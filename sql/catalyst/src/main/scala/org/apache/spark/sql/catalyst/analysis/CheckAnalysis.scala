@@ -161,6 +161,12 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
       case _: ShowTableExtended =>
         throw new AnalysisException("SHOW TABLE EXTENDED is not supported for v2 tables.")
 
+      case Sort(_, _, child) =>
+        checkInformationQuery(child, "sorting")
+
+      case Aggregate(_, _, child) =>
+        checkInformationQuery(child, "aggregation")
+
       case operator: LogicalPlan =>
         // Check argument data types of higher-order functions downwards first.
         // If the arguments of the higher-order functions are resolved but the type check fails,
@@ -821,6 +827,19 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
       })
     }
     check(plan)
+  }
+
+  private def checkInformationQuery(plan: LogicalPlan, operator: String) = {
+    val commands = plan.collect {
+      case namespaces @ ShowNamespaces(ResolvedNamespace(_, _), _, _) => namespaces
+      case tables @ ShowTables(ResolvedNamespace(_, _), _, _) => tables
+      case tblProperties @ ShowTableProperties(_: ResolvedTable, _, _) => tblProperties
+      case partitions @ ShowPartitions(_: ResolvedTable, _, _) => partitions
+      case columns @ ShowColumns(_: ResolvedTable, _, _) => columns
+    }
+    if (commands.nonEmpty) {
+      throw new AnalysisException(s"Information query does not support $operator in v2 catalog.")
+    }
   }
 
   /**

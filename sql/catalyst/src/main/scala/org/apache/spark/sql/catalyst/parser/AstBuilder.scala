@@ -206,6 +206,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     ctx.informationQuery match {
       case namespaces: ShowNamespacesContext => visitShowNamespaces(namespaces)
       case tables: ShowTablesContext => visitShowTables(tables)
+      case tableExtended: ShowTableExtendedContext => visitShowTableExtended(tableExtended)
       case tblProperties: ShowTblPropertiesContext => visitShowTblProperties(tblProperties)
       case partitions: ShowPartitionsContext => visitShowPartitions(partitions)
       case columns: ShowColumnsContext => visitShowColumns(columns)

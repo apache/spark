@@ -196,8 +196,6 @@ statement
     | DROP TEMPORARY? FUNCTION (IF EXISTS)? multipartIdentifier        #dropFunction
     | EXPLAIN (LOGICAL | FORMATTED | EXTENDED | CODEGEN | COST)?
         statement                                                      #explain
-    | SHOW TABLE EXTENDED ((FROM | IN) ns=multipartIdentifier)?
-        LIKE pattern=STRING partitionSpec?                             #showTableExtended
     | SHOW CREATE TABLE multipartIdentifier (AS SERDE)?                #showCreateTable
     | SHOW CURRENT NAMESPACE                                           #showCurrentNamespace
     | (DESC | DESCRIBE) FUNCTION EXTENDED? describeFuncName            #describeFunction
@@ -366,6 +364,7 @@ ctes
 informationQuery
     : SHOW (DATABASES | NAMESPACES) ((FROM | IN) multipartIdentifier)? (LIKE? pattern=STRING)?              #showNamespaces
     | SHOW TABLES ((FROM | IN) multipartIdentifier)? (LIKE? pattern=STRING)?                                #showTables
+    | SHOW TABLE EXTENDED ((FROM | IN) ns=multipartIdentifier)? LIKE pattern=STRING partitionSpec?          #showTableExtended
     | SHOW TBLPROPERTIES table=multipartIdentifier ('(' key=tablePropertyKey ')')?                          #showTblProperties
     | SHOW PARTITIONS multipartIdentifier partitionSpec?                                                    #showPartitions
     | SHOW COLUMNS (FROM | IN) table=multipartIdentifier ((FROM | IN) ns=multipartIdentifier)?              #showColumns
