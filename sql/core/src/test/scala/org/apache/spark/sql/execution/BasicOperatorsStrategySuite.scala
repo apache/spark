@@ -34,6 +34,7 @@ class BasicOperatorsStrategySuite extends QueryTest with SharedSparkSession {
       , testRelation))
     val plan = InsertIntoHadoopFsRelationCommand(null, null, false, null, null, null, null
       , limitScan, null, null, null, null)
+
     val sparkPlan = spark.sessionState.planner.plan(plan).next()
 
     assert(sparkPlan.children.head.isInstanceOf[CollectLimitExec])
