@@ -26,7 +26,8 @@ from multiprocessing.pool import ThreadPool
 
 import numpy as np
 
-from pyspark import keyword_only, since, SparkContext, inheritable_thread_target, is_pinned_thread_mode
+from pyspark import keyword_only, since, SparkContext, inheritable_thread_target, \
+    is_pinned_thread_mode
 from pyspark.ml import Estimator, Transformer, Model
 from pyspark.ml.common import inherit_doc, _py2java, _java2py
 from pyspark.ml.evaluation import Evaluator
