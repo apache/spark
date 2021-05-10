@@ -196,16 +196,18 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
       catch {
         case e: Throwable =>
           subTaskFailed = true
+          try {
+            Thread.sleep(1000)
+            val sparkContext = sparkSession.sparkContext
+            sparkContext.cancelJobGroup(
+              sparkContext.getLocalProperty(SparkContext.SPARK_JOB_GROUP_ID)
+            )
+          } catch {
+            case _: Throwable => ()
+          }
           throw e
       }
       finally {
-        if (subTaskFailed) {
-          Thread.sleep(1000)
-          val sparkContext = sparkSession.sparkContext
-          sparkContext.cancelJobGroup(
-            sparkContext.getLocalProperty(SparkContext.SPARK_JOB_GROUP_ID)
-          )
-        }
         // Unpersist training & validation set once all metrics have been produced
         trainingDataset.unpersist()
         validationDataset.unpersist()

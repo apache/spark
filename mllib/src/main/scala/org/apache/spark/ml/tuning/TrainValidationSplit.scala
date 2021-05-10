@@ -175,16 +175,18 @@ class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: St
     catch {
       case e: Throwable =>
         subTaskFailed = true
+        try {
+          Thread.sleep(1000)
+          val sparkContext = dataset.sparkSession.sparkContext
+          sparkContext.cancelJobGroup(
+            sparkContext.getLocalProperty(SparkContext.SPARK_JOB_GROUP_ID)
+          )
+        } catch {
+          case _: Throwable => ()
+        }
         throw e
     }
     finally {
-      if (subTaskFailed) {
-        Thread.sleep(1000)
-        val sparkContext = dataset.sparkSession.sparkContext
-        sparkContext.cancelJobGroup(
-          sparkContext.getLocalProperty(SparkContext.SPARK_JOB_GROUP_ID)
-        )
-      }
       // Unpersist training & validation set once all metrics have been produced
       trainingDataset.unpersist()
       validationDataset.unpersist()
