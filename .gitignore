@@ -18,6 +18,7 @@
 # The star is required for further !.idea/ to work, see https://git-scm.com/docs/gitignore
 .idea/*
 !.idea/vcs.xml
+python/.idea
 .idea_modules/
 .project
 .pydevproject
