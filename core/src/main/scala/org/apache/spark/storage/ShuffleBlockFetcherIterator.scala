@@ -313,7 +313,7 @@ final class ShuffleBlockFetcherIterator(
             // handling the Netty OOM issue, which is not the best way towards memory management.
             // We can get rid of it when we find a way to manage Netty's memory precisely.
             case _: OutOfDirectMemoryError
-              if blockOOMRetryTimes.getOrElseUpdate(blockId, 0) < maxAttemptsOnNettyOOM =>
+                if blockOOMRetryTimes.getOrElseUpdate(blockId, 0) < maxAttemptsOnNettyOOM =>
               if (!isZombie) {
                 val failureTimes = blockOOMRetryTimes(blockId)
                 blockOOMRetryTimes(blockId) += 1
@@ -1118,7 +1118,6 @@ object ShuffleBlockFetcherIterator {
       address: BlockManagerId,
       e: Throwable)
     extends FetchResult
-
 
   /**
    * Result of fetch request that should be deferred for some reasons, e.g., Netty OOM

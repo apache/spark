@@ -92,7 +92,7 @@ private[spark] class CoarseGrainedExecutorBackend(
     logInfo("Connecting to driver: " + driverUrl)
     try {
       if (PlatformDependent.directBufferPreferred() &&
-        PlatformDependent.maxDirectMemory() < env.conf.get(MAX_REMOTE_BLOCK_SIZE_FETCH_TO_MEM)) {
+          PlatformDependent.maxDirectMemory() < env.conf.get(MAX_REMOTE_BLOCK_SIZE_FETCH_TO_MEM)) {
         throw new SparkException(s"Netty direct memory should at least be bigger than " +
           s"'${MAX_REMOTE_BLOCK_SIZE_FETCH_TO_MEM.key}', but got " +
           s"${PlatformDependent.maxDirectMemory()} bytes < " +
