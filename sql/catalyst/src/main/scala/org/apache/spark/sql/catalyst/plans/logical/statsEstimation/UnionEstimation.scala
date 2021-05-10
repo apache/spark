@@ -86,11 +86,20 @@ object UnionEstimation {
       val outputAttrStats = new ArrayBuffer[(Attribute, ColumnStat)]()
       attrToComputeMinMaxStats.foreach {
         case (attrs, outputIndex) =>
+          var nullCount: Option[BigInt] = None
           val dataType = unionOutput(outputIndex).dataType
           val statComparator = createStatComparator(dataType)
           val minMaxValue = attrs.zipWithIndex.foldLeft[(Option[Any], Option[Any])]((None, None)) {
               case ((minVal, maxVal), (attr, childIndex)) =>
                 val colStat = union.children(childIndex).stats.attributeStats(attr)
+                // Update null count
+                nullCount = if (nullCount.isDefined  && colStat.nullCount.isDefined) {
+                  Some(nullCount.get + colStat.nullCount.get)
+                } else if (colStat.nullCount.isDefined) {
+                  colStat.nullCount
+                } else {
+                  nullCount
+                }
                 val min = if (minVal.isEmpty || statComparator(colStat.min.get, minVal.get)) {
                   colStat.min
                 } else {
@@ -103,10 +112,11 @@ object UnionEstimation {
                 }
                 (min, max)
             }
-          val newStat = ColumnStat(min = minMaxValue._1, max = minMaxValue._2)
+          val newStat = ColumnStat(min = minMaxValue._1, max = minMaxValue._2,
+            nullCount = nullCount)
           outputAttrStats += unionOutput(outputIndex) -> newStat
       }
-      AttributeMap(outputAttrStats.toSeq)
+      AttributeMap(outputAttrStats)
     } else {
       AttributeMap.empty[ColumnStat]
     }
