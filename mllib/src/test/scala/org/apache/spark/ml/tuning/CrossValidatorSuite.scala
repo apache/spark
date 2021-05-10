@@ -580,7 +580,7 @@ class CrossValidatorSuite
     }
 
     Thread.sleep(4000)
-    
+
     assert(trialStatus(0) === "failed")
     for (i <- 1 until parallelism) {
       assert(trialStatus(i) === "canceled")
