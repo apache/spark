@@ -1120,7 +1120,7 @@ object ShuffleBlockFetcherIterator {
     extends FetchResult
 
   /**
-   * Result of fetch request that should be deferred for some reasons, e.g., Netty OOM
+   * Result of a fetch request that should be deferred for some reasons, e.g., Netty OOM
    */
   private[storage]
   case class DeferFetchRequestResult(fetchRequest: FetchRequest) extends FetchResult
