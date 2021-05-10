@@ -245,21 +245,24 @@ class SparkSqlParserSuite extends AnalysisTest {
   }
 
   test("manage resources") {
-    assertEqual("ADD FILE abc.txt", AddFileCommand("abc.txt"))
-    assertEqual("ADD FILE 'abc.txt'", AddFileCommand("abc.txt"))
-    assertEqual("ADD FILE \"/path/to/abc.txt\"", AddFileCommand("/path/to/abc.txt"))
+    assertEqual("ADD FILE abc.txt", AddFilesCommand(Seq("abc.txt")))
+    assertEqual("ADD FILE 'abc.txt'", AddFilesCommand(Seq("abc.txt")))
+    assertEqual("ADD FILE \"/path/to/abc.txt\"", AddFilesCommand("/path/to/abc.txt"::Nil))
     assertEqual("LIST FILE abc.txt", ListFilesCommand(Array("abc.txt")))
     assertEqual("LIST FILE '/path//abc.txt'", ListFilesCommand(Array("/path//abc.txt")))
     assertEqual("LIST FILE \"/path2/abc.txt\"", ListFilesCommand(Array("/path2/abc.txt")))
-    assertEqual("ADD JAR /path2/_2/abc.jar", AddJarCommand("/path2/_2/abc.jar"))
-    assertEqual("ADD JAR '/test/path_2/jar/abc.jar'", AddJarCommand("/test/path_2/jar/abc.jar"))
-    assertEqual("ADD JAR \"abc.jar\"", AddJarCommand("abc.jar"))
+    assertEqual("ADD JAR /path2/_2/abc.jar", AddJarsCommand(Seq("/path2/_2/abc.jar")))
+    assertEqual("ADD JAR '/test/path_2/jar/abc.jar'",
+      AddJarsCommand(Seq("/test/path_2/jar/abc.jar")))
+    assertEqual("ADD JAR \"abc.jar\"", AddJarsCommand(Seq("abc.jar")))
     assertEqual("LIST JAR /path-with-dash/abc.jar",
       ListJarsCommand(Array("/path-with-dash/abc.jar")))
     assertEqual("LIST JAR 'abc.jar'", ListJarsCommand(Array("abc.jar")))
     assertEqual("LIST JAR \"abc.jar\"", ListJarsCommand(Array("abc.jar")))
-    assertEqual("ADD FILE /path with space/abc.txt", AddFileCommand("/path with space/abc.txt"))
-    assertEqual("ADD JAR /path with space/abc.jar", AddJarCommand("/path with space/abc.jar"))
+    assertEqual("ADD FILE '/path with space/abc.txt'",
+      AddFilesCommand(Seq("/path with space/abc.txt")))
+    assertEqual("ADD JAR '/path with space/abc.jar'",
+      AddJarsCommand(Seq("/path with space/abc.jar")))
   }
 
   test("SPARK-32608: script transform with row format delimit") {

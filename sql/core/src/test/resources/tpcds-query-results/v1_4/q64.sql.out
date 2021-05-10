@@ -3,13 +3,12 @@
 -- !query schema
 struct<product_name:string,store_name:string,store_zip:string,b_street_number:string,b_streen_name:string,b_city:string,b_zip:string,c_street_number:string,c_street_name:string,c_city:string,c_zip:string,syear:int,cnt:bigint,s1:decimal(17,2),s2:decimal(17,2),s3:decimal(17,2),s1:decimal(17,2),s2:decimal(17,2),s3:decimal(17,2),syear:int,cnt:bigint>
 -- !query output
-n stableableantiought                             	able	31904     	987       	Hillcrest 	Fairbanks	46653     	216       	3rd 	Reno	40344     	1999	1	55.42	80.91	954.53	59.08	76.80	0.00	2000	1
-n stableableantiought                             	ation	31904     	425       	Green 	Enterprise	11757     	772       	Valley 	NULL	NULL	1999	1	16.24	25.17	0.00	7.92	11.80	0.00	2000	1
-n stableableantiought                             	ation	31904     	316       	Valley Tenth	Pine Grove	74593     	806       	Wilson Main	Jackson	59583     	1999	1	49.63	78.41	14.22	7.92	11.80	0.00	2000	1
-n stableableantiought                             	ation	31904     	173       	Park Maple	Sulphur Springs	68354     	232       	Franklin 	Fairfield	66192     	1999	1	60.78	85.09	0.00	7.92	11.80	0.00	2000	1
-n stableableantiought                             	ation	31904     	425       	Green 	Enterprise	11757     	772       	Valley 	NULL	NULL	1999	1	16.24	25.17	0.00	44.27	58.43	0.00	2000	1
-n stableableantiought                             	ation	31904     	316       	Valley Tenth	Pine Grove	74593     	806       	Wilson Main	Jackson	59583     	1999	1	49.63	78.41	14.22	44.27	58.43	0.00	2000	1
-n stableableantiought                             	ation	31904     	173       	Park Maple	Sulphur Springs	68354     	232       	Franklin 	Fairfield	66192     	1999	1	60.78	85.09	0.00	44.27	58.43	0.00	2000	1
-n stableableantiought                             	eing	35709     	928       	First Oak	Summit	40499     	178       	Johnson Hillcrest	Oakdale	59584     	1999	1	63.82	121.25	0.00	10.25	12.09	0.00	2000	1
-n stableableantiought                             	eing	35709     	928       	First Oak	Summit	40499     	178       	Johnson Hillcrest	Oakdale	59584     	1999	1	63.82	121.25	0.00	30.28	49.65	0.00	2000	1
-n stableableantiought                             	eing	35709     	928       	First Oak	Summit	40499     	178       	Johnson Hillcrest	Oakdale	59584     	1999	1	63.82	121.25	0.00	58.19	85.53	0.00	2000	1
+ablepricallyantiought                             	ation	35709     	996       	NULL	Bridgeport	65817     	752       	Lakeview Lincoln	Friendship	74536     	1999	1	15.78	24.93	0.00	17.09	26.31	0.00	2000	1
+ablepricallyantiought                             	ation	35709     	71        	River River	Friendship	34536     	NULL	NULL	Newport	NULL	1999	1	22.60	38.87	0.00	17.09	26.31	0.00	2000	1
+ablepricallyantiought                             	bar	31904     	128       	East 	Franklin	19101     	990       	2nd 	Friendship	94536     	1999	1	54.76	78.30	0.00	15.80	23.54	0.00	2000	1
+ationbarpri                                       	ation	35709     	362       	Central Ridge	Oakland	69843     	666       	13th Ridge	Shiloh	29275     	1999	1	74.00	95.46	0.00	11.32	20.94	0.00	2000	1
+ationbarpri                                       	ese	31904     	759       	Elm Pine	Belmont	20191     	35        	Madison 	Waterloo	31675     	1999	1	12.92	22.22	0.00	24.15	36.70	0.00	2000	1
+ationbarpri                                       	ese	31904     	759       	Elm Pine	Belmont	20191     	35        	Madison 	Waterloo	31675     	1999	1	12.92	22.22	0.00	83.87	147.61	0.00	2000	1
+ationbarpri                                       	ought	31904     	754       	NULL	NULL	65804     	897       	8th 	Ashland	54244     	1999	1	74.70	90.38	0.00	12.02	12.74	0.00	2000	1
+ationbarpri                                       	ought	31904     	754       	NULL	NULL	65804     	897       	8th 	Ashland	54244     	1999	1	74.70	90.38	0.00	28.08	38.18	0.00	2000	1
+ationbarpri                                       	ought	31904     	754       	NULL	NULL	65804     	897       	8th 	Ashland	54244     	1999	1	74.70	90.38	0.00	56.60	63.39	0.00	2000	1

@@ -264,7 +264,7 @@ object SparkBuild extends PomBuild {
       .orElse(sys.props.get("java.home").map { p => new File(p).getParentFile().getAbsolutePath() })
       .map(file),
     publishMavenStyle := true,
-    unidocGenjavadocVersion := "0.16",
+    unidocGenjavadocVersion := "0.17",
 
     // Override SBT's default resolvers:
     resolvers := Seq(
@@ -294,7 +294,7 @@ object SparkBuild extends PomBuild {
     javaOptions ++= {
       val versionParts = System.getProperty("java.version").split("[+.\\-]+", 3)
       var major = versionParts(0).toInt
-      if (major >= 16) Seq("--add-modules=jdk.incubator.vector") else Seq.empty
+      if (major >= 16) Seq("--add-modules=jdk.incubator.vector,jdk.incubator.foreign", "-Dforeign.restricted=warn") else Seq.empty
     },
 
     (Compile / doc / javacOptions) ++= {

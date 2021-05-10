@@ -20,7 +20,8 @@ package org.apache.spark.sql.errors
 import java.io.{FileNotFoundException, IOException}
 import java.net.URISyntaxException
 import java.sql.{SQLException, SQLFeatureNotSupportedException}
-import java.time.DateTimeException
+import java.time.{DateTimeException, LocalDate}
+import java.time.temporal.ChronoField
 
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.codehaus.commons.compiler.CompileException
@@ -309,7 +310,7 @@ object QueryExecutionErrors {
     new IllegalStateException("table stats must be specified.")
   }
 
-  def unaryMinusCauseOverflowError(originValue: Short): ArithmeticException = {
+  def unaryMinusCauseOverflowError(originValue: AnyVal): ArithmeticException = {
     new ArithmeticException(s"- $originValue caused overflow.")
   }
 
@@ -772,4 +773,106 @@ object QueryExecutionErrors {
     new IllegalArgumentException(s"Unexpected: $o")
   }
 
+  def unscaledValueTooLargeForPrecisionError(): Throwable = {
+    new ArithmeticException("Unscaled value too large for precision")
+  }
+
+  def decimalPrecisionExceedsMaxPrecisionError(precision: Int, maxPrecision: Int): Throwable = {
+    new ArithmeticException(
+      s"Decimal precision $precision exceeds max precision $maxPrecision")
+  }
+
+  def outOfDecimalTypeRangeError(str: UTF8String): Throwable = {
+    new ArithmeticException(s"out of decimal type range: $str")
+  }
+
+  def unsupportedArrayTypeError(clazz: Class[_]): Throwable = {
+    new RuntimeException(s"Do not support array of type $clazz.")
+  }
+
+  def unsupportedJavaTypeError(clazz: Class[_]): Throwable = {
+    new RuntimeException(s"Do not support type $clazz.")
+  }
+
+  def failedParsingStructTypeError(raw: String): Throwable = {
+    new RuntimeException(s"Failed parsing ${StructType.simpleString}: $raw")
+  }
+
+  def failedMergingFieldsError(leftName: String, rightName: String, e: Throwable): Throwable = {
+    new SparkException(s"Failed to merge fields '$leftName' and '$rightName'. ${e.getMessage}")
+  }
+
+  def cannotMergeDecimalTypesWithIncompatiblePrecisionAndScaleError(
+      leftPrecision: Int, rightPrecision: Int, leftScale: Int, rightScale: Int): Throwable = {
+    new SparkException("Failed to merge decimal types with incompatible " +
+      s"precision $leftPrecision and $rightPrecision & scale $leftScale and $rightScale")
+  }
+
+  def cannotMergeDecimalTypesWithIncompatiblePrecisionError(
+      leftPrecision: Int, rightPrecision: Int): Throwable = {
+    new SparkException("Failed to merge decimal types with incompatible " +
+      s"precision $leftPrecision and $rightPrecision")
+  }
+
+  def cannotMergeDecimalTypesWithIncompatibleScaleError(
+      leftScale: Int, rightScale: Int): Throwable = {
+    new SparkException("Failed to merge decimal types with incompatible " +
+      s"scala $leftScale and $rightScale")
+  }
+
+  def cannotMergeIncompatibleDataTypesError(left: DataType, right: DataType): Throwable = {
+    new SparkException(s"Failed to merge incompatible data types ${left.catalogString}" +
+      s" and ${right.catalogString}")
+  }
+
+  def exceedMapSizeLimitError(size: Int): Throwable = {
+    new RuntimeException(s"Unsuccessful attempt to build maps with $size elements " +
+      s"due to exceeding the map size limit ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}.")
+  }
+
+  def duplicateMapKeyFoundError(key: Any): Throwable = {
+    new RuntimeException(s"Duplicate map key $key was found, please check the input " +
+      "data. If you want to remove the duplicated keys, you can set " +
+      s"${SQLConf.MAP_KEY_DEDUP_POLICY.key} to ${SQLConf.MapKeyDedupPolicy.LAST_WIN} so that " +
+      "the key inserted at last takes precedence.")
+  }
+
+  def mapDataKeyArrayLengthDiffersFromValueArrayLengthError(): Throwable = {
+    new RuntimeException("The key array and value array of MapData must have the same length.")
+  }
+
+  def fieldDiffersFromDerivedLocalDateError(
+      field: ChronoField, actual: Int, expected: Int, candidate: LocalDate): Throwable = {
+    new DateTimeException(s"Conflict found: Field $field $actual differs from" +
+      s" $field $expected derived from $candidate")
+  }
+
+  def failToParseDateTimeInNewParserError(s: String, e: Throwable): Throwable = {
+    new SparkUpgradeException("3.0", s"Fail to parse '$s' in the new parser. You can " +
+      s"set ${SQLConf.LEGACY_TIME_PARSER_POLICY.key} to LEGACY to restore the behavior " +
+      s"before Spark 3.0, or set to CORRECTED and treat it as an invalid datetime string.", e)
+  }
+
+  def failToFormatDateTimeInNewFormatterError(
+      resultCandidate: String, e: Throwable): Throwable = {
+    new SparkUpgradeException("3.0",
+      s"""
+         |Fail to format it to '$resultCandidate' in the new formatter. You can set
+         |${SQLConf.LEGACY_TIME_PARSER_POLICY.key} to LEGACY to restore the behavior before
+         |Spark 3.0, or set to CORRECTED and treat it as an invalid datetime string.
+       """.stripMargin.replaceAll("\n", " "), e)
+  }
+
+  def failToRecognizePatternInDateTimeFormatterError(
+      pattern: String, e: Throwable): Throwable = {
+    new SparkUpgradeException("3.0", s"Fail to recognize '$pattern' pattern in the" +
+      s" DateTimeFormatter. 1) You can set ${SQLConf.LEGACY_TIME_PARSER_POLICY.key} to LEGACY" +
+      s" to restore the behavior before Spark 3.0. 2) You can form a valid datetime pattern" +
+      s" with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html",
+      e)
+  }
+
+  def cannotCastUTF8StringToDataTypeError(s: UTF8String, to: DataType): Throwable = {
+    new DateTimeException(s"Cannot cast $s to $to.")
+  }
 }

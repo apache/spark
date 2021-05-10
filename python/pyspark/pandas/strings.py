@@ -1489,7 +1489,7 @@ class StringMethods(object):
         dtype: object
         """
         if not isinstance(repeats, int):
-            raise ValueError("repeats expects an int parameter")
+            raise TypeError("repeats expects an int parameter")
         return self._data.spark.transform(lambda c: SF.repeat(col=c, n=repeats))
 
     def replace(self, pat, repl, n=-1, case=None, flags=0, regex=True) -> "ps.Series":

@@ -24,7 +24,7 @@ import scala.concurrent.duration._
 
 import org.apache.spark.SparkContext
 import org.apache.spark.scheduler.AccumulableInfo
-import org.apache.spark.sql.connector.CustomMetric
+import org.apache.spark.sql.connector.metric.CustomMetric
 import org.apache.spark.sql.execution.ui.SparkListenerDriverAccumUpdates
 import org.apache.spark.util.{AccumulatorContext, AccumulatorV2, Utils}
 

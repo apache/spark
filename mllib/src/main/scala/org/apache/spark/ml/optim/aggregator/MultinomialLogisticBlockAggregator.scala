@@ -203,7 +203,7 @@ private[ml] class MultinomialLogisticBlockAggregator(
     }
 
     if (fitIntercept) {
-      BLAS.getBLAS(numClasses).daxpy(numClasses, 1.0, multiplierSum, 0, 1,
+      BLAS.javaBLAS.daxpy(numClasses, 1.0, multiplierSum, 0, 1,
         gradientSumArray, numClasses * numFeatures, 1)
     }
 
