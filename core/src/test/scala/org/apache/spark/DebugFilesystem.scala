@@ -61,7 +61,7 @@ object DebugFilesystem extends Logging {
  *     1) file open calls to track all open connections. This can be used in tests to check that
  *        connections are not leaked;
  *     2) rename calls to return false when destination's parent path does not exist. When
- *        destination parent does not exist, [[LocalFileSystem]] uses [[FileUtil#copy]] to copy the
+ *        destination parent does not exist, LocalFileSystem uses FileUtil#copy to copy the
  *        file and returns true if succeed, while many other hadoop file systems (e.g. HDFS, S3A)
  *        return false without renaming any file. This helps to test that Spark can work with the
  *        latter file systems.
