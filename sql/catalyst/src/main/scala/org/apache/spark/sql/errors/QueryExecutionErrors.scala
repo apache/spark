@@ -20,7 +20,8 @@ package org.apache.spark.sql.errors
 import java.io.{FileNotFoundException, IOException}
 import java.net.URISyntaxException
 import java.sql.{SQLException, SQLFeatureNotSupportedException}
-import java.time.DateTimeException
+import java.time.{DateTimeException, LocalDate}
+import java.time.temporal.ChronoField
 
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.codehaus.commons.compiler.CompileException
@@ -822,5 +823,56 @@ object QueryExecutionErrors {
   def cannotMergeIncompatibleDataTypesError(left: DataType, right: DataType): Throwable = {
     new SparkException(s"Failed to merge incompatible data types ${left.catalogString}" +
       s" and ${right.catalogString}")
+  }
+
+  def exceedMapSizeLimitError(size: Int): Throwable = {
+    new RuntimeException(s"Unsuccessful attempt to build maps with $size elements " +
+      s"due to exceeding the map size limit ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}.")
+  }
+
+  def duplicateMapKeyFoundError(key: Any): Throwable = {
+    new RuntimeException(s"Duplicate map key $key was found, please check the input " +
+      "data. If you want to remove the duplicated keys, you can set " +
+      s"${SQLConf.MAP_KEY_DEDUP_POLICY.key} to ${SQLConf.MapKeyDedupPolicy.LAST_WIN} so that " +
+      "the key inserted at last takes precedence.")
+  }
+
+  def mapDataKeyArrayLengthDiffersFromValueArrayLengthError(): Throwable = {
+    new RuntimeException("The key array and value array of MapData must have the same length.")
+  }
+
+  def fieldDiffersFromDerivedLocalDateError(
+      field: ChronoField, actual: Int, expected: Int, candidate: LocalDate): Throwable = {
+    new DateTimeException(s"Conflict found: Field $field $actual differs from" +
+      s" $field $expected derived from $candidate")
+  }
+
+  def failToParseDateTimeInNewParserError(s: String, e: Throwable): Throwable = {
+    new SparkUpgradeException("3.0", s"Fail to parse '$s' in the new parser. You can " +
+      s"set ${SQLConf.LEGACY_TIME_PARSER_POLICY.key} to LEGACY to restore the behavior " +
+      s"before Spark 3.0, or set to CORRECTED and treat it as an invalid datetime string.", e)
+  }
+
+  def failToFormatDateTimeInNewFormatterError(
+      resultCandidate: String, e: Throwable): Throwable = {
+    new SparkUpgradeException("3.0",
+      s"""
+         |Fail to format it to '$resultCandidate' in the new formatter. You can set
+         |${SQLConf.LEGACY_TIME_PARSER_POLICY.key} to LEGACY to restore the behavior before
+         |Spark 3.0, or set to CORRECTED and treat it as an invalid datetime string.
+       """.stripMargin.replaceAll("\n", " "), e)
+  }
+
+  def failToRecognizePatternInDateTimeFormatterError(
+      pattern: String, e: Throwable): Throwable = {
+    new SparkUpgradeException("3.0", s"Fail to recognize '$pattern' pattern in the" +
+      s" DateTimeFormatter. 1) You can set ${SQLConf.LEGACY_TIME_PARSER_POLICY.key} to LEGACY" +
+      s" to restore the behavior before Spark 3.0. 2) You can form a valid datetime pattern" +
+      s" with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html",
+      e)
+  }
+
+  def cannotCastUTF8StringToDataTypeError(s: UTF8String, to: DataType): Throwable = {
+    new DateTimeException(s"Cannot cast $s to $to.")
   }
 }

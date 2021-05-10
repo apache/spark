@@ -3,103 +3,103 @@
 -- !query schema
 struct<c_customer_id:string,c_salutation:string,c_first_name:string,c_last_name:string,c_preferred_cust_flag:string,c_birth_day:int,c_birth_month:int,c_birth_year:int,c_birth_country:string,c_login:string,c_email_address:string,c_last_review_date:int,ctr_total_return:decimal(17,2)>
 -- !query output
-AAAAAAAAAAAIBAAA	Mr.       	Eduardo             	Goodwin                       	Y	24	11	1950	GHANA	NULL	Eduardo.Goodwin@rolemn2xusv5Ot0.edu               	2452312	3838.00
-AAAAAAAAABHAAAAA	Sir       	Robert              	Thornton                      	Y	24	5	1924	HONG KONG	NULL	Robert.Thornton@jas.edu                           	2452431	2434.58
-AAAAAAAAABPNAAAA	Mr.       	Alonzo              	Huddleston                    	Y	19	4	1957	FAROE ISLANDS	NULL	Alonzo.Huddleston@g.edu                           	2452289	2813.00
-AAAAAAAAAFCGBAAA	Ms.       	Pamela              	Slater                        	Y	2	6	1931	GAMBIA	NULL	Pamela.Slater@ajU1sMrf5vC7.com                    	2452613	1746.58
-AAAAAAAAAFLBAAAA	Sir       	Keith               	Stern                         	N	18	2	1925	ICELAND	NULL	Keith.Stern@34Hb991eohmd.com                      	2452549	1850.70
-AAAAAAAAAFLBAAAA	Sir       	Keith               	Stern                         	N	18	2	1925	ICELAND	NULL	Keith.Stern@34Hb991eohmd.com                      	2452549	10898.40
-AAAAAAAAAFOEBAAA	Dr.       	Trevor              	Battle                        	N	12	8	1953	THAILAND	NULL	Trevor.Battle@0F.com                              	2452643	3556.00
-AAAAAAAAAIKEAAAA	Dr.       	Joseph              	Miller                        	N	17	12	1930	MONACO	NULL	Joseph.Miller@Ampmde.edu                          	2452332	7037.55
-AAAAAAAAAJMABAAA	Miss      	Brenda              	Sloan                         	Y	23	3	1982	MALAYSIA	NULL	Brenda.Sloan@csCoX.edu                            	2452336	1783.19
-AAAAAAAAAKDNAAAA	NULL	NULL	NULL	NULL	NULL	12	NULL	NULL	NULL	NULL	2452544	2448.03
-AAAAAAAAANCLAAAA	Mr.       	Raymond             	Dixon                         	N	31	12	1977	MONTENEGRO	NULL	Raymond.Dixon@07IH.edu                            	2452514	1785.96
-AAAAAAAAANNNAAAA	Ms.       	Cindy               	Julian                        	Y	4	8	1982	UGANDA	NULL	Cindy.Julian@ChEB5eyUCBe.org                      	2452368	2449.04
-AAAAAAAAAPKJAAAA	Ms.       	Elizabeth           	Pepper                        	Y	28	12	1930	NICARAGUA	NULL	Elizabeth.Pepper@xlygC22.org                      	2452645	1764.40
-AAAAAAAABAKCBAAA	Miss      	Denise              	Brock                         	Y	10	4	1958	JAMAICA	NULL	Denise.Brock@7ffTBTNaX7is.com                     	2452435	1618.24
-AAAAAAAABBMDAAAA	Dr.       	Walter              	Bernard                       	Y	2	10	1948	BELARUS	NULL	Walter.Bernard@Th.org                             	2452628	1755.66
-AAAAAAAABIBBBAAA	Miss      	Lorene              	Mayfield                      	N	17	12	1947	ALBANIA	NULL	Lorene.Mayfield@ECni6UFkF2.edu                    	2452450	3157.70
-AAAAAAAABIIDAAAA	Mr.       	Paul                	Stevenson                     	N	26	2	1953	BARBADOS	NULL	Paul.Stevenson@tHMZG9.com                         	2452488	1947.77
-AAAAAAAABMJAAAAA	Dr.       	Marion              	Mclain                        	N	16	2	1931	ANGUILLA	NULL	Marion.Mclain@PKik2BMH.com                        	2452382	3134.46
-AAAAAAAABNFHBAAA	Mr.       	Kristofer           	Payne                         	N	12	5	1945	SYRIAN ARAB REPUBLIC	NULL	Kristofer.Payne@nc70sAM.com                       	2452436	3813.33
-AAAAAAAABOLLAAAA	Miss      	Lisa                	Way                           	N	11	1	1941	LEBANON	NULL	Lisa.Way@nnVbE2MvTT.com                           	2452383	1829.88
-AAAAAAAABPHKAAAA	Dr.       	Gabriela            	Jerome                        	Y	9	7	1969	IRAQ	NULL	Gabriela.Jerome@Hay.com                           	2452567	5360.55
-AAAAAAAACBAFAAAA	Dr.       	Timothy             	Carroll                       	Y	14	8	1957	UGANDA	NULL	Timothy.Carroll@pUcgCvxC4nkcM.edu                 	2452535	1642.80
-AAAAAAAACBPMAAAA	Ms.       	Shana               	Fulton                        	N	10	2	1955	RWANDA	NULL	Shana.Fulton@2CAVqR7d.org                         	2452378	2089.36
-AAAAAAAACCFCBAAA	Mr.       	Mark                	Pacheco                       	N	9	3	1956	YEMEN	NULL	Mark.Pacheco@NMMki.edu                            	2452377	1838.48
-AAAAAAAACCMEAAAA	Dr.       	Adriane             	Harmon                        	N	1	10	1964	ARGENTINA	NULL	Adriane.Harmon@X0nMJZPDL.com                      	2452562	8986.95
-AAAAAAAACCNJAAAA	Dr.       	Elizabeth           	Gilbreath                     	Y	17	1	1985	KIRIBATI	NULL	Elizabeth.Gilbreath@4LxlO8fArnEeEavQe.com         	2452485	2450.86
-AAAAAAAACDDNAAAA	Ms.       	Holly               	Kim                           	N	15	6	1941	ICELAND	NULL	Holly.Kim@OkTfC7tRYgy4.edu                        	2452580	2719.44
-AAAAAAAACGILAAAA	Sir       	Nolan               	Mosley                        	N	20	3	1980	KENYA	NULL	Nolan.Mosley@5E.org                               	2452317	1865.64
-AAAAAAAACHFHBAAA	Mr.       	Dallas              	Courtney                      	Y	21	5	1928	CÔTE D'IVOIRE	NULL	Dallas.Courtney@c7.org                            	2452496	4394.79
-AAAAAAAACKOFAAAA	Dr.       	Eric                	Bucher                        	Y	19	9	1979	ALBANIA	NULL	Eric.Bucher@sxSne.org                             	2452541	4662.35
-AAAAAAAACMHNAAAA	Miss      	Lisa                	Dukes                         	Y	4	3	1964	SOLOMON ISLANDS	NULL	Lisa.Dukes@tuRJRXkQm.com                          	2452303	10387.84
-AAAAAAAACNGBAAAA	Mr.       	Michael             	Haley                         	Y	10	5	1933	SWAZILAND	NULL	Michael.Haley@OfAOvhrm.com                        	2452359	4187.82
-AAAAAAAACOFAAAAA	Ms.       	Tammy               	Searcy                        	N	6	5	1989	SURINAME	NULL	Tammy.Searcy@6ZFFGtIuCqT.com                      	2452295	5091.84
-AAAAAAAADBBHAAAA	Dr.       	Charles             	Fernandez                     	N	8	12	1992	CAMBODIA	NULL	Charles.Fernandez@MVhjrzVNVY.com                  	2452574	4640.37
-AAAAAAAADFCBBAAA	Dr.       	Micheal             	Collier                       	N	1	9	1934	HONDURAS	NULL	Micheal.Collier@NztJvzb.org                       	2452446	15944.40
-AAAAAAAADIHHAAAA	Miss      	Vikki               	Garza                         	Y	29	8	1950	NAMIBIA	NULL	Vikki.Garza@v.edu                                 	2452608	2373.84
-AAAAAAAADJAPAAAA	Ms.       	Angel               	Dodd                          	Y	22	12	1950	TIMOR-LESTE	NULL	Angel.Dodd@gQOLRKqU285BfTIT.edu                   	2452634	2227.83
-AAAAAAAADKEFAAAA	Ms.       	Martha              	Dillon                        	N	9	12	1971	VANUATU	NULL	Martha.Dillon@iKkeDtKERbu.org                     	2452404	1863.40
-AAAAAAAADKIFAAAA	Sir       	Walter              	Stout                         	Y	18	1	1970	BURUNDI	NULL	Walter.Stout@Q961tU4iePsOy.org                    	2452449	2465.55
-AAAAAAAADLHNAAAA	Mr.       	Joseph              	Mckinney                      	Y	23	3	1940	ARMENIA	NULL	Joseph.Mckinney@4YYp7B8ccPz.edu                   	2452595	1820.02
-AAAAAAAADMMDBAAA	Mr.       	Darrell             	Padgett                       	Y	17	3	1992	HONDURAS	NULL	Darrell.Padgett@IrqARXX.org                       	2452554	2052.54
-AAAAAAAADNHPAAAA	Mr.       	John                	Mathews                       	N	23	2	1925	NICARAGUA	NULL	John.Mathews@UOtpEd.edu                           	2452543	7883.40
-AAAAAAAADOCMAAAA	Dr.       	Yvonne              	Poirier                       	Y	30	1	1950	ESTONIA	NULL	Yvonne.Poirier@l.org                              	2452648	4075.55
-AAAAAAAADODBAAAA	Mrs.      	Elizabeth           	Spalding                      	N	27	11	1947	KAZAKHSTAN	NULL	Elizabeth.Spalding@ihnjlmxMbs.edu                 	2452318	10349.68
-AAAAAAAAEBAOAAAA	Miss      	Amy                 	Causey                        	N	21	9	1951	COMOROS	NULL	Amy.Causey@7EvHzf02opq6QlO.com                    	2452443	8005.40
-AAAAAAAAEBLEAAAA	Mr.       	Leroy               	Couture                       	N	7	5	1938	SWITZERLAND	NULL	Leroy.Couture@vqrL.com                            	2452595	1683.88
-AAAAAAAAEEADAAAA	Mr.       	Robert              	Donohue                       	Y	21	8	1938	SWAZILAND	NULL	Robert.Donohue@U2xz7.org                          	2452436	11083.80
-AAAAAAAAEHAABAAA	Dr.       	Victoria            	Morgan                        	Y	31	5	1960	JERSEY	NULL	Victoria.Morgan@Sk3jzrDZTq.org                    	2452646	1712.16
-AAAAAAAAEHGOAAAA	Miss      	Jillian             	Nelson                        	Y	27	7	1978	TURKMENISTAN	NULL	Jillian.Nelson@ph0qObqh3fbv.com                   	2452315	4432.69
-AAAAAAAAEHPNAAAA	Dr.       	Rachael             	King                          	Y	28	11	1927	PANAMA	NULL	Rachael.King@t8dA2klrEIBiCd.edu                   	2452438	2251.50
-AAAAAAAAEIDHAAAA	Sir       	George              	Garcia                        	Y	21	4	1960	CROATIA	NULL	George.Garcia@uzGHyYUnvs.edu                      	2452306	1783.12
-AAAAAAAAEIDHAAAA	Sir       	George              	Garcia                        	Y	21	4	1960	CROATIA	NULL	George.Garcia@uzGHyYUnvs.edu                      	2452306	1857.63
-AAAAAAAAEIOBBAAA	Mr.       	Gary                	Davis                         	N	9	6	1992	KYRGYZSTAN	NULL	Gary.Davis@GTXc2AbKvkM.edu                        	2452322	1652.70
-AAAAAAAAEJFNAAAA	Dr.       	Chad                	Baldwin                       	Y	11	11	1937	BULGARIA	NULL	Chad.Baldwin@cN988.org                            	2452560	11133.36
-AAAAAAAAEJOPAAAA	Dr.       	Alexandra           	Henderson                     	N	4	2	1986	MONTENEGRO	NULL	Alexandra.Henderson@4FCXABbkVkrLK.com             	2452376	3426.36
-AAAAAAAAELEBAAAA	Mrs.      	Dianne              	Ross                          	Y	19	7	1949	ICELAND	NULL	Dianne.Ross@D4VH75e9n.org                         	2452429	4018.30
-AAAAAAAAEMDIBAAA	Sir       	Scott               	Obrien                        	Y	3	8	1926	JERSEY	NULL	Scott.Obrien@a84VTAJCTB.com                       	2452504	1456.67
-AAAAAAAAEMIAAAAA	Dr.       	Danny               	Ness                          	Y	25	10	1955	IRAQ	NULL	Danny.Ness@CC8vAp.edu                             	2452487	5569.50
-AAAAAAAAEMNGBAAA	Mr.       	Milton              	Oakley                        	Y	10	10	1976	FINLAND	NULL	Milton.Oakley@O4DHXT.com                          	2452355	1505.16
-AAAAAAAAEMPKAAAA	Sir       	Gilbert             	Palmer                        	N	23	10	1933	BRUNEI DARUSSALAM	NULL	Gilbert.Palmer@7UYjIOOIg0.org                     	2452463	2391.95
-AAAAAAAAENFLAAAA	Sir       	Joseph              	Gaffney                       	N	22	1	1967	BULGARIA	NULL	Joseph.Gaffney@nBDj.org                           	2452608	6135.48
-AAAAAAAAEPELAAAA	Dr.       	Emily               	Thomas                        	Y	14	3	1981	MOZAMBIQUE	NULL	Emily.Thomas@qtJnzLvYcK598T.edu                   	2452617	3239.04
-AAAAAAAAFBLHAAAA	Mr.       	Carter              	Lombardo                      	N	22	11	1950	MONACO	NULL	Carter.Lombardo@X.edu                             	2452582	3965.43
-AAAAAAAAFHODBAAA	Ms.       	Diana               	Hall                          	N	14	7	1934	LATVIA	NULL	Diana.Hall@Be.com                                 	2452546	9391.76
-AAAAAAAAFLAJAAAA	Mr.       	John                	Hardy                         	Y	4	9	1977	ANGUILLA	NULL	John.Hardy@LnaYnyZ9AYee.edu                       	2452289	1640.80
-AAAAAAAAFLDFBAAA	Mr.       	Demetrius           	Hunt                          	N	30	8	1956	ZAMBIA	NULL	Demetrius.Hunt@J3.com                             	2452647	3673.60
-AAAAAAAAFMCFBAAA	Mrs.      	Karen               	Middleton                     	Y	21	10	1934	GUADELOUPE	NULL	Karen.Middleton@q.com                             	2452343	1415.70
-AAAAAAAAFMENAAAA	Ms.       	Anne                	Jernigan                      	Y	14	8	1952	ITALY	NULL	Anne.Jernigan@BBtNT7SneOEKG.edu                   	2452612	1735.14
-AAAAAAAAFMLEAAAA	Mr.       	Gavin               	NULL	NULL	21	NULL	1933	BRAZIL	NULL	Gavin.Maples@AT6ClrGUc79.com                      	NULL	4882.15
-AAAAAAAAFMPMAAAA	Sir       	Jack                	Thomas                        	Y	12	1	1971	ARMENIA	NULL	Jack.Thomas@dn0mBXIEu7XPH.com                     	2452409	2501.94
-AAAAAAAAFNHBBAAA	Miss      	Jennifer            	Long                          	Y	12	6	1984	VENEZUELA	NULL	Jennifer.Long@RyRC5oxxCoVPG.com                   	2452285	4430.88
-AAAAAAAAGAGEAAAA	Sir       	Jeffrey             	Cleveland                     	N	2	8	1974	GUADELOUPE	NULL	Jeffrey.Cleveland@ijNnAoDZQajhuz.edu              	2452380	4215.15
-AAAAAAAAGCNPAAAA	Sir       	Jack                	Stewart                       	N	19	12	1926	SAN MARINO	NULL	Jack.Stewart@G6N710E1oO.edu                       	2452618	2859.50
-AAAAAAAAGFKEAAAA	Dr.       	NULL	Brown                         	NULL	NULL	4	1933	ROMANIA	NULL	NULL	NULL	11364.32
-AAAAAAAAGGBIBAAA	Dr.       	Michael             	Christiansen                  	Y	4	3	1947	ISRAEL	NULL	Michael.Christiansen@kQmauEb.org                  	2452583	1726.20
-AAAAAAAAGHHEAAAA	Sir       	Jerry               	Glover                        	Y	3	6	1942	ANTIGUA AND BARBUDA	NULL	Jerry.Glover@yCUI3N8C0o7LPvL.edu                  	2452645	6382.26
-AAAAAAAAGICFAAAA	Mr.       	Charles             	Sloan                         	Y	8	4	1991	KOREA, REPUBLIC OF	NULL	Charles.Sloan@gnfGZRA0F.com                       	2452431	2793.57
-AAAAAAAAGIFHBAAA	Sir       	Joe                 	Jackson                       	N	31	10	1969	FRENCH POLYNESIA	NULL	Joe.Jackson@eHmBJ4QqjNKJypF.com                   	2452534	1692.69
-AAAAAAAAGJEGBAAA	Dr.       	Carlos              	Hampton                       	N	18	11	1947	DOMINICA	NULL	Carlos.Hampton@nrYQ8MXgIunX6gf.com                	2452470	5556.75
-AAAAAAAAGMDJAAAA	Dr.       	Christopher         	Payne                         	Y	30	12	1958	DJIBOUTI	NULL	Christopher.Payne@R6POV.org                       	2452350	1638.72
-AAAAAAAAGOPMAAAA	Mrs.      	Donna               	West                          	N	2	12	1977	SOLOMON ISLANDS	NULL	Donna.West@6Q.com                                 	2452645	1623.20
-AAAAAAAAHBBDBAAA	Mrs.      	NULL	Henry                         	N	NULL	NULL	1948	ARUBA	NULL	NULL	2452337	4377.30
-AAAAAAAAHBBDBAAA	Mrs.      	NULL	Henry                         	N	NULL	NULL	1948	ARUBA	NULL	NULL	2452337	5013.12
-AAAAAAAAHCJKAAAA	Ms.       	Emma                	Bailey                        	N	2	10	1935	LATVIA	NULL	Emma.Bailey@beDlbUDUUcPhilRyy9.edu                	2452491	5638.14
-AAAAAAAAHGCHBAAA	Dr.       	Thomas              	Hull                          	Y	24	2	1931	DENMARK	NULL	Thomas.Hull@XobY92y.com                           	2452648	2487.60
-AAAAAAAAHGIFAAAA	Sir       	James               	Turner                        	N	25	10	1937	JERSEY	NULL	James.Turner@4RGTbOoV.org                         	2452293	2757.44
-AAAAAAAAHIIDBAAA	Mrs.      	Andrew              	Barrett                       	Y	24	5	1992	GUERNSEY	NULL	Andrew.Barrett@i85phxAtKhZfES.com                 	2452319	7854.67
-AAAAAAAAHJOBAAAA	Mrs.      	April               	Wallace                       	N	19	7	1930	FIJI	NULL	April.Wallace@9iuUi3U0K.edu                       	2452382	4596.60
-AAAAAAAAHMEFBAAA	NULL	Joshua              	Bruno                         	NULL	1	11	NULL	NULL	NULL	Joshua.Bruno@7Ds6hF5nMgOTel9.org                  	2452303	1806.33
-AAAAAAAAHMNNAAAA	Sir       	Jeffery             	Thomas                        	Y	8	3	1929	MONTSERRAT	NULL	Jeffery.Thomas@Ld7t.org                           	2452598	2441.40
-AAAAAAAAICMGAAAA	Miss      	Edith               	Robinson                      	Y	11	7	1967	PUERTO RICO	NULL	Edith.Robinson@zuf2DUz3bhKnEB.org                 	2452319	7193.61
-AAAAAAAAIGLCBAAA	Miss      	Erika               	Edmondson                     	Y	1	8	1944	DJIBOUTI	NULL	Erika.Edmondson@BuAbOSrTiD06f.edu                 	2452460	2381.83
-AAAAAAAAIJGGBAAA	Ms.       	Carolyn             	Cardona                       	N	15	9	1936	BULGARIA	NULL	Carolyn.Cardona@EhKjaAPoU8gf.edu                  	2452453	7659.19
-AAAAAAAAIMAHBAAA	Mrs.      	Elizabeth           	Guzman                        	Y	19	9	1950	GREECE	NULL	Elizabeth.Guzman@4Rq0Cyh9c.edu                    	2452315	1856.20
-AAAAAAAAIMGFAAAA	Dr.       	Paul                	Powell                        	Y	28	11	1935	GREECE	NULL	Paul.Powell@3EgM4I28gtaqb.org                     	2452320	8416.80
-AAAAAAAAIMJCBAAA	Dr.       	Dennis              	Brown                         	Y	24	10	1978	BULGARIA	NULL	Dennis.Brown@fAvOOY4Q13dVdPfb.com                 	2452404	1552.46
-AAAAAAAAIMJCBAAA	Dr.       	Dennis              	Brown                         	Y	24	10	1978	BULGARIA	NULL	Dennis.Brown@fAvOOY4Q13dVdPfb.com                 	2452404	2639.34
-AAAAAAAAIMPNAAAA	Sir       	Charles             	Chadwick                      	N	21	1	1936	ALAND ISLANDS	NULL	Charles.Chadwick@ofbPzGan.org                     	2452414	4241.44
-AAAAAAAAIPHCAAAA	Mr.       	Robert              	Parham                        	Y	9	2	1967	ETHIOPIA	NULL	Robert.Parham@0GnPcZbUE.org                       	2452519	4317.18
-AAAAAAAAJABDBAAA	NULL	NULL	NULL	NULL	9	6	1972	TIMOR-LESTE	NULL	NULL	NULL	2387.28
+AAAAAAAAABEBBAAA	Sir       	Carlton             	Miles                         	N	23	9	1957	MALI	NULL	Carlton.Miles@4DbIUoznbr.org                      	2452588	12916.86
+AAAAAAAAABKGBAAA	Miss      	Sharee              	Stevens                       	Y	15	8	1992	SLOVAKIA	NULL	Sharee.Stevens@Z.edu                              	2452492	2480.80
+AAAAAAAAAEIPAAAA	Mr.       	Chris               	Ryan                          	Y	23	4	1931	TURKMENISTAN	NULL	Chris.Ryan@QlH9G0fkAR5.org                        	2452443	3469.95
+AAAAAAAAAHNKAAAA	Sir       	Scott               	Garcia                        	N	19	10	1952	WALLIS AND FUTUNA	NULL	Scott.Garcia@3pd6mnJYbKxb.org                     	2452611	2944.24
+AAAAAAAAAJDABAAA	Sir       	Gerald              	Monroe                        	Y	19	5	1985	LIECHTENSTEIN	NULL	Gerald.Monroe@opYT.org                            	2452632	4030.41
+AAAAAAAAAJJBAAAA	Sir       	Jose                	Garcia                        	Y	11	6	1977	AMERICAN SAMOA	NULL	Jose.Garcia@n1VrEIOg4f.com                        	2452406	4131.05
+AAAAAAAAALNKAAAA	Dr.       	Wanda               	Devries                       	N	6	2	1953	YEMEN	NULL	Wanda.Devries@lzbOovP.com                         	2452411	3197.25
+AAAAAAAAANPAAAAA	NULL	NULL	Sanders                       	NULL	12	10	NULL	NULL	NULL	NULL	2452646	2091.90
+AAAAAAAAAOKPAAAA	Mr.       	Brandon             	Foster                        	N	28	4	1992	FRENCH POLYNESIA	NULL	Brandon.Foster@vKi8eFToOZHK.org                   	2452527	3706.08
+AAAAAAAABBEDAAAA	Mr.       	James               	Pantoja                       	Y	5	12	1982	NEPAL	NULL	James.Pantoja@LTZLj3ddIvIG0.edu                   	2452503	5668.25
+AAAAAAAABBIHAAAA	Ms.       	Sherry              	Kennedy                       	Y	3	8	1984	MOZAMBIQUE	NULL	Sherry.Kennedy@9hhBNI6.edu                        	2452481	1561.14
+AAAAAAAABBJMAAAA	NULL	Paul                	Lindsey                       	N	NULL	10	NULL	NULL	NULL	Paul.Lindsey@bQo8Zt9XStF.edu                      	NULL	3139.50
+AAAAAAAABBNFBAAA	Mrs.      	Nellie              	Johnson                       	Y	14	6	1962	BAHRAIN	NULL	Nellie.Johnson@U.com                              	2452411	1609.90
+AAAAAAAABDKOAAAA	Dr.       	Vernita             	Bennett                       	Y	12	3	1955	NICARAGUA	NULL	Vernita.Bennett@u2QKJHt.com                       	2452352	11315.85
+AAAAAAAABEJLAAAA	Mr.       	Abel                	Lucero                        	N	15	9	1930	CAPE VERDE	NULL	Abel.Lucero@txdlc3sekSyj7mLokv.org                	2452461	4524.56
+AAAAAAAABFFHBAAA	Mrs.      	Arlene              	Parrish                       	N	18	9	1957	MALAWI	NULL	Arlene.Parrish@m5lX3mTVhbxAEz.org                 	2452433	3184.72
+AAAAAAAABGCFBAAA	Sir       	Alberto             	Whitney                       	Y	20	5	1946	MALAYSIA	NULL	Alberto.Whitney@En6lzc8TlV7vF.org                 	2452496	3806.56
+AAAAAAAABHAGBAAA	Mrs.      	Minnie              	Thompson                      	N	1	8	1976	NEW ZEALAND	NULL	Minnie.Thompson@7u.org                            	2452558	1871.31
+AAAAAAAABLMCAAAA	Dr.       	Frank               	Price                         	N	13	2	1962	SYRIAN ARAB REPUBLIC	NULL	Frank.Price@KO.org                                	2452372	1779.84
+AAAAAAAABNEGAAAA	Ms.       	Laurel              	Olson                         	Y	24	6	1960	BANGLADESH	NULL	Laurel.Olson@92YpV3hofMbNz.edu                    	2452508	4912.49
+AAAAAAAABNMIAAAA	Mrs.      	Judi                	Lopes                         	Y	21	2	1943	NICARAGUA	NULL	Judi.Lopes@DYAyBUb1E.org                          	2452297	8335.86
+AAAAAAAABOGDAAAA	Ms.       	Laura               	Mcfadden                      	N	29	3	1964	GREECE	NULL	Laura.Mcfadden@Ks.com                             	2452364	3942.35
+AAAAAAAABPECAAAA	Mr.       	William             	Hoffman                       	N	21	4	1991	PERU	NULL	William.Hoffman@m8E1N4.com                        	2452321	4550.73
+AAAAAAAACGHDAAAA	Mr.       	Ricky               	Marshall                      	N	11	7	1979	NAMIBIA	NULL	Ricky.Marshall@tJKkX.edu                          	2452610	10400.46
+AAAAAAAACIKBAAAA	Ms.       	Virginia            	Lawson                        	N	26	11	1929	PHILIPPINES	NULL	Virginia.Lawson@bdtmjhsnqQZx.edu                  	2452490	2164.20
+AAAAAAAACILFBAAA	NULL	Frederick           	NULL	N	23	11	1954	NULL	NULL	Frederick.Lambert@BNHNh23xF7qIUJ30.edu            	NULL	3849.92
+AAAAAAAACLNHBAAA	Dr.       	Gary                	Perez                         	N	21	4	1992	MACAO	NULL	Gary.Perez@5dGey4.com                             	2452300	9647.56
+AAAAAAAACOEAAAAA	Dr.       	David               	Saunders                      	Y	6	12	1991	HAITI	NULL	David.Saunders@APTXJyYNgVa.edu                    	2452482	8357.76
+AAAAAAAADBIHAAAA	Mr.       	John                	Sturm                         	Y	5	8	1973	GUAM	NULL	John.Sturm@PnUSI7.com                             	2452457	7161.74
+AAAAAAAADCCCBAAA	Ms.       	Antonia             	Miller                        	N	1	5	1992	PALAU	NULL	Antonia.Miller@CsPe3fE38F.com                     	2452635	2688.66
+AAAAAAAADGIGBAAA	Miss      	Margarita           	Park                          	Y	20	1	1947	LITHUANIA	NULL	Margarita.Park@qb0FrD2Pk.org                      	2452462	1557.37
+AAAAAAAADGMJAAAA	Mrs.      	Karen               	Olson                         	Y	18	11	1974	ARGENTINA	NULL	Karen.Olson@Qe3bBGr.com                           	2452596	11849.40
+AAAAAAAADGOIAAAA	NULL	NULL	NULL	NULL	2	NULL	1977	NULL	NULL	Kathleen.Bell@B0Ze.com                            	2452322	3979.64
+AAAAAAAADHFBAAAA	Mr.       	William             	Lopez                         	N	12	1	1967	MALAYSIA	NULL	William.Lopez@9JMTYo5O22ZFskMMybp.org             	2452435	2302.41
+AAAAAAAADJJMAAAA	Mr.       	James               	Cooper                        	Y	26	4	1982	TUNISIA	NULL	James.Cooper@KH.com                               	2452365	3388.66
+AAAAAAAADJPEBAAA	Ms.       	Lizzie              	Neal                          	Y	16	2	1939	MAURITIUS	NULL	Lizzie.Neal@ru9qksDH5rgLsRn.edu                   	2452433	1915.72
+AAAAAAAADKJCAAAA	Dr.       	Daniel              	Green                         	N	29	8	1970	AMERICAN SAMOA	NULL	Daniel.Green@GPktIG5Y.org                         	2452421	5675.02
+AAAAAAAADMFKAAAA	Mr.       	Ray                 	Gonzales                      	N	22	2	1930	TURKMENISTAN	NULL	Ray.Gonzales@kH8kp.com                            	2452378	2294.25
+AAAAAAAADMHDAAAA	Mr.       	Lee                 	Stanley                       	Y	9	3	1959	CZECH REPUBLIC	NULL	Lee.Stanley@rONmrEDug8q.com                       	2452451	1912.92
+AAAAAAAADMONAAAA	Sir       	Joshua              	West                          	Y	15	3	1987	ALAND ISLANDS	NULL	Joshua.West@5q4JZHUuo9h0e1ol.org                  	2452545	2870.00
+AAAAAAAADOBAAAAA	Dr.       	Paul                	Yeager                        	N	17	11	1946	EGYPT	NULL	Paul.Yeager@PKzHg.edu                             	2452571	3050.46
+AAAAAAAAEADIAAAA	Dr.       	Gregory             	Carey                         	Y	6	1	1937	SUDAN	NULL	Gregory.Carey@495UmqFpU0My0GB8.edu                	2452330	5133.18
+AAAAAAAAECBEAAAA	Ms.       	Megan               	Wilson                        	N	1	12	1935	COMOROS	NULL	Megan.Wilson@mi.com                               	2452501	1622.24
+AAAAAAAAECIEAAAA	Miss      	Danille             	Sanders                       	Y	15	3	1942	OMAN	NULL	Danille.Sanders@dnjPPYBZQ.com                     	2452566	5474.66
+AAAAAAAAEEBEBAAA	Dr.       	Jamie               	Jackson                       	Y	21	11	1933	POLAND	NULL	Jamie.Jackson@dLUBOuU.com                         	2452365	1761.68
+AAAAAAAAEEGMAAAA	Dr.       	NULL	NULL	N	5	NULL	NULL	NULL	NULL	NULL	2452438	2046.20
+AAAAAAAAEEJAAAAA	Dr.       	Rhonda              	Anderson                      	N	27	12	1942	ISLE OF MAN	NULL	Rhonda.Anderson@P2VN7VQxGjj.com                   	2452394	2888.50
+AAAAAAAAEENFAAAA	Dr.       	James               	Brown                         	N	27	9	1971	NEW CALEDONIA	NULL	James.Brown@dzkgBG43cs.org                        	2452466	2474.24
+AAAAAAAAEGDDBAAA	Mr.       	Timothy             	Barajas                       	N	8	10	1976	MAURITANIA	NULL	Timothy.Barajas@FFhEdu3MO4n.com                   	2452594	2209.06
+AAAAAAAAEGEGAAAA	Mrs.      	Arthur              	Kirk                          	Y	24	8	1972	SLOVAKIA	NULL	Arthur.Kirk@3eFiyMXiuRCqt1ofD.com                 	2452286	3189.74
+AAAAAAAAEGGKAAAA	Miss      	Johanna             	Moses                         	Y	3	5	1971	R�UNION	NULL	Johanna.Moses@AhPc5dGr7FubqU1Lyj.com              	2452443	2842.06
+AAAAAAAAEGPPAAAA	Mr.       	Michael             	Pringle                       	Y	1	10	1990	JERSEY	NULL	Michael.Pringle@noEgytx7nOED.edu                  	2452398	1870.56
+AAAAAAAAEHFCBAAA	Mrs.      	Lillian             	Yazzie                        	N	14	1	1936	GEORGIA	NULL	Lillian.Yazzie@Hzg3QQh.com                        	2452555	1758.12
+AAAAAAAAEHLDAAAA	Ms.       	NULL	Brown                         	NULL	NULL	3	NULL	NULL	NULL	NULL	NULL	4483.20
+AAAAAAAAEHLNAAAA	Mr.       	Gregory             	Wester                        	Y	9	3	1946	SPAIN	NULL	Gregory.Wester@ko.com                             	2452535	2303.28
+AAAAAAAAEKCJAAAA	Mrs.      	Keri                	Lawrence                      	Y	31	10	1955	GUERNSEY	NULL	Keri.Lawrence@yIBxLUPgozYINi.com                  	2452523	1523.98
+AAAAAAAAEMELAAAA	Dr.       	Steven              	Parker                        	N	11	9	1936	MADAGASCAR	NULL	Steven.Parker@E6kIVz3.org                         	2452372	2106.30
+AAAAAAAAEMHBAAAA	Mr.       	Brandon             	Ray                           	Y	13	8	1976	ANTARCTICA	NULL	Brandon.Ray@OP6YgS6SQnuykF.org                    	2452290	2258.53
+AAAAAAAAFCPEBAAA	Dr.       	Kristi              	Brennan                       	Y	NULL	11	NULL	NULL	NULL	NULL	2452349	6815.00
+AAAAAAAAFDBAAAAA	Mrs.      	Virginia            	Sims                          	Y	16	4	1969	BULGARIA	NULL	Virginia.Sims@3qndx2y.edu                         	2452302	6723.52
+AAAAAAAAFGICAAAA	Dr.       	Will                	Isbell                        	N	1	10	1975	ERITREA	NULL	Will.Isbell@100I71HVxMaaTVZ5MH2m.org              	2452482	1765.89
+AAAAAAAAFKGEBAAA	Dr.       	Dorothy             	Hendricks                     	N	14	9	1947	NAMIBIA	NULL	Dorothy.Hendricks@7X7OXy1xAs7hVN.org              	2452562	2333.76
+AAAAAAAAFKNEAAAA	Ms.       	Ruth                	Catron                        	Y	2	3	1983	SAINT LUCIA	NULL	Ruth.Catron@g4krLkSRUFX60t4P.edu                  	2452401	1873.40
+AAAAAAAAFKOHBAAA	Ms.       	Annie               	Stevens                       	N	12	2	1933	KENYA	NULL	Annie.Stevens@e3vFdRXUEQ.org                      	2452504	4229.82
+AAAAAAAAFMDEAAAA	Sir       	Dennis              	Mayfield                      	N	5	1	1933	SOMALIA	NULL	Dennis.Mayfield@9DPHTIUxRlxd.edu                  	2452535	2849.00
+AAAAAAAAFMIPAAAA	Dr.       	Michael             	Moran                         	N	1	2	1940	SAINT HELENA	NULL	Michael.Moran@3.edu                               	2452411	3869.60
+AAAAAAAAFPKCBAAA	Dr.       	William             	Terry                         	Y	10	3	1991	GUATEMALA	NULL	William.Terry@jKyKRKfrxH.org                      	2452325	3550.05
+AAAAAAAAFPPGAAAA	Ms.       	Margie              	Lee                           	Y	22	10	1933	GUINEA	NULL	Margie.Lee@Tg2pE7.com                             	2452419	3288.60
+AAAAAAAAGBOAAAAA	Mr.       	Micheal             	NULL	NULL	NULL	NULL	1991	NULL	NULL	Micheal.Holland@4rhkIkNJy6fSU.edu                 	2452530	2676.00
+AAAAAAAAGIEDAAAA	Miss      	Adriana             	Maxfield                      	Y	6	1	1948	MONGOLIA	NULL	Adriana.Maxfield@Na4ize7RHB.com                   	2452415	4872.96
+AAAAAAAAGJJEAAAA	Miss      	NULL	Barnard                       	N	NULL	NULL	1987	NULL	NULL	NULL	NULL	1628.77
+AAAAAAAAGMJPAAAA	Miss      	Deena               	Ferguson                      	Y	8	9	1986	PHILIPPINES	NULL	Deena.Ferguson@19lazfjoSTXBorQ.edu                	2452301	5713.74
+AAAAAAAAHANIAAAA	Mr.       	Robert              	Rogers                        	Y	5	7	1990	SOUTH AFRICA	NULL	Robert.Rogers@m77qeFKJfIO3rugyC.org               	2452456	1638.00
+AAAAAAAAHCHKAAAA	Dr.       	Harry               	Bearden                       	Y	10	2	1957	CHINA	NULL	Harry.Bearden@kNxzQ3SYEmp.com                     	2452533	6455.11
+AAAAAAAAHHAKAAAA	Dr.       	Jeremy              	Richter                       	Y	8	8	1951	SOUTH AFRICA	NULL	Jeremy.Richter@hCAQGRgTCrU.edu                    	2452496	3764.21
+AAAAAAAAHIMLAAAA	Dr.       	Kathleen            	Floyd                         	N	16	12	1983	TURKMENISTAN	NULL	Kathleen.Floyd@ACpkOV2nlHDL.edu                   	2452644	5796.90
+AAAAAAAAHLMCAAAA	Miss      	Adriana             	Case                          	N	16	3	1959	GREECE	NULL	Adriana.Case@aRv.com                              	2452408	1740.52
+AAAAAAAAHMFBBAAA	Dr.       	Katheryn            	White                         	Y	21	7	1983	CAPE VERDE	NULL	Katheryn.White@dqdzeup0a7TYhnOB.edu               	2452417	20518.95
+AAAAAAAAHMNFAAAA	Dr.       	Stephen             	Belanger                      	Y	10	11	1951	GUADELOUPE	NULL	Stephen.Belanger@emUp.edu                         	2452340	5734.80
+AAAAAAAAHNAOAAAA	Mrs.      	Anita               	Gardner                       	Y	27	6	1979	GEORGIA	NULL	Anita.Gardner@g.org                               	2452557	2921.42
+AAAAAAAAHOIBAAAA	Miss      	Vera                	Forte                         	N	20	9	1941	ZAMBIA	NULL	Vera.Forte@XxMnMUGRS.edu                          	2452549	2533.00
+AAAAAAAAHOOGAAAA	Sir       	Jerry               	Rader                         	Y	31	1	1948	PAPUA NEW GUINEA	NULL	Jerry.Rader@FAhBv4pGRIGB.com                      	2452327	3590.16
+AAAAAAAAHPGNAAAA	Dr.       	Renae               	Richardson                    	Y	4	8	1927	SYRIAN ARAB REPUBLIC	NULL	Renae.Richardson@eGnpquq6hFfm20r.com              	2452426	6468.92
+AAAAAAAAIAGBBAAA	Ms.       	Alexis              	Evans                         	N	3	12	1966	LITHUANIA	NULL	Alexis.Evans@2cqJZnt7z8.edu                       	2452596	2043.99
+AAAAAAAAICGBAAAA	Miss      	Gertrude            	Rodriguez                     	Y	10	4	1932	SAN MARINO	NULL	Gertrude.Rodriguez@lj4qAeL9afqB9jS.com            	2452447	2865.39
+AAAAAAAAIDFJAAAA	Dr.       	Dixie               	Brown                         	N	1	5	1983	FRENCH POLYNESIA	NULL	Dixie.Brown@PrD49KMoXd8SEMuCS.com                 	2452595	2135.70
+AAAAAAAAIJCHBAAA	Dr.       	Karen               	Cosby                         	Y	17	9	1963	IRAQ	NULL	Karen.Cosby@H17xf1rPlPtkdKTr.com                  	2452368	3731.50
+AAAAAAAAIJDEBAAA	Mrs.      	Elisa               	Baldwin                       	Y	14	5	1983	SWEDEN	NULL	Elisa.Baldwin@S.edu                               	2452579	3168.75
+AAAAAAAAILKLAAAA	Ms.       	Janice              	Cannon                        	N	11	12	1983	ARGENTINA	NULL	Janice.Cannon@lmR.org                             	2452353	2810.73
+AAAAAAAAINLKAAAA	Ms.       	Mandy               	Anderson                      	N	30	6	1958	MOZAMBIQUE	NULL	Mandy.Anderson@ONxvienlYHJpCe.org                 	2452539	9893.12
+AAAAAAAAIOGPAAAA	Ms.       	Kathryn             	Cooper                        	N	27	1	1982	ARGENTINA	NULL	Kathryn.Cooper@VBO8.com                           	2452457	1870.56
+AAAAAAAAJDKCAAAA	Dr.       	Curtis              	Mcguire                       	Y	10	5	1974	ETHIOPIA	NULL	Curtis.Mcguire@Vex25USDKvv.org                    	2452411	4900.15
+AAAAAAAAJFEFBAAA	Ms.       	Nancy               	Hampton                       	N	24	3	1946	WESTERN SAHARA	NULL	Nancy.Hampton@K8CudFMgtgyGyzS.com                 	2452309	6277.08
+AAAAAAAAJGNBAAAA	Sir       	Robert              	Johnston                      	N	14	5	1956	FAROE ISLANDS	NULL	Robert.Johnston@ccQCj7j.edu                       	2452631	2383.74
+AAAAAAAAJHHEBAAA	Miss      	Else                	Carter                        	Y	19	8	1963	NORFOLK ISLAND	NULL	Else.Carter@e.com                                 	2452580	4210.60
+AAAAAAAAJHIBAAAA	Mr.       	Edwin               	Christensen                   	N	23	6	1947	URUGUAY	NULL	Edwin.Christensen@3fBqkiUX.com                    	2452485	5984.00
+AAAAAAAAJJFBBAAA	Sir       	Michael             	Toney                         	Y	2	6	1981	COSTA RICA	NULL	Michael.Toney@Oe1SH.edu                           	2452306	3453.63
+AAAAAAAAJKDCBAAA	Dr.       	Robert              	James                         	Y	8	11	1929	LEBANON	NULL	Robert.James@DSVGYuMQLZNo9oga1.edu                	2452306	1922.62
+AAAAAAAAJLAGBAAA	Mrs.      	Isabel              	Barber                        	N	24	4	1964	ROMANIA	NULL	Isabel.Barber@0RSzJgpalSYmAoYJgnL.org             	2452435	2562.91
+AAAAAAAAJLICBAAA	Ms.       	Fumiko              	Ebert                         	N	5	12	1956	NAURU	NULL	Fumiko.Ebert@8kz.com                              	2452309	2408.38

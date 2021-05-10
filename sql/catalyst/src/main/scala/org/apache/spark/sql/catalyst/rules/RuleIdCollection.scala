@@ -40,30 +40,76 @@ object RuleIdCollection {
   // a changing, external state. Rules here are in alphabetical order.
   private val rulesNeedingIds: Seq[String] = {
       // Catalyst Analyzer rules
+      "org.apache.spark.sql.catalyst.analysis.Analyzer$AddMetadataColumns" ::
+      "org.apache.spark.sql.catalyst.analysis.Analyzer$ExtractGenerator" ::
+      "org.apache.spark.sql.catalyst.analysis.Analyzer$ExtractWindowExpressions" ::
+      "org.apache.spark.sql.catalyst.analysis.Analyzer$GlobalAggregates" ::
+      "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveAggAliasInGroupBy" ::
+      "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveAggregateFunctions" ::
+      "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveAliases" ::
+      "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveBinaryArithmetic" ::
+      "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveDeserializer" ::
+      "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveEncodersInUDF" ::
+      "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveFunctions" ::
+      "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveGenerate" ::
+      "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveGroupingAnalytics" ::
+      "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveInsertInto" ::
+      "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveMissingReferences" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveNaturalAndUsingJoin" ::
+      "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveNewInstance" ::
+      "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveOrdinalInOrderByAndGroupBy" ::
+      "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveOutputRelation" ::
+      "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolvePivot" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveRandomSeed" ::
+      "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveReferences" ::
+      "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveRelations" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveSubquery" ::
+      "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveSubqueryColumnAliases" ::
+      "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveTables" ::
+      "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveTempViews" ::
+      "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveUpCast" ::
+      "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveUserSpecifiedColumns" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveWindowFrame" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveWindowOrder" ::
+      "org.apache.spark.sql.catalyst.analysis.Analyzer$WindowsSubstitution" ::
+      "org.apache.spark.sql.catalyst.analysis.ApplyCharTypePadding" ::
+      "org.apache.spark.sql.catalyst.analysis.DeduplicateRelations" ::
+      "org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases" ::
+      "org.apache.spark.sql.catalyst.analysis.EliminateUnions" ::
+      "org.apache.spark.sql.catalyst.analysis.ResolveCreateNamedStruct" ::
+      "org.apache.spark.sql.catalyst.analysis.ResolveHints$ResolveCoalesceHints" ::
+      "org.apache.spark.sql.catalyst.analysis.ResolveHints$ResolveJoinStrategyHints" ::
+      "org.apache.spark.sql.catalyst.analysis.ResolveInlineTables" ::
+      "org.apache.spark.sql.catalyst.analysis.ResolveLambdaVariables" ::
+      "org.apache.spark.sql.catalyst.analysis.ResolveTimeZone" ::
+      "org.apache.spark.sql.catalyst.analysis.ResolveUnion" ::
+      "org.apache.spark.sql.catalyst.analysis.SubstituteUnresolvedOrdinals" ::
+      "org.apache.spark.sql.catalyst.analysis.TimeWindowing" ::
       "org.apache.spark.sql.catalyst.analysis.UpdateOuterReferences" ::
       // Catalyst Optimizer rules
       "org.apache.spark.sql.catalyst.optimizer.BooleanSimplification" ::
       "org.apache.spark.sql.catalyst.optimizer.CombineConcats" ::
+      "org.apache.spark.sql.catalyst.optimizer.CombineTypedFilters" ::
       "org.apache.spark.sql.catalyst.optimizer.ConstantFolding" ::
       "org.apache.spark.sql.catalyst.optimizer.ConstantPropagation" ::
       "org.apache.spark.sql.catalyst.optimizer.CostBasedJoinReorder" ::
+      "org.apache.spark.sql.catalyst.optimizer.EliminateMapObjects" ::
       "org.apache.spark.sql.catalyst.optimizer.EliminateOuterJoin" ::
+      "org.apache.spark.sql.catalyst.optimizer.EliminateSerialization" ::
       "org.apache.spark.sql.catalyst.optimizer.LikeSimplification" ::
       "org.apache.spark.sql.catalyst.optimizer.LimitPushDownThroughWindow" ::
       "org.apache.spark.sql.catalyst.optimizer.NullPropagation" ::
+      "org.apache.spark.sql.catalyst.optimizer.ObjectSerializerPruning" ::
       "org.apache.spark.sql.catalyst.optimizer.OptimizeCsvJsonExprs" ::
       "org.apache.spark.sql.catalyst.optimizer.OptimizeIn" ::
       "org.apache.spark.sql.catalyst.optimizer.Optimizer$OptimizeSubqueries" ::
+      "org.apache.spark.sql.catalyst.optimizer.OptimizeUpdateFields"::
       "org.apache.spark.sql.catalyst.optimizer.PropagateEmptyRelation" ::
       "org.apache.spark.sql.catalyst.optimizer.PushDownLeftSemiAntiJoin" ::
       "org.apache.spark.sql.catalyst.optimizer.PushExtraPredicateThroughJoin" ::
       "org.apache.spark.sql.catalyst.optimizer.PushFoldableIntoBranches" ::
       "org.apache.spark.sql.catalyst.optimizer.PushLeftSemiLeftAntiThroughJoin" ::
+      "org.apache.spark.sql.catalyst.optimizer.ReassignLambdaVariableID" ::
       "org.apache.spark.sql.catalyst.optimizer.RemoveDispensableExpressions" ::
       "org.apache.spark.sql.catalyst.optimizer.ReorderAssociativeOperator" ::
       "org.apache.spark.sql.catalyst.optimizer.ReorderJoin" ::
