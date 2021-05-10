@@ -19,10 +19,10 @@ import pandas as pd
 
 from pyspark import pandas as ps
 from pyspark.pandas.config import set_option, reset_option
-from pyspark.pandas.testing.utils import ReusedSQLTestCase, TestUtils
+from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
 
 
-class OpsOnDiffFramesGroupByRollingTest(ReusedSQLTestCase, TestUtils):
+class OpsOnDiffFramesGroupByRollingTest(PandasOnSparkTestCase, TestUtils):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()

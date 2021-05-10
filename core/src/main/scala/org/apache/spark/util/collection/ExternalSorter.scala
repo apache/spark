@@ -263,7 +263,7 @@ private[spark] class ExternalSorter[K, V, C](
   /**
    * Spill contents of in-memory iterator to a temporary file on disk.
    */
-  private[this] def spillMemoryIteratorToDisk(inMemoryIterator: WritablePartitionedIterator)
+  private[this] def spillMemoryIteratorToDisk(inMemoryIterator: WritablePartitionedIterator[K, C])
       : SpilledFile = {
     // Because these files may be read during shuffle, their compression must be controlled by
     // spark.shuffle.compress instead of spark.shuffle.spill.compress, so we need to use
@@ -750,7 +750,7 @@ private[spark] class ExternalSorter[K, V, C](
       // Case where we only have in-memory data
       val collection = if (aggregator.isDefined) map else buffer
       val it = collection.destructiveSortedWritablePartitionedIterator(comparator)
-      while (it.hasNext()) {
+      while (it.hasNext) {
         val partitionId = it.nextPartition()
         var partitionWriter: ShufflePartitionWriter = null
         var partitionPairsWriter: ShufflePartitionPairsWriter = null
@@ -866,18 +866,7 @@ private[spark] class ExternalSorter[K, V, C](
       if (hasSpilled) {
         false
       } else {
-        val inMemoryIterator = new WritablePartitionedIterator {
-          private[this] var cur = if (upstream.hasNext) upstream.next() else null
-
-          def writeNext(writer: PairsWriter): Unit = {
-            writer.write(cur._1._2, cur._2)
-            cur = if (upstream.hasNext) upstream.next() else null
-          }
-
-          def hasNext(): Boolean = cur != null
-
-          def nextPartition(): Int = cur._1._1
-        }
+        val inMemoryIterator = new WritablePartitionedIterator[K, C](upstream)
         logInfo(s"Task ${TaskContext.get().taskAttemptId} force spilling in-memory map to disk " +
           s"and it will release ${org.apache.spark.util.Utils.bytesToString(getUsed())} memory")
         val spillFile = spillMemoryIteratorToDisk(inMemoryIterator)

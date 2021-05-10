@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.expressions.{BaseGroupingSets, Expression, Literal, SortOrder}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan, Sort}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.trees.AlwaysProcess
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
 import org.apache.spark.sql.types.IntegerType
 
@@ -39,7 +40,8 @@ object SubstituteUnresolvedOrdinals extends Rule[LogicalPlan] {
     case e => e
   }
 
-  def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+  def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
+    AlwaysProcess.fn, ruleId) {
     case s: Sort if conf.orderByOrdinal && s.order.exists(o => containIntLiteral(o.child)) =>
       val newOrders = s.order.map {
         case order @ SortOrder(ordinal @ Literal(index: Int, IntegerType), _, _, _) =>

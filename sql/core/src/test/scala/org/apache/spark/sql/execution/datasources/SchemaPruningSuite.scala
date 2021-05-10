@@ -351,6 +351,43 @@ abstract class SchemaPruningSuite
     }
   }
 
+  testSchemaPruning("SPARK-34638: nested column prune on generator output") {
+    val query1 = spark.table("contacts")
+      .select(explode(col("friends")).as("friend"))
+      .select("friend.first")
+    checkScan(query1, "struct<friends:array<struct<first:string>>>")
+    checkAnswer(query1, Row("Susan") :: Nil)
+
+    // Currently we don't prune multiple field case.
+    val query2 = spark.table("contacts")
+      .select(explode(col("friends")).as("friend"))
+      .select("friend.first", "friend.middle")
+    checkScan(query2, "struct<friends:array<struct<first:string,middle:string,last:string>>>")
+    checkAnswer(query2, Row("Susan", "Z.") :: Nil)
+
+    val query3 = spark.table("contacts")
+      .select(explode(col("friends")).as("friend"))
+      .select("friend.first", "friend.middle", "friend")
+    checkScan(query3, "struct<friends:array<struct<first:string,middle:string,last:string>>>")
+    checkAnswer(query3, Row("Susan", "Z.", Row("Susan", "Z.", "Smith")) :: Nil)
+  }
+
+  testSchemaPruning("SPARK-34638: nested column prune on generator output - case-sensitivity") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      val query1 = spark.table("contacts")
+        .select(explode(col("friends")).as("friend"))
+        .select("friend.First")
+      checkScan(query1, "struct<friends:array<struct<first:string>>>")
+      checkAnswer(query1, Row("Susan") :: Nil)
+
+      val query2 = spark.table("contacts")
+        .select(explode(col("friends")).as("friend"))
+        .select("friend.MIDDLE")
+      checkScan(query2, "struct<friends:array<struct<middle:string>>>")
+      checkAnswer(query2, Row("Z.") :: Nil)
+    }
+  }
+
   testSchemaPruning("select one deep nested complex field after repartition") {
     val query = sql("select * from contacts")
       .repartition(100)
@@ -814,6 +851,23 @@ abstract class SchemaPruningSuite
       checkAnswer(query2,
         Row("Jane", "X.") ::
           Row("John", "Y.") :: Nil)
+    }
+  }
+
+  test("SPARK-34638: queries should not fail on unsupported cases") {
+    withTable("nested_array") {
+      sql("select * from values array(array(named_struct('a', 1, 'b', 3), " +
+        "named_struct('a', 2, 'b', 4))) T(items)").write.saveAsTable("nested_array")
+      val query = sql("select d.a from (select explode(c) d from " +
+        "(select explode(items) c from nested_array))")
+      checkAnswer(query, Row(1) :: Row(2) :: Nil)
+    }
+
+    withTable("map") {
+      sql("select * from values map(1, named_struct('a', 1, 'b', 3), " +
+        "2, named_struct('a', 2, 'b', 4)) T(items)").write.saveAsTable("map")
+      val query = sql("select d.a from (select explode(items) (c, d) from map)")
+      checkAnswer(query, Row(1) :: Row(2) :: Nil)
     }
   }
 }

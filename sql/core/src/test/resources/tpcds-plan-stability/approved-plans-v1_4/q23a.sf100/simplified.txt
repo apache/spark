@@ -34,8 +34,8 @@ WholeStageCodegen (36)
                                               Sort [item_sk]
                                                 Project [item_sk]
                                                   Filter [count(1)]
-                                                    HashAggregate [substr(i_item_desc, 1, 30),i_item_sk,d_date,count] [count(1),item_sk,count(1),count]
-                                                      HashAggregate [i_item_desc,i_item_sk,d_date] [count,substr(i_item_desc, 1, 30),count]
+                                                    HashAggregate [_groupingexpression,i_item_sk,d_date,count] [count(1),item_sk,count(1),count]
+                                                      HashAggregate [_groupingexpression,i_item_sk,d_date] [count,count]
                                                         Project [d_date,i_item_sk,i_item_desc]
                                                           SortMergeJoin [ss_item_sk,i_item_sk]
                                                             InputAdapter
@@ -177,8 +177,8 @@ WholeStageCodegen (36)
                                               Sort [item_sk]
                                                 Project [item_sk]
                                                   Filter [count(1)]
-                                                    HashAggregate [substr(i_item_desc, 1, 30),i_item_sk,d_date,count] [count(1),item_sk,count(1),count]
-                                                      HashAggregate [i_item_desc,i_item_sk,d_date] [count,substr(i_item_desc, 1, 30),count]
+                                                    HashAggregate [_groupingexpression,i_item_sk,d_date,count] [count(1),item_sk,count(1),count]
+                                                      HashAggregate [_groupingexpression,i_item_sk,d_date] [count,count]
                                                         Project [d_date,i_item_sk,i_item_desc]
                                                           SortMergeJoin [ss_item_sk,i_item_sk]
                                                             InputAdapter

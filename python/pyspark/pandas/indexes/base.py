@@ -2076,7 +2076,7 @@ class Index(IndexOpsMixin):
         MultiIndex([], )
         """
         if not isinstance(repeats, int):
-            raise ValueError(
+            raise TypeError(
                 "`repeats` argument must be integer, but got {}".format(type(repeats).__name__)
             )
         elif repeats < 0:

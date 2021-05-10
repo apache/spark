@@ -18,10 +18,10 @@
 from pyspark import pandas as ps
 from pyspark.pandas import config
 from pyspark.pandas.config import Option, DictWrapper
-from pyspark.pandas.testing.utils import ReusedSQLTestCase
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 
 
-class ConfigTest(ReusedSQLTestCase):
+class ConfigTest(PandasOnSparkTestCase):
     def setUp(self):
         config._options_dict["test.config"] = Option(key="test.config", doc="", default="default")
 
@@ -77,16 +77,16 @@ class ConfigTest(ReusedSQLTestCase):
         self.assertEqual(ps.get_option("test.config.int.none"), None)
 
     def test_different_types(self):
-        with self.assertRaisesRegex(ValueError, "was <class 'int'>"):
+        with self.assertRaisesRegex(TypeError, "was <class 'int'>"):
             ps.set_option("test.config.list", 1)
 
-        with self.assertRaisesRegex(ValueError, "however, expected types are"):
+        with self.assertRaisesRegex(TypeError, "however, expected types are"):
             ps.set_option("test.config.float", "abc")
 
-        with self.assertRaisesRegex(ValueError, "[<class 'int'>]"):
+        with self.assertRaisesRegex(TypeError, "[<class 'int'>]"):
             ps.set_option("test.config.int", "abc")
 
-        with self.assertRaisesRegex(ValueError, "(<class 'int'>, <class 'NoneType'>)"):
+        with self.assertRaisesRegex(TypeError, "(<class 'int'>, <class 'NoneType'>)"):
             ps.set_option("test.config.int.none", "abc")
 
     def test_check_func(self):

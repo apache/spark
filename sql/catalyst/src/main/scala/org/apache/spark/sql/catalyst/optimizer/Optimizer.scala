@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
+import org.apache.spark.sql.catalyst.trees.TreePattern.PLAN_EXPRESSION
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -147,6 +148,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       EliminateView,
       ReplaceExpressions,
       RewriteNonCorrelatedExists,
+      PullOutGroupingExpressions,
       ComputeCurrentTime,
       GetCurrentDatabaseAndCatalog(catalogManager)) ::
     //////////////////////////////////////////////////////////////////////////////////////////
@@ -266,7 +268,8 @@ abstract class Optimizer(catalogManager: CatalogManager)
       RewriteCorrelatedScalarSubquery.ruleName ::
       RewritePredicateSubquery.ruleName ::
       NormalizeFloatingNumbers.ruleName ::
-      ReplaceUpdateFieldsExpression.ruleName :: Nil
+      ReplaceUpdateFieldsExpression.ruleName ::
+      PullOutGroupingExpressions.ruleName :: Nil
 
   /**
    * Optimize all the subqueries inside expression.
@@ -279,7 +282,8 @@ abstract class Optimizer(catalogManager: CatalogManager)
         case other => other
       }
     }
-    def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
+    def apply(plan: LogicalPlan): LogicalPlan = plan.transformAllExpressionsWithPruning(
+      _.containsPattern(PLAN_EXPRESSION), ruleId) {
       case s: SubqueryExpression =>
         val Subquery(newPlan, _) = Optimizer.this.execute(Subquery.fromExpression(s))
         // At this point we have an optimized subquery plan that we are going to attach
@@ -522,22 +526,18 @@ object RemoveRedundantAggregates extends Rule[LogicalPlan] with AliasHelper {
   }
 
   private def lowerIsRedundant(upper: Aggregate, lower: Aggregate): Boolean = {
-    val upperHasNoAggregateExpressions = !upper.aggregateExpressions.exists(isAggregate)
+    val upperHasNoAggregateExpressions =
+      !upper.aggregateExpressions.exists(AggregateExpression.containsAggregate)
 
     lazy val upperRefsOnlyDeterministicNonAgg = upper.references.subsetOf(AttributeSet(
       lower
         .aggregateExpressions
         .filter(_.deterministic)
-        .filter(!isAggregate(_))
+        .filterNot(AggregateExpression.containsAggregate)
         .map(_.toAttribute)
     ))
 
     upperHasNoAggregateExpressions && upperRefsOnlyDeterministicNonAgg
-  }
-
-  private def isAggregate(expr: Expression): Boolean = {
-    expr.find(e => e.isInstanceOf[AggregateExpression] ||
-      PythonUDF.isGroupedAggPandasUDF(e)).isDefined
   }
 }
 
@@ -772,9 +772,6 @@ object ColumnPruning extends Rule[LogicalPlan] {
       f.copy(child = prunedChild(child, f.references))
     case e @ Expand(_, _, child) if !child.outputSet.subsetOf(e.references) =>
       e.copy(child = prunedChild(child, e.references))
-    case s @ ScriptTransformation(_, _, _, child, _)
-        if !child.outputSet.subsetOf(s.references) =>
-      s.copy(child = prunedChild(child, s.references))
 
     // prune unrequired references
     case p @ Project(_, g: Generate) if p.references != g.outputSet =>
@@ -1175,14 +1172,17 @@ object CombineFilters extends Rule[LogicalPlan] with PredicateHelper {
   val applyLocally: PartialFunction[LogicalPlan, LogicalPlan] = {
     // The query execution/optimization does not guarantee the expressions are evaluated in order.
     // We only can combine them if and only if both are deterministic.
-    case Filter(fc, nf @ Filter(nc, grandChild)) if fc.deterministic && nc.deterministic =>
-      (ExpressionSet(splitConjunctivePredicates(fc)) --
+    case Filter(fc, nf @ Filter(nc, grandChild)) if nc.deterministic =>
+      val (combineCandidates, nonDeterministic) =
+        splitConjunctivePredicates(fc).partition(_.deterministic)
+      val mergedFilter = (ExpressionSet(combineCandidates) --
         ExpressionSet(splitConjunctivePredicates(nc))).reduceOption(And) match {
         case Some(ac) =>
           Filter(And(nc, ac), grandChild)
         case None =>
           nf
       }
+      nonDeterministic.reduceOption(And).map(c => Filter(c, mergedFilter)).getOrElse(mergedFilter)
   }
 }
 
