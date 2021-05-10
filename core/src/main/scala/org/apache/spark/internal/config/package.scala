@@ -1194,7 +1194,7 @@ package object config {
       .createWithDefault(3)
 
   private[spark] val SHUFFLE_MAX_ATTEMPTS_ON_NETTY_OOM =
-    ConfigBuilder("spark.shuffle.nettyOOM.maxAttempts")
+    ConfigBuilder("spark.shuffle.maxAttemptsOnNettyOOM")
       .doc("The max attempts of a shuffle block would retry on Netty OOM issue before throwing " +
         "the shuffle fetch failure.")
       .version("3.2.0")
