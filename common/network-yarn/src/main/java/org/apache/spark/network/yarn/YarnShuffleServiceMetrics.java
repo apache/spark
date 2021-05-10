@@ -83,15 +83,30 @@ class YarnShuffleServiceMetrics implements MetricsSource {
           t.getOneMinuteRate())
         .addGauge(new ShuffleServiceMetricsInfo(name + "_rateMean", "Mean rate of timer " + name),
           t.getMeanRate())
-        .addGauge(getMetricsInfoGenericValue(timingName, "max"), snapshot.getMax())
-        .addGauge(getMetricsInfoGenericValue(timingName, "min"), snapshot.getMin())
-        .addGauge(getMetricsInfoGenericValue(timingName, "mean"), snapshot.getMean())
-        .addGauge(getMetricsInfoGenericValue(timingName, "stdDev"), snapshot.getStdDev());
-      for (int percentile : new int[] { 1, 5, 25, 50, 75, 95, 99 }) {
-        String percentileStr =
-            String.format("%d%sPercentile", percentile, percentile == 1 ? "st" : "th");
-        metricsRecordBuilder.addGauge(getMetricsInfoGenericValue(timingName, percentileStr),
-            snapshot.getValue(percentile / 100.0));
+        .addGauge(
+          getShuffleServiceMetricsInfoForGenericValue(timingName, "max"), snapshot.getMax())
+        .addGauge(
+          getShuffleServiceMetricsInfoForGenericValue(timingName, "min"), snapshot.getMin())
+        .addGauge(
+          getShuffleServiceMetricsInfoForGenericValue(timingName, "mean"), snapshot.getMean())
+        .addGauge(
+          getShuffleServiceMetricsInfoForGenericValue(timingName, "stdDev"), snapshot.getStdDev());
+      for (int percentileThousands : new int[] { 10, 50, 250, 500, 750, 950, 980, 990, 999 }) {
+        String percentileStr;
+        switch (percentileThousands) {
+          case 10:
+            percentileStr = "1stPercentile";
+            break;
+          case 999:
+            percentileStr = "99.9thPercentile";
+            break;
+          default:
+            percentileStr = String.format("%d%sPercentile", percentileThousands / 10, "th");
+            break;
+        }
+        metricsRecordBuilder.addGauge(
+          getShuffleServiceMetricsInfoForGenericValue(timingName, percentileStr),
+          snapshot.getValue(percentileThousands / 1000.0));
       }
     } else if (metric instanceof Meter) {
       Meter m = (Meter) metric;
@@ -142,10 +157,11 @@ class YarnShuffleServiceMetrics implements MetricsSource {
     return new ShuffleServiceMetricsInfo(name, "Value of counter " + name);
   }
 
-  private static ShuffleServiceMetricsInfo getMetricsInfoGenericValue(
+  private static ShuffleServiceMetricsInfo getShuffleServiceMetricsInfoForGenericValue(
       String baseName, String valueName) {
-    return new ShuffleServiceMetricsInfo(String.format("%s_%s", baseName, valueName),
-        valueName + " value of " + baseName);
+    return new ShuffleServiceMetricsInfo(
+      baseName + "_" + valueName,
+      valueName + " value of " + baseName);
   }
 
   private static class ShuffleServiceMetricsInfo implements MetricsInfo {

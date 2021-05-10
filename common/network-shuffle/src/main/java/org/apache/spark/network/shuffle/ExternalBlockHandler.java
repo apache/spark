@@ -107,10 +107,10 @@ public class ExternalBlockHandler extends RpcHandler
       OneForOneStreamManager streamManager,
       ExternalShuffleBlockResolver blockManager,
       MergedShuffleFileManager mergeManager) {
+    this.metrics = new ShuffleMetrics();
     this.streamManager = streamManager;
     this.blockManager = blockManager;
     this.mergeManager = mergeManager;
-    this.metrics = new ShuffleMetrics();
   }
 
   @Override
@@ -332,7 +332,7 @@ public class ExternalBlockHandler extends RpcHandler
         }
       });
       allMetrics.put("registeredExecutorsSize",
-          (Gauge<Integer>) blockManager::getRegisteredExecutorsSize);
+                     (Gauge<Integer>) () -> blockManager.getRegisteredExecutorsSize());
       allMetrics.put("numActiveConnections", activeConnections);
       allMetrics.put("numCaughtExceptions", caughtExceptions);
     }
