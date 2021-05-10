@@ -754,7 +754,7 @@ final class ShuffleBlockFetcherIterator(
               s"retries due to Netty OOM"
             logError(errorMsg)
           }
-          throwFetchFailedException(blockId, mapIndex, address, e, errorMsg)
+          throwFetchFailedException(blockId, mapIndex, address, e, Some(errorMsg))
 
         case DeferFetchRequestResult(request) =>
           val address = request.address
@@ -859,8 +859,8 @@ final class ShuffleBlockFetcherIterator(
       mapIndex: Int,
       address: BlockManagerId,
       e: Throwable,
-      message: String = null) = {
-    val msg = Option(message).getOrElse(e.getMessage)
+      message: Option[String] = None) = {
+    val msg = message.getOrElse(e.getMessage)
     blockId match {
       case ShuffleBlockId(shufId, mapId, reduceId) =>
         throw new FetchFailedException(address, shufId, mapId, mapIndex, reduceId, msg, e)
