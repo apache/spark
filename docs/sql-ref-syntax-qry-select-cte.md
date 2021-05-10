@@ -161,6 +161,7 @@ SELECT * FROM s WHERE tn = 'test_show_tables';
 * [SHOW DATABASES](sql-ref-syntax-aux-show-databases.html)
 * [SHOW FUNCTIONS](sql-ref-syntax-aux-show-functions.html)
 * [SHOW PARTITIONS](sql-ref-syntax-aux-show-partitions.html)
+* [SHOW TABLE EXTENDED](sql-ref-syntax-aux-show-table.html)
 * [SHOW TABLES](sql-ref-syntax-aux-show-tables.html)
 * [SHOW TBLPROPERTIES](sql-ref-syntax-aux-show-tblproperties.html)
 * [SHOW VIEWS](sql-ref-syntax-aux-show-views.html)
