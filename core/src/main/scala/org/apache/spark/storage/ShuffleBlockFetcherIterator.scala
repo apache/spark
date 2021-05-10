@@ -155,7 +155,7 @@ final class ShuffleBlockFetcherIterator(
    * Count the retry times for the blocks due to Netty OOM. The block will stop retry if
    * retry times has exceeded the [[maxAttemptsOnNettyOOM]].
    */
-  private[this] val blockOOMRetryTimes = new HashMap[String, Int]
+  private[this] val blockOOMRetryCounts = new HashMap[String, Int]
 
   /**
    * The blocks that can't be decompressed successfully, it is used to guarantee that we retry
@@ -281,7 +281,7 @@ final class ShuffleBlockFetcherIterator(
             // This needs to be released after use.
             buf.retain()
             remainingBlocks -= blockId
-            blockOOMRetryTimes.remove(blockId)
+            blockOOMRetryCounts.remove(blockId)
             results.put(new SuccessFetchResult(BlockId(blockId), infoMap(blockId)._2,
               address, infoMap(blockId)._1, buf, remainingBlocks.isEmpty))
             logDebug("remainingBlocks: " + remainingBlocks)
@@ -313,10 +313,10 @@ final class ShuffleBlockFetcherIterator(
             // handling the Netty OOM issue, which is not the best way towards memory management.
             // We can get rid of it when we find a way to manage Netty's memory precisely.
             case _: OutOfDirectMemoryError
-                if blockOOMRetryTimes.getOrElseUpdate(blockId, 0) < maxAttemptsOnNettyOOM =>
+                if blockOOMRetryCounts.getOrElseUpdate(blockId, 0) < maxAttemptsOnNettyOOM =>
               if (!isZombie) {
-                val failureTimes = blockOOMRetryTimes(blockId)
-                blockOOMRetryTimes(blockId) += 1
+                val failureTimes = blockOOMRetryCounts(blockId)
+                blockOOMRetryCounts(blockId) += 1
                 if (isNettyOOMOnShuffle.compareAndSet(false, true)) {
                   // The fetcher can fail remaining blocks in batch for the same error. So we only
                   // log the warning once to avoid flooding the logs.
