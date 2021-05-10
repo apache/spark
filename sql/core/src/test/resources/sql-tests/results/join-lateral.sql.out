@@ -286,12 +286,23 @@ struct<c1:int,c2:int,c1:int,c1:int>
 
 
 -- !query
+SELECT * FROM t1, LATERAL (
+  SELECT * FROM (SELECT c1, MIN(c2) m FROM t2 WHERE t1.c1 = t2.c1 GROUP BY c1) s,
+  LATERAL (SELECT m WHERE m > c1)
+)
+-- !query schema
+struct<c1:int,c2:int,c1:int,m:int,m:int>
+-- !query output
+0	1	0	2	2
+
+
+-- !query
 SELECT * FROM t1, LATERAL (SELECT * FROM t2, LATERAL (SELECT t1.c1 + t2.c1))
 -- !query schema
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 't1.c1' given input columns: []; line 1 pos 61
+Found an outer column reference 'spark_catalog.default.t1.c1' in a lateral subquery that is not present in the preceding FROM items of its own query level: [spark_catalog.default.t2.c1, spark_catalog.default.t2.c2], which is not supported yet.; line 1 pos 61
 
 
 -- !query
@@ -300,16 +311,7 @@ SELECT * FROM t1, LATERAL (SELECT * FROM (SELECT c1), LATERAL (SELECT c2))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'c2' given input columns: []; line 1 pos 70
-
-
--- !query
-SELECT * FROM t1, LATERAL (SELECT * FROM (SELECT c1), LATERAL (SELECT c3))
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.AnalysisException
-cannot resolve 'c3' given input columns: []; line 1 pos 70
+Found an outer column reference 'spark_catalog.default.t1.c2' in a lateral subquery that is not present in the preceding FROM items of its own query level: [__auto_generated_subquery_name.c1], which is not supported yet.; line 1 pos 49
 
 
 -- !query

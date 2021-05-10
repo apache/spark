@@ -81,7 +81,7 @@ class ResolveLateralJoinSuite extends AnalysisTest {
   }
 
   test("lateral join with unresolvable attributes") {
-    // SELECT * FROM t1, LATERAL (SELECT a, c))
+    // SELECT * FROM t1, LATERAL (SELECT a, c)
     assertAnalysisError(
       t1.join(t0.select('a, 'c), LateralJoin(Inner)),
       Seq("cannot resolve 'c' given input columns: []")
@@ -91,15 +91,19 @@ class ResolveLateralJoinSuite extends AnalysisTest {
       t1.join(t2.select('a, 'b, 'c, 'd), LateralJoin(Inner)),
       Seq("cannot resolve 'd' given input columns: [a, c]")
     )
-    // SELECT * FROM t1, LATERAL (SELECT * FROM t2, LATERAL (SELECT a, b))
-    assertAnalysisError(
-      t1.join(t2.join(t0.select('a, 'b), LateralJoin(Inner)), LateralJoin(Inner)),
-      Seq("cannot resolve 'b' given input columns: []")
-    )
     // SELECT * FROM t1, LATERAL (SELECT * FROM t2, LATERAL (SELECT t1.a))
     assertAnalysisError(
       t1.join(t2.join(t0.select($"t1.a"), LateralJoin(Inner)), LateralJoin(Inner)),
       Seq("cannot resolve 't1.a' given input columns: []")
+    )
+  }
+
+  test("lateral joins with attributes referencing multiple query levels") {
+    // SELECT * FROM t1, LATERAL (SELECT * FROM t2, LATERAL (SELECT a, b))
+    assertAnalysisError(
+      t1.join(t2.join(t0.select('a, 'b), LateralJoin(Inner)), LateralJoin(Inner)),
+      Seq("Found an outer column reference 'b' in a lateral subquery that is not present in " +
+        "the preceding FROM items of its own query level: [a, c], which is not supported yet.")
     )
   }
 
@@ -172,6 +176,14 @@ class ResolveLateralJoinSuite extends AnalysisTest {
     assertAnalysisError(
       t1.as("x").join(t3.select($"x.a", $"x.b"), LateralJoin(Inner)),
       Seq("No such struct field b in a")
+    )
+  }
+
+  test("resolve missing references before resolving lateral references") {
+    val func = abs(c).as("abs")
+    checkAnalysis(
+      t1.join(t2.select(func).where('a > 0), LateralJoin(Inner)),
+      t1.join(t2.select(func, a).where(a > 0).select(func.toAttribute), LateralJoin(Inner))
     )
   }
 }

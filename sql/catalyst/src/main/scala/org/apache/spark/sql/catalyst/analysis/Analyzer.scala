@@ -2436,79 +2436,60 @@ class Analyzer(override val catalogManager: CatalogManager)
     import ResolveReferences._
 
     /**
-     * Build a project list for Project/Aggregate and expand the star if possible by first using
-     * the inner query plan. If failed, use the outer query plan to expand the star and wrap all
-     * expanded attributes in [[OuterReference]]s.
+     * Expand a star expression using the outer plan and wrap resolved attributes in
+     * outer references.
      */
-    private def expandOuterReference(
-        expressions: Seq[NamedExpression],
-        inner: LogicalPlan,
-        outer: LogicalPlan): Seq[NamedExpression] = {
-
-      // Expand the star expression using the inner plan.
-      def expandInner(star: Star): Seq[NamedExpression] =
-        star.expand(inner, resolver)
-
-      // Leave the star unchanged if the outer plan is unable to resolve the star.
-      // Otherwise wrap the resolved attributes in outer references.
-      def expandOuter(star: Star): Seq[NamedExpression] = {
-        star.expand(outer, resolver).map {
-          case s: Star => s
-          case other => other
-            .transform { case a: Attribute => OuterReference(a) }
-            .asInstanceOf[NamedExpression]
-        }
-      }
-
-      buildExpandedProjectList(expressions, inner, expandInner) match {
-        case expanded if !containsStar(expanded) => expanded
-        // Expand the remaining star expressions using the outer query plan.
-        case other => buildExpandedProjectList(other, outer, expandOuter)
+    private def expandStar(outer: LogicalPlan)(star: Star): Seq[NamedExpression] = {
+      star.expand(outer, resolver).map {
+        case s: Star => s
+        case other => other
+          .transform { case a: Attribute => OuterReference(a) }
+          .asInstanceOf[NamedExpression]
       }
     }
 
     /**
-     * Recursively resolve the plan by first using columns from its children, and then try
-     * resolving the unresolved attributes and star expressions using the outer query plan.
-     * Note for a nested lateral join, only its left subtree can be resolved using the outer
-     * query plan.
+     * Recursively resolve attributes and star expressions in the plan using the outer query plan.
      */
-    private def resolveWithOuter(plan: LogicalPlan, outer: LogicalPlan): LogicalPlan = plan match {
-      case p: LogicalPlan if p.resolved => p
-      case j @ Join(left, _, LateralJoin(_), _, _) if !left.resolved =>
-        // The outer query plan can only be used to resolve the left subtree of a nested
-        // lateral join.
-        j.copy(left = resolveWithOuter(left, outer))
-      case j @ Join(left, right, LateralJoin(_), _, _) if left.resolved && !right.resolved =>
-        // Leave the lateral join unchanged if its left subtree is already resolved. The right
-        // subtree of a nested lateral join can only be resolved using output columns from its
-        // left subtree. Deep correlation is currently not supported. For example:
-        // SELECT * FROM t1, LATERAL (SELECT * FROM t2, LATERAL (SELECT t1.c1 + t2.c1))
-        // `t1.c1` cannot be resolved using t2.
-        j
-      case p: LogicalPlan if !p.childrenResolved =>
-        p.mapChildren(resolveWithOuter(_, outer))
-      case p: Project if containsStar(p.projectList) =>
-        p.copy(projectList = expandOuterReference(p.projectList, p.child, outer))
-      case a: Aggregate if containsStar(a.aggregateExpressions) =>
-        a.copy(aggregateExpressions =
-          expandOuterReference(a.aggregateExpressions, a.child, outer))
-      case p: LogicalPlan =>
-        p transformExpressions {
-          case u @ UnresolvedAttribute(nameParts) =>
-            withPosition(u) {
-              p.resolveChildren(nameParts, resolver)
-                .orElse(resolveLiteralFunction(nameParts))
-                .orElse(resolveOuterReference(nameParts, outer))
-                .getOrElse(u)
-            }
-        }
+    private def resolveOuterReferences(plan: LogicalPlan, outer: LogicalPlan): LogicalPlan = {
+      plan match {
+        case p: LogicalPlan if p.resolved => p
+
+        // The left child of a nested lateral join must be resolved first before resolving
+        // its right child.
+        case j @ Join(left, _, LateralJoin(_), _, _) if !left.resolved =>
+          j.copy(left = resolveOuterReferences(left, outer))
+
+        case p: LogicalPlan if !p.childrenResolved =>
+          p.mapChildren(resolveOuterReferences(_, outer))
+
+        // Expand star expressions in Project using the outer plan.
+        case p: Project if containsStar(p.projectList) =>
+          p.copy(projectList =
+            buildExpandedProjectList(p.projectList, p.child, expandStar(outer)))
+
+        // Expand star expressions in Aggregate using the outer plan.
+        case a: Aggregate if containsStar(a.aggregateExpressions) =>
+          a.copy(aggregateExpressions =
+            buildExpandedProjectList(a.aggregateExpressions, a.child, expandStar(outer)))
+
+        case p: LogicalPlan =>
+          p transformExpressions {
+            case u @ UnresolvedAttribute(nameParts) =>
+              withPosition(u) {
+                resolveOuterReference(nameParts, outer).getOrElse(u)
+              }
+          }
+      }
     }
 
-    override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
-      case j @ Join(left, right, LateralJoin(_), _, _) if left.resolved && !right.resolved =>
-        val newRight = resolveWithOuter(right, left)
-        j.copy(right = newRight)
+    override def apply(plan: LogicalPlan): LogicalPlan = {
+      plan.resolveOperatorsUpWithPruning(_.containsPattern(LATERAL_JOIN), ruleId) {
+        case j @ Join(left, right, LateralJoin(_), _, _) if left.resolved && !right.resolved =>
+          val afterResolve = executeSameContext(right)
+          val newRight = resolveOuterReferences(afterResolve, left)
+          j.copy(right = newRight)
+      }
     }
   }
 

@@ -262,7 +262,25 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
               s"join condition '${condition.sql}' " +
                 s"of type ${condition.dataType.catalogString} is not a boolean.")
 
-          case Join(_, right, LateralJoin(_), _, _) =>
+          case Join(left, right, LateralJoin(_), _, _) =>
+            // Check all outer references in the right operand are a subset of output columns
+            // of the left operand.
+            def checkOuterReferences(plan: LogicalPlan, outer: LogicalPlan): Unit = {
+              plan match {
+                case Join(left, _, LateralJoin(_), _, _) =>
+                  checkOuterReferences(left, outer)
+                case p: LogicalPlan => p transformExpressions {
+                  case o @ OuterReference(e) if !outer.outputSet.contains(e) =>
+                    val column = outer.outputSet.toSeq.map(_.qualifiedName).mkString(", ")
+                    o.failAnalysis(
+                      s"Found an outer column reference '${e.sql}' in a lateral subquery " +
+                      s"that is not present in the preceding FROM items of its own query " +
+                      s"level: [$column], which is not supported yet.")
+                  }
+                  p.children.foreach(checkOuterReferences(_, outer))
+              }
+            }
+            checkOuterReferences(right, left)
             checkCorrelationsInSubquery(right, isLateral = true)
 
           case a @ Aggregate(groupingExprs, aggregateExprs, child) =>
