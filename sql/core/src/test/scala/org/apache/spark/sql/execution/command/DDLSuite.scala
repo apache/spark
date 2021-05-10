@@ -37,7 +37,6 @@ import org.apache.spark.sql.test.{SQLTestUtils, SharedSparkSession}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
-
 class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSparkSession {
   import testImplicits._
 
@@ -224,6 +223,16 @@ class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSparkSession {
   }
 
   test("SPARK-35356: Fix issue of the createTable when externalCatalog is InMemoryCatalog") {
+    def withSparkSession(path: String)(f: SparkSession => Unit): Unit = {
+      val session = SparkSession.builder().master("local[*]").appName("ddlsuite").
+        config("spark.sql.warehouse.dir", path).getOrCreate()
+      try {
+        f(session)
+      } finally {
+        session.close()
+      }
+    }
+
     withTempDir { path =>
       withSparkSession(path.getAbsolutePath) { sparkSession =>
         sparkSession.sql("create table if not exists t1 (id Int) using orc").show()
@@ -237,16 +246,6 @@ class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSparkSession {
           case Exception => fail()
         }
       }
-    }
-  }
-
-  def withSparkSession(path: String)(f: SparkSession => Unit): Unit = {
-    val session = SparkSession.builder().master("local[*]").appName("SPARK-35356").
-      config("spark.sql.warehouse.dir", path).getOrCreate()
-    try {
-      f(session)
-    } finally {
-      session.close()
     }
   }
 }
