@@ -131,35 +131,9 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     verify(wrappedInputStream.invokePrivate(delegateAccess()), times(1)).close()
   }
 
-  /**
-   * Get a blockByAddress iterator for a set of block managers, assuming that for each block
-   * manager, all associated blocks have the same size and `blockMapId`. Each value of the
-   * map contain `(blocks, blockSize, blockMapIndex)`.
-   */
-  private def getBlocksByAddress(
-      blockManagerIdToBlocks: Map[BlockManagerId, (Traversable[BlockId], Long, Int)])
-  : Iterator[(BlockManagerId, Seq[(BlockId, Long, Int)])] = {
-    blockManagerIdToBlocks.map { case (blockManagerId, (blocks, blockSize, blockMapIndex)) =>
-      (blockManagerId, blocks.map(blockId => (blockId, blockSize, blockMapIndex)).toSeq)
-    }.toIterator
-  }
-
-  /**
-   * Get a blockByAddress iterator for a single BlockManagerId assuming all blocks have the same
-   * size and `blockMapIndex`. Convenience method for calling `getBlocksByAddress` with a map
-   * containing a single entry.
-   */
-  private def getBlocksByAddressForSingleBM(
-      blockManagerId: BlockManagerId,
-      blocks: Traversable[BlockId],
-      blockSize: Long,
-      blockMapIndex: Int): Iterator[(BlockManagerId, Seq[(BlockId, Long, Int)])] = {
-    getBlocksByAddress(Map(blockManagerId -> (blocks, blockSize, blockMapIndex)))
-  }
-
   // scalastyle:off argcount
   private def createShuffleBlockIteratorWithDefaults(
-      blocksByAddress: Iterator[(BlockManagerId, Seq[(BlockId, Long, Int)])],
+      blocksByAddress: Map[BlockManagerId, (Traversable[BlockId], Long, Int)],
       taskContext: Option[TaskContext] = None,
       streamWrapperLimitSize: Option[Long] = None,
       blockManager: Option[BlockManager] = None,
@@ -176,7 +150,9 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       tContext,
       transfer,
       blockManager.getOrElse(createMockBlockManager()),
-      blocksByAddress,
+      blocksByAddress.map { case (blockManagerId, (blocks, blockSize, blockMapIndex)) =>
+        (blockManagerId, blocks.map(blockId => (blockId, blockSize, blockMapIndex)).toSeq)
+      }.toIterator,
       streamWrapperLimitSize
         .map(limit => (_: BlockId, in: InputStream) => new LimitedInputStream(in, limit))
         .getOrElse((_: BlockId, in: InputStream) => in),
@@ -214,11 +190,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
 
     // Create a block manager running on the same host (host-local)
     val hostLocalBmId = BlockManagerId("test-host-local-client-1", "test-local-host", 3)
-    val hostLocalBlocks = Map[BlockId, ManagedBuffer](
-      ShuffleBlockId(0, 5, 0) -> createMockManagedBuffer(),
-      ShuffleBlockId(0, 6, 0) -> createMockManagedBuffer(),
-      ShuffleBlockId(0, 7, 0) -> createMockManagedBuffer(),
-      ShuffleBlockId(0, 8, 0) -> createMockManagedBuffer())
+    val hostLocalBlocks = 5.to(8).map(ShuffleBlockId(0, _, 0) -> createMockManagedBuffer()).toMap
 
     hostLocalBlocks.foreach { case (blockId, buf) =>
       doReturn(buf)
@@ -229,14 +201,12 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     // returning local dir for hostLocalBmId
     initHostLocalDirManager(blockManager, hostLocalDirs)
 
-    val blocksByAddress = getBlocksByAddress(Map(
-      localBmId -> (localBlocks.keys, 1L, 0),
-      remoteBmId -> (remoteBlocks.keys, 1L, 1),
-      hostLocalBlocks -> (hostLocalBlocks.keys, 1L, 1)
-    ))
-
     val iterator = createShuffleBlockIteratorWithDefaults(
-      blocksByAddress,
+      Map(
+        localBmId -> (localBlocks.keys, 1L, 0),
+        remoteBmId -> (remoteBlocks.keys, 1L, 1),
+        hostLocalBmId -> (hostLocalBlocks.keys, 1L, 1)
+      ),
       blockManager = Some(blockManager)
     )
 
@@ -292,7 +262,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
 
     configureMockTransfer(Map())
     val iterator = createShuffleBlockIteratorWithDefaults(
-      getBlocksByAddressForSingleBM(hostLocalBmId, hostLocalBlocks.keys, 1L, 1)
+      Map(hostLocalBmId -> (hostLocalBlocks.keys, 1L, 1))
     )
     intercept[FetchFailedException] { iterator.next() }
   }
@@ -302,14 +272,13 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     val remoteBmId2 = BlockManagerId("test-remote-client-2", "test-remote-host2", 2)
     val blockId1 = ShuffleBlockId(0, 1, 0)
     val blockId2 = ShuffleBlockId(1, 1, 0)
-    val blocksByAddress = getBlocksByAddress(Map(
-      remoteBmId1 -> (Seq(blockId1), 1000L, 0),
-      remoteBmId2 -> (Seq(blockId2), 1000L, 0)
-    ))
     configureMockTransfer(Map(
       blockId1 -> createMockManagedBuffer(1000),
       blockId2 -> createMockManagedBuffer(1000)))
-    val iterator = createShuffleBlockIteratorWithDefaults(blocksByAddress, maxBytesInFlight = 1000L)
+    val iterator = createShuffleBlockIteratorWithDefaults(Map(
+      remoteBmId1 -> (Seq(blockId1), 1000L, 0),
+      remoteBmId2 -> (Seq(blockId2), 1000L, 0)
+    ), maxBytesInFlight = 1000L)
     // After initialize() we'll have 2 FetchRequests and each is 1000 bytes. So only the
     // first FetchRequests can be sent, and the second one will hit maxBytesInFlight so
     // it won't be sent.
@@ -329,7 +298,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     val blocks = 1.to(3).map(ShuffleBlockId(0, _, 0))
     configureMockTransfer(blocks.map(_ -> createMockManagedBuffer()).toMap)
     val iterator = createShuffleBlockIteratorWithDefaults(
-      getBlocksByAddressForSingleBM(remoteBmId, blocks, 1000L, 0),
+      Map(remoteBmId -> (blocks, 1000L, 0)),
       maxBlocksInFlightPerAddress = 2
     )
     // After initialize(), we'll have 2 FetchRequests that one has 2 blocks inside and another one
@@ -390,14 +359,12 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     // returning local dir for hostLocalBmId
     initHostLocalDirManager(blockManager, hostLocalDirs)
 
-    val blocksByAddress = getBlocksByAddress(Map(
-      localBmId -> (localBlocks, 1L, 0),
-      remoteBmId -> (remoteBlocks, 1L, 1),
-      hostLocalBmId -> (hostLocalBlocks.keys, 1L, 1)
-    ))
-
     val iterator = createShuffleBlockIteratorWithDefaults(
-      blocksByAddress,
+      Map(
+        localBmId -> (localBlocks, 1L, 0),
+        remoteBmId -> (remoteBlocks, 1L, 1),
+        hostLocalBmId -> (hostLocalBlocks.keys, 1L, 1)
+      ),
       blockManager = Some(blockManager),
       doBatchFetch = true
     )
@@ -437,13 +404,11 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       ShuffleBlockBatchId(0, 4, 0, 2) -> createMockManagedBuffer())
     configureMockTransfer(mergedRemoteBlocks)
 
-    val blocksByAddress = getBlocksByAddress(Map(
-      remoteBmId1 -> (remoteBlocks1, 100L, 1),
-      remoteBmId2 -> (remoteBlocks2, 100L, 1)
-    ))
-
     val iterator = createShuffleBlockIteratorWithDefaults(
-      blocksByAddress,
+      Map(
+        remoteBmId1 -> (remoteBlocks1, 100L, 1),
+        remoteBmId2 -> (remoteBlocks2, 100L, 1)
+      ),
       maxBytesInFlight = 1500,
       doBatchFetch = true
     )
@@ -483,7 +448,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
 
     configureMockTransfer(mergedRemoteBlocks)
     val iterator = createShuffleBlockIteratorWithDefaults(
-      getBlocksByAddressForSingleBM(remoteBmId, remoteBlocks, 100L, 1),
+      Map(remoteBmId -> (remoteBlocks, 100L, 1)),
       maxBlocksInFlightPerAddress = 2,
       doBatchFetch = true
     )
@@ -532,7 +497,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
 
     val taskContext = TaskContext.empty()
     val iterator = createShuffleBlockIteratorWithDefaults(
-      getBlocksByAddressForSingleBM(remoteBmId, blocks.keys, 1L, 0),
+      Map(remoteBmId -> (blocks.keys, 1L, 0)),
       taskContext = Some(taskContext)
     )
 
@@ -581,7 +546,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     }
 
     val iterator = createShuffleBlockIteratorWithDefaults(
-      getBlocksByAddressForSingleBM(remoteBmId, blocks.keys, 1L, 0)
+      Map(remoteBmId -> (blocks.keys, 1L, 0))
     )
 
     // Continue only after the mock calls onBlockFetchFailure
@@ -650,7 +615,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     }
 
     val iterator = createShuffleBlockIteratorWithDefaults(
-      getBlocksByAddressForSingleBM(remoteBmId, blocks.keys, 1L, 0),
+      Map(remoteBmId ->(blocks.keys, 1L, 0)),
       streamWrapperLimitSize = Some(100)
     )
 
@@ -693,12 +658,11 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
 
     configureMockTransfer(
       Map(shuffleBlockId1 -> corruptBuffer1, shuffleBlockId2 -> corruptBuffer2))
-    val blocksByAddress = getBlocksByAddress(Map(
-      blockManagerId1 -> (Seq(shuffleBlockId1), corruptBuffer1.size(), 1),
-      blockManagerId2 -> (Seq(shuffleBlockId2), corruptBuffer2.size(), 2)
-    ))
     val iterator = createShuffleBlockIteratorWithDefaults(
-      blocksByAddress,
+      Map(
+        blockManagerId1 -> (Seq(shuffleBlockId1), corruptBuffer1.size(), 1),
+        blockManagerId2 -> (Seq(shuffleBlockId2), corruptBuffer2.size(), 2)
+      ),
       streamWrapperLimitSize = Some(streamLength),
       maxBytesInFlight = 3 * 1024
     )
@@ -747,7 +711,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     configureMockTransfer(Map(ShuffleBlockId(0, 0, 0) -> managedBuffer))
 
     val iterator = createShuffleBlockIteratorWithDefaults(
-      getBlocksByAddressForSingleBM(localBmId, Seq(ShuffleBlockId(0, 0, 0)), 10000L, 0),
+      Map(localBmId -> (Seq(ShuffleBlockId(0, 0, 0)), 10000L, 0)),
       blockManager = Some(blockManager),
       streamWrapperLimitSize = Some(10000),
       maxBytesInFlight = 2048 // force concatenation of stream by limiting bytes in flight
@@ -791,7 +755,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     }
 
     val iterator = createShuffleBlockIteratorWithDefaults(
-      getBlocksByAddressForSingleBM(remoteBmId, blocks.keys, 1L, 0),
+      Map(remoteBmId -> (blocks.keys, 1L, 0)),
       streamWrapperLimitSize = Some(100),
       detectCorruptUseExtraMemory = false
     )
@@ -837,7 +801,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       // construction of `ShuffleBlockFetcherIterator`, all requests to fetch remote shuffle blocks
       // are issued. The `maxReqSizeShuffleToMem` is hard-coded as 200 here.
       createShuffleBlockIteratorWithDefaults(
-        getBlocksByAddressForSingleBM(remoteBmId, remoteBlocks.keys, blockSize, 0),
+        Map(remoteBmId -> (remoteBlocks.keys, blockSize, 0)),
         blockManager = Some(blockManager),
         maxReqSizeShuffleToMem = 200)
     }
@@ -864,7 +828,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     configureMockTransfer(blocks.mapValues(_ => createMockManagedBuffer(0)).toMap)
 
     val iterator = createShuffleBlockIteratorWithDefaults(
-      getBlocksByAddressForSingleBM(remoteBmId, blocks.keys, 1L, 0)
+      Map(remoteBmId ->(blocks.keys, 1L, 0))
     )
 
     // All blocks fetched return zero length and should trigger a receive-side error:
