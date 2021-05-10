@@ -3168,6 +3168,8 @@ object SQLConf {
     .intConf
     .createWithDefault(0)
 
+  val ADD_PARTITION_BATCH_SIZE
+
   /**
    * Holds information about keys that have been deprecated.
    *
