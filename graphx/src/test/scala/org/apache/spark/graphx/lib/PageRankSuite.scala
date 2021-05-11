@@ -261,7 +261,7 @@ class PageRankSuite extends SparkFunSuite with LocalSparkContext {
       ).vertices.collect()
 
       // assert that all scores are equal
-      assert(ranksA.zip(ranksB).forall{ case(rankA, rankB) => rankA == rankB })
+      assert(ranksA.zip(ranksB).forall { case(rankA, rankB) => rankA == rankB })
     }
   } // end of Grid PageRank with checkpoint without intermediate normalization
 

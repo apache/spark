@@ -161,6 +161,7 @@ object PageRank extends Logging {
    * @return the graph containing with each vertex containing the PageRank and each edge
    *         containing the normalized weight.
    *
+   * @since 3.2.0
    */
   def runWithOptions[VD: ClassTag, ED: ClassTag](
       graph: Graph[VD, ED], numIter: Int, resetProb: Double,
@@ -254,6 +255,8 @@ object PageRank extends Logging {
    *
    * @return the graph containing with each vertex containing the PageRank and each edge
    *         containing the normalized weight.
+   *
+   * @since 3.2.0
    */
   def runWithOptionsWithPreviousPageRank[VD: ClassTag, ED: ClassTag](
       graph: Graph[VD, ED], numIter: Int, resetProb: Double, srcId: Option[VertexId],
