@@ -168,7 +168,7 @@ case class ExpandExec(
     }
 
     // Part 2: switch/case statements
-    val cases = projections.zipWithIndex.map { case (exprs, row) =>
+    val switchCaseExprs = projections.zipWithIndex.map { case (exprs, row) =>
       val (exprCodesWithIndices, inputVarSets) = exprs.indices.flatMap { col =>
         if (!sameOutput(col)) {
           val boundExpr = BindReferences.bindReference(exprs(col), attributeSeq)
@@ -180,40 +180,55 @@ case class ExpandExec(
         }
       }.unzip
 
-      val updateCode = exprCodesWithIndices.map { case (col, ev) =>
+      val inputVars = inputVarSets.foldLeft(Set.empty[VariableValue])(_ ++ _)
+      (row, exprCodesWithIndices, inputVars.toSeq)
+    }
+
+    def generateUpdateCode(exprCodes: Seq[(Int, ExprCode)]): String = {
+      exprCodes.map { case (col, ev) =>
         s"""
            |${ev.code}
            |${outputColumns(col).isNull} = ${ev.isNull};
            |${outputColumns(col).value} = ${ev.value};
          """.stripMargin
-      }
+      }.mkString("\n")
+    }
 
-      val splitThreshold = SQLConf.get.methodSplitThreshold
-      val inputVars = inputVarSets.foldLeft(Set.empty[VariableValue])(_ ++ _)
-      val paramLength = CodeGenerator.calculateParamLengthFromExprValues(inputVars.toSeq)
-      val maybeSplitUpdateCode = if (CodeGenerator.isValidParamLength(paramLength) &&
-          exprCodesWithIndices.map(_._2.code.length).sum > splitThreshold) {
-        val switchCaseFunc = ctx.freshName("switchCaseCode")
-        val argList = inputVars.map { v =>
-          s"${CodeGenerator.typeName(v.javaType)} ${v.variableName}"
+    val splitThreshold = SQLConf.get.methodSplitThreshold
+    val cases = if (switchCaseExprs.flatMap(_._2.map(_._2.code.length)).sum > splitThreshold) {
+      switchCaseExprs.map { case (row, exprCodes, inputVars) =>
+        val updateCode = generateUpdateCode(exprCodes)
+        val paramLength = CodeGenerator.calculateParamLengthFromExprValues(inputVars)
+        val maybeSplitUpdateCode = if (CodeGenerator.isValidParamLength(paramLength)) {
+          val switchCaseFunc = ctx.freshName("switchCaseCode")
+          val argList = inputVars.map { v =>
+            s"${CodeGenerator.typeName(v.javaType)} ${v.variableName}"
+          }
+          ctx.addNewFunction(switchCaseFunc,
+            s"""
+               |private void $switchCaseFunc(${argList.mkString(", ")}) {
+               |  $updateCode
+               |}
+             """.stripMargin)
+
+          s"$switchCaseFunc(${inputVars.map(_.variableName).mkString(", ")});"
+        } else {
+          updateCode
         }
-        ctx.addNewFunction(switchCaseFunc,
-          s"""
-             |private void $switchCaseFunc(${argList.mkString(", ")}) {
-             |  ${updateCode.mkString("\n")}
-             |}
-           """.stripMargin)
-
-        s"$switchCaseFunc(${inputVars.map(_.variableName).mkString(", ")});"
-      } else {
-        updateCode.mkString("\n")
+        s"""
+           |case $row:
+           |  $maybeSplitUpdateCode
+           |  break;
+         """.stripMargin
       }
-
-      s"""
-         |case $row:
-         |  $maybeSplitUpdateCode
-         |  break;
-       """.stripMargin
+    } else {
+      switchCaseExprs.map { case (row, exprCodes, _) =>
+        s"""
+           |case $row:
+           |  ${generateUpdateCode(exprCodes)}
+           |  break;
+         """.stripMargin
+      }
     }
 
     val numOutput = metricTerm(ctx, "numOutputRows")
