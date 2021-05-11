@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.plans.physical.{Distribution, HashClustered
  * Holds common logic for join operators by shuffling two child relations
  * using the join keys.
  */
-trait ShuffledJoin extends BaseJoinExec {
+trait ShuffledJoin extends JoinCodegenSupport {
   def isSkewJoin: Boolean
 
   override def nodeName: String = {
