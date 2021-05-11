@@ -1093,13 +1093,13 @@ object SQLConf {
   val CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING =
     buildConf("spark.sql.optimizer.canChangeCachedPlanOutputPartitioning")
       .internal()
-      .doc(s"When true, some configs are disabled during executing cache plan that is to avoid " +
+      .doc(s"When false, some configs are disabled during executing cache plan that is to avoid " +
         "performance regression if other queries hit the cached plan. Currently, the disabled " +
         s"configs include: ${ADAPTIVE_EXECUTION_ENABLED.key} and " +
         s"${AUTO_BUCKETED_SCAN_ENABLED.key}.")
       .version("3.2.0")
       .booleanConf
-      .createWithDefault(true)
+      .createWithDefault(false)
 
   val CROSS_JOINS_ENABLED = buildConf("spark.sql.crossJoin.enabled")
     .internal()
