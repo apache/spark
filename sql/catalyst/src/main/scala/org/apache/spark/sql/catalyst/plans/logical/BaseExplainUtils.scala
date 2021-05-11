@@ -15,17 +15,17 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution
+package org.apache.spark.sql.catalyst.plans.logical
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.{Expression, PlanExpression}
+import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AdaptiveSparkPlanHelper, QueryStageExec}
+import org.apache.spark.sql.internal.SQLConf
 
-object ExplainUtils extends AdaptiveSparkPlanHelper {
+abstract class BaseExplainUtils[PlanType <: QueryPlan[PlanType]] {
   /**
    * Given a input physical plan, performs the following tasks.
    *   1. Computes the operator id for current operator and records it in the operator
@@ -48,8 +48,8 @@ object ExplainUtils extends AdaptiveSparkPlanHelper {
    *         always assign incrementing unique id to each operator.
    *
    */
-  private def processPlanSkippingSubqueries[T <: QueryPlan[T]](
-      plan: => QueryPlan[T],
+  protected def processPlanSkippingSubqueries(
+      plan: => PlanType,
       append: String => Unit,
       startOperatorID: Int): Int = {
 
@@ -57,18 +57,16 @@ object ExplainUtils extends AdaptiveSparkPlanHelper {
     var currentOperatorID = startOperatorID
     try {
       currentOperatorID = generateOperatorIDs(plan, currentOperatorID, operationIDs)
-      generateWholeStageCodegenIds(plan)
 
-      QueryPlan.append(
-        plan,
+      plan.treeString(
         append,
         verbose = false,
         addSuffix = false,
+        maxFields = SQLConf.get.maxToStringFields,
         printOperatorId = true)
 
       append("\n")
-      var i: Integer = 0
-      for ((opId, curPlan) <- operationIDs) {
+      for ((_, curPlan) <- operationIDs) {
         append(curPlan.verboseStringWithOperatorId())
       }
     } catch {
@@ -77,40 +75,41 @@ object ExplainUtils extends AdaptiveSparkPlanHelper {
     currentOperatorID
   }
 
+  protected def processSubquries(
+    append: String => Unit,
+    startOperatorID: Int,
+    subqueries: Seq[(PlanType, Expression, PlanType)]): Unit = {
+    var i = 0
+    var currentOperatorID = startOperatorID
+    for (sub <- subqueries) {
+      if (i == 0) {
+        append("\n===== Subqueries =====\n\n")
+      }
+      i = i + 1
+      append(s"Subquery:$i Hosting operator id = " +
+        s"${getOpId(sub._1)} Hosting Expression = ${sub._2}\n")
+
+      // For each subquery expression in the parent plan, process its child plan to compute
+      // the explain output.
+      currentOperatorID = processPlanSkippingSubqueries(sub._3, append, currentOperatorID)
+      append("\n")
+    }
+  }
+
   /**
    * Given a input physical plan, performs the following tasks.
    *   1. Generates the explain output for the input plan excluding the subquery plans.
    *   2. Generates the explain output for each subquery referenced in the plan.
    */
-  def processPlan[T <: QueryPlan[T]](
-      plan: => QueryPlan[T],
+  def processPlan(
+      plan: => PlanType,
       append: String => Unit): Unit = {
     try {
-      val subqueries = ArrayBuffer.empty[(SparkPlan, Expression, BaseSubqueryExec)]
+      val subqueries = ArrayBuffer.empty[(PlanType, Expression, PlanType)]
       var currentOperatorID = 0
       currentOperatorID = processPlanSkippingSubqueries(plan, append, currentOperatorID)
       getSubqueries(plan, subqueries)
-      var i = 0
-
-      for (sub <- subqueries) {
-        if (i == 0) {
-          append("\n===== Subqueries =====\n\n")
-        }
-        i = i + 1
-        append(s"Subquery:$i Hosting operator id = " +
-          s"${getOpId(sub._1)} Hosting Expression = ${sub._2}\n")
-
-        // For each subquery expression in the parent plan, process its child plan to compute
-        // the explain output. In case of subquery reuse, we don't print subquery plan more
-        // than once. So we skip [[ReusedSubqueryExec]] here.
-        if (!sub._3.isInstanceOf[ReusedSubqueryExec]) {
-          currentOperatorID = processPlanSkippingSubqueries(
-            sub._3.child,
-            append,
-            currentOperatorID)
-        }
-        append("\n")
-      }
+      processSubquries(append, currentOperatorID, subqueries)
     } finally {
       removeTags(plan)
     }
@@ -132,70 +131,10 @@ object ExplainUtils extends AdaptiveSparkPlanHelper {
    * @return The last generated operation id for this input plan. This is to ensure we
    *         always assign incrementing unique id to each operator.
    */
-  private def generateOperatorIDs(
+  protected def generateOperatorIDs(
       plan: QueryPlan[_],
       startOperatorID: Int,
-      operatorIDs: mutable.ArrayBuffer[(Int, QueryPlan[_])]): Int = {
-    var currentOperationID = startOperatorID
-    // Skip the subqueries as they are not printed as part of main query block.
-    if (plan.isInstanceOf[BaseSubqueryExec]) {
-      return currentOperationID
-    }
-    plan.foreachUp {
-      case p: WholeStageCodegenExec =>
-      case p: InputAdapter =>
-      case other: QueryPlan[_] =>
-
-        def setOpId(): Unit = if (other.getTagValue(QueryPlan.OP_ID_TAG).isEmpty) {
-          currentOperationID += 1
-          other.setTagValue(QueryPlan.OP_ID_TAG, currentOperationID)
-          operatorIDs += ((currentOperationID, other))
-        }
-
-        other match {
-          case p: AdaptiveSparkPlanExec =>
-            currentOperationID =
-              generateOperatorIDs(p.executedPlan, currentOperationID, operatorIDs)
-            setOpId()
-          case p: QueryStageExec =>
-            currentOperationID = generateOperatorIDs(p.plan, currentOperationID, operatorIDs)
-            setOpId()
-          case _ =>
-            setOpId()
-            other.innerChildren.foldLeft(currentOperationID) {
-              (curId, plan) => generateOperatorIDs(plan, curId, operatorIDs)
-            }
-        }
-    }
-    currentOperationID
-  }
-
-  /**
-   * Traverses the supplied input plan in a top-down fashion and records the
-   * whole stage code gen id in the plan via setting a tag.
-   */
-  private def generateWholeStageCodegenIds(plan: QueryPlan[_]): Unit = {
-    var currentCodegenId = -1
-
-    def setCodegenId(p: QueryPlan[_], children: Seq[QueryPlan[_]]): Unit = {
-      if (currentCodegenId != -1) {
-        p.setTagValue(QueryPlan.CODEGEN_ID_TAG, currentCodegenId)
-      }
-      children.foreach(generateWholeStageCodegenIds)
-    }
-
-    // Skip the subqueries as they are not printed as part of main query block.
-    if (plan.isInstanceOf[BaseSubqueryExec]) {
-      return
-    }
-    plan.foreach {
-      case p: WholeStageCodegenExec => currentCodegenId = p.codegenStageId
-      case _: InputAdapter => currentCodegenId = -1
-      case p: AdaptiveSparkPlanExec => setCodegenId(p, Seq(p.executedPlan))
-      case p: QueryStageExec => setCodegenId(p, Seq(p.plan))
-      case other: QueryPlan[_] => setCodegenId(other, other.innerChildren)
-    }
-  }
+      operatorIDs: mutable.ArrayBuffer[(Int, QueryPlan[_])]): Int
 
   /**
    * Generate detailed field string with different format based on type of input value
@@ -214,44 +153,27 @@ object ExplainUtils extends AdaptiveSparkPlanHelper {
    *  2. Hosting expression
    *  3. Subquery plan
    */
-  private def getSubqueries(
-      plan: => QueryPlan[_],
-      subqueries: ArrayBuffer[(SparkPlan, Expression, BaseSubqueryExec)]): Unit = {
-    plan.foreach {
-      case a: AdaptiveSparkPlanExec =>
-        getSubqueries(a.executedPlan, subqueries)
-      case p: SparkPlan =>
-        p.expressions.foreach (_.collect {
-          case e: PlanExpression[_] =>
-            e.plan match {
-              case s: BaseSubqueryExec =>
-                subqueries += ((p, e, s))
-                getSubqueries(s, subqueries)
-              case _ =>
-            }
-        })
-    }
-  }
+  protected def getSubqueries(
+      plan: => PlanType,
+      subqueries: ArrayBuffer[(PlanType, Expression, PlanType)]): Unit
 
   /**
    * Returns the operator identifier for the supplied plan by retrieving the
    * `operationId` tag value.
    */
-  def getOpId(plan: QueryPlan[_]): String = {
+  def getOpId(plan: PlanType): String = {
     plan.getTagValue(QueryPlan.OP_ID_TAG).map(v => s"$v").getOrElse("unknown")
   }
 
-  def removeTags(plan: QueryPlan[_]): Unit = {
-    def remove(p: QueryPlan[_], children: Seq[QueryPlan[_]]): Unit = {
-      p.unsetTagValue(QueryPlan.OP_ID_TAG)
-      p.unsetTagValue(QueryPlan.CODEGEN_ID_TAG)
-      children.foreach(removeTags)
-    }
+  protected def removeIdTags(p: QueryPlan[_], children: Seq[QueryPlan[_]]): Unit = {
+    p.unsetTagValue(QueryPlan.OP_ID_TAG)
+    p.unsetTagValue(QueryPlan.CODEGEN_ID_TAG)
+    children.foreach(removeTags)
+  }
 
+  protected def removeTags(plan: QueryPlan[_]): Unit = {
     plan foreach {
-      case p: AdaptiveSparkPlanExec => remove(p, Seq(p.executedPlan))
-      case p: QueryStageExec => remove(p, Seq(p.plan))
-      case plan: QueryPlan[_] => remove(plan, plan.innerChildren)
+      case p: QueryPlan[_] => removeIdTags(p, p.innerChildren)
     }
   }
 }

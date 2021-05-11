@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
-import org.apache.spark.sql.execution.{CodegenSupport, ExplainUtils, RowIterator}
+import org.apache.spark.sql.execution.{CodegenSupport, ExplainSparkPlanUtils, RowIterator}
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.types.{BooleanType, IntegralType, LongType}
 
@@ -43,7 +43,7 @@ trait HashJoin extends JoinCodegenSupport {
   def buildSide: BuildSide
 
   override def simpleStringWithNodeId(): String = {
-    val opId = ExplainUtils.getOpId(this)
+    val opId = ExplainSparkPlanUtils.getOpId(this)
     s"$nodeName $joinType ${buildSide} ($opId)".trim
   }
 

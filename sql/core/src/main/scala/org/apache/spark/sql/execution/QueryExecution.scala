@@ -146,28 +146,16 @@ class QueryExecution(
 
   def simpleString: String = {
     val concat = new PlanStringConcat()
-    simpleString(false, SQLConf.get.maxToStringFields, concat.append)
+    simpleString(SQLConf.get.maxToStringFields, concat.append)
     withRedaction {
       concat.toString
     }
   }
 
-  private def simpleString(
-      formatted: Boolean,
-      maxFields: Int,
-      append: String => Unit): Unit = {
+  private def simpleString(maxFields: Int, append: String => Unit): Unit = {
     append("== Physical Plan ==\n")
-    if (formatted) {
-      try {
-        ExplainUtils.processPlan(executedPlan, append)
-      } catch {
-        case e: AnalysisException => append(e.toString)
-        case e: IllegalArgumentException => append(e.toString)
-      }
-    } else {
-      QueryPlan.append(executedPlan,
-        append, verbose = false, addSuffix = false, maxFields = maxFields)
-    }
+    QueryPlan.append(executedPlan,
+      append, verbose = false, addSuffix = false, maxFields = maxFields)
     append("\n")
   }
 
@@ -192,9 +180,9 @@ class QueryExecution(
 
     mode match {
       case SimpleMode =>
-        queryExecution.simpleString(false, maxFields, append)
+        queryExecution.simpleString(maxFields, append)
       case ExtendedMode =>
-        queryExecution.toString(maxFields, append)
+        queryExecution.toString(formatted = false, maxFields, append)
       case CodegenMode =>
         try {
           org.apache.spark.sql.execution.debug.writeCodegen(append, queryExecution.executedPlan)
@@ -204,11 +192,26 @@ class QueryExecution(
       case CostMode =>
         queryExecution.stringWithStats(maxFields, append)
       case FormattedMode =>
-        queryExecution.simpleString(formatted = true, maxFields = maxFields, append)
+        queryExecution.toString(formatted = true, maxFields = maxFields, append)
     }
   }
 
-  private def writePlans(append: String => Unit, maxFields: Int): Unit = {
+  private def printTreeString[T <: QueryPlan[T]](
+      plan: QueryPlan[T],
+      append: String => Unit,
+      formatted: Boolean,
+      verbose: Boolean,
+      addSuffix: Boolean,
+      maxFields: Int): Unit = {
+    try {
+      QueryPlan.append(plan, append, verbose, addSuffix, maxFields, formatted = formatted)
+    } catch {
+      case e: AnalysisException => append(e.toString)
+      case e: IllegalArgumentException => append(e.toString)
+    }
+  }
+
+  private def writePlans(formatted: Boolean, append: String => Unit, maxFields: Int): Unit = {
     val (verbose, addSuffix) = (true, false)
     append("== Parsed Logical Plan ==\n")
     QueryPlan.append(logical, append, verbose, addSuffix, maxFields)
@@ -221,11 +224,11 @@ class QueryExecution(
         )
         append("\n")
       }
-      QueryPlan.append(analyzed, append, verbose, addSuffix, maxFields)
+      printTreeString(analyzed, append, formatted, verbose, addSuffix, maxFields)
       append("\n== Optimized Logical Plan ==\n")
-      QueryPlan.append(optimizedPlan, append, verbose, addSuffix, maxFields)
+      printTreeString(optimizedPlan, append, formatted, verbose, addSuffix, maxFields)
       append("\n== Physical Plan ==\n")
-      QueryPlan.append(executedPlan, append, verbose, addSuffix, maxFields)
+      printTreeString(executedPlan, append, formatted, verbose, addSuffix, maxFields)
     } catch {
       case e: AnalysisException => append(e.toString)
     }
@@ -233,14 +236,14 @@ class QueryExecution(
 
   override def toString: String = withRedaction {
     val concat = new PlanStringConcat()
-    toString(SQLConf.get.maxToStringFields, concat.append)
+    toString(formatted = false, SQLConf.get.maxToStringFields, concat.append)
     withRedaction {
       concat.toString
     }
   }
 
-  private def toString(maxFields: Int, append: String => Unit): Unit = {
-    writePlans(append, maxFields)
+  private def toString(formatted: Boolean, maxFields: Int, append: String => Unit): Unit = {
+    writePlans(formatted, append, maxFields)
   }
 
   def stringWithStats: String = {

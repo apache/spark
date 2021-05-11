@@ -174,6 +174,14 @@ case class Filter(condition: Expression, child: LogicalPlan)
 
   override protected def withNewChildInternal(newChild: LogicalPlan): Filter =
     copy(child = newChild)
+
+  override def verboseStringWithOperatorId(): String = {
+    s"""
+       |$formattedNodeName
+       |${ExplainLogicalPlanUtils.generateFieldString("Input", child.output)}
+       |Condition : $condition
+       |""".stripMargin
+  }
 }
 
 abstract class SetOperation(left: LogicalPlan, right: LogicalPlan) extends BinaryNode {

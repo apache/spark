@@ -87,10 +87,10 @@ case class ReusedExchangeExec(override val output: Seq[Attribute], child: Exchan
   }
 
   override def verboseStringWithOperatorId(): String = {
-    val reuse_op_str = ExplainUtils.getOpId(child)
+    val reuse_op_str = ExplainSparkPlanUtils.getOpId(child)
     s"""
        |$formattedNodeName [Reuses operator id: $reuse_op_str]
-       |${ExplainUtils.generateFieldString("Output", output)}
+       |${ExplainSparkPlanUtils.generateFieldString("Output", output)}
        |""".stripMargin
   }
 }

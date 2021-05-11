@@ -157,6 +157,10 @@ abstract class LogicalPlan
       case (a1, a2) => a1.semanticEquals(a2)
     }
   }
+
+  override def formatString(append: String => Unit): Unit = {
+    ExplainLogicalPlanUtils.processPlan(this, append)
+  }
 }
 
 /**
@@ -164,6 +168,24 @@ abstract class LogicalPlan
  */
 trait LeafNode extends LogicalPlan with LeafLike[LogicalPlan] {
   override def producedAttributes: AttributeSet = outputSet
+
+  override def verboseStringWithOperatorId(): String = {
+    val argumentString = argString(conf.maxToStringFields)
+    val outputStr = s"${ExplainLogicalPlanUtils.generateFieldString("Output", output)}"
+
+    if (argumentString.nonEmpty) {
+      s"""
+         |$formattedNodeName
+         |$outputStr
+         |Arguments: $argumentString
+         |""".stripMargin
+    } else {
+      s"""
+         |$formattedNodeName
+         |$outputStr
+         |""".stripMargin
+    }
+  }
 
   /** Leaf nodes that can survive analysis must define their own statistics. */
   def computeStats(): Statistics = throw new UnsupportedOperationException
@@ -196,12 +218,54 @@ trait UnaryNode extends LogicalPlan with UnaryLike[LogicalPlan] {
   }
 
   override protected lazy val validConstraints: ExpressionSet = child.constraints
+
+  override def verboseStringWithOperatorId(): String = {
+    val argumentString = argString(conf.maxToStringFields)
+    val inputStr = s"${ExplainLogicalPlanUtils.generateFieldString("Input", child.output)}"
+
+    if (argumentString.nonEmpty) {
+      s"""
+         |$formattedNodeName
+         |$inputStr
+         |Arguments: $argumentString
+         |""".stripMargin
+    } else {
+      s"""
+         |$formattedNodeName
+         |$inputStr
+         |""".stripMargin
+    }
+  }
 }
 
 /**
  * A logical plan node with a left and right child.
  */
-trait BinaryNode extends LogicalPlan with BinaryLike[LogicalPlan]
+trait BinaryNode extends LogicalPlan with BinaryLike[LogicalPlan] {
+
+  override def verboseStringWithOperatorId(): String = {
+    val argumentString = argString(conf.maxToStringFields)
+    val leftOutputStr =
+      s"${ExplainLogicalPlanUtils.generateFieldString("Left output", left.output)}"
+    val rightOutputStr =
+      s"${ExplainLogicalPlanUtils.generateFieldString("Right output", right.output)}"
+
+    if (argumentString.nonEmpty) {
+      s"""
+         |$formattedNodeName
+         |$leftOutputStr
+         |$rightOutputStr
+         |Arguments: $argumentString
+         |""".stripMargin
+    } else {
+      s"""
+         |$formattedNodeName
+         |$leftOutputStr
+         |$rightOutputStr
+         |""".stripMargin
+    }
+  }
+}
 
 abstract class OrderPreservingUnaryNode extends UnaryNode {
   override final def outputOrdering: Seq[SortOrder] = child.outputOrdering

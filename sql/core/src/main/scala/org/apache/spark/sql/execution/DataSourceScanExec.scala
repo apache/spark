@@ -77,7 +77,7 @@ trait DataSourceScanExec extends LeafExecNode {
 
     s"""
        |$formattedNodeName
-       |${ExplainUtils.generateFieldString("Output", output)}
+       |${ExplainSparkPlanUtils.generateFieldString("Output", output)}
        |${metadataStr.mkString("\n")}
        |""".stripMargin
   }
@@ -390,7 +390,7 @@ case class FileSourceScanExec(
 
     s"""
        |$formattedNodeName
-       |${ExplainUtils.generateFieldString("Output", output)}
+       |${ExplainSparkPlanUtils.generateFieldString("Output", output)}
        |${metadataStr.mkString("\n")}
        |""".stripMargin
   }

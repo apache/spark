@@ -103,8 +103,8 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
   override def verboseStringWithOperatorId(): String = {
     s"""
        |$formattedNodeName
-       |${ExplainUtils.generateFieldString("Output", projectList)}
-       |${ExplainUtils.generateFieldString("Input", child.output)}
+       |${ExplainSparkPlanUtils.generateFieldString("Output", projectList)}
+       |${ExplainSparkPlanUtils.generateFieldString("Input", child.output)}
        |""".stripMargin
   }
 
@@ -285,7 +285,7 @@ case class FilterExec(condition: Expression, child: SparkPlan)
   override def verboseStringWithOperatorId(): String = {
     s"""
        |$formattedNodeName
-       |${ExplainUtils.generateFieldString("Input", child.output)}
+       |${ExplainSparkPlanUtils.generateFieldString("Input", child.output)}
        |Condition : ${condition}
        |""".stripMargin
   }
@@ -766,36 +766,6 @@ abstract class BaseSubqueryExec extends SparkPlan {
   override def outputPartitioning: Partitioning = child.outputPartitioning
 
   override def outputOrdering: Seq[SortOrder] = child.outputOrdering
-
-  override def generateTreeString(
-      depth: Int,
-      lastChildren: Seq[Boolean],
-      append: String => Unit,
-      verbose: Boolean,
-      prefix: String = "",
-      addSuffix: Boolean = false,
-      maxFields: Int,
-      printNodeId: Boolean,
-      indent: Int = 0): Unit = {
-    /**
-     * In the new explain mode `EXPLAIN FORMATTED`, the subqueries are not shown in the
-     * main plan and are printed separately along with correlation information with
-     * its parent plan. The condition below makes sure that subquery plans are
-     * excluded from the main plan.
-     */
-    if (!printNodeId) {
-      super.generateTreeString(
-        depth,
-        lastChildren,
-        append,
-        verbose,
-        "",
-        false,
-        maxFields,
-        printNodeId,
-        indent)
-    }
-  }
 }
 
 /**

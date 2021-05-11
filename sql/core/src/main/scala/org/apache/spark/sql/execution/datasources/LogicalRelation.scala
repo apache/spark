@@ -20,7 +20,7 @@ import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.expressions.{AttributeMap, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
+import org.apache.spark.sql.catalyst.plans.logical.{ExplainLogicalPlanUtils, LeafNode, LogicalPlan, Statistics}
 import org.apache.spark.sql.catalyst.util.{truncatedString, CharVarcharUtils}
 import org.apache.spark.sql.sources.BaseRelation
 
@@ -33,6 +33,10 @@ case class LogicalRelation(
     catalogTable: Option[CatalogTable],
     override val isStreaming: Boolean)
   extends LeafNode with MultiInstanceRelation {
+
+  override val nodeName: String = {
+    s"Relation $relation ${catalogTable.map(_.identifier.unquotedString).getOrElse("")}"
+  }
 
   // Only care about relation when canonicalizing.
   override def doCanonicalize(): LogicalPlan = copy(
@@ -64,8 +68,14 @@ case class LogicalRelation(
   }
 
   override def simpleString(maxFields: Int): String = {
-    s"Relation ${catalogTable.map(_.identifier.unquotedString).getOrElse("")}" +
-      s"[${truncatedString(output, ",", maxFields)}] $relation"
+    s"$nodeName${truncatedString(output, "[", ",", "]", maxFields)}"
+  }
+
+  override def verboseStringWithOperatorId(): String = {
+    s"""
+       |$formattedNodeName
+       |${ExplainLogicalPlanUtils.generateFieldString("Output", output)}
+       |""".stripMargin
   }
 }
 

@@ -378,6 +378,8 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
   def printSchema(): Unit = println(schemaString)
   // scalastyle:on println
 
+  def formatString(append: String => Unit): Unit
+
   /**
    * A prefix string used when printing the plan.
    *
@@ -414,6 +416,37 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
     val codegenId =
       getTagValue(QueryPlan.CODEGEN_ID_TAG).map(id => s" [codegen id : $id]").getOrElse("")
     s"($opId) $nodeName$codegenId"
+  }
+
+  override def generateTreeString(
+      depth: Int,
+      lastChildren: Seq[Boolean],
+      append: String => Unit,
+      verbose: Boolean,
+      prefix: String = "",
+      addSuffix: Boolean = false,
+      maxFields: Int,
+      printNodeId: Boolean,
+      indent: Int = 0): Unit = {
+    /**
+     * In the new explain mode `EXPLAIN FORMATTED`, the subqueries are not shown in the
+     * main plan and are printed separately along with correlation information with
+     * its parent plan. The condition below makes sure that subquery plans are
+     * excluded from the main plan.
+     */
+    if (printNodeId && getTagValue(QueryPlan.OP_ID_TAG).isEmpty) {
+      return
+    }
+    super.generateTreeString(
+      depth,
+      lastChildren,
+      append,
+      verbose,
+      prefix,
+      addSuffix,
+      maxFields,
+      printNodeId,
+      indent)
   }
 
   /**
@@ -576,9 +609,14 @@ object QueryPlan extends PredicateHelper {
       verbose: Boolean,
       addSuffix: Boolean,
       maxFields: Int = SQLConf.get.maxToStringFields,
-      printOperatorId: Boolean = false): Unit = {
+      printOperatorId: Boolean = false,
+      formatted: Boolean = false): Unit = {
     try {
-      plan.treeString(append, verbose, addSuffix, maxFields, printOperatorId)
+      if (formatted) {
+        plan.formatString(append)
+      } else {
+        plan.treeString(append, verbose, addSuffix, maxFields, printOperatorId)
+      }
     } catch {
       case e: AnalysisException => append(e.toString)
     }

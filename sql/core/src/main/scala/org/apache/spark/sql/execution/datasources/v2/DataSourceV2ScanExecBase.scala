@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.plans.physical
 import org.apache.spark.sql.catalyst.plans.physical.SinglePartition
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReaderFactory, Scan, SupportsReportPartitioning}
-import org.apache.spark.sql.execution.{ExplainUtils, LeafExecNode}
+import org.apache.spark.sql.execution.{ExplainSparkPlanUtils, LeafExecNode}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.internal.connector.SupportsMetadata
 import org.apache.spark.sql.vectorized.ColumnarBatch
@@ -73,7 +73,7 @@ trait DataSourceV2ScanExecBase extends LeafExecNode {
     }
     s"""
        |$formattedNodeName
-       |${ExplainUtils.generateFieldString("Output", output)}
+       |${ExplainSparkPlanUtils.generateFieldString("Output", output)}
        |${metaDataStr.mkString("\n")}
        |""".stripMargin
   }
