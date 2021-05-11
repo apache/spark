@@ -68,7 +68,8 @@ case class UpdatingSessionsExec(
   }
 
   override def requiredChildOrdering: Seq[Seq[SortOrder]] = {
-    Seq(groupingExpression.map(SortOrder(_, Ascending)))
+    Seq((groupingWithoutSessionAttributes ++ Seq(sessionExpression))
+      .map(SortOrder(_, Ascending)))
   }
 
   override protected def withNewChildInternal(newChild: SparkPlan): UpdatingSessionsExec =
