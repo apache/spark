@@ -78,9 +78,10 @@ def _daemonize(child_body):
         _close_std_streams()
         os._exit(0)
     # Second child (daemon process)
+
     def _write_to_parent(success):
         parent_message = CHILD_SUCCESS if success else CHILD_FAIL
-        os.write(w_fd, parent_message) # .encode())
+        os.write(w_fd, parent_message)
     child_body(_write_to_parent)
     os._exit(0)
 
