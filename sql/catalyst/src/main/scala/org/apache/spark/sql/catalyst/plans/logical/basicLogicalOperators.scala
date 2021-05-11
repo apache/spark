@@ -1244,7 +1244,6 @@ case class Repartition(numPartitions: Int, shuffle: Boolean, child: LogicalPlan)
       case _ => RoundRobinPartitioning(numPartitions)
     }
   }
-
   override protected def withNewChildInternal(newChild: LogicalPlan): Repartition =
     copy(child = newChild)
 }
