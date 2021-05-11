@@ -2133,7 +2133,8 @@ class Analyzer(override val catalogManager: CatalogManager)
               expandIdentifier(nameParts) match {
                 case NonSessionCatalogAndIdentifier(catalog, ident) =>
                   if (!catalog.isFunctionCatalog) {
-                    throw QueryCompilationErrors.lookupFunctionInNonFunctionCatalogError(ident, catalog)
+                    throw QueryCompilationErrors.lookupFunctionInNonFunctionCatalogError(
+                      ident, catalog)
                   }
 
                   val unbound = catalog.asFunctionCatalog.loadFunction(ident)
