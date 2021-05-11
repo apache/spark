@@ -759,6 +759,10 @@ case class Range(
   }
 
   override def computeStats(): Statistics = {
+    if (!conf.cboEnabled) {
+      return Statistics(sizeInBytes = LongType.defaultSize * numElements)
+    }
+
     if (numElements == 0) {
       Statistics(sizeInBytes = 0, rowCount = Some(0))
     } else {
@@ -767,13 +771,41 @@ case class Range(
       } else {
         (start + (numElements - 1) * step, start)
       }
-      val colStat = ColumnStat(
+      var colStat = ColumnStat(
         distinctCount = Some(numElements),
         max = Some(maxVal),
         min = Some(minVal),
         nullCount = Some(0),
         avgLen = Some(LongType.defaultSize),
         maxLen = Some(LongType.defaultSize))
+
+      if (conf.histogramEnabled) {
+
+        val numBins = conf.histogramNumBins
+        val height = numElements.toDouble / numBins
+        val end = start + (numElements - 1) * step
+        val rangeArray: Array[Long] = if (step > 0) {
+          start.to(end.toLong).by(step).toArray
+        } else {
+          end.toLong.to(start).by(step * -1).toArray
+        }
+        val percentileArray = (0 to conf.histogramNumBins).map(i => i * height).toArray
+
+        var binId = 0
+        val binArray = new Array[HistogramBin](numBins)
+        var lowerIndex = percentileArray(0)
+        var lowerBinValue = rangeArray(0)
+        while (binId < numBins) {
+          val upperIndex = percentileArray(binId + 1)
+          val upperBinValue = rangeArray(math.max(math.ceil(upperIndex).toInt - 1, 0))
+          val ndv = math.max((math.ceil(upperIndex).toInt - math.ceil(lowerIndex).toInt), 1)
+          binArray(binId) = HistogramBin(lowerBinValue, upperBinValue, ndv)
+          lowerBinValue = upperBinValue
+          lowerIndex = upperIndex
+          binId = binId + 1
+        }
+        colStat = colStat.copy(histogram = Some(Histogram(height, binArray)))
+      }
 
       Statistics(
         sizeInBytes = LongType.defaultSize * numElements,

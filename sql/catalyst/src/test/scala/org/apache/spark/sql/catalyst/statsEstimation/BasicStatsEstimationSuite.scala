@@ -43,7 +43,13 @@ class BasicStatsEstimationSuite extends PlanTest with StatsEstimationTestBase {
 
   test("range with positive step") {
     val range = Range(1, 5, 1, None)
-    val rangeStats = Statistics(
+    val histogramBins = new Array[HistogramBin](3)
+    histogramBins(0) = HistogramBin(1.0, 2.0, 2)
+    histogramBins(1) = HistogramBin(2.0, 3.0, 1)
+    histogramBins(2) = HistogramBin(3.0, 4.0, 1)
+    val histogram = Some(Histogram(4.toDouble / 3, histogramBins))
+
+    val rangeStatsWithCbo = Statistics(
       sizeInBytes = 4 * 8,
       rowCount = Some(4),
       attributeStats = AttributeMap(
@@ -57,13 +63,21 @@ class BasicStatsEstimationSuite extends PlanTest with StatsEstimationTestBase {
                 max = Some(4),
                 nullCount = Some(0),
                 maxLen = Some(LongType.defaultSize),
-                avgLen = Some(LongType.defaultSize))))))
-    checkStats(range, expectedStatsCboOn = rangeStats, expectedStatsCboOff = rangeStats)
+                avgLen = Some(LongType.defaultSize),
+                histogram = histogram)))))
+    val rangeStatsWithoutCbo = Statistics(sizeInBytes = 4 * 8)
+    checkStats(range, expectedStatsCboOn = rangeStatsWithCbo,
+      expectedStatsCboOff = rangeStatsWithoutCbo, checkHistogram = true)
   }
 
   test("range with positive step where end minus start not divisible by step") {
     val range = Range(-4, 5, 2, None)
-    val rangeStats = Statistics(
+    val histogramBins = new Array[HistogramBin](3)
+    histogramBins(0) = HistogramBin(-4.0, -2.0, 2)
+    histogramBins(1) = HistogramBin(-2.0, 2.0, 2)
+    histogramBins(2) = HistogramBin(2.0, 4.0, 1)
+    val histogram = Some(Histogram(5.toDouble / 3, histogramBins))
+    val rangeStatsWithCbo = Statistics(
       sizeInBytes = 5 * 8,
       rowCount = Some(5),
       attributeStats = AttributeMap(
@@ -77,13 +91,21 @@ class BasicStatsEstimationSuite extends PlanTest with StatsEstimationTestBase {
                 max = Some(4),
                 nullCount = Some(0),
                 maxLen = Some(LongType.defaultSize),
-                avgLen = Some(LongType.defaultSize))))))
-    checkStats(range, expectedStatsCboOn = rangeStats, expectedStatsCboOff = rangeStats)
+                avgLen = Some(LongType.defaultSize),
+                histogram = histogram)))))
+    val rangeStatsWithoutCbo = Statistics(sizeInBytes = 5 * 8)
+    checkStats(range, expectedStatsCboOn = rangeStatsWithCbo,
+      expectedStatsCboOff = rangeStatsWithoutCbo, checkHistogram = true)
   }
 
   test("range with negative step") {
     val range = Range(-10, -20, -2, None)
-    val rangeStats = Statistics(
+    val histogramBins = new Array[HistogramBin](3)
+    histogramBins(0) = HistogramBin(-18.0, -16.0, 2)
+    histogramBins(1) = HistogramBin(-16.0, -12.0, 2)
+    histogramBins(2) = HistogramBin(-12.0, -10.0, 1)
+    val histogram = Some(Histogram(5.toDouble / 3, histogramBins))
+    val rangeStatsWithCbo = Statistics(
       sizeInBytes = 5 * 8,
       rowCount = Some(5),
       attributeStats = AttributeMap(
@@ -97,13 +119,24 @@ class BasicStatsEstimationSuite extends PlanTest with StatsEstimationTestBase {
                 max = Some(-10),
                 nullCount = Some(0),
                 maxLen = Some(LongType.defaultSize),
-                avgLen = Some(LongType.defaultSize))))))
-    checkStats(range, expectedStatsCboOn = rangeStats, expectedStatsCboOff = rangeStats)
+                avgLen = Some(LongType.defaultSize),
+                histogram = histogram)))))
+    val rangeStatsWithoutCbo = Statistics(sizeInBytes = 5 * 8)
+    checkStats(range, expectedStatsCboOn = rangeStatsWithCbo,
+      expectedStatsCboOff = rangeStatsWithoutCbo, checkHistogram = true)
   }
 
   test("range with negative step where end minus start not divisible by step") {
+
     val range = Range(-10, -20, -3, None)
-    val rangeStats = Statistics(
+
+    val histogramBins = new Array[HistogramBin](3)
+    histogramBins(0) = HistogramBin(-19.0, -16.0, 2)
+    histogramBins(1) = HistogramBin(-16.0, -13.0, 1)
+    histogramBins(2) = HistogramBin(-13.0, -10.0, 1)
+    val histogram = Some(Histogram(4.toDouble / 3, histogramBins))
+
+    val rangeStatsWithCbo = Statistics(
       sizeInBytes = 4 * 8,
       rowCount = Some(4),
       attributeStats = AttributeMap(
@@ -117,14 +150,19 @@ class BasicStatsEstimationSuite extends PlanTest with StatsEstimationTestBase {
                 max = Some(-10),
                 nullCount = Some(0),
                 maxLen = Some(LongType.defaultSize),
-                avgLen = Some(LongType.defaultSize))))))
-    checkStats(range, expectedStatsCboOn = rangeStats, expectedStatsCboOff = rangeStats)
+                avgLen = Some(LongType.defaultSize),
+                histogram = histogram)))))
+    val rangeStatsWithoutCbo = Statistics(sizeInBytes = 4 * 8)
+    checkStats(range, expectedStatsCboOn = rangeStatsWithCbo,
+      expectedStatsCboOff = rangeStatsWithoutCbo, checkHistogram = true)
   }
 
   test("range with empty output") {
-    val range = Range(-10, -10, -1, None)
-    val rangeStats = Statistics(sizeInBytes = 0, rowCount = Some(0))
-    checkStats(range, expectedStatsCboOn = rangeStats, expectedStatsCboOff = rangeStats)
+      val range = Range(-10, -10, -1, None)
+      val rangeStatsWithCbo = Statistics(sizeInBytes = 0, rowCount = Some(0))
+      val rangeStatsWithoutCbo = Statistics(sizeInBytes = 0)
+      checkStats(range, expectedStatsCboOn = rangeStatsWithCbo,
+        expectedStatsCboOff = rangeStatsWithoutCbo, checkHistogram = true)
   }
 
   test("windows") {
@@ -283,8 +321,11 @@ class BasicStatsEstimationSuite extends PlanTest with StatsEstimationTestBase {
   private def checkStats(
       plan: LogicalPlan,
       expectedStatsCboOn: Statistics,
-      expectedStatsCboOff: Statistics): Unit = {
-    withSQLConf(SQLConf.CBO_ENABLED.key -> "true") {
+      expectedStatsCboOff: Statistics,
+      checkHistogram: Boolean = false): Unit = {
+    withSQLConf(SQLConf.CBO_ENABLED.key -> "true",
+      SQLConf.HISTOGRAM_ENABLED.key -> checkHistogram.toString,
+      SQLConf.HISTOGRAM_NUM_BINS.key -> "3") {
       // Invalidate statistics
       plan.invalidateStatsCache()
       assert(plan.stats == expectedStatsCboOn)
