@@ -78,7 +78,7 @@ class FakeWriteBuilder extends WriteBuilder {
 
 class FakeStreamingWrite extends StreamingWrite {
   override def createStreamingWriterFactory(
-    info: PhysicalWriteInfo): StreamingDataWriterFactory = {
+      info: PhysicalWriteInfo): StreamingDataWriterFactory = {
     throw new IllegalStateException("fake sink - cannot actually write")
   }
   override def commit(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {
