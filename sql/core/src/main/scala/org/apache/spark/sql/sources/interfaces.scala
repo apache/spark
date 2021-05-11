@@ -30,9 +30,10 @@ import org.apache.spark.sql.types.StructType
  * Data sources should implement this trait so that they can register an alias to their data source.
  * This allows users to give the data source alias as the format type over the fully qualified
  * class name.
- *
+ *数据源应实现此特征，以便它们可以向其数据源注册别名。
+ * 这样，用户可以在完全限定的类名上为数据源别名提供格式类型的别名。
  * A new instance of this class will be instantiated each time a DDL call is made.
- *
+ *每次进行DDL调用时都会实例化此类的新实例。
  * @since 1.5.0
  */
 @Stable
@@ -239,7 +240,7 @@ abstract class BaseRelation {
 
 /**
  * A BaseRelation that can produce all of its tuples as an RDD of Row objects.
- *
+ *可以将其所有元组生成为Row对象的RDD的BaseRelation。
  * @since 1.3.0
  */
 @Stable
@@ -250,7 +251,7 @@ trait TableScan {
 /**
  * A BaseRelation that can eliminate unneeded columns before producing an RDD
  * containing all of its tuples as Row objects.
- *
+ * 一个BaseRelation，可以在生成包含其所有元组作为Row对象的RDD之前消除不需要的列。
  * @since 1.3.0
  */
 @Stable

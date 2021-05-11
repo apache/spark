@@ -316,6 +316,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    */
   def json(path: String): DataFrame = {
     // This method ensures that calls that explicit need single argument works, see SPARK-16009
+    // _*表示边长参数
     json(Seq(path): _*)
   }
 
@@ -764,6 +765,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   // Builder pattern config options
   ///////////////////////////////////////////////////////////////////////////////////////
 
+  //默认parquet格式 source=parquet
   private var source: String = sparkSession.sessionState.conf.defaultDataSourceName
 
   private var userSpecifiedSchema: Option[StructType] = None

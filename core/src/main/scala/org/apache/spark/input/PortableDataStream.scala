@@ -34,6 +34,7 @@ import org.apache.spark.internal.config
 /**
  * A general format for reading whole files in as streams, byte arrays,
  * or other functions to be added
+ * 以流，字节数组或其他要添加的功能读取整个文件的通用格式
  */
 private[spark] abstract class StreamFileInputFormat[T]
   extends CombineFileInputFormat[String, T]

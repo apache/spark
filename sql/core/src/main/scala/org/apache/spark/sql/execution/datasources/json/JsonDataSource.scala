@@ -177,6 +177,7 @@ object MultiLineJsonDataSource extends JsonDataSource {
       .values
   }
 
+  //创建数据输入流
   private def dataToInputStream(dataStream: PortableDataStream): InputStream = {
     val path = new Path(dataStream.getPath())
     CodecStreams.createInputStreamWithCloseResource(dataStream.getConfiguration, path)

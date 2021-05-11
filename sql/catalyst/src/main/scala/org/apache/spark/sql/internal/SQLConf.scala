@@ -640,6 +640,7 @@ object SQLConf {
     .createWithDefault(200)
 
   // This is used to set the default data source
+  //默认是parquet格式
   val DEFAULT_DATA_SOURCE_NAME = buildConf("spark.sql.sources.default")
     .doc("The default data source to use in input/output.")
     .stringConf
@@ -1643,17 +1644,19 @@ object SQLConf {
 
 /**
  * A class that enables the setting and getting of mutable config parameters/hints.
- *
+ *允许设置和获取可变配置参数/提示的类。
  * In the presence of a SQLContext, these can be set and queried by passing SET commands
  * into Spark SQL's query functions (i.e. sql()). Otherwise, users of this class can
  * modify the hints by programmatically calling the setters and getters of this class.
  *
  * SQLConf is thread-safe (internally synchronized, so safe to be used in multiple threads).
+ * SQLConf是线程安全的（内部同步，因此可以在多个线程中安全使用）。
  */
 class SQLConf extends Serializable with Logging {
   import SQLConf._
 
-  /** Only low degree of contention is expected for conf, thus NOT using ConcurrentHashMap. */
+  /** Only low degree of contention is expected for conf, thus NOT using ConcurrentHashMap.
+   * conf预期只有较低的竞争程度，因此不使用ConcurrentHashMap。*/
   @transient protected[spark] val settings = java.util.Collections.synchronizedMap(
     new java.util.HashMap[String, String]())
 

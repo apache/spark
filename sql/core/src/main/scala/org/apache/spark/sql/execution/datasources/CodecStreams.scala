@@ -47,6 +47,7 @@ object CodecStreams {
   /**
    * Creates an input stream from the given path and add a closure for the input stream to be
    * closed on task completion.
+   * 从给定的路径创建输入流，并为要在任务完成时关闭的输入流添加一个闭包。
    */
   def createInputStreamWithCloseResource(config: Configuration, path: Path): InputStream = {
     val inputStream = createInputStream(config, path)
