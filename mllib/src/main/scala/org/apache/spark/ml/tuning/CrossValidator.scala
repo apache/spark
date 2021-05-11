@@ -169,6 +169,10 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
       val validationDataset = sparkSession.createDataFrame(validation, schemaWithoutFold).cache()
       instr.logDebug(s"Train split $splitIndex with multiple sets of parameters.")
 
+      val sparkContext = sparkSession.sparkContext
+      val oldJobGroup = sparkContext.getLocalProperty(SparkContext.SPARK_JOB_GROUP_ID)
+      val cvJobGroup = s"${this.uid}_job_group"
+      sparkContext.setLocalProperty(SparkContext.SPARK_JOB_GROUP_ID, cvJobGroup)
       @volatile var subTaskFailed = false
       // Fit models in a Future for training in parallel
       val foldMetricFutures = epm.zipWithIndex.map { case (paramMap, paramIndex) =>
@@ -198,16 +202,15 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
           subTaskFailed = true
           try {
             Thread.sleep(1000)
-            val sparkContext = sparkSession.sparkContext
-            sparkContext.cancelJobGroup(
-              sparkContext.getLocalProperty(SparkContext.SPARK_JOB_GROUP_ID)
-            )
+            sparkContext.cancelJobGroup(cvJobGroup)
           } catch {
             case _: Throwable => ()
           }
           throw e
       }
       finally {
+        // Restore old job group
+        sparkContext.setLocalProperty(SparkContext.SPARK_JOB_GROUP_ID, oldJobGroup)
         // Unpersist training & validation set once all metrics have been produced
         trainingDataset.unpersist()
         validationDataset.unpersist()

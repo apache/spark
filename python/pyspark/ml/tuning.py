@@ -735,6 +735,10 @@ class CrossValidator(Estimator, _CrossValidatorParams, HasParallelism, HasCollec
             tasks = _parallelFitTasks(est, train, eva, validation, epm, collectSubModelsParam)
 
             sub_task_failed = False
+            sc = dataset._sc
+            old_job_group = sc.getLocalProperty("spark.jobGroup.id")
+            cv_job_group = self.uid + "_job_group"
+            sc.setLocalProperty("spark.jobGroup.id", cv_job_group)
 
             @inheritable_thread_target
             def run_task(task):
@@ -753,7 +757,7 @@ class CrossValidator(Estimator, _CrossValidatorParams, HasParallelism, HasCollec
                     try:
                         time.sleep(1)
                         sc = dataset._sc
-                        sc.cancelJobGroup(sc.getLocalProperty("spark.jobGroup.id"))
+                        sc.cancelJobGroup(cv_job_group)
                     except:
                         pass
                 else:
@@ -763,6 +767,7 @@ class CrossValidator(Estimator, _CrossValidatorParams, HasParallelism, HasCollec
                                   .format(self.uid))
                 raise
             finally:
+                sc.setLocalProperty("spark.jobGroup.id", old_job_group)
                 train.unpersist()
                 validation.unpersist()
 
@@ -1293,6 +1298,10 @@ class TrainValidationSplit(Estimator, _TrainValidationSplitParams, HasParallelis
         pool = ThreadPool(processes=min(self.getParallelism(), numModels))
         metrics = [None] * numModels
 
+        sc = dataset._sc
+        old_job_group = sc.getLocalProperty("spark.jobGroup.id")
+        tvs_job_group = self.uid + "_job_group"
+        sc.setLocalProperty("spark.jobGroup.id", tvs_job_group)
         sub_task_failed = False
 
         @inheritable_thread_target
@@ -1311,8 +1320,7 @@ class TrainValidationSplit(Estimator, _TrainValidationSplitParams, HasParallelis
             if is_pinned_thread_mode():
                 try:
                     time.sleep(1)
-                    sc = dataset._sc
-                    sc.cancelJobGroup(sc.getLocalProperty("spark.jobGroup.id"))
+                    sc.cancelJobGroup(tvs_job_group)
                 except:
                     pass
             else:
@@ -1322,6 +1330,7 @@ class TrainValidationSplit(Estimator, _TrainValidationSplitParams, HasParallelis
                               .format(self.uid))
             raise
         finally:
+            sc.setLocalProperty("spark.jobGroup.id", old_job_group)
             train.unpersist()
             validation.unpersist()
 

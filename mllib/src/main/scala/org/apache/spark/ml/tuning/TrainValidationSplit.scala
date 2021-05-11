@@ -148,6 +148,11 @@ class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: St
     // Fit models in a Future for training in parallel
     instr.logDebug(s"Train split with multiple sets of parameters.")
 
+    val sparkSession = dataset.sparkSession
+    val sparkContext = sparkSession.sparkContext
+    val oldJobGroup = sparkContext.getLocalProperty(SparkContext.SPARK_JOB_GROUP_ID)
+    val tvsJobGroup = s"${this.uid}_job_group"
+    sparkContext.setLocalProperty(SparkContext.SPARK_JOB_GROUP_ID, tvsJobGroup)
     @volatile var subTaskFailed = false
     val metricFutures = epm.zipWithIndex.map { case (paramMap, paramIndex) =>
       Future[Double] {
@@ -177,16 +182,16 @@ class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: St
         subTaskFailed = true
         try {
           Thread.sleep(1000)
-          val sparkContext = dataset.sparkSession.sparkContext
-          sparkContext.cancelJobGroup(
-            sparkContext.getLocalProperty(SparkContext.SPARK_JOB_GROUP_ID)
-          )
+          val sparkContext = sparkSession.sparkContext
+          sparkContext.cancelJobGroup(tvsJobGroup)
         } catch {
           case _: Throwable => ()
         }
         throw e
     }
     finally {
+      // Restore old job group
+      sparkContext.setLocalProperty(SparkContext.SPARK_JOB_GROUP_ID, oldJobGroup)
       // Unpersist training & validation set once all metrics have been produced
       trainingDataset.unpersist()
       validationDataset.unpersist()
