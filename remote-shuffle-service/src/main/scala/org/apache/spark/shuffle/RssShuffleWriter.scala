@@ -73,7 +73,6 @@ class RssShuffleWriter[K, V, C](
           new WriteBufferManager[K, V](
             serializer = serializer,
             bufferSize = bufferOptions.individualBufferSize,
-            maxBufferSize = bufferOptions.individualBufferMax,
             spillSize = bufferOptions.bufferSpillThreshold,
             numPartitions = numPartitions,
             createCombiner = createCombiner)

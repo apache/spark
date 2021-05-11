@@ -25,7 +25,6 @@ import org.testng.annotations.Test
 
 class WriteBufferManagerTest {
   val serializer = new KryoSerializer(getConf)
-  val maxBufferSize = 10000000
 
   @Test
   def singlePartition(): Unit = {
@@ -34,7 +33,7 @@ class WriteBufferManagerTest {
     val numPartitions = 10
     val record = (1, "123") // it is 7 bytes after serialization
     var bufferManager = new WriteBufferManager[Any, Any](
-      serializer, bufferSize, maxBufferSize, spillSize, numPartitions)
+      serializer, bufferSize, spillSize, numPartitions)
     Assert.assertEquals(bufferManager.filledBytes, 0)
 
     var spilledData = bufferManager.clear().toList
@@ -51,7 +50,7 @@ class WriteBufferManagerTest {
 
     bufferSize = 20
     bufferManager = new WriteBufferManager[Any, Any](
-      serializer, bufferSize, maxBufferSize, spillSize, numPartitions)
+      serializer, bufferSize, spillSize, numPartitions)
     spilledData = bufferManager.clear().toList
     Assert.assertEquals(spilledData.size, 0)
 
@@ -92,7 +91,7 @@ class WriteBufferManagerTest {
     val spillSize = 30
     val numPartitions = 10
     val bufferManager = new WriteBufferManager[Any, Any](
-      serializer, bufferSize, maxBufferSize, spillSize, numPartitions)
+      serializer, bufferSize, spillSize, numPartitions)
     var spilledData = bufferManager.clear().toList
     Assert.assertEquals(spilledData.size, 0)
 
@@ -133,7 +132,7 @@ class WriteBufferManagerTest {
     val spillSize = 20
     val numPartitions = 10
     val bufferManager = new WriteBufferManager[Any, Any](
-      serializer, bufferSize, maxBufferSize, spillSize, numPartitions)
+      serializer, bufferSize, spillSize, numPartitions)
 
     val partition1 = 1
     val partition2 = 2
@@ -169,7 +168,7 @@ class WriteBufferManagerTest {
     val recordSet = records.toSet
 
     val bufferManager = new WriteBufferManager[Any, Any](
-      serializer, bufferSize, maxBufferSize, spillSize, numPartitions)
+      serializer, bufferSize, spillSize, numPartitions)
 
     val numRecords = 2000
     val random = new Random()

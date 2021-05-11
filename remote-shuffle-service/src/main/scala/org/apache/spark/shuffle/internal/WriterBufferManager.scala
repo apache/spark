@@ -30,7 +30,6 @@ case class WriterBufferManagerValue(serializeStream: SerializationStream,
 
 class WriteBufferManager[K, V](serializer: Serializer,
                          bufferSize: Int,
-                         maxBufferSize: Int,
                          spillSize: Int,
                          numPartitions: Int,
                          createCombiner: Option[V => Any] = None)
