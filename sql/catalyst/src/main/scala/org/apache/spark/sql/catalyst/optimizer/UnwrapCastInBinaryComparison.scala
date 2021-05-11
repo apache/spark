@@ -92,8 +92,7 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
     _.containsAnyPattern(BINARY_COMPARISON, IN), ruleId) {
     case l: LogicalPlan =>
       l.transformExpressionsUpWithPruning(_.containsAnyPattern(BINARY_COMPARISON, IN), ruleId) {
-        case e @ BinaryComparison(_, _) => unwrapCast(e)
-        case e @ In(_, _) => unwrapCast(e)
+        case e @ (BinaryComparison(_, _) | In(_, _)) => unwrapCast(e)
       }
   }
 
@@ -124,14 +123,16 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
 
     case in @ In(Cast(fromExp, toType: NumericType, _), list)
       if list.forall(v =>
-        canImplicitlyCast(fromExp, toType, v.dataType) && v.isInstanceOf[Literal]
+        v.isInstanceOf[Literal] && canImplicitlyCast(fromExp, toType, v.dataType)
       ) =>
-      val newValueList =
+      val (newValueList, exp) =
         list.map(lit => unwrapCast(EqualTo(in.value, lit)))
-          .collect {
-            case EqualTo(_, lit: Literal) => lit
+          .partition {
+            case EqualTo(_, _: Literal) => true
+            case And(IsNull(_), Literal(null, BooleanType)) => false
           }
-      In(fromExp, newValueList)
+      val unwrapIn = In(fromExp, newValueList.map {case EqualTo(_, lit) => lit})
+      (exp :+ unwrapIn).reduce(Or)
 
     case _ => exp
   }
