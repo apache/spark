@@ -46,12 +46,10 @@ class UpdatingSessionsIterator(
 
   private val groupingWithoutSession: Seq[NamedExpression] =
     groupingExpressions.diff(Seq(sessionExpression))
-  private val groupingWithoutSessionAttributes: Seq[Attribute] =
-    groupingWithoutSession.map(_.toAttribute)
   private[this] val groupingWithoutSessionProjection: UnsafeProjection =
     UnsafeProjection.create(groupingWithoutSession, inputSchema)
 
-  private val valuesExpressions: Seq[Attribute] = inputSchema.diff(groupingWithoutSession)
+  private val valuesExpressions: Seq[Attribute] = inputSchema.diff(groupingExpressions)
 
   private[this] val sessionProjection: UnsafeProjection =
     UnsafeProjection.create(Seq(sessionExpression), inputSchema)
@@ -181,18 +179,14 @@ class UpdatingSessionsIterator(
   private val join = new JoinedRow
   private val join2 = new JoinedRow
 
-  private val groupingKeyProj = GenerateUnsafeProjection.generate(groupingExpressions,
-    groupingWithoutSessionAttributes :+ sessionExpression.toAttribute)
   private val valueProj = GenerateUnsafeProjection.generate(valuesExpressions, inputSchema)
   private val restoreProj = GenerateUnsafeProjection.generate(inputSchema,
     groupingExpressions.map(_.toAttribute) ++ valuesExpressions.map(_.toAttribute))
 
-  private def generateGroupingKey(): UnsafeRow = {
+  private def generateGroupingKey(): InternalRow = {
     val newRow = new SpecificInternalRow(Seq(sessionExpression.toAttribute).toStructType)
     newRow.update(0, currentSession)
-    val joined = join(currentKeys, newRow)
-
-    groupingKeyProj(joined)
+    join(currentKeys, newRow)
   }
 
   private def closeCurrentSession(keyChanged: Boolean): Unit = {

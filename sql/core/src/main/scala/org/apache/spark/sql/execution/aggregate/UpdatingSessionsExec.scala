@@ -35,11 +35,11 @@ import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
  * Refer [[UpdatingSessionsIterator]] for more details.
  */
 case class UpdatingSessionsExec(
-    keyExpressions: Seq[Attribute],
+    groupingExpression: Seq[Attribute],
     sessionExpression: Attribute,
     child: SparkPlan) extends UnaryExecNode {
 
-  private val groupingWithoutSessionExpression = keyExpressions.filterNot {
+  private val groupingWithoutSessionExpression = groupingExpression.filterNot {
     p => p.semanticEquals(sessionExpression)
   }
   private val groupingWithoutSessionAttributes =
@@ -50,7 +50,7 @@ case class UpdatingSessionsExec(
     val spillThreshold = sqlContext.conf.sessionWindowBufferSpillThreshold
 
     child.execute().mapPartitions { iter =>
-      new UpdatingSessionsIterator(iter, keyExpressions, sessionExpression,
+      new UpdatingSessionsIterator(iter, groupingExpression, sessionExpression,
         child.output, inMemoryThreshold, spillThreshold)
     }
   }
@@ -68,8 +68,7 @@ case class UpdatingSessionsExec(
   }
 
   override def requiredChildOrdering: Seq[Seq[SortOrder]] = {
-    Seq((groupingWithoutSessionAttributes ++ Seq(sessionExpression))
-      .map(SortOrder(_, Ascending)))
+    Seq(groupingExpression.map(SortOrder(_, Ascending)))
   }
 
   override protected def withNewChildInternal(newChild: SparkPlan): UpdatingSessionsExec =
