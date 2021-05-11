@@ -781,23 +781,25 @@ case class Range(
 
       if (conf.histogramEnabled) {
 
+        def getRangeValue(index: Int): Long = {
+          if (step > 0) {
+            start + index * step
+          } else {
+            start + (numElements.toLong - index - 1) * step
+          }
+        }
+
         val numBins = conf.histogramNumBins
         val height = numElements.toDouble / numBins
-        val end = start + (numElements - 1) * step
-        val rangeArray: Array[Long] = if (step > 0) {
-          start.to(end.toLong).by(step).toArray
-        } else {
-          end.toLong.to(start).by(step * -1).toArray
-        }
-        val percentileArray = (0 to conf.histogramNumBins).map(i => i * height).toArray
+        val percentileArray = (0 to numBins).map(i => i * height).toArray
 
         var binId = 0
         val binArray = new Array[HistogramBin](numBins)
         var lowerIndex = percentileArray(0)
-        var lowerBinValue = rangeArray(0)
+        var lowerBinValue = getRangeValue(0)
         while (binId < numBins) {
           val upperIndex = percentileArray(binId + 1)
-          val upperBinValue = rangeArray(math.max(math.ceil(upperIndex).toInt - 1, 0))
+          val upperBinValue = getRangeValue(math.max(math.ceil(upperIndex).toInt - 1, 0))
           val ndv = math.max((math.ceil(upperIndex).toInt - math.ceil(lowerIndex).toInt), 1)
           binArray(binId) = HistogramBin(lowerBinValue, upperBinValue, ndv)
           lowerBinValue = upperBinValue
