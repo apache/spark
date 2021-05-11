@@ -24,6 +24,8 @@ import scala.collection.mutable.{Builder, WrappedArray}
 import scala.reflect.ClassTag
 import scala.util.{Properties, Try}
 
+import org.apache.commons.lang3.reflect.MethodUtils
+
 import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.serializer._
 import org.apache.spark.sql.Row
@@ -147,30 +149,11 @@ trait InvokeLike extends Expression with NonSQLExpression {
   }
 
   final def findMethod(cls: Class[_], functionName: String, argClasses: Seq[Class[_]]): Method = {
-    // Looking with function name + argument classes first.
-    try {
-      cls.getMethod(functionName, argClasses: _*)
-    } catch {
-      case _: NoSuchMethodException =>
-        // For some cases, e.g. arg class is Object, `getMethod` cannot find the method.
-        // We look at function name + argument length
-        val m = cls.getMethods.filter { m =>
-          m.getName == functionName && m.getParameterCount == arguments.length
-        }
-        if (m.isEmpty) {
-          sys.error(s"Couldn't find $functionName on $cls")
-        } else if (m.length > 1) {
-          // More than one matched method signature. Exclude synthetic one, e.g. generic one.
-          val realMethods = m.filter(!_.isSynthetic)
-          if (realMethods.length > 1) {
-            // Ambiguous case, we don't know which method to choose, just fail it.
-            sys.error(s"Found ${realMethods.length} $functionName on $cls")
-          } else {
-            realMethods.head
-          }
-        } else {
-          m.head
-        }
+    val method = MethodUtils.getMatchingAccessibleMethod(cls, functionName, argClasses: _*)
+    if (method == null) {
+      sys.error(s"Couldn't find $functionName on $cls")
+    } else {
+      method
     }
   }
 }

@@ -2852,8 +2852,8 @@ object Sequence {
       val (stepMonths, stepDays, stepMicros) = splitStep(input3)
 
       if (scale == MICROS_PER_DAY && stepMonths == 0 && stepDays == 0) {
-        throw new IllegalArgumentException(
-          s"sequence step must be a day ${intervalType.typeName} if start and end values are dates")
+        throw new IllegalArgumentException(s"sequence step must be an ${intervalType.typeName}" +
+          " of day granularity if start and end values are dates")
       }
 
       if (stepMonths == 0 && stepMicros == 0 && scale == MICROS_PER_DAY) {
@@ -2929,8 +2929,8 @@ object Sequence {
         s"""
            |if ($stepMonths == 0 && $stepDays == 0) {
            |  throw new IllegalArgumentException(
-           |    "sequence step must be a day ${intervalType.typeName} " +
-           |    "if start and end values are dates");
+           |    "sequence step must be an ${intervalType.typeName} " +
+           |    "of day granularity if start and end values are dates");
            |}
          """.stripMargin
         } else {

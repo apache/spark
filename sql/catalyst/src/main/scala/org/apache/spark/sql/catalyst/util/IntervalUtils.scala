@@ -100,15 +100,16 @@ object IntervalUtils {
     result
   }
 
-  private val yearMonthPattern = "^([+|-])?(\\d+)-(\\d+)$".r
-  private val yearMonthStringPattern =
-    "(?i)^(INTERVAL\\s+)([+|-])?(')([+|-])?(\\d+)-(\\d+)(')(\\s+YEAR\\s+TO\\s+MONTH)$".r
+  private val yearMonthPatternString = "([+|-])?(\\d+)-(\\d+)"
+  private val yearMonthRegex = (s"^$yearMonthPatternString$$").r
+  private val yearMonthLiteralRegex =
+    (s"(?i)^INTERVAL\\s+([+|-])?'$yearMonthPatternString'\\s+YEAR\\s+TO\\s+MONTH$$").r
 
   def castStringToYMInterval(input: UTF8String): Int = {
     input.trimAll().toString match {
-      case yearMonthPattern("-", year, month) => toYMInterval(year, month, -1)
-      case yearMonthPattern(_, year, month) => toYMInterval(year, month, 1)
-      case yearMonthStringPattern(_, firstSign, _, secondSign, year, month, _, _) =>
+      case yearMonthRegex("-", year, month) => toYMInterval(year, month, -1)
+      case yearMonthRegex(_, year, month) => toYMInterval(year, month, 1)
+      case yearMonthLiteralRegex(firstSign, secondSign, year, month) =>
         (firstSign, secondSign) match {
           case ("-", "-") => toYMInterval(year, month, 1)
           case ("-", _) => toYMInterval(year, month, -1)
@@ -129,9 +130,9 @@ object IntervalUtils {
   def fromYearMonthString(input: String): CalendarInterval = {
     require(input != null, "Interval year-month string must be not null")
     input.trim match {
-      case yearMonthPattern("-", yearStr, monthStr) =>
+      case yearMonthRegex("-", yearStr, monthStr) =>
         new CalendarInterval(toYMInterval(yearStr, monthStr, -1), 0, 0)
-      case yearMonthPattern(_, yearStr, monthStr) =>
+      case yearMonthRegex(_, yearStr, monthStr) =>
         new CalendarInterval(toYMInterval(yearStr, monthStr, 1), 0, 0)
       case _ =>
         throw new IllegalArgumentException(
@@ -151,11 +152,11 @@ object IntervalUtils {
     }
   }
 
-  private val unquotedDaySecondPattern =
+  private val daySecondPatternString =
     "([+|-])?(\\d+) (\\d{1,2}):(\\d{1,2}):(\\d{1,2})(\\.\\d{1,9})?"
-  private val quotedDaySecondPattern = (s"^$unquotedDaySecondPattern$$").r
-  private val daySecondLiteralPattern =
-    (s"(?i)^INTERVAL\\s+([+|-])?\\'$unquotedDaySecondPattern\\'\\s+DAY\\s+TO\\s+SECOND$$").r
+  private val daySecondRegex = (s"^$daySecondPatternString$$").r
+  private val daySecondLiteralRegex =
+    (s"(?i)^INTERVAL\\s+([+|-])?\\'$daySecondPatternString\\'\\s+DAY\\s+TO\\s+SECOND$$").r
 
   def castStringToDTInterval(input: UTF8String): Long = {
     def secondAndMicro(second: String, micro: String): String = {
@@ -167,11 +168,11 @@ object IntervalUtils {
     }
 
     input.trimAll().toString match {
-      case quotedDaySecondPattern("-", day, hour, minute, second, micro) =>
+      case daySecondRegex("-", day, hour, minute, second, micro) =>
         toDTInterval(day, hour, minute, secondAndMicro(second, micro), -1)
-      case quotedDaySecondPattern(_, day, hour, minute, second, micro) =>
+      case daySecondRegex(_, day, hour, minute, second, micro) =>
         toDTInterval(day, hour, minute, secondAndMicro(second, micro), 1)
-      case daySecondLiteralPattern(firstSign, secondSign, day, hour, minute, second, micro) =>
+      case daySecondLiteralRegex(firstSign, secondSign, day, hour, minute, second, micro) =>
         (firstSign, secondSign) match {
           case ("-", "-") => toDTInterval(day, hour, minute, secondAndMicro(second, micro), 1)
           case ("-", _) => toDTInterval(day, hour, minute, secondAndMicro(second, micro), -1)
