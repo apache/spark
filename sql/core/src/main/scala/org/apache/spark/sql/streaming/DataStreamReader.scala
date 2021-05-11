@@ -195,7 +195,7 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
 
   private def loadInternal(path: Option[String]): DataFrame = {
     if (source.toLowerCase(Locale.ROOT) == DDLUtils.HIVE_PROVIDER) {
-      throw QueryCompilationErrors.operateHiveDataSourceDirectlyError("read")
+      throw QueryCompilationErrors.cannotOperateOnHiveDataSourceFilesError("read")
     }
 
     val optionsWithPath = if (path.isEmpty) {

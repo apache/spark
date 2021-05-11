@@ -384,7 +384,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
 
   private def startInternal(path: Option[String]): StreamingQuery = {
     if (source.toLowerCase(Locale.ROOT) == DDLUtils.HIVE_PROVIDER) {
-      throw QueryCompilationErrors.operateHiveDataSourceDirectlyError("write")
+      throw QueryCompilationErrors.cannotOperateOnHiveDataSourceFilesError("write")
     }
 
     if (source == SOURCE_NAME_MEMORY) {

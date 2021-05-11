@@ -1392,7 +1392,7 @@ private[spark] object QueryCompilationErrors {
     new AnalysisException("function is only supported in v1 catalog")
   }
 
-  def operateHiveDataSourceDirectlyError(operation: String): Throwable = {
+  def cannotOperateOnHiveDataSourceFilesError(operation: String): Throwable = {
     new AnalysisException("Hive data source can only be used with tables, you can not " +
       s"$operation files of Hive data source directly.")
   }
