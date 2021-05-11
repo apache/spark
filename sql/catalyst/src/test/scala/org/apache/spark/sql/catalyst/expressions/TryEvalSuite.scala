@@ -30,27 +30,6 @@ class TryEvalSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
-
-  test("try_subtract") {
-    Seq(
-      (1, 1, 0),
-      (Int.MaxValue, -1, null),
-      (Int.MinValue, 1, null)
-    ).foreach { case (a, b, expected) =>
-      checkEvaluation(TryEval(Subtract(Literal(a), Literal(b)).asAnsi), expected)
-    }
-  }
-
-  test("try_multiply") {
-    Seq(
-      (1, 2, 2),
-      (Int.MaxValue, 2, null),
-      (Int.MinValue, 2, null)
-    ).foreach { case (a, b, expected) =>
-      checkEvaluation(TryEval(Multiply(Literal(a), Literal(b)).asAnsi), expected)
-    }
-  }
-
   test("try_divide") {
     Seq(
       (3.0, 2.0, 1.5),
@@ -58,16 +37,6 @@ class TryEvalSuite extends SparkFunSuite with ExpressionEvalHelper {
       (-1.0, 0.0, null)
     ).foreach { case (a, b, expected) =>
       checkEvaluation(TryEval(Divide(Literal(a), Literal(b)).asAnsi), expected)
-    }
-  }
-
-  test("try_div") {
-    Seq(
-      (2L, 2L, 1L),
-      (1L, 0L, null),
-      (-1L, 0L, null)
-    ).foreach { case (a, b, expected) =>
-      checkEvaluation(TryEval(IntegralDivide(Literal(a), Literal(b)).asAnsi), expected)
     }
   }
 }

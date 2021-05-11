@@ -5,26 +5,7 @@ SELECT try_add(-2147483648, -1);
 SELECT try_add(9223372036854775807L, 1);
 SELECT try_add(-9223372036854775808L, -1);
 
--- TRY_SUBTRACT
-SELECT try_subtract(1, 1);
-SELECT try_subtract(2147483647, -1);
-SELECT try_subtract(-2147483648, 1);
-SELECT try_subtract(9223372036854775807L, -1);
-SELECT try_subtract(-9223372036854775808L, 1);
-
--- TRY_MULTIPLY
-SELECT try_multiply(1, 2);
-SELECT try_multiply(2147483647, 2);
-SELECT try_multiply(-2147483648, 2);
-SELECT try_multiply(9223372036854775807L, 2);
-SELECT try_multiply(-9223372036854775808L, 2);
-
 -- TRY_DIVIDE
 SELECT try_divide(1, 0.5);
 SELECT try_divide(1, 0);
 SELECT try_divide(0, 0);
-
--- TRY_DIV
-SELECT try_div(1, 0);
-SELECT try_div(0, 0);
-SELECT try_div(-9223372036854775808L, -1);

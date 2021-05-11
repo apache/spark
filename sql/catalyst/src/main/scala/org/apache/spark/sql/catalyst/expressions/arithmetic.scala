@@ -342,11 +342,9 @@ case class Add(
 case class Subtract(
     left: Expression,
     right: Expression,
-    failOnError: Boolean = SQLConf.get.ansiEnabled) extends BinaryArithmetic with AsAnsi {
+    failOnError: Boolean = SQLConf.get.ansiEnabled) extends BinaryArithmetic {
 
   def this(left: Expression, right: Expression) = this(left, right, SQLConf.get.ansiEnabled)
-
-  override def asAnsi: Expression = this.copy(failOnError = true)
 
   override def inputType: AbstractDataType = TypeCollection.NumericAndInterval
 
@@ -390,11 +388,9 @@ case class Subtract(
 case class Multiply(
     left: Expression,
     right: Expression,
-    failOnError: Boolean = SQLConf.get.ansiEnabled) extends BinaryArithmetic with AsAnsi {
+    failOnError: Boolean = SQLConf.get.ansiEnabled) extends BinaryArithmetic {
 
   def this(left: Expression, right: Expression) = this(left, right, SQLConf.get.ansiEnabled)
-
-  override def asAnsi: Expression = this.copy(failOnError = true)
 
   override def inputType: AbstractDataType = NumericType
 
@@ -573,11 +569,9 @@ case class Divide(
 case class IntegralDivide(
     left: Expression,
     right: Expression,
-    failOnError: Boolean = SQLConf.get.ansiEnabled) extends DivModLike with AsAnsi {
+    failOnError: Boolean = SQLConf.get.ansiEnabled) extends DivModLike {
 
   def this(left: Expression, right: Expression) = this(left, right, SQLConf.get.ansiEnabled)
-
-  override def asAnsi: Expression = this.copy(failOnError = true)
 
   override def checkDivideOverflow: Boolean = left.dataType match {
     case LongType if failOnError => true

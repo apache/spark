@@ -321,10 +321,7 @@ object FunctionRegistry {
     expression[CaseWhen]("when"),
 
     try_expression[Add]("try_add"),
-    try_expression[Subtract]("try_subtract"),
-    try_expression[Multiply]("try_multiply"),
     try_expression[Divide]("try_divide"),
-    try_expression[IntegralDivide]("try_div"),
     // math functions
     expression[Acos]("acos"),
     expression[Acosh]("acosh"),
@@ -705,15 +702,16 @@ object FunctionRegistry {
     (name, (expressionInfo, newBuilder))
   }
 
-  private def try_expression[T <: Expression : ClassTag](name: String, setAlias: Boolean = false)
+  private def try_expression[T <: Expression : ClassTag](name: String)
       : (String, (ExpressionInfo, FunctionBuilder)) = {
     val (expressionInfo, builder) = FunctionRegistryBase.build[T](name)
     val newBuilder = (expressions: Seq[Expression]) => {
       val expr = builder(expressions)
-      if (setAlias) expr.setTagValue(FUNC_ALIAS, name)
       expr match {
         case a: AsAnsi =>
-          TryEval(a.asAnsi)
+          val result = TryEval(a.asAnsi)
+          result.setTagValue(FUNC_ALIAS, name)
+          result
 
         case _ =>
           throw new UnsupportedOperationException(
