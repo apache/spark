@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FUNC_ALIAS
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
@@ -54,9 +53,7 @@ private[catalyst] case class TryEval(child: Expression) extends UnaryExpression 
   override protected def withNewChildInternal(newChild: Expression): Expression =
     copy(child = newChild)
 
-  private def functionName: String = getTagValue(FUNC_ALIAS).getOrElse {
-    throw new AnalysisException("The tree node tag FUNC_ALIAS must be set for TryEval")
-  }
+  private def functionName: String = getTagValue(FUNC_ALIAS).getOrElse("try_eval")
 
   override def sql: String = {
     val childrenSQL = child.children.map(_.sql).mkString(", ")

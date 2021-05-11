@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FUNC_ALIAS
 
 class TryEvalSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("try_add") {
@@ -26,7 +27,13 @@ class TryEvalSuite extends SparkFunSuite with ExpressionEvalHelper {
       (Int.MaxValue, 1, null),
       (Int.MinValue, -1, null)
     ).foreach { case (a, b, expected) =>
-      checkEvaluation(TryEval(Add(Literal(a), Literal(b)).asAnsi), expected)
+      val left = Literal(a)
+      val right = Literal(b)
+      val input = TryEval(Add(left, right).asAnsi)
+      checkEvaluation(input, expected)
+      input.setTagValue(FUNC_ALIAS, "try_add")
+      assert(input.toString == s"try_add(${left.toString}, ${right.toString})")
+      assert(input.sql == s"try_add(${left.sql}, ${right.sql})")
     }
   }
 
@@ -36,7 +43,13 @@ class TryEvalSuite extends SparkFunSuite with ExpressionEvalHelper {
       (1.0, 0.0, null),
       (-1.0, 0.0, null)
     ).foreach { case (a, b, expected) =>
-      checkEvaluation(TryEval(Divide(Literal(a), Literal(b)).asAnsi), expected)
+      val left = Literal(a)
+      val right = Literal(b)
+      val input = TryEval(Divide(Literal(a), Literal(b)).asAnsi)
+      checkEvaluation(input, expected)
+      input.setTagValue(FUNC_ALIAS, "try_divide")
+      assert(input.toString == s"try_divide(${left.toString}, ${right.toString})")
+      assert(input.sql == s"try_divide(${left.sql}, ${right.sql})")
     }
   }
 }
