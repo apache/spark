@@ -37,10 +37,10 @@ class KyroWriteBufferManager[K, V](serializerInstance: KryoSerializerInstance,
 
   private var totalBytes = 0
 
-  def addRecord(partitionId: Int, record: Product2[K, V]): Seq[(Int, Array[Byte])] = {
+  def addRecord(partitionId: Int, record: Product2[K, V]): Seq[(Int, Array[Byte], Int)] = {
     val key: Any = record._1
     val value: Any = createCombiner.map(_.apply(record._2)).getOrElse(record._2)
-    var result: mutable.Buffer[(Int, Array[Byte])] = null
+    var result: mutable.Buffer[(Int, Array[Byte], Int)] = null
     val stream = partitionBuffers(partitionId)
     if (stream != null) {
       val oldSize = stream.position()
@@ -50,10 +50,13 @@ class KyroWriteBufferManager[K, V](serializerInstance: KryoSerializerInstance,
       if (newSize >= bufferSize) {
         // partition buffer is full, add it to the result as spill data
         if (result == null) {
-          result = mutable.Buffer[(Int, Array[Byte])]()
+          result = mutable.Buffer[(Int, Array[Byte], Int)]()
         }
-        result.append((partitionId, stream.toBytes))
-        stream.clear()
+        val bytes = stream.getBuffer
+        val length = stream.position()
+        result.append((partitionId, bytes, length))
+        stream.close()
+        partitionBuffers(partitionId) = null
         totalBytes -= oldSize
       } else {
         totalBytes += (newSize - oldSize)
@@ -68,11 +71,12 @@ class KyroWriteBufferManager[K, V](serializerInstance: KryoSerializerInstance,
       if (newSize >= bufferSize) {
         // partition buffer is full, add it to the result as spill data
         if (result == null) {
-          result = mutable.Buffer[(Int, Array[Byte])]()
+          result = mutable.Buffer[(Int, Array[Byte], Int)]()
         }
-        result.append((partitionId, stream.toBytes))
-        stream.clear()
-        partitionBuffers(partitionId) = stream
+        val bytes = stream.getBuffer
+        val length = stream.position()
+        result.append((partitionId, bytes, length))
+        stream.close()
       } else {
         partitionBuffers(partitionId) = stream
         totalBytes = totalBytes + newSize
@@ -82,9 +86,9 @@ class KyroWriteBufferManager[K, V](serializerInstance: KryoSerializerInstance,
     if (totalBytes >= spillSize) {
       // data for all partitions exceeds threshold, add all data to the result as spill data
       if (result == null) {
-        result = mutable.Buffer[(Int, Array[Byte])]()
+        result = mutable.Buffer[(Int, Array[Byte], Int)]()
       }
-      clearData(false, result)
+      clearData(result)
     }
 
     if (result == null) {
@@ -111,26 +115,24 @@ class KyroWriteBufferManager[K, V](serializerInstance: KryoSerializerInstance,
     totalBytes
   }
 
-  def clear(): Seq[(Int, Array[Byte])] = {
-    val result = mutable.Buffer[(Int, Array[Byte])]()
-    clearData(true, result)
+  def clear(): Seq[(Int, Array[Byte], Int)] = {
+    val result = mutable.Buffer[(Int, Array[Byte], Int)]()
+    clearData(result)
     result
   }
 
-  private def clearData(closeStream: Boolean,
-                        dataCollector: mutable.Buffer[(Int, Array[Byte])]): Unit = {
+  private def clearData(dataCollector: mutable.Buffer[(Int, Array[Byte], Int)]): Unit = {
     var i = 0
     while (i < partitionBuffers.length) {
       val t = partitionBuffers(i)
       if (t != null) {
         if (t.position() > 0) {
-          dataCollector.append((i, t.toBytes))
-          t.clear()
+          val bytes = t.getBuffer()
+          val length = t.position()
+          dataCollector.append((i, bytes, length))
         }
-        if (closeStream) {
-          t.close()
-          partitionBuffers(i) = null
-        }
+        t.close()
+        partitionBuffers(i) = null
       }
       i += 1
     }

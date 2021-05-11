@@ -37,7 +37,7 @@ class RecordCombinedSerializationBuffer[K, V, C](
 
   private val serializerInstance = serializer.newInstance()
 
-  override def addRecord(partitionId: Int, record: Product2[K, V]): Seq[(Int, Array[Byte])] = {
+  override def addRecord(partitionId: Int, record: Product2[K, V]): Seq[(Int, Array[Byte], Int)] = {
     val update: (Boolean, C) => C = (hadVal, oldVal) => {
       if (hadVal) mergeValue(oldVal, record._2) else createCombiner(record._2)
     }
@@ -60,7 +60,7 @@ class RecordCombinedSerializationBuffer[K, V, C](
     }
   }
 
-  override def clear(): Seq[(Int, Array[Byte])] = {
+  override def clear(): Seq[(Int, Array[Byte], Int)] = {
     serializeMap()
   }
 
@@ -69,7 +69,7 @@ class RecordCombinedSerializationBuffer[K, V, C](
     new PartitionedAppendOnlyMap[K, C]()
   }
 
-  private def serializeMap(): Seq[(Int, Array[Byte])] = {
+  private def serializeMap(): Seq[(Int, Array[Byte], Int)] = {
     val comparator = new Comparator[(Int, K)] {
       override def compare(o1: (Int, K), o2: (Int, K)): Int = {
         Integer.compare(o1._1, o2._1)

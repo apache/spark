@@ -133,7 +133,7 @@ class RssShuffleWriter[K, V, C](
 
       val partition = getPartition(record._1)
 
-      var spilledData: Seq[(Int, Array[Byte])] = null
+      var spilledData: Seq[(Int, Array[Byte], Int)] = null
 
       val serializeStartTime = System.nanoTime()
       spilledData = bufferManager.addRecord(partition, record)
@@ -177,16 +177,17 @@ class RssShuffleWriter[K, V, C](
     closeWriteClientAsync()
   }
 
-  private def sendDataBlocks(fullFilledData: Seq[(Int, Array[Byte])],
+  private def sendDataBlocks(fullFilledData: Seq[(Int, Array[Byte], Int)],
                              partitionLengths: Array[Long]) = {
     fullFilledData.foreach(t => {
       val partitionId = t._1
       val bytes = t._2
-      if (bytes != null && bytes.length > 0) {
-        val dataBlock = createDataBlock(bytes)
+      val length = t._3
+      if (bytes != null && bytes.length > 0 && length > 0) {
+        val dataBlock = createDataBlock(bytes, length)
         writeClient.writeDataBlock(partitionId, dataBlock)
 
-        partitionLengths(partitionId) += bytes.length
+        partitionLengths(partitionId) += length
       }
     })
   }
@@ -222,10 +223,10 @@ class RssShuffleWriter[K, V, C](
     })
   }
 
-  private def createDataBlock(buffer: Array[Byte]): ByteBuffer = {
-    val uncompressedByteCount = buffer.size
+  private def createDataBlock(buffer: Array[Byte], length: Int): ByteBuffer = {
+    val uncompressedByteCount = length
     val compressedBuffer = new Array[Byte](compressor.maxCompressedLength(uncompressedByteCount))
-    val compressedByteCount = compressor.compress(buffer, compressedBuffer)
+    val compressedByteCount = compressor.compress(buffer, 0, length, compressedBuffer, 0)
     val dataBlockByteBuffer = ByteBuffer
       .allocate(Integer.BYTES + Integer.BYTES + compressedByteCount)
     dataBlockByteBuffer.putInt(compressedByteCount)

@@ -19,7 +19,7 @@ import org.testng.annotations.Test
 
 class RssWritePerfToolTest {
   @Test
-  def testRssWriterStressTool(): Unit = {
+  def testRssWritePerfTool(): Unit = {
     val tool = new RssWritePerfTool()
     tool.numMapRecords = 300000
     tool.numPartitions = 3000

@@ -23,19 +23,19 @@ import scala.collection.mutable
 trait RecordSerializationBuffer[K, V] {
 
   // Add record to the buffer, return serialized bytes if the buffer is full.
-  // The return value is a list of (Partition Id, Serialized Bytes)
-  def addRecord(partitionId: Int, record: Product2[K, V]): Seq[(Int, Array[Byte])]
+  // The return value is a list of (Partition Id, Serialized Bytes, Size of Serialized Bytes)
+  def addRecord(partitionId: Int, record: Product2[K, V]): Seq[(Int, Array[Byte], Int)]
 
   def filledBytes: Int
 
-  def clear(): Seq[(Int, Array[Byte])]
+  def clear(): Seq[(Int, Array[Byte], Int)]
 
   protected def serializeSortedPartitionedRecords[RK, RV](
                    sortedPartitionedIter: Iterator[((Int, RK), RV)],
                    serializerInstance: SerializerInstance,
                    bufferSize: Int):
-      Seq[(Int, Array[Byte])] = {
-    val result = mutable.Buffer[(Int, Array[Byte])]()
+      Seq[(Int, Array[Byte], Int)] = {
+    val result = mutable.Buffer[(Int, Array[Byte], Int)]()
 
     val invalidPartitionId = Integer.MIN_VALUE
     var currentPartitionId = invalidPartitionId
@@ -52,7 +52,8 @@ trait RecordSerializationBuffer[K, V] {
       if (partitionId != currentPartitionId) {
         if (stream != null) {
           stream.flush()
-          result.append((currentPartitionId, output.toBytes))
+          val bytes = output.toBytes
+          result.append((currentPartitionId, bytes, bytes.length))
           stream.close()
         }
         output = new Output(bufferSize, outputMaxBufferSize)
@@ -67,7 +68,8 @@ trait RecordSerializationBuffer[K, V] {
 
     if (currentPartitionRecords > 0) {
       stream.flush()
-      result.append((currentPartitionId, output.toBytes))
+      val bytes = output.toBytes
+      result.append((currentPartitionId, bytes, bytes.length))
       stream.close()
     }
 

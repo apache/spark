@@ -120,11 +120,11 @@ class KryoWriteBufferManagerTest {
     Assert.assertEquals(spilledData.size, 2)
 
     Assert.assertEquals(spilledData(0)._1, partition1)
-    var deserializedData = deserializeData(spilledData(0)._2).toList
+    var deserializedData = deserializeData(spilledData(0)._2, spilledData(0)._3).toList
     Assert.assertEquals(deserializedData, List(record1, record2, record3))
 
     Assert.assertEquals(spilledData(1)._1, partition2)
-    deserializedData = deserializeData(spilledData(1)._2).toList
+    deserializedData = deserializeData(spilledData(1)._2, spilledData(1)._3).toList
     Assert.assertEquals(deserializedData, List(record2))
 
     Assert.assertEquals(bufferManager.filledBytes, 0)
@@ -185,7 +185,7 @@ class KryoWriteBufferManagerTest {
 
       Assert.assertTrue(bufferManager.filledBytes >= 0)
 
-      val deserializedRecords = spilledData.flatMap(t => deserializeData(t._2)).toList
+      val deserializedRecords = spilledData.flatMap(t => deserializeData(t._2, t._3)).toList
       numDeserializedRecords += deserializedRecords.size
 
       deserializedRecords.foreach(t => {
@@ -196,7 +196,7 @@ class KryoWriteBufferManagerTest {
     val remainingData = bufferManager.clear()
     Assert.assertEquals(bufferManager.filledBytes, 0)
 
-    numDeserializedRecords += remainingData.flatMap(t => deserializeData(t._2)).size
+    numDeserializedRecords += remainingData.flatMap(t => deserializeData(t._2, t._3)).size
 
     Assert.assertEquals(numDeserializedRecords, numRecords)
   }
@@ -206,8 +206,8 @@ class KryoWriteBufferManagerTest {
       .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
   }
 
-  private def deserializeData(data: Array[Byte]): Seq[(Any, Any)] = {
-    val input = new Input(data)
+  private def deserializeData(data: Array[Byte], length: Int): Seq[(Any, Any)] = {
+    val input = new Input(data, 0, length)
     val stream = serializer.newInstance().deserializeStream(input)
     stream.asKeyValueIterator.toList
   }

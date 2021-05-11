@@ -66,9 +66,7 @@ class RssKryoSerializationStream(
         }
     }
 
+    def getBuffer(): Array[Byte] = output.getBuffer()
+
     def position(): Int = output.position()
-
-    def toBytes: Array[Byte] = output.toBytes
-
-    def clear(): Unit = output.clear()
 }

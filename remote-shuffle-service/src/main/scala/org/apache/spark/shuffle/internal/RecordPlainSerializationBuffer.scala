@@ -35,7 +35,7 @@ class RecordPlainSerializationBuffer[K, V](
 
   private val serializerInstance = serializer.newInstance()
 
-  override def addRecord(partitionId: Int, record: Product2[K, V]): Seq[(Int, Array[Byte])] = {
+  override def addRecord(partitionId: Int, record: Product2[K, V]): Seq[(Int, Array[Byte], Int)] = {
     partitionedBuffer.insert(partitionId, record._1, record._2)
     partitionedBufferSize += 1
 
@@ -55,7 +55,7 @@ class RecordPlainSerializationBuffer[K, V](
     }
   }
 
-  override def clear(): Seq[(Int, Array[Byte])] = {
+  override def clear(): Seq[(Int, Array[Byte], Int)] = {
     serializeBuffer()
   }
 
@@ -65,7 +65,7 @@ class RecordPlainSerializationBuffer[K, V](
     new PartitionedPairBuffer[K, V]()
   }
 
-  private def serializeBuffer(): Seq[(Int, Array[Byte])] = {
+  private def serializeBuffer(): Seq[(Int, Array[Byte], Int)] = {
     val itr = partitionedBuffer.partitionedDestructiveSortedIterator(None)
     val result = serializeSortedPartitionedRecords(itr, serializerInstance, spillSize)
     partitionedBuffer = createPartitionedPairBuffer()
