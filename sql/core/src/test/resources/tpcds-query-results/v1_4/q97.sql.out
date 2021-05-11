@@ -3,4 +3,4 @@
 -- !query schema
 struct<store_only:bigint,catalog_only:bigint,store_and_catalog:bigint>
 -- !query output
-540401	286628	174
+537833	285408	200
