@@ -202,7 +202,8 @@ class JacksonParser(
             case "NaN" => Float.NaN
             case "Infinity" => Float.PositiveInfinity
             case "-Infinity" => Float.NegativeInfinity
-            case other => throw QueryExecutionErrors.cannotParseStringAsDataTypeError(other, FloatType)
+            case other => throw QueryExecutionErrors.cannotParseStringAsDataTypeError(
+              other, FloatType)
           }
       }
 
