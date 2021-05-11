@@ -27,7 +27,8 @@ import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, HashedRelati
 /**
  * A rule to insert dynamic pruning predicates in order to reuse the results of broadcast.
  */
-case class PlanAdaptiveDynamicPruningFilters(rootPlan: SparkPlan) extends Rule[SparkPlan] {
+case class PlanAdaptiveDynamicPruningFilters(
+    rootPlan: AdaptiveSparkPlanExec) extends Rule[SparkPlan] with AdaptiveSparkPlanHelper {
   def apply(plan: SparkPlan): SparkPlan = {
     if (!conf.dynamicPartitionPruningEnabled) {
       return plan
@@ -44,7 +45,7 @@ case class PlanAdaptiveDynamicPruningFilters(rootPlan: SparkPlan) extends Rule[S
         val exchange = BroadcastExchangeExec(mode, adaptivePlan.executedPlan)
 
         val canReuseExchange = conf.exchangeReuseEnabled && buildKeys.nonEmpty &&
-          rootPlan.find {
+          find(rootPlan) {
             case BroadcastHashJoinExec(_, _, _, BuildLeft, _, left, _, _) =>
               left.sameResult(exchange)
             case BroadcastHashJoinExec(_, _, _, BuildRight, _, _, right, _) =>

@@ -91,15 +91,10 @@ case class AdaptiveSparkPlanExec(
     DisableUnnecessaryBucketedScan
   ) ++ context.session.sessionState.queryStagePrepRules
 
-  @transient private val initialPlan = context.session.withActive {
-    applyPhysicalRules(
-      inputPlan, queryStagePreparationRules, Some((planChangeLogger, "AQE Preparations")))
-  }
-
   // A list of physical optimizer rules to be applied to a new stage before its execution. These
   // optimizations should be stage-independent.
   @transient private val queryStageOptimizerRules: Seq[Rule[SparkPlan]] = Seq(
-    PlanAdaptiveDynamicPruningFilters(initialPlan),
+    PlanAdaptiveDynamicPruningFilters(this),
     ReuseAdaptiveSubquery(context.subqueryCache),
     CoalesceShufflePartitions(context.session),
     // The following two rules need to make use of 'CustomShuffleReaderExec.partitionSpecs'
@@ -133,6 +128,11 @@ case class AdaptiveSparkPlanExec(
   }
 
   @transient private val costEvaluator = SimpleCostEvaluator
+
+  @transient private val initialPlan = context.session.withActive {
+    applyPhysicalRules(
+      inputPlan, queryStagePreparationRules, Some((planChangeLogger, "AQE Preparations")))
+  }
 
   @volatile private var currentPhysicalPlan = initialPlan
 

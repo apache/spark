@@ -1492,12 +1492,11 @@ abstract class DynamicPartitionPruningSuiteBase
       //       +- Exchange
       //          +- HashAggregate
       //             +- Filter
-      //                +- FileScan [PartitionFilters: [isnotnull(store_id#3367),
-      //                           dynamicpruningexpression(store_id#3367 IN dynamicpruning#3385)]]
+      //                +- FileScan [PartitionFilters: dynamicpruning#3385]
       //                     +- SubqueryBroadcast dynamicpruning#3385
-      //                       +- AdaptiveSparkPlan
-      //                         +- BroadcastQueryStage
-      //                            +- BroadcastExchange
+      //                        +- AdaptiveSparkPlan
+      //                           +- BroadcastQueryStage
+      //                              +- BroadcastExchange
       //
       // +- BroadcastQueryStage
       //    +- ReusedExchange
