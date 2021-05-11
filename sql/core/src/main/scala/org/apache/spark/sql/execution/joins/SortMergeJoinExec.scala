@@ -455,8 +455,8 @@ case class SortMergeJoinExec(
           s"SortMergeJoin.genScanner should not take $x as the JoinType")
     }
 
-    // Handle the case when streamed keys less than buffered keys.
-    val handleStreamedLessThanBuffered = joinType match {
+    // Handle the case when streamed keys has no match with buffered side.
+    val handleStreamedWithoutMatch = joinType match {
       case _: InnerLike =>
         // Skip streamed row.
         s"$streamedRow = null;"
@@ -468,6 +468,31 @@ case class SortMergeJoinExec(
           s"SortMergeJoin.genScanner should not take $x as the JoinType")
     }
 
+    // Generate a function to scan both streamed and buffered sides to find a match.
+    // Return whether a match is found.
+    //
+    // `streamedIter`: the iterator for streamed side.
+    // `bufferedIter`: the iterator for buffered side.
+    // `streamedRow`: the current row from streamed side.
+    //                When `streamedIter` is empty, `streamedRow` is null.
+    // `matches`: the rows from buffered side already matched with `streamedRow`.
+    //            `matches` is buffered and reused for all `streamedRow`s having same join keys.
+    //            If there is no match with `streamedRow`, `matches` is empty.
+    // `bufferedRow`: the current matched row from buffered side.
+    //
+    // The function has the following step:
+    //  - Step 1: Find the next `streamedRow` with non-null join keys.
+    //            For `streamedRow` with null join keys (`handleStreamedAnyNull`):
+    //            1. Inner join: skip the row.
+    //            2. Left/Right Outer join: clear the previous `matches` if needed, keep the row,
+    //                                      and return false.
+    //  - Step 2: Find the `matches` from buffered side having same join keys with `streamedRow`.
+    //            If previous `matches` is not empty, check the join keys and clear the `matches`
+    //            if the keys are not matched. Use `bufferedRow` to iterate buffered side to put
+    //            all matched rows into `matches`. Return true when getting all matched rows.
+    //            For `streamedRow` without `matches` (`handleStreamedWithoutMatch`):
+    //            1. Inner join: skip the row.
+    //            2. Left/Right Outer join: keep the row and return false.
     ctx.addNewFunction("findNextJoinRows",
       s"""
          |private boolean findNextJoinRows(
@@ -512,7 +537,7 @@ case class SortMergeJoinExec(
          |          ${matchedKeyVars.map(_.code).mkString("\n")}
          |          return true;
          |        } else {
-         |          $handleStreamedLessThanBuffered
+         |          $handleStreamedWithoutMatch
          |        }
          |      } else {
          |        $matches.add((UnsafeRow) $bufferedRow);
