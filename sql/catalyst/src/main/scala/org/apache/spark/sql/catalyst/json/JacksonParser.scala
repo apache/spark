@@ -202,7 +202,7 @@ class JacksonParser(
             case "NaN" => Float.NaN
             case "Infinity" => Float.PositiveInfinity
             case "-Infinity" => Float.NegativeInfinity
-            case other => throw QueryExecutionErrors.parseStringAsDataTypeError(other, FloatType)
+            case other => throw QueryExecutionErrors.cannotParseStringAsDataTypeError(other, FloatType)
           }
       }
 
@@ -218,7 +218,7 @@ class JacksonParser(
             case "Infinity" => Double.PositiveInfinity
             case "-Infinity" => Double.NegativeInfinity
             case other =>
-              throw QueryExecutionErrors.parseStringAsDataTypeError(other, DoubleType)
+              throw QueryExecutionErrors.cannotParseStringAsDataTypeError(other, DoubleType)
           }
       }
 

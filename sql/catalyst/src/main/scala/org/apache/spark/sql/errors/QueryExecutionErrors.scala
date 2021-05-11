@@ -27,10 +27,11 @@ import com.fasterxml.jackson.core.JsonToken
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.codehaus.commons.compiler.CompileException
 import org.codehaus.janino.InternalCompilerException
-
 import org.apache.spark.{Partition, SparkException, SparkUpgradeException}
 import org.apache.spark.executor.CommitDeniedException
 import org.apache.spark.memory.SparkOutOfMemoryError
+import org.apache.spark.sql.catalyst.ScalaReflection.Schema
+import org.apache.spark.sql.catalyst.WalkedTypePath
 import org.apache.spark.sql.catalyst.analysis.UnresolvedGenerator
 import org.apache.spark.sql.catalyst.catalog.CatalogDatabase
 import org.apache.spark.sql.catalyst.expressions.{Expression, UnevaluableAggregate}
@@ -881,7 +882,7 @@ object QueryExecutionErrors {
     new RuntimeException("Parsing JSON arrays as structs is forbidden.")
   }
 
-  def parseStringAsDataTypeError(str: String, dataType: DataType): Throwable = {
+  def cannotParseStringAsDataTypeError(str: String, dataType: DataType): Throwable = {
     new RuntimeException(s"Cannot parse $str as ${dataType.catalogString}.")
   }
 
@@ -897,5 +898,44 @@ object QueryExecutionErrors {
 
   def rootConverterReturnNullError(): Throwable = {
     new RuntimeException("Root converter returned null")
+  }
+
+  def cannotHaveCircularReferencesInBeanClassError(clazz: Class[_]): Throwable = {
+    new UnsupportedOperationException(
+      "Cannot have circular references in bean class, but got the circular reference " +
+        s"of class $clazz")
+  }
+
+  def cannotHaveCircularReferencesInClassError(t: String): Throwable = {
+    new UnsupportedOperationException(
+      s"cannot have circular references in class, but got the circular reference of class $t")
+  }
+
+  def cannotUseInvalidIdentifierOfJavaAsFieldNameError(
+      fieldName: String, walkedTypePath: WalkedTypePath): Throwable = {
+    new UnsupportedOperationException(s"`$fieldName` is not a valid identifier of " +
+      s"Java and cannot be used as field name\n$walkedTypePath")
+  }
+
+  def cannotFindEncoderForTypeError(
+      tpe: String, walkedTypePath: WalkedTypePath): Throwable = {
+    new UnsupportedOperationException(s"No Encoder found for $tpe\n$walkedTypePath")
+  }
+
+  def attributesForTypeUnsupportedError(schema: Schema): Throwable = {
+    new UnsupportedOperationException(s"Attributes for type $schema is not supported")
+  }
+
+  def schemaForTypeUnsupportedError(tpe: String): Throwable = {
+    new UnsupportedOperationException(s"Schema for type $tpe is not supported")
+  }
+
+  def cannotFindConstructorForTypeError(tpe: String): Throwable = {
+    new UnsupportedOperationException(
+      s"""
+         |Unable to find constructor for $tpe.
+         |This could happen if $tpe is an interface, or a trait without companion object
+         |constructor.
+       """.stripMargin.replaceAll("\n", " "))
   }
 }

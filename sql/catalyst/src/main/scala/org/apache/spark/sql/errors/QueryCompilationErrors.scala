@@ -29,8 +29,10 @@ import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.catalyst.util.{toPrettySQL, FailFastMode, ParseMode, PermissiveMode}
 import org.apache.spark.sql.connector.catalog.{CatalogPlugin, Identifier, NamespaceChange, Table, TableCapability, TableChange, V1Table}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.connector.expressions.{NamedReference, Transform}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.LEGACY_CTE_PRECEDENCE_POLICY
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.{AbstractDataType, DataType, NullType, StructField, StructType}
@@ -1390,5 +1392,70 @@ private[spark] object QueryCompilationErrors {
 
   def functionUnsupportedInV2CatalogError(): Throwable = {
     new AnalysisException("function is only supported in v1 catalog")
+  }
+
+  def lookupFunctionInNonFunctionCatalogError(
+      ident: Identifier, catalog: CatalogPlugin): Throwable = {
+    new AnalysisException(s"Trying to lookup function '$ident' in " +
+      s"catalog '${catalog.name()}', but it is not a FunctionCatalog.")
+  }
+
+  def functionCannotProcessInputError(
+      unbound: UnboundFunction,
+      arguments: Seq[Expression],
+      unsupported: UnsupportedOperationException): Throwable = {
+    new AnalysisException(s"Function '${unbound.name}' cannot process " +
+      s"input: (${arguments.map(_.dataType.simpleString).mkString(", ")}): " +
+      unsupported.getMessage, cause = Some(unsupported))
+  }
+
+  def relationAliasNameIsAmbiguousInNestedCTEError(name: String): Throwable = {
+    new AnalysisException(s"Name $name is ambiguous in nested CTE. " +
+      s"Please set ${LEGACY_CTE_PRECEDENCE_POLICY.key} to CORRECTED so that name " +
+      "defined in inner CTE takes precedence. If set it to LEGACY, outer CTE " +
+      "definitions will take precedence. See more details in SPARK-28228.")
+  }
+
+  def commandUnsupportedInV2CatalogError(name: String): Throwable = {
+    new AnalysisException(s"$name is not supported for v2 tables.")
+  }
+
+  def cannotResolveColumnNameAmongAttributesError(
+      lattr: Attribute, rightOutputAttrs: Seq[Attribute]): Throwable = {
+    new AnalysisException(
+      s"""
+         |Cannot resolve column name "${lattr.name}" among
+         |(${rightOutputAttrs.map(_.name).mkString(", ")})
+       """.stripMargin.replaceAll("\n", " "))
+  }
+
+  def cannotWriteTooManyColumnsToTableError(
+      tableName: String, expected: Seq[Attribute], query: LogicalPlan): Throwable = {
+    new AnalysisException(
+      s"""
+         |Cannot write to '$tableName', too many data columns:
+         |Table columns: ${expected.map(c => s"'${c.name}'").mkString(", ")}
+         |Data columns: ${query.output.map(c => s"'${c.name}'").mkString(", ")}
+       """.stripMargin)
+  }
+
+  def cannotWriteNotEnoughColumnsToTableError(
+      tableName: String, expected: Seq[Attribute], query: LogicalPlan): Throwable = {
+    new AnalysisException(
+      s"""Cannot write to '$tableName', not enough data columns:
+         |Table columns: ${expected.map(c => s"'${c.name}'").mkString(", ")}
+         |Data columns: ${query.output.map(c => s"'${c.name}'").mkString(", ")}"""
+        .stripMargin)
+  }
+
+  def cannotWriteIncompatibleDataToTableError(tableName: String, errors: Seq[String]): Throwable = {
+    new AnalysisException(
+      s"Cannot write incompatible data to table '$tableName':\n- ${errors.mkString("\n- ")}")
+  }
+
+  def secondArgumentOfFunctionIsNotIntegerError(
+      function: String, e: NumberFormatException): Throwable = {
+    new AnalysisException(
+      s"The second argument of '$function' function needs to be an integer.", cause = Some(e))
   }
 }

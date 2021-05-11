@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, TypeUtils}
 import org.apache.spark.sql.connector.catalog.{LookupCatalog, SupportsAtomicPartitionManagement, SupportsPartitionManagement, Table}
 import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, After, ColumnPosition, DeleteColumn, RenameColumn, UpdateColumnComment, UpdateColumnNullability, UpdateColumnPosition, UpdateColumnType}
-import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -159,7 +159,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
 
       // `ShowTableExtended` should have been converted to the v1 command if the table is v1.
       case _: ShowTableExtended =>
-        throw new AnalysisException("SHOW TABLE EXTENDED is not supported for v2 tables.")
+        throw QueryCompilationErrors.commandUnsupportedInV2CatalogError("SHOW TABLE EXTENDED")
 
       case operator: LogicalPlan =>
         // Check argument data types of higher-order functions downwards first.
