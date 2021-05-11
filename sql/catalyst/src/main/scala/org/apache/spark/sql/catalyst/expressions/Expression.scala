@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.DeclarativeAggregate
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, LeafLike, QuaternaryLike, TernaryLike, TreeNode, UnaryLike}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{RUNTIME_REPLACEABLE, TreePattern}
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -335,6 +336,8 @@ trait RuntimeReplaceable extends UnaryExpression with Unevaluable {
   def exprsReplaced: Seq[Expression]
 
   override def sql: String = mkString(exprsReplaced.map(_.sql))
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(RUNTIME_REPLACEABLE)
 
   def mkString(childrenString: Seq[String]): String = {
     prettyName + childrenString.mkString("(", ", ", ")")
