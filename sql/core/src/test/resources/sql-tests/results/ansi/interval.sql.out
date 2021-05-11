@@ -5,7 +5,7 @@
 -- !query
 select 3 * (timestamp'2019-10-15 10:11:12.001002' - date'2019-10-15')
 -- !query schema
-struct<((TIMESTAMP '2019-10-15 10:11:12.001002' - DATE '2019-10-15') * 3):day-time interval>
+struct<((TIMESTAMP '2019-10-15 10:11:12.001002' - DATE '2019-10-15') * 3):interval day to second>
 -- !query output
 1 06:33:36.003006000
 
@@ -21,7 +21,7 @@ struct<multiply_interval(INTERVAL '4 months 14 days 0.000003 seconds', 1.5):inte
 -- !query
 select (timestamp'2019-10-15' - timestamp'2019-10-14') / 1.5
 -- !query schema
-struct<((TIMESTAMP '2019-10-15 00:00:00' - TIMESTAMP '2019-10-14 00:00:00') / 1.5):day-time interval>
+struct<((TIMESTAMP '2019-10-15 00:00:00' - TIMESTAMP '2019-10-14 00:00:00') / 1.5):interval day to second>
 -- !query output
 0 16:00:00.000000000
 
@@ -130,7 +130,7 @@ struct<(+ INTERVAL '-1 months 1 days -1 seconds'):interval>
 -- !query
 select interval -'1-1' year to month
 -- !query schema
-struct<INTERVAL '-1-1' YEAR TO MONTH:year-month interval>
+struct<INTERVAL '-1-1' YEAR TO MONTH:interval year to month>
 -- !query output
 -1-1
 
@@ -138,7 +138,7 @@ struct<INTERVAL '-1-1' YEAR TO MONTH:year-month interval>
 -- !query
 select interval -'-1-1' year to month
 -- !query schema
-struct<INTERVAL '1-1' YEAR TO MONTH:year-month interval>
+struct<INTERVAL '1-1' YEAR TO MONTH:interval year to month>
 -- !query output
 1-1
 
@@ -146,7 +146,7 @@ struct<INTERVAL '1-1' YEAR TO MONTH:year-month interval>
 -- !query
 select interval +'-1-1' year to month
 -- !query schema
-struct<INTERVAL '-1-1' YEAR TO MONTH:year-month interval>
+struct<INTERVAL '-1-1' YEAR TO MONTH:interval year to month>
 -- !query output
 -1-1
 
@@ -154,7 +154,7 @@ struct<INTERVAL '-1-1' YEAR TO MONTH:year-month interval>
 -- !query
 select interval - '1 2:3:4.001' day to second
 -- !query schema
-struct<INTERVAL '-1 02:03:04.001' DAY TO SECOND:day-time interval>
+struct<INTERVAL '-1 02:03:04.001' DAY TO SECOND:interval day to second>
 -- !query output
 -1 02:03:04.001000000
 
@@ -162,7 +162,7 @@ struct<INTERVAL '-1 02:03:04.001' DAY TO SECOND:day-time interval>
 -- !query
 select interval +'1 2:3:4.001' day to second
 -- !query schema
-struct<INTERVAL '1 02:03:04.001' DAY TO SECOND:day-time interval>
+struct<INTERVAL '1 02:03:04.001' DAY TO SECOND:interval day to second>
 -- !query output
 1 02:03:04.001000000
 
@@ -170,7 +170,7 @@ struct<INTERVAL '1 02:03:04.001' DAY TO SECOND:day-time interval>
 -- !query
 select interval -'-1 2:3:4.001' day to second
 -- !query schema
-struct<INTERVAL '1 02:03:04.001' DAY TO SECOND:day-time interval>
+struct<INTERVAL '1 02:03:04.001' DAY TO SECOND:interval day to second>
 -- !query output
 1 02:03:04.001000000
 
@@ -331,7 +331,7 @@ struct<INTERVAL '32 years 1 months -100 days 41 hours 24 minutes 59.889987 secon
 -- !query
 select interval '0-0' year to month
 -- !query schema
-struct<INTERVAL '0-0' YEAR TO MONTH:year-month interval>
+struct<INTERVAL '0-0' YEAR TO MONTH:interval year to month>
 -- !query output
 0-0
 
@@ -339,7 +339,7 @@ struct<INTERVAL '0-0' YEAR TO MONTH:year-month interval>
 -- !query
 select interval '0 0:0:0' day to second
 -- !query schema
-struct<INTERVAL '0 00:00:00' DAY TO SECOND:day-time interval>
+struct<INTERVAL '0 00:00:00' DAY TO SECOND:interval day to second>
 -- !query output
 0 00:00:00.000000000
 
@@ -347,7 +347,7 @@ struct<INTERVAL '0 00:00:00' DAY TO SECOND:day-time interval>
 -- !query
 select interval '0 0:0:0.1' day to second
 -- !query schema
-struct<INTERVAL '0 00:00:00.1' DAY TO SECOND:day-time interval>
+struct<INTERVAL '0 00:00:00.1' DAY TO SECOND:interval day to second>
 -- !query output
 0 00:00:00.100000000
 
@@ -355,7 +355,7 @@ struct<INTERVAL '0 00:00:00.1' DAY TO SECOND:day-time interval>
 -- !query
 select interval '10-9' year to month
 -- !query schema
-struct<INTERVAL '10-9' YEAR TO MONTH:year-month interval>
+struct<INTERVAL '10-9' YEAR TO MONTH:interval year to month>
 -- !query output
 10-9
 
@@ -363,7 +363,7 @@ struct<INTERVAL '10-9' YEAR TO MONTH:year-month interval>
 -- !query
 select interval '20 15' day to hour
 -- !query schema
-struct<INTERVAL '20 15:00:00' DAY TO SECOND:day-time interval>
+struct<INTERVAL '20 15:00:00' DAY TO SECOND:interval day to second>
 -- !query output
 20 15:00:00.000000000
 
@@ -371,7 +371,7 @@ struct<INTERVAL '20 15:00:00' DAY TO SECOND:day-time interval>
 -- !query
 select interval '20 15:40' day to minute
 -- !query schema
-struct<INTERVAL '20 15:40:00' DAY TO SECOND:day-time interval>
+struct<INTERVAL '20 15:40:00' DAY TO SECOND:interval day to second>
 -- !query output
 20 15:40:00.000000000
 
@@ -379,7 +379,7 @@ struct<INTERVAL '20 15:40:00' DAY TO SECOND:day-time interval>
 -- !query
 select interval '20 15:40:32.99899999' day to second
 -- !query schema
-struct<INTERVAL '20 15:40:32.998999' DAY TO SECOND:day-time interval>
+struct<INTERVAL '20 15:40:32.998999' DAY TO SECOND:interval day to second>
 -- !query output
 20 15:40:32.998999000
 
@@ -387,7 +387,7 @@ struct<INTERVAL '20 15:40:32.998999' DAY TO SECOND:day-time interval>
 -- !query
 select interval '15:40' hour to minute
 -- !query schema
-struct<INTERVAL '0 15:40:00' DAY TO SECOND:day-time interval>
+struct<INTERVAL '0 15:40:00' DAY TO SECOND:interval day to second>
 -- !query output
 0 15:40:00.000000000
 
@@ -395,7 +395,7 @@ struct<INTERVAL '0 15:40:00' DAY TO SECOND:day-time interval>
 -- !query
 select interval '15:40:32.99899999' hour to second
 -- !query schema
-struct<INTERVAL '0 15:40:32.998999' DAY TO SECOND:day-time interval>
+struct<INTERVAL '0 15:40:32.998999' DAY TO SECOND:interval day to second>
 -- !query output
 0 15:40:32.998999000
 
@@ -403,7 +403,7 @@ struct<INTERVAL '0 15:40:32.998999' DAY TO SECOND:day-time interval>
 -- !query
 select interval '40:32.99899999' minute to second
 -- !query schema
-struct<INTERVAL '0 00:40:32.998999' DAY TO SECOND:day-time interval>
+struct<INTERVAL '0 00:40:32.998999' DAY TO SECOND:interval day to second>
 -- !query output
 0 00:40:32.998999000
 
@@ -411,7 +411,7 @@ struct<INTERVAL '0 00:40:32.998999' DAY TO SECOND:day-time interval>
 -- !query
 select interval '40:32' minute to second
 -- !query schema
-struct<INTERVAL '0 00:40:32' DAY TO SECOND:day-time interval>
+struct<INTERVAL '0 00:40:32' DAY TO SECOND:interval day to second>
 -- !query output
 0 00:40:32.000000000
 
@@ -783,7 +783,7 @@ select interval 30 days days days
 -- !query
 SELECT INTERVAL '178956970-7' YEAR TO MONTH
 -- !query schema
-struct<INTERVAL '178956970-7' YEAR TO MONTH:year-month interval>
+struct<INTERVAL '178956970-7' YEAR TO MONTH:interval year to month>
 -- !query output
 178956970-7
 
@@ -805,7 +805,7 @@ SELECT INTERVAL '178956970-8' YEAR TO MONTH
 -- !query
 SELECT INTERVAL '-178956970-8' YEAR TO MONTH
 -- !query schema
-struct<INTERVAL '-178956970-8' YEAR TO MONTH:year-month interval>
+struct<INTERVAL '-178956970-8' YEAR TO MONTH:interval year to month>
 -- !query output
 -178956970-8
 
@@ -813,7 +813,7 @@ struct<INTERVAL '-178956970-8' YEAR TO MONTH:year-month interval>
 -- !query
 SELECT INTERVAL -'178956970-8' YEAR TO MONTH
 -- !query schema
-struct<INTERVAL '-178956970-8' YEAR TO MONTH:year-month interval>
+struct<INTERVAL '-178956970-8' YEAR TO MONTH:interval year to month>
 -- !query output
 -178956970-8
 
@@ -867,7 +867,7 @@ select
   interval '2-2' year to month - interval '3-3' year to month
 from interval_arithmetic
 -- !query schema
-struct<(INTERVAL '2-2' YEAR TO MONTH + INTERVAL '3-3' YEAR TO MONTH):year-month interval,(INTERVAL '2-2' YEAR TO MONTH - INTERVAL '3-3' YEAR TO MONTH):year-month interval>
+struct<(INTERVAL '2-2' YEAR TO MONTH + INTERVAL '3-3' YEAR TO MONTH):interval year to month,(INTERVAL '2-2' YEAR TO MONTH - INTERVAL '3-3' YEAR TO MONTH):interval year to month>
 -- !query output
 5-5	-1-1
 
@@ -926,7 +926,7 @@ select
   interval '99 11:22:33.123456789' day to second - interval '10 9:8:7.123456789' day to second
 from interval_arithmetic
 -- !query schema
-struct<(INTERVAL '99 11:22:33.123456' DAY TO SECOND + INTERVAL '10 09:08:07.123456' DAY TO SECOND):day-time interval,(INTERVAL '99 11:22:33.123456' DAY TO SECOND - INTERVAL '10 09:08:07.123456' DAY TO SECOND):day-time interval>
+struct<(INTERVAL '99 11:22:33.123456' DAY TO SECOND + INTERVAL '10 09:08:07.123456' DAY TO SECOND):interval day to second,(INTERVAL '99 11:22:33.123456' DAY TO SECOND - INTERVAL '10 09:08:07.123456' DAY TO SECOND):interval day to second>
 -- !query output
 109 20:30:40.246912000	89 02:14:26.000000000
 
@@ -974,7 +974,7 @@ struct<INTERVAL '1 days':interval>
 -- !query
 select interval '2-2\t' year to month
 -- !query schema
-struct<INTERVAL '2-2' YEAR TO MONTH:year-month interval>
+struct<INTERVAL '2-2' YEAR TO MONTH:interval year to month>
 -- !query output
 2-2
 
@@ -996,7 +996,7 @@ select interval '-\t2-2\t' year to month
 -- !query
 select interval '\n0 12:34:46.789\t' day to second
 -- !query schema
-struct<INTERVAL '0 12:34:46.789' DAY TO SECOND:day-time interval>
+struct<INTERVAL '0 12:34:46.789' DAY TO SECOND:interval day to second>
 -- !query output
 0 12:34:46.789000000
 
@@ -1264,7 +1264,7 @@ struct<INTERVAL '-1 days':interval>
 -- !query
 SELECT (INTERVAL '-178956970-8' YEAR TO MONTH) / 2
 -- !query schema
-struct<(INTERVAL '-178956970-8' YEAR TO MONTH / 2):year-month interval>
+struct<(INTERVAL '-178956970-8' YEAR TO MONTH / 2):interval year to month>
 -- !query output
 -89478485-4
 
@@ -1272,7 +1272,7 @@ struct<(INTERVAL '-178956970-8' YEAR TO MONTH / 2):year-month interval>
 -- !query
 SELECT (INTERVAL '-178956970-8' YEAR TO MONTH) / 5
 -- !query schema
-struct<(INTERVAL '-178956970-8' YEAR TO MONTH / 5):year-month interval>
+struct<(INTERVAL '-178956970-8' YEAR TO MONTH / 5):interval year to month>
 -- !query output
 -35791394-2
 
@@ -1316,7 +1316,7 @@ not in range
 -- !query
 SELECT (INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND) / 2
 -- !query schema
-struct<(INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND / 2):day-time interval>
+struct<(INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND / 2):interval day to second>
 -- !query output
 -53375995 14:00:27.387904000
 
@@ -1324,7 +1324,7 @@ struct<(INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND / 2):day-time interv
 -- !query
 SELECT (INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND) / 5
 -- !query schema
-struct<(INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND / 5):day-time interval>
+struct<(INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND / 5):interval day to second>
 -- !query output
 -21350398 05:36:10.955162000
 

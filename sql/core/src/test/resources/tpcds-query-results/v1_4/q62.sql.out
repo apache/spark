@@ -3,103 +3,103 @@
 -- !query schema
 struct<substr(w_warehouse_name, 1, 20):string,sm_type:string,web_name:string,30 days :bigint,31 - 60 days :bigint,61 - 90 days :bigint,91 - 120 days :bigint,>120 days :bigint>
 -- !query output
-NULL	EXPRESS                       	site_0	260	283	296	314	0
-NULL	EXPRESS                       	site_1	330	285	315	329	0
-NULL	EXPRESS                       	site_2	283	291	318	333	0
-NULL	EXPRESS                       	site_3	274	280	277	258	0
-NULL	EXPRESS                       	site_4	247	244	268	259	0
-NULL	LIBRARY                       	site_0	197	180	203	180	0
-NULL	LIBRARY                       	site_1	208	205	185	211	0
-NULL	LIBRARY                       	site_2	258	230	267	243	0
-NULL	LIBRARY                       	site_3	243	204	241	252	0
-NULL	LIBRARY                       	site_4	211	213	216	206	0
-NULL	NEXT DAY                      	site_0	332	290	340	289	0
-NULL	NEXT DAY                      	site_1	297	292	275	334	0
-NULL	NEXT DAY                      	site_2	287	253	272	220	0
-NULL	NEXT DAY                      	site_3	255	252	243	264	0
-NULL	NEXT DAY                      	site_4	300	309	309	281	0
-NULL	OVERNIGHT                     	site_0	242	224	226	237	0
-NULL	OVERNIGHT                     	site_1	237	202	213	204	0
-NULL	OVERNIGHT                     	site_2	172	182	158	181	0
-NULL	OVERNIGHT                     	site_3	217	193	201	175	0
-NULL	OVERNIGHT                     	site_4	231	251	249	237	0
-NULL	REGULAR                       	site_0	227	216	199	193	0
-NULL	REGULAR                       	site_1	239	209	254	246	0
-NULL	REGULAR                       	site_2	235	241	259	219	0
-NULL	REGULAR                       	site_3	204	212	185	237	0
-NULL	REGULAR                       	site_4	171	176	182	163	0
-NULL	TWO DAY                       	site_0	189	201	202	218	0
-NULL	TWO DAY                       	site_1	199	170	177	174	0
-NULL	TWO DAY                       	site_2	200	202	181	179	0
-NULL	TWO DAY                       	site_3	237	234	233	253	0
-NULL	TWO DAY                       	site_4	233	229	234	238	0
-Bad cards must make.	EXPRESS                       	site_0	251	248	268	277	0
-Bad cards must make.	EXPRESS                       	site_1	262	304	290	267	0
-Bad cards must make.	EXPRESS                       	site_2	287	290	293	286	0
-Bad cards must make.	EXPRESS                       	site_3	283	260	267	290	0
-Bad cards must make.	EXPRESS                       	site_4	281	310	309	321	0
-Bad cards must make.	LIBRARY                       	site_0	254	265	226	231	0
-Bad cards must make.	LIBRARY                       	site_1	198	231	211	201	0
-Bad cards must make.	LIBRARY                       	site_2	181	172	190	176	0
-Bad cards must make.	LIBRARY                       	site_3	196	214	173	226	0
-Bad cards must make.	LIBRARY                       	site_4	241	241	247	236	0
-Bad cards must make.	NEXT DAY                      	site_0	259	255	279	260	0
-Bad cards must make.	NEXT DAY                      	site_1	287	334	295	300	0
-Bad cards must make.	NEXT DAY                      	site_2	269	309	306	272	0
-Bad cards must make.	NEXT DAY                      	site_3	281	322	308	277	0
-Bad cards must make.	NEXT DAY                      	site_4	273	295	275	281	0
-Bad cards must make.	OVERNIGHT                     	site_0	221	216	201	213	0
-Bad cards must make.	OVERNIGHT                     	site_1	250	228	257	235	0
-Bad cards must make.	OVERNIGHT                     	site_2	255	223	230	238	0
-Bad cards must make.	OVERNIGHT                     	site_3	195	217	199	211	0
-Bad cards must make.	OVERNIGHT                     	site_4	175	165	169	164	0
-Bad cards must make.	REGULAR                       	site_0	176	239	220	233	0
-Bad cards must make.	REGULAR                       	site_1	187	163	200	198	0
-Bad cards must make.	REGULAR                       	site_2	190	231	195	208	0
-Bad cards must make.	REGULAR                       	site_3	227	241	231	252	0
-Bad cards must make.	REGULAR                       	site_4	258	245	260	245	0
-Bad cards must make.	TWO DAY                       	site_0	222	235	235	223	0
-Bad cards must make.	TWO DAY                       	site_1	264	248	237	227	0
-Bad cards must make.	TWO DAY                       	site_2	181	230	231	207	0
-Bad cards must make.	TWO DAY                       	site_3	182	158	209	185	0
-Bad cards must make.	TWO DAY                       	site_4	203	218	198	221	0
-Conventional childr	EXPRESS                       	site_0	311	308	336	287	0
-Conventional childr	EXPRESS                       	site_1	250	269	273	260	0
-Conventional childr	EXPRESS                       	site_2	255	280	235	276	0
-Conventional childr	EXPRESS                       	site_3	269	292	303	278	0
-Conventional childr	EXPRESS                       	site_4	275	324	268	330	0
-Conventional childr	LIBRARY                       	site_0	212	211	225	250	0
-Conventional childr	LIBRARY                       	site_1	218	249	244	204	0
-Conventional childr	LIBRARY                       	site_2	203	215	222	205	0
-Conventional childr	LIBRARY                       	site_3	163	181	180	193	0
-Conventional childr	LIBRARY                       	site_4	189	208	207	191	0
-Conventional childr	NEXT DAY                      	site_0	253	269	285	258	0
-Conventional childr	NEXT DAY                      	site_1	289	244	254	269	0
-Conventional childr	NEXT DAY                      	site_2	341	290	310	315	0
-Conventional childr	NEXT DAY                      	site_3	309	294	328	270	0
-Conventional childr	NEXT DAY                      	site_4	312	311	275	291	0
-Conventional childr	OVERNIGHT                     	site_0	180	193	167	211	0
-Conventional childr	OVERNIGHT                     	site_1	196	210	238	194	0
-Conventional childr	OVERNIGHT                     	site_2	218	236	287	220	0
-Conventional childr	OVERNIGHT                     	site_3	235	253	228	246	0
-Conventional childr	OVERNIGHT                     	site_4	211	199	201	201	0
-Conventional childr	REGULAR                       	site_0	209	262	232	207	0
-Conventional childr	REGULAR                       	site_1	214	218	222	227	0
-Conventional childr	REGULAR                       	site_2	166	193	184	183	0
-Conventional childr	REGULAR                       	site_3	195	191	221	219	0
-Conventional childr	REGULAR                       	site_4	248	236	244	256	0
-Conventional childr	TWO DAY                       	site_0	192	225	232	225	0
-Conventional childr	TWO DAY                       	site_1	248	239	233	251	0
-Conventional childr	TWO DAY                       	site_2	230	214	237	201	0
-Conventional childr	TWO DAY                       	site_3	236	190	190	222	0
-Conventional childr	TWO DAY                       	site_4	197	159	202	176	0
-Doors canno	EXPRESS                       	site_0	303	312	304	319	0
-Doors canno	EXPRESS                       	site_1	321	278	313	297	0
-Doors canno	EXPRESS                       	site_2	267	277	265	257	0
-Doors canno	EXPRESS                       	site_3	263	245	258	285	0
-Doors canno	EXPRESS                       	site_4	282	313	319	323	0
-Doors canno	LIBRARY                       	site_0	201	210	201	200	0
-Doors canno	LIBRARY                       	site_1	239	217	208	206	0
-Doors canno	LIBRARY                       	site_2	229	233	244	241	0
-Doors canno	LIBRARY                       	site_3	216	198	182	222	0
-Doors canno	LIBRARY                       	site_4	176	163	170	216	0
+Just good amou	EXPRESS                       	site_0	270	248	280	287	0
+Just good amou	EXPRESS                       	site_1	290	327	288	262	0
+Just good amou	EXPRESS                       	site_2	314	295	311	299	0
+Just good amou	EXPRESS                       	site_3	309	300	299	267	0
+Just good amou	EXPRESS                       	site_4	224	250	297	273	0
+Just good amou	LIBRARY                       	site_0	217	192	210	225	0
+Just good amou	LIBRARY                       	site_1	163	207	172	205	0
+Just good amou	LIBRARY                       	site_2	176	204	208	190	0
+Just good amou	LIBRARY                       	site_3	222	220	240	240	0
+Just good amou	LIBRARY                       	site_4	254	230	241	263	0
+Just good amou	NEXT DAY                      	site_0	311	275	303	291	0
+Just good amou	NEXT DAY                      	site_1	291	307	284	289	0
+Just good amou	NEXT DAY                      	site_2	275	299	323	279	0
+Just good amou	NEXT DAY                      	site_3	260	290	242	248	0
+Just good amou	NEXT DAY                      	site_4	233	285	271	281	0
+Just good amou	OVERNIGHT                     	site_0	242	262	221	248	0
+Just good amou	OVERNIGHT                     	site_1	251	245	249	233	0
+Just good amou	OVERNIGHT                     	site_2	198	226	209	204	0
+Just good amou	OVERNIGHT                     	site_3	168	199	184	175	0
+Just good amou	OVERNIGHT                     	site_4	237	231	193	207	0
+Just good amou	REGULAR                       	site_0	140	236	154	190	0
+Just good amou	REGULAR                       	site_1	189	190	205	194	0
+Just good amou	REGULAR                       	site_2	234	251	264	235	0
+Just good amou	REGULAR                       	site_3	229	251	244	243	0
+Just good amou	REGULAR                       	site_4	198	209	188	216	0
+Just good amou	TWO DAY                       	site_0	256	258	218	235	0
+Just good amou	TWO DAY                       	site_1	217	226	195	198	0
+Just good amou	TWO DAY                       	site_2	176	151	186	202	0
+Just good amou	TWO DAY                       	site_3	221	225	236	190	0
+Just good amou	TWO DAY                       	site_4	239	240	219	252	0
+Matches produce	EXPRESS                       	site_0	330	277	239	314	0
+Matches produce	EXPRESS                       	site_1	296	336	288	307	0
+Matches produce	EXPRESS                       	site_2	262	307	273	305	0
+Matches produce	EXPRESS                       	site_3	284	253	253	256	0
+Matches produce	EXPRESS                       	site_4	260	309	252	296	0
+Matches produce	LIBRARY                       	site_0	188	181	179	170	0
+Matches produce	LIBRARY                       	site_1	189	211	193	181	0
+Matches produce	LIBRARY                       	site_2	253	230	207	248	0
+Matches produce	LIBRARY                       	site_3	225	230	217	214	0
+Matches produce	LIBRARY                       	site_4	220	218	208	213	0
+Matches produce	NEXT DAY                      	site_0	296	286	328	316	0
+Matches produce	NEXT DAY                      	site_1	303	303	307	281	0
+Matches produce	NEXT DAY                      	site_2	271	258	253	256	0
+Matches produce	NEXT DAY                      	site_3	265	263	290	296	0
+Matches produce	NEXT DAY                      	site_4	312	312	291	311	0
+Matches produce	OVERNIGHT                     	site_0	217	254	216	258	0
+Matches produce	OVERNIGHT                     	site_1	214	187	229	230	0
+Matches produce	OVERNIGHT                     	site_2	171	176	188	174	0
+Matches produce	OVERNIGHT                     	site_3	181	218	193	219	0
+Matches produce	OVERNIGHT                     	site_4	244	216	237	234	0
+Matches produce	REGULAR                       	site_0	205	216	204	229	0
+Matches produce	REGULAR                       	site_1	230	232	229	244	0
+Matches produce	REGULAR                       	site_2	225	250	209	254	0
+Matches produce	REGULAR                       	site_3	230	212	212	195	0
+Matches produce	REGULAR                       	site_4	207	167	180	172	0
+Matches produce	TWO DAY                       	site_0	228	195	222	198	0
+Matches produce	TWO DAY                       	site_1	169	154	170	146	0
+Matches produce	TWO DAY                       	site_2	197	215	201	210	0
+Matches produce	TWO DAY                       	site_3	247	236	234	237	0
+Matches produce	TWO DAY                       	site_4	242	259	245	247	0
+Operations	EXPRESS                       	site_0	270	284	268	286	0
+Operations	EXPRESS                       	site_1	274	251	245	275	0
+Operations	EXPRESS                       	site_2	287	337	296	310	0
+Operations	EXPRESS                       	site_3	349	307	322	286	0
+Operations	EXPRESS                       	site_4	284	287	285	271	0
+Operations	LIBRARY                       	site_0	266	227	229	237	0
+Operations	LIBRARY                       	site_1	201	228	190	200	0
+Operations	LIBRARY                       	site_2	177	170	182	171	0
+Operations	LIBRARY                       	site_3	227	217	214	226	0
+Operations	LIBRARY                       	site_4	268	258	242	242	0
+Operations	NEXT DAY                      	site_0	269	255	273	257	0
+Operations	NEXT DAY                      	site_1	292	295	258	291	0
+Operations	NEXT DAY                      	site_2	296	327	305	294	0
+Operations	NEXT DAY                      	site_3	274	286	322	289	0
+Operations	NEXT DAY                      	site_4	311	270	243	255	0
+Operations	OVERNIGHT                     	site_0	217	205	193	227	0
+Operations	OVERNIGHT                     	site_1	221	243	232	237	0
+Operations	OVERNIGHT                     	site_2	247	243	235	238	0
+Operations	OVERNIGHT                     	site_3	242	218	205	223	0
+Operations	OVERNIGHT                     	site_4	181	172	192	186	0
+Operations	REGULAR                       	site_0	190	211	206	195	0
+Operations	REGULAR                       	site_1	166	173	173	174	0
+Operations	REGULAR                       	site_2	198	219	215	226	0
+Operations	REGULAR                       	site_3	255	234	239	215	0
+Operations	REGULAR                       	site_4	246	231	266	208	0
+Operations	TWO DAY                       	site_0	247	232	246	240	0
+Operations	TWO DAY                       	site_1	244	240	259	234	0
+Operations	TWO DAY                       	site_2	210	214	200	190	0
+Operations	TWO DAY                       	site_3	166	181	174	184	0
+Operations	TWO DAY                       	site_4	194	197	224	211	0
+Selective,	EXPRESS                       	site_0	290	275	273	332	0
+Selective,	EXPRESS                       	site_1	303	319	311	299	0
+Selective,	EXPRESS                       	site_2	299	238	268	261	0
+Selective,	EXPRESS                       	site_3	262	273	281	300	0
+Selective,	EXPRESS                       	site_4	285	298	291	300	0
+Selective,	LIBRARY                       	site_0	215	204	202	211	0
+Selective,	LIBRARY                       	site_1	221	253	243	240	0
+Selective,	LIBRARY                       	site_2	218	261	226	234	0
+Selective,	LIBRARY                       	site_3	178	189	233	217	0
+Selective,	LIBRARY                       	site_4	159	186	194	199	0

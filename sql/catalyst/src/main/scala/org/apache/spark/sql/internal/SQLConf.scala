@@ -588,6 +588,16 @@ object SQLConf {
       .stringConf
       .createOptional
 
+  val ADAPTIVE_AUTO_BROADCASTJOIN_THRESHOLD =
+    buildConf("spark.sql.adaptive.autoBroadcastJoinThreshold")
+      .doc("Configures the maximum size in bytes for a table that will be broadcast to all " +
+        "worker nodes when performing a join. By setting this value to -1 broadcasting can be " +
+        s"disabled. The default value is same with ${AUTO_BROADCASTJOIN_THRESHOLD.key}. " +
+        "Note that, this config is used only in adaptive framework.")
+      .version("3.2.0")
+      .bytesConf(ByteUnit.BYTE)
+      .createOptional
+
   val SUBEXPRESSION_ELIMINATION_ENABLED =
     buildConf("spark.sql.subexpressionElimination.enabled")
       .internal()
@@ -2884,8 +2894,9 @@ object SQLConf {
     buildConf("spark.sql.addPartitionInBatch.size")
       .internal()
       .doc("The number of partitions to be handled in one turn when use " +
-        "`AlterTableAddPartitionCommand` to add partitions into table. The smaller " +
-        "batch size is, the less memory is required for the real handler, e.g. Hive Metastore.")
+        "`AlterTableAddPartitionCommand` or `RepairTableCommand` to add partitions into table. " +
+        "The smaller batch size is, the less memory is required for the real handler, e.g. " +
+        "Hive Metastore.")
       .version("3.0.0")
       .intConf
       .checkValue(_ > 0, "The value of spark.sql.addPartitionInBatch.size must be positive")

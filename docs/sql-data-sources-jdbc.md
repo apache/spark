@@ -211,6 +211,25 @@ the following case-insensitive options:
      Specifies kerberos principal name for the JDBC client. If both <code>keytab</code> and <code>principal</code> are defined then Spark tries to do kerberos authentication.
     </td>
   </tr>
+
+  <tr>
+    <td><code>refreshKrb5Config</code></td>
+    <td>
+      This option controls whether the kerberos configuration is to be refreshed or not for the JDBC client before
+      establishing a new connection. Set to true if you want to refresh the configuration, otherwise set to false.
+      The default value is false. Note that if you set this option to true and try to establish multiple connections,
+      a race condition can occur. One possble situation would be like as follows.
+      <ol>
+        <li>refreshKrb5Config flag is set with security context 1</li>
+        <li>A JDBC connection provider is used for the corresponding DBMS</li>
+        <li>The krb5.conf is modified but the JVM not yet realized that it must be reloaded</li>
+        <li>Spark authenticates successfully for security context 1</li>
+        <li>The JVM loads security context 2 from the modified krb5.conf</li>
+        <li>Spark restores the previously saved security context 1</li>
+        <li>The modified krb5.conf content just gone</li>
+      </ol>
+    </td>
+  </tr>  
 </table>
 
 Note that kerberos authentication with keytab is not always supported by the JDBC driver.<br>

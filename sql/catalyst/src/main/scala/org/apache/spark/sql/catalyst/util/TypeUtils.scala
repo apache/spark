@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.catalyst.util
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.expressions.RowOrdering
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types._
 
 /**
@@ -110,7 +110,7 @@ object TypeUtils {
 
   def failWithIntervalType(dataType: DataType): Unit = {
     invokeOnceForInterval(dataType) {
-      throw new AnalysisException("Cannot use interval type in the table schema.")
+      throw QueryCompilationErrors.cannotUseIntervalTypeInTableSchemaError()
     }
   }
 

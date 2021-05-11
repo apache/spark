@@ -689,7 +689,7 @@ def validate_axis(axis=0, none_axis=0):
 def validate_bool_kwarg(value, arg_name):
     """ Ensures that argument passed in arg_name is of type bool. """
     if not (isinstance(value, bool) or value is None):
-        raise ValueError(
+        raise TypeError(
             'For argument "{}" expected type bool, received '
             "type {}.".format(arg_name, type(value).__name__)
         )

@@ -91,7 +91,7 @@ jobs:
         # To keep the directory structure and file permissions, tar them
         # See also https://github.com/actions/upload-artifact#maintaining-file-permissions-and-case-sensitive-files
         echo "Preparing the benchmark results:"
-        tar -cvf benchmark-results-${{ github.event.inputs.jdk }}.tar `git diff --name-only`
+        tar -cvf benchmark-results-${{ github.event.inputs.jdk }}.tar `git diff --name-only` `git ls-files --others --exclude-standard`
     - name: Upload benchmark results
       uses: actions/upload-artifact@v2
       with:

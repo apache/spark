@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+/* global $, formatTimeMillis, getTimeZone */
+
 $(document).ready(function() {
   if ($('#last-updated').length) {
     var lastUpdatedMillis = Number($('#last-updated').text());

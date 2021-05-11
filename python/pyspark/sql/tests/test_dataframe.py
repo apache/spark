@@ -319,7 +319,7 @@ class DataFrameTests(ReusedSQLTestCase):
         self.assertTupleEqual(row, (u'Alice', 20, None))
 
         # should fail if subset is not list, tuple or None
-        with self.assertRaises(ValueError):
+        with self.assertRaises(TypeError):
             self.spark.createDataFrame(
                 [(u'Alice', 10, 80.1)], schema).replace({10: 11}, subset=1).first()
 
@@ -329,7 +329,7 @@ class DataFrameTests(ReusedSQLTestCase):
                 [(u'Alice', 10, 80.1)], schema).replace(["Alice", "Bob"], ["Eve"]).first()
 
         # should fail if when received unexpected type
-        with self.assertRaises(ValueError):
+        with self.assertRaises(TypeError):
             from datetime import datetime
             self.spark.createDataFrame(
                 [(u'Alice', 10, 80.1)], schema).replace(datetime.now(), datetime.now()).first()
@@ -818,7 +818,7 @@ class DataFrameTests(ReusedSQLTestCase):
 
     def test_same_semantics_error(self):
         with QuietTest(self.sc):
-            with self.assertRaisesRegex(ValueError, "should be of DataFrame.*int"):
+            with self.assertRaisesRegex(TypeError, "should be of DataFrame.*int"):
                 self.spark.range(10).sameSemantics(1)
 
     def test_input_files(self):
