@@ -2924,6 +2924,57 @@ abstract class JsonSuite
       }
     }
   }
+
+  test("SPARK-35374: Numbers represented as string should be parsed as the schema-specified type") {
+    withTempPath { path =>
+      val basePath = path.getCanonicalPath
+      val df1 = Seq("foo", "100", "257", "32768", "2147483648", "2.71f", "1.0E100").toDF
+      df1.write.json(basePath)
+
+      def createDFForType(t: DataType): DataFrame = {
+        spark.read.schema(StructType(StructField("value", t)::Nil)).json(basePath)
+      }
+
+      def countIsNullRecords(df: DataFrame): Long = {
+        df.filter("ISNULL(value)").count
+      }
+
+      def getNonNullResultForType[T: Encoder](df: DataFrame): Set[T] = {
+        df.filter("NOT ISNULL(value)").map(_.getAs[T](0)).collect.toSet
+      }
+
+      val strDF = createDFForType(StringType)
+      assert(countIsNullRecords(strDF) === 0)
+      assert(getNonNullResultForType[String](strDF) ===
+        Set("foo", "100", "257", "32768", "2147483648", "2.71f", "1.0E100"))
+
+      val byteDF = createDFForType(ByteType)
+      assert(countIsNullRecords(byteDF) === 6)
+      assert(getNonNullResultForType[Byte](byteDF) === Set(100))
+
+      val shortDF = createDFForType(ShortType)
+      assert(countIsNullRecords(shortDF) === 5)
+      assert(getNonNullResultForType[Short](shortDF) === Set(100, 257))
+
+      val intDF = createDFForType(IntegerType)
+      assert(countIsNullRecords(intDF) === 4)
+      assert(getNonNullResultForType[Int](intDF) === Set(100, 257, 32768))
+
+      val longDF = createDFForType(LongType)
+      assert(countIsNullRecords(longDF) === 3)
+      assert(getNonNullResultForType[Long](longDF) === Set(100, 257, 32768, 2147483648L))
+
+      val floatDF = createDFForType(FloatType)
+      assert(countIsNullRecords(floatDF) === 1)
+      assert(getNonNullResultForType[Float](floatDF) ===
+        Set(100f, 257f, 32768f, 2147483648f, 2.71f, Float.PositiveInfinity))
+
+      val doubleDF = createDFForType(DoubleType)
+      assert(countIsNullRecords(doubleDF) === 1)
+      assert(getNonNullResultForType[Double](doubleDF) ===
+        Set(100.0, 257.0, 32768.0, 2147483648.0, 2.71, 1.0E100))
+    }
+  }
 }
 
 class JsonV1Suite extends JsonSuite {

@@ -173,21 +173,25 @@ class JacksonParser(
     case ByteType =>
       (parser: JsonParser) => parseJsonToken[java.lang.Byte](parser, dataType) {
         case VALUE_NUMBER_INT => parser.getByteValue
+        case VALUE_STRING => parser.getText.toByte
       }
 
     case ShortType =>
       (parser: JsonParser) => parseJsonToken[java.lang.Short](parser, dataType) {
         case VALUE_NUMBER_INT => parser.getShortValue
+        case VALUE_STRING => parser.getText.toShort
       }
 
     case IntegerType =>
       (parser: JsonParser) => parseJsonToken[java.lang.Integer](parser, dataType) {
         case VALUE_NUMBER_INT => parser.getIntValue
+        case VALUE_STRING => parser.getText.toInt
       }
 
     case LongType =>
       (parser: JsonParser) => parseJsonToken[java.lang.Long](parser, dataType) {
         case VALUE_NUMBER_INT => parser.getLongValue
+        case VALUE_STRING => parser.getText.toLong
       }
 
     case FloatType =>
@@ -201,8 +205,13 @@ class JacksonParser(
             case "NaN" => Float.NaN
             case "Infinity" => Float.PositiveInfinity
             case "-Infinity" => Float.NegativeInfinity
-            case other => throw new RuntimeException(
-              s"Cannot parse $other as ${FloatType.catalogString}.")
+            case other =>
+              try {
+                other.toFloat
+              } catch {
+                case _: NumberFormatException => throw new RuntimeException(
+                  s"Cannot parse $other as ${FloatType.catalogString}.")
+              }
           }
       }
 
@@ -218,7 +227,12 @@ class JacksonParser(
             case "Infinity" => Double.PositiveInfinity
             case "-Infinity" => Double.NegativeInfinity
             case other =>
-              throw new RuntimeException(s"Cannot parse $other as ${DoubleType.catalogString}.")
+              try {
+                other.toDouble
+              } catch {
+                case _: NumberFormatException => throw new RuntimeException(
+                  s"Cannot parse $other as ${DoubleType.catalogString}.")
+              }
           }
       }
 
