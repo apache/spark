@@ -486,13 +486,15 @@ case class SortMergeJoinExec(
     //            1. Inner join: skip the row.
     //            2. Left/Right Outer join: clear the previous `matches` if needed, keep the row,
     //                                      and return false.
+    //
     //  - Step 2: Find the `matches` from buffered side having same join keys with `streamedRow`.
-    //            If previous `matches` is not empty, check the join keys and clear the `matches`
-    //            if the keys are not matched. Use `bufferedRow` to iterate buffered side to put
-    //            all matched rows into `matches`. Return true when getting all matched rows.
+    //            Clear `matches` if we hit a new `streamedRow`, as we need to find new matches.
+    //            Use `bufferedRow` to iterate buffered side to put all matched rows into
+    //            `matches`. Return true when getting all matched rows.
     //            For `streamedRow` without `matches` (`handleStreamedWithoutMatch`):
     //            1. Inner join: skip the row.
-    //            2. Left/Right Outer join: keep the row and return false.
+    //            2. Left/Right Outer join: keep the row and return false (with `matches` being
+    //                                      empty).
     ctx.addNewFunction("findNextJoinRows",
       s"""
          |private boolean findNextJoinRows(
