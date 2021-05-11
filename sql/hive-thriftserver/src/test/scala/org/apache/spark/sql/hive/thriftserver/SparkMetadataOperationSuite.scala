@@ -377,6 +377,60 @@ class SparkMetadataOperationSuite extends HiveThriftServer2TestBase {
     }
   }
 
+  test("SPARK-35085: Get columns operation should handle ANSI interval column properly") {
+    val viewName1 = "view_interval1"
+    val yearMonthDDL =
+      s"CREATE GLOBAL TEMP VIEW $viewName1 as select interval '1-1' year to month as i"
+
+    withJdbcStatement(viewName1) { statement =>
+      statement.execute(yearMonthDDL)
+      val data = statement.getConnection.getMetaData
+      val rowSet = data.getColumns("", "global_temp", viewName1, null)
+      while (rowSet.next()) {
+        assert(rowSet.getString("TABLE_CAT") === null)
+        assert(rowSet.getString("TABLE_SCHEM") === "global_temp")
+        assert(rowSet.getString("TABLE_NAME") === viewName1)
+        assert(rowSet.getString("COLUMN_NAME") === "i")
+        assert(rowSet.getInt("DATA_TYPE") === java.sql.Types.OTHER)
+        assert(rowSet.getString("TYPE_NAME").equalsIgnoreCase(YearMonthIntervalType.sql))
+        assert(rowSet.getInt("COLUMN_SIZE") === YearMonthIntervalType.defaultSize)
+        assert(rowSet.getInt("DECIMAL_DIGITS") === 0)
+        assert(rowSet.getInt("NUM_PREC_RADIX") === 0)
+        assert(rowSet.getInt("NULLABLE") === 0)
+        assert(rowSet.getString("REMARKS") === "")
+        assert(rowSet.getInt("ORDINAL_POSITION") === 0)
+        assert(rowSet.getString("IS_NULLABLE") === "YES")
+        assert(rowSet.getString("IS_AUTO_INCREMENT") === "NO")
+      }
+    }
+
+    val viewName2 = "view_interval2"
+    val dayTimeDDL =
+      s"CREATE GLOBAL TEMP VIEW $viewName2 as select interval '1 2:3:4.001' day to second as i"
+
+    withJdbcStatement(viewName2) { statement =>
+      statement.execute(dayTimeDDL)
+      val data = statement.getConnection.getMetaData
+      val rowSet = data.getColumns("", "global_temp", viewName2, null)
+      while (rowSet.next()) {
+        assert(rowSet.getString("TABLE_CAT") === null)
+        assert(rowSet.getString("TABLE_SCHEM") === "global_temp")
+        assert(rowSet.getString("TABLE_NAME") === viewName2)
+        assert(rowSet.getString("COLUMN_NAME") === "i")
+        assert(rowSet.getInt("DATA_TYPE") === java.sql.Types.OTHER)
+        assert(rowSet.getString("TYPE_NAME").equalsIgnoreCase(DayTimeIntervalType.sql))
+        assert(rowSet.getInt("COLUMN_SIZE") === DayTimeIntervalType.defaultSize)
+        assert(rowSet.getInt("DECIMAL_DIGITS") === 0)
+        assert(rowSet.getInt("NUM_PREC_RADIX") === 0)
+        assert(rowSet.getInt("NULLABLE") === 0)
+        assert(rowSet.getString("REMARKS") === "")
+        assert(rowSet.getInt("ORDINAL_POSITION") === 0)
+        assert(rowSet.getString("IS_NULLABLE") === "YES")
+        assert(rowSet.getString("IS_AUTO_INCREMENT") === "NO")
+      }
+    }
+  }
+
   test("handling null in view for get columns operations") {
     val viewName = "view_null"
     val ddl = s"CREATE GLOBAL TEMP VIEW $viewName as select null as n"

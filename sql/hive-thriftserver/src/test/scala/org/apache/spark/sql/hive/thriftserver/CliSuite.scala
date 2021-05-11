@@ -31,6 +31,7 @@ import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.hive.HiveUtils._
 import org.apache.spark.sql.hive.test.HiveTestJars
 import org.apache.spark.sql.internal.StaticSQLConf
 import org.apache.spark.sql.test.ProcessTestUtils.ProcessOutputCapturer
@@ -593,5 +594,21 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
       "EXPLAIN SELECT /* + MERGEJOIN(t1) */ t1.* FROM t1 JOIN t2 ON t1.k = t2.v;"
         -> "BroadcastHashJoin"
     )
+  }
+
+  test("SPARK-35086: --verbose should be passed to Spark SQL CLI") {
+    runCliWithin(2.minute, Seq("--verbose"))(
+      "SELECT 'SPARK-35086' AS c1, '--verbose' AS c2;" ->
+        "SELECT 'SPARK-35086' AS c1, '--verbose' AS c2"
+    )
+  }
+
+  test("SPARK-35102: Make spark.sql.hive.version meaningful and not deprecated") {
+    runCliWithin(1.minute,
+      Seq("--conf", "spark.sql.hive.version=0.1"),
+      Seq(s"please use ${HIVE_METASTORE_VERSION.key}"))("" -> "")
+    runCliWithin(2.minute,
+      Seq("--conf", s"${BUILTIN_HIVE_VERSION.key}=$builtinHiveVersion"))(
+      s"set ${BUILTIN_HIVE_VERSION.key};" -> builtinHiveVersion, "SET -v;" -> builtinHiveVersion)
   }
 }

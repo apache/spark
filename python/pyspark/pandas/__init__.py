@@ -42,11 +42,12 @@ def assert_python_version():
 
     if sys.version_info[:2] <= deprecated_version:
         warnings.warn(
-            "Koalas support for Python {dep_ver} is deprecated and will be dropped in "
+            "pandas-on-Spark support for Python {dep_ver} is deprecated and will be dropped in "
             "the future release. At that point, existing Python {dep_ver} workflows "
-            "that use Koalas will continue to work without modification, but Python {dep_ver} "
-            "users will no longer get access to the latest Koalas features and bugfixes. "
-            "We recommend that you upgrade to Python {min_ver} or newer.".format(
+            "that use pandas-on-Spark will continue to work without modification, but "
+            "Python {dep_ver} users will no longer get access to the latest pandas-on-Spark "
+            "features and bugfixes. We recommend that you upgrade to Python {min_ver} or "
+            "newer.".format(
                 dep_ver=".".join(map(str, deprecated_version)),
                 min_ver=".".join(map(str, min_supported_version)),
             ),
@@ -68,8 +69,8 @@ if (
         "'PYARROW_IGNORE_TIMEZONE' environment variable was not set. It is required to "
         "set this environment variable to '1' in both driver and executor sides if you use "
         "pyarrow>=2.0.0. "
-        "Koalas will set it for you but it does not work if there is a Spark context already "
-        "launched."
+        "pandas-on-Spark will set it for you but it does not work if there is a Spark context "
+        "already launched."
     )
     os.environ["PYARROW_IGNORE_TIMEZONE"] = "1"
 

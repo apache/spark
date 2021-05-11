@@ -25,13 +25,12 @@ import java.io.Serializable;
 /**
  * Interface for a function that produces a result value by aggregating over multiple input rows.
  * <p>
- * For each input row, Spark will call an update method that corresponds to the
- * {@link #inputTypes() input data types}. The expected JVM argument types must be the types used by
- * Spark's InternalRow API. If no direct method is found or when not using codegen, Spark will call
- * update with {@link InternalRow}.
- * <p>
- * The JVM type of result values produced by this function must be the type used by Spark's
+ * For each input row, Spark will call the {@link #update} method which should evaluate the row
+ * and update the aggregation state. The JVM type of result values produced by
+ * {@link #produceResult} must be the type used by Spark's
  * InternalRow API for the {@link DataType SQL data type} returned by {@link #resultType()}.
+ * Please refer to class documentation of {@link ScalarFunction} for the mapping between
+ * {@link DataType} and the JVM type.
  * <p>
  * All implementations must support partial aggregation by implementing merge so that Spark can
  * partially aggregate and shuffle intermediate results, instead of shuffling all rows for an
@@ -68,9 +67,7 @@ public interface AggregateFunction<S extends Serializable, R> extends BoundFunct
    * @param input an input row
    * @return updated aggregation state
    */
-  default S update(S state, InternalRow input) {
-    throw new UnsupportedOperationException("Cannot find a compatible AggregateFunction#update");
-  }
+  S update(S state, InternalRow input);
 
   /**
    * Merge two partial aggregation states.

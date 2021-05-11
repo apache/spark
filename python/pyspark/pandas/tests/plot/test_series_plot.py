@@ -21,8 +21,8 @@ import pandas as pd
 import numpy as np
 
 from pyspark import pandas as ps
-from pyspark.pandas.plot import KoalasPlotAccessor, BoxPlotBase
-from pyspark.pandas.testing.utils import have_plotly
+from pyspark.pandas.plot import PandasOnSparkPlotAccessor, BoxPlotBase
+from pyspark.testing.pandasutils import have_plotly, plotly_requirement_message
 
 
 class SeriesPlotTest(unittest.TestCase):
@@ -36,14 +36,14 @@ class SeriesPlotTest(unittest.TestCase):
     def kdf1(self):
         return ps.from_pandas(self.pdf1)
 
-    @unittest.skipIf(not have_plotly, "plotly is not installed")
+    @unittest.skipIf(not have_plotly, plotly_requirement_message)
     def test_plot_backends(self):
         plot_backend = "plotly"
 
         with ps.option_context("plotting.backend", plot_backend):
             self.assertEqual(ps.options.plotting.backend, plot_backend)
 
-            module = KoalasPlotAccessor._get_plot_backend(plot_backend)
+            module = PandasOnSparkPlotAccessor._get_plot_backend(plot_backend)
             self.assertEqual(module.__name__, "pyspark.pandas.plot.plotly")
 
     def test_plot_backends_incorrect(self):
@@ -53,7 +53,7 @@ class SeriesPlotTest(unittest.TestCase):
             self.assertEqual(ps.options.plotting.backend, fake_plot_backend)
 
             with self.assertRaises(ValueError):
-                KoalasPlotAccessor._get_plot_backend(fake_plot_backend)
+                PandasOnSparkPlotAccessor._get_plot_backend(fake_plot_backend)
 
     def test_box_summary(self):
         def check_box_summary(kdf, pdf):

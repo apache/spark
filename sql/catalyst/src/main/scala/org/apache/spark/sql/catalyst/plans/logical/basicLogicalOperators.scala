@@ -26,9 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, RangePartitioning, RoundRobinPartitioning, SinglePartition}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
-import org.apache.spark.sql.catalyst.trees.TreePattern.{
-  INNER_LIKE_JOIN, JOIN, LEFT_SEMI_OR_ANTI_JOIN, NATURAL_LIKE_JOIN, OUTER_JOIN, TreePattern
-}
+import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -71,6 +69,9 @@ case class Project(projectList: Seq[NamedExpression], child: LogicalPlan)
     extends OrderPreservingUnaryNode {
   override def output: Seq[Attribute] = projectList.map(_.toAttribute)
   override def maxRows: Option[Long] = child.maxRows
+  override def maxRowsPerPartition: Option[Long] = child.maxRowsPerPartition
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(PROJECT)
 
   override lazy val resolved: Boolean = {
     val hasSpecialExpressions = projectList.exists ( _.collect {
@@ -163,6 +164,9 @@ case class Filter(condition: Expression, child: LogicalPlan)
   override def output: Seq[Attribute] = child.output
 
   override def maxRows: Option[Long] = child.maxRows
+  override def maxRowsPerPartition: Option[Long] = child.maxRowsPerPartition
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(FILTER)
 
   override protected lazy val validConstraints: ExpressionSet = {
     val predicates = splitConjunctivePredicates(condition)
@@ -238,6 +242,8 @@ case class Except(
   override def output: Seq[Attribute] = left.output
 
   override def metadataOutput: Seq[Attribute] = Nil
+
+  final override val nodePatterns : Seq[TreePattern] = Seq(EXCEPT)
 
   override protected lazy val validConstraints: ExpressionSet = leftConstraints
 
@@ -742,6 +748,16 @@ case class Range(
     }
   }
 
+  override def maxRowsPerPartition: Option[Long] = {
+    if (numSlices.isDefined) {
+      var m = numElements / numSlices.get
+      if (numElements % numSlices.get != 0) m += 1
+      if (m.isValidLong) Some(m.toLong) else maxRows
+    } else {
+      maxRows
+    }
+  }
+
   override def computeStats(): Statistics = {
     if (numElements == 0) {
       Statistics(sizeInBytes = 0, rowCount = Some(0))
@@ -813,6 +829,8 @@ case class Aggregate(
     }
   }
 
+  final override val nodePatterns : Seq[TreePattern] = Seq(AGGREGATE)
+
   override lazy val validConstraints: ExpressionSet = {
     val nonAgg = aggregateExpressions.filter(_.find(_.isInstanceOf[AggregateExpression]).isEmpty)
     getAllValidConstraints(nonAgg)
@@ -832,6 +850,8 @@ case class Window(
     child.output ++ windowExpressions.map(_.toAttribute)
 
   override def producedAttributes: AttributeSet = windowOutputSet
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(WINDOW)
 
   def windowOutputSet: AttributeSet = AttributeSet(windowExpressions.map(_.toAttribute))
 
@@ -1040,6 +1060,8 @@ case class GlobalLimit(limitExpr: Expression, child: LogicalPlan) extends OrderP
     }
   }
 
+  final override val nodePatterns: Seq[TreePattern] = Seq(LIMIT)
+
   override protected def withNewChildInternal(newChild: LogicalPlan): GlobalLimit =
     copy(child = newChild)
 }
@@ -1059,6 +1081,8 @@ case class LocalLimit(limitExpr: Expression, child: LogicalPlan) extends OrderPr
       case _ => None
     }
   }
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(LIMIT)
 
   override protected def withNewChildInternal(newChild: LogicalPlan): LocalLimit =
     copy(child = newChild)
@@ -1322,5 +1346,16 @@ case class CollectMetrics(
   override def output: Seq[Attribute] = child.output
 
   override protected def withNewChildInternal(newChild: LogicalPlan): CollectMetrics =
+    copy(child = newChild)
+}
+
+/**
+ * A placeholder for domain join that can be added when decorrelating subqueries.
+ * It should be rewritten during the optimization phase.
+ */
+case class DomainJoin(domainAttrs: Seq[Attribute], child: LogicalPlan) extends UnaryNode {
+  override def output: Seq[Attribute] = child.output ++ domainAttrs
+  override def producedAttributes: AttributeSet = AttributeSet(domainAttrs)
+  override protected def withNewChildInternal(newChild: LogicalPlan): DomainJoin =
     copy(child = newChild)
 }

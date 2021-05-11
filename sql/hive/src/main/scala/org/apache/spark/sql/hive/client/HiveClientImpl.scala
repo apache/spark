@@ -186,8 +186,8 @@ private[hive] class HiveClientImpl(
       Hive.set(clientLoader.cachedHive.asInstanceOf[Hive])
     }
     // Hive 2.3 will set UDFClassLoader to hiveConf when initializing SessionState
-    // since HIVE-11878, and ADDJarCommand will add jars to clientLoader.classLoader.
-    // For this reason we cannot load the jars added by ADDJarCommand because of class loader
+    // since HIVE-11878, and ADDJarsCommand will add jars to clientLoader.classLoader.
+    // For this reason we cannot load the jars added by ADDJarsCommand because of class loader
     // got changed. We reset it to clientLoader.ClassLoader here.
     state.getConf.setClassLoader(clientLoader.classLoader)
     SessionState.start(state)
@@ -292,15 +292,17 @@ private[hive] class HiveClientImpl(
   def withHiveState[A](f: => A): A = retryLocked {
     val original = Thread.currentThread().getContextClassLoader
     val originalConfLoader = state.getConf.getClassLoader
-    // The classloader in clientLoader could be changed after addJar, always use the latest
-    // classloader. We explicitly set the context class loader since "conf.setClassLoader" does
+    // We explicitly set the context class loader since "conf.setClassLoader" does
     // not do that, and the Hive client libraries may need to load classes defined by the client's
-    // class loader.
+    // class loader. See SPARK-19804 for more details.
     Thread.currentThread().setContextClassLoader(clientLoader.classLoader)
     state.getConf.setClassLoader(clientLoader.classLoader)
     // Set the thread local metastore client to the client associated with this HiveClientImpl.
     Hive.set(client)
     // Replace conf in the thread local Hive with current conf
+    // with the side-effect of Hive.get(conf) to avoid using out-of-date HiveConf.
+    // See discussion in https://github.com/apache/spark/pull/16826/files#r104606859
+    // for more details.
     Hive.get(conf)
     // setCurrentSessionState will use the classLoader associated
     // with the HiveConf in `state` to override the context class loader of the current

@@ -58,7 +58,7 @@ class CategoricalIndex(Index):
 
     See Also
     --------
-    Index : The base Koalas Index type.
+    Index : The base pandas-on-Spark Index type.
 
     Examples
     --------

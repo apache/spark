@@ -1078,7 +1078,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
 
     // these keys does not exist as default yet
     checkAnswer(sql(s"SET ${key}no"), Row(key + "no", "<undefined>"))
-    checkAnswer(sql("SET dfs.replication"), Row("dfs.replication", "<undefined>"))
+    checkAnswer(sql("SET dfs.hosts"), Row("dfs.hosts", "<undefined>"))
 
     // io.file.buffer.size has a default value from `SparkHadoopUtil.newConfiguration`
     checkAnswer(sql("SET io.file.buffer.size"), Row("io.file.buffer.size", "65536"))
@@ -4099,6 +4099,18 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         }
       }
     }
+  }
+
+  test("SPARK-35331: Fix resolving original expression in RepartitionByExpression after aliased") {
+    Seq("CLUSTER", "DISTRIBUTE").foreach { keyword =>
+      Seq("a", "substr(a, 0, 3)").foreach { expr =>
+        val clause = keyword + " by " + expr
+        withClue(clause) {
+          checkAnswer(sql(s"select a b from values('123') t(a) $clause"), Row("123"))
+        }
+      }
+    }
+    checkAnswer(sql(s"select /*+ REPARTITION(3, a) */ a b from values('123') t(a)"), Row("123"))
   }
 }
 

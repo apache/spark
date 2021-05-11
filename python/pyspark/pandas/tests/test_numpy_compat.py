@@ -23,10 +23,11 @@ import pandas as pd
 from pyspark import pandas as ps
 from pyspark.pandas import set_option, reset_option
 from pyspark.pandas.numpy_compat import unary_np_spark_mappings, binary_np_spark_mappings
-from pyspark.pandas.testing.utils import ReusedSQLTestCase, SQLTestUtils
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
+from pyspark.testing.sqlutils import SQLTestUtils
 
 
-class NumPyCompatTest(ReusedSQLTestCase, SQLTestUtils):
+class NumPyCompatTest(PandasOnSparkTestCase, SQLTestUtils):
     blacklist = [
         # Koalas does not currently support
         "conj",
@@ -80,12 +81,12 @@ class NumPyCompatTest(ReusedSQLTestCase, SQLTestUtils):
 
     def test_np_unsupported_series(self):
         kdf = self.kdf
-        with self.assertRaisesRegex(NotImplementedError, "Koalas.*not.*support.*sqrt.*"):
+        with self.assertRaisesRegex(NotImplementedError, "pandas.*not.*support.*sqrt.*"):
             np.sqrt(kdf.a, kdf.b)
 
     def test_np_unsupported_frame(self):
         kdf = self.kdf
-        with self.assertRaisesRegex(NotImplementedError, "Koalas.*not.*support.*sqrt.*"):
+        with self.assertRaisesRegex(NotImplementedError, "on-Spark.*not.*support.*sqrt.*"):
             np.sqrt(kdf, kdf)
 
     def test_np_spark_compat_series(self):

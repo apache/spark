@@ -541,8 +541,8 @@ object SQLConf {
   val SKEW_JOIN_ENABLED =
     buildConf("spark.sql.adaptive.skewJoin.enabled")
       .doc(s"When true and '${ADAPTIVE_EXECUTION_ENABLED.key}' is true, Spark dynamically " +
-        "handles skew in sort-merge join by splitting (and replicating if needed) skewed " +
-        "partitions.")
+        "handles skew in shuffled join (sort-merge and shuffled hash) by splitting (and " +
+        "replicating if needed) skewed partitions.")
       .version("3.0.0")
       .booleanConf
       .createWithDefault(true)
@@ -586,6 +586,16 @@ object SQLConf {
         "the rules that have indeed been excluded.")
       .version("3.1.0")
       .stringConf
+      .createOptional
+
+  val ADAPTIVE_AUTO_BROADCASTJOIN_THRESHOLD =
+    buildConf("spark.sql.adaptive.autoBroadcastJoinThreshold")
+      .doc("Configures the maximum size in bytes for a table that will be broadcast to all " +
+        "worker nodes when performing a join. By setting this value to -1 broadcasting can be " +
+        s"disabled. The default value is same with ${AUTO_BROADCASTJOIN_THRESHOLD.key}. " +
+        "Note that, this config is used only in adaptive framework.")
+      .version("3.2.0")
+      .bytesConf(ByteUnit.BYTE)
       .createOptional
 
   val SUBEXPRESSION_ELIMINATION_ENABLED =
@@ -2427,6 +2437,14 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val DECORRELATE_INNER_QUERY_ENABLED =
+    buildConf("spark.sql.optimizer.decorrelateInnerQuery.enabled")
+      .internal()
+      .doc("Decorrelate inner query by eliminating correlated references and build domain joins.")
+      .version("3.2.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val TOP_K_SORT_FALLBACK_THRESHOLD =
     buildConf("spark.sql.execution.topKSortFallbackThreshold")
       .internal()
@@ -2452,6 +2470,16 @@ object SQLConf {
     .version("2.4.0")
     .booleanConf
     .createWithDefault(true)
+
+  val CSV_INPUT_BUFFER_SIZE = buildConf("spark.sql.csv.parser.inputBufferSize")
+    .internal()
+    .doc("If it is set, it configures the buffer size of CSV input during parsing. " +
+      "It is the same as inputBufferSize option in CSV which has a higher priority. " +
+      "Note that this is a workaround for the parsing library's regression, and this " +
+      "configuration is internal and supposed to be removed in the near future.")
+    .version("3.0.3")
+    .intConf
+    .createOptional
 
   val REPL_EAGER_EVAL_ENABLED = buildConf("spark.sql.repl.eagerEval.enabled")
     .doc("Enables eager evaluation or not. When true, the top K rows of Dataset will be " +
@@ -2866,8 +2894,9 @@ object SQLConf {
     buildConf("spark.sql.addPartitionInBatch.size")
       .internal()
       .doc("The number of partitions to be handled in one turn when use " +
-        "`AlterTableAddPartitionCommand` to add partitions into table. The smaller " +
-        "batch size is, the less memory is required for the real handler, e.g. Hive Metastore.")
+        "`AlterTableAddPartitionCommand` or `RepairTableCommand` to add partitions into table. " +
+        "The smaller batch size is, the less memory is required for the real handler, e.g. " +
+        "Hive Metastore.")
       .version("3.0.0")
       .intConf
       .checkValue(_ > 0, "The value of spark.sql.addPartitionInBatch.size must be positive")
@@ -3131,6 +3160,14 @@ object SQLConf {
     .version("3.2.0")
     .booleanConf
     .createWithDefault(false)
+
+  val MAX_CONCURRENT_OUTPUT_FILE_WRITERS = buildConf("spark.sql.maxConcurrentOutputFileWriters")
+    .internal()
+    .doc("Maximum number of output file writers to use concurrently. If number of writers " +
+      "needed reaches this limit, task will sort rest of output then writing them.")
+    .version("3.2.0")
+    .intConf
+    .createWithDefault(0)
 
   /**
    * Holds information about keys that have been deprecated.
@@ -3818,6 +3855,10 @@ class SQLConf extends Serializable with Logging {
   def cliPrintHeader: Boolean = getConf(SQLConf.CLI_PRINT_HEADER)
 
   def legacyIntervalEnabled: Boolean = getConf(LEGACY_INTERVAL_ENABLED)
+
+  def decorrelateInnerQueryEnabled: Boolean = getConf(SQLConf.DECORRELATE_INNER_QUERY_ENABLED)
+
+  def maxConcurrentOutputFileWriters: Int = getConf(SQLConf.MAX_CONCURRENT_OUTPUT_FILE_WRITERS)
 
   /** ********************** SQLConf functionality methods ************ */
 

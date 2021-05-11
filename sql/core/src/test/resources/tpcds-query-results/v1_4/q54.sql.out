@@ -3,4 +3,4 @@
 -- !query schema
 struct<segment:int,num_customers:bigint,segment_base:int>
 -- !query output
-11860	1	593000
+

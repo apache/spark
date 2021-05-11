@@ -46,15 +46,18 @@ case class Sum(child: Expression) extends DeclarativeAggregate with ImplicitCast
   // Return data type.
   override def dataType: DataType = resultType
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(NumericType)
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(TypeCollection(NumericType, YearMonthIntervalType, DayTimeIntervalType))
 
   override def checkInputDataTypes(): TypeCheckResult =
-    TypeUtils.checkForNumericExpr(child.dataType, "function sum")
+    TypeUtils.checkForAnsiIntervalOrNumericType(child.dataType, "sum")
 
   private lazy val resultType = child.dataType match {
     case DecimalType.Fixed(precision, scale) =>
       DecimalType.bounded(precision + 10, scale)
     case _: IntegralType => LongType
+    case _: YearMonthIntervalType => YearMonthIntervalType
+    case _: DayTimeIntervalType => DayTimeIntervalType
     case _ => DoubleType
   }
 

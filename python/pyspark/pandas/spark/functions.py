@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 """
-Additional Spark functions used in Koalas.
+Additional Spark functions used in pandas-on-Spark.
 """
 
 from pyspark import SparkContext

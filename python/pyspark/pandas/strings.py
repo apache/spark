@@ -16,7 +16,7 @@
 #
 
 """
-String functions on Koalas Series
+String functions on pandas-on-Spark Series
 """
 from typing import Union, TYPE_CHECKING, cast, Optional, List
 
@@ -33,7 +33,7 @@ if TYPE_CHECKING:
 
 
 class StringMethods(object):
-    """String methods for Koalas Series"""
+    """String methods for pandas-on-Spark Series"""
 
     def __init__(self, series: "ps.Series"):
         if not isinstance(series.spark.data_type, (StringType, BinaryType, ArrayType)):
@@ -184,7 +184,7 @@ class StringMethods(object):
         Returns
         -------
         Series of bool or object
-            Koalas Series of booleans indicating whether the given pattern
+            pandas-on-Spark Series of booleans indicating whether the given pattern
             matches the start of each string element.
 
         Examples
@@ -235,7 +235,7 @@ class StringMethods(object):
         Returns
         -------
         Series of bool or object
-            Koalas Series of booleans indicating whether the given pattern
+            pandas-on-Spark Series of booleans indicating whether the given pattern
             matches the end of each string element.
 
         Examples
@@ -1489,7 +1489,7 @@ class StringMethods(object):
         dtype: object
         """
         if not isinstance(repeats, int):
-            raise ValueError("repeats expects an int parameter")
+            raise TypeError("repeats expects an int parameter")
         return self._data.spark.transform(lambda c: SF.repeat(col=c, n=repeats))
 
     def replace(self, pat, repl, n=-1, case=None, flags=0, regex=True) -> "ps.Series":
