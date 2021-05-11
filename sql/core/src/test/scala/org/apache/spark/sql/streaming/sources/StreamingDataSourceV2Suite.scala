@@ -21,21 +21,20 @@ import java.util
 import java.util.Collections
 
 import scala.collection.JavaConverters._
-
 import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.apache.spark.sql.connector.catalog.{SessionConfigSupport, SupportsRead, SupportsWrite, Table, TableCapability, TableProvider}
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReaderFactory, Scan, ScanBuilder}
 import org.apache.spark.sql.connector.read.streaming.{ContinuousPartitionReaderFactory, ContinuousStream, MicroBatchStream, Offset, PartitionOffset}
-import org.apache.spark.sql.connector.write.{LogicalWriteInfo, PhysicalWriteInfo, WriteBuilder, WriterCommitMessage}
+import org.apache.spark.sql.connector.write.{LogicalWriteInfo, PhysicalWriteInfo, Write, WriteBuilder, WriterCommitMessage}
 import org.apache.spark.sql.connector.write.streaming.{StreamingDataWriterFactory, StreamingWrite}
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.streaming.{ContinuousTrigger, RateStreamOffset, Sink, StreamingQueryWrapper}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.SimpleTableProvider
 import org.apache.spark.sql.sources.{DataSourceRegister, StreamSinkProvider}
-import org.apache.spark.sql.streaming.{OutputMode, StreamingQuery, StreamTest, Trigger}
+import org.apache.spark.sql.streaming.{OutputMode, StreamTest, StreamingQuery, Trigger}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.Utils
@@ -68,10 +67,17 @@ class FakeScanBuilder extends ScanBuilder with Scan {
   override def toContinuousStream(checkpointLocation: String): ContinuousStream = new FakeDataStream
 }
 
-class FakeWriteBuilder extends WriteBuilder with StreamingWrite {
-  override def buildForStreaming(): StreamingWrite = this
+class FakeWriteBuilder extends WriteBuilder {
+  override def build(): Write = {
+    new Write {
+      override def toStreaming: StreamingWrite = new FakeStreamingWrite
+    }
+  }
+}
+
+class FakeStreamingWrite extends StreamingWrite {
   override def createStreamingWriterFactory(
-      info: PhysicalWriteInfo): StreamingDataWriterFactory = {
+    info: PhysicalWriteInfo): StreamingDataWriterFactory = {
     throw new IllegalStateException("fake sink - cannot actually write")
   }
   override def commit(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {
