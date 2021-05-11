@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import java.lang.reflect.Method
+import java.lang.reflect.{Method, Modifier}
 import java.util
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
@@ -1903,6 +1903,15 @@ class Analyzer(override val catalogManager: CatalogManager)
           val newFilter = Filter(newCond.head, newChild)
           Project(child.output, newFilter)
         }
+
+      case r @ RepartitionByExpression(partitionExprs, child, _)
+          if (!r.resolved || r.missingInput.nonEmpty) && child.resolved =>
+        val (newPartitionExprs, newChild) = resolveExprsAndAddMissingAttrs(partitionExprs, child)
+        if (child.output == newChild.output) {
+          r.copy(newPartitionExprs, newChild)
+        } else {
+          Project(child.output, r.copy(newPartitionExprs, newChild))
+        }
     }
 
     /**
@@ -2181,6 +2190,9 @@ class Analyzer(override val catalogManager: CatalogManager)
         //  match the input type through `BoundFunction.inputTypes`.
         val argClasses = inputType.fields.map(_.dataType)
         findMethod(scalarFunc, MAGIC_METHOD_NAME, argClasses) match {
+          case Some(m) if Modifier.isStatic(m.getModifiers) =>
+            StaticInvoke(scalarFunc.getClass, scalarFunc.resultType(),
+              MAGIC_METHOD_NAME, arguments, returnNullable = scalarFunc.isResultNullable)
           case Some(_) =>
             val caller = Literal.create(scalarFunc, ObjectType(scalarFunc.getClass))
             Invoke(caller, MAGIC_METHOD_NAME, scalarFunc.resultType(),
