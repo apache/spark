@@ -2066,7 +2066,7 @@ abstract class JsonSuite
       val data =
         """{"field": 1}
           |{"field": 2}
-          |{"field": "3"}""".stripMargin
+          |{"field": "x"}""".stripMargin
       Seq(data).toDF().repartition(1).write.text(path)
       val schema = new StructType().add("field", ByteType).add("_corrupt_record", StringType)
       // negative cases
@@ -2081,7 +2081,7 @@ abstract class JsonSuite
       assert(df.filter($"_corrupt_record".isNull).count() == 2)
       checkAnswer(
         df.select("_corrupt_record"),
-        Row(null) :: Row(null) :: Row("{\"field\": \"3\"}") :: Nil
+        Row(null) :: Row(null) :: Row("{\"field\": \"x\"}") :: Nil
       )
     }
   }

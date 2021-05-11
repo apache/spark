@@ -244,7 +244,7 @@ select from_json('[1, "2", 3]', 'array<int>')
 -- !query schema
 struct<from_json([1, "2", 3]):array<int>>
 -- !query output
-NULL
+[1,2,3]
 
 
 -- !query

@@ -173,25 +173,49 @@ class JacksonParser(
     case ByteType =>
       (parser: JsonParser) => parseJsonToken[java.lang.Byte](parser, dataType) {
         case VALUE_NUMBER_INT => parser.getByteValue
-        case VALUE_STRING => parser.getText.toByte
+        case VALUE_STRING if parser.getText.length > 0 =>
+          try {
+            parser.getText.toByte
+          } catch {
+            case _: NumberFormatException => throw new RuntimeException(
+              s"Cannot parse ${parser.getText} as ${ByteType.catalogString}.")
+          }
       }
 
     case ShortType =>
       (parser: JsonParser) => parseJsonToken[java.lang.Short](parser, dataType) {
         case VALUE_NUMBER_INT => parser.getShortValue
-        case VALUE_STRING => parser.getText.toShort
+        case VALUE_STRING if parser.getText.length > 0 =>
+          try {
+            parser.getText.toShort
+          } catch {
+            case _: NumberFormatException => throw new RuntimeException(
+              s"Cannot parse ${parser.getText} as ${ShortType.catalogString}.")
+          }
       }
 
     case IntegerType =>
       (parser: JsonParser) => parseJsonToken[java.lang.Integer](parser, dataType) {
         case VALUE_NUMBER_INT => parser.getIntValue
-        case VALUE_STRING => parser.getText.toInt
+        case VALUE_STRING if parser.getText.length > 0 =>
+          try {
+            parser.getText.toInt
+          } catch {
+            case _: NumberFormatException => throw new RuntimeException(
+              s"Cannot parse ${parser.getText} as ${IntegerType.catalogString}.")
+          }
       }
 
     case LongType =>
       (parser: JsonParser) => parseJsonToken[java.lang.Long](parser, dataType) {
         case VALUE_NUMBER_INT => parser.getLongValue
-        case VALUE_STRING => parser.getText.toLong
+        case VALUE_STRING if parser.getText.length > 0 =>
+          try {
+            parser.getText.toLong
+          } catch {
+            case _: NumberFormatException => throw new RuntimeException(
+              s"Cannot parse ${parser.getText} as ${LongType.catalogString}.")
+          }
       }
 
     case FloatType =>
