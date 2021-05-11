@@ -86,6 +86,17 @@ import org.apache.spark.sql.types._
  * Further, the above `if(isnull(fromExp), null, false)` is represented using conjunction
  * `and(isnull(fromExp), null)`, to enable further optimization and filter pushdown to data sources.
  * Similarly, `if(isnull(fromExp), null, true)` is represented with `or(isnotnull(fromExp), null)`.
+ *
+ * Unwrap casts in In expression with patterns like:
+ * `In(Cast(fromExp, toType), Seq((v1, toType), (v2, toType), ...)`
+ *
+ * First the rule transform the expression to Equals:
+ * `Seq(
+ *   EqualTo(Cast(fromExp, toType), Literal(v1, toType)),
+ *   EqualTo(Cast(fromExp, toType), Literal(v2, toType)),
+ *   ...
+ * )`
+ * and using the same rule with `BinaryComparison` show as before to optimize each `EqualTo`.
  */
 object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
