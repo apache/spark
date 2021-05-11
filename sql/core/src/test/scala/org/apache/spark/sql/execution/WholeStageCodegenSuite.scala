@@ -654,4 +654,30 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
       }
     }
   }
+
+  test("SPARK-35207: Compute hash consistent between -0.0 and 0.0 doubles with Codegen") {
+    val data = Seq((0.0d, -1.0d, 1.0d))
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      data.toDF("col1", "col2", "col3").write.parquet(path)
+      sql(s"create table testHash(col1 double, col2 double, col3 double) " +
+        s"using parquet location '$path'")
+      sql("select hash(col1 / col2) == hash(col1 / col3) from testHash").collect()
+        .foreach(row => assert(row.getBoolean(0) == true))
+      sql("drop table testHash")
+    }
+  }
+
+  test("SPARK-35207: Compute hash consistent between -0.0 and 0.0 floats with Codegen") {
+    val data = Seq((0.0f, -1.0f, 1.0f))
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      data.toDF("col1", "col2", "col3").write.parquet(path)
+      sql(s"create table testHash(col1 float, col2 float, col3 float) " +
+        s"using parquet location '$path'")
+      sql("select hash(col1 / col2) == hash(col1 / col3) from testHash").collect()
+        .foreach(row => assert(row.getBoolean(0) == true))
+      sql("drop table testHash")
+    }
+  }
 }
