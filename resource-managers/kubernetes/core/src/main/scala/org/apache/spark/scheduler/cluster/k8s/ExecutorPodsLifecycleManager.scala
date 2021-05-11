@@ -217,27 +217,6 @@ private[spark] class ExecutorPodsLifecycleManager(
     ExecutorExited(exitCode, exitCausedByApp, exitMessage)
   }
 
-  // A utility function to try and help people figure out whats gone wrong faster.
-  private def describeExitCode(code: Int): String = {
-    val humanStr = code match {
-      case 0 => "(success)"
-      case 1 => "(generic, look at logs to clarify)"
-      case 42 => "(douglas adams)"
-      // Spark specific
-      case 10 | 50 => "(Uncaught exception)"
-      case 50 => "(Uncaught exception)"
-      case 52 => "(JVM OOM)"
-      case 53 => "(DiskStore failed to create temp dir)"
-      // K8s & JVM specific exit codes
-      case 126 => "(not executable - possibly perm or arch)"
-      case 137 => "(SIGKILL, possible container OOM)"
-      case 139 => "(SIGSEGV: that's unexpected)"
-      case 255 => "(exit-1, your guess is as good as mine)"
-      case _ => ""
-    }
-    s"${code}${humanStr}"
-  }
-
   private def exitReasonMessage(podState: FinalPodState, execId: Long, exitCode: Int) = {
     val pod = podState.pod
     val reason = Option(pod.getStatus.getReason)
@@ -274,4 +253,25 @@ private[spark] class ExecutorPodsLifecycleManager(
 
 private object ExecutorPodsLifecycleManager {
   val UNKNOWN_EXIT_CODE = -1
+
+  // A utility function to try and help people figure out whats gone wrong faster.
+  def describeExitCode(code: Int): String = {
+    val humanStr = code match {
+      case 0 => "(success)"
+      case 1 => "(generic, look at logs to clarify)"
+      case 42 => "(Douglas Adams fan)"
+      // Spark specific
+      case 10 | 50 => "(Uncaught exception)"
+      case 52 => "(JVM OOM)"
+      case 53 => "(DiskStore failed to create temp dir)"
+      // K8s & JVM specific exit codes
+      case 126 => "(not executable - possibly perm or arch)"
+      case 137 => "(SIGKILL, possible container OOM)"
+      case 139 => "(SIGSEGV: that's unexpected)"
+      case 255 => "(exit-1, your guess is as good as mine)"
+      case _ => "(unexpected)"
+    }
+    s"${code}${humanStr}"
+  }
+
 }

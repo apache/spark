@@ -126,31 +126,10 @@ class ExecutorPodsLifecycleManagerSuite extends SparkFunSuite with BeforeAndAfte
     assert(pod.getMetadata().getLabels().get(SPARK_EXECUTOR_INACTIVE_LABEL) === "true")
   }
 
-  // A utility function to try and help people figure out whats gone wrong faster.
-  private def describeExitCode(code: Int): String = {
-    val humanStr = code match {
-      case 0 => "(success)"
-      case 1 => "(generic, look at logs to clarify)"
-      case 42 => "(douglas adams)"
-      // Spark specific
-      case 10 => "(Uncaught exception)"
-      case 50 => "(Uncaught exception)"
-      case 52 => "(JVM OOM)"
-      case 53 => "(DiskStore failed to create temp dir)"
-      // K8s & JVM specific exit codes
-      case 126 => "(not executable - possibly perm or arch)"
-      case 137 => "(SIGKILL, possible container OOM)"
-      case 139 => "(SIGSEGV: that's unexpected)"
-      case 255 => "(exit-1, your guess is as good as mine)"
-      case _ => ""
-    }
-    s"${code}${humanStr}"
-  }
-
   private def exitReasonMessage(execId: Int, failedPod: Pod, exitCode: Int): String = {
     val reason = Option(failedPod.getStatus.getReason)
     val message = Option(failedPod.getStatus.getMessage)
-    val explained = describeExitCode(exitCode)
+    val explained = ExecutorPodsLifecycleManager.describeExitCode(exitCode)
     val exitMsg = s"The executor with id $execId exited with exit code $explained."
     val reasonStr = reason.map(r => s"The API gave the following brief reason: ${r}")
     val msgStr = message.map(m => s"The API gave the following message: ${m}")
