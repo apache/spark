@@ -157,7 +157,7 @@ class SingleDirectoryDataWriter(
     }
 
     currentWriter.write(record)
-    statsTrackers.foreach(_.newRow(record))
+    statsTrackers.foreach(_.newRow(currentWriter.path, record))
     recordsInFile += 1
   }
 }
@@ -301,7 +301,7 @@ abstract class BaseDynamicPartitionDataWriter(
   protected def writeRecord(record: InternalRow): Unit = {
     val outputRow = getOutputRow(record)
     currentWriter.write(outputRow)
-    statsTrackers.foreach(_.newRow(outputRow))
+    statsTrackers.foreach(_.newRow(currentWriter.path, outputRow))
     recordsInFile += 1
   }
 }

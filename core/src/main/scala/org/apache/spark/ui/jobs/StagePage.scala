@@ -398,8 +398,7 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
       {
         if (MAX_TIMELINE_TASKS < tasks.size) {
           <strong>
-            This page has more than the maximum number of tasks that can be shown in the
-            visualization! Only the most recent {MAX_TIMELINE_TASKS} tasks
+            Only the most recent {MAX_TIMELINE_TASKS} tasks
             (of {tasks.size} total) are shown.
           </strong>
         } else {

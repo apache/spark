@@ -83,6 +83,12 @@ class TPCDSQueryTestSuite extends QueryTest with TPCDSBase with SQLQueryTestHelp
       .toFile.getAbsolutePath
   }
 
+  override val tpcdsQueries = {
+    // SPARK-35327: Filters out the TPC-DS queries that can cause flaky test results
+    val excludedQueries = Set("q6", "q75")
+    super.tpcdsQueries.filterNot(excludedQueries.contains)
+  }
+
   override def createTable(
       spark: SparkSession,
       tableName: String,

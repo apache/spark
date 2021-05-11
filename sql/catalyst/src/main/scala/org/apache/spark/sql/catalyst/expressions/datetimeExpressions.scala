@@ -27,6 +27,7 @@ import org.apache.commons.text.StringEscapeUtils
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.trees.TreePattern.{CURRENT_LIKE, TreePattern}
 import org.apache.spark.sql.catalyst.util.{DateTimeUtils, LegacyDateFormats, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
@@ -86,6 +87,7 @@ case class CurrentTimeZone() extends LeafExpression with Unevaluable {
   override def nullable: Boolean = false
   override def dataType: DataType = StringType
   override def prettyName: String = "current_timezone"
+  final override val nodePatterns: Seq[TreePattern] = Seq(CURRENT_LIKE)
 }
 
 /**
@@ -122,6 +124,8 @@ case class CurrentDate(timeZoneId: Option[String] = None)
 
   override def dataType: DataType = DateType
 
+  final override val nodePatterns: Seq[TreePattern] = Seq(CURRENT_LIKE)
+
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
 
@@ -135,6 +139,7 @@ abstract class CurrentTimestampLike() extends LeafExpression with CodegenFallbac
   override def nullable: Boolean = false
   override def dataType: DataType = TimestampType
   override def eval(input: InternalRow): Any = currentTimestamp()
+  final override val nodePatterns: Seq[TreePattern] = Seq(CURRENT_LIKE)
 }
 
 /**

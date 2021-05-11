@@ -2894,8 +2894,9 @@ object SQLConf {
     buildConf("spark.sql.addPartitionInBatch.size")
       .internal()
       .doc("The number of partitions to be handled in one turn when use " +
-        "`AlterTableAddPartitionCommand` to add partitions into table. The smaller " +
-        "batch size is, the less memory is required for the real handler, e.g. Hive Metastore.")
+        "`AlterTableAddPartitionCommand` or `RepairTableCommand` to add partitions into table. " +
+        "The smaller batch size is, the less memory is required for the real handler, e.g. " +
+        "Hive Metastore.")
       .version("3.0.0")
       .intConf
       .checkValue(_ > 0, "The value of spark.sql.addPartitionInBatch.size must be positive")

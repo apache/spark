@@ -3,4 +3,4 @@
 -- !query schema
 struct<am_pm_ratio:decimal(35,20)>
 -- !query output
-0.61244019138755980861
+0.58933333333333333333
