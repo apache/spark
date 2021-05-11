@@ -1229,7 +1229,7 @@ def read_html(
         the encoding provided by the document).
 
     decimal : str, default '.'
-        Character to recognize as decimal point (e.g. use ',' for European
+        Character to recognize as decimal point (example: use ',' for European
         data).
 
     converters : dict, default None
