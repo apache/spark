@@ -307,7 +307,11 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
 
   private val legacyCastToStr = SQLConf.get.getConf(SQLConf.LEGACY_COMPLEX_TYPES_TO_STRING)
   // The brackets that are used in casting structs and maps to strings
-  private val (leftBracket, rightBracket) = if (legacyCastToStr) ("[", "]") else ("{", "}")
+  protected def leftBracket = if (legacyCastToStr) "[" else "{"
+  protected def rightBracket = if (legacyCastToStr) "]" else "}"
+  protected def elementSpace = " "
+  protected def keyValueSeparator = "->"
+  protected def structTypeWithSchema = false
 
   // UDFToString
   private[this] def castToString(from: DataType): Any => Any = from match {
@@ -928,11 +932,11 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
     """
   }
 
-  private def appendIfNotLegacyCastToStr(buffer: ExprValue, s: String): Block = {
+  protected def appendIfNotLegacyCastToStr(buffer: ExprValue, s: String): Block = {
     if (!legacyCastToStr) code"""$buffer.append("$s");""" else EmptyBlock
   }
 
-  private def writeArrayToStringBuilder(
+  protected def writeArrayToStringBuilder(
       et: DataType,
       array: ExprValue,
       buffer: ExprValue,
@@ -962,9 +966,9 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
        |  for (int $loopIndex = 1; $loopIndex < $array.numElements(); $loopIndex++) {
        |    $buffer.append(",");
        |    if ($array.isNullAt($loopIndex)) {
-       |      ${appendIfNotLegacyCastToStr(buffer, " null")}
+       |      ${appendIfNotLegacyCastToStr(buffer, s"${elementSpace}null")}
        |    } else {
-       |      $buffer.append(" ");
+       |      $buffer.append("$elementSpace");
        |      $buffer.append($elementToStringFunc(${CodeGenerator.getValue(array, et, loopIndex)}));
        |    }
        |  }
@@ -973,7 +977,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
      """.stripMargin
   }
 
-  private def writeMapToStringBuilder(
+  protected def writeMapToStringBuilder(
       kt: DataType,
       vt: DataType,
       map: ExprValue,
@@ -1010,21 +1014,21 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
        |$buffer.append("$leftBracket");
        |if ($map.numElements() > 0) {
        |  $buffer.append($keyToStringFunc($getMapFirstKey));
-       |  $buffer.append(" ->");
+       |  $buffer.append("$elementSpace$keyValueSeparator");
        |  if ($map.valueArray().isNullAt(0)) {
-       |    ${appendIfNotLegacyCastToStr(buffer, " null")}
+       |    ${appendIfNotLegacyCastToStr(buffer, s"${elementSpace}null")}
        |  } else {
-       |    $buffer.append(" ");
+       |    $buffer.append("$elementSpace");
        |    $buffer.append($valueToStringFunc($getMapFirstValue));
        |  }
        |  for (int $loopIndex = 1; $loopIndex < $map.numElements(); $loopIndex++) {
-       |    $buffer.append(", ");
+       |    $buffer.append(",${elementSpace}");
        |    $buffer.append($keyToStringFunc($getMapKeyArray));
-       |    $buffer.append(" ->");
+       |    $buffer.append("$elementSpace$keyValueSeparator");
        |    if ($map.valueArray().isNullAt($loopIndex)) {
-       |      ${appendIfNotLegacyCastToStr(buffer, " null")}
+       |      ${appendIfNotLegacyCastToStr(buffer, s"${elementSpace}null")}
        |    } else {
-       |      $buffer.append(" ");
+       |      $buffer.append("${elementSpace}");
        |      $buffer.append($valueToStringFunc($getMapValueArray));
        |    }
        |  }
@@ -1033,27 +1037,31 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
      """.stripMargin
   }
 
-  private def writeStructToStringBuilder(
-      st: Seq[DataType],
+  protected def writeStructToStringBuilder(
+      st: Seq[StructField],
       row: ExprValue,
       buffer: ExprValue,
       ctx: CodegenContext): Block = {
     val structToStringCode = st.zipWithIndex.map { case (ft, i) =>
-      val fieldToStringCode = castToStringCode(ft, ctx)
-      val field = ctx.freshVariable("field", ft)
+      val fieldToStringCode = castToStringCode(ft.dataType, ctx)
+      val field = ctx.freshVariable("field", ft.dataType)
       val fieldStr = ctx.freshVariable("fieldStr", StringType)
-      val javaType = JavaCode.javaType(ft)
+      val javaType = JavaCode.javaType(ft.dataType)
       code"""
          |${if (i != 0) code"""$buffer.append(",");""" else EmptyBlock}
          |if ($row.isNullAt($i)) {
          |  ${appendIfNotLegacyCastToStr(buffer, if (i == 0) "null" else " null")}
          |} else {
-         |  ${if (i != 0) code"""$buffer.append(" ");""" else EmptyBlock}
+         |  ${if (i != 0) code"""$buffer.append("$elementSpace");""" else EmptyBlock}
+         |
          |
          |  // Append $i field into the string buffer
-         |  $javaType $field = ${CodeGenerator.getValue(row, ft, s"$i")};
+         |  $javaType $field = ${CodeGenerator.getValue(row, ft.dataType, s"$i")};
          |  UTF8String $fieldStr = null;
          |  ${fieldToStringCode(field, fieldStr, null /* resultIsNull won't be used */)}
+         |  if ($structTypeWithSchema) {
+         |     $buffer.append("\\"${ft.name}\\":");
+         |  }
          |  $buffer.append($fieldStr);
          |}
        """.stripMargin
@@ -1115,7 +1123,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
           val row = ctx.freshVariable("row", classOf[InternalRow])
           val buffer = ctx.freshVariable("buffer", classOf[UTF8StringBuilder])
           val bufferClass = JavaCode.javaType(classOf[UTF8StringBuilder])
-          val writeStructCode = writeStructToStringBuilder(fields.map(_.dataType), row, buffer, ctx)
+          val writeStructCode = writeStructToStringBuilder(fields, row, buffer, ctx)
           code"""
              |InternalRow $row = $c;
              |$bufferClass $buffer = new $bufferClass();

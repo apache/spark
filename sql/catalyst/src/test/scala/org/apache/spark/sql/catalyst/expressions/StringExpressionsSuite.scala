@@ -1049,8 +1049,8 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
           StructField("c2", DoubleType) ::
           StructField("c3", FloatType) :: Nil)) -> "{\"c1\":1,\"c2\":2.0,\"c3\":3.0}")
       .foreach { case (literal: Literal, result: String) =>
-      val expr = ToPrettyString(literal, Option(SQLConf.get.sessionLocalTimeZone))
-      checkEvaluation(expr, result)
-    }
+        val expr = ToPrettyString(literal, Option(SQLConf.get.sessionLocalTimeZone))
+        checkEvaluation(expr, result)
+      }
   }
 }

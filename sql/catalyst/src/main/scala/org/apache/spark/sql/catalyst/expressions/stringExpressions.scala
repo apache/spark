@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.TreePattern.{TreePattern, UPPER_OR_LOWER}
-import org.apache.spark.sql.catalyst.util.{ArrayData, DateFormatter, GenericArrayData, MapData, TimestampFormatter, TypeUtils}
+import org.apache.spark.sql.catalyst.util.{ArrayData, DateFormatter, GenericArrayData, IntervalStringStyles, IntervalUtils, MapData, TimestampFormatter, TypeUtils}
 import org.apache.spark.sql.catalyst.util.IntervalStringStyles.HIVE_STYLE
 import org.apache.spark.sql.catalyst.util.IntervalUtils.{toDayTimeIntervalString, toYearMonthIntervalString}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
@@ -2654,39 +2654,116 @@ case class Sentences(
 }
 
 case class ToPrettyString(child: Expression, timeZoneId: Option[String] = None)
-  extends UnaryExpression with TimeZoneAwareExpression {
+  extends CastBase {
   import ToPrettyString._
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
+
   override def dataType: DataType = StringType
 
-  private val timeFormatters: TimeFormatters =
+  private lazy val timeFormatters: TimeFormatters =
     TimeFormatters(DateFormatter(zoneId), TimestampFormatter.getFractionFormatter(zoneId))
+
+  override def leftBracket: String = "{"
+  override def rightBracket: String = "}"
+  override def elementSpace: String = ""
+  override def keyValueSeparator: String = ":"
+  override def structTypeWithSchema: Boolean = true
 
   override def nullSafeEval(input: Any): Any = {
     UTF8String.fromString(toHiveString((input, child.dataType), false, timeFormatters))
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, eval => {
-      val toHiveString = ToPrettyString.getClass.getName.stripSuffix("$")
-      val tuple2 = Tuple2.getClass.getName.stripSuffix("$")
-      val dataType = JavaCode.global(
-        ctx.addReferenceObj("dataType", child.dataType),
-        child.dataType.getClass)
-      val formatter = JavaCode.global(
-        ctx.addReferenceObj("dateFormatter", timeFormatters),
-        timeFormatters.getClass)
-      s"""${ev.value} = UTF8String.fromString($toHiveString.toHiveString(
-         |$tuple2.apply($eval, ${dataType}), false, $formatter));""".stripMargin
-    })
+    val eval = child.genCode(ctx)
+    val nullSafeCast = nullSafeCastString(child.dataType, ctx)
+
+    ev.copy(code = eval.code +
+      castCode(ctx, eval.value, eval.isNull, ev.value, ev.isNull, dataType, nullSafeCast))
   }
 
-  override def prettyName: String = "to_hive_string"
+  private[this] def nullSafeCastString(from: DataType, ctx: CodegenContext): CastFunction =
+    from match {
+      case BinaryType =>
+        (c, evPrim, _) => code"${evPrim} = UTF8String.fromBytes($c);"
+      case _: DecimalType =>
+        (c, evPrim, _) =>
+          code"$evPrim = UTF8String.fromString($c.toJavaBigDecimal().toPlainString());"
+      case DateType =>
+        val df = JavaCode.global(
+          ctx.addReferenceObj("timeFormatter", timeFormatters.date),
+          timeFormatters.date.getClass)
+        (c, evPrim, _) => code"${evPrim} = UTF8String.fromString(${df}.format($c));"
+      case TimestampType =>
+        val tf = JavaCode.global(
+          ctx.addReferenceObj("timestampFormatter", timeFormatters.timestamp),
+          timeFormatters.timestamp.getClass)
+        (c, evPrim, _) => code"$evPrim = UTF8String.fromString($tf.format($c));"
+      case CalendarIntervalType =>
+        (c, evPrim, _) => code"$evPrim = UTF8String.fromString($c.toString());"
+      case ArrayType(et, _) =>
+        (c, evPrim, _) => {
+          val buffer = ctx.freshVariable("buffer", classOf[UTF8StringBuilder])
+          val bufferClass = JavaCode.javaType(classOf[UTF8StringBuilder])
+          val writeArrayElemCode = writeArrayToStringBuilder(et, c, buffer, ctx)
+          code"""
+                |$bufferClass $buffer = new $bufferClass();
+                |$writeArrayElemCode;
+                |${evPrim} = $buffer.build();
+                 """.stripMargin
+        }
+      case MapType(kt, vt, _) =>
+        (c, evPrim, _) => {
+          val buffer = ctx.freshVariable("buffer", classOf[UTF8StringBuilder])
+          val bufferClass = JavaCode.javaType(classOf[UTF8StringBuilder])
+          val writeMapElemCode = writeMapToStringBuilder(kt, vt, c, buffer, ctx)
+          code"""
+                |$bufferClass $buffer = new $bufferClass();
+                |$writeMapElemCode;
+                |$evPrim = $buffer.build();
+                 """.stripMargin
+        }
+      case StructType(fields) =>
+        (c, evPrim, _) => {
+          val row = ctx.freshVariable("row", classOf[InternalRow])
+          val buffer = ctx.freshVariable("buffer", classOf[UTF8StringBuilder])
+          val bufferClass = JavaCode.javaType(classOf[UTF8StringBuilder])
+          val writeStructCode =
+            writeStructToStringBuilder(fields, row, buffer, ctx)
+          code"""
+                |InternalRow $row = $c;
+                |$bufferClass $buffer = new $bufferClass();
+                |$writeStructCode
+                |$evPrim = $buffer.build();
+                 """.
+            stripMargin
+        }
+      case _: UserDefinedType[_] =>
+        (c, evPrim, _) => code"$evPrim = UTF8String.fromString($c.toString());"
+      case i @ (YearMonthIntervalType | DayTimeIntervalType) =>
+        (c, evPrim, _) => {
+          val iu = IntervalUtils.getClass.getName.stripSuffix("$")
+          val iss = IntervalStringStyles.getClass.getName.stripSuffix("$")
+          val subType = if (i.isInstanceOf[YearMonthIntervalType]) "YearMonth" else "DayTime"
+          val f = s"to${subType}IntervalString"
+          val style = s"$iss$$.MODULE$$.HIVE_STYLE()"
+          code"$evPrim = UTF8String.fromString($iu.$f($c, $style));"
+        }
+      case _ =>
+        (c, evPrim, _) => code"$evPrim = UTF8String.fromString(String.valueOf($c));"
+    }
 
-  override protected def withNewChildInternal(newChild: Expression): Expression =
-    ToPrettyString(newChild)
+  override def prettyName: String = "to_pretty_string"
+
+  override protected def withNewChildInternal(newChild: Expression): ToPrettyString =
+    copy(child = newChild)
+
+  override def canCast(from: DataType, to: DataType): Boolean = true
+
+  override def typeCheckFailureMessage: String = "Not need"
+
+  override protected def ansiEnabled: Boolean = false
 }
 
 object ToPrettyString {
