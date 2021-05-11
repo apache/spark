@@ -144,3 +144,15 @@ class DateOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         self.assertRaises(TypeError, lambda: "x" ** self.kser)
         self.assertRaises(TypeError, lambda: 1 ** self.kser)
         self.assertRaises(TypeError, lambda: self.some_date ** self.kser)
+
+
+if __name__ == "__main__":
+    import unittest
+    from pyspark.pandas.tests.data_type_ops.test_date_ops import *  # noqa: F401
+
+    try:
+        import xmlrunner  # type: ignore[import]
+        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
+    except ImportError:
+        testRunner = None
+    unittest.main(testRunner=testRunner, verbosity=2)
