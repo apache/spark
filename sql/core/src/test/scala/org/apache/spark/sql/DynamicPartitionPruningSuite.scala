@@ -1475,14 +1475,14 @@ abstract class DynamicPartitionPruningSuiteBase
     }
   }
 
-  test("SPARK-34637: test DPP side broadcast query stage is created firstly") {
+  test("SPARK-34637: DPP side broadcast query stage is created firstly") {
     withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "true") {
       val df = sql(
-        """ WITH view1 as (
+        """ WITH v as (
           |   SELECT f.store_id FROM fact_stats f WHERE f.units_sold = 70 group by f.store_id
           | )
           |
-          | SELECT * FROM view1 v1 join view1 v2 WHERE v1.store_id = v2.store_id
+          | SELECT * FROM v v1 join v v2 WHERE v1.store_id = v2.store_id
         """.stripMargin)
 
       // A possible resulting query plan:
@@ -1492,9 +1492,10 @@ abstract class DynamicPartitionPruningSuiteBase
       //       +- Exchange
       //          +- HashAggregate
       //             +- Filter
-      //                +- FileScan
-      //                      Dynamicpruning Subquery
-      //                      +- AdaptiveSparkPlan
+      //                +- FileScan [PartitionFilters: [isnotnull(store_id#3367),
+      //                           dynamicpruningexpression(store_id#3367 IN dynamicpruning#3385)]]
+      //                     +- SubqueryBroadcast dynamicpruning#3385
+      //                       +- AdaptiveSparkPlan
       //                         +- BroadcastQueryStage
       //                            +- BroadcastExchange
       //
