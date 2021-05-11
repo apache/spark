@@ -383,8 +383,6 @@ class TrainValidationSplitSuite
     }
 
     Thread.sleep(4000)
-    throw new RuntimeException(s"DBG: ML-14996 tvs test: ${trialStatus.mkString(",")}")
-
     assert(trialStatus(0) === "failed")
     for (i <- 1 until parallelism) {
       assert(trialStatus(i) === "canceled")

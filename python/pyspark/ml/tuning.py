@@ -749,22 +749,20 @@ class CrossValidator(Estimator, _CrossValidatorParams, HasParallelism, HasCollec
                         subModels[i][j] = subModel
             except:
                 sub_task_failed = True
+                if is_pinned_thread_mode():
+                    try:
+                        time.sleep(1)
+                        sc = dataset._sc
+                        sc.cancelJobGroup(sc.getLocalProperty("spark.jobGroup.id"))
+                    except:
+                        pass
+                else:
+                    warnings.warn("CrossValidator {} fit call failed but some spark jobs "
+                                  "may still running for unfinished trials. Enable pyspark "
+                                  "pinned thread mode will address this issue."
+                                  .format(self.uid))
                 raise
             finally:
-                if sub_task_failed:
-                    if is_pinned_thread_mode():
-                        try:
-                            time.sleep(1)
-                            sc = dataset._sc
-                            sc.cancelJobGroup(sc.getLocalProperty("spark.jobGroup.id"))
-                        except:
-                            pass
-                    else:
-                        warnings.warn("CrossValidator {} fit call failed but some spark jobs "
-                                      "may still running for unfinished trials. Enable pyspark "
-                                      "pinned thread mode will address this issue."
-                                      .format(self.uid))
-
                 train.unpersist()
                 validation.unpersist()
 
@@ -1310,22 +1308,20 @@ class TrainValidationSplit(Estimator, _TrainValidationSplitParams, HasParallelis
                     subModels[j] = subModel
         except:
             sub_task_failed = True
+            if is_pinned_thread_mode():
+                try:
+                    time.sleep(1)
+                    sc = dataset._sc
+                    sc.cancelJobGroup(sc.getLocalProperty("spark.jobGroup.id"))
+                except:
+                    pass
+            else:
+                warnings.warn("TrainValidationSplit {} fit call failed but some spark jobs "
+                              "may still running for unfinished trials. Enable pyspark "
+                              "pinned thread mode will address this issue."
+                              .format(self.uid))
             raise
         finally:
-            if sub_task_failed:
-                if is_pinned_thread_mode():
-                    try:
-                        time.sleep(1)
-                        sc = dataset._sc
-                        sc.cancelJobGroup(sc.getLocalProperty("spark.jobGroup.id"))
-                    except:
-                        pass
-                else:
-                    warnings.warn("TrainValidationSplit {} fit call failed but some spark jobs "
-                                  "may still running for unfinished trials. Enable pyspark "
-                                  "pinned thread mode will address this issue."
-                                  .format(self.uid))
-
             train.unpersist()
             validation.unpersist()
 
