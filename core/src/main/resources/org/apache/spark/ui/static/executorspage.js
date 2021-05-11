@@ -25,9 +25,9 @@ function getThreadDumpEnabled() {
     return threadDumpEnabled;
 }
 
-function formatLossReason(status, type, row) {
-    if (row.removeReason) {
-       return row.removeReason
+function formatLossReason(removeReason, type, row) {
+    if (removeReason) {
+       return removeReason
     } else {
        return ""
     }
@@ -544,9 +544,9 @@ $(document).ready(function () {
                                 return type === 'display' ? ("<a href='threadDump/?executorId=" + data + "'>Thread Dump</a>" ) : data;
                             }
                         },
-			{
-			    data: 'executorLossReason',
-			    render: formatLossReason
+                        {
+                            data: 'removeReason',
+                            render: formatLossReason
                         },
 
                     ],
