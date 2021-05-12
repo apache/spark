@@ -42,7 +42,7 @@ import org.apache.spark.annotation.{DeveloperApi, Experimental, Since, Unstable}
  *   }
  * }}}
  *
- * We need to create your extension which inherits [[SparkSessionExtensionsProvider]]
+ * We need to create our extension which inherits [[SparkSessionExtensionsProvider]]
  * Example:
  *
  * {{{
@@ -62,7 +62,7 @@ import org.apache.spark.annotation.{DeveloperApi, Experimental, Since, Unstable}
  *   }
  * }}}
  *
- * We can inject `MyExtensions` in three ways,
+ * Then, we can inject `MyExtensions` in three ways,
  * <ul>
  *   <li>[[SparkSession.Builder.withExtensions]]</li>
  *   <li>Config - spark.sql.extensions</li>
