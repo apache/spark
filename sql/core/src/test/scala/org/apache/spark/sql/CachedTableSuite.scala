@@ -1561,22 +1561,20 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
 
       withTempView("t1", "t2", "t3") {
-        withCache("t1", "t2", "t3") {
-          withSQLConf(SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING.key -> "false") {
-            sql("CACHE TABLE t1 as SELECT /*+ REPARTITION */ * FROM values(1) as t(c)")
+        withSQLConf(SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING.key -> "false") {
+          sql("CACHE TABLE t1 as SELECT /*+ REPARTITION */ * FROM values(1) as t(c)")
+          assert(spark.table("t1").rdd.partitions.length == 2)
+
+          withSQLConf(SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING.key -> "true") {
             assert(spark.table("t1").rdd.partitions.length == 2)
+            sql("CACHE TABLE t2 as SELECT /*+ REPARTITION */ * FROM values(2) as t(c)")
+            assert(spark.table("t2").rdd.partitions.length == 1)
 
-            withSQLConf(SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING.key -> "true") {
+            withSQLConf(SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING.key -> "false") {
               assert(spark.table("t1").rdd.partitions.length == 2)
-              sql("CACHE TABLE t2 as SELECT /*+ REPARTITION */ * FROM values(2) as t(c)")
               assert(spark.table("t2").rdd.partitions.length == 1)
-
-              withSQLConf(SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING.key -> "false") {
-                assert(spark.table("t1").rdd.partitions.length == 2)
-                assert(spark.table("t2").rdd.partitions.length == 1)
-                sql("CACHE TABLE t3 as SELECT /*+ REPARTITION */ * FROM values(3) as t(c)")
-                assert(spark.table("t3").rdd.partitions.length == 2)
-              }
+              sql("CACHE TABLE t3 as SELECT /*+ REPARTITION */ * FROM values(3) as t(c)")
+              assert(spark.table("t3").rdd.partitions.length == 2)
             }
           }
         }
