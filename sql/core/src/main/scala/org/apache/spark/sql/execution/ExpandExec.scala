@@ -184,7 +184,7 @@ case class ExpandExec(
       (row, exprCodesWithIndices, inputVars.toSeq)
     }
 
-    def generateUpdateCode(exprCodes: Seq[(Int, ExprCode)]): String = {
+    val updateCodes = switchCaseExprs.map { case (_, exprCodes, _) =>
       exprCodes.map { case (col, ev) =>
         s"""
            |${ev.code}
@@ -196,8 +196,7 @@ case class ExpandExec(
 
     val splitThreshold = SQLConf.get.methodSplitThreshold
     val cases = if (switchCaseExprs.flatMap(_._2.map(_._2.code.length)).sum > splitThreshold) {
-      switchCaseExprs.map { case (row, exprCodes, inputVars) =>
-        val updateCode = generateUpdateCode(exprCodes)
+      switchCaseExprs.zip(updateCodes).map { case ((row, _, inputVars), updateCode) =>
         val paramLength = CodeGenerator.calculateParamLengthFromExprValues(inputVars)
         val maybeSplitUpdateCode = if (CodeGenerator.isValidParamLength(paramLength)) {
           val switchCaseFunc = ctx.freshName("switchCaseCode")
@@ -222,10 +221,10 @@ case class ExpandExec(
          """.stripMargin
       }
     } else {
-      switchCaseExprs.map { case (row, exprCodes, _) =>
+      switchCaseExprs.map(_._1).zip(updateCodes).map { case (row, updateCode) =>
         s"""
            |case $row:
-           |  ${generateUpdateCode(exprCodes)}
+           |  $updateCode
            |  break;
          """.stripMargin
       }
