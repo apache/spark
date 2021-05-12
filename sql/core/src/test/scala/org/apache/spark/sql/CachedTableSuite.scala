@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import java.io.{File, FilenameFilter}
 import java.nio.file.{Files, Paths}
+import java.time.{Duration, Period}
 
 import scala.collection.mutable.HashSet
 import scala.concurrent.duration._
@@ -1184,6 +1185,20 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
         Row(1, new CalendarInterval(0, 0, DateTimeConstants.MICROS_PER_SECOND)))
       sql("UNCACHE TABLE t1")
       assert(!spark.catalog.isCached("t1"))
+    }
+  }
+
+  test("SPARK-35243: cache supports for YearMonthIntervalType and DayTimeIntervalType") {
+    withTempView("ymi_dti_interval_cache") {
+      Seq((1, Period.ofYears(1), Duration.ofDays(1)),
+        (2, Period.ofYears(2), Duration.ofDays(2)))
+        .toDF("k", "v1", "v2").createTempView("ymi_dti_interval_cache")
+      sql("CACHE TABLE tmp AS SELECT k, v1, v2 FROM ymi_dti_interval_cache")
+      assert(spark.catalog.isCached("tmp"))
+      checkAnswer(sql("SELECT * FROM tmp WHERE k = 1"),
+        Row(1, Period.ofYears(1), Duration.ofDays(1)))
+      sql("UNCACHE TABLE tmp")
+      assert(!spark.catalog.isCached("tmp"))
     }
   }
 
