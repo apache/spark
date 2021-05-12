@@ -151,7 +151,7 @@ trait InvokeLike extends Expression with NonSQLExpression {
   final def findMethod(cls: Class[_], functionName: String, argClasses: Seq[Class[_]]): Method = {
     val method = MethodUtils.getMatchingAccessibleMethod(cls, functionName, argClasses: _*)
     if (method == null) {
-      sys.error(s"Couldn't find $functionName on $cls")
+      throw QueryExecutionErrors.methodNotDeclaredError(functionName)
     } else {
       method
     }
