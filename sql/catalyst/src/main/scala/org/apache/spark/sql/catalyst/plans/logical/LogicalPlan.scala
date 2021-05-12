@@ -179,8 +179,13 @@ trait UnaryNode extends LogicalPlan with UnaryLike[LogicalPlan] {
    */
   protected def getAllValidConstraints(projectList: Seq[NamedExpression]): ExpressionSet = {
     var allConstraints = child.constraints
+    val aliasExpressions = projectList.collect {
+      case Alias(e, _) => e
+    }.toBuffer
+
     projectList.foreach {
       case a @ Alias(l: Literal, _) =>
+        aliasExpressions -= l
         allConstraints += EqualNullSafe(a.toAttribute, l)
       case a @ Alias(e, _) =>
         // For every alias in `projectList`, replace the reference in constraints by its attribute.
@@ -189,6 +194,20 @@ trait UnaryNode extends LogicalPlan with UnaryLike[LogicalPlan] {
             a.toAttribute
         })
         allConstraints += EqualNullSafe(e, a.toAttribute)
+
+        aliasExpressions -= e
+        val aliasAttributeSet = {
+          if (aliasExpressions.size > 0) {
+            aliasExpressions.map(_.references).reduce(_ ++ _)
+          } else {
+            AttributeSet.empty
+          }
+        }
+        allConstraints = allConstraints.filterNot { c =>
+          val otherAttrs = c.references.filter(!aliasAttributeSet.contains(_))
+          !otherAttrs.subsetOf(outputSet)
+        }
+
       case _ => // Don't change.
     }
 
