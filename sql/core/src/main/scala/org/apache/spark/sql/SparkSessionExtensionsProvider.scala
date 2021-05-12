@@ -19,14 +19,68 @@ package org.apache.spark.sql
 
 import org.apache.spark.annotation.{DeveloperApi, Experimental, Since, Unstable}
 
+// scalastyle:off line.size.limit
 /**
  * :: Experimental ::
+ *
  * Base trait for implementations used by [[SparkSessionExtensions]]
  *
+ *
+ * For example, now we have an external function named `Age` to register as an extension for SparkSession:
+ *
+ *
+ * {{{
+ *   package org.apache.spark.examples.extensions
+ *
+ *   import org.apache.spark.sql.catalyst.expressions.{CurrentDate, Expression, RuntimeReplaceable, SubtractDates}
+ *
+ *   case class Age(birthday: Expression, child: Expression) extends RuntimeReplaceable {
+ *
+ *     def this(birthday: Expression) = this(birthday, SubtractDates(CurrentDate(), birthday))
+ *     override def exprsReplaced: Seq[Expression] = Seq(birthday)
+ *     override protected def withNewChildInternal(newChild: Expression): Expression = copy(newChild)
+ *   }
+ * }}}
+ *
+ * We need to create your extension which inherits [[SparkSessionExtensionsProvider]]
+ * Example:
+ *
+ * {{{
+ *   package org.apache.spark.examples.extensions
+ *
+ *   import org.apache.spark.sql.{SparkSessionExtensions, SparkSessionExtensionsProvider}
+ *   import org.apache.spark.sql.catalyst.FunctionIdentifier
+ *   import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionInfo}
+ *
+ *   class MyExtensions extends SparkSessionExtensionsProvider {
+ *     override def apply(v1: SparkSessionExtensions): Unit = {
+ *       v1.injectFunction(
+ *         (new FunctionIdentifier("age"),
+ *           new ExpressionInfo(classOf[Age].getName,
+ *          "age"), (children: Seq[Expression]) => new Age(children.head)))
+ *     }
+ *   }
+ * }}}
+ *
+ * We can inject `MyExtensions` in three ways,
+ * <ul>
+ *   <li>[[SparkSession.Builder.withExtensions]]</li>
+ *   <li>Config - spark.sql.extensions</li>
+ *   <li>[[java.util.ServiceLoader]] - Add to src/main/resources/META-INF/services/org.apache.spark.sql.SparkSessionExtensionsProvider</li>
+ * </ul>
+ *
+ * @see [[SparkSessionExtensions]]
+ * @see [[SparkSession.Builder.withExtensions]]
+ * @see [[java.util.ServiceLoader]]
+ *
  * @since 3.2.0
+ *
+ * @note We make NO guarantee about the stability regarding binary compatibility and source compatibility of methods here.
+ *       It's experimental and intended for developers
  */
 @DeveloperApi
 @Experimental
 @Unstable
 @Since("3.2.0")
 trait SparkSessionExtensionsProvider extends Function1[SparkSessionExtensions, Unit]
+// scalastyle:on line.size.limit

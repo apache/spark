@@ -894,7 +894,7 @@ object SparkSession extends Logging {
      *
      * @since 2.2.0
      */
-    def withExtensions(f: SparkSessionExtensionsProvider): Builder = synchronized {
+    def withExtensions(f: SparkSessionExtensions => Unit): Builder = synchronized {
       f(extensions)
       this
     }
