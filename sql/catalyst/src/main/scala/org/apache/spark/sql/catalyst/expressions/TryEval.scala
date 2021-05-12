@@ -80,7 +80,7 @@ case class TryAdd(left: Expression, right: Expression) extends TryEval with Impl
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(expr1, expr2) - Returns `expr1`/`expr2`. It always performs floating point division.",
+  usage = "_FUNC_(expr1, expr2) - Returns `expr1`/`expr2`. It always performs floating point division. Its result is always null if `expr2` is 0.",
   examples = """
     Examples:
       > SELECT _FUNC_(3, 2);

@@ -294,11 +294,9 @@ object BinaryArithmetic {
 case class Add(
     left: Expression,
     right: Expression,
-    failOnError: Boolean = SQLConf.get.ansiEnabled) extends BinaryArithmetic with AsAnsi {
+    failOnError: Boolean = SQLConf.get.ansiEnabled) extends BinaryArithmetic {
 
   def this(left: Expression, right: Expression) = this(left, right, SQLConf.get.ansiEnabled)
-
-  override def asAnsi: Expression = this.copy(failOnError = true)
 
   override def inputType: AbstractDataType = TypeCollection.NumericAndInterval
 
@@ -534,11 +532,9 @@ trait DivModLike extends BinaryArithmetic {
 case class Divide(
     left: Expression,
     right: Expression,
-    failOnError: Boolean = SQLConf.get.ansiEnabled) extends DivModLike with AsAnsi {
+    failOnError: Boolean = SQLConf.get.ansiEnabled) extends DivModLike {
 
   def this(left: Expression, right: Expression) = this(left, right, SQLConf.get.ansiEnabled)
-
-  override def asAnsi: Expression = this.copy(failOnError = true)
 
   override def inputType: AbstractDataType = TypeCollection(DoubleType, DecimalType)
 
@@ -1009,16 +1005,4 @@ case class Greatest(children: Seq[Expression]) extends ComplexTypeMergingExpress
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Greatest =
     copy(children = newChildren)
-}
-
-/*
- * An [[Expression]] that can be convertible to a new expression as `SQLConf.get.ansiEnabled`
- * is always true.
- */
-private[catalyst] trait AsAnsi {
-  /*
-   * Return a copy of this expression as `SQLConf.get.ansiEnabled` is always true,
-   * which means it will throw an exception if error occurs.
-   */
-  def asAnsi: Expression
 }
