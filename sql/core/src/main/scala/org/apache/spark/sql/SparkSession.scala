@@ -894,7 +894,7 @@ object SparkSession extends Logging {
      *
      * @since 2.2.0
      */
-    def withExtensions(f: SparkSessionExtensions => Unit): Builder = synchronized {
+    def withExtensions(f: SparkSessionExtensionsProvider): Builder = synchronized {
       f(extensions)
       this
     }
@@ -1209,7 +1209,7 @@ object SparkSession extends Logging {
    * Load extensions from [[ServiceLoader]] and active them
    */
   private def loadExtensions(extensions: SparkSessionExtensions): Unit = {
-    val loader = ServiceLoader.load(classOf[SparkSessionExtensions => Unit],
+    val loader = ServiceLoader.load(classOf[SparkSessionExtensionsProvider],
       Utils.getContextOrSparkClassLoader)
     val loadedExts = loader.iterator()
 

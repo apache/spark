@@ -74,7 +74,7 @@ import org.apache.spark.sql.execution.{ColumnarRule, SparkPlan}
  *     .config("spark.sql.extensions", "org.example.MyExtensions")
  *     .getOrCreate()
  *
- *   class MyExtensions extends Function1[SparkSessionExtensions, Unit] {
+ *   class MyExtensions extends SparkSessionExtensionsProvider {
  *     override def apply(extensions: SparkSessionExtensions): Unit = {
  *       extensions.injectResolutionRule { session =>
  *         ...
