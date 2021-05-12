@@ -59,7 +59,9 @@ import org.apache.spark.sql.execution.{ColumnarRule, SparkPlan}
  *       extensions.injectResolutionRule { session =>
  *         ...
  *       }
- *       extensions.injectFunction(...)
+ *       extensions.injectParser { (session, parser) =>
+ *         ...
+ *       }
  *     }
  *     .getOrCreate()
  * }}}
@@ -72,7 +74,7 @@ import org.apache.spark.sql.execution.{ColumnarRule, SparkPlan}
  *     .config("spark.sql.extensions", "org.example.MyExtensions,org.example.YourExtensions")
  *     .getOrCreate()
  *
- *   class MyExtensions extends SparkSessionExtensions => Unit {
+ *   class MyExtensions extends Function1[SparkSessionExtensions, Unit] {
  *     override def apply(extensions: SparkSessionExtensions): Unit = {
  *       extensions.injectResolutionRule { session =>
  *         ...
@@ -88,9 +90,7 @@ import org.apache.spark.sql.execution.{ColumnarRule, SparkPlan}
  *       extensions.injectResolutionRule { session =>
  *         ...
  *       }
- *       extensions.injectParser { (session, parser) =>
- *         ...
- *       }
+ *       extensions.injectFunction(...)
  *     }
  *   }
  * }}}
