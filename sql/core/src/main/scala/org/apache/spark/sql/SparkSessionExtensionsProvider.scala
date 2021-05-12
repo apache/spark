@@ -56,8 +56,8 @@ import org.apache.spark.annotation.{DeveloperApi, Experimental, Since, Unstable}
  *     override def apply(v1: SparkSessionExtensions): Unit = {
  *       v1.injectFunction(
  *         (new FunctionIdentifier("age"),
- *           new ExpressionInfo(classOf[Age].getName,
- *          "age"), (children: Seq[Expression]) => new Age(children.head)))
+ *           new ExpressionInfo(classOf[Age].getName, "age"),
+ *           (children: Seq[Expression]) => new Age(children.head)))
  *     }
  *   }
  * }}}
