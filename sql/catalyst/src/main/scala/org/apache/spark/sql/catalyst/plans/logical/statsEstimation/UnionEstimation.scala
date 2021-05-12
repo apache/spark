@@ -86,19 +86,19 @@ object UnionEstimation {
       val outputAttrStats = new ArrayBuffer[(Attribute, ColumnStat)]()
       attrToComputeMinMaxStats.foreach {
         case (attrs, outputIndex) =>
-          var nullCount: Option[BigInt] = None
           val dataType = unionOutput(outputIndex).dataType
           val statComparator = createStatComparator(dataType)
-          val minMaxValue = attrs.zipWithIndex.foldLeft[(Option[Any], Option[Any])]((None, None)) {
-              case ((minVal, maxVal), (attr, childIndex)) =>
+          val colStatValues = attrs.zipWithIndex
+            .foldLeft[(Option[Any], Option[Any], Option[BigInt])]((None, None, None)) {
+              case ((minVal, maxVal, totalNullCount), (attr, childIndex)) =>
                 val colStat = union.children(childIndex).stats.attributeStats(attr)
                 // Update null count
-                nullCount = if (nullCount.isDefined  && colStat.nullCount.isDefined) {
-                  Some(nullCount.get + colStat.nullCount.get)
+                val nullCount = if (totalNullCount.isDefined && colStat.nullCount.isDefined) {
+                  Some(totalNullCount.get + colStat.nullCount.get)
                 } else if (colStat.nullCount.isDefined) {
                   colStat.nullCount
                 } else {
-                  nullCount
+                  totalNullCount
                 }
                 val min = if (minVal.isEmpty || statComparator(colStat.min.get, minVal.get)) {
                   colStat.min
@@ -110,13 +110,13 @@ object UnionEstimation {
                 } else {
                   maxVal
                 }
-                (min, max)
+                (min, max, nullCount)
             }
-          val newStat = ColumnStat(min = minMaxValue._1, max = minMaxValue._2,
-            nullCount = nullCount)
+          val newStat = ColumnStat(min = colStatValues._1, max = colStatValues._2,
+            nullCount = colStatValues._3)
           outputAttrStats += unionOutput(outputIndex) -> newStat
       }
-      AttributeMap(outputAttrStats)
+      AttributeMap(outputAttrStats.toSeq)
     } else {
       AttributeMap.empty[ColumnStat]
     }
