@@ -17,51 +17,45 @@ package org.apache.spark.shuffle.internal
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.remoteshuffle.exceptions.RssInvalidDataException
-import org.apache.spark.serializer.{SerializationStream, Serializer}
+import org.apache.spark.serializer._
 
-import java.io.ByteArrayOutputStream
 import scala.collection.mutable
 
-case class BufferManagerOptions(individualBufferSize: Int, individualBufferMax: Int,
-                                bufferSpillThreshold: Int, supportAggregate: Boolean)
-
-case class WriterBufferManagerValue(serializeStream: SerializationStream,
-                                    output: ByteArrayOutputStream)
-
-class DefaultWriteBufferManager[K, V](serializer: Serializer,
-                                      bufferSize: Int,
-                                      spillSize: Int,
-                                      numPartitions: Int,
-                                      createCombiner: Option[V => Any] = None)
-    extends RecordSerializationBuffer[K, V]
+/*
+ * This class is specially optimized for Kyro serializer to reduce memory copy.
+ */
+class KyroRecordBufferManager[K, V](serializerInstance: KryoSerializerInstance,
+                                    bufferSize: Int,
+                                    maxBufferSize: Int,
+                                    spillSize: Int,
+                                    numPartitions: Int,
+                                    createCombiner: Option[V => Any] = None)
+    extends RecordBufferManager[K, V]
     with Logging {
-  private val partitionBuffers: Array[WriterBufferManagerValue] =
-    new Array[WriterBufferManagerValue](numPartitions)
+  private val partitionBuffers: Array[RssKryoSerializationStream] =
+    new Array[RssKryoSerializationStream](numPartitions)
 
   private var totalBytes = 0
-
-  private val serializerInstance = serializer.newInstance()
 
   def addRecord(partitionId: Int, record: Product2[K, V]): Seq[(Int, Array[Byte], Int)] = {
     val key: Any = record._1
     val value: Any = createCombiner.map(_.apply(record._2)).getOrElse(record._2)
     var result: mutable.Buffer[(Int, Array[Byte], Int)] = null
-    val v = partitionBuffers(partitionId)
-    if (v != null) {
-      val stream = v.serializeStream
-      val oldSize = v.output.size()
+    val stream = partitionBuffers(partitionId)
+    if (stream != null) {
+      val oldSize = stream.position()
       stream.writeKey(key)
       stream.writeValue(value)
-      val newSize = v.output.size()
+      val newSize = stream.position()
       if (newSize >= bufferSize) {
         // partition buffer is full, add it to the result as spill data
         if (result == null) {
           result = mutable.Buffer[(Int, Array[Byte], Int)]()
         }
-        v.serializeStream.flush()
-        val bytes = v.output.toByteArray
-        result.append((partitionId, bytes, bytes.length))
-        v.serializeStream.close()
+        val bytes = stream.getBuffer
+        val length = stream.position()
+        result.append((partitionId, bytes, length))
+        stream.close()
         partitionBuffers(partitionId) = null
         totalBytes -= oldSize
       } else {
@@ -69,22 +63,22 @@ class DefaultWriteBufferManager[K, V](serializer: Serializer,
       }
     }
     else {
-      val output = new ByteArrayOutputStream(bufferSize)
-      val stream = serializerInstance.serializeStream(output)
+      val stream = RssKryoSerializationStream.newStream(serializerInstance,
+        bufferSize, maxBufferSize)
       stream.writeKey(key)
       stream.writeValue(value)
-      val newSize = output.size()
+      val newSize = stream.position()
       if (newSize >= bufferSize) {
         // partition buffer is full, add it to the result as spill data
         if (result == null) {
           result = mutable.Buffer[(Int, Array[Byte], Int)]()
         }
-        stream.flush()
-        val bytes = output.toByteArray
-        result.append((partitionId, bytes, bytes.length))
+        val bytes = stream.getBuffer
+        val length = stream.position()
+        result.append((partitionId, bytes, length))
         stream.close()
       } else {
-        partitionBuffers(partitionId) = WriterBufferManagerValue(stream, output)
+        partitionBuffers(partitionId) = stream
         totalBytes = totalBytes + newSize
       }
     }
@@ -94,8 +88,7 @@ class DefaultWriteBufferManager[K, V](serializer: Serializer,
       if (result == null) {
         result = mutable.Buffer[(Int, Array[Byte], Int)]()
       }
-      val allData = clear()
-      result.appendAll(allData)
+      clearData(result)
     }
 
     if (result == null) {
@@ -111,8 +104,7 @@ class DefaultWriteBufferManager[K, V](serializer: Serializer,
     while (i < partitionBuffers.length) {
       val t = partitionBuffers(i)
       if (t != null) {
-        flushStream(t.serializeStream, t.output)
-        sum += t.output.size()
+        sum += t.position()
       }
       i += 1
     }
@@ -125,26 +117,26 @@ class DefaultWriteBufferManager[K, V](serializer: Serializer,
 
   def clear(): Seq[(Int, Array[Byte], Int)] = {
     val result = mutable.Buffer[(Int, Array[Byte], Int)]()
+    clearData(result)
+    result
+  }
+
+  private def clearData(dataCollector: mutable.Buffer[(Int, Array[Byte], Int)]): Unit = {
     var i = 0
     while (i < partitionBuffers.length) {
       val t = partitionBuffers(i)
       if (t != null) {
-        t.serializeStream.flush()
-        val bytes = t.output.toByteArray
-        result.append((i, bytes, bytes.length))
-        t.serializeStream.close()
+        if (t.position() > 0) {
+          val bytes = t.getBuffer()
+          val length = t.position()
+          dataCollector.append((i, bytes, length))
+        }
+        t.close()
         partitionBuffers(i) = null
       }
       i += 1
     }
     totalBytes = 0
-    result
   }
 
-  private def flushStream(serializeStream: SerializationStream, output: ByteArrayOutputStream) = {
-    val oldPosition = output.size()
-    serializeStream.flush()
-    val numBytes = output.size() - oldPosition
-    totalBytes += numBytes
-  }
 }

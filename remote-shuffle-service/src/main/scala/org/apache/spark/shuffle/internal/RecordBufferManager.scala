@@ -20,7 +20,7 @@ import org.apache.spark.serializer.{SerializationStream, SerializerInstance}
 
 import scala.collection.mutable
 
-trait RecordSerializationBuffer[K, V] {
+trait RecordBufferManager[K, V] {
 
   // Add record to the buffer, return serialized bytes if the buffer is full.
   // The return value is a list of (Partition Id, Serialized Bytes, Size of Serialized Bytes)

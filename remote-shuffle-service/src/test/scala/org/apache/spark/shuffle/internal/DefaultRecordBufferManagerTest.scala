@@ -23,7 +23,7 @@ import org.apache.spark.serializer.KryoSerializer
 import org.testng.Assert
 import org.testng.annotations.Test
 
-class DefaultWriteBufferManagerTest {
+class DefaultRecordBufferManagerTest {
   val serializer = new KryoSerializer(getConf)
 
   @Test
@@ -32,7 +32,7 @@ class DefaultWriteBufferManagerTest {
     val spillSize = 100
     val numPartitions = 10
     val record = (1, "123") // it is 7 bytes after serialization
-    var bufferManager = new DefaultWriteBufferManager[Any, Any](
+    var bufferManager = new DefaultRecordBufferManager[Any, Any](
       serializer, bufferSize, spillSize, numPartitions)
     Assert.assertEquals(bufferManager.filledBytes, 0)
 
@@ -49,7 +49,7 @@ class DefaultWriteBufferManagerTest {
     Assert.assertEquals(spilledData.size, 0)
 
     bufferSize = 20
-    bufferManager = new DefaultWriteBufferManager[Any, Any](
+    bufferManager = new DefaultRecordBufferManager[Any, Any](
       serializer, bufferSize, spillSize, numPartitions)
     spilledData = bufferManager.clear().toList
     Assert.assertEquals(spilledData.size, 0)
@@ -90,7 +90,7 @@ class DefaultWriteBufferManagerTest {
     val bufferSize = 20
     val spillSize = 30
     val numPartitions = 10
-    val bufferManager = new DefaultWriteBufferManager[Any, Any](
+    val bufferManager = new DefaultRecordBufferManager[Any, Any](
       serializer, bufferSize, spillSize, numPartitions)
     var spilledData = bufferManager.clear().toList
     Assert.assertEquals(spilledData.size, 0)
@@ -131,7 +131,7 @@ class DefaultWriteBufferManagerTest {
     val bufferSize = 1000000
     val spillSize = 20
     val numPartitions = 10
-    val bufferManager = new DefaultWriteBufferManager[Any, Any](
+    val bufferManager = new DefaultRecordBufferManager[Any, Any](
       serializer, bufferSize, spillSize, numPartitions)
 
     val partition1 = 1
@@ -167,7 +167,7 @@ class DefaultWriteBufferManagerTest {
     val records = List((1, "123"), (1, 2), (1, "123456789"), ("123456789", "123456789"))
     val recordSet = records.toSet
 
-    val bufferManager = new DefaultWriteBufferManager[Any, Any](
+    val bufferManager = new DefaultRecordBufferManager[Any, Any](
       serializer, bufferSize, spillSize, numPartitions)
 
     val numRecords = 2000

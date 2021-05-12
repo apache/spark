@@ -25,7 +25,7 @@ import org.apache.spark.remoteshuffle.common.{AppTaskAttemptId, ServerList}
 import org.apache.spark.remoteshuffle.exceptions.RssInvalidStateException
 import org.apache.spark.scheduler.MapStatus
 import org.apache.spark.serializer.{KryoSerializer, KryoSerializerInstance, Serializer}
-import org.apache.spark.shuffle.internal.{BufferManagerOptions, KyroWriteBufferManager, CombinerWriterBufferManager, RecordSerializationBuffer, RssUtils, DefaultWriteBufferManager}
+import org.apache.spark.shuffle.internal.{BufferManagerOptions, KyroRecordBufferManager, CombinerRecordBufferManager, RecordBufferManager, RssUtils, DefaultRecordBufferManager}
 
 class RssShuffleWriter[K, V, C](
                                  rssServers: ServerList,
@@ -54,13 +54,13 @@ class RssShuffleWriter[K, V, C](
     None
   }
 
-  private val bufferManager: RecordSerializationBuffer[K, V] = {
+  private val bufferManager: RecordBufferManager[K, V] = {
     if (shuffleDependency.aggregator.isEmpty || !bufferOptions.supportAggregate) {
       serializer match {
         case k: KryoSerializer =>
           logInfo(s"Create KyroWriteBufferManager with spill size " +
             s"${bufferOptions.bufferSpillThreshold}")
-          new KyroWriteBufferManager[K, V](
+          new KyroRecordBufferManager[K, V](
             serializerInstance = k.newInstance().asInstanceOf[KryoSerializerInstance],
             bufferSize = bufferOptions.individualBufferSize,
             maxBufferSize = bufferOptions.individualBufferMax,
@@ -70,7 +70,7 @@ class RssShuffleWriter[K, V, C](
         case _ =>
           logInfo(s"Create WriteBufferManager with spill size " +
             s"${bufferOptions.bufferSpillThreshold}")
-          new DefaultWriteBufferManager[K, V](
+          new DefaultRecordBufferManager[K, V](
             serializer = serializer,
             bufferSize = bufferOptions.individualBufferSize,
             spillSize = bufferOptions.bufferSpillThreshold,
@@ -81,7 +81,7 @@ class RssShuffleWriter[K, V, C](
     } else {
       logInfo(s"Create RecordCombinedSerializationBuffer with spill " +
         s"size ${bufferOptions.bufferSpillThreshold}")
-      new CombinerWriterBufferManager[K, V, C](
+      new CombinerRecordBufferManager[K, V, C](
         createCombiner = shuffleDependency.aggregator.get.createCombiner,
         mergeValue = shuffleDependency.aggregator.get.mergeValue,
         serializer = serializer,

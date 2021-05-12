@@ -17,45 +17,51 @@ package org.apache.spark.shuffle.internal
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.remoteshuffle.exceptions.RssInvalidDataException
-import org.apache.spark.serializer._
+import org.apache.spark.serializer.{SerializationStream, Serializer}
 
+import java.io.ByteArrayOutputStream
 import scala.collection.mutable
 
-/*
- * This class is specially optimized for Kyro serializer to reduce memory copy.
- */
-class KyroWriteBufferManager[K, V](serializerInstance: KryoSerializerInstance,
-                                   bufferSize: Int,
-                                   maxBufferSize: Int,
-                                   spillSize: Int,
-                                   numPartitions: Int,
-                                   createCombiner: Option[V => Any] = None)
-    extends RecordSerializationBuffer[K, V]
+case class BufferManagerOptions(individualBufferSize: Int, individualBufferMax: Int,
+                                bufferSpillThreshold: Int, supportAggregate: Boolean)
+
+case class PartitionRecordBuffer(serializeStream: SerializationStream,
+                                 output: ByteArrayOutputStream)
+
+class DefaultRecordBufferManager[K, V](serializer: Serializer,
+                                       bufferSize: Int,
+                                       spillSize: Int,
+                                       numPartitions: Int,
+                                       createCombiner: Option[V => Any] = None)
+    extends RecordBufferManager[K, V]
     with Logging {
-  private val partitionBuffers: Array[RssKryoSerializationStream] =
-    new Array[RssKryoSerializationStream](numPartitions)
+  private val partitionBuffers: Array[PartitionRecordBuffer] =
+    new Array[PartitionRecordBuffer](numPartitions)
 
   private var totalBytes = 0
+
+  private val serializerInstance = serializer.newInstance()
 
   def addRecord(partitionId: Int, record: Product2[K, V]): Seq[(Int, Array[Byte], Int)] = {
     val key: Any = record._1
     val value: Any = createCombiner.map(_.apply(record._2)).getOrElse(record._2)
     var result: mutable.Buffer[(Int, Array[Byte], Int)] = null
-    val stream = partitionBuffers(partitionId)
-    if (stream != null) {
-      val oldSize = stream.position()
+    val v = partitionBuffers(partitionId)
+    if (v != null) {
+      val stream = v.serializeStream
+      val oldSize = v.output.size()
       stream.writeKey(key)
       stream.writeValue(value)
-      val newSize = stream.position()
+      val newSize = v.output.size()
       if (newSize >= bufferSize) {
         // partition buffer is full, add it to the result as spill data
         if (result == null) {
           result = mutable.Buffer[(Int, Array[Byte], Int)]()
         }
-        val bytes = stream.getBuffer
-        val length = stream.position()
-        result.append((partitionId, bytes, length))
-        stream.close()
+        v.serializeStream.flush()
+        val bytes = v.output.toByteArray
+        result.append((partitionId, bytes, bytes.length))
+        v.serializeStream.close()
         partitionBuffers(partitionId) = null
         totalBytes -= oldSize
       } else {
@@ -63,22 +69,22 @@ class KyroWriteBufferManager[K, V](serializerInstance: KryoSerializerInstance,
       }
     }
     else {
-      val stream = RssKryoSerializationStream.newStream(serializerInstance,
-        bufferSize, maxBufferSize)
+      val output = new ByteArrayOutputStream(bufferSize)
+      val stream = serializerInstance.serializeStream(output)
       stream.writeKey(key)
       stream.writeValue(value)
-      val newSize = stream.position()
+      val newSize = output.size()
       if (newSize >= bufferSize) {
         // partition buffer is full, add it to the result as spill data
         if (result == null) {
           result = mutable.Buffer[(Int, Array[Byte], Int)]()
         }
-        val bytes = stream.getBuffer
-        val length = stream.position()
-        result.append((partitionId, bytes, length))
+        stream.flush()
+        val bytes = output.toByteArray
+        result.append((partitionId, bytes, bytes.length))
         stream.close()
       } else {
-        partitionBuffers(partitionId) = stream
+        partitionBuffers(partitionId) = PartitionRecordBuffer(stream, output)
         totalBytes = totalBytes + newSize
       }
     }
@@ -88,7 +94,8 @@ class KyroWriteBufferManager[K, V](serializerInstance: KryoSerializerInstance,
       if (result == null) {
         result = mutable.Buffer[(Int, Array[Byte], Int)]()
       }
-      clearData(result)
+      val allData = clear()
+      result.appendAll(allData)
     }
 
     if (result == null) {
@@ -104,7 +111,8 @@ class KyroWriteBufferManager[K, V](serializerInstance: KryoSerializerInstance,
     while (i < partitionBuffers.length) {
       val t = partitionBuffers(i)
       if (t != null) {
-        sum += t.position()
+        flushStream(t.serializeStream, t.output)
+        sum += t.output.size()
       }
       i += 1
     }
@@ -117,26 +125,26 @@ class KyroWriteBufferManager[K, V](serializerInstance: KryoSerializerInstance,
 
   def clear(): Seq[(Int, Array[Byte], Int)] = {
     val result = mutable.Buffer[(Int, Array[Byte], Int)]()
-    clearData(result)
-    result
-  }
-
-  private def clearData(dataCollector: mutable.Buffer[(Int, Array[Byte], Int)]): Unit = {
     var i = 0
     while (i < partitionBuffers.length) {
       val t = partitionBuffers(i)
       if (t != null) {
-        if (t.position() > 0) {
-          val bytes = t.getBuffer()
-          val length = t.position()
-          dataCollector.append((i, bytes, length))
-        }
-        t.close()
+        t.serializeStream.flush()
+        val bytes = t.output.toByteArray
+        result.append((i, bytes, bytes.length))
+        t.serializeStream.close()
         partitionBuffers(i) = null
       }
       i += 1
     }
     totalBytes = 0
+    result
   }
 
+  private def flushStream(serializeStream: SerializationStream, output: ByteArrayOutputStream) = {
+    val oldPosition = output.size()
+    serializeStream.flush()
+    val numBytes = output.size() - oldPosition
+    totalBytes += numBytes
+  }
 }

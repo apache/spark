@@ -33,7 +33,7 @@ class KryoWriteBufferManagerTest {
     val spillSize = 100
     val numPartitions = 10
     val record = (1, "123") // it is 7 bytes after serialization
-    var bufferManager = new KyroWriteBufferManager[Any, Any](
+    var bufferManager = new KyroRecordBufferManager[Any, Any](
       serializer.newInstance().asInstanceOf[KryoSerializerInstance],
       bufferSize, maxBufferSize, spillSize, numPartitions)
     Assert.assertEquals(bufferManager.filledBytes, 0)
@@ -51,7 +51,7 @@ class KryoWriteBufferManagerTest {
     Assert.assertEquals(spilledData.size, 0)
 
     bufferSize = 20
-    bufferManager = new KyroWriteBufferManager[Any, Any](
+    bufferManager = new KyroRecordBufferManager[Any, Any](
       serializer.newInstance().asInstanceOf[KryoSerializerInstance],
       bufferSize, maxBufferSize, spillSize, numPartitions)
     spilledData = bufferManager.clear().toList
@@ -93,7 +93,7 @@ class KryoWriteBufferManagerTest {
     val bufferSize = 20
     val spillSize = 30
     val numPartitions = 10
-    val bufferManager = new KyroWriteBufferManager[Any, Any](
+    val bufferManager = new KyroRecordBufferManager[Any, Any](
       serializer.newInstance().asInstanceOf[KryoSerializerInstance],
       bufferSize, maxBufferSize, spillSize, numPartitions)
     var spilledData = bufferManager.clear().toList
@@ -135,7 +135,7 @@ class KryoWriteBufferManagerTest {
     val bufferSize = 10000
     val spillSize = 20
     val numPartitions = 10
-    val bufferManager = new KyroWriteBufferManager[Any, Any](
+    val bufferManager = new KyroRecordBufferManager[Any, Any](
       serializer.newInstance().asInstanceOf[KryoSerializerInstance],
       bufferSize, maxBufferSize, spillSize, numPartitions)
 
@@ -171,7 +171,7 @@ class KryoWriteBufferManagerTest {
     val records = List((1, "123"), (1, 2), (1, "123456789"), ("123456789", "123456789"))
     val recordSet = records.toSet
 
-    val bufferManager = new KyroWriteBufferManager[Any, Any](
+    val bufferManager = new KyroRecordBufferManager[Any, Any](
       serializer.newInstance().asInstanceOf[KryoSerializerInstance],
       bufferSize, maxBufferSize, spillSize, numPartitions)
 

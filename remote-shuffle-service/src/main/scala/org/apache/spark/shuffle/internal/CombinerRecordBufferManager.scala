@@ -24,12 +24,12 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.util.collection.PartitionedAppendOnlyMap
 
-class CombinerWriterBufferManager[K, V, C](
+class CombinerRecordBufferManager[K, V, C](
     createCombiner: V => C,
     mergeValue: (C, V) => C,
     serializer: Serializer,
     spillSize: Int)
-  extends RecordSerializationBuffer[K, V]
+  extends RecordBufferManager[K, V]
   with Serializable
   with Logging {
 
