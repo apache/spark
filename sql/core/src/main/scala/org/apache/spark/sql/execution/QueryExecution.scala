@@ -75,7 +75,7 @@ class QueryExecution(
     sparkSession.sessionState.analyzer.executeAndCheck(logical, tracker) match {
       case c: Command => c
       case plan => plan transform {
-        // SPARK-35378: Support LeafRunnableCommand as sub query
+        // SPARK-35378: Convert LeafRunnableCommand to LocalRelation when query with CTE
         case r: LeafRunnableCommand =>
           LocalRelation(r.output, ExecutedCommandExec(r).executeCollect())
         case other => other
