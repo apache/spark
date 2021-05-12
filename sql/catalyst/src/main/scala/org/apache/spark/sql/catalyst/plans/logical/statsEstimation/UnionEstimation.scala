@@ -88,8 +88,7 @@ object UnionEstimation {
         case (attrs, outputIndex) =>
           val dataType = unionOutput(outputIndex).dataType
           val statComparator = createStatComparator(dataType)
-          val minMaxValue = attrs.zipWithIndex
-            .foldLeft[(Option[Any], Option[Any])]((None, None)) {
+          val minMaxValue = attrs.zipWithIndex.foldLeft[(Option[Any], Option[Any])]((None, None)) {
               case ((minVal, maxVal), (attr, childIndex)) =>
                 val colStat = union.children(childIndex).stats.attributeStats(attr)
                 val min = if (minVal.isEmpty || statComparator(colStat.min.get, minVal.get)) {
@@ -134,6 +133,8 @@ object UnionEstimation {
               }
           }
 
+          // If attribute stats are already computed in min-max stats, update the
+          // statistics with null count.
           if (attrStatsWithMinMax.get(unionOutput(outputIndex)).isDefined) {
             val updatedColStat = attrStatsWithMinMax.get(unionOutput(outputIndex))
               .get.copy(nullCount = colWithNullStatValues)
