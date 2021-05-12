@@ -88,7 +88,7 @@ object UnionEstimation {
         case (attrs, outputIndex) =>
           val dataType = unionOutput(outputIndex).dataType
           val statComparator = createStatComparator(dataType)
-          val colStatValues = attrs.zipWithIndex
+          val minMaxValue = attrs.zipWithIndex
             .foldLeft[(Option[Any], Option[Any])]((None, None)) {
               case ((minVal, maxVal), (attr, childIndex)) =>
                 val colStat = union.children(childIndex).stats.attributeStats(attr)
@@ -104,7 +104,7 @@ object UnionEstimation {
                 }
                 (min, max)
             }
-          val newStat = ColumnStat(min = colStatValues._1, max = colStatValues._2)
+          val newStat = ColumnStat(min = minMaxValue._1, max = minMaxValue._2)
           outputAttrStats += unionOutput(outputIndex) -> newStat
       }
       AttributeMap(outputAttrStats.toSeq)
