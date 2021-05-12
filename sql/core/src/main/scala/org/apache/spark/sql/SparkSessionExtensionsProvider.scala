@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.annotation.{DeveloperApi, Experimental, Since, Unstable}
+import org.apache.spark.annotation.{DeveloperApi, Experimental, Unstable}
 
 // scalastyle:off line.size.limit
 /**
