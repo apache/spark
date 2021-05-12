@@ -100,9 +100,9 @@ object BloomFilterBenchmark extends SqlBasedBenchmark {
   }
 
   private def readParquetBenchmark(): Unit = {
-    val blockSizes = Seq(512 * 1024, 1024 * 1024, 2 * 1024 * 1024, 3 * 1024 * 1024,
-      4 * 1024 * 1024, 5 * 1024 * 1024, 6 * 1024 * 1024, 7 * 1024 * 1024,
-      8 * 1024 * 1024, 9 * 1024 * 1024, 10 * 1024 * 1024)
+    val blockSizes = Seq(2 * 1024 * 1024, 3 * 1024 * 1024, 4 * 1024 * 1024, 5 * 1024 * 1024,
+      6 * 1024 * 1024, 8 * 1024 * 1024, 16 * 1024 * 1024, 32 * 1024 * 1024, 64 * 1024 * 1024,
+      128 * 1024 * 1024)
     for (blocksize <- blockSizes) {
       withTempPath { dir =>
         val path = dir.getCanonicalPath
