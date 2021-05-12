@@ -18,57 +18,66 @@
 package org.apache.spark.shuffle.internal
 
 import java.io._
+import java.util.Comparator
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.serializer.Serializer
-import org.apache.spark.util.collection.PartitionedPairBuffer
+import org.apache.spark.util.collection.PartitionedAppendOnlyMap
 
-class RecordPlainSerializationBuffer[K, V](
+class CombinerWriterBufferManager[K, V, C](
+    createCombiner: V => C,
+    mergeValue: (C, V) => C,
     serializer: Serializer,
     spillSize: Int)
   extends RecordSerializationBuffer[K, V]
   with Serializable
   with Logging {
 
-  private var partitionedBuffer = createPartitionedPairBuffer()
-  private var partitionedBufferSize = 0
+  private var partitionedMap = createPartitionedAppendOnlyMap()
 
   private val serializerInstance = serializer.newInstance()
 
   override def addRecord(partitionId: Int, record: Product2[K, V]): Seq[(Int, Array[Byte], Int)] = {
-    partitionedBuffer.insert(partitionId, record._1, record._2)
-    partitionedBufferSize += 1
+    val update: (Boolean, C) => C = (hadVal, oldVal) => {
+      if (hadVal) mergeValue(oldVal, record._2) else createCombiner(record._2)
+    }
+
+    partitionedMap.changeValue((partitionId, record._1), update)
 
     val estimatedSize = filledBytes
     if (estimatedSize >= spillSize) {
-      serializeBuffer()
+      serializeMap()
     } else {
       Seq.empty
     }
   }
 
   override def filledBytes: Int = {
-    if (partitionedBufferSize == 0) {
+    if (partitionedMap.isEmpty) {
       0
     } else {
-      partitionedBuffer.estimateSize().intValue()
+      partitionedMap.estimateSize().intValue()
     }
   }
 
   override def clear(): Seq[(Int, Array[Byte], Int)] = {
-    serializeBuffer()
+    serializeMap()
   }
 
-  private def createPartitionedPairBuffer() = {
-    partitionedBufferSize = 0
-    // TODO pass initialCapacity to PartitionedPairBuffer
-    new PartitionedPairBuffer[K, V]()
+  private def createPartitionedAppendOnlyMap() = {
+    // TODO pass initialCapacity to PartitionedAppendOnlyMap
+    new PartitionedAppendOnlyMap[K, C]()
   }
 
-  private def serializeBuffer(): Seq[(Int, Array[Byte], Int)] = {
-    val itr = partitionedBuffer.partitionedDestructiveSortedIterator(None)
+  private def serializeMap(): Seq[(Int, Array[Byte], Int)] = {
+    val comparator = new Comparator[(Int, K)] {
+      override def compare(o1: (Int, K), o2: (Int, K)): Int = {
+        Integer.compare(o1._1, o2._1)
+      }
+    }
+    val itr = partitionedMap.destructiveSortedIterator(comparator)
     val result = serializeSortedPartitionedRecords(itr, serializerInstance, spillSize)
-    partitionedBuffer = createPartitionedPairBuffer()
+    partitionedMap = createPartitionedAppendOnlyMap()
     result
   }
 }

@@ -21,7 +21,7 @@ class RssWritePerfToolTest {
   @Test
   def testRssWritePerfTool(): Unit = {
     val tool = new RssWritePerfTool()
-    tool.numMapRecords = 300000000
+    tool.numMapRecords = 300000
     tool.numPartitions = 3000
     try {
       tool.setup()

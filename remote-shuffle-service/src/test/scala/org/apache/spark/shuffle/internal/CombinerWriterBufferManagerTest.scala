@@ -19,14 +19,14 @@ import org.testng.annotations.Test
 import org.apache.spark.SparkConf
 import org.apache.spark.serializer.KryoSerializer
 
-class RecordCombinedSerializationBufferTest {
+class CombinerWriterBufferManagerTest {
   val serializer = new KryoSerializer(getConf)
 
   @Test
   def singlePartition(): Unit = {
     var spillSize = 1
     val record = (1, "123")
-    var bufferManager = new RecordCombinedSerializationBuffer[Any, Any, Seq[Any]](
+    var bufferManager = new CombinerWriterBufferManager[Any, Any, Seq[Any]](
       createCombiner = v => Seq(v),
       mergeValue = (c, v) => c :+ v,
       serializer = serializer,
@@ -38,7 +38,7 @@ class RecordCombinedSerializationBufferTest {
 
     val partition1 = 1
 
-    bufferManager = new RecordCombinedSerializationBuffer[Any, Any, Seq[Any]](
+    bufferManager = new CombinerWriterBufferManager[Any, Any, Seq[Any]](
       createCombiner = v => Seq(v),
       mergeValue = (c, v) => c :+ v,
       serializer = serializer,
@@ -66,7 +66,7 @@ class RecordCombinedSerializationBufferTest {
 
     // use large buffer to get size for one record after serialization
     spillSize = 1024 * 1024
-    bufferManager = new RecordCombinedSerializationBuffer[Any, Any, Seq[Any]](
+    bufferManager = new CombinerWriterBufferManager[Any, Any, Seq[Any]](
       createCombiner = v => Seq(v),
       mergeValue = (c, v) => c :+ v,
       serializer = serializer,
@@ -82,7 +82,7 @@ class RecordCombinedSerializationBufferTest {
 
     // use spill size a little more than one record
     spillSize = oneRecordSize + 1
-    bufferManager = new RecordCombinedSerializationBuffer[Any, Any, Seq[Any]](
+    bufferManager = new CombinerWriterBufferManager[Any, Any, Seq[Any]](
       createCombiner = v => Seq(v),
       mergeValue = (c, v) => c :+ v,
       serializer = serializer,
@@ -112,7 +112,7 @@ class RecordCombinedSerializationBufferTest {
 
     // use large buffer to get size for one record after serialization
     var spillSize = 1024 * 1024
-    var bufferManager = new RecordCombinedSerializationBuffer[Any, Any, Seq[Any]](
+    var bufferManager = new CombinerWriterBufferManager[Any, Any, Seq[Any]](
       createCombiner = v => Seq(v),
       mergeValue = (c, v) => c :+ v,
       serializer = serializer,
@@ -124,7 +124,7 @@ class RecordCombinedSerializationBufferTest {
 
     // use spill size a little more than one record
     spillSize = oneRecordSize + 1
-    bufferManager = new RecordCombinedSerializationBuffer[Any, Any, Seq[Any]](
+    bufferManager = new CombinerWriterBufferManager[Any, Any, Seq[Any]](
       createCombiner = v => Seq(v),
       mergeValue = (c, v) => c :+ v,
       serializer = serializer,
@@ -150,7 +150,7 @@ class RecordCombinedSerializationBufferTest {
 
     // use very spill size
     spillSize = 1024 * 1024 * 1024
-    bufferManager = new RecordCombinedSerializationBuffer[Any, Any, Seq[Any]](
+    bufferManager = new CombinerWriterBufferManager[Any, Any, Seq[Any]](
       createCombiner = v => Seq(v),
       mergeValue = (c, v) => c :+ v,
       serializer = serializer,
@@ -184,7 +184,7 @@ class RecordCombinedSerializationBufferTest {
     val numPartitions = 100
 
     val spillSize = 10 * 1024 * 1024
-    val bufferManager = new RecordCombinedSerializationBuffer[Any, Any, Seq[Any]](
+    val bufferManager = new CombinerWriterBufferManager[Any, Any, Seq[Any]](
       createCombiner = v => Seq(v),
       mergeValue = (c, v) => c :+ v,
       serializer = serializer,

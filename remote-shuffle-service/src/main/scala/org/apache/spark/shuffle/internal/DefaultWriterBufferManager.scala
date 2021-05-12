@@ -28,11 +28,11 @@ case class BufferManagerOptions(individualBufferSize: Int, individualBufferMax: 
 case class WriterBufferManagerValue(serializeStream: SerializationStream,
                                     output: ByteArrayOutputStream)
 
-class WriteBufferManager[K, V](serializer: Serializer,
-                         bufferSize: Int,
-                         spillSize: Int,
-                         numPartitions: Int,
-                         createCombiner: Option[V => Any] = None)
+class DefaultWriteBufferManager[K, V](serializer: Serializer,
+                                      bufferSize: Int,
+                                      spillSize: Int,
+                                      numPartitions: Int,
+                                      createCombiner: Option[V => Any] = None)
     extends RecordSerializationBuffer[K, V]
     with Logging {
   private val partitionBuffers: Array[WriterBufferManagerValue] =
