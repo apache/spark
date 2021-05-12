@@ -805,13 +805,13 @@ class FileSourceCharVarcharTestSuite extends CharVarcharTestSuite with SharedSpa
     }
   }
 
-  test("create table and insert data over length values") {
+  test("SPARK-35359: create table and insert data over length values") {
     Seq("char", "varchar").foreach { typ =>
       withSQLConf((SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key, "true")) {
         withTable("t") {
           sql(s"CREATE TABLE t (col $typ(2)) using $format")
           sql("INSERT INTO t SELECT 'aaa'")
-          checkAnswer(sql("select * from t"), Row("aa"))
+          checkAnswer(sql("select * from t"), Row("aaa"))
         }
       }
     }
