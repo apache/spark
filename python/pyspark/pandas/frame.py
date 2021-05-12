@@ -2994,7 +2994,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         axis: Union[int, str] = 0,
     ) -> "DataFrame":
         """
-        Select values between particular times of the day (e.g., 9:00-9:30 AM).
+        Select values between particular times of the day (example: 9:00-9:30 AM).
 
         By setting ``start_time`` to be later than ``end_time``,
         you can get the times that are *not* between the two times.
@@ -3088,7 +3088,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         self, time: Union[datetime.time, str], asof: bool = False, axis: Union[int, str] = 0
     ) -> "DataFrame":
         """
-        Select values at particular time of day (e.g., 9:30AM).
+        Select values at particular time of day (example: 9:30AM).
 
         Parameters
         ----------
