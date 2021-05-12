@@ -188,7 +188,60 @@ class UnionEstimationSuite extends StatsEstimationTestBase {
 
     val union = Union(Seq(child1, child2))
 
-    val expectedStats = logical.Statistics(sizeInBytes = 2 * 1024, rowCount = Some(4))
+    // Only null count is present in the attribute stats
+    val expectedStats = logical.Statistics(
+      sizeInBytes = 2 * 1024,
+      rowCount = Some(4),
+      attributeStats = AttributeMap(
+        Seq(attrInt -> ColumnStat(nullCount = Some(0)))))
+    assert(union.stats === expectedStats)
+  }
+
+  test("col stats estimation when null count stats are not present for one child") {
+    val sz = Some(BigInt(1024))
+
+    val attrInt = AttributeReference("cint", IntegerType)()
+
+    val columnInfo = AttributeMap(
+      Seq(
+        attrInt -> ColumnStat(
+          distinctCount = Some(2),
+          min = Some(1),
+          max = Some(2),
+          nullCount = Some(2),
+          avgLen = Some(4),
+          maxLen = Some(4))))
+
+    // No null count
+    val columnInfo1 = AttributeMap(
+      Seq(
+        AttributeReference("cint1", IntegerType)() -> ColumnStat(
+          distinctCount = Some(2),
+          min = Some(3),
+          max = Some(4),
+          avgLen = Some(8),
+          maxLen = Some(8))))
+
+    val child1 = StatsTestPlan(
+      outputList = columnInfo.keys.toSeq,
+      rowCount = 2,
+      attributeStats = columnInfo,
+      size = sz)
+
+    val child2 = StatsTestPlan(
+      outputList = columnInfo1.keys.toSeq,
+      rowCount = 2,
+      attributeStats = columnInfo1,
+      size = sz)
+
+    val union = Union(Seq(child1, child2))
+
+    // Null count should not present in the stats
+    val expectedStats = logical.Statistics(
+      sizeInBytes = 2 * 1024,
+      rowCount = Some(4),
+      attributeStats = AttributeMap(
+          Seq(attrInt -> ColumnStat(min = Some(1), max = Some(4), nullCount = None))))
     assert(union.stats === expectedStats)
   }
 }
