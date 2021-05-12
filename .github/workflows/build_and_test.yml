@@ -354,6 +354,10 @@ jobs:
         Rscript -e "install.packages(c('devtools'), repos='https://cloud.r-project.org/')"
         Rscript -e "devtools::install_github('jimhester/lintr@v2.0.1')"
         ./R/install-dev.sh
+    - name: Instll JS linter dependencies
+      run: |
+        apt update
+        apt-get install -y nodejs npm
     - name: Install dependencies for documentation generation
       run: |
         # pandoc is required to generate PySpark APIs as well in nbsphinx.
@@ -375,6 +379,8 @@ jobs:
       run: ./dev/lint-python
     - name: R linter
       run: ./dev/lint-r
+    - name: JS linter
+      run: ./dev/lint-js
     - name: License test
       run: ./dev/check-license
     - name: Dependencies test
