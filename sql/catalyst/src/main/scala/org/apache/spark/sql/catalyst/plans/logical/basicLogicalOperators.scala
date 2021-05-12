@@ -775,7 +775,7 @@ case class Range(
         avgLen = Some(LongType.defaultSize),
         maxLen = Some(LongType.defaultSize))
 
-      val colStatWithHistogram = if (conf.histogramEnabled) {
+      val colStatsWithHistogram = if (conf.histogramEnabled) {
         val numBins = conf.histogramNumBins
         val height = numElements.toDouble / numBins
         val percentileArray = (0 to numBins).map(i => i * height).toArray
@@ -801,7 +801,7 @@ case class Range(
       Statistics(
         sizeInBytes = LongType.defaultSize * numElements,
         rowCount = Some(numElements),
-        attributeStats = AttributeMap(Seq(output.head -> colStatWithHistogram)))
+        attributeStats = AttributeMap(Seq(output.head -> colStatsWithHistogram)))
     }
   }
 
