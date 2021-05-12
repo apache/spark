@@ -47,7 +47,7 @@ import org.apache.spark.unsafe.types.UTF8String
  */
 class SparkSessionExtensionSuite extends SparkFunSuite {
   private def create(
-    builder: SparkSessionExtensionsProvider): Seq[SparkSessionExtensionsProvider] = Seq(builder)
+      builder: SparkSessionExtensionsProvider): Seq[SparkSessionExtensionsProvider] = Seq(builder)
 
   private def stop(spark: SparkSession): Unit = {
     spark.stop()
@@ -56,7 +56,7 @@ class SparkSessionExtensionSuite extends SparkFunSuite {
   }
 
   private def withSession(
-    builders: Seq[SparkSessionExtensionsProvider])(f: SparkSession => Unit): Unit = {
+      builders: Seq[SparkSessionExtensionsProvider])(f: SparkSession => Unit): Unit = {
     val builder = SparkSession.builder().master("local[1]")
     builders.foreach(builder.withExtensions)
     val spark = builder.getOrCreate()
@@ -977,11 +977,11 @@ class MyExtensions2Duplicate extends (SparkSessionExtensions => Unit) {
 
 class YourExtensions extends SparkSessionExtensionsProvider {
   val getAppName = (FunctionIdentifier("get_fake_app_name"),
-      new ExpressionInfo(
-        "noClass",
-        "",
-        "get_fake_app_name"),
-      (_: Seq[Expression]) => Literal("Fake App Name"))
+    new ExpressionInfo(
+      "noClass",
+      "",
+      "get_fake_app_name"),
+    (_: Seq[Expression]) => Literal("Fake App Name"))
 
   override def apply(v1: SparkSessionExtensions): Unit = {
     v1.injectFunction(getAppName)
