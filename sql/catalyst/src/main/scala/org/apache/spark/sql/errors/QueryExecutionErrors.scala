@@ -27,7 +27,6 @@ import com.fasterxml.jackson.core.JsonToken
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.codehaus.commons.compiler.CompileException
 import org.codehaus.janino.InternalCompilerException
-
 import org.apache.spark.{Partition, SparkException, SparkUpgradeException}
 import org.apache.spark.executor.CommitDeniedException
 import org.apache.spark.memory.SparkOutOfMemoryError
@@ -41,7 +40,7 @@ import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{DataType, Decimal, StructType}
+import org.apache.spark.sql.types.{DataType, Decimal, StructType, UserDefinedType}
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -938,5 +937,53 @@ object QueryExecutionErrors {
          |This could happen if $tpe is an interface, or a trait without companion object
          |constructor.
        """.stripMargin.replaceAll("\n", " "))
+  }
+
+  def paramExceedOneCharError(paramName: String): Throwable = {
+    new RuntimeException(s"$paramName cannot be more than one character")
+  }
+
+  def paramIsNotIntegerError(paramName: String, value: String): Throwable = {
+    new RuntimeException(s"$paramName should be an integer. Found $value")
+  }
+
+  def paramIsNotBooleanValueError(paramName: String): Throwable = {
+    new Exception(s"$paramName flag can be true or false")
+  }
+
+  def notNullableFieldNotAcceptNullValueError(name: String): Throwable = {
+    new RuntimeException(s"null value found but field $name is not nullable.")
+  }
+
+  def malformedCSVRecordError(): Throwable = {
+    new RuntimeException("Malformed CSV record")
+  }
+
+  def elementsOfTupleExceedLimitError(): Throwable = {
+    new UnsupportedOperationException("Due to Scala's limited support of tuple, " +
+      "tuple with more than 22 elements are not supported.")
+  }
+
+  def expressionDecodingError(e: Exception, expressions: Seq[Expression]): Throwable = {
+    new RuntimeException(s"Error while decoding: $e\n" +
+      s"${expressions.map(_.simpleString(SQLConf.get.maxToStringFields)).mkString("\n")}", e)
+  }
+
+  def expressionEncodingError(e: Exception, expressions: Seq[Expression]): Throwable = {
+    new RuntimeException(s"Error while encoding: $e\n" +
+      s"${expressions.map(_.simpleString(SQLConf.get.maxToStringFields)).mkString("\n")}", e)
+  }
+
+  def classHasUnexpectedSerializerError(clsName: String, objSerializer: Expression): Throwable = {
+    new RuntimeException(s"class $clsName has unexpected serializer: $objSerializer")
+  }
+
+  def cannotGetOuterPointerForInnerClassError(innerCls: Class[_]): Throwable = {
+    new RuntimeException(s"Failed to get outer pointer for ${innerCls.getName}")
+  }
+
+  def userDefinedTypeIsNotAnnotatedAndRegisteredError(udt: UserDefinedType[_]): Throwable = {
+    new SparkException(s"${udt.userClass.getName} is not annotated with " +
+      "SQLUserDefinedType nor registered with UDTRegistration.}")
   }
 }

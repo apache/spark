@@ -1458,4 +1458,16 @@ private[spark] object QueryCompilationErrors {
     new AnalysisException(
       s"The second argument of '$function' function needs to be an integer.", cause = Some(e))
   }
+
+  def nonPartitionPruningPredicatesNotExpectedError(
+      nonPartitionPruningPredicates: Seq[Expression]): Throwable = {
+    new AnalysisException(
+      s"Expected only partition pruning predicates: $nonPartitionPruningPredicates")
+  }
+
+  def columnNotDefinedInTableError(
+      colType: String, colName: String, tableName: String, tableCols: Seq[String]): Throwable = {
+    new AnalysisException(s"$colType column $colName is not defined in table $tableName, " +
+      s"defined table columns are: ${tableCols.mkString(", ")}")
+  }
 }
