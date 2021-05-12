@@ -45,7 +45,7 @@ NULL
 -- !query
 SELECT try_divide(1, 0.5)
 -- !query schema
-struct<try_divide((1 / 0.5)):decimal(8,6)>
+struct<try_divide(1, 0.5):decimal(8,6)>
 -- !query output
 2.000000
 

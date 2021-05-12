@@ -20,13 +20,12 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.types.{AbstractDataType, DataType}
+import org.apache.spark.sql.types.DataType
 
-private[catalyst] abstract class TryEval extends Expression with NullIntolerant {
-  protected def internalExpression: Expression
-
+private[catalyst] case class TryEval(child: Expression)
+    extends UnaryExpression with NullIntolerant {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val childGen = internalExpression.genCode(ctx)
+    val childGen = child.genCode(ctx)
     ev.copy(code = code"""
       boolean ${ev.isNull} = true;
       ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
@@ -41,17 +40,18 @@ private[catalyst] abstract class TryEval extends Expression with NullIntolerant 
 
   override def eval(input: InternalRow): Any =
     try {
-      internalExpression.eval(input)
+      child.eval(input)
     } catch {
       case _: Exception =>
         null
     }
 
-  override def dataType: DataType = internalExpression.dataType
+  override def dataType: DataType = child.dataType
 
   override def nullable: Boolean = true
 
-  override def children: Seq[Expression] = internalExpression.children
+  override protected def withNewChildInternal(newChild: Expression): Expression =
+    copy(child = newChild)
 }
 
 @ExpressionDescription(
@@ -63,20 +63,20 @@ private[catalyst] abstract class TryEval extends Expression with NullIntolerant 
   """,
   since = "3.2.0",
   group = "math_funcs")
-case class TryAdd(left: Expression, right: Expression) extends TryEval with ImplicitCastInputTypes {
+case class TryAdd(left: Expression, right: Expression, child: Expression)
+    extends RuntimeReplaceable {
+  def this(left: Expression, right: Expression) =
+    this(left, right, TryEval(Add(left, right, failOnError = true)))
 
-  protected override def internalExpression: Expression =
-    Add(left: Expression, right: Expression, failOnError = true)
+  override def flatArguments: Iterator[Any] = Iterator(left, right)
+
+  override def exprsReplaced: Seq[Expression] = Seq(left, right)
 
   override def prettyName: String = "try_add"
 
-  override def inputTypes: Seq[AbstractDataType] =
-    internalExpression.asInstanceOf[ExpectsInputTypes].inputTypes
-
-  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
-    copy(left = newChildren(0), right = newChildren(1))
+  override protected def withNewChildInternal(newChild: Expression): Expression =
+    this.copy(child = newChild)
 }
-
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
@@ -91,17 +91,17 @@ case class TryAdd(left: Expression, right: Expression) extends TryEval with Impl
   since = "3.2.0",
   group = "math_funcs")
 // scalastyle:on line.size.limit
-case class TryDivide(left: Expression, right: Expression)
-  extends TryEval with ImplicitCastInputTypes {
+case class TryDivide(left: Expression, right: Expression, child: Expression)
+    extends RuntimeReplaceable {
+  def this(left: Expression, right: Expression) =
+    this(left, right, TryEval(Divide(left, right, failOnError = true)))
 
-  protected override def internalExpression: Expression =
-    Divide(left, right, failOnError = true)
+  override def flatArguments: Iterator[Any] = Iterator(left, right)
+
+  override def exprsReplaced: Seq[Expression] = Seq(left, right)
 
   override def prettyName: String = "try_divide"
 
-  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
-    copy(left = newChildren(0), right = newChildren(1))
-
-  override def inputTypes: Seq[AbstractDataType] =
-    internalExpression.asInstanceOf[ExpectsInputTypes].inputTypes
+  override protected def withNewChildInternal(newChild: Expression): Expression =
+    this.copy(child = newChild)
 }

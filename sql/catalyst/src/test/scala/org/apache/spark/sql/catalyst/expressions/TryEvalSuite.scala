@@ -18,7 +18,6 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FUNC_ALIAS
 
 class TryEvalSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("try_add") {
@@ -29,11 +28,8 @@ class TryEvalSuite extends SparkFunSuite with ExpressionEvalHelper {
     ).foreach { case (a, b, expected) =>
       val left = Literal(a)
       val right = Literal(b)
-      val input = TryAdd(left, right)
+      val input = TryEval(Add(left, right, failOnError = true))
       checkEvaluation(input, expected)
-      input.setTagValue(FUNC_ALIAS, "try_add")
-      assert(input.toString == s"try_add(${left.toString}, ${right.toString})")
-      assert(input.sql == s"try_add(${left.sql}, ${right.sql})")
     }
   }
 
@@ -45,11 +41,8 @@ class TryEvalSuite extends SparkFunSuite with ExpressionEvalHelper {
     ).foreach { case (a, b, expected) =>
       val left = Literal(a)
       val right = Literal(b)
-      val input = TryDivide(left, right)
+      val input = TryEval(Divide(left, right, failOnError = true))
       checkEvaluation(input, expected)
-      input.setTagValue(FUNC_ALIAS, "try_divide")
-      assert(input.toString == s"try_divide(${left.toString}, ${right.toString})")
-      assert(input.sql == s"try_divide(${left.sql}, ${right.sql})")
     }
   }
 }
