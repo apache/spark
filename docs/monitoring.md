@@ -1189,7 +1189,20 @@ This is the component with the largest amount of instrumented metrics
     `spark.metrics.executorMetricsSource.enabled` (default is true) 
   - This source contains memory-related metrics. A full list of available metrics in this 
     namespace can be found in the corresponding entry for the Executor component instance.
- 
+
+- namespace=ExecutorAllocationManager
+  - **note:** these metrics are only emitted when using dynamic allocation. Conditional to a configuration
+    parameter `spark.dynamicAllocation.enabled` (default is false)
+  - executors.numberExecutorsToAdd  
+  - executors.numberExecutorsPendingToRemove
+  - executors.numberAllExecutors
+  - executors.numberTargetExecutors
+  - executors.numberMaxNeededExecutors
+  - executors.numberExecutorsGracefullyDecommissioned.count
+  - executors.numberExecutorsDecommissionUnfinished.count
+  - executors.numberExecutorsExitedUnexpectedly.count
+  - executors.numberExecutorsKilledByDriver.count
+
 - namespace=plugin.\<Plugin Class Name>
   - Optional namespace(s). Metrics in this namespace are defined by user-supplied code, and
   configured using the Spark plugin API. See "Advanced Instrumentation" below for how to load
