@@ -1239,7 +1239,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     }
   }
 
-  test("SPARK-XXX: Fill missing S3A magic committer configs if needed") {
+  test("SPARK-35383: Fill missing S3A magic committer configs if needed") {
     val c1 = new SparkConf().setAppName("s3a-test").setMaster("local")
     sc = new SparkContext(c1)
     assertFalse(sc.getConf.contains("spark.hadoop.fs.s3a.committer.name"))
