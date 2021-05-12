@@ -74,9 +74,6 @@ import org.apache.spark.annotation.{DeveloperApi, Experimental, Since, Unstable}
  * @see [[java.util.ServiceLoader]]
  *
  * @since 3.2.0
- *
- * @note We make NO guarantee about the stability regarding binary compatibility and source compatibility of methods here.
- *       It's experimental and intended for developers
  */
 @DeveloperApi
 @Experimental

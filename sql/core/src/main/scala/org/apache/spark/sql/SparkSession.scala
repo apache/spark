@@ -1206,7 +1206,7 @@ object SparkSession extends Logging {
   }
 
   /**
-   * Load extensions from [[ServiceLoader]] and active them
+   * Load extensions from [[ServiceLoader]] and use them
    */
   private def loadExtensions(extensions: SparkSessionExtensions): Unit = {
     val loader = ServiceLoader.load(classOf[SparkSessionExtensionsProvider],
@@ -1218,7 +1218,7 @@ object SparkSession extends Logging {
         val ext = loadedExts.next()
         ext(extensions)
       } catch {
-        case e: Throwable => logWarning("Failed to loader session extension", e)
+        case e: Throwable => logWarning("Failed to load session extension", e)
       }
     }
   }
