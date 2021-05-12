@@ -614,7 +614,7 @@ class DatetimeIndex(Index):
         Parameters
         ----------
         date_format : str
-            Date format string (e.g. "%%Y-%%m-%%d").
+            Date format string (example: "%%Y-%%m-%%d").
 
         Returns
         -------
@@ -646,7 +646,7 @@ class DatetimeIndex(Index):
     ) -> Index:
         """
         Return index locations of values between particular times of day
-        (e.g., 9:00-9:30AM).
+        (example: 9:00-9:30AM).
 
         Parameters
         ----------
@@ -694,7 +694,7 @@ class DatetimeIndex(Index):
     def indexer_at_time(self, time: Union[datetime.time, str], asof: bool = False) -> Index:
         """
         Return index locations of values at particular time of day
-        (e.g. 9:30AM).
+        (example: 9:30AM).
 
         Parameters
         ----------
