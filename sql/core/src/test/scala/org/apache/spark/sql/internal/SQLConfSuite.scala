@@ -475,4 +475,12 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
          |${nonInternalLegacyConfigs.map(_._1).mkString("\n")}
          |""".stripMargin)
   }
+
+  test("SPARK-35376: Fallback config should override defaultValue") {
+    assert(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.defaultValue.isDefined)
+    assert(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.defaultValue ===
+      SQLConf.SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE.defaultValue)
+    assert(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.defaultValueString ===
+      SQLConf.SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE.defaultValueString)
+  }
 }

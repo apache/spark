@@ -264,7 +264,9 @@ private[spark] class FallbackConfigEntry[T] (
     version
   ) {
 
-  override def defaultValueString: String = s"<value of ${fallback.key}>"
+  override def defaultValue: Option[T] = fallback.defaultValue
+
+  override def defaultValueString: String = fallback.defaultValueString
 
   override def readFrom(reader: ConfigReader): T = {
     readString(reader).map(valueConverter).getOrElse(fallback.readFrom(reader))
