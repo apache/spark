@@ -2161,7 +2161,7 @@ test_that("higher order functions", {
   expect_error(array_transform("xs", function(...) 42))
 })
 
-test("SPARK-34794: lambda variables must be resolved properly in nested higher order functions", {
+test_that("SPARK-34794: lambda vars must be resolved properly in nested higher order functions", {
   df <- sql("SELECT array(1, 2, 3) as numbers, array('a', 'b', 'c') as letters")
   ret <- first(select(
     df,
