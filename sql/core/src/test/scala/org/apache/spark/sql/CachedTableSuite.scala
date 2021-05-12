@@ -1188,7 +1188,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
     }
   }
 
-  test("cache supports for YearMonthIntervalType and DayTimeIntervalType") {
+  test("SPARK-35243: cache supports for YearMonthIntervalType and DayTimeIntervalType") {
     withTempView("ymi_dti_interval_cache") {
       Seq((1, Period.ofYears(1), Duration.ofDays(1)),
         (2, Period.ofYears(2), Duration.ofDays(2)))
