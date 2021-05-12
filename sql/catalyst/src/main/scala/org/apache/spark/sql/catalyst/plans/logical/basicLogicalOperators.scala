@@ -767,7 +767,7 @@ case class Range(
       } else {
         (start + (numElements - 1) * step, start)
       }
-      var colStat = ColumnStat(
+      val colStat = ColumnStat(
         distinctCount = Some(numElements),
         max = Some(maxVal),
         min = Some(minVal),
@@ -775,7 +775,7 @@ case class Range(
         avgLen = Some(LongType.defaultSize),
         maxLen = Some(LongType.defaultSize))
 
-      if (conf.histogramEnabled) {
+      val colStatWithHistogram = if (conf.histogramEnabled) {
         val numBins = conf.histogramNumBins
         val height = numElements.toDouble / numBins
         val percentileArray = (0 to numBins).map(i => i * height).toArray
@@ -793,13 +793,15 @@ case class Range(
           lowerIndex = upperIndex
           binId = binId + 1
         }
-        colStat = colStat.copy(histogram = Some(Histogram(height, binArray)))
+        colStat.copy(histogram = Some(Histogram(height, binArray)))
+      } else {
+        colStat
       }
 
       Statistics(
         sizeInBytes = LongType.defaultSize * numElements,
         rowCount = Some(numElements),
-        attributeStats = AttributeMap(Seq(output.head -> colStat)))
+        attributeStats = AttributeMap(Seq(output.head -> colStatWithHistogram)))
     }
   }
 
