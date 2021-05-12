@@ -30,13 +30,14 @@ case class ApplyFunctionExpression(
   override def dataType: DataType = function.resultType()
 
   private lazy val reusedRow = new GenericInternalRow(children.size)
-  private lazy val childrenWithIndex = children.zipWithIndex
 
   /** Returns the result of evaluating this expression on a given input Row */
   override def eval(input: InternalRow): Any = {
-    childrenWithIndex.foreach {
-      case (expr, pos) =>
-        reusedRow.update(pos, expr.eval(input))
+    var i = 0
+    while (i < children.length) {
+      val expr = children(i)
+      reusedRow.update(i, expr.eval(input))
+      i += 1
     }
 
     function.produceResult(reusedRow)
