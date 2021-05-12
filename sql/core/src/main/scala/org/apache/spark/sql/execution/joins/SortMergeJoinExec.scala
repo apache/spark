@@ -483,7 +483,8 @@ case class SortMergeJoinExec(
     // The function has the following step:
     //  - Step 1: Find the next `streamedRow` with non-null join keys.
     //            For `streamedRow` with null join keys (`handleStreamedAnyNull`):
-    //            1. Inner join: skip the row.
+    //            1. Inner join: skip the row. `matches` will be cleared later when hitting the
+    //                           next `streamedRow` with non-null join keys.
     //            2. Left/Right Outer join: clear the previous `matches` if needed, keep the row,
     //                                      and return false.
     //
@@ -699,21 +700,21 @@ case class SortMergeJoinExec(
      """.stripMargin
 
     lazy val outerJoin = {
-      val foundMatch = ctx.freshName("foundMatch")
+      val hasOutputRow = ctx.freshName("hasOutputRow")
       s"""
          |while ($streamedInput.hasNext()) {
          |  findNextJoinRows($streamedInput, $bufferedInput);
          |  ${streamedVarDecl.mkString("\n")}
          |  ${beforeLoop.trim}
          |  scala.collection.Iterator<UnsafeRow> $iterator = $matches.generateIterator();
-         |  boolean $foundMatch = false;
+         |  boolean $hasOutputRow = false;
          |
          |  // the last iteration of this loop is to emit an empty row if there is no matched rows.
-         |  while ($iterator.hasNext() || !$foundMatch) {
+         |  while ($iterator.hasNext() || !$hasOutputRow) {
          |    InternalRow $bufferedRow = $iterator.hasNext() ?
          |      (InternalRow) $iterator.next() : null;
          |    ${condCheck.trim}
-         |    $foundMatch = true;
+         |    $hasOutputRow = true;
          |    $numOutput.add(1);
          |    ${consume(ctx, resultVars)}
          |  }
