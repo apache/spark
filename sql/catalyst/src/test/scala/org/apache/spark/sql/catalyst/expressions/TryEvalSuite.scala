@@ -29,7 +29,7 @@ class TryEvalSuite extends SparkFunSuite with ExpressionEvalHelper {
     ).foreach { case (a, b, expected) =>
       val left = Literal(a)
       val right = Literal(b)
-      val input = TryEval(Add(left, right).asAnsi)
+      val input = TryAdd(left, right)
       checkEvaluation(input, expected)
       input.setTagValue(FUNC_ALIAS, "try_add")
       assert(input.toString == s"try_add(${left.toString}, ${right.toString})")
@@ -45,7 +45,7 @@ class TryEvalSuite extends SparkFunSuite with ExpressionEvalHelper {
     ).foreach { case (a, b, expected) =>
       val left = Literal(a)
       val right = Literal(b)
-      val input = TryEval(Divide(Literal(a), Literal(b)).asAnsi)
+      val input = TryDivide(left, right)
       checkEvaluation(input, expected)
       input.setTagValue(FUNC_ALIAS, "try_divide")
       assert(input.toString == s"try_divide(${left.toString}, ${right.toString})")

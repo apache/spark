@@ -320,8 +320,8 @@ object FunctionRegistry {
     expression[Stack]("stack"),
     expression[CaseWhen]("when"),
 
-    try_expression[Add]("try_add"),
-    try_expression[Divide]("try_divide"),
+    expression[TryAdd]("try_add"),
+    expression[TryDivide]("try_divide"),
     // math functions
     expression[Acos]("acos"),
     expression[Acosh]("acosh"),
@@ -698,25 +698,6 @@ object FunctionRegistry {
       val expr = builder(expressions)
       if (setAlias) expr.setTagValue(FUNC_ALIAS, name)
       expr
-    }
-    (name, (expressionInfo, newBuilder))
-  }
-
-  private def try_expression[T <: Expression : ClassTag](name: String)
-      : (String, (ExpressionInfo, FunctionBuilder)) = {
-    val (expressionInfo, builder) = FunctionRegistryBase.build[T](name)
-    val newBuilder = (expressions: Seq[Expression]) => {
-      val expr = builder(expressions)
-      expr match {
-        case a: AsAnsi =>
-          val result = TryEval(a.asAnsi)
-          result.setTagValue(FUNC_ALIAS, name)
-          result
-
-        case _ =>
-          throw new UnsupportedOperationException(
-            s"${expressionInfo.getClassName} should extend the trait `AsAnsi`")
-      }
     }
     (name, (expressionInfo, newBuilder))
   }

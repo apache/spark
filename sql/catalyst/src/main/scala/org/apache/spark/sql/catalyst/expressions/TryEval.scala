@@ -18,14 +18,15 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FUNC_ALIAS
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.types.{AbstractDataType, DataType}
 
-private[catalyst] case class TryEval(child: Expression) extends UnaryExpression {
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val childGen = child.genCode(ctx)
+private[catalyst] abstract class TryEval extends Expression with NullIntolerant {
+  protected def internalExpression: Expression
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val childGen = internalExpression.genCode(ctx)
     ev.copy(code = code"""
       boolean ${ev.isNull} = true;
       ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
@@ -40,28 +41,67 @@ private[catalyst] case class TryEval(child: Expression) extends UnaryExpression 
 
   override def eval(input: InternalRow): Any =
     try {
-      child.eval(input)
+      internalExpression.eval(input)
     } catch {
       case _: Exception =>
         null
     }
 
-  override def dataType: DataType = child.dataType
+  override def dataType: DataType = internalExpression.dataType
 
   override def nullable: Boolean = true
 
-  override protected def withNewChildInternal(newChild: Expression): Expression =
-    copy(child = newChild)
+  override def children: Seq[Expression] = internalExpression.children
+}
 
-  private def functionName: String = getTagValue(FUNC_ALIAS).getOrElse("try_eval")
+@ExpressionDescription(
+  usage = "_FUNC_(expr1, expr2) - Returns `expr1`+`expr2` and the result is null on overflow.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(1, 2);
+       3
+  """,
+  since = "3.2.0",
+  group = "math_funcs")
+case class TryAdd(left: Expression, right: Expression) extends TryEval with ImplicitCastInputTypes {
 
-  override def sql: String = {
-    val childrenSQL = child.children.map(_.sql).mkString(", ")
-    s"$functionName($childrenSQL)"
-  }
+  protected override def internalExpression: Expression =
+    Add(left: Expression, right: Expression, failOnError = true)
 
-  override def toString: String = {
-    val childrenString = child.children.map(_.toString).mkString(", ")
-    s"$functionName($childrenString)"
-  }
+  override def prettyName: String = "try_add"
+
+  override def inputTypes: Seq[AbstractDataType] =
+    internalExpression.asInstanceOf[ExpectsInputTypes].inputTypes
+
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
+    copy(left = newChildren(0), right = newChildren(1))
+}
+
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(expr1, expr2) - Returns `expr1`/`expr2`. It always performs floating point division.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(3, 2);
+       1.5
+      > SELECT _FUNC_(2L, 2L);
+       1.0
+  """,
+  since = "3.2.0",
+  group = "math_funcs")
+// scalastyle:on line.size.limit
+case class TryDivide(left: Expression, right: Expression)
+  extends TryEval with ImplicitCastInputTypes {
+
+  protected override def internalExpression: Expression =
+    Divide(left, right, failOnError = true)
+
+  override def prettyName: String = "try_divide"
+
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
+    copy(left = newChildren(0), right = newChildren(1))
+
+  override def inputTypes: Seq[AbstractDataType] =
+    internalExpression.asInstanceOf[ExpectsInputTypes].inputTypes
 }
