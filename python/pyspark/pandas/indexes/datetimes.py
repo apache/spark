@@ -663,33 +663,33 @@ class DatetimeIndex(Index):
 
         Examples
         --------
-        >>> kidx = ps.date_range("2000-01-01", periods=3, freq="T")
-        >>> kidx  # doctest: +NORMALIZE_WHITESPACE
+        >>> psidx = ps.date_range("2000-01-01", periods=3, freq="T")
+        >>> psidx  # doctest: +NORMALIZE_WHITESPACE
         DatetimeIndex(['2000-01-01 00:00:00', '2000-01-01 00:01:00',
                        '2000-01-01 00:02:00'],
                       dtype='datetime64[ns]', freq=None)
 
-        >>> kidx.indexer_between_time("00:01", "00:02").sort_values()
+        >>> psidx.indexer_between_time("00:01", "00:02").sort_values()
         Int64Index([1, 2], dtype='int64')
 
-        >>> kidx.indexer_between_time("00:01", "00:02", include_end=False)
+        >>> psidx.indexer_between_time("00:01", "00:02", include_end=False)
         Int64Index([1], dtype='int64')
 
-        >>> kidx.indexer_between_time("00:01", "00:02", include_start=False)
+        >>> psidx.indexer_between_time("00:01", "00:02", include_start=False)
         Int64Index([2], dtype='int64')
         """
 
         def pandas_between_time(pdf) -> ps.DataFrame[int]:
             return pdf.between_time(start_time, end_time, include_start, include_end)
 
-        kdf = self.to_frame()[[]]
-        id_column_name = verify_temp_column_name(kdf, "__id_column__")
-        kdf = kdf.koalas.attach_id_column("distributed-sequence", id_column_name)
+        psdf = self.to_frame()[[]]
+        id_column_name = verify_temp_column_name(psdf, "__id_column__")
+        psdf = psdf.koalas.attach_id_column("distributed-sequence", id_column_name)
         with ps.option_context("compute.default_index_type", "distributed"):
             # The attached index in the statement below will be dropped soon,
             # so we enforce “distributed” default index type
-            kdf = kdf.koalas.apply_batch(pandas_between_time)
-        return ps.Index(first_series(kdf).rename(self.name))
+            psdf = psdf.koalas.apply_batch(pandas_between_time)
+        return ps.Index(first_series(psdf).rename(self.name))
 
     def indexer_at_time(self, time: Union[datetime.time, str], asof: bool = False) -> Index:
         """
@@ -709,16 +709,16 @@ class DatetimeIndex(Index):
 
         Examples
         --------
-        >>> kidx = ps.date_range("2000-01-01", periods=3, freq="T")
-        >>> kidx  # doctest: +NORMALIZE_WHITESPACE
+        >>> psidx = ps.date_range("2000-01-01", periods=3, freq="T")
+        >>> psidx  # doctest: +NORMALIZE_WHITESPACE
         DatetimeIndex(['2000-01-01 00:00:00', '2000-01-01 00:01:00',
                        '2000-01-01 00:02:00'],
                       dtype='datetime64[ns]', freq=None)
 
-        >>> kidx.indexer_at_time("00:00")
+        >>> psidx.indexer_at_time("00:00")
         Int64Index([0], dtype='int64')
 
-        >>> kidx.indexer_at_time("00:01")
+        >>> psidx.indexer_at_time("00:01")
         Int64Index([1], dtype='int64')
         """
         if asof:
@@ -727,14 +727,14 @@ class DatetimeIndex(Index):
         def pandas_at_time(pdf) -> ps.DataFrame[int]:
             return pdf.at_time(time, asof)
 
-        kdf = self.to_frame()[[]]
-        id_column_name = verify_temp_column_name(kdf, "__id_column__")
-        kdf = kdf.koalas.attach_id_column("distributed-sequence", id_column_name)
+        psdf = self.to_frame()[[]]
+        id_column_name = verify_temp_column_name(psdf, "__id_column__")
+        psdf = psdf.koalas.attach_id_column("distributed-sequence", id_column_name)
         with ps.option_context("compute.default_index_type", "distributed"):
             # The attached index in the statement below will be dropped soon,
             # so we enforce “distributed” default index type
-            kdf = kdf.koalas.apply_batch(pandas_at_time)
-        return ps.Index(first_series(kdf).rename(self.name))
+            psdf = psdf.koalas.apply_batch(pandas_at_time)
+        return ps.Index(first_series(psdf).rename(self.name))
 
 
 def disallow_nanoseconds(freq):
