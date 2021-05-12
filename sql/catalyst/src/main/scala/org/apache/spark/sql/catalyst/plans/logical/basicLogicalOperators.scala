@@ -774,42 +774,45 @@ case class Range(
       } else {
         (start + (numElements - 1) * step, start)
       }
+
+      val histogram = getHistogramStatistics
+
       val colStat = ColumnStat(
         distinctCount = Some(numElements),
         max = Some(maxVal),
         min = Some(minVal),
         nullCount = Some(0),
         avgLen = Some(LongType.defaultSize),
-        maxLen = Some(LongType.defaultSize))
-
-      val colStatsWithHistogram = if (conf.histogramEnabled) {
-        val numBins = conf.histogramNumBins
-        val height = numElements.toDouble / numBins
-        val percentileArray = (0 to numBins).map(i => i * height).toArray
-
-        var binId = 0
-        val binArray = new Array[HistogramBin](numBins)
-        var lowerIndex = percentileArray(0)
-        var lowerBinValue = getRangeValue(0)
-        while (binId < numBins) {
-          val upperIndex = percentileArray(binId + 1)
-          val upperBinValue = getRangeValue(math.max(math.ceil(upperIndex).toInt - 1, 0))
-          val ndv = math.max(math.ceil(upperIndex).toInt - math.ceil(lowerIndex).toInt, 1)
-          binArray(binId) = HistogramBin(lowerBinValue, upperBinValue, ndv)
-          lowerBinValue = upperBinValue
-          lowerIndex = upperIndex
-          binId = binId + 1
-        }
-        colStat.copy(histogram = Some(Histogram(height, binArray)))
-      } else {
-        colStat
-      }
+        maxLen = Some(LongType.defaultSize),
+        histogram = histogram)
 
       Statistics(
         sizeInBytes = LongType.defaultSize * numElements,
         rowCount = Some(numElements),
-        attributeStats = AttributeMap(Seq(output.head -> colStatsWithHistogram)))
+        attributeStats = AttributeMap(Seq(output.head -> colStat)))
     }
+  }
+
+  private def getHistogramStatistics = {
+    val numBins = conf.histogramNumBins
+    val height = numElements.toDouble / numBins
+    val percentileArray = (0 to numBins).map(i => i * height).toArray
+
+    var binId = 0
+    val binArray = new Array[HistogramBin](numBins)
+    var lowerIndex = percentileArray(0)
+    var lowerBinValue = getRangeValue(0)
+    while (binId < numBins) {
+      val upperIndex = percentileArray(binId + 1)
+      val upperBinValue = getRangeValue(math.max(math.ceil(upperIndex).toInt - 1, 0))
+      val ndv = math.max(math.ceil(upperIndex).toInt - math.ceil(lowerIndex).toInt, 1)
+      binArray(binId) = HistogramBin(lowerBinValue, upperBinValue, ndv)
+      lowerBinValue = upperBinValue
+      lowerIndex = upperIndex
+      binId = binId + 1
+    }
+    val hist = Some(Histogram(height, binArray))
+    hist
   }
 
   // Utility method to compute histogram

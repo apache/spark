@@ -65,8 +65,10 @@ class BasicStatsEstimationSuite extends PlanTest with StatsEstimationTestBase {
                 maxLen = Some(LongType.defaultSize),
                 avgLen = Some(LongType.defaultSize),
                 histogram = histogram)))))
+    val extraConfig = Map(SQLConf.HISTOGRAM_ENABLED.key -> "true",
+      SQLConf.HISTOGRAM_NUM_BINS.key -> "3")
     checkStats(range, expectedStatsCboOn = rangeStats,
-      expectedStatsCboOff = rangeStats, checkHistogram = true)
+      expectedStatsCboOff = rangeStats, extraConfig)
   }
 
   test("range with positive step where end minus start not divisible by step") {
@@ -92,8 +94,10 @@ class BasicStatsEstimationSuite extends PlanTest with StatsEstimationTestBase {
                 maxLen = Some(LongType.defaultSize),
                 avgLen = Some(LongType.defaultSize),
                 histogram = histogram)))))
+    val extraConfig = Map(SQLConf.HISTOGRAM_ENABLED.key -> "true",
+      SQLConf.HISTOGRAM_NUM_BINS.key -> "3")
     checkStats(range, expectedStatsCboOn = rangeStats,
-      expectedStatsCboOff = rangeStats, checkHistogram = true)
+      expectedStatsCboOff = rangeStats, extraConfig)
   }
 
   test("range with negative step") {
@@ -119,8 +123,10 @@ class BasicStatsEstimationSuite extends PlanTest with StatsEstimationTestBase {
                 maxLen = Some(LongType.defaultSize),
                 avgLen = Some(LongType.defaultSize),
                 histogram = histogram)))))
+    val extraConfig = Map(SQLConf.HISTOGRAM_ENABLED.key -> "true",
+      SQLConf.HISTOGRAM_NUM_BINS.key -> "3")
     checkStats(range, expectedStatsCboOn = rangeStats,
-      expectedStatsCboOff = rangeStats, checkHistogram = true)
+      expectedStatsCboOff = rangeStats, extraConfig)
   }
 
   test("range with negative step where end minus start not divisible by step") {
@@ -149,15 +155,19 @@ class BasicStatsEstimationSuite extends PlanTest with StatsEstimationTestBase {
                 maxLen = Some(LongType.defaultSize),
                 avgLen = Some(LongType.defaultSize),
                 histogram = histogram)))))
+    val extraConfig = Map(SQLConf.HISTOGRAM_ENABLED.key -> "true",
+      SQLConf.HISTOGRAM_NUM_BINS.key -> "3")
     checkStats(range, expectedStatsCboOn = rangeStats,
-      expectedStatsCboOff = rangeStats, checkHistogram = true)
+      expectedStatsCboOff = rangeStats, extraConfig)
   }
 
   test("range with empty output") {
       val range = Range(-10, -10, -1, None)
       val rangeStats = Statistics(sizeInBytes = 0, rowCount = Some(0))
+    val extraConfig = Map(SQLConf.HISTOGRAM_ENABLED.key -> "true",
+      SQLConf.HISTOGRAM_NUM_BINS.key -> "3")
       checkStats(range, expectedStatsCboOn = rangeStats,
-        expectedStatsCboOff = rangeStats, checkHistogram = true)
+        expectedStatsCboOff = rangeStats, extraConfig)
   }
 
   test("windows") {
@@ -317,18 +327,16 @@ class BasicStatsEstimationSuite extends PlanTest with StatsEstimationTestBase {
       plan: LogicalPlan,
       expectedStatsCboOn: Statistics,
       expectedStatsCboOff: Statistics,
-      checkHistogram: Boolean = false): Unit = {
-    withSQLConf(SQLConf.CBO_ENABLED.key -> "true",
-      SQLConf.HISTOGRAM_ENABLED.key -> checkHistogram.toString,
-      SQLConf.HISTOGRAM_NUM_BINS.key -> "3") {
+      extraConfigs: Map[String, String] = Map.empty): Unit = {
+
+    val cboEnabledConfig = Seq(SQLConf.CBO_ENABLED.key -> "true") ++ extraConfigs.toSeq
+    withSQLConf(cboEnabledConfig: _*) {
       // Invalidate statistics
       plan.invalidateStatsCache()
       assert(plan.stats == expectedStatsCboOn)
     }
-
-    withSQLConf(SQLConf.CBO_ENABLED.key -> "false",
-      SQLConf.HISTOGRAM_ENABLED.key -> checkHistogram.toString,
-      SQLConf.HISTOGRAM_NUM_BINS.key -> "3") {
+    val cboDisabledConfig = Seq(SQLConf.CBO_ENABLED.key -> "false") ++ extraConfigs.toSeq
+    withSQLConf(cboDisabledConfig: _*) {
       plan.invalidateStatsCache()
       assert(plan.stats == expectedStatsCboOff)
     }
