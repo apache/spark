@@ -2352,8 +2352,8 @@ class Analyzer(override val catalogManager: CatalogManager)
       // Only a few unary nodes (Project/Filter/Aggregate) can contain subqueries.
       case q: UnaryNode if q.childrenResolved =>
         resolveSubQueries(q, q.children)
-      case j: Join if j.childrenResolved =>
-        resolveSubQueries(j, Seq(j, j.left, j.right))
+      case j: Join if j.childrenResolved && j.duplicateResolved =>
+        resolveSubQueries(j, j.children)
       case s: SupportsSubquery if s.childrenResolved =>
         resolveSubQueries(s, s.children)
     }

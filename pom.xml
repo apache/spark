@@ -172,7 +172,7 @@
     <fasterxml.jackson.version>2.12.2</fasterxml.jackson.version>
     <snappy.version>1.1.8.4</snappy.version>
     <netlib.java.version>1.1.2</netlib.java.version>
-    <netlib.ludovic.dev.version>1.3.2</netlib.ludovic.dev.version>
+    <netlib.ludovic.dev.version>2.2.0</netlib.ludovic.dev.version>
     <commons-codec.version>1.15</commons-codec.version>
     <commons-compress.version>1.20</commons-compress.version>
     <commons-io.version>2.8.0</commons-io.version>
@@ -184,7 +184,7 @@
     <commons-pool2.version>2.6.2</commons-pool2.version>
     <datanucleus-core.version>4.1.17</datanucleus-core.version>
     <guava.version>14.0.1</guava.version>
-    <janino.version>3.0.16</janino.version>
+    <janino.version>3.1.4</janino.version>
     <jersey.version>2.34</jersey.version>
     <joda.version>2.10.5</joda.version>
     <jodd.version>3.5.2</jodd.version>
@@ -3486,6 +3486,26 @@
         <maven.surefire.debug>${jdwp.arg.line}</maven.surefire.debug>
         <debugForkedProcess>${test.debug.suite}</debugForkedProcess>
       </properties>
+    </profile>
+
+    <!--
+      Deprecated: com.github.fommil.netlib has been replaced by dev.ludovic.netlib which
+      doesn't package or distribute any GPL/LGPL dependencies. There should now be hardware
+      acceleration out-of-the-box without enabling any additional profile.
+      However, we need to keep the dependency for now because the last release of
+      org.scalanlp:breeze still depends on `com.github.fommil.netlib`. It's been updated with
+      https://github.com/scalanlp/breeze/pull/811 but it hasn't been released yet.
+    -->
+    <profile>
+      <id>netlib-lgpl</id>
+      <dependencies>
+        <dependency>
+          <groupId>com.github.fommil.netlib</groupId>
+          <artifactId>all</artifactId>
+          <version>${netlib.java.version}</version>
+          <type>pom</type>
+        </dependency>
+      </dependencies>
     </profile>
   </profiles>
 </project>

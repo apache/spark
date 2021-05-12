@@ -12,7 +12,7 @@ TakeOrderedAndProject (133)
       :                    +- * HashAggregate (66)
       :                       +- Union (65)
       :                          :- * Project (26)
-      :                          :  +- SortMergeJoin LeftOuter (25)
+      :                          :  +- * SortMergeJoin LeftOuter (25)
       :                          :     :- * Sort (18)
       :                          :     :  +- Exchange (17)
       :                          :     :     +- * Project (16)
@@ -38,7 +38,7 @@ TakeOrderedAndProject (133)
       :                          :                 +- * ColumnarToRow (20)
       :                          :                    +- Scan parquet default.catalog_returns (19)
       :                          :- * Project (45)
-      :                          :  +- SortMergeJoin LeftOuter (44)
+      :                          :  +- * SortMergeJoin LeftOuter (44)
       :                          :     :- * Sort (37)
       :                          :     :  +- Exchange (36)
       :                          :     :     +- * Project (35)
@@ -57,7 +57,7 @@ TakeOrderedAndProject (133)
       :                          :                 +- * ColumnarToRow (39)
       :                          :                    +- Scan parquet default.store_returns (38)
       :                          +- * Project (64)
-      :                             +- SortMergeJoin LeftOuter (63)
+      :                             +- * SortMergeJoin LeftOuter (63)
       :                                :- * Sort (56)
       :                                :  +- Exchange (55)
       :                                :     +- * Project (54)
@@ -85,7 +85,7 @@ TakeOrderedAndProject (133)
                            +- * HashAggregate (123)
                               +- Union (122)
                                  :- * Project (91)
-                                 :  +- SortMergeJoin LeftOuter (90)
+                                 :  +- * SortMergeJoin LeftOuter (90)
                                  :     :- * Sort (87)
                                  :     :  +- Exchange (86)
                                  :     :     +- * Project (85)
@@ -103,7 +103,7 @@ TakeOrderedAndProject (133)
                                  :     +- * Sort (89)
                                  :        +- ReusedExchange (88)
                                  :- * Project (106)
-                                 :  +- SortMergeJoin LeftOuter (105)
+                                 :  +- * SortMergeJoin LeftOuter (105)
                                  :     :- * Sort (102)
                                  :     :  +- Exchange (101)
                                  :     :     +- * Project (100)
@@ -118,7 +118,7 @@ TakeOrderedAndProject (133)
                                  :     +- * Sort (104)
                                  :        +- ReusedExchange (103)
                                  +- * Project (121)
-                                    +- SortMergeJoin LeftOuter (120)
+                                    +- * SortMergeJoin LeftOuter (120)
                                        :- * Sort (117)
                                        :  +- Exchange (116)
                                        :     +- * Project (115)
@@ -241,7 +241,7 @@ Arguments: hashpartitioning(cr_order_number#19, cr_item_sk#18, 5), ENSURE_REQUIR
 Input [4]: [cr_item_sk#18, cr_order_number#19, cr_return_quantity#20, cr_return_amount#21]
 Arguments: [cr_order_number#19 ASC NULLS FIRST, cr_item_sk#18 ASC NULLS FIRST], false, 0
 
-(25) SortMergeJoin
+(25) SortMergeJoin [codegen id : 7]
 Left keys [2]: [cs_order_number#2, cs_item_sk#1]
 Right keys [2]: [cr_order_number#19, cr_item_sk#18]
 Join condition: None
@@ -323,7 +323,7 @@ Arguments: hashpartitioning(sr_ticket_number#40, sr_item_sk#39, 5), ENSURE_REQUI
 Input [4]: [sr_item_sk#39, sr_ticket_number#40, sr_return_quantity#41, sr_return_amt#42]
 Arguments: [sr_ticket_number#40 ASC NULLS FIRST, sr_item_sk#39 ASC NULLS FIRST], false, 0
 
-(44) SortMergeJoin
+(44) SortMergeJoin [codegen id : 14]
 Left keys [2]: [ss_ticket_number#27, ss_item_sk#26]
 Right keys [2]: [sr_ticket_number#40, sr_item_sk#39]
 Join condition: None
@@ -405,7 +405,7 @@ Arguments: hashpartitioning(wr_order_number#61, wr_item_sk#60, 5), ENSURE_REQUIR
 Input [4]: [wr_item_sk#60, wr_order_number#61, wr_return_quantity#62, wr_return_amt#63]
 Arguments: [wr_order_number#61 ASC NULLS FIRST, wr_item_sk#60 ASC NULLS FIRST], false, 0
 
-(63) SortMergeJoin
+(63) SortMergeJoin [codegen id : 21]
 Left keys [2]: [ws_order_number#48, ws_item_sk#47]
 Right keys [2]: [wr_order_number#61, wr_item_sk#60]
 Join condition: None
@@ -529,7 +529,7 @@ Output [4]: [cr_item_sk#94, cr_order_number#95, cr_return_quantity#96, cr_return
 Input [4]: [cr_item_sk#94, cr_order_number#95, cr_return_quantity#96, cr_return_amount#97]
 Arguments: [cr_order_number#95 ASC NULLS FIRST, cr_item_sk#94 ASC NULLS FIRST], false, 0
 
-(90) SortMergeJoin
+(90) SortMergeJoin [codegen id : 32]
 Left keys [2]: [cs_order_number#80, cs_item_sk#79]
 Right keys [2]: [cr_order_number#95, cr_item_sk#94]
 Join condition: None
@@ -592,7 +592,7 @@ Output [4]: [sr_item_sk#111, sr_ticket_number#112, sr_return_quantity#113, sr_re
 Input [4]: [sr_item_sk#111, sr_ticket_number#112, sr_return_quantity#113, sr_return_amt#114]
 Arguments: [sr_ticket_number#112 ASC NULLS FIRST, sr_item_sk#111 ASC NULLS FIRST], false, 0
 
-(105) SortMergeJoin
+(105) SortMergeJoin [codegen id : 39]
 Left keys [2]: [ss_ticket_number#99, ss_item_sk#98]
 Right keys [2]: [sr_ticket_number#112, sr_item_sk#111]
 Join condition: None
@@ -655,7 +655,7 @@ Output [4]: [wr_item_sk#128, wr_order_number#129, wr_return_quantity#130, wr_ret
 Input [4]: [wr_item_sk#128, wr_order_number#129, wr_return_quantity#130, wr_return_amt#131]
 Arguments: [wr_order_number#129 ASC NULLS FIRST, wr_item_sk#128 ASC NULLS FIRST], false, 0
 
-(120) SortMergeJoin
+(120) SortMergeJoin [codegen id : 46]
 Left keys [2]: [ws_order_number#116, ws_item_sk#115]
 Right keys [2]: [wr_order_number#129, wr_item_sk#128]
 Join condition: None
