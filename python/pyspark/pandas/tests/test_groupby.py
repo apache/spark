@@ -77,7 +77,9 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
                 sort(pdf.groupby("a", as_index=as_index)["c"].sum()),
             )
 
-        self.assert_eq(psdf.groupby("a").a.sum().sort_index(), pdf.groupby("a").a.sum().sort_index())
+        self.assert_eq(
+            psdf.groupby("a").a.sum().sort_index(), pdf.groupby("a").a.sum().sort_index()
+        )
         self.assert_eq(
             psdf.groupby("a")["a"].sum().sort_index(), pdf.groupby("a")["a"].sum().sort_index()
         )
@@ -759,7 +761,9 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
             pdf = pd.DataFrame(data)
             psdf = ps.from_pandas(pdf)
 
-            self.assertRaises(NotImplementedError, lambda: psdf.groupby("a").describe().sort_index())
+            self.assertRaises(
+                NotImplementedError, lambda: psdf.groupby("a").describe().sort_index()
+            )
 
         # multi-index columns
         pdf = pd.DataFrame({("x", "a"): [1, 1, 3], ("x", "b"): [4, 5, 6], ("y", "c"): [7, 8, 9]})
@@ -1036,10 +1040,12 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
             psdf.groupby("A")["B"].size().sort_index(), pdf.groupby("A")["B"].size().sort_index()
         )
         self.assert_eq(
-            psdf.groupby("A")[["B"]].size().sort_index(), pdf.groupby("A")[["B"]].size().sort_index()
+            psdf.groupby("A")[["B"]].size().sort_index(),
+            pdf.groupby("A")[["B"]].size().sort_index(),
         )
         self.assert_eq(
-            psdf.groupby(["A", "B"]).size().sort_index(), pdf.groupby(["A", "B"]).size().sort_index()
+            psdf.groupby(["A", "B"]).size().sort_index(),
+            pdf.groupby(["A", "B"]).size().sort_index(),
         )
 
         # multi-index columns
@@ -1048,7 +1054,8 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
         psdf.columns = columns
 
         self.assert_eq(
-            psdf.groupby(("X", "A")).size().sort_index(), pdf.groupby(("X", "A")).size().sort_index()
+            psdf.groupby(("X", "A")).size().sort_index(),
+            pdf.groupby(("X", "A")).size().sort_index(),
         )
         self.assert_eq(
             psdf.groupby([("X", "A"), ("Y", "B")]).size().sort_index(),
@@ -1067,17 +1074,20 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
 
         self.assert_eq(psdf.groupby("b").diff().sort_index(), pdf.groupby("b").diff().sort_index())
         self.assert_eq(
-            psdf.groupby(["a", "b"]).diff().sort_index(), pdf.groupby(["a", "b"]).diff().sort_index()
+            psdf.groupby(["a", "b"]).diff().sort_index(),
+            pdf.groupby(["a", "b"]).diff().sort_index(),
         )
         self.assert_eq(
-            psdf.groupby(["b"])["a"].diff().sort_index(), pdf.groupby(["b"])["a"].diff().sort_index()
+            psdf.groupby(["b"])["a"].diff().sort_index(),
+            pdf.groupby(["b"])["a"].diff().sort_index(),
         )
         self.assert_eq(
             psdf.groupby(["b"])[["a", "b"]].diff().sort_index(),
             pdf.groupby(["b"])[["a", "b"]].diff().sort_index(),
         )
         self.assert_eq(
-            psdf.groupby(psdf.b // 5).diff().sort_index(), pdf.groupby(pdf.b // 5).diff().sort_index()
+            psdf.groupby(psdf.b // 5).diff().sort_index(),
+            pdf.groupby(pdf.b // 5).diff().sort_index(),
         )
         self.assert_eq(
             psdf.groupby(psdf.b // 5)["a"].diff().sort_index(),
@@ -1093,7 +1103,8 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
         psdf.columns = columns
 
         self.assert_eq(
-            psdf.groupby(("x", "b")).diff().sort_index(), pdf.groupby(("x", "b")).diff().sort_index()
+            psdf.groupby(("x", "b")).diff().sort_index(),
+            pdf.groupby(("x", "b")).diff().sort_index(),
         )
         self.assert_eq(
             psdf.groupby([("x", "a"), ("x", "b")]).diff().sort_index(),
@@ -1113,17 +1124,20 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
 
         self.assert_eq(psdf.groupby("b").rank().sort_index(), pdf.groupby("b").rank().sort_index())
         self.assert_eq(
-            psdf.groupby(["a", "b"]).rank().sort_index(), pdf.groupby(["a", "b"]).rank().sort_index()
+            psdf.groupby(["a", "b"]).rank().sort_index(),
+            pdf.groupby(["a", "b"]).rank().sort_index(),
         )
         self.assert_eq(
-            psdf.groupby(["b"])["a"].rank().sort_index(), pdf.groupby(["b"])["a"].rank().sort_index()
+            psdf.groupby(["b"])["a"].rank().sort_index(),
+            pdf.groupby(["b"])["a"].rank().sort_index(),
         )
         self.assert_eq(
             psdf.groupby(["b"])[["a", "c"]].rank().sort_index(),
             pdf.groupby(["b"])[["a", "c"]].rank().sort_index(),
         )
         self.assert_eq(
-            psdf.groupby(psdf.b // 5).rank().sort_index(), pdf.groupby(pdf.b // 5).rank().sort_index()
+            psdf.groupby(psdf.b // 5).rank().sort_index(),
+            pdf.groupby(pdf.b // 5).rank().sort_index(),
         )
         self.assert_eq(
             psdf.groupby(psdf.b // 5)["a"].rank().sort_index(),
@@ -1139,7 +1153,8 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
         psdf.columns = columns
 
         self.assert_eq(
-            psdf.groupby(("x", "b")).rank().sort_index(), pdf.groupby(("x", "b")).rank().sort_index()
+            psdf.groupby(("x", "b")).rank().sort_index(),
+            pdf.groupby(("x", "b")).rank().sort_index(),
         )
         self.assert_eq(
             psdf.groupby([("x", "a"), ("x", "b")]).rank().sort_index(),
@@ -1719,7 +1734,9 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
         self.assert_eq(
             psdf.groupby("A")["B"].ffill().sort_index(), pdf.groupby("A")["B"].ffill().sort_index()
         )
-        self.assert_eq(psdf.groupby("A")["B"].ffill()[idx[6]], pdf.groupby("A")["B"].ffill()[idx[6]])
+        self.assert_eq(
+            psdf.groupby("A")["B"].ffill()[idx[6]], pdf.groupby("A")["B"].ffill()[idx[6]]
+        )
 
         # multi-index columns
         columns = pd.MultiIndex.from_tuples([("X", "A"), ("X", "B"), ("Y", "C"), ("Z", "D")])
@@ -1770,7 +1787,9 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
         self.assert_eq(
             psdf.groupby("A")["B"].bfill().sort_index(), pdf.groupby("A")["B"].bfill().sort_index(),
         )
-        self.assert_eq(psdf.groupby("A")["B"].bfill()[idx[6]], pdf.groupby("A")["B"].bfill()[idx[6]])
+        self.assert_eq(
+            psdf.groupby("A")["B"].bfill()[idx[6]], pdf.groupby("A")["B"].bfill()[idx[6]]
+        )
 
         # multi-index columns
         columns = pd.MultiIndex.from_tuples([("X", "A"), ("X", "B"), ("Y", "C"), ("Z", "D")])
@@ -1800,7 +1819,9 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
         )
         psdf = ps.from_pandas(pdf)
 
-        self.assert_eq(psdf.groupby("a").shift().sort_index(), pdf.groupby("a").shift().sort_index())
+        self.assert_eq(
+            psdf.groupby("a").shift().sort_index(), pdf.groupby("a").shift().sort_index()
+        )
         # TODO: seems like a pandas' bug when fill_value is not None?
         # self.assert_eq(psdf.groupby(['a', 'b']).shift(periods=-1, fill_value=0).sort_index(),
         #                pdf.groupby(['a', 'b']).shift(periods=-1, fill_value=0).sort_index())
@@ -1875,7 +1896,9 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
             psdf.groupby("b").apply(len).sort_index(), pdf.groupby("b").apply(len).sort_index(),
         )
         self.assert_eq(
-            psdf.groupby("b")["a"].apply(lambda x, y, z: x + x.min() + y * z, 10, z=20).sort_index(),
+            psdf.groupby("b")["a"]
+            .apply(lambda x, y, z: x + x.min() + y * z, 10, z=20)
+            .sort_index(),
             pdf.groupby("b")["a"].apply(lambda x, y, z: x + x.min() + y * z, 10, z=20).sort_index(),
         )
         self.assert_eq(
@@ -1883,7 +1906,9 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
             pdf.groupby("b")[["a"]].apply(lambda x: x + x.min()).sort_index(),
         )
         self.assert_eq(
-            psdf.groupby(["a", "b"]).apply(lambda x, y, z: x + x.min() + y + z, 1, z=2).sort_index(),
+            psdf.groupby(["a", "b"])
+            .apply(lambda x, y, z: x + x.min() + y + z, 1, z=2)
+            .sort_index(),
             pdf.groupby(["a", "b"]).apply(lambda x, y, z: x + x.min() + y + z, 1, z=2).sort_index(),
         )
         self.assert_eq(
@@ -2294,7 +2319,9 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
         )
         psdf = ps.from_pandas(pdf)
 
-        self.assert_eq(pdf.groupby("a").head(2).sort_index(), psdf.groupby("a").head(2).sort_index())
+        self.assert_eq(
+            pdf.groupby("a").head(2).sort_index(), psdf.groupby("a").head(2).sort_index()
+        )
         self.assert_eq(
             pdf.groupby("a").head(-2).sort_index(), psdf.groupby("a").head(-2).sort_index()
         )
@@ -2306,7 +2333,8 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
             pdf.groupby("a")["b"].head(2).sort_index(), psdf.groupby("a")["b"].head(2).sort_index()
         )
         self.assert_eq(
-            pdf.groupby("a")["b"].head(-2).sort_index(), psdf.groupby("a")["b"].head(-2).sort_index()
+            pdf.groupby("a")["b"].head(-2).sort_index(),
+            psdf.groupby("a")["b"].head(-2).sort_index(),
         )
         self.assert_eq(
             pdf.groupby("a")["b"].head(100000).sort_index(),
@@ -2368,7 +2396,9 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
         )
         psdf = ps.from_pandas(pdf)
 
-        self.assert_eq(pdf.groupby("a").head(2).sort_index(), psdf.groupby("a").head(2).sort_index())
+        self.assert_eq(
+            pdf.groupby("a").head(2).sort_index(), psdf.groupby("a").head(2).sort_index()
+        )
         self.assert_eq(
             pdf.groupby("a").head(-2).sort_index(), psdf.groupby("a").head(-2).sort_index()
         )
@@ -2380,7 +2410,8 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
             pdf.groupby("a")["b"].head(2).sort_index(), psdf.groupby("a")["b"].head(2).sort_index()
         )
         self.assert_eq(
-            pdf.groupby("a")["b"].head(-2).sort_index(), psdf.groupby("a")["b"].head(-2).sort_index()
+            pdf.groupby("a")["b"].head(-2).sort_index(),
+            psdf.groupby("a")["b"].head(-2).sort_index(),
         )
         self.assert_eq(
             pdf.groupby("a")["b"].head(100000).sort_index(),
@@ -2565,7 +2596,9 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
             KeyError, lambda: psdf.groupby(["class", "name"]).get_group(("lion", "mammal"))
         )
         self.assertRaises(ValueError, lambda: psdf.groupby(["class", "name"]).get_group(("lion",)))
-        self.assertRaises(ValueError, lambda: psdf.groupby(["class", "name"]).get_group(("mammal",)))
+        self.assertRaises(
+            ValueError, lambda: psdf.groupby(["class", "name"]).get_group(("mammal",))
+        )
         self.assertRaises(ValueError, lambda: psdf.groupby(["class", "name"]).get_group("mammal"))
 
         # MultiIndex columns
@@ -2657,7 +2690,9 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
         )
         psdf = ps.from_pandas(pdf)
 
-        self.assert_eq(pdf.groupby("a").tail(2).sort_index(), psdf.groupby("a").tail(2).sort_index())
+        self.assert_eq(
+            pdf.groupby("a").tail(2).sort_index(), psdf.groupby("a").tail(2).sort_index()
+        )
         self.assert_eq(
             pdf.groupby("a").tail(-2).sort_index(), psdf.groupby("a").tail(-2).sort_index()
         )
@@ -2669,7 +2704,8 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
             pdf.groupby("a")["b"].tail(2).sort_index(), psdf.groupby("a")["b"].tail(2).sort_index()
         )
         self.assert_eq(
-            pdf.groupby("a")["b"].tail(-2).sort_index(), psdf.groupby("a")["b"].tail(-2).sort_index()
+            pdf.groupby("a")["b"].tail(-2).sort_index(),
+            psdf.groupby("a")["b"].tail(-2).sort_index(),
         )
         self.assert_eq(
             pdf.groupby("a")["b"].tail(100000).sort_index(),
@@ -2731,7 +2767,9 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
         )
         psdf = ps.from_pandas(pdf)
 
-        self.assert_eq(pdf.groupby("a").tail(2).sort_index(), psdf.groupby("a").tail(2).sort_index())
+        self.assert_eq(
+            pdf.groupby("a").tail(2).sort_index(), psdf.groupby("a").tail(2).sort_index()
+        )
         self.assert_eq(
             pdf.groupby("a").tail(-2).sort_index(), psdf.groupby("a").tail(-2).sort_index()
         )
@@ -2743,7 +2781,8 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
             pdf.groupby("a")["b"].tail(2).sort_index(), psdf.groupby("a")["b"].tail(2).sort_index()
         )
         self.assert_eq(
-            pdf.groupby("a")["b"].tail(-2).sort_index(), psdf.groupby("a")["b"].tail(-2).sort_index()
+            pdf.groupby("a")["b"].tail(-2).sort_index(),
+            psdf.groupby("a")["b"].tail(-2).sort_index(),
         )
         self.assert_eq(
             pdf.groupby("a")["b"].tail(100000).sort_index(),
@@ -2809,7 +2848,8 @@ if __name__ == "__main__":
 
     try:
         import xmlrunner  # type: ignore[import]
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
+
+        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

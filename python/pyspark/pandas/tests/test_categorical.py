@@ -114,7 +114,8 @@ class CategoricalTest(PandasOnSparkTestCase, TestUtils):
 
         self.assert_eq(psdf.apply(lambda x: x).sort_index(), pdf.apply(lambda x: x).sort_index())
         self.assert_eq(
-            psdf.apply(lambda x: x, axis=1).sort_index(), pdf.apply(lambda x: x, axis=1).sort_index()
+            psdf.apply(lambda x: x, axis=1).sort_index(),
+            pdf.apply(lambda x: x, axis=1).sort_index(),
         )
 
     def test_frame_apply_without_shortcut(self):
@@ -182,7 +183,9 @@ class CategoricalTest(PandasOnSparkTestCase, TestUtils):
     def test_series_apply(self):
         pdf, psdf = self.df_pair
 
-        self.assert_eq(psdf.a.apply(lambda x: x).sort_index(), pdf.a.apply(lambda x: x).sort_index())
+        self.assert_eq(
+            psdf.a.apply(lambda x: x).sort_index(), pdf.a.apply(lambda x: x).sort_index()
+        )
 
     def test_series_apply_without_shortcut(self):
         with ps.option_context("compute.shortcut_limit", 0):
@@ -469,7 +472,8 @@ if __name__ == "__main__":
 
     try:
         import xmlrunner  # type: ignore[import]
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
+
+        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

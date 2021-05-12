@@ -5612,7 +5612,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
             def op(psser):
                 if psser.name in to_replace:
-                    return psser.replace(to_replace=to_replace[psser.name], value=value, regex=regex)
+                    return psser.replace(
+                        to_replace=to_replace[psser.name], value=value, regex=regex
+                    )
                 else:
                     return psser
 

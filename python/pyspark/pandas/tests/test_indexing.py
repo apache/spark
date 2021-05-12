@@ -438,7 +438,9 @@ class IndexingTest(PandasOnSparkTestCase):
 
         self.assert_eq(psdf.loc[psdf.copy().a % 2 == 0], pdf.loc[pdf.copy().a % 2 == 0])
         self.assert_eq(psdf.loc[psdf.copy().a % 2 == 0, "a"], pdf.loc[pdf.copy().a % 2 == 0, "a"])
-        self.assert_eq(psdf.loc[psdf.copy().a % 2 == 0, ["a"]], pdf.loc[pdf.copy().a % 2 == 0, ["a"]])
+        self.assert_eq(
+            psdf.loc[psdf.copy().a % 2 == 0, ["a"]], pdf.loc[pdf.copy().a % 2 == 0, ["a"]]
+        )
         self.assert_eq(psdf.a.loc[psdf.copy().a % 2 == 0], pdf.a.loc[pdf.copy().a % 2 == 0])
 
     def test_loc_noindex(self):
@@ -951,9 +953,12 @@ class IndexingTest(PandasOnSparkTestCase):
         ]:
             with self.subTest(rows_sel=rows_sel):
                 self.assert_eq(psdf.iloc[rows_sel].sort_index(), pdf.iloc[rows_sel].sort_index())
-                self.assert_eq(psdf.A.iloc[rows_sel].sort_index(), pdf.A.iloc[rows_sel].sort_index())
                 self.assert_eq(
-                    (psdf.A + 1).iloc[rows_sel].sort_index(), (pdf.A + 1).iloc[rows_sel].sort_index()
+                    psdf.A.iloc[rows_sel].sort_index(), pdf.A.iloc[rows_sel].sort_index()
+                )
+                self.assert_eq(
+                    (psdf.A + 1).iloc[rows_sel].sort_index(),
+                    (pdf.A + 1).iloc[rows_sel].sort_index(),
                 )
 
     def test_iloc_iterable_rows_sel(self):
@@ -971,9 +976,12 @@ class IndexingTest(PandasOnSparkTestCase):
         ]:
             with self.subTest(rows_sel=rows_sel):
                 self.assert_eq(psdf.iloc[rows_sel].sort_index(), pdf.iloc[rows_sel].sort_index())
-                self.assert_eq(psdf.A.iloc[rows_sel].sort_index(), pdf.A.iloc[rows_sel].sort_index())
                 self.assert_eq(
-                    (psdf.A + 1).iloc[rows_sel].sort_index(), (pdf.A + 1).iloc[rows_sel].sort_index()
+                    psdf.A.iloc[rows_sel].sort_index(), pdf.A.iloc[rows_sel].sort_index()
+                )
+                self.assert_eq(
+                    (psdf.A + 1).iloc[rows_sel].sort_index(),
+                    (pdf.A + 1).iloc[rows_sel].sort_index(),
                 )
 
             with self.subTest(rows_sel=rows_sel):
@@ -1321,7 +1329,8 @@ if __name__ == "__main__":
 
     try:
         import xmlrunner  # type: ignore[import]
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
+
+        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

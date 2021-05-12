@@ -2248,7 +2248,8 @@ def concat(objs, axis=0, join="outer", ignore_index=False, sort=False) -> Union[
                     "Index type and names should be same in the objects to concatenate. "
                     "You passed different indices "
                     "{index_of_first_psdf} and {index_of_psdf}".format(
-                        index_of_first_psdf=index_of_first_psdf.names, index_of_psdf=index_of_psdf.names
+                        index_of_first_psdf=index_of_first_psdf.names,
+                        index_of_psdf=index_of_psdf.names,
                     )
                 )
 
@@ -2324,7 +2325,9 @@ def concat(objs, axis=0, join="outer", ignore_index=False, sort=False) -> Union[
                 psdfs.append(psdf[merged_columns])
 
     if ignore_index:
-        sdfs = [psdf._internal.spark_frame.select(psdf._internal.data_spark_columns) for psdf in psdfs]
+        sdfs = [
+            psdf._internal.spark_frame.select(psdf._internal.data_spark_columns) for psdf in psdfs
+        ]
     else:
         sdfs = [
             psdf._internal.spark_frame.select(

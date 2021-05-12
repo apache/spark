@@ -84,7 +84,9 @@ class SparkFrameMethodsTest(PandasOnSparkTestCase, SQLTestUtils, TestUtils):
         psdf = psdf.set_index("name")
         psdf2 = psdf + 1
         num_partitions += 1
-        self.assert_eq(psdf2.sort_index(), (psdf + 1).spark.repartition(num_partitions).sort_index())
+        self.assert_eq(
+            psdf2.sort_index(), (psdf + 1).spark.repartition(num_partitions).sort_index()
+        )
 
         # Reserves MultiIndex
         psdf = ps.DataFrame({"a": ["a", "b", "c"]}, index=[[1, 2, 3], [4, 5, 6]])
@@ -147,7 +149,8 @@ if __name__ == "__main__":
 
     try:
         import xmlrunner  # type: ignore[import]
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
+
+        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

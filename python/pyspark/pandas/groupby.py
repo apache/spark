@@ -251,7 +251,9 @@ class GroupBy(object, metaclass=ABCMeta):
         if self._dropna:
             psdf = DataFrame(
                 psdf._internal.with_new_sdf(
-                    psdf._internal.spark_frame.dropna(subset=psdf._internal.index_spark_column_names)
+                    psdf._internal.spark_frame.dropna(
+                        subset=psdf._internal.index_spark_column_names
+                    )
                 )
             )
 
@@ -1349,7 +1351,8 @@ class GroupBy(object, metaclass=ABCMeta):
     @staticmethod
     def _prepare_group_map_apply(psdf, groupkeys, agg_columns):
         groupkey_labels = [
-            verify_temp_column_name(psdf, "__groupkey_{}__".format(i)) for i in range(len(groupkeys))
+            verify_temp_column_name(psdf, "__groupkey_{}__".format(i))
+            for i in range(len(groupkeys))
         ]
         psdf = psdf[[s.rename(label) for s, label in zip(groupkeys, groupkey_labels)] + agg_columns]
         groupkey_names = [label if len(label) > 1 else label[0] for label in groupkey_labels]
@@ -2471,7 +2474,9 @@ class GroupBy(object, metaclass=ABCMeta):
         if self._dropna:
             psdf = DataFrame(
                 psdf._internal.with_new_sdf(
-                    psdf._internal.spark_frame.dropna(subset=psdf._internal.index_spark_column_names)
+                    psdf._internal.spark_frame.dropna(
+                        subset=psdf._internal.index_spark_column_names
+                    )
                 )
             )
 
@@ -2523,7 +2528,8 @@ class GroupBy(object, metaclass=ABCMeta):
 
         psdf = DataFrame(
             psdf._internal.with_new_columns(
-                [psdf._psser_for(label) for label in psdf._internal.column_labels] + additional_pssers
+                [psdf._psser_for(label) for label in psdf._internal.column_labels]
+                + additional_pssers
             )
         )
 
@@ -2776,12 +2782,17 @@ class SeriesGroupBy(GroupBy):
     def _build(
         psser: Series, by: List[Union[Series, Tuple]], as_index: bool, dropna: bool
     ) -> "SeriesGroupBy":
-        if any(isinstance(col_or_s, Series) and not same_anchor(psser, col_or_s) for col_or_s in by):
+        if any(
+            isinstance(col_or_s, Series) and not same_anchor(psser, col_or_s) for col_or_s in by
+        ):
             psdf, new_by_series, _ = GroupBy._resolve_grouping_from_diff_dataframes(
                 psser.to_frame(), by
             )
             return SeriesGroupBy(
-                first_series(psdf).rename(psser.name), new_by_series, as_index=as_index, dropna=dropna
+                first_series(psdf).rename(psser.name),
+                new_by_series,
+                as_index=as_index,
+                dropna=dropna,
             )
         else:
             new_by_series = GroupBy._resolve_grouping(psser._psdf, by)
@@ -2930,7 +2941,8 @@ class SeriesGroupBy(GroupBy):
                 ]
             ),
             index_names=(
-                [psser._column_label for psser in self._groupkeys] + self._psdf._internal.index_names
+                [psser._column_label for psser in self._groupkeys]
+                + self._psdf._internal.index_names
             ),
             index_dtypes=(
                 [psser.dtype for psser in self._groupkeys] + self._psdf._internal.index_dtypes
@@ -3007,7 +3019,8 @@ class SeriesGroupBy(GroupBy):
                 ]
             ),
             index_names=(
-                [psser._column_label for psser in self._groupkeys] + self._psdf._internal.index_names
+                [psser._column_label for psser in self._groupkeys]
+                + self._psdf._internal.index_names
             ),
             index_dtypes=(
                 [psser.dtype for psser in self._groupkeys] + self._psdf._internal.index_dtypes

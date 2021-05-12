@@ -986,7 +986,9 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
 
         self.assert_eq(psser.sort_values(), pser.sort_values())
         self.assert_eq(psser.sort_values(ascending=False), pser.sort_values(ascending=False))
-        self.assert_eq(psser.sort_values(na_position="first"), pser.sort_values(na_position="first"))
+        self.assert_eq(
+            psser.sort_values(na_position="first"), pser.sort_values(na_position="first")
+        )
 
         self.assertRaises(ValueError, lambda: psser.sort_values(na_position="invalid"))
 
@@ -1136,11 +1138,15 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
             self.assertTrue(res_psdf.empty)
             self.assert_eq(res_psdf.columns, pd.Index(["self", "other"]))
 
-            self.assert_eq(pser.compare(pser + 1).sort_index(), psser.compare(psser + 1).sort_index())
+            self.assert_eq(
+                pser.compare(pser + 1).sort_index(), psser.compare(psser + 1).sort_index()
+            )
 
             pser = pd.Series([1, 2], index=["x", "y"])
             psser = ps.from_pandas(pser)
-            self.assert_eq(pser.compare(pser + 1).sort_index(), psser.compare(psser + 1).sort_index())
+            self.assert_eq(
+                pser.compare(pser + 1).sort_index(), psser.compare(psser + 1).sort_index()
+            )
         else:
             psser = ps.Series([1, 2])
             res_psdf = psser.compare(psser)
@@ -1432,7 +1438,9 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         if LooseVersion(pd.__version__) < LooseVersion("0.24.2"):
             self.assert_eq(psser.shift(periods=2), pser.shift(periods=2))
         else:
-            self.assert_eq(psser.shift(periods=2, fill_value=0), pser.shift(periods=2, fill_value=0))
+            self.assert_eq(
+                psser.shift(periods=2, fill_value=0), pser.shift(periods=2, fill_value=0)
+            )
         with self.assertRaisesRegex(TypeError, "periods should be an int; however"):
             psser.shift(periods=1.5)
 
@@ -1583,7 +1591,9 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(psser.astype("M"), pser.astype("M"))
         self.assert_eq(psser.astype("M").astype(str), pser.astype("M").astype(str))
         # Comment out the below test cause because pandas returns `NaT` or `nan` randomly
-        # self.assert_eq(psser.astype("M").dt.date.astype(str), pser.astype("M").dt.date.astype(str))
+        # self.assert_eq(
+        #     psser.astype("M").dt.date.astype(str), pser.astype("M").dt.date.astype(str)
+        # )
 
         if extension_object_dtypes_available:
             from pandas import StringDtype
@@ -2911,7 +2921,8 @@ if __name__ == "__main__":
 
     try:
         import xmlrunner  # type: ignore[import]
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
+
+        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

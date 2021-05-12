@@ -64,9 +64,9 @@ class IndexerLike(object):
         from pyspark.pandas.frame import DataFrame
         from pyspark.pandas.series import Series
 
-        assert isinstance(psdf_or_psser, (DataFrame, Series)), "unexpected argument type: {}".format(
-            type(psdf_or_psser)
-        )
+        assert isinstance(
+            psdf_or_psser, (DataFrame, Series)
+        ), "unexpected argument type: {}".format(type(psdf_or_psser))
         self._psdf_or_psser = psdf_or_psser
 
     @property
@@ -647,7 +647,9 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
 
             if (
                 isinstance(rows_sel, Series)
-                and (isinstance(self, iLocIndexer) or not same_anchor(rows_sel, self._psdf_or_psser))
+                and (
+                    isinstance(self, iLocIndexer) or not same_anchor(rows_sel, self._psdf_or_psser)
+                )
             ) or (
                 isinstance(value, Series)
                 and (isinstance(self, iLocIndexer) or not same_anchor(value, self._psdf_or_psser))
@@ -1205,7 +1207,9 @@ class LocIndexer(LocIndexerLike):
     ) -> Tuple[
         List[Tuple], Optional[List[spark.Column]], Optional[List[Dtype]], bool, Optional[Tuple]
     ]:
-        start, stop = self._psdf_or_psser.columns.slice_locs(start=cols_sel.start, end=cols_sel.stop)
+        start, stop = self._psdf_or_psser.columns.slice_locs(
+            start=cols_sel.start, end=cols_sel.stop
+        )
         column_labels = self._internal.column_labels[start:stop]
         data_spark_columns = self._internal.data_spark_columns[start:stop]
         data_dtypes = self._internal.data_dtypes[start:stop]

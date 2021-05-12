@@ -124,7 +124,9 @@ class StatsTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(psdf["b"].product(min_count=3), pdf["b"].product(min_count=3))
         self.assert_eq(psdf["c"].product(min_count=3), pdf["c"].product(min_count=3))
         self.assert_eq(psdf["a"].loc[[]].product(), pdf["a"].loc[[]].product())
-        self.assert_eq(psdf["a"].loc[[]].product(min_count=1), pdf["a"].loc[[]].product(min_count=1))
+        self.assert_eq(
+            psdf["a"].loc[[]].product(min_count=1), pdf["a"].loc[[]].product(min_count=1)
+        )
 
     def test_abs(self):
         pdf = pd.DataFrame(
@@ -200,13 +202,16 @@ class StatsTest(PandasOnSparkTestCase, SQLTestUtils):
                 pdf.std(axis=1, ddof=0, numeric_only=True),
             )
             self.assert_eq(
-                psdf.max(axis=1, numeric_only=True), pdf.max(axis=1, numeric_only=True).astype(float)
+                psdf.max(axis=1, numeric_only=True),
+                pdf.max(axis=1, numeric_only=True).astype(float),
             )
             self.assert_eq(
-                psdf.min(axis=1, numeric_only=True), pdf.min(axis=1, numeric_only=True).astype(float)
+                psdf.min(axis=1, numeric_only=True),
+                pdf.min(axis=1, numeric_only=True).astype(float),
             )
             self.assert_eq(
-                psdf.sum(axis=1, numeric_only=True), pdf.sum(axis=1, numeric_only=True).astype(float)
+                psdf.sum(axis=1, numeric_only=True),
+                pdf.sum(axis=1, numeric_only=True).astype(float),
             )
             self.assert_eq(
                 psdf.product(axis=1, numeric_only=True),
@@ -215,8 +220,12 @@ class StatsTest(PandasOnSparkTestCase, SQLTestUtils):
             self.assert_eq(
                 psdf.kurtosis(axis=1, numeric_only=True), pdf.kurtosis(axis=1, numeric_only=True)
             )
-            self.assert_eq(psdf.skew(axis=1, numeric_only=True), pdf.skew(axis=1, numeric_only=True))
-            self.assert_eq(psdf.mean(axis=1, numeric_only=True), pdf.mean(axis=1, numeric_only=True))
+            self.assert_eq(
+                psdf.skew(axis=1, numeric_only=True), pdf.skew(axis=1, numeric_only=True)
+            )
+            self.assert_eq(
+                psdf.mean(axis=1, numeric_only=True), pdf.mean(axis=1, numeric_only=True)
+            )
             self.assert_eq(psdf.sem(axis=1, numeric_only=True), pdf.sem(axis=1, numeric_only=True))
             self.assert_eq(
                 psdf.sem(axis=1, ddof=0, numeric_only=True),
@@ -367,7 +376,8 @@ class StatsTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(len(psdf.skew(numeric_only=True)), len(pdf.skew(numeric_only=True)))
 
         self.assert_eq(
-            len(psdf.quantile(q=0.5, numeric_only=True)), len(pdf.quantile(q=0.5, numeric_only=True))
+            len(psdf.quantile(q=0.5, numeric_only=True)),
+            len(pdf.quantile(q=0.5, numeric_only=True)),
         )
         self.assert_eq(
             len(psdf.quantile(q=[0.25, 0.5, 0.75], numeric_only=True)),
@@ -403,7 +413,8 @@ if __name__ == "__main__":
 
     try:
         import xmlrunner  # type: ignore[import]
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
+
+        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

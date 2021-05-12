@@ -134,7 +134,8 @@ class Rolling(RollingAndExpanding):
 
         if not isinstance(psdf_or_psser, (DataFrame, Series)):
             raise TypeError(
-                "psdf_or_psser must be a series or dataframe; however, got: %s" % type(psdf_or_psser)
+                "psdf_or_psser must be a series or dataframe; however, got: %s"
+                % type(psdf_or_psser)
             )
 
         window = Window.orderBy(NATURAL_ORDER_COLUMN_NAME).rowsBetween(
@@ -678,7 +679,9 @@ class RollingGroupby(Rolling):
             new_index_dtypes.append(groupkey.dtype)
 
         for new_index_scol, index_name, index_dtype in zip(
-            psdf._internal.index_spark_columns, psdf._internal.index_names, psdf._internal.index_dtypes
+            psdf._internal.index_spark_columns,
+            psdf._internal.index_names,
+            psdf._internal.index_dtypes,
         ):
             index_column_name = SPARK_INDEX_NAME_FORMAT(len(new_index_scols))
             new_index_scols.append(new_index_scol.alias(index_column_name))
@@ -1044,7 +1047,8 @@ class Expanding(RollingAndExpanding):
 
         if not isinstance(psdf_or_psser, (DataFrame, Series)):
             raise TypeError(
-                "psdf_or_psser must be a series or dataframe; however, got: %s" % type(psdf_or_psser)
+                "psdf_or_psser must be a series or dataframe; however, got: %s"
+                % type(psdf_or_psser)
             )
 
         window = Window.orderBy(NATURAL_ORDER_COLUMN_NAME).rowsBetween(

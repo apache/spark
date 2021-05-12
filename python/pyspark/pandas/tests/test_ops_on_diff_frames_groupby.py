@@ -490,7 +490,9 @@ class OpsOnDiffFramesGroupByTest(PandasOnSparkTestCase, SQLTestUtils):
         psdf = ps.from_pandas(pdf)
         kkey = ps.from_pandas(pkey)
 
-        self.assert_eq(psdf.groupby(kkey).diff().sort_index(), pdf.groupby(pkey).diff().sort_index())
+        self.assert_eq(
+            psdf.groupby(kkey).diff().sort_index(), pdf.groupby(pkey).diff().sort_index()
+        )
         self.assert_eq(
             psdf.groupby(kkey)["a"].diff().sort_index(), pdf.groupby(pkey)["a"].diff().sort_index()
         )
@@ -514,7 +516,9 @@ class OpsOnDiffFramesGroupByTest(PandasOnSparkTestCase, SQLTestUtils):
         psdf = ps.from_pandas(pdf)
         kkey = ps.from_pandas(pkey)
 
-        self.assert_eq(psdf.groupby(kkey).rank().sort_index(), pdf.groupby(pkey).rank().sort_index())
+        self.assert_eq(
+            psdf.groupby(kkey).rank().sort_index(), pdf.groupby(pkey).rank().sort_index()
+        )
         self.assert_eq(
             psdf.groupby(kkey)["a"].rank().sort_index(), pdf.groupby(pkey)["a"].rank().sort_index()
         )
@@ -543,14 +547,17 @@ class OpsOnDiffFramesGroupByTest(PandasOnSparkTestCase, SQLTestUtils):
             psdf.groupby(kkey).shift().sort_index(), pdf.groupby(pkey).shift().sort_index()
         )
         self.assert_eq(
-            psdf.groupby(kkey)["a"].shift().sort_index(), pdf.groupby(pkey)["a"].shift().sort_index()
+            psdf.groupby(kkey)["a"].shift().sort_index(),
+            pdf.groupby(pkey)["a"].shift().sort_index(),
         )
         self.assert_eq(
             psdf.groupby(kkey)[["a"]].shift().sort_index(),
             pdf.groupby(pkey)[["a"]].shift().sort_index(),
         )
 
-        self.assert_eq(psdf.groupby(kkey).shift().sum(), pdf.groupby(pkey).shift().sum().astype(int))
+        self.assert_eq(
+            psdf.groupby(kkey).shift().sum(), pdf.groupby(pkey).shift().sum().astype(int)
+        )
         self.assert_eq(psdf.groupby(kkey)["a"].shift().sum(), pdf.groupby(pkey)["a"].shift().sum())
 
     def test_fillna(self):
@@ -608,7 +615,8 @@ if __name__ == "__main__":
 
     try:
         import xmlrunner  # type: ignore[import]
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
+
+        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

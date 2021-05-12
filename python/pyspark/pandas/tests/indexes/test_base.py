@@ -767,7 +767,9 @@ class IndexesTest(PandasOnSparkTestCase, TestUtils):
         self.assert_eq(pidx.drop("a"), psidx.drop("a"))
         self.assert_eq(pidx.drop(["a", "b"]), psidx.drop(["a", "b"]))
         self.assert_eq(pidx.drop(["x", "y"], level=1), psidx.drop(["x", "y"], level=1))
-        self.assert_eq(pidx.drop(["x", "y"], level="level2"), psidx.drop(["x", "y"], level="level2"))
+        self.assert_eq(
+            pidx.drop(["x", "y"], level="level2"), psidx.drop(["x", "y"], level="level2")
+        )
 
         pidx.names = ["lv1", "lv2"]
         psidx.names = ["lv1", "lv2"]
@@ -936,7 +938,9 @@ class IndexesTest(PandasOnSparkTestCase, TestUtils):
 
         self.assert_eq(pidx.delete(8).sort_values(), psidx.delete(8).sort_values())
         self.assert_eq(pidx.delete(-9).sort_values(), psidx.delete(-9).sort_values())
-        self.assert_eq(pidx.delete([-9, 0, 8]).sort_values(), psidx.delete([-9, 0, 8]).sort_values())
+        self.assert_eq(
+            pidx.delete([-9, 0, 8]).sort_values(), psidx.delete([-9, 0, 8]).sort_values()
+        )
 
         with self.assertRaisesRegex(IndexError, "index 9 is out of bounds for axis 0 with size 9"):
             psidx.delete([0, 9])
@@ -957,7 +961,9 @@ class IndexesTest(PandasOnSparkTestCase, TestUtils):
 
         self.assert_eq(pidx.delete(2).sort_values(), psidx.delete(2).sort_values())
         self.assert_eq(pidx.delete(-3).sort_values(), psidx.delete(-3).sort_values())
-        self.assert_eq(pidx.delete([-3, 0, 2]).sort_values(), psidx.delete([-3, 0, 2]).sort_values())
+        self.assert_eq(
+            pidx.delete([-3, 0, 2]).sort_values(), psidx.delete([-3, 0, 2]).sort_values()
+        )
 
         with self.assertRaisesRegex(IndexError, "index 3 is out of bounds for axis 0 with size 3"):
             psidx.delete([0, 3])
@@ -1249,38 +1255,38 @@ class IndexesTest(PandasOnSparkTestCase, TestUtils):
 
         # Disable the test cases below because pandas returns `True` or `False` randomly.
         # else:
-            # [(-5, None), (-4, None), (-3, None), (-2, None), (-1, None)]
-            # psdf = ps.DataFrame({"a": [-5, -4, -3, -2, -1], "b": [1, 1, 1, 1, 1]})
-            # psdf["b"] = None
-            # psmidx = psdf.set_index(["a", "b"]).index
-            # pmidx = psmidx.to_pandas()
-            # self.assert_eq(psmidx.is_monotonic_increasing, pmidx.is_monotonic_increasing)
-            # self.assert_eq(psmidx.is_monotonic_decreasing, pmidx.is_monotonic_decreasing)
+        # [(-5, None), (-4, None), (-3, None), (-2, None), (-1, None)]
+        # psdf = ps.DataFrame({"a": [-5, -4, -3, -2, -1], "b": [1, 1, 1, 1, 1]})
+        # psdf["b"] = None
+        # psmidx = psdf.set_index(["a", "b"]).index
+        # pmidx = psmidx.to_pandas()
+        # self.assert_eq(psmidx.is_monotonic_increasing, pmidx.is_monotonic_increasing)
+        # self.assert_eq(psmidx.is_monotonic_decreasing, pmidx.is_monotonic_decreasing)
 
-            # [(None, "e"), (None, "c"), (None, "b"), (None, "d"), (None, "a")]
-            # psdf = ps.DataFrame({"a": [1, 1, 1, 1, 1], "b": ["e", "c", "b", "d", "a"]})
-            # psdf["a"] = None
-            # psmidx = psdf.set_index(["a", "b"]).index
-            # pmidx = psmidx.to_pandas()
-            # self.assert_eq(psmidx.is_monotonic_increasing, pmidx.is_monotonic_increasing)
-            # self.assert_eq(psmidx.is_monotonic_decreasing, pmidx.is_monotonic_decreasing)
+        # [(None, "e"), (None, "c"), (None, "b"), (None, "d"), (None, "a")]
+        # psdf = ps.DataFrame({"a": [1, 1, 1, 1, 1], "b": ["e", "c", "b", "d", "a"]})
+        # psdf["a"] = None
+        # psmidx = psdf.set_index(["a", "b"]).index
+        # pmidx = psmidx.to_pandas()
+        # self.assert_eq(psmidx.is_monotonic_increasing, pmidx.is_monotonic_increasing)
+        # self.assert_eq(psmidx.is_monotonic_decreasing, pmidx.is_monotonic_decreasing)
 
-            # [(None, None), (None, None), (None, None), (None, None), (None, None)]
-            # psdf = ps.DataFrame({"a": [1, 1, 1, 1, 1], "b": [1, 1, 1, 1, 1]})
-            # psdf["a"] = None
-            # psdf["b"] = None
-            # psmidx = psdf.set_index(["a", "b"]).index
-            # pmidx = psmidx.to_pandas()
-            # self.assert_eq(psmidx.is_monotonic_increasing, pmidx.is_monotonic_increasing)
-            # self.assert_eq(psmidx.is_monotonic_decreasing, pmidx.is_monotonic_decreasing)
-            # [(None, None)]
-            # psdf = ps.DataFrame({"a": [1], "b": [1]})
-            # psdf["a"] = None
-            # psdf["b"] = None
-            # psmidx = psdf.set_index(["a", "b"]).index
-            # pmidx = psmidx.to_pandas()
-            # self.assert_eq(psmidx.is_monotonic_increasing, pmidx.is_monotonic_increasing)
-            # self.assert_eq(psmidx.is_monotonic_decreasing, pmidx.is_monotonic_decreasing)
+        # [(None, None), (None, None), (None, None), (None, None), (None, None)]
+        # psdf = ps.DataFrame({"a": [1, 1, 1, 1, 1], "b": [1, 1, 1, 1, 1]})
+        # psdf["a"] = None
+        # psdf["b"] = None
+        # psmidx = psdf.set_index(["a", "b"]).index
+        # pmidx = psmidx.to_pandas()
+        # self.assert_eq(psmidx.is_monotonic_increasing, pmidx.is_monotonic_increasing)
+        # self.assert_eq(psmidx.is_monotonic_decreasing, pmidx.is_monotonic_decreasing)
+        # [(None, None)]
+        # psdf = ps.DataFrame({"a": [1], "b": [1]})
+        # psdf["a"] = None
+        # psdf["b"] = None
+        # psmidx = psdf.set_index(["a", "b"]).index
+        # pmidx = psmidx.to_pandas()
+        # self.assert_eq(psmidx.is_monotonic_increasing, pmidx.is_monotonic_increasing)
+        # self.assert_eq(psmidx.is_monotonic_decreasing, pmidx.is_monotonic_decreasing)
 
     def test_difference(self):
         # Index
@@ -1289,7 +1295,9 @@ class IndexesTest(PandasOnSparkTestCase, TestUtils):
         psidx1 = ps.from_pandas(pidx1)
         psidx2 = ps.from_pandas(pidx2)
 
-        self.assert_eq(psidx1.difference(psidx2).sort_values(), pidx1.difference(pidx2).sort_values())
+        self.assert_eq(
+            psidx1.difference(psidx2).sort_values(), pidx1.difference(pidx2).sort_values()
+        )
         self.assert_eq(
             psidx1.difference([3, 4, 5, 6]).sort_values(),
             pidx1.difference([3, 4, 5, 6]).sort_values(),
@@ -1333,7 +1341,9 @@ class IndexesTest(PandasOnSparkTestCase, TestUtils):
         psidx1 = ps.from_pandas(pidx1)
         psidx2 = ps.from_pandas(pidx2)
 
-        self.assert_eq(psidx1.difference(psidx2).sort_values(), pidx1.difference(pidx2).sort_values())
+        self.assert_eq(
+            psidx1.difference(psidx2).sort_values(), pidx1.difference(pidx2).sort_values()
+        )
         self.assert_eq(
             psidx1.difference({("a", "x", 1)}).sort_values(),
             pidx1.difference({("a", "x", 1)}).sort_values(),
@@ -1836,7 +1846,8 @@ class IndexesTest(PandasOnSparkTestCase, TestUtils):
                     psidx.intersection(other).sort_values(), ps.Index([3, 4], name="Koalas")
                 )
                 self.assert_eq(
-                    (psidx + 1).intersection(other).sort_values(), ps.Index([3, 4, 5], name="Koalas")
+                    (psidx + 1).intersection(other).sort_values(),
+                    ps.Index([3, 4, 5], name="Koalas"),
                 )
             else:
                 self.assert_eq(pidx.intersection(other), psidx.intersection(other).sort_values())
@@ -2002,7 +2013,8 @@ class IndexesTest(PandasOnSparkTestCase, TestUtils):
 
         # non-string names
         self.assert_eq(
-            ps.MultiIndex.from_frame(psdf, names=[0, 1]), pd.MultiIndex.from_frame(pdf, names=[0, 1])
+            ps.MultiIndex.from_frame(psdf, names=[0, 1]),
+            pd.MultiIndex.from_frame(pdf, names=[0, 1]),
         )
         self.assert_eq(
             ps.MultiIndex.from_frame(psdf, names=[("x", 0), ("y", 1)]),
@@ -2043,7 +2055,9 @@ class IndexesTest(PandasOnSparkTestCase, TestUtils):
         pmidx = pd.MultiIndex.from_tuples([("a", "x")])
         psmidx = ps.from_pandas(pmidx)
         for data_type in data_types:
-            self.assert_eq(pmidx.is_type_compatible(data_type), psmidx.is_type_compatible(data_type))
+            self.assert_eq(
+                pmidx.is_type_compatible(data_type), psmidx.is_type_compatible(data_type)
+            )
 
     def test_asi8(self):
         # Integer
@@ -2282,7 +2296,8 @@ if __name__ == "__main__":
 
     try:
         import xmlrunner  # type: ignore[import]
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
+
+        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

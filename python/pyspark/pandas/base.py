@@ -720,7 +720,8 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         else:
             # TODO: support more APIs?
             raise NotImplementedError(
-                "pandas-on-Spark objects currently do not support %s." % ufunc)
+                "pandas-on-Spark objects currently do not support %s." % ufunc
+            )
 
     @property
     def dtype(self) -> Dtype:

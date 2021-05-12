@@ -332,7 +332,8 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(psdf1.columns.names, pdf.columns.names)
 
         self.assertRaises(
-            AssertionError, lambda: ps.DataFrame(psdf1._internal.copy(column_label_names=("level",)))
+            AssertionError,
+            lambda: ps.DataFrame(psdf1._internal.copy(column_label_names=("level",))),
         )
 
         self.assert_eq(psdf["X"], pdf["X"])
@@ -455,7 +456,8 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(psdf.reset_index(), pdf.reset_index())
         self.assert_eq(psdf.reset_index(level="class"), pdf.reset_index(level="class"))
         self.assert_eq(
-            psdf.reset_index(level="class", col_level=1), pdf.reset_index(level="class", col_level=1)
+            psdf.reset_index(level="class", col_level=1),
+            pdf.reset_index(level="class", col_level=1),
         )
         self.assert_eq(
             psdf.reset_index(level="class", col_level=1, col_fill="species"),
@@ -494,7 +496,8 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
             # The `name` argument is added in pandas 0.24.
             check(psdf.index.to_frame(name="a"), pdf.index.to_frame(name="a"))
             check(
-                psdf.index.to_frame(index=False, name="a"), pdf.index.to_frame(index=False, name="a")
+                psdf.index.to_frame(index=False, name="a"),
+                pdf.index.to_frame(index=False, name="a"),
             )
             check(psdf.index.to_frame(name=("x", "a")), pdf.index.to_frame(name=("x", "a")))
             check(
@@ -818,8 +821,12 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         psdf3 = ps.from_pandas(pdf3)
 
         self.assert_eq(psdf3.rename(index=str_lower), pdf3.rename(index=str_lower))
-        self.assert_eq(psdf3.rename(index=str_lower, level=0), pdf3.rename(index=str_lower, level=0))
-        self.assert_eq(psdf3.rename(index=str_lower, level=1), pdf3.rename(index=str_lower, level=1))
+        self.assert_eq(
+            psdf3.rename(index=str_lower, level=0), pdf3.rename(index=str_lower, level=0)
+        )
+        self.assert_eq(
+            psdf3.rename(index=str_lower, level=1), pdf3.rename(index=str_lower, level=1)
+        )
 
         pdf4 = pdf2 + 1
         psdf4 = psdf2 + 1
@@ -1114,7 +1121,9 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
 
             self.assert_eq(pdf.droplevel("level_1", axis=1), psdf.droplevel("level_1", axis=1))
             self.assert_eq(pdf.droplevel(["level_1"], axis=1), psdf.droplevel(["level_1"], axis=1))
-            self.assert_eq(pdf.droplevel(("level_1",), axis=1), psdf.droplevel(("level_1",), axis=1))
+            self.assert_eq(
+                pdf.droplevel(("level_1",), axis=1), psdf.droplevel(("level_1",), axis=1)
+            )
             self.assert_eq(pdf.droplevel(0, axis=1), psdf.droplevel(0, axis=1))
             self.assert_eq(pdf.droplevel(-1, axis=1), psdf.droplevel(-1, axis=1))
         else:
@@ -1724,7 +1733,9 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         )
         psdf = ps.from_pandas(pdf)
         self.assert_eq(psdf.nsmallest(n=5, columns="a"), pdf.nsmallest(5, columns="a"))
-        self.assert_eq(psdf.nsmallest(n=5, columns=["a", "b"]), pdf.nsmallest(5, columns=["a", "b"]))
+        self.assert_eq(
+            psdf.nsmallest(n=5, columns=["a", "b"]), pdf.nsmallest(5, columns=["a", "b"])
+        )
 
     def test_xs(self):
         d = {
@@ -2690,7 +2701,8 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         )
 
         self.assert_eq(
-            psdf.replace({("Y", "C"): ["a", None]}, "e"), pdf.replace({("Y", "C"): ["a", None]}, "e")
+            psdf.replace({("Y", "C"): ["a", None]}, "e"),
+            pdf.replace({("Y", "C"): ["a", None]}, "e"),
         )
 
     def test_update(self):
@@ -2880,7 +2892,9 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         )
 
         self.assert_eq(
-            psdf.pivot_table(index=["e", "c"], columns="a", values="b", fill_value=999).sort_index(),
+            psdf.pivot_table(
+                index=["e", "c"], columns="a", values="b", fill_value=999
+            ).sort_index(),
             pdf.pivot_table(index=["e", "c"], columns="a", values="b", fill_value=999).sort_index(),
             almost=True,
         )
@@ -3811,8 +3825,12 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         )
         self.assert_eq(pdf.rank(method="min").sort_index(), psdf.rank(method="min").sort_index())
         self.assert_eq(pdf.rank(method="max").sort_index(), psdf.rank(method="max").sort_index())
-        self.assert_eq(pdf.rank(method="first").sort_index(), psdf.rank(method="first").sort_index())
-        self.assert_eq(pdf.rank(method="dense").sort_index(), psdf.rank(method="dense").sort_index())
+        self.assert_eq(
+            pdf.rank(method="first").sort_index(), psdf.rank(method="first").sort_index()
+        )
+        self.assert_eq(
+            pdf.rank(method="dense").sort_index(), psdf.rank(method="dense").sort_index()
+        )
 
         msg = "method must be one of 'average', 'min', 'max', 'first', 'dense'"
         with self.assertRaisesRegex(ValueError, msg):
@@ -4070,7 +4088,9 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(psdf.filter(like="b", axis="index"), pdf.filter(like="b", axis="index"))
         self.assert_eq(psdf.filter(like="c", axis="columns"), pdf.filter(like="c", axis="columns"))
 
-        self.assert_eq(psdf.filter(regex="b.*", axis="index"), pdf.filter(regex="b.*", axis="index"))
+        self.assert_eq(
+            psdf.filter(regex="b.*", axis="index"), pdf.filter(regex="b.*", axis="index")
+        )
         self.assert_eq(
             psdf.filter(regex="b.*", axis="columns"), pdf.filter(regex="b.*", axis="columns")
         )
@@ -4129,7 +4149,9 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(psdf.filter(like="b", axis="index"), pdf.filter(like="b", axis="index"))
         self.assert_eq(psdf.filter(like="c", axis="columns"), pdf.filter(like="c", axis="columns"))
 
-        self.assert_eq(psdf.filter(regex="b.*", axis="index"), pdf.filter(regex="b.*", axis="index"))
+        self.assert_eq(
+            psdf.filter(regex="b.*", axis="index"), pdf.filter(regex="b.*", axis="index")
+        )
         self.assert_eq(
             psdf.filter(regex="b.*", axis="columns"), pdf.filter(regex="b.*", axis="columns")
         )
@@ -4158,7 +4180,8 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         )
         psdf = ps.DataFrame(pdf)
         self.assert_eq(
-            psdf.transform(lambda x: x + 1).sort_index(), pdf.transform(lambda x: x + 1).sort_index()
+            psdf.transform(lambda x: x + 1).sort_index(),
+            pdf.transform(lambda x: x + 1).sort_index(),
         )
         self.assert_eq(
             psdf.transform(lambda x, y: x + y, y=2).sort_index(),
@@ -4183,7 +4206,8 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         psdf.columns = columns
 
         self.assert_eq(
-            psdf.transform(lambda x: x + 1).sort_index(), pdf.transform(lambda x: x + 1).sort_index()
+            psdf.transform(lambda x: x + 1).sort_index(),
+            pdf.transform(lambda x: x + 1).sort_index(),
         )
         with option_context("compute.shortcut_limit", 500):
             self.assert_eq(
@@ -4333,7 +4357,9 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         pdf.columns = columns
         psdf.columns = columns
 
-        self.assert_eq(psdf.koalas.apply_batch(lambda x: x + 1).sort_index(), (pdf + 1).sort_index())
+        self.assert_eq(
+            psdf.koalas.apply_batch(lambda x: x + 1).sort_index(), (pdf + 1).sort_index()
+        )
         with option_context("compute.shortcut_limit", 500):
             self.assert_eq(
                 psdf.koalas.apply_batch(lambda x: x + 1).sort_index(), (pdf + 1).sort_index()
@@ -4356,7 +4382,8 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
             psdf.transform_batch(lambda pdf: pdf + 1).sort_index(), (pdf + 1).sort_index()
         )
         self.assert_eq(
-            psdf.koalas.transform_batch(lambda pdf: pdf.c + 1).sort_index(), (pdf.c + 1).sort_index()
+            psdf.koalas.transform_batch(lambda pdf: pdf.c + 1).sort_index(),
+            (pdf.c + 1).sort_index(),
         )
         self.assert_eq(
             psdf.koalas.transform_batch(lambda pdf, a: pdf + a, 1).sort_index(),
@@ -4369,7 +4396,8 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
 
         with option_context("compute.shortcut_limit", 500):
             self.assert_eq(
-                psdf.koalas.transform_batch(lambda pdf: pdf + 1).sort_index(), (pdf + 1).sort_index()
+                psdf.koalas.transform_batch(lambda pdf: pdf + 1).sort_index(),
+                (pdf + 1).sort_index(),
             )
             self.assert_eq(
                 psdf.koalas.transform_batch(lambda pdf: pdf.b + 1).sort_index(),
@@ -4412,14 +4440,16 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         psdf = ps.range(10)
         psdf["d"] = psdf.koalas.transform_batch(lambda pdf: pdf.id + 1)
         self.assert_eq(
-            psdf, pd.DataFrame({"id": list(range(10)), "d": list(range(1, 11))}, columns=["id", "d"])
+            psdf,
+            pd.DataFrame({"id": list(range(10)), "d": list(range(1, 11))}, columns=["id", "d"]),
         )
 
         psdf = ps.range(10)
         # One to test alias.
         psdf["d"] = psdf.id.transform_batch(lambda ser: ser + 1)
         self.assert_eq(
-            psdf, pd.DataFrame({"id": list(range(10)), "d": list(range(1, 11))}, columns=["id", "d"])
+            psdf,
+            pd.DataFrame({"id": list(range(10)), "d": list(range(1, 11))}, columns=["id", "d"]),
         )
 
         psdf = ps.range(10)
@@ -4429,7 +4459,8 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
 
         psdf["d"] = psdf.koalas.transform_batch(plus_one)
         self.assert_eq(
-            psdf, pd.DataFrame({"id": list(range(10)), "d": list(range(1, 11))}, columns=["id", "d"])
+            psdf,
+            pd.DataFrame({"id": list(range(10)), "d": list(range(1, 11))}, columns=["id", "d"]),
         )
 
         psdf = ps.range(10)
@@ -4439,7 +4470,8 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
 
         psdf["d"] = psdf.id.koalas.transform_batch(plus_one)
         self.assert_eq(
-            psdf, pd.DataFrame({"id": list(range(10)), "d": list(range(1, 11))}, columns=["id", "d"])
+            psdf,
+            pd.DataFrame({"id": list(range(10)), "d": list(range(1, 11))}, columns=["id", "d"]),
         )
 
     def test_empty_timestamp(self):
@@ -4498,7 +4530,9 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         with self.assertRaisesRegex(TypeError, "q must be a float or an array of floats;"):
             psdf.quantile(q=["a"])
 
-        self.assert_eq(psdf.quantile(0.5, numeric_only=False), pdf.quantile(0.5, numeric_only=False))
+        self.assert_eq(
+            psdf.quantile(0.5, numeric_only=False), pdf.quantile(0.5, numeric_only=False)
+        )
         self.assert_eq(
             psdf.quantile([0.25, 0.5, 0.75], numeric_only=False),
             pdf.quantile([0.25, 0.5, 0.75], numeric_only=False),
@@ -4622,7 +4656,9 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         )
 
         # axis=1
-        self.assert_eq(psdf.take([1, 2], axis=1).sort_index(), pdf.take([1, 2], axis=1).sort_index())
+        self.assert_eq(
+            psdf.take([1, 2], axis=1).sort_index(), pdf.take([1, 2], axis=1).sort_index()
+        )
         self.assert_eq(
             psdf.take([-1, -2], axis=1).sort_index(), pdf.take([-1, -2], axis=1).sort_index()
         )
@@ -4664,7 +4700,9 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         )
 
         # axis=1
-        self.assert_eq(psdf.take([1, 2], axis=1).sort_index(), pdf.take([1, 2], axis=1).sort_index())
+        self.assert_eq(
+            psdf.take([1, 2], axis=1).sort_index(), pdf.take([1, 2], axis=1).sort_index()
+        )
         self.assert_eq(
             psdf.take([-1, -2], axis=1).sort_index(), pdf.take([-1, -2], axis=1).sort_index()
         )
@@ -5520,7 +5558,8 @@ if __name__ == "__main__":
 
     try:
         import xmlrunner  # type: ignore[import]
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
+
+        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

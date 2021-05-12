@@ -339,7 +339,9 @@ class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
                 self.assert_eq(actual, expected)
 
         # Series
-        assert_eq((psdf1.a - psdf2.b - psdf3.c).sort_index(), (pdf1.a - pdf2.b - pdf3.c).sort_index())
+        assert_eq(
+            (psdf1.a - psdf2.b - psdf3.c).sort_index(), (pdf1.a - pdf2.b - pdf3.c).sort_index()
+        )
 
         assert_eq(
             (psdf1.a * (psdf2.a * psdf3.c)).sort_index(), (pdf1.a * (pdf2.a * pdf3.c)).sort_index()
@@ -1558,7 +1560,9 @@ class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
         psser2 = ps.from_pandas(pser2)
         psidx1 = ps.from_pandas(pidx1)
 
-        self.assert_eq((psser1 + 1 + 10 * psser2).sort_index(), (pser1 + 1 + 10 * pser2).sort_index())
+        self.assert_eq(
+            (psser1 + 1 + 10 * psser2).sort_index(), (pser1 + 1 + 10 * pser2).sort_index()
+        )
         self.assert_eq(
             (psser1 + 1 + 10 * psser2.rename()).sort_index(),
             (pser1 + 1 + 10 * pser2.rename()).sort_index(),
@@ -1942,7 +1946,8 @@ if __name__ == "__main__":
 
     try:
         import xmlrunner  # type: ignore[import]
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
+
+        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

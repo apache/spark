@@ -231,7 +231,8 @@ class ReshapeTest(PandasOnSparkTestCase):
         psdf = ps.from_pandas(pdf)
 
         self.assert_eq(
-            ps.get_dummies(psdf), pd.get_dummies(pdf, dtype=np.int8).rename(columns=name_like_string)
+            ps.get_dummies(psdf),
+            pd.get_dummies(pdf, dtype=np.int8).rename(columns=name_like_string),
         )
         self.assert_eq(
             ps.get_dummies(psdf, columns=[("y", "c", "3"), ("x", "a", "1")]),
@@ -264,7 +265,8 @@ class ReshapeTest(PandasOnSparkTestCase):
         psdf = ps.from_pandas(pdf)
 
         self.assert_eq(
-            ps.get_dummies(psdf), pd.get_dummies(pdf, dtype=np.int8).rename(columns=name_like_string)
+            ps.get_dummies(psdf),
+            pd.get_dummies(pdf, dtype=np.int8).rename(columns=name_like_string),
         )
         self.assert_eq(
             ps.get_dummies(psdf, columns=[("y", 3, "c"), ("x", 1, "a")]),
@@ -288,7 +290,8 @@ if __name__ == "__main__":
 
     try:
         import xmlrunner  # type: ignore[import]
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
+
+        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

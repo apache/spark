@@ -30,7 +30,9 @@ class ExpandingTest(PandasOnSparkTestCase, TestUtils):
         pser = pd.Series([1, 2, 3], index=np.random.rand(3))
         psser = ps.from_pandas(pser)
         self.assert_eq(getattr(psser.expanding(2), f)(), getattr(pser.expanding(2), f)())
-        self.assert_eq(getattr(psser.expanding(2), f)().sum(), getattr(pser.expanding(2), f)().sum())
+        self.assert_eq(
+            getattr(psser.expanding(2), f)().sum(), getattr(pser.expanding(2), f)().sum()
+        )
 
         # Multiindex
         pser = pd.Series(
@@ -233,7 +235,8 @@ class ExpandingTest(PandasOnSparkTestCase, TestUtils):
             )
             expected_result = pd.Series([None, None, 2.0, None], index=midx, name="b")
             self.assert_eq(
-                psdf.b.groupby(psdf.a).expanding(2).count().sort_index(), expected_result.sort_index()
+                psdf.b.groupby(psdf.a).expanding(2).count().sort_index(),
+                expected_result.sort_index(),
             )
             self.assert_eq(
                 psdf.groupby(psdf.a)["b"].expanding(2).count().sort_index(),
@@ -300,7 +303,8 @@ if __name__ == "__main__":
 
     try:
         import xmlrunner  # type: ignore[import]
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
+
+        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

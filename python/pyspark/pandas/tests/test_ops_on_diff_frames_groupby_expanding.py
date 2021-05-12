@@ -75,7 +75,8 @@ class OpsOnDiffFramesGroupByExpandingTest(PandasOnSparkTestCase, TestUtils):
             psser = ps.Series([1, 2, 3])
             kkey = ps.Series([1, 2, 3], name="a")
             midx = pd.MultiIndex.from_tuples(
-                list(zip(kkey.to_pandas().values, psser.index.to_pandas().values)), names=["a", None]
+                list(zip(kkey.to_pandas().values, psser.index.to_pandas().values)),
+                names=["a", None],
             )
             expected_result = pd.Series([np.nan, np.nan, np.nan], index=midx)
             self.assert_eq(
@@ -128,7 +129,8 @@ if __name__ == "__main__":
 
     try:
         import xmlrunner  # type: ignore[import]
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
+
+        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

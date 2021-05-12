@@ -146,7 +146,9 @@ class DataFramePlotPlotlyTest(PandasOnSparkTestCase, TestUtils):
     def test_scatter_plot(self):
         def check_scatter_plot(pdf, psdf, x, y, c):
             self.assertEqual(pdf.plot.scatter(x=x, y=y), psdf.plot.scatter(x=x, y=y))
-            self.assertEqual(pdf.plot(kind="scatter", x=x, y=y), psdf.plot(kind="scatter", x=x, y=y))
+            self.assertEqual(
+                pdf.plot(kind="scatter", x=x, y=y), psdf.plot(kind="scatter", x=x, y=y)
+            )
 
             # check when keyword c is given as name of a column
             self.assertEqual(
@@ -269,7 +271,8 @@ if __name__ == "__main__":
 
     try:
         import xmlrunner  # type: ignore[import]
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
+
+        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)
