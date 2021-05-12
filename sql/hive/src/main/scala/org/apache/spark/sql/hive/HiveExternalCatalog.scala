@@ -1078,7 +1078,6 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
             throw new IOException(s"Renaming partition path from $actualPartitionPath to " +
               s"$expectedPartitionPath returned false")
           }
-          fs.rename(actualPartitionPath, expectedPartitionPath)
         } catch {
           case e: IOException =>
             throw new SparkException("Unable to rename partition path from " +
