@@ -42,7 +42,7 @@ import org.apache.spark.annotation.{DeveloperApi, Experimental, Since, Unstable}
  *   }
  * }}}
  *
- * We need to create your extension which inherits [[SparkSessionExtensionsProvider]]
+ * We need to create our extension which inherits [[SparkSessionExtensionsProvider]]
  * Example:
  *
  * {{{
@@ -63,15 +63,12 @@ import org.apache.spark.annotation.{DeveloperApi, Experimental, Since, Unstable}
  * }}}
  *
  * We can inject `MyExtensions` in three ways,
+ *
  * <ul>
  *   <li>[[SparkSession.Builder.withExtensions]]</li>
  *   <li>Config - spark.sql.extensions</li>
  *   <li>[[java.util.ServiceLoader]] - Add to src/main/resources/META-INF/services/org.apache.spark.sql.SparkSessionExtensionsProvider</li>
  * </ul>
- *
- * @see [[SparkSessionExtensions]]
- * @see [[SparkSession.Builder.withExtensions]]
- * @see [[java.util.ServiceLoader]]
  *
  * @since 3.2.0
  *
@@ -81,6 +78,5 @@ import org.apache.spark.annotation.{DeveloperApi, Experimental, Since, Unstable}
 @DeveloperApi
 @Experimental
 @Unstable
-@Since("3.2.0")
 trait SparkSessionExtensionsProvider extends Function1[SparkSessionExtensions, Unit]
 // scalastyle:on line.size.limit
