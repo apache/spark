@@ -815,7 +815,7 @@ case class Range(
           val upperBinValue = getRangeValue(math.max(upperIndexPos, 0))
           val ndv = math.max(upperIndexPos - lowerIndexPos, 1)
           binArray(binId) = HistogramBin(lowerBinValue, upperBinValue, ndv)
-          // Update lowerIndex and lowerBinValue with upper one for next iteration.
+          // Update the lowerIndex and lowerBinValue with upper ones for the next iteration.
           (upperIndex, upperBinValue)
       }
     Histogram(height, binArray)
