@@ -23,25 +23,32 @@ object TreePattern extends Enumeration  {
 
   // Enum Ids start from 0.
   // Expression patterns (alphabetically ordered)
-  val AND_OR: Value = Value(0)
+  val ALIAS: Value = Value(0)
+  val AND_OR: Value = Value
   val ATTRIBUTE_REFERENCE: Value = Value
   val APPEND_COLUMNS: Value = Value
+  val AVERAGE: Value = Value
   val BINARY_ARITHMETIC: Value = Value
   val BINARY_COMPARISON: Value = Value
+  val BOOL_AGG: Value = Value
   val CASE_WHEN: Value = Value
   val CAST: Value = Value
   val CONCAT: Value = Value
   val COUNT: Value = Value
+  val COUNT_IF: Value = Value
   val CREATE_NAMED_STRUCT: Value = Value
+  val CURRENT_LIKE: Value = Value
   val DESERIALIZE_TO_OBJECT: Value = Value
   val DYNAMIC_PRUNING_SUBQUERY: Value = Value
   val EXISTS_SUBQUERY = Value
   val EXPRESSION_WITH_RANDOM_SEED: Value = Value
   val EXTRACT_VALUE: Value = Value
+  val GENERATE: Value = Value
   val IF: Value = Value
   val IN: Value = Value
   val IN_SUBQUERY: Value = Value
   val INSET: Value = Value
+  val INTERSECT: Value = Value
   val JSON_TO_STRUCT: Value = Value
   val LAMBDA_VARIABLE: Value = Value
   val LIKE_FAMLIY: Value = Value
@@ -54,7 +61,10 @@ object TreePattern extends Enumeration  {
   val SERIALIZE_FROM_OBJECT: Value = Value
   val OUTER_REFERENCE: Value = Value
   val PLAN_EXPRESSION: Value = Value
+  val RUNTIME_REPLACEABLE: Value = Value
   val SCALAR_SUBQUERY: Value = Value
+  val SORT: Value = Value
+  val SUM: Value = Value
   val TRUE_OR_FALSE_LITERAL: Value = Value
   val WINDOW_EXPRESSION: Value = Value
   val UNARY_POSITIVE: Value = Value
@@ -62,6 +72,7 @@ object TreePattern extends Enumeration  {
 
   // Logical plan patterns (alphabetically ordered)
   val AGGREGATE: Value = Value
+  val DISTINCT_LIKE: Value = Value
   val EXCEPT: Value = Value
   val FILTER: Value = Value
   val INNER_LIKE_JOIN: Value = Value
@@ -72,6 +83,8 @@ object TreePattern extends Enumeration  {
   val NATURAL_LIKE_JOIN: Value = Value
   val OUTER_JOIN: Value = Value
   val PROJECT: Value = Value
+  val REPARTITION_OPERATION: Value = Value
+  val UNION: Value = Value
   val TYPED_FILTER: Value = Value
   val WINDOW: Value = Value
 }

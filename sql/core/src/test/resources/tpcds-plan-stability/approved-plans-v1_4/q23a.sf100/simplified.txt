@@ -10,16 +10,16 @@ WholeStageCodegen (36)
                   Project [cs_quantity,cs_list_price]
                     BroadcastHashJoin [cs_sold_date_sk,d_date_sk]
                       Project [cs_quantity,cs_list_price,cs_sold_date_sk]
-                        InputAdapter
-                          SortMergeJoin [cs_bill_customer_sk,c_customer_sk]
+                        SortMergeJoin [cs_bill_customer_sk,c_customer_sk]
+                          InputAdapter
                             WholeStageCodegen (10)
                               Sort [cs_bill_customer_sk]
                                 InputAdapter
                                   Exchange [cs_bill_customer_sk] #2
                                     WholeStageCodegen (9)
                                       Project [cs_bill_customer_sk,cs_quantity,cs_list_price,cs_sold_date_sk]
-                                        InputAdapter
-                                          SortMergeJoin [cs_item_sk,item_sk]
+                                        SortMergeJoin [cs_item_sk,item_sk]
+                                          InputAdapter
                                             WholeStageCodegen (2)
                                               Sort [cs_item_sk]
                                                 InputAdapter
@@ -30,6 +30,7 @@ WholeStageCodegen (36)
                                                           Scan parquet default.catalog_sales [cs_bill_customer_sk,cs_item_sk,cs_quantity,cs_list_price,cs_sold_date_sk]
                                                             SubqueryBroadcast [d_date_sk] #1
                                                               ReusedExchange [d_date_sk] #4
+                                          InputAdapter
                                             WholeStageCodegen (8)
                                               Sort [item_sk]
                                                 Project [item_sk]
@@ -70,6 +71,7 @@ WholeStageCodegen (36)
                                                                           ColumnarToRow
                                                                             InputAdapter
                                                                               Scan parquet default.item [i_item_sk,i_item_desc]
+                          InputAdapter
                             WholeStageCodegen (15)
                               Sort [c_customer_sk]
                                 Project [c_customer_sk]
@@ -154,16 +156,16 @@ WholeStageCodegen (36)
                   Project [ws_quantity,ws_list_price]
                     BroadcastHashJoin [ws_sold_date_sk,d_date_sk]
                       Project [ws_quantity,ws_list_price,ws_sold_date_sk]
-                        InputAdapter
-                          SortMergeJoin [ws_bill_customer_sk,c_customer_sk]
+                        SortMergeJoin [ws_bill_customer_sk,c_customer_sk]
+                          InputAdapter
                             WholeStageCodegen (27)
                               Sort [ws_bill_customer_sk]
                                 InputAdapter
                                   Exchange [ws_bill_customer_sk] #14
                                     WholeStageCodegen (26)
                                       Project [ws_bill_customer_sk,ws_quantity,ws_list_price,ws_sold_date_sk]
-                                        InputAdapter
-                                          SortMergeJoin [ws_item_sk,item_sk]
+                                        SortMergeJoin [ws_item_sk,item_sk]
+                                          InputAdapter
                                             WholeStageCodegen (19)
                                               Sort [ws_item_sk]
                                                 InputAdapter
@@ -173,6 +175,7 @@ WholeStageCodegen (36)
                                                         InputAdapter
                                                           Scan parquet default.web_sales [ws_item_sk,ws_bill_customer_sk,ws_quantity,ws_list_price,ws_sold_date_sk]
                                                             ReusedSubquery [d_date_sk] #1
+                                          InputAdapter
                                             WholeStageCodegen (25)
                                               Sort [item_sk]
                                                 Project [item_sk]
@@ -191,6 +194,7 @@ WholeStageCodegen (36)
                                                                 Sort [i_item_sk]
                                                                   InputAdapter
                                                                     ReusedExchange [i_item_sk,i_item_desc] #7
+                          InputAdapter
                             WholeStageCodegen (32)
                               Sort [c_customer_sk]
                                 Project [c_customer_sk]

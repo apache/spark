@@ -17,8 +17,8 @@ WholeStageCodegen (12)
                                 SortMergeJoin [ws_order_number,wr_order_number]
                                   WholeStageCodegen (5)
                                     Project [ws_ship_date_sk,ws_ship_addr_sk,ws_web_site_sk,ws_order_number,ws_ext_ship_cost,ws_net_profit]
-                                      InputAdapter
-                                        SortMergeJoin [ws_order_number,ws_order_number,ws_warehouse_sk,ws_warehouse_sk]
+                                      SortMergeJoin [ws_order_number,ws_order_number,ws_warehouse_sk,ws_warehouse_sk]
+                                        InputAdapter
                                           WholeStageCodegen (2)
                                             Sort [ws_order_number]
                                               InputAdapter
@@ -29,6 +29,7 @@ WholeStageCodegen (12)
                                                         ColumnarToRow
                                                           InputAdapter
                                                             Scan parquet default.web_sales [ws_ship_date_sk,ws_ship_addr_sk,ws_web_site_sk,ws_warehouse_sk,ws_order_number,ws_ext_ship_cost,ws_net_profit,ws_sold_date_sk]
+                                        InputAdapter
                                           WholeStageCodegen (4)
                                             Sort [ws_order_number]
                                               InputAdapter

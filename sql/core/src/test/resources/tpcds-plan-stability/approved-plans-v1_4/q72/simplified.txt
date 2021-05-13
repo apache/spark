@@ -6,8 +6,8 @@ TakeOrderedAndProject [total_cnt,i_item_desc,w_warehouse_name,d_week_seq,no_prom
           WholeStageCodegen (14)
             HashAggregate [i_item_desc,w_warehouse_name,d_week_seq] [count,count]
               Project [w_warehouse_name,i_item_desc,d_week_seq]
-                InputAdapter
-                  SortMergeJoin [cs_item_sk,cs_order_number,cr_item_sk,cr_order_number]
+                SortMergeJoin [cs_item_sk,cs_order_number,cr_item_sk,cr_order_number]
+                  InputAdapter
                     WholeStageCodegen (11)
                       Sort [cs_item_sk,cs_order_number]
                         InputAdapter
@@ -103,6 +103,7 @@ TakeOrderedAndProject [total_cnt,i_item_desc,w_warehouse_name,d_week_seq,no_prom
                                           ColumnarToRow
                                             InputAdapter
                                               Scan parquet default.promotion [p_promo_sk]
+                  InputAdapter
                     WholeStageCodegen (13)
                       Sort [cr_item_sk,cr_order_number]
                         InputAdapter

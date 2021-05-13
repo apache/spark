@@ -776,7 +776,7 @@ object DateTimeUtils {
       case TRUNC_TO_YEAR => days - getDayInYear(days) + 1
       case _ =>
         // caller make sure that this should never be reached
-        sys.error(s"Invalid trunc level: $level")
+        throw QueryExecutionErrors.unreachableError(s": Invalid trunc level: $level")
     }
   }
 

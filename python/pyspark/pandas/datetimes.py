@@ -576,7 +576,7 @@ class DatetimeMethods(object):
         Parameters
         ----------
         date_format : str
-            Date format string (e.g. "%%Y-%%m-%%d").
+            Date format string (example: "%%Y-%%m-%%d").
 
         Returns
         -------
