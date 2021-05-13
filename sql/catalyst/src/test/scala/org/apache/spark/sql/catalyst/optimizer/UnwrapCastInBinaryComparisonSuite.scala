@@ -237,9 +237,10 @@ class UnwrapCastInBinaryComparisonSuite extends PlanTest with ExpressionEvalHelp
     assertEquivalent(
       Cast(f, LongType).in(1.toLong, 2.toLong, 3.toLong), f.in(1.toShort, 2.toShort, 3.toShort))
 
-    // Literal list contains the value which out of fromExp range
+    // in.list contains the value which out of `fromType` range
     assertEquivalent(
-      Cast(f, LongType).in(1.toLong, Int.MaxValue.toLong), Or(falseIfNotNull(f), f.in(1.toShort)))
+      Cast(f, LongType).in(1.toLong, Int.MaxValue.toLong, Long.MaxValue),
+      Or(falseIfNotNull(f), f.in(1.toShort)))
   }
 
   private def castInt(e: Expression): Expression = Cast(e, IntegerType)

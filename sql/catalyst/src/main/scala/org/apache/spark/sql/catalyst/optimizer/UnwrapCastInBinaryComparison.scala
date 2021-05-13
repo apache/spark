@@ -25,11 +25,11 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{BINARY_COMPARISON, IN}
 import org.apache.spark.sql.types._
 
 /**
- * Unwrap casts in binary comparison operations with patterns like following:
+ * Unwrap casts in binary comparison or `In` operations with patterns like following:
  *
- * `BinaryComparison(Cast(fromExp, toType), Literal(value, toType))`
- *   or
- * `BinaryComparison(Literal(value, toType), Cast(fromExp, toType))`
+ * - `BinaryComparison(Cast(fromExp, toType), Literal(value, toType))`
+ * - `BinaryComparison(Literal(value, toType), Cast(fromExp, toType))`
+ * - `In(Cast(fromExp, toType), Seq((v1, toType), (v2, toType), ...)`
  *
  * This rule optimizes expressions with the above pattern by either replacing the cast with simpler
  * constructs, or moving the cast from the expression side to the literal side, which enables them
@@ -87,10 +87,7 @@ import org.apache.spark.sql.types._
  * `and(isnull(fromExp), null)`, to enable further optimization and filter pushdown to data sources.
  * Similarly, `if(isnull(fromExp), null, true)` is represented with `or(isnotnull(fromExp), null)`.
  *
- * Unwrap casts in In expression with patterns like:
- * `In(Cast(fromExp, toType), Seq((v1, toType), (v2, toType), ...)`
- *
- * First the rule transform the expression to Equals:
+ * For `In` operation, first the rule transform the expression to Equals:
  * `Seq(
  *   EqualTo(Cast(fromExp, toType), Literal(v1, toType)),
  *   EqualTo(Cast(fromExp, toType), Literal(v2, toType)),
@@ -143,7 +140,12 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
             case And(IsNull(_), Literal(null, BooleanType)) => false
           }
       val unwrapIn = In(fromExp, newValueList.map {case EqualTo(_, lit) => lit})
-      (exp :+ unwrapIn).reduce(Or)
+      // since `exp` are all the same,
+      // convert to a single value `And(IsNull(_), Literal(null, BooleanType))`.
+      exp.headOption match {
+        case Some(falseIfNotNull) => Or(falseIfNotNull, unwrapIn)
+        case _ => unwrapIn
+      }
 
     case _ => exp
   }
