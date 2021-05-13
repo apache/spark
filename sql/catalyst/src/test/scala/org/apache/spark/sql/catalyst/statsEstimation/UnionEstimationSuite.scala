@@ -199,9 +199,7 @@ class UnionEstimationSuite extends StatsEstimationTestBase {
 
   test("col stats estimation when null count stats are not present for one child") {
     val sz = Some(BigInt(1024))
-
     val attrInt = AttributeReference("cint", IntegerType)()
-
     val columnInfo = AttributeMap(
       Seq(
         attrInt -> ColumnStat(
