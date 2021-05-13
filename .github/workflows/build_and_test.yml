@@ -76,8 +76,6 @@ jobs:
       INCLUDED_TAGS: ${{ matrix.included-tags }}
       HADOOP_PROFILE: ${{ matrix.hadoop }}
       HIVE_PROFILE: ${{ matrix.hive }}
-      # GitHub Actions' default miniconda to use in pip packaging test.
-      CONDA_PREFIX: /usr/share/miniconda
       GITHUB_PREV_SHA: ${{ github.event.before }}
       SPARK_LOCAL_IP: localhost
     steps:
@@ -160,8 +158,6 @@ jobs:
       MODULES_TO_TEST: ${{ matrix.modules }}
       HADOOP_PROFILE: hadoop2.7
       HIVE_PROFILE: hive2.3
-      # GitHub Actions' default miniconda to use in pip packaging test.
-      CONDA_PREFIX: /usr/share/miniconda
       GITHUB_PREV_SHA: ${{ github.event.before }}
       SPARK_LOCAL_IP: localhost
     steps:
@@ -195,13 +191,18 @@ jobs:
       with:
         python-version: 2.7
         architecture: x64
-    - name: Install Python packages (Python 2.7 )
+    - name: Install Python packages (Python 2.7)
       run: |
         python2.7 -m pip install numpy 'pyarrow<3.0.0' pandas scipy xmlrunner
         python2.7 -m pip list
+    - name: Install Conda for pip packaging test
+      run: |
+        curl -s https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh > miniconda.sh
+        bash miniconda.sh -b -p $HOME/miniconda
     # Run the tests.
     - name: Run tests
       run: |
+        export PATH=$PATH:$HOME/miniconda/bin
         ./dev/run-tests --parallelism 2 --modules "$MODULES_TO_TEST"
     - name: Upload test results to report
       if: always()
