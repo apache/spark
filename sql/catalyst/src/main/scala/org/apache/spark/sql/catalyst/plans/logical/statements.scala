@@ -241,43 +241,6 @@ case class QualifiedColType(
     position: Option[ColumnPosition])
 
 /**
- * ALTER TABLE ... ADD COLUMNS command, as parsed from SQL.
- */
-case class AlterTableAddColumnsStatement(
-    tableName: Seq[String],
-    columnsToAdd: Seq[QualifiedColType]) extends LeafParsedStatement
-
-case class AlterTableReplaceColumnsStatement(
-    tableName: Seq[String],
-    columnsToAdd: Seq[QualifiedColType]) extends LeafParsedStatement
-
-/**
- * ALTER TABLE ... CHANGE COLUMN command, as parsed from SQL.
- */
-case class AlterTableAlterColumnStatement(
-    tableName: Seq[String],
-    column: Seq[String],
-    dataType: Option[DataType],
-    nullable: Option[Boolean],
-    comment: Option[String],
-    position: Option[ColumnPosition]) extends LeafParsedStatement
-
-/**
- * ALTER TABLE ... RENAME COLUMN command, as parsed from SQL.
- */
-case class AlterTableRenameColumnStatement(
-    tableName: Seq[String],
-    column: Seq[String],
-    newName: String) extends LeafParsedStatement
-
-/**
- * ALTER TABLE ... DROP COLUMNS command, as parsed from SQL.
- */
-case class AlterTableDropColumnsStatement(
-    tableName: Seq[String],
-    columnsToDrop: Seq[Seq[String]]) extends LeafParsedStatement
-
-/**
  * An INSERT INTO statement, as parsed from SQL.
  *
  * @param table                the logical plan representing the table.

@@ -41,7 +41,7 @@ import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, IntervalUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{getZoneId, stringToDate, stringToTimestamp}
 import org.apache.spark.sql.catalyst.util.IntervalUtils.IntervalUnit
-import org.apache.spark.sql.connector.catalog.{SupportsNamespaces, TableCatalog}
+import org.apache.spark.sql.connector.catalog.{SupportsNamespaces, TableCatalog, TableChange}
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, Expression => V2Expression, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
 import org.apache.spark.sql.errors.QueryParsingErrors
@@ -3468,7 +3468,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   /**
-   * Parse a [[AlterTableAddColumnsStatement]] command.
+   * Parse a [[AlterTableAddColumns]] command.
    *
    * For example:
    * {{{
@@ -3477,14 +3477,23 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    * }}}
    */
   override def visitAddTableColumns(ctx: AddTableColumnsContext): LogicalPlan = withOrigin(ctx) {
-    AlterTableAddColumnsStatement(
-      visitMultipartIdentifier(ctx.multipartIdentifier),
+    val cols =
       ctx.columns.qualifiedColTypeWithPosition.asScala.map(typedVisit[QualifiedColType]).toSeq
-    )
+    val changes = cols.map { col =>
+      TableChange.addColumn(
+        col.name.toArray,
+        col.dataType,
+        col.nullable,
+        col.comment.orNull,
+        col.position.orNull)
+    }
+    AlterTableAddColumns(
+      createUnresolvedTable(ctx.multipartIdentifier, "ALTER TABLE ... ADD COLUMNS"),
+      changes)
   }
 
   /**
-   * Parse a [[AlterTableRenameColumnStatement]] command.
+   * Parse a [[AlterTableRenameColumn]] command.
    *
    * For example:
    * {{{
@@ -3493,14 +3502,17 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    */
   override def visitRenameTableColumn(
       ctx: RenameTableColumnContext): LogicalPlan = withOrigin(ctx) {
-    AlterTableRenameColumnStatement(
-      visitMultipartIdentifier(ctx.table),
-      ctx.from.parts.asScala.map(_.getText).toSeq,
-      ctx.to.getText)
+    val fromCol = ctx.from.parts.asScala.map(_.getText).toSeq
+    val toCol = ctx.to.getText
+    AlterTableRenameColumn(
+      createUnresolvedTable(
+        ctx.table,
+        "ALTER TABLE ... RENAME COLUMN"),
+      Seq(TableChange.renameColumn(fromCol.toArray, toCol)))
   }
 
   /**
-   * Parse a [[AlterTableAlterColumnStatement]] command to alter a column's property.
+   * Parse a [[AlterTableAlterColumn]] command to alter a column's property.
    *
    * For example:
    * {{{
@@ -3548,13 +3560,22 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
 
     assert(Seq(dataType, nullable, comment, position).count(_.nonEmpty) == 1)
 
-    AlterTableAlterColumnStatement(
-      visitMultipartIdentifier(ctx.table),
-      typedVisit[Seq[String]](ctx.column),
-      dataType = dataType,
-      nullable = nullable,
-      comment = comment,
-      position = position)
+    val colName = typedVisit[Seq[String]](ctx.column).toArray
+    val typeChange = dataType.map { newDataType =>
+      TableChange.updateColumnType(colName, newDataType)
+    }
+    val nullabilityChange = nullable.map { nullable =>
+      TableChange.updateColumnNullability(colName, nullable)
+    }
+    val commentChange = comment.map { newComment =>
+      TableChange.updateColumnComment(colName, newComment)
+    }
+    val positionChange = position.map { newPosition =>
+      TableChange.updateColumnPosition(colName, newPosition)
+    }
+    AlterTableAlterColumn(
+      createUnresolvedTable(ctx.table, "ALTER TABLE ... ALTER COLUMN"),
+      typeChange.toSeq ++ nullabilityChange ++ commentChange ++ positionChange)
   }
 
   /**
@@ -3582,13 +3603,22 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
         Some("please run ALTER COLUMN ... SET/DROP NOT NULL instead"))
     }
 
-    AlterTableAlterColumnStatement(
-      typedVisit[Seq[String]](ctx.table),
-      columnNameParts,
-      dataType = Option(ctx.colType().dataType()).map(typedVisit[DataType]),
-      nullable = None,
-      comment = Option(ctx.colType().commentSpec()).map(visitCommentSpec),
-      position = Option(ctx.colPosition).map(typedVisit[ColumnPosition]))
+    val colName = columnNameParts.toArray
+    val dataType = Option(ctx.colType().dataType()).map(typedVisit[DataType])
+    val typeChange = dataType.map { newDataType =>
+      TableChange.updateColumnType(colName, newDataType)
+    }
+    val comment = Option(ctx.colType().commentSpec()).map(visitCommentSpec)
+    val commentChange = comment.map { newComment =>
+      TableChange.updateColumnComment(colName, newComment)
+    }
+    val position = Option(ctx.colPosition).map(typedVisit[ColumnPosition])
+    val positionChange = position.map { newPosition =>
+      TableChange.updateColumnPosition(colName, newPosition)
+    }
+    AlterTableAlterColumn(
+      createUnresolvedTable(ctx.table, "ALTER TABLE ... ALTER COLUMN"),
+      typeChange.toSeq ++ commentChange ++ positionChange)
   }
 
   override def visitHiveReplaceColumns(
@@ -3596,24 +3626,32 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     if (ctx.partitionSpec != null) {
       operationNotAllowed("ALTER TABLE table PARTITION partition_spec REPLACE COLUMNS", ctx)
     }
-    AlterTableReplaceColumnsStatement(
-      visitMultipartIdentifier(ctx.multipartIdentifier),
-      ctx.columns.qualifiedColTypeWithPosition.asScala.map { colType =>
-        if (colType.NULL != null) {
-          throw QueryParsingErrors.operationInHiveStyleCommandUnsupportedError(
-            "NOT NULL", "REPLACE COLUMNS", ctx)
-        }
-        if (colType.colPosition != null) {
-          throw QueryParsingErrors.operationInHiveStyleCommandUnsupportedError(
-            "Column position", "REPLACE COLUMNS", ctx)
-        }
-        typedVisit[QualifiedColType](colType)
-      }.toSeq
-    )
+    val cols = ctx.columns.qualifiedColTypeWithPosition.asScala.map { colType =>
+      if (colType.NULL != null) {
+        throw QueryParsingErrors.operationInHiveStyleCommandUnsupportedError(
+          "NOT NULL", "REPLACE COLUMNS", ctx)
+      }
+      if (colType.colPosition != null) {
+        throw QueryParsingErrors.operationInHiveStyleCommandUnsupportedError(
+          "Column position", "REPLACE COLUMNS", ctx)
+      }
+      typedVisit[QualifiedColType](colType)
+    }.toSeq
+    val changes = cols.map { col =>
+      TableChange.addColumn(
+        col.name.toArray,
+        col.dataType,
+        col.nullable,
+        col.comment.orNull,
+        col.position.orNull)
+    }
+    AlterTableAddColumns(
+      createUnresolvedTable(ctx.multipartIdentifier, "ALTER TABLE ... REPLACE COLUMNS"),
+      changes)
   }
 
   /**
-   * Parse a [[AlterTableDropColumnsStatement]] command.
+   * Parse a [[AlterTableDropColumns]] command.
    *
    * For example:
    * {{{
@@ -3624,9 +3662,11 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   override def visitDropTableColumns(
       ctx: DropTableColumnsContext): LogicalPlan = withOrigin(ctx) {
     val columnsToDrop = ctx.columns.multipartIdentifier.asScala.map(typedVisit[Seq[String]])
-    AlterTableDropColumnsStatement(
-      visitMultipartIdentifier(ctx.multipartIdentifier),
-      columnsToDrop.toSeq)
+    AlterTableDropColumns(
+      createUnresolvedTable(
+        ctx.multipartIdentifier,
+        "ALTER TABLE ... DROP COLUMNS"),
+      columnsToDrop.map(col => TableChange.deleteColumn(col.toArray)))
   }
 
   /**

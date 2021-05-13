@@ -31,7 +31,7 @@ import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource}
 import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
-import org.apache.spark.sql.types.{MetadataBuilder, StructField, StructType}
+import org.apache.spark.sql.types.{DataType, MetadataBuilder, StructField, StructType}
 
 /**
  * Resolves catalogs from the multi-part identifiers in SQL statements, and convert the statements
@@ -46,126 +46,62 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
   import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
-    case AlterTableAddColumnsStatement(
-         nameParts @ SessionCatalogAndTable(catalog, tbl), cols) =>
-      cols.foreach(c => failNullType(c.dataType))
-      loadTable(catalog, tbl.asIdentifier).collect {
-        case v1Table: V1Table =>
-          cols.foreach { c =>
-            assertTopLevelColumn(c.name, "AlterTableAddColumnsCommand")
-            if (!c.nullable) {
-              throw QueryCompilationErrors.addColumnWithV1TableCannotSpecifyNotNullError
-            }
-          }
-          AlterTableAddColumnsCommand(tbl.asTableIdentifier, cols.map(convertToStructField))
-      }.getOrElse {
-        val changes = cols.map { col =>
-          TableChange.addColumn(
-            col.name.toArray,
-            col.dataType,
-            col.nullable,
-            col.comment.orNull,
-            col.position.orNull)
-        }
-        createAlterTable(nameParts, catalog, tbl, changes)
+    case AlterTableAddColumns(ResolvedV1TableIdentifier(ident), changes) =>
+      val colsToAdd = changes.map { c =>
+        val add = c.asInstanceOf[TableChange.AddColumn]
+        assertTopLevelColumn(add.fieldNames(), "AlterTableAddColumnsCommand")
+        convertToStructField(add)
       }
+      AlterTableAddColumnsCommand(ident.asTableIdentifier, colsToAdd)
 
-    case AlterTableReplaceColumnsStatement(
-        nameParts @ SessionCatalogAndTable(catalog, tbl), cols) =>
-      cols.foreach(c => failNullType(c.dataType))
-      val changes: Seq[TableChange] = loadTable(catalog, tbl.asIdentifier) match {
-        case Some(_: V1Table) =>
-          throw QueryCompilationErrors.replaceColumnsOnlySupportedWithV2TableError
-        case Some(table) =>
-          // REPLACE COLUMNS deletes all the existing columns and adds new columns specified.
-          val deleteChanges = table.schema.fieldNames.map { name =>
-            TableChange.deleteColumn(Array(name))
-          }
-          val addChanges = cols.map { col =>
-            TableChange.addColumn(
-              col.name.toArray,
-              col.dataType,
-              col.nullable,
-              col.comment.orNull,
-              col.position.orNull)
-          }
-          deleteChanges ++ addChanges
-        case None => Seq() // Unresolved table will be handled in CheckAnalysis.
-      }
-      createAlterTable(nameParts, catalog, tbl, changes)
+    case AlterTableReplaceColumns(ResolvedV1TableIdentifier(_), _) =>
+      throw QueryCompilationErrors.replaceColumnsOnlySupportedWithV2TableError
 
-    case a @ AlterTableAlterColumnStatement(
-         nameParts @ SessionCatalogAndTable(catalog, tbl), _, _, _, _, _) =>
-      a.dataType.foreach(failNullType)
-      loadTable(catalog, tbl.asIdentifier).collect {
-        case v1Table: V1Table =>
-          if (a.column.length > 1) {
-            throw QueryCompilationErrors.alterQualifiedColumnOnlySupportedWithV2TableError
-          }
-          if (a.nullable.isDefined) {
-            throw QueryCompilationErrors.alterColumnWithV1TableCannotSpecifyNotNullError
-          }
-          if (a.position.isDefined) {
-            throw QueryCompilationErrors.alterOnlySupportedWithV2TableError
-          }
-          val builder = new MetadataBuilder
-          // Add comment to metadata
-          a.comment.map(c => builder.putString("comment", c))
-          val colName = a.column(0)
-          val dataType = a.dataType.getOrElse {
-            v1Table.schema.findNestedField(Seq(colName), resolver = conf.resolver)
-              .map(_._2.dataType)
-              .getOrElse {
-                throw QueryCompilationErrors.alterColumnCannotFindColumnInV1TableError(
-                  quoteIfNeeded(colName), v1Table)
-              }
-          }
-          val newColumn = StructField(
-            colName,
-            dataType,
-            nullable = true,
-            builder.build())
-          AlterTableChangeColumnCommand(tbl.asTableIdentifier, colName, newColumn)
-      }.getOrElse {
-        val colName = a.column.toArray
-        val typeChange = a.dataType.map { newDataType =>
-          TableChange.updateColumnType(colName, newDataType)
-        }
-        val nullabilityChange = a.nullable.map { nullable =>
-          TableChange.updateColumnNullability(colName, nullable)
-        }
-        val commentChange = a.comment.map { newComment =>
-          TableChange.updateColumnComment(colName, newComment)
-        }
-        val positionChange = a.position.map { newPosition =>
-          TableChange.updateColumnPosition(colName, newPosition)
-        }
-        createAlterTable(
-          nameParts,
-          catalog,
-          tbl,
-          typeChange.toSeq ++ nullabilityChange ++ commentChange ++ positionChange)
+    case AlterTableAlterColumn(ResolvedTable(catalog, ident, v1Table: V1Table, _), changes)
+        if isSessionCatalog(catalog) =>
+      var column: Seq[String] = Nil
+      var optDataType: Option[DataType] = None
+      var optComment: Option[String] = None
+      changes.foreach {
+        case c: TableChange.UpdateColumnType =>
+          column = c.fieldNames
+          optDataType = Some(c.newDataType)
+        case _: TableChange.UpdateColumnNullability =>
+          throw QueryCompilationErrors.alterColumnWithV1TableCannotSpecifyNotNullError
+        case c: TableChange.UpdateColumnComment =>
+          column = c.fieldNames
+          optComment = Some(c.newComment)
+        case _: TableChange.UpdateColumnPosition =>
+          throw QueryCompilationErrors.alterOnlySupportedWithV2TableError
       }
+      assert(column.nonEmpty)
+      if (column.length > 1) {
+        throw QueryCompilationErrors.alterQualifiedColumnOnlySupportedWithV2TableError
+      }
+      val builder = new MetadataBuilder
+      // Add comment to metadata
+      optComment.map(c => builder.putString("comment", c))
+      val colName = column(0)
+      val dataType = optDataType.getOrElse {
+        v1Table.schema.findNestedField(Seq(colName), resolver = conf.resolver)
+          .map(_._2.dataType)
+          .getOrElse {
+            throw QueryCompilationErrors.alterColumnCannotFindColumnInV1TableError(
+              quoteIfNeeded(colName), v1Table)
+          }
+      }
+      val newColumn = StructField(
+        colName,
+        dataType,
+        nullable = true,
+        builder.build())
+      AlterTableChangeColumnCommand(ident.asTableIdentifier, colName, newColumn)
 
-    case AlterTableRenameColumnStatement(
-         nameParts @ SessionCatalogAndTable(catalog, tbl), col, newName) =>
-      loadTable(catalog, tbl.asIdentifier).collect {
-        case v1Table: V1Table =>
-          throw QueryCompilationErrors.renameColumnOnlySupportedWithV2TableError
-      }.getOrElse {
-        val changes = Seq(TableChange.renameColumn(col.toArray, newName))
-        createAlterTable(nameParts, catalog, tbl, changes)
-      }
+    case AlterTableRenameColumn(ResolvedV1TableIdentifier(_), _) =>
+      throw QueryCompilationErrors.renameColumnOnlySupportedWithV2TableError
 
-    case AlterTableDropColumnsStatement(
-         nameParts @ SessionCatalogAndTable(catalog, tbl), cols) =>
-      loadTable(catalog, tbl.asIdentifier).collect {
-        case v1Table: V1Table =>
-          throw QueryCompilationErrors.dropColumnOnlySupportedWithV2TableError
-      }.getOrElse {
-        val changes = cols.map(col => TableChange.deleteColumn(col.toArray))
-        createAlterTable(nameParts, catalog, tbl, changes)
-      }
+    case AlterTableDropColumns(ResolvedV1TableIdentifier(_), _) =>
+      throw QueryCompilationErrors.dropColumnOnlySupportedWithV2TableError
 
     case SetTableProperties(ResolvedV1TableIdentifier(ident), props) =>
       AlterTableSetPropertiesCommand(ident.asTableIdentifier, props, isView = false)
@@ -695,6 +631,17 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     if (colName.length > 1) {
       throw QueryCompilationErrors.commandNotSupportNestedColumnError(command, colName.quoted)
     }
+  }
+
+  private def convertToStructField(change: TableChange.AddColumn): StructField = {
+    if (!change.isNullable) {
+      throw QueryCompilationErrors.addColumnWithV1TableCannotSpecifyNotNullError
+    }
+    val builder = new MetadataBuilder
+    if (change.comment() != null) {
+      builder.putString("comment", change.comment())
+    }
+    StructField(change.fieldNames().head, change.dataType, nullable = true, builder.build())
   }
 
   private def convertToStructField(col: QualifiedColType): StructField = {

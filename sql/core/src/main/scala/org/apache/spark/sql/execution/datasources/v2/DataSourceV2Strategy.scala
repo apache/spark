@@ -285,9 +285,6 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     case _: NoopCommand =>
       LocalTableScanExec(Nil, Nil) :: Nil
 
-    case AlterTable(catalog, ident, _, changes) =>
-      AlterTableExec(catalog, ident, changes) :: Nil
-
     case RenameTable(r @ ResolvedTable(catalog, oldIdent, _, _), newIdent, isView) =>
       if (isView) {
         throw QueryCompilationErrors.cannotRenameTableWithAlterViewError()
@@ -438,6 +435,18 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     case UnsetTableProperties(table: ResolvedTable, keys, _) =>
       val changes = keys.map(key => TableChange.removeProperty(key))
       AlterTableExec(table.catalog, table.identifier, changes) :: Nil
+
+    case AlterTableReplaceColumns(table: ResolvedTable, addChanges) =>
+      // REPLACE COLUMNS deletes all the existing columns and adds new columns specified.
+      val deleteChanges = table.schema.fieldNames.map { name =>
+        TableChange.deleteColumn(Array(name))
+      }
+      AlterTableExec(table.catalog, table.identifier, deleteChanges ++ addChanges) :: Nil
+
+    // AlterTable should be matched after all commands that extend AlterTable are matched.
+    case a: AlterTable =>
+      val tbl = a.table.asInstanceOf[ResolvedTable]
+      AlterTableExec(tbl.catalog, tbl.identifier, a.changes) :: Nil
 
     case _ => Nil
   }

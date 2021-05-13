@@ -533,13 +533,16 @@ case class NoopCommand(
     multipartIdentifier: Seq[String]) extends LeafCommand
 
 /**
- * The logical plan of the ALTER TABLE command.
+ * The base class for ALTER TABLE commands.
  */
-case class AlterTable(
-    catalog: TableCatalog,
-    ident: Identifier,
-    table: NamedRelation,
-    changes: Seq[TableChange]) extends LeafCommand {
+abstract class AlterTable extends UnaryCommand {
+  def table: LogicalPlan
+
+  def changes: Seq[TableChange]
+
+  def withNewChanges(changes: Seq[TableChange]): AlterTable
+
+  override def child: LogicalPlan = table
 
   override lazy val resolved: Boolean = table.resolved && {
     changes.forall {
@@ -1097,4 +1100,69 @@ case class UnsetTableProperties(
   override def child: LogicalPlan = table
   override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
     copy(table = newChild)
+}
+
+/**
+ * The logical plan of the ALTER TABLE ... ADD COLUMNS command.
+ */
+case class AlterTableAddColumns(
+    table: LogicalPlan,
+    changes: Seq[TableChange]) extends AlterTable {
+  override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
+    copy(table = newChild)
+
+  def withNewChanges(changes: Seq[TableChange]): AlterTable =
+    copy(changes = changes)
+}
+
+/**
+ * The logical plan of the ALTER TABLE ... CHANGE COLUMN command.
+ */
+case class AlterTableAlterColumn(
+    table: LogicalPlan,
+    changes: Seq[TableChange]) extends AlterTable {
+  override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
+    copy(table = newChild)
+
+  def withNewChanges(changes: Seq[TableChange]): AlterTable =
+    copy(changes = changes)
+}
+
+/**
+ * The logical plan of the ALTER TABLE ... REPLACE COLUMNS command.
+ */
+case class AlterTableReplaceColumns(
+    table: LogicalPlan,
+    changes: Seq[TableChange]) extends AlterTable {
+  override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
+    copy(table = newChild)
+
+  def withNewChanges(changes: Seq[TableChange]): AlterTable =
+    copy(changes = changes)
+}
+
+/**
+ * The logical plan of the ALTER TABLE ... RENAME COLUMN command.
+ */
+case class AlterTableRenameColumn(
+    table: LogicalPlan,
+    changes: Seq[TableChange]) extends AlterTable {
+  override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
+    copy(table = newChild)
+
+  def withNewChanges(changes: Seq[TableChange]): AlterTable =
+    copy(changes = changes)
+}
+
+/**
+ * The logical plan of the ALTER TABLE ... DROP COLUMNS command.
+ */
+case class AlterTableDropColumns(
+    table: LogicalPlan,
+    changes: Seq[TableChange]) extends AlterTable {
+  override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
+    copy(table = newChild)
+
+  def withNewChanges(changes: Seq[TableChange]): AlterTable =
+    copy(changes = changes)
 }

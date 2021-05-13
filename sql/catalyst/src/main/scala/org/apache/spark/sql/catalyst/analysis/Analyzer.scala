@@ -1037,11 +1037,6 @@ class Analyzer(override val catalogManager: CatalogManager)
           case _ => write
         }
 
-      case alter @ AlterTable(_, _, u: UnresolvedV2Relation, _) =>
-        CatalogV2Util.loadRelation(u.catalog, u.tableName)
-          .map(rel => alter.copy(table = rel))
-          .getOrElse(alter)
-
       case u: UnresolvedV2Relation =>
         CatalogV2Util.loadRelation(u.catalog, u.tableName).getOrElse(u)
     }
@@ -3516,15 +3511,16 @@ class Analyzer(override val catalogManager: CatalogManager)
   /** Rule to mostly resolve, normalize and rewrite column names based on case sensitivity. */
   object ResolveAlterTableChanges extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
-      case a @ AlterTable(_, _, t: NamedRelation, changes) if t.resolved =>
+      case a: AlterTable if a.table.resolved =>
         // 'colsToAdd' keeps track of new columns being added. It stores a mapping from a
         // normalized parent name of fields to field names that belong to the parent.
         // For example, if we add columns "a.b.c", "a.b.d", and "a.c", 'colsToAdd' will become
         // Map(Seq("a", "b") -> Seq("c", "d"), Seq("a") -> Seq("c")).
         val colsToAdd = mutable.Map.empty[Seq[String], Seq[String]]
-        val schema = t.schema
-        val normalizedChanges = changes.flatMap {
+        val schema = a.table.schema
+        val normalizedChanges = a.changes.flatMap {
           case add: AddColumn =>
+            CatalogV2Util.failNullType(add.dataType)
             def addColumn(
                 parentSchema: StructType,
                 parentName: String,
@@ -3562,6 +3558,7 @@ class Analyzer(override val catalogManager: CatalogManager)
             }
 
           case typeChange: UpdateColumnType =>
+            CatalogV2Util.failNullType(typeChange.newDataType)
             // Hive style syntax provides the column type, even if it may not have changed
             val fieldOpt = schema.findNestedField(
               typeChange.fieldNames(), includeCollections = true, conf.resolver)
@@ -3639,7 +3636,7 @@ class Analyzer(override val catalogManager: CatalogManager)
           case other => Some(other)
         }
 
-        a.copy(changes = normalizedChanges)
+        a.withNewChanges(normalizedChanges)
     }
 
     /**

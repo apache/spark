@@ -137,13 +137,6 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
       case u: UnresolvedV2Relation =>
         u.failAnalysis(s"Table not found: ${u.originalNameParts.quoted}")
 
-      case AlterTable(_, _, u: UnresolvedV2Relation, _) if isView(u.originalNameParts) =>
-        u.failAnalysis(
-          s"Invalid command: '${u.originalNameParts.quoted}' is a view not a table.")
-
-      case AlterTable(_, _, u: UnresolvedV2Relation, _) =>
-        failAnalysis(s"Table not found: ${u.originalNameParts.quoted}")
-
       case command: V2PartitionCommand =>
         command.table match {
           case r @ ResolvedTable(_, _, table, _) => table match {
@@ -441,7 +434,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
             write.query.schema.foreach(f => TypeUtils.failWithIntervalType(f.dataType))
 
           case alter: AlterTable if alter.table.resolved =>
-            val table = alter.table
+            val table = alter.table.asInstanceOf[ResolvedTable]
             def findField(operation: String, fieldName: Array[String]): StructField = {
               // include collections because structs nested in maps and arrays may be altered
               val field = table.schema.findNestedField(fieldName, includeCollections = true)
