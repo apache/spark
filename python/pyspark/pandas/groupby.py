@@ -34,7 +34,7 @@ from pandas.api.types import is_hashable, is_list_like
 
 from pyspark.sql import Column, Window, functions as F
 from pyspark.sql.types import (
-    DataType,
+    DataType,  # noqa: F401
     FloatType,
     DoubleType,
     NumericType,
