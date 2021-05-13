@@ -644,12 +644,6 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     StructField(change.fieldNames().head, change.dataType, nullable = true, builder.build())
   }
 
-  private def convertToStructField(col: QualifiedColType): StructField = {
-    val builder = new MetadataBuilder
-    col.comment.foreach(builder.putString("comment", _))
-    StructField(col.name.head, col.dataType, nullable = true, builder.build())
-  }
-
   private def isV2Provider(provider: String): Boolean = {
     // Return earlier since `lookupDataSourceV2` may fail to resolve provider "hive" to
     // `HiveFileFormat`, when running tests in sql/core.

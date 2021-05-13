@@ -1028,26 +1028,26 @@ class DDLParserSuite extends AnalysisTest {
 
     comparePlans(
       parsePlan(sql1),
-      AlterTableAddColumns(
+      AlterTableReplaceColumns(
         UnresolvedTable(Seq("table_name"), "ALTER TABLE ... REPLACE COLUMNS", None),
         Seq(TableChange.addColumn(Seq("x").toArray, StringType, true, null, null))))
 
     comparePlans(
       parsePlan(sql2),
-      AlterTableAddColumns(
+      AlterTableReplaceColumns(
         UnresolvedTable(Seq("table_name"), "ALTER TABLE ... REPLACE COLUMNS", None),
         Seq(TableChange.addColumn(Seq("x").toArray, StringType, true, "x1", null))))
 
     comparePlans(
       parsePlan(sql3),
-      AlterTableAddColumns(
+      AlterTableReplaceColumns(
         UnresolvedTable(Seq("table_name"), "ALTER TABLE ... REPLACE COLUMNS", None),
         Seq(TableChange.addColumn(Seq("x").toArray, StringType, true, "x1", null),
           TableChange.addColumn(Seq("y").toArray, IntegerType, true, null, null))))
 
     comparePlans(
       parsePlan(sql4),
-      AlterTableAddColumns(
+      AlterTableReplaceColumns(
         UnresolvedTable(Seq("table_name"), "ALTER TABLE ... REPLACE COLUMNS", None),
         Seq(TableChange.addColumn(Seq("x").toArray, StringType, true, "x1", null),
           TableChange.addColumn(Seq("y").toArray, IntegerType, true, "y1", null))))

@@ -3539,45 +3539,22 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
         ctx)
     }
 
-    val dataType = if (action.dataType != null) {
-      Some(typedVisit[DataType](action.dataType))
-    } else {
-      None
+    val dataType = Option(action.dataType()).map(typedVisit[DataType])
+    val nullable = Option(action.setOrDrop).map(_.getType).map {
+      case SqlBaseParser.SET => false
+      case SqlBaseParser.DROP => true
     }
-    val nullable = if (action.setOrDrop != null) {
-      action.setOrDrop.getType match {
-        case SqlBaseParser.SET => Some(false)
-        case SqlBaseParser.DROP => Some(true)
-      }
-    } else {
-      None
-    }
-    val comment = if (action.commentSpec != null) {
-      Some(visitCommentSpec(action.commentSpec()))
-    } else {
-      None
-    }
-    val position = if (action.colPosition != null) {
-      Some(typedVisit[ColumnPosition](action.colPosition))
-    } else {
-      None
-    }
+    val comment = Option(action.commentSpec()).map(visitCommentSpec)
+    val position = Option(action.colPosition()).map(typedVisit[ColumnPosition])
 
     assert(Seq(dataType, nullable, comment, position).count(_.nonEmpty) == 1)
 
     val colName = typedVisit[Seq[String]](ctx.column).toArray
-    val typeChange = dataType.map { newDataType =>
-      TableChange.updateColumnType(colName, newDataType)
-    }
-    val nullabilityChange = nullable.map { nullable =>
-      TableChange.updateColumnNullability(colName, nullable)
-    }
-    val commentChange = comment.map { newComment =>
-      TableChange.updateColumnComment(colName, newComment)
-    }
-    val positionChange = position.map { newPosition =>
-      TableChange.updateColumnPosition(colName, newPosition)
-    }
+    val typeChange = dataType.map(TableChange.updateColumnType(colName, _))
+    val nullabilityChange = nullable.map(TableChange.updateColumnNullability(colName, _))
+    val commentChange = comment.map(TableChange.updateColumnComment(colName, _))
+    val positionChange = position.map(TableChange.updateColumnPosition(colName, _))
+
     AlterTableAlterColumn(
       createUnresolvedTable(ctx.table, s"ALTER TABLE ... $verb COLUMN"),
       typeChange.toSeq ++ nullabilityChange ++ commentChange ++ positionChange)
@@ -3608,19 +3585,15 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
         Some("please run ALTER COLUMN ... SET/DROP NOT NULL instead"))
     }
 
-    val colName = columnNameParts.toArray
     val dataType = Option(ctx.colType().dataType()).map(typedVisit[DataType])
-    val typeChange = dataType.map { newDataType =>
-      TableChange.updateColumnType(colName, newDataType)
-    }
     val comment = Option(ctx.colType().commentSpec()).map(visitCommentSpec)
-    val commentChange = comment.map { newComment =>
-      TableChange.updateColumnComment(colName, newComment)
-    }
     val position = Option(ctx.colPosition).map(typedVisit[ColumnPosition])
-    val positionChange = position.map { newPosition =>
-      TableChange.updateColumnPosition(colName, newPosition)
-    }
+
+    val colName = columnNameParts.toArray
+    val typeChange = dataType.map(TableChange.updateColumnType(colName, _))
+    val commentChange = comment.map(TableChange.updateColumnComment(colName, _))
+    val positionChange = position.map(TableChange.updateColumnPosition(colName, _))
+
     AlterTableAlterColumn(
       createUnresolvedTable(ctx.table, "ALTER TABLE ... ALTER COLUMN"),
       typeChange.toSeq ++ commentChange ++ positionChange)
