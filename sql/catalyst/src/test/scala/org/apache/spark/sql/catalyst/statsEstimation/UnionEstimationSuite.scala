@@ -239,7 +239,7 @@ class UnionEstimationSuite extends StatsEstimationTestBase {
       sizeInBytes = 2 * 1024,
       rowCount = Some(4),
       attributeStats = AttributeMap(
-          Seq(attrInt -> ColumnStat(min = Some(1), max = Some(4), nullCount = None))))
+        Seq(attrInt -> ColumnStat(min = Some(1), max = Some(4), nullCount = None))))
     assert(union.stats === expectedStats)
   }
 }
