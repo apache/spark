@@ -52,6 +52,12 @@ trait InvokeLike extends Expression with NonSQLExpression {
 
   protected lazy val needNullCheck: Boolean = propagateNull && arguments.exists(_.nullable)
   protected lazy val evaluatedArgs: Array[Object] = new Array[Object](arguments.length)
+  private lazy val boxingFn: Any => Any =
+    ScalaReflection.typeBoxedJavaMapping
+      .get(dataType)
+      .map(cls => v => cls.cast(v))
+      .getOrElse(identity)
+
 
   /**
    * Prepares codes for arguments.
@@ -145,12 +151,7 @@ trait InvokeLike extends Expression with NonSQLExpression {
         case e: java.lang.reflect.InvocationTargetException if e.getCause != null =>
           throw e.getCause
       }
-      val boxedClass = ScalaReflection.typeBoxedJavaMapping.get(dataType)
-      if (boxedClass.isDefined) {
-        boxedClass.get.cast(ret)
-      } else {
-        ret
-      }
+      boxingFn(ret)
     }
   }
 
