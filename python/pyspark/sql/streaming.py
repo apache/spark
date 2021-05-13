@@ -685,6 +685,8 @@ class DataStreamReader(OptionUtils):
             For the extra options, refer to
             `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#data-source-option>`_
             in the version you use.
+            Other generic options can be found in
+            `Generic File Source Options <https://spark.apache.org/docs/latest/sql-data-sources-generic-options.html`>_  # noqa
 
         Examples
         --------
