@@ -3487,8 +3487,13 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
         col.comment.orNull,
         col.position.orNull)
     }
+    val cmdName = if (ctx.COLUMNS != null) {
+      "ALTER TABLE ... ADD COLUMNS"
+    } else {
+      "ALTER TABLE ... ADD COLUMN"
+    }
     AlterTableAddColumns(
-      createUnresolvedTable(ctx.multipartIdentifier, "ALTER TABLE ... ADD COLUMNS"),
+      createUnresolvedTable(ctx.multipartIdentifier, cmdName),
       changes)
   }
 
@@ -3527,8 +3532,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   override def visitAlterTableAlterColumn(
       ctx: AlterTableAlterColumnContext): LogicalPlan = withOrigin(ctx) {
     val action = ctx.alterColumnAction
+    val verb = if (ctx.CHANGE != null) "CHANGE" else "ALTER"
     if (action == null) {
-      val verb = if (ctx.CHANGE != null) "CHANGE" else "ALTER"
       operationNotAllowed(
         s"ALTER TABLE table $verb COLUMN requires a TYPE, a SET/DROP, a COMMENT, or a FIRST/AFTER",
         ctx)
@@ -3574,7 +3579,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       TableChange.updateColumnPosition(colName, newPosition)
     }
     AlterTableAlterColumn(
-      createUnresolvedTable(ctx.table, "ALTER TABLE ... ALTER COLUMN"),
+      createUnresolvedTable(ctx.table, s"ALTER TABLE ... $verb COLUMN"),
       typeChange.toSeq ++ nullabilityChange ++ commentChange ++ positionChange)
   }
 
@@ -3645,7 +3650,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
         col.comment.orNull,
         col.position.orNull)
     }
-    AlterTableAddColumns(
+    AlterTableReplaceColumns(
       createUnresolvedTable(ctx.multipartIdentifier, "ALTER TABLE ... REPLACE COLUMNS"),
       changes)
   }
@@ -3661,11 +3666,14 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    */
   override def visitDropTableColumns(
       ctx: DropTableColumnsContext): LogicalPlan = withOrigin(ctx) {
+    val cmdName = if (ctx.COLUMNS != null) {
+      "ALTER TABLE ... DROP COLUMNS"
+    } else {
+      "ALTER TABLE ... DROP COLUMN"
+    }
     val columnsToDrop = ctx.columns.multipartIdentifier.asScala.map(typedVisit[Seq[String]])
     AlterTableDropColumns(
-      createUnresolvedTable(
-        ctx.multipartIdentifier,
-        "ALTER TABLE ... DROP COLUMNS"),
+      createUnresolvedTable(ctx.multipartIdentifier, cmdName),
       columnsToDrop.map(col => TableChange.deleteColumn(col.toArray)))
   }
 

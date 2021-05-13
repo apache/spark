@@ -17,8 +17,7 @@
 
 package org.apache.spark.sql.connector
 
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, TestRelation2}
-import org.apache.spark.sql.catalyst.analysis.CreateTablePartitioningValidationSuite
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, CreateTablePartitioningValidationSuite, ResolvedTable, TestRelation2}
 import org.apache.spark.sql.catalyst.plans.logical.{AlterTable, CreateTableAsSelect, LogicalPlan, ReplaceTableAsSelect}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.{Identifier, TableChange}
@@ -235,12 +234,9 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
   private def alterTableTest(changes: Seq[TableChange], error: Seq[String]): Unit = {
     Seq(true, false).foreach { caseSensitive =>
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
-        val plan = AlterTable(
-          catalog,
-          Identifier.of(Array(), "table_name"),
-          TestRelation2,
-          changes
-        )
+        val plan = DummyAlterTable(
+          ResolvedTable(catalog, Identifier.of(Array(), "table_name"), null, schema.toAttributes),
+          changes)
 
         if (caseSensitive) {
           assertAnalysisError(plan, error, caseSensitive)
@@ -250,4 +246,14 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
       }
     }
   }
+}
+
+private[sql] case class DummyAlterTable(
+    table: LogicalPlan,
+    changes: Seq[TableChange]) extends AlterTable {
+  override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
+    copy(table = newChild)
+
+  def withNewChanges(changes: Seq[TableChange]): AlterTable =
+    copy(changes = changes)
 }

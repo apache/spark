@@ -130,13 +130,6 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
         val tblName = write.table.asInstanceOf[UnresolvedRelation].multipartIdentifier
         write.table.failAnalysis(s"Table or view not found: ${tblName.quoted}")
 
-      case u: UnresolvedV2Relation if isView(u.originalNameParts) =>
-        u.failAnalysis(
-          s"Invalid command: '${u.originalNameParts.quoted}' is a view not a table.")
-
-      case u: UnresolvedV2Relation =>
-        u.failAnalysis(s"Table not found: ${u.originalNameParts.quoted}")
-
       case command: V2PartitionCommand =>
         command.table match {
           case r @ ResolvedTable(_, _, table, _) => table match {
@@ -489,11 +482,13 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
             // Map(Seq("a", "b") -> Seq("c", "d"), Seq("a") -> Seq("c")).
             val colsToAdd = mutable.Map.empty[Seq[String], Seq[String]]
 
+            val isReplacingCols = alter.isInstanceOf[AlterTableReplaceColumns]
             alter.changes.foreach {
               case add: AddColumn =>
-                // If a column to add is a part of columns to delete, we don't need to check
-                // if column already exists - applies to REPLACE COLUMNS scenario.
-                if (!colsToDelete.contains(add.fieldNames())) {
+                // REPLACE COLUMNS deletes all the existing columns, thus we don't need
+                // to check if a column already exists if we are replacing columns.
+                // Note that columns to delete are added in DataSourceV2Strategy.
+                if (!isReplacingCols) {
                   checkColumnNotExists("add", add.fieldNames(), table.schema)
                 }
                 val parent = findParentStruct("add", add.fieldNames())

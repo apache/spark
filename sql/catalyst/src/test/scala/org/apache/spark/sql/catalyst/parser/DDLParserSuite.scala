@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, GlobalTempView, Loc
 import org.apache.spark.sql.catalyst.catalog.{ArchiveResource, BucketSpec, FileResource, FunctionResource, JarResource}
 import org.apache.spark.sql.catalyst.expressions.{EqualTo, Hex, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.connector.catalog.TableChange
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition.{after, first}
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
 import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType, TimestampType}
@@ -787,89 +788,89 @@ class DDLParserSuite extends AnalysisTest {
   test("alter table: add column") {
     comparePlans(
       parsePlan("ALTER TABLE table_name ADD COLUMN x int"),
-      AlterTableAddColumnsStatement(Seq("table_name"), Seq(
-        QualifiedColType(Seq("x"), IntegerType, true, None, None)
-      )))
+      AlterTableAddColumns(
+        UnresolvedTable(Seq("table_name"), "ALTER TABLE ... ADD COLUMN", None),
+        Seq(TableChange.addColumn(Seq("x").toArray, IntegerType, true, null, null))))
   }
 
   test("alter table: add multiple columns") {
     comparePlans(
       parsePlan("ALTER TABLE table_name ADD COLUMNS x int, y string"),
-      AlterTableAddColumnsStatement(Seq("table_name"), Seq(
-        QualifiedColType(Seq("x"), IntegerType, true, None, None),
-        QualifiedColType(Seq("y"), StringType, true, None, None)
-      )))
+      AlterTableAddColumns(
+        UnresolvedTable(Seq("table_name"), "ALTER TABLE ... ADD COLUMNS", None),
+        Seq(TableChange.addColumn(Seq("x").toArray, IntegerType, true, null, null),
+          TableChange.addColumn(Seq("y").toArray, StringType, true, null, null))))
   }
 
   test("alter table: add column with COLUMNS") {
     comparePlans(
       parsePlan("ALTER TABLE table_name ADD COLUMNS x int"),
-      AlterTableAddColumnsStatement(Seq("table_name"), Seq(
-        QualifiedColType(Seq("x"), IntegerType, true, None, None)
-      )))
+      AlterTableAddColumns(
+        UnresolvedTable(Seq("table_name"), "ALTER TABLE ... ADD COLUMNS", None),
+        Seq(TableChange.addColumn(Seq("x").toArray, IntegerType, true, null, null))))
   }
 
   test("alter table: add column with COLUMNS (...)") {
     comparePlans(
       parsePlan("ALTER TABLE table_name ADD COLUMNS (x int)"),
-      AlterTableAddColumnsStatement(Seq("table_name"), Seq(
-        QualifiedColType(Seq("x"), IntegerType, true, None, None)
-      )))
+      AlterTableAddColumns(
+        UnresolvedTable(Seq("table_name"), "ALTER TABLE ... ADD COLUMNS", None),
+        Seq(TableChange.addColumn(Seq("x").toArray, IntegerType, true, null, null))))
   }
 
   test("alter table: add column with COLUMNS (...) and COMMENT") {
     comparePlans(
       parsePlan("ALTER TABLE table_name ADD COLUMNS (x int COMMENT 'doc')"),
-      AlterTableAddColumnsStatement(Seq("table_name"), Seq(
-        QualifiedColType(Seq("x"), IntegerType, true, Some("doc"), None)
-      )))
+      AlterTableAddColumns(
+        UnresolvedTable(Seq("table_name"), "ALTER TABLE ... ADD COLUMNS", None),
+        Seq(TableChange.addColumn(Seq("x").toArray, IntegerType, true, "doc", null))))
   }
 
   test("alter table: add non-nullable column") {
     comparePlans(
       parsePlan("ALTER TABLE table_name ADD COLUMN x int NOT NULL"),
-      AlterTableAddColumnsStatement(Seq("table_name"), Seq(
-        QualifiedColType(Seq("x"), IntegerType, false, None, None)
-      )))
+      AlterTableAddColumns(
+        UnresolvedTable(Seq("table_name"), "ALTER TABLE ... ADD COLUMN", None),
+        Seq(TableChange.addColumn(Seq("x").toArray, IntegerType, false, null, null))))
   }
 
   test("alter table: add column with COMMENT") {
     comparePlans(
       parsePlan("ALTER TABLE table_name ADD COLUMN x int COMMENT 'doc'"),
-      AlterTableAddColumnsStatement(Seq("table_name"), Seq(
-        QualifiedColType(Seq("x"), IntegerType, true, Some("doc"), None)
-      )))
+      AlterTableAddColumns(
+        UnresolvedTable(Seq("table_name"), "ALTER TABLE ... ADD COLUMN", None),
+        Seq(TableChange.addColumn(Seq("x").toArray, IntegerType, true, "doc", null))))
   }
 
   test("alter table: add column with position") {
     comparePlans(
       parsePlan("ALTER TABLE table_name ADD COLUMN x int FIRST"),
-      AlterTableAddColumnsStatement(Seq("table_name"), Seq(
-        QualifiedColType(Seq("x"), IntegerType, true, None, Some(first()))
-      )))
+      AlterTableAddColumns(
+        UnresolvedTable(Seq("table_name"), "ALTER TABLE ... ADD COLUMN", None),
+        Seq(TableChange.addColumn(Seq("x").toArray, IntegerType, true, null, first()))))
 
     comparePlans(
       parsePlan("ALTER TABLE table_name ADD COLUMN x int AFTER y"),
-      AlterTableAddColumnsStatement(Seq("table_name"), Seq(
-        QualifiedColType(Seq("x"), IntegerType, true, None, Some(after("y")))
-      )))
+        AlterTableAddColumns(
+          UnresolvedTable(Seq("table_name"), "ALTER TABLE ... ADD COLUMN", None),
+          Seq(TableChange.addColumn(Seq("x").toArray, IntegerType, true, null, after("y")))))
   }
 
   test("alter table: add column with nested column name") {
     comparePlans(
       parsePlan("ALTER TABLE table_name ADD COLUMN x.y.z int COMMENT 'doc'"),
-      AlterTableAddColumnsStatement(Seq("table_name"), Seq(
-        QualifiedColType(Seq("x", "y", "z"), IntegerType, true, Some("doc"), None)
-      )))
+      AlterTableAddColumns(
+        UnresolvedTable(Seq("table_name"), "ALTER TABLE ... ADD COLUMN", None),
+        Seq(TableChange.addColumn(Seq("x", "y", "z").toArray, IntegerType, true, "doc", null))))
   }
 
   test("alter table: add multiple columns with nested column name") {
     comparePlans(
       parsePlan("ALTER TABLE table_name ADD COLUMN x.y.z int COMMENT 'doc', a.b string FIRST"),
-      AlterTableAddColumnsStatement(Seq("table_name"), Seq(
-        QualifiedColType(Seq("x", "y", "z"), IntegerType, true, Some("doc"), None),
-        QualifiedColType(Seq("a", "b"), StringType, true, None, Some(first()))
-      )))
+      AlterTableAddColumns(
+        UnresolvedTable(Seq("table_name"), "ALTER TABLE ... ADD COLUMN", None),
+        Seq(TableChange.addColumn(Seq("x", "y", "z").toArray, IntegerType, true, "doc", null),
+          TableChange.addColumn(Seq("a", "b").toArray, StringType, true, null, first()))))
   }
 
   test("alter table: set location") {
@@ -892,22 +893,17 @@ class DDLParserSuite extends AnalysisTest {
   test("alter table: rename column") {
     comparePlans(
       parsePlan("ALTER TABLE table_name RENAME COLUMN a.b.c TO d"),
-      AlterTableRenameColumnStatement(
-        Seq("table_name"),
-        Seq("a", "b", "c"),
-        "d"))
+      AlterTableRenameColumn(
+        UnresolvedTable(Seq("table_name"), "ALTER TABLE ... RENAME COLUMN", None),
+        Seq(TableChange.renameColumn(Seq("a", "b", "c").toArray, "d"))))
   }
 
   test("alter table: update column type using ALTER") {
     comparePlans(
       parsePlan("ALTER TABLE table_name ALTER COLUMN a.b.c TYPE bigint"),
-      AlterTableAlterColumnStatement(
-        Seq("table_name"),
-        Seq("a", "b", "c"),
-        Some(LongType),
-        None,
-        None,
-        None))
+      AlterTableAlterColumn(
+        UnresolvedTable(Seq("table_name"), "ALTER TABLE ... ALTER COLUMN", None),
+        Seq(TableChange.updateColumnType(Seq("a", "b", "c").toArray, LongType))))
   }
 
   test("alter table: update column type invalid type") {
@@ -920,37 +916,25 @@ class DDLParserSuite extends AnalysisTest {
   test("alter table: update column type") {
     comparePlans(
       parsePlan("ALTER TABLE table_name CHANGE COLUMN a.b.c TYPE bigint"),
-      AlterTableAlterColumnStatement(
-        Seq("table_name"),
-        Seq("a", "b", "c"),
-        Some(LongType),
-        None,
-        None,
-        None))
+      AlterTableAlterColumn(
+        UnresolvedTable(Seq("table_name"), "ALTER TABLE ... CHANGE COLUMN", None),
+        Seq(TableChange.updateColumnType(Seq("a", "b", "c").toArray, LongType))))
   }
 
   test("alter table: update column comment") {
     comparePlans(
       parsePlan("ALTER TABLE table_name CHANGE COLUMN a.b.c COMMENT 'new comment'"),
-      AlterTableAlterColumnStatement(
-        Seq("table_name"),
-        Seq("a", "b", "c"),
-        None,
-        None,
-        Some("new comment"),
-        None))
+      AlterTableAlterColumn(
+        UnresolvedTable(Seq("table_name"), "ALTER TABLE ... CHANGE COLUMN", None),
+        Seq(TableChange.updateColumnComment(Seq("a", "b", "c").toArray, "new comment"))))
   }
 
   test("alter table: update column position") {
     comparePlans(
       parsePlan("ALTER TABLE table_name CHANGE COLUMN a.b.c FIRST"),
-      AlterTableAlterColumnStatement(
-        Seq("table_name"),
-        Seq("a", "b", "c"),
-        None,
-        None,
-        None,
-        Some(first())))
+      AlterTableAlterColumn(
+        UnresolvedTable(Seq("table_name"), "ALTER TABLE ... CHANGE COLUMN", None),
+        Seq(TableChange.updateColumnPosition(Seq("a", "b", "c").toArray, first()))))
   }
 
   test("alter table: multiple property changes are not allowed") {
@@ -970,39 +954,36 @@ class DDLParserSuite extends AnalysisTest {
   test("alter table: SET/DROP NOT NULL") {
     comparePlans(
       parsePlan("ALTER TABLE table_name ALTER COLUMN a.b.c SET NOT NULL"),
-      AlterTableAlterColumnStatement(
-        Seq("table_name"),
-        Seq("a", "b", "c"),
-        None,
-        Some(false),
-        None,
-        None))
+      AlterTableAlterColumn(
+        UnresolvedTable(Seq("table_name"), "ALTER TABLE ... ALTER COLUMN", None),
+        Seq(TableChange.updateColumnNullability(Seq("a", "b", "c").toArray, false))))
 
     comparePlans(
       parsePlan("ALTER TABLE table_name ALTER COLUMN a.b.c DROP NOT NULL"),
-      AlterTableAlterColumnStatement(
-        Seq("table_name"),
-        Seq("a", "b", "c"),
-        None,
-        Some(true),
-        None,
-        None))
+      AlterTableAlterColumn(
+        UnresolvedTable(Seq("table_name"), "ALTER TABLE ... ALTER COLUMN", None),
+        Seq(TableChange.updateColumnNullability(Seq("a", "b", "c").toArray, true))))
   }
 
   test("alter table: drop column") {
     comparePlans(
       parsePlan("ALTER TABLE table_name DROP COLUMN a.b.c"),
-      AlterTableDropColumnsStatement(Seq("table_name"), Seq(Seq("a", "b", "c"))))
+      AlterTableDropColumns(
+        UnresolvedTable(Seq("table_name"), "ALTER TABLE ... DROP COLUMN", None),
+        Seq(TableChange.deleteColumn(Seq("a", "b", "c").toArray))))
   }
 
   test("alter table: drop multiple columns") {
-    val sql = "ALTER TABLE table_name DROP COLUMN x, y, a.b.c"
-    Seq(sql, sql.replace("COLUMN", "COLUMNS")).foreach { drop =>
+    Seq("DROP COLUMN", "DROP COLUMNS").foreach { dropVerb =>
+      val sql = s"ALTER TABLE table_name $dropVerb x, y, a.b.c"
       comparePlans(
-        parsePlan(drop),
-        AlterTableDropColumnsStatement(
-          Seq("table_name"),
-          Seq(Seq("x"), Seq("y"), Seq("a", "b", "c"))))
+        parsePlan(sql),
+        AlterTableDropColumns(
+          UnresolvedTable(Seq("table_name"), s"ALTER TABLE ... $dropVerb", None),
+          Seq(
+            TableChange.deleteColumn(Seq("x").toArray),
+            TableChange.deleteColumn(Seq("y").toArray),
+            TableChange.deleteColumn(Seq("a", "b", "c").toArray))))
     }
   }
 
@@ -1013,33 +994,23 @@ class DDLParserSuite extends AnalysisTest {
 
     comparePlans(
       parsePlan(sql1),
-      AlterTableAlterColumnStatement(
-        Seq("table_name"),
-        Seq("a", "b", "c"),
-        Some(IntegerType),
-        None,
-        None,
-        None))
+      AlterTableAlterColumn(
+        UnresolvedTable(Seq("table_name"), "ALTER TABLE ... ALTER COLUMN", None),
+        Seq(TableChange.updateColumnType(Seq("a", "b", "c").toArray, IntegerType))))
 
     comparePlans(
       parsePlan(sql2),
-      AlterTableAlterColumnStatement(
-        Seq("table_name"),
-        Seq("a", "b", "c"),
-        Some(IntegerType),
-        None,
-        Some("new_comment"),
-        None))
+      AlterTableAlterColumn(
+        UnresolvedTable(Seq("table_name"), "ALTER TABLE ... ALTER COLUMN", None),
+        Seq(TableChange.updateColumnType(Seq("a", "b", "c").toArray, IntegerType),
+          TableChange.updateColumnComment(Seq("a", "b", "c").toArray, "new_comment"))))
 
     comparePlans(
       parsePlan(sql3),
-      AlterTableAlterColumnStatement(
-        Seq("table_name"),
-        Seq("a", "b", "c"),
-        Some(IntegerType),
-        None,
-        None,
-        Some(after("other_col"))))
+      AlterTableAlterColumn(
+        UnresolvedTable(Seq("table_name"), "ALTER TABLE ... ALTER COLUMN", None),
+        Seq(TableChange.updateColumnType(Seq("a", "b", "c").toArray, IntegerType),
+          TableChange.updateColumnPosition(Seq("a", "b", "c").toArray, after("other_col")))))
 
     // renaming column not supported in hive style ALTER COLUMN.
     intercept("ALTER TABLE table_name CHANGE COLUMN a.b.c new_name INT",
@@ -1057,33 +1028,29 @@ class DDLParserSuite extends AnalysisTest {
 
     comparePlans(
       parsePlan(sql1),
-      AlterTableReplaceColumnsStatement(
-        Seq("table_name"),
-        Seq(QualifiedColType(Seq("x"), StringType, true, None, None))))
+      AlterTableAddColumns(
+        UnresolvedTable(Seq("table_name"), "ALTER TABLE ... REPLACE COLUMNS", None),
+        Seq(TableChange.addColumn(Seq("x").toArray, StringType, true, null, null))))
 
     comparePlans(
       parsePlan(sql2),
-      AlterTableReplaceColumnsStatement(
-        Seq("table_name"),
-        Seq(QualifiedColType(Seq("x"), StringType, true, Some("x1"), None))))
+      AlterTableAddColumns(
+        UnresolvedTable(Seq("table_name"), "ALTER TABLE ... REPLACE COLUMNS", None),
+        Seq(TableChange.addColumn(Seq("x").toArray, StringType, true, "x1", null))))
 
     comparePlans(
       parsePlan(sql3),
-      AlterTableReplaceColumnsStatement(
-        Seq("table_name"),
-        Seq(
-          QualifiedColType(Seq("x"), StringType, true, Some("x1"), None),
-          QualifiedColType(Seq("y"), IntegerType, true, None, None)
-        )))
+      AlterTableAddColumns(
+        UnresolvedTable(Seq("table_name"), "ALTER TABLE ... REPLACE COLUMNS", None),
+        Seq(TableChange.addColumn(Seq("x").toArray, StringType, true, "x1", null),
+          TableChange.addColumn(Seq("y").toArray, IntegerType, true, null, null))))
 
     comparePlans(
       parsePlan(sql4),
-      AlterTableReplaceColumnsStatement(
-        Seq("table_name"),
-        Seq(
-          QualifiedColType(Seq("x"), StringType, true, Some("x1"), None),
-          QualifiedColType(Seq("y"), IntegerType, true, Some("y1"), None)
-        )))
+      AlterTableAddColumns(
+        UnresolvedTable(Seq("table_name"), "ALTER TABLE ... REPLACE COLUMNS", None),
+        Seq(TableChange.addColumn(Seq("x").toArray, StringType, true, "x1", null),
+          TableChange.addColumn(Seq("y").toArray, IntegerType, true, "y1", null))))
 
     intercept("ALTER TABLE table_name PARTITION (a='1') REPLACE COLUMNS (x string)",
       "Operation not allowed: ALTER TABLE table PARTITION partition_spec REPLACE COLUMNS")
