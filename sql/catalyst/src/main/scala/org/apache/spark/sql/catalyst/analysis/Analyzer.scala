@@ -3350,7 +3350,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       case _ : InnerLike =>
         (leftKeys ++ lUniqueOutput ++ rUniqueOutput, rightKeys)
       case _ =>
-        sys.error("Unsupported natural join type " + joinType)
+        throw QueryExecutionErrors.unsupportedNaturalJoinTypeError(joinType)
     }
     // use Project to hide duplicated common keys
     // propagate hidden columns from nested USING/NATURAL JOINs
