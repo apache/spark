@@ -34,14 +34,14 @@ from pandas.api.types import is_hashable, is_list_like
 
 from pyspark.sql import Column, Window, functions as F
 from pyspark.sql.types import (
-    DataType,  # noqa: F401
+    DataType,
     FloatType,
     DoubleType,
     NumericType,
     StructField,
     StructType,
     StringType,
-)
+)  # noqa: F401
 from pyspark.sql.functions import PandasUDFType, pandas_udf
 
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
