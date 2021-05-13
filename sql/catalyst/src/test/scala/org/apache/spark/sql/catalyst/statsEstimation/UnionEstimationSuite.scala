@@ -234,7 +234,7 @@ class UnionEstimationSuite extends StatsEstimationTestBase {
 
     val union = Union(Seq(child1, child2))
 
-    // Null count should not present in the stats
+    // Null count should not present in the stats.
     val expectedStats = logical.Statistics(
       sizeInBytes = 2 * 1024,
       rowCount = Some(4),
