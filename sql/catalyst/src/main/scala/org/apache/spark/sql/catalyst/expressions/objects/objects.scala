@@ -131,11 +131,10 @@ trait InvokeLike extends Expression with NonSQLExpression {
     var i = 0
     val len = arguments.length
     while (i < len) {
-      val e = arguments(i)
-      evaluatedArgs(i) = e.eval(input).asInstanceOf[Object]
+      evaluatedArgs(i) = arguments(i).eval(input).asInstanceOf[Object]
       i += 1
     }
-    if (needNullCheck && evaluatedArgs.exists(_ == null)) {
+    if (needNullCheck && evaluatedArgs.contains(null)) {
       // return null if one of arguments is null
       null
     } else {
