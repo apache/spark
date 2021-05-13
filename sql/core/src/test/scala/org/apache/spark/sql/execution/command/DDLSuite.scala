@@ -23,6 +23,7 @@ import java.util.Locale
 
 import org.apache.hadoop.fs.{Path, RawLocalFileSystem}
 import org.apache.hadoop.fs.permission.{AclEntry, AclStatus}
+
 import org.apache.spark.{SparkException, SparkFiles}
 import org.apache.spark.internal.config
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode, SparkSession}
@@ -33,7 +34,7 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces.PROP_OWNER
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
-import org.apache.spark.sql.test.{SQLTestUtils, SharedSparkSession}
+import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -243,7 +244,7 @@ class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSparkSession {
         try {
           sparkSession.sql("create table if not exists t1 (id Int) using orc").show()
         } catch {
-          case Exception => fail()
+          case _: Exception => fail()
         }
       }
     }
