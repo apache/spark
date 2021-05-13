@@ -334,7 +334,6 @@ class BasicStatsEstimationSuite extends PlanTest with StatsEstimationTestBase {
       expectedStatsCboOn: Statistics,
       expectedStatsCboOff: Statistics,
       extraConfigs: Map[String, String] = Map.empty): Unit = {
-
     val cboEnabledConfig = Seq(SQLConf.CBO_ENABLED.key -> "true") ++ extraConfigs.toSeq
     withSQLConf(cboEnabledConfig: _*) {
       // Invalidate statistics
