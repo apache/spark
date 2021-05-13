@@ -33,7 +33,7 @@ import pandas as pd
 from pandas.api.types import is_hashable, is_list_like
 
 from pyspark.sql import Column, Window, functions as F
-from pyspark.sql.types import (
+from pyspark.sql.types import (  # noqa: F401
     DataType,
     FloatType,
     DoubleType,
@@ -41,7 +41,7 @@ from pyspark.sql.types import (
     StructField,
     StructType,
     StringType,
-)  # noqa: F401
+)
 from pyspark.sql.functions import PandasUDFType, pandas_udf
 
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
