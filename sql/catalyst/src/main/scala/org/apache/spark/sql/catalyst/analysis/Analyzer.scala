@@ -3339,7 +3339,6 @@ class Analyzer(override val catalogManager: CatalogManager)
         (leftKeys ++ lUniqueOutput ++ rUniqueOutput, rightKeys)
       case _ =>
         throw QueryExecutionErrors.unsupportedNaturalJoinTypeError(joinType)
-
     }
     // use Project to hide duplicated common keys
     // propagate hidden columns from nested USING/NATURAL JOINs
