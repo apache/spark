@@ -27,6 +27,8 @@ case class KafkaWrite(
     producerParams: ju.Map[String, Object],
     schema: StructType) extends Write {
 
+  override def description(): String = "Kafka"
+
   override def toBatch: BatchWrite = {
     assert(schema != null)
     new KafkaBatchWrite(topic, producerParams, schema)

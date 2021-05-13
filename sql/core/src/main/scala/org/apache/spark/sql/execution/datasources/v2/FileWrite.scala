@@ -47,6 +47,8 @@ trait FileWrite extends Write {
   private val queryId = info.queryId()
   private val options = info.options()
 
+  override def description(): String = formatName
+
   override def toBatch: BatchWrite = {
     val sparkSession = SparkSession.active
     validateInputs(sparkSession.sessionState.conf.caseSensitiveAnalysis)
