@@ -775,7 +775,11 @@ case class Range(
         (start + (numElements - 1) * step, start)
       }
 
-      val histogram = getHistogramStatistics
+      val histogram = if (conf.histogramEnabled) {
+        Some(computeHistogramStatistics())
+      } else {
+        None
+      }
 
       val colStat = ColumnStat(
         distinctCount = Some(numElements),
@@ -793,25 +797,27 @@ case class Range(
     }
   }
 
-  private def getHistogramStatistics = {
+  private def computeHistogramStatistics() = {
     val numBins = conf.histogramNumBins
     val height = numElements.toDouble / numBins
     val percentileArray = (0 to numBins).map(i => i * height).toArray
 
-    var binId = 0
     val binArray = new Array[HistogramBin](numBins)
-    var lowerIndex = percentileArray(0)
+    var lowerIndex = percentileArray.head
     var lowerBinValue = getRangeValue(0)
-    while (binId < numBins) {
-      val upperIndex = percentileArray(binId + 1)
-      val upperBinValue = getRangeValue(math.max(math.ceil(upperIndex).toInt - 1, 0))
-      val ndv = math.max(math.ceil(upperIndex).toInt - math.ceil(lowerIndex).toInt, 1)
+    percentileArray.tail.zipWithIndex.foreach { case (upperIndex, binId) =>
+      // Integer index for upper and lower values in the bin.
+      val upperIndexPos = math.ceil(upperIndex).toInt - 1
+      val lowerIndexPos = math.ceil(lowerIndex).toInt - 1
+
+      val upperBinValue = getRangeValue(math.max(upperIndexPos, 0))
+      val ndv = math.max(upperIndexPos - lowerIndexPos, 1)
       binArray(binId) = HistogramBin(lowerBinValue, upperBinValue, ndv)
+
       lowerBinValue = upperBinValue
       lowerIndex = upperIndex
-      binId = binId + 1
     }
-    Some(Histogram(height, binArray))
+    Histogram(height, binArray)
   }
 
   // Utility method to compute histogram
