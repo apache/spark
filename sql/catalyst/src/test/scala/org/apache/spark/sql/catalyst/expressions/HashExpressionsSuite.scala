@@ -710,12 +710,13 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("SPARK-35207: Compute hash consistent between -0.0 and 0.0") {
     def checkResult(exprs1: Expression, exprs2: Expression): Unit = {
-      assert(Murmur3Hash(Seq(exprs1), 42).eval() == Murmur3Hash(Seq(exprs2), 42).eval())
-      assert(XxHash64(Seq(exprs1), 42).eval() == XxHash64(Seq(exprs2), 42).eval())
-      assert(HiveHash(Seq(exprs1)).eval() == HiveHash(Seq(exprs2)).eval())
+      checkEvaluation(Murmur3Hash(Seq(exprs1), 42), Murmur3Hash(Seq(exprs2), 42).eval())
+      checkEvaluation(XxHash64(Seq(exprs1), 42), XxHash64(Seq(exprs2), 42).eval())
+      checkEvaluation(HiveHash(Seq(exprs1)), HiveHash(Seq(exprs2)).eval())
     }
-    checkResult(Literal.create(0D, DoubleType), Literal.create(-0D, DoubleType))
-    checkResult(Literal.create(0L, LongType), Literal.create(-0L, LongType))
+
+    checkResult(Literal.create(-0D, DoubleType), Literal.create(0D, DoubleType))
+    checkResult(Literal.create(-0F, FloatType), Literal.create(0F, FloatType))
   }
 
   private def testHash(inputSchema: StructType): Unit = {

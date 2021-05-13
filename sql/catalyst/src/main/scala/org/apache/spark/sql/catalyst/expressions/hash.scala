@@ -371,7 +371,7 @@ abstract class HashExpression[E] extends Expression {
 
   protected def genHashFloat(input: String, result: String): String = {
     s"""
-       |if(Float.floatToIntBits($input) == Float.floatToIntBits(-0.0f)) {
+       |if($input == -0.0f) {
        |  ${genHashInt(s"Float.floatToIntBits(0.0f)", result)}
        |} else {
        |  ${genHashInt(s"Float.floatToIntBits($input)", result)}
@@ -381,7 +381,7 @@ abstract class HashExpression[E] extends Expression {
 
   protected def genHashDouble(input: String, result: String): String = {
     s"""
-      |if(Double.doubleToLongBits($input) == Double.doubleToLongBits(-0.0d)) {
+      |if($input == -0.0d) {
       |  ${genHashLong(s"Double.doubleToLongBits(0.0d)", result)}
       |} else {
       |  ${genHashLong(s"Double.doubleToLongBits($input)", result)}
