@@ -17,7 +17,8 @@
 
 package org.apache.spark.ml.linalg
 
-import dev.ludovic.netlib.blas.NetlibF2jBLAS
+import dev.ludovic.netlib.{BLAS => NetlibBLAS}
+import dev.ludovic.netlib.blas.F2jBLAS
 import scala.concurrent.duration._
 
 import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
@@ -39,7 +40,7 @@ object BLASBenchmark extends BenchmarkBase {
     val iters = 1e2.toInt
     val rnd = new scala.util.Random(0)
 
-    val f2jBLAS = NetlibF2jBLAS.getInstance
+    val f2jBLAS = F2jBLAS.getInstance
     val javaBLAS = BLAS.javaBLAS
     val nativeBLAS = BLAS.nativeBLAS
 
@@ -49,32 +50,38 @@ object BLASBenchmark extends BenchmarkBase {
     println("nativeBLAS = " + nativeBLAS.getClass.getName)
     // scalastyle:on println
 
+    def runBLASBenchmark(name: String, n: Int)(bench: NetlibBLAS => Unit) {
+      val benchmark = new Benchmark(name, n, iters,
+                                    warmupTime = 30.seconds,
+                                    minTime = 30.seconds,
+                                    output = output)
+
+      benchmark.addCase("f2j") { _ =>
+        bench(f2jBLAS)
+      }
+
+      benchmark.addCase("java") { _ =>
+        bench(javaBLAS)
+      }
+
+      if (nativeBLAS != javaBLAS) {
+        benchmark.addCase("native") { _ =>
+          bench(nativeBLAS)
+        }
+      }
+
+      benchmark.run()
+    }
+
     runBenchmark("daxpy") {
       val n = 1e8.toInt
       val alpha = rnd.nextDouble
       val x = Array.fill(n) { rnd.nextDouble }
       val y = Array.fill(n) { rnd.nextDouble }
 
-      val benchmark = new Benchmark("daxpy", n, iters,
-                                    warmupTime = 30.seconds,
-                                    minTime = 30.seconds,
-                                    output = output)
-
-      benchmark.addCase("f2j") { _ =>
-        f2jBLAS.daxpy(n, alpha, x, 1, y.clone, 1)
+      runBLASBenchmark("daxpy", n) { impl =>
+        impl.daxpy(n, alpha, x, 1, y.clone, 1)
       }
-
-      benchmark.addCase("java") { _ =>
-        javaBLAS.daxpy(n, alpha, x, 1, y.clone, 1)
-      }
-
-      if (nativeBLAS != javaBLAS) {
-        benchmark.addCase("native") { _ =>
-          nativeBLAS.daxpy(n, alpha, x, 1, y.clone, 1)
-        }
-      }
-
-      benchmark.run()
     }
 
     runBenchmark("saxpy") {
@@ -83,26 +90,29 @@ object BLASBenchmark extends BenchmarkBase {
       val x = Array.fill(n) { rnd.nextFloat }
       val y = Array.fill(n) { rnd.nextFloat }
 
-      val benchmark = new Benchmark("saxpy", n, iters,
-                                    warmupTime = 30.seconds,
-                                    minTime = 30.seconds,
-                                    output = output)
-
-      benchmark.addCase("f2j") { _ =>
-        f2jBLAS.saxpy(n, alpha, x, 1, y.clone, 1)
+      runBLASBenchmark("saxpy", n) { impl =>
+        impl.saxpy(n, alpha, x, 1, y.clone, 1)
       }
+    }
 
-      benchmark.addCase("java") { _ =>
-        javaBLAS.saxpy(n, alpha, x, 1, y.clone, 1)
+    runBenchmark("dcopy") {
+      val n = 1e8.toInt
+      val x = Array.fill(n) { rnd.nextDouble }
+      val y = Array.fill(n) { 0.0 }
+
+      runBLASBenchmark("dcopy", n) { impl =>
+        impl.dcopy(n, x, 1, y.clone, 1)
       }
+    }
 
-      if (nativeBLAS != javaBLAS) {
-        benchmark.addCase("native") { _ =>
-          nativeBLAS.saxpy(n, alpha, x, 1, y.clone, 1)
-        }
+    runBenchmark("scopy") {
+      val n = 1e8.toInt
+      val x = Array.fill(n) { rnd.nextFloat }
+      val y = Array.fill(n) { 0.0f }
+
+      runBLASBenchmark("scopy", n) { impl =>
+        impl.scopy(n, x, 1, y.clone, 1)
       }
-
-      benchmark.run()
     }
 
     runBenchmark("ddot") {
@@ -110,26 +120,9 @@ object BLASBenchmark extends BenchmarkBase {
       val x = Array.fill(n) { rnd.nextDouble }
       val y = Array.fill(n) { rnd.nextDouble }
 
-      val benchmark = new Benchmark("ddot", n, iters,
-                                    warmupTime = 30.seconds,
-                                    minTime = 30.seconds,
-                                    output = output)
-
-      benchmark.addCase("f2j") { _ =>
-        f2jBLAS.ddot(n, x, 1, y, 1)
+      runBLASBenchmark("ddot", n) { impl =>
+        impl.ddot(n, x, 1, y, 1)
       }
-
-      benchmark.addCase("java") { _ =>
-        javaBLAS.ddot(n, x, 1, y, 1)
-      }
-
-      if (nativeBLAS != javaBLAS) {
-        benchmark.addCase("native") { _ =>
-          nativeBLAS.ddot(n, x, 1, y, 1)
-        }
-      }
-
-      benchmark.run()
     }
 
     runBenchmark("sdot") {
@@ -137,26 +130,27 @@ object BLASBenchmark extends BenchmarkBase {
       val x = Array.fill(n) { rnd.nextFloat }
       val y = Array.fill(n) { rnd.nextFloat }
 
-      val benchmark = new Benchmark("sdot", n, iters,
-                                    warmupTime = 30.seconds,
-                                    minTime = 30.seconds,
-                                    output = output)
-
-      benchmark.addCase("f2j") { _ =>
-        f2jBLAS.sdot(n, x, 1, y, 1)
+      runBLASBenchmark("sdot", n) { impl =>
+        impl.sdot(n, x, 1, y, 1)
       }
+    }
 
-      benchmark.addCase("java") { _ =>
-        javaBLAS.sdot(n, x, 1, y, 1)
+    runBenchmark("dnrm2") {
+      val n = 1e8.toInt
+      val x = Array.fill(n) { rnd.nextDouble }
+
+      runBLASBenchmark("dnrm2", n) { impl =>
+        impl.dnrm2(n, x, 1)
       }
+    }
 
-      if (nativeBLAS != javaBLAS) {
-        benchmark.addCase("native") { _ =>
-          nativeBLAS.sdot(n, x, 1, y, 1)
-        }
+    runBenchmark("snrm2") {
+      val n = 1e8.toInt
+      val x = Array.fill(n) { rnd.nextFloat }
+
+      runBLASBenchmark("snrm2", n) { impl =>
+        impl.snrm2(n, x, 1)
       }
-
-      benchmark.run()
     }
 
     runBenchmark("dscal") {
@@ -164,26 +158,9 @@ object BLASBenchmark extends BenchmarkBase {
       val alpha = rnd.nextDouble
       val x = Array.fill(n) { rnd.nextDouble }
 
-      val benchmark = new Benchmark("dscal", n, iters,
-                                    warmupTime = 30.seconds,
-                                    minTime = 30.seconds,
-                                    output = output)
-
-      benchmark.addCase("f2j") { _ =>
-        f2jBLAS.dscal(n, alpha, x.clone, 1)
+      runBLASBenchmark("dscal", n) { impl =>
+        impl.dscal(n, alpha, x.clone, 1)
       }
-
-      benchmark.addCase("java") { _ =>
-        javaBLAS.dscal(n, alpha, x.clone, 1)
-      }
-
-      if (nativeBLAS != javaBLAS) {
-        benchmark.addCase("native") { _ =>
-          nativeBLAS.dscal(n, alpha, x.clone, 1)
-        }
-      }
-
-      benchmark.run()
     }
 
     runBenchmark("sscal") {
@@ -191,117 +168,14 @@ object BLASBenchmark extends BenchmarkBase {
       val alpha = rnd.nextFloat
       val x = Array.fill(n) { rnd.nextFloat }
 
-      val benchmark = new Benchmark("sscal", n, iters,
-                                    warmupTime = 30.seconds,
-                                    minTime = 30.seconds,
-                                    output = output)
-
-      benchmark.addCase("f2j") { _ =>
-        f2jBLAS.sscal(n, alpha, x.clone, 1)
+      runBLASBenchmark("sscal", n) { impl =>
+        impl.sscal(n, alpha, x.clone, 1)
       }
-
-      benchmark.addCase("java") { _ =>
-        javaBLAS.sscal(n, alpha, x.clone, 1)
-      }
-
-      if (nativeBLAS != javaBLAS) {
-        benchmark.addCase("native") { _ =>
-          nativeBLAS.sscal(n, alpha, x.clone, 1)
-        }
-      }
-
-      benchmark.run()
-    }
-
-    runBenchmark("dspmv[U]") {
-      val n = 1e3.toInt
-      val alpha = rnd.nextDouble
-      val a = Array.fill(n * (n + 1) / 2) { rnd.nextDouble }
-      val x = Array.fill(n) { rnd.nextDouble }
-      val beta = rnd.nextDouble
-      val y = Array.fill(n) { rnd.nextDouble }
-
-      val benchmark = new Benchmark("dspmv[U]", n * (n + 1) / 2, iters,
-                                    warmupTime = 30.seconds,
-                                    minTime = 30.seconds,
-                                    output = output)
-
-      benchmark.addCase("f2j") { _ =>
-        f2jBLAS.dspmv("U", n, alpha, a, x, 1, beta, y.clone, 1)
-      }
-
-      benchmark.addCase("java") { _ =>
-        javaBLAS.dspmv("U", n, alpha, a, x, 1, beta, y.clone, 1)
-      }
-
-      if (nativeBLAS != javaBLAS) {
-        benchmark.addCase("native") { _ =>
-          nativeBLAS.dspmv("U", n, alpha, a, x, 1, beta, y.clone, 1)
-        }
-      }
-
-      benchmark.run()
-    }
-
-    runBenchmark("dspr[U]") {
-      val n = 1e3.toInt
-      val alpha = rnd.nextDouble
-      val x = Array.fill(n) { rnd.nextDouble }
-      val a = Array.fill(n * (n + 1) / 2) { rnd.nextDouble }
-
-      val benchmark = new Benchmark("dspr[U]", n * (n + 1) / 2, iters,
-                                    warmupTime = 30.seconds,
-                                    minTime = 30.seconds,
-                                    output = output)
-
-      benchmark.addCase("f2j") { _ =>
-        f2jBLAS.dspr("U", n, alpha, x, 1, a.clone)
-      }
-
-      benchmark.addCase("java") { _ =>
-        javaBLAS.dspr("U", n, alpha, x, 1, a.clone)
-      }
-
-      if (nativeBLAS != javaBLAS) {
-        benchmark.addCase("native") { _ =>
-          nativeBLAS.dspr("U", n, alpha, x, 1, a.clone)
-        }
-      }
-
-      benchmark.run()
-    }
-
-    runBenchmark("dsyr[U]") {
-      val n = 1e3.toInt
-      val alpha = rnd.nextDouble
-      val x = Array.fill(n) { rnd.nextDouble }
-      val a = Array.fill(n * n) { rnd.nextDouble }
-
-      val benchmark = new Benchmark("dsyr[U]", n * (n + 1) / 2, iters,
-                                    warmupTime = 30.seconds,
-                                    minTime = 30.seconds,
-                                    output = output)
-
-      benchmark.addCase("f2j") { _ =>
-        f2jBLAS.dsyr("U", n, alpha, x, 1, a.clone, n)
-      }
-
-      benchmark.addCase("java") { _ =>
-        javaBLAS.dsyr("U", n, alpha, x, 1, a.clone, n)
-      }
-
-      if (nativeBLAS != javaBLAS) {
-        benchmark.addCase("native") { _ =>
-          nativeBLAS.dsyr("U", n, alpha, x, 1, a.clone, n)
-        }
-      }
-
-      benchmark.run()
     }
 
     runBenchmark("dgemv[N]") {
-      val m = 1e3.toInt
-      val n = 1e3.toInt
+      val m = 1e4.toInt
+      val n = 1e4.toInt
       val alpha = rnd.nextDouble
       val a = Array.fill(m * n) { rnd.nextDouble }
       val lda = m
@@ -309,31 +183,14 @@ object BLASBenchmark extends BenchmarkBase {
       val beta = rnd.nextDouble
       val y = Array.fill(m) { rnd.nextDouble }
 
-      val benchmark = new Benchmark("dgemv[N]", m * n, iters,
-                                    warmupTime = 30.seconds,
-                                    minTime = 30.seconds,
-                                    output = output)
-
-      benchmark.addCase("f2j") { _ =>
-        f2jBLAS.dgemv("N", m, n, alpha, a, lda, x, 1, beta, y.clone, 1)
+      runBLASBenchmark("dgemv[N]", m * n) { impl =>
+        impl.dgemv("N", m, n, alpha, a, lda, x, 1, beta, y.clone, 1)
       }
-
-      benchmark.addCase("java") { _ =>
-        javaBLAS.dgemv("N", m, n, alpha, a, lda, x, 1, beta, y.clone, 1)
-      }
-
-      if (nativeBLAS != javaBLAS) {
-        benchmark.addCase("native") { _ =>
-          nativeBLAS.dgemv("N", m, n, alpha, a, lda, x, 1, beta, y.clone, 1)
-        }
-      }
-
-      benchmark.run()
     }
 
     runBenchmark("dgemv[T]") {
-      val m = 1e3.toInt
-      val n = 1e3.toInt
+      val m = 1e4.toInt
+      val n = 1e4.toInt
       val alpha = rnd.nextDouble
       val a = Array.fill(m * n) { rnd.nextDouble }
       val lda = m
@@ -341,31 +198,14 @@ object BLASBenchmark extends BenchmarkBase {
       val beta = rnd.nextDouble
       val y = Array.fill(n) { rnd.nextDouble }
 
-      val benchmark = new Benchmark("dgemv[T]", m * n, iters,
-                                    warmupTime = 30.seconds,
-                                    minTime = 30.seconds,
-                                    output = output)
-
-      benchmark.addCase("f2j") { _ =>
-        f2jBLAS.dgemv("T", m, n, alpha, a, lda, x, 1, beta, y.clone, 1)
+      runBLASBenchmark("dgemv[T]", m * n) { impl =>
+        impl.dgemv("T", m, n, alpha, a, lda, x, 1, beta, y.clone, 1)
       }
-
-      benchmark.addCase("java") { _ =>
-        javaBLAS.dgemv("T", m, n, alpha, a, lda, x, 1, beta, y.clone, 1)
-      }
-
-      if (nativeBLAS != javaBLAS) {
-        benchmark.addCase("native") { _ =>
-          nativeBLAS.dgemv("T", m, n, alpha, a, lda, x, 1, beta, y.clone, 1)
-        }
-      }
-
-      benchmark.run()
     }
 
     runBenchmark("sgemv[N]") {
-      val m = 1e3.toInt
-      val n = 1e3.toInt
+      val m = 1e4.toInt
+      val n = 1e4.toInt
       val alpha = rnd.nextFloat
       val a = Array.fill(m * n) { rnd.nextFloat }
       val lda = m
@@ -373,31 +213,14 @@ object BLASBenchmark extends BenchmarkBase {
       val beta = rnd.nextFloat
       val y = Array.fill(m) { rnd.nextFloat }
 
-      val benchmark = new Benchmark("sgemv[N]", m * n, iters,
-                                    warmupTime = 30.seconds,
-                                    minTime = 30.seconds,
-                                    output = output)
-
-      benchmark.addCase("f2j") { _ =>
-        f2jBLAS.sgemv("N", m, n, alpha, a, lda, x, 1, beta, y.clone, 1)
+      runBLASBenchmark("sgemv[N]", m * n) { impl =>
+        impl.sgemv("N", m, n, alpha, a, lda, x, 1, beta, y.clone, 1)
       }
-
-      benchmark.addCase("java") { _ =>
-        javaBLAS.sgemv("N", m, n, alpha, a, lda, x, 1, beta, y.clone, 1)
-      }
-
-      if (nativeBLAS != javaBLAS) {
-        benchmark.addCase("native") { _ =>
-          nativeBLAS.sgemv("N", m, n, alpha, a, lda, x, 1, beta, y.clone, 1)
-        }
-      }
-
-      benchmark.run()
     }
 
     runBenchmark("sgemv[T]") {
-      val m = 1e3.toInt
-      val n = 1e3.toInt
+      val m = 1e4.toInt
+      val n = 1e4.toInt
       val alpha = rnd.nextFloat
       val a = Array.fill(m * n) { rnd.nextFloat }
       val lda = m
@@ -405,26 +228,59 @@ object BLASBenchmark extends BenchmarkBase {
       val beta = rnd.nextFloat
       val y = Array.fill(n) { rnd.nextFloat }
 
-      val benchmark = new Benchmark("sgemv[T]", m * n, iters,
-                                    warmupTime = 30.seconds,
-                                    minTime = 30.seconds,
-                                    output = output)
-
-      benchmark.addCase("f2j") { _ =>
-        f2jBLAS.sgemv("T", m, n, alpha, a, lda, x, 1, beta, y.clone, 1)
+      runBLASBenchmark("sgemv[T]", m * n) { impl =>
+        impl.sgemv("T", m, n, alpha, a, lda, x, 1, beta, y.clone, 1)
       }
+    }
 
-      benchmark.addCase("java") { _ =>
-        javaBLAS.sgemv("T", m, n, alpha, a, lda, x, 1, beta, y.clone, 1)
+    runBenchmark("dger") {
+      val m = 1e4.toInt
+      val n = 1e4.toInt
+      val alpha = rnd.nextDouble
+      val a = Array.fill(m * n) { rnd.nextDouble }
+      val lda = m
+      val x = Array.fill(n) { rnd.nextDouble }
+      val beta = rnd.nextDouble
+      val y = Array.fill(m) { rnd.nextDouble }
+
+      runBLASBenchmark("dger", m * n) { impl =>
+        impl.dger(m, n, alpha, x, 1, y, 1, a.clone(), m)
       }
+    }
 
-      if (nativeBLAS != javaBLAS) {
-        benchmark.addCase("native") { _ =>
-          nativeBLAS.sgemv("T", m, n, alpha, a, lda, x, 1, beta, y.clone, 1)
-        }
+    runBenchmark("dspmv[U]") {
+      val n = 1e4.toInt
+      val alpha = rnd.nextDouble
+      val a = Array.fill(n * (n + 1) / 2) { rnd.nextDouble }
+      val x = Array.fill(n) { rnd.nextDouble }
+      val beta = rnd.nextDouble
+      val y = Array.fill(n) { rnd.nextDouble }
+
+      runBLASBenchmark("dspmv[U]", n * (n + 1) / 2) { impl =>
+        impl.dspmv("U", n, alpha, a, x, 1, beta, y.clone, 1)
       }
+    }
 
-      benchmark.run()
+    runBenchmark("dspr[U]") {
+      val n = 1e4.toInt
+      val alpha = rnd.nextDouble
+      val x = Array.fill(n) { rnd.nextDouble }
+      val a = Array.fill(n * (n + 1) / 2) { rnd.nextDouble }
+
+      runBLASBenchmark("dspr[U]", n * (n + 1) / 2) { impl =>
+        impl.dspr("U", n, alpha, x, 1, a.clone)
+      }
+    }
+
+    runBenchmark("dsyr[U]") {
+      val n = 1e4.toInt
+      val alpha = rnd.nextDouble
+      val x = Array.fill(n) { rnd.nextDouble }
+      val a = Array.fill(n * n) { rnd.nextDouble }
+
+      runBLASBenchmark("dsyr[U]", n * (n + 1) / 2) { impl =>
+        impl.dsyr("U", n, alpha, x, 1, a.clone, n)
+      }
     }
 
     runBenchmark("dgemm[N,N]") {
@@ -440,26 +296,9 @@ object BLASBenchmark extends BenchmarkBase {
       val c = Array.fill(m * n) { rnd.nextDouble }
       var ldc = m
 
-      val benchmark = new Benchmark("dgemm[N,N]", m * n * k, iters,
-                                    warmupTime = 30.seconds,
-                                    minTime = 30.seconds,
-                                    output = output)
-
-      benchmark.addCase("f2j") { _ =>
-        f2jBLAS.dgemm("N", "N", m, n, k, alpha, a, lda, b, ldb, beta, c.clone, ldc)
+      runBLASBenchmark("dgemm[N,N]", m * n * k) { impl =>
+        impl.dgemm("N", "N", m, n, k, alpha, a, lda, b, ldb, beta, c.clone, ldc)
       }
-
-      benchmark.addCase("java") { _ =>
-        javaBLAS.dgemm("N", "N", m, n, k, alpha, a, lda, b, ldb, beta, c.clone, ldc)
-      }
-
-      if (nativeBLAS != javaBLAS) {
-        benchmark.addCase("native") { _ =>
-          nativeBLAS.dgemm("N", "N", m, n, k, alpha, a, lda, b, ldb, beta, c.clone, ldc)
-        }
-      }
-
-      benchmark.run()
     }
 
     runBenchmark("dgemm[N,T]") {
@@ -475,26 +314,9 @@ object BLASBenchmark extends BenchmarkBase {
       val c = Array.fill(m * n) { rnd.nextDouble }
       var ldc = m
 
-      val benchmark = new Benchmark("dgemm[N,T]", m * n * k, iters,
-                                    warmupTime = 30.seconds,
-                                    minTime = 30.seconds,
-                                    output = output)
-
-      benchmark.addCase("f2j") { _ =>
-        f2jBLAS.dgemm("N", "T", m, n, k, alpha, a, lda, b, ldb, beta, c.clone, ldc)
+      runBLASBenchmark("dgemm[N,T]", m * n * k) { impl =>
+        impl.dgemm("N", "T", m, n, k, alpha, a, lda, b, ldb, beta, c.clone, ldc)
       }
-
-      benchmark.addCase("java") { _ =>
-        javaBLAS.dgemm("N", "T", m, n, k, alpha, a, lda, b, ldb, beta, c.clone, ldc)
-      }
-
-      if (nativeBLAS != javaBLAS) {
-        benchmark.addCase("native") { _ =>
-          nativeBLAS.dgemm("N", "T", m, n, k, alpha, a, lda, b, ldb, beta, c.clone, ldc)
-        }
-      }
-
-      benchmark.run()
     }
 
     runBenchmark("dgemm[T,N]") {
@@ -510,26 +332,9 @@ object BLASBenchmark extends BenchmarkBase {
       val c = Array.fill(m * n) { rnd.nextDouble }
       var ldc = m
 
-      val benchmark = new Benchmark("dgemm[T,N]", m * n * k, iters,
-                                    warmupTime = 30.seconds,
-                                    minTime = 30.seconds,
-                                    output = output)
-
-      benchmark.addCase("f2j") { _ =>
-        f2jBLAS.dgemm("T", "N", m, n, k, alpha, a, lda, b, ldb, beta, c.clone, ldc)
+      runBLASBenchmark("dgemm[T,N]", m * n * k) { impl =>
+        impl.dgemm("T", "N", m, n, k, alpha, a, lda, b, ldb, beta, c.clone, ldc)
       }
-
-      benchmark.addCase("java") { _ =>
-        javaBLAS.dgemm("T", "N", m, n, k, alpha, a, lda, b, ldb, beta, c.clone, ldc)
-      }
-
-      if (nativeBLAS != javaBLAS) {
-        benchmark.addCase("native") { _ =>
-          nativeBLAS.dgemm("T", "N", m, n, k, alpha, a, lda, b, ldb, beta, c.clone, ldc)
-        }
-      }
-
-      benchmark.run()
     }
 
     runBenchmark("dgemm[T,T]") {
@@ -545,26 +350,9 @@ object BLASBenchmark extends BenchmarkBase {
       val c = Array.fill(m * n) { rnd.nextDouble }
       var ldc = m
 
-      val benchmark = new Benchmark("dgemm[T,T]", m * n * k, iters,
-                                    warmupTime = 30.seconds,
-                                    minTime = 30.seconds,
-                                    output = output)
-
-      benchmark.addCase("f2j") { _ =>
-        f2jBLAS.dgemm("T", "T", m, n, k, alpha, a, lda, b, ldb, beta, c.clone, ldc)
+      runBLASBenchmark("dgemm[T,T]", m * n * k) { impl =>
+        impl.dgemm("T", "T", m, n, k, alpha, a, lda, b, ldb, beta, c.clone, ldc)
       }
-
-      benchmark.addCase("java") { _ =>
-        javaBLAS.dgemm("T", "T", m, n, k, alpha, a, lda, b, ldb, beta, c.clone, ldc)
-      }
-
-      if (nativeBLAS != javaBLAS) {
-        benchmark.addCase("native") { _ =>
-          nativeBLAS.dgemm("T", "T", m, n, k, alpha, a, lda, b, ldb, beta, c.clone, ldc)
-        }
-      }
-
-      benchmark.run()
     }
 
     runBenchmark("sgemm[N,N]") {
@@ -580,26 +368,9 @@ object BLASBenchmark extends BenchmarkBase {
       val c = Array.fill(m * n) { rnd.nextFloat }
       var ldc = m
 
-      val benchmark = new Benchmark("sgemm[N,N]", m * n * k, iters,
-                                    warmupTime = 30.seconds,
-                                    minTime = 30.seconds,
-                                    output = output)
-
-      benchmark.addCase("f2j") { _ =>
-        f2jBLAS.sgemm("N", "N", m, n, k, alpha, a, lda, b, ldb, beta, c.clone, ldc)
+      runBLASBenchmark("sgemm[N,N]", m * n * k) { impl =>
+        impl.sgemm("N", "N", m, n, k, alpha, a, lda, b, ldb, beta, c.clone, ldc)
       }
-
-      benchmark.addCase("java") { _ =>
-        javaBLAS.sgemm("N", "N", m, n, k, alpha, a, lda, b, ldb, beta, c.clone, ldc)
-      }
-
-      if (nativeBLAS != javaBLAS) {
-        benchmark.addCase("native") { _ =>
-          nativeBLAS.sgemm("N", "N", m, n, k, alpha, a, lda, b, ldb, beta, c.clone, ldc)
-        }
-      }
-
-      benchmark.run()
     }
 
     runBenchmark("sgemm[N,T]") {
@@ -615,26 +386,9 @@ object BLASBenchmark extends BenchmarkBase {
       val c = Array.fill(m * n) { rnd.nextFloat }
       var ldc = m
 
-      val benchmark = new Benchmark("sgemm[N,T]", m * n * k, iters,
-                                    warmupTime = 30.seconds,
-                                    minTime = 30.seconds,
-                                    output = output)
-
-      benchmark.addCase("f2j") { _ =>
-        f2jBLAS.sgemm("N", "T", m, n, k, alpha, a, lda, b, ldb, beta, c.clone, ldc)
+      runBLASBenchmark("sgemm[N,T]", m * n * k) { impl =>
+        impl.sgemm("N", "T", m, n, k, alpha, a, lda, b, ldb, beta, c.clone, ldc)
       }
-
-      benchmark.addCase("java") { _ =>
-        javaBLAS.sgemm("N", "T", m, n, k, alpha, a, lda, b, ldb, beta, c.clone, ldc)
-      }
-
-      if (nativeBLAS != javaBLAS) {
-        benchmark.addCase("native") { _ =>
-          nativeBLAS.sgemm("N", "T", m, n, k, alpha, a, lda, b, ldb, beta, c.clone, ldc)
-        }
-      }
-
-      benchmark.run()
     }
 
     runBenchmark("sgemm[T,N]") {
@@ -650,26 +404,9 @@ object BLASBenchmark extends BenchmarkBase {
       val c = Array.fill(m * n) { rnd.nextFloat }
       var ldc = m
 
-      val benchmark = new Benchmark("sgemm[T,N]", m * n * k, iters,
-                                    warmupTime = 30.seconds,
-                                    minTime = 30.seconds,
-                                    output = output)
-
-      benchmark.addCase("f2j") { _ =>
-        f2jBLAS.sgemm("T", "N", m, n, k, alpha, a, lda, b, ldb, beta, c.clone, ldc)
+      runBLASBenchmark("sgemm[T,N]", m * n * k) { impl =>
+        impl.sgemm("T", "N", m, n, k, alpha, a, lda, b, ldb, beta, c.clone, ldc)
       }
-
-      benchmark.addCase("java") { _ =>
-        javaBLAS.sgemm("T", "N", m, n, k, alpha, a, lda, b, ldb, beta, c.clone, ldc)
-      }
-
-      if (nativeBLAS != javaBLAS) {
-        benchmark.addCase("native") { _ =>
-          nativeBLAS.sgemm("T", "N", m, n, k, alpha, a, lda, b, ldb, beta, c.clone, ldc)
-        }
-      }
-
-      benchmark.run()
     }
 
     runBenchmark("sgemm[T,T]") {
@@ -685,26 +422,9 @@ object BLASBenchmark extends BenchmarkBase {
       val c = Array.fill(m * n) { rnd.nextFloat }
       var ldc = m
 
-      val benchmark = new Benchmark("sgemm[T,T]", m * n * k, iters,
-                                    warmupTime = 30.seconds,
-                                    minTime = 30.seconds,
-                                    output = output)
-
-      benchmark.addCase("f2j") { _ =>
-        f2jBLAS.sgemm("T", "T", m, n, k, alpha, a, lda, b, ldb, beta, c.clone, ldc)
+      runBLASBenchmark("sgemm[T,T]", m * n * k) { impl =>
+        impl.sgemm("T", "T", m, n, k, alpha, a, lda, b, ldb, beta, c.clone, ldc)
       }
-
-      benchmark.addCase("java") { _ =>
-        javaBLAS.sgemm("T", "T", m, n, k, alpha, a, lda, b, ldb, beta, c.clone, ldc)
-      }
-
-      if (nativeBLAS != javaBLAS) {
-        benchmark.addCase("native") { _ =>
-          nativeBLAS.sgemm("T", "T", m, n, k, alpha, a, lda, b, ldb, beta, c.clone, ldc)
-        }
-      }
-
-      benchmark.run()
     }
   }
 }
