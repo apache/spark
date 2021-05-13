@@ -128,12 +128,7 @@ trait InvokeLike extends Expression with NonSQLExpression {
    * @param dataType the data type of the return object
    * @return the return object of a method call
    */
-  def invoke(
-      obj: Any,
-      method: Method,
-      arguments: Seq[Expression],
-      input: InternalRow,
-      dataType: DataType): Any = {
+  def invoke(obj: Any, method: Method, input: InternalRow): Any = {
     var i = 0
     val len = arguments.length
     while (i < len) {
@@ -257,7 +252,7 @@ case class StaticInvoke(
   @transient lazy val method = findMethod(cls, functionName, argClasses)
 
   override def eval(input: InternalRow): Any = {
-    invoke(null, method, arguments, input, dataType)
+    invoke(null, method, input)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -359,7 +354,7 @@ case class Invoke(
       } else {
         obj.getClass.getMethod(functionName, argClasses: _*)
       }
-      invoke(obj, invokeMethod, arguments, input, dataType)
+      invoke(obj, invokeMethod, input)
     }
   }
 
