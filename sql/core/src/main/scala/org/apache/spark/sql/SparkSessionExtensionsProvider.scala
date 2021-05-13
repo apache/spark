@@ -76,7 +76,6 @@ import org.apache.spark.annotation.{DeveloperApi, Experimental, Since, Unstable}
  * @since 3.2.0
  */
 @DeveloperApi
-@Experimental
 @Unstable
 @Since("3.2.0")
 trait SparkSessionExtensionsProvider extends Function1[SparkSessionExtensions, Unit]
