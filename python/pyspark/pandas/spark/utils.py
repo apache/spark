@@ -17,7 +17,29 @@
 """
 Helpers and utilities to deal with PySpark instances
 """
+from typing import overload
+
 from pyspark.sql.types import DecimalType, StructType, MapType, ArrayType, StructField, DataType
+
+
+@overload
+def as_nullable_spark_type(dt: StructType) -> StructType:
+    ...
+
+
+@overload
+def as_nullable_spark_type(dt: ArrayType) -> ArrayType:
+    ...
+
+
+@overload
+def as_nullable_spark_type(dt: MapType) -> MapType:
+    ...
+
+
+@overload
+def as_nullable_spark_type(dt: DataType) -> DataType:
+    ...
 
 
 def as_nullable_spark_type(dt: DataType) -> DataType:
@@ -68,7 +90,89 @@ StructField(B,FloatType,true)))
         return dt
 
 
-def force_decimal_precision_scale(dt: DataType, precision: int = 38, scale: int = 18) -> DataType:
+@overload
+def force_decimal_precision_scale(dt: StructType) -> StructType:
+    ...
+
+
+@overload
+def force_decimal_precision_scale(dt: StructType, *, precision: int) -> StructType:
+    ...
+
+
+@overload
+def force_decimal_precision_scale(dt: StructType, *, scale: int) -> StructType:
+    ...
+
+
+@overload
+def force_decimal_precision_scale(dt: StructType, *, precision: int, scale: int) -> StructType:
+    ...
+
+
+@overload
+def force_decimal_precision_scale(dt: ArrayType) -> ArrayType:
+    ...
+
+
+@overload
+def force_decimal_precision_scale(dt: ArrayType, *, precision: int) -> ArrayType:
+    ...
+
+
+@overload
+def force_decimal_precision_scale(dt: ArrayType, *, scale: int) -> ArrayType:
+    ...
+
+
+@overload
+def force_decimal_precision_scale(dt: ArrayType, *, precision: int, scale: int) -> ArrayType:
+    ...
+
+
+@overload
+def force_decimal_precision_scale(dt: MapType) -> MapType:
+    ...
+
+
+@overload
+def force_decimal_precision_scale(dt: MapType, *, precision: int) -> MapType:
+    ...
+
+
+@overload
+def force_decimal_precision_scale(dt: MapType, *, scale: int) -> MapType:
+    ...
+
+
+@overload
+def force_decimal_precision_scale(dt: MapType, *, precision: int, scale: int) -> MapType:
+    ...
+
+
+@overload
+def force_decimal_precision_scale(dt: DataType) -> DataType:
+    ...
+
+
+@overload
+def force_decimal_precision_scale(dt: DataType, *, precision: int) -> DataType:
+    ...
+
+
+@overload
+def force_decimal_precision_scale(dt: DataType, *, scale: int) -> DataType:
+    ...
+
+
+@overload
+def force_decimal_precision_scale(dt: DataType, *, precision: int, scale: int) -> DataType:
+    ...
+
+
+def force_decimal_precision_scale(
+    dt: DataType, *, precision: int = 38, scale: int = 18
+) -> DataType:
     """
     Returns a data type with a fixed decimal type.
 
@@ -101,7 +205,7 @@ StructField(B,DecimalType(30,15),false)))
             new_fields.append(
                 StructField(
                     field.name,
-                    force_decimal_precision_scale(field.dataType, precision, scale),
+                    force_decimal_precision_scale(field.dataType, precision=precision, scale=scale),
                     nullable=field.nullable,
                     metadata=field.metadata,
                 )
@@ -109,13 +213,13 @@ StructField(B,DecimalType(30,15),false)))
         return StructType(new_fields)
     elif isinstance(dt, ArrayType):
         return ArrayType(
-            force_decimal_precision_scale(dt.elementType, precision, scale),
+            force_decimal_precision_scale(dt.elementType, precision=precision, scale=scale),
             containsNull=dt.containsNull,
         )
     elif isinstance(dt, MapType):
         return MapType(
-            force_decimal_precision_scale(dt.keyType, precision, scale),
-            force_decimal_precision_scale(dt.valueType, precision, scale),
+            force_decimal_precision_scale(dt.keyType, precision=precision, scale=scale),
+            force_decimal_precision_scale(dt.valueType, precision=precision, scale=scale),
             valueContainsNull=dt.valueContainsNull,
         )
     elif isinstance(dt, DecimalType):

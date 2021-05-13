@@ -19,6 +19,7 @@ from typing import Callable, Any
 
 import numpy as np
 from pyspark.sql import functions as F, Column
+from pyspark.sql.pandas.functions import pandas_udf, PandasUDFType
 from pyspark.sql.types import DoubleType, LongType, BooleanType
 
 
@@ -27,11 +28,11 @@ unary_np_spark_mappings = OrderedDict(
         "abs": F.abs,
         "absolute": F.abs,
         "arccos": F.acos,
-        "arccosh": F.pandas_udf(lambda s: np.arccosh(s), DoubleType()),
+        "arccosh": pandas_udf(lambda s: np.arccosh(s), DoubleType(), PandasUDFType.SCALAR),
         "arcsin": F.asin,
-        "arcsinh": F.pandas_udf(lambda s: np.arcsinh(s), DoubleType()),
+        "arcsinh": pandas_udf(lambda s: np.arcsinh(s), DoubleType(), PandasUDFType.SCALAR),
         "arctan": F.atan,
-        "arctanh": F.pandas_udf(lambda s: np.arctanh(s), DoubleType()),
+        "arctanh": pandas_udf(lambda s: np.arctanh(s), DoubleType(), PandasUDFType.SCALAR),
         "bitwise_not": F.bitwiseNOT,
         "cbrt": F.cbrt,
         "ceil": F.ceil,
@@ -39,17 +40,17 @@ unary_np_spark_mappings = OrderedDict(
         "conj": lambda _: NotImplemented,
         "conjugate": lambda _: NotImplemented,  # It requires complex type
         "cos": F.cos,
-        "cosh": F.pandas_udf(lambda s: np.cosh(s), DoubleType()),
-        "deg2rad": F.pandas_udf(lambda s: np.deg2rad(s), DoubleType()),
+        "cosh": pandas_udf(lambda s: np.cosh(s), DoubleType(), PandasUDFType.SCALAR),
+        "deg2rad": pandas_udf(lambda s: np.deg2rad(s), DoubleType(), PandasUDFType.SCALAR),
         "degrees": F.degrees,
         "exp": F.exp,
-        "exp2": F.pandas_udf(lambda s: np.exp2(s), DoubleType()),
+        "exp2": pandas_udf(lambda s: np.exp2(s), DoubleType(), PandasUDFType.SCALAR),
         "expm1": F.expm1,
-        "fabs": F.pandas_udf(lambda s: np.fabs(s), DoubleType()),
+        "fabs": pandas_udf(lambda s: np.fabs(s), DoubleType(), PandasUDFType.SCALAR),
         "floor": F.floor,
         "frexp": lambda _: NotImplemented,  # 'frexp' output lengths become different
         # and it cannot be supported via pandas UDF.
-        "invert": F.pandas_udf(lambda s: np.invert(s), DoubleType()),
+        "invert": pandas_udf(lambda s: np.invert(s), DoubleType(), PandasUDFType.SCALAR),
         "isfinite": lambda c: c != float("inf"),
         "isinf": lambda c: c == float("inf"),
         "isnan": F.isnan,
@@ -57,25 +58,25 @@ unary_np_spark_mappings = OrderedDict(
         "log": F.log,
         "log10": F.log10,
         "log1p": F.log1p,
-        "log2": F.pandas_udf(lambda s: np.log2(s), DoubleType()),
+        "log2": pandas_udf(lambda s: np.log2(s), DoubleType(), PandasUDFType.SCALAR),
         "logical_not": lambda c: ~(c.cast(BooleanType())),
         "matmul": lambda _: NotImplemented,  # Can return a NumPy array in pandas.
         "negative": lambda c: c * -1,
         "positive": lambda c: c,
-        "rad2deg": F.pandas_udf(lambda s: np.rad2deg(s), DoubleType()),
+        "rad2deg": pandas_udf(lambda s: np.rad2deg(s), DoubleType(), PandasUDFType.SCALAR),
         "radians": F.radians,
-        "reciprocal": F.pandas_udf(lambda s: np.reciprocal(s), DoubleType()),
-        "rint": F.pandas_udf(lambda s: np.rint(s), DoubleType()),
+        "reciprocal": pandas_udf(lambda s: np.reciprocal(s), DoubleType(), PandasUDFType.SCALAR),
+        "rint": pandas_udf(lambda s: np.rint(s), DoubleType(), PandasUDFType.SCALAR),
         "sign": lambda c: F.when(c == 0, 0).when(c < 0, -1).otherwise(1),
         "signbit": lambda c: F.when(c < 0, True).otherwise(False),
         "sin": F.sin,
-        "sinh": F.pandas_udf(lambda s: np.sinh(s), DoubleType()),
-        "spacing": F.pandas_udf(lambda s: np.spacing(s), DoubleType()),
+        "sinh": pandas_udf(lambda s: np.sinh(s), DoubleType(), PandasUDFType.SCALAR),
+        "spacing": pandas_udf(lambda s: np.spacing(s), DoubleType(), PandasUDFType.SCALAR),
         "sqrt": F.sqrt,
-        "square": F.pandas_udf(lambda s: np.square(s), DoubleType()),
+        "square": pandas_udf(lambda s: np.square(s), DoubleType(), PandasUDFType.SCALAR),
         "tan": F.tan,
-        "tanh": F.pandas_udf(lambda s: np.tanh(s), DoubleType()),
-        "trunc": F.pandas_udf(lambda s: np.trunc(s), DoubleType()),
+        "tanh": pandas_udf(lambda s: np.tanh(s), DoubleType(), PandasUDFType.SCALAR),
+        "trunc": pandas_udf(lambda s: np.trunc(s), DoubleType(), PandasUDFType.SCALAR),
     }
 )
 
@@ -85,20 +86,34 @@ binary_np_spark_mappings = OrderedDict(
         "bitwise_and": lambda c1, c2: c1.bitwiseAND(c2),
         "bitwise_or": lambda c1, c2: c1.bitwiseOR(c2),
         "bitwise_xor": lambda c1, c2: c1.bitwiseXOR(c2),
-        "copysign": F.pandas_udf(lambda s1, s2: np.copysign(s1, s2), DoubleType()),
-        "float_power": F.pandas_udf(lambda s1, s2: np.float_power(s1, s2), DoubleType()),
-        "floor_divide": F.pandas_udf(lambda s1, s2: np.floor_divide(s1, s2), DoubleType()),
-        "fmax": F.pandas_udf(lambda s1, s2: np.fmax(s1, s2), DoubleType()),
-        "fmin": F.pandas_udf(lambda s1, s2: np.fmin(s1, s2), DoubleType()),
-        "fmod": F.pandas_udf(lambda s1, s2: np.fmod(s1, s2), DoubleType()),
-        "gcd": F.pandas_udf(lambda s1, s2: np.gcd(s1, s2), DoubleType()),
-        "heaviside": F.pandas_udf(lambda s1, s2: np.heaviside(s1, s2), DoubleType()),
+        "copysign": pandas_udf(
+            lambda s1, s2: np.copysign(s1, s2), DoubleType(), PandasUDFType.SCALAR
+        ),
+        "float_power": pandas_udf(
+            lambda s1, s2: np.float_power(s1, s2), DoubleType(), PandasUDFType.SCALAR
+        ),
+        "floor_divide": pandas_udf(
+            lambda s1, s2: np.floor_divide(s1, s2), DoubleType(), PandasUDFType.SCALAR
+        ),
+        "fmax": pandas_udf(lambda s1, s2: np.fmax(s1, s2), DoubleType(), PandasUDFType.SCALAR),
+        "fmin": pandas_udf(lambda s1, s2: np.fmin(s1, s2), DoubleType(), PandasUDFType.SCALAR),
+        "fmod": pandas_udf(lambda s1, s2: np.fmod(s1, s2), DoubleType(), PandasUDFType.SCALAR),
+        "gcd": pandas_udf(lambda s1, s2: np.gcd(s1, s2), DoubleType(), PandasUDFType.SCALAR),
+        "heaviside": pandas_udf(
+            lambda s1, s2: np.heaviside(s1, s2), DoubleType(), PandasUDFType.SCALAR
+        ),
         "hypot": F.hypot,
-        "lcm": F.pandas_udf(lambda s1, s2: np.lcm(s1, s2), DoubleType()),
-        "ldexp": F.pandas_udf(lambda s1, s2: np.ldexp(s1, s2), DoubleType()),
-        "left_shift": F.pandas_udf(lambda s1, s2: np.left_shift(s1, s2), LongType()),
-        "logaddexp": F.pandas_udf(lambda s1, s2: np.logaddexp(s1, s2), DoubleType()),
-        "logaddexp2": F.pandas_udf(lambda s1, s2: np.logaddexp2(s1, s2), DoubleType()),
+        "lcm": pandas_udf(lambda s1, s2: np.lcm(s1, s2), DoubleType(), PandasUDFType.SCALAR),
+        "ldexp": pandas_udf(lambda s1, s2: np.ldexp(s1, s2), DoubleType(), PandasUDFType.SCALAR),
+        "left_shift": pandas_udf(
+            lambda s1, s2: np.left_shift(s1, s2), LongType(), PandasUDFType.SCALAR
+        ),
+        "logaddexp": pandas_udf(
+            lambda s1, s2: np.logaddexp(s1, s2), DoubleType(), PandasUDFType.SCALAR
+        ),
+        "logaddexp2": pandas_udf(
+            lambda s1, s2: np.logaddexp2(s1, s2), DoubleType(), PandasUDFType.SCALAR
+        ),
         "logical_and": lambda c1, c2: c1.cast(BooleanType()) & c2.cast(BooleanType()),
         "logical_or": lambda c1, c2: c1.cast(BooleanType()) | c2.cast(BooleanType()),
         "logical_xor": lambda c1, c2: (
@@ -108,9 +123,13 @@ binary_np_spark_mappings = OrderedDict(
         ),
         "maximum": F.greatest,
         "minimum": F.least,
-        "modf": F.pandas_udf(lambda s1, s2: np.modf(s1, s2), DoubleType()),
-        "nextafter": F.pandas_udf(lambda s1, s2: np.nextafter(s1, s2), DoubleType()),
-        "right_shift": F.pandas_udf(lambda s1, s2: np.right_shift(s1, s2), LongType()),
+        "modf": pandas_udf(lambda s1, s2: np.modf(s1, s2), DoubleType(), PandasUDFType.SCALAR),
+        "nextafter": pandas_udf(
+            lambda s1, s2: np.nextafter(s1, s2), DoubleType(), PandasUDFType.SCALAR
+        ),
+        "right_shift": pandas_udf(
+            lambda s1, s2: np.right_shift(s1, s2), LongType(), PandasUDFType.SCALAR
+        ),
     }
 )
 
