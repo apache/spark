@@ -811,8 +811,7 @@ case class Range(
       lowerIndex = upperIndex
       binId = binId + 1
     }
-    val hist = Some(Histogram(height, binArray))
-    hist
+    Some(Histogram(height, binArray))
   }
 
   // Utility method to compute histogram
