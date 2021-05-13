@@ -11,8 +11,8 @@
                      :  +- * BroadcastHashJoin Inner BuildRight (45)
                      :     :- * Project (39)
                      :     :  +- * BroadcastHashJoin Inner BuildRight (38)
-                     :     :     :- SortMergeJoin LeftSemi (32)
-                     :     :     :  :- SortMergeJoin LeftSemi (17)
+                     :     :     :- * SortMergeJoin LeftSemi (32)
+                     :     :     :  :- * SortMergeJoin LeftSemi (17)
                      :     :     :  :  :- * Sort (6)
                      :     :     :  :  :  +- Exchange (5)
                      :     :     :  :  :     +- * Project (4)
@@ -128,7 +128,7 @@ Join condition: NOT (ws_warehouse_sk#9 = ws_warehouse_sk#13)
 Output [1]: [ws_order_number#10]
 Input [4]: [ws_warehouse_sk#9, ws_order_number#10, ws_warehouse_sk#13, ws_order_number#14]
 
-(17) SortMergeJoin
+(17) SortMergeJoin [codegen id : 8]
 Left keys [1]: [ws_order_number#4]
 Right keys [1]: [ws_order_number#10]
 Join condition: None
@@ -140,14 +140,14 @@ Location [not included in comparison]/{warehouse_dir}/web_returns]
 PushedFilters: [IsNotNull(wr_order_number)]
 ReadSchema: struct<wr_order_number:int>
 
-(19) ColumnarToRow [codegen id : 8]
+(19) ColumnarToRow [codegen id : 9]
 Input [2]: [wr_order_number#15, wr_returned_date_sk#16]
 
-(20) Filter [codegen id : 8]
+(20) Filter [codegen id : 9]
 Input [2]: [wr_order_number#15, wr_returned_date_sk#16]
 Condition : isnotnull(wr_order_number#15)
 
-(21) Project [codegen id : 8]
+(21) Project [codegen id : 9]
 Output [1]: [wr_order_number#15]
 Input [2]: [wr_order_number#15, wr_returned_date_sk#16]
 
@@ -155,43 +155,43 @@ Input [2]: [wr_order_number#15, wr_returned_date_sk#16]
 Input [1]: [wr_order_number#15]
 Arguments: hashpartitioning(wr_order_number#15, 5), ENSURE_REQUIREMENTS, [id=#17]
 
-(23) Sort [codegen id : 9]
+(23) Sort [codegen id : 10]
 Input [1]: [wr_order_number#15]
 Arguments: [wr_order_number#15 ASC NULLS FIRST], false, 0
 
 (24) ReusedExchange [Reuses operator id: 11]
 Output [2]: [ws_warehouse_sk#18, ws_order_number#19]
 
-(25) Sort [codegen id : 11]
+(25) Sort [codegen id : 12]
 Input [2]: [ws_warehouse_sk#18, ws_order_number#19]
 Arguments: [ws_order_number#19 ASC NULLS FIRST], false, 0
 
 (26) ReusedExchange [Reuses operator id: 11]
 Output [2]: [ws_warehouse_sk#20, ws_order_number#21]
 
-(27) Sort [codegen id : 13]
+(27) Sort [codegen id : 14]
 Input [2]: [ws_warehouse_sk#20, ws_order_number#21]
 Arguments: [ws_order_number#21 ASC NULLS FIRST], false, 0
 
-(28) SortMergeJoin [codegen id : 14]
+(28) SortMergeJoin [codegen id : 15]
 Left keys [1]: [ws_order_number#19]
 Right keys [1]: [ws_order_number#21]
 Join condition: NOT (ws_warehouse_sk#18 = ws_warehouse_sk#20)
 
-(29) Project [codegen id : 14]
+(29) Project [codegen id : 15]
 Output [1]: [ws_order_number#19]
 Input [4]: [ws_warehouse_sk#18, ws_order_number#19, ws_warehouse_sk#20, ws_order_number#21]
 
-(30) SortMergeJoin [codegen id : 15]
+(30) SortMergeJoin [codegen id : 16]
 Left keys [1]: [wr_order_number#15]
 Right keys [1]: [ws_order_number#19]
 Join condition: None
 
-(31) Project [codegen id : 15]
+(31) Project [codegen id : 16]
 Output [1]: [wr_order_number#15]
 Input [2]: [wr_order_number#15, ws_order_number#19]
 
-(32) SortMergeJoin
+(32) SortMergeJoin [codegen id : 20]
 Left keys [1]: [ws_order_number#4]
 Right keys [1]: [wr_order_number#15]
 Join condition: None
@@ -203,14 +203,14 @@ Location [not included in comparison]/{warehouse_dir}/date_dim]
 PushedFilters: [IsNotNull(d_date), GreaterThanOrEqual(d_date,1999-02-01), LessThanOrEqual(d_date,1999-04-02), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_date:date>
 
-(34) ColumnarToRow [codegen id : 16]
+(34) ColumnarToRow [codegen id : 17]
 Input [2]: [d_date_sk#22, d_date#23]
 
-(35) Filter [codegen id : 16]
+(35) Filter [codegen id : 17]
 Input [2]: [d_date_sk#22, d_date#23]
 Condition : (((isnotnull(d_date#23) AND (d_date#23 >= 1999-02-01)) AND (d_date#23 <= 1999-04-02)) AND isnotnull(d_date_sk#22))
 
-(36) Project [codegen id : 16]
+(36) Project [codegen id : 17]
 Output [1]: [d_date_sk#22]
 Input [2]: [d_date_sk#22, d_date#23]
 
@@ -218,12 +218,12 @@ Input [2]: [d_date_sk#22, d_date#23]
 Input [1]: [d_date_sk#22]
 Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#24]
 
-(38) BroadcastHashJoin [codegen id : 19]
+(38) BroadcastHashJoin [codegen id : 20]
 Left keys [1]: [ws_ship_date_sk#1]
 Right keys [1]: [d_date_sk#22]
 Join condition: None
 
-(39) Project [codegen id : 19]
+(39) Project [codegen id : 20]
 Output [5]: [ws_ship_addr_sk#2, ws_web_site_sk#3, ws_order_number#4, ws_ext_ship_cost#5, ws_net_profit#6]
 Input [7]: [ws_ship_date_sk#1, ws_ship_addr_sk#2, ws_web_site_sk#3, ws_order_number#4, ws_ext_ship_cost#5, ws_net_profit#6, d_date_sk#22]
 
@@ -234,14 +234,14 @@ Location [not included in comparison]/{warehouse_dir}/customer_address]
 PushedFilters: [IsNotNull(ca_state), EqualTo(ca_state,IL), IsNotNull(ca_address_sk)]
 ReadSchema: struct<ca_address_sk:int,ca_state:string>
 
-(41) ColumnarToRow [codegen id : 17]
+(41) ColumnarToRow [codegen id : 18]
 Input [2]: [ca_address_sk#25, ca_state#26]
 
-(42) Filter [codegen id : 17]
+(42) Filter [codegen id : 18]
 Input [2]: [ca_address_sk#25, ca_state#26]
 Condition : ((isnotnull(ca_state#26) AND (ca_state#26 = IL)) AND isnotnull(ca_address_sk#25))
 
-(43) Project [codegen id : 17]
+(43) Project [codegen id : 18]
 Output [1]: [ca_address_sk#25]
 Input [2]: [ca_address_sk#25, ca_state#26]
 
@@ -249,12 +249,12 @@ Input [2]: [ca_address_sk#25, ca_state#26]
 Input [1]: [ca_address_sk#25]
 Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#27]
 
-(45) BroadcastHashJoin [codegen id : 19]
+(45) BroadcastHashJoin [codegen id : 20]
 Left keys [1]: [ws_ship_addr_sk#2]
 Right keys [1]: [ca_address_sk#25]
 Join condition: None
 
-(46) Project [codegen id : 19]
+(46) Project [codegen id : 20]
 Output [4]: [ws_web_site_sk#3, ws_order_number#4, ws_ext_ship_cost#5, ws_net_profit#6]
 Input [6]: [ws_ship_addr_sk#2, ws_web_site_sk#3, ws_order_number#4, ws_ext_ship_cost#5, ws_net_profit#6, ca_address_sk#25]
 
@@ -265,14 +265,14 @@ Location [not included in comparison]/{warehouse_dir}/web_site]
 PushedFilters: [IsNotNull(web_company_name), EqualTo(web_company_name,pri                                               ), IsNotNull(web_site_sk)]
 ReadSchema: struct<web_site_sk:int,web_company_name:string>
 
-(48) ColumnarToRow [codegen id : 18]
+(48) ColumnarToRow [codegen id : 19]
 Input [2]: [web_site_sk#28, web_company_name#29]
 
-(49) Filter [codegen id : 18]
+(49) Filter [codegen id : 19]
 Input [2]: [web_site_sk#28, web_company_name#29]
 Condition : ((isnotnull(web_company_name#29) AND (web_company_name#29 = pri                                               )) AND isnotnull(web_site_sk#28))
 
-(50) Project [codegen id : 18]
+(50) Project [codegen id : 19]
 Output [1]: [web_site_sk#28]
 Input [2]: [web_site_sk#28, web_company_name#29]
 
@@ -280,30 +280,30 @@ Input [2]: [web_site_sk#28, web_company_name#29]
 Input [1]: [web_site_sk#28]
 Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#30]
 
-(52) BroadcastHashJoin [codegen id : 19]
+(52) BroadcastHashJoin [codegen id : 20]
 Left keys [1]: [ws_web_site_sk#3]
 Right keys [1]: [web_site_sk#28]
 Join condition: None
 
-(53) Project [codegen id : 19]
+(53) Project [codegen id : 20]
 Output [3]: [ws_order_number#4, ws_ext_ship_cost#5, ws_net_profit#6]
 Input [5]: [ws_web_site_sk#3, ws_order_number#4, ws_ext_ship_cost#5, ws_net_profit#6, web_site_sk#28]
 
-(54) HashAggregate [codegen id : 19]
+(54) HashAggregate [codegen id : 20]
 Input [3]: [ws_order_number#4, ws_ext_ship_cost#5, ws_net_profit#6]
 Keys [1]: [ws_order_number#4]
 Functions [2]: [partial_sum(UnscaledValue(ws_ext_ship_cost#5)), partial_sum(UnscaledValue(ws_net_profit#6))]
 Aggregate Attributes [2]: [sum(UnscaledValue(ws_ext_ship_cost#5))#31, sum(UnscaledValue(ws_net_profit#6))#32]
 Results [3]: [ws_order_number#4, sum#33, sum#34]
 
-(55) HashAggregate [codegen id : 19]
+(55) HashAggregate [codegen id : 20]
 Input [3]: [ws_order_number#4, sum#33, sum#34]
 Keys [1]: [ws_order_number#4]
 Functions [2]: [merge_sum(UnscaledValue(ws_ext_ship_cost#5)), merge_sum(UnscaledValue(ws_net_profit#6))]
 Aggregate Attributes [2]: [sum(UnscaledValue(ws_ext_ship_cost#5))#31, sum(UnscaledValue(ws_net_profit#6))#32]
 Results [3]: [ws_order_number#4, sum#33, sum#34]
 
-(56) HashAggregate [codegen id : 19]
+(56) HashAggregate [codegen id : 20]
 Input [3]: [ws_order_number#4, sum#33, sum#34]
 Keys: []
 Functions [3]: [merge_sum(UnscaledValue(ws_ext_ship_cost#5)), merge_sum(UnscaledValue(ws_net_profit#6)), partial_count(distinct ws_order_number#4)]
@@ -314,14 +314,14 @@ Results [3]: [sum#33, sum#34, count#36]
 Input [3]: [sum#33, sum#34, count#36]
 Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#37]
 
-(58) HashAggregate [codegen id : 20]
+(58) HashAggregate [codegen id : 21]
 Input [3]: [sum#33, sum#34, count#36]
 Keys: []
 Functions [3]: [sum(UnscaledValue(ws_ext_ship_cost#5)), sum(UnscaledValue(ws_net_profit#6)), count(distinct ws_order_number#4)]
 Aggregate Attributes [3]: [sum(UnscaledValue(ws_ext_ship_cost#5))#31, sum(UnscaledValue(ws_net_profit#6))#32, count(ws_order_number#4)#35]
 Results [3]: [count(ws_order_number#4)#35 AS order count #38, MakeDecimal(sum(UnscaledValue(ws_ext_ship_cost#5))#31,17,2) AS total shipping cost #39, MakeDecimal(sum(UnscaledValue(ws_net_profit#6))#32,17,2) AS total net profit #40]
 
-(59) Sort [codegen id : 20]
+(59) Sort [codegen id : 21]
 Input [3]: [order count #38, total shipping cost #39, total net profit #40]
 Arguments: [order count #38 ASC NULLS FIRST], true, 0
 
