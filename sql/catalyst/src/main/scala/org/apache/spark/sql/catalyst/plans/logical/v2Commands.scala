@@ -533,7 +533,7 @@ case class NoopCommand(
     multipartIdentifier: Seq[String]) extends LeafCommand
 
 /**
- * The base class for ALTER TABLE commands.
+ * The base class for ALTER TABLE commands that alter columns.
  */
 abstract class AlterTable extends UnaryCommand {
   def table: LogicalPlan
