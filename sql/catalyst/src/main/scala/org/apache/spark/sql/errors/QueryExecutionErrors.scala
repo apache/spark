@@ -22,6 +22,7 @@ import java.net.URISyntaxException
 import java.sql.{SQLException, SQLFeatureNotSupportedException}
 import java.time.{DateTimeException, LocalDate}
 import java.time.temporal.ChronoField
+import java.util.ConcurrentModificationException
 
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.codehaus.commons.compiler.{CompileException, InternalCompilerException}
@@ -873,5 +874,14 @@ object QueryExecutionErrors {
 
   def cannotCastUTF8StringToDataTypeError(s: UTF8String, to: DataType): Throwable = {
     new DateTimeException(s"Cannot cast $s to $to.")
+  }
+
+  def registeringStreamingQueryListenerError(e: Exception): Throwable = {
+    new SparkException("Exception when registering StreamingQueryListener", e)
+  }
+
+  def concurrentQueryInstanceError(): Throwable = {
+    new ConcurrentModificationException(
+      "Another instance of this query was just started by a concurrent session.")
   }
 }
