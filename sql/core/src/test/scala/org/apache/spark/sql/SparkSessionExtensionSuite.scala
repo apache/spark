@@ -978,7 +978,7 @@ class MyExtensions2Duplicate extends (SparkSessionExtensions => Unit) {
 class YourExtensions extends SparkSessionExtensionsProvider {
   val getAppName = (FunctionIdentifier("get_fake_app_name"),
     new ExpressionInfo(
-      "noClass",
+      "zzz.zzz.zzz",
       "",
       "get_fake_app_name"),
     (_: Seq[Expression]) => Literal("Fake App Name"))
