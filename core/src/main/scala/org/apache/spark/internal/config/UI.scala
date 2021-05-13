@@ -218,4 +218,13 @@ private[spark] object UI {
     .stringConf
     .transform(_.toUpperCase(Locale.ROOT))
     .createWithDefault("LOCAL")
+
+  val UI_THREADS = ConfigBuilder("spark.ui.threads")
+      .doc("Advisory thread pool size for the web UI Jetty HTTP server, the actual size will be" +
+        " max(this val, selectors * 2 + 1)")
+      .version("3.2.0")
+      .intConf
+      .checkValue(_ > 0, "the spark.ui.threads must be positive")
+      .createWithDefault(200)
+
 }

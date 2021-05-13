@@ -26,6 +26,7 @@ import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
 import scala.io.Source
 
 import org.eclipse.jetty.servlet.{ServletContextHandler, ServletHolder}
+import org.eclipse.jetty.util.thread.QueuedThreadPool
 import org.mockito.Mockito.{mock, when}
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.time.SpanSugar._
@@ -403,6 +404,27 @@ class UISuite extends SparkFunSuite {
       assert(TestUtils.httpResponseCode(new URL(urlStr)) === HttpServletResponse.SC_OK)
     } finally {
       stopServer(serverInfo)
+    }
+  }
+
+  test("SPARK-34449: ") {
+    val (conf, securityMgr, sslOptions) = sslDisabledConf()
+    conf.set(UI.UI_THREADS, 123)
+    val serverInfo1 = JettyUtils.startJettyServer("0.0.0.0", 0, sslOptions, conf)
+    try {
+      assert(serverInfo1.server.getThreadPool.asInstanceOf[QueuedThreadPool].getMaxThreads === 123)
+    } finally {
+      stopServer(serverInfo1)
+    }
+    conf.set(UI.UI_THREADS, 1)
+
+    val serverInfo2 = JettyUtils.startJettyServer("0.0.0.0", 0, sslOptions, conf)
+    try {
+      val queuedThreadPool = serverInfo2.server.getThreadPool.asInstanceOf[QueuedThreadPool]
+      val leasedThreads = queuedThreadPool.getThreadPoolBudget.getLeasedThreads
+      assert(queuedThreadPool.getMaxThreads === leasedThreads + 1)
+    } finally {
+      stopServer(serverInfo2)
     }
   }
 

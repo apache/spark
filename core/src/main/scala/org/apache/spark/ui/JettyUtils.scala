@@ -301,7 +301,9 @@ private[spark] object JettyUtils extends Logging {
 
         connector.start()
         // The number of selectors always equals to the number of acceptors
-        minThreads += connector.getAcceptors * 2
+        minThreads += math.max(connector.getAcceptors * 2,
+          // Avoid jetty `Insufficient configured threads` error
+          pool.getThreadPoolBudget.getLeasedThreads)
 
         (connector, connector.getLocalPort())
       }
@@ -349,7 +351,7 @@ private[spark] object JettyUtils extends Logging {
       }
 
       server.addConnector(httpConnector)
-      pool.setMaxThreads(math.max(pool.getMaxThreads, minThreads))
+      pool.setMaxThreads(math.max(conf.get(UI_THREADS), minThreads))
       ServerInfo(server, httpPort, securePort, conf, collection)
     } catch {
       case e: Exception =>
