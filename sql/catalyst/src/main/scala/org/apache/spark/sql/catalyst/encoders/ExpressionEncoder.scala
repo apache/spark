@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjectio
 import org.apache.spark.sql.catalyst.expressions.objects.{AssertNotNull, InitializeJavaBean, Invoke, NewInstance}
 import org.apache.spark.sql.catalyst.optimizer.{ReassignLambdaVariableID, SimplifyCasts}
 import org.apache.spark.sql.catalyst.plans.logical.{CatalystSerde, DeserializeToObject, LeafNode, LocalRelation}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{ObjectType, StringType, StructField, StructType}
 import org.apache.spark.unsafe.types.UTF8String
@@ -404,7 +405,7 @@ case class ExpressionEncoder[T](
   def assertUnresolved(): Unit = {
     (deserializer +:  serializer).foreach(_.foreach {
       case a: AttributeReference if a.name != "loopVar" =>
-        sys.error(s"Unresolved encoder expected, but $a was found.")
+        throw QueryExecutionErrors.notExpectedUnresolvedEncoderError(a)
       case _ =>
     })
   }

@@ -491,7 +491,7 @@ case class NewInstance(
     val paramTypes = ScalaReflection.expressionJavaClasses(arguments)
     val getConstructor = (paramClazz: Seq[Class[_]]) => {
       ScalaReflection.findConstructor(cls, paramClazz).getOrElse {
-        sys.error(s"Couldn't find a valid constructor on $cls")
+        throw QueryExecutionErrors.constructorNotFoundError(cls.toString)
       }
     }
     outerPointer.map { p =>
