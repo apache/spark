@@ -150,25 +150,23 @@ object UnionEstimation {
       val outputAttrStats = new ArrayBuffer[(Attribute, ColumnStat)]()
       attrToComputeNullCount.foreach {
         case (attrs, outputIndex) =>
-          val colWithNullStatValues = attrs.zipWithIndex.foldLeft[Option[BigInt]](None) {
+          val firstStat = union.children.head.stats.attributeStats(attrs.head)
+          val firstNullCount = firstStat.nullCount.get
+          val colWithNullStatValues = attrs.zipWithIndex.tail.foldLeft[BigInt](firstNullCount) {
             case (totalNullCount, (attr, childIndex)) =>
               val colStat = union.children(childIndex).stats.attributeStats(attr)
-              if (totalNullCount.isDefined) {
-                Some(totalNullCount.get + colStat.nullCount.get)
-              } else {
-                colStat.nullCount
-              }
+              totalNullCount + colStat.nullCount.get
           }
 
-          // If attribute stats are already computed in min-max stats, update the
+          // If the attribute stats are already computed in min-max stats, update the
           // statistics with null count.
           if (attrStatsWithMinMax.get(unionOutput(outputIndex)).isDefined) {
             val updatedColStat = attrStatsWithMinMax(unionOutput(outputIndex))
-              .copy(nullCount = colWithNullStatValues)
+              .copy(nullCount = Some(colWithNullStatValues))
             outputAttrStats += (unionOutput(outputIndex) -> updatedColStat)
           } else {
             outputAttrStats += (unionOutput(outputIndex) ->
-              ColumnStat(nullCount = colWithNullStatValues))
+              ColumnStat(nullCount = Some(colWithNullStatValues)))
           }
       }
       AttributeMap(attrStatsWithMinMax.toSeq ++ outputAttrStats.toSeq)
