@@ -1470,4 +1470,23 @@ private[spark] object QueryCompilationErrors {
     new AnalysisException(s"$colType column $colName is not defined in table $tableName, " +
       s"defined table columns are: ${tableCols.mkString(", ")}")
   }
+
+  def invalidLiteralForWindowDurationError(): Throwable = {
+    new AnalysisException("The duration and time inputs to window must be " +
+      "an integer, long or string literal.")
+  }
+
+  def noSuchStructFieldInGivenFieldsError(
+      fieldName: String, fields: Array[StructField]): Throwable = {
+    new AnalysisException(
+      s"No such struct field $fieldName in ${fields.map(_.name).mkString(", ")}")
+  }
+
+  def ambiguousReferenceToFieldsError(fields: String): Throwable = {
+    new AnalysisException(s"Ambiguous reference to fields $fields")
+  }
+
+  def secondArgumentInFunctionIsNotBooleanLiteralError(funcName: String): Throwable = {
+    new AnalysisException(s"The second argument in $funcName should be a boolean literal.")
+  }
 }

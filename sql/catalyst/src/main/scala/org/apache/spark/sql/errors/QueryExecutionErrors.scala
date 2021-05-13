@@ -27,7 +27,6 @@ import com.fasterxml.jackson.core.JsonToken
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.codehaus.commons.compiler.CompileException
 import org.codehaus.janino.InternalCompilerException
-
 import org.apache.spark.{Partition, SparkException, SparkUpgradeException}
 import org.apache.spark.executor.CommitDeniedException
 import org.apache.spark.memory.SparkOutOfMemoryError
@@ -36,12 +35,13 @@ import org.apache.spark.sql.catalyst.WalkedTypePath
 import org.apache.spark.sql.catalyst.analysis.UnresolvedGenerator
 import org.apache.spark.sql.catalyst.catalog.CatalogDatabase
 import org.apache.spark.sql.catalyst.expressions.{Expression, UnevaluableAggregate}
+import org.apache.spark.sql.catalyst.util.FailFastMode
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{DataType, Decimal, StructType, UserDefinedType}
+import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -986,5 +986,97 @@ object QueryExecutionErrors {
   def userDefinedTypeIsNotAnnotatedAndRegisteredError(udt: UserDefinedType[_]): Throwable = {
     new SparkException(s"${udt.userClass.getName} is not annotated with " +
       "SQLUserDefinedType nor registered with UDTRegistration.}")
+  }
+
+  def invalidInputSyntaxForBooleanError(s: UTF8String): Throwable = {
+    new UnsupportedOperationException(s"invalid input syntax for type boolean: $s")
+  }
+
+  def unsupportedOperandTypeForSizeFunctionError(dataType: DataType): Throwable = {
+    new UnsupportedOperationException(
+      s"The size function doesn't support the operand type ${dataType.getClass.getCanonicalName}")
+  }
+
+  def unexpectedValueForStartInFunctionError(prettyName: String): Throwable = {
+    new RuntimeException(
+      s"Unexpected value for start in function $prettyName: SQL array indices start at 1.")
+  }
+
+  def unexpectedValueForLengthInFunctionError(prettyName: String): Throwable = {
+    new RuntimeException(s"Unexpected value for length in function $prettyName: " +
+      "length must be greater than or equal to 0.")
+  }
+
+  def sqlArrayIndexNotStartAtOneError(): Throwable = {
+    new ArrayIndexOutOfBoundsException("SQL array indices start at 1")
+  }
+
+  def concatArraysWithElementsExceedLimitError(numberOfElements: Long): Throwable = {
+    new RuntimeException(
+      s"""
+         |Unsuccessful try to concat arrays with $numberOfElements
+         |elements due to exceeding the array size limit
+         |${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}.
+       """.stripMargin.replaceAll("\n", " "))
+  }
+
+  def flattenArraysWithElementsExceedLimitError(numberOfElements: Long): Throwable = {
+    new RuntimeException(
+      s"""
+         |Unsuccessful try to flatten an array of arrays with $numberOfElements
+         |elements due to exceeding the array size limit
+         |${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}.
+       """.stripMargin.replaceAll("\n", " "))
+  }
+
+  def createArrayWithElementsExceedLimitError(count: Any): Throwable = {
+    new RuntimeException(
+      s"""
+         |Unsuccessful try to create array with $count elements
+         |due to exceeding the array size limit
+         |${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}.
+       """.stripMargin.replaceAll("\n", " "))
+  }
+
+  def unionArrayWithElementsExceedLimitError(length: Int): Throwable = {
+    new RuntimeException(
+      s"""
+         |Unsuccessful try to union arrays with $length
+         |elements due to exceeding the array size limit
+         |${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}.
+       """.stripMargin.replaceAll("\n", " "))
+  }
+
+  def initialTypeIsNotSuitableDataTypeError(dataType: DataType, target: String): Throwable = {
+    new UnsupportedOperationException(s"Initial type ${dataType.catalogString} must be a $target")
+  }
+
+  def initialTypeIsNotSuitableDataTypesError(dataType: DataType): Throwable = {
+    new UnsupportedOperationException(
+      s"Initial type ${dataType.catalogString} must be " +
+        s"an ${ArrayType.simpleString}, a ${StructType.simpleString} or a ${MapType.simpleString}")
+  }
+
+  def cannotConvertColumnToJSONError(name: String, dataType: DataType): Throwable = {
+    new UnsupportedOperationException(
+      s"Unable to convert column $name of type ${dataType.catalogString} to JSON.")
+  }
+
+  def malformedRecordsDetectedInSchemaInferenceError(e: Throwable): Throwable = {
+    new SparkException("Malformed records are detected in schema inference. " +
+      s"Parse Mode: ${FailFastMode.name}.", e)
+  }
+
+  def malformedJSONError(): Throwable = {
+    new SparkException("Malformed JSON")
+  }
+
+  def malformedRecordsDetectedInSchemaInferenceError(dataType: DataType): Throwable = {
+    new SparkException(
+      s"""
+         |Malformed records are detected in schema inference.
+         |Parse Mode: ${FailFastMode.name}. Reasons: Failed to infer a common schema.
+         |Struct types are expected, but `${dataType.catalogString}` was found.
+       """.stripMargin.replaceAll("\n", " "))
   }
 }
