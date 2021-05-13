@@ -60,7 +60,7 @@ case class TryEval(child: Expression) extends UnaryExpression with NullIntoleran
       > SELECT _FUNC_(1, 2);
        3
       > SELECT _FUNC_(2147483647, 1);
-       null
+       NULL
   """,
   since = "3.2.0",
   group = "math_funcs")
@@ -89,7 +89,7 @@ case class TryAdd(left: Expression, right: Expression, child: Expression)
       > SELECT _FUNC_(2L, 2L);
        1.0
       > SELECT _FUNC_(1, 0);
-       null
+       NULL
   """,
   since = "3.2.0",
   group = "math_funcs")
