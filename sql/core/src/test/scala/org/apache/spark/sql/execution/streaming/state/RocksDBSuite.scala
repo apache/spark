@@ -23,14 +23,13 @@ import java.nio.charset.Charset
 import org.apache.commons.io.FileUtils
 
 import org.apache.spark._
-import org.apache.spark.util.Utils
 
 class RocksDBSuite extends SparkFunSuite {
 
   test("checkpoint metadata serde roundtrip") {
     def checkJsonRoundtrip(metadata: RocksDBCheckpointMetadata, json: String): Unit = {
       assert(metadata.json == json)
-      withTempDirectory { dir =>
+      withTempDir { dir =>
         val file = new File(dir, "json")
         FileUtils.write(file, s"v1\n$json", Charset.defaultCharset)
         assert(metadata == RocksDBCheckpointMetadata.readFromFile(file))
@@ -54,12 +53,5 @@ class RocksDBSuite extends SparkFunSuite {
       RocksDBCheckpointMetadata(sstFiles, logFiles, 12345678901234L),
       """{"sstFiles":[{"localFileName":"00001.sst","dfsSstFileName":"00001-uuid.sst","sizeBytes":12345678901234}],"logFiles":[{"localFileName":"00001.log","dfsLogFileName":"00001-uuid.log","sizeBytes":12345678901234}],"numKeys":12345678901234}""")
     // scalastyle:on line.size.limit
-  }
-
-  private def withTempDirectory(f: File => Unit): Unit = {
-    val dir = Utils.createTempDir()
-    try f(dir) finally {
-      Utils.deleteRecursively(dir)
-    }
   }
 }
