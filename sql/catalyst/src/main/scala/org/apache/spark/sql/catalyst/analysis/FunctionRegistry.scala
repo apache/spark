@@ -320,8 +320,6 @@ object FunctionRegistry {
     expression[Stack]("stack"),
     expression[CaseWhen]("when"),
 
-    expression[TryAdd]("try_add"),
-    expression[TryDivide]("try_divide"),
     // math functions
     expression[Acos]("acos"),
     expression[Acosh]("acosh"),
@@ -381,6 +379,8 @@ object FunctionRegistry {
     expression[Divide]("/"),
     expression[IntegralDivide]("div"),
     expression[Remainder]("%"),
+    expression[TryAdd]("try_add"),
+    expression[TryDivide]("try_divide"),
 
     // aggregate functions
     expression[HyperLogLogPlusPlus]("approx_count_distinct"),
