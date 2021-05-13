@@ -699,7 +699,7 @@ case class SortMergeJoinExec(
            |}
            |$bufferedAfter
          """.stripMargin
-      (before, checking)
+      (before, checking.trim)
     } else {
       (evaluateVariables(streamedVars), "")
     }
@@ -748,10 +748,10 @@ case class SortMergeJoinExec(
       eagerCleanup: String): String = {
     s"""
        |while ($findNextJoinRows) {
-       |  ${beforeLoop.trim}
+       |  $beforeLoop
        |  while ($matchIterator.hasNext()) {
        |    InternalRow $bufferedRow = (InternalRow) $matchIterator.next();
-       |    ${conditionCheck.trim}
+       |    $conditionCheck
        |    $outputRow
        |  }
        |  if (shouldStop()) return;
@@ -776,14 +776,14 @@ case class SortMergeJoinExec(
     s"""
        |while ($streamedInput.hasNext()) {
        |  $findNextJoinRows;
-       |  ${beforeLoop.trim}
+       |  $beforeLoop
        |  boolean $hasOutputRow = false;
        |
        |  // the last iteration of this loop is to emit an empty row if there is no matched rows.
        |  while ($matchIterator.hasNext() || !$hasOutputRow) {
        |    InternalRow $bufferedRow = $matchIterator.hasNext() ?
        |      (InternalRow) $matchIterator.next() : null;
-       |    ${conditionCheck.trim}
+       |    $conditionCheck
        |    $hasOutputRow = true;
        |    $outputRow
        |  }
@@ -807,12 +807,12 @@ case class SortMergeJoinExec(
       eagerCleanup: String): String = {
     s"""
        |while ($findNextJoinRows) {
-       |  ${beforeLoop.trim}
+       |  $beforeLoop
        |  boolean $hasOutputRow = false;
        |
        |  while (!$hasOutputRow && $matchIterator.hasNext()) {
        |    InternalRow $bufferedRow = (InternalRow) $matchIterator.next();
-       |    ${conditionCheck.trim}
+       |    $conditionCheck
        |    $hasOutputRow = true;
        |    $outputRow
        |  }
