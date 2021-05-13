@@ -21,7 +21,7 @@ import org.apache.spark.annotation.{DeveloperApi, Experimental, Since, Unstable}
 
 // scalastyle:off line.size.limit
 /**
- * :: Experimental ::
+ * :: Unstable ::
  *
  * Base trait for implementations used by [[SparkSessionExtensions]]
  *
