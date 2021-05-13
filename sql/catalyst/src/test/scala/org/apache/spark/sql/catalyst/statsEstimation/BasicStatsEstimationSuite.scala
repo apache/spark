@@ -43,11 +43,13 @@ class BasicStatsEstimationSuite extends PlanTest with StatsEstimationTestBase {
 
   test("range with positive step") {
     val range = Range(1, 5, 1, None)
-    val histogramBins = new Array[HistogramBin](3)
-    histogramBins(0) = HistogramBin(1.0, 2.0, 2)
-    histogramBins(1) = HistogramBin(2.0, 3.0, 1)
-    histogramBins(2) = HistogramBin(3.0, 4.0, 1)
+    val histogramBins = Array(
+      HistogramBin(1.0, 2.0, 2),
+      HistogramBin(2.0, 3.0, 1),
+      HistogramBin(3.0, 4.0, 1))
     val histogram = Some(Histogram(4.toDouble / 3, histogramBins))
+    // Number of range elements should be same as number of distinct values
+    assert(range.numElements === 4)
 
     val rangeStats = Statistics(
       sizeInBytes = 4 * 8,
@@ -73,11 +75,13 @@ class BasicStatsEstimationSuite extends PlanTest with StatsEstimationTestBase {
 
   test("range with positive step where end minus start not divisible by step") {
     val range = Range(-4, 5, 2, None)
-    val histogramBins = new Array[HistogramBin](3)
-    histogramBins(0) = HistogramBin(-4.0, -2.0, 2)
-    histogramBins(1) = HistogramBin(-2.0, 2.0, 2)
-    histogramBins(2) = HistogramBin(2.0, 4.0, 1)
+    val histogramBins = Array(
+      HistogramBin(-4.0, -2.0, 2),
+      HistogramBin(-2.0, 2.0, 2),
+      HistogramBin(2.0, 4.0, 1))
     val histogram = Some(Histogram(5.toDouble / 3, histogramBins))
+    // Number of range elements should be same as number of distinct values
+    assert(range.numElements === 5)
     val rangeStats = Statistics(
       sizeInBytes = 5 * 8,
       rowCount = Some(5),
@@ -102,11 +106,13 @@ class BasicStatsEstimationSuite extends PlanTest with StatsEstimationTestBase {
 
   test("range with negative step") {
     val range = Range(-10, -20, -2, None)
-    val histogramBins = new Array[HistogramBin](3)
-    histogramBins(0) = HistogramBin(-18.0, -16.0, 2)
-    histogramBins(1) = HistogramBin(-16.0, -12.0, 2)
-    histogramBins(2) = HistogramBin(-12.0, -10.0, 1)
+    val histogramBins = Array(
+      HistogramBin(-18.0, -16.0, 2),
+      HistogramBin(-16.0, -12.0, 2),
+      HistogramBin(-12.0, -10.0, 1))
     val histogram = Some(Histogram(5.toDouble / 3, histogramBins))
+    // Number of range elements should be same as number of distinct values
+    assert(range.numElements === 5)
     val rangeStats = Statistics(
       sizeInBytes = 5 * 8,
       rowCount = Some(5),
@@ -130,14 +136,14 @@ class BasicStatsEstimationSuite extends PlanTest with StatsEstimationTestBase {
   }
 
   test("range with negative step where end minus start not divisible by step") {
-
     val range = Range(-10, -20, -3, None)
-
-    val histogramBins = new Array[HistogramBin](3)
-    histogramBins(0) = HistogramBin(-19.0, -16.0, 2)
-    histogramBins(1) = HistogramBin(-16.0, -13.0, 1)
-    histogramBins(2) = HistogramBin(-13.0, -10.0, 1)
+    val histogramBins = Array(
+      HistogramBin(-19.0, -16.0, 2),
+      HistogramBin(-16.0, -13.0, 1),
+      HistogramBin(-13.0, -10.0, 1))
     val histogram = Some(Histogram(4.toDouble / 3, histogramBins))
+    // Number of range elements should be same as number of distinct values
+    assert(range.numElements === 4)
 
     val rangeStats = Statistics(
       sizeInBytes = 4 * 8,
