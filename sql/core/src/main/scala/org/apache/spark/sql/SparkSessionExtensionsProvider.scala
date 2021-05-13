@@ -64,13 +64,13 @@ import org.apache.spark.annotation.{DeveloperApi, Since, Unstable}
  *
  * Then, we can inject `MyExtensions` in three ways,
  * <ul>
- *   <li>[[SparkSession.Builder.withExtensions]]</li>
+ *   <li>withExtensions of [[SparkSession.Builder]]</li>
  *   <li>Config - spark.sql.extensions</li>
  *   <li>[[java.util.ServiceLoader]] - Add to src/main/resources/META-INF/services/org.apache.spark.sql.SparkSessionExtensionsProvider</li>
  * </ul>
  *
  * @see [[SparkSessionExtensions]]
- * @see [[SparkSession.Builder.withExtensions]]
+ * @see [[SparkSession.Builder]]
  * @see [[java.util.ServiceLoader]]
  *
  * @since 3.2.0
