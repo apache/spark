@@ -91,82 +91,30 @@ StructField(B,FloatType,true)))
 
 
 @overload
-def force_decimal_precision_scale(dt: StructType) -> StructType:
+def force_decimal_precision_scale(
+    dt: StructType, *, precision: int = ..., scale: int = ...
+) -> StructType:
     ...
 
 
 @overload
-def force_decimal_precision_scale(dt: StructType, *, precision: int) -> StructType:
+def force_decimal_precision_scale(
+    dt: ArrayType, *, precision: int = ..., scale: int = ...
+) -> ArrayType:
     ...
 
 
 @overload
-def force_decimal_precision_scale(dt: StructType, *, scale: int) -> StructType:
+def force_decimal_precision_scale(
+    dt: MapType, *, precision: int = ..., scale: int = ...
+) -> MapType:
     ...
 
 
 @overload
-def force_decimal_precision_scale(dt: StructType, *, precision: int, scale: int) -> StructType:
-    ...
-
-
-@overload
-def force_decimal_precision_scale(dt: ArrayType) -> ArrayType:
-    ...
-
-
-@overload
-def force_decimal_precision_scale(dt: ArrayType, *, precision: int) -> ArrayType:
-    ...
-
-
-@overload
-def force_decimal_precision_scale(dt: ArrayType, *, scale: int) -> ArrayType:
-    ...
-
-
-@overload
-def force_decimal_precision_scale(dt: ArrayType, *, precision: int, scale: int) -> ArrayType:
-    ...
-
-
-@overload
-def force_decimal_precision_scale(dt: MapType) -> MapType:
-    ...
-
-
-@overload
-def force_decimal_precision_scale(dt: MapType, *, precision: int) -> MapType:
-    ...
-
-
-@overload
-def force_decimal_precision_scale(dt: MapType, *, scale: int) -> MapType:
-    ...
-
-
-@overload
-def force_decimal_precision_scale(dt: MapType, *, precision: int, scale: int) -> MapType:
-    ...
-
-
-@overload
-def force_decimal_precision_scale(dt: DataType) -> DataType:
-    ...
-
-
-@overload
-def force_decimal_precision_scale(dt: DataType, *, precision: int) -> DataType:
-    ...
-
-
-@overload
-def force_decimal_precision_scale(dt: DataType, *, scale: int) -> DataType:
-    ...
-
-
-@overload
-def force_decimal_precision_scale(dt: DataType, *, precision: int, scale: int) -> DataType:
+def force_decimal_precision_scale(
+    dt: DataType, *, precision: int = ..., scale: int = ...
+) -> DataType:
     ...
 
 
