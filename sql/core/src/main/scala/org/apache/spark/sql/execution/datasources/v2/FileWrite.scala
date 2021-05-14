@@ -29,7 +29,7 @@ import org.apache.spark.internal.io.FileCommitProtocol
 import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
-import org.apache.spark.sql.connector.write.{BatchWrite, LogicalWriteInfo, WriteBuilder}
+import org.apache.spark.sql.connector.write.{BatchWrite, LogicalWriteInfo, Write}
 import org.apache.spark.sql.execution.datasources.{BasicWriteJobStatsTracker, DataSource, OutputWriterFactory, WriteJobDescription}
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.internal.SQLConf
@@ -37,16 +37,19 @@ import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.util.SerializableConfiguration
 
-abstract class FileWriteBuilder(
-    paths: Seq[String],
-    formatName: String,
-    supportsDataType: DataType => Boolean,
-    info: LogicalWriteInfo) extends WriteBuilder {
+trait FileWrite extends Write {
+  def paths: Seq[String]
+  def formatName: String
+  def supportsDataType: DataType => Boolean
+  def info: LogicalWriteInfo
+
   private val schema = info.schema()
   private val queryId = info.queryId()
   private val options = info.options()
 
-  override def buildForBatch(): BatchWrite = {
+  override def description(): String = formatName
+
+  override def toBatch: BatchWrite = {
     val sparkSession = SparkSession.active
     validateInputs(sparkSession.sessionState.conf.caseSensitiveAnalysis)
     val path = new Path(paths.head)

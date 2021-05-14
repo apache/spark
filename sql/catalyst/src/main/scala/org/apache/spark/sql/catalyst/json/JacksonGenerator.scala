@@ -181,8 +181,7 @@ private[sql] class JacksonGenerator(
     case _ =>
       (row: SpecializedGetters, ordinal: Int) =>
         val v = row.get(ordinal, dataType)
-        sys.error(s"Failed to convert value $v (class of ${v.getClass}}) " +
-          s"with the type of $dataType to JSON.")
+        throw QueryExecutionErrors.failToConvertValueToJsonError(v, v.getClass, dataType)
   }
 
   private def writeObject(f: => Unit): Unit = {
