@@ -72,14 +72,11 @@ class QueryExecution(
 
   lazy val analyzed: LogicalPlan = executePhase(QueryPlanningTracker.ANALYSIS) {
     // We can't clone `logical` here, which will reset the `_analyzed` flag.
-    sparkSession.sessionState.analyzer.executeAndCheck(logical, tracker) match {
-      case c: Command => c
-      case plan => plan transform {
-        // SPARK-35378: Convert LeafRunnableCommand to LocalRelation when query with CTE
-        case r: LeafRunnableCommand =>
-          LocalRelation(r.output, ExecutedCommandExec(r).executeCollect())
-        case other => other
-      }
+    sparkSession.sessionState.analyzer.executeAndCheck(logical, tracker) transform {
+      // SPARK-35378: Eagerly execute LeafRunnableCommand so that query command with CTE
+      case r: LeafRunnableCommand =>
+        LocalRelation(r.output, ExecutedCommandExec(r).executeCollect())
+      case other => other
     }
   }
 
