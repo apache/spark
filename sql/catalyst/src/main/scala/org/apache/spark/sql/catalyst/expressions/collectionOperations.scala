@@ -1503,7 +1503,7 @@ case class Slice(x: Expression, start: Expression, length: Expression)
          |${CodeGenerator.JAVA_INT} $startIdx = $defaultIntValue;
          |${CodeGenerator.JAVA_INT} $resLength = $defaultIntValue;
          |if ($start == 0) {
-         |  throw QueryExecutionErrors.unexpectedValueForStartInFunctionError($prettyName);
+         |  throw QueryExecutionErrors.unexpectedValueForStartInFunctionError("$prettyName");
          |} else if ($start < 0) {
          |  $startIdx = $start + $x.numElements();
          |} else {
@@ -1511,7 +1511,7 @@ case class Slice(x: Expression, start: Expression, length: Expression)
          |  $startIdx = $start - 1;
          |}
          |if ($length < 0) {
-         |  throw QueryExecutionErrors.unexpectedValueForLengthInFunctionError($prettyName);
+         |  throw QueryExecutionErrors.unexpectedValueForLengthInFunctionError("$prettyName");
          |} else if ($length > $x.numElements() - $startIdx) {
          |  $resLength = $x.numElements() - $startIdx;
          |} else {
@@ -2108,7 +2108,7 @@ case class ElementAt(
           }
 
           val indexOutOfBoundBranch = if (failOnError) {
-            s"throw QueryExecutionErrors.invalidArrayIndexError(index, $eval1.numElements());"
+            s"throw QueryExecutionErrors.invalidArrayIndexError($index, $eval1.numElements());"
           } else {
             s"${ev.isNull} = true;"
           }

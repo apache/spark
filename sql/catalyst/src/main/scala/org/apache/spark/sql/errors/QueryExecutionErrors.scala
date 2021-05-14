@@ -988,7 +988,7 @@ object QueryExecutionErrors {
       "SQLUserDefinedType nor registered with UDTRegistration.}")
   }
 
-  def invalidInputSyntaxForBooleanError(s: UTF8String): Throwable = {
+  def invalidInputSyntaxForBooleanError(s: UTF8String): UnsupportedOperationException = {
     new UnsupportedOperationException(s"invalid input syntax for type boolean: $s")
   }
 
@@ -997,17 +997,17 @@ object QueryExecutionErrors {
       s"The size function doesn't support the operand type ${dataType.getClass.getCanonicalName}")
   }
 
-  def unexpectedValueForStartInFunctionError(prettyName: String): Throwable = {
+  def unexpectedValueForStartInFunctionError(prettyName: String): RuntimeException = {
     new RuntimeException(
       s"Unexpected value for start in function $prettyName: SQL array indices start at 1.")
   }
 
-  def unexpectedValueForLengthInFunctionError(prettyName: String): Throwable = {
+  def unexpectedValueForLengthInFunctionError(prettyName: String): RuntimeException = {
     new RuntimeException(s"Unexpected value for length in function $prettyName: " +
       "length must be greater than or equal to 0.")
   }
 
-  def sqlArrayIndexNotStartAtOneError(): Throwable = {
+  def sqlArrayIndexNotStartAtOneError(): ArrayIndexOutOfBoundsException = {
     new ArrayIndexOutOfBoundsException("SQL array indices start at 1")
   }
 
@@ -1029,7 +1029,7 @@ object QueryExecutionErrors {
        """.stripMargin.replaceAll("\n", " "))
   }
 
-  def createArrayWithElementsExceedLimitError(count: Any): Throwable = {
+  def createArrayWithElementsExceedLimitError(count: Any): RuntimeException = {
     new RuntimeException(
       s"""
          |Unsuccessful try to create array with $count elements
