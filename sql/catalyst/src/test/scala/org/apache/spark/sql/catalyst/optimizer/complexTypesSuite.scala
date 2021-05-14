@@ -37,7 +37,7 @@ class ComplexTypesSuite extends PlanTest with ExpressionEvalHelper {
   object Optimizer extends RuleExecutor[LogicalPlan] {
     val batches =
       Batch("Finish Analysis", Once,
-        EnforceGroupingReferencesInAggregates) ::
+        PullOutGroupingExpressions) ::
       Batch("collapse projections", FixedPoint(10),
         CollapseProject) ::
       Batch("Constant Folding", FixedPoint(10),
@@ -59,7 +59,7 @@ class ComplexTypesSuite extends PlanTest with ExpressionEvalHelper {
   private def checkRule(originalQuery: LogicalPlan, correctAnswer: LogicalPlan) = {
     val optimized = Optimizer.execute(originalQuery.analyze)
     assert(optimized.resolved, "optimized plans must be still resolvable")
-    comparePlans(optimized, EnforceGroupingReferencesInAggregates(correctAnswer.analyze))
+    comparePlans(optimized, PullOutGroupingExpressions(correctAnswer.analyze))
   }
 
   test("explicit get from namedStruct") {

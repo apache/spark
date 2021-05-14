@@ -762,7 +762,7 @@ class Index(IndexOpsMixin):
         Parameters
         ----------
         value : scalar
-            Scalar value to use to fill holes (e.g. 0). This value cannot be a list-likes.
+            Scalar value to use to fill holes (example: 0). This value cannot be a list-likes.
 
         Returns
         -------
@@ -2076,7 +2076,7 @@ class Index(IndexOpsMixin):
         MultiIndex([], )
         """
         if not isinstance(repeats, int):
-            raise ValueError(
+            raise TypeError(
                 "`repeats` argument must be integer, but got {}".format(type(repeats).__name__)
             )
         elif repeats < 0:

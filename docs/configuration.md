@@ -771,7 +771,12 @@ Apart from these, the following properties are also available, and may be useful
     option <code>--repositories</code> or <code>spark.jars.repositories</code> will also be included.
     Useful for allowing Spark to resolve artifacts from behind a firewall e.g. via an in-house
     artifact server like Artifactory. Details on the settings file format can be
-    found at <a href="http://ant.apache.org/ivy/history/latest-milestone/settings.html">Settings Files</a>
+    found at <a href="http://ant.apache.org/ivy/history/latest-milestone/settings.html">Settings Files</a>.
+    Only paths with <code>file://</code> scheme are supported. Paths without a scheme are assumed to have
+    a <code>file://</code> scheme.
+    <p/>
+    When running in YARN cluster mode, this file will also be localized to the remote driver for dependency
+    resolution within <code>SparkContext#addJar</code>
   </td>
   <td>2.2.0</td>
 </tr>
@@ -1359,6 +1364,38 @@ Apart from these, the following properties are also available, and may be useful
     This setting applies for the Spark History Server too.
   </td>
   <td>2.2.3</td>
+</tr>
+<tr>
+  <td><code>spark.ui.timeline.executors.maximum</code></td>
+  <td>250</td>
+  <td>
+    The maximum number of executors shown in the event timeline.
+  </td>
+  <td>3.2.0</td>
+</tr>
+<tr>
+  <td><code>spark.ui.timeline.jobs.maximum</code></td>
+  <td>500</td>
+  <td>
+    The maximum number of jobs shown in the event timeline.
+  </td>
+  <td>3.2.0</td>
+</tr>
+<tr>
+  <td><code>spark.ui.timeline.stages.maximum</code></td>
+  <td>500</td>
+  <td>
+    The maximum number of stages shown in the event timeline.
+  </td>
+  <td>3.2.0</td>
+</tr>
+<tr>
+  <td><code>spark.ui.timeline.tasks.maximum</code></td>
+  <td>1000</td>
+  <td>
+    The maximum number of tasks shown in the event timeline.
+  </td>
+  <td>1.4.0</td>
 </tr>
 </table>
 

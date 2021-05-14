@@ -75,48 +75,12 @@
       <type>test-jar</type>
       <scope>test</scope>
     </dependency>
+
+    <dependency>
+      <groupId>dev.ludovic.netlib</groupId>
+      <artifactId>blas</artifactId>
+    </dependency>
   </dependencies>
-  <profiles>
-    <profile>
-      <id>netlib-lgpl</id>
-      <dependencies>
-        <dependency>
-          <groupId>com.github.fommil.netlib</groupId>
-          <artifactId>all</artifactId>
-          <version>${netlib.java.version}</version>
-          <type>pom</type>
-        </dependency>
-      </dependencies>
-    </profile>
-    <profile>
-      <id>jvm-vectorized</id>
-      <properties>
-        <extra.source.dir>src/jvm-vectorized/java</extra.source.dir>
-      </properties>
-      <build>
-        <plugins>
-          <plugin>
-            <groupId>org.codehaus.mojo</groupId>
-            <artifactId>build-helper-maven-plugin</artifactId>
-            <executions>
-              <execution>
-                <id>add-vectorized-sources</id>
-                <phase>generate-sources</phase>
-                <goals>
-                  <goal>add-source</goal>
-                </goals>
-                <configuration>
-                  <sources>
-                    <source>${extra.source.dir}</source>
-                  </sources>
-                </configuration>
-              </execution>
-            </executions>
-          </plugin>
-        </plugins>
-      </build>
-    </profile>
-  </profiles>
   <build>
     <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>
     <testOutputDirectory>target/scala-${scala.binary.version}/test-classes</testOutputDirectory>

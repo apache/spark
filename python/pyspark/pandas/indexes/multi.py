@@ -342,7 +342,7 @@ class MultiIndex(Index):
         if names is None:
             names = df._internal.column_labels
         elif not is_list_like(names):
-            raise ValueError("Names should be list-like for a MultiIndex")
+            raise TypeError("Names should be list-like for a MultiIndex")
         else:
             names = [name if is_name_like_tuple(name) else (name,) for name in names]
 

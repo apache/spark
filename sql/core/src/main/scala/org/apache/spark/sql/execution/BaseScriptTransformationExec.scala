@@ -40,14 +40,13 @@ import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.{CircularBuffer, RedirectThread, SerializableConfiguration, Utils}
 
 trait BaseScriptTransformationExec extends UnaryExecNode {
-  def input: Seq[Expression]
   def script: String
   def output: Seq[Attribute]
   def child: SparkPlan
   def ioschema: ScriptTransformationIOSchema
 
   protected lazy val inputExpressionsWithoutSerde: Seq[Expression] = {
-    input.map { in =>
+    child.output.map { in =>
       in.dataType match {
         case _: ArrayType | _: MapType | _: StructType =>
           new StructsToJson(ioschema.inputSerdeProps.toMap, in)

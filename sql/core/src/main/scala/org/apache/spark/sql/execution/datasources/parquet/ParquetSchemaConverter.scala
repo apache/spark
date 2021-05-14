@@ -141,7 +141,9 @@ class ParquetToSparkSchemaConverter(
         originalType match {
           case INT_64 | null => LongType
           case DECIMAL => makeDecimalType(Decimal.MAX_LONG_DIGITS)
-          case UINT_64 => DecimalType.LongDecimal
+          // The precision to hold the largest unsigned long is:
+          // `java.lang.Long.toUnsignedString(-1).length` = 20
+          case UINT_64 => DecimalType(20, 0)
           case TIMESTAMP_MICROS => TimestampType
           case TIMESTAMP_MILLIS => TimestampType
           case _ => illegalType()

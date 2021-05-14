@@ -22,10 +22,11 @@ from pyspark.pandas.internal import (
     SPARK_DEFAULT_INDEX_NAME,
     SPARK_INDEX_NAME_FORMAT,
 )
-from pyspark.pandas.testing.utils import ReusedSQLTestCase, SQLTestUtils
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
+from pyspark.testing.sqlutils import SQLTestUtils
 
 
-class InternalFrameTest(ReusedSQLTestCase, SQLTestUtils):
+class InternalFrameTest(PandasOnSparkTestCase, SQLTestUtils):
     def test_from_pandas(self):
         pdf = pd.DataFrame({"a": [1, 2, 3], "b": [4, 5, 6]})
 

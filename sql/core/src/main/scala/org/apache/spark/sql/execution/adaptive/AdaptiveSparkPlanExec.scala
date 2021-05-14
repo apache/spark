@@ -26,7 +26,7 @@ import scala.collection.mutable
 import scala.concurrent.ExecutionContext
 import scala.util.control.NonFatal
 
-import org.apache.spark.SparkException
+import org.apache.spark.{broadcast, SparkException}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
@@ -94,7 +94,7 @@ case class AdaptiveSparkPlanExec(
   // A list of physical optimizer rules to be applied to a new stage before its execution. These
   // optimizations should be stage-independent.
   @transient private val queryStageOptimizerRules: Seq[Rule[SparkPlan]] = Seq(
-    PlanAdaptiveDynamicPruningFilters(context.stageCache),
+    PlanAdaptiveDynamicPruningFilters(this),
     ReuseAdaptiveSubquery(context.subqueryCache),
     CoalesceShufflePartitions(context.session),
     // The following two rules need to make use of 'CustomShuffleReaderExec.partitionSpecs'
@@ -308,6 +308,10 @@ case class AdaptiveSparkPlanExec(
     val rdd = getFinalPhysicalPlan().execute()
     finalPlanUpdate
     rdd
+  }
+
+  override def doExecuteBroadcast[T](): broadcast.Broadcast[T] = {
+    getFinalPhysicalPlan().doExecuteBroadcast()
   }
 
   protected override def stringArgs: Iterator[Any] = Iterator(s"isFinalPlan=$isFinalPlan")

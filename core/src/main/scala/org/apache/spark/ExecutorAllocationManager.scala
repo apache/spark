@@ -290,11 +290,11 @@ private[spark] class ExecutorAllocationManager(
    * under the current load to satisfy all running and pending tasks, rounded up.
    */
   private[spark] def maxNumExecutorsNeededPerResourceProfile(rpId: Int): Int = {
-    val pending = listener.totalPendingTasksPerResourceProfile(rpId)
+    val pendingTask = listener.pendingTasksPerResourceProfile(rpId)
     val pendingSpeculative = listener.pendingSpeculativeTasksPerResourceProfile(rpId)
     val unschedulableTaskSets = listener.pendingUnschedulableTaskSetsPerResourceProfile(rpId)
     val running = listener.totalRunningTasksPerResourceProfile(rpId)
-    val numRunningOrPendingTasks = pending + running
+    val numRunningOrPendingTasks = pendingTask + pendingSpeculative + running
     val rp = resourceProfileManager.resourceProfileFromId(rpId)
     val tasksPerExecutor = rp.maxTasksPerExecutor(conf)
     logDebug(s"max needed for rpId: $rpId numpending: $numRunningOrPendingTasks," +
@@ -914,18 +914,6 @@ private[spark] class ExecutorAllocationManager(
 
     def hasPendingTasks: Boolean = {
       hasPendingSpeculativeTasks || hasPendingRegularTasks
-    }
-
-    def totalPendingTasksPerResourceProfile(rp: Int): Int = {
-      pendingTasksPerResourceProfile(rp) + pendingSpeculativeTasksPerResourceProfile(rp)
-    }
-
-    /**
-     * The number of tasks currently running across all stages.
-     * Include running-but-zombie stage attempts
-     */
-    def totalRunningTasks(): Int = {
-      stageAttemptToNumRunningTask.values.sum
     }
 
     def totalRunningTasksPerResourceProfile(rp: Int): Int = {

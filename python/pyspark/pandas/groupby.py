@@ -2416,7 +2416,7 @@ class GroupBy(object, metaclass=ABCMeta):
         Name: b, dtype: float64
         """
         if not isinstance(accuracy, int):
-            raise ValueError(
+            raise TypeError(
                 "accuracy must be an integer; however, got [%s]" % type(accuracy).__name__
             )
 

@@ -40,6 +40,7 @@ import org.apache.spark.sql.catalyst.rules.UnknownRuleId
 import org.apache.spark.sql.catalyst.trees.TreePattern.TreePattern
 import org.apache.spark.sql.catalyst.util.StringUtils.PlanStringConcat
 import org.apache.spark.sql.catalyst.util.truncatedString
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -74,8 +75,11 @@ object CurrentOrigin {
   }
 
   def withOrigin[A](o: Origin)(f: => A): A = {
+    // remember the previous one so it can be reset to this
+    // this way withOrigin can be recursive
+    val previous = get
     set(o)
-    val ret = try f finally { reset() }
+    val ret = try f finally { set(previous) }
     ret
   }
 }
@@ -671,7 +675,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
     // Skip no-arg constructors that are just there for kryo.
     val ctors = allCtors.filter(allowEmptyArgs || _.getParameterTypes.size != 0)
     if (ctors.isEmpty) {
-      sys.error(s"No valid constructor for $nodeName")
+      throw QueryExecutionErrors.constructorNotFoundError(nodeName)
     }
     val allArgs: Array[AnyRef] = if (otherCopyArgs.isEmpty) {
       newArgs

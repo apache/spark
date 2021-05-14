@@ -3,4 +3,4 @@
 -- !query schema
 struct<sum(ss_quantity):bigint>
 -- !query output
-29030
+28312

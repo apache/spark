@@ -20,10 +20,11 @@ import numpy as np
 import re
 
 from pyspark import pandas as ps
-from pyspark.pandas.testing.utils import ReusedSQLTestCase, SQLTestUtils
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
+from pyspark.testing.sqlutils import SQLTestUtils
 
 
-class SeriesStringTest(ReusedSQLTestCase, SQLTestUtils):
+class SeriesStringTest(PandasOnSparkTestCase, SQLTestUtils):
     @property
     def pser(self):
         return pd.Series(
@@ -240,7 +241,7 @@ class SeriesStringTest(ReusedSQLTestCase, SQLTestUtils):
 
     def test_string_repeat(self):
         self.check_func(lambda x: x.str.repeat(repeats=3))
-        with self.assertRaises(ValueError):
+        with self.assertRaises(TypeError):
             self.check_func(lambda x: x.str.repeat(repeats=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]))
 
     def test_string_replace(self):

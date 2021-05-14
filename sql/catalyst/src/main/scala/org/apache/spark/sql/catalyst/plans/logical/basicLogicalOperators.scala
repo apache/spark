@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import scala.collection.mutable
-
 import org.apache.spark.sql.catalyst.AliasIdentifier
 import org.apache.spark.sql.catalyst.analysis.{AnsiTypeCoercion, MultiInstanceRelation, TypeCoercion, TypeCoercionBase}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable}
@@ -28,9 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, RangePartitioning, RoundRobinPartitioning, SinglePartition}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
-import org.apache.spark.sql.catalyst.trees.TreePattern.{
-  INNER_LIKE_JOIN, JOIN, LEFT_SEMI_OR_ANTI_JOIN, NATURAL_LIKE_JOIN, OUTER_JOIN, TreePattern
-}
+import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -73,6 +69,9 @@ case class Project(projectList: Seq[NamedExpression], child: LogicalPlan)
     extends OrderPreservingUnaryNode {
   override def output: Seq[Attribute] = projectList.map(_.toAttribute)
   override def maxRows: Option[Long] = child.maxRows
+  override def maxRowsPerPartition: Option[Long] = child.maxRowsPerPartition
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(PROJECT)
 
   override lazy val resolved: Boolean = {
     val hasSpecialExpressions = projectList.exists ( _.collect {
@@ -128,6 +127,8 @@ case class Generate(
     child: LogicalPlan)
   extends UnaryNode {
 
+  final override val nodePatterns: Seq[TreePattern] = Seq(GENERATE)
+
   lazy val requiredChildOutput: Seq[Attribute] = {
     val unrequiredSet = unrequiredChildIndex.toSet
     child.output.zipWithIndex.filterNot(t => unrequiredSet.contains(t._2)).map(_._1)
@@ -165,6 +166,9 @@ case class Filter(condition: Expression, child: LogicalPlan)
   override def output: Seq[Attribute] = child.output
 
   override def maxRows: Option[Long] = child.maxRows
+  override def maxRowsPerPartition: Option[Long] = child.maxRowsPerPartition
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(FILTER)
 
   override protected lazy val validConstraints: ExpressionSet = {
     val predicates = splitConjunctivePredicates(condition)
@@ -209,6 +213,8 @@ case class Intersect(
 
   override def nodeName: String = getClass.getSimpleName + ( if ( isAll ) "All" else "" )
 
+  final override val nodePatterns: Seq[TreePattern] = Seq(INTERSECT)
+
   override def output: Seq[Attribute] =
     left.output.zip(right.output).map { case (leftAttr, rightAttr) =>
       leftAttr.withNullability(leftAttr.nullable && rightAttr.nullable)
@@ -240,6 +246,8 @@ case class Except(
   override def output: Seq[Attribute] = left.output
 
   override def metadataOutput: Seq[Attribute] = Nil
+
+  final override val nodePatterns : Seq[TreePattern] = Seq(EXCEPT)
 
   override protected lazy val validConstraints: ExpressionSet = leftConstraints
 
@@ -275,6 +283,8 @@ case class Union(
       Some(children.flatMap(_.maxRows).sum)
     }
   }
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(UNION)
 
   /**
    * Note the definition has assumption about how union is implemented physically.
@@ -628,6 +638,7 @@ case class Sort(
   override def output: Seq[Attribute] = child.output
   override def maxRows: Option[Long] = child.maxRows
   override def outputOrdering: Seq[SortOrder] = order
+  final override val nodePatterns: Seq[TreePattern] = Seq(SORT)
   override protected def withNewChildInternal(newChild: LogicalPlan): Sort = copy(child = newChild)
 }
 
@@ -744,6 +755,16 @@ case class Range(
     }
   }
 
+  override def maxRowsPerPartition: Option[Long] = {
+    if (numSlices.isDefined) {
+      var m = numElements / numSlices.get
+      if (numElements % numSlices.get != 0) m += 1
+      if (m.isValidLong) Some(m.toLong) else maxRows
+    } else {
+      maxRows
+    }
+  }
+
   override def computeStats(): Statistics = {
     if (numElements == 0) {
       Statistics(sizeInBytes = 0, rowCount = Some(0))
@@ -781,23 +802,14 @@ case class Range(
 /**
  * This is a Group by operator with the aggregate functions and projections.
  *
- * @param groupingExpressions Expressions for grouping keys.
- * @param aggregateExpressions Expressions for a project list, which can contain
- *                             [[AggregateExpression]]s and [[GroupingExprRef]]s.
- * @param child The child of the aggregate node.
+ * @param groupingExpressions expressions for grouping keys
+ * @param aggregateExpressions expressions for a project list, which could contain
+ *                             [[AggregateExpression]]s.
  *
- * Expressions without aggregate functions in [[aggregateExpressions]] can contain
- * [[GroupingExprRef]]s to refer to complex grouping expressions in [[groupingExpressions]]. These
- * references ensure that optimization rules don't change the aggregate expressions to invalid ones
- * that no longer refer to any grouping expressions and also simplify the expression transformations
- * on the node (need to transform the expression only once).
- *
- * For example, in the following query Spark shouldn't optimize the aggregate expression
- * `Not(IsNull(c))` to `IsNotNull(c)` as the grouping expression is `IsNull(c)`:
- * SELECT not(c IS NULL)
- * FROM t
- * GROUP BY c IS NULL
- * Instead, the aggregate expression should contain `Not(GroupingExprRef(0))`.
+ * Note: Currently, aggregateExpressions is the project list of this Group by operator. Before
+ * separating projection from grouping and aggregate, we should avoid expression-level optimization
+ * on aggregateExpressions, which could reference an expression in groupingExpressions.
+ * For example, see the rule [[org.apache.spark.sql.catalyst.optimizer.SimplifyExtractValueOps]]
  */
 case class Aggregate(
     groupingExpressions: Seq[Expression],
@@ -824,71 +836,15 @@ case class Aggregate(
     }
   }
 
-  private def expandGroupingReferences(e: Expression): Expression = {
-    e match {
-      case _ if AggregateExpression.isAggregate(e) => e
-      case g: GroupingExprRef => groupingExpressions(g.ordinal)
-      case _ => e.mapChildren(expandGroupingReferences)
-    }
-  }
-
-  lazy val aggregateExpressionsWithoutGroupingRefs = {
-    aggregateExpressions.map(expandGroupingReferences(_).asInstanceOf[NamedExpression])
-  }
+  final override val nodePatterns : Seq[TreePattern] = Seq(AGGREGATE)
 
   override lazy val validConstraints: ExpressionSet = {
-    val nonAgg = aggregateExpressionsWithoutGroupingRefs.
-      filter(_.find(_.isInstanceOf[AggregateExpression]).isEmpty)
+    val nonAgg = aggregateExpressions.filter(_.find(_.isInstanceOf[AggregateExpression]).isEmpty)
     getAllValidConstraints(nonAgg)
   }
 
   override protected def withNewChildInternal(newChild: LogicalPlan): Aggregate =
     copy(child = newChild)
-}
-
-object Aggregate {
-  private def collectComplexGroupingExpressions(groupingExpressions: Seq[Expression]) = {
-    val complexGroupingExpressions = mutable.Map.empty[Expression, (Expression, Int)]
-    var i = 0
-    groupingExpressions.foreach { ge =>
-      if (!ge.foldable && ge.children.nonEmpty &&
-        !complexGroupingExpressions.contains(ge.canonicalized)) {
-        complexGroupingExpressions += ge.canonicalized -> (ge, i)
-      }
-      i += 1
-    }
-    complexGroupingExpressions
-  }
-
-  private def insertGroupingReferences(
-      aggregateExpressions: Seq[NamedExpression],
-      groupingExpressions: collection.Map[Expression, (Expression, Int)]): Seq[NamedExpression] = {
-    def insertGroupingExprRefs(e: Expression): Expression = {
-      e match {
-        case _ if AggregateExpression.isAggregate(e) => e
-        case _ if groupingExpressions.contains(e.canonicalized) =>
-          val (groupingExpression, ordinal) = groupingExpressions(e.canonicalized)
-          GroupingExprRef(ordinal, groupingExpression.dataType, groupingExpression.nullable)
-        case _ => e.mapChildren(insertGroupingExprRefs)
-      }
-    }
-
-    aggregateExpressions.map(insertGroupingExprRefs(_).asInstanceOf[NamedExpression])
-  }
-
-  def withGroupingRefs(
-      groupingExpressions: Seq[Expression],
-      aggregateExpressions: Seq[NamedExpression],
-      child: LogicalPlan): Aggregate = {
-    val complexGroupingExpressions = collectComplexGroupingExpressions(groupingExpressions)
-    val aggrExprWithGroupingReferences = if (complexGroupingExpressions.nonEmpty) {
-      insertGroupingReferences(aggregateExpressions, complexGroupingExpressions)
-    } else {
-      aggregateExpressions
-    }
-
-    new Aggregate(groupingExpressions, aggrExprWithGroupingReferences, child)
-  }
 }
 
 case class Window(
@@ -901,6 +857,8 @@ case class Window(
     child.output ++ windowExpressions.map(_.toAttribute)
 
   override def producedAttributes: AttributeSet = windowOutputSet
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(WINDOW)
 
   def windowOutputSet: AttributeSet = AttributeSet(windowExpressions.map(_.toAttribute))
 
@@ -1109,6 +1067,8 @@ case class GlobalLimit(limitExpr: Expression, child: LogicalPlan) extends OrderP
     }
   }
 
+  final override val nodePatterns: Seq[TreePattern] = Seq(LIMIT)
+
   override protected def withNewChildInternal(newChild: LogicalPlan): GlobalLimit =
     copy(child = newChild)
 }
@@ -1128,6 +1088,8 @@ case class LocalLimit(limitExpr: Expression, child: LogicalPlan) extends OrderPr
       case _ => None
     }
   }
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(LIMIT)
 
   override protected def withNewChildInternal(newChild: LogicalPlan): LocalLimit =
     copy(child = newChild)
@@ -1248,6 +1210,7 @@ case class Sample(
 case class Distinct(child: LogicalPlan) extends UnaryNode {
   override def maxRows: Option[Long] = child.maxRows
   override def output: Seq[Attribute] = child.output
+  final override val nodePatterns: Seq[TreePattern] = Seq(DISTINCT_LIKE)
   override protected def withNewChildInternal(newChild: LogicalPlan): Distinct =
     copy(child = newChild)
 }
@@ -1260,6 +1223,7 @@ abstract class RepartitionOperation extends UnaryNode {
   def numPartitions: Int
   override final def maxRows: Option[Long] = child.maxRows
   override def output: Seq[Attribute] = child.output
+  final override val nodePatterns: Seq[TreePattern] = Seq(REPARTITION_OPERATION)
   def partitioning: Partitioning
 }
 
@@ -1359,6 +1323,7 @@ case class Deduplicate(
     child: LogicalPlan) extends UnaryNode {
   override def maxRows: Option[Long] = child.maxRows
   override def output: Seq[Attribute] = child.output
+  final override val nodePatterns: Seq[TreePattern] = Seq(DISTINCT_LIKE)
   override protected def withNewChildInternal(newChild: LogicalPlan): Deduplicate =
     copy(child = newChild)
 }
@@ -1391,5 +1356,16 @@ case class CollectMetrics(
   override def output: Seq[Attribute] = child.output
 
   override protected def withNewChildInternal(newChild: LogicalPlan): CollectMetrics =
+    copy(child = newChild)
+}
+
+/**
+ * A placeholder for domain join that can be added when decorrelating subqueries.
+ * It should be rewritten during the optimization phase.
+ */
+case class DomainJoin(domainAttrs: Seq[Attribute], child: LogicalPlan) extends UnaryNode {
+  override def output: Seq[Attribute] = child.output ++ domainAttrs
+  override def producedAttributes: AttributeSet = AttributeSet(domainAttrs)
+  override protected def withNewChildInternal(newChild: LogicalPlan): DomainJoin =
     copy(child = newChild)
 }

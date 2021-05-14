@@ -20,6 +20,8 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.trees.TreePattern.{CREATE_NAMED_STRUCT, EXTRACT_VALUE,
+  JSON_TO_STRUCT}
 import org.apache.spark.sql.types.{ArrayType, StructType}
 
 /**
@@ -37,16 +39,20 @@ import org.apache.spark.sql.types.{ArrayType, StructType}
 object OptimizeCsvJsonExprs extends Rule[LogicalPlan] {
   private def nameOfCorruptRecord = conf.columnNameOfCorruptRecord
 
-  override def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
+    _.containsAnyPattern(CREATE_NAMED_STRUCT, EXTRACT_VALUE, JSON_TO_STRUCT), ruleId) {
     case p =>
       val optimized = if (conf.jsonExpressionOptimization) {
-        p.transformExpressions(jsonOptimization)
+        p.transformExpressionsWithPruning(
+          _.containsAnyPattern(CREATE_NAMED_STRUCT, EXTRACT_VALUE, JSON_TO_STRUCT)
+          )(jsonOptimization)
       } else {
         p
       }
 
       if (conf.csvExpressionOptimization) {
-        optimized.transformExpressions(csvOptimization)
+        optimized.transformExpressionsWithPruning(
+          _.containsAnyPattern(EXTRACT_VALUE))(csvOptimization)
       } else {
         optimized
       }

@@ -17,7 +17,9 @@
 
 package org.apache.spark.ml.linalg
 
-import com.github.fommil.netlib.{BLAS => NetlibBLAS, F2jBLAS}
+import dev.ludovic.netlib.{BLAS => NetlibBLAS,
+                           JavaBLAS => NetlibJavaBLAS,
+                           NativeBLAS => NetlibNativeBLAS}
 
 /**
  * BLAS routines for MLlib's vectors and matrices.
@@ -29,38 +31,23 @@ private[spark] object BLAS extends Serializable {
   private val nativeL1Threshold: Int = 256
 
   // For level-1 function dspmv, use javaBLAS for better performance.
-  private[ml] def javaBLAS: NetlibBLAS = {
+  private[spark] def javaBLAS: NetlibBLAS = {
     if (_javaBLAS == null) {
-      _javaBLAS =
-        try {
-          // scalastyle:off classforname
-          Class.forName("org.apache.spark.ml.linalg.VectorizedBLAS", true,
-                          Option(Thread.currentThread().getContextClassLoader)
-                            .getOrElse(getClass.getClassLoader))
-               .newInstance()
-               .asInstanceOf[NetlibBLAS]
-          // scalastyle:on classforname
-        } catch {
-          case _: Throwable => new F2jBLAS
-        }
+      _javaBLAS = NetlibJavaBLAS.getInstance
     }
     _javaBLAS
   }
 
   // For level-3 routines, we use the native BLAS.
-  private[ml] def nativeBLAS: NetlibBLAS = {
+  private[spark] def nativeBLAS: NetlibBLAS = {
     if (_nativeBLAS == null) {
       _nativeBLAS =
-        if (NetlibBLAS.getInstance.isInstanceOf[F2jBLAS]) {
-          javaBLAS
-        } else {
-          NetlibBLAS.getInstance
-        }
+        try { NetlibNativeBLAS.getInstance } catch { case _: Throwable => javaBLAS }
     }
     _nativeBLAS
   }
 
-  private[ml] def getBLAS(vectorSize: Int): NetlibBLAS = {
+  private[spark] def getBLAS(vectorSize: Int): NetlibBLAS = {
     if (vectorSize < nativeL1Threshold) {
       javaBLAS
     } else {

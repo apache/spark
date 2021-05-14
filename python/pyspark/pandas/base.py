@@ -1498,7 +1498,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
 
     def _shift(self, periods, fill_value, *, part_cols=()):
         if not isinstance(periods, int):
-            raise ValueError("periods should be an int; however, got [%s]" % type(periods).__name__)
+            raise TypeError("periods should be an int; however, got [%s]" % type(periods).__name__)
 
         col = self.spark.column
         window = (
@@ -1828,7 +1828,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
                    )
         """
         if not is_list_like(indices) or isinstance(indices, (dict, set)):
-            raise ValueError("`indices` must be a list-like except dict or set")
+            raise TypeError("`indices` must be a list-like except dict or set")
         if isinstance(self, ps.Series):
             return cast(ps.Series, self.iloc[indices])
         else:

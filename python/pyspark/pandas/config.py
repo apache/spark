@@ -70,7 +70,7 @@ class Option:
     >>> option.validate('abc')  # doctest: +NORMALIZE_WHITESPACE
     Traceback (most recent call last):
       ...
-    ValueError: The value for option 'option.name' was <class 'str'>;
+    TypeError: The value for option 'option.name' was <class 'str'>;
     however, expected types are [(<class 'float'>, <class 'int'>)].
 
     >>> option.validate(-1.1)
@@ -101,7 +101,7 @@ class Option:
         Validate the given value and throw an exception with related information such as key.
         """
         if not isinstance(v, self.types):
-            raise ValueError(
+            raise TypeError(
                 "The value for option '%s' was %s; however, expected types are "
                 "[%s]." % (self.key, type(v), str(self.types))
             )

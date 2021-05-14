@@ -24,6 +24,8 @@ import scala.collection.mutable.{Builder, WrappedArray}
 import scala.reflect.ClassTag
 import scala.util.{Properties, Try}
 
+import org.apache.commons.lang3.reflect.MethodUtils
+
 import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.serializer._
 import org.apache.spark.sql.Row
@@ -33,6 +35,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.TernaryLike
+import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, GenericArrayData, MapData}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
@@ -48,6 +51,7 @@ trait InvokeLike extends Expression with NonSQLExpression {
   def propagateNull: Boolean
 
   protected lazy val needNullCheck: Boolean = propagateNull && arguments.exists(_.nullable)
+  protected lazy val evaluatedArgs: Array[Object] = new Array[Object](arguments.length)
 
   /**
    * Prepares codes for arguments.
@@ -124,18 +128,38 @@ trait InvokeLike extends Expression with NonSQLExpression {
       arguments: Seq[Expression],
       input: InternalRow,
       dataType: DataType): Any = {
-    val args = arguments.map(e => e.eval(input).asInstanceOf[Object])
-    if (needNullCheck && args.exists(_ == null)) {
+    var i = 0
+    val len = arguments.length
+    while (i < len) {
+      evaluatedArgs(i) = arguments(i).eval(input).asInstanceOf[Object]
+      i += 1
+    }
+    if (needNullCheck && evaluatedArgs.contains(null)) {
       // return null if one of arguments is null
       null
     } else {
-      val ret = method.invoke(obj, args: _*)
+      val ret = try {
+        method.invoke(obj, evaluatedArgs: _*)
+      } catch {
+        // Re-throw the original exception.
+        case e: java.lang.reflect.InvocationTargetException if e.getCause != null =>
+          throw e.getCause
+      }
       val boxedClass = ScalaReflection.typeBoxedJavaMapping.get(dataType)
       if (boxedClass.isDefined) {
         boxedClass.get.cast(ret)
       } else {
         ret
       }
+    }
+  }
+
+  final def findMethod(cls: Class[_], functionName: String, argClasses: Seq[Class[_]]): Method = {
+    val method = MethodUtils.getMatchingAccessibleMethod(cls, functionName, argClasses: _*)
+    if (method == null) {
+      throw QueryExecutionErrors.methodNotDeclaredError(functionName)
+    } else {
+      method
     }
   }
 }
@@ -229,7 +253,7 @@ case class StaticInvoke(
   override def children: Seq[Expression] = arguments
 
   lazy val argClasses = ScalaReflection.expressionJavaClasses(arguments)
-  @transient lazy val method = cls.getDeclaredMethod(functionName, argClasses : _*)
+  @transient lazy val method = findMethod(cls, functionName, argClasses)
 
   override def eval(input: InternalRow): Any = {
     invoke(null, method, arguments, input, dataType)
@@ -249,7 +273,7 @@ case class StaticInvoke(
       ""
     }
 
-    val evaluate = if (returnNullable) {
+    val evaluate = if (returnNullable && !method.getReturnType.isPrimitive) {
       if (CodeGenerator.defaultValue(dataType) == "null") {
         s"""
           ${ev.value} = $callFunc;
@@ -319,12 +343,7 @@ case class Invoke(
 
   @transient lazy val method = targetObject.dataType match {
     case ObjectType(cls) =>
-      val m = cls.getMethods.find(_.getName == encodedFunctionName)
-      if (m.isEmpty) {
-        sys.error(s"Couldn't find $encodedFunctionName on $cls")
-      } else {
-        m
-      }
+      Some(findMethod(cls, encodedFunctionName, argClasses))
     case _ => None
   }
 
@@ -388,16 +407,29 @@ case class Invoke(
       """
     }
 
+    val mainEvalCode =
+      code"""
+         |$argCode
+         |${ev.isNull} = $resultIsNull;
+         |if (!${ev.isNull}) {
+         |  $evaluate
+         |}
+         |""".stripMargin
+
+    val evalWithNullCheck = if (targetObject.nullable) {
+      code"""
+         |if (!${obj.isNull}) {
+         |  $mainEvalCode
+         |}
+         |""".stripMargin
+    } else {
+      mainEvalCode
+    }
+
     val code = obj.code + code"""
       boolean ${ev.isNull} = true;
       $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
-      if (!${obj.isNull}) {
-        $argCode
-        ${ev.isNull} = $resultIsNull;
-        if (!${ev.isNull}) {
-          $evaluate
-        }
-      }
+      $evalWithNullCheck
      """
     ev.copy(code = code)
   }
@@ -459,7 +491,7 @@ case class NewInstance(
     val paramTypes = ScalaReflection.expressionJavaClasses(arguments)
     val getConstructor = (paramClazz: Seq[Class[_]]) => {
       ScalaReflection.findConstructor(cls, paramClazz).getOrElse {
-        sys.error(s"Couldn't find a valid constructor on $cls")
+        throw QueryExecutionErrors.constructorNotFoundError(cls.toString)
       }
     }
     outerPointer.map { p =>
@@ -630,6 +662,8 @@ case class LambdaVariable(
 
   private val accessor: (InternalRow, Int) => Any = InternalRow.getAccessor(dataType, nullable)
 
+  final override val nodePatterns: Seq[TreePattern] = Seq(LAMBDA_VARIABLE)
+
   // Interpreted execution of `LambdaVariable` always get the 0-index element from input row.
   override def eval(input: InternalRow): Any = {
     assert(input.numFields == 1,
@@ -741,6 +775,8 @@ case class MapObjects private(
   override def first: Expression = loopVar
   override def second: Expression = lambdaFunction
   override def third: Expression = inputData
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(MAP_OBJECTS)
 
   // The data with UserDefinedType are actually stored with the data type of its sqlType.
   // When we want to apply MapObjects on it, we have to use it.
@@ -1704,6 +1740,8 @@ case class AssertNotNull(child: Expression, walkedTypePath: Seq[String] = Nil)
   override def dataType: DataType = child.dataType
   override def foldable: Boolean = false
   override def nullable: Boolean = false
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(NULL_CHECK)
 
   override def flatArguments: Iterator[Any] = Iterator(child)
 
