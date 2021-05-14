@@ -601,6 +601,27 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
           "class" -> classOf[JsonTestTreeNode].getName,
           "num-children" -> 0,
           "arg" -> "1")))
+
+    // Convert Seq of Product contains TreeNode to JSON.
+    assertJSON(
+      Seq(("a", JsonTestTreeNode("0")), ("b", JsonTestTreeNode("1"))),
+      List(
+        JObject(
+          "product-class" -> "scala.Tuple2",
+          "_1" -> "a",
+          "_2" -> List(JObject(
+            "class" -> classOf[JsonTestTreeNode].getName,
+            "num-children" -> 0,
+            "arg" -> "0"
+          ))),
+        JObject(
+          "product-class" -> "scala.Tuple2",
+          "_1" -> "b",
+          "_2" -> List(JObject(
+            "class" -> classOf[JsonTestTreeNode].getName,
+            "num-children" -> 0,
+            "arg" -> "1"
+          )))))
   }
 
   test("toJSON should not throws java.lang.StackOverflowError") {
