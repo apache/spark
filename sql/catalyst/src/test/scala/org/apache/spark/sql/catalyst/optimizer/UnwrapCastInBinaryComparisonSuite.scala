@@ -233,7 +233,7 @@ class UnwrapCastInBinaryComparisonSuite extends PlanTest with ExpressionEvalHelp
     assert(getRange(DecimalType(5, 2)).isEmpty)
   }
 
-  test("SPARK-35316: unwrap should support In/InSet predicate.") {
+  test("SPARK-35316: unwrap should support In predicate.") {
     assertEquivalent(
       Cast(f, LongType).in(1.toLong, 2.toLong, 3.toLong), f.in(1.toShort, 2.toShort, 3.toShort))
 
