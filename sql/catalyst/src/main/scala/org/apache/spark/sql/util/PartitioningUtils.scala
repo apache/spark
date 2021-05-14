@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils.DEFAULT_PARTITION_NAME
 import org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{CharType, StructType, VarcharType}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -72,12 +73,20 @@ private[sql] object PartitioningUtils {
 
   private def charTypeWriteSideCheck(inputStr: String, limit: Int): String = {
     val toUtf8 = UTF8String.fromString(inputStr)
-    CharVarcharCodegenUtils.charTypeWriteSideCheck(toUtf8, limit).toString
+    if (SQLConf.get.charVarcharAsString) {
+      toUtf8.toString
+    } else {
+      CharVarcharCodegenUtils.charTypeWriteSideCheck(toUtf8, limit).toString
+    }
   }
 
   private def varcharTypeWriteSideCheck(inputStr: String, limit: Int): String = {
     val toUtf8 = UTF8String.fromString(inputStr)
-    CharVarcharCodegenUtils.varcharTypeWriteSideCheck(toUtf8, limit).toString
+    if (SQLConf.get.charVarcharAsString) {
+      toUtf8.toString
+    } else {
+      CharVarcharCodegenUtils.varcharTypeWriteSideCheck(toUtf8, limit).toString
+    }
   }
 
   /**
