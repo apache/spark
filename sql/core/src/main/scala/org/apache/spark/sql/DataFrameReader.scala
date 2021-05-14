@@ -874,23 +874,14 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   /**
    * Loads ORC files and returns the result as a `DataFrame`.
    *
-   * You can set the following ORC-specific option(s) for reading ORC files:
-   * <ul>
-   * <li>`mergeSchema` (default is the value specified in `spark.sql.orc.mergeSchema`): sets whether
-   * we should merge schemas collected from all ORC part-files. This will override
-   * `spark.sql.orc.mergeSchema`.</li>
-   * <li>`pathGlobFilter`: an optional glob pattern to only include files with paths matching
-   * the pattern. The syntax follows <code>org.apache.hadoop.fs.GlobFilter</code>.
-   * It does not change the behavior of partition discovery.</li>
-   * <li>`modifiedBefore` (batch only): an optional timestamp to only include files with
-   * modification times  occurring before the specified Time. The provided timestamp
-   * must be in the following form: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)</li>
-   * <li>`modifiedAfter` (batch only): an optional timestamp to only include files with
-   * modification times occurring after the specified Time. The provided timestamp
-   * must be in the following form: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)</li>
-   * <li>`recursiveFileLookup`: recursively scan a directory for files. Using this option
-   * disables partition discovery</li>
-   * </ul>
+   * ORC-specific option(s) for reading ORC files can be found in
+   * <a href=
+   *   "https://spark.apache.org/docs/latest/sql-data-sources-orc.html#data-source-option">
+   *   Data Source Option</a> in the version you use.
+   * Other generic options can be found in
+   * <a href=
+   *   "https://spark.apache.org/docs/latest/sql-data-sources-generic-options.html">
+   *   Generic Files Source Options</a>.
    *
    * @param paths input paths
    * @since 2.0.0

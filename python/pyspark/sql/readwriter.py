@@ -793,28 +793,15 @@ class DataFrameReader(OptionUtils):
         Parameters
         ----------
         path : str or list
-        mergeSchema : str or bool, optional
-            sets whether we should merge schemas collected from all
-            ORC part-files. This will override ``spark.sql.orc.mergeSchema``.
-            The default value is specified in ``spark.sql.orc.mergeSchema``.
-        pathGlobFilter : str or bool
-            an optional glob pattern to only include files with paths matching
-            the pattern. The syntax follows `org.apache.hadoop.fs.GlobFilter`.
-            It does not change the behavior of
-            `partition discovery <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#partition-discovery>`_.  # noqa
-        recursiveFileLookup : str or bool
-            recursively scan a directory for files. Using this option
-            disables
-            `partition discovery <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#partition-discovery>`_.  # noqa
 
-            modification times occurring before the specified time. The provided timestamp
-            must be in the following format: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)
-        modifiedBefore : an optional timestamp to only include files with
-            modification times occurring before the specified time. The provided timestamp
-            must be in the following format: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)
-        modifiedAfter : an optional timestamp to only include files with
-            modification times occurring after the specified time. The provided timestamp
-            must be in the following format: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)
+        Other Parameters
+        ----------------
+        Extra options
+            For the extra options, refer to
+            `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-orc.html#data-source-option>`_  # noqa
+            in the version you use.
+            Other generic options can be found in
+            `Generic File Source Options <https://spark.apache.org/docs/latest/sql-data-sources-generic-options.html`>_  # noqa
 
         Examples
         --------
@@ -1407,22 +1394,13 @@ class DataFrameWriter(OptionUtils):
         ----------
         path : str
             the path in any Hadoop supported file system
-        mode : str, optional
-            specifies the behavior of the save operation when data already exists.
 
-            * ``append``: Append contents of this :class:`DataFrame` to existing data.
-            * ``overwrite``: Overwrite existing data.
-            * ``ignore``: Silently ignore this operation if data already exists.
-            * ``error`` or ``errorifexists`` (default case): Throw an exception if data already \
-                exists.
-        partitionBy : str or list, optional
-            names of partitioning columns
-        compression : str, optional
-            compression codec to use when saving to file. This can be one of the
-            known case-insensitive shorten names (none, snappy, zlib, lzo, and zstd).
-            This will override ``orc.compress`` and
-            ``spark.sql.orc.compression.codec``. If None is set, it uses the value
-            specified in ``spark.sql.orc.compression.codec``.
+        Other Parameters
+        ----------------
+        Extra options
+            For the extra options, refer to
+            `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-orc.html#data-source-option>`_  # noqa
+            in the version you use.
 
         Examples
         --------

@@ -172,3 +172,51 @@ When reading from Hive metastore ORC tables and inserting to Hive metastore ORC 
   <td>2.0.0</td>
   </tr>
 </table>
+
+## Data Source Option
+
+Data source options of ORC can be set via:
+* the `.option`/`.options` methods of `DataFrameReader` or `DataFrameWriter`
+* the `.option`/`.options` methods of `DataStreamReader` or `DataStreamWriter`
+
+<table class="table">
+  <tr><th><b>Property Name</b></th><th><b>Default</b></th><th><b>Meaning</b></th><th><b>Scope</b></th></tr>
+  <tr>
+    <td><code>mergeSchema</code></td>
+    <td>None</td>
+    <td>sets whether we should merge schemas collected from all ORC part-files. This will override <code>spark.sql.orc.mergeSchema</code>. The default value is specified in <code>spark.sql.orc.mergeSchema</code>.</td>
+    <td>read</td>
+  </tr>
+  <tr>
+    <td><code>mode</code></td>
+    <td>None</td>
+    <td>specifies the behavior of the save operation when data already exists.<br>
+    <ul>
+      <li><code>append</code>: Append contents of this <a href="https://spark.apache.org/docs/latest/api/python/reference/api/pyspark.sql.DataFrame.html#pyspark.sql.DataFrame"> DataFrame</a> to existing data.</li>
+      <li><code>overwrite</code>: Overwrite existing data.</li>
+      <li><code>ignore</code>: Silently ignore this operation if data already exists.</li>
+      <li><code>error</code> or <code>errorifexists</code> (default case)</code>: Throw an exception if data already exists.</li>
+    </ul>
+    </td>
+    <td>write</td>
+  </tr>
+  <tr>
+    <td><code>partitionBy</code></td>
+    <td>None</td>
+    <td>names of partitioning columns</td>
+    <td>write</td>
+  </tr>
+  <tr>
+    <td><code>compression</code></td>
+    <td>None</td>
+    <td>compression codec to use when saving to file. This can be one of the known case-insensitive shorten names (none, snappy, zlib, lzo, and zstd). This will override <code>orc.compress</code> and <code>spark.sql.orc.compression.codec</code>. If None is set, it uses the value specified in <code>spark.sql.orc.compression.codec</code>.</td>
+    <td>write</td>
+  </tr>
+  <tr>
+    <td><code>lineSep</code></td>
+    <td>\n</td>
+    <td>defines the line separator that should be used for writing.</td>
+    <td>write</td>
+  </tr>
+</table>
+Other generic options can be found in <a href="https://spark.apache.org/docs/latest/sql-data-sources-generic-options.html"> Generic File Source Options</a>.
