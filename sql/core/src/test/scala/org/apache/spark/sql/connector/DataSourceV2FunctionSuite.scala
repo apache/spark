@@ -213,6 +213,16 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
       .getMessage.contains("neither implement magic method nor override 'produceResult'"))
   }
 
+  test("SPARK-35389: magic function should handle null arguments") {
+    catalog("testcat").asInstanceOf[SupportsNamespaces].createNamespace(Array("ns"), emptyProps)
+    addFunction(Identifier.of(Array("ns"), "strlen"), new JavaStrLen(new JavaStrLenMagicNullSafe))
+    addFunction(Identifier.of(Array("ns"), "strlen2"),
+      new JavaStrLen(new JavaStrLenStaticMagicNullSafe))
+    Seq("strlen", "strlen2").foreach { name =>
+      checkAnswer(sql(s"SELECT testcat.ns.$name(CAST(NULL as STRING))"), Row(0) :: Nil)
+    }
+  }
+
   test("bad bound function (neither scalar nor aggregate)") {
     catalog("testcat").asInstanceOf[SupportsNamespaces].createNamespace(Array("ns"), emptyProps)
     addFunction(Identifier.of(Array("ns"), "strlen"), StrLen(BadBoundFunction))
