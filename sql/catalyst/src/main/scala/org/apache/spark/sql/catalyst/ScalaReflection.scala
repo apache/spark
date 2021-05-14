@@ -582,7 +582,7 @@ object ScalaReflection extends ScalaReflection {
         val fields = params.map { case (fieldName, fieldType) =>
           if (SourceVersion.isKeyword(fieldName) ||
               !SourceVersion.isIdentifier(encodeFieldNameToIdentifier(fieldName))) {
-            throw QueryExecutionErrors.cannotUseInvalidIdentifierOfJavaAsFieldNameError(
+            throw QueryExecutionErrors.cannotUseInvalidJavaIdentifierAsFieldNameError(
               fieldName, walkedTypePath)
           }
 

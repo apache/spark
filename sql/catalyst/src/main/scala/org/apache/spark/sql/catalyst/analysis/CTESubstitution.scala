@@ -64,7 +64,7 @@ object CTESubstitution extends Rule[LogicalPlan] {
         relations.foreach {
           case (name, relation) =>
             if (startOfQuery && outerCTERelationNames.exists(resolver(_, name))) {
-              throw QueryCompilationErrors.relationAliasNameIsAmbiguousInNestedCTEError(name)
+              throw QueryCompilationErrors.ambiguousRelationAliasNameInNestedCTEError(name)
             }
             // CTE relation is defined as `SubqueryAlias`. Here we skip it and check the child
             // directly, so that `startOfQuery` is set correctly.

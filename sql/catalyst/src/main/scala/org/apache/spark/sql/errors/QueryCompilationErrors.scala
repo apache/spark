@@ -1409,14 +1409,14 @@ private[spark] object QueryCompilationErrors {
       unsupported.getMessage, cause = Some(unsupported))
   }
 
-  def relationAliasNameIsAmbiguousInNestedCTEError(name: String): Throwable = {
+  def ambiguousRelationAliasNameInNestedCTEError(name: String): Throwable = {
     new AnalysisException(s"Name $name is ambiguous in nested CTE. " +
       s"Please set ${LEGACY_CTE_PRECEDENCE_POLICY.key} to CORRECTED so that name " +
       "defined in inner CTE takes precedence. If set it to LEGACY, outer CTE " +
       "definitions will take precedence. See more details in SPARK-28228.")
   }
 
-  def commandUnsupportedInV2CatalogError(name: String): Throwable = {
+  def commandUnsupportedInV2TableError(name: String): Throwable = {
     new AnalysisException(s"$name is not supported for v2 tables.")
   }
 

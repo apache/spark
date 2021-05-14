@@ -879,7 +879,7 @@ object QueryExecutionErrors {
     new DateTimeException(s"Cannot cast $s to $to.")
   }
 
-  def parseJsonArraysAsStructsError(): Throwable = {
+  def cannotParseJsonArraysAsStructsError(): Throwable = {
     new RuntimeException("Parsing JSON arrays as structs is forbidden.")
   }
 
@@ -912,7 +912,7 @@ object QueryExecutionErrors {
       s"cannot have circular references in class, but got the circular reference of class $t")
   }
 
-  def cannotUseInvalidIdentifierOfJavaAsFieldNameError(
+  def cannotUseInvalidJavaIdentifierAsFieldNameError(
       fieldName: String, walkedTypePath: WalkedTypePath): Throwable = {
     new UnsupportedOperationException(s"`$fieldName` is not a valid identifier of " +
       s"Java and cannot be used as field name\n$walkedTypePath")
@@ -952,7 +952,7 @@ object QueryExecutionErrors {
     new Exception(s"$paramName flag can be true or false")
   }
 
-  def notNullableFieldNotAcceptNullValueError(name: String): Throwable = {
+  def foundNullValueForNotNullableFieldError(name: String): Throwable = {
     new RuntimeException(s"null value found but field $name is not nullable.")
   }
 
@@ -983,7 +983,7 @@ object QueryExecutionErrors {
     new RuntimeException(s"Failed to get outer pointer for ${innerCls.getName}")
   }
 
-  def userDefinedTypeIsNotAnnotatedAndRegisteredError(udt: UserDefinedType[_]): Throwable = {
+  def userDefinedTypeNotAnnotatedAndRegisteredError(udt: UserDefinedType[_]): Throwable = {
     new SparkException(s"${udt.userClass.getName} is not annotated with " +
       "SQLUserDefinedType nor registered with UDTRegistration.}")
   }
@@ -1047,11 +1047,11 @@ object QueryExecutionErrors {
        """.stripMargin.replaceAll("\n", " "))
   }
 
-  def initialTypeIsNotSuitableDataTypeError(dataType: DataType, target: String): Throwable = {
+  def initialTypeNotTargetDataTypeError(dataType: DataType, target: String): Throwable = {
     new UnsupportedOperationException(s"Initial type ${dataType.catalogString} must be a $target")
   }
 
-  def initialTypeIsNotSuitableDataTypesError(dataType: DataType): Throwable = {
+  def initialTypeNotTargetDataTypesError(dataType: DataType): Throwable = {
     new UnsupportedOperationException(
       s"Initial type ${dataType.catalogString} must be " +
         s"an ${ArrayType.simpleString}, a ${StructType.simpleString} or a ${MapType.simpleString}")

@@ -232,7 +232,7 @@ class UnivocityParser(
        options: CSVOptions)(converter: ValueConverter): Any = {
     if (datum == options.nullValue || datum == null) {
       if (!nullable) {
-        throw QueryExecutionErrors.notNullableFieldNotAcceptNullValueError(name)
+        throw QueryExecutionErrors.foundNullValueForNotNullableFieldError(name)
       }
       null
     } else {

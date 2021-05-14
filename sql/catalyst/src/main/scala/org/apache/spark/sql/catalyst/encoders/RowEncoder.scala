@@ -87,7 +87,7 @@ object RowEncoder {
         annotation.udt()
       } else {
         UDTRegistration.getUDTFor(udt.userClass.getName).getOrElse {
-          throw QueryExecutionErrors.userDefinedTypeIsNotAnnotatedAndRegisteredError(udt)
+          throw QueryExecutionErrors.userDefinedTypeNotAnnotatedAndRegisteredError(udt)
         }
       }
       val obj = NewInstance(
@@ -265,7 +265,7 @@ object RowEncoder {
         annotation.udt()
       } else {
         UDTRegistration.getUDTFor(udt.userClass.getName).getOrElse {
-          throw QueryExecutionErrors.userDefinedTypeIsNotAnnotatedAndRegisteredError(udt)
+          throw QueryExecutionErrors.userDefinedTypeNotAnnotatedAndRegisteredError(udt)
         }
       }
       val obj = NewInstance(
