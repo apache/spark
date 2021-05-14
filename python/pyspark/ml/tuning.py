@@ -1141,8 +1141,8 @@ class TrainValidationSplit(Estimator, _TrainValidationSplitParams, HasParallelis
     >>> from pyspark.ml.classification import LogisticRegression
     >>> from pyspark.ml.evaluation import BinaryClassificationEvaluator
     >>> from pyspark.ml.linalg import Vectors
-    >>> from pyspark.ml.tuning import TrainValidationSplit, ParamGridBuilder,\
-    >>>     TrainValidationSplitModel
+    >>> from pyspark.ml.tuning import TrainValidationSplit, ParamGridBuilder
+    >>> from pyspark.ml.tuning import TrainValidationSplitModel
     >>> import tempfile
     >>> dataset = spark.createDataFrame(
     ...     [(Vectors.dense([0.0]), 0.0),
