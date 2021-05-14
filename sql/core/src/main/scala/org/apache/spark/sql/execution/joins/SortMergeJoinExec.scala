@@ -680,7 +680,7 @@ case class SortMergeJoinExec(
       ctx.currentVars = streamedVars ++ bufferedVars
       val cond = BindReferences.bindReference(
         condition.get, streamedPlan.output ++ bufferedPlan.output).genCode(ctx)
-      // evaluate the columns those used by condition before loop
+      // Evaluate the columns those used by condition before loop
       val before =
         s"""
            |boolean $loaded = false;
@@ -695,6 +695,21 @@ case class SortMergeJoinExec(
            |}
          """.stripMargin
 
+      val loadStreamedAfterCondition = joinType match {
+        case LeftAnti =>
+          // No need to evaluate columns not used by condition from streamed side, as for Left Anti
+          // join, streamed row with match is not outputted.
+          ""
+        case _ => loadStreamed
+      }
+
+      val loadBufferedAfterCondition = joinType match {
+        case LeftSemi | LeftAnti =>
+          // No need to evaluate columns not used by condition from buffered side
+          ""
+        case _ => bufferedAfter
+      }
+
       val checking =
         s"""
            |$bufferedBefore
@@ -704,8 +719,8 @@ case class SortMergeJoinExec(
            |    continue;
            |  }
            |}
-           |$loadStreamed
-           |$bufferedAfter
+           |$loadStreamedAfterCondition
+           |$loadBufferedAfterCondition
          """.stripMargin
       (before, checking.trim, loadStreamed)
     } else {
