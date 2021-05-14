@@ -227,5 +227,4 @@ private[spark] object UI {
       .intConf
       .checkValue(_ > 0, "the spark.ui.threads must be positive")
       .createWithDefault(200)
-
 }
