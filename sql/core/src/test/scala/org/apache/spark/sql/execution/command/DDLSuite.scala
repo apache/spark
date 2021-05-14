@@ -2310,7 +2310,8 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       val e = intercept[AnalysisException] {
         sql("ALTER TABLE tmp_v ADD COLUMNS (c3 INT)")
       }
-      assert(e.message.contains("'tmp_v' is a view not a table"))
+      assert(e.message.contains(
+        "tmp_v is a temp view. 'ALTER TABLE ... ADD COLUMNS' expects a table."))
     }
   }
 
@@ -2320,7 +2321,8 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       val e = intercept[AnalysisException] {
         sql("ALTER TABLE v1 ADD COLUMNS (c3 INT)")
       }
-      assert(e.message.contains("ALTER ADD COLUMNS does not support views"))
+      assert(e.message.contains(
+        "default.v1 is a view. 'ALTER TABLE ... ADD COLUMNS' expects a table."))
     }
   }
 
