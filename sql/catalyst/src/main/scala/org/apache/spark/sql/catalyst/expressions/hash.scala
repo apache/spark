@@ -372,7 +372,7 @@ abstract class HashExpression[E] extends Expression {
   protected def genHashFloat(input: String, result: String): String = {
     s"""
        |if($input == -0.0f) {
-       |  ${genHashInt(s"Float.floatToIntBits(0.0f)", result)}
+       |  ${genHashInt("0", result)}
        |} else {
        |  ${genHashInt(s"Float.floatToIntBits($input)", result)}
        |}
@@ -382,7 +382,7 @@ abstract class HashExpression[E] extends Expression {
   protected def genHashDouble(input: String, result: String): String = {
     s"""
       |if($input == -0.0d) {
-      |  ${genHashLong(s"Double.doubleToLongBits(0.0d)", result)}
+      |  ${genHashLong("0L", result)}
       |} else {
       |  ${genHashLong(s"Double.doubleToLongBits($input)", result)}
       |}
@@ -537,9 +537,9 @@ abstract class InterpretedHashFunction {
       case s: Short => hashInt(s, seed)
       case i: Int => hashInt(i, seed)
       case l: Long => hashLong(l, seed)
-      case f: Float if (f == -0.0f) => hashInt(java.lang.Float.floatToIntBits(0.0f), seed)
+      case f: Float if (f == -0.0f) => hashInt(0, seed)
       case f: Float => hashInt(java.lang.Float.floatToIntBits(f), seed)
-      case d: Double if (d == -0.0d) => hashLong(java.lang.Double.doubleToLongBits(0.0d), seed)
+      case d: Double if (d == -0.0d) => hashLong(0L, seed)
       case d: Double => hashLong(java.lang.Double.doubleToLongBits(d), seed)
       case d: Decimal =>
         val precision = dataType.asInstanceOf[DecimalType].precision
