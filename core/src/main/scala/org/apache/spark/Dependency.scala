@@ -125,7 +125,7 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
 
   def getMergerLocs: Seq[BlockManagerId] = mergerLocs
 
-  private[spark] def markShuffleMergeFinalized: Unit = {
+  private[spark] def markShuffleMergeFinalized(): Unit = {
     _shuffleMergedFinalized = true
   }
 

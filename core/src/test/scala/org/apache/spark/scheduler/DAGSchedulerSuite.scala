@@ -335,8 +335,8 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       override private[scheduler] def scheduleShuffleMergeFinalize(
           shuffleMapStage: ShuffleMapStage): Unit = {
         for (part <- 0 until shuffleMapStage.shuffleDep.partitioner.numPartitions) {
-          mapOutputTracker.registerMergeResult(shuffleMapStage.shuffleDep.shuffleId, part,
-            makeMergeStatus(""))
+          val mergeStatuses = Seq((part, makeMergeStatus("")))
+          handleRegisterMergeStatuses(shuffleMapStage, mergeStatuses)
         }
         shuffleMapStage.shuffleDep.markShuffleMergeFinalized()
         handleShuffleMergeFinalized(shuffleMapStage)

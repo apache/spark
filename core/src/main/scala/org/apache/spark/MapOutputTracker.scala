@@ -238,6 +238,12 @@ private class ShuffleStatus(
         invalidateSerializedMapOutputStatusCache()
       }
     }
+  }
+
+  /**
+   * Removes all shuffle merge result which satisfies the filter.
+   */
+  def removeMergeResultsByFilter(f: BlockManagerId => Boolean): Unit = withWriteLock {
     for (reduceId <- mergeStatuses.indices) {
       if (mergeStatuses(reduceId) != null && f(mergeStatuses(reduceId).location)) {
         _numAvailableMergeResults -= 1
@@ -755,6 +761,17 @@ private[spark] class MapOutputTrackerMaster(
         }
       case None =>
         throw new SparkException("unregisterMergeResult called for nonexistent shuffle ID")
+    }
+  }
+
+  def unregisterAllMergeResult(shuffleId: Int): Unit = {
+    shuffleStatuses.get(shuffleId) match {
+      case Some(shuffleStatus) =>
+        shuffleStatus.removeMergeResultsByFilter(x => true)
+        incrementEpoch()
+      case None =>
+        throw new SparkException(
+          s"unregisterAllMergeResult called for nonexistent shuffle ID $shuffleId.")
     }
   }
 
