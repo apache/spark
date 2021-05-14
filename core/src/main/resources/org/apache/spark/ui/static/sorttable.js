@@ -537,9 +537,8 @@ function storageSizeConverter(data) {
   };
 
   var matches = data.match(/^(\d+(\.\d+)?)\s*(b|[k|m|g|t|p|e|z|y]ib)/i);
-
   if (matches) {
-    var unit = matches[2].toLowerCase();
+    var unit = matches[matches.length - 1].toLowerCase();
     return parseFloat(matches[1]) * multipliers[unit];
   } else {
     return -1;
