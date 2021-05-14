@@ -414,7 +414,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
               longVal += (if (droppedDigits < 0) -1L else 1L)
             }
           case _ =>
-            sys.error(s"Not supported rounding mode: $roundMode")
+            throw QueryExecutionErrors.unsupportedRoundingMode(roundMode)
         }
       } else if (scale > _scale) {
         // We might be able to multiply longVal by a power of 10 and not overflow, but if not,

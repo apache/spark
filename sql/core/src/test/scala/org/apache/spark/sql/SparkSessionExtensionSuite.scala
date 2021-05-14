@@ -46,8 +46,8 @@ import org.apache.spark.unsafe.types.UTF8String
  * Test cases for the [[SparkSessionExtensions]].
  */
 class SparkSessionExtensionSuite extends SparkFunSuite {
-  type ExtensionsBuilder = SparkSessionExtensions => Unit
-  private def create(builder: ExtensionsBuilder): Seq[ExtensionsBuilder] = Seq(builder)
+  private def create(
+      builder: SparkSessionExtensionsProvider): Seq[SparkSessionExtensionsProvider] = Seq(builder)
 
   private def stop(spark: SparkSession): Unit = {
     spark.stop()
@@ -55,7 +55,8 @@ class SparkSessionExtensionSuite extends SparkFunSuite {
     SparkSession.clearDefaultSession()
   }
 
-  private def withSession(builders: Seq[ExtensionsBuilder])(f: SparkSession => Unit): Unit = {
+  private def withSession(
+      builders: Seq[SparkSessionExtensionsProvider])(f: SparkSession => Unit): Unit = {
     val builder = SparkSession.builder().master("local[1]")
     builders.foreach(builder.withExtensions)
     val spark = builder.getOrCreate()
@@ -353,6 +354,20 @@ class SparkSessionExtensionSuite extends SparkFunSuite {
       assert(lastRegistered.get === MyExtensions2Duplicate.myFunction._2)
     } finally {
       stop(session)
+    }
+  }
+
+  test("SPARK-35380: Loading extensions from ServiceLoader") {
+    val builder = SparkSession.builder().master("local[1]")
+
+    Seq(None, Some(classOf[YourExtensions].getName)).foreach { ext =>
+      ext.foreach(builder.config(SPARK_SESSION_EXTENSIONS.key, _))
+      val session = builder.getOrCreate()
+      try {
+        assert(session.sql("select get_fake_app_name()").head().getString(0) === "Fake App Name")
+      } finally {
+        stop(session)
+      }
     }
   }
 }
@@ -957,5 +972,18 @@ object MyExtensions2Duplicate {
 class MyExtensions2Duplicate extends (SparkSessionExtensions => Unit) {
   def apply(e: SparkSessionExtensions): Unit = {
     e.injectFunction(MyExtensions2Duplicate.myFunction)
+  }
+}
+
+class YourExtensions extends SparkSessionExtensionsProvider {
+  val getAppName = (FunctionIdentifier("get_fake_app_name"),
+    new ExpressionInfo(
+      "zzz.zzz.zzz",
+      "",
+      "get_fake_app_name"),
+    (_: Seq[Expression]) => Literal("Fake App Name"))
+
+  override def apply(v1: SparkSessionExtensions): Unit = {
+    v1.injectFunction(getAppName)
   }
 }

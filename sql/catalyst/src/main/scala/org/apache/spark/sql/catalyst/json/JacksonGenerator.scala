@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
 
 /**
@@ -182,8 +183,7 @@ private[sql] class JacksonGenerator(
     case _ =>
       (row: SpecializedGetters, ordinal: Int) =>
         val v = row.get(ordinal, dataType)
-        sys.error(s"Failed to convert value $v (class of ${v.getClass}}) " +
-          s"with the type of $dataType to JSON.")
+        throw QueryExecutionErrors.failToConvertValueToJsonError(v, v.getClass, dataType)
   }
 
   private def writeObject(f: => Unit): Unit = {

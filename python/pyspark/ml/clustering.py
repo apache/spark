@@ -273,8 +273,6 @@ class GaussianMixture(JavaEstimator, _GaussianMixtureParams, JavaMLWritable, Jav
     3
     >>> summary.clusterSizes
     [2, 2, 2]
-    >>> summary.logLikelihood
-    65.02945...
     >>> weights = model.weights
     >>> len(weights)
     3

@@ -1469,14 +1469,18 @@ class Analyzer(override val catalogManager: CatalogManager)
               case UpdateAction(updateCondition, assignments) =>
                 val resolvedUpdateCondition = updateCondition.map(
                   resolveExpressionByPlanChildren(_, m))
-                // The update value can access columns from both target and source tables.
                 UpdateAction(
                   resolvedUpdateCondition,
-                  resolveAssignments(Some(assignments), m, resolveValuesWithSourceOnly = false))
+                  // The update value can access columns from both target and source tables.
+                  resolveAssignments(assignments, m, resolveValuesWithSourceOnly = false))
               case UpdateStarAction(updateCondition) =>
+                val assignments = targetTable.output.map { attr =>
+                  Assignment(attr, UnresolvedAttribute(Seq(attr.name)))
+                }
                 UpdateAction(
                   updateCondition.map(resolveExpressionByPlanChildren(_, m)),
-                  resolveAssignments(assignments = None, m, resolveValuesWithSourceOnly = false))
+                  // For UPDATE *, the value must from source table.
+                  resolveAssignments(assignments, m, resolveValuesWithSourceOnly = true))
               case o => o
             }
             val newNotMatchedActions = m.notMatchedActions.map {
@@ -1487,15 +1491,18 @@ class Analyzer(override val catalogManager: CatalogManager)
                   resolveExpressionByPlanChildren(_, Project(Nil, m.sourceTable)))
                 InsertAction(
                   resolvedInsertCondition,
-                  resolveAssignments(Some(assignments), m, resolveValuesWithSourceOnly = true))
+                  resolveAssignments(assignments, m, resolveValuesWithSourceOnly = true))
               case InsertStarAction(insertCondition) =>
                 // The insert action is used when not matched, so its condition and value can only
                 // access columns from the source table.
                 val resolvedInsertCondition = insertCondition.map(
                   resolveExpressionByPlanChildren(_, Project(Nil, m.sourceTable)))
+                val assignments = targetTable.output.map { attr =>
+                  Assignment(attr, UnresolvedAttribute(Seq(attr.name)))
+                }
                 InsertAction(
                   resolvedInsertCondition,
-                  resolveAssignments(assignments = None, m, resolveValuesWithSourceOnly = true))
+                  resolveAssignments(assignments, m, resolveValuesWithSourceOnly = true))
               case o => o
             }
             val resolvedMergeCondition = resolveExpressionByPlanChildren(m.mergeCondition, m)
@@ -1513,33 +1520,38 @@ class Analyzer(override val catalogManager: CatalogManager)
     }
 
     def resolveAssignments(
-        assignments: Option[Seq[Assignment]],
+        assignments: Seq[Assignment],
         mergeInto: MergeIntoTable,
         resolveValuesWithSourceOnly: Boolean): Seq[Assignment] = {
-      if (assignments.isEmpty) {
-        val expandedColumns = mergeInto.targetTable.output
-        val expandedValues = mergeInto.sourceTable.output
-        expandedColumns.zip(expandedValues).map(kv => Assignment(kv._1, kv._2))
-      } else {
-        assignments.get.map { assign =>
-          val resolvedKey = assign.key match {
-            case c if !c.resolved =>
-              resolveExpressionByPlanChildren(c, Project(Nil, mergeInto.targetTable))
-            case o => o
-          }
-          val resolvedValue = assign.value match {
-            // The update values may contain target and/or source references.
-            case c if !c.resolved =>
-              if (resolveValuesWithSourceOnly) {
-                resolveExpressionByPlanChildren(c, Project(Nil, mergeInto.sourceTable))
-              } else {
-                resolveExpressionByPlanChildren(c, mergeInto)
-              }
-            case o => o
-          }
-          Assignment(resolvedKey, resolvedValue)
+      assignments.map { assign =>
+        val resolvedKey = assign.key match {
+          case c if !c.resolved =>
+            resolveMergeExprOrFail(c, Project(Nil, mergeInto.targetTable))
+          case o => o
         }
+        val resolvedValue = assign.value match {
+          // The update values may contain target and/or source references.
+          case c if !c.resolved =>
+            if (resolveValuesWithSourceOnly) {
+              resolveMergeExprOrFail(c, Project(Nil, mergeInto.sourceTable))
+            } else {
+              resolveMergeExprOrFail(c, mergeInto)
+            }
+          case o => o
+        }
+        Assignment(resolvedKey, resolvedValue)
       }
+    }
+
+    private def resolveMergeExprOrFail(e: Expression, p: LogicalPlan): Expression = {
+      val resolved = resolveExpressionByPlanChildren(e, p)
+      resolved.references.filter(!_.resolved).foreach { a =>
+        // Note: This will throw error only on unresolved attribute issues,
+        // not other resolution errors like mismatched data types.
+        val cols = p.inputSet.toSeq.map(_.sql).mkString(", ")
+        a.failAnalysis(s"cannot resolve ${a.sql} in MERGE command given columns [$cols]")
+      }
+      resolved
     }
 
     // This method is used to trim groupByExpressions/selectedGroupByExpressions's top-level
@@ -3338,7 +3350,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       case _ : InnerLike =>
         (leftKeys ++ lUniqueOutput ++ rUniqueOutput, rightKeys)
       case _ =>
-        sys.error("Unsupported natural join type " + joinType)
+        throw QueryExecutionErrors.unsupportedNaturalJoinTypeError(joinType)
     }
     // use Project to hide duplicated common keys
     // propagate hidden columns from nested USING/NATURAL JOINs
