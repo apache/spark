@@ -2005,7 +2005,7 @@ object SQLConf {
       .internal()
       .doc("Threshold for number of windows guaranteed to be held in memory by the " +
         "session window operator. Note that the buffer is used only for the query Spark " +
-        "cannot apply aggregations on classifying session window.")
+        "cannot apply aggregations on determining session window.")
       .version("3.2.0")
       .intConf
       .createWithDefault(4096)
@@ -2014,7 +2014,7 @@ object SQLConf {
     buildConf("spark.sql.sessionWindow.buffer.spill.threshold")
       .internal()
       .doc("Threshold for number of rows to be spilled by window operator. Note that " +
-        "the buffer is used only for the query Spark cannot apply aggregations on classifying " +
+        "the buffer is used only for the query Spark cannot apply aggregations on determining " +
         "session window.")
       .version("3.2.0")
       .intConf
