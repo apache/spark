@@ -23,11 +23,12 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, QualifiedTableName, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NamespaceAlreadyExistsException, NoSuchNamespaceException, NoSuchTableException, ResolvedNamespace, ResolvedTable, ResolvedView, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable, InvalidUDFClassException}
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, CreateMap, Expression, GroupingID, NamedExpression, SpecifiedWindowFrame, WindowFrame, WindowFunction, WindowSpecDefinition}
-import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoStatement, LogicalPlan, SerdeInfo}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, AttributeSet, CreateMap, Expression, GroupingID, NamedExpression, SpecifiedWindowFrame, WindowFrame, WindowFunction, WindowSpecDefinition}
+import org.apache.spark.sql.catalyst.plans.JoinType
+import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoStatement, Join, LogicalPlan, SerdeInfo, Window}
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.catalyst.util.{toPrettySQL, FailFastMode, ParseMode, PermissiveMode}
-import org.apache.spark.sql.connector.catalog.{CatalogPlugin, Identifier, NamespaceChange, Table, TableCapability, TableChange, V1Table}
+import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.connector.expressions.{NamedReference, Transform}
@@ -35,7 +36,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LEGACY_CTE_PRECEDENCE_POLICY
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.streaming.OutputMode
-import org.apache.spark.sql.types.{AbstractDataType, DataType, NullType, StructField, StructType}
+import org.apache.spark.sql.types._
 
 /**
  * Object for grouping error messages from exceptions thrown during query compilation.
@@ -1008,9 +1009,9 @@ private[spark] object QueryCompilationErrors {
     new AnalysisException("Cannot save interval data type into external storage.")
   }
 
-  def cannotResolveAttributeError(name: String, data: LogicalPlan): Throwable = {
+  def cannotResolveAttributeError(name: String, outputStr: String): Throwable = {
     new AnalysisException(
-      s"Unable to resolve $name given [${data.output.map(_.name).mkString(", ")}]")
+      s"Unable to resolve $name given [$outputStr]")
   }
 
   def orcNotUsedWithHiveEnabledError(): Throwable = {
@@ -1542,5 +1543,40 @@ private[spark] object QueryCompilationErrors {
 
   def secondArgumentInFunctionIsNotBooleanLiteralError(funcName: String): Throwable = {
     new AnalysisException(s"The second argument in $funcName should be a boolean literal.")
+  }
+
+  def joinConditionMissingOrTrivialError(
+      join: Join, left: LogicalPlan, right: LogicalPlan): Throwable = {
+    new AnalysisException(
+      s"""Detected implicit cartesian product for ${join.joinType.sql} join between logical plans
+         |${left.treeString(false).trim}
+         |and
+         |${right.treeString(false).trim}
+         |Join condition is missing or trivial.
+         |Either: use the CROSS JOIN syntax to allow cartesian products between these
+         |relations, or: enable implicit cartesian products by setting the configuration
+         |variable spark.sql.crossJoin.enabled=true"""
+        .stripMargin)
+  }
+
+  def usePythonUDFInJoinConditionUnsupportedError(joinType: JoinType): Throwable = {
+    new AnalysisException("Using PythonUDF in join condition of join type" +
+      s" $joinType is not supported.")
+  }
+
+  def foundConflictAttributesInJoinConditionError(
+      conflictingAttrs: AttributeSet, outerPlan: LogicalPlan, subplan: LogicalPlan): Throwable = {
+    new AnalysisException("Found conflicting attributes " +
+      s"${conflictingAttrs.mkString(",")} in the condition joining outer plan:\n  " +
+      s"$outerPlan\nand subplan:\n  $subplan")
+  }
+
+  def windowExprIsEmptyError(expr: Window): Throwable = {
+    new AnalysisException(s"Window expression is empty in $expr")
+  }
+
+  def foundDifferentWindowFunctionTypeError(windowExpressions: Seq[NamedExpression]): Throwable = {
+    new AnalysisException(
+      s"Found different window function type in $windowExpressions")
   }
 }

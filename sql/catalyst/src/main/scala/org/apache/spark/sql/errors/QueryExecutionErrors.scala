@@ -37,7 +37,7 @@ import org.apache.spark.sql.catalyst.analysis.UnresolvedGenerator
 import org.apache.spark.sql.catalyst.catalog.CatalogDatabase
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression, UnevaluableAggregate}
 import org.apache.spark.sql.catalyst.plans.JoinType
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.logical.{DomainJoin, LogicalPlan}
 import org.apache.spark.sql.catalyst.util.FailFastMode
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.Identifier
@@ -1135,5 +1135,33 @@ object QueryExecutionErrors {
          |Parse Mode: ${FailFastMode.name}. Reasons: Failed to infer a common schema.
          |Struct types are expected, but `${dataType.catalogString}` was found.
        """.stripMargin.replaceAll("\n", " "))
+  }
+
+  def cannotRewriteDomainJoinWithConditionsError(
+      conditions: Seq[Expression], d: DomainJoin): Throwable = {
+    new UnsupportedOperationException(
+      s"Unable to rewrite domain join with conditions: $conditions\n$d")
+  }
+
+  def decorrelateInnerQueryThroughPlanUnsupportedError(plan: LogicalPlan): Throwable = {
+    new UnsupportedOperationException(
+      s"Decorrelate inner query through ${plan.nodeName} is not supported.")
+  }
+
+  def methodCalledInAnalyzerNotAllowedError(): Throwable = {
+    new RuntimeException("This method should not be called in the analyzer")
+  }
+
+  def cannotSafelyMergeSerdePropertiesError(
+      props1: Map[String, String],
+      props2: Map[String, String],
+      conflictKeys: Set[String]): Throwable = {
+    new UnsupportedOperationException(
+      s"""
+         |Cannot safely merge SERDEPROPERTIES:
+         |${props1.map { case (k, v) => s"$k=$v" }.mkString("{", ",", "}")}
+         |${props2.map { case (k, v) => s"$k=$v" }.mkString("{", ",", "}")}
+         |The conflict keys: ${conflictKeys.mkString(", ")}
+         |""".stripMargin)
   }
 }
