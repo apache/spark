@@ -188,25 +188,6 @@ Data source options of ORC can be set via:
     <td>read</td>
   </tr>
   <tr>
-    <td><code>mode</code></td>
-    <td>None</td>
-    <td>specifies the behavior of the save operation when data already exists.<br>
-    <ul>
-      <li><code>append</code>: Append contents of this <a href="https://spark.apache.org/docs/latest/api/python/reference/api/pyspark.sql.DataFrame.html#pyspark.sql.DataFrame"> DataFrame</a> to existing data.</li>
-      <li><code>overwrite</code>: Overwrite existing data.</li>
-      <li><code>ignore</code>: Silently ignore this operation if data already exists.</li>
-      <li><code>error</code> or <code>errorifexists</code> (default case)</code>: Throw an exception if data already exists.</li>
-    </ul>
-    </td>
-    <td>write</td>
-  </tr>
-  <tr>
-    <td><code>partitionBy</code></td>
-    <td>None</td>
-    <td>names of partitioning columns</td>
-    <td>write</td>
-  </tr>
-  <tr>
     <td><code>compression</code></td>
     <td>None</td>
     <td>compression codec to use when saving to file. This can be one of the known case-insensitive shorten names (none, snappy, zlib, lzo, and zstd). This will override <code>orc.compress</code> and <code>spark.sql.orc.compression.codec</code>. If None is set, it uses the value specified in <code>spark.sql.orc.compression.codec</code>.</td>

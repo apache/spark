@@ -1394,6 +1394,15 @@ class DataFrameWriter(OptionUtils):
         ----------
         path : str
             the path in any Hadoop supported file system
+        mode : str, optional
+            specifies the behavior of the save operation when data already exists.
+            * ``append``: Append contents of this :class:`DataFrame` to existing data.
+            * ``overwrite``: Overwrite existing data.
+            * ``ignore``: Silently ignore this operation if data already exists.
+            * ``error`` or ``errorifexists`` (default case): Throw an exception if data already \
+                exists.
+        partitionBy : str or list, optional
+            names of partitioning columns
 
         Other Parameters
         ----------------
