@@ -221,7 +221,8 @@ private[spark] object UI {
 
   val UI_THREADS = ConfigBuilder("spark.ui.threads")
       .doc("Advisory thread pool size for the web UI Jetty HTTP server, the actual size will be" +
-        " max(this val, selectors * 2 + 1)")
+        " the bigger one of this and (selectors * 2 + 1), which meets the basic requirement for" +
+        " the jetty server to be responsive")
       .version("3.2.0")
       .intConf
       .checkValue(_ > 0, "the spark.ui.threads must be positive")
