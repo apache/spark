@@ -45,23 +45,24 @@ private[sql] object PartitioningUtils {
         throw new AnalysisException(s"$key is not a valid partition column in table $tblName.")
       }
 
-      val normalizedVal = normalizedFiled.dataType match {
-        case CharType(len) if value != null && value != DEFAULT_PARTITION_NAME =>
-          val v = value match {
-            case Some(str: String) => Some(charTypeWriteSideCheck(str, len))
-            case str: String => charTypeWriteSideCheck(str, len)
-            case other => other
-          }
-          v.asInstanceOf[T]
-        case VarcharType(len) if value != null && value != DEFAULT_PARTITION_NAME =>
-          val v = value match {
-            case Some(str: String) => Some(varcharTypeWriteSideCheck(str, len))
-            case str: String => varcharTypeWriteSideCheck(str, len)
-            case other => other
-          }
-          v.asInstanceOf[T]
-        case _ => value
-      }
+      val normalizedVal =
+        if (SQLConf.get.charVarcharAsString) value else normalizedFiled.dataType match {
+          case CharType(len) if value != null && value != DEFAULT_PARTITION_NAME =>
+            val v = value match {
+              case Some(str: String) => Some(charTypeWriteSideCheck(str, len))
+              case str: String => charTypeWriteSideCheck(str, len)
+              case other => other
+            }
+            v.asInstanceOf[T]
+          case VarcharType(len) if value != null && value != DEFAULT_PARTITION_NAME =>
+            val v = value match {
+              case Some(str: String) => Some(varcharTypeWriteSideCheck(str, len))
+              case str: String => varcharTypeWriteSideCheck(str, len)
+              case other => other
+            }
+            v.asInstanceOf[T]
+          case _ => value
+        }
       normalizedFiled.name -> normalizedVal
     }
 
@@ -73,20 +74,12 @@ private[sql] object PartitioningUtils {
 
   private def charTypeWriteSideCheck(inputStr: String, limit: Int): String = {
     val toUtf8 = UTF8String.fromString(inputStr)
-    if (SQLConf.get.charVarcharAsString) {
-      toUtf8.toString
-    } else {
-      CharVarcharCodegenUtils.charTypeWriteSideCheck(toUtf8, limit).toString
-    }
+    CharVarcharCodegenUtils.charTypeWriteSideCheck(toUtf8, limit).toString
   }
 
   private def varcharTypeWriteSideCheck(inputStr: String, limit: Int): String = {
     val toUtf8 = UTF8String.fromString(inputStr)
-    if (SQLConf.get.charVarcharAsString) {
-      toUtf8.toString
-    } else {
-      CharVarcharCodegenUtils.varcharTypeWriteSideCheck(toUtf8, limit).toString
-    }
+    CharVarcharCodegenUtils.varcharTypeWriteSideCheck(toUtf8, limit).toString
   }
 
   /**
