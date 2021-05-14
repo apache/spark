@@ -1365,6 +1365,38 @@ Apart from these, the following properties are also available, and may be useful
   </td>
   <td>2.2.3</td>
 </tr>
+<tr>
+  <td><code>spark.ui.timeline.executors.maximum</code></td>
+  <td>250</td>
+  <td>
+    The maximum number of executors shown in the event timeline.
+  </td>
+  <td>3.2.0</td>
+</tr>
+<tr>
+  <td><code>spark.ui.timeline.jobs.maximum</code></td>
+  <td>500</td>
+  <td>
+    The maximum number of jobs shown in the event timeline.
+  </td>
+  <td>3.2.0</td>
+</tr>
+<tr>
+  <td><code>spark.ui.timeline.stages.maximum</code></td>
+  <td>500</td>
+  <td>
+    The maximum number of stages shown in the event timeline.
+  </td>
+  <td>3.2.0</td>
+</tr>
+<tr>
+  <td><code>spark.ui.timeline.tasks.maximum</code></td>
+  <td>1000</td>
+  <td>
+    The maximum number of tasks shown in the event timeline.
+  </td>
+  <td>1.4.0</td>
+</tr>
 </table>
 
 ### Compression and Serialization
