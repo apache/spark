@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
+import java.util.Objects
+
 import org.apache.spark.sql.catalyst.expressions.Attribute
 
 /**
@@ -165,10 +167,34 @@ case object SHUFFLE_REPLICATE_NL extends JoinStrategyHint {
 }
 
 /**
+ * An internal hint contains some JoinStrategyHint, used by adaptive query execution.
+ */
+case class JoinStrategyHintCollection(hints: Seq[JoinStrategyHint]) extends JoinStrategyHint {
+  override def displayName: String = s"(${hints.mkString(", ")})"
+  override def hintAliases: Set[String] = Set.empty
+
+  override def hashCode(): Int = Objects.hash(hints)
+  override def equals(obj: Any): Boolean = {
+    obj match {
+      case strategy: JoinStrategyHint => hints.contains(strategy)
+      case _ => false
+    }
+  }
+}
+
+/**
  * An internal hint to discourage broadcast hash join, used by adaptive query execution.
  */
 case object NO_BROADCAST_HASH extends JoinStrategyHint {
   override def displayName: String = "no_broadcast_hash"
+  override def hintAliases: Set[String] = Set.empty
+}
+
+/**
+ * An internal hint to encourage shuffle hash join, used by adaptive query execution.
+ */
+case object PREFER_SHUFFLE_HASH extends JoinStrategyHint {
+  override def displayName: String = "prefer_shuffle_hash"
   override def hintAliases: Set[String] = Set.empty
 }
 
