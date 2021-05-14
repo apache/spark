@@ -836,7 +836,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
           val outer = a.collect { case OuterReference(e) => e.toAttribute }
           val local = a.references -- outer
           if (local.nonEmpty) {
-            throw QueryCompilationErrors.mixedRefInAggFunc(a)
+            throw QueryCompilationErrors.mixedRefsInAggFunc(a.sql)
           }
         case _ =>
       }

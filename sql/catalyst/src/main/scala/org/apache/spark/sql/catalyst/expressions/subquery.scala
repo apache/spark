@@ -189,12 +189,12 @@ object SubExprUtils extends PredicateHelper {
    */
   def getOuterReferences(expr: Expression): Seq[Expression] = {
     val outerExpressions = ArrayBuffer.empty[Expression]
-    expr foreach {
+    def collectOutRefs(input: Expression): Unit = input match {
       case a: AggregateExpression if containsOuter(a) =>
         val outer = a.collect { case OuterReference(e) => e.toAttribute }
         val local = a.references -- outer
         if (local.nonEmpty) {
-          throw QueryCompilationErrors.mixedRefInAggFunc(a)
+          throw QueryCompilationErrors.mixedRefsInAggFunc(a.sql)
         } else {
           // Collect and update the sub-tree so that outer references inside this aggregate
           // expression will not be collected. For example: min(outer(a)) -> min(a).
@@ -202,8 +202,9 @@ object SubExprUtils extends PredicateHelper {
           outerExpressions += newExpr
         }
       case OuterReference(e) => outerExpressions += e
-      case _ =>
+      case _ => input.children.foreach(collectOutRefs)
     }
+    collectOutRefs(expr)
     outerExpressions.toSeq
   }
 
