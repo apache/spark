@@ -1216,6 +1216,8 @@ class DataFrameWriter(OptionUtils):
             * ``ignore``: Silently ignore this operation if data already exists.
             * ``error`` or ``errorifexists`` (default case): Throw an exception if data already \
                 exists.
+        partitionBy : str or list, optional
+            names of partitioning columns
 
         Other Parameters
         ----------------
