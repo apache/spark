@@ -384,6 +384,22 @@ class PodTemplateFileTest(unittest.TestCase):
             docs[0],
         )
 
+    def test_should_add_env_for_gitsync(self):
+        docs = render_chart(
+            values={
+                "dags": {
+                    "gitSync": {
+                        "enabled": True,
+                        "env": [{"name": "FOO", "value": "bar"}],
+                    }
+                },
+            },
+            show_only=["templates/pod-template-file.yaml"],
+            chart_dir=self.temp_chart_dir,
+        )
+
+        assert {"name": "FOO", "value": "bar"} in jmespath.search("spec.initContainers[0].env", docs[0])
+
     def test_no_airflow_local_settings_by_default(self):
         docs = render_chart(show_only=["templates/pod-template-file.yaml"], chart_dir=self.temp_chart_dir)
         volume_mounts = jmespath.search("spec.containers[0].volumeMounts", docs[0])
