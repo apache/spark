@@ -3647,7 +3647,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     val columnsToDrop = ctx.columns.multipartIdentifier.asScala.map(typedVisit[Seq[String]])
     AlterTableDropColumns(
       createUnresolvedTable(ctx.multipartIdentifier, cmdName),
-      columnsToDrop.map(col => TableChange.deleteColumn(col.toArray)))
+      columnsToDrop.toSeq.map(col => TableChange.deleteColumn(col.toArray)))
   }
 
   /**
