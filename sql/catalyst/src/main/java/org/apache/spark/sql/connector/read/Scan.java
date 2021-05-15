@@ -24,7 +24,6 @@ import org.apache.spark.sql.connector.read.streaming.MicroBatchStream;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.sql.connector.catalog.Table;
 import org.apache.spark.sql.connector.catalog.TableCapability;
-import org.apache.spark.sql.sources.Aggregation;
 
 /**
  * A logical representation of a data source scan. This interface is used to provide logical

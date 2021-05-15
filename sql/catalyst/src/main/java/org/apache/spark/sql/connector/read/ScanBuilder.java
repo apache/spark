@@ -32,7 +32,7 @@ public interface ScanBuilder {
 
   // Orders of operators push down. Spark will push down filters first, then aggregates, and finally
   // column pruning (if applicable).
-  static orders[] PUSH_DOWN_ORDERS = {orders.FILTER, orders.AGGREGATE, orders.COLUMNS};
+  orders[] PUSH_DOWN_ORDERS = {orders.FILTER, orders.AGGREGATE, orders.COLUMNS};
 
   Scan build();
 }
