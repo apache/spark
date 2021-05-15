@@ -136,6 +136,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with AliasHelper {
               } else {
                 aggNode
               }
+            case _ => aggNode
           }
 
         case _ => aggNode // return original plan node
