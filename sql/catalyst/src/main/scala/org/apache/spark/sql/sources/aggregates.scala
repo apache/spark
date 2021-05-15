@@ -20,15 +20,13 @@ package org.apache.spark.sql.sources
 import org.apache.spark.sql.types.DataType
 
 // Aggregate Functions in SQL statement.
-// e.g. SELECT COUNT(EmployeeID), AVG(salary), deptID FROM dept GROUP BY deptID
-// aggregateExpressions are (COUNT(EmployeeID), AVG(salary)), groupByColumns are (deptID)
-case class Aggregation(aggregateExpressions: Seq[AggregateFunc],
+// e.g. SELECT COUNT(EmployeeID), Max(salary), deptID FROM dept GROUP BY deptID
+// aggregateExpressions are (COUNT(EmployeeID), Max(salary)), groupByColumns are (deptID)
+case class Aggregation(aggregateExpressions: Seq[Seq[AggregateFunc]],
                        groupByColumns: Seq[String])
 
 abstract class AggregateFunc
 
-// Avg and Sum are only supported by JDBC agg pushdown, not supported by parquet agg pushdown yet
-case class Avg(column: String, dataType: DataType, isDistinct: Boolean) extends AggregateFunc
 case class Min(column: String, dataType: DataType) extends AggregateFunc
 case class Max(column: String, dataType: DataType) extends AggregateFunc
 case class Sum(column: String, dataType: DataType, isDistinct: Boolean) extends AggregateFunc
@@ -36,5 +34,5 @@ case class Count(column: String, dataType: DataType, isDistinct: Boolean) extend
 
 object Aggregation {
   // Returns an empty Aggregate
-  def empty: Aggregation = Aggregation(Seq.empty[AggregateFunc], Seq.empty[String])
+  def empty: Aggregation = Aggregation(Seq.empty[Seq[AggregateFunc]], Seq.empty[String])
 }

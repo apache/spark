@@ -40,8 +40,8 @@ import org.apache.spark.sql.execution.datasources.parquet._
 import org.apache.spark.sql.execution.datasources.v2._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
-import org.apache.spark.sql.sources.{Aggregation, Count, Filter, Max, Min}
-import org.apache.spark.sql.types.{AtomicType, LongType, StructField, StructType}
+import org.apache.spark.sql.sources.{Aggregation, Filter}
+import org.apache.spark.sql.types.{AtomicType, StructType}
 import org.apache.spark.sql.vectorized.ColumnarBatch
 import org.apache.spark.util.SerializableConfiguration
 
@@ -53,6 +53,7 @@ import org.apache.spark.util.SerializableConfiguration
  * @param dataSchema Schema of Parquet files.
  * @param readDataSchema Required schema of Parquet files.
  * @param partitionSchema Schema of partitions.
+ * @aggSchema Schema of the pushed down aggregation.
  * @param filters Filters to be pushed down in the batch scan.
  * @param aggregation Aggregation to be pushed down in the batch scan.
  * @param parquetOptions The options of Parquet datasource that are set for the read.
@@ -63,6 +64,7 @@ case class ParquetPartitionReaderFactory(
     dataSchema: StructType,
     readDataSchema: StructType,
     partitionSchema: StructType,
+    aggSchema: StructType,
     filters: Array[Filter],
     aggregation: Aggregation,
     parquetOptions: ParquetOptions) extends FilePartitionReaderFactory with Logging {
@@ -87,25 +89,6 @@ case class ParquetPartitionReaderFactory(
   private val pushDownInFilterThreshold = sqlConf.parquetFilterPushDownInFilterThreshold
   private val datetimeRebaseModeInRead = parquetOptions.datetimeRebaseModeInRead
   private val int96RebaseModeInRead = parquetOptions.int96RebaseModeInRead
-  private lazy val aggSchema = {
-    var schema = new StructType()
-    aggregation.aggregateExpressions.map {
-      case Max(col, _) =>
-        val field = dataSchema.fields(dataSchema.fieldNames.toList.indexOf(col))
-        schema = schema.add(field.copy("max(" + field.name + ")"))
-      case Min(col, _) =>
-        val field = dataSchema.fields(dataSchema.fieldNames.toList.indexOf(col))
-        schema = schema.add(field.copy("min(" + field.name + ")"))
-      case Count(col, _, _) =>
-        if (col.equals("1")) {
-          schema = schema.add(new StructField("count(*)", LongType))
-        } else {
-          schema = schema.add(new StructField("count(" + col + ")", LongType))
-        }
-      case _ =>
-    }
-    schema
-  }
 
   private def getFooter(file: PartitionedFile): ParquetMetadata = {
     val conf = broadcastedConf.value.value
@@ -157,13 +140,10 @@ case class ParquetPartitionReaderFactory(
       new PartitionReader[InternalRow] {
         var count = 0
 
-        override def next(): Boolean = {
-          val hasNext = if (count == 0) true else false
-          count += 1
-          hasNext
-        }
+        override def next(): Boolean = if (count == 0) true else false
 
         override def get(): InternalRow = {
+          count += 1
           val footer = getFooter(file)
           val (parquetTypes, values) =
             ParquetUtils.getPushedDownAggResult(footer, dataSchema, aggregation)
@@ -196,13 +176,10 @@ case class ParquetPartitionReaderFactory(
       new PartitionReader[ColumnarBatch] {
         var count = 0
 
-        override def next(): Boolean = {
-          val hasNext = if (count == 0) true else false
-          count += 1
-          hasNext
-        }
+        override def next(): Boolean = if (count == 0) true else false
 
         override def get(): ColumnarBatch = {
+          count += 1
           val footer = getFooter(file)
           val (parquetTypes, values) =
             ParquetUtils.getPushedDownAggResult(footer, dataSchema, aggregation)

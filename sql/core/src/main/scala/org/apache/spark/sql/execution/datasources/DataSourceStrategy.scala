@@ -679,19 +679,19 @@ object DataSourceStrategy
 
   protected[sql] def translateAggregate(
       aggregates: AggregateExpression,
-      pushableColumn: PushableColumnBase): Option[AggregateFunc] = {
+      pushableColumn: PushableColumnBase): Option[Seq[AggregateFunc]] = {
     aggregates.aggregateFunction match {
       case min@aggregate.Min(pushableColumn(name)) =>
-        Some(Min(name, min.dataType))
+        Some(Seq(Min(name, min.dataType)))
       case max@aggregate.Max(pushableColumn(name)) =>
-        Some(Max(name, max.dataType))
+        Some(Seq(Max(name, max.dataType)))
       case count: aggregate.Count =>
         val columnName = count.children.head match {
           // SELECT COUNT(*) FROM table is translated to SELECT 1 FROM table
           case Literal(_, _) => "1"
           case pushableColumn(name) => name
         }
-        Some(Count(columnName, count.dataType, aggregates.isDistinct))
+        Some(Seq(Count(columnName, count.dataType, aggregates.isDistinct)))
       case _ => None
     }
   }

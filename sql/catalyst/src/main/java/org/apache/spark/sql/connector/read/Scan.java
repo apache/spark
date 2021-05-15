@@ -113,22 +113,4 @@ public interface Scan {
     CustomMetric[] NO_METRICS = {};
     return NO_METRICS;
   }
-
-  /**
-   * Pushes down Aggregation to scan.
-   * The Aggregation can be pushed down only if all the Aggregate Functions can
-   * be pushed down.
-   */
-  default void pushAggregation(Aggregation aggregation) {
-    throw new UnsupportedOperationException(description() +
-        ": Push down Aggregation is not supported");
-  }
-
-  /*
-   * Returns the aggregation that is pushed to the Scan
-   */
-  default Aggregation pushedAggregation() {
-    throw new UnsupportedOperationException(description() +
-            ": pushedAggregation is not supported");
-  }
 }

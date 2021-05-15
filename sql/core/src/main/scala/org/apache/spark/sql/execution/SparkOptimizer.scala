@@ -23,7 +23,6 @@ import org.apache.spark.sql.catalyst.optimizer._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.CatalogManager
-import org.apache.spark.sql.execution.datasources.PartialAggregatePushDown
 import org.apache.spark.sql.execution.datasources.PruneFileSourcePartitions
 import org.apache.spark.sql.execution.datasources.SchemaPruning
 import org.apache.spark.sql.execution.datasources.v2.{V2ScanRelationPushDown, V2Writes}
@@ -38,7 +37,7 @@ class SparkOptimizer(
 
   override def earlyScanPushDownRules: Seq[Rule[LogicalPlan]] =
     // TODO: move SchemaPruning into catalyst
-    SchemaPruning :: PartialAggregatePushDown :: V2ScanRelationPushDown :: V2Writes ::
+    SchemaPruning :: V2ScanRelationPushDown :: V2Writes ::
       PruneFileSourcePartitions :: Nil
 
   override def defaultBatches: Seq[Batch] = (preOptimizationBatches ++ super.defaultBatches :+

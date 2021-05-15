@@ -357,7 +357,7 @@ object ParquetUtils {
       blocks.forEach { block =>
         val blockMetaData = block.getColumns()
         aggregation.aggregateExpressions(i) match {
-          case Max(col, _) =>
+          case Seq(Max(col, _)) =>
             index = dataSchema.fieldNames.toList.indexOf(col)
             val currentMax = getCurrentBlockMaxOrMin(footer, blockMetaData, index, true)
             if (currentMax != None &&
@@ -365,7 +365,7 @@ object ParquetUtils {
               value = currentMax
             }
 
-          case Min(col, _) =>
+          case Seq(Min(col, _)) =>
             index = dataSchema.fieldNames.toList.indexOf(col)
             val currentMin = getCurrentBlockMaxOrMin(footer, blockMetaData, index, false)
             if (currentMin != None &&
@@ -373,7 +373,7 @@ object ParquetUtils {
               value = currentMin
             }
 
-          case Count(col, _, _) =>
+          case Seq(Count(col, _, _)) =>
             index = dataSchema.fieldNames.toList.indexOf(col)
             rowCount += block.getRowCount
             if (!col.equals("1")) {  // "1" is for count(*)

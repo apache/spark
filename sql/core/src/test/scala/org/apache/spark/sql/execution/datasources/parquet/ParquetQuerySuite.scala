@@ -925,16 +925,16 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
         selectAgg3.queryExecution.optimizedPlan.collect {
           case _: DataSourceV2ScanRelation =>
             val expected_plan_fragment =
-              "PushedAggregation: [Min(_3,IntegerType), " +
-                "Min(_3,IntegerType), " +
-                "Max(_3,IntegerType), " +
-                "Min(_1,IntegerType), " +
-                "Max(_1,IntegerType), " +
-                "Max(_1,IntegerType), " +
-                "Count(1,LongType,false), " +
-                "Count(_1,LongType,false), " +
-                "Count(_2,LongType,false), " +
-                "Count(_3,LongType,false)]"
+              "PushedAggregation: [List(Min(_3,IntegerType)), " +
+                "List(Min(_3,IntegerType)), " +
+                "List(Max(_3,IntegerType)), " +
+                "List(Min(_1,IntegerType)), " +
+                "List(Max(_1,IntegerType)), " +
+                "List(Max(_1,IntegerType)), " +
+                "List(Count(1,LongType,false)), " +
+                "List(Count(_1,LongType,false)), " +
+                "List(Count(_2,LongType,false)), " +
+                "List(Count(_3,LongType,false))]"
             checkKeywordsExistsInExplain(selectAgg3, expected_plan_fragment)
         }
 
@@ -1030,17 +1030,17 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
           testMin.queryExecution.optimizedPlan.collect {
             case _: DataSourceV2ScanRelation =>
               val expected_plan_fragment =
-                "PushedAggregation: [Min(StringCol,StringType), " +
-                  "Min(BooleanCol,BooleanType), " +
-                  "Min(ByteCol,ByteType), " +
-                  "Min(BinaryCol,BinaryType), " +
-                  "Min(ShortCol,ShortType), " +
-                  "Min(IntegerCol,IntegerType), " +
-                  "Min(LongCol,LongType), " +
-                  "Min(FloatCol,FloatType), " +
-                  "Min(DoubleCol,DoubleType), " +
-                  "Min(DecimalCol,DecimalType(25,5)), " +
-                  "Min(DateCol,DateType)]"
+                "PushedAggregation: [List(Min(StringCol,StringType)), " +
+                  "List(Min(BooleanCol,BooleanType)), " +
+                  "List(Min(ByteCol,ByteType)), " +
+                  "List(Min(BinaryCol,BinaryType)), " +
+                  "List(Min(ShortCol,ShortType)), " +
+                  "List(Min(IntegerCol,IntegerType)), " +
+                  "List(Min(LongCol,LongType)), " +
+                  "List(Min(FloatCol,FloatType)), " +
+                  "List(Min(DoubleCol,DoubleType)), " +
+                  "List(Min(DecimalCol,DecimalType(25,5))), " +
+                  "List(Min(DateCol,DateType))]"
               checkKeywordsExistsInExplain(testMin, expected_plan_fragment)
           }
 
@@ -1055,17 +1055,17 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
           testMax.queryExecution.optimizedPlan.collect {
             case _: DataSourceV2ScanRelation =>
               val expected_plan_fragment =
-                "PushedAggregation: [Max(StringCol,StringType), " +
-                  "Max(BooleanCol,BooleanType)," +
-                  " Max(ByteCol,ByteType), " +
-                  "Max(BinaryCol,BinaryType)," +
-                  " Max(ShortCol,ShortType), " +
-                  "Max(IntegerCol,IntegerType)," +
-                  " Max(LongCol,LongType), " +
-                  "Max(FloatCol,FloatType)," +
-                  " Max(DoubleCol,DoubleType), " +
-                  "Max(DecimalCol,DecimalType(25,5)), " +
-                  "Max(DateCol,DateType)]"
+                "PushedAggregation: [List(Max(StringCol,StringType)), " +
+                  "List(Max(BooleanCol,BooleanType)), " +
+                  "List(Max(ByteCol,ByteType)), " +
+                  "List(Max(BinaryCol,BinaryType)), " +
+                  "List(Max(ShortCol,ShortType)), " +
+                  "List(Max(IntegerCol,IntegerType)), " +
+                  "List(Max(LongCol,LongType)), " +
+                  "List(Max(FloatCol,FloatType)), " +
+                  "List(Max(DoubleCol,DoubleType)), " +
+                  "List(Max(DecimalCol,DecimalType(25,5))), " +
+                  "List(Max(DateCol,DateType))]"
               checkKeywordsExistsInExplain(testMax, expected_plan_fragment)
           }
 
@@ -1081,19 +1081,19 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
           testCount.queryExecution.optimizedPlan.collect {
             case _: DataSourceV2ScanRelation =>
               val expected_plan_fragment =
-                "PushedAggregation: [Count(1,LongType,false), " +
-                  "Count(StringCol,LongType,false), " +
-                  "Count(BooleanCol,LongType,false), " +
-                  "Count(ByteCol,LongType,false), " +
-                  "Count(BinaryCol,LongType,false), " +
-                  "Count(ShortCol,LongType,false), " +
-                  "Count(IntegerCol,LongType,false), " +
-                  "Count(LongCol,LongType,false), " +
-                  "Count(FloatCol,LongType,false), " +
-                  "Count(DoubleCol,LongType,false), " +
-                  "Count(DecimalCol,LongType,false), " +
-                  "Count(DateCol,LongType,false), " +
-                  "Count(TimestampCol,LongType,false)]"
+                "PushedAggregation: [List(Count(1,LongType,false)), " +
+                  "List(Count(StringCol,LongType,false)), " +
+                  "List(Count(BooleanCol,LongType,false)), " +
+                  "List(Count(ByteCol,LongType,false)), " +
+                  "List(Count(BinaryCol,LongType,false)), " +
+                  "List(Count(ShortCol,LongType,false)), " +
+                  "List(Count(IntegerCol,LongType,false)), " +
+                  "List(Count(LongCol,LongType,false)), " +
+                  "List(Count(FloatCol,LongType,false)), " +
+                  "List(Count(DoubleCol,LongType,false)), " +
+                  "List(Count(DecimalCol,LongType,false)), " +
+                  "List(Count(DateCol,LongType,false)), " +
+                  "List(Count(TimestampCol,LongType,false))]"
               checkKeywordsExistsInExplain(testCount, expected_plan_fragment)
           }
 
