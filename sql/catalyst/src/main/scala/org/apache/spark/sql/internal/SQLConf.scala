@@ -2775,6 +2775,13 @@ object SQLConf {
       .stringConf
       .createOptional
 
+  val ESCAPE_META_CHARACTERS_FOR_SHOW_ENABLED =
+    buildConf("spark.sql.escapeMetaCharactersForShow.enabled")
+      .doc("When true, the meta-characters `\n`, `\t`, `\r`, `\f` etc  are escaped in the `show()` action.")
+      .version("3.2.0")
+      .booleanConf
+      .createWithDefault(true)
+
   object MapKeyDedupPolicy extends Enumeration {
     val EXCEPTION, LAST_WIN = Value
   }
@@ -3871,6 +3878,8 @@ class SQLConf extends Serializable with Logging {
   def decorrelateInnerQueryEnabled: Boolean = getConf(SQLConf.DECORRELATE_INNER_QUERY_ENABLED)
 
   def maxConcurrentOutputFileWriters: Int = getConf(SQLConf.MAX_CONCURRENT_OUTPUT_FILE_WRITERS)
+
+  def escapeMetaCharactersForShowEnabled: Boolean = getConf(ESCAPE_META_CHARACTERS_FOR_SHOW_ENABLED)
 
   /** ********************** SQLConf functionality methods ************ */
 

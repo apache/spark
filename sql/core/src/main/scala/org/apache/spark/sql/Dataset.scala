@@ -309,8 +309,14 @@ class Dataset[T] private[sql](
           case null => "null"
           case binary: Array[Byte] => binary.map("%02X".format(_)).mkString("[", " ", "]")
           case _ =>
-            // Escapes meta-characters not to break the `showString` format
-            SchemaUtils.escapeMetaCharacters(cell.toString)
+            if (sparkSession.sessionState.conf.escapeMetaCharactersForShowEnabled) {
+              // Escapes meta-characters not to break the `showString` format
+              SchemaUtils.escapeMetaCharacters(cell.toString)
+            } else {
+              cell.toString
+            }
+
+            //
         }
         if (truncate > 0 && str.length > truncate) {
           // do not show ellipses for strings shorter than 4 characters.
