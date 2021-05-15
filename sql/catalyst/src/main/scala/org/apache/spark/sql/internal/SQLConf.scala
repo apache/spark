@@ -2709,14 +2709,6 @@ object SQLConf {
     .checkValue(_ > 3, "This value must be bigger than 3.")
     .createWithDefault(100)
 
-  val ESCAPE_META_CHARACTERS_FOR_SHOW_ENABLED =
-    buildConf("spark.sql.escapeMetaCharactersForShow.enabled")
-      .doc("When true, the meta-characters `\n`, `\t`, `\r`, `\f` etc  are escaped in the" +
-        " `show()` action.")
-      .version("3.2.0")
-      .booleanConf
-      .createWithDefault(true)
-
   val SET_COMMAND_REJECTS_SPARK_CORE_CONFS =
     buildConf("spark.sql.legacy.setCommandRejectsSparkCoreConfs")
       .internal()
@@ -3840,9 +3832,6 @@ class SQLConf extends Serializable with Logging {
   def maxPlanStringLength: Int = getConf(SQLConf.MAX_PLAN_STRING_LENGTH).toInt
 
   def maxMetadataStringLength: Int = getConf(SQLConf.MAX_METADATA_STRING_LENGTH)
-
-  def escapeMetaCharactersForShowEnabled: Boolean =
-    getConf(ESCAPE_META_CHARACTERS_FOR_SHOW_ENABLED)
 
   def setCommandRejectsSparkCoreConfs: Boolean =
     getConf(SQLConf.SET_COMMAND_REJECTS_SPARK_CORE_CONFS)

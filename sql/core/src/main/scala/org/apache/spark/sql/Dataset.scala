@@ -298,6 +298,13 @@ class Dataset[T] private[sql](
         Column(col).cast(StringType)
       }
     }
+    // SPARK-35409: This is for preventing skipping meta characters in case of
+    // explain command using show().
+    val isExplainCommand = newDf.queryExecution.analyzed match {
+      case _: ExplainCommand => true
+      case _ => false
+    }
+
     val data = newDf.select(castCols: _*).take(numRows + 1)
 
     // For array values, replace Seq and Array with square brackets
@@ -309,11 +316,11 @@ class Dataset[T] private[sql](
           case null => "null"
           case binary: Array[Byte] => binary.map("%02X".format(_)).mkString("[", " ", "]")
           case _ =>
-            if (sparkSession.sessionState.conf.escapeMetaCharactersForShowEnabled) {
+            if (isExplainCommand) {
+              cell.toString
+            } else {
               // Escapes meta-characters not to break the `showString` format
               SchemaUtils.escapeMetaCharacters(cell.toString)
-            } else {
-              cell.toString
             }
         }
         if (truncate > 0 && str.length > truncate) {
