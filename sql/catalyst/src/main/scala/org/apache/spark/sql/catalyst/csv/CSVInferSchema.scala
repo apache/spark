@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.csv
 
+import java.text.SimpleDateFormat
 import java.util.Locale
 
 import scala.util.control.Exception.allCatch
@@ -169,6 +170,15 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
     // This case infers a custom `dataFormat` is set.
     if ((allCatch opt timestampParser.parse(field)).isDefined) {
       TimestampType
+    } else {
+      tryParseDateFormat(field)
+    }
+  }
+
+  private def tryParseDateFormat(field: String): DataType = {
+    if ((allCatch opt new SimpleDateFormat(
+      options.dateFormat, Locale.US).parse(field)).isDefined) {
+      DateType
     } else {
       tryParseBoolean(field)
     }

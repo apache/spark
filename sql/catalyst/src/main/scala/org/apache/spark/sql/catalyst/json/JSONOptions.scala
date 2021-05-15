@@ -68,6 +68,8 @@ private[sql] class JSONOptions(
     parameters.get("allowNonNumericNumbers").map(_.toBoolean).getOrElse(true)
   val allowBackslashEscapingAnyCharacter =
     parameters.get("allowBackslashEscapingAnyCharacter").map(_.toBoolean).getOrElse(false)
+  val allowDateFormat =
+    parameters.get("allowDateFormat").map(_.toBoolean).getOrElse(false)
   private val allowUnquotedControlChars =
     parameters.get("allowUnquotedControlChars").map(_.toBoolean).getOrElse(false)
   val compressionCodec = parameters.get("compression").map(CompressionCodecs.getCodecClassName)

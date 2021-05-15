@@ -17,7 +17,9 @@
 
 package org.apache.spark.sql.catalyst.json
 
+import java.text.SimpleDateFormat
 import java.util.Comparator
+import java.util.Locale
 
 import scala.util.control.Exception.allCatch
 
@@ -130,6 +132,10 @@ private[sql] class JsonInferSchema(options: JSONOptions) extends Serializable {
         } else if (options.inferTimestamp &&
             (allCatch opt timestampFormatter.parse(field)).isDefined) {
           TimestampType
+        } else if (options.allowDateFormat &&
+          (allCatch opt new SimpleDateFormat(
+            options.dateFormat, Locale.US).parse(field)).isDefined) {
+          DateType
         } else {
           StringType
         }
