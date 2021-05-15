@@ -482,10 +482,22 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
          age  | 5
          name | Bob
         """
+
+        if not isinstance(n, int) or isinstance(n, bool):
+            raise TypeError(f'Parameter `n` (number of rows) must be an int')
+
+        if not isinstance(vertical, bool):
+            raise TypeError(f'Parameter `vertical` must be a bool')
+
         if isinstance(truncate, bool) and truncate:
             print(self._jdf.showString(n, 20, vertical))
         else:
-            print(self._jdf.showString(n, int(truncate), vertical))
+            try:
+                int_truncate = int(truncate)
+                print(self._jdf.showString(n, int_truncate, vertical))
+            except ValueError:
+                raise ValueError(f'Non-bool parameter `truncate`=`{truncate}` '
+                                 f'could not be converted to an int')
 
     def __repr__(self):
         if not self._support_repr_html and self.sql_ctx._conf.isReplEagerEvalEnabled():
