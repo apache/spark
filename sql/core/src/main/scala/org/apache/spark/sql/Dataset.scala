@@ -315,8 +315,6 @@ class Dataset[T] private[sql](
             } else {
               cell.toString
             }
-
-            //
         }
         if (truncate > 0 && str.length > truncate) {
           // do not show ellipses for strings shorter than 4 characters.
