@@ -44,6 +44,9 @@ class SparkOptimizer(
     Batch("PartitionPruning", Once,
       PartitionPruning,
       OptimizeSubqueries) :+
+    Batch("MergeScalarSubqueries", Once,
+      MergeScalarSubqueries,
+      OptimizeSubqueries) :+
     Batch("Pushdown Filters from PartitionPruning", fixedPoint,
       PushDownPredicates) :+
     Batch("Cleanup filters that cannot be pushed down", Once,
