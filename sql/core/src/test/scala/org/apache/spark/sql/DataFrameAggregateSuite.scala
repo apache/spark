@@ -1196,6 +1196,13 @@ class DataFrameAggregateSuite extends QueryTest
     val avgDF4 = df3.groupBy($"class").agg(avg($"year-month"), avg($"day-time"))
     checkAnswer(avgDF4, Nil)
   }
+
+  test("SPARK-35412: groupBy of year-month/day-time intervals should work") {
+    val df1 = Seq(Duration.ofDays(1)).toDF("a").groupBy("a").count()
+    checkAnswer(df1, Row(Duration.ofDays(1), 1))
+    val df2 = Seq(Period.ofYears(1)).toDF("a").groupBy("a").count()
+    checkAnswer(df2, Row(Period.ofYears(1), 1))
+  }
 }
 
 case class B(c: Option[Double])
