@@ -70,6 +70,15 @@ private[spark] object Config extends Logging {
       .booleanConf
       .createWithDefault(false)
 
+  val KUBERNETES_DRIVER_REUSE_PVC =
+    ConfigBuilder("spark.kubernetes.driver.reusePersistentVolumeClaim")
+      .doc("If true, driver pod tries to reuse driver-owned on-demand persistent volume claims " +
+        "of the deleted executor pods. This can be useful to reduce executor pod creation delay. " +
+        s"This requires ${KUBERNETES_DRIVER_OWN_PVC.key}=true.")
+      .version("3.2.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val KUBERNETES_NAMESPACE =
     ConfigBuilder("spark.kubernetes.namespace")
       .doc("The namespace that will be used for running the driver and executor pods.")

@@ -18,7 +18,9 @@ package org.apache.spark.scheduler.cluster.k8s
 
 import java.time.Instant
 
-import io.fabric8.kubernetes.api.model.{ContainerBuilder, Pod, PodBuilder}
+import scala.collection.JavaConverters._
+
+import io.fabric8.kubernetes.api.model._
 
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.SparkPod
@@ -188,5 +190,23 @@ object ExecutorLifecycleTestUtils {
       .withImage("k8s-spark")
       .build()
     SparkPod(pod, container)
+  }
+
+  def persistentVolumeClaim(claimName: String, storageClass: String, size: String)
+      : PersistentVolumeClaim = {
+    new PersistentVolumeClaimBuilder()
+      .withKind("PersistentVolumeClaim")
+      .withApiVersion("v1")
+      .withNewMetadata()
+        .withName(claimName)
+        .addToLabels(SPARK_APP_ID_LABEL, TEST_SPARK_APP_ID)
+        .endMetadata()
+      .withNewSpec()
+        .withStorageClassName(storageClass)
+        .withAccessModes("ReadWriteOnce")
+        .withResources(new ResourceRequirementsBuilder()
+          .withRequests(Map("storage" -> new Quantity(size)).asJava).build())
+        .endSpec()
+      .build()
   }
 }

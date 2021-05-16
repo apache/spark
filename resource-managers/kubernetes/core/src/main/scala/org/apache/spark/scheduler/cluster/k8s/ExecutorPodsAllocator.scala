@@ -125,6 +125,14 @@ private[spark] class ExecutorPodsAllocator(
     newlyCreatedExecutors --= k8sKnownExecIds
     schedulerKnownNewlyCreatedExecs --= k8sKnownExecIds
 
+    // Although we are going to delete some executors due to timeout in this function,
+    // it takes undefined time before the actual deletion. Hence, we should collect all PVCs
+    // in use at the beginning. False positive is okay in this context in order to be safe.
+    val k8sKnownPVCNames = snapshots.flatMap(_.executorPods.values.map(_.pod)).flatMap { pod =>
+      pod.getSpec.getVolumes.asScala
+        .flatMap { v => Option(v.getPersistentVolumeClaim).map(_.getClaimName) }
+    }
+
     // transfer the scheduler backend known executor requests from the newlyCreatedExecutors
     // to the schedulerKnownNewlyCreatedExecs
     val schedulerKnownExecs = schedulerBackend.getExecutorIds().map(_.toLong).toSet
@@ -280,7 +288,7 @@ private[spark] class ExecutorPodsAllocator(
 
       if (newlyCreatedExecutorsForRpId.isEmpty
         && knownPodCount < targetNum) {
-        requestNewExecutors(targetNum, knownPodCount, applicationId, rpId)
+        requestNewExecutors(targetNum, knownPodCount, applicationId, rpId, k8sKnownPVCNames)
       }
       totalPendingCount += knownPendingCount
 
@@ -308,14 +316,35 @@ private[spark] class ExecutorPodsAllocator(
     numOutstandingPods.set(totalPendingCount + newlyCreatedExecutors.size)
   }
 
+  private def getReusablePVCs(applicationId: String, pvcsInUse: Seq[String]) = {
+    if (conf.get(KUBERNETES_DRIVER_OWN_PVC) && conf.get(KUBERNETES_DRIVER_REUSE_PVC) &&
+        driverPod.nonEmpty) {
+      val createdPVCs = kubernetesClient
+        .persistentVolumeClaims
+        .withLabel("spark-app-selector", applicationId)
+        .list()
+        .getItems
+        .asScala
+
+      val reusablePVCs = createdPVCs.filterNot(pvc => pvcsInUse.contains(pvc.getMetadata.getName))
+      logInfo(s"Found ${reusablePVCs.size} reusable PVCs from ${createdPVCs.size} PVCs")
+      reusablePVCs
+    } else {
+      mutable.Buffer.empty[PersistentVolumeClaim]
+    }
+  }
+
   private def requestNewExecutors(
       expected: Int,
       running: Int,
       applicationId: String,
-      resourceProfileId: Int): Unit = {
+      resourceProfileId: Int,
+      pvcsInUse: Seq[String]): Unit = {
     val numExecutorsToAllocate = math.min(expected - running, podAllocationSize)
     logInfo(s"Going to request $numExecutorsToAllocate executors from Kubernetes for " +
       s"ResourceProfile Id: $resourceProfileId, target: $expected running: $running.")
+    // Check reusable PVCs for this executor allocation batch
+    val reusablePVCs = getReusablePVCs(applicationId, pvcsInUse)
     for ( _ <- 0 until numExecutorsToAllocate) {
       val newExecutorId = EXECUTOR_ID_COUNTER.incrementAndGet()
       val executorConf = KubernetesConf.createExecutorConf(
@@ -343,9 +372,21 @@ private[spark] class ExecutorPodsAllocator(
               addOwnerReference(driverPod.get, Seq(resource))
             }
             val pvc = resource.asInstanceOf[PersistentVolumeClaim]
-            logInfo(s"Trying to create PersistentVolumeClaim ${pvc.getMetadata.getName} with " +
-              s"StorageClass ${pvc.getSpec.getStorageClassName}")
-            kubernetesClient.persistentVolumeClaims().create(pvc)
+            // Find one with the same storage class and size.
+            val index = reusablePVCs.indexWhere { p =>
+              p.getSpec.getStorageClassName == pvc.getSpec.getStorageClassName &&
+                p.getSpec.getResources.getRequests.get("storage") ==
+                  pvc.getSpec.getResources.getRequests.get("storage")
+            }
+            if (index < 0) {
+              logInfo(s"Trying to create PersistentVolumeClaim ${pvc.getMetadata.getName} with " +
+                s"StorageClass ${pvc.getSpec.getStorageClassName}")
+              kubernetesClient.persistentVolumeClaims().create(pvc)
+            } else {
+              val matchedPVC = reusablePVCs.remove(index)
+              logInfo(s"Reuse PersistentVolumeClaim ${matchedPVC.getMetadata.getName}")
+              pvc.getMetadata.setName(matchedPVC.getMetadata.getName)
+            }
           }
         newlyCreatedExecutors(newExecutorId) = (resourceProfileId, clock.getTimeMillis())
         logDebug(s"Requested executor with id $newExecutorId from Kubernetes.")
