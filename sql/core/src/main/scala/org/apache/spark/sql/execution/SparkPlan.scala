@@ -21,6 +21,7 @@ import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, Da
 import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.mutable.{ArrayBuffer, ListBuffer}
+import scala.concurrent.{ExecutionContext, Future}
 
 import org.apache.spark.{broadcast, SparkEnv}
 import org.apache.spark.internal.Logging
@@ -392,11 +393,18 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     results.toArray
   }
 
-  private[spark] def executeCollectIterator(): (Long, Iterator[InternalRow]) = {
-    val countsAndBytes = getByteArrayRdd().collect()
-    val total = countsAndBytes.map(_._1).sum
-    val rows = countsAndBytes.iterator.flatMap(countAndBytes => decodeUnsafeRows(countAndBytes._2))
-    (total, rows)
+  /**
+   * Runs this query in async way and return the future of collect result.
+   */
+  private[spark] def executeCollectIteratorFuture()(
+    implicit executor: ExecutionContext): Future[(Long, Iterator[InternalRow])] = {
+    val future = getByteArrayRdd().collectAsync()
+    future.map(countsAndBytes => {
+      val total = countsAndBytes.map(_._1).sum
+      val rows = countsAndBytes.iterator
+        .flatMap(countAndBytes => decodeUnsafeRows(countAndBytes._2))
+      (total, rows)
+    })
   }
 
   /**

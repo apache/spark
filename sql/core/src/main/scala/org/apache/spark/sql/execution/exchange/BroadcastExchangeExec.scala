@@ -21,7 +21,7 @@ import java.util.UUID
 import java.util.concurrent._
 
 import scala.concurrent.{ExecutionContext, Promise}
-import scala.concurrent.duration.NANOSECONDS
+import scala.concurrent.duration.{Duration, NANOSECONDS}
 import scala.util.control.NonFatal
 
 import org.apache.spark.{broadcast, SparkException}
@@ -107,15 +107,19 @@ case class BroadcastExchangeExec(
 
   @transient
   override lazy val relationFuture: Future[broadcast.Broadcast[Any]] = {
+    val beforeCollect = System.nanoTime()
+    // SPARK-35414: use executeCollectIteratorFuture() to submit a job before get the relationFuture
+    // This can ensure the broadcast job is submitted before shuffle map job in AQE
+    val collectFuture = child.executeCollectIteratorFuture()(
+      BroadcastExchangeExec.executionContext)
+
     SQLExecution.withThreadLocalCaptured[broadcast.Broadcast[Any]](
       sqlContext.sparkSession, BroadcastExchangeExec.executionContext) {
           try {
             // Setup a job group here so later it may get cancelled by groupId if necessary.
             sparkContext.setJobGroup(runId.toString, s"broadcast exchange (runId $runId)",
               interruptOnCancel = true)
-            val beforeCollect = System.nanoTime()
-            // Use executeCollect/executeCollectIterator to avoid conversion to Scala types
-            val (numRows, input) = child.executeCollectIterator()
+            val (numRows, input) = ThreadUtils.awaitResult(collectFuture, Duration.Inf)
             longMetric("numOutputRows") += numRows
             if (numRows >= MAX_BROADCAST_TABLE_ROWS) {
               throw new SparkException(

@@ -23,7 +23,7 @@ import java.net.URI
 import org.apache.log4j.Level
 import org.scalatest.PrivateMethodTester
 
-import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListenerJobStart}
+import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListenerJobStart, SparkListenerStageSubmitted, StageInfo}
 import org.apache.spark.sql.{Dataset, QueryTest, Row, SparkSession, Strategy}
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
@@ -1639,6 +1639,42 @@ class AdaptiveQueryExecSuite
       withSQLConf(SQLConf.ADAPTIVE_AUTO_BROADCASTJOIN_THRESHOLD.key -> "160") {
         checkJoinStrategy(true)
       }
+    }
+  }
+
+  test("SPARK-35414: Submit broadcast job first to avoid broadcast timeout in AQE") {
+    val broadcastTimeoutInSec = 10
+    val shuffleMapTaskParallelism = 10
+
+    val df = spark.sparkContext.parallelize(Range(0, 10), shuffleMapTaskParallelism)
+      .flatMap(x => {
+        Thread.sleep(10)
+        for (i <- Range(0, 100)) yield (x % 26, x % 10)
+      }).toDF("index", "pv")
+    val dim = Range(0, 26).map(x => (x, ('a' + x).toChar.toString))
+      .toDF("index", "name")
+    val testDf = df.groupBy("index")
+      .agg(sum($"pv").alias("pv"))
+      .join(dim, Seq("index"))
+
+    val stageInfos = scala.collection.mutable.ArrayBuffer[StageInfo]()
+    val listener = new SparkListener {
+      override def onStageSubmitted(stageSubmitted: SparkListenerStageSubmitted): Unit = {
+        stageInfos += stageSubmitted.stageInfo
+      }
+    }
+    spark.sparkContext.addSparkListener(listener)
+
+    withSQLConf(SQLConf.BROADCAST_TIMEOUT.key -> broadcastTimeoutInSec.toString,
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
+      val result = testDf.collect()
+      assert(result.length == 26)
+      val sortedStageInfos = stageInfos.sortBy(_.submissionTime)
+      assert(sortedStageInfos.size > 2)
+      // this is broadcast stage
+      assert(sortedStageInfos(0).numTasks == 1)
+      // this is shuffle map stage
+      assert(sortedStageInfos(1).numTasks == shuffleMapTaskParallelism)
     }
   }
 }
