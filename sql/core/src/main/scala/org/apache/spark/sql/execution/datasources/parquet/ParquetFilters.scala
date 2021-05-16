@@ -688,11 +688,12 @@ class ParquetFilters(
         createFilterHelper(pred, canPartialPushDownConjuncts = false)
           .map(FilterApi.not)
 
-      case sources.In(name, values) if values.nonEmpty && canMakeFilterOn(name, values.head) =>
+      case sources.In(name, values) if pushDownInFilterThreshold > 0 && values.nonEmpty &&
+          canMakeFilterOn(name, values.head) =>
         val fieldType = nameToParquetField(name).fieldType
         val fieldNames = nameToParquetField(name).fieldNames
         if (values.length <= pushDownInFilterThreshold) {
-          values.flatMap { v =>
+          values.distinct.flatMap { v =>
             makeEq.lift(fieldType).map(_(fieldNames, v))
           }.reduceLeftOption(FilterApi.or)
         } else {

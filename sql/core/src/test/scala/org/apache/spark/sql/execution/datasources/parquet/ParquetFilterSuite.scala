@@ -1488,9 +1488,7 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
     }
 
     // Remove duplicates
-    assertResult(Some(
-      FilterApi.or(
-        FilterApi.eq(intColumn("a"), 10: Integer), FilterApi.eq(intColumn("a"), 10: Integer)))) {
+    assertResult(Some(FilterApi.eq(intColumn("a"), 10: Integer))) {
       parquetFilters.createFilter(sources.In("a", Array(10, 10)))
     }
 
@@ -1502,9 +1500,12 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
       parquetFilters.createFilter(sources.In("a", Array(10, 20, 30)))
     }
 
-    assert(parquetFilters.createFilter(sources.In("a",
-      Range(0, conf.parquetFilterPushDownInFilterThreshold).toArray)).isDefined)
-    assert(parquetFilters.createFilter(sources.In("a", Array.empty)).isEmpty)
+    Seq(0, 10).foreach { threshold =>
+      withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD.key -> threshold.toString) {
+        assert(createParquetFilters(parquetSchema)
+          .createFilter(sources.In("a", Array(10, 20, 30))).nonEmpty === threshold > 0)
+      }
+    }
 
     import testImplicits._
     withTempPath { path =>
