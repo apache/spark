@@ -133,8 +133,11 @@ private[sql] class JsonInferSchema(options: JSONOptions) extends Serializable {
             (allCatch opt timestampFormatter.parse(field)).isDefined) {
           TimestampType
         } else if (options.allowDateFormat &&
-          (allCatch opt new SimpleDateFormat(
-            options.dateFormat, Locale.US).parse(field)).isDefined) {
+          (allCatch opt { val dtFormat = new SimpleDateFormat(
+            options.dateFormat, Locale.US)
+            dtFormat.setLenient(false)
+            dtFormat.parse(field)
+          }).isDefined) {
           DateType
         } else {
           StringType

@@ -176,8 +176,10 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
   }
 
   private def tryParseDateFormat(field: String): DataType = {
-    if ((allCatch opt new SimpleDateFormat(
-      options.dateFormat, Locale.US).parse(field)).isDefined) {
+    if ((allCatch opt {
+      val dtFormat = new SimpleDateFormat(options.dateFormat, Locale.US)
+      dtFormat.setLenient(false)
+      dtFormat.parse(field)}).isDefined) {
       DateType
     } else {
       tryParseBoolean(field)

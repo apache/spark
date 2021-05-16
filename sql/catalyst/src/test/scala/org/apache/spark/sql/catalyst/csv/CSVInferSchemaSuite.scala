@@ -194,11 +194,18 @@ class CSVInferSchemaSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("SPARK-34953 - DateType should be inferred when user defined format are provided") {
-    val options = new CSVOptions(Map("dateFormat" -> "dd-MM-yyyy",
+    var options = new CSVOptions(Map("dateFormat" -> "dd-MM-yyyy",
       "inferSchema" -> "true"), false, "UTC")
-    val inferSchema = new CSVInferSchema(options)
+    var inferSchema = new CSVInferSchema(options)
 
     assert(inferSchema.inferField(NullType, "21-10-2021") == DateType)
+    assert(inferSchema.inferField(NullType, "03.31.2021") == StringType)
+
+    // For default type
+    options = new CSVOptions(Map("inferSchema" -> "true"), false, "UTC")
+    inferSchema = new CSVInferSchema(options)
+
+    assert(inferSchema.inferField(NullType, "2021-10-05") == DateType)
     assert(inferSchema.inferField(NullType, "03.31.2021") == StringType)
   }
 }
