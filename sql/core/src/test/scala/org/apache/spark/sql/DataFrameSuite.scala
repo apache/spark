@@ -2861,8 +2861,24 @@ class DataFrameSuite extends QueryTest
       checkAnswer(result, Row(0, 0, 0, 0, 100))
     }
   }
+
+  test("SPARK-35410: SubExpr elimination should not include redundant child exprs " +
+    "for conditional expressions") {
+    val myUdf = udf((s: String) => {
+      KeepCall.countOfCalls += 1
+      s
+    })
+    val df = spark.range(5).select(when(functions.length(myUdf($"id")) > 0,
+      functions.length(myUdf($"id"))))
+    df.collect()
+    assert(KeepCall.countOfCalls == 5)
+  }
 }
 
 case class GroupByKey(a: Int, b: Int)
 
 case class Bar2(s: String)
+
+object KeepCall {
+  var countOfCalls = 0
+}

@@ -90,13 +90,20 @@ class EquivalentExpressions {
     val exprSetForAll = mutable.Set[Expr]()
     addExprTree(exprs.head, addExprToSet(_, exprSetForAll))
 
-    val commonExprSet = exprs.tail.foldLeft(exprSetForAll) { (exprSet, expr) =>
+    val candidateExprs = exprs.tail.foldLeft(exprSetForAll) { (exprSet, expr) =>
       val otherExprSet = mutable.Set[Expr]()
       addExprTree(expr, addExprToSet(_, otherExprSet))
       exprSet.intersect(otherExprSet)
     }
 
-    commonExprSet.foreach(expr => addFunc(expr.e))
+    // Not all expressions in the set should be added. We should filter out the subexprs.
+    val commonExprSet = candidateExprs.filter { candidateExpr =>
+      candidateExprs.forall { expr =>
+        expr == candidateExpr || expr.e.find(_.semanticEquals(candidateExpr.e)).isEmpty
+      }
+    }
+
+    commonExprSet.foreach(expr => addExprTree(expr.e, addFunc))
   }
 
   // There are some special expressions that we should not recurse into all of its children.
