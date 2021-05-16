@@ -838,6 +838,9 @@ class DataFrameTests(ReusedSQLTestCase):
             shutil.rmtree(tpath)
 
     def test_df_show(self):
+        # SPARK-35408: ensure better diagnostics if incorrect parameters are passed
+        # to DataFrame.show
+
         df = self.spark.createDataFrame([('foo',)])
         df.show(5)
         df.show(5, True)
@@ -845,11 +848,11 @@ class DataFrameTests(ReusedSQLTestCase):
         df.show(n=5, truncate='1', vertical=False)
         df.show(n=5, truncate=1.5, vertical=False)
 
-        with self.assertRaisesRegex(TypeError, 'Parameter `n`'):
+        with self.assertRaisesRegex(TypeError, "Parameter 'n'"):
             df.show(True)
-        with self.assertRaisesRegex(TypeError, 'Parameter `vertical`'):
+        with self.assertRaisesRegex(TypeError, "Parameter 'vertical'"):
             df.show(vertical='foo')
-        with self.assertRaisesRegex(ValueError, 'Non-bool parameter `truncate`=`foo`'):
+        with self.assertRaisesRegex(ValueError, "Non-bool parameter 'truncate=foo'"):
             df.show(truncate='foo')
 
 

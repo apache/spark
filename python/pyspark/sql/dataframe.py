@@ -448,7 +448,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         ----------
         n : int, optional
             Number of rows to show.
-        truncate : bool, optional
+        truncate : bool or int, optional
             If set to ``True``, truncate strings longer than 20 chars by default.
             If set to a number greater than one, truncates long strings to length ``truncate``
             and align cells right.
@@ -484,20 +484,21 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
 
         if not isinstance(n, int) or isinstance(n, bool):
-            raise TypeError(f'Parameter `n` (number of rows) must be an int')
+            raise TypeError("Parameter 'n' (number of rows) must be an int")
 
         if not isinstance(vertical, bool):
-            raise TypeError(f'Parameter `vertical` must be a bool')
+            raise TypeError("Parameter 'vertical' must be a bool")
 
         if isinstance(truncate, bool) and truncate:
             print(self._jdf.showString(n, 20, vertical))
         else:
             try:
                 int_truncate = int(truncate)
-                print(self._jdf.showString(n, int_truncate, vertical))
             except ValueError:
-                raise ValueError(f'Non-bool parameter `truncate`=`{truncate}` '
-                                 f'could not be converted to an int')
+                raise ValueError(f"Non-bool parameter 'truncate={truncate}'"
+                                 f"could not be converted to an int")
+
+            print(self._jdf.showString(n, int_truncate, vertical))
 
     def __repr__(self):
         if not self._support_repr_html and self.sql_ctx._conf.isReplEagerEvalEnabled():
