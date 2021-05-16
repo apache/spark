@@ -120,19 +120,9 @@ show_t3
 -- !query
 SHOW TABLE EXTENDED LIKE 'show_t*'
 -- !query schema
-struct<namespace:string,tableName:string,isTemporary:boolean,information:string>
+struct<namespace:string,tableName:string,isTemporary:boolean,information:map<string,string>>
 -- !query output
-	show_t3	true	Table: show_t3
-Created Time [not included in comparison]
-Last Access [not included in comparison]
-Created By [not included in comparison]
-Type: VIEW
-Table Properties: []
-Schema: root
- |-- e: integer (nullable = true)
-
-
-showdb	show_t1	false	Database: showdb
+Database: showdb
 Table: show_t1
 Created Time [not included in comparison]
 Last Access [not included in comparison]
@@ -148,8 +138,7 @@ Schema: root
  |-- c: string (nullable = true)
  |-- d: string (nullable = true)
 
-
-showdb	show_t2	false	Database: showdb
+Database: showdb
 Table: show_t2
 Created Time [not included in comparison]
 Last Access [not included in comparison]
@@ -160,6 +149,15 @@ Location [not included in comparison]/{warehouse_dir}/showdb.db/show_t2
 Schema: root
  |-- b: string (nullable = true)
  |-- d: integer (nullable = true)
+
+Table: show_t3
+Created Time [not included in comparison]
+Last Access [not included in comparison]
+Created By [not included in comparison]
+Type: VIEW
+Table Properties: []
+Schema: root
+ |-- e: integer (nullable = true)
 
 
 -- !query
@@ -179,9 +177,9 @@ SHOW TABLE EXTENDED
 -- !query
 SHOW TABLE EXTENDED LIKE 'show_t1' PARTITION(c='Us', d=1)
 -- !query schema
-struct<namespace:string,tableName:string,isTemporary:boolean,information:string>
+struct<namespace:string,tableName:string,isTemporary:boolean,information:map<string,string>>
 -- !query output
-showdb	show_t1	false	Partition Values: [c=Us, d=1]
+Partition Values: [c=Us, d=1]
 Location [not included in comparison]/{warehouse_dir}/showdb.db/show_t1/c=Us/d=1
 Created Time [not included in comparison]
 Last Access [not included in comparison]

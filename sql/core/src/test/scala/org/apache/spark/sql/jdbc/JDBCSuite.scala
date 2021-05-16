@@ -1183,8 +1183,9 @@ class JDBCSuite extends QueryTest
         .select("information").collect()
       assert(information.length === 1)
       information.foreach { r =>
-        assert(r.getString(0).contains(s"url=${Utils.REDACTION_REPLACEMENT_TEXT}"))
-        assert(r.getString(0).contains(s"password=${Utils.REDACTION_REPLACEMENT_TEXT}"))
+        val storageProperties = r.getMap[String, String](0)("Storage Properties")
+        assert(storageProperties.contains(s"url=${Utils.REDACTION_REPLACEMENT_TEXT}"))
+        assert(storageProperties.contains(s"password=${Utils.REDACTION_REPLACEMENT_TEXT}"))
       }
 
       val createTabStmt = sql(s"SHOW CREATE TABLE $tableName")

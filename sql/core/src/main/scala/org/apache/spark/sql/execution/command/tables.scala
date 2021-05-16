@@ -844,8 +844,8 @@ case class ShowTablesCommand(
         val tableName = tableIdent.table
         val isTemp = catalog.isTempView(tableIdent)
         if (isExtended) {
-          val information = catalog.getTempViewOrPermanentTableMetadata(tableIdent).simpleString
-          Row(database, tableName, isTemp, s"$information\n")
+          val information = catalog.getTempViewOrPermanentTableMetadata(tableIdent)
+          Row(database, tableName, isTemp, information.toLinkedHashMap)
         } else {
           Row(database, tableName, isTemp)
         }
@@ -869,8 +869,7 @@ case class ShowTablesCommand(
       val database = tableIdent.database.getOrElse("")
       val tableName = tableIdent.table
       val isTemp = catalog.isTempView(tableIdent)
-      val information = partition.simpleString
-      Seq(Row(database, tableName, isTemp, s"$information\n"))
+      Seq(Row(database, tableName, isTemp, partition.toLinkedHashMap))
     }
   }
 }
