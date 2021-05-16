@@ -595,13 +595,14 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     when(persistentVolumeClaims.withLabel(any(), any())).thenReturn(labeledPersistentVolumeClaims)
     when(labeledPersistentVolumeClaims.list()).thenReturn(persistentVolumeClaimList)
     when(persistentVolumeClaimList.getItems)
-      .thenReturn(Seq(persistentVolumeClaim("old", "gp2", "200Gi")).asJava)
+      .thenReturn(Seq(persistentVolumeClaim("pvc-0", "gp2", "200Gi")).asJava)
     when(executorBuilder.buildFromFeatures(any(classOf[KubernetesExecutorConf]), meq(secMgr),
         meq(kubernetesClient), any(classOf[ResourceProfile])))
       .thenAnswer((invocation: InvocationOnMock) => {
       val k8sConf: KubernetesExecutorConf = invocation.getArgument(0)
-        KubernetesExecutorSpec(executorPodWithId(k8sConf.executorId.toInt,
-        k8sConf.resourceProfileId.toInt), Seq(persistentVolumeClaim("new", "gp2", "200Gi")))
+      KubernetesExecutorSpec(
+        executorPodWithIdAndVolume(k8sConf.executorId.toInt, k8sConf.resourceProfileId),
+        Seq(persistentVolumeClaim("pvc-0", "gp2", "200Gi")))
     })
 
     podsAllocatorUnderTest = new ExecutorPodsAllocator(
@@ -628,7 +629,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     // Target 1 executor, make sure it's requested, even with an empty initial snapshot.
     podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 1))
     assert(podsAllocatorUnderTest.numOutstandingPods.get() == 1)
-    verify(podOperations).create(podWithAttachedContainerForId(1))
+    verify(podOperations).create(podWithAttachedContainerForIdAndVolume(1))
 
     // Mark executor as running, verify that subsequent allocation cycle is a no-op.
     snapshotsStore.updatePod(runningExecutor(1))
@@ -641,7 +642,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 2))
     snapshotsStore.notifySubscribers()
     assert(podsAllocatorUnderTest.numOutstandingPods.get() == 1)
-    verify(podOperations).create(podWithAttachedContainerForId(2))
+    verify(podOperations).create(podWithAttachedContainerForIdAndVolume(2))
     verify(persistentVolumeClaims, never()).create(any())
   }
 

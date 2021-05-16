@@ -24,7 +24,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.util.control.NonFatal
 
-import io.fabric8.kubernetes.api.model.{PersistentVolumeClaim, PodBuilder}
+import io.fabric8.kubernetes.api.model.{HasMetadata, PersistentVolumeClaim, Pod, PodBuilder}
 import io.fabric8.kubernetes.client.KubernetesClient
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkException}
@@ -361,9 +361,10 @@ private[spark] class ExecutorPodsAllocator(
         .addToContainers(executorPod.container)
         .endSpec()
         .build()
+      val resources = replacePVCsIfNeeded(
+        podWithAttachedContainer, resolvedExecutorSpec.executorKubernetesResources, reusablePVCs)
       val createdExecutorPod = kubernetesClient.pods().create(podWithAttachedContainer)
       try {
-        val resources = resolvedExecutorSpec.executorKubernetesResources
         addOwnerReference(createdExecutorPod, resources)
         resources
           .filter(_.getKind == "PersistentVolumeClaim")
@@ -372,21 +373,9 @@ private[spark] class ExecutorPodsAllocator(
               addOwnerReference(driverPod.get, Seq(resource))
             }
             val pvc = resource.asInstanceOf[PersistentVolumeClaim]
-            // Find one with the same storage class and size.
-            val index = reusablePVCs.indexWhere { p =>
-              p.getSpec.getStorageClassName == pvc.getSpec.getStorageClassName &&
-                p.getSpec.getResources.getRequests.get("storage") ==
-                  pvc.getSpec.getResources.getRequests.get("storage")
-            }
-            if (index < 0) {
-              logInfo(s"Trying to create PersistentVolumeClaim ${pvc.getMetadata.getName} with " +
-                s"StorageClass ${pvc.getSpec.getStorageClassName}")
-              kubernetesClient.persistentVolumeClaims().create(pvc)
-            } else {
-              val matchedPVC = reusablePVCs.remove(index)
-              logInfo(s"Reuse PersistentVolumeClaim ${matchedPVC.getMetadata.getName}")
-              pvc.getMetadata.setName(matchedPVC.getMetadata.getName)
-            }
+            logInfo(s"Trying to create PersistentVolumeClaim ${pvc.getMetadata.getName} with " +
+              s"StorageClass ${pvc.getSpec.getStorageClassName}")
+            kubernetesClient.persistentVolumeClaims().create(pvc)
           }
         newlyCreatedExecutors(newExecutorId) = (resourceProfileId, clock.getTimeMillis())
         logDebug(s"Requested executor with id $newExecutorId from Kubernetes.")
@@ -396,6 +385,36 @@ private[spark] class ExecutorPodsAllocator(
           throw e
       }
     }
+  }
+
+  private def replacePVCsIfNeeded(
+      pod: Pod,
+      resources: Seq[HasMetadata],
+      reusablePVCs: mutable.Buffer[PersistentVolumeClaim]) = {
+    val replacedResources = mutable.ArrayBuffer[HasMetadata]()
+    resources.foreach {
+      case pvc: PersistentVolumeClaim =>
+        // Find one with the same storage class and size.
+        val index = reusablePVCs.indexWhere { p =>
+          p.getSpec.getStorageClassName == pvc.getSpec.getStorageClassName &&
+            p.getSpec.getResources.getRequests.get("storage") ==
+              pvc.getSpec.getResources.getRequests.get("storage")
+        }
+        if (index >= 0) {
+          val volume = pod.getSpec.getVolumes.asScala.find { v =>
+            v.getPersistentVolumeClaim != null &&
+              v.getPersistentVolumeClaim.getClaimName == pvc.getMetadata.getName
+          }
+          if (volume.nonEmpty) {
+            val matchedPVC = reusablePVCs.remove(index)
+            replacedResources.append(pvc)
+            logInfo(s"Reuse PersistentVolumeClaim ${matchedPVC.getMetadata.getName}")
+            volume.get.getPersistentVolumeClaim.setClaimName(matchedPVC.getMetadata.getName)
+          }
+        }
+      case _ => // no-op
+    }
+    resources.filterNot(replacedResources.contains)
   }
 
   private def isExecutorIdleTimedOut(state: ExecutorPodState, currentTime: Long): Boolean = {
