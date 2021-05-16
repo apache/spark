@@ -224,6 +224,21 @@ class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSparkSession {
   }
 
   test("SPARK-35356: Fix issue of the createTable when externalCatalog is InMemoryCatalog") {
+    withTable("t1") {
+      withTempDir { path =>
+        withSparkSession(path.getAbsolutePath) { sparkSession =>
+          sparkSession.sql("CREATE TABLE IF NOT EXISTS t1 (id INT) USING ORC")
+          sparkSession.sql("INSERT INTO t1 VALUES(1)").show()
+          checkAnswer(spark.table("t1"), Row(1))
+        }
+
+        withSparkSession(path.getAbsolutePath) { sparkSession =>
+          sparkSession.sql("CREATE TABLE IF NOT EXISTS t1 (id INT) USING ORC")
+          checkAnswer(spark.table("t1"), Nil)
+        }
+      }
+    }
+
     def withSparkSession(path: String)(f: SparkSession => Unit): Unit = {
       val session = SparkSession.builder().master("local[*]").appName("ddlsuite").
         config("spark.sql.warehouse.dir", path).getOrCreate()
@@ -231,21 +246,6 @@ class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSparkSession {
         f(session)
       } finally {
         session.close()
-      }
-    }
-
-    withTempDir { path =>
-      withSparkSession(path.getAbsolutePath) { sparkSession =>
-        sparkSession.sql("create table if not exists t1 (id Int) using orc").show()
-        sparkSession.sql("insert into t1 values(1)").show()
-      }
-
-      withSparkSession(path.getAbsolutePath) { sparkSession =>
-        try {
-          sparkSession.sql("create table if not exists t1 (id Int) using orc").show()
-        } catch {
-          case _: Exception => fail()
-        }
       }
     }
   }
@@ -494,11 +494,11 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
         }.getMessage
         assert(ex.contains(exMsgWithDefaultDB))
 
-        // Always check location of managed table, with or without (IF NOT EXISTS)
+        // Always check location of managed table, without (IF NOT EXISTS)
         withTable("tab2") {
           sql(s"CREATE TABLE tab2 (col1 int, col2 string) USING ${dataSource}")
           ex = intercept[AnalysisException] {
-            sql(s"CREATE TABLE IF NOT EXISTS tab1 LIKE tab2")
+            sql(s"CREATE TABLE tab1 LIKE tab2")
           }.getMessage
           assert(ex.contains(exMsgWithDefaultDB))
         }
