@@ -258,7 +258,7 @@ trait JoinSelectionHelper {
       if (hintToPreferShuffleHashJoinLeft(hint)) {
         true
       } else {
-        if (conf.preferSortMergeJoin) {
+        if (!conf.preferSortMergeJoin) {
           canBuildLocalHashMapBySize(left, conf) && muchSmaller(left, right)
         } else {
           false
@@ -271,7 +271,7 @@ trait JoinSelectionHelper {
       if (hintToPreferShuffleHashJoinRight(hint)) {
         true
       } else {
-        if (conf.preferSortMergeJoin) {
+        if (!conf.preferSortMergeJoin) {
           canBuildLocalHashMapBySize(right, conf) && muchSmaller(right, left)
         } else {
           false
