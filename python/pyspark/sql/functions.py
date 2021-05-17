@@ -2681,7 +2681,7 @@ def overlay(src, replace, pos, len=-1):
     ))
 
 
-def sentences(str, language="", country=""):
+def sentences(str, lang="", country=""):
     """
     Splits a string into arrays of sentences, where each sentence is an array of words.
     The 'lang' and 'country' arguments are optional, and if omitted, the default locale is used.
@@ -2700,7 +2700,7 @@ def sentences(str, language="", country=""):
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.sentences(
         _to_java_column(str),
-        language,
+        lang,
         country
     ))
 
