@@ -606,7 +606,7 @@ object SQLConf {
         s"${PREFER_SORTMERGEJOIN.key} is false.")
       .version("3.2.0")
       .bytesConf(ByteUnit.BYTE)
-      .createWithDefaultString("64MB")
+      .createWithDefaultString("-1")
 
   val SUBEXPRESSION_ELIMINATION_ENABLED =
     buildConf("spark.sql.subexpressionElimination.enabled")
