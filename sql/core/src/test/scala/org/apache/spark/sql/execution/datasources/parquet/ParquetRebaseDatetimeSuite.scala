@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.{LegacyBehaviorPolicy, ParquetOutputTimestampType}
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy.{CORRECTED, EXCEPTION, LEGACY}
+import org.apache.spark.sql.internal.SQLConf.ParquetOutputTimestampType.{TIMESTAMP_MICROS, TIMESTAMP_MILLIS}
 import org.apache.spark.sql.test.SharedSparkSession
 
 abstract class ParquetRebaseDatetimeSuite
@@ -371,6 +372,48 @@ abstract class ParquetRebaseDatetimeSuite
       withTempPath { dir =>
         saveTs(dir, "2020-10-22 01:02:03")
         assert(getMetaData(dir).get(SPARK_LEGACY_INT96).isEmpty)
+      }
+    }
+  }
+
+  test("SPARK-35427: datetime rebasing in the EXCEPTION mode") {
+    withSQLConf(SQLConf.PARQUET_REBASE_MODE_IN_WRITE.key -> EXCEPTION.toString) {
+      Seq(TIMESTAMP_MICROS, TIMESTAMP_MILLIS).foreach { tsType =>
+        withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> tsType.toString) {
+          withTempPath { dir =>
+            val df = Seq("1001-01-01 01:02:03.123")
+              .toDF("str")
+              .select($"str".cast("timestamp").as("dt"))
+            val e = intercept[SparkException] {
+              df.write.parquet(dir.getCanonicalPath)
+            }
+            val errMsg = e.getCause.getCause.getCause.asInstanceOf[SparkUpgradeException].getMessage
+            assert(errMsg.contains("You may get a different result due to the upgrading"))
+          }
+        }
+      }
+
+      withTempPath { dir =>
+        val df = Seq(java.sql.Date.valueOf("1001-01-01")).toDF("dt")
+        val e = intercept[SparkException] {
+          df.write.parquet(dir.getCanonicalPath)
+        }
+        val errMsg = e.getCause.getCause.getCause.asInstanceOf[SparkUpgradeException].getMessage
+        assert(errMsg.contains("You may get a different result due to the upgrading"))
+      }
+    }
+
+    withSQLConf(SQLConf.PARQUET_REBASE_MODE_IN_READ.key -> EXCEPTION.toString) {
+      Seq(
+        "before_1582_date_v2_4_5.snappy.parquet",
+        "before_1582_timestamp_micros_v2_4_5.snappy.parquet",
+        "before_1582_timestamp_millis_v2_4_5.snappy.parquet"
+      ).foreach { fileName =>
+        val e = intercept[SparkException] {
+          spark.read.parquet(getResourceParquetFilePath("test-data/" + fileName)).collect()
+        }
+        val errMsg = e.getCause.asInstanceOf[SparkUpgradeException].getMessage
+        assert(errMsg.contains("You may get a different result due to the upgrading"))
       }
     }
   }
