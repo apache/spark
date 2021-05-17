@@ -38,7 +38,9 @@ import org.apache.spark.sql.catalyst.catalog.CatalogDatabase
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression, UnevaluableAggregate}
 import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.plans.logical.{DomainJoin, LogicalPlan}
-import org.apache.spark.sql.catalyst.util.FailFastMode
+import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.ValueInterval
+import org.apache.spark.sql.catalyst.trees.TreeNode
+import org.apache.spark.sql.catalyst.util.{BadRecordException, FailFastMode, sideBySide}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.expressions.Transform
@@ -1163,5 +1165,55 @@ object QueryExecutionErrors {
          |${props2.map { case (k, v) => s"$k=$v" }.mkString("{", ",", "}")}
          |The conflict keys: ${conflictKeys.mkString(", ")}
          |""".stripMargin)
+  }
+
+  def pairUnsupportedAtFunctionError(
+      r1: ValueInterval, r2: ValueInterval, function: String): Throwable = {
+    new UnsupportedOperationException(s"Not supported pair: $r1, $r2 at $function()")
+  }
+
+  def onceStrategyNotAllowBreakIdempotenceError[TreeType <: TreeNode[_]](
+      batchName: String, plan: TreeType, reOptimized: TreeType): Throwable = {
+    new RuntimeException(
+      s"""
+         |Once strategy's idempotence is broken for batch $batchName
+         |${sideBySide(plan.treeString, reOptimized.treeString).mkString("\n")}
+       """.stripMargin)
+  }
+
+  def cannotBreakStructuralIntegrityOfInputPlanError(className: String): Throwable = {
+    new RuntimeException("The structural integrity of the input plan is broken in " +
+      s"$className.")
+  }
+
+  def cannotBreakStructuralAfterApplyRuleError(ruleName: String, batchName: String): Throwable = {
+    new RuntimeException(s"After applying rule $ruleName in batch $batchName, " +
+      "the structural integrity of the plan is broken.")
+  }
+
+  def notFoundRuleIdForRuleError(ruleName: String): Throwable = {
+    new NoSuchElementException(s"Rule id not found for $ruleName")
+  }
+
+  def cannotCreateArrayWithElementsExceedLimitError(
+      numElements: Long, additionalErrorMessage: String): Throwable = {
+    new RuntimeException(
+      s"""
+         |Cannot create array with $numElements
+         |elements of data due to exceeding the limit
+         |${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH} elements for ArrayData.
+         |$additionalErrorMessage
+       """.stripMargin.replaceAll("\n", " "))
+  }
+
+  def indexOutOfBoundsOfArrayDataError(idx: Int): Throwable = {
+    new IndexOutOfBoundsException(
+      s"Index $idx must be between 0 and the length of the ArrayData.")
+  }
+
+  def malformedRecordsDetectedInRecordParsingError(e: BadRecordException): Throwable = {
+    new SparkException("Malformed records are detected in record parsing. " +
+      s"Parse Mode: ${FailFastMode.name}. To process malformed records as null " +
+      "result, try setting the option 'mode' as 'PERMISSIVE'.", e)
   }
 }

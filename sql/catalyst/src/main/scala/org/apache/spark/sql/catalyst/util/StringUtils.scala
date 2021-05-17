@@ -23,6 +23,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.unsafe.types.UTF8String
@@ -45,8 +46,7 @@ object StringUtils extends Logging {
     val in = pattern.toIterator
     val out = new StringBuilder()
 
-    def fail(message: String) = throw new AnalysisException(
-      s"the pattern '$pattern' is invalid, $message")
+    def fail(message: String) = throw QueryCompilationErrors.invalidPatternError(pattern, message)
 
     while (in.hasNext) {
       in.next match {

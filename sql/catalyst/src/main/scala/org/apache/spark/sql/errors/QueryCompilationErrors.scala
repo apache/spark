@@ -1579,4 +1579,15 @@ private[spark] object QueryCompilationErrors {
     new AnalysisException(
       s"Found different window function type in $windowExpressions")
   }
+
+  def charOrVarcharTypeAsStringUnsupportedError(): Throwable = {
+    new AnalysisException("char/varchar type can only be used in the table schema. " +
+      s"You can set ${SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key} to true, so that Spark" +
+      s" treat them as string type as same as Spark 3.0 and earlier")
+  }
+
+  def invalidPatternError(pattern: String, message: String): Throwable = {
+    new AnalysisException(
+      s"the pattern '$pattern' is invalid, $message")
+  }
 }
