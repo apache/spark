@@ -754,7 +754,7 @@ case class SortMergeJoinExec(
           ctx.freshName("hasOutputRow"), outputRow, eagerCleanup)
       case LeftAnti =>
         codegenAnti(streamedInput, findNextJoinRows, beforeLoop, iterator, bufferedRow, condCheck,
-          loadStreamed, ctx.freshName("hasOutputRow"), outputRow, eagerCleanup)
+          loadStreamed, ctx.freshName("hasMatchedRow"), outputRow, eagerCleanup)
       case x =>
         throw new IllegalArgumentException(
           s"SortMergeJoin.doProduce should not take $x as the JoinType")
@@ -859,22 +859,22 @@ case class SortMergeJoinExec(
       bufferedRow: String,
       conditionCheck: String,
       loadStreamed: String,
-      hasOutputRow: String,
+      hasMatchedRow: String,
       outputRow: String,
       eagerCleanup: String): String = {
     s"""
        |while ($streamedInput.hasNext()) {
        |  $findNextJoinRows;
        |  $beforeLoop
-       |  boolean $hasOutputRow = false;
+       |  boolean $hasMatchedRow = false;
        |
-       |  while (!$hasOutputRow && $matchIterator.hasNext()) {
+       |  while (!$hasMatchedRow && $matchIterator.hasNext()) {
        |    InternalRow $bufferedRow = (InternalRow) $matchIterator.next();
        |    $conditionCheck
-       |    $hasOutputRow = true;
+       |    $hasMatchedRow = true;
        |  }
        |
-       |  if (!$hasOutputRow) {
+       |  if (!$hasMatchedRow) {
        |    // load all values of streamed row, because the values not in join condition are not
        |    // loaded yet.
        |    $loadStreamed
