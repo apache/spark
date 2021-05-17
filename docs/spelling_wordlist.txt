@@ -861,6 +861,7 @@ http
 httpbin
 httplib
 https
+httpx
 hvac
 hyperparameter
 iPython
