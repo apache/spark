@@ -31,12 +31,12 @@ function getThreadDumpEnabled() {
   return threadDumpEnabled;
 }
 
-function formatLossReason(removeReason, type, row) {
-    if (removeReason) {
-       return removeReason
-    } else {
-       return ""
-    }
+function formatLossReason(removeReason) {
+  if (removeReason) {
+    return removeReason
+  } else {
+    return ""
+  }
 }
 
 function formatStatus(status, type, row) {
@@ -553,8 +553,8 @@ $(document).ready(function () {
               }
             },
             {
-                data: 'removeReason',
-                render: formatLossReason
+              data: 'removeReason',
+              render: formatLossReason
             }
           ],
           "order": [[0, "asc"]],
