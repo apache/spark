@@ -2872,13 +2872,13 @@ object functions {
    * @group string_funcs
    * @since 3.2.0
    */
-  def sentences(str: Column, language: Column, country: Column): Column = withExpr {
-    Sentences(str.expr, language.expr, country.expr)
+  def sentences(str: Column, language: String, country: String): Column = withExpr {
+    Sentences(str.expr, lit(language).expr, lit(country).expr)
   }
 
   /**
    * Splits a string into arrays of sentences, where each sentence is an array of words.
-   * The default locale (US) is used.
+   * The default locale is used.
    * @group string_funcs
    * @sinde 3.2.0
    */

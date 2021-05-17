@@ -558,7 +558,7 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
       Row(Seq(Seq("Hi", "there"), Seq("The", "price", "was"), Seq("But", "not", "now"))))
 
     checkAnswer(
-      df.select(sentences($"str", $"language", $"country")),
+      df.select(sentences($"str", "en", "US")),
       Row(Seq(Seq("Hi", "there"), Seq("The", "price", "was"), Seq("But", "not", "now"))))
 
     // Type coercion

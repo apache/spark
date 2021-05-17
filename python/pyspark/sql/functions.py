@@ -2681,6 +2681,30 @@ def overlay(src, replace, pos, len=-1):
     ))
 
 
+def sentences(str, language="", country=""):
+    """
+    Splits a string into arrays of sentences, where each sentence is an array of words.
+    The 'lang' and 'country' arguments are optional, and if omitted, the default locale is used.
+
+    .. versionadded:: 3.2.0
+
+    Examples
+    >>> df = spark.createDataFrame([["This is an example sentence."]], ["str"])
+    >>> df.select(sentences(df.str, "en", "US")).show(truncate=False)
+    +-----------------------------------+
+    |sentences(str, en, US)             |
+    +-----------------------------------+
+    |[[This, is, an, example, sentence]]|
+    +-----------------------------------+
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.sentences(
+        _to_java_column(str),
+        language,
+        country
+    ))
+
+
 def substring(str, pos, len):
     """
     Substring starts at `pos` and is of length `len` when str is String type or
