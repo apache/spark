@@ -2078,6 +2078,53 @@ abstract class AvroSuite
         Seq(Row(1), Row(2), Row(3)))
     }
   }
+
+  test("SPARK-35427: datetime rebasing in the EXCEPTION mode") {
+    withSQLConf(SQLConf.AVRO_REBASE_MODE_IN_WRITE.key -> EXCEPTION.toString) {
+      Seq("timestamp-millis", "timestamp-micros").foreach { dt =>
+        withTempPath { dir =>
+          val df = Seq("1001-01-01 01:02:03.123456")
+            .toDF("str")
+            .select($"str".cast("timestamp").as("dt"))
+          val avroSchema =
+            s"""
+              |{
+              |  "type" : "record",
+              |  "name" : "test_schema",
+              |  "fields" : [
+              |    {"name": "dt", "type": {"type": "long", "logicalType": "$dt"}}
+              |  ]
+              |}""".stripMargin
+
+          val e = intercept[SparkException] {
+            df.write.format("avro").option("avroSchema", avroSchema).save(dir.getCanonicalPath)
+          }
+          assert(e.getCause.getCause.getCause.isInstanceOf[SparkUpgradeException])
+        }
+      }
+
+      withTempPath { dir =>
+        val df = Seq(java.sql.Date.valueOf("1001-01-01")).toDF("dt")
+        val e = intercept[SparkException] {
+          df.write.format("avro").save(dir.getCanonicalPath)
+        }
+        assert(e.getCause.getCause.getCause.isInstanceOf[SparkUpgradeException])
+      }
+    }
+
+    withSQLConf(SQLConf.AVRO_REBASE_MODE_IN_READ.key -> EXCEPTION.toString) {
+      Seq(
+        "before_1582_date_v2_4_5.avro",
+        "before_1582_timestamp_micros_v2_4_5.avro",
+        "before_1582_timestamp_millis_v2_4_5.avro"
+      ).foreach { fileName =>
+        val e = intercept[SparkException] {
+          spark.read.format("avro").load(getResourceAvroFilePath(fileName)).collect()
+        }
+        assert(e.getCause.isInstanceOf[SparkUpgradeException])
+      }
+    }
+  }
 }
 
 class AvroV1Suite extends AvroSuite {
