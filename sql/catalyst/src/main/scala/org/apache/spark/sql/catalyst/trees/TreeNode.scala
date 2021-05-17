@@ -40,6 +40,7 @@ import org.apache.spark.sql.catalyst.rules.UnknownRuleId
 import org.apache.spark.sql.catalyst.trees.TreePattern.TreePattern
 import org.apache.spark.sql.catalyst.util.StringUtils.PlanStringConcat
 import org.apache.spark.sql.catalyst.util.truncatedString
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -674,7 +675,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
     // Skip no-arg constructors that are just there for kryo.
     val ctors = allCtors.filter(allowEmptyArgs || _.getParameterTypes.size != 0)
     if (ctors.isEmpty) {
-      sys.error(s"No valid constructor for $nodeName")
+      throw QueryExecutionErrors.constructorNotFoundError(nodeName)
     }
     val allArgs: Array[AnyRef] = if (otherCopyArgs.isEmpty) {
       newArgs

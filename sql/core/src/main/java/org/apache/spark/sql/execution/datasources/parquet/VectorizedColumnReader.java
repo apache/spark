@@ -32,8 +32,12 @@ import org.apache.parquet.column.Encoding;
 import org.apache.parquet.column.page.*;
 import org.apache.parquet.column.values.ValuesReader;
 import org.apache.parquet.io.api.Binary;
-import org.apache.parquet.schema.DecimalMetadata;
-import org.apache.parquet.schema.OriginalType;
+import org.apache.parquet.schema.LogicalTypeAnnotation;
+import org.apache.parquet.schema.LogicalTypeAnnotation.IntLogicalTypeAnnotation;
+import org.apache.parquet.schema.LogicalTypeAnnotation.DateLogicalTypeAnnotation;
+import org.apache.parquet.schema.LogicalTypeAnnotation.DecimalLogicalTypeAnnotation;
+import org.apache.parquet.schema.LogicalTypeAnnotation.TimestampLogicalTypeAnnotation;
+import org.apache.parquet.schema.LogicalTypeAnnotation.TimeUnit;
 import org.apache.parquet.schema.PrimitiveType;
 
 import org.apache.spark.sql.catalyst.util.DateTimeUtils;
@@ -101,7 +105,7 @@ public class VectorizedColumnReader {
 
   private final PageReader pageReader;
   private final ColumnDescriptor descriptor;
-  private final OriginalType originalType;
+  private final LogicalTypeAnnotation logicalTypeAnnotation;
   // The timezone conversion to apply to int96 timestamps. Null if no conversion.
   private final ZoneId convertTz;
   private static final ZoneId UTC = ZoneOffset.UTC;
@@ -110,10 +114,14 @@ public class VectorizedColumnReader {
 
   private boolean isDecimalTypeMatched(DataType dt) {
     DecimalType d = (DecimalType) dt;
-    DecimalMetadata dm = descriptor.getPrimitiveType().getDecimalMetadata();
-    // It's OK if the required decimal precision is larger than or equal to the physical decimal
-    // precision in the Parquet metadata, as long as the decimal scale is the same.
-    return dm != null && dm.getPrecision() <= d.precision() && dm.getScale() == d.scale();
+    LogicalTypeAnnotation typeAnnotation = descriptor.getPrimitiveType().getLogicalTypeAnnotation();
+    if (typeAnnotation instanceof DecimalLogicalTypeAnnotation) {
+      DecimalLogicalTypeAnnotation decimalType = (DecimalLogicalTypeAnnotation) typeAnnotation;
+      // It's OK if the required decimal precision is larger than or equal to the physical decimal
+      // precision in the Parquet metadata, as long as the decimal scale is the same.
+      return decimalType.getPrecision() <= d.precision() && decimalType.getScale() == d.scale();
+    }
+    return false;
   }
 
   private boolean canReadAsIntDecimal(DataType dt) {
@@ -133,7 +141,7 @@ public class VectorizedColumnReader {
 
   public VectorizedColumnReader(
       ColumnDescriptor descriptor,
-      OriginalType originalType,
+      LogicalTypeAnnotation logicalTypeAnnotation,
       PageReader pageReader,
       ZoneId convertTz,
       String datetimeRebaseMode,
@@ -141,7 +149,7 @@ public class VectorizedColumnReader {
     this.descriptor = descriptor;
     this.pageReader = pageReader;
     this.convertTz = convertTz;
-    this.originalType = originalType;
+    this.logicalTypeAnnotation = logicalTypeAnnotation;
     this.maxDefLevel = descriptor.getMaxDefinitionLevel();
 
     DictionaryPage dictionaryPage = pageReader.readDictionaryPage();
@@ -172,13 +180,14 @@ public class VectorizedColumnReader {
     boolean isSupported = false;
     switch (typeName) {
       case INT32:
-        isSupported = originalType != OriginalType.DATE || "CORRECTED".equals(datetimeRebaseMode);
+        isSupported = !(logicalTypeAnnotation instanceof DateLogicalTypeAnnotation) ||
+          "CORRECTED".equals(datetimeRebaseMode);
         break;
       case INT64:
-        if (originalType == OriginalType.TIMESTAMP_MICROS) {
+        if (isTimestampTypeMatched(TimeUnit.MICROS)) {
           isSupported = "CORRECTED".equals(datetimeRebaseMode);
         } else {
-          isSupported = originalType != OriginalType.TIMESTAMP_MILLIS;
+          isSupported = !isTimestampTypeMatched(TimeUnit.MILLIS);
         }
         break;
       case FLOAT:
@@ -263,17 +272,18 @@ public class VectorizedColumnReader {
           // We need to make sure that we initialize the right type for the dictionary otherwise
           // WritableColumnVector will throw an exception when trying to decode to an Int when the
           // dictionary is in fact initialized as Long
-          boolean castLongToInt = primitiveType.getOriginalType() == OriginalType.DECIMAL &&
-            primitiveType.getDecimalMetadata().getPrecision() <= Decimal.MAX_INT_DIGITS() &&
-            primitiveType.getPrimitiveTypeName() == INT64;
+          LogicalTypeAnnotation typeAnnotation = primitiveType.getLogicalTypeAnnotation();
+          boolean castLongToInt = typeAnnotation instanceof DecimalLogicalTypeAnnotation &&
+            ((DecimalLogicalTypeAnnotation) typeAnnotation).getPrecision() <=
+            Decimal.MAX_INT_DIGITS() && primitiveType.getPrimitiveTypeName() == INT64;
 
           // We require a long value, but we need to use dictionary to decode the original
           // signed int first
-          boolean isUnsignedInt32 = primitiveType.getOriginalType() == OriginalType.UINT_32;
+          boolean isUnsignedInt32 = isUnsignedIntTypeMatched(32);
 
           // We require a decimal value, but we need to use dictionary to decode the original
           // signed long first
-          boolean isUnsignedInt64 = primitiveType.getOriginalType() == OriginalType.UINT_64;
+          boolean isUnsignedInt64 = isUnsignedIntTypeMatched(64);
 
           boolean needTransform = castLongToInt || isUnsignedInt32 || isUnsignedInt64;
           column.setDictionary(new ParquetDictionary(dictionary, needTransform));
@@ -398,14 +408,14 @@ public class VectorizedColumnReader {
       case INT64:
         if (column.dataType() == DataTypes.LongType ||
             canReadAsLongDecimal(column.dataType()) ||
-            (originalType == OriginalType.TIMESTAMP_MICROS &&
+            (isTimestampTypeMatched(TimeUnit.MICROS) &&
               "CORRECTED".equals(datetimeRebaseMode))) {
           for (int i = rowId; i < rowId + num; ++i) {
             if (!column.isNullAt(i)) {
               column.putLong(i, dictionary.decodeToLong(dictionaryIds.getDictId(i)));
             }
           }
-        } else if (originalType == OriginalType.UINT_64) {
+        } else if (isUnsignedIntTypeMatched(64)) {
           // In `ParquetToSparkSchemaConverter`, we map parquet UINT64 to our Decimal(20, 0).
           // For unsigned int64, it stores as dictionary encoded signed int64 in Parquet
           // whenever dictionary is available.
@@ -418,7 +428,7 @@ public class VectorizedColumnReader {
               column.putByteArray(i, unsigned);
             }
           }
-        } else if (originalType == OriginalType.TIMESTAMP_MILLIS) {
+        } else if (isTimestampTypeMatched(TimeUnit.MILLIS)) {
           if ("CORRECTED".equals(datetimeRebaseMode)) {
             for (int i = rowId; i < rowId + num; ++i) {
               if (!column.isNullAt(i)) {
@@ -436,7 +446,7 @@ public class VectorizedColumnReader {
               }
             }
           }
-        } else if (originalType == OriginalType.TIMESTAMP_MICROS) {
+        } else if (isTimestampTypeMatched(TimeUnit.MICROS)) {
           final boolean failIfRebase = "EXCEPTION".equals(datetimeRebaseMode);
           for (int i = rowId; i < rowId + num; ++i) {
             if (!column.isNullAt(i)) {
@@ -611,13 +621,13 @@ public class VectorizedColumnReader {
       defColumn.readLongs(
         num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn,
         DecimalType.is32BitDecimalType(column.dataType()));
-    } else if (originalType == OriginalType.UINT_64) {
+    } else if (isUnsignedIntTypeMatched(64)) {
       // In `ParquetToSparkSchemaConverter`, we map parquet UINT64 to our Decimal(20, 0).
       // For unsigned int64, it stores as plain signed int64 in Parquet when dictionary fallbacks.
       // We read them as decimal values.
       defColumn.readUnsignedLongs(
         num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
-    } else if (originalType == OriginalType.TIMESTAMP_MICROS) {
+    } else if (isTimestampTypeMatched(TimeUnit.MICROS)) {
       if ("CORRECTED".equals(datetimeRebaseMode)) {
         defColumn.readLongs(
           num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn, false);
@@ -626,7 +636,7 @@ public class VectorizedColumnReader {
         defColumn.readLongsWithRebase(
           num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn, failIfRebase);
       }
-    } else if (originalType == OriginalType.TIMESTAMP_MILLIS) {
+    } else if (isTimestampTypeMatched(TimeUnit.MILLIS)) {
       if ("CORRECTED".equals(datetimeRebaseMode)) {
         for (int i = 0; i < num; i++) {
           if (defColumn.readInteger() == maxDefLevel) {
@@ -870,5 +880,16 @@ public class VectorizedColumnReader {
     } catch (IOException e) {
       throw new IOException("could not read page " + page + " in col " + descriptor, e);
     }
+  }
+
+  private boolean isTimestampTypeMatched(TimeUnit unit) {
+    return logicalTypeAnnotation instanceof TimestampLogicalTypeAnnotation &&
+      ((TimestampLogicalTypeAnnotation) logicalTypeAnnotation).getUnit() == unit;
+  }
+
+  private boolean isUnsignedIntTypeMatched(int bitWidth) {
+    return logicalTypeAnnotation instanceof IntLogicalTypeAnnotation &&
+      !((IntLogicalTypeAnnotation) logicalTypeAnnotation).isSigned() &&
+      ((IntLogicalTypeAnnotation) logicalTypeAnnotation).getBitWidth() == bitWidth;
   }
 }

@@ -158,6 +158,8 @@ case class Alias(child: Expression, name: String)(
     val nonInheritableMetadataKeys: Seq[String] = Seq.empty)
   extends UnaryExpression with NamedExpression {
 
+  final override val nodePatterns: Seq[TreePattern] = Seq(ALIAS)
+
   // Alias(Generator, xx) need to be transformed into Generate(generator, ...)
   override lazy val resolved =
     childrenResolved && checkInputDataTypes().isSuccess && !child.isInstanceOf[Generator]

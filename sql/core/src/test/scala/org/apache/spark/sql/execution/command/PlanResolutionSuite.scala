@@ -55,6 +55,20 @@ class PlanResolutionSuite extends AnalysisTest {
     t
   }
 
+  private val table1: Table = {
+    val t = mock(classOf[Table])
+    when(t.schema()).thenReturn(new StructType().add("s", "string").add("i", "int"))
+    when(t.partitioning()).thenReturn(Array.empty[Transform])
+    t
+  }
+
+  private val table2: Table = {
+    val t = mock(classOf[Table])
+    when(t.schema()).thenReturn(new StructType().add("i", "int").add("x", "string"))
+    when(t.partitioning()).thenReturn(Array.empty[Transform])
+    t
+  }
+
   private val tableWithAcceptAnySchemaCapability: Table = {
     val t = mock(classOf[Table])
     when(t.schema()).thenReturn(new StructType().add("i", "int"))
@@ -91,7 +105,8 @@ class PlanResolutionSuite extends AnalysisTest {
     when(newCatalog.loadTable(any())).thenAnswer((invocation: InvocationOnMock) => {
       invocation.getArgument[Identifier](0).name match {
         case "tab" => table
-        case "tab1" => table
+        case "tab1" => table1
+        case "tab2" => table2
         case name => throw new NoSuchTableException(name)
       }
     })
@@ -107,7 +122,7 @@ class PlanResolutionSuite extends AnalysisTest {
         case "v1Table1" => v1Table
         case "v1HiveTable" => v1HiveTable
         case "v2Table" => table
-        case "v2Table1" => table
+        case "v2Table1" => table1
         case "v2TableWithAcceptAnySchemaCapability" => tableWithAcceptAnySchemaCapability
         case "view" => view
         case name => throw new NoSuchTableException(name)
@@ -1385,7 +1400,7 @@ class PlanResolutionSuite extends AnalysisTest {
         // cte
         val sql5 =
           s"""
-             |WITH source(i, s) AS
+             |WITH source(s, i) AS
              | (SELECT * FROM $source)
              |MERGE INTO $target AS target
              |USING source
@@ -1405,7 +1420,7 @@ class PlanResolutionSuite extends AnalysisTest {
                   updateAssigns)),
               Seq(InsertAction(Some(EqualTo(il: AttributeReference, StringLiteral("insert"))),
                 insertAssigns))) =>
-            assert(source.output.map(_.name) == Seq("i", "s"))
+            assert(source.output.map(_.name) == Seq("s", "i"))
             checkResolution(target, source, mergeCondition, Some(dl), Some(ul), Some(il),
               updateAssigns, insertAssigns)
 
@@ -1414,8 +1429,7 @@ class PlanResolutionSuite extends AnalysisTest {
     }
 
     // no aliases
-    Seq(("v2Table", "v2Table1"),
-      ("testcat.tab", "testcat.tab1")).foreach { pair =>
+    Seq(("v2Table", "v2Table1"), ("testcat.tab", "testcat.tab1")).foreach { pair =>
 
       val target = pair._1
       val source = pair._2
@@ -1507,7 +1521,7 @@ class PlanResolutionSuite extends AnalysisTest {
       assert(e5.message.contains("Reference 's' is ambiguous"))
     }
 
-    val sql6 =
+    val sql1 =
       s"""
          |MERGE INTO non_exist_target
          |USING non_exist_source
@@ -1516,13 +1530,37 @@ class PlanResolutionSuite extends AnalysisTest {
          |WHEN MATCHED THEN UPDATE SET *
          |WHEN NOT MATCHED THEN INSERT *
        """.stripMargin
-    val parsed = parseAndResolve(sql6)
+    val parsed = parseAndResolve(sql1)
     parsed match {
       case u: MergeIntoTable =>
         assert(u.targetTable.isInstanceOf[UnresolvedRelation])
         assert(u.sourceTable.isInstanceOf[UnresolvedRelation])
       case _ => fail("Expect MergeIntoTable, but got:\n" + parsed.treeString)
     }
+
+    // UPDATE * with incompatible schema between source and target tables.
+    val sql2 =
+      """
+         |MERGE INTO testcat.tab
+         |USING testcat.tab2
+         |ON 1 = 1
+         |WHEN MATCHED THEN UPDATE SET *
+         |""".stripMargin
+    val e2 = intercept[AnalysisException](parseAndResolve(sql2))
+    assert(e2.message.contains(
+      "cannot resolve s in MERGE command given columns [testcat.tab2.i, testcat.tab2.x]"))
+
+    // INSERT * with incompatible schema between source and target tables.
+    val sql3 =
+      """
+        |MERGE INTO testcat.tab
+        |USING testcat.tab2
+        |ON 1 = 1
+        |WHEN NOT MATCHED THEN INSERT *
+        |""".stripMargin
+    val e3 = intercept[AnalysisException](parseAndResolve(sql3))
+    assert(e3.message.contains(
+      "cannot resolve s in MERGE command given columns [testcat.tab2.i, testcat.tab2.x]"))
   }
 
   test("MERGE INTO TABLE - skip resolution on v2 tables that accept any schema") {
