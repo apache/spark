@@ -72,10 +72,16 @@ class QueryExecution(
 
   lazy val analyzed: LogicalPlan = executePhase(QueryPlanningTracker.ANALYSIS) {
     // We can't clone `logical` here, which will reset the `_analyzed` flag.
-    sparkSession.sessionState.analyzer.executeAndCheck(logical, tracker) transform {
-      // SPARK-35378: Eagerly execute LeafRunnableCommand so that query command with CTE
-      case r: LeafRunnableCommand =>
-        LocalRelation(r.output, ExecutedCommandExec(r).executeCollect())
+    sparkSession.sessionState.analyzer.executeAndCheck(logical, tracker)
+  }
+
+  lazy val commandCollected: LogicalPlan = analyzed mapChildren { child =>
+    child transform {
+      // SPARK-35378: Eagerly execute Command so that query command with CTE
+      case c: Command =>
+        val subQueryExecution = sparkSession.sessionState.executePlan(c)
+        LocalRelation(c.output,
+          subQueryExecution.executedPlan.executeCollect(), false, Some(subQueryExecution.id))
       case other => other
     }
   }
@@ -85,7 +91,7 @@ class QueryExecution(
     assertSupported()
     // clone the plan to avoid sharing the plan instance between different stages like analyzing,
     // optimizing and planning.
-    sparkSession.sharedState.cacheManager.useCachedData(analyzed.clone())
+    sparkSession.sharedState.cacheManager.useCachedData(commandCollected.clone())
   }
 
   lazy val optimizedPlan: LogicalPlan = executePhase(QueryPlanningTracker.OPTIMIZATION) {
