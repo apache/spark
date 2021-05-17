@@ -2880,7 +2880,7 @@ object functions {
    * Splits a string into arrays of sentences, where each sentence is an array of words.
    * The default locale is used.
    * @group string_funcs
-   * @sinde 3.2.0
+   * @since 3.2.0
    */
   def sentences(str: Column): Column = withExpr {
     Sentences(str.expr)
