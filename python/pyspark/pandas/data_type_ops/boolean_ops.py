@@ -23,44 +23,6 @@ class BooleanOps(DataTypeOps):
     The class for binary operations of pandas-on-Spark objects with spark type: BooleanType.
     """
 
-    def __add__(self, left, right):
-        raise TypeError("addition can not be applied to given types.")
-
-    def __sub__(self, left, right):
-        raise TypeError("subtraction can not be applied to given types.")
-
-    def __mul__(self, left, right):
-        raise TypeError("multiplication can not be applied to given types.")
-
-    def __truediv__(self, left, right):
-        raise TypeError("division can not be applied to given types.")
-
-    def __floordiv__(self, left, right):
-        raise TypeError("division can not be applied to given types.")
-
-    def __mod__(self, left, right):
-        raise TypeError("modulo can not be applied to given types.")
-
-    def __pow__(self, left, right):
-        raise TypeError("exponentiation can not be applied to given types.")
-
-    def __radd__(self, left, right=None):
-        raise TypeError("addition can not be applied to given types.")
-
-    def __rsub__(self, left, right=None):
-        raise TypeError("subtraction can not be applied to given types.")
-
-    def __rmul__(self, left, right=None):
-        raise TypeError("multiplication can not be applied to given types.")
-
-    def __rtruediv__(self, left, right=None):
-        raise TypeError("division can not be applied to given types.")
-
-    def __rfloordiv__(self, left, right=None):
-        raise TypeError("division can not be applied to given types.")
-
-    def __rpow__(self, left, right=None):
-        raise TypeError("exponentiation can not be applied to given types.")
-
-    def __rmod__(self, left, right=None):
-        raise TypeError("modulo can not be applied to given types.")
+    @property
+    def pretty_name(self):
+        return 'booleans'

@@ -30,8 +30,9 @@ class DateOps(DataTypeOps):
     The class for binary operations of pandas-on-Spark objects with spark type: DateType.
     """
 
-    def __add__(self, left, right):
-        raise TypeError("addition can not be applied to date.")
+    @property
+    def pretty_name(self):
+        return 'dates'
 
     def __sub__(self, left, right):
         # Note that date subtraction casts arguments to integer. This is to mimic pandas's
@@ -50,24 +51,6 @@ class DateOps(DataTypeOps):
         else:
             raise TypeError("date subtraction can only be applied to date series.")
 
-    def __mul__(self, left, right):
-        raise TypeError("multiplication can not be applied to date.")
-
-    def __truediv__(self, left, right):
-        raise TypeError("division can not be applied to date.")
-
-    def __floordiv__(self, left, right):
-        raise TypeError("division can not be applied to date.")
-
-    def __mod__(self, left, right):
-        raise TypeError("modulo can not be applied to date.")
-
-    def __pow__(self, left, right):
-        raise TypeError("exponentiation can not be applied to date.")
-
-    def __radd__(self, left, right=None):
-        raise TypeError("addition can not be applied to date.")
-
     def __rsub__(self, left, right=None):
         # Note that date subtraction casts arguments to integer. This is to mimic pandas's
         # behaviors. pandas returns 'timedelta64[ns]' in days from date's subtraction.
@@ -81,18 +64,3 @@ class DateOps(DataTypeOps):
             return -column_op(F.datediff)(left, F.lit(right)).astype("long")
         else:
             raise TypeError("date subtraction can only be applied to date series.")
-
-    def __rmul__(self, left, right=None):
-        raise TypeError("multiplication can not be applied to date.")
-
-    def __rtruediv__(self, left, right=None):
-        raise TypeError("division can not be applied to date.")
-
-    def __rfloordiv__(self, left, right=None):
-        raise TypeError("division can not be applied to date.")
-
-    def __rpow__(self, left, right=None):
-        raise TypeError("exponentiation can not be applied to date.")
-
-    def __rmod__(self, left, right=None):
-        raise TypeError("modulo can not be applied to date.")

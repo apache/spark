@@ -31,8 +31,9 @@ class DatetimeOps(DataTypeOps):
     The class for binary operations of pandas-on-Spark objects with spark type: TimestampType.
     """
 
-    def __add__(self, left, right):
-        raise TypeError("addition can not be applied to date times.")
+    @property
+    def pretty_name(self):
+        return 'datetimes'
 
     def __sub__(self, left, right):
         # Note that timestamp subtraction casts arguments to integer. This is to mimic pandas's
@@ -51,24 +52,6 @@ class DatetimeOps(DataTypeOps):
         else:
             raise TypeError("datetime subtraction can only be applied to datetime series.")
 
-    def __mul__(self, left, right):
-        raise TypeError("multiplication can not be applied to date times.")
-
-    def __truediv__(self, left, right):
-        raise TypeError("division can not be applied to date times.")
-
-    def __floordiv__(self, left, right):
-        raise TypeError("division can not be applied to date times.")
-
-    def __mod__(self, left, right):
-        raise TypeError("modulo can not be applied to date times.")
-
-    def __pow__(self, left, right):
-        raise TypeError("exponentiation can not be applied to date times.")
-
-    def __radd__(self, left, right=None):
-        raise TypeError("addition can not be applied to date times.")
-
     def __rsub__(self, left, right=None):
         # Note that timestamp subtraction casts arguments to integer. This is to mimic pandas's
         # behaviors. pandas returns 'timedelta64[ns]' from 'datetime64[ns]'s subtraction.
@@ -82,18 +65,3 @@ class DatetimeOps(DataTypeOps):
             return -(left.astype("long") - F.lit(right).cast(as_spark_type("long")))
         else:
             raise TypeError("datetime subtraction can only be applied to datetime series.")
-
-    def __rmul__(self, left, right=None):
-        raise TypeError("multiplication can not be applied to date times.")
-
-    def __rtruediv__(self, left, right=None):
-        raise TypeError("division can not be applied to date times.")
-
-    def __rfloordiv__(self, left, right=None):
-        raise TypeError("division can not be applied to date times.")
-
-    def __rpow__(self, left, right=None):
-        raise TypeError("exponentiation can not be applied to date times.")
-
-    def __rmod__(self, left, right=None):
-        raise TypeError("modulo can not be applied to date times.")

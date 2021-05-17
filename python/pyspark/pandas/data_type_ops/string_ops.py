@@ -30,6 +30,10 @@ class StringOps(DataTypeOps):
     The class for binary operations of pandas-on-Spark objects with spark type: StringType.
     """
 
+    @property
+    def pretty_name(self):
+        return 'strings'
+
     def __add__(self, left, right):
         if isinstance(right, IndexOpsMixin) and isinstance(right.spark.data_type, StringType):
             return column_op(F.concat)(left, right)

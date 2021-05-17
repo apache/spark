@@ -23,44 +23,6 @@ class CategoricalOps(DataTypeOps):
     The class for binary operations of pandas-on-Spark objects with categorical types.
     """
 
-    def __add__(self, left, right):
-        raise TypeError("Object with dtype category cannot perform the numpy op add.")
-
-    def __sub__(self, left, right):
-        raise TypeError("Object with dtype category cannot perform the numpy op subtract.")
-
-    def __mul__(self, left, right):
-        raise TypeError("Object with dtype category cannot perform the numpy op multiply.")
-
-    def __truediv__(self, left, right):
-        raise TypeError("Object with dtype category cannot perform Floating division")
-
-    def __floordiv__(self, left, right):
-        raise TypeError("Object with dtype category cannot perform Integer division.")
-
-    def __mod__(self, left, right):
-        raise TypeError("Object with dtype category cannot perform modulo.")
-
-    def __pow__(self, left, right):
-        raise TypeError("Object with dtype category cannot perform exponentiation.")
-
-    def __radd__(self, left, right=None):
-        raise TypeError("Object with dtype category cannot perform the numpy op add.")
-
-    def __rsub__(self, left, right=None):
-        raise TypeError("Object with dtype category cannot perform the numpy op subtract.")
-
-    def __rmul__(self, left, right=None):
-        raise TypeError("Object with dtype category cannot perform the numpy op multiply")
-
-    def __rtruediv__(self, left, right=None):
-        raise TypeError("Object with dtype category cannot perform Floating division")
-
-    def __rfloordiv__(self, left, right=None):
-        raise TypeError("Object with dtype category cannot perform Integer division")
-
-    def __rpow__(self, left, right=None):
-        raise TypeError("Object with dtype category cannot perform exponentiation.")
-
-    def __rmod__(self, left, right=None):
-        raise TypeError("Object with dtype category cannot perform modulo.")
+    @property
+    def pretty_name(self):
+        return 'categoricals'

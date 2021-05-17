@@ -73,58 +73,49 @@ class DataTypeOps(object, metaclass=ABCMeta):
         self.dtype = dtype
         self.spark_type = spark_type
 
+    @property
     @abstractmethod
+    def pretty_name(self):
+        raise NotImplementedError()
+
     def __add__(self, left, right):
-        raise NotImplementedError()
+        raise TypeError("Addition can not be applied to %s." % self.pretty_name)
 
-    @abstractmethod
     def __sub__(self, left, right):
-        raise NotImplementedError()
+        raise TypeError("Subtraction can not be applied to %s." % self.pretty_name)
 
-    @abstractmethod
     def __mul__(self, left, right):
-        raise NotImplementedError()
+        raise TypeError("Multiplication can not be applied to %s." % self.pretty_name)
 
-    @abstractmethod
     def __truediv__(self, left, right):
-        raise NotImplementedError()
+        raise TypeError("True division can not be applied to %s." % self.pretty_name)
 
-    @abstractmethod
     def __floordiv__(self, left, right):
-        raise NotImplementedError()
+        raise TypeError("Floor division can not be applied to %s." % self.pretty_name)
 
-    @abstractmethod
     def __mod__(self, left, right):
-        raise NotImplementedError()
+        raise TypeError("Modulo can not be applied to %s." % self.pretty_name)
 
-    @abstractmethod
     def __pow__(self, left, right):
-        raise NotImplementedError()
+        raise TypeError("Exponentiation can not be applied to %s." % self.pretty_name)
 
-    @abstractmethod
     def __radd__(self, left, right=None):
-        raise NotImplementedError()
+        raise TypeError("Addition can not be applied to %s." % self.pretty_name)
 
-    @abstractmethod
     def __rsub__(self, left, right=None):
-        raise NotImplementedError()
+        raise TypeError("Subtraction can not be applied to %s." % self.pretty_name)
 
-    @abstractmethod
     def __rmul__(self, left, right=None):
-        raise NotImplementedError()
+        raise TypeError("Multiplication can not be applied to %s." % self.pretty_name)
 
-    @abstractmethod
     def __rtruediv__(self, left, right=None):
-        raise NotImplementedError()
+        raise TypeError("True division can not be applied to %s." % self.pretty_name)
 
-    @abstractmethod
     def __rfloordiv__(self, left, right=None):
-        raise NotImplementedError()
+        raise TypeError("Floor division can not be applied to %s." % self.pretty_name)
 
-    @abstractmethod
     def __rpow__(self, left, right=None):
-        raise NotImplementedError()
+        raise TypeError("Modulo can not be applied to %s." % self.pretty_name)
 
-    @abstractmethod
     def __rmod__(self, left, right=None):
-        raise NotImplementedError()
+        raise TypeError("Exponentiation can not be applied to %s." % self.pretty_name)

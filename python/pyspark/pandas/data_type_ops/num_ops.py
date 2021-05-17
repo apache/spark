@@ -37,6 +37,10 @@ class NumericOps(DataTypeOps):
     The class for binary operations of numeric pandas-on-Spark objects.
     """
 
+    @property
+    def pretty_name(self):
+        return 'numerics'
+
     def __add__(self, left, right):
         if (
             isinstance(right, IndexOpsMixin) and isinstance(right.spark.data_type, StringType)
@@ -257,6 +261,10 @@ class IntegralOps(NumericOps):
     The class for binary operations of pandas-on-Spark objects with spark types:
     LongType, IntegerType, ByteType and ShortType.
     """
+
+    @property
+    def pretty_name(self):
+        return 'integrals'
 
     def __mul__(self, left, right):
         if isinstance(right, str):
