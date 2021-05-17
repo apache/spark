@@ -287,7 +287,7 @@ def inheritable_thread_target(f):
     When the pinned thread mode is off, it return the original ``f``.
     :param f: the original thread target.
 
-    .. versionadded:: 3.1.0
+    .. versionadded:: 3.2.0
 
     Notes
     -----

@@ -196,8 +196,7 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
       // Wait for metrics to be calculated
       val foldMetrics = try {
         foldMetricFutures.map(ThreadUtils.awaitResult(_, Duration.Inf))
-      }
-      catch {
+      } catch {
         case e: Throwable =>
           subTaskFailed = true
           try {
@@ -207,8 +206,7 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
             case _: Throwable => ()
           }
           throw e
-      }
-      finally {
+      } finally {
         // Restore old job group
         sparkContext.setLocalProperty(SparkContext.SPARK_JOB_GROUP_ID, oldJobGroup)
         // Unpersist training & validation set once all metrics have been produced

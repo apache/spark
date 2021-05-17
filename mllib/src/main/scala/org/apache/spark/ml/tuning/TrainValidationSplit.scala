@@ -176,8 +176,7 @@ class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: St
     // Wait for all metrics to be calculated
     val metrics = try {
       metricFutures.map(ThreadUtils.awaitResult(_, Duration.Inf))
-    }
-    catch {
+    } catch {
       case e: Throwable =>
         subTaskFailed = true
         try {
@@ -188,8 +187,7 @@ class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: St
           case _: Throwable => ()
         }
         throw e
-    }
-    finally {
+    } finally {
       // Restore old job group
       sparkContext.setLocalProperty(SparkContext.SPARK_JOB_GROUP_ID, oldJobGroup)
       // Unpersist training & validation set once all metrics have been produced
