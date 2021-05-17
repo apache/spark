@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.csv
 
-import java.text.SimpleDateFormat
 import java.util.Locale
 
 import scala.util.control.Exception.allCatch
@@ -25,8 +24,9 @@ import scala.util.control.Exception.allCatch
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion
 import org.apache.spark.sql.catalyst.expressions.ExprUtils
-import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
-import org.apache.spark.sql.catalyst.util.TimestampFormatter
+import org.apache.spark.sql.catalyst.util.{DateFormatter, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.LegacyDateFormats.{FAST_DATE_FORMAT, SIMPLE_DATE_FORMAT}
+import org.apache.spark.sql.catalyst.util.LegacySimpleDateFormatter
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
 
@@ -37,6 +37,13 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
     options.zoneId,
     options.locale,
     legacyFormat = FAST_DATE_FORMAT,
+    isParsing = true)
+
+  private val dateFormatter = DateFormatter(
+    options.dateFormat,
+    options.zoneId,
+    options.locale,
+    legacyFormat = SIMPLE_DATE_FORMAT,
     isParsing = true)
 
   private val decimalParser = if (options.locale == Locale.US) {
@@ -110,6 +117,7 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
         case LongType => tryParseLong(field)
         case _: DecimalType => tryParseDecimal(field)
         case DoubleType => tryParseDouble(field)
+        case DateType => tryParseDateFormat(field)
         case TimestampType => tryParseTimestamp(field)
         case BooleanType => tryParseBoolean(field)
         case StringType => StringType
@@ -162,6 +170,15 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
     if ((allCatch opt field.toDouble).isDefined || isInfOrNan(field)) {
       DoubleType
     } else {
+      tryParseDateFormat(field)
+    }
+  }
+
+  private def tryParseDateFormat(field: String): DataType = {
+    if (!dateFormatter.isInstanceOf[LegacySimpleDateFormatter]
+      && (allCatch opt dateFormatter.parse(field)).isDefined) {
+      DateType
+    } else {
       tryParseTimestamp(field)
     }
   }
@@ -170,17 +187,6 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
     // This case infers a custom `dataFormat` is set.
     if ((allCatch opt timestampParser.parse(field)).isDefined) {
       TimestampType
-    } else {
-      tryParseDateFormat(field)
-    }
-  }
-
-  private def tryParseDateFormat(field: String): DataType = {
-    if ((allCatch opt {
-      val dtFormat = new SimpleDateFormat(options.dateFormat, Locale.US)
-      dtFormat.setLenient(false)
-      dtFormat.parse(field)}).isDefined) {
-      DateType
     } else {
       tryParseBoolean(field)
     }

@@ -17,9 +17,7 @@
 
 package org.apache.spark.sql.catalyst.json
 
-import java.text.SimpleDateFormat
 import java.util.Comparator
-import java.util.Locale
 
 import scala.util.control.Exception.allCatch
 
@@ -30,7 +28,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCoercion
 import org.apache.spark.sql.catalyst.expressions.ExprUtils
 import org.apache.spark.sql.catalyst.json.JacksonUtils.nextUntil
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
+import org.apache.spark.sql.catalyst.util.LegacyDateFormats.{FAST_DATE_FORMAT, SIMPLE_DATE_FORMAT}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -45,6 +43,13 @@ private[sql] class JsonInferSchema(options: JSONOptions) extends Serializable {
     options.zoneId,
     options.locale,
     legacyFormat = FAST_DATE_FORMAT,
+    isParsing = true)
+
+  private val dateFormatter = DateFormatter(
+    options.dateFormat,
+    options.zoneId,
+    options.locale,
+    legacyFormat = SIMPLE_DATE_FORMAT,
     isParsing = true)
 
   /**
@@ -129,16 +134,13 @@ private[sql] class JsonInferSchema(options: JSONOptions) extends Serializable {
         }
         if (options.prefersDecimal && decimalTry.isDefined) {
           decimalTry.get
+        } else if (options.allowDateFormat
+            && !dateFormatter.isInstanceOf[LegacySimpleDateFormatter] &&
+            (allCatch opt dateFormatter.parse(field)).isDefined) {
+          DateType
         } else if (options.inferTimestamp &&
             (allCatch opt timestampFormatter.parse(field)).isDefined) {
           TimestampType
-        } else if (options.allowDateFormat &&
-          (allCatch opt { val dtFormat = new SimpleDateFormat(
-            options.dateFormat, Locale.US)
-            dtFormat.setLenient(false)
-            dtFormat.parse(field)
-          }).isDefined) {
-          DateType
         } else {
           StringType
         }
