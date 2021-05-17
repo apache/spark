@@ -82,7 +82,10 @@ class EquivalentExpressions {
   /**
    * Adds only expressions which are common in each of given expressions, in a recursive way.
    * For example, given two expressions `(a + (b + (c + 1)))` and `(d + (e + (c + 1)))`,
-   * the common expression `(c + 1)` will be added into `equivalenceMap`.
+   * the common expression `(c + 1)` will be added into `equivalenceMap`. Note that if an
+   * expression and its child expressions are all commonly occurred in each of given expressions,
+   * we filter out the child expressions. For example, if `((a + b) + c)` and `(a + b)` are
+   * common expressions, we only add `((a + b) + c)`.
    */
   private def addCommonExprs(
       exprs: Seq[Expression],
