@@ -852,7 +852,7 @@ class DataFrameTests(ReusedSQLTestCase):
             df.show(True)
         with self.assertRaisesRegex(TypeError, "Parameter 'vertical'"):
             df.show(vertical='foo')
-        with self.assertRaisesRegex(ValueError, "Non-bool parameter 'truncate=foo'"):
+        with self.assertRaisesRegex(TypeError, "Parameter 'truncate=foo'"):
             df.show(truncate='foo')
 
 

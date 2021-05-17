@@ -495,8 +495,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             try:
                 int_truncate = int(truncate)
             except ValueError:
-                raise ValueError(f"Non-bool parameter 'truncate={truncate}'"
-                                 f"could not be converted to an int")
+                raise TypeError(f"Parameter 'truncate={truncate}' should be either bool or int.")
 
             print(self._jdf.showString(n, int_truncate, vertical))
 
