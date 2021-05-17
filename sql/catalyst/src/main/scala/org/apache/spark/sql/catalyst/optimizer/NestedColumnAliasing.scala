@@ -147,11 +147,10 @@ object NestedColumnAliasing {
 
     // A reference attribute can have multiple aliases for nested fields.
     val attrToAliases = AttributeMap(
-      attributeToExtractValuesAndAliases.map { case (attr, evAliasSeq) =>
-        val aliasSeq = evAliasSeq.map { case (_, alias) =>
+      attributeToExtractValuesAndAliases.mapValues { evAliasSeq =>
+        evAliasSeq.map { case (_, alias) =>
           alias
         }
-        attr -> aliasSeq
       }
     )
 
@@ -278,7 +277,7 @@ object NestedColumnAliasing {
         val numUsedNestedFields = dedupNestedFields.map(_.canonicalized).distinct
           .map { nestedField => totalFieldNum(nestedField.dataType) }.sum
         if (numUsedNestedFields < totalFieldNum(attr.dataType)) {
-          Some((attr, dedupNestedFields))
+          Some((attr, dedupNestedFields.toSeq))
         } else {
           None
         }
