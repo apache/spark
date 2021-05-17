@@ -177,7 +177,6 @@ class LimitPushdownThroughWindowSuite extends PlanTest {
       WithoutOptimize.execute(originalQuery.analyze))
   }
 
-
   test("Should push down if partitionSpec is not empty") {
     val originalQuery = testRelation
       .select(a, b, c,
