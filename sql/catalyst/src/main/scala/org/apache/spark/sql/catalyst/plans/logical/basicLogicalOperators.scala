@@ -802,29 +802,28 @@ case class Range(
     val height = numElements.toDouble / numBins
     val percentileArray = (0 to numBins).map(i => i * height).toArray
 
-    val binArray = new Array[HistogramBin](numBins)
-    val lowerIndexInitial = percentileArray.head
-    val lowerBinValueInitial = getRangeValue(0)
-    percentileArray.tail.zipWithIndex
-      .foldLeft[(Double, Long)]((lowerIndexInitial, lowerBinValueInitial)) {
-        case ((lowerIndex, lowerBinValue), (upperIndex, binId)) =>
+    val lowerIndexInitial: Double = percentileArray.head
+    val lowerBinValueInitial: Long = getRangeValue(0)
+    val (_, _, binArray) = percentileArray.tail
+      .foldLeft((lowerIndexInitial, lowerBinValueInitial, Seq.empty[HistogramBin])) {
+        case ((lowerIndex, lowerBinValue, binAr), upperIndex) =>
           // Integer index for upper and lower values in the bin.
           val upperIndexPos = math.ceil(upperIndex).toInt - 1
           val lowerIndexPos = math.ceil(lowerIndex).toInt - 1
 
           val upperBinValue = getRangeValue(math.max(upperIndexPos, 0))
           val ndv = math.max(upperIndexPos - lowerIndexPos, 1)
-          binArray(binId) = HistogramBin(lowerBinValue, upperBinValue, ndv)
           // Update the lowerIndex and lowerBinValue with upper ones for the next iteration.
-          (upperIndex, upperBinValue)
+          (upperIndex, upperBinValue, binAr :+ HistogramBin(lowerBinValue, upperBinValue, ndv))
       }
-    Histogram(height, binArray)
+    Histogram(height, binArray.toArray)
   }
 
   // Utility method to compute histogram
   private def getRangeValue(index: Int): Long = {
     assert(index >= 0, "index must be greater than and equal to 0")
-    if (step <= 0) {
+    if (step < 0) {
+      // Reverse the range values for computing histogram, if the step size is negative.
       start + (numElements.toLong - index - 1) * step
     } else {
       start + index * step
