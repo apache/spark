@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.analysis.UnsupportedOperationChecker
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
 import org.apache.spark.sql.catalyst.expressions.codegen.ByteCodeStats
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, ReturnAnswer}
+import org.apache.spark.sql.catalyst.plans.logical.{Command, LocalRelation, LogicalPlan, ReturnAnswer}
 import org.apache.spark.sql.catalyst.rules.{PlanChangeLogger, Rule}
 import org.apache.spark.sql.catalyst.util.StringUtils.PlanStringConcat
 import org.apache.spark.sql.catalyst.util.truncatedString
@@ -74,12 +74,23 @@ class QueryExecution(
     sparkSession.sessionState.analyzer.executeAndCheck(logical, tracker)
   }
 
+  lazy val commandCollected: LogicalPlan = analyzed mapChildren { child =>
+    child transform {
+      // SPARK-35378: Eagerly execute Command so that query command with CTE
+      case c: Command =>
+        val subQueryExecution = sparkSession.sessionState.executePlan(c)
+        LocalRelation(c.output,
+          subQueryExecution.executedPlan.executeCollect(), false, Some(subQueryExecution.id))
+      case other => other
+    }
+  }
+
   lazy val withCachedData: LogicalPlan = sparkSession.withActive {
     assertAnalyzed()
     assertSupported()
     // clone the plan to avoid sharing the plan instance between different stages like analyzing,
     // optimizing and planning.
-    sparkSession.sharedState.cacheManager.useCachedData(analyzed.clone())
+    sparkSession.sharedState.cacheManager.useCachedData(commandCollected.clone())
   }
 
   lazy val optimizedPlan: LogicalPlan = executePhase(QueryPlanningTracker.OPTIMIZATION) {
