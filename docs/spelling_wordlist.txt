@@ -564,6 +564,7 @@ cgroupspy
 changelog
 charset
 checklicence
+checksums
 chmod
 chown
 ci
