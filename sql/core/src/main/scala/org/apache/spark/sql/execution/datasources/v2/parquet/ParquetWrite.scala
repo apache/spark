@@ -27,16 +27,15 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.connector.write.LogicalWriteInfo
 import org.apache.spark.sql.execution.datasources.{OutputWriter, OutputWriterFactory}
 import org.apache.spark.sql.execution.datasources.parquet._
-import org.apache.spark.sql.execution.datasources.v2.FileWriteBuilder
+import org.apache.spark.sql.execution.datasources.v2.FileWrite
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
-class ParquetWriteBuilder(
+case class ParquetWrite(
     paths: Seq[String],
     formatName: String,
     supportsDataType: DataType => Boolean,
-    info: LogicalWriteInfo)
-  extends FileWriteBuilder(paths, formatName, supportsDataType, info) with Logging {
+    info: LogicalWriteInfo) extends FileWrite with Logging {
 
   override def prepareWrite(
       sqlConf: SQLConf,

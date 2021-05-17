@@ -4254,7 +4254,10 @@ def _create_lambda(f):
 
     argnames = ["x", "y", "z"]
     args = [
-        _unresolved_named_lambda_variable(arg) for arg in argnames[: len(parameters)]
+        _unresolved_named_lambda_variable(
+            expressions.UnresolvedNamedLambdaVariable.freshVarName(arg)
+        )
+        for arg in argnames[: len(parameters)]
     ]
 
     result = f(*args)

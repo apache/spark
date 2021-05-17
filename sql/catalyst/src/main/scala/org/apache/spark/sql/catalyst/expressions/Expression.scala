@@ -485,7 +485,8 @@ abstract class UnaryExpression extends Expression with UnaryLike[Expression] {
    * of evaluation process, we should override [[eval]].
    */
   protected def nullSafeEval(input: Any): Any =
-    sys.error(s"UnaryExpressions must override either eval or nullSafeEval")
+    throw QueryExecutionErrors.notOverrideExpectedMethodsError("UnaryExpressions",
+      "eval", "nullSafeEval")
 
   /**
    * Called by unary expressions to generate a code block that returns null if its parent returns
@@ -578,7 +579,8 @@ abstract class BinaryExpression extends Expression with BinaryLike[Expression] {
    * of evaluation process, we should override [[eval]].
    */
   protected def nullSafeEval(input1: Any, input2: Any): Any =
-    sys.error(s"BinaryExpressions must override either eval or nullSafeEval")
+    throw QueryExecutionErrors.notOverrideExpectedMethodsError("BinaryExpressions",
+      "eval", "nullSafeEval")
 
   /**
    * Short hand for generating binary evaluation code.
@@ -722,7 +724,8 @@ abstract class TernaryExpression extends Expression with TernaryLike[Expression]
    * of evaluation process, we should override [[eval]].
    */
   protected def nullSafeEval(input1: Any, input2: Any, input3: Any): Any =
-    sys.error(s"TernaryExpressions must override either eval or nullSafeEval")
+    throw QueryExecutionErrors.notOverrideExpectedMethodsError("TernaryExpressions",
+      "eval", "nullSafeEval")
 
   /**
    * Short hand for generating ternary evaluation code.
@@ -822,7 +825,8 @@ abstract class QuaternaryExpression extends Expression with QuaternaryLike[Expre
    *  full control of evaluation process, we should override [[eval]].
    */
   protected def nullSafeEval(input1: Any, input2: Any, input3: Any, input4: Any): Any =
-    sys.error(s"QuaternaryExpressions must override either eval or nullSafeEval")
+    throw QueryExecutionErrors.notOverrideExpectedMethodsError("QuaternaryExpressions",
+      "eval", "nullSafeEval")
 
   /**
    * Short hand for generating quaternary evaluation code.
@@ -947,7 +951,8 @@ abstract class SeptenaryExpression extends Expression {
       input5: Any,
       input6: Any,
       input7: Option[Any]): Any = {
-    sys.error("SeptenaryExpression must override either eval or nullSafeEval")
+    throw QueryExecutionErrors.notOverrideExpectedMethodsError("SeptenaryExpression",
+      "eval", "nullSafeEval")
   }
 
   /**

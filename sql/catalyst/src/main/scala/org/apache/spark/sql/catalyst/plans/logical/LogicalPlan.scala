@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.LogicalPlanStats
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, LeafLike, UnaryLike}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types.StructType
 
 
@@ -85,7 +86,7 @@ abstract class LogicalPlan
     schema.map { field =>
       resolve(field.name :: Nil, resolver).map {
         case a: AttributeReference => a
-        case _ => sys.error(s"can not handle nested schema yet...  plan $this")
+        case _ => throw QueryExecutionErrors.resolveCannotHandleNestedSchema(this)
       }.getOrElse {
         throw new AnalysisException(
           s"Unable to resolve ${field.name} given [${output.map(_.name).mkString(", ")}]")

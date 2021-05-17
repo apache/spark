@@ -27,8 +27,8 @@ import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
-import org.apache.spark.sql.catalyst.trees.TreePattern.{EXISTS_SUBQUERY, FILTER, IN_SUBQUERY,
-  LIST_SUBQUERY, SCALAR_SUBQUERY}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{EXISTS_SUBQUERY, FILTER, IN_SUBQUERY, LIST_SUBQUERY, SCALAR_SUBQUERY}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -502,13 +502,14 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
           bottomPart = child
 
         case Filter(_, op) =>
-          sys.error(s"Correlated subquery has unexpected operator $op below filter")
+          throw QueryExecutionErrors.unexpectedOperatorInCorrelatedSubquery(op, " below filter")
 
-        case op @ _ => sys.error(s"Unexpected operator $op in correlated subquery")
+        case op @ _ => throw QueryExecutionErrors.unexpectedOperatorInCorrelatedSubquery(op)
       }
     }
 
-    sys.error("This line should be unreachable")
+    throw QueryExecutionErrors.unreachableError()
+
   }
 
   // Name of generated column used in rewrite below
@@ -576,7 +577,7 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
                 subqueryRoot = Project(projList ++ havingInputs, subqueryRoot)
               case s @ SubqueryAlias(alias, _) =>
                 subqueryRoot = SubqueryAlias(alias, subqueryRoot)
-              case op => sys.error(s"Unexpected operator $op in correlated subquery")
+              case op => throw QueryExecutionErrors.unexpectedOperatorInCorrelatedSubquery(op)
             }
 
             // CASE WHEN alwaysTrue IS NULL THEN resultOnZeroTups

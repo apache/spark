@@ -52,6 +52,12 @@ trait InvokeLike extends Expression with NonSQLExpression {
 
   protected lazy val needNullCheck: Boolean = propagateNull && arguments.exists(_.nullable)
   protected lazy val evaluatedArgs: Array[Object] = new Array[Object](arguments.length)
+  private lazy val boxingFn: Any => Any =
+    ScalaReflection.typeBoxedJavaMapping
+      .get(dataType)
+      .map(cls => v => cls.cast(v))
+      .getOrElse(identity)
+
 
   /**
    * Prepares codes for arguments.
@@ -122,12 +128,7 @@ trait InvokeLike extends Expression with NonSQLExpression {
    * @param dataType the data type of the return object
    * @return the return object of a method call
    */
-  def invoke(
-      obj: Any,
-      method: Method,
-      arguments: Seq[Expression],
-      input: InternalRow,
-      dataType: DataType): Any = {
+  def invoke(obj: Any, method: Method, input: InternalRow): Any = {
     var i = 0
     val len = arguments.length
     while (i < len) {
@@ -145,12 +146,7 @@ trait InvokeLike extends Expression with NonSQLExpression {
         case e: java.lang.reflect.InvocationTargetException if e.getCause != null =>
           throw e.getCause
       }
-      val boxedClass = ScalaReflection.typeBoxedJavaMapping.get(dataType)
-      if (boxedClass.isDefined) {
-        boxedClass.get.cast(ret)
-      } else {
-        ret
-      }
+      boxingFn(ret)
     }
   }
 
@@ -256,7 +252,7 @@ case class StaticInvoke(
   @transient lazy val method = findMethod(cls, functionName, argClasses)
 
   override def eval(input: InternalRow): Any = {
-    invoke(null, method, arguments, input, dataType)
+    invoke(null, method, input)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -358,7 +354,7 @@ case class Invoke(
       } else {
         obj.getClass.getMethod(functionName, argClasses: _*)
       }
-      invoke(obj, invokeMethod, arguments, input, dataType)
+      invoke(obj, invokeMethod, input)
     }
   }
 
@@ -491,7 +487,7 @@ case class NewInstance(
     val paramTypes = ScalaReflection.expressionJavaClasses(arguments)
     val getConstructor = (paramClazz: Seq[Class[_]]) => {
       ScalaReflection.findConstructor(cls, paramClazz).getOrElse {
-        sys.error(s"Couldn't find a valid constructor on $cls")
+        throw QueryExecutionErrors.constructorNotFoundError(cls.toString)
       }
     }
     outerPointer.map { p =>

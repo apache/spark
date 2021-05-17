@@ -22,6 +22,7 @@ import java.net.URISyntaxException
 import java.sql.{SQLException, SQLFeatureNotSupportedException}
 import java.time.{DateTimeException, LocalDate}
 import java.time.temporal.ChronoField
+import java.util.ConcurrentModificationException
 
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.codehaus.commons.compiler.{CompileException, InternalCompilerException}
@@ -31,7 +32,9 @@ import org.apache.spark.executor.CommitDeniedException
 import org.apache.spark.memory.SparkOutOfMemoryError
 import org.apache.spark.sql.catalyst.analysis.UnresolvedGenerator
 import org.apache.spark.sql.catalyst.catalog.CatalogDatabase
-import org.apache.spark.sql.catalyst.expressions.{Expression, UnevaluableAggregate}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression, UnevaluableAggregate}
+import org.apache.spark.sql.catalyst.plans.JoinType
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.expressions.Transform
@@ -245,6 +248,51 @@ object QueryExecutionErrors {
   def methodNotDeclaredError(name: String): Throwable = {
     new NoSuchMethodException(s"""A method named "$name" is not declared """ +
       "in any enclosing class nor any supertype")
+  }
+
+  def constructorNotFoundError(cls: String): Throwable = {
+    new RuntimeException(s"Couldn't find a valid constructor on $cls")
+  }
+
+  def primaryConstructorNotFoundError(cls: Class[_]): Throwable = {
+    new RuntimeException(s"Couldn't find a primary constructor on $cls")
+  }
+
+  def unsupportedNaturalJoinTypeError(joinType: JoinType): Throwable = {
+    new RuntimeException("Unsupported natural join type " + joinType)
+  }
+
+  def notExpectedUnresolvedEncoderError(attr: AttributeReference): Throwable = {
+    new RuntimeException(s"Unresolved encoder expected, but $attr was found.")
+  }
+
+  def unsupportedEncoderError(): Throwable = {
+    new RuntimeException("Only expression encoders are supported for now.")
+  }
+
+  def notOverrideExpectedMethodsError(className: String, m1: String, m2: String): Throwable = {
+    new RuntimeException(s"$className must override either $m1 or $m2")
+  }
+
+  def failToConvertValueToJsonError(value: AnyRef, cls: Class[_], dataType: DataType): Throwable = {
+    new RuntimeException(s"Failed to convert value $value (class of $cls) " +
+      s"with the type of $dataType to JSON.")
+  }
+
+  def unexpectedOperatorInCorrelatedSubquery(op: LogicalPlan, pos: String = ""): Throwable = {
+    new RuntimeException(s"Unexpected operator $op in correlated subquery" + pos)
+  }
+
+  def unreachableError(err: String = ""): Throwable = {
+    new RuntimeException("This line should be unreachable" + err)
+  }
+
+  def unsupportedRoundingMode(roundMode: BigDecimal.RoundingMode.Value): Throwable = {
+    new RuntimeException(s"Not supported rounding mode: $roundMode")
+  }
+
+  def resolveCannotHandleNestedSchema(plan: LogicalPlan): Throwable = {
+    new RuntimeException(s"Can not handle nested schema yet...  plan $plan")
   }
 
   def inputExternalRowCannotBeNullError(): RuntimeException = {
@@ -873,5 +921,14 @@ object QueryExecutionErrors {
 
   def cannotCastUTF8StringToDataTypeError(s: UTF8String, to: DataType): Throwable = {
     new DateTimeException(s"Cannot cast $s to $to.")
+  }
+
+  def registeringStreamingQueryListenerError(e: Exception): Throwable = {
+    new SparkException("Exception when registering StreamingQueryListener", e)
+  }
+
+  def concurrentQueryInstanceError(): Throwable = {
+    new ConcurrentModificationException(
+      "Another instance of this query was just started by a concurrent session.")
   }
 }
