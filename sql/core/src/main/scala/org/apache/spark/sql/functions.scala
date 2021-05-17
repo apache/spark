@@ -2873,7 +2873,7 @@ object functions {
    * @since 3.2.0
    */
   def sentences(string: Column, language: Column, country: Column): Column = withExpr {
-    Sentences(string.expr, language.expr, language.expr)
+    Sentences(string.expr, language.expr, country.expr)
   }
 
   /**

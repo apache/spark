@@ -2702,7 +2702,7 @@ def sentences(string, language=lit(""), country=lit("")):
     >>> df = spark.createDataFrame([["This is an example sentence."]], ["string"])
     >>> df.select(sentences(df.string, lit("en"), lit("US"))).show(truncate=False)
     +-----------------------------------+
-    |sentences(str, en, US)             |
+    |sentences(string, en, US)          |
     +-----------------------------------+
     |[[This, is, an, example, sentence]]|
     +-----------------------------------+
