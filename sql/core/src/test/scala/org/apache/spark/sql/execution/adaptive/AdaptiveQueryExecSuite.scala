@@ -1643,10 +1643,9 @@ class AdaptiveQueryExecSuite
   }
 
   test("SPARK-35414: Submit broadcast job first to avoid broadcast timeout in AQE") {
-    val broadcastTimeoutInSec = 10
     val shuffleMapTaskParallelism = 10
 
-    val df = spark.sparkContext.parallelize(Range(0, 10), shuffleMapTaskParallelism)
+    val df = spark.sparkContext.parallelize(Range(0, 26), shuffleMapTaskParallelism)
       .flatMap(x => {
         Thread.sleep(10)
         for (i <- Range(0, 100)) yield (x % 26, x % 10)
@@ -1665,8 +1664,7 @@ class AdaptiveQueryExecSuite
     }
     spark.sparkContext.addSparkListener(listener)
 
-    withSQLConf(SQLConf.BROADCAST_TIMEOUT.key -> broadcastTimeoutInSec.toString,
-      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
       val result = testDf.collect()
       assert(result.length == 26)
       val sortedStageInfos = stageInfos.sortBy(_.submissionTime)
