@@ -75,7 +75,7 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
       CodegenMetrics.METRIC_GENERATED_CLASS_BYTECODE_SIZE.getSnapshot.getValues
     val metricGeneratedMethodByteCodeSizeSnapshot =
       CodegenMetrics.METRIC_GENERATED_METHOD_BYTECODE_SIZE.getSnapshot.getValues
-    GenerateOrdering.generate(Add(Literal(123), Literal(1)).asc :: Nil)
+    GenerateOrdering.generate(Subtract(Literal(123), Literal(1)).asc :: Nil)
     // The state of metrics may change when using different versions of janino or
     // the operator implementation changes.
     assert(CodegenMetrics.METRIC_GENERATED_CLASS_BYTECODE_SIZE.getSnapshot.getValues
