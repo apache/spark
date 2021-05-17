@@ -638,12 +638,15 @@ object RemoveDuplicatedBranches extends Rule[LogicalPlan] with PredicateHelper {
     override def hashCode: Int = br._1.semanticHash()
   }
 
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+  def apply(plan: LogicalPlan): LogicalPlan =
+    if (!SQLConf.get.deduplicateCaseWhenBranchesEnabled) {
+      plan
+    } else plan transform {
     case q: LogicalPlan => q transformExpressionsUp {
       case c @ CaseWhen(branches, _) if branches.length > 1 =>
-        val equivalentBranchSet = branches.map(EquivalentBranch).toSet
-        if (equivalentBranchSet.size < branches.length) {
-          val dedup = equivalentBranchSet.map(_.br).toSeq
+        val distinctEquivalentBranches = branches.map(EquivalentBranch).distinct
+        if (distinctEquivalentBranches.size < branches.length) {
+          val dedup = distinctEquivalentBranches.map(_.br)
           c.copy(branches = dedup)
         } else {
           c

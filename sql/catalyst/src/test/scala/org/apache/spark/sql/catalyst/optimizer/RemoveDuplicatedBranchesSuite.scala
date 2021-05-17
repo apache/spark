@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.LongType
 
 class RemoveDuplicatedBranchesSuite
@@ -54,34 +55,38 @@ class RemoveDuplicatedBranchesSuite
   }
 
   test("remove basic duplicate branches") {
-    val caseWhen = CaseWhen(Seq((a, Literal(1)), (c, Literal(2))), Some(Literal(3)))
-    val dupCaseWhen1 = CaseWhen(
-      Seq((a, Literal(1)), (a, Literal(1)), (a, Literal(1)),
-        (c, Literal(2)), (c, Literal(2)), (c, Literal(2))), Some(Literal(3))
-    )
-    val dupCaseWhen2 = CaseWhen(
-      Seq((a, Literal(1)), (c, Literal(2)), (a, Literal(1)),
-        (c, Literal(2)), (a, Literal(1)), (c, Literal(2))), Some(Literal(3))
-    )
-    assertEquivalent(EqualTo(dupCaseWhen1, Literal(4)), EqualTo(caseWhen, Literal(4)))
-    assertEquivalent(EqualTo(dupCaseWhen2, Literal(4)), EqualTo(caseWhen, Literal(4)))
+    withSQLConf(SQLConf.DEDUP_CASE_WHEN_BRANCHES_ENABLED.key -> "true") {
+      val caseWhen = CaseWhen(Seq((a, Literal(1)), (c, Literal(2))), Some(Literal(3)))
+      val dupCaseWhen1 = CaseWhen(
+        Seq((a, Literal(1)), (a, Literal(1)), (a, Literal(1)),
+          (c, Literal(2)), (c, Literal(2)), (c, Literal(2))), Some(Literal(3))
+      )
+      val dupCaseWhen2 = CaseWhen(
+        Seq((a, Literal(1)), (c, Literal(2)), (a, Literal(1)),
+          (c, Literal(2)), (a, Literal(1)), (c, Literal(2))), Some(Literal(3))
+      )
+      assertEquivalent(EqualTo(dupCaseWhen1, Literal(4)), EqualTo(caseWhen, Literal(4)))
+      assertEquivalent(EqualTo(dupCaseWhen2, Literal(4)), EqualTo(caseWhen, Literal(4)))
+    }
   }
 
   test("remove duplicate branches with semanticEquals") {
-    var caseWhen = CaseWhen(Seq((b, Literal("b"))))
-    var dupCaseWhen = CaseWhen(Seq((b, Literal("b")),
-      (EqualTo(UnresolvedAttribute("B").withName("b"), Literal("b")), Literal("b"))))
-    assertEquivalent(EqualTo(dupCaseWhen, Literal("b")), EqualTo(caseWhen, Literal("b")))
+    withSQLConf(SQLConf.DEDUP_CASE_WHEN_BRANCHES_ENABLED.key -> "true") {
+      var caseWhen = CaseWhen(Seq((b, Literal("b"))))
+      var dupCaseWhen = CaseWhen(Seq((b, Literal("b")),
+        (EqualTo(UnresolvedAttribute("B").withName("b"), Literal("b")), Literal("b"))))
+      assertEquivalent(EqualTo(dupCaseWhen, Literal("b")), EqualTo(caseWhen, Literal("b")))
 
-    // with needTimeZone
-    val literal = Literal(1)
-    val cast = EqualTo(Cast(literal, LongType), Literal(100))
-    val castWithTimeZoneId =
-      EqualTo(Cast(literal, LongType, Some(TimeZone.getDefault.getID)), Literal(100))
-    caseWhen = CaseWhen(Seq((cast, Literal(1))), Some(Literal(3)))
-    dupCaseWhen = CaseWhen(
-      Seq((cast, Literal(1)), (castWithTimeZoneId, Literal(1))), Some(Literal(3))
-    )
-    assertEquivalent(EqualTo(dupCaseWhen, Literal(4)), EqualTo(caseWhen, Literal(4)))
+      // with needTimeZone
+      val literal = Literal(1)
+      val cast = EqualTo(Cast(literal, LongType), Literal(100))
+      val castWithTimeZoneId =
+        EqualTo(Cast(literal, LongType, Some(TimeZone.getDefault.getID)), Literal(100))
+      caseWhen = CaseWhen(Seq((cast, Literal(1))), Some(Literal(3)))
+      dupCaseWhen = CaseWhen(
+        Seq((cast, Literal(1)), (castWithTimeZoneId, Literal(1))), Some(Literal(3))
+      )
+      assertEquivalent(EqualTo(dupCaseWhen, Literal(4)), EqualTo(caseWhen, Literal(4)))
+    }
   }
 }
