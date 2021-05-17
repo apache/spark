@@ -41,10 +41,10 @@ import org.apache.spark.sql.types._
  *     +- LocalLimit 5
  *       +- LocalRelation <empty>, [s#0]
  * After:
- * +- Project [concat_ws(_gen_alias_2#2, _gen_alias_3#3) AS concat_ws(s.a, s.b)#1]
+ * +- Project [concat_ws(_extract_a#2, _extract_b#3) AS concat_ws(s.a, s.b)#1]
  *   +- GlobalLimit 5
  *     +- LocalLimit 5
- *       +- Project [s#0.a AS _gen_alias_2#2, s#0.b AS _gen_alias_3#3]
+ *       +- Project [s#0.a AS _extract_a#2, s#0.b AS _extract_b#3]
  *         +- LocalRelation <empty>, [s#0]
  *
  * Example 2: Project above Filter
@@ -56,25 +56,25 @@ import org.apache.spark.sql.types._
  *       +- LocalLimit 5
  *         +- LocalRelation <empty>, [s#0]
  * After:
- * +- Project [_gen_alias_2#2 AS s.a#1]
- *   +- Filter (length(_gen_alias_3#3) > 2)
+ * +- Project [_extract_a#2 AS s.a#1]
+ *   +- Filter (length(_extract_b#3) > 2)
  *     +- GlobalLimit 5
  *       +- LocalLimit 5
- *         +- Project [s#0.a AS _gen_alias_2#2, s#0.b AS _gen_alias_3#3]
+ *         +- Project [s#0.a AS _extract_a#2, s#0.b AS _extract_b#3]
  *           +- LocalRelation <empty>, [s#0]
  *
- * Example 3: Nested columns in nested columns
- * -------------------------------------------
+ * Example 3: Nested fields with referenced parents
+ * ------------------------------------------------
  * Before:
  * +- Project [s#0.a AS s.a#1, s#0.a.a1 AS s.a.a1#2]
  *   +- GlobalLimit 5
  *     +- LocalLimit 5
  *       +- LocalRelation <empty>, [s#0]
  * After:
- * +- Project [_gen_alias_3#3 AS s.a#1, _gen_alias_3#3.name AS s.a.a1#2]
+ * +- Project [_extract_a#3 AS s.a#1, _extract_a#3.name AS s.a.a1#2]
  *   +- GlobalLimit 5
  *     +- LocalLimit 5
- *       +- Project [s#0.a AS _gen_alias_3#3]
+ *       +- Project [s#0.a AS _extract_a#3]
  *         +- LocalRelation <empty>, [s#0]
  *
  * The schema of the datasource relation will be pruned in the [[SchemaPruning]] optimizer rule.
@@ -129,21 +129,31 @@ object NestedColumnAliasing {
     // Each expression can contain multiple nested fields.
     // Note that we keep the original names to deliver to parquet in a case-sensitive way.
     // A new alias is created for each nested field.
-    val nestedFieldToAlias = attributeToExtractValues.flatMap { case (_, nestedFields) =>
-      nestedFields.map { f =>
-        val exprId = NamedExpression.newExprId
-        val fieldName = f match {
-          case g: GetStructField => g.extractFieldName
-          case g: GetArrayStructFields => g.field.name
+    // Implementation detail: we don't use mapValues, because it creates a mutable view.
+    val attributeToExtractValuesAndAliases =
+      attributeToExtractValues.map { case (attr, evSeq) =>
+        val evAliasSeq = evSeq.map { ev =>
+          val fieldName = ev match {
+            case g: GetStructField => g.extractFieldName
+            case g: GetArrayStructFields => g.field.name
+          }
+          ev -> Alias(ev, s"_extract_$fieldName")()
         }
-        f -> Alias(f, s"_extract_${fieldName}")(exprId, Seq.empty, None)
+
+        attr -> evAliasSeq
       }
-    }
+
+    val nestedFieldToAlias = attributeToExtractValuesAndAliases.values.flatten.toMap
 
     // A reference attribute can have multiple aliases for nested fields.
-    val attrToAliases = attributeToExtractValues.map { case (attr, nestedFields) =>
-      attr.exprId -> nestedFields.map(nestedFieldToAlias)
-    }
+    val attrToAliases = AttributeMap(
+      attributeToExtractValuesAndAliases.map { case (attr, evAliasSeq) =>
+        val aliasSeq = evAliasSeq.map { case (_, alias) =>
+          alias
+        }
+        attr -> aliasSeq
+      }
+    )
 
     plan match {
       case Project(projectList, child) =>
@@ -176,9 +186,9 @@ object NestedColumnAliasing {
   def replaceWithAliases(
       plan: LogicalPlan,
       nestedFieldToAlias: Map[ExtractValue, Alias],
-      attrToAliases: Map[ExprId, Seq[Alias]]): LogicalPlan = {
+      attrToAliases: AttributeMap[Seq[Alias]]): LogicalPlan = {
     plan.withNewChildren(plan.children.map { plan =>
-      Project(plan.output.flatMap(a => attrToAliases.getOrElse(a.exprId, Seq(a))), plan)
+      Project(plan.output.flatMap(a => attrToAliases.getOrElse(a, Seq(a))), plan)
     }).transformExpressions {
       case f: ExtractValue if nestedFieldToAlias.contains(f) =>
         nestedFieldToAlias(f).toAttribute
@@ -268,7 +278,7 @@ object NestedColumnAliasing {
         val numUsedNestedFields = dedupNestedFields.map(_.canonicalized).distinct
           .map { nestedField => totalFieldNum(nestedField.dataType) }.sum
         if (numUsedNestedFields < totalFieldNum(attr.dataType)) {
-          Some((attr, dedupNestedFields.toSeq))
+          Some((attr, dedupNestedFields))
         } else {
           None
         }
