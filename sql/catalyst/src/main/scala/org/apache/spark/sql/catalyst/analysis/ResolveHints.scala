@@ -24,7 +24,7 @@ import scala.collection.mutable
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Expression, IntegerLiteral, SortOrder}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.CurrentOrigin
+import org.apache.spark.sql.catalyst.trees.{AlwaysProcess, CurrentOrigin}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 
@@ -143,7 +143,8 @@ object ResolveHints {
       }
     }
 
-    def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperatorsUp {
+    def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
+      AlwaysProcess.fn, ruleId) {
       case h: UnresolvedHint if STRATEGY_HINT_NAMES.contains(h.name.toUpperCase(Locale.ROOT)) =>
         if (h.parameters.isEmpty) {
           // If there is no table alias specified, apply the hint on the entire subtree.
@@ -187,10 +188,9 @@ object ResolveHints {
       def createRepartitionByExpression(
           numPartitions: Option[Int], partitionExprs: Seq[Any]): RepartitionByExpression = {
         val sortOrders = partitionExprs.filter(_.isInstanceOf[SortOrder])
-        if (sortOrders.nonEmpty) throw new IllegalArgumentException(
-          s"""Invalid partitionExprs specified: $sortOrders
-             |For range partitioning use REPARTITION_BY_RANGE instead.
-           """.stripMargin)
+        if (sortOrders.nonEmpty) {
+          throw QueryCompilationErrors.invalidRepartitionExpressionsError(sortOrders)
+        }
         val invalidParams = partitionExprs.filter(!_.isInstanceOf[UnresolvedAttribute])
         if (invalidParams.nonEmpty) {
           throw QueryCompilationErrors.invalidHintParameterError(hintName, invalidParams)
@@ -247,7 +247,8 @@ object ResolveHints {
       }
     }
 
-    def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperators {
+    def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
+      AlwaysProcess.fn, ruleId) {
       case hint @ UnresolvedHint(hintName, _, _) => hintName.toUpperCase(Locale.ROOT) match {
           case "REPARTITION" =>
             createRepartition(shuffle = true, hint)

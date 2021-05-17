@@ -60,7 +60,7 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
       .map(new File(_)).getOrElse(Utils.createTempDir(namePrefix = "test-spark"))
   private val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
   val hiveVersion = if (SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_9)) {
-    "2.3.7"
+    HiveUtils.builtinHiveVersion
   } else {
     "1.2.1"
   }
@@ -194,7 +194,7 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
     // scalastyle:on line.size.limit
 
     if (PROCESS_TABLES.testingVersions.isEmpty) {
-      fail("Fail to get the lates Spark versions to test.")
+      logError("Fail to get the latest Spark versions to test.")
     }
 
     PROCESS_TABLES.testingVersions.zipWithIndex.foreach { case (version, index) =>
@@ -232,25 +232,27 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
       "--conf", s"${WAREHOUSE_PATH.key}=${wareHousePath.getCanonicalPath}",
       "--driver-java-options", s"-Dderby.system.home=${wareHousePath.getCanonicalPath}",
       unusedJar.toString)
-    runSparkSubmit(args)
+    if (PROCESS_TABLES.testingVersions.nonEmpty) runSparkSubmit(args)
   }
 }
 
 object PROCESS_TABLES extends QueryTest with SQLTestUtils {
-  val releaseMirror = "https://dist.apache.org/repos/dist/release"
+  val releaseMirror = sys.env.getOrElse("SPARK_RELEASE_MIRROR",
+    "https://dist.apache.org/repos/dist/release")
   // Tests the latest version of every release line.
   val testingVersions: Seq[String] = {
     import scala.io.Source
-    val versions: Seq[String] = try {
-      Source.fromURL(s"${releaseMirror}/spark").mkString
+    val versions: Seq[String] = try Utils.tryWithResource(
+      Source.fromURL(s"$releaseMirror/spark")) { source =>
+      source.mkString
         .split("\n")
-        .filter(_.contains("""<li><a href="spark-"""))
+        .filter(_.contains("""<a href="spark-"""))
         .filterNot(_.contains("preview"))
         .map("""<a href="spark-(\d.\d.\d)/">""".r.findFirstMatchIn(_).get.group(1))
         .filter(_ < org.apache.spark.SPARK_VERSION)
     } catch {
-      // do not throw exception during object initialization.
-      case NonFatal(_) => Seq("3.0.1", "2.4.7") // A temporary fallback to use a specific version
+      // Do not throw exception during object initialization.
+      case NonFatal(_) => Nil
     }
     versions
       .filter(v => v.startsWith("3") || !TestUtils.isPythonVersionAtLeast38())

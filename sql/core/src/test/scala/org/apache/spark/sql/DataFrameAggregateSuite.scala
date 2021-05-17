@@ -17,10 +17,13 @@
 
 package org.apache.spark.sql
 
+import java.time.{Duration, Period}
+
 import scala.util.Random
 
 import org.scalatest.matchers.must.Matchers.the
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
@@ -297,7 +300,7 @@ class DataFrameAggregateSuite extends QueryTest
       Row(2.0, 2.0))
 
     checkAnswer(
-      testData2.agg(avg($"a"), sumDistinct($"a")), // non-partial
+      testData2.agg(avg($"a"), sumDistinct($"a")), // non-partial and test deprecated version
       Row(2.0, 6.0) :: Nil)
 
     checkAnswer(
@@ -305,7 +308,7 @@ class DataFrameAggregateSuite extends QueryTest
       Row(new java.math.BigDecimal(2)))
 
     checkAnswer(
-      decimalData.agg(avg($"a"), sumDistinct($"a")), // non-partial
+      decimalData.agg(avg($"a"), sum_distinct($"a")), // non-partial
       Row(new java.math.BigDecimal(2), new java.math.BigDecimal(6)) :: Nil)
 
     checkAnswer(
@@ -314,7 +317,7 @@ class DataFrameAggregateSuite extends QueryTest
     // non-partial
     checkAnswer(
       decimalData.agg(
-        avg($"a" cast DecimalType(10, 2)), sumDistinct($"a" cast DecimalType(10, 2))),
+        avg($"a" cast DecimalType(10, 2)), sum_distinct($"a" cast DecimalType(10, 2))),
       Row(new java.math.BigDecimal(2), new java.math.BigDecimal(6)) :: Nil)
   }
 
@@ -324,11 +327,11 @@ class DataFrameAggregateSuite extends QueryTest
       Row(2.0))
 
     checkAnswer(
-      testData3.agg(avg($"b"), countDistinct($"b")),
+      testData3.agg(avg($"b"), count_distinct($"b")),
       Row(2.0, 1))
 
     checkAnswer(
-      testData3.agg(avg($"b"), sumDistinct($"b")), // non-partial
+      testData3.agg(avg($"b"), sum_distinct($"b")), // non-partial
       Row(2.0, 2.0))
   }
 
@@ -339,7 +342,7 @@ class DataFrameAggregateSuite extends QueryTest
       Row(null))
 
     checkAnswer(
-      emptyTableData.agg(avg($"a"), sumDistinct($"b")), // non-partial
+      emptyTableData.agg(avg($"a"), sum_distinct($"b")), // non-partial
       Row(null, null))
   }
 
@@ -347,7 +350,7 @@ class DataFrameAggregateSuite extends QueryTest
     assert(testData2.count() === testData2.rdd.map(_ => 1).count())
 
     checkAnswer(
-      testData2.agg(count($"a"), sumDistinct($"a")), // non-partial
+      testData2.agg(count($"a"), sum_distinct($"a")), // non-partial
       Row(6, 6.0))
   }
 
@@ -364,12 +367,12 @@ class DataFrameAggregateSuite extends QueryTest
 
     checkAnswer(
       testData3.agg(
-        count($"a"), count($"b"), count(lit(1)), countDistinct($"a"), countDistinct($"b")),
+        count($"a"), count($"b"), count(lit(1)), count_distinct($"a"), count_distinct($"b")),
       Row(2, 1, 2, 2, 1)
     )
 
     checkAnswer(
-      testData3.agg(count($"b"), countDistinct($"b"), sumDistinct($"b")), // non-partial
+      testData3.agg(count($"b"), count_distinct($"b"), sum_distinct($"b")), // non-partial
       Row(1, 1, 2)
     )
   }
@@ -384,17 +387,17 @@ class DataFrameAggregateSuite extends QueryTest
       .toDF("key1", "key2", "key3")
 
     checkAnswer(
-      df1.agg(countDistinct($"key1", $"key2")),
+      df1.agg(count_distinct($"key1", $"key2")),
       Row(3)
     )
 
     checkAnswer(
-      df1.agg(countDistinct($"key1", $"key2", $"key3")),
+      df1.agg(count_distinct($"key1", $"key2", $"key3")),
       Row(3)
     )
 
     checkAnswer(
-      df1.groupBy($"key1").agg(countDistinct($"key2", $"key3")),
+      df1.groupBy($"key1").agg(count_distinct($"key2", $"key3")),
       Seq(Row("a", 2), Row("x", 1))
     )
   }
@@ -402,7 +405,7 @@ class DataFrameAggregateSuite extends QueryTest
   test("zero count") {
     val emptyTableData = Seq.empty[(Int, Int)].toDF("a", "b")
     checkAnswer(
-      emptyTableData.agg(count($"a"), sumDistinct($"a")), // non-partial
+      emptyTableData.agg(count($"a"), sum_distinct($"a")), // non-partial
       Row(0, null))
   }
 
@@ -433,7 +436,7 @@ class DataFrameAggregateSuite extends QueryTest
   test("zero sum distinct") {
     val emptyTableData = Seq.empty[(Int, Int)].toDF("a", "b")
     checkAnswer(
-      emptyTableData.agg(sumDistinct($"a")),
+      emptyTableData.agg(sum_distinct($"a")),
       Row(null))
   }
 
@@ -622,7 +625,7 @@ class DataFrameAggregateSuite extends QueryTest
     val df = Seq((1, 3, "a"), (1, 2, "b"), (3, 4, "c"), (3, 4, "c"), (3, 5, "d"))
       .toDF("x", "y", "z")
     checkAnswer(
-      df.groupBy($"x").agg(countDistinct($"y"), sort_array(collect_list($"z"))),
+      df.groupBy($"x").agg(count_distinct($"y"), sort_array(collect_list($"z"))),
       Seq(Row(1, 2, Seq("a", "b")), Row(3, 2, Seq("c", "c", "d"))))
   }
 
@@ -837,7 +840,7 @@ class DataFrameAggregateSuite extends QueryTest
     )
   }
 
-  test("SPARK-27581: DataFrame countDistinct(\"*\") shouldn't fail with AnalysisException") {
+  test("SPARK-27581: DataFrame count_distinct(\"*\") shouldn't fail with AnalysisException") {
     val df = sql("select id % 100 from range(100000)")
     val distinctCount1 = df.select(expr("count(distinct(*))"))
     val distinctCount2 = df.select(countDistinct("*"))
@@ -1076,6 +1079,129 @@ class DataFrameAggregateSuite extends QueryTest
     assert(aggs.length == 2)
     assert(aggs.head.output.map(_.dataType.simpleString).head ===
       aggs.last.output.map(_.dataType.simpleString).head)
+  }
+
+  test("SPARK-33726: Aggregation on a table where a column name is reused") {
+    val query =
+      """|with T as (
+         |select id as a, -id as x from range(3)),
+         |U as (
+         |select id as b, cast(id as string) as x from range(3))
+         |select T.x, U.x, min(a) as ma, min(b) as mb
+         |from T join U on a=b
+         |group by U.x, T.x
+      """.stripMargin
+    val df = spark.sql(query)
+    checkAnswer(df, Row(0, "0", 0, 0) :: Row(-1, "1", 1, 1) :: Row(-2, "2", 2, 2) :: Nil)
+  }
+
+  test("SPARK-34713: group by CreateStruct with ExtractValue") {
+    val structDF = Seq(Tuple1(1 -> 1)).toDF("col")
+    checkAnswer(structDF.groupBy(struct($"col._1")).count().select("count"), Row(1))
+
+    val arrayOfStructDF = Seq(Tuple1(Seq(1 -> 1))).toDF("col")
+    checkAnswer(arrayOfStructDF.groupBy(struct($"col._1")).count().select("count"), Row(1))
+
+    val mapDF = Seq(Tuple1(Map("a" -> "a"))).toDF("col")
+    checkAnswer(mapDF.groupBy(struct($"col.a")).count().select("count"), Row(1))
+
+    val nonStringMapDF = Seq(Tuple1(Map(1 -> 1))).toDF("col")
+    // Spark implicit casts string literal "a" to int to match the key type.
+    checkAnswer(nonStringMapDF.groupBy(struct($"col.a")).count().select("count"), Row(1))
+
+    val arrayDF = Seq(Tuple1(Seq(1))).toDF("col")
+    val e = intercept[AnalysisException](arrayDF.groupBy(struct($"col.a")).count())
+    assert(e.message.contains("requires integral type"))
+  }
+
+  test("SPARK-34716: Support ANSI SQL intervals by the aggregate function `sum`") {
+    val df = Seq((1, Period.ofMonths(10), Duration.ofDays(10)),
+      (2, Period.ofMonths(1), Duration.ofDays(1)),
+      (2, null, null),
+      (3, Period.ofMonths(-3), Duration.ofDays(-6)),
+      (3, Period.ofMonths(21), Duration.ofDays(-5)))
+      .toDF("class", "year-month", "day-time")
+
+    val df2 = Seq((Period.ofMonths(Int.MaxValue), Duration.ofDays(106751991)),
+      (Period.ofMonths(10), Duration.ofDays(10)))
+      .toDF("year-month", "day-time")
+
+    val sumDF = df.select(sum($"year-month"), sum($"day-time"))
+    checkAnswer(sumDF, Row(Period.of(2, 5, 0), Duration.ofDays(0)))
+    assert(find(sumDF.queryExecution.executedPlan)(_.isInstanceOf[HashAggregateExec]).isDefined)
+    assert(sumDF.schema == StructType(Seq(StructField("sum(year-month)", YearMonthIntervalType),
+      StructField("sum(day-time)", DayTimeIntervalType))))
+
+    val sumDF2 = df.groupBy($"class").agg(sum($"year-month"), sum($"day-time"))
+    checkAnswer(sumDF2, Row(1, Period.ofMonths(10), Duration.ofDays(10)) ::
+      Row(2, Period.ofMonths(1), Duration.ofDays(1)) ::
+      Row(3, Period.of(1, 6, 0), Duration.ofDays(-11)) :: Nil)
+    assert(find(sumDF2.queryExecution.executedPlan)(_.isInstanceOf[HashAggregateExec]).isDefined)
+    assert(sumDF2.schema == StructType(Seq(StructField("class", IntegerType, false),
+      StructField("sum(year-month)", YearMonthIntervalType),
+      StructField("sum(day-time)", DayTimeIntervalType))))
+
+    val error = intercept[SparkException] {
+      checkAnswer(df2.select(sum($"year-month")), Nil)
+    }
+    assert(error.toString contains "java.lang.ArithmeticException: integer overflow")
+
+    val error2 = intercept[SparkException] {
+      checkAnswer(df2.select(sum($"day-time")), Nil)
+    }
+    assert(error2.toString contains "java.lang.ArithmeticException: long overflow")
+  }
+
+  test("SPARK-34837: Support ANSI SQL intervals by the aggregate function `avg`") {
+    val df = Seq((1, Period.ofMonths(10), Duration.ofDays(10)),
+      (2, Period.ofMonths(1), Duration.ofDays(1)),
+      (2, null, null),
+      (3, Period.ofMonths(-3), Duration.ofDays(-6)),
+      (3, Period.ofMonths(21), Duration.ofDays(-5)))
+      .toDF("class", "year-month", "day-time")
+
+    val df2 = Seq((Period.ofMonths(Int.MaxValue), Duration.ofDays(106751991)),
+      (Period.ofMonths(10), Duration.ofDays(10)))
+      .toDF("year-month", "day-time")
+
+    val avgDF = df.select(avg($"year-month"), avg($"day-time"))
+    checkAnswer(avgDF, Row(Period.ofMonths(7), Duration.ofDays(0)))
+    assert(find(avgDF.queryExecution.executedPlan)(_.isInstanceOf[HashAggregateExec]).isDefined)
+    assert(avgDF.schema == StructType(Seq(StructField("avg(year-month)", YearMonthIntervalType),
+      StructField("avg(day-time)", DayTimeIntervalType))))
+
+    val avgDF2 = df.groupBy($"class").agg(avg($"year-month"), avg($"day-time"))
+    checkAnswer(avgDF2, Row(1, Period.ofMonths(10), Duration.ofDays(10)) ::
+      Row(2, Period.ofMonths(1), Duration.ofDays(1)) ::
+      Row(3, Period.ofMonths(9), Duration.ofDays(-5).plusHours(-12)) :: Nil)
+    assert(find(avgDF2.queryExecution.executedPlan)(_.isInstanceOf[HashAggregateExec]).isDefined)
+    assert(avgDF2.schema == StructType(Seq(StructField("class", IntegerType, false),
+      StructField("avg(year-month)", YearMonthIntervalType),
+      StructField("avg(day-time)", DayTimeIntervalType))))
+
+    val error = intercept[SparkException] {
+      checkAnswer(df2.select(avg($"year-month")), Nil)
+    }
+    assert(error.toString contains "java.lang.ArithmeticException: integer overflow")
+
+    val error2 = intercept[SparkException] {
+      checkAnswer(df2.select(avg($"day-time")), Nil)
+    }
+    assert(error2.toString contains "java.lang.ArithmeticException: long overflow")
+
+    val df3 = df.filter($"class" > 4)
+    val avgDF3 = df3.select(avg($"year-month"), avg($"day-time"))
+    checkAnswer(avgDF3, Row(null, null) :: Nil)
+
+    val avgDF4 = df3.groupBy($"class").agg(avg($"year-month"), avg($"day-time"))
+    checkAnswer(avgDF4, Nil)
+  }
+
+  test("SPARK-35412: groupBy of year-month/day-time intervals should work") {
+    val df1 = Seq(Duration.ofDays(1)).toDF("a").groupBy("a").count()
+    checkAnswer(df1, Row(Duration.ofDays(1), 1))
+    val df2 = Seq(Period.ofYears(1)).toDF("a").groupBy("a").count()
+    checkAnswer(df2, Row(Period.ofYears(1), 1))
   }
 }
 

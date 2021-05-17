@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnresolvedSeed
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.trees.TreePattern.{CURRENT_LIKE, TreePattern}
 import org.apache.spark.sql.catalyst.util.RandomUUIDGenerator
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -51,6 +52,9 @@ case class PrintToStderr(child: Expression) extends UnaryExpression {
          | ${ev.value} = $c;
        """.stripMargin)
   }
+
+  override protected def withNewChildInternal(newChild: Expression): PrintToStderr =
+    copy(child = newChild)
 }
 
 /**
@@ -66,11 +70,13 @@ case class PrintToStderr(child: Expression) extends UnaryExpression {
   """,
   since = "3.1.0",
   group = "misc_funcs")
-case class RaiseError(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+case class RaiseError(child: Expression, dataType: DataType)
+  extends UnaryExpression with ImplicitCastInputTypes {
+
+  def this(child: Expression) = this(child, NullType)
 
   override def foldable: Boolean = false
   override def nullable: Boolean = true
-  override def dataType: DataType = NullType
   override def inputTypes: Seq[AbstractDataType] = Seq(StringType)
 
   override def prettyName: String = "raise_error"
@@ -98,6 +104,13 @@ case class RaiseError(child: Expression) extends UnaryExpression with ImplicitCa
       value = JavaCode.defaultLiteral(dataType)
     )
   }
+
+  override protected def withNewChildInternal(newChild: Expression): RaiseError =
+    copy(child = newChild)
+}
+
+object RaiseError {
+  def apply(child: Expression): RaiseError = new RaiseError(child)
 }
 
 /**
@@ -127,6 +140,9 @@ case class AssertTrue(left: Expression, right: Expression, child: Expression)
 
   override def flatArguments: Iterator[Any] = Iterator(left, right)
   override def exprsReplaced: Seq[Expression] = Seq(left, right)
+
+  override protected def withNewChildInternal(newChild: Expression): AssertTrue =
+    copy(child = newChild)
 }
 
 object AssertTrue {
@@ -149,6 +165,7 @@ case class CurrentDatabase() extends LeafExpression with Unevaluable {
   override def dataType: DataType = StringType
   override def nullable: Boolean = false
   override def prettyName: String = "current_database"
+  final override val nodePatterns: Seq[TreePattern] = Seq(CURRENT_LIKE)
 }
 
 /**
@@ -167,6 +184,7 @@ case class CurrentCatalog() extends LeafExpression with Unevaluable {
   override def dataType: DataType = StringType
   override def nullable: Boolean = false
   override def prettyName: String = "current_catalog"
+  final override val nodePatterns: Seq[TreePattern] = Seq(CURRENT_LIKE)
 }
 
 // scalastyle:off line.size.limit
@@ -262,4 +280,6 @@ case class TypeOf(child: Expression) extends UnaryExpression {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, _ => s"""UTF8String.fromString(${child.dataType.catalogString})""")
   }
+
+  override protected def withNewChildInternal(newChild: Expression): TypeOf = copy(child = newChild)
 }

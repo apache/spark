@@ -24,6 +24,8 @@ import org.apache.arrow.vector.complex._
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
+import org.apache.spark.sql.catalyst.util.DateTimeConstants.{MICROS_PER_DAY, MICROS_PER_MILLIS}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.ArrowUtils
 
@@ -72,17 +74,18 @@ object ArrowWriter {
           createFieldWriter(vector.getChildByOrdinal(ordinal))
         }
         new StructWriter(vector, children.toArray)
+      case (NullType, vector: NullVector) => new NullWriter(vector)
+      case (YearMonthIntervalType, vector: IntervalYearVector) => new IntervalYearWriter(vector)
+      case (DayTimeIntervalType, vector: IntervalDayVector) => new IntervalDayWriter(vector)
       case (dt, _) =>
-        throw new UnsupportedOperationException(s"Unsupported data type: ${dt.catalogString}")
+        throw QueryExecutionErrors.unsupportedDataTypeError(dt)
     }
   }
 }
 
 class ArrowWriter(val root: VectorSchemaRoot, fields: Array[ArrowFieldWriter]) {
 
-  def schema: StructType = StructType(fields.map { f =>
-    StructField(f.name, f.dataType, f.nullable)
-  })
+  def schema: StructType = ArrowUtils.fromArrowSchema(root.getSchema())
 
   private var count: Int = 0
 
@@ -383,5 +386,39 @@ private[arrow] class MapWriter(
     super.reset()
     keyWriter.reset()
     valueWriter.reset()
+  }
+}
+
+private[arrow] class NullWriter(val valueVector: NullVector) extends ArrowFieldWriter {
+
+  override def setNull(): Unit = {
+  }
+
+  override def setValue(input: SpecializedGetters, ordinal: Int): Unit = {
+  }
+}
+
+private[arrow] class IntervalYearWriter(val valueVector: IntervalYearVector)
+  extends ArrowFieldWriter {
+  override def setNull(): Unit = {
+    valueVector.setNull(count)
+  }
+
+  override def setValue(input: SpecializedGetters, ordinal: Int): Unit = {
+    valueVector.setSafe(count, input.getInt(ordinal));
+  }
+}
+
+private[arrow] class IntervalDayWriter(val valueVector: IntervalDayVector)
+  extends ArrowFieldWriter {
+  override def setNull(): Unit = {
+    valueVector.setNull(count)
+  }
+
+  override def setValue(input: SpecializedGetters, ordinal: Int): Unit = {
+    val totalMicroseconds = input.getLong(ordinal)
+    val days = totalMicroseconds / MICROS_PER_DAY
+    val millis = (totalMicroseconds % MICROS_PER_DAY) / MICROS_PER_MILLIS
+    valueVector.set(count, days.toInt, millis.toInt)
   }
 }

@@ -28,7 +28,8 @@ import org.apache.spark.sql.catalyst.expressions.objects.AssertNotNull
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.catalyst.trees.AlwaysProcess
+import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -50,8 +51,9 @@ object ConstantFolding extends Rule[LogicalPlan] {
     case _ => false
   }
 
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case q: LogicalPlan => q transformExpressionsDown {
+  def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(AlwaysProcess.fn, ruleId) {
+    case q: LogicalPlan => q.transformExpressionsDownWithPruning(
+      AlwaysProcess.fn, ruleId) {
       // Skip redundant folding of literals. This rule is technically not necessary. Placing this
       // here avoids running the next rule for Literal values, which would create a new Literal
       // object and running eval unnecessarily.
@@ -83,7 +85,8 @@ object ConstantFolding extends Rule[LogicalPlan] {
  *   in the AND node.
  */
 object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+  def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithPruning(
+    _.containsAllPatterns(LITERAL, FILTER), ruleId) {
     case f: Filter =>
       val (newCondition, _) = traverse(f.condition, replaceChildren = true, nullIsFalse = true)
       if (newCondition.isDefined) {
@@ -210,14 +213,15 @@ object ReorderAssociativeOperator extends Rule[LogicalPlan] {
     case _ => ExpressionSet(Seq.empty)
   }
 
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+  def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
+    _.containsPattern(BINARY_ARITHMETIC), ruleId) {
     case q: LogicalPlan =>
       // We have to respect aggregate expressions which exists in grouping expressions when plan
       // is an Aggregate operator, otherwise the optimized expression could not be derived from
       // grouping expressions.
       // TODO: do not reorder consecutive `Add`s or `Multiply`s with different `failOnError` flags
       val groupingExpressionSet = collectGroupingExpressions(q)
-      q transformExpressionsDown {
+      q.transformExpressionsDownWithPruning(_.containsPattern(BINARY_ARITHMETIC)) {
       case a @ Add(_, _, f) if a.deterministic && a.dataType.isInstanceOf[IntegralType] =>
         val (foldables, others) = flattenAdd(a, groupingExpressionSet).partition(_.foldable)
         if (foldables.size > 1) {
@@ -250,8 +254,9 @@ object ReorderAssociativeOperator extends Rule[LogicalPlan] {
  *    [[InSet (value, HashSet[Literal])]] which is much faster.
  */
 object OptimizeIn extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case q: LogicalPlan => q transformExpressionsDown {
+  def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
+    _.containsPattern(IN), ruleId) {
+    case q: LogicalPlan => q.transformExpressionsDownWithPruning(_.containsPattern(IN), ruleId) {
       case In(v, list) if list.isEmpty =>
         // When v is not nullable, the following expression will be optimized
         // to FalseLiteral which is tested in OptimizeInSuite.scala
@@ -264,7 +269,7 @@ object OptimizeIn extends Rule[LogicalPlan] {
           && !v.isInstanceOf[CreateNamedStruct]
           && !newList.head.isInstanceOf[CreateNamedStruct]) {
           EqualTo(v, newList.head)
-        } else if (newList.length > SQLConf.get.optimizerInSetConversionThreshold) {
+        } else if (newList.length > conf.optimizerInSetConversionThreshold) {
           val hSet = newList.map(e => e.eval(EmptyRow))
           InSet(v, HashSet() ++ hSet)
         } else if (newList.length < list.length) {
@@ -285,8 +290,10 @@ object OptimizeIn extends Rule[LogicalPlan] {
  * 4. Removes `Not` operator.
  */
 object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case q: LogicalPlan => q transformExpressionsUp {
+  def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
+    _.containsAnyPattern(AND_OR, NOT), ruleId) {
+    case q: LogicalPlan => q.transformExpressionsUpWithPruning(
+      _.containsAnyPattern(AND_OR, NOT), ruleId) {
       case TrueLiteral And e => e
       case e And TrueLiteral => e
       case FalseLiteral Or e => e
@@ -345,17 +352,18 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
       // Common factor elimination for conjunction
       case and @ (left And right) =>
         // 1. Split left and right to get the disjunctive predicates,
-        //   i.e. lhs = (a, b), rhs = (a, c)
+        //    i.e. lhs = (a || b), rhs = (a || c)
         // 2. Find the common predict between lhsSet and rhsSet, i.e. common = (a)
         // 3. Remove common predict from lhsSet and rhsSet, i.e. ldiff = (b), rdiff = (c)
-        // 4. Apply the formula, get the optimized predicate: common || (ldiff && rdiff)
+        // 4. If common is non-empty, apply the formula to get the optimized predicate:
+        //    common || (ldiff && rdiff)
+        // 5. Else if common is empty, split left and right to get the conjunctive predicates.
+        //    for example lhs = (a && b), rhs = (a && c) => all = (a, b, a, c), distinct = (a, b, c)
+        //    optimized predicate: (a && b && c)
         val lhs = splitDisjunctivePredicates(left)
         val rhs = splitDisjunctivePredicates(right)
         val common = lhs.filter(e => rhs.exists(e.semanticEquals))
-        if (common.isEmpty) {
-          // No common factors, return the original predicate
-          and
-        } else {
+        if (common.nonEmpty) {
           val ldiff = lhs.filterNot(e => common.exists(e.semanticEquals))
           val rdiff = rhs.filterNot(e => common.exists(e.semanticEquals))
           if (ldiff.isEmpty || rdiff.isEmpty) {
@@ -363,25 +371,37 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
             common.reduce(Or)
           } else {
             // (a || b || c || ...) && (a || b || d || ...) =>
-            // ((c || ...) && (d || ...)) || a || b
+            // a || b || ((c || ...) && (d || ...))
             (common :+ And(ldiff.reduce(Or), rdiff.reduce(Or))).reduce(Or)
+          }
+        } else {
+          // No common factors from disjunctive predicates, reduce common factor from conjunction
+          val all = splitConjunctivePredicates(left) ++ splitConjunctivePredicates(right)
+          val distinct = ExpressionSet(all)
+          if (all.size == distinct.size) {
+            // No common factors, return the original predicate
+            and
+          } else {
+            // (a && b) && a && (a && c) => a && b && c
+            buildBalancedPredicate(distinct.toSeq, And)
           }
         }
 
       // Common factor elimination for disjunction
       case or @ (left Or right) =>
         // 1. Split left and right to get the conjunctive predicates,
-        //   i.e.  lhs = (a, b), rhs = (a, c)
+        //    i.e.  lhs = (a && b), rhs = (a && c)
         // 2. Find the common predict between lhsSet and rhsSet, i.e. common = (a)
         // 3. Remove common predict from lhsSet and rhsSet, i.e. ldiff = (b), rdiff = (c)
-        // 4. Apply the formula, get the optimized predicate: common && (ldiff || rdiff)
+        // 4. If common is non-empty, apply the formula to get the optimized predicate:
+        //    common && (ldiff || rdiff)
+        // 5. Else if common is empty, split left and right to get the conjunctive predicates.
+        // for example lhs = (a || b), rhs = (a || c) => all = (a, b, a, c), distinct = (a, b, c)
+        // optimized predicate: (a || b || c)
         val lhs = splitConjunctivePredicates(left)
         val rhs = splitConjunctivePredicates(right)
         val common = lhs.filter(e => rhs.exists(e.semanticEquals))
-        if (common.isEmpty) {
-          // No common factors, return the original predicate
-          or
-        } else {
+        if (common.nonEmpty) {
           val ldiff = lhs.filterNot(e => common.exists(e.semanticEquals))
           val rdiff = rhs.filterNot(e => common.exists(e.semanticEquals))
           if (ldiff.isEmpty || rdiff.isEmpty) {
@@ -389,8 +409,19 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
             common.reduce(And)
           } else {
             // (a && b && c && ...) || (a && b && d && ...) =>
-            // ((c && ...) || (d && ...)) && a && b
+            // a && b && ((c && ...) || (d && ...))
             (common :+ Or(ldiff.reduce(And), rdiff.reduce(And))).reduce(And)
+          }
+        } else {
+          // No common factors in conjunctive predicates, reduce common factor from disjunction
+          val all = splitDisjunctivePredicates(left) ++ splitDisjunctivePredicates(right)
+          val distinct = ExpressionSet(all)
+          if (all.size == distinct.size) {
+            // No common factors, return the original predicate
+            or
+          } else {
+            // (a || b) || a || (a || c) => a || b || c
+            buildBalancedPredicate(distinct.toSeq, Or)
           }
         }
 
@@ -435,7 +466,8 @@ object SimplifyBinaryComparison
     }
   }
 
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+  def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
+    _.containsPattern(BINARY_COMPARISON), ruleId) {
     case l: LogicalPlan =>
       lazy val notNullExpressions = ExpressionSet(l match {
         case Filter(fc, _) =>
@@ -445,7 +477,7 @@ object SimplifyBinaryComparison
         case _ => Seq.empty
       })
 
-      l transformExpressionsUp {
+      l.transformExpressionsUpWithPruning(_.containsPattern(BINARY_COMPARISON)) {
         // True with equality
         case a EqualNullSafe b if a.semanticEquals(b) => TrueLiteral
         case a EqualTo b if canSimplifyComparison(a, b, notNullExpressions) => TrueLiteral
@@ -471,7 +503,8 @@ object SimplifyConditionals extends Rule[LogicalPlan] with PredicateHelper {
     case _ => false
   }
 
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+  def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
+    _.containsAnyPattern(IF, CASE_WHEN), ruleId) {
     case q: LogicalPlan => q transformExpressionsUp {
       case If(TrueLiteral, trueValue, _) => trueValue
       case If(FalseLiteral, _, falseValue) => falseValue
@@ -559,7 +592,7 @@ object PushFoldableIntoBranches extends Rule[LogicalPlan] with PredicateHelper {
       true
     case _: CastBase => true
     case _: GetDateField | _: LastDay => true
-    case _: ExtractIntervalPart => true
+    case _: ExtractIntervalPart[_] => true
     case _: ArraySetLike => true
     case _: ExtractValue => true
     case _ => false
@@ -570,13 +603,16 @@ object PushFoldableIntoBranches extends Rule[LogicalPlan] with PredicateHelper {
     case _: BinaryComparison | _: StringPredicate | _: StringRegexExpression => true
     case _: BinaryArithmetic => true
     case _: BinaryMathExpression => true
-    case _: AddMonths | _: DateAdd | _: DateAddInterval | _: DateDiff | _: DateSub => true
+    case _: AddMonths | _: DateAdd | _: DateAddInterval | _: DateDiff | _: DateSub |
+         _: DateAddYMInterval | _: TimestampAddYMInterval | _: TimeAdd => true
     case _: FindInSet | _: RoundBase => true
     case _ => false
   }
 
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case q: LogicalPlan => q transformExpressionsUp {
+  def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
+    _.containsAnyPattern(CASE_WHEN, IF), ruleId) {
+    case q: LogicalPlan => q.transformExpressionsUpWithPruning(
+      _.containsAnyPattern(CASE_WHEN, IF), ruleId) {
       case u @ UnaryExpression(i @ If(_, trueValue, falseValue))
           if supportedUnaryExpression(u) && atMostOneUnfoldable(Seq(trueValue, falseValue)) =>
         i.copy(
@@ -702,7 +738,9 @@ object LikeSimplification extends Rule[LogicalPlan] {
   private def simplifyMultiLike(
       child: Expression, patterns: Seq[UTF8String], multi: MultiLikeBase): Expression = {
     val (remainPatternMap, replacementMap) =
-      patterns.map { p => p -> simplifyLike(child, p.toString)}.partition(_._2.isEmpty)
+      patterns.map { p =>
+        p -> Option(p).flatMap(p => simplifyLike(child, p.toString))
+      }.partition(_._2.isEmpty)
     val remainPatterns = remainPatternMap.map(_._1)
     val replacements = replacementMap.map(_._2.get)
     if (replacements.isEmpty) {
@@ -719,7 +757,8 @@ object LikeSimplification extends Rule[LogicalPlan] {
     }
   }
 
-  def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
+  def apply(plan: LogicalPlan): LogicalPlan = plan.transformAllExpressionsWithPruning(
+    _.containsPattern(LIKE_FAMLIY), ruleId) {
     case l @ Like(input, Literal(pattern, StringType), escapeChar) =>
       if (pattern == null) {
         // If pattern is null, return null value directly, since "col like null" == null.
@@ -746,12 +785,16 @@ object NullPropagation extends Rule[LogicalPlan] {
     case _ => false
   }
 
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case q: LogicalPlan => q transformExpressionsUp {
+  def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
+    t => t.containsAnyPattern(NULL_CHECK, NULL_LITERAL, COUNT)
+      || t.containsAllPatterns(WINDOW_EXPRESSION, CAST, LITERAL), ruleId) {
+    case q: LogicalPlan => q.transformExpressionsUpWithPruning(
+      t => t.containsAnyPattern(NULL_CHECK, NULL_LITERAL, COUNT)
+        || t.containsAllPatterns(WINDOW_EXPRESSION, CAST, LITERAL), ruleId) {
       case e @ WindowExpression(Cast(Literal(0L, _), _, _), _) =>
-        Cast(Literal(0L), e.dataType, Option(SQLConf.get.sessionLocalTimeZone))
+        Cast(Literal(0L), e.dataType, Option(conf.sessionLocalTimeZone))
       case e @ AggregateExpression(Count(exprs), _, _, _, _) if exprs.forall(isNullLiteral) =>
-        Cast(Literal(0L), e.dataType, Option(SQLConf.get.sessionLocalTimeZone))
+        Cast(Literal(0L), e.dataType, Option(conf.sessionLocalTimeZone))
       case ae @ AggregateExpression(Count(exprs), _, false, _, _) if !exprs.exists(_.nullable) =>
         // This rule should be only triggered when isDistinct field is false.
         ae.copy(aggregateFunction = Count(Literal(1)))
@@ -923,7 +966,8 @@ object FoldablePropagation extends Rule[LogicalPlan] {
  * Removes [[Cast Casts]] that are unnecessary because the input is already the correct type.
  */
 object SimplifyCasts extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
+  def apply(plan: LogicalPlan): LogicalPlan = plan.transformAllExpressionsWithPruning(
+    _.containsPattern(CAST), ruleId) {
     case Cast(e, dataType, _) if e.dataType == dataType => e
     case c @ Cast(e, dataType, _) => (e.dataType, dataType) match {
       case (ArrayType(from, false), ArrayType(to, true)) if from == to => e
@@ -939,7 +983,8 @@ object SimplifyCasts extends Rule[LogicalPlan] {
  * Removes nodes that are not necessary.
  */
 object RemoveDispensableExpressions extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
+  def apply(plan: LogicalPlan): LogicalPlan = plan.transformAllExpressionsWithPruning(
+    _.containsPattern(UNARY_POSITIVE), ruleId) {
     case UnaryPositive(child) => child
   }
 }
@@ -950,8 +995,10 @@ object RemoveDispensableExpressions extends Rule[LogicalPlan] {
  * the inner conversion is overwritten by the outer one.
  */
 object SimplifyCaseConversionExpressions extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case q: LogicalPlan => q transformExpressionsUp {
+  def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
+    _.containsPattern(UPPER_OR_LOWER), ruleId) {
+    case q: LogicalPlan => q.transformExpressionsUpWithPruning(
+      _.containsPattern(UPPER_OR_LOWER), ruleId) {
       case Upper(Upper(child)) => Upper(child)
       case Upper(Lower(child)) => Upper(child)
       case Lower(Upper(child)) => Lower(child)
@@ -992,7 +1039,8 @@ object CombineConcats extends Rule[LogicalPlan] {
     case _ => false
   }
 
-  def apply(plan: LogicalPlan): LogicalPlan = plan.transformExpressionsDown {
+  def apply(plan: LogicalPlan): LogicalPlan = plan.transformAllExpressionsWithPruning(
+    _.containsPattern(CONCAT), ruleId) {
     case concat: Concat if hasNestedConcats(concat) =>
       flattenConcats(concat)
   }

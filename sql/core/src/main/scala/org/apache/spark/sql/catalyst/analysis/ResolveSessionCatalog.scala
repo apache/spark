@@ -17,14 +17,14 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.{AnalysisException, SaveMode}
+import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, CatalogUtils}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.util.toPrettySQL
-import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, CatalogV2Util, Identifier, LookupCatalog, SupportsNamespaces, TableCatalog, TableChange, V1Table}
+import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, toPrettySQL}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, CatalogV2Util, Identifier, LookupCatalog, SupportsNamespaces, TableChange, V1Table}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command._
@@ -39,10 +39,7 @@ import org.apache.spark.sql.types.{MetadataBuilder, StructField, StructType}
  *
  * We can remove this rule once we implement all the catalog functionality in `V2SessionCatalog`.
  */
-class ResolveSessionCatalog(
-    val catalogManager: CatalogManager,
-    isTempView: Seq[String] => Boolean,
-    isTempFunction: String => Boolean)
+class ResolveSessionCatalog(val catalogManager: CatalogManager)
   extends Rule[LogicalPlan] with LookupCatalog {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
   import org.apache.spark.sql.connector.catalog.CatalogV2Util._
@@ -170,80 +167,67 @@ class ResolveSessionCatalog(
         createAlterTable(nameParts, catalog, tbl, changes)
       }
 
-    case AlterTableSetPropertiesStatement(
-         nameParts @ SessionCatalogAndTable(catalog, tbl), props) =>
-      loadTable(catalog, tbl.asIdentifier).collect {
-        case v1Table: V1Table =>
-          AlterTableSetPropertiesCommand(tbl.asTableIdentifier, props, isView = false)
-      }.getOrElse {
-        val changes = props.map { case (key, value) =>
-          TableChange.setProperty(key, value)
-        }.toSeq
-        createAlterTable(nameParts, catalog, tbl, changes)
-      }
+    case SetTableProperties(ResolvedV1TableIdentifier(ident), props) =>
+      AlterTableSetPropertiesCommand(ident.asTableIdentifier, props, isView = false)
 
-    case AlterTableUnsetPropertiesStatement(
-         nameParts @ SessionCatalogAndTable(catalog, tbl), keys, ifExists) =>
-      loadTable(catalog, tbl.asIdentifier).collect {
-        case v1Table: V1Table =>
-          AlterTableUnsetPropertiesCommand(
-            tbl.asTableIdentifier, keys, ifExists, isView = false)
-      }.getOrElse {
-        val changes = keys.map(key => TableChange.removeProperty(key))
-        createAlterTable(nameParts, catalog, tbl, changes)
-      }
+    case UnsetTableProperties(ResolvedV1TableIdentifier(ident), keys, ifExists) =>
+      AlterTableUnsetPropertiesCommand(ident.asTableIdentifier, keys, ifExists, isView = false)
 
-    case AlterTableSetLocationStatement(
-         nameParts @ SessionCatalogAndTable(catalog, tbl), partitionSpec, newLoc) =>
-      loadTable(catalog, tbl.asIdentifier).collect {
-        case v1Table: V1Table =>
-          AlterTableSetLocationCommand(tbl.asTableIdentifier, partitionSpec, newLoc)
-      }.getOrElse {
-        if (partitionSpec.nonEmpty) {
-          throw QueryCompilationErrors.alterV2TableSetLocationWithPartitionNotSupportedError
-        }
-        val changes = Seq(TableChange.setProperty(TableCatalog.PROP_LOCATION, newLoc))
-        createAlterTable(nameParts, catalog, tbl, changes)
-      }
-
-    case AlterViewSetProperties(ResolvedView(ident, _), props) =>
+    case SetViewProperties(ResolvedView(ident, _), props) =>
       AlterTableSetPropertiesCommand(ident.asTableIdentifier, props, isView = true)
 
-    case AlterViewUnsetProperties(ResolvedView(ident, _), keys, ifExists) =>
+    case UnsetViewProperties(ResolvedView(ident, _), keys, ifExists) =>
       AlterTableUnsetPropertiesCommand(ident.asTableIdentifier, keys, ifExists, isView = true)
 
-    case d @ DescribeNamespace(DatabaseInSessionCatalog(db), _) =>
-      DescribeDatabaseCommand(db, d.extended)
+    case DescribeNamespace(DatabaseInSessionCatalog(db), extended, output) =>
+      val newOutput = if (conf.getConf(SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA)) {
+        assert(output.length == 2)
+        Seq(output.head.withName("database_description_item"),
+          output.last.withName("database_description_value"))
+      } else {
+        output
+      }
+      DescribeDatabaseCommand(db, extended, newOutput)
 
-    case AlterNamespaceSetProperties(DatabaseInSessionCatalog(db), properties) =>
+    case SetNamespaceProperties(DatabaseInSessionCatalog(db), properties) =>
       AlterDatabasePropertiesCommand(db, properties)
 
-    case AlterNamespaceSetLocation(DatabaseInSessionCatalog(db), location) =>
+    case SetNamespaceLocation(DatabaseInSessionCatalog(db), location) =>
       AlterDatabaseSetLocationCommand(db, location)
+
+    case s @ ShowNamespaces(ResolvedNamespace(cata, _), _, output) if isSessionCatalog(cata) =>
+      if (conf.getConf(SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA)) {
+        assert(output.length == 1)
+        s.copy(output = Seq(output.head.withName("databaseName")))
+      } else {
+        s
+      }
 
     case RenameTable(ResolvedV1TableOrViewIdentifier(oldName), newName, isView) =>
       AlterTableRenameCommand(oldName.asTableIdentifier, newName.asTableIdentifier, isView)
 
     // Use v1 command to describe (temp) view, as v2 catalog doesn't support view yet.
-    case DescribeRelation(ResolvedV1TableOrViewIdentifier(ident), partitionSpec, isExtended) =>
-      DescribeTableCommand(ident.asTableIdentifier, partitionSpec, isExtended)
+    case DescribeRelation(
+         ResolvedV1TableOrViewIdentifier(ident), partitionSpec, isExtended, output) =>
+      DescribeTableCommand(ident.asTableIdentifier, partitionSpec, isExtended, output)
 
-    case DescribeColumn(ResolvedViewIdentifier(ident), column: UnresolvedAttribute, isExtended) =>
+    case DescribeColumn(
+         ResolvedViewIdentifier(ident), column: UnresolvedAttribute, isExtended, output) =>
       // For views, the column will not be resolved by `ResolveReferences` because
       // `ResolvedView` stores only the identifier.
-      DescribeColumnCommand(ident.asTableIdentifier, column.nameParts, isExtended)
+      DescribeColumnCommand(ident.asTableIdentifier, column.nameParts, isExtended, output)
 
-    case DescribeColumn(ResolvedV1TableIdentifier(ident), column, isExtended) =>
+    case DescribeColumn(ResolvedV1TableIdentifier(ident), column, isExtended, output) =>
       column match {
         case u: UnresolvedAttribute =>
           throw QueryCompilationErrors.columnDoesNotExistError(u.name)
         case a: Attribute =>
-          DescribeColumnCommand(ident.asTableIdentifier, a.qualifier :+ a.name, isExtended)
+          DescribeColumnCommand(ident.asTableIdentifier, a.qualifier :+ a.name, isExtended, output)
         case Alias(child, _) =>
           throw QueryCompilationErrors.commandNotSupportNestedColumnError(
             "DESC TABLE COLUMN", toPrettySQL(child))
-        case other =>
-          throw new AnalysisException(s"[BUG] unexpected column expression: $other")
+        case _ =>
+          throw new IllegalStateException(s"[BUG] unexpected column expression: $column")
       }
 
     // For CREATE TABLE [AS SELECT], we should use the v1 command if the catalog is resolved to the
@@ -367,18 +351,28 @@ class ResolveSessionCatalog(
     case d @ DropNamespace(DatabaseInSessionCatalog(db), _, _) =>
       DropDatabaseCommand(db, d.ifExists, d.cascade)
 
-    case ShowTables(DatabaseInSessionCatalog(db), pattern) =>
-      ShowTablesCommand(Some(db), pattern)
+    case ShowTables(DatabaseInSessionCatalog(db), pattern, output) =>
+      val newOutput = if (conf.getConf(SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA)) {
+        assert(output.length == 3)
+        output.head.withName("database") +: output.tail
+      } else {
+        output
+      }
+      ShowTablesCommand(Some(db), pattern, newOutput)
 
     case ShowTableExtended(
         DatabaseInSessionCatalog(db),
         pattern,
-        partitionSpec @ (None | Some(UnresolvedPartitionSpec(_, _)))) =>
-      ShowTablesCommand(
-        databaseName = Some(db),
-        tableIdentifierPattern = Some(pattern),
-        isExtended = true,
-        partitionSpec.map(_.asInstanceOf[UnresolvedPartitionSpec].spec))
+        partitionSpec @ (None | Some(UnresolvedPartitionSpec(_, _))),
+        output) =>
+      val newOutput = if (conf.getConf(SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA)) {
+        assert(output.length == 4)
+        output.head.withName("database") +: output.tail
+      } else {
+        output
+      }
+      val tablePartitionSpec = partitionSpec.map(_.asInstanceOf[UnresolvedPartitionSpec].spec)
+      ShowTablesCommand(Some(db), Some(pattern), newOutput, true, tablePartitionSpec)
 
     // ANALYZE TABLE works on permanent views if the views are cached.
     case AnalyzeTable(ResolvedV1TableOrViewIdentifier(ident), partitionSpec, noScan) =>
@@ -388,11 +382,14 @@ class ResolveSessionCatalog(
         AnalyzePartitionCommand(ident.asTableIdentifier, partitionSpec, noScan)
       }
 
+    case AnalyzeTables(DatabaseInSessionCatalog(db), noScan) =>
+      AnalyzeTablesCommand(Some(db), noScan)
+
     case AnalyzeColumn(ResolvedV1TableOrViewIdentifier(ident), columnNames, allColumns) =>
       AnalyzeColumnCommand(ident.asTableIdentifier, columnNames, allColumns)
 
-    case RepairTable(ResolvedV1TableIdentifier(ident)) =>
-      AlterTableRecoverPartitionsCommand(ident.asTableIdentifier, "MSCK REPAIR TABLE")
+    case RepairTable(ResolvedV1TableIdentifier(ident), addPartitions, dropPartitions) =>
+      RepairTableCommand(ident.asTableIdentifier, addPartitions, dropPartitions)
 
     case LoadData(ResolvedV1TableIdentifier(ident), path, isLocal, isOverwrite, partition) =>
       LoadDataCommand(
@@ -402,26 +399,30 @@ class ResolveSessionCatalog(
         isOverwrite,
         partition)
 
-    case ShowCreateTable(ResolvedV1TableOrViewIdentifier(ident), asSerde) =>
+    case ShowCreateTable(ResolvedV1TableOrViewIdentifier(ident), asSerde, output) =>
       if (asSerde) {
-        ShowCreateTableAsSerdeCommand(ident.asTableIdentifier)
+        ShowCreateTableAsSerdeCommand(ident.asTableIdentifier, output)
       } else {
-        ShowCreateTableCommand(ident.asTableIdentifier)
+        ShowCreateTableCommand(ident.asTableIdentifier, output)
       }
 
-    case TruncateTable(ResolvedV1TableIdentifier(ident), partitionSpec) =>
+    case TruncateTable(ResolvedV1TableIdentifier(ident)) =>
+      TruncateTableCommand(ident.asTableIdentifier, None)
+
+    case TruncatePartition(ResolvedV1TableIdentifier(ident), partitionSpec) =>
       TruncateTableCommand(
         ident.asTableIdentifier,
-        partitionSpec)
+        Seq(partitionSpec).asUnresolvedPartitionSpecs.map(_.spec).headOption)
 
-    case ShowPartitions(
+    case s @ ShowPartitions(
         ResolvedV1TableOrViewIdentifier(ident),
-        pattern @ (None | Some(UnresolvedPartitionSpec(_, _)))) =>
+        pattern @ (None | Some(UnresolvedPartitionSpec(_, _))), output) =>
       ShowPartitionsCommand(
         ident.asTableIdentifier,
+        output,
         pattern.map(_.asInstanceOf[UnresolvedPartitionSpec].spec))
 
-    case ShowColumns(ResolvedV1TableOrViewIdentifier(ident), ns) =>
+    case s @ ShowColumns(ResolvedV1TableOrViewIdentifier(ident), ns, output) =>
       val v1TableName = ident.asTableIdentifier
       val resolver = conf.resolver
       val db = ns match {
@@ -429,26 +430,28 @@ class ResolveSessionCatalog(
           throw QueryCompilationErrors.showColumnsWithConflictDatabasesError(db, v1TableName)
         case _ => ns.map(_.head)
       }
-      ShowColumnsCommand(db, v1TableName)
+      ShowColumnsCommand(db, v1TableName, output)
 
-    case AlterTableRecoverPartitions(ResolvedV1TableIdentifier(ident)) =>
-      AlterTableRecoverPartitionsCommand(
+    case RecoverPartitions(ResolvedV1TableIdentifier(ident)) =>
+      RepairTableCommand(
         ident.asTableIdentifier,
+        enableAddPartitions = true,
+        enableDropPartitions = false,
         "ALTER TABLE RECOVER PARTITIONS")
 
-    case AlterTableAddPartition(ResolvedV1TableIdentifier(ident), partSpecsAndLocs, ifNotExists) =>
+    case AddPartitions(ResolvedV1TableIdentifier(ident), partSpecsAndLocs, ifNotExists) =>
       AlterTableAddPartitionCommand(
         ident.asTableIdentifier,
         partSpecsAndLocs.asUnresolvedPartitionSpecs.map(spec => (spec.spec, spec.location)),
         ifNotExists)
 
-    case AlterTableRenamePartition(
+    case RenamePartitions(
         ResolvedV1TableIdentifier(ident),
         UnresolvedPartitionSpec(from, _),
         UnresolvedPartitionSpec(to, _)) =>
       AlterTableRenamePartitionCommand(ident.asTableIdentifier, from, to)
 
-    case AlterTableDropPartition(
+    case DropPartitions(
         ResolvedV1TableIdentifier(ident), specs, ifExists, purge) =>
       AlterTableDropPartitionCommand(
         ident.asTableIdentifier,
@@ -457,7 +460,7 @@ class ResolveSessionCatalog(
         purge,
         retainData = false)
 
-    case AlterTableSerDeProperties(
+    case SetTableSerDeProperties(
         ResolvedV1TableIdentifier(ident),
         serdeClassName,
         serdeProperties,
@@ -467,6 +470,9 @@ class ResolveSessionCatalog(
         serdeClassName,
         serdeProperties,
         partitionSpec)
+
+    case SetTableLocation(ResolvedV1TableIdentifier(ident), partitionSpec, location) =>
+      AlterTableSetLocationCommand(ident.asTableIdentifier, partitionSpec, location)
 
     case AlterViewAs(ResolvedView(ident, _), originalText, query) =>
       AlterViewAsCommand(
@@ -485,36 +491,43 @@ class ResolveSessionCatalog(
         parseV1Table(tbl, "CREATE VIEW")
       }
       CreateViewCommand(
-        v1TableName.asTableIdentifier,
-        userSpecifiedColumns,
-        comment,
-        properties,
-        originalText,
-        child,
-        allowExisting,
-        replace,
-        viewType)
+        name = v1TableName.asTableIdentifier,
+        userSpecifiedColumns = userSpecifiedColumns,
+        comment = comment,
+        properties = properties,
+        originalText = originalText,
+        plan = child,
+        allowExisting = allowExisting,
+        replace = replace,
+        viewType = viewType)
 
-    case ShowViews(resolved: ResolvedNamespace, pattern) =>
+    case ShowViews(resolved: ResolvedNamespace, pattern, output) =>
       resolved match {
-        case DatabaseInSessionCatalog(db) => ShowViewsCommand(db, pattern)
+        case DatabaseInSessionCatalog(db) => ShowViewsCommand(db, pattern, output)
         case _ =>
           throw QueryCompilationErrors.externalCatalogNotSupportShowViewsError(resolved)
       }
 
-    case ShowTableProperties(ResolvedV1TableOrViewIdentifier(ident), propertyKey) =>
-      ShowTablePropertiesCommand(ident.asTableIdentifier, propertyKey)
+    case s @ ShowTableProperties(ResolvedV1TableOrViewIdentifier(ident), propertyKey, output) =>
+      val newOutput =
+        if (conf.getConf(SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA) && propertyKey.isDefined) {
+          assert(output.length == 2)
+          output.tail
+        } else {
+          output
+        }
+      ShowTablePropertiesCommand(ident.asTableIdentifier, propertyKey, newOutput)
 
     case DescribeFunction(ResolvedFunc(identifier), extended) =>
       DescribeFunctionCommand(identifier.asFunctionIdentifier, extended)
 
-    case ShowFunctions(None, userScope, systemScope, pattern) =>
-      ShowFunctionsCommand(None, pattern, userScope, systemScope)
+    case ShowFunctions(None, userScope, systemScope, pattern, output) =>
+      ShowFunctionsCommand(None, pattern, userScope, systemScope, output)
 
-    case ShowFunctions(Some(ResolvedFunc(identifier)), userScope, systemScope, _) =>
+    case ShowFunctions(Some(ResolvedFunc(identifier)), userScope, systemScope, _, output) =>
       val funcIdentifier = identifier.asFunctionIdentifier
       ShowFunctionsCommand(
-        funcIdentifier.database, Some(funcIdentifier.funcName), userScope, systemScope)
+        funcIdentifier.database, Some(funcIdentifier.funcName), userScope, systemScope, output)
 
     case DropFunction(ResolvedFunc(identifier), ifExists, isTemp) =>
       val funcIdentifier = identifier.asFunctionIdentifier
@@ -706,12 +719,12 @@ class ResolveSessionCatalog(
     def unapply(resolved: ResolvedNamespace): Option[String] = resolved match {
       case ResolvedNamespace(catalog, _) if !isSessionCatalog(catalog) => None
       case ResolvedNamespace(_, Seq()) =>
-        throw new AnalysisException("Database from v1 session catalog is not specified")
+        throw QueryCompilationErrors.databaseFromV1SessionCatalogNotSpecifiedError()
       case ResolvedNamespace(_, Seq(dbName)) => Some(dbName)
       case _ =>
         assert(resolved.namespace.length > 1)
-        throw new AnalysisException("Nested databases are not supported by " +
-          s"v1 session catalog: ${resolved.namespace.map(quoteIfNeeded).mkString(".")}")
+        throw QueryCompilationErrors.nestedDatabaseUnsupportedByV1SessionCatalogError(
+          resolved.namespace.map(quoteIfNeeded).mkString("."))
     }
   }
 }

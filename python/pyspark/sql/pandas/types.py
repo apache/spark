@@ -22,7 +22,7 @@ pandas instances during the type conversion.
 
 from pyspark.sql.types import BooleanType, ByteType, ShortType, IntegerType, LongType, \
     FloatType, DoubleType, DecimalType, StringType, BinaryType, DateType, TimestampType, \
-    ArrayType, MapType, StructType, StructField
+    ArrayType, MapType, StructType, StructField, NullType
 
 
 def to_arrow_type(dt):
@@ -72,6 +72,8 @@ def to_arrow_type(dt):
         fields = [pa.field(field.name, to_arrow_type(field.dataType), nullable=field.nullable)
                   for field in dt]
         arrow_type = pa.struct(fields)
+    elif type(dt) == NullType:
+        arrow_type = pa.null()
     else:
         raise TypeError("Unsupported type in conversion to Arrow: " + str(dt))
     return arrow_type
@@ -134,6 +136,8 @@ def from_arrow_type(at):
              for field in at])
     elif types.is_dictionary(at):
         spark_type = from_arrow_type(at.value_type)
+    elif types.is_null(at):
+        spark_type = NullType()
     else:
         raise TypeError("Unsupported type in conversion from Arrow: " + str(at))
     return spark_type

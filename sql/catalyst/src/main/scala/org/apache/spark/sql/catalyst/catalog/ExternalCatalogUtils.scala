@@ -119,12 +119,16 @@ object ExternalCatalogUtils {
     }
   }
 
-  def getPartitionPathString(col: String, value: String): String = {
-    val partitionString = if (value == null || value.isEmpty) {
+  def getPartitionValueString(value: String): String = {
+    if (value == null || value.isEmpty) {
       DEFAULT_PARTITION_NAME
     } else {
       escapePathName(value)
     }
+  }
+
+  def getPartitionPathString(col: String, value: String): String = {
+    val partitionString = getPartitionValueString(value)
     escapePathName(col) + "=" + partitionString
   }
 
@@ -180,7 +184,7 @@ object ExternalCatalogUtils {
   }
 
   def convertNullPartitionValues(spec: TablePartitionSpec): TablePartitionSpec = {
-    spec.mapValues(v => if (v == null) DEFAULT_PARTITION_NAME else v).toMap
+    spec.mapValues(v => if (v == null) DEFAULT_PARTITION_NAME else v).map(identity).toMap
   }
 }
 

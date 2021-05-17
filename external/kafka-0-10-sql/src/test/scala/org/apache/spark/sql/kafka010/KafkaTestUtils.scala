@@ -167,7 +167,8 @@ class KafkaTestUtils(
    * In this method we rewrite krb5.conf to make kdc and client use the same enctypes
    */
   private def rewriteKrb5Conf(): Unit = {
-    val krb5Conf = Source.fromFile(kdc.getKrb5conf, "UTF-8").getLines()
+    val krb5Conf = Utils
+      .tryWithResource(Source.fromFile(kdc.getKrb5conf, "UTF-8"))(_.getLines().toList)
     var rewritten = false
     val addedConfig =
       addedKrb5Config("default_tkt_enctypes", "aes128-cts-hmac-sha1-96") +
@@ -574,11 +575,11 @@ class KafkaTestUtils(
       s"topic $topic still exists in the replica manager")
     // ensure that logs from all replicas are deleted if delete topic is marked successful
     assert(servers.forall(server => topicAndPartitions.forall(tp =>
-      server.getLogManager().getLog(tp).isEmpty)),
+      server.getLogManager.getLog(tp).isEmpty)),
       s"topic $topic still exists in log manager")
     // ensure that topic is removed from all cleaner offsets
     assert(servers.forall(server => topicAndPartitions.forall { tp =>
-      val checkpoints = server.getLogManager().liveLogDirs.map { logDir =>
+      val checkpoints = server.getLogManager.liveLogDirs.map { logDir =>
         new OffsetCheckpointFile(new File(logDir, "cleaner-offset-checkpoint")).read()
       }
       checkpoints.forall(checkpointsPerLogDir => !checkpointsPerLogDir.contains(tp))

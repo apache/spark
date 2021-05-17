@@ -39,10 +39,13 @@ abstract class RemoveRedundantProjectsSuiteBase
 
   private def assertProjectExec(query: String, enabled: Int, disabled: Int): Unit = {
     val df = sql(query)
+    // When enabling AQE, the DPP subquery filters is replaced in runtime.
+    df.collect()
     assertProjectExecCount(df, enabled)
     val result = df.collect()
     withSQLConf(SQLConf.REMOVE_REDUNDANT_PROJECTS_ENABLED.key -> "false") {
       val df2 = sql(query)
+      df2.collect()
       assertProjectExecCount(df2, disabled)
       checkAnswer(df2, result)
     }
@@ -192,7 +195,7 @@ abstract class RemoveRedundantProjectsSuiteBase
           |)
           |""".stripMargin
 
-      Seq(("UNION", 2, 2), ("UNION ALL", 1, 2)).foreach { case (setOperation, enabled, disabled) =>
+      Seq(("UNION", 1, 2), ("UNION ALL", 1, 2)).foreach { case (setOperation, enabled, disabled) =>
         val query = queryTemplate.format(setOperation)
         assertProjectExec(query, enabled = enabled, disabled = disabled)
       }

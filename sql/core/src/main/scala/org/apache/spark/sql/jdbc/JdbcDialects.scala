@@ -18,6 +18,7 @@
 package org.apache.spark.sql.jdbc
 
 import java.sql.{Connection, Date, Timestamp}
+import java.time.{Instant, LocalDate}
 
 import scala.collection.mutable.ArrayBuilder
 
@@ -26,9 +27,11 @@ import org.apache.commons.lang3.StringUtils
 import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, TimestampFormatter}
 import org.apache.spark.sql.connector.catalog.TableChange
 import org.apache.spark.sql.connector.catalog.TableChange._
 import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 /**
@@ -175,7 +178,14 @@ abstract class JdbcDialect extends Serializable with Logging{
   def compileValue(value: Any): Any = value match {
     case stringValue: String => s"'${escapeSql(stringValue)}'"
     case timestampValue: Timestamp => "'" + timestampValue + "'"
+    case timestampValue: Instant =>
+      val timestampFormatter = TimestampFormatter.getFractionFormatter(
+        DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone))
+      s"'${timestampFormatter.format(timestampValue)}'"
     case dateValue: Date => "'" + dateValue + "'"
+    case dateValue: LocalDate =>
+      val dateFormatter = DateFormatter(DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone))
+      s"'${dateFormatter.format(dateValue)}'"
     case arrayValue: Array[Any] => arrayValue.map(compileValue).mkString(", ")
     case _ => value
   }

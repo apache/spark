@@ -54,14 +54,14 @@ class CryptoStreamUtilsSuite extends SparkFunSuite {
 
   test("shuffle encryption key length should be 128 by default") {
     val conf = createConf()
-    var key = CryptoStreamUtils.createKey(conf)
+    val key = CryptoStreamUtils.createKey(conf)
     val actual = key.length * (java.lang.Byte.SIZE)
     assert(actual === 128)
   }
 
   test("create 256-bit key") {
     val conf = createConf(IO_ENCRYPTION_KEY_SIZE_BITS.key -> "256")
-    var key = CryptoStreamUtils.createKey(conf)
+    val key = CryptoStreamUtils.createKey(conf)
     val actual = key.length * (java.lang.Byte.SIZE)
     assert(actual === 256)
   }

@@ -231,17 +231,18 @@ object EnsureRequirements extends Rule[SparkPlan] {
    */
   private def reorderJoinPredicates(plan: SparkPlan): SparkPlan = {
     plan match {
-      case ShuffledHashJoinExec(leftKeys, rightKeys, joinType, buildSide, condition, left, right) =>
+      case ShuffledHashJoinExec(
+        leftKeys, rightKeys, joinType, buildSide, condition, left, right, isSkew) =>
         val (reorderedLeftKeys, reorderedRightKeys) =
           reorderJoinKeys(leftKeys, rightKeys, left.outputPartitioning, right.outputPartitioning)
         ShuffledHashJoinExec(reorderedLeftKeys, reorderedRightKeys, joinType, buildSide, condition,
-          left, right)
+          left, right, isSkew)
 
-      case SortMergeJoinExec(leftKeys, rightKeys, joinType, condition, left, right, isPartial) =>
+      case SortMergeJoinExec(leftKeys, rightKeys, joinType, condition, left, right, isSkew) =>
         val (reorderedLeftKeys, reorderedRightKeys) =
           reorderJoinKeys(leftKeys, rightKeys, left.outputPartitioning, right.outputPartitioning)
         SortMergeJoinExec(reorderedLeftKeys, reorderedRightKeys, joinType, condition,
-          left, right, isPartial)
+          left, right, isSkew)
 
       case other => other
     }

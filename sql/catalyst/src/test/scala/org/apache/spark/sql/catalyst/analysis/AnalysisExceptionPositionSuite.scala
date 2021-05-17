@@ -57,6 +57,23 @@ class AnalysisExceptionPositionSuite extends AnalysisTest {
     verifyTableOrViewPosition("ALTER VIEW unknown RENAME TO v", "unknown")
   }
 
+  test("SPARK-34139: UnresolvedRelation should retain sql text position") {
+    verifyTableOrViewPosition("CACHE TABLE unknown", "unknown")
+    verifyTableOrViewPosition("UNCACHE TABLE unknown", "unknown")
+    verifyTableOrViewPosition("DELETE FROM unknown", "unknown")
+    verifyTableOrViewPosition("UPDATE unknown SET name='abc'", "unknown")
+    verifyTableOrViewPosition(
+      "MERGE INTO unknownTarget AS target USING TaBlE AS source " +
+        "ON target.col = source.col WHEN MATCHED THEN DELETE",
+      "unknownTarget")
+    verifyTableOrViewPosition(
+      "MERGE INTO TaBlE AS target USING unknownSource AS source " +
+        "ON target.col = source.col WHEN MATCHED THEN DELETE",
+      "unknownSource")
+    verifyTablePosition("INSERT INTO TABLE unknown SELECT 1", "unknown")
+    verifyTablePosition("INSERT OVERWRITE TABLE unknown VALUES (1, 'a')", "unknown")
+  }
+
   private def verifyTablePosition(sql: String, table: String): Unit = {
     verifyPosition(sql, table, "Table")
   }

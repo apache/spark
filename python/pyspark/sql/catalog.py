@@ -153,7 +153,8 @@ class Catalog(object):
         """
         warnings.warn(
             "createExternalTable is deprecated since Spark 2.2, please use createTable instead.",
-            DeprecationWarning)
+            FutureWarning
+        )
         return self.createTable(tableName, path, source, schema, **options)
 
     def createTable(
@@ -251,7 +252,8 @@ class Catalog(object):
         """
         warnings.warn(
             "Deprecated in 2.3.0. Use spark.udf.register instead.",
-            DeprecationWarning)
+            FutureWarning
+        )
         return self._sparkSession.udf.register(name, f, returnType)
 
     @since(2.0)

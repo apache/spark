@@ -253,6 +253,9 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
         && Try(JavaUtils.byteStringAsBytes(executorMemory)).getOrElse(-1L) <= 0) {
       error("Executor memory must be a positive number")
     }
+    if (driverCores != null && Try(driverCores.toInt).getOrElse(-1) <= 0) {
+      error("Driver cores must be a positive number")
+    }
     if (executorCores != null && Try(executorCores.toInt).getOrElse(-1) <= 0) {
       error("Executor cores must be a positive number")
     }

@@ -44,6 +44,7 @@ import org.apache.spark.sql.types.StructType
  * By default, the selection method is `numTopFeatures`, with the default number of top features
  * set to 50.
  */
+@deprecated("use UnivariateFeatureSelector instead", "3.1.1")
 @Since("1.6.0")
 final class ChiSqSelector @Since("1.6.0") (@Since("1.6.0") override val uid: String)
   extends Selector[ChiSqSelectorModel] {

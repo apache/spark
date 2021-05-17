@@ -54,9 +54,10 @@ struct<two:string,f1:string>
 -- !query
 select length(42)
 -- !query schema
-struct<length(CAST(42 AS STRING)):int>
+struct<>
 -- !query output
-2
+org.apache.spark.sql.AnalysisException
+cannot resolve 'length(42)' due to data type mismatch: argument 1 requires (string or binary) type, however, '42' is of int type.; line 1 pos 7
 
 
 -- !query
@@ -64,8 +65,8 @@ select string('four: ') || 2+2
 -- !query schema
 struct<>
 -- !query output
-java.lang.NumberFormatException
-invalid input syntax for type numeric: four: 2
+org.apache.spark.sql.AnalysisException
+cannot resolve 'concat(CAST('four: ' AS STRING), 2)' due to data type mismatch: input to function concat should have been string, binary or array, but it's [string, int]; line 1 pos 7
 
 
 -- !query
@@ -73,16 +74,17 @@ select 'four: ' || 2+2
 -- !query schema
 struct<>
 -- !query output
-java.lang.NumberFormatException
-invalid input syntax for type numeric: four: 2
+org.apache.spark.sql.AnalysisException
+cannot resolve 'concat('four: ', 2)' due to data type mismatch: input to function concat should have been string, binary or array, but it's [string, int]; line 1 pos 7
 
 
 -- !query
 select 3 || 4.0
 -- !query schema
-struct<concat(CAST(3 AS STRING), CAST(4.0 AS STRING)):string>
+struct<>
 -- !query output
-34.0
+org.apache.spark.sql.AnalysisException
+cannot resolve 'concat(3, 4.0BD)' due to data type mismatch: input to function concat should have been string, binary or array, but it's [int, decimal(2,1)]; line 1 pos 7
 
 
 -- !query
@@ -99,9 +101,10 @@ one
 -- !query
 select concat(1,2,3,'hello',true, false, to_date('20100309','yyyyMMdd'))
 -- !query schema
-struct<concat(CAST(1 AS STRING), CAST(2 AS STRING), CAST(3 AS STRING), hello, CAST(true AS STRING), CAST(false AS STRING), CAST(to_date(20100309, yyyyMMdd) AS STRING)):string>
+struct<>
 -- !query output
-123hellotruefalse2010-03-09
+org.apache.spark.sql.AnalysisException
+cannot resolve 'concat(1, 2, 3, 'hello', true, false, to_date('20100309', 'yyyyMMdd'))' due to data type mismatch: input to function concat should have been string, binary or array, but it's [int, int, int, string, boolean, boolean, date]; line 1 pos 7
 
 
 -- !query
@@ -115,33 +118,37 @@ one
 -- !query
 select concat_ws('#',1,2,3,'hello',true, false, to_date('20100309','yyyyMMdd'))
 -- !query schema
-struct<concat_ws(#, CAST(1 AS STRING), CAST(2 AS STRING), CAST(3 AS STRING), hello, CAST(true AS STRING), CAST(false AS STRING), CAST(to_date(20100309, yyyyMMdd) AS STRING)):string>
+struct<>
 -- !query output
-1#x#x#hello#true#false#x-03-09
+org.apache.spark.sql.AnalysisException
+cannot resolve 'concat_ws('#', 1, 2, 3, 'hello', true, false, to_date('20100309', 'yyyyMMdd'))' due to data type mismatch: argument 2 requires (array<string> or string) type, however, '1' is of int type. argument 3 requires (array<string> or string) type, however, '2' is of int type. argument 4 requires (array<string> or string) type, however, '3' is of int type. argument 6 requires (array<string> or string) type, however, 'true' is of boolean type. argument 7 requires (array<string> or string) type, however, 'false' is of boolean type. argument 8 requires (array<string> or string) type, however, 'to_date('20100309', 'yyyyMMdd')' is of date type.; line 1 pos 7
 
 
 -- !query
 select concat_ws(',',10,20,null,30)
 -- !query schema
-struct<concat_ws(,, CAST(10 AS STRING), CAST(20 AS STRING), NULL, CAST(30 AS STRING)):string>
+struct<>
 -- !query output
-10,20,30
+org.apache.spark.sql.AnalysisException
+cannot resolve 'concat_ws(',', 10, 20, NULL, 30)' due to data type mismatch: argument 2 requires (array<string> or string) type, however, '10' is of int type. argument 3 requires (array<string> or string) type, however, '20' is of int type. argument 4 requires (array<string> or string) type, however, 'NULL' is of null type. argument 5 requires (array<string> or string) type, however, '30' is of int type.; line 1 pos 7
 
 
 -- !query
 select concat_ws('',10,20,null,30)
 -- !query schema
-struct<concat_ws(, CAST(10 AS STRING), CAST(20 AS STRING), NULL, CAST(30 AS STRING)):string>
+struct<>
 -- !query output
-102030
+org.apache.spark.sql.AnalysisException
+cannot resolve 'concat_ws('', 10, 20, NULL, 30)' due to data type mismatch: argument 2 requires (array<string> or string) type, however, '10' is of int type. argument 3 requires (array<string> or string) type, however, '20' is of int type. argument 4 requires (array<string> or string) type, however, 'NULL' is of null type. argument 5 requires (array<string> or string) type, however, '30' is of int type.; line 1 pos 7
 
 
 -- !query
 select concat_ws(NULL,10,20,null,30) is null
 -- !query schema
-struct<(concat_ws(CAST(NULL AS STRING), CAST(10 AS STRING), CAST(20 AS STRING), NULL, CAST(30 AS STRING)) IS NULL):boolean>
+struct<>
 -- !query output
-true
+org.apache.spark.sql.AnalysisException
+cannot resolve 'concat_ws(CAST(NULL AS STRING), 10, 20, NULL, 30)' due to data type mismatch: argument 2 requires (array<string> or string) type, however, '10' is of int type. argument 3 requires (array<string> or string) type, however, '20' is of int type. argument 4 requires (array<string> or string) type, however, 'NULL' is of null type. argument 5 requires (array<string> or string) type, however, '30' is of int type.; line 1 pos 7
 
 
 -- !query
@@ -155,19 +162,10 @@ edcba
 -- !query
 select i, left('ahoj', i), right('ahoj', i) from range(-5, 6) t(i) order by i
 -- !query schema
-struct<i:bigint,left(ahoj, i):string,right(ahoj, i):string>
+struct<>
 -- !query output
--5		
--4		
--3		
--2		
--1		
-0		
-1	a	j
-2	ah	oj
-3	aho	hoj
-4	ahoj	ahoj
-5	ahoj	ahoj
+org.apache.spark.sql.AnalysisException
+cannot resolve 'substring('ahoj', 1, t.i)' due to data type mismatch: argument 3 requires int type, however, 't.i' is of bigint type.; line 1 pos 10
 
 
 -- !query
@@ -176,7 +174,7 @@ struct<i:bigint,left(ahoj, i):string,right(ahoj, i):string>
  */
 select format_string(NULL)
 -- !query schema
-struct<format_string(CAST(NULL AS STRING)):string>
+struct<format_string(NULL):string>
 -- !query output
 NULL
 

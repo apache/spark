@@ -255,9 +255,9 @@ This feature coalesces the post shuffle partitions based on the map output stati
    </tr>
    <tr>
      <td><code>spark.sql.adaptive.coalescePartitions.initialPartitionNum</code></td>
-     <td>200</td>
+     <td>(none)</td>
      <td>
-       The initial number of shuffle partitions before coalescing. By default it equals to <code>spark.sql.shuffle.partitions</code>. This configuration only has an effect when <code>spark.sql.adaptive.enabled</code> and <code>spark.sql.adaptive.coalescePartitions.enabled</code> are both enabled.
+       The initial number of shuffle partitions before coalescing. If not set, it equals to <code>spark.sql.shuffle.partitions</code>. This configuration only has an effect when <code>spark.sql.adaptive.enabled</code> and <code>spark.sql.adaptive.coalescePartitions.enabled</code> are both enabled.
      </td>
      <td>3.0.0</td>
    </tr>
@@ -288,7 +288,7 @@ Data skew can severely downgrade the performance of join queries. This feature d
      </tr>
      <tr>
        <td><code>spark.sql.adaptive.skewJoin.skewedPartitionFactor</code></td>
-       <td>10</td>
+       <td>5</td>
        <td>
          A partition is considered as skewed if its size is larger than this factor multiplying the median partition size and also larger than <code>spark.sql.adaptive.skewJoin.skewedPartitionThresholdInBytes</code>.
        </td>

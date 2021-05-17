@@ -25,6 +25,7 @@ This page describes the migration guide specific to PySpark.
 .. toctree::
    :maxdepth: 2
 
+   pyspark_3.1_to_3.2
    pyspark_2.4_to_3.0
    pyspark_2.3_to_2.4
    pyspark_2.3.0_to_2.3.1_above
@@ -36,8 +37,8 @@ This page describes the migration guide specific to PySpark.
 Many items of other migration guides can also be applied when migrating PySpark to higher versions because PySpark internally shares other components.
 Please also refer other migration guides:
 
-- `Migration Guide: Spark Core <http://spark.apache.org/docs/latest/core-migration-guide.html>`_
-- `Migration Guide: SQL, Datasets and DataFrame <http://spark.apache.org/docs/latest/sql-migration-guide.html>`_
-- `Migration Guide: Structured Streaming <http://spark.apache.org/docs/latest/ss-migration-guide.html>`_
-- `Migration Guide: MLlib (Machine Learning) <http://spark.apache.org/docs/latest/ml-migration-guide.html>`_
+- `Migration Guide: Spark Core <https://spark.apache.org/docs/latest/core-migration-guide.html>`_
+- `Migration Guide: SQL, Datasets and DataFrame <https://spark.apache.org/docs/latest/sql-migration-guide.html>`_
+- `Migration Guide: Structured Streaming <https://spark.apache.org/docs/latest/ss-migration-guide.html>`_
+- `Migration Guide: MLlib (Machine Learning) <https://spark.apache.org/docs/latest/ml-migration-guide.html>`_
 

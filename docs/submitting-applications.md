@@ -181,7 +181,7 @@ The master URL passed to Spark can be in one of the following formats:
         The cluster location will be found based on the <code>HADOOP_CONF_DIR</code> or <code>YARN_CONF_DIR</code> variable.
 </td></tr>
 <tr><td> <code>k8s://HOST:PORT</code> </td><td> Connect to a <a href="running-on-kubernetes.html">Kubernetes</a> cluster in
-        <code>cluster</code> mode. Client mode is currently unsupported and will be supported in future releases.
+        <code>client</code> or <code>cluster</code> mode depending on the value of <code>--deploy-mode</code>.
         The <code>HOST</code> and <code>PORT</code> refer to the <a href="https://kubernetes.io/docs/reference/generated/kube-apiserver/">Kubernetes API Server</a>.
         It connects using TLS by default. In order to force it to use an unsecured connection, you can use
         <code>k8s://http://HOST:PORT</code>.

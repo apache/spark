@@ -41,7 +41,7 @@ class HivePartitionFilteringSuite(version: String)
   private val tryDirectSqlKey = HiveConf.ConfVars.METASTORE_TRY_DIRECT_SQL.varname
 
   // Support default partition in metastoredirectsql since HIVE-11898(Hive 2.0.0).
-  private val defaultPartition = if (version.toDouble >= 2) Some(DEFAULT_PARTITION_NAME) else None
+  private val defaultPartition = if (version >= "2.0") Some(DEFAULT_PARTITION_NAME) else None
 
   private val dsValue = 20170101 to 20170103
   private val hValue = 0 to 4
@@ -416,6 +416,76 @@ class HivePartitionFilteringSuite(version: String)
       chunkValue,
       Seq("2019-01-01", "2019-01-02"),
       dateStrValue)
+  }
+
+  test("getPartitionsByFilter: not in/inset string type") {
+    def check(condition: Expression, result: Seq[String]): Unit = {
+      testMetastorePartitionFiltering(
+        condition,
+        dsValue,
+        hValue,
+        result,
+        dateValue,
+        dateStrValue
+      )
+    }
+
+    check(
+      Not(In(attr("chunk"), Seq(Literal("aa"), Literal("ab")))),
+      Seq("ba", "bb")
+    )
+    check(
+      Not(In(attr("chunk"), Seq(Literal("aa"), Literal("ab"), Literal(null)))),
+      chunkValue
+    )
+
+    check(
+      Not(InSet(attr("chunk"), Set(Literal("aa").eval(), Literal("ab").eval()))),
+      Seq("ba", "bb")
+    )
+    check(
+      Not(InSet(attr("chunk"), Set("aa", "ab", null))),
+      chunkValue
+    )
+  }
+
+  test("getPartitionsByFilter: not in/inset date type") {
+    def check(condition: Expression, result: Seq[String]): Unit = {
+      testMetastorePartitionFiltering(
+        condition,
+        dsValue,
+        hValue,
+        chunkValue,
+        result,
+        dateStrValue
+      )
+    }
+
+    check(
+      Not(In(attr("d"),
+        Seq(Literal(Date.valueOf("2019-01-01")),
+          Literal(Date.valueOf("2019-01-02"))))),
+      Seq("2019-01-03")
+    )
+    check(
+      Not(In(attr("d"),
+        Seq(Literal(Date.valueOf("2019-01-01")),
+          Literal(Date.valueOf("2019-01-02")), Literal(null)))),
+      dateValue
+    )
+
+    check(
+      Not(InSet(attr("d"),
+        Set(Literal(Date.valueOf("2019-01-01")).eval(),
+          Literal(Date.valueOf("2019-01-02")).eval()))),
+      Seq("2019-01-03")
+    )
+    check(
+      Not(InSet(attr("d"),
+        Set(Literal(Date.valueOf("2019-01-01")).eval(),
+          Literal(Date.valueOf("2019-01-02")).eval(), null))),
+      dateValue
+    )
   }
 
   test("getPartitionsByFilter: cast(datestr as date)= 2020-01-01") {

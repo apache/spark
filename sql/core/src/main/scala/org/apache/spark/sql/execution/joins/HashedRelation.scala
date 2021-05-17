@@ -28,6 +28,7 @@ import org.apache.spark.memory._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.BroadcastMode
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types.LongType
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.map.BytesToBytesMap
@@ -219,7 +220,7 @@ private[joins] class UnsafeHashedRelation(
   var resultRow = new UnsafeRow(numFields)
 
   // re-used in getWithKeyIndex()/getValueWithKeyIndex()/valuesWithKeyIndex()
-  var valueRowWithKeyIndex = new ValueRowWithKeyIndex
+  val valueRowWithKeyIndex = new ValueRowWithKeyIndex
 
   override def get(key: InternalRow): Iterator[InternalRow] = {
     val unsafeKey = key.asInstanceOf[UnsafeRow]
@@ -300,7 +301,7 @@ private[joins] class UnsafeHashedRelation(
 
       override def next(): ValueRowWithKeyIndex = {
         if (!hasNext) {
-          throw new NoSuchElementException("End of the iterator")
+          throw QueryExecutionErrors.endOfIteratorError()
         }
         val loc = iter.next()
         resultRow.pointTo(loc.getValueBase, loc.getValueOffset, loc.getValueLength)
@@ -325,7 +326,7 @@ private[joins] class UnsafeHashedRelation(
 
       override def next(): InternalRow = {
         if (!hasNext) {
-          throw new NoSuchElementException("End of the iterator")
+          throw QueryExecutionErrors.endOfIteratorError()
         } else {
           val loc = iter.next()
           unsafeRow.pointTo(loc.getKeyBase, loc.getKeyOffset, loc.getKeyLength)
@@ -430,7 +431,7 @@ private[joins] class UnsafeHashedRelation(
         valuesBuffer, Platform.BYTE_ARRAY_OFFSET, valuesSize)
       if (!putSucceeded) {
         binaryMap.free()
-        throw new IOException("Could not allocate memory to grow BytesToBytesMap")
+        throw QueryExecutionErrors.cannotAllocateMemoryToGrowBytesToBytesMapError()
       }
       i += 1
     }
@@ -475,9 +476,7 @@ private[joins] object UnsafeHashedRelation {
           row.getBaseObject, row.getBaseOffset, row.getSizeInBytes)
         if (!success) {
           binaryMap.free()
-          // scalastyle:off throwerror
-          throw new SparkOutOfMemoryError("There is not enough memory to build hash map")
-          // scalastyle:on throwerror
+          throw QueryExecutionErrors.cannotAcquireMemoryToBuildUnsafeHashedRelationError()
         }
       } else if (isNullAware) {
         return HashedRelationWithAllNullKeys
@@ -523,7 +522,7 @@ private[joins] object UnsafeHashedRelation {
  * see http://java-performance.info/implementing-world-fastest-java-int-to-int-hash-map/
  */
 private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, capacity: Int)
-  extends MemoryConsumer(mm) with Externalizable with KryoSerializable {
+  extends MemoryConsumer(mm, MemoryMode.ON_HEAP) with Externalizable with KryoSerializable {
 
   // Whether the keys are stored in dense mode or not.
   private var isDense = false
@@ -576,8 +575,7 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
     val got = acquireMemory(size)
     if (got < size) {
       freeMemory(got)
-      throw new SparkException(s"Can't acquire $size bytes memory to build hash relation, " +
-        s"got $got bytes")
+      throw QueryExecutionErrors.cannotAcquireMemoryToBuildLongHashedRelationError(size, got)
     }
   }
 
@@ -728,7 +726,7 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
 
       override def next(): InternalRow = {
         if (!hasNext) {
-          throw new NoSuchElementException("End of the iterator")
+          throw QueryExecutionErrors.endOfIteratorError()
         } else {
           // the key is retrieved based on the map mode
           val ret = if (isDense) minKey + pos else array(pos)
@@ -747,7 +745,7 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
   def append(key: Long, row: UnsafeRow): Unit = {
     val sizeInBytes = row.getSizeInBytes
     if (sizeInBytes >= (1 << SIZE_BITS)) {
-      throw new UnsupportedOperationException("Does not support row that is larger than 256M")
+      throw QueryExecutionErrors.rowLargerThan256MUnsupportedError()
     }
 
     if (key < minKey) {
@@ -790,8 +788,7 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
           growArray()
         } else if (numKeys > array.length / 2 * 0.75) {
           // The fill ratio should be less than 0.75
-          throw new UnsupportedOperationException(
-            "Cannot build HashedRelation with more than 1/3 billions unique keys")
+          throw QueryExecutionErrors.cannotBuildHashedRelationWithUniqueKeysExceededError()
         }
       }
     } else {
@@ -807,8 +804,7 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
     val neededNumWords = (cursor - Platform.LONG_ARRAY_OFFSET + 8 + inputRowSize + 7) / 8
     if (neededNumWords > page.length) {
       if (neededNumWords > (1 << 30)) {
-        throw new UnsupportedOperationException(
-          "Can not build a HashedRelation that is larger than 8G")
+        throw QueryExecutionErrors.cannotBuildHashedRelationLargerThan8GError()
       }
       val newNumWords = math.max(neededNumWords, math.min(page.length * 2, 1 << 30))
       ensureAcquireMemory(newNumWords * 8L)

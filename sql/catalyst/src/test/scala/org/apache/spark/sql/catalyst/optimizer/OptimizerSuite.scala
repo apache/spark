@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions.{Alias, IntegerLiteral, Literal}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, OneRowRelation, Project}
@@ -48,7 +48,7 @@ class OptimizerSuite extends PlanTest {
             DecrementLiterals) :: Nil
       }
 
-      val message1 = intercept[TreeNodeException[LogicalPlan]] {
+      val message1 = intercept[RuntimeException] {
         optimizer.execute(analyzed)
       }.getMessage
       assert(message1.startsWith(s"Max iterations ($maxIterationsNotEnough) reached for batch " +
@@ -58,13 +58,13 @@ class OptimizerSuite extends PlanTest {
         try {
           optimizer.execute(analyzed)
         } catch {
-          case ex: TreeNodeException[_]
+          case ex: AnalysisException
             if ex.getMessage.contains(SQLConf.OPTIMIZER_MAX_ITERATIONS.key) =>
               fail("optimizer.execute should not reach max iterations.")
         }
       }
 
-      val message2 = intercept[TreeNodeException[LogicalPlan]] {
+      val message2 = intercept[RuntimeException] {
         optimizer.execute(analyzed)
       }.getMessage
       assert(message2.startsWith(s"Max iterations ($maxIterationsNotEnough) reached for batch " +

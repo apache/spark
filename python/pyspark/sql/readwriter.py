@@ -439,6 +439,30 @@ class DataFrameReader(OptionUtils):
         modifiedAfter (batch only) : an optional timestamp to only include files with
             modification times occurring after the specified time. The provided timestamp
             must be in the following format: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)
+        datetimeRebaseMode : str, optional
+            the rebasing mode for the values of the ``DATE``, ``TIMESTAMP_MICROS``,
+            ``TIMESTAMP_MILLIS`` logical types from the Julian to Proleptic Gregorian calendar.
+
+                * ``EXCEPTION``: Spark fails in reads of ancient dates/timestamps
+                                 that are ambiguous between the two calendars.
+                *  ``CORRECTED``: loading of dates/timestamps without rebasing.
+                *  ``LEGACY``: perform rebasing of ancient dates/timestamps from the Julian
+                               to Proleptic Gregorian calendar.
+
+            If None is set, the value of the SQL config
+            ``spark.sql.parquet.datetimeRebaseModeInRead`` is used by default.
+        int96RebaseMode : str, optional
+            the rebasing mode for ``INT96`` timestamps from the Julian to
+            Proleptic Gregorian calendar.
+
+                * ``EXCEPTION``: Spark fails in reads of ancient ``INT96`` timestamps
+                                 that are ambiguous between the two calendars.
+                *  ``CORRECTED``: loading of ``INT96`` timestamps without rebasing.
+                *  ``LEGACY``: perform rebasing of ancient ``INT96`` timestamps from the Julian
+                               to Proleptic Gregorian calendar.
+
+            If None is set, the value of the SQL config
+            ``spark.sql.parquet.int96RebaseModeInRead`` is used by default.
 
         Examples
         --------
@@ -451,9 +475,12 @@ class DataFrameReader(OptionUtils):
         modifiedBefore = options.get('modifiedBefore', None)
         modifiedAfter = options.get('modifiedAfter', None)
         recursiveFileLookup = options.get('recursiveFileLookup', None)
+        datetimeRebaseMode = options.get('datetimeRebaseMode', None)
+        int96RebaseMode = options.get('int96RebaseMode', None)
         self._set_opts(mergeSchema=mergeSchema, pathGlobFilter=pathGlobFilter,
                        recursiveFileLookup=recursiveFileLookup, modifiedBefore=modifiedBefore,
-                       modifiedAfter=modifiedAfter)
+                       modifiedAfter=modifiedAfter, datetimeRebaseMode=datetimeRebaseMode,
+                       int96RebaseMode=int96RebaseMode)
 
         return self._df(self._jreader.parquet(_to_seq(self._spark._sc, paths)))
 
@@ -701,7 +728,7 @@ class DataFrameReader(OptionUtils):
             * ``STOP_AT_DELIMITER``: If unescaped quotes are found in the input, consider the value
               as an unquoted value. This will make the parser accumulate all characters until the
               delimiter or a line ending is found in the input.
-            * ``STOP_AT_DELIMITER``: If unescaped quotes are found in the input, the content parsed
+            * ``SKIP_VALUE``: If unescaped quotes are found in the input, the content parsed
               for the given value will be skipped and the value set in nullValue will be produced
               instead.
             * ``RAISE_ERROR``: If unescaped quotes are found in the input, a TextParsingException
@@ -1196,7 +1223,8 @@ class DataFrameWriter(OptionUtils):
         encoding : str, optional
             specifies encoding (charset) of saved json files. If None is set,
             the default UTF-8 charset will be used.
-        lineSep : str, optional defines the line separator that should be used for writing. If None is
+        lineSep : str, optional
+            defines the line separator that should be used for writing. If None is
             set, it uses the default value, ``\\n``.
         ignoreNullFields : str or bool, optional
             Whether to ignore null fields when generating JSON objects.

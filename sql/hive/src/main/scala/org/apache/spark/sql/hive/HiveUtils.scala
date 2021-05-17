@@ -24,6 +24,7 @@ import java.util.concurrent.TimeUnit
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.HashMap
+import scala.util.Try
 
 import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.apache.hadoop.conf.Configuration
@@ -33,7 +34,7 @@ import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.util.VersionInfo
 import org.apache.hive.common.util.HiveVersionInfo
 
-import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
@@ -43,41 +44,44 @@ import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.hive.client._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf._
-import org.apache.spark.sql.internal.StaticSQLConf.{CATALOG_IMPLEMENTATION, WAREHOUSE_PATH}
+import org.apache.spark.sql.internal.StaticSQLConf.WAREHOUSE_PATH
 import org.apache.spark.sql.types._
 import org.apache.spark.util.{ChildFirstURLClassLoader, Utils}
 
 
 private[spark] object HiveUtils extends Logging {
 
-  def withHiveExternalCatalog(sc: SparkContext): SparkContext = {
-    sc.conf.set(CATALOG_IMPLEMENTATION.key, "hive")
-    sc
-  }
-
   /** The version of hive used internally by Spark SQL. */
   val builtinHiveVersion: String = HiveVersionInfo.getVersion
 
+  val BUILTIN_HIVE_VERSION = buildStaticConf("spark.sql.hive.version")
+    .doc("The compiled, a.k.a, builtin Hive version of the Spark distribution bundled with." +
+        " Note that, this a read-only conf and only used to report the built-in hive version." +
+        " If you want a different metastore client for Spark to call, please refer to" +
+        " spark.sql.hive.metastore.version.")
+    .version("1.1.1")
+    .stringConf
+    .checkValue(_ == builtinHiveVersion,
+      "The builtin Hive version is read-only, please use spark.sql.hive.metastore.version")
+    .createWithDefault(builtinHiveVersion)
+
+  private def isCompatibleHiveVersion(hiveVersionStr: String): Boolean = {
+    Try { IsolatedClientLoader.hiveVersion(hiveVersionStr) }.isSuccess
+  }
+
   val HIVE_METASTORE_VERSION = buildStaticConf("spark.sql.hive.metastore.version")
     .doc("Version of the Hive metastore. Available options are " +
-        "<code>0.12.0</code> through <code>2.3.7</code> and " +
+        "<code>0.12.0</code> through <code>2.3.8</code> and " +
         "<code>3.0.0</code> through <code>3.1.2</code>.")
     .version("1.4.0")
     .stringConf
+    .checkValue(isCompatibleHiveVersion, "Unsupported Hive Metastore version")
     .createWithDefault(builtinHiveVersion)
-
-  // A fake config which is only here for backward compatibility reasons. This config has no effect
-  // to Spark, just for reporting the builtin Hive version of Spark to existing applications that
-  // already rely on this config.
-  val FAKE_HIVE_VERSION = buildConf("spark.sql.hive.version")
-    .doc(s"deprecated, please use ${HIVE_METASTORE_VERSION.key} to get the Hive version in Spark.")
-    .version("1.1.1")
-    .fallbackConf(HIVE_METASTORE_VERSION)
 
   val HIVE_METASTORE_JARS = buildStaticConf("spark.sql.hive.metastore.jars")
     .doc(s"""
       | Location of the jars that should be used to instantiate the HiveMetastoreClient.
-      | This property can be one of four options: "
+      | This property can be one of four options:
       | 1. "builtin"
       |   Use Hive ${builtinHiveVersion}, which is bundled with the Spark assembly when
       |   <code>-Phive</code> is enabled. When this option is chosen,
@@ -87,8 +91,10 @@ private[spark] object HiveUtils extends Logging {
       |   Use Hive jars of specified version downloaded from Maven repositories.
       | 3. "path"
       |   Use Hive jars configured by `spark.sql.hive.metastore.jars.path`
-      |   in comma separated format. Support both local or remote paths.
-      | 4. A classpath in the standard format for both Hive and Hadoop.
+      |   in comma separated format. Support both local or remote paths.The provided jars
+      |   should be the same version as ${HIVE_METASTORE_VERSION}.
+      | 4. A classpath in the standard format for both Hive and Hadoop. The provided jars
+      |   should be the same version as ${HIVE_METASTORE_VERSION}.
       """.stripMargin)
     .version("1.4.0")
     .stringConf
@@ -369,10 +375,10 @@ private[spark] object HiveUtils extends Logging {
           logWarning(s"Hive jar path '${file.getPath}' does not exist.")
           Nil
         } else {
-          files.filter(_.getName.toLowerCase(Locale.ROOT).endsWith(".jar")).map(_.toURL).toSeq
+          files.filter(_.getName.toLowerCase(Locale.ROOT).endsWith(".jar")).map(_.toURI.toURL).toSeq
         }
       } else {
-        file.toURL :: Nil
+        file.toURI.toURL :: Nil
       }
     }
 
@@ -460,7 +466,7 @@ private[spark] object HiveUtils extends Logging {
         version = metaVersion,
         sparkConf = conf,
         hadoopConf = hadoopConf,
-        execJars = jars.toSeq,
+        execJars = jars,
         config = configurations,
         isolationOn = true,
         barrierPrefixes = hiveMetastoreBarrierPrefixes,

@@ -26,6 +26,13 @@ import org.apache.spark.sql.types._
 
 private object MsSqlServerDialect extends JdbcDialect {
 
+  // Special JDBC types in Microsoft SQL Server.
+  // https://github.com/microsoft/mssql-jdbc/blob/v8.2.2/src/main/java/microsoft/sql/Types.java
+  private object SpecificTypes {
+    val GEOMETRY = -157
+    val GEOGRAPHY = -158
+  }
+
   override def canHandle(url: String): Boolean =
     url.toLowerCase(Locale.ROOT).startsWith("jdbc:sqlserver")
 
@@ -41,6 +48,7 @@ private object MsSqlServerDialect extends JdbcDialect {
         sqlType match {
           case java.sql.Types.SMALLINT => Some(ShortType)
           case java.sql.Types.REAL => Some(FloatType)
+          case SpecificTypes.GEOMETRY | SpecificTypes.GEOGRAPHY => Some(BinaryType)
           case _ => None
         }
       }

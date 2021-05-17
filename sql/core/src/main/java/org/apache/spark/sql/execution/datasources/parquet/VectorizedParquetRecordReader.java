@@ -320,7 +320,7 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
 
   private void checkEndOfRowGroup() throws IOException {
     if (rowsReturned != totalCountLoadedSoFar) return;
-    PageReadStore pages = reader.readNextRowGroup();
+    PageReadStore pages = reader.readNextFilteredRowGroup();
     if (pages == null) {
       throw new IOException("expecting more rows but reached last block. Read "
           + rowsReturned + " out of " + totalRowCount);
@@ -332,7 +332,7 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
       if (missingColumns[i]) continue;
       columnReaders[i] = new VectorizedColumnReader(
         columns.get(i),
-        types.get(i).getOriginalType(),
+        types.get(i).getLogicalTypeAnnotation(),
         pages.getPageReader(columns.get(i)),
         convertTz,
         datetimeRebaseMode,

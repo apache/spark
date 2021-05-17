@@ -22,7 +22,6 @@ import scala.reflect.runtime.universe.{typeTag, TypeTag}
 
 import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.{InternalRow, JavaTypeInference, ScalaReflection}
-import org.apache.spark.sql.catalyst.ScalaReflection.Schema
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, GetColumnByOrdinal, SimpleAnalyzer, UnresolvedAttribute, UnresolvedExtractValue}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder.{Deserializer, Serializer}
 import org.apache.spark.sql.catalyst.expressions._
@@ -30,6 +29,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjectio
 import org.apache.spark.sql.catalyst.expressions.objects.{AssertNotNull, InitializeJavaBean, Invoke, NewInstance}
 import org.apache.spark.sql.catalyst.optimizer.{ReassignLambdaVariableID, SimplifyCasts}
 import org.apache.spark.sql.catalyst.plans.logical.{CatalystSerde, DeserializeToObject, LeafNode, LocalRelation}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{ObjectType, StringType, StructField, StructType}
 import org.apache.spark.unsafe.types.UTF8String
@@ -304,11 +304,6 @@ case class ExpressionEncoder[T](
     StructField(s.name, s.dataType, s.nullable)
   })
 
-  def dataTypeAndNullable: Schema = {
-    val dataType = if (isSerializedAsStruct) schema else schema.head.dataType
-    Schema(dataType, objSerializer.nullable)
-  }
-
   /**
    * Returns true if the type `T` is serialized as a struct by `objSerializer`.
    */
@@ -410,7 +405,7 @@ case class ExpressionEncoder[T](
   def assertUnresolved(): Unit = {
     (deserializer +:  serializer).foreach(_.foreach {
       case a: AttributeReference if a.name != "loopVar" =>
-        sys.error(s"Unresolved encoder expected, but $a was found.")
+        throw QueryExecutionErrors.notExpectedUnresolvedEncoderError(a)
       case _ =>
     })
   }

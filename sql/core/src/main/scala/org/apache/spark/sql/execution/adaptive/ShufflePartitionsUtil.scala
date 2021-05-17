@@ -125,6 +125,10 @@ object ShufflePartitionsUtil extends Logging {
     partitionSpecs.toSeq
   }
 
+  def createEmptyPartition(): ShufflePartitionSpec = {
+    CoalescedPartitionSpec(0, 0)
+  }
+
   /**
    * Given a list of size, return an array of indices to split the list into multiple partitions,
    * so that the size sum of each partition is close to the target size. Each index indicates the

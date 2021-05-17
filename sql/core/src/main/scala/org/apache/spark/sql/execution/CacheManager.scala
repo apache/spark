@@ -114,8 +114,7 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
     if (lookupCachedData(planToCache).nonEmpty) {
       logWarning("Asked to cache already cached data.")
     } else {
-      val sessionWithConfigsOff = SparkSession.getOrCloneSessionWithConfigsOff(
-        spark, forceDisableConfigs)
+      val sessionWithConfigsOff = getOrCloneSessionWithConfigsOff(spark)
       val inMemoryRelation = sessionWithConfigsOff.withActive {
         val qe = sessionWithConfigsOff.sessionState.executePlan(planToCache)
         InMemoryRelation(
@@ -223,8 +222,7 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
     }
     needToRecache.foreach { cd =>
       cd.cachedRepresentation.cacheBuilder.clearCache()
-      val sessionWithConfigsOff = SparkSession.getOrCloneSessionWithConfigsOff(
-        spark, forceDisableConfigs)
+      val sessionWithConfigsOff = getOrCloneSessionWithConfigsOff(spark)
       val newCache = sessionWithConfigsOff.withActive {
         val qe = sessionWithConfigsOff.sessionState.executePlan(cd.plan)
         InMemoryRelation(cd.cachedRepresentation.cacheBuilder, qe)
@@ -327,5 +325,16 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       .exists(_.startsWith(prefixToInvalidate))
     if (needToRefresh) fileIndex.refresh()
     needToRefresh
+  }
+
+  /**
+   * If CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING is enabled, just return original session.
+   */
+  private def getOrCloneSessionWithConfigsOff(session: SparkSession): SparkSession = {
+    if (session.sessionState.conf.getConf(SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING)) {
+      session
+    } else {
+      SparkSession.getOrCloneSessionWithConfigsOff(session, forceDisableConfigs)
+    }
   }
 }

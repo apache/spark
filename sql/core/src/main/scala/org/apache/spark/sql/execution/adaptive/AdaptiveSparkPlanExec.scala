@@ -26,7 +26,7 @@ import scala.collection.mutable
 import scala.concurrent.ExecutionContext
 import scala.util.control.NonFatal
 
-import org.apache.spark.SparkException
+import org.apache.spark.{broadcast, SparkException}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
@@ -94,6 +94,7 @@ case class AdaptiveSparkPlanExec(
   // A list of physical optimizer rules to be applied to a new stage before its execution. These
   // optimizations should be stage-independent.
   @transient private val queryStageOptimizerRules: Seq[Rule[SparkPlan]] = Seq(
+    PlanAdaptiveDynamicPruningFilters(this),
     ReuseAdaptiveSubquery(context.subqueryCache),
     CoalesceShufflePartitions(context.session),
     // The following two rules need to make use of 'CustomShuffleReaderExec.partitionSpecs'
@@ -189,8 +190,20 @@ case class AdaptiveSparkPlanExec(
           stagesToReplace = result.newStages ++ stagesToReplace
           executionId.foreach(onUpdatePlan(_, result.newStages.map(_.plan)))
 
+          // SPARK-33933: we should submit tasks of broadcast stages first, to avoid waiting
+          // for tasks to be scheduled and leading to broadcast timeout.
+          // This partial fix only guarantees the start of materialization for BroadcastQueryStage
+          // is prior to others, but because the submission of collect job for broadcasting is
+          // running in another thread, the issue is not completely resolved.
+          val reorderedNewStages = result.newStages
+            .sortWith {
+              case (_: BroadcastQueryStageExec, _: BroadcastQueryStageExec) => false
+              case (_: BroadcastQueryStageExec, _) => true
+              case _ => false
+            }
+
           // Start materialization of all new stages and fail fast if any stages failed eagerly
-          result.newStages.foreach { stage =>
+          reorderedNewStages.foreach { stage =>
             try {
               stage.materialize().onComplete { res =>
                 if (res.isSuccess) {
@@ -295,6 +308,10 @@ case class AdaptiveSparkPlanExec(
     val rdd = getFinalPhysicalPlan().execute()
     finalPlanUpdate
     rdd
+  }
+
+  override def doExecuteBroadcast[T](): broadcast.Broadcast[T] = {
+    getFinalPhysicalPlan().doExecuteBroadcast()
   }
 
   protected override def stringArgs: Iterator[Any] = Iterator(s"isFinalPlan=$isFinalPlan")
@@ -463,7 +480,7 @@ case class AdaptiveSparkPlanExec(
           throw new IllegalStateException(
             "Custom columnar rules cannot transform shuffle node to something else.")
         }
-        ShuffleQueryStageExec(currentStageId, newShuffle)
+        ShuffleQueryStageExec(currentStageId, newShuffle, s.canonicalized)
       case b: BroadcastExchangeLike =>
         val newBroadcast = applyPhysicalRules(
           b.withNewChildren(Seq(optimizedPlan)),
@@ -473,7 +490,7 @@ case class AdaptiveSparkPlanExec(
           throw new IllegalStateException(
             "Custom columnar rules cannot transform broadcast node to something else.")
         }
-        BroadcastQueryStageExec(currentStageId, newBroadcast)
+        BroadcastQueryStageExec(currentStageId, newBroadcast, b.canonicalized)
     }
     currentStageId += 1
     setLogicalLinkForNewQueryStage(queryStage, e)

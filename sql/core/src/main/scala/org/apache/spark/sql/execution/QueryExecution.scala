@@ -28,6 +28,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.{InternalRow, QueryPlanningTracker}
 import org.apache.spark.sql.catalyst.analysis.UnsupportedOperationChecker
+import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
 import org.apache.spark.sql.catalyst.expressions.codegen.ByteCodeStats
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, ReturnAnswer}
@@ -213,11 +214,13 @@ class QueryExecution(
     QueryPlan.append(logical, append, verbose, addSuffix, maxFields)
     append("\n== Analyzed Logical Plan ==\n")
     try {
-      append(
-        truncatedString(
-          analyzed.output.map(o => s"${o.name}: ${o.dataType.simpleString}"), ", ", maxFields)
-      )
-      append("\n")
+      if (analyzed.output.nonEmpty) {
+        append(
+          truncatedString(
+            analyzed.output.map(o => s"${o.name}: ${o.dataType.simpleString}"), ", ", maxFields)
+        )
+        append("\n")
+      }
       QueryPlan.append(analyzed, append, verbose, addSuffix, maxFields)
       append("\n== Optimized Logical Plan ==\n")
       QueryPlan.append(optimizedPlan, append, verbose, addSuffix, maxFields)
@@ -253,6 +256,12 @@ class QueryExecution(
 
     // trigger to compute stats for logical plans
     try {
+      optimizedPlan.foreach(_.expressions.foreach(_.foreach {
+        case subqueryExpression: SubqueryExpression =>
+          // trigger subquery's child plan stats propagation
+          subqueryExpression.plan.stats
+        case _ =>
+      }))
       optimizedPlan.stats
     } catch {
       case e: AnalysisException => append(e.toString + "\n")

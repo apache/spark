@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.IntegerType
 
 class LeftSemiPushdownSuite extends PlanTest {
@@ -239,14 +240,23 @@ class LeftSemiPushdownSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("Union: LeftSemiAnti join no pushdown in self join scenario") {
+  test("Union: LeftSemiAnti join pushdown in self join scenario") {
     val testRelation2 = LocalRelation('x.int, 'y.int, 'z.int)
+    val attrX = testRelation2.output.head
 
     val originalQuery = Union(Seq(testRelation, testRelation2))
-      .join(testRelation2, joinType = LeftSemi, condition = Some('a === 'x))
+      .join(testRelation2, joinType = LeftSemi, condition = Some('a === attrX))
 
     val optimized = Optimize.execute(originalQuery.analyze)
-    comparePlans(optimized, originalQuery.analyze)
+
+    val correctAnswer = Union(Seq(
+      testRelation.join(testRelation2, joinType = LeftSemi, condition = Some('a === 'x)),
+      // We can't construct the actual query, as relations deduplication will create new attribute
+      // IDs. Here we use a fake join condition (always true) to verify the query plan shape.
+      testRelation2.join(testRelation2, joinType = LeftSemi, condition = Some(attrX === attrX))))
+      .analyze
+
+    comparePlans(optimized, correctAnswer)
   }
 
   test("Unary: LeftSemiAnti join pushdown") {
@@ -440,6 +450,30 @@ class LeftSemiPushdownSuite extends PlanTest {
         joinedRelation.join(testRelation, joinType = jt, condition = Some('a === 'e))
       val optimized = Optimize.execute(originalQuery.analyze)
       comparePlans(optimized, originalQuery.analyze)
+    }
+  }
+
+  Seq(LeftSemi, LeftAnti).foreach { jt =>
+    test(s"SPARK-34081: $jt only push down if join can be planned as broadcast join") {
+      Seq(-1, 100000).foreach { threshold =>
+        withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> threshold.toString) {
+          val originalQuery = testRelation
+            .groupBy('b)('b)
+            .join(testRelation1, joinType = jt, condition = Some('b <=> 'd))
+
+          val optimized = Optimize.execute(originalQuery.analyze)
+          val correctAnswer = if (threshold > 0) {
+            testRelation
+              .join(testRelation1, joinType = jt, condition = Some('b <=> 'd))
+              .groupBy('b)('b)
+              .analyze
+          } else {
+            originalQuery.analyze
+          }
+
+          comparePlans(optimized, correctAnswer)
+        }
+      }
     }
   }
 
