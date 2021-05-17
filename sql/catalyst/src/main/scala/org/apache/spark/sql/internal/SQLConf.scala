@@ -770,10 +770,10 @@ object SQLConf {
 
   val PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD =
     buildConf("spark.sql.parquet.pushdown.inFilterThreshold")
-      .doc("The maximum number of values to filter push-down optimization for IN predicate. " +
-        "Large threshold won't necessarily provide much better performance. " +
-        "The experiment argued that 300 is the limit threshold. " +
-        "By setting this value to 0 this feature can be disabled. " +
+      .doc("For IN predicate, Parquet filter will push-down a set of OR clauses if its " +
+        "number of values not exceeds this threshold. Otherwise, Parquet filter will push-down " +
+        "a value greater than or equal to its minimum value and less than or equal to " +
+        "its maximum value. By setting this value to 0 this feature can be disabled. " +
         s"This configuration only has an effect when '${PARQUET_FILTER_PUSHDOWN_ENABLED.key}' is " +
         "enabled.")
       .version("2.4.0")
@@ -1089,6 +1089,18 @@ object SQLConf {
       .version("3.1.0")
       .booleanConf
       .createWithDefault(true)
+
+  val CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING =
+    buildConf("spark.sql.optimizer.canChangeCachedPlanOutputPartitioning")
+      .internal()
+      .doc("Whether to forcibly enable some optimization rules that can change the output " +
+        "partitioning of a cached query when executing it for caching. If it is set to true, " +
+        "queries may need an extra shuffle to read the cached data. This configuration is " +
+        "disabled by default. Currently, the optimization rules enabled by this configuration " +
+        s"are ${ADAPTIVE_EXECUTION_ENABLED.key} and ${AUTO_BUCKETED_SCAN_ENABLED.key}.")
+      .version("3.2.0")
+      .booleanConf
+      .createWithDefault(false)
 
   val CROSS_JOINS_ENABLED = buildConf("spark.sql.crossJoin.enabled")
     .internal()

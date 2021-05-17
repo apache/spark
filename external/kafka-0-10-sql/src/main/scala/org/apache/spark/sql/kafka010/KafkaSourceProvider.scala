@@ -34,8 +34,7 @@ import org.apache.spark.sql.connector.catalog.{SupportsRead, SupportsWrite, Tabl
 import org.apache.spark.sql.connector.metric.{CustomMetric, CustomSumMetric}
 import org.apache.spark.sql.connector.read.{Batch, Scan, ScanBuilder}
 import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, MicroBatchStream}
-import org.apache.spark.sql.connector.write.{BatchWrite, LogicalWriteInfo, SupportsTruncate, WriteBuilder}
-import org.apache.spark.sql.connector.write.streaming.StreamingWrite
+import org.apache.spark.sql.connector.write.{LogicalWriteInfo, SupportsTruncate, Write, WriteBuilder}
 import org.apache.spark.sql.execution.streaming.{Sink, Source}
 import org.apache.spark.sql.internal.connector.{SimpleTableProvider, SupportsStreamingUpdateAsAppend}
 import org.apache.spark.sql.sources._
@@ -402,15 +401,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
         private val producerParams =
           kafkaParamsForProducer(CaseInsensitiveMap(options.asScala.toMap))
 
-        override def buildForBatch(): BatchWrite = {
-          assert(inputSchema != null)
-          new KafkaBatchWrite(topic, producerParams, inputSchema)
-        }
-
-        override def buildForStreaming(): StreamingWrite = {
-          assert(inputSchema != null)
-          new KafkaStreamingWrite(topic, producerParams, inputSchema)
-        }
+        override def build(): Write = KafkaWrite(topic, producerParams, inputSchema)
 
         override def truncate(): WriteBuilder = this
       }
