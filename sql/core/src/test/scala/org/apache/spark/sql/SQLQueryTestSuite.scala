@@ -131,8 +131,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
     // We use a path based on Spark home for 2 reasons:
     //   1. Maven can't get correct resource directory when resources in other jars.
     //   2. We test subclasses in the hive-thriftserver module.
-    java.nio.file.Paths.get(sparkHome,
-      "sql", "core", "src", "test", "resources", "sql-tests").toFile
+    getWorkspaceFilePath("sql", "core", "src", "test", "resources", "sql-tests").toFile
   }
 
   protected val inputFilePath = new File(baseResourcePath, "inputs").getAbsolutePath
