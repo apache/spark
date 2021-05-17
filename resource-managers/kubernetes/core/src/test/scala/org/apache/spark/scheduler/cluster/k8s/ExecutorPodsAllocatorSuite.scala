@@ -18,7 +18,9 @@ package org.apache.spark.scheduler.cluster.k8s
 
 import java.time.Instant
 
-import io.fabric8.kubernetes.api.model.{Pod, PodBuilder}
+import scala.collection.JavaConverters._
+
+import io.fabric8.kubernetes.api.model._
 import io.fabric8.kubernetes.client.KubernetesClient
 import io.fabric8.kubernetes.client.dsl.PodResource
 import org.mockito.{Mock, MockitoAnnotations}
@@ -71,6 +73,15 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
 
   @Mock
   private var podOperations: PODS = _
+
+  @Mock
+  private var persistentVolumeClaims: PERSISTENT_VOLUME_CLAIMS = _
+
+  @Mock
+  private var labeledPersistentVolumeClaims: LABELED_PERSISTENT_VOLUME_CLAIMS = _
+
+  @Mock
+  private var persistentVolumeClaimList: PersistentVolumeClaimList = _
 
   @Mock
   private var labeledPods: LABELED_PODS = _
@@ -567,6 +578,72 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     assert(podsAllocatorUnderTest.numOutstandingPods.get() == 2)
     // We request pod 6
     verify(podOperations).create(podWithAttachedContainerForId(6))
+  }
+
+  test("SPARK-35416: Support PersistentVolumeClaim Reuse") {
+    val prefix = "spark.kubernetes.executor.volumes.persistentVolumeClaim.spark-local-dir-1"
+    val confWithPVC = conf.clone
+      .set(KUBERNETES_DRIVER_OWN_PVC.key, "true")
+      .set(KUBERNETES_DRIVER_REUSE_PVC.key, "true")
+      .set(s"$prefix.mount.path", "/spark-local-dir")
+      .set(s"$prefix.mount.readOnly", "false")
+      .set(s"$prefix.option.claimName", "OnDemand")
+      .set(s"$prefix.option.sizeLimit", "200Gi")
+      .set(s"$prefix.option.storageClass", "gp2")
+
+    when(kubernetesClient.persistentVolumeClaims()).thenReturn(persistentVolumeClaims)
+    when(persistentVolumeClaims.withLabel(any(), any())).thenReturn(labeledPersistentVolumeClaims)
+    when(labeledPersistentVolumeClaims.list()).thenReturn(persistentVolumeClaimList)
+    when(persistentVolumeClaimList.getItems)
+      .thenReturn(Seq(persistentVolumeClaim("pvc-0", "gp2", "200Gi")).asJava)
+    when(executorBuilder.buildFromFeatures(any(classOf[KubernetesExecutorConf]), meq(secMgr),
+        meq(kubernetesClient), any(classOf[ResourceProfile])))
+      .thenAnswer((invocation: InvocationOnMock) => {
+      val k8sConf: KubernetesExecutorConf = invocation.getArgument(0)
+      KubernetesExecutorSpec(
+        executorPodWithIdAndVolume(k8sConf.executorId.toInt, k8sConf.resourceProfileId),
+        Seq(persistentVolumeClaim("pvc-0", "gp2", "200Gi")))
+    })
+
+    podsAllocatorUnderTest = new ExecutorPodsAllocator(
+      confWithPVC, secMgr, executorBuilder,
+      kubernetesClient, snapshotsStore, waitForExecutorPodsClock)
+    podsAllocatorUnderTest.start(TEST_SPARK_APP_ID, schedulerBackend)
+
+    when(podOperations
+      .withField("status.phase", "Pending"))
+      .thenReturn(podOperations)
+    when(podOperations
+      .withLabel(SPARK_APP_ID_LABEL, TEST_SPARK_APP_ID))
+      .thenReturn(podOperations)
+    when(podOperations
+      .withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE))
+      .thenReturn(podOperations)
+    when(podOperations
+      .withLabelIn(meq(SPARK_EXECUTOR_ID_LABEL), any()))
+      .thenReturn(podOperations)
+
+    val startTime = Instant.now.toEpochMilli
+    waitForExecutorPodsClock.setTime(startTime)
+
+    // Target 1 executor, make sure it's requested, even with an empty initial snapshot.
+    podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 1))
+    assert(podsAllocatorUnderTest.numOutstandingPods.get() == 1)
+    verify(podOperations).create(podWithAttachedContainerForIdAndVolume(1))
+
+    // Mark executor as running, verify that subsequent allocation cycle is a no-op.
+    snapshotsStore.updatePod(runningExecutor(1))
+    snapshotsStore.notifySubscribers()
+    assert(podsAllocatorUnderTest.numOutstandingPods.get() == 0)
+    verify(podOperations, times(1)).create(any())
+    verify(podOperations, never()).delete()
+
+    // Request a new executor, make sure it's using reused PVC
+    podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 2))
+    snapshotsStore.notifySubscribers()
+    assert(podsAllocatorUnderTest.numOutstandingPods.get() == 1)
+    verify(podOperations).create(podWithAttachedContainerForIdAndVolume(2))
+    verify(persistentVolumeClaims, never()).create(any())
   }
 
   private def executorPodAnswer(): Answer[KubernetesExecutorSpec] =
