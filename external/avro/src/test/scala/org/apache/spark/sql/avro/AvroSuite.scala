@@ -2099,7 +2099,8 @@ abstract class AvroSuite
           val e = intercept[SparkException] {
             df.write.format("avro").option("avroSchema", avroSchema).save(dir.getCanonicalPath)
           }
-          assert(e.getCause.getCause.getCause.isInstanceOf[SparkUpgradeException])
+          val errMsg = e.getCause.getCause.getCause.asInstanceOf[SparkUpgradeException].getMessage
+          assert(errMsg.contains("You may get a different result due to the upgrading"))
         }
       }
 
@@ -2108,7 +2109,8 @@ abstract class AvroSuite
         val e = intercept[SparkException] {
           df.write.format("avro").save(dir.getCanonicalPath)
         }
-        assert(e.getCause.getCause.getCause.isInstanceOf[SparkUpgradeException])
+        val errMsg = e.getCause.getCause.getCause.asInstanceOf[SparkUpgradeException].getMessage
+        assert(errMsg.contains("You may get a different result due to the upgrading"))
       }
     }
 
@@ -2121,7 +2123,8 @@ abstract class AvroSuite
         val e = intercept[SparkException] {
           spark.read.format("avro").load(getResourceAvroFilePath(fileName)).collect()
         }
-        assert(e.getCause.isInstanceOf[SparkUpgradeException])
+        val errMsg = e.getCause.asInstanceOf[SparkUpgradeException].getMessage
+        assert(errMsg.contains("You may get a different result due to the upgrading"))
       }
     }
   }
