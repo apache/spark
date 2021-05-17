@@ -50,7 +50,14 @@ trait InvokeLike extends Expression with NonSQLExpression {
 
   def propagateNull: Boolean
 
-  protected lazy val needNullCheck: Boolean = propagateNull && arguments.exists(_.nullable)
+  def propagateNullForPrimitive: Boolean
+
+  protected lazy val needNullCheck: Boolean = needNullCheckForIndex.contains(true)
+  protected lazy val needNullCheckForIndex: Array[Boolean] =
+    arguments.map(a => (propagateNull && a.nullable) ||
+        (!propagateNull && propagateNullForPrimitive &&
+            ScalaReflection.dataTypeJavaClass(a.dataType).isPrimitive &&
+            a.nullable)).toArray
   protected lazy val evaluatedArgs: Array[Object] = new Array[Object](arguments.length)
   private lazy val boxingFn: Any => Any =
     ScalaReflection.typeBoxedJavaMapping
@@ -89,7 +96,7 @@ trait InvokeLike extends Expression with NonSQLExpression {
       val reset = s"$resultIsNull = false;"
       val argCodes = arguments.zipWithIndex.map { case (e, i) =>
         val expr = e.genCode(ctx)
-        val updateResultIsNull = if (e.nullable) {
+        val updateResultIsNull = if (needNullCheckForIndex(i)) {
           s"$resultIsNull = ${expr.isNull};"
         } else {
           ""
@@ -131,11 +138,14 @@ trait InvokeLike extends Expression with NonSQLExpression {
   def invoke(obj: Any, method: Method, input: InternalRow): Any = {
     var i = 0
     val len = arguments.length
+    var resultNull = false
     while (i < len) {
-      evaluatedArgs(i) = arguments(i).eval(input).asInstanceOf[Object]
+      val result = arguments(i).eval(input).asInstanceOf[Object]
+      evaluatedArgs(i) = result
+      resultNull = resultNull || (result == null && needNullCheckForIndex(i))
       i += 1
     }
-    if (needNullCheck && evaluatedArgs.contains(null)) {
+    if (needNullCheck && resultNull) {
       // return null if one of arguments is null
       null
     } else {
@@ -229,6 +239,10 @@ object SerializerSupport {
  *                      of calling the function.
  * @param returnNullable When false, indicating the invoked method will always return
  *                       non-null value.
+ * @param propagateNullForPrimitive Whether to propagate null for arguments of primitive type,
+ *                                  when [[propagateNull]] is false. Note this is ignored when
+ *                                  [[propagateNull]] is true.
+
  */
 case class StaticInvoke(
     staticObject: Class[_],
@@ -236,7 +250,8 @@ case class StaticInvoke(
     functionName: String,
     arguments: Seq[Expression] = Nil,
     propagateNull: Boolean = true,
-    returnNullable: Boolean = true) extends InvokeLike {
+    returnNullable: Boolean = true,
+    propagateNullForPrimitive: Boolean = false) extends InvokeLike {
 
   val objectName = staticObject.getName.stripSuffix("$")
   val cls = if (staticObject.getName == objectName) {
@@ -321,6 +336,9 @@ case class StaticInvoke(
  *                      of calling the function.
  * @param returnNullable When false, indicating the invoked method will always return
  *                       non-null value.
+ * @param propagateNullForPrimitive Whether to propagate null for arguments of primitive type,
+ *                                  when [[propagateNull]] is false. Note this is ignored when
+ *                                  [[propagateNull]] is true.
  */
 case class Invoke(
     targetObject: Expression,
@@ -328,7 +346,8 @@ case class Invoke(
     dataType: DataType,
     arguments: Seq[Expression] = Nil,
     propagateNull: Boolean = true,
-    returnNullable : Boolean = true) extends InvokeLike {
+    returnNullable : Boolean = true,
+    propagateNullForPrimitive: Boolean = false) extends InvokeLike {
 
   lazy val argClasses = ScalaReflection.expressionJavaClasses(arguments)
 
@@ -441,8 +460,9 @@ object NewInstance {
       cls: Class[_],
       arguments: Seq[Expression],
       dataType: DataType,
-      propagateNull: Boolean = true): NewInstance =
-    new NewInstance(cls, arguments, propagateNull, dataType, None)
+      propagateNull: Boolean = true,
+      propagateNullForPrimitive: Boolean = false): NewInstance =
+    new NewInstance(cls, arguments, propagateNull, dataType, None, propagateNullForPrimitive)
 }
 
 /**
@@ -460,13 +480,17 @@ object NewInstance {
  *                     containing class must be specified. This parameter is defined as an optional
  *                     function, which allows us to get the outer pointer lazily,and it's useful if
  *                     the inner class is defined in REPL.
+ * @param propagateNullForPrimitive Whether to propagate null for arguments of primitive type,
+ *                                  when [[propagateNull]] is false. Note this is ignored when
+ *                                  [[propagateNull]] is true.
  */
 case class NewInstance(
     cls: Class[_],
     arguments: Seq[Expression],
     propagateNull: Boolean,
     dataType: DataType,
-    outerPointer: Option[() => AnyRef]) extends InvokeLike {
+    outerPointer: Option[() => AnyRef],
+    propagateNullForPrimitive: Boolean) extends InvokeLike {
   private val className = cls.getName
 
   override def nullable: Boolean = needNullCheck
