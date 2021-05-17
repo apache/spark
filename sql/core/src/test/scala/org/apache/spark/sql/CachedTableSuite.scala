@@ -1355,14 +1355,10 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
       checkAnswer(sql("SELECT * FROM t"), Seq(Row(0, 0)))
 
       // Create new partition (part = 1) in the filesystem
-      val information = sql("SHOW TABLE EXTENDED LIKE 't' PARTITION (part = 0)")
-        .select("information")
+      val part0Loc = sql("SHOW TABLE EXTENDED LIKE 't' PARTITION (part = 0)")
+        .selectExpr("information['Location']")
         .first().getString(0)
-      val part0Loc = information
-        .split("\\r?\\n")
-        .filter(_.startsWith("Location:"))
-        .head
-        .replace("Location: file:", "")
+        .replace("file:", "")
       FileUtils.copyDirectory(
         new File(part0Loc),
         new File(part0Loc.replace("part=0", "part=1")))
