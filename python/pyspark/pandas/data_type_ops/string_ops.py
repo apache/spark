@@ -15,6 +15,8 @@
 # limitations under the License.
 #
 
+from typing import TYPE_CHECKING, Union
+
 from pandas.api.types import CategoricalDtype
 
 from pyspark.sql import functions as F
@@ -24,6 +26,10 @@ from pyspark.pandas.base import column_op, IndexOpsMixin
 from pyspark.pandas.data_type_ops.base import DataTypeOps
 from pyspark.pandas.spark import functions as SF
 
+if TYPE_CHECKING:
+    from pyspark.pandas.indexes import Index  # noqa: F401 (SPARK-34943)
+    from pyspark.pandas.series import Series  # noqa: F401 (SPARK-34943)
+
 
 class StringOps(DataTypeOps):
     """
@@ -31,10 +37,10 @@ class StringOps(DataTypeOps):
     """
 
     @property
-    def pretty_name(self):
+    def pretty_name(self) -> str:
         return 'strings'
 
-    def __add__(self, left, right):
+    def __add__(self, left, right) -> Union["Series", "Index"]:
         if isinstance(right, IndexOpsMixin) and isinstance(right.spark.data_type, StringType):
             return column_op(F.concat)(left, right)
         elif isinstance(right, str):
@@ -45,7 +51,7 @@ class StringOps(DataTypeOps):
     def __sub__(self, left, right):
         raise TypeError("subtraction can not be applied to string series or literals.")
 
-    def __mul__(self, left, right):
+    def __mul__(self, left, right) -> Union["Series", "Index"]:
         if isinstance(right, str):
             raise TypeError("multiplication can not be applied to a string literal.")
 
@@ -70,7 +76,7 @@ class StringOps(DataTypeOps):
     def __pow__(self, left, right):
         raise TypeError("exponentiation can not be applied on string series or literals.")
 
-    def __radd__(self, left, right=None):
+    def __radd__(self, left, right=None) -> Union["Series", "Index"]:
         if isinstance(right, str):
             return left._with_new_scol(F.concat(F.lit(right), left.spark.column))  # TODO: dtype?
         else:
@@ -79,7 +85,7 @@ class StringOps(DataTypeOps):
     def __rsub__(self, left, right=None):
         raise TypeError("subtraction can not be applied to string series or literals.")
 
-    def __rmul__(self, left, right=None):
+    def __rmul__(self, left, right=None) -> Union["Series", "Index"]:
         if isinstance(right, int):
             return column_op(SF.repeat)(left, right)
         else:

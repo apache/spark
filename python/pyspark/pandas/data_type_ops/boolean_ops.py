@@ -24,5 +24,5 @@ class BooleanOps(DataTypeOps):
     """
 
     @property
-    def pretty_name(self):
+    def pretty_name(self) -> str:
         return 'booleans'

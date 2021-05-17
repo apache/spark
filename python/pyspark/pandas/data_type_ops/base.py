@@ -16,6 +16,7 @@
 #
 
 from abc import ABCMeta, abstractmethod
+from typing import TYPE_CHECKING, Union
 
 from pandas.api.types import CategoricalDtype
 
@@ -30,6 +31,10 @@ from pyspark.sql.types import (
 )
 
 from pyspark.pandas.typedef import Dtype
+
+if TYPE_CHECKING:
+    from pyspark.pandas.indexes import Index  # noqa: F401 (SPARK-34943)
+    from pyspark.pandas.series import Series  # noqa: F401 (SPARK-34943)
 
 
 class DataTypeOps(object, metaclass=ABCMeta):
@@ -69,47 +74,47 @@ class DataTypeOps(object, metaclass=ABCMeta):
 
     @property
     @abstractmethod
-    def pretty_name(self):
+    def pretty_name(self) -> str:
         raise NotImplementedError()
 
-    def __add__(self, left, right):
+    def __add__(self, left, right) -> Union["Series", "Index"]:
         raise TypeError("Addition can not be applied to %s." % self.pretty_name)
 
-    def __sub__(self, left, right):
+    def __sub__(self, left, right) -> Union["Series", "Index"]:
         raise TypeError("Subtraction can not be applied to %s." % self.pretty_name)
 
-    def __mul__(self, left, right):
+    def __mul__(self, left, right) -> Union["Series", "Index"]:
         raise TypeError("Multiplication can not be applied to %s." % self.pretty_name)
 
-    def __truediv__(self, left, right):
+    def __truediv__(self, left, right) -> Union["Series", "Index"]:
         raise TypeError("True division can not be applied to %s." % self.pretty_name)
 
-    def __floordiv__(self, left, right):
+    def __floordiv__(self, left, right) -> Union["Series", "Index"]:
         raise TypeError("Floor division can not be applied to %s." % self.pretty_name)
 
-    def __mod__(self, left, right):
+    def __mod__(self, left, right) -> Union["Series", "Index"]:
         raise TypeError("Modulo can not be applied to %s." % self.pretty_name)
 
-    def __pow__(self, left, right):
+    def __pow__(self, left, right) -> Union["Series", "Index"]:
         raise TypeError("Exponentiation can not be applied to %s." % self.pretty_name)
 
-    def __radd__(self, left, right=None):
+    def __radd__(self, left, right=None) -> Union["Series", "Index"]:
         raise TypeError("Addition can not be applied to %s." % self.pretty_name)
 
-    def __rsub__(self, left, right=None):
+    def __rsub__(self, left, right=None) -> Union["Series", "Index"]:
         raise TypeError("Subtraction can not be applied to %s." % self.pretty_name)
 
-    def __rmul__(self, left, right=None):
+    def __rmul__(self, left, right=None) -> Union["Series", "Index"]:
         raise TypeError("Multiplication can not be applied to %s." % self.pretty_name)
 
-    def __rtruediv__(self, left, right=None):
+    def __rtruediv__(self, left, right=None) -> Union["Series", "Index"]:
         raise TypeError("True division can not be applied to %s." % self.pretty_name)
 
-    def __rfloordiv__(self, left, right=None):
+    def __rfloordiv__(self, left, right=None) -> Union["Series", "Index"]:
         raise TypeError("Floor division can not be applied to %s." % self.pretty_name)
 
-    def __rmod__(self, left, right=None):
+    def __rmod__(self, left, right=None) -> Union["Series", "Index"]:
         raise TypeError("Modulo can not be applied to %s." % self.pretty_name)
 
-    def __rpow__(self, left, right=None):
+    def __rpow__(self, left, right=None) -> Union["Series", "Index"]:
         raise TypeError("Exponentiation can not be applied to %s." % self.pretty_name)

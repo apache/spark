@@ -17,12 +17,17 @@
 
 import datetime
 import warnings
+from typing import TYPE_CHECKING, Union
 
 from pyspark.sql import functions as F
 from pyspark.sql.types import DateType
 
 from pyspark.pandas.base import column_op, IndexOpsMixin
 from pyspark.pandas.data_type_ops.base import DataTypeOps
+
+if TYPE_CHECKING:
+    from pyspark.pandas.indexes import Index  # noqa: F401 (SPARK-34943)
+    from pyspark.pandas.series import Series  # noqa: F401 (SPARK-34943)
 
 
 class DateOps(DataTypeOps):
@@ -31,10 +36,10 @@ class DateOps(DataTypeOps):
     """
 
     @property
-    def pretty_name(self):
+    def pretty_name(self) -> str:
         return 'dates'
 
-    def __sub__(self, left, right):
+    def __sub__(self, left, right) -> Union["Series", "Index"]:
         # Note that date subtraction casts arguments to integer. This is to mimic pandas's
         # behaviors. pandas returns 'timedelta64[ns]' in days from date's subtraction.
         msg = (
@@ -51,7 +56,7 @@ class DateOps(DataTypeOps):
         else:
             raise TypeError("date subtraction can only be applied to date series.")
 
-    def __rsub__(self, left, right=None):
+    def __rsub__(self, left, right=None) -> Union["Series", "Index"]:
         # Note that date subtraction casts arguments to integer. This is to mimic pandas's
         # behaviors. pandas returns 'timedelta64[ns]' in days from date's subtraction.
         msg = (
