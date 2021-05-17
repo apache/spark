@@ -50,9 +50,9 @@ class StringOps(DataTypeOps):
             raise TypeError("multiplication can not be applied to a string literal.")
 
         if (
-                isinstance(right, IndexOpsMixin)
-                and isinstance(right.spark.data_type, IntegralType)
-                and not isinstance(right.dtype, CategoricalDtype)
+            isinstance(right, IndexOpsMixin)
+            and isinstance(right.spark.data_type, IntegralType)
+            and not isinstance(right.dtype, CategoricalDtype)
         ) or isinstance(right, int):
             return column_op(SF.repeat)(left, right)
         else:

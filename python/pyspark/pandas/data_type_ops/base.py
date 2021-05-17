@@ -23,9 +23,7 @@ from pyspark.sql.types import (
     BooleanType,
     DataType,
     DateType,
-    DecimalType,
-    DoubleType,
-    FloatType,
+    FractionalType,
     IntegralType,
     StringType,
     TimestampType,
@@ -50,11 +48,7 @@ class DataTypeOps(object, metaclass=ABCMeta):
 
         if isinstance(dtype, CategoricalDtype):
             return object.__new__(CategoricalOps)
-        elif (
-                isinstance(spark_type, FloatType)
-                or isinstance(spark_type, DoubleType)
-                or isinstance(spark_type, DecimalType)
-        ):
+        elif isinstance(spark_type, FractionalType):
             return object.__new__(FractionalOps)
         elif isinstance(spark_type, IntegralType):
             return object.__new__(IntegralOps)
@@ -114,8 +108,8 @@ class DataTypeOps(object, metaclass=ABCMeta):
     def __rfloordiv__(self, left, right=None):
         raise TypeError("Floor division can not be applied to %s." % self.pretty_name)
 
-    def __rpow__(self, left, right=None):
+    def __rmod__(self, left, right=None):
         raise TypeError("Modulo can not be applied to %s." % self.pretty_name)
 
-    def __rmod__(self, left, right=None):
+    def __rpow__(self, left, right=None):
         raise TypeError("Exponentiation can not be applied to %s." % self.pretty_name)

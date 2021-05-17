@@ -75,24 +75,6 @@ class NumericOps(DataTypeOps):
 
         return column_op(Column.__sub__)(left, right)
 
-    def __mul__(self, left, right):
-        if isinstance(right, str):
-            raise TypeError("multiplication can not be applied to a string literal.")
-
-        if isinstance(right, IndexOpsMixin) and isinstance(right.spark.data_type, TimestampType):
-            raise TypeError("multiplication can not be applied to date times.")
-
-        if (
-            isinstance(right, IndexOpsMixin)
-            and (
-                isinstance(right.dtype, CategoricalDtype)
-                or not isinstance(right.spark.data_type, NumericType)
-            )
-        ) and not isinstance(right, numbers.Number):
-            raise TypeError("multiplication can not be applied to given types.")
-
-        return column_op(Column.__mul__)(left, right)
-
     def __truediv__(self, left, right):
         if (
             isinstance(right, IndexOpsMixin) and isinstance(right.spark.data_type, StringType)
@@ -294,4 +276,24 @@ class FractionalOps(NumericOps):
     FloatType, DoubleType and DecimalType.
     """
 
-    pass
+    @property
+    def pretty_name(self):
+        return 'fractions'
+
+    def __mul__(self, left, right):
+        if isinstance(right, str):
+            raise TypeError("multiplication can not be applied to a string literal.")
+
+        if isinstance(right, IndexOpsMixin) and isinstance(right.spark.data_type, TimestampType):
+            raise TypeError("multiplication can not be applied to date times.")
+
+        if (
+            isinstance(right, IndexOpsMixin)
+            and (
+                    isinstance(right.dtype, CategoricalDtype)
+                    or not isinstance(right.spark.data_type, NumericType)
+            )
+        ) and not isinstance(right, numbers.Number):
+            raise TypeError("multiplication can not be applied to given types.")
+
+        return column_op(Column.__mul__)(left, right)
