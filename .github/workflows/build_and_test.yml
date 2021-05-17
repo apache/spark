@@ -428,6 +428,7 @@ jobs:
       uses: actions/checkout@v2
       with:
         repository: databricks/tpcds-kit
+        ref: 2a5078a782192ddb6efbcead8de9973d6ab4f069
         path: ./tpcds-kit
     - name: Build tpcds-kit
       if: steps.cache-tpcds-sf-1.outputs.cache-hit != 'true'
