@@ -2872,8 +2872,8 @@ object functions {
    * @group string_funcs
    * @since 3.2.0
    */
-  def sentences(str: Column, language: String, country: String): Column = withExpr {
-    Sentences(str.expr, lit(language).expr, lit(country).expr)
+  def sentences(string: Column, language: Column, country: Column): Column = withExpr {
+    Sentences(string.expr, language.expr, language.expr)
   }
 
   /**
