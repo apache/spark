@@ -1001,7 +1001,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
     case t: Seq[_] if t.forall(_.isInstanceOf[TreeNode[_]]) ||
       t.forall(_.isInstanceOf[Partitioning]) || t.forall(_.isInstanceOf[DataType]) =>
       JArray(t.map(parseToJson).toList)
-    // Scan Seq of Product to make sure essential information can be written out.
+    // Scan Seq[Product] to make sure essential information can be written out.
     case t: Seq[_] if t.forall(_.isInstanceOf[Product]) =>
       JArray(t.map(parseToJson).toList)
     case t: Seq[_] if t.length > 0 && t.head.isInstanceOf[String] =>
