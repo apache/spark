@@ -151,7 +151,9 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       transfer,
       blockManager.getOrElse(createMockBlockManager()),
       blocksByAddress.toIterator,
-      (_, in) => new LimitedInputStream(in, streamWrapperLimitSize.getOrElse(Long.MaxValue)),
+      streamWrapperLimitSize
+          .map(limit => (_: BlockId, in: InputStream) => new LimitedInputStream(in, limit))
+          .getOrElse((_: BlockId, in: InputStream) => in),
       maxBytesInFlight,
       maxReqsInFlight,
       maxBlocksInFlightPerAddress,
