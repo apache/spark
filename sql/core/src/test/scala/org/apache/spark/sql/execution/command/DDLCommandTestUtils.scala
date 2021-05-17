@@ -153,14 +153,10 @@ trait DDLCommandTestUtils extends SQLTestUtils {
     val table = idents.last
     val catalogAndNs = idents.init
     val in = if (catalogAndNs.isEmpty) "" else s"IN ${catalogAndNs.mkString(".")}"
-    val information = sql(s"SHOW TABLE EXTENDED $in LIKE '$table' PARTITION ($part)")
-      .select("information")
+    val location = sql(s"SHOW TABLE EXTENDED $in LIKE '$table' PARTITION ($part)")
+      .selectExpr("information['Location']")
       .first().getString(0)
-    information
-      .split("\\r?\\n")
-      .filter(_.startsWith("Location:"))
-      .head
-      .replace("Location: file:", "")
+    location.replace("file:", "")
   }
 
   def copyPartition(tableName: String, from: String, to: String): String = {

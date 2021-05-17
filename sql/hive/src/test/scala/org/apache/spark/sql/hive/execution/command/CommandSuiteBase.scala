@@ -41,11 +41,10 @@ trait CommandSuiteBase extends TestHiveSingleton {
     val tableName = tablePath.last
     val ns = tablePath.init.mkString(".")
     val partSpec = spec.map { case (key, value) => s"$key = $value"}.mkString(", ")
-    val information =
+    val location =
       spark.sql(s"SHOW TABLE EXTENDED IN $ns LIKE '$tableName' PARTITION($partSpec)")
-        .select("information")
+        .selectExpr("information['Location']")
         .first().getString(0)
-    val location = information.split("\\r?\\n").filter(_.startsWith("Location:")).head
     assert(location.endsWith(expected))
   }
 

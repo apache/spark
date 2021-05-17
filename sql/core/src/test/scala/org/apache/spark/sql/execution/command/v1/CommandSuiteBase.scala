@@ -41,10 +41,9 @@ trait CommandSuiteBase extends SharedSparkSession {
     val tableName = tablePath.last
     val ns = tablePath.init.mkString(".")
     val partSpec = spec.map { case (key, value) => s"$key = $value"}.mkString(", ")
-    val information = sql(s"SHOW TABLE EXTENDED IN $ns LIKE '$tableName' PARTITION($partSpec)")
-      .select("information")
+    val location = sql(s"SHOW TABLE EXTENDED IN $ns LIKE '$tableName' PARTITION($partSpec)")
+      .selectExpr("information['Location']")
       .first().getString(0)
-    val location = information.split("\\r?\\n").filter(_.startsWith("Location:")).head
     assert(location.endsWith(expected))
   }
 }

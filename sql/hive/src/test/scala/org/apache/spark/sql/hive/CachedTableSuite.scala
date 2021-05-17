@@ -478,14 +478,10 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
   }
 
   private def getPartitionLocation(t: String, partition: String): String = {
-    val information = sql(s"SHOW TABLE EXTENDED LIKE '$t' PARTITION ($partition)")
-      .select("information")
+    val location = sql(s"SHOW TABLE EXTENDED LIKE '$t' PARTITION ($partition)")
+      .selectExpr("information['Location']")
       .first().getString(0)
-    information
-      .split("\\r?\\n")
-      .filter(_.startsWith("Location:"))
-      .head
-      .replace("Location: file:", "")
+    location.replace("file:", "")
   }
 
   test("SPARK-34213: LOAD DATA refreshes cached table") {

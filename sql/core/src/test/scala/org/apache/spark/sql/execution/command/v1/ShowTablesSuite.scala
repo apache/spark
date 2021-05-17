@@ -67,7 +67,9 @@ trait ShowTablesSuiteBase extends command.ShowTablesSuiteBase {
       val resultWithoutInfo = result.map { case Row(db, table, temp, _) => Row(db, table, temp) }
 
       assert(resultWithoutInfo === expected)
-      result.foreach { case Row(_, _, _, info: String) => assert(info.nonEmpty) }
+      result.foreach {
+        case Row(_, _, _, info: Map[String, String] @ unchecked) => assert(info.nonEmpty)
+      }
     }
   }
 
@@ -84,8 +86,8 @@ trait ShowTablesSuiteBase extends command.ShowTablesSuiteBase {
       ).foreach { case (caseSensitive, partitionSpec) =>
         withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
           val df = sql(s"SHOW TABLE EXTENDED LIKE 'part_table' $partitionSpec")
-          val information = df.select("information").first().getString(0)
-          assert(information.contains("Partition Values: [year=2015, month=1]"))
+          val partValues = df.selectExpr("information['Partition Values']").first().getString(0)
+          assert(partValues === "[year=2015, month=1]")
         }
       }
     }

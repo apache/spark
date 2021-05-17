@@ -68,7 +68,7 @@ object HiveResult {
     // SHOW TABLE EXTENDED in Hive do not have isTemp while our v1 command outputs isTemp.
     case command @ ExecutedCommandExec(s: ShowTablesCommand) if s.isExtended =>
       command.executeCollect().map(_.getMap(3))
-        .map(kv => kv.keyArray().array.zip(kv.valueArray().array)
+        .map(m => m.keyArray().array.zip(m.valueArray().array)
           .map(kv => s"${kv._1}: ${kv._2}").mkString("\n"))
     // SHOW TABLES in Hive only output table names while our v2 command outputs
     // namespace and table name.
