@@ -911,6 +911,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * one of the known case-insensitive shorten names (`none`, `bzip2`, `gzip`, `lz4`,
    * `snappy` and `deflate`). </li>
    * <li>`lineSep` (default `\n`): defines the line separator that should be used for writing.</li>
+   * </ul>
    *
    * @since 1.6.0
    */
