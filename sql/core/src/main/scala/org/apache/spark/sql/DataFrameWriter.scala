@@ -881,14 +881,10 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    *   format("orc").save(path)
    * }}}
    *
-   * You can set the following ORC-specific option(s) for writing ORC files:
-   * <ul>
-   * <li>`compression` (default is the value specified in `spark.sql.orc.compression.codec`):
-   * compression codec to use when saving to file. This can be one of the known case-insensitive
-   * shorten names(`none`, `snappy`, `zlib`, `lzo`, and `zstd`). This will override
-   * `orc.compress` and `spark.sql.orc.compression.codec`. If `orc.compress` is given,
-   * it overrides `spark.sql.orc.compression.codec`.</li>
-   * </ul>
+   * ORC-specific option(s) for writing ORC files can be found in
+   * <a href=
+   *   "https://spark.apache.org/docs/latest/sql-data-sources-orc.html#data-source-option">
+   *   Data Source Option</a> in the version you use.
    *
    * @since 1.5.0
    */
@@ -909,10 +905,12 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * }}}
    * The text files will be encoded as UTF-8.
    *
-   * ORC-specific option(s) for writing ORC files can be found in
-   * <a href=
-   *   "https://spark.apache.org/docs/latest/sql-data-sources-orc.html#data-source-option">
-   *   Data Source Option</a> in the version you use.
+   * You can set the following option(s) for writing text files:
+   * <ul>
+   * <li>`compression` (default `null`): compression codec to use when saving to file. This can be
+   * one of the known case-insensitive shorten names (`none`, `bzip2`, `gzip`, `lz4`,
+   * `snappy` and `deflate`). </li>
+   * <li>`lineSep` (default `\n`): defines the line separator that should be used for writing.</li>
    *
    * @since 1.6.0
    */
