@@ -70,7 +70,19 @@ object UnionEstimation {
 
     val newMinMaxStats = computeMinMaxStats(union)
     val newNullCountStats = computeNullCountStats(union)
-    val newAttrStats = combineStats(newMinMaxStats, newNullCountStats)
+    val newAttrStats = {
+      val updatedNullCountStats = newNullCountStats.keys.map { key =>
+        if (newMinMaxStats.get(key).isDefined) {
+          val updatedColsStats = newMinMaxStats(key)
+            .copy(nullCount = newNullCountStats(key).nullCount)
+          key -> updatedColsStats
+        } else {
+          key -> newNullCountStats(key)
+        }
+      }
+      // Combine both the stats. Duplicate keys will be overwritten by the later keys.
+      AttributeMap(newMinMaxStats.toSeq ++ updatedNullCountStats)
+    }
 
     Some(
       Statistics(
@@ -79,7 +91,6 @@ object UnionEstimation {
         attributeStats = newAttrStats))
   }
 
-  // This method computes the min-max statistics and return the attribute stats Map.
   private def computeMinMaxStats(union: Union) = {
     val unionOutput = union.output
     val attrToComputeMinMaxStats = union.children.map(_.output).transpose.zipWithIndex.filter {
@@ -114,13 +125,12 @@ object UnionEstimation {
           unionOutput(outputIndex) -> newStat
       }
     if (outputAttrStats.nonEmpty) {
-      AttributeMap(outputAttrStats.toSeq)
+      AttributeMap(outputAttrStats)
     } else {
       AttributeMap.empty[ColumnStat]
     }
   }
 
-  /** This method computes the null count statistics and return the attribute stats Map. */
   private def computeNullCountStats(union: Union) = {
     val unionOutput = union.output
     val attrToComputeNullCount = union.children.map(_.output).transpose.zipWithIndex.filter {
@@ -143,24 +153,9 @@ object UnionEstimation {
         unionOutput(outputIndex) -> newStat
     }
     if (outputAttrStats.nonEmpty) {
-      AttributeMap(outputAttrStats.toSeq)
+      AttributeMap(outputAttrStats)
     } else {
       AttributeMap.empty[ColumnStat]
     }
-  }
-
-  // Combine the two Maps by updating the min-max stats Map with null count stats.
-  private def combineStats(
-      minMaxStats: AttributeMap[ColumnStat],
-      nullCountStats: AttributeMap[ColumnStat]) = {
-    val updatedNullCountStats = nullCountStats.keys.map { key =>
-      if (minMaxStats.get(key).isDefined) {
-        val updatedColsStats = minMaxStats(key).copy(nullCount = nullCountStats(key).nullCount)
-        key -> updatedColsStats
-      } else {
-        key -> nullCountStats(key)
-      }
-    }
-    AttributeMap(minMaxStats.toSeq ++ updatedNullCountStats)
   }
 }
