@@ -56,7 +56,7 @@ class DateOps(DataTypeOps):
         else:
             raise TypeError("date subtraction can only be applied to date series.")
 
-    def __rsub__(self, left, right=None) -> Union["Series", "Index"]:
+    def __rsub__(self, left, right) -> Union["Series", "Index"]:
         # Note that date subtraction casts arguments to integer. This is to mimic pandas's
         # behaviors. pandas returns 'timedelta64[ns]' in days from date's subtraction.
         msg = (

@@ -57,7 +57,7 @@ class DatetimeOps(DataTypeOps):
         else:
             raise TypeError("datetime subtraction can only be applied to datetime series.")
 
-    def __rsub__(self, left, right=None) -> Union["Series", "Index"]:
+    def __rsub__(self, left, right) -> Union["Series", "Index"]:
         # Note that timestamp subtraction casts arguments to integer. This is to mimic pandas's
         # behaviors. pandas returns 'timedelta64[ns]' from 'datetime64[ns]'s subtraction.
         msg = (

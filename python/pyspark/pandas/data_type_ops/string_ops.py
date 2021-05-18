@@ -76,29 +76,29 @@ class StringOps(DataTypeOps):
     def __pow__(self, left, right):
         raise TypeError("exponentiation can not be applied on string series or literals.")
 
-    def __radd__(self, left, right=None) -> Union["Series", "Index"]:
+    def __radd__(self, left, right) -> Union["Series", "Index"]:
         if isinstance(right, str):
             return left._with_new_scol(F.concat(F.lit(right), left.spark.column))  # TODO: dtype?
         else:
             raise TypeError("string addition can only be applied to string series or literals.")
 
-    def __rsub__(self, left, right=None):
+    def __rsub__(self, left, right):
         raise TypeError("subtraction can not be applied to string series or literals.")
 
-    def __rmul__(self, left, right=None) -> Union["Series", "Index"]:
+    def __rmul__(self, left, right) -> Union["Series", "Index"]:
         if isinstance(right, int):
             return column_op(SF.repeat)(left, right)
         else:
             raise TypeError("a string series can only be multiplied to an int series or literal")
 
-    def __rtruediv__(self, left, right=None):
+    def __rtruediv__(self, left, right):
         raise TypeError("division can not be applied on string series or literals.")
 
-    def __rfloordiv__(self, left, right=None):
+    def __rfloordiv__(self, left, right):
         raise TypeError("division can not be applied on string series or literals.")
 
-    def __rpow__(self, left, right=None):
+    def __rpow__(self, left, right):
         raise TypeError("exponentiation can not be applied on string series or literals.")
 
-    def __rmod__(self, left, right=None):
+    def __rmod__(self, left, right):
         raise TypeError("modulo can not be applied on string series or literals.")

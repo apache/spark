@@ -172,7 +172,7 @@ class NumericOps(DataTypeOps):
 
         return column_op(pow_func)(left, right)
 
-    def __radd__(self, left, right=None) -> Union["Series", "Index"]:
+    def __radd__(self, left, right) -> Union["Series", "Index"]:
         if isinstance(right, str):
             raise TypeError("string addition can only be applied to string series or literals.")
         if not isinstance(right, numbers.Number):
@@ -180,21 +180,21 @@ class NumericOps(DataTypeOps):
 
         return column_op(Column.__radd__)(left, right)
 
-    def __rsub__(self, left, right=None) -> Union["Series", "Index"]:
+    def __rsub__(self, left, right) -> Union["Series", "Index"]:
         if isinstance(right, str):
             raise TypeError("subtraction can not be applied to string series or literals.")
         if not isinstance(right, numbers.Number):
             raise TypeError("subtraction can not be applied to given types.")
         return column_op(Column.__rsub__)(left, right)
 
-    def __rmul__(self, left, right=None) -> Union["Series", "Index"]:
+    def __rmul__(self, left, right) -> Union["Series", "Index"]:
         if isinstance(right, str):
             raise TypeError("multiplication can not be applied to a string literal.")
         if not isinstance(right, numbers.Number):
             raise TypeError("multiplication can not be applied to given types.")
         return column_op(Column.__rmul__)(left, right)
 
-    def __rtruediv__(self, left, right=None) -> Union["Series", "Index"]:
+    def __rtruediv__(self, left, right) -> Union["Series", "Index"]:
         if isinstance(right, str):
             raise TypeError("division can not be applied on string series or literals.")
         if not isinstance(right, numbers.Number):
@@ -207,7 +207,7 @@ class NumericOps(DataTypeOps):
 
         return numpy_column_op(rtruediv)(left, right)
 
-    def __rfloordiv__(self, left, right=None) -> Union["Series", "Index"]:
+    def __rfloordiv__(self, left, right) -> Union["Series", "Index"]:
         if isinstance(right, str):
             raise TypeError("division can not be applied on string series or literals.")
         if not isinstance(right, numbers.Number):
@@ -220,7 +220,7 @@ class NumericOps(DataTypeOps):
 
         return numpy_column_op(rfloordiv)(left, right)
 
-    def __rpow__(self, left, right=None) -> Union["Series", "Index"]:
+    def __rpow__(self, left, right) -> Union["Series", "Index"]:
         if isinstance(right, str):
             raise TypeError("exponentiation can not be applied on string series or literals.")
         if not isinstance(right, numbers.Number):
@@ -231,7 +231,7 @@ class NumericOps(DataTypeOps):
 
         return column_op(rpow_func)(left, right)
 
-    def __rmod__(self, left, right=None) -> Union["Series", "Index"]:
+    def __rmod__(self, left, right) -> Union["Series", "Index"]:
         if isinstance(right, str):
             raise TypeError("modulo can not be applied on string series or literals.")
         if not isinstance(right, numbers.Number):
