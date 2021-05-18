@@ -32,8 +32,9 @@ from typing import Any, List, Set, Tuple, Union, cast
 import pandas as pd
 from pandas.api.types import is_hashable, is_list_like
 
-from pyspark.sql import Window, functions as F
-from pyspark.sql.types import (
+from pyspark.sql import Column, Window, functions as F
+from pyspark.sql.types import (  # noqa: F401
+    DataType,
     FloatType,
     DoubleType,
     NumericType,
@@ -41,7 +42,7 @@ from pyspark.sql.types import (
     StructType,
     StringType,
 )
-from pyspark.sql.functions import PandasUDFType, pandas_udf, Column
+from pyspark.sql.functions import PandasUDFType, pandas_udf
 
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
 from pyspark.pandas.typedef import infer_return_type, DataFrameType, ScalarType, SeriesType
@@ -1171,7 +1172,7 @@ class GroupBy(object, metaclass=ABCMeta):
                 as_nullable_spark_type(
                     kdf_from_pandas._internal.spark_frame.drop(*HIDDEN_COLUMNS).schema
                 )
-            )
+            )  # type: DataType
         else:
             return_type = infer_return_type(func)
             if not is_series_groupby and isinstance(return_type, SeriesType):
@@ -1513,7 +1514,7 @@ class GroupBy(object, metaclass=ABCMeta):
                 order_column = Column(c._jc.desc_nulls_last())
             else:
                 order_column = Column(c._jc.desc_nulls_first())
-            window = Window.partitionBy(groupkey_names).orderBy(
+            window = Window.partitionBy(*groupkey_names).orderBy(
                 order_column, NATURAL_ORDER_COLUMN_NAME
             )
             sdf = sdf.withColumn(
@@ -1592,7 +1593,7 @@ class GroupBy(object, metaclass=ABCMeta):
                 order_column = Column(c._jc.asc_nulls_last())
             else:
                 order_column = Column(c._jc.asc_nulls_first())
-            window = Window.partitionBy(groupkey_names).orderBy(
+            window = Window.partitionBy(*groupkey_names).orderBy(
                 order_column, NATURAL_ORDER_COLUMN_NAME
             )
             sdf = sdf.withColumn(
@@ -1812,9 +1813,11 @@ class GroupBy(object, metaclass=ABCMeta):
 
         # This part is handled differently depending on whether it is a tail or a head.
         window = (
-            Window.partitionBy(groupkey_scols).orderBy(F.col(NATURAL_ORDER_COLUMN_NAME).asc())
+            Window.partitionBy(*groupkey_scols).orderBy(F.col(NATURAL_ORDER_COLUMN_NAME).asc())
             if asc
-            else Window.partitionBy(groupkey_scols).orderBy(F.col(NATURAL_ORDER_COLUMN_NAME).desc())
+            else Window.partitionBy(*groupkey_scols).orderBy(
+                F.col(NATURAL_ORDER_COLUMN_NAME).desc()
+            )
         )
 
         sdf = (
@@ -2131,7 +2134,7 @@ class GroupBy(object, metaclass=ABCMeta):
                 as_nullable_spark_type(
                     kdf_from_pandas._internal.spark_frame.drop(*HIDDEN_COLUMNS).schema
                 )
-            )
+            )  # type: DataType
             if len(pdf) <= limit:
                 return kdf_from_pandas
 
@@ -2899,16 +2902,16 @@ class SeriesGroupBy(GroupBy):
 
         groupkey_col_names = [SPARK_INDEX_NAME_FORMAT(i) for i in range(len(self._groupkeys))]
         sdf = self._kser._internal.spark_frame.select(
-            [scol.alias(name) for scol, name in zip(self._groupkeys_scols, groupkey_col_names)]
-            + [
+            *[scol.alias(name) for scol, name in zip(self._groupkeys_scols, groupkey_col_names)],
+            *[
                 scol.alias(SPARK_INDEX_NAME_FORMAT(i + len(self._groupkeys)))
                 for i, scol in enumerate(self._kser._internal.index_spark_columns)
-            ]
-            + [self._kser.spark.column]
-            + [NATURAL_ORDER_COLUMN_NAME]
+            ],
+            self._kser.spark.column,
+            NATURAL_ORDER_COLUMN_NAME,
         )
 
-        window = Window.partitionBy(groupkey_col_names).orderBy(
+        window = Window.partitionBy(*groupkey_col_names).orderBy(
             scol_for(sdf, self._kser._internal.data_spark_column_names[0]).asc(),
             NATURAL_ORDER_COLUMN_NAME,
         )
@@ -2976,16 +2979,16 @@ class SeriesGroupBy(GroupBy):
 
         groupkey_col_names = [SPARK_INDEX_NAME_FORMAT(i) for i in range(len(self._groupkeys))]
         sdf = self._kser._internal.spark_frame.select(
-            [scol.alias(name) for scol, name in zip(self._groupkeys_scols, groupkey_col_names)]
-            + [
+            *[scol.alias(name) for scol, name in zip(self._groupkeys_scols, groupkey_col_names)],
+            *[
                 scol.alias(SPARK_INDEX_NAME_FORMAT(i + len(self._groupkeys)))
                 for i, scol in enumerate(self._kser._internal.index_spark_columns)
-            ]
-            + [self._kser.spark.column]
-            + [NATURAL_ORDER_COLUMN_NAME]
+            ],
+            self._kser.spark.column,
+            NATURAL_ORDER_COLUMN_NAME,
         )
 
-        window = Window.partitionBy(groupkey_col_names).orderBy(
+        window = Window.partitionBy(*groupkey_col_names).orderBy(
             scol_for(sdf, self._kser._internal.data_spark_column_names[0]).desc(),
             NATURAL_ORDER_COLUMN_NAME,
         )

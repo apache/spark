@@ -2022,6 +2022,26 @@ object SQLConf {
       .intConf
       .createWithDefault(SHUFFLE_SPILL_NUM_ELEMENTS_FORCE_SPILL_THRESHOLD.defaultValue.get)
 
+  val SESSION_WINDOW_BUFFER_IN_MEMORY_THRESHOLD =
+    buildConf("spark.sql.sessionWindow.buffer.in.memory.threshold")
+      .internal()
+      .doc("Threshold for number of windows guaranteed to be held in memory by the " +
+        "session window operator. Note that the buffer is used only for the query Spark " +
+        "cannot apply aggregations on determining session window.")
+      .version("3.2.0")
+      .intConf
+      .createWithDefault(4096)
+
+  val SESSION_WINDOW_BUFFER_SPILL_THRESHOLD =
+    buildConf("spark.sql.sessionWindow.buffer.spill.threshold")
+      .internal()
+      .doc("Threshold for number of rows to be spilled by window operator. Note that " +
+        "the buffer is used only for the query Spark cannot apply aggregations on determining " +
+        "session window.")
+      .version("3.2.0")
+      .intConf
+      .createWithDefault(SHUFFLE_SPILL_NUM_ELEMENTS_FORCE_SPILL_THRESHOLD.defaultValue.get)
+
   val SORT_MERGE_JOIN_EXEC_BUFFER_IN_MEMORY_THRESHOLD =
     buildConf("spark.sql.sortMergeJoinExec.buffer.in.memory.threshold")
       .internal()
@@ -2165,7 +2185,7 @@ object SQLConf {
         "shows the exception messages from UDFs. Note that this works only with CPython 3.7+.")
       .version("3.1.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val PANDAS_GROUPED_MAP_ASSIGN_COLUMNS_BY_NAME =
     buildConf("spark.sql.legacy.execution.pandas.groupedMap.assignColumnsByName")
@@ -3696,6 +3716,10 @@ class SQLConf extends Serializable with Logging {
   def windowExecBufferInMemoryThreshold: Int = getConf(WINDOW_EXEC_BUFFER_IN_MEMORY_THRESHOLD)
 
   def windowExecBufferSpillThreshold: Int = getConf(WINDOW_EXEC_BUFFER_SPILL_THRESHOLD)
+
+  def sessionWindowBufferInMemoryThreshold: Int = getConf(SESSION_WINDOW_BUFFER_IN_MEMORY_THRESHOLD)
+
+  def sessionWindowBufferSpillThreshold: Int = getConf(SESSION_WINDOW_BUFFER_SPILL_THRESHOLD)
 
   def sortMergeJoinExecBufferInMemoryThreshold: Int =
     getConf(SORT_MERGE_JOIN_EXEC_BUFFER_IN_MEMORY_THRESHOLD)

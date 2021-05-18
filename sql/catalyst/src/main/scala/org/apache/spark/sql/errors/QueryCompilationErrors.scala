@@ -1449,6 +1449,12 @@ private[spark] object QueryCompilationErrors {
     new AnalysisException(s"'$operation' does not support partitioning")
   }
 
+  def mixedRefsInAggFunc(funcStr: String): Throwable = {
+    val msg = "Found an aggregate function in a correlated predicate that has both " +
+      "outer and local references, which is not supported: " + funcStr
+    new AnalysisException(msg)
+  }
+
   def lookupFunctionInNonFunctionCatalogError(
       ident: Identifier, catalog: CatalogPlugin): Throwable = {
     new AnalysisException(s"Trying to lookup function '$ident' in " +

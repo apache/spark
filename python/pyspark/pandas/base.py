@@ -720,7 +720,8 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         else:
             # TODO: support more APIs?
             raise NotImplementedError(
-                "pandas-on-Spark objects currently do not support %s." % ufunc)
+                "pandas-on-Spark objects currently do not support %s." % ufunc
+            )
 
     @property
     def dtype(self) -> Dtype:
@@ -1098,15 +1099,10 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
             if len(categories) == 0:
                 scol = F.lit(None)
             else:
-                kvs = list(
-                    chain(
-                        *[
-                            (F.lit(code), F.lit(category))
-                            for code, category in enumerate(categories)
-                        ]
-                    )
+                kvs = chain(
+                    *[(F.lit(code), F.lit(category)) for code, category in enumerate(categories)]
                 )
-                map_scol = F.create_map(kvs)
+                map_scol = F.create_map(*kvs)
                 scol = map_scol.getItem(self.spark.column)
             return self._with_new_scol(
                 scol.alias(self._internal.data_spark_column_names[0])
@@ -1122,15 +1118,13 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
                 if len(categories) == 0:
                     scol = F.lit(-1)
                 else:
-                    kvs = list(
-                        chain(
-                            *[
-                                (F.lit(category), F.lit(code))
-                                for code, category in enumerate(categories)
-                            ]
-                        )
+                    kvs = chain(
+                        *[
+                            (F.lit(category), F.lit(code))
+                            for code, category in enumerate(categories)
+                        ]
                     )
-                    map_scol = F.create_map(kvs)
+                    map_scol = F.create_map(*kvs)
 
                     scol = F.coalesce(map_scol.getItem(self.spark.column), F.lit(-1))
                 return self._with_new_scol(
@@ -1926,7 +1920,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
                         ]
                     )
                 )
-                map_scol = F.create_map(kvs)
+                map_scol = F.create_map(*kvs)
                 scol = map_scol.getItem(self.spark.column)
             codes, uniques = self._with_new_scol(
                 scol.alias(self._internal.data_spark_column_names[0])
@@ -1980,7 +1974,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
                 cond = scol.isNull() | F.isnan(scol)
             else:
                 cond = scol.isNull()
-            map_scol = F.create_map(kvs)
+            map_scol = F.create_map(*kvs)
 
             null_scol = F.when(cond, F.lit(na_sentinel_code))
             new_scol = null_scol.otherwise(map_scol.getItem(scol))
