@@ -36,7 +36,7 @@ TakeOrderedAndProject (31)
 Output [4]: [i_item_sk#1, i_brand#2, i_class#3, i_category#4]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/item]
-PushedFilters: [Or(And(In(i_category, [Books                                             ,Electronics                                       ,Sports                                            ]),In(i_class, [computers                                         ,stereo                                            ,football                                          ])),And(In(i_category, [Men                                               ,Jewelry                                           ,Women                                             ]),In(i_class, [shirts                                            ,birdal                                            ,dresses                                           ]))), IsNotNull(i_item_sk)]
+PushedFilters: [Or(And(In(i_category, [Books                                             ,Electronics                                       ,Sports                                            ]),In(i_class, [computers                                         ,football                                          ,stereo                                            ])),And(In(i_category, [Jewelry                                           ,Men                                               ,Women                                             ]),In(i_class, [birdal                                            ,dresses                                           ,shirts                                            ]))), IsNotNull(i_item_sk)]
 ReadSchema: struct<i_item_sk:int,i_brand:string,i_class:string,i_category:string>
 
 (2) ColumnarToRow [codegen id : 4]
