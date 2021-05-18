@@ -55,7 +55,7 @@ Arguments: [ws_item_sk#1 ASC NULLS FIRST], false, 0
 Output [6]: [i_item_sk#6, i_item_id#7, i_item_desc#8, i_current_price#9, i_class#10, i_category#11]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/item]
-PushedFilters: [In(i_category, [Sports                                            ,Books                                             ,Home                                              ]), IsNotNull(i_item_sk)]
+PushedFilters: [In(i_category, [Books                                             ,Home                                              ,Sports                                            ]), IsNotNull(i_item_sk)]
 ReadSchema: struct<i_item_sk:int,i_item_id:string,i_item_desc:string,i_current_price:decimal(7,2),i_class:string,i_category:string>
 
 (7) ColumnarToRow [codegen id : 3]

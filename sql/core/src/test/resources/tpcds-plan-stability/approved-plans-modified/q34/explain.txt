@@ -87,7 +87,7 @@ Input [6]: [ss_customer_sk#1, ss_hdemo_sk#2, ss_store_sk#3, ss_ticket_number#4, 
 Output [2]: [s_store_sk#11, s_county#12]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store]
-PushedFilters: [In(s_county, [Saginaw County,Sumner County,Appanoose County,Daviess County,Fairfield County,Raleigh County,Ziebach County,Williamson County]), IsNotNull(s_store_sk)]
+PushedFilters: [In(s_county, [Appanoose County,Daviess County,Fairfield County,Raleigh County,Saginaw County,Sumner County,Williamson County,Ziebach County]), IsNotNull(s_store_sk)]
 ReadSchema: struct<s_store_sk:int,s_county:string>
 
 (12) ColumnarToRow [codegen id : 2]
