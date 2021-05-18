@@ -306,7 +306,7 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
     }
   }
 
-  private case object StrLenMagic extends ScalarFunction[Int] {
+  case object StrLenMagic extends ScalarFunction[Int] {
     override def inputTypes(): Array[DataType] = Array(StringType)
     override def resultType(): DataType = IntegerType
     override def name(): String = "strlen_magic"
@@ -316,7 +316,7 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
     }
   }
 
-  private case object StrLenBadMagic extends ScalarFunction[Int] {
+  case object StrLenBadMagic extends ScalarFunction[Int] {
     override def inputTypes(): Array[DataType] = Array(StringType)
     override def resultType(): DataType = IntegerType
     override def name(): String = "strlen_bad_magic"
@@ -326,7 +326,7 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
     }
   }
 
-  private case object StrLenBadMagicWithDefault extends ScalarFunction[Int] {
+  case object StrLenBadMagicWithDefault extends ScalarFunction[Int] {
     override def inputTypes(): Array[DataType] = Array(StringType)
     override def resultType(): DataType = IntegerType
     override def name(): String = "strlen_bad_magic"

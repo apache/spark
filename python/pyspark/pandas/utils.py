@@ -22,7 +22,7 @@ import functools
 from collections import OrderedDict
 from contextlib import contextmanager
 import os
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union, TYPE_CHECKING
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union, TYPE_CHECKING, overload
 import warnings
 
 from pyspark import sql as spark
@@ -82,7 +82,7 @@ def same_anchor(
         this_internal.spark_frame is that_internal.spark_frame
         and this_internal.index_level == that_internal.index_level
         and all(
-            this_scol._jc.equals(that_scol._jc)
+            this_scol._jc.equals(that_scol._jc)  # type: ignore
             for this_scol, that_scol in zip(
                 this_internal.index_spark_columns, that_internal.index_spark_columns
             )
@@ -713,6 +713,18 @@ def validate_how(how: str) -> str:
             "['inner', 'left', 'right', 'outer']",
         )
     return how
+
+
+@overload
+def verify_temp_column_name(df: spark.DataFrame, column_name_or_label: str) -> str:
+    ...
+
+
+@overload
+def verify_temp_column_name(
+    df: "DataFrame", column_name_or_label: Union[Any, Tuple]
+) -> Union[Any, Tuple]:
+    ...
 
 
 def verify_temp_column_name(

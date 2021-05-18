@@ -22,8 +22,8 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan}
-import org.apache.spark.sql.catalyst.trees.TreePattern.{EXISTS_SUBQUERY, LIST_SUBQUERY,
-  PLAN_EXPRESSION, SCALAR_SUBQUERY, TreePattern}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{EXISTS_SUBQUERY, LIST_SUBQUERY, PLAN_EXPRESSION, SCALAR_SUBQUERY, TreePattern}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types._
 import org.apache.spark.util.collection.BitSet
 
@@ -189,17 +189,22 @@ object SubExprUtils extends PredicateHelper {
    */
   def getOuterReferences(expr: Expression): Seq[Expression] = {
     val outerExpressions = ArrayBuffer.empty[Expression]
-    expr transformDown {
-      case a: AggregateExpression if a.collectLeaves.forall(_.isInstanceOf[OuterReference]) =>
-        // Collect and update the sub-tree so that outer references inside this aggregate
-        // expression will not be collected. For example: min(outer(a)) -> min(a).
-        val newExpr = stripOuterReference(a)
-        outerExpressions += newExpr
-        newExpr
-      case OuterReference(e) =>
-        outerExpressions += e
-        e
+    def collectOutRefs(input: Expression): Unit = input match {
+      case a: AggregateExpression if containsOuter(a) =>
+        val outer = a.collect { case OuterReference(e) => e.toAttribute }
+        val local = a.references -- outer
+        if (local.nonEmpty) {
+          throw QueryCompilationErrors.mixedRefsInAggFunc(a.sql)
+        } else {
+          // Collect and update the sub-tree so that outer references inside this aggregate
+          // expression will not be collected. For example: min(outer(a)) -> min(a).
+          val newExpr = stripOuterReference(a)
+          outerExpressions += newExpr
+        }
+      case OuterReference(e) => outerExpressions += e
+      case _ => input.children.foreach(collectOutRefs)
     }
+    collectOutRefs(expr)
     outerExpressions.toSeq
   }
 

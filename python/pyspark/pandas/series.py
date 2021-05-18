@@ -5095,7 +5095,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         if not should_return_series:
             with sql_conf({SPARK_CONF_ARROW_ENABLED: False}):
                 # Disable Arrow to keep row ordering.
-                result = sdf.limit(1).toPandas().iloc[0, 0]
+                result = cast(pd.DataFrame, sdf.limit(1).toPandas()).iloc[0, 0]
             return result if result is not None else np.nan
 
         # The data is expected to be small so it's fine to transpose/use default index.
@@ -5717,7 +5717,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             this_scol = this_data_scol.alias(this_column_label)
             that_scol = that_data_scol.alias(that_column_label)
 
-        sdf = sdf.select(index_scols + [this_scol, that_scol, NATURAL_ORDER_COLUMN_NAME])
+        sdf = sdf.select(*index_scols, this_scol, that_scol, NATURAL_ORDER_COLUMN_NAME)
         internal = InternalFrame(
             spark_frame=sdf,
             index_spark_columns=[

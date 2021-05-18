@@ -18,7 +18,7 @@
 """
 Wrappers around spark that correspond to common pandas functions.
 """
-from typing import Any, Optional, Union, List, Tuple, Sized, cast
+from typing import Any, Optional, Union, List, Tuple, Type, Sized, cast
 from collections import OrderedDict
 from collections.abc import Iterable
 from distutils.version import LooseVersion
@@ -47,6 +47,7 @@ from pyspark.sql.types import (
     StringType,
     DateType,
     StructType,
+    DataType,
 )
 
 from pyspark import pandas as ps  # noqa: F401
@@ -1939,7 +1940,9 @@ def get_dummies(
     ):
         raise NotImplementedError(
             "get_dummies currently only accept {} values".format(
-                ", ".join([t.typeName() for t in _get_dummies_acceptable_types])
+                ", ".join(
+                    [cast(Type[DataType], t).typeName() for t in _get_dummies_acceptable_types]
+                )
             )
         )
 
