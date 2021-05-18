@@ -80,58 +80,6 @@ class NumericOps(DataTypeOps):
 
         return column_op(Column.__sub__)(left, right)
 
-    def __truediv__(self, left, right) -> Union["Series", "Index"]:
-        if (
-            isinstance(right, IndexOpsMixin) and isinstance(right.spark.data_type, StringType)
-        ) or isinstance(right, str):
-            raise TypeError("division can not be applied on string series or literals.")
-
-        if (
-            isinstance(right, IndexOpsMixin)
-            and (
-                isinstance(right.dtype, CategoricalDtype)
-                or (not isinstance(right.spark.data_type, NumericType))
-            )
-        ) and not isinstance(right, numbers.Number):
-            raise TypeError("division can not be applied to given types.")
-
-        def truediv(left, right):
-            return F.when(F.lit(right != 0) | F.lit(right).isNull(), left.__div__(right)).otherwise(
-                F.when(F.lit(left == np.inf) | F.lit(left == -np.inf), left).otherwise(
-                    F.lit(np.inf).__div__(left)
-                )
-            )
-
-        return numpy_column_op(truediv)(left, right)
-
-    def __floordiv__(self, left, right) -> Union["Series", "Index"]:
-        if (
-            isinstance(right, IndexOpsMixin) and isinstance(right.spark.data_type, StringType)
-        ) or isinstance(right, str):
-            raise TypeError("division can not be applied on string series or literals.")
-
-        if (
-            isinstance(right, IndexOpsMixin)
-            and (
-                isinstance(right.dtype, CategoricalDtype)
-                or (not isinstance(right.spark.data_type, NumericType))
-            )
-        ) and not isinstance(right, numbers.Number):
-            raise TypeError("division can not be applied to given types.")
-
-        def floordiv(left, right):
-            return F.when(F.lit(right is np.nan), np.nan).otherwise(
-                F.when(
-                    F.lit(right != 0) | F.lit(right).isNull(), F.floor(left.__div__(right))
-                ).otherwise(
-                    F.when(F.lit(left == np.inf) | F.lit(left == -np.inf), left).otherwise(
-                        F.lit(np.inf).__div__(left)
-                    )
-                )
-            )
-
-        return numpy_column_op(floordiv)(left, right)
-
     def __mod__(self, left, right) -> Union["Series", "Index"]:
         if (
             isinstance(right, IndexOpsMixin) and isinstance(right.spark.data_type, StringType)
@@ -194,32 +142,6 @@ class NumericOps(DataTypeOps):
             raise TypeError("multiplication can not be applied to given types.")
         return column_op(Column.__rmul__)(left, right)
 
-    def __rtruediv__(self, left, right) -> Union["Series", "Index"]:
-        if isinstance(right, str):
-            raise TypeError("division can not be applied on string series or literals.")
-        if not isinstance(right, numbers.Number):
-            raise TypeError("division can not be applied to given types.")
-
-        def rtruediv(left, right):
-            return F.when(left == 0, F.lit(np.inf).__div__(right)).otherwise(
-                F.lit(right).__truediv__(left)
-            )
-
-        return numpy_column_op(rtruediv)(left, right)
-
-    def __rfloordiv__(self, left, right) -> Union["Series", "Index"]:
-        if isinstance(right, str):
-            raise TypeError("division can not be applied on string series or literals.")
-        if not isinstance(right, numbers.Number):
-            raise TypeError("division can not be applied to given types.")
-
-        def rfloordiv(left, right):
-            return F.when(F.lit(left == 0), F.lit(np.inf).__div__(right)).otherwise(
-                F.when(F.lit(left) == np.nan, np.nan).otherwise(F.floor(F.lit(right).__div__(left)))
-            )
-
-        return numpy_column_op(rfloordiv)(left, right)
-
     def __rpow__(self, left, right) -> Union["Series", "Index"]:
         if isinstance(right, str):
             raise TypeError("exponentiation can not be applied on string series or literals.")
@@ -274,6 +196,80 @@ class IntegralOps(NumericOps):
 
         return column_op(Column.__mul__)(left, right)
 
+    def __truediv__(self, left, right) -> Union["Series", "Index"]:
+        if (
+            isinstance(right, IndexOpsMixin) and isinstance(right.spark.data_type, StringType)
+        ) or isinstance(right, str):
+            raise TypeError("division can not be applied on string series or literals.")
+
+        if (
+            isinstance(right, IndexOpsMixin)
+            and (
+                isinstance(right.dtype, CategoricalDtype)
+                or (not isinstance(right.spark.data_type, NumericType))
+            )
+        ) and not isinstance(right, numbers.Number):
+            raise TypeError("division can not be applied to given types.")
+
+        def truediv(left, right):
+            return F.when(F.lit(right != 0) | F.lit(right).isNull(), left.__div__(right)).otherwise(
+                F.lit(np.inf).__div__(left)
+            )
+
+        return numpy_column_op(truediv)(left, right)
+
+    def __floordiv__(self, left, right) -> Union["Series", "Index"]:
+        if (
+            isinstance(right, IndexOpsMixin) and isinstance(right.spark.data_type, StringType)
+        ) or isinstance(right, str):
+            raise TypeError("division can not be applied on string series or literals.")
+
+        if (
+            isinstance(right, IndexOpsMixin)
+            and (
+                isinstance(right.dtype, CategoricalDtype)
+                or (not isinstance(right.spark.data_type, NumericType))
+            )
+        ) and not isinstance(right, numbers.Number):
+            raise TypeError("division can not be applied to given types.")
+
+        def floordiv(left, right):
+            return F.when(F.lit(right is np.nan), np.nan).otherwise(
+                F.when(
+                    F.lit(right != 0) | F.lit(right).isNull(), F.floor(left.__div__(right))
+                ).otherwise(
+                    F.lit(np.inf).__div__(left)
+                )
+            )
+
+        return numpy_column_op(floordiv)(left, right)
+
+    def __rtruediv__(self, left, right) -> Union["Series", "Index"]:
+        if isinstance(right, str):
+            raise TypeError("division can not be applied on string series or literals.")
+        if not isinstance(right, numbers.Number):
+            raise TypeError("division can not be applied to given types.")
+
+        def rtruediv(left, right):
+            return F.when(left == 0, F.lit(np.inf).__div__(right)).otherwise(
+                F.lit(right).__truediv__(left)
+            )
+
+        return numpy_column_op(rtruediv)(left, right)
+
+    def __rfloordiv__(self, left, right) -> Union["Series", "Index"]:
+        if isinstance(right, str):
+            raise TypeError("division can not be applied on string series or literals.")
+        if not isinstance(right, numbers.Number):
+            raise TypeError("division can not be applied to given types.")
+
+        def rfloordiv(left, right):
+            return F.when(F.lit(left == 0), F.lit(np.inf).__div__(right)).otherwise(
+                F.floor(F.lit(right).__div__(left))
+            )
+
+        return numpy_column_op(rfloordiv)(left, right)
+
 
 class FractionalOps(NumericOps):
     """
@@ -302,3 +298,81 @@ class FractionalOps(NumericOps):
             raise TypeError("multiplication can not be applied to given types.")
 
         return column_op(Column.__mul__)(left, right)
+
+    def __truediv__(self, left, right) -> Union["Series", "Index"]:
+        if (
+            isinstance(right, IndexOpsMixin) and isinstance(right.spark.data_type, StringType)
+        ) or isinstance(right, str):
+            raise TypeError("division can not be applied on string series or literals.")
+
+        if (
+            isinstance(right, IndexOpsMixin)
+            and (
+                isinstance(right.dtype, CategoricalDtype)
+                or (not isinstance(right.spark.data_type, NumericType))
+            )
+        ) and not isinstance(right, numbers.Number):
+            raise TypeError("division can not be applied to given types.")
+
+        def truediv(left, right):
+            return F.when(F.lit(right != 0) | F.lit(right).isNull(), left.__div__(right)).otherwise(
+                F.when(F.lit(left == np.inf) | F.lit(left == -np.inf), left).otherwise(
+                    F.lit(np.inf).__div__(left)
+                )
+            )
+
+        return numpy_column_op(truediv)(left, right)
+
+    def __floordiv__(self, left, right) -> Union["Series", "Index"]:
+        if (
+            isinstance(right, IndexOpsMixin) and isinstance(right.spark.data_type, StringType)
+        ) or isinstance(right, str):
+            raise TypeError("division can not be applied on string series or literals.")
+
+        if (
+            isinstance(right, IndexOpsMixin)
+            and (
+                isinstance(right.dtype, CategoricalDtype)
+                or (not isinstance(right.spark.data_type, NumericType))
+            )
+        ) and not isinstance(right, numbers.Number):
+            raise TypeError("division can not be applied to given types.")
+
+        def floordiv(left, right):
+            return F.when(F.lit(right is np.nan), np.nan).otherwise(
+                F.when(
+                    F.lit(right != 0) | F.lit(right).isNull(), F.floor(left.__div__(right))
+                ).otherwise(
+                    F.when(F.lit(left == np.inf) | F.lit(left == -np.inf), left).otherwise(
+                        F.lit(np.inf).__div__(left)
+                    )
+                )
+            )
+
+        return numpy_column_op(floordiv)(left, right)
+
+    def __rtruediv__(self, left, right) -> Union["Series", "Index"]:
+        if isinstance(right, str):
+            raise TypeError("division can not be applied on string series or literals.")
+        if not isinstance(right, numbers.Number):
+            raise TypeError("division can not be applied to given types.")
+
+        def rtruediv(left, right):
+            return F.when(left == 0, F.lit(np.inf).__div__(right)).otherwise(
+                F.lit(right).__truediv__(left)
+            )
+
+        return numpy_column_op(rtruediv)(left, right)
+
+    def __rfloordiv__(self, left, right) -> Union["Series", "Index"]:
+        if isinstance(right, str):
+            raise TypeError("division can not be applied on string series or literals.")
+        if not isinstance(right, numbers.Number):
+            raise TypeError("division can not be applied to given types.")
+
+        def rfloordiv(left, right):
+            return F.when(F.lit(left == 0), F.lit(np.inf).__div__(right)).otherwise(
+                F.when(F.lit(left) == np.nan, np.nan).otherwise(F.floor(F.lit(right).__div__(left)))
+            )
+
+        return numpy_column_op(rfloordiv)(left, right)
