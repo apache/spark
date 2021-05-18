@@ -476,43 +476,14 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
   /**
    * Loads a Parquet file stream, returning the result as a `DataFrame`.
    *
-   * You can set the following Parquet-specific option(s) for reading Parquet files:
-   * <ul>
-   * <li>`maxFilesPerTrigger` (default: no max limit): sets the maximum number of new files to be
-   * considered in every trigger.</li>
-   * <li>`mergeSchema` (default is the value specified in `spark.sql.parquet.mergeSchema`): sets
-   * whether we should merge schemas collected from all
-   * Parquet part-files. This will override
-   * `spark.sql.parquet.mergeSchema`.</li>
-   * <li>`pathGlobFilter`: an optional glob pattern to only include files with paths matching
-   * the pattern. The syntax follows <code>org.apache.hadoop.fs.GlobFilter</code>.
-   * It does not change the behavior of partition discovery.</li>
-   * <li>`recursiveFileLookup`: recursively scan a directory for files. Using this option
-   * disables partition discovery</li>
-   * <li>`datetimeRebaseMode` (default is the value specified in the SQL config
-   * `spark.sql.parquet.datetimeRebaseModeInRead`): the rebasing mode for the values
-   * of the `DATE`, `TIMESTAMP_MICROS`, `TIMESTAMP_MILLIS` logical types from the Julian to
-   * Proleptic Gregorian calendar:
-   *   <ul>
-   *     <li>`EXCEPTION` : Spark fails in reads of ancient dates/timestamps that are ambiguous
-   *     between the two calendars</li>
-   *     <li>`CORRECTED` : loading of dates/timestamps without rebasing</li>
-   *     <li>`LEGACY` : perform rebasing of ancient dates/timestamps from the Julian to Proleptic
-   *     Gregorian calendar</li>
-   *   </ul>
-   * </li>
-   * <li>`int96RebaseMode` (default is the value specified in the SQL config
-   * `spark.sql.parquet.int96RebaseModeInRead`): the rebasing mode for `INT96` timestamps
-   * from the Julian to Proleptic Gregorian calendar:
-   *   <ul>
-   *     <li>`EXCEPTION` : Spark fails in reads of ancient `INT96` timestamps that are ambiguous
-   *     between the two calendars</li>
-   *     <li>`CORRECTED` : loading of timestamps without rebasing</li>
-   *     <li>`LEGACY` : perform rebasing of ancient `INT96` timestamps from the Julian to Proleptic
-   *     Gregorian calendar</li>
-   *   </ul>
-   * </li>
-   * </ul>
+   * Parquet-specific option(s) for reading Parquet file stream can be found in
+   * <a href=
+   *   "https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#data-source-option">
+   *   Data Source Option</a>
+   * and
+   * <a href=
+   *   "https://spark.apache.org/docs/latest/sql-data-sources-generic-options.html">
+   *   Generic Files Source Options</a> in the version you use.
    *
    * @since 2.0.0
    */
