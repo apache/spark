@@ -37,7 +37,9 @@ case class CommandResultExec(qe: QueryExecution) extends LeafExecNode {
 
   private lazy val unsafeRows: Array[InternalRow] = qe.executedPlan.executeCollect()
 
-  private lazy val rdd: RDD[InternalRow] = {
+  private lazy val rdd: RDD[InternalRow] = if (unsafeRows.isEmpty) {
+    sqlContext.sparkContext.emptyRDD
+  } else {
     val numSlices = math.min(
       unsafeRows.length, sqlContext.sparkSession.leafNodeDefaultParallelism)
     sqlContext.sparkContext.parallelize(unsafeRows, numSlices)
