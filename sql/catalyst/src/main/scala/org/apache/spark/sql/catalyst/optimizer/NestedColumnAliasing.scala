@@ -146,11 +146,9 @@ object NestedColumnAliasing {
     val nestedFieldToAlias = attributeToExtractValuesAndAliases.values.flatten.toMap
 
     // A reference attribute can have multiple aliases for nested fields.
-    val attrToAliases = AttributeMap(
+    val attrToAliases = new AttributeMap(
       attributeToExtractValuesAndAliases.map { case (attr, evAliasSeq) =>
-        attr -> evAliasSeq.map { case (_, alias) =>
-          alias
-        }
+        attr.exprId -> (attr, evAliasSeq.map(_._2))
       }
     )
 
