@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{HintInfo, Join, JoinStrategy
 import org.apache.spark.sql.catalyst.rules.Rule
 
 /**
- * This optimization rule incluede two join selection:
+ * This optimization rule includes two join selection:
  *   1. detects a join child that has a high ratio of empty partitions and adds a
  *      no_broadcast_hash_join hint to avoid it being broadcast.
  *   2. detects a join child that every partition size less than local map threshold and adds a
