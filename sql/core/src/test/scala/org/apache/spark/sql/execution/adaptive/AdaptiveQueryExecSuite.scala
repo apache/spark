@@ -1649,7 +1649,9 @@ class AdaptiveQueryExecSuite
           "SELECT t1.c1, t2.c1 FROM t1 JOIN t2 ON t1.c1 = t2.c1")
         assert(findTopLevelSortMergeJoin(origin1).size === 1)
         if (shouldShuffleHashJoin) {
-          assert(findTopLevelShuffledHashJoin(adaptive1).size === 1)
+          val shj = findTopLevelShuffledHashJoin(adaptive1)
+          assert(shj.size === 1)
+          assert(shj.head.buildSide == BuildRight)
         } else {
           assert(findTopLevelSortMergeJoin(adaptive1).size === 1)
         }
@@ -1678,6 +1680,9 @@ class AdaptiveQueryExecSuite
         }
         withSQLConf(SQLConf.ADAPTIVE_SHUFFLE_HASH_JOIN_LOCAL_MAP_THRESHOLD.key -> "317") {
           checkJoinStrategy(false)
+        }
+        withSQLConf(SQLConf.ADAPTIVE_SHUFFLE_HASH_JOIN_LOCAL_MAP_THRESHOLD.key -> "926") {
+          checkJoinStrategy(true)
         }
       }
     }
