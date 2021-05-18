@@ -600,10 +600,10 @@ object SQLConf {
 
   val ADAPTIVE_SHUFFLE_HASH_JOIN_LOCAL_MAP_THRESHOLD =
     buildConf("spark.sql.adaptive.shuffledHashJoinLocalMapThreshold")
-      .doc("Configures the maximum size in bytes for per partition that can be allowed to build " +
+      .doc("Configures the maximum size in bytes per partition that can be allowed to build " +
         "local hash map. If all the partition size not larger than this threshold, join " +
-        "selection may use shuffled hash join instead of sort merge join regardless of the " +
-        s"value of ${PREFER_SORTMERGEJOIN.key}.")
+        "selection prefer to use shuffled hash join instead of sort merge join regardless of " +
+        s"the value of ${PREFER_SORTMERGEJOIN.key}.")
       .version("3.2.0")
       .bytesConf(ByteUnit.BYTE)
       .createWithDefaultString("-1")
