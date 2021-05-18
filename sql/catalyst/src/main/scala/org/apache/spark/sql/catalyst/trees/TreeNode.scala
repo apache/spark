@@ -997,9 +997,8 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
         ("deserialized" -> s.deserialized) ~ ("replication" -> s.replication)
     case n: TreeNode[_] => n.jsonValue
     case o: Option[_] => o.map(parseToJson)
-    // Recursive scan Seq[TreeNode], Seq[Partitioning], Seq[DataType], Seq[Product]
-    case t: Seq[_] if t.forall(_.isInstanceOf[TreeNode[_]]) ||
-      t.forall(_.isInstanceOf[Partitioning]) ||
+    // Recursive scan Seq[Partitioning], Seq[DataType], Seq[Product]
+    case t: Seq[_] if t.forall(_.isInstanceOf[Partitioning]) ||
       t.forall(_.isInstanceOf[DataType]) ||
       t.forall(_.isInstanceOf[Product]) =>
       JArray(t.map(parseToJson).toList)
