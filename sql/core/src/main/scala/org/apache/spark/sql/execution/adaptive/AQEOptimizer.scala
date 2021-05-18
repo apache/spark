@@ -28,7 +28,7 @@ import org.apache.spark.util.Utils
 class AQEOptimizer(conf: SQLConf) extends RuleExecutor[LogicalPlan] {
   private val defaultBatches = Seq(
     Batch("Eliminate Unnecessary Join", Once, EliminateUnnecessaryJoin),
-    Batch("Dynamic JoinSelection", Once, DynamicJoinSelection)
+    Batch("Dynamic Join Selection", Once, DynamicJoinSelection)
   )
 
   final override protected def batches: Seq[Batch] = {
