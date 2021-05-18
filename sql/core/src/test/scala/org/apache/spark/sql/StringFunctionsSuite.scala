@@ -596,5 +596,6 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
       df2.selectExpr("str_to_map(a)"),
       Seq(Row(Map("a" -> "1", "b" -> "2", "c" -> "3")))
     )
+
   }
 }

@@ -2882,8 +2882,8 @@ object functions {
    * @group string_funcs
    * @since 3.2.0
    */
-  def sentences(str: Column): Column = withExpr {
-    Sentences(str.expr)
+  def sentences(string: Column): Column = withExpr {
+    Sentences(string.expr)
   }
 
   /**

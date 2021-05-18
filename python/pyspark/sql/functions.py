@@ -2690,11 +2690,11 @@ def sentences(string, language=None, country=None):
 
     Parameters
     ----------
-    string : str
+    string : :class:`~pyspark.sql.Column` or str
         a string to be split
-    language : str
+    language : :class:`~pyspark.sql.Column` or str, optional
         a language of the locale
-    country : str
+    country : :class:`~pyspark.sql.Column` or str, optional
         a country of the locale
 
     Examples
