@@ -75,7 +75,7 @@ Condition : ((isnotnull(ws_warehouse_sk#3) AND isnotnull(ws_sold_time_sk#1)) AND
 Output [2]: [sm_ship_mode_sk#9, sm_carrier#10]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/ship_mode]
-PushedFilters: [In(sm_carrier, [DHL                 ,BARIAN              ]), IsNotNull(sm_ship_mode_sk)]
+PushedFilters: [In(sm_carrier, [BARIAN              ,DHL                 ]), IsNotNull(sm_ship_mode_sk)]
 ReadSchema: struct<sm_ship_mode_sk:int,sm_carrier:string>
 
 (5) ColumnarToRow [codegen id : 1]

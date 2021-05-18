@@ -544,7 +544,14 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
 
   require(hset != null, "hset could not be null")
 
-  override def toString: String = s"$child INSET ${hset.mkString("(", ",", ")")}"
+  override def toString: String = {
+    val listString = hset.toSeq
+      .map(elem => Literal(elem, child.dataType).toString)
+      // Sort elements for deterministic behaviours
+      .sorted
+      .mkString(", ")
+    s"$child INSET $listString"
+  }
 
   @transient private[this] lazy val hasNull: Boolean = hset.contains(null)
 
@@ -638,6 +645,8 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
     val valueSQL = child.sql
     val listSQL = hset.toSeq
       .map(elem => Literal(elem, child.dataType).sql)
+      // Sort elements for deterministic behaviours
+      .sorted
       .mkString(", ")
     s"($valueSQL IN ($listSQL))"
   }

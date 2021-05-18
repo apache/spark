@@ -770,10 +770,10 @@ object SQLConf {
 
   val PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD =
     buildConf("spark.sql.parquet.pushdown.inFilterThreshold")
-      .doc("The maximum number of values to filter push-down optimization for IN predicate. " +
-        "Large threshold won't necessarily provide much better performance. " +
-        "The experiment argued that 300 is the limit threshold. " +
-        "By setting this value to 0 this feature can be disabled. " +
+      .doc("For IN predicate, Parquet filter will push-down a set of OR clauses if its " +
+        "number of values not exceeds this threshold. Otherwise, Parquet filter will push-down " +
+        "a value greater than or equal to its minimum value and less than or equal to " +
+        "its maximum value. By setting this value to 0 this feature can be disabled. " +
         s"This configuration only has an effect when '${PARQUET_FILTER_PUSHDOWN_ENABLED.key}' is " +
         "enabled.")
       .version("2.4.0")
@@ -2022,6 +2022,26 @@ object SQLConf {
       .intConf
       .createWithDefault(SHUFFLE_SPILL_NUM_ELEMENTS_FORCE_SPILL_THRESHOLD.defaultValue.get)
 
+  val SESSION_WINDOW_BUFFER_IN_MEMORY_THRESHOLD =
+    buildConf("spark.sql.sessionWindow.buffer.in.memory.threshold")
+      .internal()
+      .doc("Threshold for number of windows guaranteed to be held in memory by the " +
+        "session window operator. Note that the buffer is used only for the query Spark " +
+        "cannot apply aggregations on determining session window.")
+      .version("3.2.0")
+      .intConf
+      .createWithDefault(4096)
+
+  val SESSION_WINDOW_BUFFER_SPILL_THRESHOLD =
+    buildConf("spark.sql.sessionWindow.buffer.spill.threshold")
+      .internal()
+      .doc("Threshold for number of rows to be spilled by window operator. Note that " +
+        "the buffer is used only for the query Spark cannot apply aggregations on determining " +
+        "session window.")
+      .version("3.2.0")
+      .intConf
+      .createWithDefault(SHUFFLE_SPILL_NUM_ELEMENTS_FORCE_SPILL_THRESHOLD.defaultValue.get)
+
   val SORT_MERGE_JOIN_EXEC_BUFFER_IN_MEMORY_THRESHOLD =
     buildConf("spark.sql.sortMergeJoinExec.buffer.in.memory.threshold")
       .internal()
@@ -2165,7 +2185,7 @@ object SQLConf {
         "shows the exception messages from UDFs. Note that this works only with CPython 3.7+.")
       .version("3.1.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val PANDAS_GROUPED_MAP_ASSIGN_COLUMNS_BY_NAME =
     buildConf("spark.sql.legacy.execution.pandas.groupedMap.assignColumnsByName")
@@ -3696,6 +3716,10 @@ class SQLConf extends Serializable with Logging {
   def windowExecBufferInMemoryThreshold: Int = getConf(WINDOW_EXEC_BUFFER_IN_MEMORY_THRESHOLD)
 
   def windowExecBufferSpillThreshold: Int = getConf(WINDOW_EXEC_BUFFER_SPILL_THRESHOLD)
+
+  def sessionWindowBufferInMemoryThreshold: Int = getConf(SESSION_WINDOW_BUFFER_IN_MEMORY_THRESHOLD)
+
+  def sessionWindowBufferSpillThreshold: Int = getConf(SESSION_WINDOW_BUFFER_SPILL_THRESHOLD)
 
   def sortMergeJoinExecBufferInMemoryThreshold: Int =
     getConf(SORT_MERGE_JOIN_EXEC_BUFFER_IN_MEMORY_THRESHOLD)
