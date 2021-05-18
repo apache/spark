@@ -309,6 +309,35 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
       CodeGenerator.compile(code)
     }
   }
+
+  test("SPARK-35439: Children subexpr should come first than parent subexpr") {
+    val add = Add(Literal(1), Literal(2))
+
+    val equivalence1 = new EquivalentExpressions
+
+    equivalence1.addExprTree(add)
+    assert(equivalence1.getAllEquivalentExprs.head === Seq(add))
+
+    equivalence1.addExprTree(Add(Literal(3), add))
+    assert(equivalence1.getAllEquivalentExprs ===
+      Seq(Seq(add, add), Seq(Add(Literal(3), add))))
+
+    equivalence1.addExprTree(Add(Literal(3), add))
+    assert(equivalence1.getAllEquivalentExprs ===
+      Seq(Seq(add, add), Seq(Add(Literal(3), add), Add(Literal(3), add))))
+
+    val equivalence2 = new EquivalentExpressions
+
+    equivalence2.addExprTree(Add(Literal(3), add))
+    assert(equivalence2.getAllEquivalentExprs === Seq(Seq(add), Seq(Add(Literal(3), add))))
+
+    equivalence2.addExprTree(add)
+    assert(equivalence2.getAllEquivalentExprs === Seq(Seq(add, add), Seq(Add(Literal(3), add))))
+
+    equivalence2.addExprTree(Add(Literal(3), add))
+    assert(equivalence2.getAllEquivalentExprs ===
+      Seq(Seq(add, add), Seq(Add(Literal(3), add), Add(Literal(3), add))))
+  }
 }
 
 case class CodegenFallbackExpression(child: Expression)

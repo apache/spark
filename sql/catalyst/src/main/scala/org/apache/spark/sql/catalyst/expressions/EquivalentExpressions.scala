@@ -167,7 +167,23 @@ class EquivalentExpressions {
    * Returns all the equivalent sets of expressions.
    */
   def getAllEquivalentExprs: Seq[Seq[Expression]] = {
-    equivalenceMap.values.map(_.toSeq).toSeq
+    equivalenceMap.values.map(_.toSeq).toSeq.sortBy(_.head)(new ExpressionOrdering)
+  }
+
+  /**
+   * Orders [Expression] by parent/child relations. The child expression is smaller
+   * than parent expression.
+   */
+  class ExpressionOrdering extends Ordering[Expression] {
+    override def compare(x: Expression, y: Expression): Int = {
+      if (x.semanticEquals(y)) {
+        0
+      } else if (x.find(_.semanticEquals(y)).isDefined) {
+        1
+      } else {
+        -1
+      }
+    }
   }
 
   /**
