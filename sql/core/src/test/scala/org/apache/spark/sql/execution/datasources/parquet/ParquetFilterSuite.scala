@@ -188,6 +188,15 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
       checkFilterPredicate(!(tsAttr < ts4.ts), classOf[GtEq[_]], resultFun(ts4))
       checkFilterPredicate(tsAttr < ts2.ts || tsAttr > ts3.ts, classOf[Operators.Or],
         Seq(Row(resultFun(ts1)), Row(resultFun(ts4))))
+
+      Seq(3, 20).foreach { threshold =>
+        withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD.key -> s"$threshold") {
+          checkFilterPredicate(
+            In(tsAttr, Array(ts2.ts, ts3.ts, ts4.ts, "2021-05-01 00:01:02".ts).map(Literal.apply)),
+            if (threshold == 3) classOf[Operators.And] else classOf[Operators.Or],
+            Seq(Row(resultFun(ts2)), Row(resultFun(ts3)), Row(resultFun(ts4))))
+        }
+      }
     }
   }
 
@@ -336,6 +345,15 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
       checkFilterPredicate(!(intAttr < 4), classOf[GtEq[_]], resultFun(4))
       checkFilterPredicate(intAttr < 2 || intAttr > 3, classOf[Operators.Or],
         Seq(Row(resultFun(1)), Row(resultFun(4))))
+
+      Seq(3, 20).foreach { threshold =>
+        withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD.key -> s"$threshold") {
+          checkFilterPredicate(
+            In(intAttr, Array(2, 3, 4, 5, 6, 7).map(Literal.apply)),
+            if (threshold == 3) classOf[Operators.And] else classOf[Operators.Or],
+            Seq(Row(resultFun(2)), Row(resultFun(3)), Row(resultFun(4))))
+        }
+      }
     }
   }
 
@@ -371,6 +389,15 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
       checkFilterPredicate(!(longAttr < 4), classOf[GtEq[_]], resultFun(4))
       checkFilterPredicate(longAttr < 2 || longAttr > 3, classOf[Operators.Or],
         Seq(Row(resultFun(1)), Row(resultFun(4))))
+
+      Seq(3, 20).foreach { threshold =>
+        withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD.key -> s"$threshold") {
+          checkFilterPredicate(
+            In(longAttr, Array(2L, 3L, 4L, 5L, 6L, 7L).map(Literal.apply)),
+            if (threshold == 3) classOf[Operators.And] else classOf[Operators.Or],
+            Seq(Row(resultFun(2L)), Row(resultFun(3L)), Row(resultFun(4L))))
+        }
+      }
     }
   }
 
@@ -406,6 +433,15 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
       checkFilterPredicate(!(floatAttr < 4), classOf[GtEq[_]], resultFun(4))
       checkFilterPredicate(floatAttr < 2 || floatAttr > 3, classOf[Operators.Or],
         Seq(Row(resultFun(1)), Row(resultFun(4))))
+
+      Seq(3, 20).foreach { threshold =>
+        withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD.key -> s"$threshold") {
+          checkFilterPredicate(
+            In(floatAttr, Array(2F, 3F, 4F, 5F, 6F, 7F).map(Literal.apply)),
+            if (threshold == 3) classOf[Operators.And] else classOf[Operators.Or],
+            Seq(Row(resultFun(2F)), Row(resultFun(3F)), Row(resultFun(4F))))
+        }
+      }
     }
   }
 
@@ -441,6 +477,15 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
       checkFilterPredicate(!(doubleAttr < 4), classOf[GtEq[_]], resultFun(4))
       checkFilterPredicate(doubleAttr < 2 || doubleAttr > 3, classOf[Operators.Or],
         Seq(Row(resultFun(1)), Row(resultFun(4))))
+
+      Seq(3, 20).foreach { threshold =>
+        withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD.key -> s"$threshold") {
+          checkFilterPredicate(
+            In(doubleAttr, Array(2.0D, 3.0D, 4.0D, 5.0D, 6.0D, 7.0D).map(Literal.apply)),
+            if (threshold == 3) classOf[Operators.And] else classOf[Operators.Or],
+            Seq(Row(resultFun(2D)), Row(resultFun(3D)), Row(resultFun(4F))))
+        }
+      }
     }
   }
 
@@ -476,6 +521,15 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
       checkFilterPredicate(!(stringAttr < "4"), classOf[GtEq[_]], resultFun("4"))
       checkFilterPredicate(stringAttr < "2" || stringAttr > "3", classOf[Operators.Or],
         Seq(Row(resultFun("1")), Row(resultFun("4"))))
+
+      Seq(3, 20).foreach { threshold =>
+        withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD.key -> s"$threshold") {
+          checkFilterPredicate(
+            In(stringAttr, Array("2", "3", "4", "5", "6", "7").map(Literal.apply)),
+            if (threshold == 3) classOf[Operators.And] else classOf[Operators.Or],
+            Seq(Row(resultFun("2")), Row(resultFun("3")), Row(resultFun("4"))))
+        }
+      }
     }
   }
 
@@ -516,6 +570,15 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
       checkFilterPredicate(!(binaryAttr < 4.b), classOf[GtEq[_]], resultFun(4.b))
       checkFilterPredicate(binaryAttr < 2.b || binaryAttr > 3.b, classOf[Operators.Or],
         Seq(Row(resultFun(1.b)), Row(resultFun(4.b))))
+
+      Seq(3, 20).foreach { threshold =>
+        withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD.key -> s"$threshold") {
+          checkFilterPredicate(
+            In(binaryAttr, Array(2.b, 3.b, 4.b, 5.b, 6.b, 7.b).map(Literal.apply)),
+            if (threshold == 3) classOf[Operators.And] else classOf[Operators.Or],
+            Seq(Row(resultFun(2.b)), Row(resultFun(3.b)), Row(resultFun(4.b))))
+        }
+      }
     }
   }
 
@@ -580,6 +643,17 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
             dateAttr < "2018-03-19".date || dateAttr > "2018-03-20".date,
             classOf[Operators.Or],
             Seq(Row(resultFun("2018-03-18")), Row(resultFun("2018-03-21"))))
+
+          Seq(3, 20).foreach { threshold =>
+            withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD.key -> s"$threshold") {
+              checkFilterPredicate(
+                In(dateAttr, Array("2018-03-19".date, "2018-03-20".date, "2018-03-21".date,
+                  "2018-03-22".date).map(Literal.apply)),
+                if (threshold == 3) classOf[Operators.And] else classOf[Operators.Or],
+                Seq(Row(resultFun("2018-03-19")), Row(resultFun("2018-03-20")),
+                  Row(resultFun("2018-03-21"))))
+            }
+          }
         }
       }
     }
@@ -673,6 +747,19 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
           checkFilterPredicate(!(decimalAttr < 4), classOf[GtEq[_]], resultFun(4))
           checkFilterPredicate(decimalAttr < 2 || decimalAttr > 3, classOf[Operators.Or],
             Seq(Row(resultFun(1)), Row(resultFun(4))))
+
+          Array(1, 2, 3, 4).map(JBigDecimal.valueOf(_).setScale(2))
+            .map(Literal.create(_, DecimalType(precision, 2)))
+
+          Seq(3, 20).foreach { threshold =>
+            withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD.key -> s"$threshold") {
+              checkFilterPredicate(
+                In(decimalAttr, Array(2, 3, 4, 5).map(Literal.apply)
+                  .map(_.cast(DecimalType(precision, 2)))),
+                if (threshold == 3) classOf[Operators.And] else classOf[Operators.Or],
+                Seq(Row(resultFun(2)), Row(resultFun(3)), Row(resultFun(4))))
+            }
+          }
         }
       }
     }
@@ -1413,10 +1500,12 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
       parquetFilters.createFilter(sources.In("a", Array(10, 20, 30)))
     }
 
-    assert(parquetFilters.createFilter(sources.In("a",
-      Range(0, conf.parquetFilterPushDownInFilterThreshold).toArray)).isDefined)
-    assert(parquetFilters.createFilter(sources.In("a",
-      Range(0, conf.parquetFilterPushDownInFilterThreshold + 1).toArray)).isEmpty)
+    Seq(0, 10).foreach { threshold =>
+      withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD.key -> threshold.toString) {
+        assert(createParquetFilters(parquetSchema)
+          .createFilter(sources.In("a", Array(10, 20, 30))).nonEmpty === threshold > 0)
+      }
+    }
 
     import testImplicits._
     withTempPath { path =>
@@ -1428,11 +1517,12 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
       Seq(true, false).foreach { pushEnabled =>
         withSQLConf(
           SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> pushEnabled.toString) {
-          Seq(1, 5, 10, 11).foreach { count =>
+          Seq(1, 5, 10, 11, 100).foreach { count =>
             val filter = s"a in(${Range(0, count).mkString(",")})"
             assert(df.where(filter).count() === count)
             val actual = stripSparkFilter(df.where(filter)).collect().length
-            if (pushEnabled && count <= conf.parquetFilterPushDownInFilterThreshold) {
+            if (pushEnabled) {
+              // We support push down In predicate if its value exceeds threshold since SPARK-32792.
               assert(actual > 1 && actual < data.length)
             } else {
               assert(actual === data.length)
@@ -1442,6 +1532,36 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
           assert(df.where("a = null").count() === 0)
           assert(df.where("a is null").count() === 1)
         }
+      }
+    }
+  }
+
+  test("SPARK-32792: Pushdown IN predicate to min-max filter") {
+    withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD.key -> "2") {
+      val parquetFilters = createParquetFilters(
+        new SparkToParquetSchemaConverter(conf).convert(StructType.fromDDL("a int")))
+
+      assertResult(Some(and(
+        FilterApi.gtEq(intColumn("a"), 1: Integer),
+        FilterApi.ltEq(intColumn("a"), 20: Integer)))
+      ) {
+        parquetFilters.createFilter(sources.In("a", (1 to 20).toArray))
+      }
+
+      assertResult(Some(and(
+        FilterApi.gtEq(intColumn("a"), -200: Integer),
+        FilterApi.ltEq(intColumn("a"), 40: Integer)))
+      ) {
+        parquetFilters.createFilter(sources.In("A", Array(-100, 10, -200, 40)))
+      }
+
+      assertResult(Some(or(
+        FilterApi.eq(intColumn("a"), null: Integer),
+        and(
+          FilterApi.gtEq(intColumn("a"), 2: Integer),
+          FilterApi.ltEq(intColumn("a"), 7: Integer))))
+      ) {
+        parquetFilters.createFilter(sources.In("a", Array(2, 3, 7, null, 6)))
       }
     }
   }

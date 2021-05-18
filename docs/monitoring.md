@@ -19,6 +19,9 @@ license: |
   limitations under the License.
 ---
 
+* This will become a table of contents (this text will be scraped).
+{:toc}
+
 There are several ways to monitor Spark applications: web UIs, metrics, and external instrumentation.
 
 # Web Interfaces

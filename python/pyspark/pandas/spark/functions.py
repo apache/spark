@@ -19,7 +19,7 @@ Additional Spark functions used in pandas-on-Spark.
 """
 
 from pyspark import SparkContext
-from pyspark.sql.column import Column, _to_java_column, _create_column_from_literal
+from pyspark.sql.column import Column, _to_java_column, _create_column_from_literal  # type: ignore
 
 
 def repeat(col, n):

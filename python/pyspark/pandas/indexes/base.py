@@ -16,7 +16,7 @@
 #
 
 from functools import partial
-from typing import Any, List, Optional, Tuple, Union
+from typing import Any, List, Optional, Tuple, Union, cast
 import warnings
 
 import pandas as pd
@@ -198,7 +198,7 @@ class Index(IndexOpsMixin):
         )
 
     @property
-    def _column_label(self):
+    def _column_label(self) -> Tuple:
         return self._kdf._internal.index_names[0]
 
     def _with_new_scol(self, scol: spark.Column, *, dtype=None) -> "Index":
@@ -234,11 +234,12 @@ class Index(IndexOpsMixin):
         String with a summarized representation of the index
         """
         head, tail, total_count = tuple(
-            self._internal.spark_frame.select(
-                F.first(self.spark.column), F.last(self.spark.column), F.count(F.expr("*"))
-            )
-            .toPandas()
-            .iloc[0]
+            cast(
+                pd.DataFrame,
+                self._internal.spark_frame.select(
+                    F.first(self.spark.column), F.last(self.spark.column), F.count(F.expr("*"))
+                ).toPandas(),
+            ).iloc[0]
         )
 
         if total_count > 0:
@@ -1411,7 +1412,7 @@ class Index(IndexOpsMixin):
         sdf_symdiff = sdf_self.union(sdf_other).subtract(sdf_self.intersect(sdf_other))
 
         if sort:
-            sdf_symdiff = sdf_symdiff.sort(self._internal.index_spark_column_names)
+            sdf_symdiff = sdf_symdiff.sort(*self._internal.index_spark_column_names)
 
         internal = InternalFrame(
             spark_frame=sdf_symdiff,
@@ -1490,7 +1491,7 @@ class Index(IndexOpsMixin):
                    )
         """
         sdf = self._internal.spark_frame
-        sdf = sdf.orderBy(self._internal.index_spark_columns, ascending=ascending).select(
+        sdf = sdf.orderBy(*self._internal.index_spark_columns, ascending=ascending).select(
             self._internal.index_spark_columns
         )
 
@@ -1542,10 +1543,11 @@ class Index(IndexOpsMixin):
         ('a', 'x', 1)
         """
         sdf = self._internal.spark_frame
-        min_row = (
-            sdf.select(F.min(F.struct(self._internal.index_spark_columns)).alias("min_row"))
+        min_row = cast(
+            pd.DataFrame,
+            sdf.select(F.min(F.struct(*self._internal.index_spark_columns)).alias("min_row"))
             .select("min_row.*")
-            .toPandas()
+            .toPandas(),
         )
         result = tuple(min_row.iloc[0])
 
@@ -1583,10 +1585,11 @@ class Index(IndexOpsMixin):
         ('b', 'y', 2)
         """
         sdf = self._internal.spark_frame
-        max_row = (
-            sdf.select(F.max(F.struct(self._internal.index_spark_columns)).alias("max_row"))
+        max_row = cast(
+            pd.DataFrame,
+            sdf.select(F.max(F.struct(*self._internal.index_spark_columns)).alias("max_row"))
             .select("max_row.*")
-            .toPandas()
+            .toPandas(),
         )
         result = tuple(max_row.iloc[0])
 
@@ -2142,7 +2145,7 @@ class Index(IndexOpsMixin):
         else:
             raise ValueError("index must be monotonic increasing or decreasing")
 
-        result = sdf.toPandas().iloc[0, 0]
+        result = cast(pd.DataFrame, sdf.toPandas()).iloc[0, 0]
         return result if result is not None else np.nan
 
     def union(self, other, sort=None) -> "Index":
@@ -2212,7 +2215,7 @@ class Index(IndexOpsMixin):
         if isinstance(self, MultiIndex):
             sdf = sdf.drop_duplicates()
         if sort:
-            sdf = sdf.sort(self._internal.index_spark_column_names)
+            sdf = sdf.sort(*self._internal.index_spark_column_names)
         internal = InternalFrame(  # TODO: dtypes?
             spark_frame=sdf,
             index_spark_columns=[
