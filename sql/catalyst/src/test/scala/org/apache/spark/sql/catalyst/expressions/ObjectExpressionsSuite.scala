@@ -401,8 +401,7 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       arguments = Literal.fromObject(List(1, 2, 3)) :: Nil,
       propagateNull = false,
       dataType = ArrayType(IntegerType),
-      outerPointer = None,
-      propagateNullForPrimitive = false)
+      outerPointer = None)
     checkObjectExprEvaluation(newInst1, new GenericArrayData(List(1, 2, 3)))
 
     // Inner class case test
@@ -412,8 +411,7 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       arguments = Literal(1) :: Nil,
       propagateNull = false,
       dataType = ObjectType(classOf[outerObj.Inner]),
-      outerPointer = Some(() => outerObj),
-      propagateNullForPrimitive = false)
+      outerPointer = Some(() => outerObj))
     checkObjectExprEvaluation(newInst2, new outerObj.Inner(1))
 
     // SPARK-8288: A class with only a companion object constructor
@@ -422,8 +420,7 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       arguments = Literal(1) :: Nil,
       propagateNull = false,
       dataType = ObjectType(classOf[ScroogeLikeExample]),
-      outerPointer = Some(() => outerObj),
-      propagateNullForPrimitive = false)
+      outerPointer = Some(() => outerObj))
     checkObjectExprEvaluation(newInst3, ScroogeLikeExample(1))
   }
 
