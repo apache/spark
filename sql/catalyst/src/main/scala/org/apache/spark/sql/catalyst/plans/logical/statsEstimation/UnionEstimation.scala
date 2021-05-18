@@ -149,7 +149,7 @@ object UnionEstimation {
     }
   }
 
-  // Combine the two maps by updating the min-max stats map with null count stats.
+  // Combine the two Maps by updating the min-max stats Map with null count stats.
   private def combineStats(
       minMaxStats: AttributeMap[ColumnStat],
       nullCountStats: AttributeMap[ColumnStat]) = {
