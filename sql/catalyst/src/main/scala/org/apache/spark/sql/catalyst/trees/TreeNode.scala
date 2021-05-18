@@ -1014,9 +1014,10 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
         ("deserialized" -> s.deserialized) ~ ("replication" -> s.replication)
     case n: TreeNode[_] => n.jsonValue
     case o: Option[_] => o.map(parseToJson)
-    // Recursive scan Seq[TreeNode], Seq[Partitioning], Seq[DataType]
-    case t: Seq[_] if t.forall(_.isInstanceOf[TreeNode[_]]) ||
-      t.forall(_.isInstanceOf[Partitioning]) || t.forall(_.isInstanceOf[DataType]) =>
+    // Recursive scan Seq[Partitioning], Seq[DataType], Seq[Product]
+    case t: Seq[_] if t.forall(_.isInstanceOf[Partitioning]) ||
+      t.forall(_.isInstanceOf[DataType]) ||
+      t.forall(_.isInstanceOf[Product]) =>
       JArray(t.map(parseToJson).toList)
     case t: Seq[_] if t.length > 0 && t.head.isInstanceOf[String] =>
       JString(truncatedString(t, "[", ", ", "]", SQLConf.get.maxToStringFields))
@@ -1054,6 +1055,9 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
     case broadcast: BroadcastMode => true
     case table: CatalogTableType => true
     case storage: CatalogStorageFormat => true
+    // Write out product that contains TreeNode, since there are some Tuples such as cteRelations
+    // in With, branches in CaseWhen which are essential to understand the plan.
+    case p if p.productIterator.exists(_.isInstanceOf[TreeNode[_]]) => true
     case _ => false
   }
 }
