@@ -1652,6 +1652,7 @@ class AdaptiveQueryExecSuite
       }).toDF("index", "pv")
     val dim = Range(0, 26).map(x => (x, ('a' + x).toChar.toString))
       .toDF("index", "name")
+      .coalesce(1)
     val testDf = df.groupBy("index")
       .agg(sum($"pv").alias("pv"))
       .join(dim, Seq("index"))
