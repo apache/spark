@@ -79,7 +79,7 @@ object UnionEstimation {
         attributeStats = newAttrStats))
   }
 
-  /** This method computes the min-max statistics and return the attribute stats Map. */
+  // This method computes the min-max statistics and return the attribute stats Map.
   private def computeMinMaxStats(union: Union) = {
     val unionOutput = union.output
     val attrToComputeMinMaxStats = union.children.map(_.output).transpose.zipWithIndex.filter {
