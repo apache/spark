@@ -68,24 +68,6 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(CodegenMetrics.METRIC_GENERATED_METHOD_BYTECODE_SIZE.getCount() > startCount4)
   }
 
-  test("SPARK-35398: verify the metrics state doesn't change between " +
-    "using reflection api and using ClassBodyEvaluator.getBytecodes api in " +
-    "updateAndGetCompilationStats method.") {
-    val metricGeneratedClassByteCodeSizeSnapshot =
-      CodegenMetrics.METRIC_GENERATED_CLASS_BYTECODE_SIZE.getSnapshot.getValues
-    val metricGeneratedMethodByteCodeSizeSnapshot =
-      CodegenMetrics.METRIC_GENERATED_METHOD_BYTECODE_SIZE.getSnapshot.getValues
-    GenerateOrdering.generate(Subtract(Literal(123), Literal(1)).asc :: Nil)
-    // The state of metrics may change when using different versions of janino or
-    // the operator implementation changes.
-    assert(CodegenMetrics.METRIC_GENERATED_CLASS_BYTECODE_SIZE.getSnapshot.getValues
-      .diff(metricGeneratedClassByteCodeSizeSnapshot)
-      .sameElements(Array(740, 1293)))
-    assert(CodegenMetrics.METRIC_GENERATED_METHOD_BYTECODE_SIZE.getSnapshot.getValues
-      .diff(metricGeneratedMethodByteCodeSizeSnapshot)
-      .sameElements(Array(5, 5, 6, 7, 10, 15, 46)))
-  }
-
   test("SPARK-8443: split wide projections into blocks due to JVM code size limit") {
     val length = 5000
     val expressions = List.fill(length)(EqualTo(Literal(1), Literal(1)))
