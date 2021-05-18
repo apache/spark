@@ -167,8 +167,10 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
    * Convert a list of block IDs into a list of blocks with metadata, assuming all blocks have the
    * same size and index.
    */
-  private def toBlockList(blockIds: Traversable[BlockId], blockSize: Long, blockMapIndex: Int)
-  : Seq[(BlockId, Long, Int)] = {
+  private def toBlockList(
+      blockIds: Traversable[BlockId],
+      blockSize: Long,
+      blockMapIndex: Int): Seq[(BlockId, Long, Int)] = {
     blockIds.map(blockId => (blockId, blockSize, blockMapIndex)).toSeq
   }
 
