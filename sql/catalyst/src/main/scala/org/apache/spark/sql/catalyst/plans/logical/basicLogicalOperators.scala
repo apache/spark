@@ -797,7 +797,7 @@ case class Range(
     }
   }
 
-  private def computeHistogramStatistics(): Option[Histogram] = {
+  private def computeHistogramStatistics(): Histogram = {
     val numBins = conf.histogramNumBins
     val height = numElements.toDouble / numBins
     val percentileArray = (0 to numBins).map(i => i * height).toArray
