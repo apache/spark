@@ -82,10 +82,14 @@ class EquivalentExpressions {
   /**
    * Adds only expressions which are common in each of given expressions, in a recursive way.
    * For example, given two expressions `(a + (b + (c + 1)))` and `(d + (e + (c + 1)))`,
-   * the common expression `(c + 1)` will be added into `equivalenceMap`. Note that if an
-   * expression and its child expressions are all commonly occurred in each of given expressions,
-   * we filter out the child expressions. For example, if `((a + b) + c)` and `(a + b)` are
-   * common expressions, we only add `((a + b) + c)`.
+   * the common expression `(c + 1)` will be added into `equivalenceMap`.
+   *
+   * Note that as we don't know in advance if any child node of an expression will be common
+   * across all given expressions, we count all child nodes when looking through the given
+   * expressions. But when we call `addExprTree` to add common expressions into the map, we
+   * will add recursively the child nodes. So we need to filter the child expressions first.
+   * For example, if `((a + b) + c)` and `(a + b)` are common expressions, we only add
+   * `((a + b) + c)`.
    */
   private def addCommonExprs(
       exprs: Seq[Expression],
@@ -99,7 +103,8 @@ class EquivalentExpressions {
       exprSet.intersect(otherExprSet)
     }
 
-    // Not all expressions in the set should be added. We should filter out the subexprs.
+    // Not all expressions in the set should be added. We should filter out the related
+    // children nodes.
     val commonExprSet = candidateExprs.filter { candidateExpr =>
       candidateExprs.forall { expr =>
         expr == candidateExpr || expr.e.find(_.semanticEquals(candidateExpr.e)).isEmpty
