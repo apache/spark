@@ -40,7 +40,7 @@ class SparkPlannerSuite extends SharedSparkSession {
         case u: Union =>
           planned += 1
           UnionExec(u.children.map(planLater)) :: planLater(NeverPlanned) :: Nil
-        case LocalRelation(output, data, _, _) =>
+        case LocalRelation(output, data, _) =>
           planned += 1
           LocalTableScanExec(output, data) :: planLater(NeverPlanned) :: Nil
         case NeverPlanned =>

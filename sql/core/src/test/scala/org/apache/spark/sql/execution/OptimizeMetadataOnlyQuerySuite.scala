@@ -45,14 +45,14 @@ class OptimizeMetadataOnlyQuerySuite extends QueryTest with SharedSparkSession {
 
   private def assertMetadataOnlyQuery(df: DataFrame): Unit = {
     val localRelations = df.queryExecution.optimizedPlan.collect {
-      case l @ LocalRelation(_, _, _, _) => l
+      case l @ LocalRelation(_, _, _) => l
     }
     assert(localRelations.size == 1)
   }
 
   private def assertNotMetadataOnlyQuery(df: DataFrame): Unit = {
     val localRelations = df.queryExecution.optimizedPlan.collect {
-      case l @ LocalRelation(_, _, _, _) => l
+      case l @ LocalRelation(_, _, _) => l
     }
     assert(localRelations.size == 0)
   }

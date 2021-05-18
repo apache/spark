@@ -55,18 +55,11 @@ case class LocalRelation(
     output: Seq[Attribute],
     data: Seq[InternalRow] = Nil,
     // Indicates whether this relation has data from a streaming source.
-    override val isStreaming: Boolean = false,
-    executionIdOpt: Option[Long] = None)
+    override val isStreaming: Boolean = false)
   extends LeafNode with analysis.MultiInstanceRelation {
 
   // A local relation must have resolved output.
   require(output.forall(_.resolved), "Unresolved attributes found when constructing LocalRelation.")
-
-  override def nodeName: String = if (executionIdOpt.isDefined) {
-    super.nodeName + s"(execution id: ${executionIdOpt.get})"
-  } else {
-    super.nodeName
-  }
 
   /**
    * Returns an identical copy of this relation with new exprIds for all attributes.  Different

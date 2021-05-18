@@ -22,7 +22,6 @@ import java.util.UUID
 import java.util.concurrent.atomic.AtomicLong
 
 import org.apache.hadoop.fs.Path
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
@@ -31,7 +30,7 @@ import org.apache.spark.sql.catalyst.analysis.UnsupportedOperationChecker
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
 import org.apache.spark.sql.catalyst.expressions.codegen.ByteCodeStats
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.plans.logical.{Command, LocalRelation, LogicalPlan, ReturnAnswer}
+import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan, ReturnAnswer}
 import org.apache.spark.sql.catalyst.rules.{PlanChangeLogger, Rule}
 import org.apache.spark.sql.catalyst.util.StringUtils.PlanStringConcat
 import org.apache.spark.sql.catalyst.util.truncatedString
@@ -40,6 +39,7 @@ import org.apache.spark.sql.execution.bucketing.{CoalesceBucketsInJoin, DisableU
 import org.apache.spark.sql.execution.dynamicpruning.PlanDynamicPruningFilters
 import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ReuseExchange}
 import org.apache.spark.sql.execution.streaming.{IncrementalExecution, OffsetSeqMetadata}
+import org.apache.spark.sql.expressions.CommandResult
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.util.Utils
@@ -77,10 +77,7 @@ class QueryExecution(
   lazy val commandCollected: LogicalPlan = analyzed mapChildren { child =>
     child transform {
       // SPARK-35378: Eagerly execute Command so that query command with CTE
-      case c: Command =>
-        val subQueryExecution = sparkSession.sessionState.executePlan(c)
-        LocalRelation(c.output,
-          subQueryExecution.executedPlan.executeCollect(), false, Some(subQueryExecution.id))
+      case c: Command => CommandResult(sparkSession.sessionState.executePlan(c))
       case other => other
     }
   }
