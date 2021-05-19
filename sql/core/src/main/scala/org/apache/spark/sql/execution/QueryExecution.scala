@@ -80,7 +80,11 @@ class QueryExecution(
       // SPARK-35378: Eagerly execute Command so that query command with CTE
       case c: Command =>
         val qe = sparkSession.sessionState.executePlan(c)
-        CommandResult(qe.commandCollected.output, qe, qe.executedPlan.executeCollect())
+        CommandResult(
+          qe.commandCollected.output,
+          qe.commandCollected,
+          qe.executedPlan,
+          qe.executedPlan.executeCollect())
       case other => other
     }
   }

@@ -258,10 +258,9 @@ class QueryExecutionSuite extends SharedSparkSession {
     assert(projectQe.commandCollected.children(0).children.length == 1)
     assert(projectQe.commandCollected.children(0).children(0).isInstanceOf[CommandResult])
     assert(projectQe.executedPlan.isInstanceOf[CommandResultExec])
-    val subQe = projectQe.executedPlan.asInstanceOf[CommandResultExec].qe
-    assert(subQe.commandCollected.isInstanceOf[ShowTablesCommand])
-    assert(subQe.executedPlan.isInstanceOf[ExecutedCommandExec])
-    assert(subQe.executedPlan.asInstanceOf[ExecutedCommandExec]
+    val cmdResultExec = projectQe.executedPlan.asInstanceOf[CommandResultExec]
+    assert(cmdResultExec.executedPlan.isInstanceOf[ExecutedCommandExec])
+    assert(cmdResultExec.executedPlan.asInstanceOf[ExecutedCommandExec]
       .cmd.isInstanceOf[ShowTablesCommand])
   }
 }

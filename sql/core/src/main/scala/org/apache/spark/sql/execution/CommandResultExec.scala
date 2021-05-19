@@ -25,16 +25,19 @@ import org.apache.spark.sql.execution.metric.SQLMetrics
 
 /**
  * Physical plan node for collecting data from a command.
+ *
+ * `rows` may not be serializable and ideally we should not send `rows` and `unsafeRows`
+ * to the executors. Thus marking them as transient.
  */
 case class CommandResultExec(
     output: Seq[Attribute],
-    qe: QueryExecution,
+    executedPlan: SparkPlan,
     @transient rows: Seq[InternalRow]) extends LeafExecNode {
 
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
-  override def innerChildren: Seq[QueryPlan[_]] = Seq(qe.executedPlan)
+  override def innerChildren: Seq[QueryPlan[_]] = Seq(executedPlan)
 
   @transient private lazy val unsafeRows: Array[InternalRow] = {
     if (rows.isEmpty) {
