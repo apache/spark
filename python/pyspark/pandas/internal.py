@@ -25,12 +25,20 @@ import py4j
 
 import numpy as np
 import pandas as pd
-from pandas.api.types import CategoricalDtype, is_datetime64_dtype, is_datetime64tz_dtype
+from pandas.api.types import CategoricalDtype  # noqa: F401
 from pyspark import sql as spark
 from pyspark._globals import _NoValue, _NoValueType
 from pyspark.sql import functions as F, Window
 from pyspark.sql.functions import PandasUDFType, pandas_udf
-from pyspark.sql.types import BooleanType, DataType, StructField, StructType, LongType
+from pyspark.sql.types import (  # noqa: F401
+    BooleanType,
+    DataType,
+    IntegralType,
+    LongType,
+    StructField,
+    StructType,
+    StringType,
+)
 
 # For running doctests and reference resolution in PyCharm.
 from pyspark import pandas as ps  # noqa: F401
@@ -39,6 +47,7 @@ if TYPE_CHECKING:
     # This is required in old Python 3.5 to prevent circular reference.
     from pyspark.pandas.series import Series  # noqa: F401 (SPARK-34943)
 from pyspark.pandas.config import get_option
+from pyspark.pandas.data_type_ops.base import DataTypeOps
 from pyspark.pandas.typedef import (
     Dtype,
     as_spark_type,
@@ -951,11 +960,10 @@ class InternalFrame(object):
             for col, dtype in zip(self.index_spark_column_names, self.index_dtypes)
             if isinstance(dtype, extension_dtypes)
         }
-        categorical_dtypes = {
-            col: dtype
-            for col, dtype in zip(self.index_spark_column_names, self.index_dtypes)
-            if isinstance(dtype, CategoricalDtype)
-        }
+        dtypes = [dtype for dtype in self.index_dtypes]
+        spark_types = [
+            self.spark_frame.select(scol).schema[0].dataType for scol in self.index_spark_columns]
+        
         for spark_column, column_name, dtype in zip(
             self.data_spark_columns, self.data_spark_column_names, self.data_dtypes
         ):
@@ -969,8 +977,8 @@ class InternalFrame(object):
                 column_names.append(column_name)
                 if isinstance(dtype, extension_dtypes):
                     ext_dtypes[column_name] = dtype
-                elif isinstance(dtype, CategoricalDtype):
-                    categorical_dtypes[column_name] = dtype
+                dtypes.append(dtype)
+                spark_types.append(self.spark_frame.select(spark_column).schema[0].dataType)
 
         return dict(
             index_columns=self.index_spark_column_names,
@@ -979,7 +987,8 @@ class InternalFrame(object):
             column_labels=self.column_labels,
             column_label_names=self.column_label_names,
             ext_dtypes=ext_dtypes,
-            categorical_dtypes=categorical_dtypes,
+            dtypes=dtypes,
+            spark_types=spark_types,
         )
 
     @staticmethod
@@ -992,7 +1001,8 @@ class InternalFrame(object):
         column_labels: List[Tuple],
         column_label_names: List[Tuple],
         ext_dtypes: Dict[str, Dtype] = None,
-        categorical_dtypes: Dict[str, CategoricalDtype] = None
+        dtypes: List[Dtype],
+        spark_types: List[DataType],
     ) -> pd.DataFrame:
         """
         Restore pandas DataFrame indices using the metadata.
@@ -1005,8 +1015,11 @@ class InternalFrame(object):
         :param column_label_names: the column label names after restored.
         :param ext_dtypes: the map from the original column names to extension data types.
         :param categorical_dtypes: the map from the original column names to categorical types.
+        :param dtypes: the dtypes after restored.
+        :param spark_types: the spark_types.
         :return: the restored pandas DataFrame
 
+        >>> from numpy import dtype
         >>> pdf = pd.DataFrame({"index": [10, 20, 30], "a": ['a', 'b', 'c'], "b": [0, 2, 1]})
         >>> InternalFrame.restore_index(
         ...     pdf,
@@ -1016,7 +1029,9 @@ class InternalFrame(object):
         ...     column_labels=[("x",), ("y",), ("z",)],
         ...     column_label_names=[("lv1",)],
         ...     ext_dtypes=None,
-        ...     categorical_dtypes={"b": CategoricalDtype(categories=["i", "j", "k"])}
+        ...     dtypes=[dtype('int64'), dtype('object'),
+        ...         CategoricalDtype(categories=["i", "j", "k"]), dtype('int64')],
+        ...     spark_types=[LongType(), StringType(), StringType(), LongType()]
         ... )  # doctest: +NORMALIZE_WHITESPACE
         lv1  x  y   z
         idx
@@ -1027,11 +1042,8 @@ class InternalFrame(object):
         if ext_dtypes is not None and len(ext_dtypes) > 0:
             pdf = pdf.astype(ext_dtypes, copy=True)
 
-        if categorical_dtypes is not None:
-            for col, dtype in categorical_dtypes.items():
-                pdf[col] = pd.Categorical.from_codes(
-                    pdf[col], categories=dtype.categories, ordered=dtype.ordered
-                )
+        for col, expected_dtype, spark_type in zip(pdf.columns, dtypes, spark_types):
+            pdf[col] = DataTypeOps(expected_dtype, spark_type).restore(pdf[col])
 
         append = False
         for index_field in index_columns:
@@ -1423,13 +1435,9 @@ class InternalFrame(object):
         index_dtypes = list(reset_index.dtypes)[:index_nlevels]
         data_dtypes = list(reset_index.dtypes)[index_nlevels:]
 
-        for name, col in reset_index.iteritems():
-            dt = col.dtype
-            if is_datetime64_dtype(dt) or is_datetime64tz_dtype(dt):
-                continue
-            elif isinstance(dt, CategoricalDtype):
-                col = col.cat.codes
-            reset_index[name] = col.replace({np.nan: None})
+        for col, dtype in zip(reset_index.columns, reset_index.dtypes):
+            spark_type = infer_pd_series_spark_type(reset_index[col], dtype)
+            reset_index[col] = DataTypeOps(dtype, spark_type).prepare(reset_index[col])
 
         return reset_index, index_columns, index_dtypes, data_columns, data_dtypes
 
