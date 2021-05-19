@@ -548,7 +548,7 @@ class MemoryStoreSuite
   }
 
   test("put user-defined objects to MemoryStore and remove") {
-    val (memoryStore, blockInfoManager) = makeMemoryStore(12000)
+    val (memoryStore, _) = makeMemoryStore(12000)
     val blockId = BlockId("rdd_3_10")
     case class DummyAllocator() {
       private var allocated: Int = 0
@@ -565,11 +565,10 @@ class MemoryStoreSuite
     case class NativeObject(alloc: DummyAllocator, size: Int)
       extends KnownSizeEstimation
       with AutoCloseable {
-
       alloc.alloc(size)
       var allocated_size: Int = size
       override def estimatedSize: Long = allocated_size
-      override def close(): Unit = {
+      override def close(): Unit = synchronized {
         alloc.release(allocated_size)
         allocated_size = 0
       }
@@ -581,30 +580,15 @@ class MemoryStoreSuite
         blockId: BlockId,
         iter: Iterator[T],
         classTag: ClassTag[T]): Either[PartiallyUnrolledIterator[T], Long] = {
-      assert(blockInfoManager.lockNewBlockForWriting(
-        blockId,
-        new BlockInfo(StorageLevel.MEMORY_ONLY, classTag, tellMaster = false)))
-      val res = memoryStore.putIteratorAsValues(blockId, iter, classTag)
-      blockInfoManager.unlock(blockId)
-      res
+      memoryStore.putIteratorAsValues(blockId, iter, classTag)
     }
 
-    // Unroll with plenty of space. This should succeed and cache both blocks.
-    val result1 = putIteratorAsValues("b1", nativeObjIterator, ClassTag.Any)
-    val result2 = putIteratorAsValues("b2", nativeObjIterator, ClassTag.Any)
-    assert(memoryStore.contains("b1"))
-    assert(memoryStore.contains("b2"))
-    assert(result1.isRight) // unroll was successful
-    assert(result2.isRight)
+    // Unroll with plenty of space. This should succeed and cache both blocks. 
+    assert(putIteratorAsValues("b1", nativeObjIterator, ClassTag.Any).isRight)
+    assert(putIteratorAsValues("b2", nativeObjIterator, ClassTag.Any).isRight)
 
-    // Re-put these two blocks so block manager knows about them too. Otherwise, block manager
-    // would not know how to drop them from memory later.
-    blockInfoManager.lockForWriting("b1")
     memoryStore.remove("b1")
-    blockInfoManager.lockForWriting("b2")
-    blockInfoManager.removeBlock("b1")
     memoryStore.remove("b2")
-    blockInfoManager.removeBlock("b2")
 
     // Check if allocator was cleared.
     while (allocator.getAllocatedMemory > 0) {
@@ -635,7 +619,7 @@ class MemoryStoreSuite
       alloc.alloc(size)
       var allocated_size: Int = size
       override def estimatedSize: Long = allocated_size
-      override def close(): Unit = {
+      override def close(): Unit = synchronized {
         Thread.sleep(10)
         alloc.release(allocated_size)
         allocated_size = 0

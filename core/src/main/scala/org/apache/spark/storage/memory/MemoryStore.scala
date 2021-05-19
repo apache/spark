@@ -26,8 +26,8 @@ import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
-import scala.concurrent.duration.Duration
 import scala.reflect.ClassTag
+import scala.util.{Failure, Success}
 import scala.util.control.NonFatal
 
 import com.google.common.io.ByteStreams
@@ -40,7 +40,7 @@ import org.apache.spark.serializer.{SerializationStream, SerializerManager}
 import org.apache.spark.storage._
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.array.ByteArrayMethods
-import org.apache.spark.util.{SizeEstimator, ThreadUtils, Utils}
+import org.apache.spark.util.{SizeEstimator, Utils}
 import org.apache.spark.util.collection.SizeTrackingVector
 import org.apache.spark.util.io.{ChunkedByteBuffer, ChunkedByteBufferOutputStream}
 
@@ -390,26 +390,33 @@ private[spark] class MemoryStore(
     }
   }
 
+  def manual_close[T <: MemoryEntry[_]](entry: T): T = {
+    val entryManualCloseTasks = Future {
+      entry match {
+        case e: DeserializedMemoryEntry[_] => e.value.foreach {
+          case o: AutoCloseable =>
+            try {
+              o.close
+            } catch {
+              case NonFatal(e) =>
+                logWarning(s"Got NonFatal exception during remove")
+            }
+          case _ =>
+        }
+        case _ =>
+      }
+    }
+    entryManualCloseTasks.onComplete {
+      case Success(_) =>
+      case Failure(e) => throw e
+    }
+    entry
+  }
+
   def remove(blockId: BlockId): Boolean = memoryManager.synchronized {
     val entry = entries.synchronized {
       val removed = entries.remove(blockId)
-      val entryManualCloseTasks = Future {
-        removed match {
-          case e: DeserializedMemoryEntry[_] => e.value.foreach {
-            case o: AutoCloseable =>
-              try {
-                o.close
-              } catch {
-                case NonFatal(e) =>
-                  logWarning(s"Got NonFatal exception during closing blockId ${blockId}")
-              }
-            case _ =>
-          }
-          case _ =>
-        }
-      }
-      ThreadUtils.awaitResult(entryManualCloseTasks, Duration.Inf)
-      removed
+      manual_close(removed)
     }
     if (entry != null) {
       entry match {
@@ -427,22 +434,7 @@ private[spark] class MemoryStore(
 
   def clear(): Unit = memoryManager.synchronized {
     entries.synchronized {
-      val entryManualCloseTasks = Future {
-        entries.values.asScala.foreach {
-          case e: DeserializedMemoryEntry[_] => e.value.foreach {
-            case o: AutoCloseable =>
-              try {
-                o.close
-              } catch {
-                case NonFatal(e) =>
-                  logWarning(s"Got NonFatal exception during clear entries")
-              }
-            case _ =>
-          }
-          case _ =>
-        }
-      }
-      ThreadUtils.awaitResult(entryManualCloseTasks, Duration.Inf)
+      entries.values.asScala.foreach(manual_close)
       entries.clear()
     }
     onHeapUnrollMemoryMap.clear()
