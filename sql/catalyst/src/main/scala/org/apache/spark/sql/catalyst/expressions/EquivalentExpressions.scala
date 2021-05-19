@@ -167,16 +167,19 @@ class EquivalentExpressions {
    * Returns all the equivalent sets of expressions.
    */
   def getAllEquivalentExprs: Seq[Seq[Expression]] = {
-    equivalenceMap.values.map(_.toSeq).toSeq.sortBy(_.head)(new ExpressionOrdering)
+    equivalenceMap.values.map(_.toSeq).toSeq.sortBy(_.head)(new ExpressionContainmentOrdering)
   }
 
   /**
    * Orders [Expression] by parent/child relations. The child expression is smaller
    * than parent expression. If there is child-parent relationships among the subexpressions,
    * we want the child expressions come first than parent expressions, so we can replace
-   * child expressions in parent expressions with subexpression evaluation.
+   * child expressions in parent expressions with subexpression evaluation. Note that
+   * this is not for general expression ordering. For example, two irrelevant expressions
+   * will be considered as e1 < e2 and e2 < e1 by this ordering. But for the usage here,
+   * the order of irrelevant expressions does not matter.
    */
-  class ExpressionOrdering extends Ordering[Expression] {
+  class ExpressionContainmentOrdering extends Ordering[Expression] {
     override def compare(x: Expression, y: Expression): Int = {
       if (x.semanticEquals(y)) {
         0
