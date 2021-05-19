@@ -241,7 +241,7 @@ class SeriesStringTest(PandasOnSparkTestCase, SQLTestUtils):
 
     def test_string_repeat(self):
         self.check_func(lambda x: x.str.repeat(repeats=3))
-        with self.assertRaises(ValueError):
+        with self.assertRaises(TypeError):
             self.check_func(lambda x: x.str.repeat(repeats=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]))
 
     def test_string_replace(self):

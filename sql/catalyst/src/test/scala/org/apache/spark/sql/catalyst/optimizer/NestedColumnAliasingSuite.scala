@@ -329,14 +329,14 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
     comparePlans(optimized, expected)
   }
 
-  test("Nested field pruning for Project and Generate: not prune on generator output") {
+  test("Nested field pruning for Project and Generate: multiple-field case is not supported") {
     val companies = LocalRelation(
       'id.int,
       'employers.array(employer))
 
     val query = companies
       .generate(Explode('employers.getField("company")), outputNames = Seq("company"))
-      .select('company.getField("name"))
+      .select('company.getField("name"), 'company.getField("address"))
       .analyze
     val optimized = Optimize.execute(query)
 
@@ -347,7 +347,8 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
       .generate(Explode($"${aliases(0)}"),
         unrequiredChildIndex = Seq(0),
         outputNames = Seq("company"))
-      .select('company.getField("name").as("company.name"))
+      .select('company.getField("name").as("company.name"),
+        'company.getField("address").as("company.address"))
       .analyze
     comparePlans(optimized, expected)
   }
@@ -683,6 +684,29 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
       contact.select($"name")
     ).analyze
     comparePlans(optimized2, expected2)
+  }
+
+  test("SPARK-34638: nested column prune on generator output for one field") {
+    val companies = LocalRelation(
+      'id.int,
+      'employers.array(employer))
+
+    val query = companies
+      .generate(Explode('employers.getField("company")), outputNames = Seq("company"))
+      .select('company.getField("name"))
+      .analyze
+    val optimized = Optimize.execute(query)
+
+    val aliases = collectGeneratedAliases(optimized)
+
+    val expected = companies
+      .select('employers.getField("company").getField("name").as(aliases(0)))
+      .generate(Explode($"${aliases(0)}"),
+        unrequiredChildIndex = Seq(0),
+        outputNames = Seq("company"))
+      .select('company.as("company.name"))
+      .analyze
+    comparePlans(optimized, expected)
   }
 }
 

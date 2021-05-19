@@ -1356,7 +1356,7 @@ class IndexesTest(PandasOnSparkTestCase, TestUtils):
         self.assert_eq((kidx + "x").repeat(3).sort_values(), (pidx + "x").repeat(3).sort_values())
 
         self.assertRaises(ValueError, lambda: kidx.repeat(-1))
-        self.assertRaises(ValueError, lambda: kidx.repeat("abc"))
+        self.assertRaises(TypeError, lambda: kidx.repeat("abc"))
 
         pmidx = pd.MultiIndex.from_tuples([("x", "a"), ("x", "b"), ("y", "c")])
         kmidx = ps.from_pandas(pmidx)
@@ -1365,7 +1365,7 @@ class IndexesTest(PandasOnSparkTestCase, TestUtils):
         self.assert_eq(kmidx.repeat(0).sort_values(), pmidx.repeat(0).sort_values(), almost=True)
 
         self.assertRaises(ValueError, lambda: kmidx.repeat(-1))
-        self.assertRaises(ValueError, lambda: kmidx.repeat("abc"))
+        self.assertRaises(TypeError, lambda: kmidx.repeat("abc"))
 
     def test_unique(self):
         pidx = pd.Index(["a", "b", "a"])
@@ -1618,14 +1618,14 @@ class IndexesTest(PandasOnSparkTestCase, TestUtils):
         )
 
         # Checking the type of indices.
-        self.assertRaises(ValueError, lambda: kidx.take(1))
-        self.assertRaises(ValueError, lambda: kidx.take("1"))
-        self.assertRaises(ValueError, lambda: kidx.take({1, 2}))
-        self.assertRaises(ValueError, lambda: kidx.take({1: None, 2: None}))
-        self.assertRaises(ValueError, lambda: kmidx.take(1))
-        self.assertRaises(ValueError, lambda: kmidx.take("1"))
-        self.assertRaises(ValueError, lambda: kmidx.take({1, 2}))
-        self.assertRaises(ValueError, lambda: kmidx.take({1: None, 2: None}))
+        self.assertRaises(TypeError, lambda: kidx.take(1))
+        self.assertRaises(TypeError, lambda: kidx.take("1"))
+        self.assertRaises(TypeError, lambda: kidx.take({1, 2}))
+        self.assertRaises(TypeError, lambda: kidx.take({1: None, 2: None}))
+        self.assertRaises(TypeError, lambda: kmidx.take(1))
+        self.assertRaises(TypeError, lambda: kmidx.take("1"))
+        self.assertRaises(TypeError, lambda: kmidx.take({1, 2}))
+        self.assertRaises(TypeError, lambda: kmidx.take({1: None, 2: None}))
 
     def test_index_get_level_values(self):
         pidx = pd.Index([1, 2, 3], name="ks")
@@ -1998,7 +1998,7 @@ class IndexesTest(PandasOnSparkTestCase, TestUtils):
         with self.assertRaisesRegex(TypeError, err_msg):
             ps.MultiIndex.from_frame({"a": [1, 2, 3], "b": [4, 5, 6]})
 
-        self.assertRaises(ValueError, lambda: ps.MultiIndex.from_frame(kdf, names="ab"))
+        self.assertRaises(TypeError, lambda: ps.MultiIndex.from_frame(kdf, names="ab"))
 
         # non-string names
         self.assert_eq(

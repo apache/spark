@@ -622,7 +622,7 @@ class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
             kser1.combine_first(kser2).sort_index(), pser1.combine_first(pser2).sort_index()
         )
         with self.assertRaisesRegex(
-            ValueError, "`combine_first` only allows `Series` for parameter `other`"
+            TypeError, "`combine_first` only allows `Series` for parameter `other`"
         ):
             kser1.combine_first(50)
 

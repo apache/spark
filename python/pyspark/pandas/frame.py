@@ -64,7 +64,7 @@ from pandas.core.dtypes.inference import is_sequence
 from pyspark import StorageLevel
 from pyspark import sql as spark
 from pyspark.sql import Column, DataFrame as SparkDataFrame, functions as F
-from pyspark.sql.functions import pandas_udf
+from pyspark.sql.functions import pandas_udf, PandasUDFType
 from pyspark.sql.types import (
     BooleanType,
     DoubleType,
@@ -771,7 +771,7 @@ class DataFrame(Frame, Generic[T]):
         if not isinstance(other, DataFrame) and (
             isinstance(other, IndexOpsMixin) or is_sequence(other)
         ):
-            raise ValueError(
+            raise TypeError(
                 "%s with a sequence is currently not supported; "
                 "however, got %s." % (op, type(other).__name__)
             )
@@ -2244,11 +2244,11 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             F.array(
                 *[
                     F.struct(
-                        [
+                        *[
                             F.lit(col).alias(SPARK_INDEX_NAME_FORMAT(i))
                             for i, col in enumerate(label)
-                        ]
-                        + [self._internal.spark_column_for(label).alias("value")]
+                        ],
+                        *[self._internal.spark_column_for(label).alias("value")],
                     )
                     for label in self._internal.column_labels
                 ]
@@ -2259,7 +2259,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             [
                 F.to_json(
                     F.struct(
-                        F.array([scol for scol in self._internal.index_spark_columns]).alias("a")
+                        F.array(*[scol for scol in self._internal.index_spark_columns]).alias("a")
                     )
                 ).alias("index"),
                 F.col("pairs.*"),
@@ -2936,7 +2936,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         from pyspark.pandas.series import first_series
 
         if not is_name_like_value(key):
-            raise ValueError("'key' should be a scalar value or tuple that contains scalar values")
+            raise TypeError("'key' should be a scalar value or tuple that contains scalar values")
 
         if level is not None and is_name_like_tuple(key):
             raise KeyError(key)
@@ -2994,7 +2994,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         axis: Union[int, str] = 0,
     ) -> "DataFrame":
         """
-        Select values between particular times of the day (e.g., 9:00-9:30 AM).
+        Select values between particular times of the day (example: 9:00-9:30 AM).
 
         By setting ``start_time`` to be later than ``end_time``,
         you can get the times that are *not* between the two times.
@@ -3088,7 +3088,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         self, time: Union[datetime.time, str], asof: bool = False, axis: Union[int, str] = 0
     ) -> "DataFrame":
         """
-        Select values at particular time of day (e.g., 9:30AM).
+        Select values at particular time of day (example: 9:30AM).
 
         Parameters
         ----------
@@ -3301,7 +3301,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             ]
             kdf[tmp_cond_col_names] = cond
         else:
-            raise ValueError("type of cond must be a DataFrame or Series")
+            raise TypeError("type of cond must be a DataFrame or Series")
 
         tmp_other_col_names = [
             tmp_other_col_name(name_like_string(label)) for label in self._internal.column_labels
@@ -3431,7 +3431,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         from pyspark.pandas.series import Series
 
         if not isinstance(cond, (DataFrame, Series)):
-            raise ValueError("type of cond must be a DataFrame or Series")
+            raise TypeError("type of cond must be a DataFrame or Series")
 
         cond_inversed = cond._apply_series_op(lambda kser: ~kser)
         return self.where(cond_inversed, other)
@@ -3997,7 +3997,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         assert allow_duplicates is False
 
         if not is_name_like_value(column):
-            raise ValueError(
+            raise TypeError(
                 '"column" should be a scalar value or tuple that contains scalar values'
             )
 
@@ -4289,7 +4289,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         elif isinstance(decimals, int):
             decimals = {k: decimals for k in self._internal.column_labels}
         else:
-            raise ValueError("decimals must be an integer, a dict-like or a Series")
+            raise TypeError("decimals must be an integer, a dict-like or a Series")
 
         def op(kser):
             label = kser._column_label
@@ -4762,7 +4762,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         builder = self.to_spark(index_col=index_col).write.mode(mode)
         if partition_cols is not None:
             builder.partitionBy(partition_cols)
-        builder._set_opts(compression=compression)
+        if compression is not None:
+            builder.option("compression", compression)
         builder.options(**options).format("parquet").save(path)
 
     def to_orc(
@@ -5660,7 +5661,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         will output the original DataFrame, simply ignoring the incompatible types.
         """
         if is_list_like(lower) or is_list_like(upper):
-            raise ValueError(
+            raise TypeError(
                 "List-like value are not supported for 'lower' and 'upper' at the " + "moment"
             )
 
@@ -5941,12 +5942,12 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         small  5.5  2.333333  17  13
         """
         if not is_name_like_value(columns):
-            raise ValueError("columns should be one column name.")
+            raise TypeError("columns should be one column name.")
 
         if not is_name_like_value(values) and not (
             isinstance(values, list) and all(is_name_like_value(v) for v in values)
         ):
-            raise ValueError("values should be one column or list of columns.")
+            raise TypeError("values should be one column or list of columns.")
 
         if not isinstance(aggfunc, str) and (
             not isinstance(aggfunc, dict)
@@ -5954,7 +5955,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 is_name_like_value(key) and isinstance(value, str) for key, value in aggfunc.items()
             )
         ):
-            raise ValueError(
+            raise TypeError(
                 "aggfunc must be a dict mapping from column name "
                 "to aggregate functions (string)."
             )
@@ -6031,7 +6032,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 .agg(*agg_cols)
             )
         else:
-            raise ValueError("index should be a None or a list of columns.")
+            raise TypeError("index should be a None or a list of columns.")
 
         if fill_value is not None and isinstance(fill_value, (int, float)):
             sdf = sdf.fillna(fill_value)
@@ -6460,7 +6461,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         4  1   True  1.0
         5  2  False  2.0
         """
-        from pyspark.sql.types import _parse_datatype_string
+        from pyspark.sql.types import _parse_datatype_string  # type: ignore
 
         if not is_list_like(include):
             include = (include,) if include is not None else ()
@@ -6769,7 +6770,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             (False, "last"): lambda x: Column(getattr(x._jc, "desc_nulls_last")()),
         }
         by = [mapper[(asc, na_position)](scol) for scol, asc in zip(by, ascending)]
-        sdf = self._internal.resolved_copy.spark_frame.sort(*(by + [NATURAL_ORDER_COLUMN_NAME]))
+        sdf = self._internal.resolved_copy.spark_frame.sort(*by, NATURAL_ORDER_COLUMN_NAME)
         kdf = DataFrame(self._internal.with_new_sdf(sdf))  # type: DataFrame
         if inplace:
             self._update_internal_frame(kdf._internal)
@@ -7940,7 +7941,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         3  3  4
         """
         if isinstance(other, ps.Series):
-            raise ValueError("DataFrames.append() does not support appending Series to DataFrames")
+            raise TypeError("DataFrames.append() does not support appending Series to DataFrames")
         if sort:
             raise NotImplementedError("The 'sort' parameter is currently not supported")
 
@@ -8067,8 +8068,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 )
             data_dtypes[self._internal.column_labels.index(column_labels)] = None  # TODO: dtype?
         sdf = update_sdf.select(
-            [scol_for(update_sdf, col) for col in self._internal.spark_column_names]
-            + list(HIDDEN_COLUMNS)
+            *[scol_for(update_sdf, col) for col in self._internal.spark_column_names],
+            *HIDDEN_COLUMNS,
         )
         internal = self._internal.with_new_sdf(sdf, data_dtypes=data_dtypes)
         self._update_internal_frame(internal, requires_same_anchor=False)
@@ -8494,8 +8495,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         formatted_perc = ["{:.0%}".format(p) for p in sorted(percentiles)]
         stats = ["count", "mean", "stddev", "min", *formatted_perc, "max"]
 
-        sdf = self._internal.spark_frame.select(*exprs).summary(stats)
-        sdf = sdf.replace("stddev", "std", subset="summary")
+        sdf = self._internal.spark_frame.select(*exprs).summary(*stats)
+        sdf = sdf.replace("stddev", "std", subset=["summary"])
 
         internal = InternalFrame(
             spark_frame=sdf,
@@ -9148,10 +9149,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             F.array(
                 *[
                     F.struct(
-                        *(
-                            [F.lit(c).alias(name) for c, name in zip(label, var_name)]
-                            + [self._internal.spark_column_for(label).alias(value_name)]
-                        )
+                        *[F.lit(c).alias(name) for c, name in zip(label, var_name)],
+                        *[self._internal.spark_column_for(label).alias(value_name)],
                     )
                     for label in column_labels
                     if label in value_vars
@@ -9323,20 +9322,20 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         structs = [
             F.struct(
-                [F.lit(value).alias(index_column)]
-                + [
+                *[F.lit(value).alias(index_column)],
+                *[
                     (
                         column_labels[label][value]
                         if value in column_labels[label]
                         else F.lit(None)
                     ).alias(name)
                     for label, name in zip(column_labels, data_columns)
-                ]
+                ],
             ).alias(value)
             for value in index_values
         ]
 
-        pairs = F.explode(F.array(structs))
+        pairs = F.explode(F.array(*structs))
 
         sdf = self._internal.spark_frame.withColumn("pairs", pairs)
         sdf = sdf.select(
@@ -9482,10 +9481,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             F.array(
                 *[
                     F.struct(
-                        *(
-                            [F.lit(c).alias(name) for c, name in zip(idx, new_index_columns)]
-                            + [self._internal.spark_column_for(idx).alias(ser_name)]
-                        )
+                        *[F.lit(c).alias(name) for c, name in zip(idx, new_index_columns)],
+                        *[self._internal.spark_column_for(idx).alias(ser_name)],
                     )
                     for idx in column_labels
                 ]
@@ -9587,8 +9584,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         for label, applied_col in zip(column_labels, applied):
             cols.append(
                 F.struct(
-                    [F.lit(col).alias(SPARK_INDEX_NAME_FORMAT(i)) for i, col in enumerate(label)]
-                    + [applied_col.alias(value_column)]
+                    *[F.lit(col).alias(SPARK_INDEX_NAME_FORMAT(i)) for i, col in enumerate(label)],
+                    *[applied_col.alias(value_column)],
                 )
             )
 
@@ -9674,8 +9671,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         for label, applied_col in zip(column_labels, applied):
             cols.append(
                 F.struct(
-                    [F.lit(col).alias(SPARK_INDEX_NAME_FORMAT(i)) for i, col in enumerate(label)]
-                    + [applied_col.alias(value_column)]
+                    *[F.lit(col).alias(SPARK_INDEX_NAME_FORMAT(i)) for i, col in enumerate(label)],
+                    *[applied_col.alias(value_column)],
                 )
             )
 
@@ -10726,7 +10723,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             raise NotImplementedError('axis should be either 0 or "index" currently.')
 
         if not isinstance(accuracy, int):
-            raise ValueError(
+            raise TypeError(
                 "accuracy must be an integer; however, got [%s]" % type(accuracy).__name__
             )
 
@@ -10735,7 +10732,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         for v in q if isinstance(q, list) else [q]:
             if not isinstance(v, float):
-                raise ValueError(
+                raise TypeError(
                     "q must be a float or an array of floats; however, [%s] found." % type(v)
                 )
             if v < 0.0 or v > 1.0:
@@ -10904,9 +10901,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         0  1  10   10
         """
         if isinstance(self.columns, pd.MultiIndex):
-            raise ValueError("Doesn't support for MultiIndex columns")
+            raise TypeError("Doesn't support for MultiIndex columns")
         if not isinstance(expr, str):
-            raise ValueError(
+            raise TypeError(
                 "expr must be a string to be evaluated, {} given".format(type(expr).__name__)
             )
         inplace = validate_bool_kwarg(inplace, "inplace")
@@ -11012,7 +11009,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         """
         axis = validate_axis(axis)
         if not is_list_like(indices) or isinstance(indices, (dict, set)):
-            raise ValueError("`indices` must be a list-like except dict or set")
+            raise TypeError("`indices` must be a list-like except dict or set")
         if axis == 0:
             return cast(DataFrame, self.iloc[indices, :])
         else:
@@ -11098,7 +11095,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         from pyspark.pandas.series import first_series
 
         if isinstance(self.columns, pd.MultiIndex):
-            raise ValueError("`eval` is not supported for multi-index columns")
+            raise TypeError("`eval` is not supported for multi-index columns")
         inplace = validate_bool_kwarg(inplace, "inplace")
         should_return_series = False
         series_name = None
@@ -11179,7 +11176,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         from pyspark.pandas.series import Series
 
         if not is_name_like_value(column):
-            raise ValueError("column must be a scalar")
+            raise TypeError("column must be a scalar")
 
         kdf = DataFrame(self._internal.resolved_copy)  # type: "DataFrame"
         kser = kdf[column]
@@ -11278,10 +11275,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 return first_series(DataFrame(internal).transpose())
 
         else:
-
-            @pandas_udf(returnType=DoubleType())
-            def calculate_columns_axis(*cols):
-                return pd.concat(cols, axis=1).mad(axis=1)
+            calculate_columns_axis = pandas_udf(
+                returnType=DoubleType(), functionType=PandasUDFType.SCALAR
+            )(lambda *cols: pd.concat(cols, axis=1).mad(axis=1))
 
             internal = self._internal.copy(
                 column_labels=[None],

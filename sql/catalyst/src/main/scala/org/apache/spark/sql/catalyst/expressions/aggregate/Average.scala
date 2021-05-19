@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 import org.apache.spark.sql.catalyst.analysis.{DecimalPrecision, FunctionRegistry, TypeCheckResult}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.trees.TreePattern.{AVERAGE, TreePattern}
 import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
@@ -50,6 +51,8 @@ case class Average(child: Expression) extends DeclarativeAggregate with Implicit
 
   // Return data type.
   override def dataType: DataType = resultType
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(AVERAGE)
 
   private lazy val resultType = child.dataType match {
     case DecimalType.Fixed(p, s) =>
@@ -87,8 +90,12 @@ case class Average(child: Expression) extends DeclarativeAggregate with Implicit
     case _: DecimalType =>
       DecimalPrecision.decimalAndDecimal()(
         Divide(sum, count.cast(DecimalType.LongDecimal), failOnError = false)).cast(resultType)
-    case _: YearMonthIntervalType => DivideYMInterval(sum, count)
-    case _: DayTimeIntervalType => DivideDTInterval(sum, count)
+    case _: YearMonthIntervalType =>
+      If(EqualTo(count, Literal(0L)),
+        Literal(null, YearMonthIntervalType), DivideYMInterval(sum, count))
+    case _: DayTimeIntervalType =>
+      If(EqualTo(count, Literal(0L)),
+        Literal(null, DayTimeIntervalType), DivideDTInterval(sum, count))
     case _ =>
       Divide(sum.cast(resultType), count.cast(resultType), failOnError = false)
   }

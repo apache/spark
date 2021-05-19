@@ -18,7 +18,7 @@
 """
 Wrappers around spark that correspond to common pandas functions.
 """
-from typing import Any, Optional, Union, List, Tuple, Sized, cast
+from typing import Any, Optional, Union, List, Tuple, Type, Sized, cast
 from collections import OrderedDict
 from collections.abc import Iterable
 from distutils.version import LooseVersion
@@ -47,6 +47,7 @@ from pyspark.sql.types import (
     StringType,
     DateType,
     StructType,
+    DataType,
 )
 
 from pyspark import pandas as ps  # noqa: F401
@@ -126,7 +127,7 @@ def from_pandas(pobj: Union[pd.DataFrame, pd.Series, pd.Index]) -> Union[Series,
     elif isinstance(pobj, pd.Index):
         return DataFrame(pd.DataFrame(index=pobj)).index
     else:
-        raise ValueError("Unknown data type: {}".format(type(pobj).__name__))
+        raise TypeError("Unknown data type: {}".format(type(pobj).__name__))
 
 
 _range = range  # built-in range
@@ -1229,7 +1230,7 @@ def read_html(
         the encoding provided by the document).
 
     decimal : str, default '.'
-        Character to recognize as decimal point (e.g. use ',' for European
+        Character to recognize as decimal point (example: use ',' for European
         data).
 
     converters : dict, default None
@@ -1939,7 +1940,9 @@ def get_dummies(
     ):
         raise NotImplementedError(
             "get_dummies currently only accept {} values".format(
-                ", ".join([t.typeName() for t in _get_dummies_acceptable_types])
+                ", ".join(
+                    [cast(Type[DataType], t).typeName() for t in _get_dummies_acceptable_types]
+                )
             )
         )
 
@@ -2770,7 +2773,7 @@ def broadcast(obj) -> DataFrame:
     ...
     """
     if not isinstance(obj, DataFrame):
-        raise ValueError("Invalid type : expected DataFrame got {}".format(type(obj).__name__))
+        raise TypeError("Invalid type : expected DataFrame got {}".format(type(obj).__name__))
     return DataFrame(
         obj._internal.with_new_sdf(F.broadcast(obj._internal.resolved_copy.spark_frame))
     )

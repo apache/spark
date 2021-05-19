@@ -269,12 +269,13 @@ case class UnresolvedGenerator(name: FunctionIdentifier, children: Seq[Expressio
 }
 
 case class UnresolvedFunction(
-    name: FunctionIdentifier,
+    nameParts: Seq[String],
     arguments: Seq[Expression],
     isDistinct: Boolean,
     filter: Option[Expression] = None,
     ignoreNulls: Boolean = false)
   extends Expression with Unevaluable {
+  import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
   override def children: Seq[Expression] = arguments ++ filter.toSeq
 
@@ -282,10 +283,10 @@ case class UnresolvedFunction(
   override def nullable: Boolean = throw new UnresolvedException("nullable")
   override lazy val resolved = false
 
-  override def prettyName: String = name.unquotedString
+  override def prettyName: String = nameParts.quoted
   override def toString: String = {
     val distinct = if (isDistinct) "distinct " else ""
-    s"'$name($distinct${children.mkString(", ")})"
+    s"'${nameParts.quoted}($distinct${children.mkString(", ")})"
   }
 
   override protected def withNewChildrenInternal(
@@ -299,8 +300,17 @@ case class UnresolvedFunction(
 }
 
 object UnresolvedFunction {
+  import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+
+  def apply(
+      name: FunctionIdentifier,
+      arguments: Seq[Expression],
+      isDistinct: Boolean): UnresolvedFunction = {
+    UnresolvedFunction(name.asMultipart, arguments, isDistinct)
+  }
+
   def apply(name: String, arguments: Seq[Expression], isDistinct: Boolean): UnresolvedFunction = {
-    UnresolvedFunction(FunctionIdentifier(name, None), arguments, isDistinct)
+    UnresolvedFunction(Seq(name), arguments, isDistinct)
   }
 }
 

@@ -23,17 +23,17 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.annotation.Evolving
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, SparkSession}
+import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils}
 import org.apache.spark.sql.connector.catalog.{SupportsRead, TableProvider}
 import org.apache.spark.sql.connector.catalog.TableCapability._
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Utils, FileDataSourceV2}
 import org.apache.spark.sql.execution.streaming.StreamingRelation
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.StreamSourceProvider
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -195,8 +195,7 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
 
   private def loadInternal(path: Option[String]): DataFrame = {
     if (source.toLowerCase(Locale.ROOT) == DDLUtils.HIVE_PROVIDER) {
-      throw new AnalysisException("Hive data source can only be used with tables, you can not " +
-        "read files of Hive data source directly.")
+      throw QueryCompilationErrors.cannotOperateOnHiveDataSourceFilesError("read")
     }
 
     val optionsWithPath = if (path.isEmpty) {
@@ -256,9 +255,7 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
   def load(path: String): DataFrame = {
     if (!sparkSession.sessionState.conf.legacyPathOptionBehavior &&
         extraOptions.contains("path")) {
-      throw new AnalysisException("There is a 'path' option set and load() is called with a path" +
-        "parameter. Either remove the path option, or call load() without the parameter. " +
-        s"To ignore this check, set '${SQLConf.LEGACY_PATH_OPTION_BEHAVIOR.key}' to 'true'.")
+      throw QueryCompilationErrors.setPathOptionAndCallWithPathParameterError("load")
     }
     loadInternal(Some(path))
   }
@@ -412,7 +409,7 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    *     <li>`STOP_AT_DELIMITER`: If unescaped quotes are found in the input, consider the value
    *     as an unquoted value. This will make the parser accumulate all characters until the
    *     delimiter or a line ending is found in the input.</li>
-   *     <li>`STOP_AT_DELIMITER`: If unescaped quotes are found in the input, the content parsed
+   *     <li>`SKIP_VALUE`: If unescaped quotes are found in the input, the content parsed
    *     for the given value will be skipped and the value set in nullValue will be produced
    *     instead.</li>
    *     <li>`RAISE_ERROR`: If unescaped quotes are found in the input, a TextParsingException
@@ -597,7 +594,7 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    */
   def textFile(path: String): Dataset[String] = {
     if (userSpecifiedSchema.nonEmpty) {
-      throw new AnalysisException("User specified schema not supported with `textFile`")
+      throw QueryCompilationErrors.userSpecifiedSchemaWithTextFileError()
     }
     text(path).select("value").as[String](sparkSession.implicits.newStringEncoder)
   }

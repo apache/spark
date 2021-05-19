@@ -1895,7 +1895,7 @@ class Frame(object, metaclass=ABCMeta):
             numeric_only = True
 
         if not isinstance(accuracy, int):
-            raise ValueError(
+            raise TypeError(
                 "accuracy must be an integer; however, got [%s]" % type(accuracy).__name__
             )
 
@@ -2353,11 +2353,12 @@ class Frame(object, metaclass=ABCMeta):
 
         with sql_conf({SPARK_CONF_ARROW_ENABLED: False}):
             # Disable Arrow to keep row ordering.
-            first_valid_row = (
+            first_valid_row = cast(
+                pd.DataFrame,
                 self._internal.spark_frame.filter(cond)
                 .select(self._internal.index_spark_columns)
                 .limit(1)
-                .toPandas()
+                .toPandas(),
             )
 
         # For Empty Series or DataFrame, returns None.

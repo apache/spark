@@ -224,7 +224,7 @@ Input [5]: [ss_store_sk#1, ss_net_profit#2, s_store_sk#8, s_county#9, s_state#10
 
 (39) Expand [codegen id : 9]
 Input [3]: [ss_net_profit#2, s_state#10, s_county#9]
-Arguments: [List(ss_net_profit#2, s_state#10, s_county#9, 0), List(ss_net_profit#2, s_state#10, null, 1), List(ss_net_profit#2, null, null, 3)], [ss_net_profit#2, s_state#28, s_county#29, spark_grouping_id#30]
+Arguments: [[ss_net_profit#2, s_state#10, s_county#9, 0], [ss_net_profit#2, s_state#10, null, 1], [ss_net_profit#2, null, null, 3]], [ss_net_profit#2, s_state#28, s_county#29, spark_grouping_id#30]
 
 (40) HashAggregate [codegen id : 9]
 Input [4]: [ss_net_profit#2, s_state#28, s_county#29, spark_grouping_id#30]

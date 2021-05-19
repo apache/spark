@@ -1144,7 +1144,7 @@ class StringMethods(object):
         """
         # type hint does not support to specify array type yet.
         pudf = pandas_udf(
-            lambda s: s.str.findall(pat, flags),
+            lambda s, *_: s.str.findall(pat, flags),
             returnType=ArrayType(StringType(), containsNull=True),
             functionType=PandasUDFType.SCALAR,
         )
@@ -1489,7 +1489,7 @@ class StringMethods(object):
         dtype: object
         """
         if not isinstance(repeats, int):
-            raise ValueError("repeats expects an int parameter")
+            raise TypeError("repeats expects an int parameter")
         return self._data.spark.transform(lambda c: SF.repeat(col=c, n=repeats))
 
     def replace(self, pat, repl, n=-1, case=None, flags=0, regex=True) -> "ps.Series":
@@ -1989,7 +1989,7 @@ class StringMethods(object):
 
         # type hint does not support to specify array type yet.
         pudf = pandas_udf(
-            lambda s: s.str.split(pat, n),
+            lambda s, *_: s.str.split(pat, n),
             returnType=ArrayType(StringType(), containsNull=True),
             functionType=PandasUDFType.SCALAR,
         )
@@ -2127,7 +2127,7 @@ class StringMethods(object):
 
         # type hint does not support to specify array type yet.
         pudf = pandas_udf(
-            lambda s: s.str.rsplit(pat, n),
+            lambda s, *_: s.str.rsplit(pat, n),
             returnType=ArrayType(StringType(), containsNull=True),
             functionType=PandasUDFType.SCALAR,
         )

@@ -27,6 +27,7 @@ import org.apache.commons.text.StringEscapeUtils
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.trees.TreePattern.{CURRENT_LIKE, TreePattern}
 import org.apache.spark.sql.catalyst.util.{DateTimeUtils, LegacyDateFormats, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
@@ -86,6 +87,7 @@ case class CurrentTimeZone() extends LeafExpression with Unevaluable {
   override def nullable: Boolean = false
   override def dataType: DataType = StringType
   override def prettyName: String = "current_timezone"
+  final override val nodePatterns: Seq[TreePattern] = Seq(CURRENT_LIKE)
 }
 
 /**
@@ -122,6 +124,8 @@ case class CurrentDate(timeZoneId: Option[String] = None)
 
   override def dataType: DataType = DateType
 
+  final override val nodePatterns: Seq[TreePattern] = Seq(CURRENT_LIKE)
+
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
 
@@ -135,6 +139,7 @@ abstract class CurrentTimestampLike() extends LeafExpression with CodegenFallbac
   override def nullable: Boolean = false
   override def dataType: DataType = TimestampType
   override def eval(input: InternalRow): Any = currentTimestamp()
+  final override val nodePatterns: Seq[TreePattern] = Seq(CURRENT_LIKE)
 }
 
 /**
@@ -2378,15 +2383,15 @@ object DatePart {
       Literal(null, DoubleType)
     } else {
       val fieldStr = fieldEval.asInstanceOf[UTF8String].toString
-      val analysisException = QueryCompilationErrors.literalTypeUnsupportedForSourceTypeError(
-        fieldStr, source)
-      if (source.dataType == CalendarIntervalType) {
-        ExtractIntervalPart.parseExtractField(
-          fieldStr,
-          source,
-          throw analysisException)
-      } else {
-        DatePart.parseExtractField(fieldStr, source, throw analysisException)
+
+      def analysisException =
+        throw QueryCompilationErrors.literalTypeUnsupportedForSourceTypeError(fieldStr, source)
+
+      source.dataType match {
+        case YearMonthIntervalType | DayTimeIntervalType | CalendarIntervalType =>
+          ExtractIntervalPart.parseExtractField(fieldStr, source, analysisException)
+        case _ =>
+          DatePart.parseExtractField(fieldStr, source, analysisException)
       }
     }
   }
@@ -2414,6 +2419,10 @@ object DatePart {
        5
       > SELECT _FUNC_('seconds', interval 5 hours 30 seconds 1 milliseconds 1 microseconds);
        30.001001
+      > SELECT _FUNC_('MONTH', INTERVAL '2021-11' YEAR TO MONTH);
+       11
+      > SELECT _FUNC_('MINUTE', INTERVAL '123 23:55:59.002001' DAY TO SECOND);
+       55
   """,
   note = """
     The _FUNC_ function is equivalent to the SQL-standard function `EXTRACT(field FROM source)`
@@ -2479,6 +2488,10 @@ case class DatePart(field: Expression, source: Expression, child: Expression)
        5
       > SELECT _FUNC_(seconds FROM interval 5 hours 30 seconds 1 milliseconds 1 microseconds);
        30.001001
+      > SELECT _FUNC_(MONTH FROM INTERVAL '2021-11' YEAR TO MONTH);
+       11
+      > SELECT _FUNC_(MINUTE FROM INTERVAL '123 23:55:59.002001' DAY TO SECOND);
+       55
   """,
   note = """
     The _FUNC_ function is equivalent to `date_part(field, source)`.

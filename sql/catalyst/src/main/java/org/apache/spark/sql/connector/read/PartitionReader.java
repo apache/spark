@@ -21,7 +21,7 @@ import java.io.Closeable;
 import java.io.IOException;
 
 import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.connector.CustomTaskMetric;
+import org.apache.spark.sql.connector.metric.CustomTaskMetric;
 
 /**
  * A partition reader returned by {@link PartitionReaderFactory#createReader(InputPartition)} or

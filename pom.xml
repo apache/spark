@@ -170,21 +170,22 @@
     <scalafmt.skip>true</scalafmt.skip>
     <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
     <fasterxml.jackson.version>2.12.2</fasterxml.jackson.version>
-    <snappy.version>1.1.8.2</snappy.version>
+    <snappy.version>1.1.8.4</snappy.version>
     <netlib.java.version>1.1.2</netlib.java.version>
+    <netlib.ludovic.dev.version>2.2.0</netlib.ludovic.dev.version>
     <commons-codec.version>1.15</commons-codec.version>
     <commons-compress.version>1.20</commons-compress.version>
     <commons-io.version>2.8.0</commons-io.version>
     <!-- org.apache.commons/commons-lang/-->
     <commons-lang2.version>2.6</commons-lang2.version>
     <!-- org.apache.commons/commons-lang3/-->
-    <commons-lang3.version>3.11</commons-lang3.version>
+    <commons-lang3.version>3.12.0</commons-lang3.version>
     <!-- org.apache.commons/commons-pool2/-->
     <commons-pool2.version>2.6.2</commons-pool2.version>
     <datanucleus-core.version>4.1.17</datanucleus-core.version>
     <guava.version>14.0.1</guava.version>
-    <janino.version>3.0.16</janino.version>
-    <jersey.version>2.30</jersey.version>
+    <janino.version>3.1.4</janino.version>
+    <jersey.version>2.34</jersey.version>
     <joda.version>2.10.5</joda.version>
     <jodd.version>3.5.2</jodd.version>
     <jsr305.version>3.0.0</jsr305.version>
@@ -203,6 +204,7 @@
     <arrow.version>2.0.0</arrow.version>
     <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
     <leveldbjni.group>org.fusesource.leveldbjni</leveldbjni.group>
+    <kubernetes-client.version>5.3.1</kubernetes-client.version>
 
     <test.java.home>${java.home}</test.java.home>
 
@@ -353,17 +355,17 @@
     </dependency>
     <dependency>
       <groupId>org.scalatestplus</groupId>
-      <artifactId>scalatestplus-scalacheck_${scala.binary.version}</artifactId>
+      <artifactId>scalacheck-1-15_${scala.binary.version}</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>org.scalatestplus</groupId>
-      <artifactId>scalatestplus-mockito_${scala.binary.version}</artifactId>
+      <artifactId>mockito-3-4_${scala.binary.version}</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>org.scalatestplus</groupId>
-      <artifactId>scalatestplus-selenium_${scala.binary.version}</artifactId>
+      <artifactId>selenium-3-141_${scala.binary.version}</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
@@ -939,20 +941,20 @@
       </dependency>
       <dependency>
         <groupId>org.scalatestplus</groupId>
-        <artifactId>scalatestplus-scalacheck_${scala.binary.version}</artifactId>
-        <version>3.1.0.0-RC2</version>
+        <artifactId>scalacheck-1-15_${scala.binary.version}</artifactId>
+        <version>3.2.9.0</version>
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>org.scalatestplus</groupId>
-        <artifactId>scalatestplus-mockito_${scala.binary.version}</artifactId>
-        <version>1.0.0-SNAP5</version>
+        <artifactId>mockito-3-4_${scala.binary.version}</artifactId>
+        <version>3.2.9.0</version>
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>org.scalatestplus</groupId>
-        <artifactId>scalatestplus-selenium_${scala.binary.version}</artifactId>
-        <version>1.0.0-SNAP5</version>
+        <artifactId>selenium-3-141_${scala.binary.version}</artifactId>
+        <version>3.2.9.0</version>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -970,7 +972,7 @@
       <dependency>
         <groupId>org.scalacheck</groupId>
         <artifactId>scalacheck_${scala.binary.version}</artifactId>
-        <version>1.14.2</version>
+        <version>1.15.4</version>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -2455,6 +2457,21 @@
         <artifactId>commons-cli</artifactId>
         <version>${commons-cli.version}</version>
       </dependency>
+      <dependency>
+        <groupId>dev.ludovic.netlib</groupId>
+        <artifactId>blas</artifactId>
+        <version>${netlib.ludovic.dev.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>dev.ludovic.netlib</groupId>
+        <artifactId>lapack</artifactId>
+        <version>${netlib.ludovic.dev.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>dev.ludovic.netlib</groupId>
+        <artifactId>arpack</artifactId>
+        <version>${netlib.ludovic.dev.version}</version>
+      </dependency>
     </dependencies>
   </dependencyManagement>
 
@@ -2584,6 +2601,7 @@
               <arg>-P:silencer:globalFilters=.*deprecated.*</arg>
             </args>
             <jvmArgs>
+              <jvmArg>-Xss4m</jvmArg>
               <jvmArg>-Xms1024m</jvmArg>
               <jvmArg>-Xmx1024m</jvmArg>
               <jvmArg>-XX:ReservedCodeCacheSize=${CodeCacheSize}</jvmArg>
@@ -3143,7 +3161,7 @@
       <plugin>
         <groupId>org.antipathy</groupId>
         <artifactId>mvn-scalafmt_${scala.binary.version}</artifactId>
-        <version>1.0.3</version>
+        <version>1.0.4</version>
         <configuration>
           <parameters>${scalafmt.parameters}</parameters> <!-- (Optional) Additional command line arguments -->
           <skip>${scalafmt.skip}</skip> <!-- (Optional) skip formatting -->
@@ -3469,6 +3487,26 @@
         <maven.surefire.debug>${jdwp.arg.line}</maven.surefire.debug>
         <debugForkedProcess>${test.debug.suite}</debugForkedProcess>
       </properties>
+    </profile>
+
+    <!--
+      Deprecated: com.github.fommil.netlib has been replaced by dev.ludovic.netlib which
+      doesn't package or distribute any GPL/LGPL dependencies. There should now be hardware
+      acceleration out-of-the-box without enabling any additional profile.
+      However, we need to keep the dependency for now because the last release of
+      org.scalanlp:breeze still depends on `com.github.fommil.netlib`. It's been updated with
+      https://github.com/scalanlp/breeze/pull/811 but it hasn't been released yet.
+    -->
+    <profile>
+      <id>netlib-lgpl</id>
+      <dependencies>
+        <dependency>
+          <groupId>com.github.fommil.netlib</groupId>
+          <artifactId>all</artifactId>
+          <version>${netlib.java.version}</version>
+          <type>pom</type>
+        </dependency>
+      </dependencies>
     </profile>
   </profiles>
 </project>

@@ -1198,7 +1198,7 @@ private[spark] object SparkSubmitUtils extends Logging {
     sp.setM2compatible(true)
     sp.setUsepoms(true)
     sp.setRoot(sys.env.getOrElse(
-      "DEFAULT_ARTIFACT_REPOSITORY", "https://dl.bintray.com/spark-packages/maven"))
+      "DEFAULT_ARTIFACT_REPOSITORY", "https://repos.spark-packages.org/"))
     sp.setName("spark-packages")
     cr.add(sp)
     cr
