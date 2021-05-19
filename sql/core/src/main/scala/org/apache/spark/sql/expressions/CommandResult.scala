@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.expressions
 
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.LeafNode
@@ -28,7 +29,7 @@ import org.apache.spark.sql.execution.QueryExecution
  * @param qe The query execution for command. It doesn't need to be sent to executors
  *             and then doesn't need to be serializable.
  */
-case class CommandResult(qe: QueryExecution) extends LeafNode {
+case class CommandResult(
+    output: Seq[Attribute], qe: QueryExecution, data: Seq[InternalRow]) extends LeafNode {
   override def innerChildren: Seq[QueryPlan[_]] = Seq(qe.commandCollected)
-  def output: Seq[Attribute] = qe.commandCollected.output
 }

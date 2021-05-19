@@ -19,30 +19,40 @@ package org.apache.spark.sql.execution
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.expressions.{Attribute, UnsafeProjection}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.execution.metric.SQLMetrics
 
 /**
  * Physical plan node for collecting data from a command.
  */
-case class CommandResultExec(qe: QueryExecution) extends LeafExecNode {
+case class CommandResultExec(
+    output: Seq[Attribute],
+    qe: QueryExecution,
+    @transient rows: Seq[InternalRow]) extends LeafExecNode {
 
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
   override def innerChildren: Seq[QueryPlan[_]] = Seq(qe.executedPlan)
 
-  def output: Seq[Attribute] = qe.executedPlan.output
+  @transient private lazy val unsafeRows: Array[InternalRow] = {
+    if (rows.isEmpty) {
+      Array.empty
+    } else {
+      val proj = UnsafeProjection.create(output, output)
+      rows.map(r => proj(r).copy()).toArray
+    }
+  }
 
-  private lazy val unsafeRows: Array[InternalRow] = qe.executedPlan.executeCollect()
-
-  private lazy val rdd: RDD[InternalRow] = if (unsafeRows.isEmpty) {
-    sqlContext.sparkContext.emptyRDD
-  } else {
-    val numSlices = math.min(
-      unsafeRows.length, sqlContext.sparkSession.leafNodeDefaultParallelism)
-    sqlContext.sparkContext.parallelize(unsafeRows, numSlices)
+  @transient private lazy val rdd: RDD[InternalRow] = {
+    if (rows.isEmpty) {
+      sqlContext.sparkContext.emptyRDD
+    } else {
+      val numSlices = math.min(
+        unsafeRows.length, sqlContext.sparkSession.leafNodeDefaultParallelism)
+      sqlContext.sparkContext.parallelize(unsafeRows, numSlices)
+    }
   }
 
   override def doExecute(): RDD[InternalRow] = {

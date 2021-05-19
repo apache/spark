@@ -78,7 +78,9 @@ class QueryExecution(
   lazy val commandCollected: LogicalPlan = analyzed mapChildren { child =>
     child transform {
       // SPARK-35378: Eagerly execute Command so that query command with CTE
-      case c: Command => CommandResult(sparkSession.sessionState.executePlan(c))
+      case c: Command =>
+        val qe = sparkSession.sessionState.executePlan(c)
+        CommandResult(qe.commandCollected.output, qe, qe.executedPlan.executeCollect())
       case other => other
     }
   }
