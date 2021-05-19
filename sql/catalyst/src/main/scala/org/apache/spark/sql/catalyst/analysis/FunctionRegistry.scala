@@ -47,9 +47,11 @@ trait FunctionRegistryBase[T] {
 
   type FunctionBuilder = Seq[Expression] => T
 
-  final def registerFunction(name: FunctionIdentifier, builder: FunctionBuilder): Unit = {
+  final def registerFunction(
+      name: FunctionIdentifier, builder: FunctionBuilder, language: String): Unit = {
     val info = new ExpressionInfo(
-      builder.getClass.getCanonicalName, name.database.orNull, name.funcName)
+      builder.getClass.getCanonicalName, name.database.orNull, name.funcName,
+      null, "", "", "", "", "", "", language)
     registerFunction(name, info, builder)
   }
 
@@ -59,10 +61,12 @@ trait FunctionRegistryBase[T] {
     builder: FunctionBuilder): Unit
 
   /* Create or replace a temporary function. */
-  final def createOrReplaceTempFunction(name: String, builder: FunctionBuilder): Unit = {
+  final def createOrReplaceTempFunction(
+      name: String, builder: FunctionBuilder, language: String): Unit = {
     registerFunction(
       FunctionIdentifier(name),
-      builder)
+      builder,
+      language)
   }
 
   @throws[AnalysisException]("If function does not exist")
@@ -157,7 +161,8 @@ object FunctionRegistryBase {
           df.note(),
           df.group(),
           df.since(),
-          df.deprecated())
+          df.deprecated(),
+          df.language())
       } else {
         // This exists for the backward compatibility with old `ExpressionDescription`s defining
         // the extended description in `extended()`.
@@ -721,7 +726,7 @@ object FunctionRegistry {
     val usage = "_FUNC_(expr) - Casts the value `expr` to the target data type `_FUNC_`."
     val expressionInfo =
       new ExpressionInfo(clazz.getCanonicalName, null, name, usage, "", "", "",
-        "conversion_funcs", "2.0.1", "")
+        "conversion_funcs", "2.0.1", "", "built-in")
     (name, (expressionInfo, builder))
   }
 

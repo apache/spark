@@ -65,7 +65,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
         | udfDeterministic: ${udf.udfDeterministic}
       """.stripMargin)
 
-    functionRegistry.createOrReplaceTempFunction(name, udf.builder)
+    functionRegistry.createOrReplaceTempFunction(name, udf.builder, "python")
   }
 
   /**
@@ -83,7 +83,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     " via the functions.udaf(agg) method.", "3.0.0")
   def register(name: String, udaf: UserDefinedAggregateFunction): UserDefinedAggregateFunction = {
     def builder(children: Seq[Expression]) = ScalaUDAF(children, udaf, udafName = Some(name))
-    functionRegistry.createOrReplaceTempFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder, "scala")
     udaf
   }
 
@@ -112,11 +112,11 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     udf.withName(name) match {
       case udaf: UserDefinedAggregator[_, _, _] =>
         def builder(children: Seq[Expression]) = udaf.scalaAggregator(children)
-        functionRegistry.createOrReplaceTempFunction(name, builder)
+        functionRegistry.createOrReplaceTempFunction(name, builder, "scala")
         udaf
       case other =>
         def builder(children: Seq[Expression]) = other.apply(children.map(Column.apply) : _*).expr
-        functionRegistry.createOrReplaceTempFunction(name, builder)
+        functionRegistry.createOrReplaceTempFunction(name, builder, "scala")
         other
     }
   }
@@ -195,7 +195,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 0; Found: " + e.length)
     }
-    functionRegistry.createOrReplaceTempFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder, "scala")
     finalUdf
   }
 
@@ -216,7 +216,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 1; Found: " + e.length)
     }
-    functionRegistry.createOrReplaceTempFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder, "scala")
     finalUdf
   }
 
@@ -237,7 +237,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 2; Found: " + e.length)
     }
-    functionRegistry.createOrReplaceTempFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder, "scala")
     finalUdf
   }
 
@@ -258,7 +258,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 3; Found: " + e.length)
     }
-    functionRegistry.createOrReplaceTempFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder, "scala")
     finalUdf
   }
 
@@ -279,7 +279,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 4; Found: " + e.length)
     }
-    functionRegistry.createOrReplaceTempFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder, "scala")
     finalUdf
   }
 
@@ -300,7 +300,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 5; Found: " + e.length)
     }
-    functionRegistry.createOrReplaceTempFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder, "scala")
     finalUdf
   }
 
@@ -321,7 +321,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 6; Found: " + e.length)
     }
-    functionRegistry.createOrReplaceTempFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder, "scala")
     finalUdf
   }
 
@@ -342,7 +342,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 7; Found: " + e.length)
     }
-    functionRegistry.createOrReplaceTempFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder, "scala")
     finalUdf
   }
 
@@ -363,7 +363,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 8; Found: " + e.length)
     }
-    functionRegistry.createOrReplaceTempFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder, "scala")
     finalUdf
   }
 
@@ -384,7 +384,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 9; Found: " + e.length)
     }
-    functionRegistry.createOrReplaceTempFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder, "scala")
     finalUdf
   }
 
@@ -405,7 +405,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 10; Found: " + e.length)
     }
-    functionRegistry.createOrReplaceTempFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder, "scala")
     finalUdf
   }
 
@@ -426,7 +426,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 11; Found: " + e.length)
     }
-    functionRegistry.createOrReplaceTempFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder, "scala")
     finalUdf
   }
 
@@ -447,7 +447,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 12; Found: " + e.length)
     }
-    functionRegistry.createOrReplaceTempFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder, "scala")
     finalUdf
   }
 
@@ -468,7 +468,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 13; Found: " + e.length)
     }
-    functionRegistry.createOrReplaceTempFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder, "scala")
     finalUdf
   }
 
@@ -489,7 +489,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 14; Found: " + e.length)
     }
-    functionRegistry.createOrReplaceTempFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder, "scala")
     finalUdf
   }
 
@@ -510,7 +510,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 15; Found: " + e.length)
     }
-    functionRegistry.createOrReplaceTempFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder, "scala")
     finalUdf
   }
 
@@ -531,7 +531,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 16; Found: " + e.length)
     }
-    functionRegistry.createOrReplaceTempFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder, "scala")
     finalUdf
   }
 
@@ -552,7 +552,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 17; Found: " + e.length)
     }
-    functionRegistry.createOrReplaceTempFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder, "scala")
     finalUdf
   }
 
@@ -573,7 +573,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 18; Found: " + e.length)
     }
-    functionRegistry.createOrReplaceTempFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder, "scala")
     finalUdf
   }
 
@@ -594,7 +594,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 19; Found: " + e.length)
     }
-    functionRegistry.createOrReplaceTempFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder, "scala")
     finalUdf
   }
 
@@ -615,7 +615,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 20; Found: " + e.length)
     }
-    functionRegistry.createOrReplaceTempFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder, "scala")
     finalUdf
   }
 
@@ -636,7 +636,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 21; Found: " + e.length)
     }
-    functionRegistry.createOrReplaceTempFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder, "scala")
     finalUdf
   }
 
@@ -657,7 +657,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 22; Found: " + e.length)
     }
-    functionRegistry.createOrReplaceTempFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder, "scala")
     finalUdf
   }
 
@@ -765,7 +765,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 0; Found: " + e.length)
     }
-    functionRegistry.createOrReplaceTempFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder, "java")
   }
 
   /**
@@ -781,7 +781,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 1; Found: " + e.length)
     }
-    functionRegistry.createOrReplaceTempFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder, "java")
   }
 
   /**
@@ -797,7 +797,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 2; Found: " + e.length)
     }
-    functionRegistry.createOrReplaceTempFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder, "java")
   }
 
   /**
@@ -813,7 +813,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 3; Found: " + e.length)
     }
-    functionRegistry.createOrReplaceTempFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder, "java")
   }
 
   /**
@@ -829,7 +829,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 4; Found: " + e.length)
     }
-    functionRegistry.createOrReplaceTempFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder, "java")
   }
 
   /**
@@ -845,7 +845,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 5; Found: " + e.length)
     }
-    functionRegistry.createOrReplaceTempFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder, "java")
   }
 
   /**
@@ -861,7 +861,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 6; Found: " + e.length)
     }
-    functionRegistry.createOrReplaceTempFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder, "java")
   }
 
   /**
@@ -877,7 +877,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 7; Found: " + e.length)
     }
-    functionRegistry.createOrReplaceTempFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder, "java")
   }
 
   /**
@@ -893,7 +893,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 8; Found: " + e.length)
     }
-    functionRegistry.createOrReplaceTempFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder, "java")
   }
 
   /**
@@ -909,7 +909,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 9; Found: " + e.length)
     }
-    functionRegistry.createOrReplaceTempFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder, "java")
   }
 
   /**
@@ -925,7 +925,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 10; Found: " + e.length)
     }
-    functionRegistry.createOrReplaceTempFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder, "java")
   }
 
   /**
@@ -941,7 +941,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 11; Found: " + e.length)
     }
-    functionRegistry.createOrReplaceTempFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder, "java")
   }
 
   /**
@@ -957,7 +957,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 12; Found: " + e.length)
     }
-    functionRegistry.createOrReplaceTempFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder, "java")
   }
 
   /**
@@ -973,7 +973,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 13; Found: " + e.length)
     }
-    functionRegistry.createOrReplaceTempFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder, "java")
   }
 
   /**
@@ -989,7 +989,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 14; Found: " + e.length)
     }
-    functionRegistry.createOrReplaceTempFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder, "java")
   }
 
   /**
@@ -1005,7 +1005,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 15; Found: " + e.length)
     }
-    functionRegistry.createOrReplaceTempFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder, "java")
   }
 
   /**
@@ -1021,7 +1021,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 16; Found: " + e.length)
     }
-    functionRegistry.createOrReplaceTempFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder, "java")
   }
 
   /**
@@ -1037,7 +1037,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 17; Found: " + e.length)
     }
-    functionRegistry.createOrReplaceTempFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder, "java")
   }
 
   /**
@@ -1053,7 +1053,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 18; Found: " + e.length)
     }
-    functionRegistry.createOrReplaceTempFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder, "java")
   }
 
   /**
@@ -1069,7 +1069,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 19; Found: " + e.length)
     }
-    functionRegistry.createOrReplaceTempFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder, "java")
   }
 
   /**
@@ -1085,7 +1085,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 20; Found: " + e.length)
     }
-    functionRegistry.createOrReplaceTempFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder, "java")
   }
 
   /**
@@ -1101,7 +1101,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 21; Found: " + e.length)
     }
-    functionRegistry.createOrReplaceTempFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder, "java")
   }
 
   /**
@@ -1117,7 +1117,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 22; Found: " + e.length)
     }
-    functionRegistry.createOrReplaceTempFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder, "java")
   }
 
   // scalastyle:on line.size.limit

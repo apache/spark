@@ -112,4 +112,5 @@ public @interface ExpressionDescription {
     String group() default "";
     String since() default "";
     String deprecated() default "";
+    String language() default "built-in";
 }

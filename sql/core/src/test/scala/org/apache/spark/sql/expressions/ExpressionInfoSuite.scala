@@ -51,33 +51,52 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
     Seq("agg_funcs", "array_funcs", "datetime_funcs", "json_funcs", "map_funcs", "window_funcs")
         .foreach { groupName =>
       val info = new ExpressionInfo(
-        "testClass", null, "testName", null, "", "", "", groupName, "", "")
+        "testClass", null, "testName", null, "", "", "", groupName, "", "", "")
       assert(info.getGroup === groupName)
     }
 
     val errMsg = intercept[IllegalArgumentException] {
       val invalidGroupName = "invalid_group_funcs"
-      new ExpressionInfo("testClass", null, "testName", null, "", "", "", invalidGroupName, "", "")
+      new ExpressionInfo(
+        "testClass", null, "testName", null, "", "", "", invalidGroupName, "", "", "")
     }.getMessage
     assert(errMsg.contains("'group' is malformed in the expression [testName]."))
+  }
+
+  test("language in ExpressionInfo") {
+    val info = spark.sessionState.catalog.lookupFunctionInfo(FunctionIdentifier("sum"))
+    assert(info.getLanguage === "built-in")
+
+    Seq("python", "java", "scala", "built-in", "hive").foreach { language =>
+      val info = new ExpressionInfo(
+        "testClass", null, "testName", null, "", "", "", "", "", "", language)
+      assert(info.getLanguage === language)
+    }
+    val errMsg = intercept[IllegalArgumentException] {
+      val invalidLanguage = "invalid_language"
+      new ExpressionInfo(
+        "testClass", null, "testName", null, "", "", "", "", "", "", invalidLanguage)
+    }.getMessage
+    assert(errMsg.contains("'language' is malformed in the expression [testName]."))
   }
 
   test("error handling in ExpressionInfo") {
     val errMsg1 = intercept[IllegalArgumentException] {
       val invalidNote = "  invalid note"
-      new ExpressionInfo("testClass", null, "testName", null, "", "", invalidNote, "", "", "")
+      new ExpressionInfo("testClass", null, "testName", null, "", "", invalidNote, "", "", "", "")
     }.getMessage
     assert(errMsg1.contains("'note' is malformed in the expression [testName]."))
 
     val errMsg2 = intercept[IllegalArgumentException] {
       val invalidSince = "-3.0.0"
-      new ExpressionInfo("testClass", null, "testName", null, "", "", "", "", invalidSince, "")
+      new ExpressionInfo("testClass", null, "testName", null, "", "", "", "", invalidSince, "", "")
     }.getMessage
     assert(errMsg2.contains("'since' is malformed in the expression [testName]."))
 
     val errMsg3 = intercept[IllegalArgumentException] {
       val invalidDeprecated = "  invalid deprecated"
-      new ExpressionInfo("testClass", null, "testName", null, "", "", "", "", "", invalidDeprecated)
+      new ExpressionInfo(
+        "testClass", null, "testName", null, "", "", "", "", "", invalidDeprecated, "")
     }.getMessage
     assert(errMsg3.contains("'deprecated' is malformed in the expression [testName]."))
   }
@@ -238,5 +257,19 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
         }
       }
     }
+  }
+
+  test("Check language for different kind of UDFs") {
+    import org.apache.spark.sql.IntegratedUDFTestUtils
+    val catalog = spark.sessionState.catalog
+    assert(catalog.lookupFunctionInfo(FunctionIdentifier("sum")).getLanguage === "built-in")
+
+    val scalaUDF = IntegratedUDFTestUtils.TestScalaUDF("scalaUDF")
+    IntegratedUDFTestUtils.registerTestUDF(scalaUDF, spark)
+    assert(catalog.lookupFunctionInfo(FunctionIdentifier(scalaUDF.name)).getLanguage === "scala")
+
+    val pythonUDF = IntegratedUDFTestUtils.TestPythonUDF("pythonUDF")
+    IntegratedUDFTestUtils.registerTestUDF(pythonUDF, spark)
+    assert(catalog.lookupFunctionInfo(FunctionIdentifier(pythonUDF.name)).getLanguage === "python")
   }
 }
