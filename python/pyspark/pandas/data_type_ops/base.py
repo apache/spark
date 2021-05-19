@@ -19,6 +19,7 @@ import numbers
 from abc import ABCMeta, abstractmethod
 from typing import Any, TYPE_CHECKING, Union
 
+import numpy as np
 from pandas.api.types import CategoricalDtype
 
 from pyspark.sql.types import (
@@ -163,3 +164,11 @@ class DataTypeOps(object, metaclass=ABCMeta):
 
     def rpow(self, left, right) -> Union["Series", "Index"]:
         raise TypeError("Exponentiation can not be applied to %s." % self.pretty_name)
+
+    def restore(self, col):
+        """Restore column when to_pandas."""
+        return col
+
+    def prepare(self, col):
+        """Prepare column when from_pandas."""
+        return col.replace({np.nan: None})
