@@ -129,15 +129,42 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
         if canImplicitlyCast(fromExp, toType, literalType) =>
       simplifyNumericComparison(be, fromExp, toType, value)
 
-    case in @ In(Cast(fromExp, _: NumericType, _), list)
-        if in.inSetConvertible =>
+    // As the analyzer makes sure that the list of In is already of the same data type, then the
+    // rule can simply check the first literal in `in.list` can implicitly cast to `toType` or not,
+    // and this rule doesn't convert in when `in.list` is empty.
+    case in @ In(Cast(fromExp, toType: NumericType, _), list @ Seq(firstLit, _*))
+        if canImplicitlyCast(fromExp, toType, firstLit.dataType) && in.inSetConvertible =>
       val (newValueList, exp) =
         list.map(lit => unwrapCast(EqualTo(in.value, lit)))
           .partition {
             case EqualTo(_, _: Literal) => true
             case And(IsNull(_), Literal(null, BooleanType)) => false
           }
-      val unwrapIn = In(fromExp, newValueList.map {case EqualTo(_, lit) => lit})
+
+      val (nonNullValueList, nullValueList) = newValueList.partition {
+        case EqualTo(_, NonNullLiteral(_, _: NumericType)) => true
+        case EqualTo(_, Literal(null, _)) => false
+      }
+      // make sure the new return list have the same dataType.
+      val newList = {
+        if (nonNullValueList.nonEmpty) {
+          // cast the null value to the dataType of nonNullValueList
+          // when the nonNullValueList is nonEmpty.
+          nullValueList.map {
+            case EqualTo(_, lit) =>
+              Cast(lit, nonNullValueList.head.asInstanceOf[EqualTo].left.dataType)
+          } ++ nonNullValueList.map {case EqualTo(_, lit) => lit}
+        } else {
+          // the new value list only contains null value,
+          // cast the null value to fromExp.dataType.
+          nullValueList.map {
+            case EqualTo(_, lit) =>
+              Cast(lit, fromExp.dataType)
+          }
+        }
+      }
+
+      val unwrapIn = In(fromExp, newList)
       // since `exp` are all the same,
       // convert to a single value `And(IsNull(_), Literal(null, BooleanType))`.
       exp.headOption match {

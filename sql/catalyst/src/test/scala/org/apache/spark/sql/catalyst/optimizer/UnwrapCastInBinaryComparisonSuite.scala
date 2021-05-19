@@ -234,6 +234,9 @@ class UnwrapCastInBinaryComparisonSuite extends PlanTest with ExpressionEvalHelp
   }
 
   test("SPARK-35316: unwrap should support In predicate.") {
+    val longLit = Literal.create(null, LongType)
+    val intLit = Literal.create(null, IntegerType)
+    val shortLit = Literal.create(null, ShortType)
     assertEquivalent(
       Cast(f, LongType).in(1.toLong, 2.toLong, 3.toLong), f.in(1.toShort, 2.toShort, 3.toShort))
 
@@ -241,6 +244,20 @@ class UnwrapCastInBinaryComparisonSuite extends PlanTest with ExpressionEvalHelp
     assertEquivalent(
       Cast(f, LongType).in(1.toLong, Int.MaxValue.toLong, Long.MaxValue),
       Or(falseIfNotNull(f), f.in(1.toShort)))
+
+    // in.list is empty
+    assertEquivalent(
+      Cast(f, IntegerType).in(), Cast(f, IntegerType).in())
+
+    // in.list contains null value
+    assertEquivalent(
+      Cast(f, IntegerType).in(intLit), f.in(shortLit))
+    assertEquivalent(
+      Cast(f, IntegerType).in(intLit, 1), f.in(shortLit, 1.toShort))
+    assertEquivalent(
+      Cast(f, LongType).in(longLit, 1.toLong, Long.MaxValue),
+      Or(falseIfNotNull(f), f.in(shortLit, 1.toShort))
+    )
   }
 
   private def castInt(e: Expression): Expression = Cast(e, IntegerType)
