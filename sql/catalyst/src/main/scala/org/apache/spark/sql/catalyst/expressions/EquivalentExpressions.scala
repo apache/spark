@@ -42,7 +42,7 @@ class EquivalentExpressions {
   }
 
   // For each expression, the set of equivalent expressions.
-  private val equivalenceMap = mutable.LinkedHashMap.empty[Expr, mutable.ArrayBuffer[Expression]]
+  private val equivalenceMap = mutable.HashMap.empty[Expr, mutable.ArrayBuffer[Expression]]
 
   /**
    * Adds each expression to this data structure, grouping them with existing equivalent
