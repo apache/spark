@@ -80,7 +80,6 @@ object UnionEstimation {
           key -> newNullCountStats(key)
         }
       }
-      // Combine both the stats. Duplicate keys will be overwritten by the later keys.
       AttributeMap(newMinMaxStats.toSeq ++ updatedNullCountStats)
     }
 
