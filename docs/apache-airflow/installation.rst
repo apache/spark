@@ -29,6 +29,30 @@ installation with other tools as well.
 
     Airflow is also distributed as a Docker image (OCI Image). Consider using it to guarantee that software will always run the same no matter where it is deployed. For more information, see: :doc:`docker-stack:index`.
 
+Version Life Cycle
+''''''''''''''''''
+
+Apache Airflow version life cycle:
+
++---------+-----------------+---------------+-----------------+----------------+
+| Version | State           | First Release | Limited Support | EOL/Terminated |
++---------+-----------------+---------------+-----------------+----------------+
+| 2       | Supported       | Dec 17, 2020  | Dec 2021        | TBD            |
++---------+-----------------+---------------+-----------------+----------------+
+| 1.10    | Limited Support | Aug 27, 2018  | Dec 17, 2020    | June 2021      |
++---------+-----------------+---------------+-----------------+----------------+
+| 1.9     | EOL             | Jan 03, 2018  | Aug 27, 2018    | Aug 2018       |
++---------+-----------------+---------------+-----------------+----------------+
+| 1.8     | EOL             | Mar 19, 2017  | Jan 03, 2018    | Jan 2018       |
++---------+-----------------+---------------+-----------------+----------------+
+| 1.7     | EOL             | Mar 28, 2016  | Mar 19, 2017    | Mar 2017       |
++---------+-----------------+---------------+-----------------+----------------+
+
+Limited support versions will be supported with security and critical bug fix only.
+EOL versions will not get any fixes nor support.
+We **highly** recommend installing the latest Airflow release which has richer features.
+
+
 Prerequisites
 '''''''''''''
 
