@@ -1248,14 +1248,14 @@ class IndexesTest(PandasOnSparkTestCase, TestUtils):
             self.assert_eq(kmidx.is_monotonic_decreasing, False)
 
         # Disable the test cases below because pandas returns `True` or `False` randomly.
-        # else:
-            # [(-5, None), (-4, None), (-3, None), (-2, None), (-1, None)]
-            # kdf = ps.DataFrame({"a": [-5, -4, -3, -2, -1], "b": [1, 1, 1, 1, 1]})
-            # kdf["b"] = None
-            # kmidx = kdf.set_index(["a", "b"]).index
-            # pmidx = kmidx.to_pandas()
-            # self.assert_eq(kmidx.is_monotonic_increasing, pmidx.is_monotonic_increasing)
-            # self.assert_eq(kmidx.is_monotonic_decreasing, pmidx.is_monotonic_decreasing)
+        else:
+            [(-5, None), (-4, None), (-3, None), (-2, None), (-1, None)]
+            kdf = ps.DataFrame({"a": [-5, -4, -3, -2, -1], "b": [1, 1, 1, 1, 1]})
+            kdf["b"] = None
+            kmidx = kdf.set_index(["a", "b"]).index
+            pmidx = kmidx.to_pandas()
+            self.assert_eq(kmidx.is_monotonic_increasing, pmidx.is_monotonic_increasing)
+            self.assert_eq(kmidx.is_monotonic_decreasing, pmidx.is_monotonic_decreasing)
 
             # [(None, "e"), (None, "c"), (None, "b"), (None, "d"), (None, "a")]
             # kdf = ps.DataFrame({"a": [1, 1, 1, 1, 1], "b": ["e", "c", "b", "d", "a"]})
