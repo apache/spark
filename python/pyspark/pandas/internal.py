@@ -1000,9 +1000,9 @@ class InternalFrame(object):
         data_columns: List[str],
         column_labels: List[Tuple],
         column_label_names: List[Tuple],
-        ext_dtypes: Dict[str, Dtype] = None,
         dtypes: List[Dtype],
         spark_types: List[DataType],
+        ext_dtypes: Dict[str, Dtype] = None,
     ) -> pd.DataFrame:
         """
         Restore pandas DataFrame indices using the metadata.
@@ -1013,10 +1013,9 @@ class InternalFrame(object):
         :param data_columns: the original column names for data columns.
         :param column_labels: the column labels after restored.
         :param column_label_names: the column label names after restored.
-        :param ext_dtypes: the map from the original column names to extension data types.
-        :param categorical_dtypes: the map from the original column names to categorical types.
         :param dtypes: the dtypes after restored.
         :param spark_types: the spark_types.
+        :param ext_dtypes: the map from the original column names to extension data types.
         :return: the restored pandas DataFrame
 
         >>> from numpy import dtype
@@ -1028,7 +1027,6 @@ class InternalFrame(object):
         ...     data_columns=["a", "b", "index"],
         ...     column_labels=[("x",), ("y",), ("z",)],
         ...     column_label_names=[("lv1",)],
-        ...     ext_dtypes=None,
         ...     dtypes=[dtype('int64'), dtype('object'),
         ...         CategoricalDtype(categories=["i", "j", "k"]), dtype('int64')],
         ...     spark_types=[LongType(), StringType(), StringType(), LongType()]
