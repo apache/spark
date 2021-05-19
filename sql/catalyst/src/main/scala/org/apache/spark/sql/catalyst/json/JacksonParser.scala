@@ -52,6 +52,7 @@ class JacksonParser(
   // A `ValueConverter` is responsible for converting a value from `JsonParser`
   // to a value in a field for `InternalRow`.
   private type ValueConverter = JsonParser => AnyRef
+  private type KeyConverter = String => Any
 
   // `ValueConverter`s for the root schema for all fields in the schema
   private val rootConverter = makeRootConverter(schema)
@@ -123,8 +124,9 @@ class JacksonParser(
 
   private def makeMapRootConverter(mt: MapType): JsonParser => Iterable[InternalRow] = {
     val fieldConverter = makeConverter(mt.valueType)
+    val keyConverter = makeKeyConverter(mt.keyType)
     (parser: JsonParser) => parseJsonToken[Iterable[InternalRow]](parser, mt) {
-      case START_OBJECT => Some(InternalRow(convertMap(parser, fieldConverter)))
+      case START_OBJECT => Some(InternalRow(convertMap(parser, fieldConverter, keyConverter)))
     }
   }
 
@@ -309,8 +311,9 @@ class JacksonParser(
 
     case mt: MapType =>
       val valueConverter = makeConverter(mt.valueType)
+      val keyConverter = makeKeyConverter(mt.keyType)
       (parser: JsonParser) => parseJsonToken[MapData](parser, dataType) {
-        case START_OBJECT => convertMap(parser, valueConverter)
+        case START_OBJECT => convertMap(parser, valueConverter, keyConverter)
       }
 
     case udt: UserDefinedType[_] =>
@@ -322,6 +325,36 @@ class JacksonParser(
         // handled as a failed conversion. It will throw an exception as
         // long as the value is not null.
         parseJsonToken[AnyRef](parser, dataType)(PartialFunction.empty[JsonToken, AnyRef])
+  }
+
+  def makeKeyConverter(dataType: DataType): KeyConverter = dataType match {
+    case BooleanType => (key: String) => key.toBoolean
+    case ByteType => (key: String) => key.toByte
+    case ShortType => (key: String) => key.toShort
+    case IntegerType => (key: String) => key.toInt
+    case LongType => (key: String) => key.toLong
+    case FloatType => (key: String) => key match {
+      case "NaN" => Float.NaN
+      case "Infinity" => Float.PositiveInfinity
+      case "-Infinity" => Float.NegativeInfinity
+      case other: String => other.toFloat
+    }
+    case DoubleType => (key: String) => key match {
+      case "NaN" => Double.NaN
+      case "Infinity" => Double.PositiveInfinity
+      case "-Infinity" => Double.NegativeInfinity
+      case other: String => other.toDouble
+    }
+    case TimestampType => (key: String) => timestampFormatter.parse(key)
+    case DateType => (key: String) => dateFormatter.parse(key)
+    case dt: DecimalType => (key: String) => {
+      val bigDecimal = decimalParser(key)
+      Decimal(bigDecimal, dt.precision, dt.scale)
+    }
+    case CalendarIntervalType => (key: String) =>
+      IntervalUtils.safeStringToInterval(UTF8String.fromString(key))
+    case udt: UserDefinedType[_] => (key: String) => makeKeyConverter(udt.sqlType).apply(key)
+    case _ => (key: String) => UTF8String.fromString(key)
   }
 
   /**
@@ -421,11 +454,12 @@ class JacksonParser(
    */
   private def convertMap(
       parser: JsonParser,
-      fieldConverter: ValueConverter): MapData = {
-    val keys = ArrayBuffer.empty[UTF8String]
+      fieldConverter: ValueConverter,
+      keyConverter: KeyConverter): MapData = {
+    val keys = ArrayBuffer.empty[Any]
     val values = ArrayBuffer.empty[Any]
     while (nextUntil(parser, JsonToken.END_OBJECT)) {
-      keys += UTF8String.fromString(parser.getCurrentName)
+      keys += keyConverter.apply(parser.getCurrentName)
       values += fieldConverter.apply(parser)
     }
 
