@@ -172,7 +172,9 @@ class EquivalentExpressions {
 
   /**
    * Orders [Expression] by parent/child relations. The child expression is smaller
-   * than parent expression.
+   * than parent expression. If there is child-parent relationships among the subexpressions,
+   * we want the child expressions come first than parent expressions, so we can replace
+   * child expressions in parent expressions with subexpression evaluation.
    */
   class ExpressionOrdering extends Ordering[Expression] {
     override def compare(x: Expression, y: Expression): Int = {
