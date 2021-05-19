@@ -129,10 +129,8 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
         if canImplicitlyCast(fromExp, toType, literalType) =>
       simplifyNumericComparison(be, fromExp, toType, value)
 
-    case in @ In(Cast(fromExp, toType: NumericType, _), list)
-      if list.forall(v =>
-        v.isInstanceOf[Literal] && canImplicitlyCast(fromExp, toType, v.dataType)
-      ) =>
+    case in @ In(Cast(fromExp, _: NumericType, _), list)
+        if in.inSetConvertible =>
       val (newValueList, exp) =
         list.map(lit => unwrapCast(EqualTo(in.value, lit)))
           .partition {
