@@ -367,7 +367,6 @@ class SessionCatalog(
       if (!ignoreIfExists) {
         throw new TableAlreadyExistsException(db = db, table = table)
       }
-      return;
     } else if (validateLocation) {
       validateTableLocation(newTableDefinition)
     }
