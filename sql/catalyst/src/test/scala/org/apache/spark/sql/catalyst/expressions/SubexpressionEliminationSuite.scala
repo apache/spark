@@ -209,7 +209,7 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
       (GreaterThan(add2, Literal(4)), add1) ::
       (GreaterThan(add2, Literal(5)), add1) :: Nil
 
-    val caseWhenExpr2 = CaseWhen(conditions2, None)
+    val caseWhenExpr2 = CaseWhen(conditions2, add1)
     val equivalence2 = new EquivalentExpressions
     equivalence2.addExprTree(caseWhenExpr2)
 
@@ -226,6 +226,17 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
     val equivalence3 = new EquivalentExpressions
     equivalence3.addExprTree(caseWhenExpr3)
     assert(equivalence3.getAllEquivalentExprs().count(_.size == 2) == 0)
+
+    val conditions4 = (GreaterThan(add1, Literal(3)), add1) ::
+      (GreaterThan(add2, Literal(4)), add1) ::
+      (GreaterThan(add2, Literal(5)), add1) :: Nil
+
+    val caseWhenExpr4 = CaseWhen(conditions4, None)
+    val equivalence4 = new EquivalentExpressions
+    equivalence4.addExprTree(caseWhenExpr4)
+
+    // `add1` is not in the elseValue, so we can't extract it from the branches
+    assert(equivalence4.getAllEquivalentExprs.count(_.size == 2) == 0)
   }
 
   test("Children of conditional expressions: Coalesce") {
