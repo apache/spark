@@ -197,6 +197,17 @@ abstract class DynamicPartitionPruningSuiteBase
             case _ => false
           }.isDefined
           assert(hasReuse, s"$s\nshould have been reused in\n$plan")
+        case a: AdaptiveSparkPlanExec =>
+          val broadcastQueryStage = collectFirst(a) {
+            case b: BroadcastQueryStageExec => b
+          }
+          val broadcastPlan = broadcastQueryStage.get.broadcast
+          val hasReuse = find(plan) {
+            case ReusedExchangeExec(_, e) => e eq broadcastPlan
+            case b: BroadcastExchangeLike => b eq broadcastPlan
+            case _ => false
+          }.isDefined
+          assert(hasReuse, s"$s\nshould have been reused in\n$plan")
         case _ =>
           fail(s"Invalid child node found in\n$s")
       }
@@ -413,7 +424,8 @@ abstract class DynamicPartitionPruningSuiteBase
   test("DPP triggers only for certain types of query",
     DisableAdaptiveExecution("DPP in AQE must reuse broadcast")) {
     withSQLConf(
-      SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false") {
+      SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
+      SQLConf.DYNAMIC_PARTITION_PRUNING_PRUNING_SIDE_EXTRA_FILTER_RATIO.key -> "1") {
       Given("dynamic partition pruning disabled")
       withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "false") {
         val df = sql(
@@ -1370,7 +1382,7 @@ abstract class DynamicPartitionPruningSuiteBase
     withSQLConf(
       SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
       SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "true",
-      SQLConf.ADAPTIVE_OPTIMIZER_EXCLUDED_RULES.key -> EliminateJoinToEmptyRelation.ruleName) {
+      SQLConf.ADAPTIVE_OPTIMIZER_EXCLUDED_RULES.key -> EliminateUnnecessaryJoin.ruleName) {
       val df = sql(
         """
           |SELECT * FROM fact_sk f
@@ -1401,6 +1413,96 @@ abstract class DynamicPartitionPruningSuiteBase
         Row(1050, 2) ::
         Row(1060, 2) :: Nil
       )
+    }
+  }
+
+  test("SPARK-34595: DPP support RLIKE expression") {
+    withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true") {
+      val df = sql(
+        """
+          |SELECT date_id, product_id FROM fact_sk f
+          |JOIN dim_store s
+          |ON f.store_id = s.store_id WHERE s.country RLIKE '[DE|US]'
+        """.stripMargin)
+
+      checkPartitionPruningPredicate(df, false, true)
+
+      checkAnswer(df,
+        Row(1030, 2) ::
+        Row(1040, 2) ::
+        Row(1050, 2) ::
+        Row(1060, 2) ::
+        Row(1070, 2) ::
+        Row(1080, 3) ::
+        Row(1090, 3) ::
+        Row(1100, 3) ::
+        Row(1110, 3) ::
+        Row(1120, 4) :: Nil
+      )
+    }
+  }
+
+  test("SPARK-32855: Filtering side can not broadcast by join type",
+    DisableAdaptiveExecution("DPP in AQE must reuse broadcast")) {
+    withSQLConf(
+      SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
+      SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "false",
+      SQLConf.DYNAMIC_PARTITION_PRUNING_PRUNING_SIDE_EXTRA_FILTER_RATIO.key -> "1") {
+
+      val sqlStr =
+        """
+          |SELECT s.store_id,f. product_id FROM dim_store s
+          |LEFT JOIN fact_sk f
+          |ON f.store_id = s.store_id WHERE s.country = 'NL'
+          """.stripMargin
+
+      // DPP will only apply if disable reuseBroadcastOnly
+      Seq(true, false).foreach { reuseBroadcastOnly =>
+        withSQLConf(
+          SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> s"$reuseBroadcastOnly") {
+          val df = sql(sqlStr)
+          checkPartitionPruningPredicate(df, !reuseBroadcastOnly, false)
+        }
+      }
+
+      // DPP will only apply if left side can broadcast by size
+      Seq(1L, 100000L).foreach { threshold =>
+        withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> s"$threshold") {
+          val df = sql(sqlStr)
+          checkPartitionPruningPredicate(df, threshold > 10L, false)
+        }
+      }
+    }
+  }
+
+  test("SPARK-34637: DPP side broadcast query stage is created firstly") {
+    withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "true") {
+      val df = sql(
+        """ WITH v as (
+          |   SELECT f.store_id FROM fact_stats f WHERE f.units_sold = 70 group by f.store_id
+          | )
+          |
+          | SELECT * FROM v v1 join v v2 WHERE v1.store_id = v2.store_id
+        """.stripMargin)
+
+      // A possible resulting query plan:
+      // BroadcastHashJoin
+      // +- HashAggregate
+      //    +- ShuffleQueryStage
+      //       +- Exchange
+      //          +- HashAggregate
+      //             +- Filter
+      //                +- FileScan [PartitionFilters: dynamicpruning#3385]
+      //                     +- SubqueryBroadcast dynamicpruning#3385
+      //                        +- AdaptiveSparkPlan
+      //                           +- BroadcastQueryStage
+      //                              +- BroadcastExchange
+      //
+      // +- BroadcastQueryStage
+      //    +- ReusedExchange
+
+      checkPartitionPruningPredicate(df, false, true)
+      checkAnswer(df, Row(15, 15) :: Nil)
     }
   }
 }

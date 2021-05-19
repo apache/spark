@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 case class DescribeColumnExec(
     override val output: Seq[Attribute],
     column: Attribute,
-    isExtended: Boolean) extends V2CommandExec {
+    isExtended: Boolean) extends LeafV2CommandExec {
 
   override protected def run(): Seq[InternalRow] = {
     val rows = new ArrayBuffer[InternalRow]()

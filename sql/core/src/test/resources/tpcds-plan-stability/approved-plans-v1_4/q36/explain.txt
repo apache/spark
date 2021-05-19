@@ -139,7 +139,7 @@ Input [6]: [ss_store_sk#2, ss_ext_sales_price#3, ss_net_profit#4, i_class#11, i_
 
 (24) Expand [codegen id : 4]
 Input [4]: [ss_ext_sales_price#3, ss_net_profit#4, i_category#12, i_class#11]
-Arguments: [List(ss_ext_sales_price#3, ss_net_profit#4, i_category#12, i_class#11, 0), List(ss_ext_sales_price#3, ss_net_profit#4, i_category#12, null, 1), List(ss_ext_sales_price#3, ss_net_profit#4, null, null, 3)], [ss_ext_sales_price#3, ss_net_profit#4, i_category#17, i_class#18, spark_grouping_id#19]
+Arguments: [[ss_ext_sales_price#3, ss_net_profit#4, i_category#12, i_class#11, 0], [ss_ext_sales_price#3, ss_net_profit#4, i_category#12, null, 1], [ss_ext_sales_price#3, ss_net_profit#4, null, null, 3]], [ss_ext_sales_price#3, ss_net_profit#4, i_category#17, i_class#18, spark_grouping_id#19]
 
 (25) HashAggregate [codegen id : 4]
 Input [5]: [ss_ext_sales_price#3, ss_net_profit#4, i_category#17, i_class#18, spark_grouping_id#19]

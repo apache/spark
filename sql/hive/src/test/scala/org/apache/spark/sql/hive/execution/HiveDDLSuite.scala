@@ -23,7 +23,6 @@ import java.util.Locale
 
 import org.apache.hadoop.fs.Path
 import org.apache.parquet.format.converter.ParquetMetadataConverter.NO_FILTER
-import org.apache.parquet.hadoop.ParquetFileReader
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.SparkException
@@ -36,6 +35,7 @@ import org.apache.spark.sql.connector.FakeV2Provider
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces.PROP_OWNER
 import org.apache.spark.sql.execution.command.{DDLSuite, DDLUtils}
+import org.apache.spark.sql.execution.datasources.parquet.ParquetFooterReader
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.HiveExternalCatalog
 import org.apache.spark.sql.hive.HiveUtils.{CONVERT_METASTORE_ORC, CONVERT_METASTORE_PARQUET}
@@ -2566,7 +2566,7 @@ class HiveDDLSuite
         OrcFileOperator.getFileReader(maybeFile.get.toPath.toString).get.getCompression.name
 
       case "parquet" =>
-        val footer = ParquetFileReader.readFooter(
+        val footer = ParquetFooterReader.readFooter(
           sparkContext.hadoopConfiguration, new Path(maybeFile.get.getPath), NO_FILTER)
         footer.getBlocks.get(0).getColumns.get(0).getCodec.toString
     }

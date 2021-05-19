@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.adaptive
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.plans.physical.SinglePartition
-import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.{ShufflePartitionSpec, SparkPlan}
 import org.apache.spark.sql.execution.exchange.{ENSURE_REQUIREMENTS, REPARTITION, ShuffleExchangeLike, ShuffleOrigin}
 import org.apache.spark.sql.internal.SQLConf
 
@@ -54,24 +54,7 @@ case class CoalesceShufflePartitions(session: SparkSession) extends CustomShuffl
     if (!shuffleStages.forall(s => supportCoalesce(s.shuffle))) {
       plan
     } else {
-      // `ShuffleQueryStageExec#mapStats` returns None when the input RDD has 0 partitions,
-      // we should skip it when calculating the `partitionStartIndices`.
-      val validMetrics = shuffleStages.flatMap(_.mapStats)
-
-      // We may have different pre-shuffle partition numbers, don't reduce shuffle partition number
-      // in that case. For example when we union fully aggregated data (data is arranged to a single
-      // partition) and a result of a SortMergeJoin (multiple partitions).
-      val distinctNumPreShufflePartitions =
-        validMetrics.map(stats => stats.bytesByPartitionId.length).distinct
-      if (validMetrics.nonEmpty && distinctNumPreShufflePartitions.length == 1) {
-        // We fall back to Spark default parallelism if the minimum number of coalesced partitions
-        // is not set, so to avoid perf regressions compared to no coalescing.
-        val minPartitionNum = conf.getConf(SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM)
-          .getOrElse(session.sparkContext.defaultParallelism)
-        val partitionSpecs = ShufflePartitionsUtil.coalescePartitions(
-          validMetrics.toArray,
-          advisoryTargetSize = conf.getConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES),
-          minNumPartitions = minPartitionNum)
+      def insertCustomShuffleReader(partitionSpecs: Seq[ShufflePartitionSpec]): SparkPlan = {
         // This transformation adds new nodes, so we must use `transformUp` here.
         val stageIds = shuffleStages.map(_.id).toSet
         plan.transformUp {
@@ -80,6 +63,36 @@ case class CoalesceShufflePartitions(session: SparkSession) extends CustomShuffl
           // number of output partitions.
           case stage: ShuffleQueryStageExec if stageIds.contains(stage.id) =>
             CustomShuffleReaderExec(stage, partitionSpecs)
+        }
+      }
+
+      // `ShuffleQueryStageExec#mapStats` returns None when the input RDD has 0 partitions,
+      // we should skip it when calculating the `partitionStartIndices`.
+      // If all input RDDs have 0 partition, we create empty partition for every shuffle reader.
+      val validMetrics = shuffleStages.flatMap(_.mapStats)
+
+      // We may have different pre-shuffle partition numbers, don't reduce shuffle partition number
+      // in that case. For example when we union fully aggregated data (data is arranged to a single
+      // partition) and a result of a SortMergeJoin (multiple partitions).
+      val distinctNumPreShufflePartitions =
+        validMetrics.map(stats => stats.bytesByPartitionId.length).distinct
+      if (validMetrics.isEmpty) {
+        insertCustomShuffleReader(ShufflePartitionsUtil.createEmptyPartition() :: Nil)
+      } else if (distinctNumPreShufflePartitions.length == 1) {
+        // We fall back to Spark default parallelism if the minimum number of coalesced partitions
+        // is not set, so to avoid perf regressions compared to no coalescing.
+        val minPartitionNum = conf.getConf(SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM)
+          .getOrElse(session.sparkContext.defaultParallelism)
+        val partitionSpecs = ShufflePartitionsUtil.coalescePartitions(
+          validMetrics.toArray,
+          advisoryTargetSize = conf.getConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES),
+          minNumPartitions = minPartitionNum)
+        // We can never extend the shuffle partition number, so if we get the same number here,
+        // that means we can not coalesce shuffle partition. Just return the origin plan.
+        if (partitionSpecs.length == distinctNumPreShufflePartitions.head) {
+          plan
+        } else {
+          insertCustomShuffleReader(partitionSpecs)
         }
       } else {
         plan

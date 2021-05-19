@@ -26,7 +26,7 @@ import org.apache.spark.sql.hive.test.TestHive
  * To run this benchmark:
  * {{{
  *   1. without sbt: bin/spark-submit --class <this class>
- *        --jars <spark catalyst test jar>,<spark core test jar>,<spark hive jar>
+ *        --jars <spark catalyst test jar>,<spark core test jar>,<spark sql test jar>
  *        <spark hive test jar>
  *   2. build/sbt "hive/test:runMain <this class>"
  *   3. generate result:

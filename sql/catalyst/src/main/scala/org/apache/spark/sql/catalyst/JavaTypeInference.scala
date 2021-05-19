@@ -119,6 +119,7 @@ object JavaTypeInference {
       case c: Class[_] if c == classOf[java.time.Instant] => (TimestampType, true)
       case c: Class[_] if c == classOf[java.sql.Timestamp] => (TimestampType, true)
       case c: Class[_] if c == classOf[java.time.Duration] => (DayTimeIntervalType, true)
+      case c: Class[_] if c == classOf[java.time.Period] => (YearMonthIntervalType, true)
 
       case _ if typeToken.isArray =>
         val (dataType, nullable) = inferDataType(typeToken.getComponentType, seenTypeSet)
@@ -252,6 +253,9 @@ object JavaTypeInference {
 
       case c if c == classOf[java.time.Duration] =>
         createDeserializerForDuration(path)
+
+      case c if c == classOf[java.time.Period] =>
+        createDeserializerForPeriod(path)
 
       case c if c == classOf[java.lang.String] =>
         createDeserializerForString(path, returnNullable = true)
@@ -411,6 +415,8 @@ object JavaTypeInference {
         case c if c == classOf[java.sql.Date] => createSerializerForSqlDate(inputObject)
 
         case c if c == classOf[java.time.Duration] => createSerializerForJavaDuration(inputObject)
+
+        case c if c == classOf[java.time.Period] => createSerializerForJavaPeriod(inputObject)
 
         case c if c == classOf[java.math.BigDecimal] =>
           createSerializerForJavaBigDecimal(inputObject)

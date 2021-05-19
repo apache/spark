@@ -399,7 +399,7 @@ class DataFrameWindowFunctionsSuite extends QueryTest
     val df = Seq((1, "1")).toDF("key", "value")
     val e = intercept[AnalysisException](
       df.select($"key", count("invalid").over()))
-    assert(e.message.contains("cannot resolve '`invalid`' given input columns: [key, value]"))
+    assert(e.message.contains("cannot resolve 'invalid' given input columns: [key, value]"))
   }
 
   test("numerical aggregate functions on string column") {

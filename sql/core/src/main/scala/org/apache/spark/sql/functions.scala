@@ -2868,6 +2868,25 @@ object functions {
   }
 
   /**
+   * Splits a string into arrays of sentences, where each sentence is an array of words.
+   * @group string_funcs
+   * @since 3.2.0
+   */
+  def sentences(string: Column, language: Column, country: Column): Column = withExpr {
+    Sentences(string.expr, language.expr, country.expr)
+  }
+
+  /**
+   * Splits a string into arrays of sentences, where each sentence is an array of words.
+   * The default locale is used.
+   * @group string_funcs
+   * @since 3.2.0
+   */
+  def sentences(string: Column): Column = withExpr {
+    Sentences(string.expr)
+  }
+
+  /**
    * Translate any character in the src by a character in replaceString.
    * The characters in replaceString correspond to the characters in matchingString.
    * The translate will happen when any character in the string matches the character
@@ -3800,22 +3819,22 @@ object functions {
   }
 
   private def createLambda(f: Column => Column) = {
-    val x = UnresolvedNamedLambdaVariable(Seq("x"))
+    val x = UnresolvedNamedLambdaVariable(Seq(UnresolvedNamedLambdaVariable.freshVarName("x")))
     val function = f(Column(x)).expr
     LambdaFunction(function, Seq(x))
   }
 
   private def createLambda(f: (Column, Column) => Column) = {
-    val x = UnresolvedNamedLambdaVariable(Seq("x"))
-    val y = UnresolvedNamedLambdaVariable(Seq("y"))
+    val x = UnresolvedNamedLambdaVariable(Seq(UnresolvedNamedLambdaVariable.freshVarName("x")))
+    val y = UnresolvedNamedLambdaVariable(Seq(UnresolvedNamedLambdaVariable.freshVarName("y")))
     val function = f(Column(x), Column(y)).expr
     LambdaFunction(function, Seq(x, y))
   }
 
   private def createLambda(f: (Column, Column, Column) => Column) = {
-    val x = UnresolvedNamedLambdaVariable(Seq("x"))
-    val y = UnresolvedNamedLambdaVariable(Seq("y"))
-    val z = UnresolvedNamedLambdaVariable(Seq("z"))
+    val x = UnresolvedNamedLambdaVariable(Seq(UnresolvedNamedLambdaVariable.freshVarName("x")))
+    val y = UnresolvedNamedLambdaVariable(Seq(UnresolvedNamedLambdaVariable.freshVarName("y")))
+    val z = UnresolvedNamedLambdaVariable(Seq(UnresolvedNamedLambdaVariable.freshVarName("z")))
     val function = f(Column(x), Column(y), Column(z)).expr
     LambdaFunction(function, Seq(x, y, z))
   }

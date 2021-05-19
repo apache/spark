@@ -157,6 +157,11 @@ df <- read.df("examples/src/main/resources/users.orc", "orc")
 write.orc(df, "users_with_options.orc", orc.bloom.filter.columns = "favorite_color", orc.dictionary.key.threshold = 1.0, orc.column.encoding.direct = "name")
 # $example off:manual_save_options_orc$
 
+# $example on:manual_save_options_parquet$
+df <- read.df("examples/src/main/resources/users.parquet", "parquet")
+write.parquet(df, "users_with_options.parquet", parquet.bloom.filter.enabled#favorite_color = true, parquet.bloom.filter.expected.ndv#favorite_color = 1000000, parquet.enable.dictionary = true, parquet.page.write-checksum.enabled = false)
+# $example off:manual_save_options_parquet$
+
 # $example on:direct_sql$
 df <- sql("SELECT * FROM parquet.`examples/src/main/resources/users.parquet`")
 # $example off:direct_sql$

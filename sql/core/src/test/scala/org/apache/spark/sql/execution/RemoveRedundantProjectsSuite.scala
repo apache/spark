@@ -195,7 +195,7 @@ abstract class RemoveRedundantProjectsSuiteBase
           |)
           |""".stripMargin
 
-      Seq(("UNION", 2, 2), ("UNION ALL", 1, 2)).foreach { case (setOperation, enabled, disabled) =>
+      Seq(("UNION", 1, 2), ("UNION ALL", 1, 2)).foreach { case (setOperation, enabled, disabled) =>
         val query = queryTemplate.format(setOperation)
         assertProjectExec(query, enabled = enabled, disabled = disabled)
       }

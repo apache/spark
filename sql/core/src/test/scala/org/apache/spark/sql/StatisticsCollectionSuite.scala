@@ -497,7 +497,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
   test("analyzes column statistics in cached local temporary view") {
     withTempView("tempView") {
       // Analyzes in a temporary view
-      sql("CREATE TEMPORARY VIEW tempView AS SELECT * FROM range(1, 30)")
+      sql("CREATE TEMPORARY VIEW tempView AS SELECT 1 id")
       val errMsg = intercept[AnalysisException] {
         sql("ANALYZE TABLE tempView COMPUTE STATISTICS FOR COLUMNS id")
       }.getMessage
@@ -520,7 +520,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
       assert(errMsg1.contains("Table or view not found: " +
         s"$globalTempDB.gTempView"))
       // Analyzes in a global temporary view
-      sql("CREATE GLOBAL TEMP VIEW gTempView AS SELECT * FROM range(1, 30)")
+      sql("CREATE GLOBAL TEMP VIEW gTempView AS SELECT 1 id")
       val errMsg2 = intercept[AnalysisException] {
         sql(s"ANALYZE TABLE $globalTempDB.gTempView COMPUTE STATISTICS FOR COLUMNS id")
       }.getMessage

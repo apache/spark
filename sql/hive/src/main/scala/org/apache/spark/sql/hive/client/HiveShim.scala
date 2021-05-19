@@ -748,6 +748,15 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
       values.map(value => s"$name = $value").mkString("(", " or ", ")")
     }
 
+    def convertNotInToAnd(name: String, values: Seq[String]): String = {
+      values.map(value => s"$name != $value").mkString("(", " and ", ")")
+    }
+
+    def hasNullLiteral(list: Seq[Expression]): Boolean = list.exists {
+      case Literal(null, _) => true
+      case _ => false
+    }
+
     val useAdvanced = SQLConf.get.advancedPartitionPredicatePushdownEnabled
     val inSetThreshold = SQLConf.get.metastorePartitionPruningInSetThreshold
 
@@ -763,9 +772,19 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
     }
 
     def convert(expr: Expression): Option[String] = expr match {
+      case Not(InSet(_, values)) if values.size > inSetThreshold =>
+        None
+
+      case Not(In(_, list)) if hasNullLiteral(list) => None
+      case Not(InSet(_, list)) if list.contains(null) => None
+
       case In(ExtractAttribute(SupportedAttribute(name)), ExtractableLiterals(values))
           if useAdvanced =>
         Some(convertInToOr(name, values))
+
+      case Not(In(ExtractAttribute(SupportedAttribute(name)), ExtractableLiterals(values)))
+        if useAdvanced =>
+        Some(convertNotInToAnd(name, values))
 
       case InSet(child, values) if useAdvanced && values.size > inSetThreshold =>
         val dataType = child.dataType
@@ -779,9 +798,17 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
           if useAdvanced && child.dataType == DateType =>
         Some(convertInToOr(name, values))
 
+      case Not(InSet(child @ ExtractAttribute(SupportedAttribute(name)),
+        ExtractableDateValues(values))) if useAdvanced && child.dataType == DateType =>
+        Some(convertNotInToAnd(name, values))
+
       case InSet(ExtractAttribute(SupportedAttribute(name)), ExtractableValues(values))
           if useAdvanced =>
         Some(convertInToOr(name, values))
+
+      case Not(InSet(ExtractAttribute(SupportedAttribute(name)), ExtractableValues(values)))
+        if useAdvanced =>
+        Some(convertNotInToAnd(name, values))
 
       case op @ SpecialBinaryComparison(
           ExtractAttribute(SupportedAttribute(name)), ExtractableLiteral(value)) =>

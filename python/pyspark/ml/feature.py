@@ -1536,7 +1536,7 @@ class _ImputerParams(HasInputCol, HasInputCols, HasOutputCol, HasOutputCols, Has
 @inherit_doc
 class Imputer(JavaEstimator, _ImputerParams, JavaMLReadable, JavaMLWritable):
     """
-    Imputation estimator for completing missing values, either using the mean or the median
+    Imputation estimator for completing missing values, using the mean, median or mode
     of the columns in which the missing values are located. The input columns should be of
     numeric type. Currently Imputer does not support categorical features and
     possibly creates incorrect values for a categorical feature.
@@ -4682,9 +4682,9 @@ class Word2Vec(JavaEstimator, _Word2VecParams, JavaMLReadable, JavaMLWritable):
     +----+--------------------+
     |word|              vector|
     +----+--------------------+
-    |   a|[0.09511678665876...|
-    |   b|[-1.2028766870498...|
-    |   c|[0.30153277516365...|
+    |   a|[0.0951...
+    |   b|[-1.202...
+    |   c|[0.3015...
     +----+--------------------+
     ...
     >>> model.findSynonymsArray("a", 2)

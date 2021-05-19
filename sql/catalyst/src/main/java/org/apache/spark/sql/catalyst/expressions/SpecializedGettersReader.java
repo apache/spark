@@ -86,6 +86,9 @@ public final class SpecializedGettersReader {
     if (dataType instanceof DayTimeIntervalType) {
       return obj.getLong(ordinal);
     }
+    if (dataType instanceof YearMonthIntervalType) {
+      return obj.getInt(ordinal);
+    }
 
     throw new UnsupportedOperationException("Unsupported data type " + dataType.simpleString());
   }

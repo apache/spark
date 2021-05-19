@@ -113,6 +113,15 @@ object SerializerBuildHelper {
       returnNullable = false)
   }
 
+  def createSerializerForJavaPeriod(inputObject: Expression): Expression = {
+    StaticInvoke(
+      IntervalUtils.getClass,
+      YearMonthIntervalType,
+      "periodToMonths",
+      inputObject :: Nil,
+      returnNullable = false)
+  }
+
   def createSerializerForJavaBigDecimal(inputObject: Expression): Expression = {
     CheckOverflow(StaticInvoke(
       Decimal.getClass,

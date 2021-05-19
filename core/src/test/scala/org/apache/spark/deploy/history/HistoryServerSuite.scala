@@ -138,7 +138,11 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     "complete stage list json" -> "applications/local-1422981780767/stages?status=complete",
     "failed stage list json" -> "applications/local-1422981780767/stages?status=failed",
     "one stage json" -> "applications/local-1422981780767/stages/1",
+    "one stage json with details" ->
+      "applications/local-1422981780767/stages/1?details=true&taskStatus=success",
     "one stage attempt json" -> "applications/local-1422981780767/stages/1/0",
+    "one stage attempt json details with failed task" ->
+      "applications/local-1422981780767/stages/1/0?details=true&taskStatus=failed",
 
     "stage task summary w shuffle write"
       -> "applications/local-1430917381534/stages/0/0/taskSummary",
@@ -181,12 +185,14 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     "multiple resource profiles" -> "applications/application_1578436911597_0052/environment",
     "stage list with peak metrics" -> "applications/app-20200706201101-0003/stages",
     "stage with peak metrics" -> "applications/app-20200706201101-0003/stages/2/0",
+    "stage with summaries" -> "applications/app-20200706201101-0003/stages/2/0?withSummaries=true",
 
     "app environment" -> "applications/app-20161116163331-0000/environment",
 
     // Enable "spark.eventLog.logBlockUpdates.enabled", to get the storage information
     // in the history server.
-    "one rdd storage json" -> "applications/local-1422981780767/storage/rdd/0"
+    "one rdd storage json" -> "applications/local-1422981780767/storage/rdd/0",
+    "miscellaneous process" -> "applications/application_1555004656427_0144/allmiscellaneousprocess"
   )
 
   // run a bunch of characterization tests -- just verify the behavior is the same as what is saved

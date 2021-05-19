@@ -22,7 +22,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, UnaryCommand}
 import org.apache.spark.sql.execution.{SparkPlan, SQLExecution}
 import org.apache.spark.sql.execution.datasources.BasicWriteJobStatsTracker
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
@@ -31,7 +31,7 @@ import org.apache.spark.util.SerializableConfiguration
 /**
  * A special `Command` which writes data out and updates metrics.
  */
-trait DataWritingCommand extends Command {
+trait DataWritingCommand extends UnaryCommand {
   /**
    * The input query plan that produces the data to be written.
    * IMPORTANT: the input query plan MUST be analyzed, so that we can carry its output columns
@@ -39,7 +39,7 @@ trait DataWritingCommand extends Command {
    */
   def query: LogicalPlan
 
-  override final def children: Seq[LogicalPlan] = query :: Nil
+  override final def child: LogicalPlan = query
 
   // Output column names of the analyzed input query plan.
   def outputColumnNames: Seq[String]

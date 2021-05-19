@@ -40,7 +40,7 @@ from pyspark.ml.util import DefaultParamsReader, DefaultParamsWriter, \
 from pyspark.ml.wrapper import JavaParams, \
     JavaPredictor, JavaPredictionModel, JavaWrapper
 from pyspark.ml.common import inherit_doc
-from pyspark.ml.linalg import Vectors
+from pyspark.ml.linalg import Vectors, VectorUDT
 from pyspark.sql import DataFrame
 from pyspark.sql.functions import udf, when
 from pyspark.sql.types import ArrayType, DoubleType
@@ -571,9 +571,9 @@ class LinearSVC(_JavaClassifier, _LinearSVCParams, JavaMLWritable, JavaMLReadabl
     >>> model.getMaxBlockSizeInMB()
     0.0
     >>> model.coefficients
-    DenseVector([0.0, -0.2792, -0.1833])
+    DenseVector([0.0, -1.0319, -0.5159])
     >>> model.intercept
-    1.0206118982229047
+    2.579645978780695
     >>> model.numClasses
     2
     >>> model.numFeatures
@@ -582,12 +582,12 @@ class LinearSVC(_JavaClassifier, _LinearSVCParams, JavaMLWritable, JavaMLReadabl
     >>> model.predict(test0.head().features)
     1.0
     >>> model.predictRaw(test0.head().features)
-    DenseVector([-1.4831, 1.4831])
+    DenseVector([-4.1274, 4.1274])
     >>> result = model.transform(test0).head()
     >>> result.newPrediction
     1.0
     >>> result.rawPrediction
-    DenseVector([-1.4831, 1.4831])
+    DenseVector([-4.1274, 4.1274])
     >>> svm_path = temp_path + "/svm"
     >>> svm.save(svm_path)
     >>> svm2 = LinearSVC.load(svm_path)
@@ -738,7 +738,7 @@ class LinearSVCModel(_JavaClassificationModel, _LinearSVCParams, JavaMLWritable,
     @since("3.1.0")
     def summary(self):
         """
-        Gets summary (e.g. accuracy/precision/recall, objective history, total iterations) of model
+        Gets summary (accuracy/precision/recall, objective history, total iterations) of model
         trained on the training set. An exception is thrown if `trainingSummary is None`.
         """
         if self.hasSummary:
@@ -759,7 +759,7 @@ class LinearSVCModel(_JavaClassificationModel, _LinearSVCParams, JavaMLWritable,
             Test dataset to evaluate model on.
         """
         if not isinstance(dataset, DataFrame):
-            raise ValueError("dataset must be a DataFrame but got %s." % type(dataset))
+            raise TypeError("dataset must be a DataFrame but got %s." % type(dataset))
         java_lsvc_summary = self._call_java("evaluate", dataset)
         return LinearSVCSummary(java_lsvc_summary)
 
@@ -1237,7 +1237,7 @@ class LogisticRegressionModel(_JavaProbabilisticClassificationModel, _LogisticRe
     @since("2.0.0")
     def summary(self):
         """
-        Gets summary (e.g. accuracy/precision/recall, objective history, total iterations) of model
+        Gets summary (accuracy/precision/recall, objective history, total iterations) of model
         trained on the training set. An exception is thrown if `trainingSummary is None`.
         """
         if self.hasSummary:
@@ -1263,7 +1263,7 @@ class LogisticRegressionModel(_JavaProbabilisticClassificationModel, _LogisticRe
             Test dataset to evaluate model on.
         """
         if not isinstance(dataset, DataFrame):
-            raise ValueError("dataset must be a DataFrame but got %s." % type(dataset))
+            raise TypeError("dataset must be a DataFrame but got %s." % type(dataset))
         java_blr_summary = self._call_java("evaluate", dataset)
         if self.numClasses <= 2:
             return BinaryLogisticRegressionSummary(java_blr_summary)
@@ -1843,7 +1843,7 @@ class RandomForestClassificationModel(_TreeEnsembleModel, _JavaProbabilisticClas
     @since("3.1.0")
     def summary(self):
         """
-        Gets summary (e.g. accuracy/precision/recall, objective history, total iterations) of model
+        Gets summary (accuracy/precision/recall, objective history, total iterations) of model
         trained on the training set. An exception is thrown if `trainingSummary is None`.
         """
         if self.hasSummary:
@@ -1869,7 +1869,7 @@ class RandomForestClassificationModel(_TreeEnsembleModel, _JavaProbabilisticClas
             Test dataset to evaluate model on.
         """
         if not isinstance(dataset, DataFrame):
-            raise ValueError("dataset must be a DataFrame but got %s." % type(dataset))
+            raise TypeError("dataset must be a DataFrame but got %s." % type(dataset))
         java_rf_summary = self._call_java("evaluate", dataset)
         if self.numClasses <= 2:
             return BinaryRandomForestClassificationSummary(java_rf_summary)
@@ -2700,7 +2700,7 @@ class MultilayerPerceptronClassificationModel(_JavaProbabilisticClassificationMo
     @since("3.1.0")
     def summary(self):
         """
-        Gets summary (e.g. accuracy/precision/recall, objective history, total iterations) of model
+        Gets summary (accuracy/precision/recall, objective history, total iterations) of model
         trained on the training set. An exception is thrown if `trainingSummary is None`.
         """
         if self.hasSummary:
@@ -2722,7 +2722,7 @@ class MultilayerPerceptronClassificationModel(_JavaProbabilisticClassificationMo
             Test dataset to evaluate model on.
         """
         if not isinstance(dataset, DataFrame):
-            raise ValueError("dataset must be a DataFrame but got %s." % type(dataset))
+            raise TypeError("dataset must be a DataFrame but got %s." % type(dataset))
         java_mlp_summary = self._call_java("evaluate", dataset)
         return MultilayerPerceptronClassificationSummary(java_mlp_summary)
 
@@ -3151,7 +3151,7 @@ class OneVsRestModel(Model, _OneVsRestParams, MLReadable, MLWritable):
                     predArray.append(x)
                 return Vectors.dense(predArray)
 
-            rawPredictionUDF = udf(func)
+            rawPredictionUDF = udf(func, VectorUDT())
             aggregatedDataset = aggregatedDataset.withColumn(
                 self.getRawPredictionCol(), rawPredictionUDF(aggregatedDataset[accColName]))
 
@@ -3500,7 +3500,7 @@ class FMClassificationModel(_JavaProbabilisticClassificationModel, _Factorizatio
     @since("3.1.0")
     def summary(self):
         """
-        Gets summary (e.g. accuracy/precision/recall, objective history, total iterations) of model
+        Gets summary (accuracy/precision/recall, objective history, total iterations) of model
         trained on the training set. An exception is thrown if `trainingSummary is None`.
         """
         if self.hasSummary:
@@ -3521,7 +3521,7 @@ class FMClassificationModel(_JavaProbabilisticClassificationModel, _Factorizatio
             Test dataset to evaluate model on.
         """
         if not isinstance(dataset, DataFrame):
-            raise ValueError("dataset must be a DataFrame but got %s." % type(dataset))
+            raise TypeError("dataset must be a DataFrame but got %s." % type(dataset))
         java_fm_summary = self._call_java("evaluate", dataset)
         return FMClassificationSummary(java_fm_summary)
 

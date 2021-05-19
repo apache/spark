@@ -40,7 +40,7 @@ import org.apache.spark.sql.catalyst.plans.{Cross, Inner}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, RangePartitioning, RoundRobinPartitioning}
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.connector.InMemoryTable
+import org.apache.spark.sql.connector.catalog.InMemoryTable
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -639,8 +639,8 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     val project1 = Project(Seq(UnresolvedAttribute("a")), testRelation)
     val project2 = Project(Seq(UnresolvedAttribute("a")), testRelation2)
     val flatMapGroupsInPandas = FlatMapCoGroupsInPandas(
-      Seq(UnresolvedAttribute("a")),
-      Seq(UnresolvedAttribute("a")),
+      1,
+      1,
       pythonUdf,
       output,
       project1,
@@ -671,6 +671,19 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       Project(Seq(UnresolvedAttribute("temp0.a"), UnresolvedAttribute("temp1.a")), join))
   }
 
+  test("SPARK-34741: Avoid ambiguous reference in MergeIntoTable") {
+    val cond = 'a > 1
+    assertAnalysisError(
+      MergeIntoTable(
+        testRelation,
+        testRelation,
+        cond,
+        UpdateAction(Some(cond), Assignment('a, 'a) :: Nil) :: Nil,
+        Nil
+      ),
+      "Reference 'a' is ambiguous" :: Nil)
+  }
+
   test("SPARK-24488 Generator with multiple aliases") {
     assertAnalysisSuccess(
       listRelation.select(Explode($"list").as("first_alias").as("second_alias")))
@@ -697,7 +710,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
 
   test("CTE with non-existing column alias") {
     assertAnalysisError(parsePlan("WITH t(x) AS (SELECT 1) SELECT * FROM t WHERE y = 1"),
-      Seq("cannot resolve '`y`' given input columns: [x]"))
+      Seq("cannot resolve 'y' given input columns: [t.x]"))
   }
 
   test("CTE with non-matching column alias") {
@@ -1035,5 +1048,73 @@ class AnalysisSuite extends AnalysisTest with Matchers {
           .seedExpression.isInstanceOf[Literal]
       )
     }
+  }
+
+  test("SPARK-22748: Analyze __grouping__id as a literal function") {
+    assertAnalysisSuccess(parsePlan(
+      """
+        |SELECT grouping__id FROM (
+        |  SELECT grouping__id FROM (
+        |    SELECT a, b, count(1), grouping__id FROM TaBlE2
+        |      GROUP BY a, b WITH ROLLUP
+        |  )
+        |)
+      """.stripMargin), false)
+
+
+    assertAnalysisSuccess(parsePlan(
+      """
+        |SELECT grouping__id FROM (
+        |  SELECT a, b, count(1), grouping__id FROM TaBlE2
+        |   GROUP BY a, b WITH CUBE
+        |)
+      """.stripMargin), false)
+
+    assertAnalysisSuccess(parsePlan(
+      """
+        |SELECT grouping__id FROM (
+        |  SELECT a, b, count(1), grouping__id FROM TaBlE2
+        |    GROUP BY a, b GROUPING SETS ((a, b), ())
+        |)
+      """.stripMargin), false)
+
+    assertAnalysisSuccess(parsePlan(
+      """
+        |SELECT a, b, count(1) FROM TaBlE2
+        |  GROUP BY CUBE(a, b) HAVING grouping__id > 0
+      """.stripMargin), false)
+
+    assertAnalysisSuccess(parsePlan(
+      """
+        |SELECT * FROM (
+        |  SELECT a, b, count(1), grouping__id FROM TaBlE2
+        |    GROUP BY a, b GROUPING SETS ((a, b), ())
+        |) WHERE grouping__id > 0
+      """.stripMargin), false)
+
+    assertAnalysisSuccess(parsePlan(
+      """
+        |SELECT * FROM (
+        |  SELECT a, b, count(1), grouping__id FROM TaBlE2
+        |    GROUP BY a, b GROUPING SETS ((a, b), ())
+        |) ORDER BY grouping__id > 0
+      """.stripMargin), false)
+
+    assertAnalysisSuccess(parsePlan(
+      """
+        |SELECT a, b, count(1) FROM TaBlE2
+        |  GROUP BY a, b GROUPING SETS ((a, b), ())
+        |    ORDER BY grouping__id > 0
+      """.stripMargin), false)
+
+    assertAnalysisError(parsePlan(
+      """
+        |SELECT grouping__id FROM (
+        |  SELECT a, b, count(1), grouping__id FROM TaBlE2
+        |    GROUP BY a, b
+        |)
+      """.stripMargin),
+      Seq("grouping_id() can only be used with GroupingSets/Cube/Rollup"),
+      false)
   }
 }

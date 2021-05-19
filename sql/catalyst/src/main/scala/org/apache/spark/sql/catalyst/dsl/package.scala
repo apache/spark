@@ -302,6 +302,11 @@ package object dsl {
         AttributeReference(s, DayTimeIntervalType, nullable = true)()
       }
 
+      /** Creates a new AttributeReference of the year-month interval type */
+      def yearMonthInterval: AttributeReference = {
+        AttributeReference(s, YearMonthIntervalType, nullable = true)()
+      }
+
       /** Creates a new AttributeReference of type binary */
       def binary: AttributeReference = AttributeReference(s, BinaryType, nullable = true)()
 

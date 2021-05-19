@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.analysis.GetColumnByOrdinal
 import org.apache.spark.sql.catalyst.expressions.{Expression, _}
 import org.apache.spark.sql.catalyst.expressions.objects._
 import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
@@ -242,6 +243,9 @@ object ScalaReflection extends ScalaReflection {
 
       case t if isSubtype(t, localTypeOf[java.time.Duration]) =>
         createDeserializerForDuration(path)
+
+      case t if isSubtype(t, localTypeOf[java.time.Period]) =>
+        createDeserializerForPeriod(path)
 
       case t if isSubtype(t, localTypeOf[java.lang.String]) =>
         createDeserializerForString(path, returnNullable = false)
@@ -528,6 +532,9 @@ object ScalaReflection extends ScalaReflection {
       case t if isSubtype(t, localTypeOf[java.time.Duration]) =>
         createSerializerForJavaDuration(inputObject)
 
+      case t if isSubtype(t, localTypeOf[java.time.Period]) =>
+        createSerializerForJavaPeriod(inputObject)
+
       case t if isSubtype(t, localTypeOf[BigDecimal]) =>
         createSerializerForScalaBigDecimal(inputObject)
 
@@ -748,6 +755,8 @@ object ScalaReflection extends ScalaReflection {
         Schema(CalendarIntervalType, nullable = true)
       case t if isSubtype(t, localTypeOf[java.time.Duration]) =>
         Schema(DayTimeIntervalType, nullable = true)
+      case t if isSubtype(t, localTypeOf[java.time.Period]) =>
+        Schema(YearMonthIntervalType, nullable = true)
       case t if isSubtype(t, localTypeOf[BigDecimal]) =>
         Schema(DecimalType.SYSTEM_DEFAULT, nullable = true)
       case t if isSubtype(t, localTypeOf[java.math.BigDecimal]) =>
@@ -846,7 +855,8 @@ object ScalaReflection extends ScalaReflection {
     TimestampType -> classOf[TimestampType.InternalType],
     BinaryType -> classOf[BinaryType.InternalType],
     CalendarIntervalType -> classOf[CalendarInterval],
-    DayTimeIntervalType -> classOf[DayTimeIntervalType.InternalType]
+    DayTimeIntervalType -> classOf[DayTimeIntervalType.InternalType],
+    YearMonthIntervalType -> classOf[YearMonthIntervalType.InternalType]
   )
 
   val typeBoxedJavaMapping = Map[DataType, Class[_]](
@@ -859,7 +869,8 @@ object ScalaReflection extends ScalaReflection {
     DoubleType -> classOf[java.lang.Double],
     DateType -> classOf[java.lang.Integer],
     TimestampType -> classOf[java.lang.Long],
-    DayTimeIntervalType -> classOf[java.lang.Long]
+    DayTimeIntervalType -> classOf[java.lang.Long],
+    YearMonthIntervalType -> classOf[java.lang.Integer]
   )
 
   def dataTypeJavaClass(dt: DataType): Class[_] = {
@@ -993,7 +1004,7 @@ trait ScalaReflection extends Logging {
       val primaryConstructorSymbol: Option[Symbol] = constructorSymbol.asTerm.alternatives.find(
         s => s.isMethod && s.asMethod.isPrimaryConstructor)
       if (primaryConstructorSymbol.isEmpty) {
-        sys.error("Internal SQL error: Product object did not have a primary constructor.")
+        throw QueryExecutionErrors.primaryConstructorNotFoundError(tpe.getClass)
       } else {
         primaryConstructorSymbol.get.asMethod.paramLists
       }

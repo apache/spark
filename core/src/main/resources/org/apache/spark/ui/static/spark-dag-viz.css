@@ -96,6 +96,12 @@
   stroke-width: 2px;
 }
 
+#dag-viz-graph svg.job g.node.indeterminate circle {
+  fill: #f6b187;
+  stroke: #D97536;
+  stroke-width: 2px;
+}
+
 /* Stage page specific styles */
 
 #dag-viz-graph svg.stage g.cluster rect {
@@ -133,6 +139,12 @@
 #dag-viz-graph svg.stage g.cluster.barrier rect {
   fill: #84E9E2;
   stroke: #32DBC6;
+  stroke-width: 2px;
+}
+
+#dag-viz-graph svg.stage g.node.indeterminate rect {
+  fill: #F09c67;
+  stroke: #D97536;
   stroke-width: 2px;
 }
 

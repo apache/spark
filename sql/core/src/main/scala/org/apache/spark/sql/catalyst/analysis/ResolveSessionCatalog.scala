@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, 
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.util.toPrettySQL
+import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, toPrettySQL}
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, CatalogV2Util, Identifier, LookupCatalog, SupportsNamespaces, TableChange, V1Table}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -399,11 +399,11 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         isOverwrite,
         partition)
 
-    case ShowCreateTable(ResolvedV1TableOrViewIdentifier(ident), asSerde) =>
+    case ShowCreateTable(ResolvedV1TableOrViewIdentifier(ident), asSerde, output) =>
       if (asSerde) {
-        ShowCreateTableAsSerdeCommand(ident.asTableIdentifier)
+        ShowCreateTableAsSerdeCommand(ident.asTableIdentifier, output)
       } else {
-        ShowCreateTableCommand(ident.asTableIdentifier)
+        ShowCreateTableCommand(ident.asTableIdentifier, output)
       }
 
     case TruncateTable(ResolvedV1TableIdentifier(ident)) =>
@@ -482,7 +482,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
 
     case CreateViewStatement(
       tbl, userSpecifiedColumns, comment, properties,
-      originalText, child, allowExisting, replace, viewType) if child.resolved =>
+      originalText, child, allowExisting, replace, viewType) =>
 
       val v1TableName = if (viewType != PersistedView) {
         // temp view doesn't belong to any catalog and we shouldn't resolve catalog in the name.
@@ -491,15 +491,15 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         parseV1Table(tbl, "CREATE VIEW")
       }
       CreateViewCommand(
-        v1TableName.asTableIdentifier,
-        userSpecifiedColumns,
-        comment,
-        properties,
-        originalText,
-        child,
-        allowExisting,
-        replace,
-        viewType)
+        name = v1TableName.asTableIdentifier,
+        userSpecifiedColumns = userSpecifiedColumns,
+        comment = comment,
+        properties = properties,
+        originalText = originalText,
+        plan = child,
+        allowExisting = allowExisting,
+        replace = replace,
+        viewType = viewType)
 
     case ShowViews(resolved: ResolvedNamespace, pattern, output) =>
       resolved match {

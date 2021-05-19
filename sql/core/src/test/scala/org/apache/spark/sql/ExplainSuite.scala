@@ -19,8 +19,10 @@ package org.apache.spark.sql
 
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.{DisableAdaptiveExecutionSuite, EnableAdaptiveExecutionSuite}
+import org.apache.spark.sql.execution.datasources.SaveIntoDataSourceCommand
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.sources.TestOptionsSource
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 
@@ -68,6 +70,18 @@ trait ExplainSuiteHelper extends QueryTest with SharedSparkSession {
 
   protected def checkKeywordsExistsInExplain(df: DataFrame, keywords: String*): Unit = {
     checkKeywordsExistsInExplain(df, ExtendedMode, keywords: _*)
+  }
+
+  /**
+   * Runs the plan and makes sure the plans does not contain any of the keywords.
+   */
+  protected def checkKeywordsNotExistsInExplain(
+      df: DataFrame, mode: ExplainMode, keywords: String*): Unit = {
+    withNormalizedExplain(df, mode) { normalizedOutput =>
+      for (key <- keywords) {
+        assert(!normalizedOutput.contains(key))
+      }
+    }
   }
 }
 
@@ -346,6 +360,45 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
         Nil: _*)
   }
 
+  test("SPARK-34970: Redact Map type options in explain output") {
+    val password = "MyPassWord"
+    val token = "MyToken"
+    val value = "value"
+    val options = Map("password" -> password, "token" -> token, "key" -> value)
+    val cmd = SaveIntoDataSourceCommand(spark.range(10).logicalPlan, new TestOptionsSource,
+      options, SaveMode.Overwrite)
+
+    Seq(SimpleMode, ExtendedMode, FormattedMode).foreach { mode =>
+      checkKeywordsExistsInExplain(cmd, mode, value)
+    }
+    Seq(SimpleMode, ExtendedMode, CodegenMode, CostMode, FormattedMode).foreach { mode =>
+      checkKeywordsNotExistsInExplain(cmd, mode, password)
+      checkKeywordsNotExistsInExplain(cmd, mode, token)
+    }
+  }
+
+  test("SPARK-34970: Redact CaseInsensitiveMap type options in explain output") {
+    val password = "MyPassWord"
+    val token = "MyToken"
+    val value = "value"
+    val tableName = "t"
+    withTable(tableName) {
+      val df1 = spark.range(10).toDF()
+      df1.write.format("json").saveAsTable(tableName)
+      val df2 = spark.read
+        .option("key", value)
+        .option("password", password)
+        .option("token", token)
+        .table(tableName)
+
+      checkKeywordsExistsInExplain(df2, ExtendedMode, value)
+      Seq(SimpleMode, ExtendedMode, CodegenMode, CostMode, FormattedMode).foreach { mode =>
+        checkKeywordsNotExistsInExplain(df2, mode, password)
+        checkKeywordsNotExistsInExplain(df2, mode, token)
+      }
+    }
+  }
+
   test("Dataset.toExplainString has mode as string") {
     val df = spark.range(10).toDF
     def assertExplainOutput(mode: ExplainMode): Unit = {
@@ -397,11 +450,11 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
         val basePath = dir.getCanonicalPath + "/" + fmt
         val pushFilterMaps = Map (
           "parquet" ->
-            "|PushedFilers: \\[IsNotNull\\(value\\), GreaterThan\\(value,2\\)\\]",
+            "|PushedFilters: \\[IsNotNull\\(value\\), GreaterThan\\(value,2\\)\\]",
           "orc" ->
-            "|PushedFilers: \\[.*\\(id\\), .*\\(value\\), .*\\(id,1\\), .*\\(value,2\\)\\]",
+            "|PushedFilters: \\[.*\\(id\\), .*\\(value\\), .*\\(id,1\\), .*\\(value,2\\)\\]",
           "csv" ->
-            "|PushedFilers: \\[IsNotNull\\(value\\), GreaterThan\\(value,2\\)\\]",
+            "|PushedFilters: \\[IsNotNull\\(value\\), GreaterThan\\(value,2\\)\\]",
           "json" ->
             "|remove_marker"
         )
@@ -451,6 +504,14 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
       // == Parsed Logical Plan ==
       // 'UnresolvedRelation [test], [key1=value1, KEY2=VALUE2]
       checkKeywordsExistsInExplain(df2, keywords = "[key1=value1, KEY2=VALUE2]")
+    }
+  }
+
+  test("SPARK-35225: Handle empty output for analyzed plan") {
+    withTempView("test") {
+      checkKeywordsExistsInExplain(
+        sql("CREATE TEMPORARY VIEW test AS SELECT 1"),
+        "== Analyzed Logical Plan ==\nCreateViewCommand")
     }
   }
 }
@@ -503,6 +564,33 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
          |Arguments: isFinalPlan=true
          |""".stripMargin
     )
+  }
+
+  test("SPARK-35133: explain codegen should work with AQE") {
+    withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true") {
+      withTempView("df") {
+        val df = spark.range(5).select(col("id").as("key"), col("id").as("value"))
+        df.createTempView("df")
+
+        val sqlText = "EXPLAIN CODEGEN SELECT key, MAX(value) FROM df GROUP BY key"
+        val expectedCodegenText = "Found 2 WholeStageCodegen subtrees."
+        val expectedNoCodegenText = "Found 0 WholeStageCodegen subtrees."
+        withNormalizedExplain(sqlText) { normalizedOutput =>
+          assert(normalizedOutput.contains(expectedNoCodegenText))
+        }
+
+        val aggDf = df.groupBy('key).agg(max('value))
+        withNormalizedExplain(aggDf, CodegenMode) { normalizedOutput =>
+          assert(normalizedOutput.contains(expectedNoCodegenText))
+        }
+
+        // trigger the final plan for AQE
+        aggDf.collect()
+        withNormalizedExplain(aggDf, CodegenMode) { normalizedOutput =>
+          assert(normalizedOutput.contains(expectedCodegenText))
+        }
+      }
+    }
   }
 }
 

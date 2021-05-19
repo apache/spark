@@ -17,29 +17,39 @@
 
 package org.apache.spark.ml.linalg
 
-import com.github.fommil.netlib.{BLAS => NetlibBLAS, F2jBLAS}
-import com.github.fommil.netlib.BLAS.{getInstance => NativeBLAS}
+import dev.ludovic.netlib.{BLAS => NetlibBLAS,
+                           JavaBLAS => NetlibJavaBLAS,
+                           NativeBLAS => NetlibNativeBLAS}
 
 /**
  * BLAS routines for MLlib's vectors and matrices.
  */
 private[spark] object BLAS extends Serializable {
 
-  @transient private var _f2jBLAS: NetlibBLAS = _
+  @transient private var _javaBLAS: NetlibBLAS = _
   @transient private var _nativeBLAS: NetlibBLAS = _
   private val nativeL1Threshold: Int = 256
 
-  // For level-1 function dspmv, use f2jBLAS for better performance.
-  private[ml] def f2jBLAS: NetlibBLAS = {
-    if (_f2jBLAS == null) {
-      _f2jBLAS = new F2jBLAS
+  // For level-1 function dspmv, use javaBLAS for better performance.
+  private[spark] def javaBLAS: NetlibBLAS = {
+    if (_javaBLAS == null) {
+      _javaBLAS = NetlibJavaBLAS.getInstance
     }
-    _f2jBLAS
+    _javaBLAS
   }
 
-  private[ml] def getBLAS(vectorSize: Int): NetlibBLAS = {
+  // For level-3 routines, we use the native BLAS.
+  private[spark] def nativeBLAS: NetlibBLAS = {
+    if (_nativeBLAS == null) {
+      _nativeBLAS =
+        try { NetlibNativeBLAS.getInstance } catch { case _: Throwable => javaBLAS }
+    }
+    _nativeBLAS
+  }
+
+  private[spark] def getBLAS(vectorSize: Int): NetlibBLAS = {
     if (vectorSize < nativeL1Threshold) {
-      f2jBLAS
+      javaBLAS
     } else {
       nativeBLAS
     }
@@ -235,14 +245,6 @@ private[spark] object BLAS extends Serializable {
     }
   }
 
-  // For level-3 routines, we use the native BLAS.
-  private[ml] def nativeBLAS: NetlibBLAS = {
-    if (_nativeBLAS == null) {
-      _nativeBLAS = NativeBLAS
-    }
-    _nativeBLAS
-  }
-
   /**
    * Adds alpha * x * x.t to a matrix in-place. This is the same as BLAS's ?SPR.
    *
@@ -267,7 +269,7 @@ private[spark] object BLAS extends Serializable {
       x: DenseVector,
       beta: Double,
       y: DenseVector): Unit = {
-    f2jBLAS.dspmv("U", n, alpha, A.values, x.values, 1, beta, y.values, 1)
+    javaBLAS.dspmv("U", n, alpha, A.values, x.values, 1, beta, y.values, 1)
   }
 
   /**
@@ -279,7 +281,7 @@ private[spark] object BLAS extends Serializable {
     val n = v.size
     v match {
       case DenseVector(values) =>
-        NativeBLAS.dspr("U", n, alpha, values, 1, U)
+        nativeBLAS.dspr("U", n, alpha, values, 1, U)
       case SparseVector(size, indices, values) =>
         val nnz = indices.length
         var colStartIdx = 0

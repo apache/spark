@@ -31,6 +31,7 @@ import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.catalog.CatalogV2Util.withDefaultOwnership
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
+import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.internal.SQLConf.{PARTITION_OVERWRITE_MODE, PartitionOverwriteMode, V2_SESSION_CATALOG_IMPLEMENTATION}
 import org.apache.spark.sql.internal.connector.SimpleTableProvider
@@ -174,7 +175,7 @@ class DataSourceV2SQLSuite
 
       assertAnalysisError(
         s"DESCRIBE $t invalid_col",
-        "cannot resolve '`invalid_col`' given input columns: [testcat.tbl.data, testcat.tbl.id]")
+        "cannot resolve 'invalid_col' given input columns: [testcat.tbl.data, testcat.tbl.id]")
     }
   }
 
@@ -847,6 +848,34 @@ class DataSourceV2SQLSuite
     }
   }
 
+  test("SPARK-34947: micro batch streaming write should invalidate cache") {
+    import testImplicits._
+
+    val t = "testcat.ns.t"
+    withTable(t) {
+      withTempDir { checkpointDir =>
+        sql(s"CREATE TABLE $t (id bigint, data string) USING foo")
+        sql(s"INSERT INTO $t VALUES (1L, 'a')")
+        sql(s"CACHE TABLE $t")
+
+        val inputData = MemoryStream[(Long, String)]
+        val df = inputData.toDF().toDF("id", "data")
+        val query = df
+          .writeStream
+          .option("checkpointLocation", checkpointDir.getAbsolutePath)
+          .toTable(t)
+
+        val newData = Seq((2L, "b"))
+        inputData.addData(newData)
+        query.processAllAvailable()
+        query.stop()
+
+        assert(!spark.catalog.isCached("testcat.ns.t"))
+        checkAnswer(sql(s"SELECT * FROM $t"), Row(1L, "a") :: Row(2L, "b") :: Nil)
+      }
+    }
+  }
+
   test("Relation: basic") {
     val t1 = "testcat.ns1.ns2.tbl"
     withTable(t1) {
@@ -933,7 +962,7 @@ class DataSourceV2SQLSuite
       val ex = intercept[AnalysisException] {
         sql(s"SELECT ns1.ns2.ns3.tbl.id from $t")
       }
-      assert(ex.getMessage.contains("cannot resolve '`ns1.ns2.ns3.tbl.id`"))
+      assert(ex.getMessage.contains("cannot resolve 'ns1.ns2.ns3.tbl.id"))
     }
   }
 
@@ -2687,6 +2716,109 @@ class DataSourceV2SQLSuite
       val isNullDataset = noCommentDataset
         .withColumn("is_null", noCommentDataset("info_value").isNull)
       assert(isNullDataset.schema === expectedSchema.add("is_null", BooleanType, false))
+    }
+  }
+
+  test("SPARK-34923: do not propagate metadata columns through Project") {
+    val t1 = s"${catalogAndNamespace}table"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format " +
+        "PARTITIONED BY (bucket(4, id), id)")
+      sql(s"INSERT INTO $t1 VALUES (1, 'a'), (2, 'b'), (3, 'c')")
+
+      assertThrows[AnalysisException] {
+        sql(s"SELECT index, _partition from (SELECT id, data FROM $t1)")
+      }
+      assertThrows[AnalysisException] {
+        spark.table(t1).select("id", "data").select("index", "_partition")
+      }
+    }
+  }
+
+  test("SPARK-34923: do not propagate metadata columns through View") {
+    val t1 = s"${catalogAndNamespace}table"
+    val view = "view"
+
+    withTable(t1) {
+      withTempView(view) {
+        sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format " +
+          "PARTITIONED BY (bucket(4, id), id)")
+        sql(s"INSERT INTO $t1 VALUES (1, 'a'), (2, 'b'), (3, 'c')")
+        sql(s"CACHE TABLE $view AS SELECT * FROM $t1")
+        assertThrows[AnalysisException] {
+          sql(s"SELECT index, _partition FROM $view")
+        }
+      }
+    }
+  }
+
+  test("SPARK-34923: propagate metadata columns through Filter") {
+    val t1 = s"${catalogAndNamespace}table"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format " +
+        "PARTITIONED BY (bucket(4, id), id)")
+      sql(s"INSERT INTO $t1 VALUES (1, 'a'), (2, 'b'), (3, 'c')")
+
+      val sqlQuery = spark.sql(s"SELECT id, data, index, _partition FROM $t1 WHERE id > 1")
+      val dfQuery = spark.table(t1).where("id > 1").select("id", "data", "index", "_partition")
+
+      Seq(sqlQuery, dfQuery).foreach { query =>
+        checkAnswer(query, Seq(Row(2, "b", 0, "0/2"), Row(3, "c", 0, "1/3")))
+      }
+    }
+  }
+
+  test("SPARK-34923: propagate metadata columns through Sort") {
+    val t1 = s"${catalogAndNamespace}table"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format " +
+        "PARTITIONED BY (bucket(4, id), id)")
+      sql(s"INSERT INTO $t1 VALUES (1, 'a'), (2, 'b'), (3, 'c')")
+
+      val sqlQuery = spark.sql(s"SELECT id, data, index, _partition FROM $t1 ORDER BY id")
+      val dfQuery = spark.table(t1).orderBy("id").select("id", "data", "index", "_partition")
+
+      Seq(sqlQuery, dfQuery).foreach { query =>
+        checkAnswer(query, Seq(Row(1, "a", 0, "3/1"), Row(2, "b", 0, "0/2"), Row(3, "c", 0, "1/3")))
+      }
+    }
+  }
+
+  test("SPARK-34923: propagate metadata columns through RepartitionBy") {
+    val t1 = s"${catalogAndNamespace}table"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format " +
+        "PARTITIONED BY (bucket(4, id), id)")
+      sql(s"INSERT INTO $t1 VALUES (1, 'a'), (2, 'b'), (3, 'c')")
+
+      val sqlQuery = spark.sql(
+        s"SELECT /*+ REPARTITION_BY_RANGE(3, id) */ id, data, index, _partition FROM $t1")
+      val tbl = spark.table(t1)
+      val dfQuery = tbl.repartitionByRange(3, tbl.col("id"))
+        .select("id", "data", "index", "_partition")
+
+      Seq(sqlQuery, dfQuery).foreach { query =>
+        checkAnswer(query, Seq(Row(1, "a", 0, "3/1"), Row(2, "b", 0, "0/2"), Row(3, "c", 0, "1/3")))
+      }
+    }
+  }
+
+  test("SPARK-34923: propagate metadata columns through SubqueryAlias") {
+    val t1 = s"${catalogAndNamespace}table"
+    val sbq = "sbq"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format " +
+        "PARTITIONED BY (bucket(4, id), id)")
+      sql(s"INSERT INTO $t1 VALUES (1, 'a'), (2, 'b'), (3, 'c')")
+
+      val sqlQuery = spark.sql(
+        s"SELECT $sbq.id, $sbq.data, $sbq.index, $sbq._partition FROM $t1 as $sbq")
+      val dfQuery = spark.table(t1).as(sbq).select(
+        s"$sbq.id", s"$sbq.data", s"$sbq.index", s"$sbq._partition")
+
+      Seq(sqlQuery, dfQuery).foreach { query =>
+        checkAnswer(query, Seq(Row(1, "a", 0, "3/1"), Row(2, "b", 0, "0/2"), Row(3, "c", 0, "1/3")))
+      }
     }
   }
 

@@ -21,9 +21,9 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
-import org.apache.spark.sql.catalyst.parser.ParserUtils
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, UnaryNode}
-import org.apache.spark.sql.catalyst.util.quoteIdentifier
+import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.types.{DataType, Metadata, StructType}
@@ -120,13 +120,13 @@ case class UnresolvedInlineTable(
  *   select t.a from range(10) t(a);
  * }}}
  *
- * @param functionName name of this table-value function
+ * @param name qualified name of this table-value function
  * @param functionArgs list of function arguments
  * @param outputNames alias names of function output columns. If these names given, an analyzer
  *                    adds [[Project]] to rename the output columns.
  */
 case class UnresolvedTableValuedFunction(
-    functionName: String,
+    name: FunctionIdentifier,
     functionArgs: Seq[Expression],
     outputNames: Seq[String])
   extends LeafNode {
@@ -134,6 +134,15 @@ case class UnresolvedTableValuedFunction(
   override def output: Seq[Attribute] = Nil
 
   override lazy val resolved = false
+}
+
+object UnresolvedTableValuedFunction {
+  def apply(
+      name: String,
+      functionArgs: Seq[Expression],
+      outputNames: Seq[String]): UnresolvedTableValuedFunction = {
+    UnresolvedTableValuedFunction(FunctionIdentifier(name), functionArgs, outputNames)
+  }
 }
 
 /**
@@ -159,17 +168,15 @@ case class UnresolvedAttribute(nameParts: Seq[String]) extends Attribute with Un
 
   override def toString: String = s"'$name"
 
-  override def sql: String = name match {
-    case ParserUtils.escapedIdentifier(_) | ParserUtils.qualifiedEscapedIdentifier(_, _) => name
-    case _ => quoteIdentifier(name)
-  }
+  override def sql: String = nameParts.map(quoteIfNeeded(_)).mkString(".")
 }
 
 object UnresolvedAttribute {
   /**
    * Creates an [[UnresolvedAttribute]], parsing segments separated by dots ('.').
    */
-  def apply(name: String): UnresolvedAttribute = new UnresolvedAttribute(name.split("\\."))
+  def apply(name: String): UnresolvedAttribute =
+    new UnresolvedAttribute(CatalystSqlParser.parseMultipartIdentifier(name))
 
   /**
    * Creates an [[UnresolvedAttribute]], from a single quoted string (for example using backticks in
@@ -189,7 +196,7 @@ object UnresolvedAttribute {
    * Used to split attribute name by dot with backticks rule.
    * Backticks must appear in pairs, and the quoted string must be a complete name part,
    * which means `ab..c`e.f is not allowed.
-   * Escape character is not supported now, so we can't use backtick inside name part.
+   * We can use backtick only inside quoted name parts.
    */
   def parseAttributeName(name: String): Seq[String] = {
     def e = QueryCompilationErrors.attributeNameSyntaxError(name)
@@ -201,8 +208,13 @@ object UnresolvedAttribute {
       val char = name(i)
       if (inBacktick) {
         if (char == '`') {
-          inBacktick = false
-          if (i + 1 < name.length && name(i + 1) != '.') throw e
+          if (i + 1 < name.length && name(i + 1) == '`') {
+            tmp += '`'
+            i += 1
+          } else {
+            inBacktick = false
+            if (i + 1 < name.length && name(i + 1) != '.') throw e
+          }
         } else {
           tmp += char
         }
@@ -251,15 +263,19 @@ case class UnresolvedGenerator(name: FunctionIdentifier, children: Seq[Expressio
 
   override def terminate(): TraversableOnce[InternalRow] =
     throw QueryExecutionErrors.cannotTerminateGeneratorError(this)
+
+  override protected def withNewChildrenInternal(
+    newChildren: IndexedSeq[Expression]): UnresolvedGenerator = copy(children = newChildren)
 }
 
 case class UnresolvedFunction(
-    name: FunctionIdentifier,
+    nameParts: Seq[String],
     arguments: Seq[Expression],
     isDistinct: Boolean,
     filter: Option[Expression] = None,
     ignoreNulls: Boolean = false)
   extends Expression with Unevaluable {
+  import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
   override def children: Seq[Expression] = arguments ++ filter.toSeq
 
@@ -267,16 +283,34 @@ case class UnresolvedFunction(
   override def nullable: Boolean = throw new UnresolvedException("nullable")
   override lazy val resolved = false
 
-  override def prettyName: String = name.unquotedString
+  override def prettyName: String = nameParts.quoted
   override def toString: String = {
     val distinct = if (isDistinct) "distinct " else ""
-    s"'$name($distinct${children.mkString(", ")})"
+    s"'${nameParts.quoted}($distinct${children.mkString(", ")})"
+  }
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): UnresolvedFunction = {
+    if (filter.isDefined) {
+      copy(arguments = newChildren.dropRight(1), filter = Some(newChildren.last))
+    } else {
+      copy(arguments = newChildren)
+    }
   }
 }
 
 object UnresolvedFunction {
+  import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+
+  def apply(
+      name: FunctionIdentifier,
+      arguments: Seq[Expression],
+      isDistinct: Boolean): UnresolvedFunction = {
+    UnresolvedFunction(name.asMultipart, arguments, isDistinct)
+  }
+
   def apply(name: String, arguments: Seq[Expression], isDistinct: Boolean): UnresolvedFunction = {
-    UnresolvedFunction(FunctionIdentifier(name, None), arguments, isDistinct)
+    UnresolvedFunction(Seq(name), arguments, isDistinct)
   }
 }
 
@@ -316,11 +350,11 @@ case class UnresolvedStar(target: Option[Seq[String]]) extends Star with Unevalu
    * Returns true if the nameParts is a subset of the last elements of qualifier of the attribute.
    *
    * For example, the following should all return true:
-   *   - `SELECT ns1.ns2.t.* FROM ns1.n2.t` where nameParts is Seq("ns1", "ns2", "t") and
+   *   - `SELECT ns1.ns2.t.* FROM ns1.ns2.t` where nameParts is Seq("ns1", "ns2", "t") and
    *     qualifier is Seq("ns1", "ns2", "t").
-   *   - `SELECT ns2.t.* FROM ns1.n2.t` where nameParts is Seq("ns2", "t") and
+   *   - `SELECT ns2.t.* FROM ns1.ns2.t` where nameParts is Seq("ns2", "t") and
    *     qualifier is Seq("ns1", "ns2", "t").
-   *   - `SELECT t.* FROM ns1.n2.t` where nameParts is Seq("t") and
+   *   - `SELECT t.* FROM ns1.ns2.t` where nameParts is Seq("t") and
    *     qualifier is Seq("ns1", "ns2", "t").
    */
   private def matchedQualifier(
@@ -342,10 +376,13 @@ case class UnresolvedStar(target: Option[Seq[String]]) extends Star with Unevalu
   override def expand(
       input: LogicalPlan,
       resolver: Resolver): Seq[NamedExpression] = {
-    // If there is no table specified, use all input attributes.
+    // If there is no table specified, use all non-hidden input attributes.
     if (target.isEmpty) return input.output
 
-    val expandedAttributes = input.output.filter(matchedQualifier(_, target.get, resolver))
+    // If there is a table specified, use hidden input attributes as well
+    val hiddenOutput = input.metadataOutput.filter(_.supportsQualifiedStar)
+    val expandedAttributes = (hiddenOutput ++ input.output).filter(
+      matchedQualifier(_, target.get, resolver))
 
     if (expandedAttributes.nonEmpty) return expandedAttributes
 
@@ -429,6 +466,8 @@ case class MultiAlias(child: Expression, names: Seq[String])
 
   override def toString: String = s"$child AS $names"
 
+  override protected def withNewChildInternal(newChild: Expression): MultiAlias =
+    copy(child = newChild)
 }
 
 /**
@@ -463,6 +502,11 @@ case class UnresolvedExtractValue(child: Expression, extraction: Expression)
 
   override def toString: String = s"$child[$extraction]"
   override def sql: String = s"${child.sql}[${extraction.sql}]"
+
+  override protected def withNewChildrenInternal(
+    newLeft: Expression, newRight: Expression): UnresolvedExtractValue = {
+      copy(child = newLeft, extraction = newRight)
+  }
 }
 
 /**
@@ -487,6 +531,9 @@ case class UnresolvedAlias(
   override def newInstance(): NamedExpression = throw new UnresolvedException("newInstance")
 
   override lazy val resolved = false
+
+  override protected def withNewChildInternal(newChild: Expression): UnresolvedAlias =
+    copy(child = newChild)
 }
 
 /**
@@ -508,6 +555,9 @@ case class UnresolvedSubqueryColumnAliases(
   override def output: Seq[Attribute] = Nil
 
   override lazy val resolved = false
+
+  override protected def withNewChildInternal(
+    newChild: LogicalPlan): UnresolvedSubqueryColumnAliases = copy(child = newChild)
 }
 
 /**
@@ -529,10 +579,24 @@ case class UnresolvedDeserializer(deserializer: Expression, inputAttributes: Seq
   override def dataType: DataType = throw new UnresolvedException("dataType")
   override def nullable: Boolean = throw new UnresolvedException("nullable")
   override lazy val resolved = false
+
+  override protected def withNewChildInternal(newChild: Expression): UnresolvedDeserializer =
+    copy(deserializer = newChild)
 }
 
 case class GetColumnByOrdinal(ordinal: Int, dataType: DataType) extends LeafExpression
   with Unevaluable with NonSQLExpression {
+  override def nullable: Boolean = throw new UnresolvedException("nullable")
+  override lazy val resolved = false
+}
+
+case class GetViewColumnByNameAndOrdinal(
+    viewName: String,
+    colName: String,
+    ordinal: Int,
+    expectedNumCandidates: Int)
+  extends LeafExpression with Unevaluable with NonSQLExpression {
+  override def dataType: DataType = throw new UnresolvedException("dataType")
   override def nullable: Boolean = throw new UnresolvedException("nullable")
   override lazy val resolved = false
 }
@@ -564,6 +628,8 @@ case class UnresolvedHaving(
   extends UnaryNode {
   override lazy val resolved: Boolean = false
   override def output: Seq[Attribute] = child.output
+  override protected def withNewChildInternal(newChild: LogicalPlan): UnresolvedHaving =
+    copy(child = newChild)
 }
 
 /**

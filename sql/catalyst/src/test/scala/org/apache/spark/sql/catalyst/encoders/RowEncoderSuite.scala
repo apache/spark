@@ -352,6 +352,16 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
     assert(readback.get(0).equals(duration))
   }
 
+  test("SPARK-34615: encoding/decoding YearMonthIntervalType to/from java.time.Period") {
+    val schema = new StructType().add("p", YearMonthIntervalType)
+    val encoder = RowEncoder(schema).resolveAndBind()
+    val period = java.time.Period.ofMonths(1)
+    val row = toRow(encoder, Row(period))
+    assert(row.getInt(0) === IntervalUtils.periodToMonths(period))
+    val readback = fromRow(encoder, row)
+    assert(readback.get(0).equals(period))
+  }
+
   for {
     elementType <- Seq(IntegerType, StringType)
     containsNull <- Seq(true, false)
