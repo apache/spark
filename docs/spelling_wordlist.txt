@@ -946,6 +946,7 @@ keytab
 killMode
 kinit
 kms
+knownHosts
 krb
 kube
 kubeclient
