@@ -142,7 +142,10 @@ install_zinc() {
     local TYPESAFE_MIRROR=${TYPESAFE_MIRROR:-https://downloads.lightbend.com}
 
     install_app \
-      "${TYPESAFE_MIRROR}/zinc/${ZINC_VERSION}/zinc-${ZINC_VERSION}.tgz" \
+      "${TYPESAFE_MIRROR}" \
+      "zinc/${ZINC_VERSION}/zinc-${ZINC_VERSION}.tgz" \
+      "" \
+      "" \
       "zinc-${ZINC_VERSION}.tgz" \
       "${zinc_path}"
     ZINC_BIN="${_DIR}/${zinc_path}"
