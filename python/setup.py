@@ -221,7 +221,6 @@ try:
                   'pyspark.sbin',
                   'pyspark.jars',
                   'pyspark.pandas',
-                  'pyspark.pandas.data_type_ops',
                   'pyspark.pandas.indexes',
                   'pyspark.pandas.missing',
                   'pyspark.pandas.plot',

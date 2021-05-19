@@ -84,23 +84,21 @@ class SeriesDateTimeTest(PandasOnSparkTestCase, SQLTestUtils):
         datetime_index = ps.Index(self.pd_start_date)
 
         for other in [1, 0.1, kser, datetime_index, py_datetime]:
-            expected_err_msg = "Addition can not be applied to datetimes."
+            expected_err_msg = "addition can not be applied to date times."
             self.assertRaisesRegex(TypeError, expected_err_msg, lambda: kser + other)
             self.assertRaisesRegex(TypeError, expected_err_msg, lambda: other + kser)
 
-            expected_err_msg = "Multiplication can not be applied to datetimes."
+            expected_err_msg = "multiplication can not be applied to date times."
             self.assertRaisesRegex(TypeError, expected_err_msg, lambda: kser * other)
             self.assertRaisesRegex(TypeError, expected_err_msg, lambda: other * kser)
 
-            expected_err_msg = "True division can not be applied to datetimes."
+            expected_err_msg = "division can not be applied to date times."
             self.assertRaisesRegex(TypeError, expected_err_msg, lambda: kser / other)
             self.assertRaisesRegex(TypeError, expected_err_msg, lambda: other / kser)
-
-            expected_err_msg = "Floor division can not be applied to datetimes."
             self.assertRaisesRegex(TypeError, expected_err_msg, lambda: kser // other)
             self.assertRaisesRegex(TypeError, expected_err_msg, lambda: other // kser)
 
-            expected_err_msg = "Modulo can not be applied to datetimes."
+            expected_err_msg = "modulo can not be applied to date times."
             self.assertRaisesRegex(TypeError, expected_err_msg, lambda: kser % other)
             self.assertRaisesRegex(TypeError, expected_err_msg, lambda: other % kser)
 
