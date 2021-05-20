@@ -82,14 +82,18 @@ install_app() {
       exit 2
     fi
     # Checksum may not have been specified; don't check if doesn't exist
-    if [ -f "${local_checksum}" ]; then
-      echo "  ${local_tarball}" >> ${local_checksum} # two spaces + file are important!
-      # Assuming SHA512 here for now
-      echo "Veryfing checksum from ${local_checksum}" 1>&2
-      if ! shasum -a 512 -c "${local_checksum}" > /dev/null ; then
-        echo "Bad checksum from ${remote_checksum}"
-        exit 2
+    if [ "$(command -v shasum)" ]; then
+      if [ -f "${local_checksum}" ]; then
+        echo "  ${local_tarball}" >> ${local_checksum} # two spaces + file are important!
+        # Assuming SHA512 here for now
+        echo "Veryfing checksum from ${local_checksum}" 1>&2
+        if ! shasum -a 512 -c "${local_checksum}" > /dev/null ; then
+          echo "Bad checksum from ${remote_checksum}"
+          exit 2
+        fi
       fi
+    else
+      echo "Skipping checksum because shasum is not installed."
     fi
 
     cd "${_DIR}" && tar -xzf "${local_tarball}"
