@@ -164,10 +164,12 @@ class EquivalentExpressions {
   }
 
   /**
-   * Returns all the equivalent sets of expressions.
+   * Returns all the equivalent sets of expressions which appear more than given `repeatTimes`
+   * times.
    */
-  def getAllEquivalentExprs: Seq[Seq[Expression]] = {
-    equivalenceMap.values.map(_.toSeq).toSeq.sortBy(_.head)(new ExpressionContainmentOrdering)
+  def getAllEquivalentExprs(repeatTimes: Int = 0): Seq[Seq[Expression]] = {
+    equivalenceMap.values.map(_.toSeq).filter(_.size > repeatTimes).toSeq
+      .sortBy(_.head)(new ExpressionContainmentOrdering)
   }
 
   /**
