@@ -237,8 +237,7 @@ class AdaptiveQueryExecSuite
     withSQLConf(
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
       SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "true",
-      SQLConf.ADAPTIVE_OPTIMIZER_EXCLUDED_RULES.key ->
-        EliminateUnnecessaryJoin.getClass.getName.stripSuffix("$")) {
+      SQLConf.ADAPTIVE_OPTIMIZER_EXCLUDED_RULES.key -> ConvertToLocalRelation.ruleName) {
       val df1 = spark.range(10).withColumn("a", 'id)
       val df2 = spark.range(10).withColumn("b", 'id)
       withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
@@ -1336,11 +1335,11 @@ class AdaptiveQueryExecSuite
           "(SELECT * FROM testData2 WHERE b = 0)t2 ON t1.key = t2.a", true),
         // full outer join and left side empty right side non-empty
         ("SELECT * FROM (SELECT * FROM testData WHERE key = 0)t1 FULL JOIN " +
-          "testData2 t2 ON t1.key = t2.a", false)
+          "testData2 t2 ON t1.key = t2.a", true)
       ).foreach { case (query, isEliminated) =>
         val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(query)
         assert(findTopLevelBaseJoin(plan).size == 1)
-        assert(findTopLevelBaseJoin(adaptivePlan).isEmpty == isEliminated)
+        assert(findTopLevelBaseJoin(adaptivePlan).isEmpty == isEliminated, adaptivePlan)
       }
     }
   }
@@ -1349,30 +1348,25 @@ class AdaptiveQueryExecSuite
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
       Seq(
-        ("""
+        """
          |SELECT * FROM testData t1
          | JOIN (SELECT * FROM testData2 WHERE b = 0) t2 ON t1.key = t2.a
          | LEFT JOIN testData2 t3 ON t1.key = t3.a
-         |""".stripMargin, 0),
-        ("""
+         |""".stripMargin,
+        """
          |SELECT * FROM (SELECT * FROM testData WHERE key = 0) t1
          | LEFT ANTI JOIN testData2 t2
          | FULL JOIN (SELECT * FROM testData2 WHERE b = 0) t3 ON t1.key = t3.a
-         |""".stripMargin, 0),
-        ("""
+         |""".stripMargin,
+        """
          |SELECT * FROM testData t1
          | LEFT SEMI JOIN (SELECT * FROM testData2 WHERE b = 0)
-         | RIGHT JOIN testData2
-         |""".stripMargin, 1),
-        ("""
-         |SELECT * FROM testData t1
-         | FULL JOIN (SELECT * FROM testData2 WHERE b = 0) t1
-         | FULL JOIN (SELECT * FROM testData WHERE key = 0) t2
-         |""".stripMargin, 2)
-      ).foreach { case (query, joinNum) =>
+         | RIGHT JOIN testData2 t3 on t1.key = t3.a
+         |""".stripMargin
+      ).foreach { query =>
         val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(query)
         assert(findTopLevelBaseJoin(plan).size == 2)
-        assert(findTopLevelBaseJoin(adaptivePlan).size == joinNum)
+        assert(findTopLevelBaseJoin(adaptivePlan).isEmpty)
       }
     }
   }

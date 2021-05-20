@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.adaptive
 
 import org.apache.spark.sql.catalyst.planning.ExtractSingleColumnNullAwareAntiJoin
-import org.apache.spark.sql.catalyst.plans.{FullOuter, Inner, LeftAnti, LeftOuter, LeftSemi, RightOuter}
+import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftSemi}
 import org.apache.spark.sql.catalyst.plans.logical.{Join, LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.joins.HashedRelationWithAllNullKeys
@@ -28,28 +28,12 @@ import org.apache.spark.sql.execution.joins.HashedRelationWithAllNullKeys
  * 1. Join is single column NULL-aware anti join (NAAJ), and broadcasted [[HashedRelation]]
  *    is [[HashedRelationWithAllNullKeys]]. Eliminate join to an empty [[LocalRelation]].
  *
- * 2. Join is inner join, and either side of join is empty. Eliminate join to an empty
- *    [[LocalRelation]].
+ * 2. Join is left semi join
+ *    Join right side is non-empty and condition is empty. Eliminate join to its left side.
  *
- * 3. Join is outer join. Eliminate join to empty [[LocalRelation]] if:
- *   3.1. Left outer if left side is empty
- *   3.2. Right outer if left side is empty
- *   3.3. Full outer if both side are empty
- *
- * 4. Join is left semi join
- *    4.1. Join left side is empty. Eliminate join to an empty [[LocalRelation]].
- *    4.2. Join right side is empty. Eliminate join to an empty [[LocalRelation]].
- *    4.3. Join right side is non-empty and condition is empty. Eliminate join to its left side.
- *
- * 5. Join is left anti join
- *    5.1. Join left side is empty. Eliminate join to an empty [[LocalRelation]].
- *    5.2. Join right side is empty. Eliminate join to its left side.
- *    5.3. Join right side is non-empty and condition is empty. Eliminate join to an empty
+ * 3. Join is left anti join
+ *    Join right side is non-empty and condition is empty. Eliminate join to an empty
  *         [[LocalRelation]].
- *
- * This applies to all joins (sort merge join, shuffled hash join, broadcast hash join, and
- * broadcast nested loop join), because sort merge join and shuffled hash join will be changed
- * to broadcast hash join with AQE at the first place.
  */
 object EliminateUnnecessaryJoin extends Rule[LogicalPlan] {
 
@@ -60,15 +44,12 @@ object EliminateUnnecessaryJoin extends Rule[LogicalPlan] {
     case _ => false
   }
 
-  private def checkRowCount(plan: LogicalPlan, hasRow: Boolean): Boolean = plan match {
+  private def checkRowCount(plan: LogicalPlan): Boolean = plan match {
     case LogicalQueryStage(_, stage: QueryStageExec) if stage.resultOption.get().isDefined =>
       stage.getRuntimeStatistics.rowCount match {
-        case Some(count) => hasRow == (count > 0)
+        case Some(count) => count > 0
         case _ => false
       }
-
-    case LocalRelation(_, data, isStreaming) if !isStreaming =>
-      data.nonEmpty == hasRow
 
     case _ => false
   }
@@ -77,35 +58,15 @@ object EliminateUnnecessaryJoin extends Rule[LogicalPlan] {
     case j @ ExtractSingleColumnNullAwareAntiJoin(_, _) if isRelationWithAllNullKeys(j.right) =>
       LocalRelation(j.output, data = Seq.empty, isStreaming = j.isStreaming)
 
-    case j @ Join(_, _, Inner, _, _) if checkRowCount(j.left, hasRow = false) ||
-      checkRowCount(j.right, hasRow = false) =>
-      LocalRelation(j.output, data = Seq.empty, isStreaming = j.isStreaming)
-
-    case j @ Join(_, _, LeftOuter, _, _) if checkRowCount(j.left, hasRow = false) =>
-      LocalRelation(j.output, data = Seq.empty, isStreaming = j.isStreaming)
-
-    case j @ Join(_, _, RightOuter, _, _) if checkRowCount(j.right, hasRow = false) =>
-      LocalRelation(j.output, data = Seq.empty, isStreaming = j.isStreaming)
-
-    case j @ Join(_, _, FullOuter, _, _) if checkRowCount(j.left, hasRow = false) &&
-      checkRowCount(j.right, hasRow = false) =>
-      LocalRelation(j.output, data = Seq.empty, isStreaming = j.isStreaming)
-
     case j @ Join(_, _, LeftSemi, condition, _) =>
-      if (checkRowCount(j.left, hasRow = false) || checkRowCount(j.right, hasRow = false)) {
-        LocalRelation(j.output, data = Seq.empty, isStreaming = j.isStreaming)
-      } else if (condition.isEmpty && checkRowCount(j.right, hasRow = true)) {
+      if (condition.isEmpty && checkRowCount(j.right)) {
         j.left
       } else {
         j
       }
 
     case j @ Join(_, _, LeftAnti, condition, _) =>
-      if (checkRowCount(j.left, hasRow = false)) {
-        LocalRelation(j.output, data = Seq.empty, isStreaming = j.isStreaming)
-      } else if (checkRowCount(j.right, hasRow = false)) {
-        j.left
-      } else if (condition.isEmpty && checkRowCount(j.right, hasRow = true)) {
+      if (condition.isEmpty && checkRowCount(j.right)) {
         LocalRelation(j.output, data = Seq.empty, isStreaming = j.isStreaming)
       } else {
         j
