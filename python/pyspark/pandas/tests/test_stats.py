@@ -32,15 +32,15 @@ from pyspark.testing.sqlutils import SQLTestUtils
 
 
 class StatsTest(PandasOnSparkTestCase, SQLTestUtils):
-    def _test_stat_functions(self, pdf_or_pser, kdf_or_kser):
+    def _test_stat_functions(self, pdf_or_pser, psdf_or_psser):
         functions = ["max", "min", "mean", "sum", "count"]
         for funcname in functions:
-            self.assert_eq(getattr(kdf_or_kser, funcname)(), getattr(pdf_or_pser, funcname)())
+            self.assert_eq(getattr(psdf_or_psser, funcname)(), getattr(pdf_or_pser, funcname)())
 
         functions = ["std", "var", "product", "sem"]
         for funcname in functions:
             self.assert_eq(
-                getattr(kdf_or_kser, funcname)(),
+                getattr(psdf_or_psser, funcname)(),
                 getattr(pdf_or_pser, funcname)(),
                 check_exact=False,
             )
@@ -48,7 +48,7 @@ class StatsTest(PandasOnSparkTestCase, SQLTestUtils):
         functions = ["std", "var", "sem"]
         for funcname in functions:
             self.assert_eq(
-                getattr(kdf_or_kser, funcname)(ddof=0),
+                getattr(psdf_or_psser, funcname)(ddof=0),
                 getattr(pdf_or_pser, funcname)(ddof=0),
                 check_exact=False,
             )
@@ -57,24 +57,24 @@ class StatsTest(PandasOnSparkTestCase, SQLTestUtils):
         #       The numbers are different in spark and pandas.
         functions = ["skew", "kurt", "median"]
         for funcname in functions:
-            getattr(kdf_or_kser, funcname)()
+            getattr(psdf_or_psser, funcname)()
 
     def test_stat_functions(self):
         pdf = pd.DataFrame({"A": [1, 2, 3, 4], "B": [1, 2, 3, 4], "C": [1, np.nan, 3, np.nan]})
-        kdf = ps.from_pandas(pdf)
-        self._test_stat_functions(pdf.A, kdf.A)
-        self._test_stat_functions(pdf, kdf)
+        psdf = ps.from_pandas(pdf)
+        self._test_stat_functions(pdf.A, psdf.A)
+        self._test_stat_functions(pdf, psdf)
 
         # empty
-        self._test_stat_functions(pdf.A.loc[[]], kdf.A.loc[[]])
-        self._test_stat_functions(pdf.loc[[]], kdf.loc[[]])
+        self._test_stat_functions(pdf.A.loc[[]], psdf.A.loc[[]])
+        self._test_stat_functions(pdf.loc[[]], psdf.loc[[]])
 
     def test_stat_functions_multiindex_column(self):
         arrays = [np.array(["A", "A", "B", "B"]), np.array(["one", "two", "one", "two"])]
         pdf = pd.DataFrame(np.random.randn(3, 4), index=["A", "B", "C"], columns=arrays)
-        kdf = ps.from_pandas(pdf)
-        self._test_stat_functions(pdf.A, kdf.A)
-        self._test_stat_functions(pdf, kdf)
+        psdf = ps.from_pandas(pdf)
+        self._test_stat_functions(pdf.A, psdf.A)
+        self._test_stat_functions(pdf, psdf)
 
     def test_stat_functions_with_no_numeric_columns(self):
         pdf = pd.DataFrame(
@@ -83,48 +83,50 @@ class StatsTest(PandasOnSparkTestCase, SQLTestUtils):
                 "B": ["A", "B", "C", None, "E", "F", None],
             }
         )
-        kdf = ps.from_pandas(pdf)
+        psdf = ps.from_pandas(pdf)
 
-        self._test_stat_functions(pdf, kdf)
+        self._test_stat_functions(pdf, psdf)
 
     def test_sum(self):
         pdf = pd.DataFrame({"a": [1, 2, 3, np.nan], "b": [0.1, np.nan, 0.3, np.nan]})
-        kdf = ps.from_pandas(pdf)
+        psdf = ps.from_pandas(pdf)
 
-        self.assert_eq(kdf.sum(), pdf.sum())
-        self.assert_eq(kdf.sum(axis=1), pdf.sum(axis=1))
-        self.assert_eq(kdf.sum(min_count=3), pdf.sum(min_count=3))
-        self.assert_eq(kdf.sum(axis=1, min_count=1), pdf.sum(axis=1, min_count=1))
-        self.assert_eq(kdf.loc[[]].sum(), pdf.loc[[]].sum())
-        self.assert_eq(kdf.loc[[]].sum(min_count=1), pdf.loc[[]].sum(min_count=1))
+        self.assert_eq(psdf.sum(), pdf.sum())
+        self.assert_eq(psdf.sum(axis=1), pdf.sum(axis=1))
+        self.assert_eq(psdf.sum(min_count=3), pdf.sum(min_count=3))
+        self.assert_eq(psdf.sum(axis=1, min_count=1), pdf.sum(axis=1, min_count=1))
+        self.assert_eq(psdf.loc[[]].sum(), pdf.loc[[]].sum())
+        self.assert_eq(psdf.loc[[]].sum(min_count=1), pdf.loc[[]].sum(min_count=1))
 
-        self.assert_eq(kdf["a"].sum(), pdf["a"].sum())
-        self.assert_eq(kdf["a"].sum(min_count=3), pdf["a"].sum(min_count=3))
-        self.assert_eq(kdf["b"].sum(min_count=3), pdf["b"].sum(min_count=3))
-        self.assert_eq(kdf["a"].loc[[]].sum(), pdf["a"].loc[[]].sum())
-        self.assert_eq(kdf["a"].loc[[]].sum(min_count=1), pdf["a"].loc[[]].sum(min_count=1))
+        self.assert_eq(psdf["a"].sum(), pdf["a"].sum())
+        self.assert_eq(psdf["a"].sum(min_count=3), pdf["a"].sum(min_count=3))
+        self.assert_eq(psdf["b"].sum(min_count=3), pdf["b"].sum(min_count=3))
+        self.assert_eq(psdf["a"].loc[[]].sum(), pdf["a"].loc[[]].sum())
+        self.assert_eq(psdf["a"].loc[[]].sum(min_count=1), pdf["a"].loc[[]].sum(min_count=1))
 
     def test_product(self):
         pdf = pd.DataFrame(
             {"a": [1, -2, -3, np.nan], "b": [0.1, np.nan, -0.3, np.nan], "c": [10, 20, 0, -10]}
         )
-        kdf = ps.from_pandas(pdf)
+        psdf = ps.from_pandas(pdf)
 
-        self.assert_eq(kdf.product(), pdf.product(), check_exact=False)
-        self.assert_eq(kdf.product(axis=1), pdf.product(axis=1))
-        self.assert_eq(kdf.product(min_count=3), pdf.product(min_count=3), check_exact=False)
-        self.assert_eq(kdf.product(axis=1, min_count=1), pdf.product(axis=1, min_count=1))
-        self.assert_eq(kdf.loc[[]].product(), pdf.loc[[]].product())
-        self.assert_eq(kdf.loc[[]].product(min_count=1), pdf.loc[[]].product(min_count=1))
+        self.assert_eq(psdf.product(), pdf.product(), check_exact=False)
+        self.assert_eq(psdf.product(axis=1), pdf.product(axis=1))
+        self.assert_eq(psdf.product(min_count=3), pdf.product(min_count=3), check_exact=False)
+        self.assert_eq(psdf.product(axis=1, min_count=1), pdf.product(axis=1, min_count=1))
+        self.assert_eq(psdf.loc[[]].product(), pdf.loc[[]].product())
+        self.assert_eq(psdf.loc[[]].product(min_count=1), pdf.loc[[]].product(min_count=1))
 
-        self.assert_eq(kdf["a"].product(), pdf["a"].product(), check_exact=False)
+        self.assert_eq(psdf["a"].product(), pdf["a"].product(), check_exact=False)
         self.assert_eq(
-            kdf["a"].product(min_count=3), pdf["a"].product(min_count=3), check_exact=False
+            psdf["a"].product(min_count=3), pdf["a"].product(min_count=3), check_exact=False
         )
-        self.assert_eq(kdf["b"].product(min_count=3), pdf["b"].product(min_count=3))
-        self.assert_eq(kdf["c"].product(min_count=3), pdf["c"].product(min_count=3))
-        self.assert_eq(kdf["a"].loc[[]].product(), pdf["a"].loc[[]].product())
-        self.assert_eq(kdf["a"].loc[[]].product(min_count=1), pdf["a"].loc[[]].product(min_count=1))
+        self.assert_eq(psdf["b"].product(min_count=3), pdf["b"].product(min_count=3))
+        self.assert_eq(psdf["c"].product(min_count=3), pdf["c"].product(min_count=3))
+        self.assert_eq(psdf["a"].loc[[]].product(), pdf["a"].loc[[]].product())
+        self.assert_eq(
+            psdf["a"].loc[[]].product(min_count=1), pdf["a"].loc[[]].product(min_count=1)
+        )
 
     def test_abs(self):
         pdf = pd.DataFrame(
@@ -136,23 +138,23 @@ class StatsTest(PandasOnSparkTestCase, SQLTestUtils):
                 "E": [True, np.nan, False, True, True],
             }
         )
-        kdf = ps.from_pandas(pdf)
-        self.assert_eq(kdf.A.abs(), pdf.A.abs())
-        self.assert_eq(kdf.B.abs(), pdf.B.abs())
-        self.assert_eq(kdf.E.abs(), pdf.E.abs())
+        psdf = ps.from_pandas(pdf)
+        self.assert_eq(psdf.A.abs(), pdf.A.abs())
+        self.assert_eq(psdf.B.abs(), pdf.B.abs())
+        self.assert_eq(psdf.E.abs(), pdf.E.abs())
         # pandas' bug?
-        # self.assert_eq(kdf[["B", "C", "E"]].abs(), pdf[["B", "C", "E"]].abs())
-        self.assert_eq(kdf[["B", "C"]].abs(), pdf[["B", "C"]].abs())
-        self.assert_eq(kdf[["E"]].abs(), pdf[["E"]].abs())
+        # self.assert_eq(psdf[["B", "C", "E"]].abs(), pdf[["B", "C", "E"]].abs())
+        self.assert_eq(psdf[["B", "C"]].abs(), pdf[["B", "C"]].abs())
+        self.assert_eq(psdf[["E"]].abs(), pdf[["E"]].abs())
 
         with self.assertRaisesRegex(
             TypeError, "bad operand type for abs\\(\\): object \\(string\\)"
         ):
-            kdf.abs()
+            psdf.abs()
         with self.assertRaisesRegex(
             TypeError, "bad operand type for abs\\(\\): object \\(string\\)"
         ):
-            kdf.D.abs()
+            psdf.D.abs()
 
     def test_axis_on_dataframe(self):
         # The number of each count is intentionally big
@@ -170,56 +172,63 @@ class StatsTest(PandasOnSparkTestCase, SQLTestUtils):
                 },
                 index=range(10, 15001, 10),
             )
-            kdf = ps.from_pandas(pdf)
-            self.assert_eq(kdf.count(axis=1), pdf.count(axis=1))
-            self.assert_eq(kdf.var(axis=1), pdf.var(axis=1))
-            self.assert_eq(kdf.var(axis=1, ddof=0), pdf.var(axis=1, ddof=0))
-            self.assert_eq(kdf.std(axis=1), pdf.std(axis=1))
-            self.assert_eq(kdf.std(axis=1, ddof=0), pdf.std(axis=1, ddof=0))
-            self.assert_eq(kdf.max(axis=1), pdf.max(axis=1))
-            self.assert_eq(kdf.min(axis=1), pdf.min(axis=1))
-            self.assert_eq(kdf.sum(axis=1), pdf.sum(axis=1))
-            self.assert_eq(kdf.product(axis=1), pdf.product(axis=1))
-            self.assert_eq(kdf.kurtosis(axis=1), pdf.kurtosis(axis=1))
-            self.assert_eq(kdf.skew(axis=1), pdf.skew(axis=1))
-            self.assert_eq(kdf.mean(axis=1), pdf.mean(axis=1))
-            self.assert_eq(kdf.sem(axis=1), pdf.sem(axis=1))
-            self.assert_eq(kdf.sem(axis=1, ddof=0), pdf.sem(axis=1, ddof=0))
+            psdf = ps.from_pandas(pdf)
+            self.assert_eq(psdf.count(axis=1), pdf.count(axis=1))
+            self.assert_eq(psdf.var(axis=1), pdf.var(axis=1))
+            self.assert_eq(psdf.var(axis=1, ddof=0), pdf.var(axis=1, ddof=0))
+            self.assert_eq(psdf.std(axis=1), pdf.std(axis=1))
+            self.assert_eq(psdf.std(axis=1, ddof=0), pdf.std(axis=1, ddof=0))
+            self.assert_eq(psdf.max(axis=1), pdf.max(axis=1))
+            self.assert_eq(psdf.min(axis=1), pdf.min(axis=1))
+            self.assert_eq(psdf.sum(axis=1), pdf.sum(axis=1))
+            self.assert_eq(psdf.product(axis=1), pdf.product(axis=1))
+            self.assert_eq(psdf.kurtosis(axis=1), pdf.kurtosis(axis=1))
+            self.assert_eq(psdf.skew(axis=1), pdf.skew(axis=1))
+            self.assert_eq(psdf.mean(axis=1), pdf.mean(axis=1))
+            self.assert_eq(psdf.sem(axis=1), pdf.sem(axis=1))
+            self.assert_eq(psdf.sem(axis=1, ddof=0), pdf.sem(axis=1, ddof=0))
 
             self.assert_eq(
-                kdf.count(axis=1, numeric_only=True), pdf.count(axis=1, numeric_only=True)
+                psdf.count(axis=1, numeric_only=True), pdf.count(axis=1, numeric_only=True)
             )
-            self.assert_eq(kdf.var(axis=1, numeric_only=True), pdf.var(axis=1, numeric_only=True))
+            self.assert_eq(psdf.var(axis=1, numeric_only=True), pdf.var(axis=1, numeric_only=True))
             self.assert_eq(
-                kdf.var(axis=1, ddof=0, numeric_only=True),
+                psdf.var(axis=1, ddof=0, numeric_only=True),
                 pdf.var(axis=1, ddof=0, numeric_only=True),
             )
-            self.assert_eq(kdf.std(axis=1, numeric_only=True), pdf.std(axis=1, numeric_only=True))
+            self.assert_eq(psdf.std(axis=1, numeric_only=True), pdf.std(axis=1, numeric_only=True))
             self.assert_eq(
-                kdf.std(axis=1, ddof=0, numeric_only=True),
+                psdf.std(axis=1, ddof=0, numeric_only=True),
                 pdf.std(axis=1, ddof=0, numeric_only=True),
             )
             self.assert_eq(
-                kdf.max(axis=1, numeric_only=True), pdf.max(axis=1, numeric_only=True).astype(float)
+                psdf.max(axis=1, numeric_only=True),
+                pdf.max(axis=1, numeric_only=True).astype(float),
             )
             self.assert_eq(
-                kdf.min(axis=1, numeric_only=True), pdf.min(axis=1, numeric_only=True).astype(float)
+                psdf.min(axis=1, numeric_only=True),
+                pdf.min(axis=1, numeric_only=True).astype(float),
             )
             self.assert_eq(
-                kdf.sum(axis=1, numeric_only=True), pdf.sum(axis=1, numeric_only=True).astype(float)
+                psdf.sum(axis=1, numeric_only=True),
+                pdf.sum(axis=1, numeric_only=True).astype(float),
             )
             self.assert_eq(
-                kdf.product(axis=1, numeric_only=True),
+                psdf.product(axis=1, numeric_only=True),
                 pdf.product(axis=1, numeric_only=True).astype(float),
             )
             self.assert_eq(
-                kdf.kurtosis(axis=1, numeric_only=True), pdf.kurtosis(axis=1, numeric_only=True)
+                psdf.kurtosis(axis=1, numeric_only=True), pdf.kurtosis(axis=1, numeric_only=True)
             )
-            self.assert_eq(kdf.skew(axis=1, numeric_only=True), pdf.skew(axis=1, numeric_only=True))
-            self.assert_eq(kdf.mean(axis=1, numeric_only=True), pdf.mean(axis=1, numeric_only=True))
-            self.assert_eq(kdf.sem(axis=1, numeric_only=True), pdf.sem(axis=1, numeric_only=True))
             self.assert_eq(
-                kdf.sem(axis=1, ddof=0, numeric_only=True),
+                psdf.skew(axis=1, numeric_only=True), pdf.skew(axis=1, numeric_only=True)
+            )
+            self.assert_eq(
+                psdf.mean(axis=1, numeric_only=True), pdf.mean(axis=1, numeric_only=True)
+            )
+            self.assert_eq(psdf.sem(axis=1, numeric_only=True), pdf.sem(axis=1, numeric_only=True))
+            self.assert_eq(
+                psdf.sem(axis=1, ddof=0, numeric_only=True),
                 pdf.sem(axis=1, ddof=0, numeric_only=True),
             )
 
@@ -229,33 +238,33 @@ class StatsTest(PandasOnSparkTestCase, SQLTestUtils):
             # DataFrame
             # we do not handle NaNs for now
             pdf = makeMissingDataframe(0.3, 42).fillna(0)
-            kdf = ps.from_pandas(pdf)
+            psdf = ps.from_pandas(pdf)
 
-            self.assert_eq(kdf.corr(), pdf.corr(), check_exact=False)
+            self.assert_eq(psdf.corr(), pdf.corr(), check_exact=False)
 
             # Series
             pser_a = pdf.A
             pser_b = pdf.B
-            kser_a = kdf.A
-            kser_b = kdf.B
+            psser_a = psdf.A
+            psser_b = psdf.B
 
-            self.assertAlmostEqual(kser_a.corr(kser_b), pser_a.corr(pser_b))
-            self.assertRaises(TypeError, lambda: kser_a.corr(kdf))
+            self.assertAlmostEqual(psser_a.corr(psser_b), pser_a.corr(pser_b))
+            self.assertRaises(TypeError, lambda: psser_a.corr(psdf))
 
             # multi-index columns
             columns = pd.MultiIndex.from_tuples([("X", "A"), ("X", "B"), ("Y", "C"), ("Z", "D")])
             pdf.columns = columns
-            kdf.columns = columns
+            psdf.columns = columns
 
-            self.assert_eq(kdf.corr(), pdf.corr(), check_exact=False)
+            self.assert_eq(psdf.corr(), pdf.corr(), check_exact=False)
 
             # Series
             pser_xa = pdf[("X", "A")]
             pser_xb = pdf[("X", "B")]
-            kser_xa = kdf[("X", "A")]
-            kser_xb = kdf[("X", "B")]
+            psser_xa = psdf[("X", "A")]
+            psser_xb = psdf[("X", "B")]
 
-            self.assert_eq(kser_xa.corr(kser_xb), pser_xa.corr(pser_xb), almost=True)
+            self.assert_eq(psser_xa.corr(psser_xb), pser_xa.corr(pser_xb), almost=True)
 
     def test_cov_corr_meta(self):
         # Disable arrow execution since corr() is using UDT internally which is not supported.
@@ -273,128 +282,129 @@ class StatsTest(PandasOnSparkTestCase, SQLTestUtils):
                 },
                 index=pd.Index([1, 2, 3], name="myindex"),
             )
-            kdf = ps.from_pandas(pdf)
-            self.assert_eq(kdf.corr(), pdf.corr())
+            psdf = ps.from_pandas(pdf)
+            self.assert_eq(psdf.corr(), pdf.corr())
 
     def test_stats_on_boolean_dataframe(self):
         pdf = pd.DataFrame({"A": [True, False, True], "B": [False, False, True]})
-        kdf = ps.from_pandas(pdf)
+        psdf = ps.from_pandas(pdf)
 
-        self.assert_eq(kdf.min(), pdf.min())
-        self.assert_eq(kdf.max(), pdf.max())
-        self.assert_eq(kdf.count(), pdf.count())
+        self.assert_eq(psdf.min(), pdf.min())
+        self.assert_eq(psdf.max(), pdf.max())
+        self.assert_eq(psdf.count(), pdf.count())
 
-        self.assert_eq(kdf.sum(), pdf.sum())
-        self.assert_eq(kdf.product(), pdf.product())
-        self.assert_eq(kdf.mean(), pdf.mean())
+        self.assert_eq(psdf.sum(), pdf.sum())
+        self.assert_eq(psdf.product(), pdf.product())
+        self.assert_eq(psdf.mean(), pdf.mean())
 
-        self.assert_eq(kdf.var(), pdf.var(), check_exact=False)
-        self.assert_eq(kdf.var(ddof=0), pdf.var(ddof=0), check_exact=False)
-        self.assert_eq(kdf.std(), pdf.std(), check_exact=False)
-        self.assert_eq(kdf.std(ddof=0), pdf.std(ddof=0), check_exact=False)
-        self.assert_eq(kdf.sem(), pdf.sem(), check_exact=False)
-        self.assert_eq(kdf.sem(ddof=0), pdf.sem(ddof=0), check_exact=False)
+        self.assert_eq(psdf.var(), pdf.var(), check_exact=False)
+        self.assert_eq(psdf.var(ddof=0), pdf.var(ddof=0), check_exact=False)
+        self.assert_eq(psdf.std(), pdf.std(), check_exact=False)
+        self.assert_eq(psdf.std(ddof=0), pdf.std(ddof=0), check_exact=False)
+        self.assert_eq(psdf.sem(), pdf.sem(), check_exact=False)
+        self.assert_eq(psdf.sem(ddof=0), pdf.sem(ddof=0), check_exact=False)
 
     def test_stats_on_boolean_series(self):
         pser = pd.Series([True, False, True])
-        kser = ps.from_pandas(pser)
+        psser = ps.from_pandas(pser)
 
-        self.assert_eq(kser.min(), pser.min())
-        self.assert_eq(kser.max(), pser.max())
-        self.assert_eq(kser.count(), pser.count())
+        self.assert_eq(psser.min(), pser.min())
+        self.assert_eq(psser.max(), pser.max())
+        self.assert_eq(psser.count(), pser.count())
 
-        self.assert_eq(kser.sum(), pser.sum())
-        self.assert_eq(kser.product(), pser.product())
-        self.assert_eq(kser.mean(), pser.mean())
+        self.assert_eq(psser.sum(), pser.sum())
+        self.assert_eq(psser.product(), pser.product())
+        self.assert_eq(psser.mean(), pser.mean())
 
-        self.assert_eq(kser.var(), pser.var(), almost=True)
-        self.assert_eq(kser.var(ddof=0), pser.var(ddof=0), almost=True)
-        self.assert_eq(kser.std(), pser.std(), almost=True)
-        self.assert_eq(kser.std(ddof=0), pser.std(ddof=0), almost=True)
-        self.assert_eq(kser.sem(), pser.sem(), almost=True)
-        self.assert_eq(kser.sem(ddof=0), pser.sem(ddof=0), almost=True)
+        self.assert_eq(psser.var(), pser.var(), almost=True)
+        self.assert_eq(psser.var(ddof=0), pser.var(ddof=0), almost=True)
+        self.assert_eq(psser.std(), pser.std(), almost=True)
+        self.assert_eq(psser.std(ddof=0), pser.std(ddof=0), almost=True)
+        self.assert_eq(psser.sem(), pser.sem(), almost=True)
+        self.assert_eq(psser.sem(ddof=0), pser.sem(ddof=0), almost=True)
 
     def test_stats_on_non_numeric_columns_should_be_discarded_if_numeric_only_is_true(self):
         pdf = pd.DataFrame({"i": [0, 1, 2], "b": [False, False, True], "s": ["x", "y", "z"]})
-        kdf = ps.from_pandas(pdf)
+        psdf = ps.from_pandas(pdf)
 
         self.assert_eq(
-            kdf[["i", "s"]].max(numeric_only=True), pdf[["i", "s"]].max(numeric_only=True)
+            psdf[["i", "s"]].max(numeric_only=True), pdf[["i", "s"]].max(numeric_only=True)
         )
         self.assert_eq(
-            kdf[["b", "s"]].max(numeric_only=True), pdf[["b", "s"]].max(numeric_only=True)
+            psdf[["b", "s"]].max(numeric_only=True), pdf[["b", "s"]].max(numeric_only=True)
         )
         self.assert_eq(
-            kdf[["i", "s"]].min(numeric_only=True), pdf[["i", "s"]].min(numeric_only=True)
+            psdf[["i", "s"]].min(numeric_only=True), pdf[["i", "s"]].min(numeric_only=True)
         )
         self.assert_eq(
-            kdf[["b", "s"]].min(numeric_only=True), pdf[["b", "s"]].min(numeric_only=True)
+            psdf[["b", "s"]].min(numeric_only=True), pdf[["b", "s"]].min(numeric_only=True)
         )
-        self.assert_eq(kdf.count(numeric_only=True), pdf.count(numeric_only=True))
+        self.assert_eq(psdf.count(numeric_only=True), pdf.count(numeric_only=True))
 
         if LooseVersion(pd.__version__) >= LooseVersion("1.0.0"):
-            self.assert_eq(kdf.sum(numeric_only=True), pdf.sum(numeric_only=True))
-            self.assert_eq(kdf.product(numeric_only=True), pdf.product(numeric_only=True))
+            self.assert_eq(psdf.sum(numeric_only=True), pdf.sum(numeric_only=True))
+            self.assert_eq(psdf.product(numeric_only=True), pdf.product(numeric_only=True))
         else:
-            self.assert_eq(kdf.sum(numeric_only=True), pdf.sum(numeric_only=True).astype(int))
+            self.assert_eq(psdf.sum(numeric_only=True), pdf.sum(numeric_only=True).astype(int))
             self.assert_eq(
-                kdf.product(numeric_only=True), pdf.product(numeric_only=True).astype(int)
+                psdf.product(numeric_only=True), pdf.product(numeric_only=True).astype(int)
             )
 
-        self.assert_eq(kdf.mean(numeric_only=True), pdf.mean(numeric_only=True))
+        self.assert_eq(psdf.mean(numeric_only=True), pdf.mean(numeric_only=True))
 
-        self.assert_eq(kdf.var(numeric_only=True), pdf.var(numeric_only=True), check_exact=False)
+        self.assert_eq(psdf.var(numeric_only=True), pdf.var(numeric_only=True), check_exact=False)
         self.assert_eq(
-            kdf.var(ddof=0, numeric_only=True),
+            psdf.var(ddof=0, numeric_only=True),
             pdf.var(ddof=0, numeric_only=True),
             check_exact=False,
         )
-        self.assert_eq(kdf.std(numeric_only=True), pdf.std(numeric_only=True), check_exact=False)
+        self.assert_eq(psdf.std(numeric_only=True), pdf.std(numeric_only=True), check_exact=False)
         self.assert_eq(
-            kdf.std(ddof=0, numeric_only=True),
+            psdf.std(ddof=0, numeric_only=True),
             pdf.std(ddof=0, numeric_only=True),
             check_exact=False,
         )
-        self.assert_eq(kdf.sem(numeric_only=True), pdf.sem(numeric_only=True), check_exact=False)
+        self.assert_eq(psdf.sem(numeric_only=True), pdf.sem(numeric_only=True), check_exact=False)
         self.assert_eq(
-            kdf.sem(ddof=0, numeric_only=True),
+            psdf.sem(ddof=0, numeric_only=True),
             pdf.sem(ddof=0, numeric_only=True),
             check_exact=False,
         )
 
-        self.assert_eq(len(kdf.median(numeric_only=True)), len(pdf.median(numeric_only=True)))
-        self.assert_eq(len(kdf.kurtosis(numeric_only=True)), len(pdf.kurtosis(numeric_only=True)))
-        self.assert_eq(len(kdf.skew(numeric_only=True)), len(pdf.skew(numeric_only=True)))
+        self.assert_eq(len(psdf.median(numeric_only=True)), len(pdf.median(numeric_only=True)))
+        self.assert_eq(len(psdf.kurtosis(numeric_only=True)), len(pdf.kurtosis(numeric_only=True)))
+        self.assert_eq(len(psdf.skew(numeric_only=True)), len(pdf.skew(numeric_only=True)))
 
         self.assert_eq(
-            len(kdf.quantile(q=0.5, numeric_only=True)), len(pdf.quantile(q=0.5, numeric_only=True))
+            len(psdf.quantile(q=0.5, numeric_only=True)),
+            len(pdf.quantile(q=0.5, numeric_only=True)),
         )
         self.assert_eq(
-            len(kdf.quantile(q=[0.25, 0.5, 0.75], numeric_only=True)),
+            len(psdf.quantile(q=[0.25, 0.5, 0.75], numeric_only=True)),
             len(pdf.quantile(q=[0.25, 0.5, 0.75], numeric_only=True)),
         )
 
     def test_numeric_only_unsupported(self):
         pdf = pd.DataFrame({"i": [0, 1, 2], "b": [False, False, True], "s": ["x", "y", "z"]})
-        kdf = ps.from_pandas(pdf)
+        psdf = ps.from_pandas(pdf)
 
         if LooseVersion(pd.__version__) >= LooseVersion("1.0.0"):
-            self.assert_eq(kdf.sum(numeric_only=True), pdf.sum(numeric_only=True))
+            self.assert_eq(psdf.sum(numeric_only=True), pdf.sum(numeric_only=True))
             self.assert_eq(
-                kdf[["i", "b"]].sum(numeric_only=False), pdf[["i", "b"]].sum(numeric_only=False)
+                psdf[["i", "b"]].sum(numeric_only=False), pdf[["i", "b"]].sum(numeric_only=False)
             )
         else:
-            self.assert_eq(kdf.sum(numeric_only=True), pdf.sum(numeric_only=True).astype(int))
+            self.assert_eq(psdf.sum(numeric_only=True), pdf.sum(numeric_only=True).astype(int))
             self.assert_eq(
-                kdf[["i", "b"]].sum(numeric_only=False),
+                psdf[["i", "b"]].sum(numeric_only=False),
                 pdf[["i", "b"]].sum(numeric_only=False).astype(int),
             )
 
         with self.assertRaisesRegex(TypeError, "Could not convert object \\(string\\) to numeric"):
-            kdf.sum(numeric_only=False)
+            psdf.sum(numeric_only=False)
 
         with self.assertRaisesRegex(TypeError, "Could not convert object \\(string\\) to numeric"):
-            kdf.s.sum()
+            psdf.s.sum()
 
 
 if __name__ == "__main__":
@@ -403,7 +413,8 @@ if __name__ == "__main__":
 
     try:
         import xmlrunner  # type: ignore[import]
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
+
+        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

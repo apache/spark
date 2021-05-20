@@ -31,156 +31,158 @@ class NumOpsTest(PandasOnSparkTestCase, TestCasesUtils):
     The underlying reason is the respective Spark operations return DoubleType always.
     """
     def test_add(self):
-        for pser, kser in self.numeric_pser_kser_pairs:
-            self.assert_eq(pser + pser, kser + kser)
-            self.assert_eq(pser + 1, kser + 1)
-            # self.assert_eq(pser + 0.1, kser + 0.1)
+        for pser, psser in self.numeric_pser_psser_pairs:
+            self.assert_eq(pser + pser, psser + psser)
+            self.assert_eq(pser + 1, psser + 1)
+            # self.assert_eq(pser + 0.1, psser + 0.1)
 
         with option_context("compute.ops_on_diff_frames", True):
-            for pser, kser in self.numeric_pser_kser_pairs:
-                self.assertRaises(TypeError, lambda: kser + self.non_numeric_ksers["string"])
-                self.assertRaises(TypeError, lambda: kser + self.non_numeric_ksers["datetime"])
-                self.assertRaises(TypeError, lambda: kser + self.non_numeric_ksers["date"])
-                self.assertRaises(TypeError, lambda: kser + self.non_numeric_ksers["categorical"])
-                self.assertRaises(TypeError, lambda: kser + self.non_numeric_ksers["bool"])
+            for pser, psser in self.numeric_pser_psser_pairs:
+                self.assertRaises(TypeError, lambda: psser + self.non_numeric_pssers["string"])
+                self.assertRaises(TypeError, lambda: psser + self.non_numeric_pssers["datetime"])
+                self.assertRaises(TypeError, lambda: psser + self.non_numeric_pssers["date"])
+                self.assertRaises(TypeError, lambda: psser + self.non_numeric_pssers["categorical"])
+                self.assertRaises(TypeError, lambda: psser + self.non_numeric_pssers["bool"])
 
     def test_sub(self):
-        for pser, kser in self.numeric_pser_kser_pairs:
-            self.assert_eq(pser - pser, kser - kser)
-            self.assert_eq(pser - 1, kser - 1)
-            # self.assert_eq(pser - 0.1, kser - 0.1)
+        for pser, psser in self.numeric_pser_psser_pairs:
+            self.assert_eq(pser - pser, psser - psser)
+            self.assert_eq(pser - 1, psser - 1)
+            # self.assert_eq(pser - 0.1, psser - 0.1)
 
         with option_context("compute.ops_on_diff_frames", True):
-            for pser, kser in self.numeric_pser_kser_pairs:
-                self.assertRaises(TypeError, lambda: kser - self.non_numeric_ksers["string"])
-                self.assertRaises(TypeError, lambda: kser - self.non_numeric_ksers["datetime"])
-                self.assertRaises(TypeError, lambda: kser - self.non_numeric_ksers["date"])
-                self.assertRaises(TypeError, lambda: kser - self.non_numeric_ksers["categorical"])
-                self.assertRaises(TypeError, lambda: kser - self.non_numeric_ksers["bool"])
+            for pser, psser in self.numeric_pser_psser_pairs:
+                self.assertRaises(TypeError, lambda: psser - self.non_numeric_pssers["string"])
+                self.assertRaises(TypeError, lambda: psser - self.non_numeric_pssers["datetime"])
+                self.assertRaises(TypeError, lambda: psser - self.non_numeric_pssers["date"])
+                self.assertRaises(TypeError, lambda: psser - self.non_numeric_pssers["categorical"])
+                self.assertRaises(TypeError, lambda: psser - self.non_numeric_pssers["bool"])
 
     def test_mul(self):
-        for pser, kser in self.numeric_pser_kser_pairs:
-            self.assert_eq(pser * pser, kser * kser)
+        for pser, psser in self.numeric_pser_psser_pairs:
+            self.assert_eq(pser * pser, psser * psser)
 
         with option_context("compute.ops_on_diff_frames", True):
-            for pser, kser in self.numeric_pser_kser_pairs:
-                if kser.dtype in [int, np.int32]:
+            for pser, psser in self.numeric_pser_psser_pairs:
+                if psser.dtype in [int, np.int32]:
                     self.assert_eq(
-                        (kser * self.non_numeric_ksers["string"]).sort_index(),
+                        (psser * self.non_numeric_pssers["string"]).sort_index(),
                         pser * self.non_numeric_psers["string"],
                     )
                 else:
-                    self.assertRaises(TypeError, lambda: kser * self.non_numeric_ksers["string"])
-                self.assertRaises(TypeError, lambda: kser * self.non_numeric_ksers["datetime"])
-                self.assertRaises(TypeError, lambda: kser * self.non_numeric_ksers["date"])
-                self.assertRaises(TypeError, lambda: kser * self.non_numeric_ksers["categorical"])
-                self.assertRaises(TypeError, lambda: kser * self.non_numeric_ksers["bool"])
+                    self.assertRaises(TypeError, lambda: psser * self.non_numeric_pssers["string"])
+                self.assertRaises(TypeError, lambda: psser * self.non_numeric_pssers["datetime"])
+                self.assertRaises(TypeError, lambda: psser * self.non_numeric_pssers["date"])
+                self.assertRaises(TypeError, lambda: psser * self.non_numeric_pssers["categorical"])
+                self.assertRaises(TypeError, lambda: psser * self.non_numeric_pssers["bool"])
 
     def test_truediv(self):
-        for pser, kser in self.numeric_pser_kser_pairs:
-            if kser.dtype in [float, int, np.int32]:
-                self.assert_eq(pser / pser, kser / kser)
+        for pser, psser in self.numeric_pser_psser_pairs:
+            if psser.dtype in [float, int, np.int32]:
+                self.assert_eq(pser / pser, psser / psser)
 
         with option_context("compute.ops_on_diff_frames", True):
-            for pser, kser in self.numeric_pser_kser_pairs:
-                self.assertRaises(TypeError, lambda: kser / self.non_numeric_ksers["string"])
-                self.assertRaises(TypeError, lambda: kser / self.non_numeric_ksers["datetime"])
-                self.assertRaises(TypeError, lambda: kser / self.non_numeric_ksers["date"])
-                self.assertRaises(TypeError, lambda: kser / self.non_numeric_ksers["categorical"])
-                self.assertRaises(TypeError, lambda: kser / self.non_numeric_ksers["bool"])
+            for pser, psser in self.numeric_pser_psser_pairs:
+                self.assertRaises(TypeError, lambda: psser / self.non_numeric_pssers["string"])
+                self.assertRaises(TypeError, lambda: psser / self.non_numeric_pssers["datetime"])
+                self.assertRaises(TypeError, lambda: psser / self.non_numeric_pssers["date"])
+                self.assertRaises(TypeError, lambda: psser / self.non_numeric_pssers["categorical"])
+                self.assertRaises(TypeError, lambda: psser / self.non_numeric_pssers["bool"])
 
     def test_floordiv(self):
-        for pser, kser in self.numeric_pser_kser_pairs:
-            if kser.dtype == float:
-                self.assert_eq(pser // pser, kser // kser)
+        for pser, psser in self.numeric_pser_psser_pairs:
+            if psser.dtype == float:
+                self.assert_eq(pser // pser, psser // psser)
 
         with option_context("compute.ops_on_diff_frames", True):
-            for pser, kser in self.numeric_pser_kser_pairs:
-                self.assertRaises(TypeError, lambda: kser // self.non_numeric_ksers["string"])
-                self.assertRaises(TypeError, lambda: kser // self.non_numeric_ksers["datetime"])
-                self.assertRaises(TypeError, lambda: kser // self.non_numeric_ksers["date"])
-                self.assertRaises(TypeError, lambda: kser // self.non_numeric_ksers["categorical"])
-                self.assertRaises(TypeError, lambda: kser // self.non_numeric_ksers["bool"])
+            for pser, psser in self.numeric_pser_psser_pairs:
+                self.assertRaises(TypeError, lambda: psser // self.non_numeric_pssers["string"])
+                self.assertRaises(TypeError, lambda: psser // self.non_numeric_pssers["datetime"])
+                self.assertRaises(TypeError, lambda: psser // self.non_numeric_pssers["date"])
+                self.assertRaises(
+                    TypeError, lambda: psser // self.non_numeric_pssers["categorical"])
+                self.assertRaises(TypeError, lambda: psser // self.non_numeric_pssers["bool"])
 
     def test_mod(self):
-        for pser, kser in self.numeric_pser_kser_pairs:
-            self.assert_eq(pser % pser, kser % kser)
+        for pser, psser in self.numeric_pser_psser_pairs:
+            self.assert_eq(pser % pser, psser % psser)
 
         with option_context("compute.ops_on_diff_frames", True):
-            for pser, kser in self.numeric_pser_kser_pairs:
-                self.assertRaises(TypeError, lambda: kser % self.non_numeric_ksers["string"])
-                self.assertRaises(TypeError, lambda: kser % self.non_numeric_ksers["datetime"])
-                self.assertRaises(TypeError, lambda: kser % self.non_numeric_ksers["date"])
-                self.assertRaises(TypeError, lambda: kser % self.non_numeric_ksers["categorical"])
-                self.assertRaises(TypeError, lambda: kser % self.non_numeric_ksers["bool"])
+            for pser, psser in self.numeric_pser_psser_pairs:
+                self.assertRaises(TypeError, lambda: psser % self.non_numeric_pssers["string"])
+                self.assertRaises(TypeError, lambda: psser % self.non_numeric_pssers["datetime"])
+                self.assertRaises(TypeError, lambda: psser % self.non_numeric_pssers["date"])
+                self.assertRaises(TypeError, lambda: psser % self.non_numeric_pssers["categorical"])
+                self.assertRaises(TypeError, lambda: psser % self.non_numeric_pssers["bool"])
 
     def test_pow(self):
-        for pser, kser in self.numeric_pser_kser_pairs:
-            if kser.dtype == float:
-                self.assert_eq(pser ** pser, kser ** kser)
+        for pser, psser in self.numeric_pser_psser_pairs:
+            if psser.dtype == float:
+                self.assert_eq(pser ** pser, psser ** psser)
 
         with option_context("compute.ops_on_diff_frames", True):
-            for pser, kser in self.numeric_pser_kser_pairs:
-                self.assertRaises(TypeError, lambda: kser ** self.non_numeric_ksers["string"])
-                self.assertRaises(TypeError, lambda: kser ** self.non_numeric_ksers["datetime"])
-                self.assertRaises(TypeError, lambda: kser ** self.non_numeric_ksers["date"])
-                self.assertRaises(TypeError, lambda: kser ** self.non_numeric_ksers["categorical"])
-                self.assertRaises(TypeError, lambda: kser ** self.non_numeric_ksers["bool"])
+            for pser, psser in self.numeric_pser_psser_pairs:
+                self.assertRaises(TypeError, lambda: psser ** self.non_numeric_pssers["string"])
+                self.assertRaises(TypeError, lambda: psser ** self.non_numeric_pssers["datetime"])
+                self.assertRaises(TypeError, lambda: psser ** self.non_numeric_pssers["date"])
+                self.assertRaises(
+                    TypeError, lambda: psser ** self.non_numeric_pssers["categorical"])
+                self.assertRaises(TypeError, lambda: psser ** self.non_numeric_pssers["bool"])
 
     def test_radd(self):
-        for pser, kser in self.numeric_pser_kser_pairs:
-            self.assert_eq(1 + pser, 1 + kser)
-            # self.assert_eq(0.1 + pser, 0.1 + kser)
-            self.assertRaises(TypeError, lambda: "x" + kser)
-            self.assertRaises(TypeError, lambda: datetime.date(1994, 1, 1) + kser)
-            self.assertRaises(TypeError, lambda: datetime.datetime(1994, 1, 1) + kser)
+        for pser, psser in self.numeric_pser_psser_pairs:
+            self.assert_eq(1 + pser, 1 + psser)
+            # self.assert_eq(0.1 + pser, 0.1 + psser)
+            self.assertRaises(TypeError, lambda: "x" + psser)
+            self.assertRaises(TypeError, lambda: datetime.date(1994, 1, 1) + psser)
+            self.assertRaises(TypeError, lambda: datetime.datetime(1994, 1, 1) + psser)
 
     def test_rsub(self):
-        for pser, kser in self.numeric_pser_kser_pairs:
-            self.assert_eq(1 - pser, 1 - kser)
-            # self.assert_eq(0.1 - pser, 0.1 - kser)
-            self.assertRaises(TypeError, lambda: "x" - kser)
-            self.assertRaises(TypeError, lambda: datetime.date(1994, 1, 1) - kser)
-            self.assertRaises(TypeError, lambda: datetime.datetime(1994, 1, 1) - kser)
+        for pser, psser in self.numeric_pser_psser_pairs:
+            self.assert_eq(1 - pser, 1 - psser)
+            # self.assert_eq(0.1 - pser, 0.1 - psser)
+            self.assertRaises(TypeError, lambda: "x" - psser)
+            self.assertRaises(TypeError, lambda: datetime.date(1994, 1, 1) - psser)
+            self.assertRaises(TypeError, lambda: datetime.datetime(1994, 1, 1) - psser)
 
     def test_rmul(self):
-        for pser, kser in self.numeric_pser_kser_pairs:
-            self.assert_eq(1 * pser, 1 * kser)
-            # self.assert_eq(0.1 * pser, 0.1 * kser)
-            self.assertRaises(TypeError, lambda: "x" * kser)
-            self.assertRaises(TypeError, lambda: datetime.date(1994, 1, 1) * kser)
-            self.assertRaises(TypeError, lambda: datetime.datetime(1994, 1, 1) * kser)
+        for pser, psser in self.numeric_pser_psser_pairs:
+            self.assert_eq(1 * pser, 1 * psser)
+            # self.assert_eq(0.1 * pser, 0.1 * psser)
+            self.assertRaises(TypeError, lambda: "x" * psser)
+            self.assertRaises(TypeError, lambda: datetime.date(1994, 1, 1) * psser)
+            self.assertRaises(TypeError, lambda: datetime.datetime(1994, 1, 1) * psser)
 
     def test_rtruediv(self):
-        for pser, kser in self.numeric_pser_kser_pairs:
-            # self.assert_eq(5 / pser, 5 / kser)
-            # self.assert_eq(0.1 / pser, 0.1 / kser)
-            self.assertRaises(TypeError, lambda: "x" + kser)
-            self.assertRaises(TypeError, lambda: datetime.date(1994, 1, 1) / kser)
-            self.assertRaises(TypeError, lambda: datetime.datetime(1994, 1, 1) / kser)
+        for pser, psser in self.numeric_pser_psser_pairs:
+            # self.assert_eq(5 / pser, 5 / psser)
+            # self.assert_eq(0.1 / pser, 0.1 / psser)
+            self.assertRaises(TypeError, lambda: "x" + psser)
+            self.assertRaises(TypeError, lambda: datetime.date(1994, 1, 1) / psser)
+            self.assertRaises(TypeError, lambda: datetime.datetime(1994, 1, 1) / psser)
 
     def test_rfloordiv(self):
-        for pser, kser in self.numeric_pser_kser_pairs:
-            # self.assert_eq(5 // pser, 5 // kser)
-            # self.assert_eq(0.1 // pser, 0.1 // kser)
-            self.assertRaises(TypeError, lambda: "x" // kser)
-            self.assertRaises(TypeError, lambda: datetime.date(1994, 1, 1) // kser)
-            self.assertRaises(TypeError, lambda: datetime.datetime(1994, 1, 1) // kser)
+        for pser, psser in self.numeric_pser_psser_pairs:
+            # self.assert_eq(5 // pser, 5 // psser)
+            # self.assert_eq(0.1 // pser, 0.1 // psser)
+            self.assertRaises(TypeError, lambda: "x" // psser)
+            self.assertRaises(TypeError, lambda: datetime.date(1994, 1, 1) // psser)
+            self.assertRaises(TypeError, lambda: datetime.datetime(1994, 1, 1) // psser)
 
     def test_rpow(self):
-        for pser, kser in self.numeric_pser_kser_pairs:
-            # self.assert_eq(1 ** pser, 1 ** kser)
-            # self.assert_eq(0.1 ** pser, 0.1 ** kser)
-            self.assertRaises(TypeError, lambda: "x" ** kser)
-            self.assertRaises(TypeError, lambda: datetime.date(1994, 1, 1) ** kser)
-            self.assertRaises(TypeError, lambda: datetime.datetime(1994, 1, 1) ** kser)
+        for pser, psser in self.numeric_pser_psser_pairs:
+            # self.assert_eq(1 ** pser, 1 ** psser)
+            # self.assert_eq(0.1 ** pser, 0.1 ** psser)
+            self.assertRaises(TypeError, lambda: "x" ** psser)
+            self.assertRaises(TypeError, lambda: datetime.date(1994, 1, 1) ** psser)
+            self.assertRaises(TypeError, lambda: datetime.datetime(1994, 1, 1) ** psser)
 
     def test_rmod(self):
-        for pser, kser in self.numeric_pser_kser_pairs:
-            self.assert_eq(1 % pser, 1 % kser)
-            # self.assert_eq(0.1 % pser, 0.1 % kser)
-            self.assertRaises(TypeError, lambda: datetime.date(1994, 1, 1) % kser)
-            self.assertRaises(TypeError, lambda: datetime.datetime(1994, 1, 1) % kser)
+        for pser, psser in self.numeric_pser_psser_pairs:
+            self.assert_eq(1 % pser, 1 % psser)
+            # self.assert_eq(0.1 % pser, 0.1 % psser)
+            self.assertRaises(TypeError, lambda: datetime.date(1994, 1, 1) % psser)
+            self.assertRaises(TypeError, lambda: datetime.datetime(1994, 1, 1) % psser)
 
 
 if __name__ == "__main__":

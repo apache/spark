@@ -38,8 +38,8 @@ if TYPE_CHECKING:
 
 
 class RollingAndExpanding(object):
-    def __init__(self, kdf_or_kser, window, min_periods):
-        self._kdf_or_kser = kdf_or_kser
+    def __init__(self, psdf_or_psser, window, min_periods):
+        self._psdf_or_psser = psdf_or_psser
         self._window = window
         # This unbounded Window is later used to handle 'min_periods' for now.
         self._unbounded_window = Window.orderBy(NATURAL_ORDER_COLUMN_NAME).rowsBetween(
@@ -120,7 +120,7 @@ class RollingAndExpanding(object):
 
 
 class Rolling(RollingAndExpanding):
-    def __init__(self, kdf_or_kser, window, min_periods=None):
+    def __init__(self, psdf_or_psser, window, min_periods=None):
         from pyspark.pandas import DataFrame, Series
 
         if window < 0:
@@ -132,16 +132,17 @@ class Rolling(RollingAndExpanding):
             #  a value.
             min_periods = window
 
-        if not isinstance(kdf_or_kser, (DataFrame, Series)):
+        if not isinstance(psdf_or_psser, (DataFrame, Series)):
             raise TypeError(
-                "kdf_or_kser must be a series or dataframe; however, got: %s" % type(kdf_or_kser)
+                "psdf_or_psser must be a series or dataframe; however, got: %s"
+                % type(psdf_or_psser)
             )
 
         window = Window.orderBy(NATURAL_ORDER_COLUMN_NAME).rowsBetween(
             Window.currentRow - (window - 1), Window.currentRow
         )
 
-        super().__init__(kdf_or_kser, window, min_periods)
+        super().__init__(psdf_or_psser, window, min_periods)
 
     def __getattr__(self, item: str) -> Any:
         if hasattr(MissingPandasLikeRolling, item):
@@ -153,8 +154,8 @@ class Rolling(RollingAndExpanding):
         raise AttributeError(item)
 
     def _apply_as_series_or_frame(self, func):
-        return self._kdf_or_kser._apply_series_op(
-            lambda kser: kser._with_new_scol(func(kser.spark.column)),  # TODO: dtype?
+        return self._psdf_or_psser._apply_series_op(
+            lambda psser: psser._with_new_scol(func(psser.spark.column)),  # TODO: dtype?
             should_resolve=True,
         )
 
@@ -625,16 +626,16 @@ class RollingGroupby(Rolling):
         from pyspark.pandas.groupby import DataFrameGroupBy
 
         if isinstance(groupby, SeriesGroupBy):
-            kdf_or_kser = groupby._kser
+            psdf_or_psser = groupby._psser
         elif isinstance(groupby, DataFrameGroupBy):
-            kdf_or_kser = groupby._kdf
+            psdf_or_psser = groupby._psdf
         else:
             raise TypeError(
                 "groupby must be a SeriesGroupBy or DataFrameGroupBy; "
                 "however, got: %s" % type(groupby)
             )
 
-        super().__init__(kdf_or_kser, window, min_periods)
+        super().__init__(psdf_or_psser, window, min_periods)
 
         self._groupby = groupby
         self._window = self._window.partitionBy(*[ser.spark.column for ser in groupby._groupkeys])
@@ -662,7 +663,7 @@ class RollingGroupby(Rolling):
         from pyspark.pandas.groupby import SeriesGroupBy
 
         groupby = self._groupby
-        kdf = groupby._kdf
+        psdf = groupby._psdf
 
         # Here we need to include grouped key as an index, and shift previous index.
         #   [index_column0, index_column1] -> [grouped key, index_column0, index_column1]
@@ -678,7 +679,9 @@ class RollingGroupby(Rolling):
             new_index_dtypes.append(groupkey.dtype)
 
         for new_index_scol, index_name, index_dtype in zip(
-            kdf._internal.index_spark_columns, kdf._internal.index_names, kdf._internal.index_dtypes
+            psdf._internal.index_spark_columns,
+            psdf._internal.index_names,
+            psdf._internal.index_dtypes,
         ):
             index_column_name = SPARK_INDEX_NAME_FORMAT(len(new_index_scols))
             new_index_scols.append(new_index_scol.alias(index_column_name))
@@ -690,8 +693,8 @@ class RollingGroupby(Rolling):
             agg_columns = groupby._agg_columns
         else:
             agg_columns = [
-                kdf._kser_for(label)
-                for label in kdf._internal.column_labels
+                psdf._psser_for(label)
+                for label in psdf._internal.column_labels
                 if label not in groupby._column_labels_to_exlcude
             ]
 
@@ -704,11 +707,11 @@ class RollingGroupby(Rolling):
         for c in groupby._groupkeys[1:]:
             cond = cond | c.spark.column.isNotNull()
 
-        sdf = kdf._internal.spark_frame.filter(cond).select(
+        sdf = psdf._internal.spark_frame.filter(cond).select(
             new_index_scols + [c.spark.column for c in applied]
         )
 
-        internal = kdf._internal.copy(
+        internal = psdf._internal.copy(
             spark_frame=sdf,
             index_spark_columns=[scol_for(sdf, col) for col in new_index_spark_column_names],
             index_names=new_index_names,
@@ -1036,22 +1039,23 @@ class RollingGroupby(Rolling):
 
 
 class Expanding(RollingAndExpanding):
-    def __init__(self, kdf_or_kser, min_periods=1):
+    def __init__(self, psdf_or_psser, min_periods=1):
         from pyspark.pandas import DataFrame, Series
 
         if min_periods < 0:
             raise ValueError("min_periods must be >= 0")
 
-        if not isinstance(kdf_or_kser, (DataFrame, Series)):
+        if not isinstance(psdf_or_psser, (DataFrame, Series)):
             raise TypeError(
-                "kdf_or_kser must be a series or dataframe; however, got: %s" % type(kdf_or_kser)
+                "psdf_or_psser must be a series or dataframe; however, got: %s"
+                % type(psdf_or_psser)
             )
 
         window = Window.orderBy(NATURAL_ORDER_COLUMN_NAME).rowsBetween(
             Window.unboundedPreceding, Window.currentRow
         )
 
-        super().__init__(kdf_or_kser, window, min_periods)
+        super().__init__(psdf_or_psser, window, min_periods)
 
     def __getattr__(self, item: str) -> Any:
         if hasattr(MissingPandasLikeExpanding, item):
@@ -1402,16 +1406,16 @@ class ExpandingGroupby(Expanding):
         from pyspark.pandas.groupby import DataFrameGroupBy
 
         if isinstance(groupby, SeriesGroupBy):
-            kdf_or_kser = groupby._kser
+            psdf_or_psser = groupby._psser
         elif isinstance(groupby, DataFrameGroupBy):
-            kdf_or_kser = groupby._kdf
+            psdf_or_psser = groupby._psdf
         else:
             raise TypeError(
                 "groupby must be a SeriesGroupBy or DataFrameGroupBy; "
                 "however, got: %s" % type(groupby)
             )
 
-        super().__init__(kdf_or_kser, min_periods)
+        super().__init__(psdf_or_psser, min_periods)
 
         self._groupby = groupby
         self._window = self._window.partitionBy(*[ser.spark.column for ser in groupby._groupkeys])

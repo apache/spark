@@ -122,39 +122,39 @@ class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
         return pd.Series([45, 200, 1.2, 30, 250, 1.5, 320, 1, 0.3], index=midx)
 
     @property
-    def kdf1(self):
+    def psdf1(self):
         return ps.from_pandas(self.pdf1)
 
     @property
-    def kdf2(self):
+    def psdf2(self):
         return ps.from_pandas(self.pdf2)
 
     @property
-    def kdf3(self):
+    def psdf3(self):
         return ps.from_pandas(self.pdf3)
 
     @property
-    def kdf4(self):
+    def psdf4(self):
         return ps.from_pandas(self.pdf4)
 
     @property
-    def kdf5(self):
+    def psdf5(self):
         return ps.from_pandas(self.pdf5)
 
     @property
-    def kdf6(self):
+    def psdf6(self):
         return ps.from_pandas(self.pdf6)
 
     @property
-    def kser1(self):
+    def psser1(self):
         return ps.from_pandas(self.pser1)
 
     @property
-    def kser2(self):
+    def psser2(self):
         return ps.from_pandas(self.pser2)
 
     @property
-    def kser3(self):
+    def psser3(self):
         return ps.from_pandas(self.pser3)
 
     def test_ranges(self):
@@ -198,8 +198,8 @@ class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
         )
 
     def _test_arithmetic_frame(self, pdf1, pdf2, *, check_extension):
-        kdf1 = ps.from_pandas(pdf1)
-        kdf2 = ps.from_pandas(pdf2)
+        psdf1 = ps.from_pandas(pdf1)
+        psdf2 = ps.from_pandas(pdf2)
 
         def assert_eq(actual, expected):
             if LooseVersion("1.1") <= LooseVersion(pd.__version__) < LooseVersion("1.2.2"):
@@ -214,49 +214,49 @@ class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
                 self.assert_eq(actual, expected)
 
         # Series
-        assert_eq((kdf1.a - kdf2.b).sort_index(), (pdf1.a - pdf2.b).sort_index())
+        assert_eq((psdf1.a - psdf2.b).sort_index(), (pdf1.a - pdf2.b).sort_index())
 
-        assert_eq((kdf1.a * kdf2.a).sort_index(), (pdf1.a * pdf2.a).sort_index())
+        assert_eq((psdf1.a * psdf2.a).sort_index(), (pdf1.a * pdf2.a).sort_index())
 
         if check_extension and not extension_float_dtypes_available:
             self.assert_eq(
-                (kdf1["a"] / kdf2["a"]).sort_index(), (pdf1["a"] / pdf2["a"]).sort_index()
+                (psdf1["a"] / psdf2["a"]).sort_index(), (pdf1["a"] / pdf2["a"]).sort_index()
             )
         else:
-            assert_eq((kdf1["a"] / kdf2["a"]).sort_index(), (pdf1["a"] / pdf2["a"]).sort_index())
+            assert_eq((psdf1["a"] / psdf2["a"]).sort_index(), (pdf1["a"] / pdf2["a"]).sort_index())
 
         # DataFrame
-        assert_eq((kdf1 + kdf2).sort_index(), (pdf1 + pdf2).sort_index())
+        assert_eq((psdf1 + psdf2).sort_index(), (pdf1 + pdf2).sort_index())
 
         # Multi-index columns
         columns = pd.MultiIndex.from_tuples([("x", "a"), ("x", "b")])
-        kdf1.columns = columns
-        kdf2.columns = columns
+        psdf1.columns = columns
+        psdf2.columns = columns
         pdf1.columns = columns
         pdf2.columns = columns
 
         # Series
         assert_eq(
-            (kdf1[("x", "a")] - kdf2[("x", "b")]).sort_index(),
+            (psdf1[("x", "a")] - psdf2[("x", "b")]).sort_index(),
             (pdf1[("x", "a")] - pdf2[("x", "b")]).sort_index(),
         )
 
         assert_eq(
-            (kdf1[("x", "a")] - kdf2["x"]["b"]).sort_index(),
+            (psdf1[("x", "a")] - psdf2["x"]["b"]).sort_index(),
             (pdf1[("x", "a")] - pdf2["x"]["b"]).sort_index(),
         )
 
         assert_eq(
-            (kdf1["x"]["a"] - kdf2[("x", "b")]).sort_index(),
+            (psdf1["x"]["a"] - psdf2[("x", "b")]).sort_index(),
             (pdf1["x"]["a"] - pdf2[("x", "b")]).sort_index(),
         )
 
         # DataFrame
-        assert_eq((kdf1 + kdf2).sort_index(), (pdf1 + pdf2).sort_index())
+        assert_eq((psdf1 + psdf2).sort_index(), (pdf1 + pdf2).sort_index())
 
     def _test_arithmetic_series(self, pser1, pser2, *, check_extension):
-        kser1 = ps.from_pandas(pser1)
-        kser2 = ps.from_pandas(pser2)
+        psser1 = ps.from_pandas(pser1)
+        psser2 = ps.from_pandas(pser2)
 
         def assert_eq(actual, expected):
             if LooseVersion("1.1") <= LooseVersion(pd.__version__) < LooseVersion("1.2.2"):
@@ -267,16 +267,16 @@ class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
                 self.assert_eq(actual, expected)
 
         # MultiIndex Series
-        assert_eq((kser1 + kser2).sort_index(), (pser1 + pser2).sort_index())
+        assert_eq((psser1 + psser2).sort_index(), (pser1 + pser2).sort_index())
 
-        assert_eq((kser1 - kser2).sort_index(), (pser1 - pser2).sort_index())
+        assert_eq((psser1 - psser2).sort_index(), (pser1 - pser2).sort_index())
 
-        assert_eq((kser1 * kser2).sort_index(), (pser1 * pser2).sort_index())
+        assert_eq((psser1 * psser2).sort_index(), (pser1 * pser2).sort_index())
 
         if check_extension and not extension_float_dtypes_available:
-            self.assert_eq((kser1 / kser2).sort_index(), (pser1 / pser2).sort_index())
+            self.assert_eq((psser1 / psser2).sort_index(), (pser1 / pser2).sort_index())
         else:
-            assert_eq((kser1 / kser2).sort_index(), (pser1 / pser2).sort_index())
+            assert_eq((psser1 / psser2).sort_index(), (pser1 / pser2).sort_index())
 
     def test_arithmetic_chain(self):
         self._test_arithmetic_chain_frame(self.pdf1, self.pdf2, self.pdf3, check_extension=False)
@@ -317,11 +317,11 @@ class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
         )
 
     def _test_arithmetic_chain_frame(self, pdf1, pdf2, pdf3, *, check_extension):
-        kdf1 = ps.from_pandas(pdf1)
-        kdf2 = ps.from_pandas(pdf2)
-        kdf3 = ps.from_pandas(pdf3)
+        psdf1 = ps.from_pandas(pdf1)
+        psdf2 = ps.from_pandas(pdf2)
+        psdf3 = ps.from_pandas(pdf3)
 
-        common_columns = set(kdf1.columns).intersection(kdf2.columns).intersection(kdf3.columns)
+        common_columns = set(psdf1.columns).intersection(psdf2.columns).intersection(psdf3.columns)
 
         def assert_eq(actual, expected):
             if LooseVersion("1.1") <= LooseVersion(pd.__version__) < LooseVersion("1.2.2"):
@@ -339,20 +339,22 @@ class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
                 self.assert_eq(actual, expected)
 
         # Series
-        assert_eq((kdf1.a - kdf2.b - kdf3.c).sort_index(), (pdf1.a - pdf2.b - pdf3.c).sort_index())
+        assert_eq(
+            (psdf1.a - psdf2.b - psdf3.c).sort_index(), (pdf1.a - pdf2.b - pdf3.c).sort_index()
+        )
 
         assert_eq(
-            (kdf1.a * (kdf2.a * kdf3.c)).sort_index(), (pdf1.a * (pdf2.a * pdf3.c)).sort_index()
+            (psdf1.a * (psdf2.a * psdf3.c)).sort_index(), (pdf1.a * (pdf2.a * pdf3.c)).sort_index()
         )
 
         if check_extension and not extension_float_dtypes_available:
             self.assert_eq(
-                (kdf1["a"] / kdf2["a"] / kdf3["c"]).sort_index(),
+                (psdf1["a"] / psdf2["a"] / psdf3["c"]).sort_index(),
                 (pdf1["a"] / pdf2["a"] / pdf3["c"]).sort_index(),
             )
         else:
             assert_eq(
-                (kdf1["a"] / kdf2["a"] / kdf3["c"]).sort_index(),
+                (psdf1["a"] / psdf2["a"] / psdf3["c"]).sort_index(),
                 (pdf1["a"] / pdf2["a"] / pdf3["c"]).sort_index(),
             )
 
@@ -361,31 +363,31 @@ class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
             LooseVersion("1.0") <= LooseVersion(pd.__version__) < LooseVersion("1.1")
         ):
             self.assert_eq(
-                (kdf1 + kdf2 - kdf3).sort_index(), (pdf1 + pdf2 - pdf3).sort_index(), almost=True
+                (psdf1 + psdf2 - psdf3).sort_index(), (pdf1 + pdf2 - pdf3).sort_index(), almost=True
             )
         else:
-            assert_eq((kdf1 + kdf2 - kdf3).sort_index(), (pdf1 + pdf2 - pdf3).sort_index())
+            assert_eq((psdf1 + psdf2 - psdf3).sort_index(), (pdf1 + pdf2 - pdf3).sort_index())
 
         # Multi-index columns
         columns = pd.MultiIndex.from_tuples([("x", "a"), ("x", "b")])
-        kdf1.columns = columns
-        kdf2.columns = columns
+        psdf1.columns = columns
+        psdf2.columns = columns
         pdf1.columns = columns
         pdf2.columns = columns
         columns = pd.MultiIndex.from_tuples([("x", "b"), ("y", "c")])
-        kdf3.columns = columns
+        psdf3.columns = columns
         pdf3.columns = columns
 
-        common_columns = set(kdf1.columns).intersection(kdf2.columns).intersection(kdf3.columns)
+        common_columns = set(psdf1.columns).intersection(psdf2.columns).intersection(psdf3.columns)
 
         # Series
         assert_eq(
-            (kdf1[("x", "a")] - kdf2[("x", "b")] - kdf3[("y", "c")]).sort_index(),
+            (psdf1[("x", "a")] - psdf2[("x", "b")] - psdf3[("y", "c")]).sort_index(),
             (pdf1[("x", "a")] - pdf2[("x", "b")] - pdf3[("y", "c")]).sort_index(),
         )
 
         assert_eq(
-            (kdf1[("x", "a")] * (kdf2[("x", "b")] * kdf3[("y", "c")])).sort_index(),
+            (psdf1[("x", "a")] * (psdf2[("x", "b")] * psdf3[("y", "c")])).sort_index(),
             (pdf1[("x", "a")] * (pdf2[("x", "b")] * pdf3[("y", "c")])).sort_index(),
         )
 
@@ -394,15 +396,15 @@ class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
             LooseVersion("1.0") <= LooseVersion(pd.__version__) < LooseVersion("1.1")
         ):
             self.assert_eq(
-                (kdf1 + kdf2 - kdf3).sort_index(), (pdf1 + pdf2 - pdf3).sort_index(), almost=True
+                (psdf1 + psdf2 - psdf3).sort_index(), (pdf1 + pdf2 - pdf3).sort_index(), almost=True
             )
         else:
-            assert_eq((kdf1 + kdf2 - kdf3).sort_index(), (pdf1 + pdf2 - pdf3).sort_index())
+            assert_eq((psdf1 + psdf2 - psdf3).sort_index(), (pdf1 + pdf2 - pdf3).sort_index())
 
     def _test_arithmetic_chain_series(self, pser1, pser2, pser3, *, check_extension):
-        kser1 = ps.from_pandas(pser1)
-        kser2 = ps.from_pandas(pser2)
-        kser3 = ps.from_pandas(pser3)
+        psser1 = ps.from_pandas(pser1)
+        psser2 = ps.from_pandas(pser2)
+        psser3 = ps.from_pandas(pser3)
 
         def assert_eq(actual, expected):
             if LooseVersion("1.1") <= LooseVersion(pd.__version__) < LooseVersion("1.2.2"):
@@ -413,14 +415,14 @@ class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
                 self.assert_eq(actual, expected)
 
         # MultiIndex Series
-        assert_eq((kser1 + kser2 - kser3).sort_index(), (pser1 + pser2 - pser3).sort_index())
+        assert_eq((psser1 + psser2 - psser3).sort_index(), (pser1 + pser2 - pser3).sort_index())
 
-        assert_eq((kser1 * kser2 * kser3).sort_index(), (pser1 * pser2 * pser3).sort_index())
+        assert_eq((psser1 * psser2 * psser3).sort_index(), (pser1 * pser2 * pser3).sort_index())
 
         if check_extension and not extension_float_dtypes_available:
             if LooseVersion(pd.__version__) >= LooseVersion("1.0"):
                 self.assert_eq(
-                    (kser1 - kser2 / kser3).sort_index(), (pser1 - pser2 / pser3).sort_index()
+                    (psser1 - psser2 / psser3).sort_index(), (pser1 - pser2 / pser3).sort_index()
                 )
             else:
                 expected = pd.Series(
@@ -437,31 +439,31 @@ class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
                         ],
                     ),
                 )
-                self.assert_eq((kser1 - kser2 / kser3).sort_index(), expected)
+                self.assert_eq((psser1 - psser2 / psser3).sort_index(), expected)
         else:
-            assert_eq((kser1 - kser2 / kser3).sort_index(), (pser1 - pser2 / pser3).sort_index())
+            assert_eq((psser1 - psser2 / psser3).sort_index(), (pser1 - pser2 / pser3).sort_index())
 
-        assert_eq((kser1 + kser2 * kser3).sort_index(), (pser1 + pser2 * pser3).sort_index())
+        assert_eq((psser1 + psser2 * psser3).sort_index(), (pser1 + pser2 * pser3).sort_index())
 
     def test_mod(self):
         pser = pd.Series([100, None, -300, None, 500, -700])
         pser_other = pd.Series([-150] * 6)
-        kser = ps.from_pandas(pser)
-        kser_other = ps.from_pandas(pser_other)
+        psser = ps.from_pandas(pser)
+        psser_other = ps.from_pandas(pser_other)
 
-        self.assert_eq(kser.mod(kser_other).sort_index(), pser.mod(pser_other))
-        self.assert_eq(kser.mod(kser_other).sort_index(), pser.mod(pser_other))
-        self.assert_eq(kser.mod(kser_other).sort_index(), pser.mod(pser_other))
+        self.assert_eq(psser.mod(psser_other).sort_index(), pser.mod(pser_other))
+        self.assert_eq(psser.mod(psser_other).sort_index(), pser.mod(pser_other))
+        self.assert_eq(psser.mod(psser_other).sort_index(), pser.mod(pser_other))
 
     def test_rmod(self):
         pser = pd.Series([100, None, -300, None, 500, -700])
         pser_other = pd.Series([-150] * 6)
-        kser = ps.from_pandas(pser)
-        kser_other = ps.from_pandas(pser_other)
+        psser = ps.from_pandas(pser)
+        psser_other = ps.from_pandas(pser_other)
 
-        self.assert_eq(kser.rmod(kser_other).sort_index(), pser.rmod(pser_other))
-        self.assert_eq(kser.rmod(kser_other).sort_index(), pser.rmod(pser_other))
-        self.assert_eq(kser.rmod(kser_other).sort_index(), pser.rmod(pser_other))
+        self.assert_eq(psser.rmod(psser_other).sort_index(), pser.rmod(pser_other))
+        self.assert_eq(psser.rmod(psser_other).sort_index(), pser.rmod(pser_other))
+        self.assert_eq(psser.rmod(psser_other).sort_index(), pser.rmod(pser_other))
 
     def test_getitem_boolean_series(self):
         pdf1 = pd.DataFrame(
@@ -471,15 +473,15 @@ class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
             {"A": [0, -1, -2, -3, -4], "B": [-100, -200, -300, -400, -500]},
             index=[0, 30, 10, 20, 50],
         )
-        kdf1 = ps.from_pandas(pdf1)
-        kdf2 = ps.from_pandas(pdf2)
+        psdf1 = ps.from_pandas(pdf1)
+        psdf2 = ps.from_pandas(pdf2)
 
-        self.assert_eq(pdf1[pdf2.A > -3].sort_index(), kdf1[kdf2.A > -3].sort_index())
+        self.assert_eq(pdf1[pdf2.A > -3].sort_index(), psdf1[psdf2.A > -3].sort_index())
 
-        self.assert_eq(pdf1.A[pdf2.A > -3].sort_index(), kdf1.A[kdf2.A > -3].sort_index())
+        self.assert_eq(pdf1.A[pdf2.A > -3].sort_index(), psdf1.A[psdf2.A > -3].sort_index())
 
         self.assert_eq(
-            (pdf1.A + 1)[pdf2.A > -3].sort_index(), (kdf1.A + 1)[kdf2.A > -3].sort_index()
+            (pdf1.A + 1)[pdf2.A > -3].sort_index(), (psdf1.A + 1)[psdf2.A > -3].sort_index()
         )
 
     def test_loc_getitem_boolean_series(self):
@@ -490,33 +492,33 @@ class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
             {"A": [0, -1, -2, -3, -4], "B": [-100, -200, -300, -400, -500]},
             index=[20, 10, 30, 0, 50],
         )
-        kdf1 = ps.from_pandas(pdf1)
-        kdf2 = ps.from_pandas(pdf2)
+        psdf1 = ps.from_pandas(pdf1)
+        psdf2 = ps.from_pandas(pdf2)
 
-        self.assert_eq(pdf1.loc[pdf2.A > -3].sort_index(), kdf1.loc[kdf2.A > -3].sort_index())
+        self.assert_eq(pdf1.loc[pdf2.A > -3].sort_index(), psdf1.loc[psdf2.A > -3].sort_index())
 
-        self.assert_eq(pdf1.A.loc[pdf2.A > -3].sort_index(), kdf1.A.loc[kdf2.A > -3].sort_index())
+        self.assert_eq(pdf1.A.loc[pdf2.A > -3].sort_index(), psdf1.A.loc[psdf2.A > -3].sort_index())
 
         self.assert_eq(
-            (pdf1.A + 1).loc[pdf2.A > -3].sort_index(), (kdf1.A + 1).loc[kdf2.A > -3].sort_index()
+            (pdf1.A + 1).loc[pdf2.A > -3].sort_index(), (psdf1.A + 1).loc[psdf2.A > -3].sort_index()
         )
 
     def test_bitwise(self):
         pser1 = pd.Series([True, False, True, False, np.nan, np.nan, True, False, np.nan])
         pser2 = pd.Series([True, False, False, True, True, False, np.nan, np.nan, np.nan])
-        kser1 = ps.from_pandas(pser1)
-        kser2 = ps.from_pandas(pser2)
+        psser1 = ps.from_pandas(pser1)
+        psser2 = ps.from_pandas(pser2)
 
-        self.assert_eq(pser1 | pser2, (kser1 | kser2).sort_index())
-        self.assert_eq(pser1 & pser2, (kser1 & kser2).sort_index())
+        self.assert_eq(pser1 | pser2, (psser1 | psser2).sort_index())
+        self.assert_eq(pser1 & pser2, (psser1 & psser2).sort_index())
 
         pser1 = pd.Series([True, False, np.nan], index=list("ABC"))
         pser2 = pd.Series([False, True, np.nan], index=list("DEF"))
-        kser1 = ps.from_pandas(pser1)
-        kser2 = ps.from_pandas(pser2)
+        psser1 = ps.from_pandas(pser1)
+        psser2 = ps.from_pandas(pser2)
 
-        self.assert_eq(pser1 | pser2, (kser1 | kser2).sort_index())
-        self.assert_eq(pser1 & pser2, (kser1 & kser2).sort_index())
+        self.assert_eq(pser1 | pser2, (psser1 | psser2).sort_index())
+        self.assert_eq(pser1 & pser2, (psser1 & psser2).sort_index())
 
     @unittest.skipIf(
         not extension_object_dtypes_available, "pandas extension object dtypes are not available"
@@ -535,26 +537,26 @@ class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
         pser2 = pd.Series(
             [True, False, False, True, True, False, np.nan, np.nan, np.nan], dtype="boolean"
         )
-        kser1 = ps.from_pandas(pser1)
-        kser2 = ps.from_pandas(pser2)
+        psser1 = ps.from_pandas(pser1)
+        psser2 = ps.from_pandas(pser2)
 
-        assert_eq((kser1 | kser2).sort_index(), pser1 | pser2)
-        assert_eq((kser1 & kser2).sort_index(), pser1 & pser2)
+        assert_eq((psser1 | psser2).sort_index(), pser1 | pser2)
+        assert_eq((psser1 & psser2).sort_index(), pser1 & pser2)
 
         pser1 = pd.Series([True, False, np.nan], index=list("ABC"), dtype="boolean")
         pser2 = pd.Series([False, True, np.nan], index=list("DEF"), dtype="boolean")
-        kser1 = ps.from_pandas(pser1)
-        kser2 = ps.from_pandas(pser2)
+        psser1 = ps.from_pandas(pser1)
+        psser2 = ps.from_pandas(pser2)
 
         # a pandas bug?
-        # assert_eq((kser1 | kser2).sort_index(), pser1 | pser2)
-        # assert_eq((kser1 & kser2).sort_index(), pser1 & pser2)
+        # assert_eq((psser1 | psser2).sort_index(), pser1 | pser2)
+        # assert_eq((psser1 & psser2).sort_index(), pser1 & pser2)
         assert_eq(
-            (kser1 | kser2).sort_index(),
+            (psser1 | psser2).sort_index(),
             pd.Series([True, None, None, None, True, None], index=list("ABCDEF"), dtype="boolean"),
         )
         assert_eq(
-            (kser1 & kser2).sort_index(),
+            (psser1 & psser2).sort_index(),
             pd.Series(
                 [None, False, None, False, None, None], index=list("ABCDEF"), dtype="boolean"
             ),
@@ -565,47 +567,47 @@ class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
         pdf1.columns.names = ["AB"]
         pdf2 = pd.DataFrame({"C": [1, 2, 3], "D": [4, 5, 6]}, index=[1, 3, 5])
         pdf2.columns.names = ["CD"]
-        kdf1 = ps.from_pandas(pdf1)
-        kdf2 = ps.from_pandas(pdf2)
+        psdf1 = ps.from_pandas(pdf1)
+        psdf2 = ps.from_pandas(pdf2)
 
-        kdf3 = kdf1.copy()
-        kdf4 = kdf2.copy()
+        psdf3 = psdf1.copy()
+        psdf4 = psdf2.copy()
         pdf3 = pdf1.copy()
         pdf4 = pdf2.copy()
 
         columns = pd.MultiIndex.from_tuples([("X", "A"), ("X", "B")], names=["X", "AB"])
         pdf3.columns = columns
-        kdf3.columns = columns
+        psdf3.columns = columns
 
         columns = pd.MultiIndex.from_tuples([("X", "C"), ("X", "D")], names=["Y", "CD"])
         pdf4.columns = columns
-        kdf4.columns = columns
+        psdf4.columns = columns
 
         pdf5 = pd.DataFrame({"A": [0, 2, 4], "B": [1, 3, 5]}, index=[1, 2, 3])
         pdf6 = pd.DataFrame({"C": [1, 2, 3]}, index=[1, 3, 5])
-        kdf5 = ps.from_pandas(pdf5)
-        kdf6 = ps.from_pandas(pdf6)
+        psdf5 = ps.from_pandas(pdf5)
+        psdf6 = ps.from_pandas(pdf6)
 
         ignore_indexes = [True, False]
         joins = ["inner", "outer"]
 
         objs = [
-            ([kdf1.A, kdf2.C], [pdf1.A, pdf2.C]),
-            # TODO: ([kdf1, kdf2.C], [pdf1, pdf2.C]),
-            ([kdf1.A, kdf2], [pdf1.A, pdf2]),
-            ([kdf1.A, kdf2.C], [pdf1.A, pdf2.C]),
-            ([kdf3[("X", "A")], kdf4[("X", "C")]], [pdf3[("X", "A")], pdf4[("X", "C")]]),
-            ([kdf3, kdf4[("X", "C")]], [pdf3, pdf4[("X", "C")]]),
-            ([kdf3[("X", "A")], kdf4], [pdf3[("X", "A")], pdf4]),
-            ([kdf3, kdf4], [pdf3, pdf4]),
-            ([kdf5, kdf6], [pdf5, pdf6]),
-            ([kdf6, kdf5], [pdf6, pdf5]),
+            ([psdf1.A, psdf2.C], [pdf1.A, pdf2.C]),
+            # TODO: ([psdf1, psdf2.C], [pdf1, pdf2.C]),
+            ([psdf1.A, psdf2], [pdf1.A, pdf2]),
+            ([psdf1.A, psdf2.C], [pdf1.A, pdf2.C]),
+            ([psdf3[("X", "A")], psdf4[("X", "C")]], [pdf3[("X", "A")], pdf4[("X", "C")]]),
+            ([psdf3, psdf4[("X", "C")]], [pdf3, pdf4[("X", "C")]]),
+            ([psdf3[("X", "A")], psdf4], [pdf3[("X", "A")], pdf4]),
+            ([psdf3, psdf4], [pdf3, pdf4]),
+            ([psdf5, psdf6], [pdf5, pdf6]),
+            ([psdf6, psdf5], [pdf6, pdf5]),
         ]
 
         for ignore_index, join in product(ignore_indexes, joins):
-            for i, (kdfs, pdfs) in enumerate(objs):
+            for i, (psdfs, pdfs) in enumerate(objs):
                 with self.subTest(ignore_index=ignore_index, join=join, pdfs=pdfs, pair=i):
-                    actual = ps.concat(kdfs, axis=1, ignore_index=ignore_index, join=join)
+                    actual = ps.concat(psdfs, axis=1, ignore_index=ignore_index, join=join)
                     expected = pd.concat(pdfs, axis=1, ignore_index=ignore_index, join=join)
                     self.assert_eq(
                         repr(actual.sort_values(list(actual.columns)).reset_index(drop=True)),
@@ -615,23 +617,23 @@ class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
     def test_combine_first(self):
         pser1 = pd.Series({"falcon": 330.0, "eagle": 160.0})
         pser2 = pd.Series({"falcon": 345.0, "eagle": 200.0, "duck": 30.0})
-        kser1 = ps.from_pandas(pser1)
-        kser2 = ps.from_pandas(pser2)
+        psser1 = ps.from_pandas(pser1)
+        psser2 = ps.from_pandas(pser2)
 
         self.assert_eq(
-            kser1.combine_first(kser2).sort_index(), pser1.combine_first(pser2).sort_index()
+            psser1.combine_first(psser2).sort_index(), pser1.combine_first(pser2).sort_index()
         )
         with self.assertRaisesRegex(
             TypeError, "`combine_first` only allows `Series` for parameter `other`"
         ):
-            kser1.combine_first(50)
+            psser1.combine_first(50)
 
-        kser1.name = ("X", "A")
-        kser2.name = ("Y", "B")
+        psser1.name = ("X", "A")
+        psser2.name = ("Y", "B")
         pser1.name = ("X", "A")
         pser2.name = ("Y", "B")
         self.assert_eq(
-            kser1.combine_first(kser2).sort_index(), pser1.combine_first(pser2).sort_index()
+            psser1.combine_first(psser2).sort_index(), pser1.combine_first(pser2).sort_index()
         )
 
         # MultiIndex
@@ -645,11 +647,11 @@ class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
         )
         pser1 = pd.Series([45, 200, 1.2, 30, 250, 1.5, 320, 1], index=midx1)
         pser2 = pd.Series([-45, 200, -1.2, 30, -250, 1.5, 320, 1, -0.3], index=midx2)
-        kser1 = ps.from_pandas(pser1)
-        kser2 = ps.from_pandas(pser2)
+        psser1 = ps.from_pandas(pser1)
+        psser2 = ps.from_pandas(pser2)
 
         self.assert_eq(
-            kser1.combine_first(kser2).sort_index(), pser1.combine_first(pser2).sort_index()
+            psser1.combine_first(psser2).sort_index(), pser1.combine_first(pser2).sort_index()
         )
 
         # Series come from same DataFrame
@@ -661,20 +663,20 @@ class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
         )
         pser1 = pdf.A
         pser2 = pdf.B
-        kser1 = ps.from_pandas(pser1)
-        kser2 = ps.from_pandas(pser2)
+        psser1 = ps.from_pandas(pser1)
+        psser2 = ps.from_pandas(pser2)
 
         self.assert_eq(
-            kser1.combine_first(kser2).sort_index(), pser1.combine_first(pser2).sort_index()
+            psser1.combine_first(psser2).sort_index(), pser1.combine_first(pser2).sort_index()
         )
 
-        kser1.name = ("X", "A")
-        kser2.name = ("Y", "B")
+        psser1.name = ("X", "A")
+        psser2.name = ("Y", "B")
         pser1.name = ("X", "A")
         pser2.name = ("Y", "B")
 
         self.assert_eq(
-            kser1.combine_first(kser2).sort_index(), pser1.combine_first(pser2).sort_index()
+            psser1.combine_first(psser2).sort_index(), pser1.combine_first(pser2).sort_index()
         )
 
     def test_insert(self):
@@ -682,67 +684,67 @@ class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
         # Basic DataFrame
         #
         pdf = pd.DataFrame([1, 2, 3])
-        kdf = ps.from_pandas(pdf)
+        psdf = ps.from_pandas(pdf)
 
         pser = pd.Series([4, 5, 6])
-        kser = ps.from_pandas(pser)
-        kdf.insert(1, "y", kser)
+        psser = ps.from_pandas(pser)
+        psdf.insert(1, "y", psser)
         pdf.insert(1, "y", pser)
-        self.assert_eq(kdf.sort_index(), pdf.sort_index())
+        self.assert_eq(psdf.sort_index(), pdf.sort_index())
 
         #
         # DataFrame with Index different from inserting Series'
         #
         pdf = pd.DataFrame([1, 2, 3], index=[10, 20, 30])
-        kdf = ps.from_pandas(pdf)
+        psdf = ps.from_pandas(pdf)
 
         pser = pd.Series([4, 5, 6])
-        kser = ps.from_pandas(pser)
-        kdf.insert(1, "y", kser)
+        psser = ps.from_pandas(pser)
+        psdf.insert(1, "y", psser)
         pdf.insert(1, "y", pser)
-        self.assert_eq(kdf.sort_index(), pdf.sort_index())
+        self.assert_eq(psdf.sort_index(), pdf.sort_index())
 
         #
         # DataFrame with Multi-index columns
         #
         pdf = pd.DataFrame({("x", "a"): [1, 2, 3]})
-        kdf = ps.from_pandas(pdf)
+        psdf = ps.from_pandas(pdf)
 
         pser = pd.Series([4, 5, 6])
-        kser = ps.from_pandas(pser)
+        psser = ps.from_pandas(pser)
         pdf = pd.DataFrame({("x", "a", "b"): [1, 2, 3]})
-        kdf = ps.from_pandas(pdf)
-        kdf.insert(0, "a", kser)
+        psdf = ps.from_pandas(pdf)
+        psdf.insert(0, "a", psser)
         pdf.insert(0, "a", pser)
-        self.assert_eq(kdf.sort_index(), pdf.sort_index())
-        kdf.insert(0, ("b", "c", ""), kser)
+        self.assert_eq(psdf.sort_index(), pdf.sort_index())
+        psdf.insert(0, ("b", "c", ""), psser)
         pdf.insert(0, ("b", "c", ""), pser)
-        self.assert_eq(kdf.sort_index(), pdf.sort_index())
+        self.assert_eq(psdf.sort_index(), pdf.sort_index())
 
     def test_compare(self):
         if LooseVersion(pd.__version__) >= LooseVersion("1.1"):
             pser1 = pd.Series(["b", "c", np.nan, "g", np.nan])
             pser2 = pd.Series(["a", "c", np.nan, np.nan, "h"])
-            kser1 = ps.from_pandas(pser1)
-            kser2 = ps.from_pandas(pser2)
+            psser1 = ps.from_pandas(pser1)
+            psser2 = ps.from_pandas(pser2)
             self.assert_eq(
-                pser1.compare(pser2).sort_index(), kser1.compare(kser2).sort_index(),
+                pser1.compare(pser2).sort_index(), psser1.compare(psser2).sort_index(),
             )
 
             # `keep_shape=True`
             self.assert_eq(
                 pser1.compare(pser2, keep_shape=True).sort_index(),
-                kser1.compare(kser2, keep_shape=True).sort_index(),
+                psser1.compare(psser2, keep_shape=True).sort_index(),
             )
             # `keep_equal=True`
             self.assert_eq(
                 pser1.compare(pser2, keep_equal=True).sort_index(),
-                kser1.compare(kser2, keep_equal=True).sort_index(),
+                psser1.compare(psser2, keep_equal=True).sort_index(),
             )
             # `keep_shape=True` and `keep_equal=True`
             self.assert_eq(
                 pser1.compare(pser2, keep_shape=True, keep_equal=True).sort_index(),
-                kser1.compare(kser2, keep_shape=True, keep_equal=True).sort_index(),
+                psser1.compare(psser2, keep_shape=True, keep_equal=True).sort_index(),
             )
 
             # MultiIndex
@@ -752,34 +754,34 @@ class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
             pser2.index = pd.MultiIndex.from_tuples(
                 [("a", "x"), ("b", "y"), ("c", "z"), ("x", "k"), ("q", "l")]
             )
-            kser1 = ps.from_pandas(pser1)
-            kser2 = ps.from_pandas(pser2)
+            psser1 = ps.from_pandas(pser1)
+            psser2 = ps.from_pandas(pser2)
             self.assert_eq(
-                pser1.compare(pser2).sort_index(), kser1.compare(kser2).sort_index(),
+                pser1.compare(pser2).sort_index(), psser1.compare(psser2).sort_index(),
             )
 
             # `keep_shape=True` with MultiIndex
             self.assert_eq(
                 pser1.compare(pser2, keep_shape=True).sort_index(),
-                kser1.compare(kser2, keep_shape=True).sort_index(),
+                psser1.compare(psser2, keep_shape=True).sort_index(),
             )
             # `keep_equal=True` with MultiIndex
             self.assert_eq(
                 pser1.compare(pser2, keep_equal=True).sort_index(),
-                kser1.compare(kser2, keep_equal=True).sort_index(),
+                psser1.compare(psser2, keep_equal=True).sort_index(),
             )
             # `keep_shape=True` and `keep_equal=True` with MultiIndex
             self.assert_eq(
                 pser1.compare(pser2, keep_shape=True, keep_equal=True).sort_index(),
-                kser1.compare(kser2, keep_shape=True, keep_equal=True).sort_index(),
+                psser1.compare(psser2, keep_shape=True, keep_equal=True).sort_index(),
             )
         else:
-            kser1 = ps.Series(["b", "c", np.nan, "g", np.nan])
-            kser2 = ps.Series(["a", "c", np.nan, np.nan, "h"])
+            psser1 = ps.Series(["b", "c", np.nan, "g", np.nan])
+            psser2 = ps.Series(["a", "c", np.nan, np.nan, "h"])
             expected = ps.DataFrame(
                 [["b", "a"], ["g", None], [None, "h"]], index=[0, 3, 4], columns=["self", "other"]
             )
-            self.assert_eq(expected, kser1.compare(kser2).sort_index())
+            self.assert_eq(expected, psser1.compare(psser2).sort_index())
 
             # `keep_shape=True`
             expected = ps.DataFrame(
@@ -788,14 +790,14 @@ class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
                 columns=["self", "other"],
             )
             self.assert_eq(
-                expected, kser1.compare(kser2, keep_shape=True).sort_index(),
+                expected, psser1.compare(psser2, keep_shape=True).sort_index(),
             )
             # `keep_equal=True`
             expected = ps.DataFrame(
                 [["b", "a"], ["g", None], [None, "h"]], index=[0, 3, 4], columns=["self", "other"]
             )
             self.assert_eq(
-                expected, kser1.compare(kser2, keep_equal=True).sort_index(),
+                expected, psser1.compare(psser2, keep_equal=True).sort_index(),
             )
             # `keep_shape=True` and `keep_equal=True`
             expected = ps.DataFrame(
@@ -804,17 +806,17 @@ class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
                 columns=["self", "other"],
             )
             self.assert_eq(
-                expected, kser1.compare(kser2, keep_shape=True, keep_equal=True).sort_index(),
+                expected, psser1.compare(psser2, keep_shape=True, keep_equal=True).sort_index(),
             )
 
             # MultiIndex
-            kser1 = ps.Series(
+            psser1 = ps.Series(
                 ["b", "c", np.nan, "g", np.nan],
                 index=pd.MultiIndex.from_tuples(
                     [("a", "x"), ("b", "y"), ("c", "z"), ("x", "k"), ("q", "l")]
                 ),
             )
-            kser2 = ps.Series(
+            psser2 = ps.Series(
                 ["a", "c", np.nan, np.nan, "h"],
                 index=pd.MultiIndex.from_tuples(
                     [("a", "x"), ("b", "y"), ("c", "z"), ("x", "k"), ("q", "l")]
@@ -825,7 +827,7 @@ class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
                 index=pd.MultiIndex.from_tuples([("a", "x"), ("q", "l"), ("x", "k")]),
                 columns=["self", "other"],
             )
-            self.assert_eq(expected, kser1.compare(kser2).sort_index())
+            self.assert_eq(expected, psser1.compare(psser2).sort_index())
 
             # `keep_shape=True`
             expected = ps.DataFrame(
@@ -836,7 +838,7 @@ class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
                 columns=["self", "other"],
             )
             self.assert_eq(
-                expected, kser1.compare(kser2, keep_shape=True).sort_index(),
+                expected, psser1.compare(psser2, keep_shape=True).sort_index(),
             )
             # `keep_equal=True`
             expected = ps.DataFrame(
@@ -845,7 +847,7 @@ class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
                 columns=["self", "other"],
             )
             self.assert_eq(
-                expected, kser1.compare(kser2, keep_equal=True).sort_index(),
+                expected, psser1.compare(psser2, keep_equal=True).sort_index(),
             )
             # `keep_shape=True` and `keep_equal=True`
             expected = ps.DataFrame(
@@ -856,239 +858,239 @@ class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
                 columns=["self", "other"],
             )
             self.assert_eq(
-                expected, kser1.compare(kser2, keep_shape=True, keep_equal=True).sort_index(),
+                expected, psser1.compare(psser2, keep_shape=True, keep_equal=True).sort_index(),
             )
 
         # Different Index
         with self.assertRaisesRegex(
             ValueError, "Can only compare identically-labeled Series objects"
         ):
-            kser1 = ps.Series([1, 2, 3, 4, 5], index=pd.Index([1, 2, 3, 4, 5]),)
-            kser2 = ps.Series([2, 2, 3, 4, 1], index=pd.Index([5, 4, 3, 2, 1]),)
-            kser1.compare(kser2)
+            psser1 = ps.Series([1, 2, 3, 4, 5], index=pd.Index([1, 2, 3, 4, 5]),)
+            psser2 = ps.Series([2, 2, 3, 4, 1], index=pd.Index([5, 4, 3, 2, 1]),)
+            psser1.compare(psser2)
         # Different MultiIndex
         with self.assertRaisesRegex(
             ValueError, "Can only compare identically-labeled Series objects"
         ):
-            kser1 = ps.Series(
+            psser1 = ps.Series(
                 [1, 2, 3, 4, 5],
                 index=pd.MultiIndex.from_tuples(
                     [("a", "x"), ("b", "y"), ("c", "z"), ("x", "k"), ("q", "l")]
                 ),
             )
-            kser2 = ps.Series(
+            psser2 = ps.Series(
                 [2, 2, 3, 4, 1],
                 index=pd.MultiIndex.from_tuples(
                     [("a", "x"), ("b", "y"), ("c", "a"), ("x", "k"), ("q", "l")]
                 ),
             )
-            kser1.compare(kser2)
+            psser1.compare(psser2)
 
     def test_different_columns(self):
-        kdf1 = self.kdf1
-        kdf4 = self.kdf4
+        psdf1 = self.psdf1
+        psdf4 = self.psdf4
         pdf1 = self.pdf1
         pdf4 = self.pdf4
 
-        self.assert_eq((kdf1 + kdf4).sort_index(), (pdf1 + pdf4).sort_index(), almost=True)
+        self.assert_eq((psdf1 + psdf4).sort_index(), (pdf1 + pdf4).sort_index(), almost=True)
 
         # Multi-index columns
         columns = pd.MultiIndex.from_tuples([("x", "a"), ("x", "b")])
-        kdf1.columns = columns
+        psdf1.columns = columns
         pdf1.columns = columns
         columns = pd.MultiIndex.from_tuples([("z", "e"), ("z", "f")])
-        kdf4.columns = columns
+        psdf4.columns = columns
         pdf4.columns = columns
 
-        self.assert_eq((kdf1 + kdf4).sort_index(), (pdf1 + pdf4).sort_index(), almost=True)
+        self.assert_eq((psdf1 + psdf4).sort_index(), (pdf1 + pdf4).sort_index(), almost=True)
 
     def test_assignment_series(self):
-        kdf = ps.from_pandas(self.pdf1)
+        psdf = ps.from_pandas(self.pdf1)
         pdf = self.pdf1
-        kser = kdf.a
+        psser = psdf.a
         pser = pdf.a
-        kdf["a"] = self.kdf2.a
+        psdf["a"] = self.psdf2.a
         pdf["a"] = self.pdf2.a
 
-        self.assert_eq(kdf.sort_index(), pdf.sort_index())
-        self.assert_eq(kser, pser)
+        self.assert_eq(psdf.sort_index(), pdf.sort_index())
+        self.assert_eq(psser, pser)
 
-        kdf = ps.from_pandas(self.pdf1)
+        psdf = ps.from_pandas(self.pdf1)
         pdf = self.pdf1
-        kser = kdf.a
+        psser = psdf.a
         pser = pdf.a
-        kdf["a"] = self.kdf2.b
+        psdf["a"] = self.psdf2.b
         pdf["a"] = self.pdf2.b
 
-        self.assert_eq(kdf.sort_index(), pdf.sort_index())
-        self.assert_eq(kser, pser)
+        self.assert_eq(psdf.sort_index(), pdf.sort_index())
+        self.assert_eq(psser, pser)
 
-        kdf = ps.from_pandas(self.pdf1)
+        psdf = ps.from_pandas(self.pdf1)
         pdf = self.pdf1
-        kdf["c"] = self.kdf2.a
+        psdf["c"] = self.psdf2.a
         pdf["c"] = self.pdf2.a
 
-        self.assert_eq(kdf.sort_index(), pdf.sort_index())
+        self.assert_eq(psdf.sort_index(), pdf.sort_index())
 
         # Multi-index columns
-        kdf = ps.from_pandas(self.pdf1)
+        psdf = ps.from_pandas(self.pdf1)
         pdf = self.pdf1
         columns = pd.MultiIndex.from_tuples([("x", "a"), ("x", "b")])
-        kdf.columns = columns
+        psdf.columns = columns
         pdf.columns = columns
-        kdf[("y", "c")] = self.kdf2.a
+        psdf[("y", "c")] = self.psdf2.a
         pdf[("y", "c")] = self.pdf2.a
 
-        self.assert_eq(kdf.sort_index(), pdf.sort_index())
+        self.assert_eq(psdf.sort_index(), pdf.sort_index())
 
         pdf = pd.DataFrame({"a": [1, 2, 3], "Koalas": [0, 1, 2]}).set_index("Koalas", drop=False)
-        kdf = ps.from_pandas(pdf)
+        psdf = ps.from_pandas(pdf)
 
-        kdf.index.name = None
-        kdf["NEW"] = ps.Series([100, 200, 300])
+        psdf.index.name = None
+        psdf["NEW"] = ps.Series([100, 200, 300])
 
         pdf.index.name = None
         pdf["NEW"] = pd.Series([100, 200, 300])
 
-        self.assert_eq(kdf.sort_index(), pdf.sort_index())
+        self.assert_eq(psdf.sort_index(), pdf.sort_index())
 
     def test_assignment_frame(self):
-        kdf = ps.from_pandas(self.pdf1)
+        psdf = ps.from_pandas(self.pdf1)
         pdf = self.pdf1
-        kser = kdf.a
+        psser = psdf.a
         pser = pdf.a
-        kdf[["a", "b"]] = self.kdf1
+        psdf[["a", "b"]] = self.psdf1
         pdf[["a", "b"]] = self.pdf1
 
-        self.assert_eq(kdf.sort_index(), pdf.sort_index())
-        self.assert_eq(kser, pser)
+        self.assert_eq(psdf.sort_index(), pdf.sort_index())
+        self.assert_eq(psser, pser)
 
-        # 'c' does not exist in `kdf`.
-        kdf = ps.from_pandas(self.pdf1)
+        # 'c' does not exist in `psdf`.
+        psdf = ps.from_pandas(self.pdf1)
         pdf = self.pdf1
-        kser = kdf.a
+        psser = psdf.a
         pser = pdf.a
-        kdf[["b", "c"]] = self.kdf1
+        psdf[["b", "c"]] = self.psdf1
         pdf[["b", "c"]] = self.pdf1
 
-        self.assert_eq(kdf.sort_index(), pdf.sort_index())
-        self.assert_eq(kser, pser)
+        self.assert_eq(psdf.sort_index(), pdf.sort_index())
+        self.assert_eq(psser, pser)
 
-        # 'c' and 'd' do not exist in `kdf`.
-        kdf = ps.from_pandas(self.pdf1)
+        # 'c' and 'd' do not exist in `psdf`.
+        psdf = ps.from_pandas(self.pdf1)
         pdf = self.pdf1
-        kdf[["c", "d"]] = self.kdf1
+        psdf[["c", "d"]] = self.psdf1
         pdf[["c", "d"]] = self.pdf1
 
-        self.assert_eq(kdf.sort_index(), pdf.sort_index())
+        self.assert_eq(psdf.sort_index(), pdf.sort_index())
 
         # Multi-index columns
         columns = pd.MultiIndex.from_tuples([("x", "a"), ("x", "b")])
-        kdf = ps.from_pandas(self.pdf1)
+        psdf = ps.from_pandas(self.pdf1)
         pdf = self.pdf1
-        kdf.columns = columns
+        psdf.columns = columns
         pdf.columns = columns
-        kdf[[("y", "c"), ("z", "d")]] = self.kdf1
+        psdf[[("y", "c"), ("z", "d")]] = self.psdf1
         pdf[[("y", "c"), ("z", "d")]] = self.pdf1
 
-        self.assert_eq(kdf.sort_index(), pdf.sort_index())
+        self.assert_eq(psdf.sort_index(), pdf.sort_index())
 
-        kdf = ps.from_pandas(self.pdf1)
+        psdf = ps.from_pandas(self.pdf1)
         pdf = self.pdf1
-        kdf1 = ps.from_pandas(self.pdf1)
+        psdf1 = ps.from_pandas(self.pdf1)
         pdf1 = self.pdf1
-        kdf1.columns = columns
+        psdf1.columns = columns
         pdf1.columns = columns
-        kdf[["c", "d"]] = kdf1
+        psdf[["c", "d"]] = psdf1
         pdf[["c", "d"]] = pdf1
 
-        self.assert_eq(kdf.sort_index(), pdf.sort_index())
+        self.assert_eq(psdf.sort_index(), pdf.sort_index())
 
     def test_assignment_series_chain(self):
-        kdf = ps.from_pandas(self.pdf1)
+        psdf = ps.from_pandas(self.pdf1)
         pdf = self.pdf1
-        kdf["a"] = self.kdf1.a
+        psdf["a"] = self.psdf1.a
         pdf["a"] = self.pdf1.a
 
-        kdf["a"] = self.kdf2.b
+        psdf["a"] = self.psdf2.b
         pdf["a"] = self.pdf2.b
 
-        kdf["d"] = self.kdf3.c
+        psdf["d"] = self.psdf3.c
         pdf["d"] = self.pdf3.c
 
-        self.assert_eq(kdf.sort_index(), pdf.sort_index())
+        self.assert_eq(psdf.sort_index(), pdf.sort_index())
 
     def test_assignment_frame_chain(self):
-        kdf = ps.from_pandas(self.pdf1)
+        psdf = ps.from_pandas(self.pdf1)
         pdf = self.pdf1
-        kdf[["a", "b"]] = self.kdf1
+        psdf[["a", "b"]] = self.psdf1
         pdf[["a", "b"]] = self.pdf1
 
-        kdf[["e", "f"]] = self.kdf3
+        psdf[["e", "f"]] = self.psdf3
         pdf[["e", "f"]] = self.pdf3
 
-        kdf[["b", "c"]] = self.kdf2
+        psdf[["b", "c"]] = self.psdf2
         pdf[["b", "c"]] = self.pdf2
 
-        self.assert_eq(kdf.sort_index(), pdf.sort_index())
+        self.assert_eq(psdf.sort_index(), pdf.sort_index())
 
     def test_multi_index_arithmetic(self):
-        kdf5 = self.kdf5
-        kdf6 = self.kdf6
+        psdf5 = self.psdf5
+        psdf6 = self.psdf6
         pdf5 = self.pdf5
         pdf6 = self.pdf6
 
         # Series
-        self.assert_eq((kdf5.c - kdf6.e).sort_index(), (pdf5.c - pdf6.e).sort_index())
+        self.assert_eq((psdf5.c - psdf6.e).sort_index(), (pdf5.c - pdf6.e).sort_index())
 
-        self.assert_eq((kdf5["c"] / kdf6["e"]).sort_index(), (pdf5["c"] / pdf6["e"]).sort_index())
+        self.assert_eq((psdf5["c"] / psdf6["e"]).sort_index(), (pdf5["c"] / pdf6["e"]).sort_index())
 
         # DataFrame
-        self.assert_eq((kdf5 + kdf6).sort_index(), (pdf5 + pdf6).sort_index(), almost=True)
+        self.assert_eq((psdf5 + psdf6).sort_index(), (pdf5 + pdf6).sort_index(), almost=True)
 
     def test_multi_index_assignment_series(self):
-        kdf = ps.from_pandas(self.pdf5)
+        psdf = ps.from_pandas(self.pdf5)
         pdf = self.pdf5
-        kdf["x"] = self.kdf6.e
+        psdf["x"] = self.psdf6.e
         pdf["x"] = self.pdf6.e
 
-        self.assert_eq(kdf.sort_index(), pdf.sort_index())
+        self.assert_eq(psdf.sort_index(), pdf.sort_index())
 
-        kdf = ps.from_pandas(self.pdf5)
+        psdf = ps.from_pandas(self.pdf5)
         pdf = self.pdf5
-        kdf["e"] = self.kdf6.e
+        psdf["e"] = self.psdf6.e
         pdf["e"] = self.pdf6.e
 
-        self.assert_eq(kdf.sort_index(), pdf.sort_index())
+        self.assert_eq(psdf.sort_index(), pdf.sort_index())
 
-        kdf = ps.from_pandas(self.pdf5)
+        psdf = ps.from_pandas(self.pdf5)
         pdf = self.pdf5
-        kdf["c"] = self.kdf6.e
+        psdf["c"] = self.psdf6.e
         pdf["c"] = self.pdf6.e
 
-        self.assert_eq(kdf.sort_index(), pdf.sort_index())
+        self.assert_eq(psdf.sort_index(), pdf.sort_index())
 
     def test_multi_index_assignment_frame(self):
-        kdf = ps.from_pandas(self.pdf5)
+        psdf = ps.from_pandas(self.pdf5)
         pdf = self.pdf5
-        kdf[["c"]] = self.kdf5
+        psdf[["c"]] = self.psdf5
         pdf[["c"]] = self.pdf5
 
-        self.assert_eq(kdf.sort_index(), pdf.sort_index())
+        self.assert_eq(psdf.sort_index(), pdf.sort_index())
 
-        kdf = ps.from_pandas(self.pdf5)
+        psdf = ps.from_pandas(self.pdf5)
         pdf = self.pdf5
-        kdf[["x"]] = self.kdf5
+        psdf[["x"]] = self.psdf5
         pdf[["x"]] = self.pdf5
 
-        self.assert_eq(kdf.sort_index(), pdf.sort_index())
+        self.assert_eq(psdf.sort_index(), pdf.sort_index())
 
-        kdf = ps.from_pandas(self.pdf6)
+        psdf = ps.from_pandas(self.pdf6)
         pdf = self.pdf6
-        kdf[["x", "y"]] = self.kdf6
+        psdf[["x", "y"]] = self.psdf6
         pdf[["x", "y"]] = self.pdf6
 
-        self.assert_eq(kdf.sort_index(), pdf.sort_index())
+        self.assert_eq(psdf.sort_index(), pdf.sort_index())
 
     def test_frame_loc_setitem(self):
         pdf_orig = pd.DataFrame(
@@ -1096,46 +1098,46 @@ class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
             index=["cobra", "viper", "sidewinder"],
             columns=["max_speed", "shield"],
         )
-        kdf_orig = ps.DataFrame(pdf_orig)
+        psdf_orig = ps.DataFrame(pdf_orig)
 
         pdf = pdf_orig.copy()
-        kdf = kdf_orig.copy()
+        psdf = psdf_orig.copy()
         pser1 = pdf.max_speed
         pser2 = pdf.shield
-        kser1 = kdf.max_speed
-        kser2 = kdf.shield
+        psser1 = psdf.max_speed
+        psser2 = psdf.shield
 
-        another_kdf = ps.DataFrame(pdf_orig)
+        another_psdf = ps.DataFrame(pdf_orig)
 
-        kdf.loc[["viper", "sidewinder"], ["shield"]] = -another_kdf.max_speed
+        psdf.loc[["viper", "sidewinder"], ["shield"]] = -another_psdf.max_speed
         pdf.loc[["viper", "sidewinder"], ["shield"]] = -pdf.max_speed
-        self.assert_eq(kdf, pdf)
-        self.assert_eq(kser1, pser1)
-        self.assert_eq(kser2, pser2)
+        self.assert_eq(psdf, pdf)
+        self.assert_eq(psser1, pser1)
+        self.assert_eq(psser2, pser2)
 
         pdf = pdf_orig.copy()
-        kdf = kdf_orig.copy()
+        psdf = psdf_orig.copy()
         pser1 = pdf.max_speed
         pser2 = pdf.shield
-        kser1 = kdf.max_speed
-        kser2 = kdf.shield
-        kdf.loc[another_kdf.max_speed < 5, ["shield"]] = -kdf.max_speed
+        psser1 = psdf.max_speed
+        psser2 = psdf.shield
+        psdf.loc[another_psdf.max_speed < 5, ["shield"]] = -psdf.max_speed
         pdf.loc[pdf.max_speed < 5, ["shield"]] = -pdf.max_speed
-        self.assert_eq(kdf, pdf)
-        self.assert_eq(kser1, pser1)
-        self.assert_eq(kser2, pser2)
+        self.assert_eq(psdf, pdf)
+        self.assert_eq(psser1, pser1)
+        self.assert_eq(psser2, pser2)
 
         pdf = pdf_orig.copy()
-        kdf = kdf_orig.copy()
+        psdf = psdf_orig.copy()
         pser1 = pdf.max_speed
         pser2 = pdf.shield
-        kser1 = kdf.max_speed
-        kser2 = kdf.shield
-        kdf.loc[another_kdf.max_speed < 5, ["shield"]] = -another_kdf.max_speed
+        psser1 = psdf.max_speed
+        psser2 = psdf.shield
+        psdf.loc[another_psdf.max_speed < 5, ["shield"]] = -another_psdf.max_speed
         pdf.loc[pdf.max_speed < 5, ["shield"]] = -pdf.max_speed
-        self.assert_eq(kdf, pdf)
-        self.assert_eq(kser1, pser1)
-        self.assert_eq(kser2, pser2)
+        self.assert_eq(psdf, pdf)
+        self.assert_eq(psser1, pser1)
+        self.assert_eq(psser2, pser2)
 
     def test_frame_iloc_setitem(self):
         pdf = pd.DataFrame(
@@ -1143,295 +1145,295 @@ class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
             index=["cobra", "viper", "sidewinder"],
             columns=["max_speed", "shield"],
         )
-        kdf = ps.DataFrame(pdf)
-        another_kdf = ps.DataFrame(pdf)
+        psdf = ps.DataFrame(pdf)
+        another_psdf = ps.DataFrame(pdf)
 
-        kdf.iloc[[0, 1, 2], 1] = -another_kdf.max_speed
+        psdf.iloc[[0, 1, 2], 1] = -another_psdf.max_speed
         pdf.iloc[[0, 1, 2], 1] = -pdf.max_speed
-        self.assert_eq(kdf, pdf)
+        self.assert_eq(psdf, pdf)
 
         with self.assertRaisesRegex(
             ValueError, "shape mismatch",
         ):
-            kdf.iloc[[1, 2], [1]] = -another_kdf.max_speed
+            psdf.iloc[[1, 2], [1]] = -another_psdf.max_speed
 
-        kdf.iloc[[0, 1, 2], 1] = 10 * another_kdf.max_speed
+        psdf.iloc[[0, 1, 2], 1] = 10 * another_psdf.max_speed
         pdf.iloc[[0, 1, 2], 1] = 10 * pdf.max_speed
-        self.assert_eq(kdf, pdf)
+        self.assert_eq(psdf, pdf)
 
         with self.assertRaisesRegex(ValueError, "shape mismatch"):
-            kdf.iloc[[0], 1] = 10 * another_kdf.max_speed
+            psdf.iloc[[0], 1] = 10 * another_psdf.max_speed
 
     def test_series_loc_setitem(self):
         pdf = pd.DataFrame({"x": [1, 2, 3], "y": [4, 5, 6]}, index=["cobra", "viper", "sidewinder"])
-        kdf = ps.from_pandas(pdf)
+        psdf = ps.from_pandas(pdf)
         pser = pdf.x
         psery = pdf.y
-        kser = kdf.x
-        ksery = kdf.y
+        psser = psdf.x
+        pssery = psdf.y
 
         pser_another = pd.Series([1, 2, 3], index=["cobra", "viper", "sidewinder"])
-        kser_another = ps.from_pandas(pser_another)
+        psser_another = ps.from_pandas(pser_another)
 
-        kser.loc[kser % 2 == 1] = -kser_another
+        psser.loc[psser % 2 == 1] = -psser_another
         pser.loc[pser % 2 == 1] = -pser_another
-        self.assert_eq(kser, pser)
-        self.assert_eq(kdf, pdf)
-        self.assert_eq(ksery, psery)
+        self.assert_eq(psser, pser)
+        self.assert_eq(psdf, pdf)
+        self.assert_eq(pssery, psery)
 
         pdf = pd.DataFrame({"x": [1, 2, 3], "y": [4, 5, 6]}, index=["cobra", "viper", "sidewinder"])
-        kdf = ps.from_pandas(pdf)
+        psdf = ps.from_pandas(pdf)
         pser = pdf.x
         psery = pdf.y
-        kser = kdf.x
-        ksery = kdf.y
-        kser.loc[kser_another % 2 == 1] = -kser
+        psser = psdf.x
+        pssery = psdf.y
+        psser.loc[psser_another % 2 == 1] = -psser
         pser.loc[pser_another % 2 == 1] = -pser
-        self.assert_eq(kser, pser)
-        self.assert_eq(kdf, pdf)
-        self.assert_eq(ksery, psery)
+        self.assert_eq(psser, pser)
+        self.assert_eq(psdf, pdf)
+        self.assert_eq(pssery, psery)
 
         pdf = pd.DataFrame({"x": [1, 2, 3], "y": [4, 5, 6]}, index=["cobra", "viper", "sidewinder"])
-        kdf = ps.from_pandas(pdf)
+        psdf = ps.from_pandas(pdf)
         pser = pdf.x
         psery = pdf.y
-        kser = kdf.x
-        ksery = kdf.y
-        kser.loc[kser_another % 2 == 1] = -kser
+        psser = psdf.x
+        pssery = psdf.y
+        psser.loc[psser_another % 2 == 1] = -psser
         pser.loc[pser_another % 2 == 1] = -pser
-        self.assert_eq(kser, pser)
-        self.assert_eq(kdf, pdf)
-        self.assert_eq(ksery, psery)
+        self.assert_eq(psser, pser)
+        self.assert_eq(psdf, pdf)
+        self.assert_eq(pssery, psery)
 
         pdf = pd.DataFrame({"x": [1, 2, 3], "y": [4, 5, 6]}, index=["cobra", "viper", "sidewinder"])
-        kdf = ps.from_pandas(pdf)
+        psdf = ps.from_pandas(pdf)
         pser = pdf.x
         psery = pdf.y
-        kser = kdf.x
-        ksery = kdf.y
-        kser.loc[kser_another % 2 == 1] = -kser_another
+        psser = psdf.x
+        pssery = psdf.y
+        psser.loc[psser_another % 2 == 1] = -psser_another
         pser.loc[pser_another % 2 == 1] = -pser_another
-        self.assert_eq(kser, pser)
-        self.assert_eq(kdf, pdf)
-        self.assert_eq(ksery, psery)
+        self.assert_eq(psser, pser)
+        self.assert_eq(psdf, pdf)
+        self.assert_eq(pssery, psery)
 
         pdf = pd.DataFrame({"x": [1, 2, 3], "y": [4, 5, 6]}, index=["cobra", "viper", "sidewinder"])
-        kdf = ps.from_pandas(pdf)
+        psdf = ps.from_pandas(pdf)
         pser = pdf.x
         psery = pdf.y
-        kser = kdf.x
-        ksery = kdf.y
-        kser.loc[["viper", "sidewinder"]] = -kser_another
+        psser = psdf.x
+        pssery = psdf.y
+        psser.loc[["viper", "sidewinder"]] = -psser_another
         pser.loc[["viper", "sidewinder"]] = -pser_another
-        self.assert_eq(kser, pser)
-        self.assert_eq(kdf, pdf)
-        self.assert_eq(ksery, psery)
+        self.assert_eq(psser, pser)
+        self.assert_eq(psdf, pdf)
+        self.assert_eq(pssery, psery)
 
         pdf = pd.DataFrame({"x": [1, 2, 3], "y": [4, 5, 6]}, index=["cobra", "viper", "sidewinder"])
-        kdf = ps.from_pandas(pdf)
+        psdf = ps.from_pandas(pdf)
         pser = pdf.x
         psery = pdf.y
-        kser = kdf.x
-        ksery = kdf.y
-        kser.loc[kser_another % 2 == 1] = 10
+        psser = psdf.x
+        pssery = psdf.y
+        psser.loc[psser_another % 2 == 1] = 10
         pser.loc[pser_another % 2 == 1] = 10
-        self.assert_eq(kser, pser)
-        self.assert_eq(kdf, pdf)
-        self.assert_eq(ksery, psery)
+        self.assert_eq(psser, pser)
+        self.assert_eq(psdf, pdf)
+        self.assert_eq(pssery, psery)
 
     def test_series_iloc_setitem(self):
         pdf = pd.DataFrame({"x": [1, 2, 3], "y": [4, 5, 6]}, index=["cobra", "viper", "sidewinder"])
-        kdf = ps.from_pandas(pdf)
+        psdf = ps.from_pandas(pdf)
 
         pser = pdf.x
         psery = pdf.y
-        kser = kdf.x
-        ksery = kdf.y
+        psser = psdf.x
+        pssery = psdf.y
 
         pser1 = pser + 1
-        kser1 = kser + 1
+        psser1 = psser + 1
 
         pser_another = pd.Series([1, 2, 3], index=["cobra", "viper", "sidewinder"])
-        kser_another = ps.from_pandas(pser_another)
+        psser_another = ps.from_pandas(pser_another)
 
-        kser.iloc[[0, 1, 2]] = -kser_another
+        psser.iloc[[0, 1, 2]] = -psser_another
         pser.iloc[[0, 1, 2]] = -pser_another
-        self.assert_eq(kser, pser)
-        self.assert_eq(kdf, pdf)
-        self.assert_eq(ksery, psery)
+        self.assert_eq(psser, pser)
+        self.assert_eq(psdf, pdf)
+        self.assert_eq(pssery, psery)
 
         with self.assertRaisesRegex(
             ValueError,
             "cannot set using a list-like indexer with a different length than the value",
         ):
-            kser.iloc[[1, 2]] = -kser_another
+            psser.iloc[[1, 2]] = -psser_another
 
-        kser.iloc[[0, 1, 2]] = 10 * kser_another
+        psser.iloc[[0, 1, 2]] = 10 * psser_another
         pser.iloc[[0, 1, 2]] = 10 * pser_another
-        self.assert_eq(kser, pser)
-        self.assert_eq(kdf, pdf)
-        self.assert_eq(ksery, psery)
+        self.assert_eq(psser, pser)
+        self.assert_eq(psdf, pdf)
+        self.assert_eq(pssery, psery)
 
         with self.assertRaisesRegex(
             ValueError,
             "cannot set using a list-like indexer with a different length than the value",
         ):
-            kser.iloc[[0]] = 10 * kser_another
+            psser.iloc[[0]] = 10 * psser_another
 
-        kser1.iloc[[0, 1, 2]] = -kser_another
+        psser1.iloc[[0, 1, 2]] = -psser_another
         pser1.iloc[[0, 1, 2]] = -pser_another
-        self.assert_eq(kser1, pser1)
-        self.assert_eq(kdf, pdf)
-        self.assert_eq(ksery, psery)
+        self.assert_eq(psser1, pser1)
+        self.assert_eq(psdf, pdf)
+        self.assert_eq(pssery, psery)
 
         with self.assertRaisesRegex(
             ValueError,
             "cannot set using a list-like indexer with a different length than the value",
         ):
-            kser1.iloc[[1, 2]] = -kser_another
+            psser1.iloc[[1, 2]] = -psser_another
 
         pdf = pd.DataFrame({"x": [1, 2, 3], "y": [4, 5, 6]}, index=["cobra", "viper", "sidewinder"])
-        kdf = ps.from_pandas(pdf)
+        psdf = ps.from_pandas(pdf)
 
         pser = pdf.x
         psery = pdf.y
-        kser = kdf.x
-        ksery = kdf.y
+        psser = psdf.x
+        pssery = psdf.y
 
         piloc = pser.iloc
-        kiloc = kser.iloc
+        kiloc = psser.iloc
 
-        kiloc[[0, 1, 2]] = -kser_another
+        kiloc[[0, 1, 2]] = -psser_another
         piloc[[0, 1, 2]] = -pser_another
-        self.assert_eq(kser, pser)
-        self.assert_eq(kdf, pdf)
-        self.assert_eq(ksery, psery)
+        self.assert_eq(psser, pser)
+        self.assert_eq(psdf, pdf)
+        self.assert_eq(pssery, psery)
 
         with self.assertRaisesRegex(
             ValueError,
             "cannot set using a list-like indexer with a different length than the value",
         ):
-            kiloc[[1, 2]] = -kser_another
+            kiloc[[1, 2]] = -psser_another
 
-        kiloc[[0, 1, 2]] = 10 * kser_another
+        kiloc[[0, 1, 2]] = 10 * psser_another
         piloc[[0, 1, 2]] = 10 * pser_another
-        self.assert_eq(kser, pser)
-        self.assert_eq(kdf, pdf)
-        self.assert_eq(ksery, psery)
+        self.assert_eq(psser, pser)
+        self.assert_eq(psdf, pdf)
+        self.assert_eq(pssery, psery)
 
         with self.assertRaisesRegex(
             ValueError,
             "cannot set using a list-like indexer with a different length than the value",
         ):
-            kiloc[[0]] = 10 * kser_another
+            kiloc[[0]] = 10 * psser_another
 
     def test_update(self):
         pdf = pd.DataFrame({"x": [1, 2, 3], "y": [10, 20, 30]})
-        kdf = ps.from_pandas(pdf)
+        psdf = ps.from_pandas(pdf)
 
         pser = pdf.x
-        kser = kdf.x
+        psser = psdf.x
         pser.update(pd.Series([4, 5, 6]))
-        kser.update(ps.Series([4, 5, 6]))
-        self.assert_eq(kser.sort_index(), pser.sort_index())
-        self.assert_eq(kdf.sort_index(), pdf.sort_index())
+        psser.update(ps.Series([4, 5, 6]))
+        self.assert_eq(psser.sort_index(), pser.sort_index())
+        self.assert_eq(psdf.sort_index(), pdf.sort_index())
 
     def test_where(self):
         pdf1 = pd.DataFrame({"A": [0, 1, 2, 3, 4], "B": [100, 200, 300, 400, 500]})
         pdf2 = pd.DataFrame({"A": [0, -1, -2, -3, -4], "B": [-100, -200, -300, -400, -500]})
-        kdf1 = ps.from_pandas(pdf1)
-        kdf2 = ps.from_pandas(pdf2)
+        psdf1 = ps.from_pandas(pdf1)
+        psdf2 = ps.from_pandas(pdf2)
 
-        self.assert_eq(pdf1.where(pdf2 > 100), kdf1.where(kdf2 > 100).sort_index())
+        self.assert_eq(pdf1.where(pdf2 > 100), psdf1.where(psdf2 > 100).sort_index())
 
         pdf1 = pd.DataFrame({"A": [-1, -2, -3, -4, -5], "B": [-100, -200, -300, -400, -500]})
         pdf2 = pd.DataFrame({"A": [-10, -20, -30, -40, -50], "B": [-5, -4, -3, -2, -1]})
-        kdf1 = ps.from_pandas(pdf1)
-        kdf2 = ps.from_pandas(pdf2)
+        psdf1 = ps.from_pandas(pdf1)
+        psdf2 = ps.from_pandas(pdf2)
 
-        self.assert_eq(pdf1.where(pdf2 < -250), kdf1.where(kdf2 < -250).sort_index())
+        self.assert_eq(pdf1.where(pdf2 < -250), psdf1.where(psdf2 < -250).sort_index())
 
         # multi-index columns
         pdf1 = pd.DataFrame({("X", "A"): [0, 1, 2, 3, 4], ("X", "B"): [100, 200, 300, 400, 500]})
         pdf2 = pd.DataFrame(
             {("X", "A"): [0, -1, -2, -3, -4], ("X", "B"): [-100, -200, -300, -400, -500]}
         )
-        kdf1 = ps.from_pandas(pdf1)
-        kdf2 = ps.from_pandas(pdf2)
+        psdf1 = ps.from_pandas(pdf1)
+        psdf2 = ps.from_pandas(pdf2)
 
-        self.assert_eq(pdf1.where(pdf2 > 100), kdf1.where(kdf2 > 100).sort_index())
+        self.assert_eq(pdf1.where(pdf2 > 100), psdf1.where(psdf2 > 100).sort_index())
 
     def test_mask(self):
         pdf1 = pd.DataFrame({"A": [0, 1, 2, 3, 4], "B": [100, 200, 300, 400, 500]})
         pdf2 = pd.DataFrame({"A": [0, -1, -2, -3, -4], "B": [-100, -200, -300, -400, -500]})
-        kdf1 = ps.from_pandas(pdf1)
-        kdf2 = ps.from_pandas(pdf2)
+        psdf1 = ps.from_pandas(pdf1)
+        psdf2 = ps.from_pandas(pdf2)
 
-        self.assert_eq(pdf1.mask(pdf2 < 100), kdf1.mask(kdf2 < 100).sort_index())
+        self.assert_eq(pdf1.mask(pdf2 < 100), psdf1.mask(psdf2 < 100).sort_index())
 
         pdf1 = pd.DataFrame({"A": [-1, -2, -3, -4, -5], "B": [-100, -200, -300, -400, -500]})
         pdf2 = pd.DataFrame({"A": [-10, -20, -30, -40, -50], "B": [-5, -4, -3, -2, -1]})
-        kdf1 = ps.from_pandas(pdf1)
-        kdf2 = ps.from_pandas(pdf2)
+        psdf1 = ps.from_pandas(pdf1)
+        psdf2 = ps.from_pandas(pdf2)
 
-        self.assert_eq(pdf1.mask(pdf2 > -250), kdf1.mask(kdf2 > -250).sort_index())
+        self.assert_eq(pdf1.mask(pdf2 > -250), psdf1.mask(psdf2 > -250).sort_index())
 
         # multi-index columns
         pdf1 = pd.DataFrame({("X", "A"): [0, 1, 2, 3, 4], ("X", "B"): [100, 200, 300, 400, 500]})
         pdf2 = pd.DataFrame(
             {("X", "A"): [0, -1, -2, -3, -4], ("X", "B"): [-100, -200, -300, -400, -500]}
         )
-        kdf1 = ps.from_pandas(pdf1)
-        kdf2 = ps.from_pandas(pdf2)
+        psdf1 = ps.from_pandas(pdf1)
+        psdf2 = ps.from_pandas(pdf2)
 
-        self.assert_eq(pdf1.mask(pdf2 < 100), kdf1.mask(kdf2 < 100).sort_index())
+        self.assert_eq(pdf1.mask(pdf2 < 100), psdf1.mask(psdf2 < 100).sort_index())
 
     def test_multi_index_column_assignment_frame(self):
         pdf = pd.DataFrame({"a": [1, 2, 3, 2], "b": [4.0, 2.0, 3.0, 1.0]})
         pdf.columns = pd.MultiIndex.from_tuples([("a", "x"), ("a", "y")])
-        kdf = ps.DataFrame(pdf)
+        psdf = ps.DataFrame(pdf)
 
-        kdf["c"] = ps.Series([10, 20, 30, 20])
+        psdf["c"] = ps.Series([10, 20, 30, 20])
         pdf["c"] = pd.Series([10, 20, 30, 20])
 
-        kdf[("d", "x")] = ps.Series([100, 200, 300, 200], name="1")
+        psdf[("d", "x")] = ps.Series([100, 200, 300, 200], name="1")
         pdf[("d", "x")] = pd.Series([100, 200, 300, 200], name="1")
 
-        kdf[("d", "y")] = ps.Series([1000, 2000, 3000, 2000], name=("1", "2"))
+        psdf[("d", "y")] = ps.Series([1000, 2000, 3000, 2000], name=("1", "2"))
         pdf[("d", "y")] = pd.Series([1000, 2000, 3000, 2000], name=("1", "2"))
 
-        kdf["e"] = ps.Series([10000, 20000, 30000, 20000], name=("1", "2", "3"))
+        psdf["e"] = ps.Series([10000, 20000, 30000, 20000], name=("1", "2", "3"))
         pdf["e"] = pd.Series([10000, 20000, 30000, 20000], name=("1", "2", "3"))
 
-        kdf[[("f", "x"), ("f", "y")]] = ps.DataFrame(
+        psdf[[("f", "x"), ("f", "y")]] = ps.DataFrame(
             {"1": [100000, 200000, 300000, 200000], "2": [1000000, 2000000, 3000000, 2000000]}
         )
         pdf[[("f", "x"), ("f", "y")]] = pd.DataFrame(
             {"1": [100000, 200000, 300000, 200000], "2": [1000000, 2000000, 3000000, 2000000]}
         )
 
-        self.assert_eq(repr(kdf.sort_index()), repr(pdf))
+        self.assert_eq(repr(psdf.sort_index()), repr(pdf))
 
         with self.assertRaisesRegex(KeyError, "Key length \\(3\\) exceeds index depth \\(2\\)"):
-            kdf[("1", "2", "3")] = ps.Series([100, 200, 300, 200])
+            psdf[("1", "2", "3")] = ps.Series([100, 200, 300, 200])
 
     def test_series_dot(self):
         pser = pd.Series([90, 91, 85], index=[2, 4, 1])
-        kser = ps.from_pandas(pser)
+        psser = ps.from_pandas(pser)
         pser_other = pd.Series([90, 91, 85], index=[2, 4, 1])
-        kser_other = ps.from_pandas(pser_other)
+        psser_other = ps.from_pandas(pser_other)
 
-        self.assert_eq(kser.dot(kser_other), pser.dot(pser_other))
+        self.assert_eq(psser.dot(psser_other), pser.dot(pser_other))
 
-        kser_other = ps.Series([90, 91, 85], index=[1, 2, 4])
+        psser_other = ps.Series([90, 91, 85], index=[1, 2, 4])
         pser_other = pd.Series([90, 91, 85], index=[1, 2, 4])
 
-        self.assert_eq(kser.dot(kser_other), pser.dot(pser_other))
+        self.assert_eq(psser.dot(psser_other), pser.dot(pser_other))
 
         # length of index is different
-        kser_other = ps.Series([90, 91, 85, 100], index=[2, 4, 1, 0])
+        psser_other = ps.Series([90, 91, 85, 100], index=[2, 4, 1, 0])
         with self.assertRaisesRegex(ValueError, "matrices are not aligned"):
-            kser.dot(kser_other)
+            psser.dot(psser_other)
 
         # for MultiIndex
         midx = pd.MultiIndex(
@@ -1439,281 +1441,283 @@ class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
             [[0, 0, 0, 1, 1, 1, 2, 2, 2], [0, 1, 2, 0, 1, 2, 0, 1, 2]],
         )
         pser = pd.Series([45, 200, 1.2, 30, 250, 1.5, 320, 1, 0.3], index=midx)
-        kser = ps.from_pandas(pser)
+        psser = ps.from_pandas(pser)
         pser_other = pd.Series([-450, 20, 12, -30, -250, 15, -320, 100, 3], index=midx)
-        kser_other = ps.from_pandas(pser_other)
-        self.assert_eq(kser.dot(kser_other), pser.dot(pser_other))
+        psser_other = ps.from_pandas(pser_other)
+        self.assert_eq(psser.dot(psser_other), pser.dot(pser_other))
 
         pser = pd.Series([0, 1, 2, 3])
-        kser = ps.from_pandas(pser)
+        psser = ps.from_pandas(pser)
 
         # DataFrame "other" without Index/MultiIndex as columns
         pdf = pd.DataFrame([[0, 1], [-2, 3], [4, -5], [6, 7]])
-        kdf = ps.from_pandas(pdf)
-        self.assert_eq(kser.dot(kdf), pser.dot(pdf))
+        psdf = ps.from_pandas(pdf)
+        self.assert_eq(psser.dot(psdf), pser.dot(pdf))
 
         # DataFrame "other" with Index as columns
         pdf.columns = pd.Index(["x", "y"])
-        kdf = ps.from_pandas(pdf)
-        self.assert_eq(kser.dot(kdf), pser.dot(pdf))
+        psdf = ps.from_pandas(pdf)
+        self.assert_eq(psser.dot(psdf), pser.dot(pdf))
         pdf.columns = pd.Index(["x", "y"], name="cols_name")
-        kdf = ps.from_pandas(pdf)
-        self.assert_eq(kser.dot(kdf), pser.dot(pdf))
+        psdf = ps.from_pandas(pdf)
+        self.assert_eq(psser.dot(psdf), pser.dot(pdf))
 
         pdf = pdf.reindex([1, 0, 2, 3])
-        kdf = ps.from_pandas(pdf)
-        self.assert_eq(kser.dot(kdf), pser.dot(pdf))
+        psdf = ps.from_pandas(pdf)
+        self.assert_eq(psser.dot(psdf), pser.dot(pdf))
 
         # DataFrame "other" with MultiIndex as columns
         pdf.columns = pd.MultiIndex.from_tuples([("a", "x"), ("b", "y")])
-        kdf = ps.from_pandas(pdf)
-        self.assert_eq(kser.dot(kdf), pser.dot(pdf))
+        psdf = ps.from_pandas(pdf)
+        self.assert_eq(psser.dot(psdf), pser.dot(pdf))
         pdf.columns = pd.MultiIndex.from_tuples(
             [("a", "x"), ("b", "y")], names=["cols_name1", "cols_name2"]
         )
-        kdf = ps.from_pandas(pdf)
-        self.assert_eq(kser.dot(kdf), pser.dot(pdf))
+        psdf = ps.from_pandas(pdf)
+        self.assert_eq(psser.dot(psdf), pser.dot(pdf))
 
-        kser = ps.DataFrame({"a": [1, 2, 3], "b": [4, 5, 6]}).b
-        pser = kser.to_pandas()
-        kdf = ps.DataFrame({"c": [7, 8, 9]})
-        pdf = kdf.to_pandas()
-        self.assert_eq(kser.dot(kdf), pser.dot(pdf))
+        psser = ps.DataFrame({"a": [1, 2, 3], "b": [4, 5, 6]}).b
+        pser = psser.to_pandas()
+        psdf = ps.DataFrame({"c": [7, 8, 9]})
+        pdf = psdf.to_pandas()
+        self.assert_eq(psser.dot(psdf), pser.dot(pdf))
 
     def test_frame_dot(self):
         pdf = pd.DataFrame([[0, 1, -2, -1], [1, 1, 1, 1]])
-        kdf = ps.from_pandas(pdf)
+        psdf = ps.from_pandas(pdf)
 
         pser = pd.Series([1, 1, 2, 1])
-        kser = ps.from_pandas(pser)
-        self.assert_eq(kdf.dot(kser), pdf.dot(pser))
+        psser = ps.from_pandas(pser)
+        self.assert_eq(psdf.dot(psser), pdf.dot(pser))
 
         # Index reorder
         pser = pser.reindex([1, 0, 2, 3])
-        kser = ps.from_pandas(pser)
-        self.assert_eq(kdf.dot(kser), pdf.dot(pser))
+        psser = ps.from_pandas(pser)
+        self.assert_eq(psdf.dot(psser), pdf.dot(pser))
 
         # ser with name
         pser.name = "ser"
-        kser = ps.from_pandas(pser)
-        self.assert_eq(kdf.dot(kser), pdf.dot(pser))
+        psser = ps.from_pandas(pser)
+        self.assert_eq(psdf.dot(psser), pdf.dot(pser))
 
         # df with MultiIndex as column (ser with MultiIndex)
         arrays = [[1, 1, 2, 2], ["red", "blue", "red", "blue"]]
         pidx = pd.MultiIndex.from_arrays(arrays, names=("number", "color"))
         pser = pd.Series([1, 1, 2, 1], index=pidx)
         pdf = pd.DataFrame([[0, 1, -2, -1], [1, 1, 1, 1]], columns=pidx)
-        kdf = ps.from_pandas(pdf)
-        kser = ps.from_pandas(pser)
-        self.assert_eq(kdf.dot(kser), pdf.dot(pser))
+        psdf = ps.from_pandas(pdf)
+        psser = ps.from_pandas(pser)
+        self.assert_eq(psdf.dot(psser), pdf.dot(pser))
 
         # df with Index as column (ser with Index)
         pidx = pd.Index([1, 2, 3, 4], name="number")
         pser = pd.Series([1, 1, 2, 1], index=pidx)
         pdf = pd.DataFrame([[0, 1, -2, -1], [1, 1, 1, 1]], columns=pidx)
-        kdf = ps.from_pandas(pdf)
-        kser = ps.from_pandas(pser)
-        self.assert_eq(kdf.dot(kser), pdf.dot(pser))
+        psdf = ps.from_pandas(pdf)
+        psser = ps.from_pandas(pser)
+        self.assert_eq(psdf.dot(psser), pdf.dot(pser))
 
         # df with Index
         pdf.index = pd.Index(["x", "y"], name="char")
-        kdf = ps.from_pandas(pdf)
-        self.assert_eq(kdf.dot(kser), pdf.dot(pser))
+        psdf = ps.from_pandas(pdf)
+        self.assert_eq(psdf.dot(psser), pdf.dot(pser))
 
         # df with MultiIndex
         pdf.index = pd.MultiIndex.from_arrays([[1, 1], ["red", "blue"]], names=("number", "color"))
-        kdf = ps.from_pandas(pdf)
-        self.assert_eq(kdf.dot(kser), pdf.dot(pser))
+        psdf = ps.from_pandas(pdf)
+        self.assert_eq(psdf.dot(psser), pdf.dot(pser))
 
         pdf = pd.DataFrame([[1, 2], [3, 4]])
-        kdf = ps.from_pandas(pdf)
-        self.assert_eq(kdf.dot(kdf[0]), pdf.dot(pdf[0]))
-        self.assert_eq(kdf.dot(kdf[0] * 10), pdf.dot(pdf[0] * 10))
-        self.assert_eq((kdf + 1).dot(kdf[0] * 10), (pdf + 1).dot(pdf[0] * 10))
+        psdf = ps.from_pandas(pdf)
+        self.assert_eq(psdf.dot(psdf[0]), pdf.dot(pdf[0]))
+        self.assert_eq(psdf.dot(psdf[0] * 10), pdf.dot(pdf[0] * 10))
+        self.assert_eq((psdf + 1).dot(psdf[0] * 10), (pdf + 1).dot(pdf[0] * 10))
 
     def test_to_series_comparison(self):
-        kidx1 = ps.Index([1, 2, 3, 4, 5])
-        kidx2 = ps.Index([1, 2, 3, 4, 5])
+        psidx1 = ps.Index([1, 2, 3, 4, 5])
+        psidx2 = ps.Index([1, 2, 3, 4, 5])
 
-        self.assert_eq((kidx1.to_series() == kidx2.to_series()).all(), True)
+        self.assert_eq((psidx1.to_series() == psidx2.to_series()).all(), True)
 
-        kidx1.name = "koalas"
-        kidx2.name = "koalas"
+        psidx1.name = "koalas"
+        psidx2.name = "koalas"
 
-        self.assert_eq((kidx1.to_series() == kidx2.to_series()).all(), True)
+        self.assert_eq((psidx1.to_series() == psidx2.to_series()).all(), True)
 
     def test_series_repeat(self):
         pser1 = pd.Series(["a", "b", "c"], name="a")
         pser2 = pd.Series([10, 20, 30], name="rep")
-        kser1 = ps.from_pandas(pser1)
-        kser2 = ps.from_pandas(pser2)
+        psser1 = ps.from_pandas(pser1)
+        psser2 = ps.from_pandas(pser2)
 
-        self.assert_eq(kser1.repeat(kser2).sort_index(), pser1.repeat(pser2).sort_index())
+        self.assert_eq(psser1.repeat(psser2).sort_index(), pser1.repeat(pser2).sort_index())
 
     def test_series_ops(self):
         pser1 = pd.Series([1, 2, 3, 4, 5, 6, 7], name="x", index=[11, 12, 13, 14, 15, 16, 17])
         pser2 = pd.Series([1, 2, 3, 4, 5, 6, 7], name="x", index=[11, 12, 13, 14, 15, 16, 17])
         pidx1 = pd.Index([10, 11, 12, 13, 14, 15, 16], name="x")
-        kser1 = ps.from_pandas(pser1)
-        kser2 = ps.from_pandas(pser2)
-        kidx1 = ps.from_pandas(pidx1)
+        psser1 = ps.from_pandas(pser1)
+        psser2 = ps.from_pandas(pser2)
+        psidx1 = ps.from_pandas(pidx1)
 
-        self.assert_eq((kser1 + 1 + 10 * kser2).sort_index(), (pser1 + 1 + 10 * pser2).sort_index())
         self.assert_eq(
-            (kser1 + 1 + 10 * kser2.rename()).sort_index(),
+            (psser1 + 1 + 10 * psser2).sort_index(), (pser1 + 1 + 10 * pser2).sort_index()
+        )
+        self.assert_eq(
+            (psser1 + 1 + 10 * psser2.rename()).sort_index(),
             (pser1 + 1 + 10 * pser2.rename()).sort_index(),
         )
         self.assert_eq(
-            (kser1.rename() + 1 + 10 * kser2).sort_index(),
+            (psser1.rename() + 1 + 10 * psser2).sort_index(),
             (pser1.rename() + 1 + 10 * pser2).sort_index(),
         )
         self.assert_eq(
-            (kser1.rename() + 1 + 10 * kser2.rename()).sort_index(),
+            (psser1.rename() + 1 + 10 * psser2.rename()).sort_index(),
             (pser1.rename() + 1 + 10 * pser2.rename()).sort_index(),
         )
 
-        self.assert_eq(kser1 + 1 + 10 * kidx1, pser1 + 1 + 10 * pidx1)
-        self.assert_eq(kser1.rename() + 1 + 10 * kidx1, pser1.rename() + 1 + 10 * pidx1)
-        self.assert_eq(kser1 + 1 + 10 * kidx1.rename(None), pser1 + 1 + 10 * pidx1.rename(None))
+        self.assert_eq(psser1 + 1 + 10 * psidx1, pser1 + 1 + 10 * pidx1)
+        self.assert_eq(psser1.rename() + 1 + 10 * psidx1, pser1.rename() + 1 + 10 * pidx1)
+        self.assert_eq(psser1 + 1 + 10 * psidx1.rename(None), pser1 + 1 + 10 * pidx1.rename(None))
         self.assert_eq(
-            kser1.rename() + 1 + 10 * kidx1.rename(None),
+            psser1.rename() + 1 + 10 * psidx1.rename(None),
             pser1.rename() + 1 + 10 * pidx1.rename(None),
         )
 
-        self.assert_eq(kidx1 + 1 + 10 * kser1, pidx1 + 1 + 10 * pser1)
-        self.assert_eq(kidx1 + 1 + 10 * kser1.rename(), pidx1 + 1 + 10 * pser1.rename())
-        self.assert_eq(kidx1.rename(None) + 1 + 10 * kser1, pidx1.rename(None) + 1 + 10 * pser1)
+        self.assert_eq(psidx1 + 1 + 10 * psser1, pidx1 + 1 + 10 * pser1)
+        self.assert_eq(psidx1 + 1 + 10 * psser1.rename(), pidx1 + 1 + 10 * pser1.rename())
+        self.assert_eq(psidx1.rename(None) + 1 + 10 * psser1, pidx1.rename(None) + 1 + 10 * pser1)
         self.assert_eq(
-            kidx1.rename(None) + 1 + 10 * kser1.rename(),
+            psidx1.rename(None) + 1 + 10 * psser1.rename(),
             pidx1.rename(None) + 1 + 10 * pser1.rename(),
         )
 
         pidx2 = pd.Index([11, 12, 13])
-        kidx2 = ps.from_pandas(pidx2)
+        psidx2 = ps.from_pandas(pidx2)
 
         with self.assertRaisesRegex(
             ValueError, "operands could not be broadcast together with shapes"
         ):
-            kser1 + kidx2
+            psser1 + psidx2
 
         with self.assertRaisesRegex(
             ValueError, "operands could not be broadcast together with shapes"
         ):
-            kidx2 + kser1
+            psidx2 + psser1
 
     def test_index_ops(self):
         pidx1 = pd.Index([1, 2, 3, 4, 5], name="x")
         pidx2 = pd.Index([6, 7, 8, 9, 10], name="x")
-        kidx1 = ps.from_pandas(pidx1)
-        kidx2 = ps.from_pandas(pidx2)
+        psidx1 = ps.from_pandas(pidx1)
+        psidx2 = ps.from_pandas(pidx2)
 
-        self.assert_eq(kidx1 * 10 + kidx2, pidx1 * 10 + pidx2)
-        self.assert_eq(kidx1.rename(None) * 10 + kidx2, pidx1.rename(None) * 10 + pidx2)
+        self.assert_eq(psidx1 * 10 + psidx2, pidx1 * 10 + pidx2)
+        self.assert_eq(psidx1.rename(None) * 10 + psidx2, pidx1.rename(None) * 10 + pidx2)
 
         if LooseVersion(pd.__version__) >= LooseVersion("1.0"):
-            self.assert_eq(kidx1 * 10 + kidx2.rename(None), pidx1 * 10 + pidx2.rename(None))
+            self.assert_eq(psidx1 * 10 + psidx2.rename(None), pidx1 * 10 + pidx2.rename(None))
         else:
             self.assert_eq(
-                kidx1 * 10 + kidx2.rename(None), (pidx1 * 10 + pidx2.rename(None)).rename(None)
+                psidx1 * 10 + psidx2.rename(None), (pidx1 * 10 + pidx2.rename(None)).rename(None)
             )
 
         pidx3 = pd.Index([11, 12, 13])
-        kidx3 = ps.from_pandas(pidx3)
+        psidx3 = ps.from_pandas(pidx3)
 
         with self.assertRaisesRegex(
             ValueError, "operands could not be broadcast together with shapes"
         ):
-            kidx1 + kidx3
+            psidx1 + psidx3
 
         pidx1 = pd.Index([1, 2, 3, 4, 5], name="a")
         pidx2 = pd.Index([6, 7, 8, 9, 10], name="a")
         pidx3 = pd.Index([11, 12, 13, 14, 15], name="x")
-        kidx1 = ps.from_pandas(pidx1)
-        kidx2 = ps.from_pandas(pidx2)
-        kidx3 = ps.from_pandas(pidx3)
+        psidx1 = ps.from_pandas(pidx1)
+        psidx2 = ps.from_pandas(pidx2)
+        psidx3 = ps.from_pandas(pidx3)
 
-        self.assert_eq(kidx1 * 10 + kidx2, pidx1 * 10 + pidx2)
+        self.assert_eq(psidx1 * 10 + psidx2, pidx1 * 10 + pidx2)
 
         if LooseVersion(pd.__version__) >= LooseVersion("1.0"):
-            self.assert_eq(kidx1 * 10 + kidx3, pidx1 * 10 + pidx3)
+            self.assert_eq(psidx1 * 10 + psidx3, pidx1 * 10 + pidx3)
         else:
-            self.assert_eq(kidx1 * 10 + kidx3, (pidx1 * 10 + pidx3).rename(None))
+            self.assert_eq(psidx1 * 10 + psidx3, (pidx1 * 10 + pidx3).rename(None))
 
     def test_align(self):
         pdf1 = pd.DataFrame({"a": [1, 2, 3], "b": ["a", "b", "c"]}, index=[10, 20, 30])
         pdf2 = pd.DataFrame({"a": [4, 5, 6], "c": ["d", "e", "f"]}, index=[10, 11, 12])
-        kdf1 = ps.from_pandas(pdf1)
-        kdf2 = ps.from_pandas(pdf2)
+        psdf1 = ps.from_pandas(pdf1)
+        psdf2 = ps.from_pandas(pdf2)
 
         for join in ["outer", "inner", "left", "right"]:
             for axis in [None, 0]:
-                kdf_l, kdf_r = kdf1.align(kdf2, join=join, axis=axis)
+                psdf_l, psdf_r = psdf1.align(psdf2, join=join, axis=axis)
                 pdf_l, pdf_r = pdf1.align(pdf2, join=join, axis=axis)
-                self.assert_eq(kdf_l.sort_index(), pdf_l.sort_index())
-                self.assert_eq(kdf_r.sort_index(), pdf_r.sort_index())
+                self.assert_eq(psdf_l.sort_index(), pdf_l.sort_index())
+                self.assert_eq(psdf_r.sort_index(), pdf_r.sort_index())
 
         pser1 = pd.Series([7, 8, 9], index=[10, 11, 12])
         pser2 = pd.Series(["g", "h", "i"], index=[10, 20, 30])
-        kser1 = ps.from_pandas(pser1)
-        kser2 = ps.from_pandas(pser2)
+        psser1 = ps.from_pandas(pser1)
+        psser2 = ps.from_pandas(pser2)
 
         for join in ["outer", "inner", "left", "right"]:
-            kser_l, kser_r = kser1.align(kser2, join=join)
+            psser_l, psser_r = psser1.align(psser2, join=join)
             pser_l, pser_r = pser1.align(pser2, join=join)
-            self.assert_eq(kser_l.sort_index(), pser_l.sort_index())
-            self.assert_eq(kser_r.sort_index(), pser_r.sort_index())
+            self.assert_eq(psser_l.sort_index(), pser_l.sort_index())
+            self.assert_eq(psser_r.sort_index(), pser_r.sort_index())
 
-            kdf_l, kser_r = kdf1.align(kser1, join=join, axis=0)
+            psdf_l, psser_r = psdf1.align(psser1, join=join, axis=0)
             pdf_l, pser_r = pdf1.align(pser1, join=join, axis=0)
-            self.assert_eq(kdf_l.sort_index(), pdf_l.sort_index())
-            self.assert_eq(kser_r.sort_index(), pser_r.sort_index())
+            self.assert_eq(psdf_l.sort_index(), pdf_l.sort_index())
+            self.assert_eq(psser_r.sort_index(), pser_r.sort_index())
 
-            kser_l, kdf_r = kser1.align(kdf1, join=join)
+            psser_l, psdf_r = psser1.align(psdf1, join=join)
             pser_l, pdf_r = pser1.align(pdf1, join=join)
-            self.assert_eq(kser_l.sort_index(), pser_l.sort_index())
-            self.assert_eq(kdf_r.sort_index(), pdf_r.sort_index())
+            self.assert_eq(psser_l.sort_index(), pser_l.sort_index())
+            self.assert_eq(psdf_r.sort_index(), pdf_r.sort_index())
 
         # multi-index columns
         pdf3 = pd.DataFrame(
             {("x", "a"): [4, 5, 6], ("y", "c"): ["d", "e", "f"]}, index=[10, 11, 12]
         )
-        kdf3 = ps.from_pandas(pdf3)
+        psdf3 = ps.from_pandas(pdf3)
         pser3 = pdf3[("y", "c")]
-        kser3 = kdf3[("y", "c")]
+        psser3 = psdf3[("y", "c")]
 
         for join in ["outer", "inner", "left", "right"]:
-            kdf_l, kdf_r = kdf1.align(kdf3, join=join, axis=0)
+            psdf_l, psdf_r = psdf1.align(psdf3, join=join, axis=0)
             pdf_l, pdf_r = pdf1.align(pdf3, join=join, axis=0)
-            self.assert_eq(kdf_l.sort_index(), pdf_l.sort_index())
-            self.assert_eq(kdf_r.sort_index(), pdf_r.sort_index())
+            self.assert_eq(psdf_l.sort_index(), pdf_l.sort_index())
+            self.assert_eq(psdf_r.sort_index(), pdf_r.sort_index())
 
-            kser_l, kser_r = kser1.align(kser3, join=join)
+            psser_l, psser_r = psser1.align(psser3, join=join)
             pser_l, pser_r = pser1.align(pser3, join=join)
-            self.assert_eq(kser_l.sort_index(), pser_l.sort_index())
-            self.assert_eq(kser_r.sort_index(), pser_r.sort_index())
+            self.assert_eq(psser_l.sort_index(), pser_l.sort_index())
+            self.assert_eq(psser_r.sort_index(), pser_r.sort_index())
 
-            kdf_l, kser_r = kdf1.align(kser3, join=join, axis=0)
+            psdf_l, psser_r = psdf1.align(psser3, join=join, axis=0)
             pdf_l, pser_r = pdf1.align(pser3, join=join, axis=0)
-            self.assert_eq(kdf_l.sort_index(), pdf_l.sort_index())
-            self.assert_eq(kser_r.sort_index(), pser_r.sort_index())
+            self.assert_eq(psdf_l.sort_index(), pdf_l.sort_index())
+            self.assert_eq(psser_r.sort_index(), pser_r.sort_index())
 
-            kser_l, kdf_r = kser3.align(kdf1, join=join)
+            psser_l, psdf_r = psser3.align(psdf1, join=join)
             pser_l, pdf_r = pser3.align(pdf1, join=join)
-            self.assert_eq(kser_l.sort_index(), pser_l.sort_index())
-            self.assert_eq(kdf_r.sort_index(), pdf_r.sort_index())
+            self.assert_eq(psser_l.sort_index(), pser_l.sort_index())
+            self.assert_eq(psdf_r.sort_index(), pdf_r.sort_index())
 
-        self.assertRaises(ValueError, lambda: kdf1.align(kdf3, axis=None))
-        self.assertRaises(ValueError, lambda: kdf1.align(kdf3, axis=1))
+        self.assertRaises(ValueError, lambda: psdf1.align(psdf3, axis=None))
+        self.assertRaises(ValueError, lambda: psdf1.align(psdf3, axis=1))
 
     def test_pow_and_rpow(self):
         pser = pd.Series([1, 2, np.nan])
-        kser = ps.from_pandas(pser)
+        psser = ps.from_pandas(pser)
         pser_other = pd.Series([np.nan, 2, 3])
-        kser_other = ps.from_pandas(pser_other)
+        psser_other = ps.from_pandas(pser_other)
 
-        self.assert_eq(pser.pow(pser_other), kser.pow(kser_other).sort_index())
-        self.assert_eq(pser ** pser_other, (kser ** kser_other).sort_index())
-        self.assert_eq(pser.rpow(pser_other), kser.rpow(kser_other).sort_index())
+        self.assert_eq(pser.pow(pser_other), psser.pow(psser_other).sort_index())
+        self.assert_eq(pser ** pser_other, (psser ** psser_other).sort_index())
+        self.assert_eq(pser.rpow(pser_other), psser.rpow(psser_other).sort_index())
 
     def test_shift(self):
         pdf = pd.DataFrame(
@@ -1724,14 +1728,14 @@ class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
             },
             index=np.random.rand(5),
         )
-        kdf = ps.from_pandas(pdf)
+        psdf = ps.from_pandas(pdf)
 
         self.assert_eq(
-            pdf.shift().loc[pdf["Col1"] == 20].astype(int), kdf.shift().loc[kdf["Col1"] == 20]
+            pdf.shift().loc[pdf["Col1"] == 20].astype(int), psdf.shift().loc[psdf["Col1"] == 20]
         )
         self.assert_eq(
             pdf["Col2"].shift().loc[pdf["Col1"] == 20].astype(int),
-            kdf["Col2"].shift().loc[kdf["Col1"] == 20],
+            psdf["Col2"].shift().loc[psdf["Col1"] == 20],
         )
 
     def test_diff(self):
@@ -1743,14 +1747,14 @@ class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
             },
             index=np.random.rand(5),
         )
-        kdf = ps.from_pandas(pdf)
+        psdf = ps.from_pandas(pdf)
 
         self.assert_eq(
-            pdf.diff().loc[pdf["Col1"] == 20].astype(int), kdf.diff().loc[kdf["Col1"] == 20]
+            pdf.diff().loc[pdf["Col1"] == 20].astype(int), psdf.diff().loc[psdf["Col1"] == 20]
         )
         self.assert_eq(
             pdf["Col2"].diff().loc[pdf["Col1"] == 20].astype(int),
-            kdf["Col2"].diff().loc[kdf["Col1"] == 20],
+            psdf["Col2"].diff().loc[psdf["Col1"] == 20],
         )
 
     def test_rank(self):
@@ -1762,11 +1766,11 @@ class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
             },
             index=np.random.rand(5),
         )
-        kdf = ps.from_pandas(pdf)
+        psdf = ps.from_pandas(pdf)
 
-        self.assert_eq(pdf.rank().loc[pdf["Col1"] == 20], kdf.rank().loc[kdf["Col1"] == 20])
+        self.assert_eq(pdf.rank().loc[pdf["Col1"] == 20], psdf.rank().loc[psdf["Col1"] == 20])
         self.assert_eq(
-            pdf["Col2"].rank().loc[pdf["Col1"] == 20], kdf["Col2"].rank().loc[kdf["Col1"] == 20]
+            pdf["Col2"].rank().loc[pdf["Col1"] == 20], psdf["Col2"].rank().loc[psdf["Col1"] == 20]
         )
 
 
@@ -1796,30 +1800,30 @@ class OpsOnDiffFramesDisabledTest(PandasOnSparkTestCase, SQLTestUtils):
         )
 
     @property
-    def kdf1(self):
+    def psdf1(self):
         return ps.from_pandas(self.pdf1)
 
     @property
-    def kdf2(self):
+    def psdf2(self):
         return ps.from_pandas(self.pdf2)
 
     def test_arithmetic(self):
         with self.assertRaisesRegex(ValueError, "Cannot combine the series or dataframe"):
-            self.kdf1.a - self.kdf2.b
+            self.psdf1.a - self.psdf2.b
 
         with self.assertRaisesRegex(ValueError, "Cannot combine the series or dataframe"):
-            self.kdf1.a - self.kdf2.a
+            self.psdf1.a - self.psdf2.a
 
         with self.assertRaisesRegex(ValueError, "Cannot combine the series or dataframe"):
-            self.kdf1["a"] - self.kdf2["a"]
+            self.psdf1["a"] - self.psdf2["a"]
 
         with self.assertRaisesRegex(ValueError, "Cannot combine the series or dataframe"):
-            self.kdf1 - self.kdf2
+            self.psdf1 - self.psdf2
 
     def test_assignment(self):
         with self.assertRaisesRegex(ValueError, "Cannot combine the series or dataframe"):
-            kdf = ps.from_pandas(self.pdf1)
-            kdf["c"] = self.kdf1.a
+            psdf = ps.from_pandas(self.pdf1)
+            psdf["c"] = self.psdf1.a
 
     def test_frame_loc_setitem(self):
         pdf = pd.DataFrame(
@@ -1827,17 +1831,17 @@ class OpsOnDiffFramesDisabledTest(PandasOnSparkTestCase, SQLTestUtils):
             index=["cobra", "viper", "sidewinder"],
             columns=["max_speed", "shield"],
         )
-        kdf = ps.DataFrame(pdf)
-        another_kdf = ps.DataFrame(pdf)
+        psdf = ps.DataFrame(pdf)
+        another_psdf = ps.DataFrame(pdf)
 
         with self.assertRaisesRegex(ValueError, "Cannot combine the series or dataframe"):
-            kdf.loc[["viper", "sidewinder"], ["shield"]] = another_kdf.max_speed
+            psdf.loc[["viper", "sidewinder"], ["shield"]] = another_psdf.max_speed
 
         with self.assertRaisesRegex(ValueError, "Cannot combine the series or dataframe"):
-            kdf.loc[another_kdf.max_speed < 5, ["shield"]] = -kdf.max_speed
+            psdf.loc[another_psdf.max_speed < 5, ["shield"]] = -psdf.max_speed
 
         with self.assertRaisesRegex(ValueError, "Cannot combine the series or dataframe"):
-            kdf.loc[another_kdf.max_speed < 5, ["shield"]] = -another_kdf.max_speed
+            psdf.loc[another_psdf.max_speed < 5, ["shield"]] = -another_psdf.max_speed
 
     def test_frame_iloc_setitem(self):
         pdf = pd.DataFrame(
@@ -1845,96 +1849,96 @@ class OpsOnDiffFramesDisabledTest(PandasOnSparkTestCase, SQLTestUtils):
             index=["cobra", "viper", "sidewinder"],
             columns=["max_speed", "shield"],
         )
-        kdf = ps.DataFrame(pdf)
-        another_kdf = ps.DataFrame(pdf)
+        psdf = ps.DataFrame(pdf)
+        another_psdf = ps.DataFrame(pdf)
 
         with self.assertRaisesRegex(ValueError, "Cannot combine the series or dataframe"):
-            kdf.iloc[[1, 2], [1]] = another_kdf.max_speed.iloc[[1, 2]]
+            psdf.iloc[[1, 2], [1]] = another_psdf.max_speed.iloc[[1, 2]]
 
     def test_series_loc_setitem(self):
         pser = pd.Series([1, 2, 3], index=["cobra", "viper", "sidewinder"])
-        kser = ps.from_pandas(pser)
+        psser = ps.from_pandas(pser)
 
         pser_another = pd.Series([1, 2, 3], index=["cobra", "viper", "sidewinder"])
-        kser_another = ps.from_pandas(pser_another)
+        psser_another = ps.from_pandas(pser_another)
 
         with self.assertRaisesRegex(ValueError, "Cannot combine the series or dataframe"):
-            kser.loc[kser % 2 == 1] = -kser_another
+            psser.loc[psser % 2 == 1] = -psser_another
 
         with self.assertRaisesRegex(ValueError, "Cannot combine the series or dataframe"):
-            kser.loc[kser_another % 2 == 1] = -kser
+            psser.loc[psser_another % 2 == 1] = -psser
 
         with self.assertRaisesRegex(ValueError, "Cannot combine the series or dataframe"):
-            kser.loc[kser_another % 2 == 1] = -kser_another
+            psser.loc[psser_another % 2 == 1] = -psser_another
 
     def test_series_iloc_setitem(self):
         pser = pd.Series([1, 2, 3], index=["cobra", "viper", "sidewinder"])
-        kser = ps.from_pandas(pser)
+        psser = ps.from_pandas(pser)
 
         pser_another = pd.Series([1, 2, 3], index=["cobra", "viper", "sidewinder"])
-        kser_another = ps.from_pandas(pser_another)
+        psser_another = ps.from_pandas(pser_another)
 
         with self.assertRaisesRegex(ValueError, "Cannot combine the series or dataframe"):
-            kser.iloc[[1]] = -kser_another.iloc[[1]]
+            psser.iloc[[1]] = -psser_another.iloc[[1]]
 
     def test_where(self):
         pdf1 = pd.DataFrame({"A": [0, 1, 2, 3, 4], "B": [100, 200, 300, 400, 500]})
         pdf2 = pd.DataFrame({"A": [0, -1, -2, -3, -4], "B": [-100, -200, -300, -400, -500]})
-        kdf1 = ps.from_pandas(pdf1)
-        kdf2 = ps.from_pandas(pdf2)
+        psdf1 = ps.from_pandas(pdf1)
+        psdf2 = ps.from_pandas(pdf2)
 
         with self.assertRaisesRegex(ValueError, "Cannot combine the series or dataframe"):
-            kdf1.where(kdf2 > 100)
+            psdf1.where(psdf2 > 100)
 
         pdf1 = pd.DataFrame({"A": [-1, -2, -3, -4, -5], "B": [-100, -200, -300, -400, -500]})
         pdf2 = pd.DataFrame({"A": [-10, -20, -30, -40, -50], "B": [-5, -4, -3, -2, -1]})
-        kdf1 = ps.from_pandas(pdf1)
-        kdf2 = ps.from_pandas(pdf2)
+        psdf1 = ps.from_pandas(pdf1)
+        psdf2 = ps.from_pandas(pdf2)
 
         with self.assertRaisesRegex(ValueError, "Cannot combine the series or dataframe"):
-            kdf1.where(kdf2 < -250)
+            psdf1.where(psdf2 < -250)
 
     def test_mask(self):
         pdf1 = pd.DataFrame({"A": [0, 1, 2, 3, 4], "B": [100, 200, 300, 400, 500]})
         pdf2 = pd.DataFrame({"A": [0, -1, -2, -3, -4], "B": [-100, -200, -300, -400, -500]})
-        kdf1 = ps.from_pandas(pdf1)
-        kdf2 = ps.from_pandas(pdf2)
+        psdf1 = ps.from_pandas(pdf1)
+        psdf2 = ps.from_pandas(pdf2)
 
         with self.assertRaisesRegex(ValueError, "Cannot combine the series or dataframe"):
-            kdf1.mask(kdf2 < 100)
+            psdf1.mask(psdf2 < 100)
 
         pdf1 = pd.DataFrame({"A": [-1, -2, -3, -4, -5], "B": [-100, -200, -300, -400, -500]})
         pdf2 = pd.DataFrame({"A": [-10, -20, -30, -40, -50], "B": [-5, -4, -3, -2, -1]})
-        kdf1 = ps.from_pandas(pdf1)
-        kdf2 = ps.from_pandas(pdf2)
+        psdf1 = ps.from_pandas(pdf1)
+        psdf2 = ps.from_pandas(pdf2)
 
         with self.assertRaisesRegex(ValueError, "Cannot combine the series or dataframe"):
-            kdf1.mask(kdf2 > -250)
+            psdf1.mask(psdf2 > -250)
 
     def test_align(self):
         pdf1 = pd.DataFrame({"a": [1, 2, 3], "b": ["a", "b", "c"]}, index=[10, 20, 30])
         pdf2 = pd.DataFrame({"a": [4, 5, 6], "c": ["d", "e", "f"]}, index=[10, 11, 12])
-        kdf1 = ps.from_pandas(pdf1)
-        kdf2 = ps.from_pandas(pdf2)
+        psdf1 = ps.from_pandas(pdf1)
+        psdf2 = ps.from_pandas(pdf2)
 
         with self.assertRaisesRegex(ValueError, "Cannot combine the series or dataframe"):
-            kdf1.align(kdf2)
+            psdf1.align(psdf2)
 
         with self.assertRaisesRegex(ValueError, "Cannot combine the series or dataframe"):
-            kdf1.align(kdf2, axis=0)
+            psdf1.align(psdf2, axis=0)
 
     def test_pow_and_rpow(self):
         pser = pd.Series([1, 2, np.nan])
-        kser = ps.from_pandas(pser)
+        psser = ps.from_pandas(pser)
         pser_other = pd.Series([np.nan, 2, 3])
-        kser_other = ps.from_pandas(pser_other)
+        psser_other = ps.from_pandas(pser_other)
 
         with self.assertRaisesRegex(ValueError, "Cannot combine the series or dataframe"):
-            kser.pow(kser_other)
+            psser.pow(psser_other)
         with self.assertRaisesRegex(ValueError, "Cannot combine the series or dataframe"):
-            kser ** kser_other
+            psser ** psser_other
         with self.assertRaisesRegex(ValueError, "Cannot combine the series or dataframe"):
-            kser.rpow(kser_other)
+            psser.rpow(psser_other)
 
 
 if __name__ == "__main__":
@@ -1942,7 +1946,8 @@ if __name__ == "__main__":
 
     try:
         import xmlrunner  # type: ignore[import]
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
+
+        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)
