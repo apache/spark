@@ -20,7 +20,7 @@ package org.apache.spark.sql.jdbc
 import java.sql.{SQLFeatureNotSupportedException, Types}
 import java.util.Locale
 
-import org.apache.spark.sql.types.{BooleanType, DataType, LongType, MetadataBuilder}
+import org.apache.spark.sql.types._
 
 private case object MySQLDialect extends JdbcDialect {
 
