@@ -236,7 +236,9 @@ class AdaptiveQueryExecSuite
   test("Empty stage coalesced to 1-partition RDD") {
     withSQLConf(
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
-      SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "true") {
+      SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "true",
+      SQLConf.ADAPTIVE_OPTIMIZER_EXCLUDED_RULES.key ->
+        EliminateUnnecessaryJoin.getClass.getName.stripSuffix("$")) {
       val df1 = spark.range(10).withColumn("a", 'id)
       val df2 = spark.range(10).withColumn("b", 'id)
       withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
