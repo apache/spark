@@ -87,9 +87,9 @@ class BooleanOpsTest(PandasOnSparkTestCase, TestCasesUtils):
                 self.assertRaises(TypeError, lambda: self.psser / psser)
 
     def test_floordiv(self):
-        # float is always returned in Koalas
+        # float is always returned in pandas-on-Spark
         self.assert_eq((self.pser // 1).astype("float"), self.psser // 1)
-        # in pandas, 1 // 0.1 = 9.0; in Koalas, 1 // 0.1 = 10.0
+        # in pandas, 1 // 0.1 = 9.0; in pandas-on-Spark, 1 // 0.1 = 10.0
         # self.assert_eq(self.pser // 0.1, self.psser // 0.1)
 
         with option_context("compute.ops_on_diff_frames", True):
@@ -112,7 +112,7 @@ class BooleanOpsTest(PandasOnSparkTestCase, TestCasesUtils):
                 self.assertRaises(TypeError, lambda: self.psser % psser)
 
     def test_pow(self):
-        # float is always returned in Koalas
+        # float is always returned in pandas-on-Spark
         self.assert_eq((self.pser ** 1).astype("float"), self.psser ** 1)
         self.assert_eq(self.pser ** 0.1, self.psser ** 0.1)
 
@@ -161,7 +161,7 @@ class BooleanOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         self.assertRaises(TypeError, lambda: datetime.datetime(1994, 1, 1) // self.psser)
 
     def test_rpow(self):
-        # float is returned always in Koalas
+        # float is returned always in pandas-on-Spark
         self.assert_eq((1 ** self.pser).astype(float), 1 ** self.psser)
         self.assert_eq(0.1 ** self.pser, 0.1 ** self.psser)
         self.assertRaises(TypeError, lambda: "x" ** self.psser)
