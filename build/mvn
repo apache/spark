@@ -51,7 +51,7 @@ install_app() {
     # check if we already have the tarball
     # check if we have curl installed
     # download application
-    if [ ! -f "${local_tarball}" -a $(command -v curl) ]; then
+    if [ ! -f "${local_tarball}" -a "$(command -v curl)" ]; then
       echo "exec: curl ${curl_opts} ${remote_tarball}" 1>&2
       curl ${curl_opts} "${remote_tarball}" > "${local_tarball}"
       if [ ! -z "${checksum_suffix}" ]; then
@@ -60,7 +60,7 @@ install_app() {
       fi
     fi
     # if the file still doesn't exist, lets try `wget` and cross our fingers
-    if [ ! -f "${local_tarball}" -a $(command -v wget) ]; then
+    if [ ! -f "${local_tarball}" -a "$(command -v wget)" ]; then
       echo "exec: wget ${wget_opts} ${remote_tarball}" 1>&2
       wget ${wget_opts} -O "${local_tarball}" "${remote_tarball}"
       if [ ! -z "${checksum_suffix}" ]; then
