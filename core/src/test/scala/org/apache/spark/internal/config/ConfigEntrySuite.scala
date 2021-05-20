@@ -145,7 +145,7 @@ class ConfigEntrySuite extends SparkFunSuite {
     def createEntry(default: Int): ConfigEntry[Int] =
       ConfigBuilder(testKey("checkValue"))
         .intConf
-        .checkValue(value => value >= 0, "'-1' is invalid. value must be non-negative")
+        .checkValue(value => value >= 0, "value must be non-negative")
         .createWithDefault(default)
 
     val conf = new SparkConf()
