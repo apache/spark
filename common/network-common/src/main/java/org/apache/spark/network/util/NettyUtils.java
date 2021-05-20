@@ -52,6 +52,10 @@ public class NettyUtils {
   private static final PooledByteBufAllocator[] _sharedPooledByteBufAllocator =
       new PooledByteBufAllocator[2];
 
+  public static long freeDirectMemory() {
+    return PlatformDependent.maxDirectMemory() - PlatformDependent.usedDirectMemory();
+  }
+
   /** Creates a new ThreadFactory which prefixes each thread with the given name. */
   public static ThreadFactory createThreadFactory(String threadPoolPrefix) {
     return new DefaultThreadFactory(threadPoolPrefix, true);
