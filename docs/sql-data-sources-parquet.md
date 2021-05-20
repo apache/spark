@@ -261,12 +261,6 @@ Data source options of Parquet can be set via:
 <table class="table">
   <tr><th><b>Property Name</b></th><th><b>Default</b></th><th><b>Meaning</b></th><th><b>Scope</b></th></tr>
   <tr>
-    <td><code>maxFilesPerTrigger</code></td>
-    <td>None</td>
-    <td>Sets the maximum number of new files to be considered in every trigger.</td>
-    <td>read</td>
-  </tr>
-  <tr>
     <td><code>datetimeRebaseMode</code></td>
     <td>The SQL config <code>spark.sql.parquet</code> <code>.datetimeRebaseModeInRead</code> which is <code>EXCEPTION</code> by default</td>
     <td>The <code>datetimeRebaseMode</code> option allows to specify the rebasing mode for the values of the <code>DATE</code>, <code>TIMESTAMP_MILLIS</code>, <code>TIMESTAMP_MICROS</code> logical types from the Julian to Proleptic Gregorian calendar.<br>
