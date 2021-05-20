@@ -2123,7 +2123,7 @@ class Frame(object, metaclass=ABCMeta):
 
         See Also
         --------
-        koalas.groupby.GroupBy
+        pyspark.pandas.groupby.GroupBy
 
         Examples
         --------

@@ -400,7 +400,7 @@ class GroupBy(object, metaclass=ABCMeta):
 
         Returns
         -------
-        koalas.Series or koalas.DataFrame
+        pyspark.pandas.Series or pyspark.pandas.DataFrame
 
         See Also
         --------

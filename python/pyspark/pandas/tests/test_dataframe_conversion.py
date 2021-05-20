@@ -88,9 +88,9 @@ class DataFrameConversionTest(PandasOnSparkTestCase, SQLTestUtils, TestUtils):
         self.assert_eq(got, expected)
 
     @staticmethod
-    def get_excel_dfs(koalas_location, pandas_location):
+    def get_excel_dfs(pandas_on_spark_location, pandas_location):
         return {
-            "got": pd.read_excel(koalas_location, index_col=0),
+            "got": pd.read_excel(pandas_on_spark_location, index_col=0),
             "expected": pd.read_excel(pandas_location, index_col=0),
         }
 
@@ -98,46 +98,46 @@ class DataFrameConversionTest(PandasOnSparkTestCase, SQLTestUtils, TestUtils):
     def test_to_excel(self):
         with self.temp_dir() as dirpath:
             pandas_location = dirpath + "/" + "output1.xlsx"
-            koalas_location = dirpath + "/" + "output2.xlsx"
+            pandas_on_spark_location = dirpath + "/" + "output2.xlsx"
 
             pdf = self.pdf
             psdf = self.psdf
-            psdf.to_excel(koalas_location)
+            psdf.to_excel(pandas_on_spark_location)
             pdf.to_excel(pandas_location)
-            dataframes = self.get_excel_dfs(koalas_location, pandas_location)
+            dataframes = self.get_excel_dfs(pandas_on_spark_location, pandas_location)
             self.assert_eq(dataframes["got"], dataframes["expected"])
 
-            psdf.a.to_excel(koalas_location)
+            psdf.a.to_excel(pandas_on_spark_location)
             pdf.a.to_excel(pandas_location)
-            dataframes = self.get_excel_dfs(koalas_location, pandas_location)
+            dataframes = self.get_excel_dfs(pandas_on_spark_location, pandas_location)
             self.assert_eq(dataframes["got"], dataframes["expected"])
 
             pdf = pd.DataFrame({"a": [1, None, 3], "b": ["one", "two", None]}, index=[0, 1, 3])
 
             psdf = ps.from_pandas(pdf)
 
-            psdf.to_excel(koalas_location, na_rep="null")
+            psdf.to_excel(pandas_on_spark_location, na_rep="null")
             pdf.to_excel(pandas_location, na_rep="null")
-            dataframes = self.get_excel_dfs(koalas_location, pandas_location)
+            dataframes = self.get_excel_dfs(pandas_on_spark_location, pandas_location)
             self.assert_eq(dataframes["got"], dataframes["expected"])
 
             pdf = pd.DataFrame({"a": [1.0, 2.0, 3.0], "b": [4.0, 5.0, 6.0]}, index=[0, 1, 3])
 
             psdf = ps.from_pandas(pdf)
 
-            psdf.to_excel(koalas_location, float_format="%.1f")
+            psdf.to_excel(pandas_on_spark_location, float_format="%.1f")
             pdf.to_excel(pandas_location, float_format="%.1f")
-            dataframes = self.get_excel_dfs(koalas_location, pandas_location)
+            dataframes = self.get_excel_dfs(pandas_on_spark_location, pandas_location)
             self.assert_eq(dataframes["got"], dataframes["expected"])
 
-            psdf.to_excel(koalas_location, header=False)
+            psdf.to_excel(pandas_on_spark_location, header=False)
             pdf.to_excel(pandas_location, header=False)
-            dataframes = self.get_excel_dfs(koalas_location, pandas_location)
+            dataframes = self.get_excel_dfs(pandas_on_spark_location, pandas_location)
             self.assert_eq(dataframes["got"], dataframes["expected"])
 
-            psdf.to_excel(koalas_location, index=False)
+            psdf.to_excel(pandas_on_spark_location, index=False)
             pdf.to_excel(pandas_location, index=False)
-            dataframes = self.get_excel_dfs(koalas_location, pandas_location)
+            dataframes = self.get_excel_dfs(pandas_on_spark_location, pandas_location)
             self.assert_eq(dataframes["got"], dataframes["expected"])
 
     def test_to_json(self):
