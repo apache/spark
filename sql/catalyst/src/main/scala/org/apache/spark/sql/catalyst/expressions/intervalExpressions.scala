@@ -402,7 +402,7 @@ case class MakeDuration(
   override def third: Expression = mins
   override def fourth: Expression = secs
 
-  // Accept `secs` as DecimalType to avoid loosing precision of microseconds while converting
+  // Accept `secs` as DecimalType to avoid loosing precision of microseconds when converting
   // them to the fractional part of `secs`.
   override def inputTypes: Seq[AbstractDataType] = Seq(
     IntegerType, IntegerType, IntegerType, DecimalType(Decimal.MAX_LONG_DIGITS, 6))
