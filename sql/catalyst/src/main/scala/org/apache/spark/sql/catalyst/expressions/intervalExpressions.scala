@@ -346,7 +346,6 @@ case class MakeInterval(
     )
 }
 
-// scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(days, hours, mins, secs) - Make duration from days, hours, mins and secs.",
   arguments = """
@@ -365,7 +364,6 @@ case class MakeInterval(
   """,
   since = "3.2.0",
   group = "datetime_funcs")
-// scalastyle:on line.size.limit
 case class MakeDuration(
     days: Expression,
     hours: Expression,
@@ -439,7 +437,7 @@ case class MakeDuration(
     })
   }
 
-  override def prettyName: String = "make_day_time_interval"
+  override def prettyName: String = "make_duration"
 
   override protected def withNewChildrenInternal(
       days: Expression,

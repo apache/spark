@@ -279,7 +279,7 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
-  test("make duration") {
+  test("SPARK-35130: make duration") {
     def check(
         days: Int = 0,
         hours: Int = 0,
@@ -309,7 +309,7 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       micros = Int.MaxValue)
   }
 
-  test("ANSI mode: make duration") {
+  test("SPARK-35130: ANSI mode make duration") {
     def check(
         days: Int = 0,
         hours: Int = 0,
