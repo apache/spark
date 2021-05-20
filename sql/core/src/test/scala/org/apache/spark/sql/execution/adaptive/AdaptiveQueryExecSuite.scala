@@ -1307,6 +1307,74 @@ class AdaptiveQueryExecSuite
     }
   }
 
+  test("SPARK-35455: Enhance EliminateUnnecessaryJoin - single join") {
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      Seq(
+        // left semi join and empty left side
+        ("SELECT * FROM (SELECT * FROM testData WHERE key = 0)t1 LEFT SEMI JOIN testData2 t2 ON " +
+          "t1.key = t2.a", true),
+        // left anti join and empty left side
+        ("SELECT * FROM (SELECT * FROM testData WHERE key = 0)t1 LEFT ANTI JOIN testData2 t2 ON " +
+          "t1.key = t2.a", true),
+        // left outer join and empty left side
+        ("SELECT * FROM (SELECT * FROM testData WHERE key = 0)t1 LEFT JOIN testData2 t2 ON " +
+          "t1.key = t2.a", true),
+        // left outer join and non-empty left side
+        ("SELECT * FROM testData t1 LEFT JOIN testData2 t2 ON " +
+          "t1.key = t2.a", false),
+        // right outer join and empty right side
+        ("SELECT * FROM testData t1 RIGHT JOIN (SELECT * FROM testData2 WHERE b = 0)t2 ON " +
+          "t1.key = t2.a", true),
+        // right outer join and non-empty right side
+        ("SELECT * FROM testData t1 RIGHT JOIN testData2 t2 ON " +
+          "t1.key = t2.a", false),
+        // full outer join and both side empty
+        ("SELECT * FROM (SELECT * FROM testData WHERE key = 0)t1 FULL JOIN " +
+          "(SELECT * FROM testData2 WHERE b = 0)t2 ON t1.key = t2.a", true),
+        // full outer join and left side empty right side non-empty
+        ("SELECT * FROM (SELECT * FROM testData WHERE key = 0)t1 FULL JOIN " +
+          "testData2 t2 ON t1.key = t2.a", false)
+      ).foreach { case (query, isEliminated) =>
+        val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(query)
+        assert(findTopLevelBaseJoin(plan).size == 1)
+        assert(findTopLevelBaseJoin(adaptivePlan).isEmpty == isEliminated)
+      }
+    }
+  }
+
+  test("SPARK-35455: Enhance EliminateUnnecessaryJoin - multi join") {
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      Seq(
+        ("""
+         |SELECT * FROM testData t1
+         | JOIN (SELECT * FROM testData2 WHERE b = 0) t2 ON t1.key = t2.a
+         | LEFT JOIN testData2 t3 ON t1.key = t3.a
+         |""".stripMargin, 0),
+        ("""
+         |SELECT * FROM (SELECT * FROM testData WHERE key = 0) t1
+         | LEFT ANTI JOIN testData2 t2
+         | FULL JOIN (SELECT * FROM testData2 WHERE b = 0) t3 ON t1.key = t3.a
+         |""".stripMargin, 0),
+        ("""
+         |SELECT * FROM testData t1
+         | LEFT SEMI JOIN (SELECT * FROM testData2 WHERE b = 0)
+         | RIGHT JOIN testData2
+         |""".stripMargin, 1),
+        ("""
+         |SELECT * FROM testData t1
+         | FULL JOIN (SELECT * FROM testData2 WHERE b = 0) t1
+         | FULL JOIN (SELECT * FROM testData WHERE key = 0) t2
+         |""".stripMargin, 2)
+      ).foreach { case (query, joinNum) =>
+        val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(query)
+        assert(findTopLevelBaseJoin(plan).size == 2)
+        assert(findTopLevelBaseJoin(adaptivePlan).size == joinNum)
+      }
+    }
+  }
+
   test("SPARK-32753: Only copy tags to node with no tags") {
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
       withTempView("v1") {
