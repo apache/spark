@@ -560,3 +560,68 @@ jobs:
       with:
         name: unit-tests-log-tpcds--8-hadoop3.2-hive2.3
         path: "**/target/unit-tests.log"
+
+  docker-integration-tests:
+    name: Run integration tests
+    runs-on: ubuntu-20.04
+    env:
+      SPARK_LOCAL_IP: localhost
+    steps:
+    - name: Checkout Spark repository
+      uses: actions/checkout@v2
+    - name: Cache Scala, SBT and Maven
+      uses: actions/cache@v2
+      with:
+        path: |
+          build/apache-maven-*
+          build/scala-*
+          build/*.jar
+          ~/.sbt
+        key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
+        restore-keys: |
+          build-
+    - name: Cache Coursier local repository
+      uses: actions/cache@v2
+      with:
+        path: ~/.cache/coursier
+        key: integration-tests-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+        restore-keys: |
+          integration-tests-coursier-
+    - name: Install Java 8
+      uses: actions/setup-java@v1
+      with:
+        java-version: 8
+    - name: Cache Oracle docker images
+      id: cache-oracle-docker-images
+      uses: actions/cache@v2
+      with:
+        path: ./oracle-docker-images
+        # NOTE: The last hash value should synchronize with the `ref` value in the following step
+        # to check out the `oracle/docker-images` repository.
+        key: integration-tests-3e352a22618070595f823977a0fd1a3a8071a83c
+    - name: Checkout Oracle docker images repository
+      if: steps.cache-oracle-docker-images.outputs.cache-hit != 'true'
+      uses: actions/checkout@v2
+      with:
+        repository: oracle/docker-images
+        ref: 3e352a22618070595f823977a0fd1a3a8071a83c
+        path: ./oracle-docker-images
+    - name: Build Oracle docker images
+      run: |
+        cd oracle-docker-images/OracleDatabase/SingleInstance/dockerfiles && ./buildDockerImage.sh -v 18.4.0 -x
+    - name: Run integration tests
+      run: |
+        export ORACLE_DOCKER_IMAGE_NAME=oracle/database:18.4.0-xe
+        ./build/sbt -Pdocker-integration-tests "docker-integration-tests/testOnly *Suite"
+    - name: Upload test results to report
+      if: always()
+      uses: actions/upload-artifact@v2
+      with:
+        name: test-results-integration-tests--8-hadoop3.2-hive2.3
+        path: "**/target/test-reports/*.xml"
+    - name: Upload unit tests log files
+      if: failure()
+      uses: actions/upload-artifact@v2
+      with:
+        name: unit-tests-log-integration-tests--8-hadoop3.2-hive2.3
+        path: "**/target/unit-tests.log"
