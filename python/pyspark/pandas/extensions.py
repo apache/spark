@@ -18,9 +18,9 @@ from typing import Callable, Generic, Optional, Type, TypeVar, Union, TYPE_CHECK
 import warnings
 
 if TYPE_CHECKING:
-    from pyspark.pandas.frame import DataFrame
-    from pyspark.pandas.indexes import Index
-    from pyspark.pandas.series import Series
+    from pyspark.pandas.frame import DataFrame  # noqa: F401 (SPARK-34943)
+    from pyspark.pandas.indexes import Index  # noqa: F401 (SPARK-34943)
+    from pyspark.pandas.series import Series  # noqa: F401 (SPARK-34943)
 
 
 T = TypeVar("T")

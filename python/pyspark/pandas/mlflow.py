@@ -18,7 +18,7 @@
 """
 MLflow-related functions to load models and apply them to pandas-on-Spark dataframes.
 """
-from typing import List, Tuple, Union
+from typing import List, Tuple, Union  # noqa: F401 (SPARK-34943)
 
 from pyspark.sql.types import DataType
 import pandas as pd
