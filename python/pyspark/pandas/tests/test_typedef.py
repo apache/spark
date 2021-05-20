@@ -298,7 +298,7 @@ class TypeHintTests(unittest.TestCase):
 
         self.assertRaisesRegex(TypeError, "object.*not understood", try_infer_return_type)
 
-    def test_as_spark_type_koalas_dtype(self):
+    def test_as_spark_type_pandas_on_spark_dtype(self):
         type_mapper = {
             # binary
             np.character: (np.character, BinaryType()),
