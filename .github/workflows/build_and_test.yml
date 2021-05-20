@@ -322,11 +322,9 @@ jobs:
       if: github.repository != 'apache/spark'
       id: sync-branch
       run: |
-        apache_spark_ref=`git rev-parse HEAD`
         git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit"
-        echo "::set-output name=APACHE_SPARK_REF::$apache_spark_ref"
     # Cache local repositories. Note that GitHub Actions cache has a 2G limit.
     - name: Cache Scala, SBT and Maven
       uses: actions/cache@v2
@@ -424,11 +422,9 @@ jobs:
       if: github.repository != 'apache/spark'
       id: sync-branch
       run: |
-        apache_spark_ref=`git rev-parse HEAD`
         git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit"
-        echo "::set-output name=APACHE_SPARK_REF::$apache_spark_ref"
     - name: Cache Scala, SBT and Maven
       uses: actions/cache@v2
       with:
@@ -474,11 +470,9 @@ jobs:
       if: github.repository != 'apache/spark'
       id: sync-branch
       run: |
-        apache_spark_ref=`git rev-parse HEAD`
         git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit"
-        echo "::set-output name=APACHE_SPARK_REF::$apache_spark_ref"
     - name: Cache Scala, SBT and Maven
       uses: actions/cache@v2
       with:
@@ -521,11 +515,9 @@ jobs:
       if: github.repository != 'apache/spark'
       id: sync-branch
       run: |
-        apache_spark_ref=`git rev-parse HEAD`
         git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit"
-        echo "::set-output name=APACHE_SPARK_REF::$apache_spark_ref"
     - name: Cache Scala, SBT and Maven
       uses: actions/cache@v2
       with:
@@ -569,11 +561,9 @@ jobs:
       if: github.repository != 'apache/spark'
       id: sync-branch
       run: |
-        apache_spark_ref=`git rev-parse HEAD`
         git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit"
-        echo "::set-output name=APACHE_SPARK_REF::$apache_spark_ref"
     - name: Cache Scala, SBT and Maven
       uses: actions/cache@v2
       with:
