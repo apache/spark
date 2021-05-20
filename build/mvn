@@ -74,7 +74,7 @@ install_app() {
       exit 2
     fi
     # Checksum may not have been specified; don't check if doesn't exist
-    if [ -f "${local_checksum}" ]; then
+    if [ -f "${local_checksum}" -a "$(command -v shasum)" ]; then
       echo "  ${local_tarball}" >> ${local_checksum} # two spaces + file are important!
       # Assuming SHA512 here for now
       echo "Veryfing checksum from ${local_checksum}" 1>&2
