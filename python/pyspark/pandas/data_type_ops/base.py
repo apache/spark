@@ -46,7 +46,8 @@ if TYPE_CHECKING:
 def transform_boolean_operand_to_numeric(operand: Any, spark_type: types.DataType) -> Any:
     """Transform boolean operand to the given numeric spark_type.
 
-    Return the transformed operand if the operand is boolean, otherwise return the original operand.
+    Return the transformed operand if the operand is a boolean IndexOpsMixin,
+    otherwise return the original operand.
     """
     if isinstance(operand, IndexOpsMixin) and isinstance(operand.spark.data_type, BooleanType):
         return operand.spark.transform(lambda scol: scol.cast(spark_type))
