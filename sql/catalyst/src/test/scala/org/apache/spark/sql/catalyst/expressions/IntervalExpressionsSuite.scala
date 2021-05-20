@@ -21,7 +21,6 @@ import java.time.{Duration, Period}
 import java.time.temporal.ChronoUnit
 
 import scala.language.implicitConversions
-
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion
 import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, IntervalUtils}
@@ -277,6 +276,82 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
       checkException(years = Int.MaxValue)
       checkException(weeks = Int.MaxValue)
+    }
+  }
+
+  test("make duration") {
+    def check(
+        days: Int = 0,
+        hours: Int = 0,
+        minutes: Int = 0,
+        seconds: Int = 0,
+        millis: Int = 0,
+        micros: Int = 0): Unit = {
+      val secFrac = DateTimeTestUtils.secFrac(seconds, millis, micros)
+      val durationExpr = MakeDuration(Literal(days), Literal(hours), Literal(minutes),
+        Literal(Decimal(secFrac, Decimal.MAX_LONG_DIGITS, 6)))
+      val expected = secFrac + minutes * MICROS_PER_MINUTE + hours * MICROS_PER_HOUR +
+          days * MICROS_PER_DAY
+      checkEvaluation(durationExpr, expected)
+    }
+
+    check(millis = -123)
+    check(31, 23, 59, 59, 999, 999)
+    check(31, 123, 159, 159, 1999, 1999)
+    check(days = 10000, micros = -1)
+    check(-31, -23, -59, -59, -999, -999)
+    check(days = -10000, micros = 1)
+    check(
+      hours = Int.MaxValue,
+      minutes = Int.MaxValue,
+      seconds = Int.MaxValue,
+      millis = Int.MaxValue,
+      micros = Int.MaxValue)
+  }
+
+  test("ANSI mode: make duration") {
+    def check(
+        days: Int = 0,
+        hours: Int = 0,
+        minutes: Int = 0,
+        seconds: Int = 0,
+        millis: Int = 0,
+        micros: Int = 0): Unit = {
+      val secFrac = DateTimeTestUtils.secFrac(seconds, millis, micros)
+      val durationExpr = MakeDuration(Literal(days), Literal(hours), Literal(minutes),
+        Literal(Decimal(secFrac, Decimal.MAX_LONG_DIGITS, 6)))
+      val expected = secFrac + minutes * MICROS_PER_MINUTE + hours * MICROS_PER_HOUR +
+          days * MICROS_PER_DAY
+      checkEvaluation(durationExpr, expected)
+    }
+
+    def checkException(
+        days: Int = 0,
+        hours: Int = 0,
+        minutes: Int = 0,
+        seconds: Int = 0,
+        millis: Int = 0,
+        micros: Int = 0): Unit = {
+      val secFrac = DateTimeTestUtils.secFrac(seconds, millis, micros)
+      val durationExpr = MakeDuration(Literal(days), Literal(hours), Literal(minutes),
+        Literal(Decimal(secFrac, Decimal.MAX_LONG_DIGITS, 6)))
+      checkExceptionInExpression[ArithmeticException](durationExpr, EmptyRow, "")
+    }
+
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      check(millis = -123)
+      check(31, 23, 59, 59, 999, 999)
+      check(days = 10000, micros = -1)
+      check(-31, -23, -59, -59, -999, -999)
+      check(days = -10000, micros = 1)
+      check(
+        hours = Int.MaxValue,
+        minutes = Int.MaxValue,
+        seconds = Int.MaxValue,
+        millis = Int.MaxValue,
+        micros = Int.MaxValue)
+
+      checkException(days = Int.MaxValue)
     }
   }
 

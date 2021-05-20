@@ -346,6 +346,109 @@ case class MakeInterval(
     )
 }
 
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(days, hours, mins, secs) - Make duration from days, hours, mins and secs.",
+  arguments = """
+    Arguments:
+      * days - the number of days, positive or negative
+      * hours - the number of hours, positive or negative
+      * mins - the number of minutes, positive or negative
+      * secs - the number of seconds with the fractional part in microsecond precision.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(1, 12, 30, 01.001001);
+       1 days 12 hours 30 minutes 1.001001 seconds
+      > SELECT _FUNC_(100, null, 3);
+       NULL
+  """,
+  since = "3.2.0",
+  group = "datetime_funcs")
+// scalastyle:on line.size.limit
+case class MakeDuration(
+    days: Expression,
+    hours: Expression,
+    mins: Expression,
+    secs: Expression,
+    failOnError: Boolean = SQLConf.get.ansiEnabled)
+    extends QuaternaryExpression with ImplicitCastInputTypes with NullIntolerant {
+
+  def this(
+      days: Expression,
+      hours: Expression,
+      mins: Expression,
+      secs: Expression) = {
+    this(days, hours, mins, secs, SQLConf.get.ansiEnabled)
+  }
+  def this(
+      days: Expression,
+      hours: Expression,
+      mins: Expression) = {
+    this(days, hours, mins, Literal(Decimal(0, Decimal.MAX_LONG_DIGITS, 6)),
+      SQLConf.get.ansiEnabled)
+  }
+  def this(
+      days: Expression,
+      hours: Expression) = {
+    this(days, hours, Literal(0))
+  }
+  def this(days: Expression) =
+    this(days, Literal(0))
+  def this() = this(Literal(0))
+
+  override def first: Expression = days
+  override def second: Expression = hours
+  override def third: Expression = mins
+  override def fourth: Expression = secs
+
+  // Accept `secs` as DecimalType to avoid loosing precision of microseconds while converting
+  // them to the fractional part of `secs`.
+  override def inputTypes: Seq[AbstractDataType] = Seq(
+    IntegerType, IntegerType, IntegerType, DecimalType(Decimal.MAX_LONG_DIGITS, 6))
+  override def dataType: DataType = DayTimeIntervalType
+  override def nullable: Boolean = if (failOnError) children.exists(_.nullable) else true
+
+  override def nullSafeEval(
+      day: Any,
+      hour: Any,
+      min: Any,
+      sec: Any): Any = {
+    try {
+      IntervalUtils.makeDuration(
+        day.asInstanceOf[Int],
+        hour.asInstanceOf[Int],
+        min.asInstanceOf[Int],
+        sec.asInstanceOf[Decimal])
+    } catch {
+      case _: ArithmeticException if !failOnError => null
+    }
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    nullSafeCodeGen(ctx, ev, (day, hour, min, sec) => {
+      val iu = IntervalUtils.getClass.getName.stripSuffix("$")
+      val failOnErrorBranch = if (failOnError) "throw e;" else s"${ev.isNull} = true;"
+      s"""
+        try {
+          ${ev.value} = $iu.makeDuration($day, $hour, $min, $sec);
+        } catch (java.lang.ArithmeticException e) {
+          $failOnErrorBranch
+        }
+      """
+    })
+  }
+
+  override def prettyName: String = "make_day_time_interval"
+
+  override protected def withNewChildrenInternal(
+      days: Expression,
+      hours: Expression,
+      mins: Expression,
+      secs: Expression): MakeDuration =
+    copy(days, hours, mins, secs)
+}
+
 @ExpressionDescription(
   usage = "_FUNC_(years, months) - Make year-month interval from years, months.",
   arguments = """
