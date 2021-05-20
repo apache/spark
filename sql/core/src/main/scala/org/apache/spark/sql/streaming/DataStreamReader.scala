@@ -457,6 +457,7 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * <ul>
    * <li>`maxFilesPerTrigger` (default: no max limit): sets the maximum number of new files to be
    * considered in every trigger.</li>
+   * </ul>
    *
    * ORC-specific option(s) for reading ORC file stream can be found in
    * <a href=
