@@ -140,11 +140,6 @@ abstract class ParquetRebaseDatetimeSuite
           .select($"dict".cast(catalystType), $"plain".cast(catalystType))
         withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> tsOutputType) {
           checkDefaultLegacyRead(path2_4)
-          // By default we should fail to write ancient datetime values.
-          if (tsOutputType != "INT96") {
-            val e = intercept[SparkException](df.write.parquet(path3_0))
-            assert(e.getCause.getCause.getCause.isInstanceOf[SparkUpgradeException])
-          }
           withSQLConf(inWriteConf -> CORRECTED.toString) {
             df.write.mode("overwrite").parquet(path3_0)
           }

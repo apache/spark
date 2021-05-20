@@ -1832,9 +1832,6 @@ abstract class AvroSuite
         if (dt == "date") {
           val df = Seq(dataStr).toDF("str").select($"str".cast("date").as("dt"))
 
-          // By default we should fail to write ancient datetime values.
-          val e = intercept[SparkException](df.write.format("avro").save(path3_0))
-          assert(e.getCause.getCause.getCause.isInstanceOf[SparkUpgradeException])
           checkDefaultLegacyRead(path2_4)
 
           withSQLConf(SQLConf.AVRO_REBASE_MODE_IN_WRITE.key -> CORRECTED.toString) {
