@@ -84,7 +84,7 @@ class QueryExecution(
           qe.commandCollected.output,
           qe.commandCollected,
           qe.executedPlan,
-          qe.executedPlan.executeCollect())
+          SQLExecution.withNewExecutionId(qe, Some("command"))(qe.executedPlan.executeCollect()))
       case other => other
     }
   }
