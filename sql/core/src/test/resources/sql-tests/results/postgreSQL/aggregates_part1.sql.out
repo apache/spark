@@ -379,10 +379,7 @@ having exists (select 1 from onek b
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-
-Aggregate/Window/Generate expressions are not valid in where clause of the query.
-Expression in where clause: [(sum(DISTINCT (outer(a.four) + b.four)) = CAST(b.four AS BIGINT))]
-Invalid expressions: [sum(DISTINCT (outer(a.four) + b.four))]
+Found an aggregate function in a correlated predicate that has both outer and local references, which is not supported: sum(DISTINCT (outer(a.four) + b.four))
 
 
 -- !query

@@ -64,7 +64,7 @@ from pandas.core.dtypes.inference import is_sequence
 from pyspark import StorageLevel
 from pyspark import sql as spark
 from pyspark.sql import Column, DataFrame as SparkDataFrame, functions as F
-from pyspark.sql.functions import pandas_udf
+from pyspark.sql.functions import pandas_udf, PandasUDFType
 from pyspark.sql.types import (
     BooleanType,
     DoubleType,
@@ -2244,11 +2244,11 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             F.array(
                 *[
                     F.struct(
-                        [
+                        *[
                             F.lit(col).alias(SPARK_INDEX_NAME_FORMAT(i))
                             for i, col in enumerate(label)
-                        ]
-                        + [self._internal.spark_column_for(label).alias("value")]
+                        ],
+                        *[self._internal.spark_column_for(label).alias("value")],
                     )
                     for label in self._internal.column_labels
                 ]
@@ -2259,7 +2259,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             [
                 F.to_json(
                     F.struct(
-                        F.array([scol for scol in self._internal.index_spark_columns]).alias("a")
+                        F.array(*[scol for scol in self._internal.index_spark_columns]).alias("a")
                     )
                 ).alias("index"),
                 F.col("pairs.*"),
@@ -4762,7 +4762,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         builder = self.to_spark(index_col=index_col).write.mode(mode)
         if partition_cols is not None:
             builder.partitionBy(partition_cols)
-        builder._set_opts(compression=compression)
+        if compression is not None:
+            builder.option("compression", compression)
         builder.options(**options).format("parquet").save(path)
 
     def to_orc(
@@ -6460,7 +6461,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         4  1   True  1.0
         5  2  False  2.0
         """
-        from pyspark.sql.types import _parse_datatype_string
+        from pyspark.sql.types import _parse_datatype_string  # type: ignore
 
         if not is_list_like(include):
             include = (include,) if include is not None else ()
@@ -6769,7 +6770,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             (False, "last"): lambda x: Column(getattr(x._jc, "desc_nulls_last")()),
         }
         by = [mapper[(asc, na_position)](scol) for scol, asc in zip(by, ascending)]
-        sdf = self._internal.resolved_copy.spark_frame.sort(*(by + [NATURAL_ORDER_COLUMN_NAME]))
+        sdf = self._internal.resolved_copy.spark_frame.sort(*by, NATURAL_ORDER_COLUMN_NAME)
         kdf = DataFrame(self._internal.with_new_sdf(sdf))  # type: DataFrame
         if inplace:
             self._update_internal_frame(kdf._internal)
@@ -8067,8 +8068,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 )
             data_dtypes[self._internal.column_labels.index(column_labels)] = None  # TODO: dtype?
         sdf = update_sdf.select(
-            [scol_for(update_sdf, col) for col in self._internal.spark_column_names]
-            + list(HIDDEN_COLUMNS)
+            *[scol_for(update_sdf, col) for col in self._internal.spark_column_names],
+            *HIDDEN_COLUMNS,
         )
         internal = self._internal.with_new_sdf(sdf, data_dtypes=data_dtypes)
         self._update_internal_frame(internal, requires_same_anchor=False)
@@ -8494,8 +8495,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         formatted_perc = ["{:.0%}".format(p) for p in sorted(percentiles)]
         stats = ["count", "mean", "stddev", "min", *formatted_perc, "max"]
 
-        sdf = self._internal.spark_frame.select(*exprs).summary(stats)
-        sdf = sdf.replace("stddev", "std", subset="summary")
+        sdf = self._internal.spark_frame.select(*exprs).summary(*stats)
+        sdf = sdf.replace("stddev", "std", subset=["summary"])
 
         internal = InternalFrame(
             spark_frame=sdf,
@@ -9148,10 +9149,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             F.array(
                 *[
                     F.struct(
-                        *(
-                            [F.lit(c).alias(name) for c, name in zip(label, var_name)]
-                            + [self._internal.spark_column_for(label).alias(value_name)]
-                        )
+                        *[F.lit(c).alias(name) for c, name in zip(label, var_name)],
+                        *[self._internal.spark_column_for(label).alias(value_name)],
                     )
                     for label in column_labels
                     if label in value_vars
@@ -9323,20 +9322,20 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         structs = [
             F.struct(
-                [F.lit(value).alias(index_column)]
-                + [
+                *[F.lit(value).alias(index_column)],
+                *[
                     (
                         column_labels[label][value]
                         if value in column_labels[label]
                         else F.lit(None)
                     ).alias(name)
                     for label, name in zip(column_labels, data_columns)
-                ]
+                ],
             ).alias(value)
             for value in index_values
         ]
 
-        pairs = F.explode(F.array(structs))
+        pairs = F.explode(F.array(*structs))
 
         sdf = self._internal.spark_frame.withColumn("pairs", pairs)
         sdf = sdf.select(
@@ -9482,10 +9481,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             F.array(
                 *[
                     F.struct(
-                        *(
-                            [F.lit(c).alias(name) for c, name in zip(idx, new_index_columns)]
-                            + [self._internal.spark_column_for(idx).alias(ser_name)]
-                        )
+                        *[F.lit(c).alias(name) for c, name in zip(idx, new_index_columns)],
+                        *[self._internal.spark_column_for(idx).alias(ser_name)],
                     )
                     for idx in column_labels
                 ]
@@ -9587,8 +9584,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         for label, applied_col in zip(column_labels, applied):
             cols.append(
                 F.struct(
-                    [F.lit(col).alias(SPARK_INDEX_NAME_FORMAT(i)) for i, col in enumerate(label)]
-                    + [applied_col.alias(value_column)]
+                    *[F.lit(col).alias(SPARK_INDEX_NAME_FORMAT(i)) for i, col in enumerate(label)],
+                    *[applied_col.alias(value_column)],
                 )
             )
 
@@ -9674,8 +9671,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         for label, applied_col in zip(column_labels, applied):
             cols.append(
                 F.struct(
-                    [F.lit(col).alias(SPARK_INDEX_NAME_FORMAT(i)) for i, col in enumerate(label)]
-                    + [applied_col.alias(value_column)]
+                    *[F.lit(col).alias(SPARK_INDEX_NAME_FORMAT(i)) for i, col in enumerate(label)],
+                    *[applied_col.alias(value_column)],
                 )
             )
 
@@ -11278,10 +11275,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 return first_series(DataFrame(internal).transpose())
 
         else:
-
-            @pandas_udf(returnType=DoubleType())
-            def calculate_columns_axis(*cols):
-                return pd.concat(cols, axis=1).mad(axis=1)
+            calculate_columns_axis = pandas_udf(
+                returnType=DoubleType(), functionType=PandasUDFType.SCALAR
+            )(lambda *cols: pd.concat(cols, axis=1).mad(axis=1))
 
             internal = self._internal.copy(
                 column_labels=[None],
