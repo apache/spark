@@ -17,13 +17,21 @@
 
 package org.apache.spark.sql.jdbc
 
+import java.math.BigDecimal
+import java.sql.{Date, DriverManager, SQLException, Timestamp}
+import java.time.{Instant, LocalDate}
+import java.util.{Calendar, GregorianCalendar, Properties, TimeZone}
+
+import scala.collection.JavaConverters._
+
 import org.h2.jdbc.JdbcSQLException
 import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito._
 import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
+
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
-import org.apache.spark.sql.catalyst.{TableIdentifier, analysis}
+import org.apache.spark.sql.catalyst.{analysis, TableIdentifier}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.ShowCreateTable
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeTestUtils}
