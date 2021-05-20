@@ -16,6 +16,7 @@
 #
 
 import datetime
+from distutils.version import LooseVersion
 
 import pandas as pd
 
@@ -60,7 +61,8 @@ class DateOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         with option_context("compute.ops_on_diff_frames", True):
             for pser, psser in self.pser_psser_pairs:
                 if isinstance(psser.spark.data_type, DateType):
-                    self.assert_eq((self.pser - pser).dt.days, (self.psser - psser).sort_index())
+                    if LooseVersion(pd.__version__) >= LooseVersion("0.24.2"):
+                        self.assert_eq((self.pser - pser).dt.days, (self.psser - psser).sort_index())
                 else:
                     self.assertRaises(TypeError, lambda: self.psser - psser)
 

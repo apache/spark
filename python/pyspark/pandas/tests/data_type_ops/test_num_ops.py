@@ -16,6 +16,9 @@
 #
 
 import datetime
+from distutils.version import LooseVersion
+
+import pandas as pd
 import numpy as np
 
 from pyspark.pandas.config import option_context
@@ -30,6 +33,14 @@ class NumOpsTest(PandasOnSparkTestCase, TestCasesUtils):
     returns float32.
     The underlying reason is the respective Spark operations return DoubleType always.
     """
+    @property
+    def float_pser(self):
+        return pd.Series([1, 2, 3], dtype=float)
+
+    @property
+    def float_psser(self):
+        return ps.from_pandas(self.float_pser)
+
     def test_add(self):
         for pser, psser in self.numeric_pser_psser_pairs:
             self.assert_eq(pser + pser, psser + psser)
@@ -42,7 +53,10 @@ class NumOpsTest(PandasOnSparkTestCase, TestCasesUtils):
                 self.assertRaises(TypeError, lambda: psser + self.non_numeric_pssers["datetime"])
                 self.assertRaises(TypeError, lambda: psser + self.non_numeric_pssers["date"])
                 self.assertRaises(TypeError, lambda: psser + self.non_numeric_pssers["categorical"])
-                self.assertRaises(TypeError, lambda: psser + self.non_numeric_pssers["bool"])
+                self.assert_eq(
+                    (psser + self.non_numeric_pssers["bool"]).sort_index(),
+                    pser + self.non_numeric_psers["bool"],
+                )
 
     def test_sub(self):
         for pser, psser in self.numeric_pser_psser_pairs:
@@ -56,7 +70,10 @@ class NumOpsTest(PandasOnSparkTestCase, TestCasesUtils):
                 self.assertRaises(TypeError, lambda: psser - self.non_numeric_pssers["datetime"])
                 self.assertRaises(TypeError, lambda: psser - self.non_numeric_pssers["date"])
                 self.assertRaises(TypeError, lambda: psser - self.non_numeric_pssers["categorical"])
-                self.assertRaises(TypeError, lambda: psser - self.non_numeric_pssers["bool"])
+                self.assert_eq(
+                    (psser - self.non_numeric_pssers["bool"]).sort_index(),
+                    pser - self.non_numeric_psers["bool"],
+                )
 
     def test_mul(self):
         for pser, psser in self.numeric_pser_psser_pairs:
@@ -74,7 +91,10 @@ class NumOpsTest(PandasOnSparkTestCase, TestCasesUtils):
                 self.assertRaises(TypeError, lambda: psser * self.non_numeric_pssers["datetime"])
                 self.assertRaises(TypeError, lambda: psser * self.non_numeric_pssers["date"])
                 self.assertRaises(TypeError, lambda: psser * self.non_numeric_pssers["categorical"])
-                self.assertRaises(TypeError, lambda: psser * self.non_numeric_pssers["bool"])
+                self.assert_eq(
+                    (psser * self.non_numeric_pssers["bool"]).sort_index(),
+                    pser * self.non_numeric_psers["bool"],
+                )
 
     def test_truediv(self):
         for pser, psser in self.numeric_pser_psser_pairs:
@@ -87,7 +107,10 @@ class NumOpsTest(PandasOnSparkTestCase, TestCasesUtils):
                 self.assertRaises(TypeError, lambda: psser / self.non_numeric_pssers["datetime"])
                 self.assertRaises(TypeError, lambda: psser / self.non_numeric_pssers["date"])
                 self.assertRaises(TypeError, lambda: psser / self.non_numeric_pssers["categorical"])
-                self.assertRaises(TypeError, lambda: psser / self.non_numeric_pssers["bool"])
+            self.assert_eq(
+                (self.float_psser / self.non_numeric_pssers["bool"]).sort_index(),
+                self.float_pser / self.non_numeric_psers["bool"],
+            )
 
     def test_floordiv(self):
         for pser, psser in self.numeric_pser_psser_pairs:
@@ -99,9 +122,12 @@ class NumOpsTest(PandasOnSparkTestCase, TestCasesUtils):
                 self.assertRaises(TypeError, lambda: psser // self.non_numeric_pssers["string"])
                 self.assertRaises(TypeError, lambda: psser // self.non_numeric_pssers["datetime"])
                 self.assertRaises(TypeError, lambda: psser // self.non_numeric_pssers["date"])
-                self.assertRaises(
-                    TypeError, lambda: psser // self.non_numeric_pssers["categorical"])
-                self.assertRaises(TypeError, lambda: psser // self.non_numeric_pssers["bool"])
+                self.assertRaises(TypeError, lambda: psser // self.non_numeric_pssers["categorical"])
+                if LooseVersion(pd.__version__) >= LooseVersion("0.25.3"):
+                    self.assert_eq(
+                        (self.float_psser // self.non_numeric_pssers["bool"]).sort_index(),
+                        self.float_pser // self.non_numeric_psers["bool"],
+                    )
 
     def test_mod(self):
         for pser, psser in self.numeric_pser_psser_pairs:
@@ -113,7 +139,10 @@ class NumOpsTest(PandasOnSparkTestCase, TestCasesUtils):
                 self.assertRaises(TypeError, lambda: psser % self.non_numeric_pssers["datetime"])
                 self.assertRaises(TypeError, lambda: psser % self.non_numeric_pssers["date"])
                 self.assertRaises(TypeError, lambda: psser % self.non_numeric_pssers["categorical"])
-                self.assertRaises(TypeError, lambda: psser % self.non_numeric_pssers["bool"])
+            self.assert_eq(
+                (self.float_psser % self.non_numeric_pssers["bool"]).sort_index(),
+                self.float_pser % self.non_numeric_psers["bool"],
+            )
 
     def test_pow(self):
         for pser, psser in self.numeric_pser_psser_pairs:
@@ -125,9 +154,11 @@ class NumOpsTest(PandasOnSparkTestCase, TestCasesUtils):
                 self.assertRaises(TypeError, lambda: psser ** self.non_numeric_pssers["string"])
                 self.assertRaises(TypeError, lambda: psser ** self.non_numeric_pssers["datetime"])
                 self.assertRaises(TypeError, lambda: psser ** self.non_numeric_pssers["date"])
-                self.assertRaises(
-                    TypeError, lambda: psser ** self.non_numeric_pssers["categorical"])
-                self.assertRaises(TypeError, lambda: psser ** self.non_numeric_pssers["bool"])
+                self.assertRaises(TypeError, lambda: psser ** self.non_numeric_pssers["categorical"])
+            self.assert_eq(
+                (self.float_psser ** self.non_numeric_pssers["bool"]).sort_index(),
+                self.float_pser ** self.non_numeric_psers["bool"],
+            )
 
     def test_radd(self):
         for pser, psser in self.numeric_pser_psser_pairs:

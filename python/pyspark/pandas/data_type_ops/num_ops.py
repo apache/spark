@@ -16,17 +16,19 @@
 #
 
 import numbers
-from typing import TYPE_CHECKING, Union
+from typing import Any, TYPE_CHECKING, Union
 
 import numpy as np
 from pandas.api.types import CategoricalDtype
 
 from pyspark.sql import Column, functions as F
 from pyspark.sql.types import (
+    BooleanType,
     NumericType,
     StringType,
     TimestampType,
 )
+import pyspark.sql.types as types
 
 from pyspark.pandas.base import column_op, IndexOpsMixin, numpy_column_op
 from pyspark.pandas.data_type_ops.base import DataTypeOps
@@ -37,10 +39,33 @@ if TYPE_CHECKING:
     from pyspark.pandas.series import Series  # noqa: F401 (SPARK-34943)
 
 
+def is_valid_operand_for_numeric_arithmetic(operand: IndexOpsMixin) -> bool:
+    """Check whether the operand is valid for arithmetic operations against numerics."""
+    if isinstance(operand, numbers.Number):
+        return True
+    elif isinstance(operand, IndexOpsMixin):
+        if isinstance(operand.dtype, CategoricalDtype):
+            return False
+        else:
+            return isinstance(operand.spark.data_type, NumericType) or isinstance(
+                operand.spark.data_type, BooleanType)
+    else:
+        return False
+
+
+def transform_boolean_operand_to_numeric(operand: Any, spark_type: types.DataType) -> Any:
+    """Transform boolean operand to the given numeric spark_type.
+
+    Return the transformed operand if the operand is boolean, otherwise return the original operand.
+    """
+    if isinstance(operand, IndexOpsMixin) and isinstance(operand.spark.data_type, BooleanType):
+        return operand.spark.transform(lambda scol: scol.cast(spark_type))
+    else:
+        return operand
+
+
 class NumericOps(DataTypeOps):
-    """
-    The class for binary operations of numeric pandas-on-Spark objects.
-    """
+    """The class for binary operations of numeric pandas-on-Spark objects."""
 
     @property
     def pretty_name(self) -> str:
@@ -52,14 +77,10 @@ class NumericOps(DataTypeOps):
         ) or isinstance(right, str):
             raise TypeError("string addition can only be applied to string series or literals.")
 
-        if (
-            isinstance(right, IndexOpsMixin)
-            and (
-                isinstance(right.dtype, CategoricalDtype)
-                or (not isinstance(right.spark.data_type, NumericType))
-            )
-        ) and not isinstance(right, numbers.Number):
+        if not is_valid_operand_for_numeric_arithmetic(right):
             raise TypeError("addition can not be applied to given types.")
+
+        right = transform_boolean_operand_to_numeric(right, left.spark.data_type)
 
         return column_op(Column.__add__)(left, right)
 
@@ -69,14 +90,10 @@ class NumericOps(DataTypeOps):
         ) or isinstance(right, str):
             raise TypeError("subtraction can not be applied to string series or literals.")
 
-        if (
-            isinstance(right, IndexOpsMixin)
-            and (
-                isinstance(right.dtype, CategoricalDtype)
-                or (not isinstance(right.spark.data_type, NumericType))
-            )
-        ) and not isinstance(right, numbers.Number):
+        if not is_valid_operand_for_numeric_arithmetic(right):
             raise TypeError("subtraction can not be applied to given types.")
+
+        right = transform_boolean_operand_to_numeric(right, left.spark.data_type)
 
         return column_op(Column.__sub__)(left, right)
 
@@ -86,14 +103,10 @@ class NumericOps(DataTypeOps):
         ) or isinstance(right, str):
             raise TypeError("modulo can not be applied on string series or literals.")
 
-        if (
-            isinstance(right, IndexOpsMixin)
-            and (
-                isinstance(right.dtype, CategoricalDtype)
-                or (not isinstance(right.spark.data_type, NumericType))
-            )
-        ) and not isinstance(right, numbers.Number):
+        if not is_valid_operand_for_numeric_arithmetic(right):
             raise TypeError("modulo can not be applied to given types.")
+
+        right = transform_boolean_operand_to_numeric(right, left.spark.data_type)
 
         def mod(left, right):
             return ((left % right) + right) % right
@@ -106,14 +119,10 @@ class NumericOps(DataTypeOps):
         ) or isinstance(right, str):
             raise TypeError("exponentiation can not be applied on string series or literals.")
 
-        if (
-            isinstance(right, IndexOpsMixin)
-            and (
-                isinstance(right.dtype, CategoricalDtype)
-                or (not isinstance(right.spark.data_type, NumericType))
-            )
-        ) and not isinstance(right, numbers.Number):
+        if not is_valid_operand_for_numeric_arithmetic(right):
             raise TypeError("exponentiation can not be applied to given types.")
+
+        right = transform_boolean_operand_to_numeric(right, left.spark.data_type)
 
         def pow_func(left, right):
             return F.when(left == 1, left).otherwise(Column.__pow__(left, right))
@@ -185,14 +194,10 @@ class IntegralOps(NumericOps):
         if isinstance(right, IndexOpsMixin) and isinstance(right.spark.data_type, StringType):
             return column_op(SF.repeat)(right, left)
 
-        if (
-            isinstance(right, IndexOpsMixin)
-            and (
-                isinstance(right.dtype, CategoricalDtype)
-                or not isinstance(right.spark.data_type, NumericType)
-            )
-        ) and not isinstance(right, numbers.Number):
+        if not is_valid_operand_for_numeric_arithmetic(right):
             raise TypeError("multiplication can not be applied to given types.")
+
+        right = transform_boolean_operand_to_numeric(right, left.spark.data_type)
 
         return column_op(Column.__mul__)(left, right)
 
@@ -202,14 +207,10 @@ class IntegralOps(NumericOps):
         ) or isinstance(right, str):
             raise TypeError("division can not be applied on string series or literals.")
 
-        if (
-            isinstance(right, IndexOpsMixin)
-            and (
-                isinstance(right.dtype, CategoricalDtype)
-                or (not isinstance(right.spark.data_type, NumericType))
-            )
-        ) and not isinstance(right, numbers.Number):
+        if not is_valid_operand_for_numeric_arithmetic(right):
             raise TypeError("division can not be applied to given types.")
+
+        right = transform_boolean_operand_to_numeric(right, left.spark.data_type)
 
         def truediv(left, right):
             return F.when(F.lit(right != 0) | F.lit(right).isNull(), left.__div__(right)).otherwise(
@@ -224,14 +225,10 @@ class IntegralOps(NumericOps):
         ) or isinstance(right, str):
             raise TypeError("division can not be applied on string series or literals.")
 
-        if (
-            isinstance(right, IndexOpsMixin)
-            and (
-                isinstance(right.dtype, CategoricalDtype)
-                or (not isinstance(right.spark.data_type, NumericType))
-            )
-        ) and not isinstance(right, numbers.Number):
+        if not is_valid_operand_for_numeric_arithmetic(right):
             raise TypeError("division can not be applied to given types.")
+
+        right = transform_boolean_operand_to_numeric(right, left.spark.data_type)
 
         def floordiv(left, right):
             return F.when(F.lit(right is np.nan), np.nan).otherwise(
@@ -288,14 +285,10 @@ class FractionalOps(NumericOps):
         if isinstance(right, IndexOpsMixin) and isinstance(right.spark.data_type, TimestampType):
             raise TypeError("multiplication can not be applied to date times.")
 
-        if (
-            isinstance(right, IndexOpsMixin)
-            and (
-                isinstance(right.dtype, CategoricalDtype)
-                or not isinstance(right.spark.data_type, NumericType)
-            )
-        ) and not isinstance(right, numbers.Number):
+        if not is_valid_operand_for_numeric_arithmetic(right):
             raise TypeError("multiplication can not be applied to given types.")
+
+        right = transform_boolean_operand_to_numeric(right, left.spark.data_type)
 
         return column_op(Column.__mul__)(left, right)
 
@@ -305,14 +298,10 @@ class FractionalOps(NumericOps):
         ) or isinstance(right, str):
             raise TypeError("division can not be applied on string series or literals.")
 
-        if (
-            isinstance(right, IndexOpsMixin)
-            and (
-                isinstance(right.dtype, CategoricalDtype)
-                or (not isinstance(right.spark.data_type, NumericType))
-            )
-        ) and not isinstance(right, numbers.Number):
+        if not is_valid_operand_for_numeric_arithmetic(right):
             raise TypeError("division can not be applied to given types.")
+
+        right = transform_boolean_operand_to_numeric(right, left.spark.data_type)
 
         def truediv(left, right):
             return F.when(F.lit(right != 0) | F.lit(right).isNull(), left.__div__(right)).otherwise(
@@ -329,14 +318,10 @@ class FractionalOps(NumericOps):
         ) or isinstance(right, str):
             raise TypeError("division can not be applied on string series or literals.")
 
-        if (
-            isinstance(right, IndexOpsMixin)
-            and (
-                isinstance(right.dtype, CategoricalDtype)
-                or (not isinstance(right.spark.data_type, NumericType))
-            )
-        ) and not isinstance(right, numbers.Number):
+        if not is_valid_operand_for_numeric_arithmetic(right):
             raise TypeError("division can not be applied to given types.")
+
+        right = transform_boolean_operand_to_numeric(right, left.spark.data_type)
 
         def floordiv(left, right):
             return F.when(F.lit(right is np.nan), np.nan).otherwise(
