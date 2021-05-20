@@ -417,7 +417,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         return self._psdf._internal.select_column(self._column_label)
 
     @property
-    def _column_label(self) -> Tuple:
+    def _column_label(self) -> Optional[Tuple]:
         return self._col_label
 
     def _update_anchor(self, psdf: DataFrame):

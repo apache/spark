@@ -16,10 +16,11 @@
 #
 import datetime
 from functools import partial
-from typing import Any, Optional, Union
+from typing import Any, Optional, Union, cast, no_type_check
 
 import pandas as pd
 from pandas.api.types import is_hashable
+from pandas.tseries.offsets import DateOffset
 from pyspark._globals import _NoValue
 
 from pyspark import pandas as ps
@@ -95,6 +96,7 @@ class DatetimeIndex(Index):
     DatetimeIndex(['1970-01-01', '1970-01-01', '1970-01-01'], dtype='datetime64[ns]', freq=None)
     """
 
+    @no_type_check
     def __new__(
         cls,
         data=None,
@@ -107,14 +109,14 @@ class DatetimeIndex(Index):
         dtype=None,
         copy=False,
         name=None,
-    ):
+    ) -> "DatetimeIndex":
         if not is_hashable(name):
             raise TypeError("Index.name must be a hashable type")
 
         if isinstance(data, (Series, Index)):
             if dtype is None:
                 dtype = "datetime64[ns]"
-            return Index(data, dtype=dtype, copy=copy, name=name)
+            return cast(DatetimeIndex, Index(data, dtype=dtype, copy=copy, name=name))
 
         kwargs = dict(
             data=data,
@@ -129,7 +131,8 @@ class DatetimeIndex(Index):
         )
         if freq is not _NoValue:
             kwargs["freq"] = freq
-        return ps.from_pandas(pd.DatetimeIndex(**kwargs))
+
+        return cast(DatetimeIndex, ps.from_pandas(pd.DatetimeIndex(**kwargs)))
 
     def __getattr__(self, item: str) -> Any:
         if hasattr(MissingPandasLikeDatetimeIndex, item):
@@ -436,7 +439,7 @@ class DatetimeIndex(Index):
     days_in_month.__doc__ = daysinmonth.__doc__
 
     # Methods
-    def ceil(self, freq, *args, **kwargs) -> "DatetimeIndex":
+    def ceil(self, freq: Union[str, DateOffset], *args: Any, **kwargs: Any) -> "DatetimeIndex":
         """
         Perform ceil operation on the data to the specified freq.
 
@@ -466,7 +469,7 @@ class DatetimeIndex(Index):
 
         return DatetimeIndex(self.to_series().dt.ceil(freq, *args, **kwargs))
 
-    def floor(self, freq, *args, **kwargs) -> "DatetimeIndex":
+    def floor(self, freq: Union[str, DateOffset], *args: Any, **kwargs: Any) -> "DatetimeIndex":
         """
         Perform floor operation on the data to the specified freq.
 
@@ -496,7 +499,7 @@ class DatetimeIndex(Index):
 
         return DatetimeIndex(self.to_series().dt.floor(freq, *args, **kwargs))
 
-    def round(self, freq, *args, **kwargs) -> "DatetimeIndex":
+    def round(self, freq: Union[str, DateOffset], *args: Any, **kwargs: Any) -> "DatetimeIndex":
         """
         Perform round operation on the data to the specified freq.
 
@@ -679,6 +682,7 @@ class DatetimeIndex(Index):
         Int64Index([2], dtype='int64')
         """
 
+        @no_type_check
         def pandas_between_time(pdf) -> ps.DataFrame[int]:
             return pdf.between_time(start_time, end_time, include_start, include_end)
 
@@ -724,6 +728,7 @@ class DatetimeIndex(Index):
         if asof:
             raise NotImplementedError("'asof' argument is not supported")
 
+        @no_type_check
         def pandas_at_time(pdf) -> ps.DataFrame[int]:
             return pdf.at_time(time, asof)
 
@@ -737,12 +742,12 @@ class DatetimeIndex(Index):
         return ps.Index(first_series(psdf).rename(self.name))
 
 
-def disallow_nanoseconds(freq):
+def disallow_nanoseconds(freq: Union[str, DateOffset]) -> None:
     if freq in ["N", "ns"]:
         raise ValueError("nanoseconds is not supported")
 
 
-def _test():
+def _test() -> None:
     import os
     import doctest
     import sys

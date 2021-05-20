@@ -299,7 +299,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
 
     @property
     @abstractmethod
-    def _column_label(self) -> Tuple:
+    def _column_label(self) -> Optional[Tuple]:
         pass
 
     @property
