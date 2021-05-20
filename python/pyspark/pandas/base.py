@@ -19,7 +19,6 @@
 Base and utility classes for pandas-on-Spark objects.
 """
 from abc import ABCMeta, abstractmethod
-import datetime
 from functools import wraps, partial
 from itertools import chain
 from typing import Any, Callable, Optional, Tuple, Union, cast, TYPE_CHECKING
@@ -35,7 +34,6 @@ from pyspark.sql.types import (
     DateType,
     DoubleType,
     FloatType,
-    IntegralType,
     LongType,
     NumericType,
     StringType,
@@ -50,11 +48,9 @@ from pyspark.pandas.internal import (
     NATURAL_ORDER_COLUMN_NAME,
     SPARK_DEFAULT_INDEX_NAME,
 )
-from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.spark.accessors import SparkIndexOpsMethods
 from pyspark.pandas.typedef import (
     Dtype,
-    as_spark_type,
     extension_dtypes,
     pandas_on_spark_type,
     spark_type_to_pandas_dtype,
@@ -322,100 +318,23 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
 
     spark_column.__doc__ = SparkIndexOpsMethods.column.__doc__
 
+    @property
+    def _dtype_op(self):
+        from pyspark.pandas.data_type_ops.base import DataTypeOps
+
+        return DataTypeOps(self.dtype, self.spark.data_type)
+
     # arithmetic operators
     __neg__ = column_op(Column.__neg__)
 
     def __add__(self, other) -> Union["Series", "Index"]:
-        if not isinstance(self.spark.data_type, StringType) and (
-            (isinstance(other, IndexOpsMixin) and isinstance(other.spark.data_type, StringType))
-            or isinstance(other, str)
-        ):
-            raise TypeError("string addition can only be applied to string series or literals.")
-
-        if isinstance(self.spark.data_type, TimestampType):
-            raise TypeError("addition can not be applied to date times.")
-
-        if isinstance(self.spark.data_type, StringType):
-            # Concatenate string columns
-            if isinstance(other, IndexOpsMixin) and isinstance(other.spark.data_type, StringType):
-                return column_op(F.concat)(self, other)
-            # Handle df['col'] + 'literal'
-            elif isinstance(other, str):
-                return column_op(F.concat)(self, F.lit(other))
-            else:
-                raise TypeError("string addition can only be applied to string series or literals.")
-        else:
-            return column_op(Column.__add__)(self, other)
+        return self._dtype_op.add(self, other)
 
     def __sub__(self, other) -> Union["Series", "Index"]:
-        if (
-            isinstance(self.spark.data_type, StringType)
-            or (isinstance(other, IndexOpsMixin) and isinstance(other.spark.data_type, StringType))
-            or isinstance(other, str)
-        ):
-            raise TypeError("substraction can not be applied to string series or literals.")
-
-        if isinstance(self.spark.data_type, TimestampType):
-            # Note that timestamp subtraction casts arguments to integer. This is to mimic pandas's
-            # behaviors. pandas returns 'timedelta64[ns]' from 'datetime64[ns]'s subtraction.
-            msg = (
-                "Note that there is a behavior difference of timestamp subtraction. "
-                "The timestamp subtraction returns an integer in seconds, "
-                "whereas pandas returns 'timedelta64[ns]'."
-            )
-            if isinstance(other, IndexOpsMixin) and isinstance(
-                other.spark.data_type, TimestampType
-            ):
-                warnings.warn(msg, UserWarning)
-                return self.astype("long") - other.astype("long")
-            elif isinstance(other, datetime.datetime):
-                warnings.warn(msg, UserWarning)
-                return self.astype("long") - F.lit(other).cast(as_spark_type("long"))
-            else:
-                raise TypeError("datetime subtraction can only be applied to datetime series.")
-        elif isinstance(self.spark.data_type, DateType):
-            # Note that date subtraction casts arguments to integer. This is to mimic pandas's
-            # behaviors. pandas returns 'timedelta64[ns]' in days from date's subtraction.
-            msg = (
-                "Note that there is a behavior difference of date subtraction. "
-                "The date subtraction returns an integer in days, "
-                "whereas pandas returns 'timedelta64[ns]'."
-            )
-            if isinstance(other, IndexOpsMixin) and isinstance(other.spark.data_type, DateType):
-                warnings.warn(msg, UserWarning)
-                return column_op(F.datediff)(self, other).astype("long")
-            elif isinstance(other, datetime.date) and not isinstance(other, datetime.datetime):
-                warnings.warn(msg, UserWarning)
-                return column_op(F.datediff)(self, F.lit(other)).astype("long")
-            else:
-                raise TypeError("date subtraction can only be applied to date series.")
-        return column_op(Column.__sub__)(self, other)
+        return self._dtype_op.sub(self, other)
 
     def __mul__(self, other) -> Union["Series", "Index"]:
-        if isinstance(other, str):
-            raise TypeError("multiplication can not be applied to a string literal.")
-
-        if isinstance(self.spark.data_type, TimestampType):
-            raise TypeError("multiplication can not be applied to date times.")
-
-        if (
-            isinstance(self.spark.data_type, IntegralType)
-            and isinstance(other, IndexOpsMixin)
-            and isinstance(other.spark.data_type, StringType)
-        ):
-            return column_op(SF.repeat)(other, self)
-
-        if isinstance(self.spark.data_type, StringType):
-            if (
-                isinstance(other, IndexOpsMixin) and isinstance(other.spark.data_type, IntegralType)
-            ) or isinstance(other, int):
-                return column_op(SF.repeat)(self, other)
-            else:
-                raise TypeError(
-                    "a string series can only be multiplied to an int series or literal"
-                )
-
-        return column_op(Column.__mul__)(self, other)
+        return self._dtype_op.mul(self, other)
 
     def __truediv__(self, other) -> Union["Series", "Index"]:
         """
@@ -434,122 +353,22 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         |          -10          |   null  | -np.inf |
         +-----------------------|---------|---------+
         """
-
-        if (
-            isinstance(self.spark.data_type, StringType)
-            or (isinstance(other, IndexOpsMixin) and isinstance(other.spark.data_type, StringType))
-            or isinstance(other, str)
-        ):
-            raise TypeError("division can not be applied on string series or literals.")
-
-        if isinstance(self.spark.data_type, TimestampType):
-            raise TypeError("division can not be applied to date times.")
-
-        def truediv(left, right):
-            return F.when(F.lit(right != 0) | F.lit(right).isNull(), left.__div__(right)).otherwise(
-                F.when(F.lit(left == np.inf) | F.lit(left == -np.inf), left).otherwise(
-                    F.lit(np.inf).__div__(left)
-                )
-            )
-
-        return numpy_column_op(truediv)(self, other)
+        return self._dtype_op.truediv(self, other)
 
     def __mod__(self, other) -> Union["Series", "Index"]:
-        if (
-            isinstance(self.spark.data_type, StringType)
-            or (isinstance(other, IndexOpsMixin) and isinstance(other.spark.data_type, StringType))
-            or isinstance(other, str)
-        ):
-            raise TypeError("modulo can not be applied on string series or literals.")
-
-        if isinstance(self.spark.data_type, TimestampType):
-            raise TypeError("modulo can not be applied to date times.")
-
-        def mod(left, right):
-            return ((left % right) + right) % right
-
-        return column_op(mod)(self, other)
+        return self._dtype_op.mod(self, other)
 
     def __radd__(self, other) -> Union["Series", "Index"]:
-        # Handle 'literal' + df['col']
-        if not isinstance(self.spark.data_type, StringType) and isinstance(other, str):
-            raise TypeError("string addition can only be applied to string series or literals.")
-
-        if isinstance(self.spark.data_type, TimestampType):
-            raise TypeError("addition can not be applied to date times.")
-
-        if isinstance(self.spark.data_type, StringType):
-            if isinstance(other, str):
-                return self._with_new_scol(
-                    F.concat(F.lit(other), self.spark.column)
-                )  # TODO: dtype?
-            else:
-                raise TypeError("string addition can only be applied to string series or literals.")
-        else:
-            return column_op(Column.__radd__)(self, other)
+        return self._dtype_op.radd(self, other)
 
     def __rsub__(self, other) -> Union["Series", "Index"]:
-        if isinstance(self.spark.data_type, StringType) or isinstance(other, str):
-            raise TypeError("substraction can not be applied to string series or literals.")
-
-        if isinstance(self.spark.data_type, TimestampType):
-            # Note that timestamp subtraction casts arguments to integer. This is to mimic pandas's
-            # behaviors. pandas returns 'timedelta64[ns]' from 'datetime64[ns]'s subtraction.
-            msg = (
-                "Note that there is a behavior difference of timestamp subtraction. "
-                "The timestamp subtraction returns an integer in seconds, "
-                "whereas pandas returns 'timedelta64[ns]'."
-            )
-            if isinstance(other, datetime.datetime):
-                warnings.warn(msg, UserWarning)
-                return -(self.astype("long") - F.lit(other).cast(as_spark_type("long")))
-            else:
-                raise TypeError("datetime subtraction can only be applied to datetime series.")
-        elif isinstance(self.spark.data_type, DateType):
-            # Note that date subtraction casts arguments to integer. This is to mimic pandas's
-            # behaviors. pandas returns 'timedelta64[ns]' in days from date's subtraction.
-            msg = (
-                "Note that there is a behavior difference of date subtraction. "
-                "The date subtraction returns an integer in days, "
-                "whereas pandas returns 'timedelta64[ns]'."
-            )
-            if isinstance(other, datetime.date) and not isinstance(other, datetime.datetime):
-                warnings.warn(msg, UserWarning)
-                return -column_op(F.datediff)(self, F.lit(other)).astype("long")
-            else:
-                raise TypeError("date subtraction can only be applied to date series.")
-        return column_op(Column.__rsub__)(self, other)
+        return self._dtype_op.rsub(self, other)
 
     def __rmul__(self, other) -> Union["Series", "Index"]:
-        if isinstance(other, str):
-            raise TypeError("multiplication can not be applied to a string literal.")
-
-        if isinstance(self.spark.data_type, TimestampType):
-            raise TypeError("multiplication can not be applied to date times.")
-
-        if isinstance(self.spark.data_type, StringType):
-            if isinstance(other, int):
-                return column_op(SF.repeat)(self, other)
-            else:
-                raise TypeError(
-                    "a string series can only be multiplied to an int series or literal"
-                )
-
-        return column_op(Column.__rmul__)(self, other)
+        return self._dtype_op.rmul(self, other)
 
     def __rtruediv__(self, other) -> Union["Series", "Index"]:
-        if isinstance(self.spark.data_type, StringType) or isinstance(other, str):
-            raise TypeError("division can not be applied on string series or literals.")
-
-        if isinstance(self.spark.data_type, TimestampType):
-            raise TypeError("division can not be applied to date times.")
-
-        def rtruediv(left, right):
-            return F.when(left == 0, F.lit(np.inf).__div__(right)).otherwise(
-                F.lit(right).__truediv__(left)
-            )
-
-        return numpy_column_op(rtruediv)(self, other)
+        return self._dtype_op.rtruediv(self, other)
 
     def __floordiv__(self, other) -> Union["Series", "Index"]:
         """
@@ -568,66 +387,19 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         |          -10          |   null  | -np.inf |
         +-----------------------|---------|---------+
         """
-        if (
-            isinstance(self.spark.data_type, StringType)
-            or (isinstance(other, IndexOpsMixin) and isinstance(other.spark.data_type, StringType))
-            or isinstance(other, str)
-        ):
-            raise TypeError("division can not be applied on string series or literals.")
-
-        if isinstance(self.spark.data_type, TimestampType):
-            raise TypeError("division can not be applied to date times.")
-
-        def floordiv(left, right):
-            return F.when(F.lit(right is np.nan), np.nan).otherwise(
-                F.when(
-                    F.lit(right != 0) | F.lit(right).isNull(), F.floor(left.__div__(right))
-                ).otherwise(
-                    F.when(F.lit(left == np.inf) | F.lit(left == -np.inf), left).otherwise(
-                        F.lit(np.inf).__div__(left)
-                    )
-                )
-            )
-
-        return numpy_column_op(floordiv)(self, other)
+        return self._dtype_op.floordiv(self, other)
 
     def __rfloordiv__(self, other) -> Union["Series", "Index"]:
-        if isinstance(self.spark.data_type, StringType) or isinstance(other, str):
-            raise TypeError("division can not be applied on string series or literals.")
-
-        if isinstance(self.spark.data_type, TimestampType):
-            raise TypeError("division can not be applied to date times.")
-
-        def rfloordiv(left, right):
-            return F.when(F.lit(left == 0), F.lit(np.inf).__div__(right)).otherwise(
-                F.when(F.lit(left) == np.nan, np.nan).otherwise(F.floor(F.lit(right).__div__(left)))
-            )
-
-        return numpy_column_op(rfloordiv)(self, other)
+        return self._dtype_op.rfloordiv(self, other)
 
     def __rmod__(self, other) -> Union["Series", "Index"]:
-        if isinstance(self.spark.data_type, StringType) or isinstance(other, str):
-            raise TypeError("modulo can not be applied on string series or literals.")
-
-        if isinstance(self.spark.data_type, TimestampType):
-            raise TypeError("modulo can not be applied to date times.")
-
-        def rmod(left, right):
-            return ((right % left) + left) % left
-
-        return column_op(rmod)(self, other)
+        return self._dtype_op.rmod(self, other)
 
     def __pow__(self, other) -> Union["Series", "Index"]:
-        def pow_func(left, right):
-            return F.when(left == 1, left).otherwise(Column.__pow__(left, right))
-
-        return column_op(pow_func)(self, other)
+        return self._dtype_op.pow(self, other)
 
     def __rpow__(self, other) -> Union["Series", "Index"]:
-        def rpow_func(left, right):
-            return F.when(F.lit(right == 1), right).otherwise(Column.__rpow__(left, right))
-
-        return column_op(rpow_func)(self, other)
+        return self._dtype_op.rpow(self, other)
 
     __abs__ = column_op(F.abs)
 
