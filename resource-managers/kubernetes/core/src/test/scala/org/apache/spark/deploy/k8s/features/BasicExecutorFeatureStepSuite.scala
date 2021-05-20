@@ -186,10 +186,24 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     assert(step.configurePod(SparkPod.initialPod()).pod.getSpec.getHostname.length === 63)
   }
 
+  test("invalid PodNamePrefixes") {
+    val namePrefixOld = baseConf.get(KUBERNETES_EXECUTOR_POD_NAME_PREFIX)
+    try{
+      Seq("_123", "spark_exec", "spark@").foreach { invalid =>
+        baseConf.set(KUBERNETES_EXECUTOR_POD_NAME_PREFIX, invalid)
+        val e = intercept[IllegalArgumentException](newExecutorConf())
+        assert(e.getMessage.contains("Pod names must consist of lower case alphanumeric" +
+          " characters"))
+      }
+    } finally {
+      namePrefixOld.foreach(baseConf.set(KUBERNETES_EXECUTOR_POD_NAME_PREFIX, _))
+    }
+  }
+
   test("hostname truncation generates valid host names") {
     val invalidPrefix = "abcdef-*_/[]{}+==.,;'\"-----------------------------------------------"
 
-    baseConf.set(KUBERNETES_EXECUTOR_POD_NAME_PREFIX, invalidPrefix)
+    baseConf.set("spark.app.name", invalidPrefix)
     initDefaultProfile(baseConf)
     val step = new BasicExecutorFeatureStep(newExecutorConf(), new SecurityManager(baseConf),
       defaultProfile)

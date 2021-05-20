@@ -250,11 +250,21 @@ private[spark] object Config extends Logging {
       .stringConf
       .createOptional
 
+  private val podConfValidator =
+    "^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$".r.pattern
+
   val KUBERNETES_EXECUTOR_POD_NAME_PREFIX =
     ConfigBuilder("spark.kubernetes.executor.podNamePrefix")
-      .doc("Prefix to use in front of the executor pod names.")
+      .doc("Prefix to use in front of the executor pod names. Note that pod names must consist" +
+        " of lower case alphanumeric characters, '-' or '.', and must start and end with an" +
+        " alphanumeric character (e.g. 'example.com', regex used for validation is:" +
+        s" ${podConfValidator.toString}")
       .version("2.3.0")
       .stringConf
+      .checkValue(v => podConfValidator.matcher(v).matches(),
+        "Pod names must consist of lower case alphanumeric characters, '-' or '.'," +
+          " and must start and end with an alphanumeric character (e.g. 'example.com', regex" +
+          s" used for validation is: ${podConfValidator.toString}")
       .createOptional
 
   val KUBERNETES_EXECUTOR_DISABLE_CONFIGMAP =
