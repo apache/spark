@@ -2185,7 +2185,7 @@ object SQLConf {
         "shows the exception messages from UDFs. Note that this works only with CPython 3.7+.")
       .version("3.1.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val PANDAS_GROUPED_MAP_ASSIGN_COLUMNS_BY_NAME =
     buildConf("spark.sql.legacy.execution.pandas.groupedMap.assignColumnsByName")

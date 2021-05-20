@@ -2366,7 +2366,7 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
 
         # Negative
         psdf = ps.DataFrame({"a": ["x"], "b": [1]})
-        ks_err_msg = "substraction can not be applied to string series or literals"
+        ks_err_msg = "subtraction can not be applied to string series or literals"
 
         self.assertRaisesRegex(TypeError, ks_err_msg, lambda: psdf["a"] - psdf["b"])
         self.assertRaisesRegex(TypeError, ks_err_msg, lambda: psdf["b"] - psdf["a"])
@@ -2441,12 +2441,12 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assertRaisesRegex(TypeError, ks_err_msg, lambda: psdf["b"] * "literal")
         self.assertRaisesRegex(TypeError, ks_err_msg, lambda: "literal" * psdf["b"])
         self.assertRaisesRegex(TypeError, ks_err_msg, lambda: psdf["a"] * "literal")
-        self.assertRaisesRegex(TypeError, ks_err_msg, lambda: "literal" * psdf["a"])
 
         ks_err_msg = "a string series can only be multiplied to an int series or literal"
         self.assertRaisesRegex(TypeError, ks_err_msg, lambda: psdf["a"] * psdf["a"])
         self.assertRaisesRegex(TypeError, ks_err_msg, lambda: psdf["a"] * 0.1)
         self.assertRaisesRegex(TypeError, ks_err_msg, lambda: 0.1 * psdf["a"])
+        self.assertRaisesRegex(TypeError, ks_err_msg, lambda: "literal" * psdf["a"])
 
     def test_sample(self):
         pdf = pd.DataFrame({"A": [0, 2, 4]})

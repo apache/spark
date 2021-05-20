@@ -37,7 +37,7 @@ TakeOrderedAndProject (32)
 Output [5]: [i_item_sk#1, i_item_id#2, i_item_desc#3, i_current_price#4, i_manufact_id#5]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/item]
-PushedFilters: [IsNotNull(i_current_price), GreaterThanOrEqual(i_current_price,62.00), LessThanOrEqual(i_current_price,92.00), In(i_manufact_id, [129,270,821,423]), IsNotNull(i_item_sk)]
+PushedFilters: [IsNotNull(i_current_price), GreaterThanOrEqual(i_current_price,62.00), LessThanOrEqual(i_current_price,92.00), In(i_manufact_id, [129,270,423,821]), IsNotNull(i_item_sk)]
 ReadSchema: struct<i_item_sk:int,i_item_id:string,i_item_desc:string,i_current_price:decimal(7,2),i_manufact_id:int>
 
 (2) ColumnarToRow [codegen id : 1]
