@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.command.v1
 import org.apache.spark.sql.{AnalysisException, Row, SaveMode}
 import org.apache.spark.sql.execution.command
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.{MapType, StringType}
 
 /**
  * This base suite contains unified tests for the `SHOW TABLES` command that check V1
@@ -116,6 +117,8 @@ trait ShowTablesSuiteBase extends command.ShowTablesSuiteBase {
         assert(sql("show table extended like 'tbl'").collect()(0).length == 4)
         assert(sql("show table extended like 'tbl'").schema.fieldNames ===
           Seq("namespace", "tableName", "isTemporary", "information"))
+        assert(sql("show table extended like 'tbl'").schema.last.dataType ===
+          MapType(StringType, StringType))
 
         // Keep the legacy output schema
         withSQLConf(SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA.key -> "true") {
@@ -125,6 +128,7 @@ trait ShowTablesSuiteBase extends command.ShowTablesSuiteBase {
           assert(sql("show table extended like 'tbl'").collect()(0).length == 4)
           assert(sql("show table extended like 'tbl'").schema.fieldNames ===
             Seq("database", "tableName", "isTemporary", "information"))
+          assert(sql("show table extended like 'tbl'").schema.last.dataType === StringType)
         }
       }
     }
