@@ -164,7 +164,7 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
   private def checkBatchIdempotence(batch: Batch, plan: TreeType): Unit = {
     val reOptimized = batch.rules.foldLeft(plan) { case (p, rule) => rule(p) }
     if (!plan.fastEquals(reOptimized)) {
-      throw QueryExecutionErrors.onceStrategyNotAllowBreakIdempotenceError(
+      throw QueryExecutionErrors.onceStrategyIdempotenceIsBrokenForBatchError(
         batch.name, plan, reOptimized)
     }
   }
@@ -193,7 +193,7 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
 
     // Run the structural integrity checker against the initial input
     if (!isPlanIntegral(plan)) {
-      throw QueryExecutionErrors.cannotBreakStructuralIntegrityOfInputPlanError(
+      throw QueryExecutionErrors.structuralIntegrityOfInputPlanIsBrokenInClassError(
         this.getClass.getName.stripSuffix("$"))
     }
 
@@ -225,7 +225,7 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
 
             // Run the structural integrity checker against the plan after each rule.
             if (effective && !isPlanIntegral(result)) {
-              throw QueryExecutionErrors.cannotBreakStructuralAfterApplyRuleError(
+              throw QueryExecutionErrors.structuralIntegrityIsBrokenAfterApplyingRuleError(
                 rule.ruleName, batch.name)
             }
 

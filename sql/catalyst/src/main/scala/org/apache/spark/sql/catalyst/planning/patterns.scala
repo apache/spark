@@ -369,7 +369,7 @@ object PhysicalWindow {
 
       // The window expression should not be empty here, otherwise it's a bug.
       if (windowExpressions.isEmpty) {
-        throw QueryCompilationErrors.windowExprIsEmptyError(expr)
+        throw QueryCompilationErrors.emptyWindowExpressionError(expr)
       }
 
       val windowFunctionType = windowExpressions.map(WindowFunctionType.functionType)

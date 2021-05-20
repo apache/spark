@@ -1564,14 +1564,14 @@ private[spark] object QueryCompilationErrors {
       s" $joinType is not supported.")
   }
 
-  def foundConflictAttributesInJoinConditionError(
+  def conflictingAttributesInJoinConditionError(
       conflictingAttrs: AttributeSet, outerPlan: LogicalPlan, subplan: LogicalPlan): Throwable = {
     new AnalysisException("Found conflicting attributes " +
       s"${conflictingAttrs.mkString(",")} in the condition joining outer plan:\n  " +
       s"$outerPlan\nand subplan:\n  $subplan")
   }
 
-  def windowExprIsEmptyError(expr: Window): Throwable = {
+  def emptyWindowExpressionError(expr: Window): Throwable = {
     new AnalysisException(s"Window expression is empty in $expr")
   }
 

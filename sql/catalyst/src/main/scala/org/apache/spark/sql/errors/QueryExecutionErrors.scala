@@ -1172,7 +1172,7 @@ object QueryExecutionErrors {
     new UnsupportedOperationException(s"Not supported pair: $r1, $r2 at $function()")
   }
 
-  def onceStrategyNotAllowBreakIdempotenceError[TreeType <: TreeNode[_]](
+  def onceStrategyIdempotenceIsBrokenForBatchError[TreeType <: TreeNode[_]](
       batchName: String, plan: TreeType, reOptimized: TreeType): Throwable = {
     new RuntimeException(
       s"""
@@ -1181,17 +1181,18 @@ object QueryExecutionErrors {
        """.stripMargin)
   }
 
-  def cannotBreakStructuralIntegrityOfInputPlanError(className: String): Throwable = {
+  def structuralIntegrityOfInputPlanIsBrokenInClassError(className: String): Throwable = {
     new RuntimeException("The structural integrity of the input plan is broken in " +
       s"$className.")
   }
 
-  def cannotBreakStructuralAfterApplyRuleError(ruleName: String, batchName: String): Throwable = {
+  def structuralIntegrityIsBrokenAfterApplyingRuleError(
+      ruleName: String, batchName: String): Throwable = {
     new RuntimeException(s"After applying rule $ruleName in batch $batchName, " +
       "the structural integrity of the plan is broken.")
   }
 
-  def notFoundRuleIdForRuleError(ruleName: String): Throwable = {
+  def ruleIdNotFoundForRuleError(ruleName: String): Throwable = {
     new NoSuchElementException(s"Rule id not found for $ruleName")
   }
 

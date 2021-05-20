@@ -167,7 +167,7 @@ object RuleIdCollection {
     val ruleIdOpt = ruleToId.get(ruleName)
     // Please add the rule name to `rulesWithIds` if rule id is not found.
     if (!ruleIdOpt.isDefined) {
-      throw QueryExecutionErrors.notFoundRuleIdForRuleError(ruleName)
+      throw QueryExecutionErrors.ruleIdNotFoundForRuleError(ruleName)
     }
     ruleIdOpt.get
   }

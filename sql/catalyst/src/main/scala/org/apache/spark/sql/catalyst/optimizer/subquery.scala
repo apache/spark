@@ -78,7 +78,7 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
       condition.foreach { e =>
           val conflictingAttrs = e.references.intersect(duplicates)
           if (conflictingAttrs.nonEmpty) {
-            throw QueryCompilationErrors.foundConflictAttributesInJoinConditionError(
+            throw QueryCompilationErrors.conflictingAttributesInJoinConditionError(
               conflictingAttrs, outerPlan, subplan)
           }
       }
