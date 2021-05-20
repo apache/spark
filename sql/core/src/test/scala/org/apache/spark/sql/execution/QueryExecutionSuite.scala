@@ -245,22 +245,22 @@ class QueryExecutionSuite extends SharedSparkSession {
 
     val showTables = ShowTables(UnresolvedNamespace(Seq.empty[String]), None)
     val showTablesQe = qe(showTables)
-    assert(showTablesQe.commandCollected.isInstanceOf[ShowTablesCommand])
+    assert(showTablesQe.nonRootCommandExecuted.isInstanceOf[ShowTablesCommand])
     assert(showTablesQe.executedPlan.isInstanceOf[ExecutedCommandExec])
     assert(showTablesQe.executedPlan.asInstanceOf[ExecutedCommandExec]
       .cmd.isInstanceOf[ShowTablesCommand])
 
     val project = Project(showTables.output, SubqueryAlias("s", showTables))
     val projectQe = qe(project)
-    assert(projectQe.commandCollected.isInstanceOf[Project])
-    assert(projectQe.commandCollected.children.length == 1)
-    assert(projectQe.commandCollected.children(0).isInstanceOf[SubqueryAlias])
-    assert(projectQe.commandCollected.children(0).children.length == 1)
-    assert(projectQe.commandCollected.children(0).children(0).isInstanceOf[CommandResult])
+    assert(projectQe.nonRootCommandExecuted.isInstanceOf[Project])
+    assert(projectQe.nonRootCommandExecuted.children.length == 1)
+    assert(projectQe.nonRootCommandExecuted.children(0).isInstanceOf[SubqueryAlias])
+    assert(projectQe.nonRootCommandExecuted.children(0).children.length == 1)
+    assert(projectQe.nonRootCommandExecuted.children(0).children(0).isInstanceOf[CommandResult])
     assert(projectQe.executedPlan.isInstanceOf[CommandResultExec])
     val cmdResultExec = projectQe.executedPlan.asInstanceOf[CommandResultExec]
-    assert(cmdResultExec.executedPlan.isInstanceOf[ExecutedCommandExec])
-    assert(cmdResultExec.executedPlan.asInstanceOf[ExecutedCommandExec]
+    assert(cmdResultExec.commandPhysicalPlan.isInstanceOf[ExecutedCommandExec])
+    assert(cmdResultExec.commandPhysicalPlan.asInstanceOf[ExecutedCommandExec]
       .cmd.isInstanceOf[ShowTablesCommand])
   }
 }
