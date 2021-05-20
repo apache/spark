@@ -346,8 +346,9 @@ case class MakeInterval(
     )
 }
 
+// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(days, hours, mins, secs) - Make duration from days, hours, mins and secs.",
+  usage = "_FUNC_(days, hours, mins, secs) - Make DayTimeIntervalType duration from days, hours, mins and secs.",
   arguments = """
     Arguments:
       * days - the number of days, positive or negative
@@ -364,6 +365,7 @@ case class MakeInterval(
   """,
   since = "3.2.0",
   group = "datetime_funcs")
+// scalastyle:on line.size.limit
 case class MakeDuration(
     days: Expression,
     hours: Expression,
