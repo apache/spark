@@ -328,13 +328,13 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
     __neg__ = column_op(Column.__neg__)
 
     def __add__(self, other) -> Union["Series", "Index"]:
-        return self._dtype_op.__add__(self, other)
+        return self._dtype_op.add(self, other)
 
     def __sub__(self, other) -> Union["Series", "Index"]:
-        return self._dtype_op.__sub__(self, other)
+        return self._dtype_op.sub(self, other)
 
     def __mul__(self, other) -> Union["Series", "Index"]:
-        return self._dtype_op.__mul__(self, other)
+        return self._dtype_op.mul(self, other)
 
     def __truediv__(self, other) -> Union["Series", "Index"]:
         """
@@ -353,22 +353,22 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         |          -10          |   null  | -np.inf |
         +-----------------------|---------|---------+
         """
-        return self._dtype_op.__truediv__(self, other)
+        return self._dtype_op.truediv(self, other)
 
     def __mod__(self, other) -> Union["Series", "Index"]:
-        return self._dtype_op.__mod__(self, other)
+        return self._dtype_op.mod(self, other)
 
     def __radd__(self, other) -> Union["Series", "Index"]:
-        return self._dtype_op.__radd__(self, other)
+        return self._dtype_op.radd(self, other)
 
     def __rsub__(self, other) -> Union["Series", "Index"]:
-        return self._dtype_op.__rsub__(self, other)
+        return self._dtype_op.rsub(self, other)
 
     def __rmul__(self, other) -> Union["Series", "Index"]:
-        return self._dtype_op.__rmul__(self, other)
+        return self._dtype_op.rmul(self, other)
 
     def __rtruediv__(self, other) -> Union["Series", "Index"]:
-        return self._dtype_op.__rtruediv__(self, other)
+        return self._dtype_op.rtruediv(self, other)
 
     def __floordiv__(self, other) -> Union["Series", "Index"]:
         """
@@ -387,19 +387,19 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         |          -10          |   null  | -np.inf |
         +-----------------------|---------|---------+
         """
-        return self._dtype_op.__floordiv__(self, other)
+        return self._dtype_op.floordiv(self, other)
 
     def __rfloordiv__(self, other) -> Union["Series", "Index"]:
-        return self._dtype_op.__rfloordiv__(self, other)
+        return self._dtype_op.rfloordiv(self, other)
 
     def __rmod__(self, other) -> Union["Series", "Index"]:
-        return self._dtype_op.__rmod__(self, other)
+        return self._dtype_op.rmod(self, other)
 
     def __pow__(self, other) -> Union["Series", "Index"]:
-        return self._dtype_op.__pow__(self, other)
+        return self._dtype_op.pow(self, other)
 
     def __rpow__(self, other) -> Union["Series", "Index"]:
-        return self._dtype_op.__rpow__(self, other)
+        return self._dtype_op.rpow(self, other)
 
     __abs__ = column_op(F.abs)
 

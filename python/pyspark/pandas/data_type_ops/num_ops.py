@@ -46,7 +46,7 @@ class NumericOps(DataTypeOps):
     def pretty_name(self) -> str:
         return 'numerics'
 
-    def __add__(self, left, right) -> Union["Series", "Index"]:
+    def add(self, left, right) -> Union["Series", "Index"]:
         if (
             isinstance(right, IndexOpsMixin) and isinstance(right.spark.data_type, StringType)
         ) or isinstance(right, str):
@@ -63,7 +63,7 @@ class NumericOps(DataTypeOps):
 
         return column_op(Column.__add__)(left, right)
 
-    def __sub__(self, left, right) -> Union["Series", "Index"]:
+    def sub(self, left, right) -> Union["Series", "Index"]:
         if (
             isinstance(right, IndexOpsMixin) and isinstance(right.spark.data_type, StringType)
         ) or isinstance(right, str):
@@ -80,7 +80,7 @@ class NumericOps(DataTypeOps):
 
         return column_op(Column.__sub__)(left, right)
 
-    def __mod__(self, left, right) -> Union["Series", "Index"]:
+    def mod(self, left, right) -> Union["Series", "Index"]:
         if (
             isinstance(right, IndexOpsMixin) and isinstance(right.spark.data_type, StringType)
         ) or isinstance(right, str):
@@ -100,7 +100,7 @@ class NumericOps(DataTypeOps):
 
         return column_op(mod)(left, right)
 
-    def __pow__(self, left, right) -> Union["Series", "Index"]:
+    def pow(self, left, right) -> Union["Series", "Index"]:
         if (
             isinstance(right, IndexOpsMixin) and isinstance(right.spark.data_type, StringType)
         ) or isinstance(right, str):
@@ -120,7 +120,7 @@ class NumericOps(DataTypeOps):
 
         return column_op(pow_func)(left, right)
 
-    def __radd__(self, left, right) -> Union["Series", "Index"]:
+    def radd(self, left, right) -> Union["Series", "Index"]:
         if isinstance(right, str):
             raise TypeError("string addition can only be applied to string series or literals.")
         if not isinstance(right, numbers.Number):
@@ -128,21 +128,21 @@ class NumericOps(DataTypeOps):
 
         return column_op(Column.__radd__)(left, right)
 
-    def __rsub__(self, left, right) -> Union["Series", "Index"]:
+    def rsub(self, left, right) -> Union["Series", "Index"]:
         if isinstance(right, str):
             raise TypeError("subtraction can not be applied to string series or literals.")
         if not isinstance(right, numbers.Number):
             raise TypeError("subtraction can not be applied to given types.")
         return column_op(Column.__rsub__)(left, right)
 
-    def __rmul__(self, left, right) -> Union["Series", "Index"]:
+    def rmul(self, left, right) -> Union["Series", "Index"]:
         if isinstance(right, str):
             raise TypeError("multiplication can not be applied to a string literal.")
         if not isinstance(right, numbers.Number):
             raise TypeError("multiplication can not be applied to given types.")
         return column_op(Column.__rmul__)(left, right)
 
-    def __rpow__(self, left, right) -> Union["Series", "Index"]:
+    def rpow(self, left, right) -> Union["Series", "Index"]:
         if isinstance(right, str):
             raise TypeError("exponentiation can not be applied on string series or literals.")
         if not isinstance(right, numbers.Number):
@@ -153,7 +153,7 @@ class NumericOps(DataTypeOps):
 
         return column_op(rpow_func)(left, right)
 
-    def __rmod__(self, left, right) -> Union["Series", "Index"]:
+    def rmod(self, left, right) -> Union["Series", "Index"]:
         if isinstance(right, str):
             raise TypeError("modulo can not be applied on string series or literals.")
         if not isinstance(right, numbers.Number):
@@ -175,7 +175,7 @@ class IntegralOps(NumericOps):
     def pretty_name(self) -> str:
         return 'integrals'
 
-    def __mul__(self, left, right) -> Union["Series", "Index"]:
+    def mul(self, left, right) -> Union["Series", "Index"]:
         if isinstance(right, str):
             raise TypeError("multiplication can not be applied to a string literal.")
 
@@ -196,7 +196,7 @@ class IntegralOps(NumericOps):
 
         return column_op(Column.__mul__)(left, right)
 
-    def __truediv__(self, left, right) -> Union["Series", "Index"]:
+    def truediv(self, left, right) -> Union["Series", "Index"]:
         if (
             isinstance(right, IndexOpsMixin) and isinstance(right.spark.data_type, StringType)
         ) or isinstance(right, str):
@@ -218,7 +218,7 @@ class IntegralOps(NumericOps):
 
         return numpy_column_op(truediv)(left, right)
 
-    def __floordiv__(self, left, right) -> Union["Series", "Index"]:
+    def floordiv(self, left, right) -> Union["Series", "Index"]:
         if (
             isinstance(right, IndexOpsMixin) and isinstance(right.spark.data_type, StringType)
         ) or isinstance(right, str):
@@ -244,7 +244,7 @@ class IntegralOps(NumericOps):
 
         return numpy_column_op(floordiv)(left, right)
 
-    def __rtruediv__(self, left, right) -> Union["Series", "Index"]:
+    def rtruediv(self, left, right) -> Union["Series", "Index"]:
         if isinstance(right, str):
             raise TypeError("division can not be applied on string series or literals.")
         if not isinstance(right, numbers.Number):
@@ -257,7 +257,7 @@ class IntegralOps(NumericOps):
 
         return numpy_column_op(rtruediv)(left, right)
 
-    def __rfloordiv__(self, left, right) -> Union["Series", "Index"]:
+    def rfloordiv(self, left, right) -> Union["Series", "Index"]:
         if isinstance(right, str):
             raise TypeError("division can not be applied on string series or literals.")
         if not isinstance(right, numbers.Number):
@@ -281,7 +281,7 @@ class FractionalOps(NumericOps):
     def pretty_name(self) -> str:
         return 'fractions'
 
-    def __mul__(self, left, right) -> Union["Series", "Index"]:
+    def mul(self, left, right) -> Union["Series", "Index"]:
         if isinstance(right, str):
             raise TypeError("multiplication can not be applied to a string literal.")
 
@@ -299,7 +299,7 @@ class FractionalOps(NumericOps):
 
         return column_op(Column.__mul__)(left, right)
 
-    def __truediv__(self, left, right) -> Union["Series", "Index"]:
+    def truediv(self, left, right) -> Union["Series", "Index"]:
         if (
             isinstance(right, IndexOpsMixin) and isinstance(right.spark.data_type, StringType)
         ) or isinstance(right, str):
@@ -323,7 +323,7 @@ class FractionalOps(NumericOps):
 
         return numpy_column_op(truediv)(left, right)
 
-    def __floordiv__(self, left, right) -> Union["Series", "Index"]:
+    def floordiv(self, left, right) -> Union["Series", "Index"]:
         if (
             isinstance(right, IndexOpsMixin) and isinstance(right.spark.data_type, StringType)
         ) or isinstance(right, str):
@@ -351,7 +351,7 @@ class FractionalOps(NumericOps):
 
         return numpy_column_op(floordiv)(left, right)
 
-    def __rtruediv__(self, left, right) -> Union["Series", "Index"]:
+    def rtruediv(self, left, right) -> Union["Series", "Index"]:
         if isinstance(right, str):
             raise TypeError("division can not be applied on string series or literals.")
         if not isinstance(right, numbers.Number):
@@ -364,7 +364,7 @@ class FractionalOps(NumericOps):
 
         return numpy_column_op(rtruediv)(left, right)
 
-    def __rfloordiv__(self, left, right) -> Union["Series", "Index"]:
+    def rfloordiv(self, left, right) -> Union["Series", "Index"]:
         if isinstance(right, str):
             raise TypeError("division can not be applied on string series or literals.")
         if not isinstance(right, numbers.Number):
