@@ -186,7 +186,7 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     assert(step.configurePod(SparkPod.initialPod()).pod.getSpec.getHostname.length === 63)
   }
 
-  test("invalid PodNamePrefixes") {
+  test("SPARK-35460: invalid PodNamePrefixes") {
     val namePrefixOld = baseConf.get(KUBERNETES_EXECUTOR_POD_NAME_PREFIX)
     try{
       Seq("_123", "spark_exec", "spark@").foreach { invalid =>
