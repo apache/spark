@@ -390,7 +390,7 @@ private[spark] class MemoryStore(
     }
   }
 
-  def manual_close[T <: MemoryEntry[_]](entry: T): T = {
+  def manualClose[T <: MemoryEntry[_]](entry: T): T = {
     val entryManualCloseTasks = Future {
       entry match {
         case e: DeserializedMemoryEntry[_] => e.value.foreach {
@@ -416,7 +416,7 @@ private[spark] class MemoryStore(
   def remove(blockId: BlockId): Boolean = memoryManager.synchronized {
     val entry = entries.synchronized {
       val removed = entries.remove(blockId)
-      manual_close(removed)
+      manualClose(removed)
     }
     if (entry != null) {
       entry match {
@@ -434,7 +434,7 @@ private[spark] class MemoryStore(
 
   def clear(): Unit = memoryManager.synchronized {
     entries.synchronized {
-      entries.values.asScala.foreach(manual_close)
+      entries.values.asScala.foreach(manualClose)
       entries.clear()
     }
     onHeapUnrollMemoryMap.clear()

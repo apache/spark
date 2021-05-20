@@ -583,7 +583,7 @@ class MemoryStoreSuite
       memoryStore.putIteratorAsValues(blockId, iter, classTag)
     }
 
-    // Unroll with plenty of space. This should succeed and cache both blocks. 
+    // Unroll with plenty of space. This should succeed and cache both blocks.
     assert(putIteratorAsValues("b1", nativeObjIterator, ClassTag.Any).isRight)
     assert(putIteratorAsValues("b2", nativeObjIterator, ClassTag.Any).isRight)
 
