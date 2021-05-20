@@ -31,8 +31,8 @@ import org.apache.spark.sql.execution.SparkPlan
  */
 case class CommandResult(
     output: Seq[Attribute],
-    commandCollected: LogicalPlan,
-    executedPlan: SparkPlan,
+    commandLogicalPlan: LogicalPlan,
+    commandPhysicalPlan: SparkPlan,
     data: Seq[InternalRow]) extends LeafNode {
-  override def innerChildren: Seq[QueryPlan[_]] = Seq(commandCollected)
+  override def innerChildren: Seq[QueryPlan[_]] = Seq(commandLogicalPlan)
 }

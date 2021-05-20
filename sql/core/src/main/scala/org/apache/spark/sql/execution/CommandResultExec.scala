@@ -31,13 +31,13 @@ import org.apache.spark.sql.execution.metric.SQLMetrics
  */
 case class CommandResultExec(
     output: Seq[Attribute],
-    executedPlan: SparkPlan,
+    commandPhysicalPlan: SparkPlan,
     @transient rows: Seq[InternalRow]) extends LeafExecNode {
 
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
-  override def innerChildren: Seq[QueryPlan[_]] = Seq(executedPlan)
+  override def innerChildren: Seq[QueryPlan[_]] = Seq(commandPhysicalPlan)
 
   @transient private lazy val unsafeRows: Array[InternalRow] = {
     if (rows.isEmpty) {

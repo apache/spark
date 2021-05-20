@@ -75,14 +75,14 @@ class QueryExecution(
     sparkSession.sessionState.analyzer.executeAndCheck(logical, tracker)
   }
 
-  lazy val commandCollected: LogicalPlan = analyzed mapChildren { child =>
+  lazy val nonRootCommandExecuted: LogicalPlan = analyzed mapChildren { child =>
     child transform {
-      // SPARK-35378: Eagerly execute Command so that query command with CTE
+      // SPARK-35378: Eagerly execute non-root Command so that query command with CTE
       case c: Command =>
         val qe = sparkSession.sessionState.executePlan(c)
         CommandResult(
-          qe.commandCollected.output,
-          qe.commandCollected,
+          qe.nonRootCommandExecuted.output,
+          qe.nonRootCommandExecuted,
           qe.executedPlan,
           SQLExecution.withNewExecutionId(qe, Some("command"))(qe.executedPlan.executeCollect()))
       case other => other
