@@ -1616,6 +1616,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val ALLOW_NON_EMPTY_LOCATION_IN_CTAS =
+    buildConf("spark.sql.legacy.allowNonEmptyLocationInCTAS")
+      .internal()
+      .doc("When false, CTAS with LOCATION throws an analysis exception if the " +
+        "location is not empty.")
+      .version("3.2.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val ALLOW_STAR_WITH_SINGLE_TABLE_IDENTIFIER_IN_COUNT =
     buildConf("spark.sql.legacy.allowStarWithSingleTableIdentifierInCount")
       .internal()
@@ -2185,7 +2194,7 @@ object SQLConf {
         "shows the exception messages from UDFs. Note that this works only with CPython 3.7+.")
       .version("3.1.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val PANDAS_GROUPED_MAP_ASSIGN_COLUMNS_BY_NAME =
     buildConf("spark.sql.legacy.execution.pandas.groupedMap.assignColumnsByName")
@@ -3743,6 +3752,9 @@ class SQLConf extends Serializable with Logging {
 
   def allowStarWithSingleTableIdentifierInCount: Boolean =
     getConf(SQLConf.ALLOW_STAR_WITH_SINGLE_TABLE_IDENTIFIER_IN_COUNT)
+
+  def allowNonEmptyLocationInCTAS: Boolean =
+    getConf(SQLConf.ALLOW_NON_EMPTY_LOCATION_IN_CTAS)
 
   def starSchemaDetection: Boolean = getConf(STARSCHEMA_DETECTION)
 

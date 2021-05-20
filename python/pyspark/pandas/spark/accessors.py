@@ -941,7 +941,8 @@ class SparkFrameMethods(object):
                 "The output of the function [%s] should be of a "
                 "pyspark.sql.DataFrame; however, got [%s]." % (func, type(output))
             )
-        return output.to_koalas(index_col)
+        kdf = output.to_koalas(index_col)  # type: ignore
+        return cast("ps.DataFrame", kdf)
 
     def repartition(self, num_partitions: int) -> "ps.DataFrame":
         """

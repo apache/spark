@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-import _string
+import _string  # type: ignore
 from typing import Dict, Any, Optional  # noqa: F401 (SPARK-34943)
 import inspect
 import pandas as pd
@@ -168,7 +168,7 @@ def _get_ipython_scope():
     in an IPython notebook environment.
     """
     try:
-        from IPython import get_ipython
+        from IPython import get_ipython  # type: ignore
 
         shell = get_ipython()
         return shell.user_ns

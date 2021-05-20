@@ -42,7 +42,6 @@ import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.server.OneForOneStreamManager;
 import org.apache.spark.network.server.RpcHandler;
 import org.apache.spark.network.server.StreamManager;
-import org.apache.spark.network.shuffle.ExternalShuffleBlockResolver.AppExecId;
 import org.apache.spark.network.shuffle.protocol.*;
 import static org.apache.spark.network.util.NettyUtils.getRemoteAddress;
 import org.apache.spark.network.util.TransportConf;
@@ -240,20 +239,6 @@ public class ExternalBlockHandler extends RpcHandler {
    */
   public void executorRemoved(String executorId, String appId) {
     blockManager.executorRemoved(executorId, appId);
-  }
-
-  /**
-   * Register an (application, executor) with the given shuffle info.
-   *
-   * The "re-" is meant to highlight the intended use of this method -- when this service is
-   * restarted, this is used to restore the state of executors from before the restart.  Normal
-   * registration will happen via a message handled in receive()
-   *
-   * @param appExecId
-   * @param executorInfo
-   */
-  public void reregisterExecutor(AppExecId appExecId, ExecutorShuffleInfo executorInfo) {
-    blockManager.registerExecutor(appExecId.appId, appExecId.execId, executorInfo);
   }
 
   public void close() {
