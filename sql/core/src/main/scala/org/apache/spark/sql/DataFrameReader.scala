@@ -878,10 +878,6 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * <a href=
    *   "https://spark.apache.org/docs/latest/sql-data-sources-orc.html#data-source-option">
    *   Data Source Option</a> in the version you use.
-   * More general options can be found in
-   * <a href=
-   *   "https://spark.apache.org/docs/latest/sql-data-sources-generic-options.html">
-   *   Generic Files Source Options</a> in the version you use.
    *
    * @param paths input paths
    * @since 2.0.0
