@@ -218,10 +218,16 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * This function goes through the input once to determine the input schema. If you know the
    * schema in advance, use the version that specifies the schema to avoid the extra scan.
    *
+   * You can set the following structured streaming option(s):
+   * <ul>
+   * <li>`maxFilesPerTrigger` (default: no max limit): sets the maximum number of new files to be
+   * considered in every trigger.</li>
+   * </ul>
+   *
    * You can find the JSON-specific options for reading JSON file stream in
    * <a href="https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option">
-   *   Data Source Option</a>
-   * and
+   *   Data Source Option</a> in the version you use.
+   * More general options can be found in
    * <a href=
    *   "https://spark.apache.org/docs/latest/sql-data-sources-generic-options.html">
    *   Generic Files Source Options</a> in the version you use.

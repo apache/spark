@@ -392,8 +392,8 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    *
    * You can find the JSON-specific options for reading JSON files in
    * <a href="https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option">
-   *   Data Source Option</a>
-   * and
+   *   Data Source Option</a> in the version you use.
+   * More general options can be found in
    * <a href=
    *   "https://spark.apache.org/docs/latest/sql-data-sources-generic-options.html">
    *   Generic Files Source Options</a> in the version you use.

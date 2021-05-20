@@ -117,12 +117,6 @@ Data source options of JSON can be set via:
     <td>read/write</td>
   </tr>
   <tr>
-    <td><code>maxFilesPerTrigger</code></td>
-    <td>None</td>
-    <td>Sets the maximum number of new files to be considered in every trigger.</td>
-    <td>read</td>
-  </tr>
-  <tr>
     <td><code>primitivesAsString</code></td>
     <td>None</td>
     <td>Infers all primitive values as a string type. If None is set, it uses the default value, <code>false</code>.</td>

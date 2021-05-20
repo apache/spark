@@ -108,17 +108,6 @@ class DataFrameReader(OptionUtils):
     @since(1.5)
     def option(self, key, value):
         """Adds an input option for the underlying data source.
-
-        You can set the following option(s) for reading files:
-            * ``pathGlobFilter``: an optional glob pattern to only include files with paths matching
-                the pattern. The syntax follows org.apache.hadoop.fs.GlobFilter.
-                It does not change the behavior of partition discovery.
-            * ``modifiedBefore``: an optional timestamp to only include files with
-                modification times occurring before the specified time. The provided timestamp
-                must be in the following format: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)
-            * ``modifiedAfter``: an optional timestamp to only include files with
-                modification times occurring after the specified time. The provided timestamp
-                must be in the following format: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)
         """
         self._jreader = self._jreader.option(key, to_str(value))
         return self
@@ -126,17 +115,6 @@ class DataFrameReader(OptionUtils):
     @since(1.4)
     def options(self, **options):
         """Adds input options for the underlying data source.
-
-        You can set the following option(s) for reading files:
-            * ``pathGlobFilter``: an optional glob pattern to only include files with paths matching
-                the pattern. The syntax follows org.apache.hadoop.fs.GlobFilter.
-                It does not change the behavior of partition discovery.
-            * ``modifiedBefore``: an optional timestamp to only include files with
-                modification times occurring before the specified time. The provided timestamp
-                must be in the following format: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)
-            * ``modifiedAfter``: an optional timestamp to only include files with
-                modification times occurring after the specified time. The provided timestamp
-                must be in the following format: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)
         """
         for k in options:
             self._jreader = self._jreader.option(k, to_str(options[k]))
