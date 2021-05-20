@@ -877,8 +877,8 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * ORC-specific option(s) for reading ORC files can be found in
    * <a href=
    *   "https://spark.apache.org/docs/latest/sql-data-sources-orc.html#data-source-option">
-   *   Data Source Option</a>
-   * and
+   *   Data Source Option</a> in the version you use.
+   * More general options can be found in
    * <a href=
    *   "https://spark.apache.org/docs/latest/sql-data-sources-generic-options.html">
    *   Generic Files Source Options</a> in the version you use.

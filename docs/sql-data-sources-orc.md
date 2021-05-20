@@ -182,12 +182,6 @@ Data source options of ORC can be set via:
 <table class="table">
   <tr><th><b>Property Name</b></th><th><b>Default</b></th><th><b>Meaning</b></th><th><b>Scope</b></th></tr>
   <tr>
-    <td><code>maxFilesPerTrigger</code></td>
-    <td>None</td>
-    <td>Sets the maximum number of new files to be considered in every trigger.</td>
-    <td>read</td>
-  </tr>
-  <tr>
     <td><code>mergeSchema</code></td>
     <td>None</td>
     <td>sets whether we should merge schemas collected from all ORC part-files. This will override <code>spark.sql.orc.mergeSchema</code>. The default value is specified in <code>spark.sql.orc.mergeSchema</code>.</td>
