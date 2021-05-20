@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.AlwaysProcess
 
 /**
- * A help class that used to detect duplicate relations fast in `DeduplicateRelations`
+ * A helper class used to detect duplicate relations fast in `DeduplicateRelations`
  */
 case class ReferenceEqualPlanWrapper(plan: LogicalPlan) {
   private val _hashCode = System.identityHashCode(plan)
@@ -78,7 +78,7 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
    * @param existingRelations the known unique relations for a LogicalPlan
    * @param plan the LogicalPlan that requires the deduplication
    * @return (the new LogicalPlan which already deduplicate all duplicated relations (if any),
-   *         all relations of the new LogicalPlan )
+   *         all relations of the new LogicalPlan, whether the plan has changed or not)
    */
   private def renewDuplicatedRelations(
       existingRelations: mutable.HashSet[ReferenceEqualPlanWrapper],
@@ -88,7 +88,7 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
 
     case m: MultiInstanceRelation =>
       val planWrapper = ReferenceEqualPlanWrapper(m)
-      if (isDuplicated(existingRelations, planWrapper)) {
+      if (existingRelations.contains(planWrapper)) {
         val newNode = m.newInstance()
         newNode.copyTagsFrom(m)
         (newNode, mutable.HashSet.empty, true)
@@ -146,13 +146,6 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
           subquery.withNewPlan(renewed)
       }
       (planWithNewSubquery, relations, planChanged)
-  }
-
-  @inline
-  private def isDuplicated(
-      existingRelations: mutable.HashSet[ReferenceEqualPlanWrapper],
-      planWrapper: ReferenceEqualPlanWrapper): Boolean = {
-    existingRelations.contains(planWrapper)
   }
 
   /**
