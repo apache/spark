@@ -506,7 +506,6 @@ jobs:
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v2
-      # In order to fetch changed files
       with:
         fetch-depth: 0
         repository: apache/spark
