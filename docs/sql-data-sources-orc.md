@@ -176,8 +176,11 @@ When reading from Hive metastore ORC tables and inserting to Hive metastore ORC 
 ## Data Source Option
 
 Data source options of ORC can be set via:
-* the `.option`/`.options` methods of `DataFrameReader` or `DataFrameWriter`
-* the `.option`/`.options` methods of `DataStreamReader` or `DataStreamWriter`
+* the `.option`/`.options` methods of
+  *  `DataFrameReader`
+  *  `DataFrameWriter`
+  *  `DataStreamReader`
+  *  `DataStreamWriter`
 
 <table class="table">
   <tr><th><b>Property Name</b></th><th><b>Default</b></th><th><b>Meaning</b></th><th><b>Scope</b></th></tr>
