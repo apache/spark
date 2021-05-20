@@ -16,7 +16,7 @@
 #
 
 from abc import ABCMeta, abstractmethod
-from typing import TYPE_CHECKING, Union
+from typing import Any, TYPE_CHECKING, Union
 
 from pandas.api.types import CategoricalDtype
 
@@ -34,11 +34,24 @@ from pyspark.sql.types import (
     TimestampType,
 )
 
+import pyspark.sql.types as types
+from pyspark.pandas.base import IndexOpsMixin
 from pyspark.pandas.typedef import Dtype
 
 if TYPE_CHECKING:
     from pyspark.pandas.indexes import Index  # noqa: F401 (SPARK-34943)
     from pyspark.pandas.series import Series  # noqa: F401 (SPARK-34943)
+
+
+def transform_boolean_operand_to_numeric(operand: Any, spark_type: types.DataType) -> Any:
+    """Transform boolean operand to the given numeric spark_type.
+
+    Return the transformed operand if the operand is boolean, otherwise return the original operand.
+    """
+    if isinstance(operand, IndexOpsMixin) and isinstance(operand.spark.data_type, BooleanType):
+        return operand.spark.transform(lambda scol: scol.cast(spark_type))
+    else:
+        return operand
 
 
 class DataTypeOps(object, metaclass=ABCMeta):

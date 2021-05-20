@@ -16,7 +16,7 @@
 #
 
 import numbers
-from typing import Any, TYPE_CHECKING, Union
+from typing import TYPE_CHECKING, Union
 
 import numpy as np
 from pandas.api.types import CategoricalDtype
@@ -28,10 +28,9 @@ from pyspark.sql.types import (
     StringType,
     TimestampType,
 )
-import pyspark.sql.types as types
 
 from pyspark.pandas.base import column_op, IndexOpsMixin, numpy_column_op
-from pyspark.pandas.data_type_ops.base import DataTypeOps
+from pyspark.pandas.data_type_ops.base import DataTypeOps, transform_boolean_operand_to_numeric
 from pyspark.pandas.spark import functions as SF
 
 if TYPE_CHECKING:
@@ -51,17 +50,6 @@ def is_valid_operand_for_numeric_arithmetic(operand: IndexOpsMixin) -> bool:
                 operand.spark.data_type, BooleanType)
     else:
         return False
-
-
-def transform_boolean_operand_to_numeric(operand: Any, spark_type: types.DataType) -> Any:
-    """Transform boolean operand to the given numeric spark_type.
-
-    Return the transformed operand if the operand is boolean, otherwise return the original operand.
-    """
-    if isinstance(operand, IndexOpsMixin) and isinstance(operand.spark.data_type, BooleanType):
-        return operand.spark.transform(lambda scol: scol.cast(spark_type))
-    else:
-        return operand
 
 
 class NumericOps(DataTypeOps):

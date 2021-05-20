@@ -21,7 +21,7 @@ import numpy as np
 from pandas.api.types import CategoricalDtype
 
 from pyspark.pandas.base import column_op, IndexOpsMixin, numpy_column_op
-from pyspark.pandas.data_type_ops.base import DataTypeOps
+from pyspark.pandas.data_type_ops.base import DataTypeOps, transform_boolean_operand_to_numeric
 from pyspark.pandas.typedef.typehints import as_spark_type
 from pyspark.sql import Column, functions as F
 from pyspark.sql.types import NumericType
@@ -47,7 +47,7 @@ class BooleanOps(DataTypeOps):
             left = left.spark.apply(lambda scol: scol.cast(as_spark_type(type(right))))
             return column_op(Column.__add__)(left, right)
         elif isinstance(right, IndexOpsMixin) and is_numeric_index_ops(right):
-            left = left.spark.apply(lambda scol: scol.cast(right.spark.data_type))
+            left = transform_boolean_operand_to_numeric(left, right.spark.data_type)
             return column_op(Column.__add__)(left, right)
         else:
             raise TypeError(
@@ -58,7 +58,7 @@ class BooleanOps(DataTypeOps):
             left = left.spark.apply(lambda scol: scol.cast(as_spark_type(type(right))))
             return column_op(Column.__sub__)(left, right)
         elif isinstance(right, IndexOpsMixin) and is_numeric_index_ops(right):
-            left = left.spark.apply(lambda scol: scol.cast(right.spark.data_type))
+            left = transform_boolean_operand_to_numeric(left, right.spark.data_type)
             return column_op(Column.__sub__)(left, right)
         else:
             raise TypeError(
@@ -69,7 +69,7 @@ class BooleanOps(DataTypeOps):
             left = left.spark.apply(lambda scol: scol.cast(as_spark_type(type(right))))
             return column_op(Column.__mul__)(left, right)
         elif isinstance(right, IndexOpsMixin) and is_numeric_index_ops(right):
-            left = left.spark.apply(lambda scol: scol.cast(right.spark.data_type))
+            left = transform_boolean_operand_to_numeric(left, right.spark.data_type)
             return column_op(Column.__mul__)(left, right)
         else:
             raise TypeError(
@@ -87,7 +87,7 @@ class BooleanOps(DataTypeOps):
             left = left.spark.apply(lambda scol: scol.cast(as_spark_type(type(right))))
             return numpy_column_op(truediv)(left, right)
         elif isinstance(right, IndexOpsMixin) and is_numeric_index_ops(right):
-            left = left.spark.apply(lambda scol: scol.cast(right.spark.data_type))
+            left = transform_boolean_operand_to_numeric(left, right.spark.data_type)
             return numpy_column_op(truediv)(left, right)
         else:
             raise TypeError(
@@ -109,7 +109,7 @@ class BooleanOps(DataTypeOps):
             left = left.spark.apply(lambda scol: scol.cast(as_spark_type(type(right))))
             return numpy_column_op(floordiv)(left, right)
         elif isinstance(right, IndexOpsMixin) and is_numeric_index_ops(right):
-            left = left.spark.apply(lambda scol: scol.cast(right.spark.data_type))
+            left = transform_boolean_operand_to_numeric(left, right.spark.data_type)
             return numpy_column_op(floordiv)(left, right)
         else:
             raise TypeError(
@@ -123,7 +123,7 @@ class BooleanOps(DataTypeOps):
             left = left.spark.apply(lambda scol: scol.cast(as_spark_type(type(right))))
             return column_op(mod)(left, right)
         elif isinstance(right, IndexOpsMixin) and is_numeric_index_ops(right):
-            left = left.spark.apply(lambda scol: scol.cast(right.spark.data_type))
+            left = transform_boolean_operand_to_numeric(left, right.spark.data_type)
             return column_op(mod)(left, right)
         else:
             raise TypeError(
@@ -137,7 +137,7 @@ class BooleanOps(DataTypeOps):
             left = left.spark.apply(lambda scol: scol.cast(as_spark_type(type(right))))
             return column_op(pow_func)(left, right)
         elif isinstance(right, IndexOpsMixin) and is_numeric_index_ops(right):
-            left = left.spark.apply(lambda scol: scol.cast(right.spark.data_type))
+            left = transform_boolean_operand_to_numeric(left, right.spark.data_type)
             return column_op(pow_func)(left, right)
 
         else:
