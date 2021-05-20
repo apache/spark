@@ -165,6 +165,7 @@ case class UnresolvedAttribute(nameParts: Seq[String]) extends Attribute with Un
   override def withName(newName: String): UnresolvedAttribute = UnresolvedAttribute.quoted(newName)
   override def withMetadata(newMetadata: Metadata): Attribute = this
   override def withExprId(newExprId: ExprId): UnresolvedAttribute = this
+  override def withDataType(newDataType: DataType): UnresolvedAttribute = this
 
   override def toString: String = s"'$name"
 

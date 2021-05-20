@@ -31,7 +31,7 @@ import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource}
 import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
-import org.apache.spark.sql.types.{MetadataBuilder, StructField, StructType}
+import org.apache.spark.sql.types.{MetadataBuilder, StringType, StructField, StructType}
 
 /**
  * Resolves catalogs from the multi-part identifiers in SQL statements, and convert the statements
@@ -367,7 +367,8 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         output) =>
       val newOutput = if (conf.getConf(SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA)) {
         assert(output.length == 4)
-        output.head.withName("database") +: output.tail
+        output.head.withName("database") +: output.slice(1, 3) :+
+          output.last.withDataType(StringType)
       } else {
         output
       }
