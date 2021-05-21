@@ -860,7 +860,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    *   format("parquet").save(path)
    * }}}
    *
-   * Parquet-specific option(s) for reading Parquet files can be found in
+   * Parquet-specific option(s) for writing Parquet files can be found in
    * <a href=
    *   "https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#data-source-option">
    *   Data Source Option</a> in the version you use.
