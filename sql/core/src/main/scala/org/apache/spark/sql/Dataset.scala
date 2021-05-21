@@ -20,7 +20,7 @@ package org.apache.spark.sql
 import java.io.{ByteArrayOutputStream, CharArrayWriter, DataOutputStream}
 
 import scala.collection.JavaConverters._
-import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable.{ArrayBuffer, HashSet}
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
 
@@ -69,7 +69,7 @@ private[sql] object Dataset {
   val curId = new java.util.concurrent.atomic.AtomicLong()
   val DATASET_ID_KEY = "__dataset_id"
   val COL_POS_KEY = "__col_position"
-  val DATASET_ID_TAG = TreeNodeTag[Long]("dataset_id")
+  val DATASET_ID_TAG = TreeNodeTag[HashSet[Long]]("dataset_id")
 
   def apply[T: Encoder](sparkSession: SparkSession, logicalPlan: LogicalPlan): Dataset[T] = {
     val dataset = new Dataset(sparkSession, logicalPlan, implicitly[Encoder[T]])
@@ -231,9 +231,10 @@ class Dataset[T] private[sql](
       case _ =>
         queryExecution.analyzed
     }
-    if (sparkSession.sessionState.conf.getConf(SQLConf.FAIL_AMBIGUOUS_SELF_JOIN_ENABLED) &&
-        plan.getTagValue(Dataset.DATASET_ID_TAG).isEmpty) {
-      plan.setTagValue(Dataset.DATASET_ID_TAG, id)
+    if (sparkSession.sessionState.conf.getConf(SQLConf.FAIL_AMBIGUOUS_SELF_JOIN_ENABLED)) {
+      val dsIds = plan.getTagValue(Dataset.DATASET_ID_TAG).getOrElse(new HashSet[Long])
+      dsIds.add(id)
+      plan.setTagValue(Dataset.DATASET_ID_TAG, dsIds)
     }
     plan
   }
