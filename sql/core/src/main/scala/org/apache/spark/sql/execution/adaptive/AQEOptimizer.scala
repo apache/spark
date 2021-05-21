@@ -29,7 +29,7 @@ import org.apache.spark.util.Utils
 class AQEOptimizer(conf: SQLConf) extends RuleExecutor[LogicalPlan] {
   private val defaultBatches = Seq(
     Batch("Propagate Empty LocalRelation", Once,
-      PropagateEmptyRelationAdvancedHelper.propagateEmptyRelationAdvanced,
+      AQEPropagateEmptyRelation,
       UpdateAttributeNullability),
     Batch("Demote BroadcastHashJoin", Once, DemoteBroadcastHashJoin)
   )

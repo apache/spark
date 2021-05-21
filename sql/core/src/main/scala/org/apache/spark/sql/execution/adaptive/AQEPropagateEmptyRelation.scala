@@ -17,32 +17,34 @@
 
 package org.apache.spark.sql.execution.adaptive
 
-import org.apache.spark.sql.catalyst.optimizer.PropagateEmptyRelationAdvanced
+import org.apache.spark.sql.catalyst.optimizer.PropagateEmptyRelationBase
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.joins.HashedRelationWithAllNullKeys
 
 /**
- * A helper class to provide a AQE side `PropagateEmptyRelationAdvanced` rule.
+ * Rule [[PropagateEmptyRelation]] at AQE side.
  */
-object PropagateEmptyRelationAdvancedHelper {
+object AQEPropagateEmptyRelation extends PropagateEmptyRelationBase {
 
-  private def isRelationWithAllNullKeys(plan: LogicalPlan) = plan match {
-    case LogicalQueryStage(_, stage: BroadcastQueryStageExec)
-      if stage.resultOption.get().isDefined =>
-      stage.broadcast.relationFuture.get().value == HashedRelationWithAllNullKeys
-    case _ => false
-  }
-
-  private def checkRowCount(plan: LogicalPlan, hasRow: Boolean): Boolean = plan match {
-    case LogicalQueryStage(_, stage: QueryStageExec) if stage.resultOption.get().isDefined =>
-      stage.getRuntimeStatistics.rowCount match {
-        case Some(count) => hasRow == (count > 0)
+  override protected def checkRowCount: Option[(LogicalPlan, Boolean) => Boolean] = {
+    case (plan, hasRow) =>
+      Some(plan match {
+        case LogicalQueryStage(_, stage: QueryStageExec) if stage.resultOption.get().isDefined =>
+          stage.getRuntimeStatistics.rowCount match {
+            case Some(count) => hasRow == (count > 0)
+            case _ => false
+          }
         case _ => false
-      }
-    case _ => false
+      })
   }
 
-  lazy val propagateEmptyRelationAdvanced: PropagateEmptyRelationAdvanced = {
-    PropagateEmptyRelationAdvanced(Some(checkRowCount), Some(isRelationWithAllNullKeys))
+  override protected def isRelationWithAllNullKeys: Option[LogicalPlan => Boolean] = {
+    case plan =>
+      Some(plan match {
+        case LogicalQueryStage(_, stage: BroadcastQueryStageExec)
+          if stage.resultOption.get().isDefined =>
+          stage.broadcast.relationFuture.get().value == HashedRelationWithAllNullKeys
+        case _ => false
+      })
   }
 }

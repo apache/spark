@@ -21,7 +21,7 @@ import org.scalatest.GivenWhenThen
 
 import org.apache.spark.sql.catalyst.expressions.{DynamicPruningExpression, Expression}
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode._
-import org.apache.spark.sql.catalyst.optimizer.PropagateEmptyRelationAdvanced
+import org.apache.spark.sql.catalyst.optimizer.PropagateEmptyRelation
 import org.apache.spark.sql.catalyst.plans.ExistenceJoin
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive._
@@ -1383,7 +1383,7 @@ abstract class DynamicPartitionPruningSuiteBase
     withSQLConf(
       SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
       SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "true",
-      SQLConf.ADAPTIVE_OPTIMIZER_EXCLUDED_RULES.key -> PropagateEmptyRelationAdvanced().ruleName) {
+      SQLConf.ADAPTIVE_OPTIMIZER_EXCLUDED_RULES.key -> PropagateEmptyRelation.ruleName) {
       val df = sql(
         """
           |SELECT * FROM fact_sk f

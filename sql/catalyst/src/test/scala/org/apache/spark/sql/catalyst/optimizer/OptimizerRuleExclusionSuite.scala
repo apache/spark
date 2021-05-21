@@ -119,7 +119,7 @@ class OptimizerRuleExclusionSuite extends PlanTest {
     val excludedRules = Seq(
       ConvertToLocalRelation.ruleName,
       PropagateEmptyRelationBasic.ruleName,
-      PropagateEmptyRelationAdvanced().ruleName,
+      PropagateEmptyRelation.ruleName,
       CombineUnions.ruleName)
 
     val testRelation1 = LocalRelation('a.int, 'b.int, 'c.int)

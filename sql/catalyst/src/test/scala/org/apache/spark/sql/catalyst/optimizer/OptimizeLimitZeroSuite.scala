@@ -34,7 +34,7 @@ class OptimizeLimitZeroSuite extends PlanTest {
         ReplaceIntersectWithSemiJoin,
         OptimizeLimitZero,
         PropagateEmptyRelationBasic,
-        PropagateEmptyRelationAdvanced()) :: Nil
+        PropagateEmptyRelation) :: Nil
   }
 
   val testRelation1 = LocalRelation.fromExternalRows(Seq('a.int), data = Seq(Row(1)))

@@ -174,7 +174,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
     Batch("LocalRelation early", fixedPoint,
       ConvertToLocalRelation,
       PropagateEmptyRelationBasic,
-      PropagateEmptyRelationAdvanced(),
+      PropagateEmptyRelation,
       // PropagateEmptyRelation can change the nullability of an attribute from nullable to
       // non-nullable when an empty relation child of a Union is removed
       UpdateAttributeNullability) ::
@@ -223,7 +223,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
     Batch("LocalRelation", fixedPoint,
       ConvertToLocalRelation,
       PropagateEmptyRelationBasic,
-      PropagateEmptyRelationAdvanced(),
+      PropagateEmptyRelation,
       // PropagateEmptyRelation can change the nullability of an attribute from nullable to
       // non-nullable when an empty relation child of a Union is removed
       UpdateAttributeNullability) :+
