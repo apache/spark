@@ -1193,6 +1193,15 @@ package object config {
       .intConf
       .createWithDefault(3)
 
+  private[spark] val SHUFFLE_MAX_ATTEMPTS_ON_NETTY_OOM =
+    ConfigBuilder("spark.shuffle.maxAttemptsOnNettyOOM")
+      .doc("The max attempts of a shuffle block would retry on Netty OOM issue before throwing " +
+        "the shuffle fetch failure.")
+      .version("3.2.0")
+      .internal()
+      .intConf
+      .createWithDefault(10)
+
   private[spark] val REDUCER_MAX_BLOCKS_IN_FLIGHT_PER_ADDRESS =
     ConfigBuilder("spark.reducer.maxBlocksInFlightPerAddress")
       .doc("This configuration limits the number of remote blocks being fetched per reduce task " +

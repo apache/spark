@@ -837,6 +837,24 @@ class DataFrameTests(ReusedSQLTestCase):
         finally:
             shutil.rmtree(tpath)
 
+    def test_df_show(self):
+        # SPARK-35408: ensure better diagnostics if incorrect parameters are passed
+        # to DataFrame.show
+
+        df = self.spark.createDataFrame([('foo',)])
+        df.show(5)
+        df.show(5, True)
+        df.show(5, 1, True)
+        df.show(n=5, truncate='1', vertical=False)
+        df.show(n=5, truncate=1.5, vertical=False)
+
+        with self.assertRaisesRegex(TypeError, "Parameter 'n'"):
+            df.show(True)
+        with self.assertRaisesRegex(TypeError, "Parameter 'vertical'"):
+            df.show(vertical='foo')
+        with self.assertRaisesRegex(TypeError, "Parameter 'truncate=foo'"):
+            df.show(truncate='foo')
+
 
 class QueryExecutionListenerTests(unittest.TestCase, SQLTestUtils):
     # These tests are separate because it uses 'spark.sql.queryExecutionListeners' which is

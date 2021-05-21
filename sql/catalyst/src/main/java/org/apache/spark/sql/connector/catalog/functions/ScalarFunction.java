@@ -31,6 +31,7 @@ import org.apache.spark.sql.types.DataType;
  * InternalRow API for the {@link DataType SQL data type} returned by {@link #resultType()}.
  * The mapping between {@link DataType} and the corresponding JVM type is defined below.
  * <p>
+ * <h2> Magic method </h2>
  * <b>IMPORTANT</b>: the default implementation of {@link #produceResult} throws
  * {@link UnsupportedOperationException}. Users must choose to either override this method, or
  * implement a magic method with name {@link #MAGIC_METHOD_NAME}, which takes individual parameters
@@ -82,6 +83,24 @@ import org.apache.spark.sql.types.DataType;
  * following the mapping defined below, and then checking if there is a matching method from all the
  * declared methods in the UDF class, using method name and the Java types.
  * <p>
+ * <h2> Handling of nullable primitive arguments </h2>
+ * The handling of null primitive arguments is different between the magic method approach and
+ * the {@link #produceResult} approach. With the former, whenever any of the method arguments meet
+ * the following conditions:
+ * <ol>
+ *   <li>the argument is of primitive type</li>
+ *   <li>the argument is nullable</li>
+ *   <li>the value of the argument is null</li>
+ * </ol>
+ * Spark will return null directly instead of calling the magic method. On the other hand, Spark
+ * will pass null primitive arguments to {@link #produceResult} and it is user's responsibility to
+ * handle them in the function implementation.
+ * <p>
+ * Because of the difference, if Spark users want to implement special handling of nulls for
+ * nullable primitive arguments, they should override the {@link #produceResult} method instead
+ * of using the magic method approach.
+ * <p>
+ * <h2> Spark data type to Java type mapping </h2>
  * The following are the mapping from {@link DataType SQL data type} to Java type which is used
  * by Spark to infer parameter types for the magic methods as well as return value type for
  * {@link #produceResult}:

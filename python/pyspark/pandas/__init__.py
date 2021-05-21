@@ -144,7 +144,7 @@ def _auto_patch_spark():
 
         from pyspark.sql import dataframe as df
 
-        df.DataFrame.to_koalas = DataFrame.to_koalas
+        df.DataFrame.to_pandas_on_spark = DataFrame.to_pandas_on_spark
 
 
 def _auto_patch_pandas():

@@ -720,7 +720,7 @@ Input [6]: [i_brand_id#104, i_class_id#105, i_category_id#106, sales#116, number
 
 (130) Expand [codegen id : 139]
 Input [6]: [sales#68, number_sales#69, channel#73, i_brand_id#54, i_class_id#55, i_category_id#56]
-Arguments: [ArrayBuffer(sales#68, number_sales#69, channel#73, i_brand_id#54, i_class_id#55, i_category_id#56, 0), ArrayBuffer(sales#68, number_sales#69, channel#73, i_brand_id#54, i_class_id#55, null, 1), ArrayBuffer(sales#68, number_sales#69, channel#73, i_brand_id#54, null, null, 3), ArrayBuffer(sales#68, number_sales#69, channel#73, null, null, null, 7), ArrayBuffer(sales#68, number_sales#69, null, null, null, null, 15)], [sales#68, number_sales#69, channel#120, i_brand_id#121, i_class_id#122, i_category_id#123, spark_grouping_id#124]
+Arguments: [[sales#68, number_sales#69, channel#73, i_brand_id#54, i_class_id#55, i_category_id#56, 0], [sales#68, number_sales#69, channel#73, i_brand_id#54, i_class_id#55, null, 1], [sales#68, number_sales#69, channel#73, i_brand_id#54, null, null, 3], [sales#68, number_sales#69, channel#73, null, null, null, 7], [sales#68, number_sales#69, null, null, null, null, 15]], [sales#68, number_sales#69, channel#120, i_brand_id#121, i_class_id#122, i_category_id#123, spark_grouping_id#124]
 
 (131) HashAggregate [codegen id : 139]
 Input [7]: [sales#68, number_sales#69, channel#120, i_brand_id#121, i_class_id#122, i_category_id#123, spark_grouping_id#124]

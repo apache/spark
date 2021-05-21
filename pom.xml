@@ -190,7 +190,7 @@
     <jodd.version>3.5.2</jodd.version>
     <jsr305.version>3.0.0</jsr305.version>
     <libthrift.version>0.12.0</libthrift.version>
-    <antlr4.version>4.8-1</antlr4.version>
+    <antlr4.version>4.8</antlr4.version>
     <jpam.version>1.1</jpam.version>
     <selenium.version>3.141.59</selenium.version>
     <htmlunit.version>2.40.0</htmlunit.version>
@@ -204,7 +204,7 @@
     <arrow.version>2.0.0</arrow.version>
     <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
     <leveldbjni.group>org.fusesource.leveldbjni</leveldbjni.group>
-    <kubernetes-client.version>5.3.1</kubernetes-client.version>
+    <kubernetes-client.version>5.4.0</kubernetes-client.version>
 
     <test.java.home>${java.home}</test.java.home>
 
@@ -355,17 +355,17 @@
     </dependency>
     <dependency>
       <groupId>org.scalatestplus</groupId>
-      <artifactId>scalatestplus-scalacheck_${scala.binary.version}</artifactId>
+      <artifactId>scalacheck-1-15_${scala.binary.version}</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>org.scalatestplus</groupId>
-      <artifactId>scalatestplus-mockito_${scala.binary.version}</artifactId>
+      <artifactId>mockito-3-4_${scala.binary.version}</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>org.scalatestplus</groupId>
-      <artifactId>scalatestplus-selenium_${scala.binary.version}</artifactId>
+      <artifactId>selenium-3-141_${scala.binary.version}</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
@@ -941,20 +941,20 @@
       </dependency>
       <dependency>
         <groupId>org.scalatestplus</groupId>
-        <artifactId>scalatestplus-scalacheck_${scala.binary.version}</artifactId>
-        <version>3.1.0.0-RC2</version>
+        <artifactId>scalacheck-1-15_${scala.binary.version}</artifactId>
+        <version>3.2.9.0</version>
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>org.scalatestplus</groupId>
-        <artifactId>scalatestplus-mockito_${scala.binary.version}</artifactId>
-        <version>1.0.0-SNAP5</version>
+        <artifactId>mockito-3-4_${scala.binary.version}</artifactId>
+        <version>3.2.9.0</version>
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>org.scalatestplus</groupId>
-        <artifactId>scalatestplus-selenium_${scala.binary.version}</artifactId>
-        <version>1.0.0-SNAP5</version>
+        <artifactId>selenium-3-141_${scala.binary.version}</artifactId>
+        <version>3.2.9.0</version>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -972,7 +972,7 @@
       <dependency>
         <groupId>org.scalacheck</groupId>
         <artifactId>scalacheck_${scala.binary.version}</artifactId>
-        <version>1.14.2</version>
+        <version>1.15.4</version>
         <scope>test</scope>
       </dependency>
       <dependency>

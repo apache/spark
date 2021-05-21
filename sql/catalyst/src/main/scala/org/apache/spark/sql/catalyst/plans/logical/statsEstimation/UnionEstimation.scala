@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst.plans.logical.statsEstimation
 
-import scala.collection.mutable.ArrayBuffer
-
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap}
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, Statistics, Union}
 import org.apache.spark.sql.types._
@@ -70,8 +68,27 @@ object UnionEstimation {
       None
     }
 
-    val unionOutput = union.output
+    val newMinMaxStats = computeMinMaxStats(union)
+    val newNullCountStats = computeNullCountStats(union)
+    val newAttrStats = {
+      val baseStats = AttributeMap(newMinMaxStats)
+      val overwriteStats = newNullCountStats.map { case attrStat@(attr, stat) =>
+        baseStats.get(attr).map { baseStat =>
+          attr -> baseStat.copy(nullCount = stat.nullCount)
+        }.getOrElse(attrStat)
+      }
+      AttributeMap(newMinMaxStats ++ overwriteStats)
+    }
 
+    Some(
+      Statistics(
+        sizeInBytes = sizeInBytes,
+        rowCount = outputRows,
+        attributeStats = newAttrStats))
+  }
+
+  private def computeMinMaxStats(union: Union): Seq[(Attribute, ColumnStat)] = {
+    val unionOutput = union.output
     val attrToComputeMinMaxStats = union.children.map(_.output).transpose.zipWithIndex.filter {
       case (attrs, outputIndex) => isTypeSupported(unionOutput(outputIndex).dataType) &&
         // checks if all the children has min/max stats for an attribute
@@ -81,40 +98,50 @@ object UnionEstimation {
             attrStats.get(attr).isDefined && attrStats(attr).hasMinMaxStats
         }
     }
-
-    val newAttrStats = if (attrToComputeMinMaxStats.nonEmpty) {
-      val outputAttrStats = new ArrayBuffer[(Attribute, ColumnStat)]()
-      attrToComputeMinMaxStats.foreach {
-        case (attrs, outputIndex) =>
-          val dataType = unionOutput(outputIndex).dataType
-          val statComparator = createStatComparator(dataType)
-          val minMaxValue = attrs.zipWithIndex.foldLeft[(Option[Any], Option[Any])]((None, None)) {
-              case ((minVal, maxVal), (attr, childIndex)) =>
-                val colStat = union.children(childIndex).stats.attributeStats(attr)
-                val min = if (minVal.isEmpty || statComparator(colStat.min.get, minVal.get)) {
-                  colStat.min
-                } else {
-                  minVal
-                }
-                val max = if (maxVal.isEmpty || statComparator(maxVal.get, colStat.max.get)) {
-                  colStat.max
-                } else {
-                  maxVal
-                }
-                (min, max)
+    attrToComputeMinMaxStats.map {
+      case (attrs, outputIndex) =>
+        val dataType = unionOutput(outputIndex).dataType
+        val statComparator = createStatComparator(dataType)
+        val minMaxValue = attrs.zipWithIndex.foldLeft[(Option[Any], Option[Any])]((None, None)) {
+          case ((minVal, maxVal), (attr, childIndex)) =>
+            val colStat = union.children(childIndex).stats.attributeStats(attr)
+            val min = if (minVal.isEmpty || statComparator(colStat.min.get, minVal.get)) {
+              colStat.min
+            } else {
+              minVal
             }
-          val newStat = ColumnStat(min = minMaxValue._1, max = minMaxValue._2)
-          outputAttrStats += unionOutput(outputIndex) -> newStat
-      }
-      AttributeMap(outputAttrStats.toSeq)
-    } else {
-      AttributeMap.empty[ColumnStat]
+            val max = if (maxVal.isEmpty || statComparator(maxVal.get, colStat.max.get)) {
+              colStat.max
+            } else {
+              maxVal
+            }
+            (min, max)
+        }
+        val newStat = ColumnStat(min = minMaxValue._1, max = minMaxValue._2)
+        unionOutput(outputIndex) -> newStat
     }
+  }
 
-    Some(
-      Statistics(
-        sizeInBytes = sizeInBytes,
-        rowCount = outputRows,
-        attributeStats = newAttrStats))
+  private def computeNullCountStats(union: Union): Seq[(Attribute, ColumnStat)] = {
+    val unionOutput = union.output
+    val attrToComputeNullCount = union.children.map(_.output).transpose.zipWithIndex.filter {
+      case (attrs, _) => attrs.zipWithIndex.forall {
+        case (attr, childIndex) =>
+          val attrStats = union.children(childIndex).stats.attributeStats
+          attrStats.get(attr).isDefined && attrStats(attr).nullCount.isDefined
+      }
+    }
+    attrToComputeNullCount.map {
+      case (attrs, outputIndex) =>
+        val firstStat = union.children.head.stats.attributeStats(attrs.head)
+        val firstNullCount = firstStat.nullCount.get
+        val colWithNullStatValues = attrs.zipWithIndex.tail.foldLeft[BigInt](firstNullCount) {
+          case (totalNullCount, (attr, childIndex)) =>
+            val colStat = union.children(childIndex).stats.attributeStats(attr)
+            totalNullCount + colStat.nullCount.get
+        }
+        val newStat = ColumnStat(nullCount = Some(colWithNullStatValues))
+        unionOutput(outputIndex) -> newStat
+    }
   }
 }

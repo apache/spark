@@ -134,7 +134,7 @@ class MultiIndex(Index):
 
     @property
     def _internal(self):
-        internal = self._kdf._internal
+        internal = self._psdf._internal
         scol = F.struct(internal.index_spark_columns)
         return internal.copy(
             column_labels=[None],
@@ -770,8 +770,8 @@ class MultiIndex(Index):
                 "Doesn't support symmetric_difference between Index & MultiIndex for now"
             )
 
-        sdf_self = self._kdf._internal.spark_frame.select(self._internal.index_spark_columns)
-        sdf_other = other._kdf._internal.spark_frame.select(other._internal.index_spark_columns)
+        sdf_self = self._psdf._internal.spark_frame.select(self._internal.index_spark_columns)
+        sdf_other = other._psdf._internal.spark_frame.select(other._internal.index_spark_columns)
 
         sdf_symdiff = sdf_self.union(sdf_other).subtract(sdf_self.intersect(sdf_other))
 
@@ -997,8 +997,8 @@ class MultiIndex(Index):
 
         Examples
         --------
-        >>> kmidx = ps.MultiIndex.from_tuples([("a", "x"), ("b", "y"), ("c", "z")])
-        >>> kmidx.insert(3, ("h", "j"))  # doctest: +SKIP
+        >>> psmidx = ps.MultiIndex.from_tuples([("a", "x"), ("b", "y"), ("c", "z")])
+        >>> psmidx.insert(3, ("h", "j"))  # doctest: +SKIP
         MultiIndex([('a', 'x'),
                     ('b', 'y'),
                     ('c', 'z'),
@@ -1007,7 +1007,7 @@ class MultiIndex(Index):
 
         For negative values
 
-        >>> kmidx.insert(-2, ("h", "j"))  # doctest: +SKIP
+        >>> psmidx.insert(-2, ("h", "j"))  # doctest: +SKIP
         MultiIndex([('a', 'x'),
                     ('h', 'j'),
                     ('b', 'y'),
@@ -1060,11 +1060,11 @@ class MultiIndex(Index):
 
         Examples
         --------
-        >>> kmidx = ps.MultiIndex.from_tuples([('a', 'x')])
-        >>> kmidx.item()
+        >>> psmidx = ps.MultiIndex.from_tuples([('a', 'x')])
+        >>> psmidx.item()
         ('a', 'x')
         """
-        return self._kdf.head(2)._to_internal_pandas().index.item()
+        return self._psdf.head(2)._to_internal_pandas().index.item()
 
     def intersection(self, other) -> "MultiIndex":
         """

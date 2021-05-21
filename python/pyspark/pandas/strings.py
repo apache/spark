@@ -1144,7 +1144,7 @@ class StringMethods(object):
         """
         # type hint does not support to specify array type yet.
         pudf = pandas_udf(
-            lambda s: s.str.findall(pat, flags),
+            lambda s, *_: s.str.findall(pat, flags),
             returnType=ArrayType(StringType(), containsNull=True),
             functionType=PandasUDFType.SCALAR,
         )
@@ -1989,25 +1989,25 @@ class StringMethods(object):
 
         # type hint does not support to specify array type yet.
         pudf = pandas_udf(
-            lambda s: s.str.split(pat, n),
+            lambda s, *_: s.str.split(pat, n),
             returnType=ArrayType(StringType(), containsNull=True),
             functionType=PandasUDFType.SCALAR,
         )
-        kser = self._data._with_new_scol(pudf(self._data.spark.column), dtype=self._data.dtype)
+        psser = self._data._with_new_scol(pudf(self._data.spark.column), dtype=self._data.dtype)
 
         if expand:
-            kdf = kser.to_frame()
-            scol = kdf._internal.data_spark_columns[0]
+            psdf = psser.to_frame()
+            scol = psdf._internal.data_spark_columns[0]
             spark_columns = [scol[i].alias(str(i)) for i in range(n + 1)]
             column_labels = [(i,) for i in range(n + 1)]
-            internal = kdf._internal.with_new_columns(
+            internal = psdf._internal.with_new_columns(
                 spark_columns,
                 column_labels=cast(Optional[List], column_labels),
                 data_dtypes=([self._data.dtype] * len(column_labels)),
             )
             return DataFrame(internal)
         else:
-            return kser
+            return psser
 
     def rsplit(self, pat=None, n=-1, expand=False) -> Union["ps.Series", "ps.DataFrame"]:
         """
@@ -2127,25 +2127,25 @@ class StringMethods(object):
 
         # type hint does not support to specify array type yet.
         pudf = pandas_udf(
-            lambda s: s.str.rsplit(pat, n),
+            lambda s, *_: s.str.rsplit(pat, n),
             returnType=ArrayType(StringType(), containsNull=True),
             functionType=PandasUDFType.SCALAR,
         )
-        kser = self._data._with_new_scol(pudf(self._data.spark.column), dtype=self._data.dtype)
+        psser = self._data._with_new_scol(pudf(self._data.spark.column), dtype=self._data.dtype)
 
         if expand:
-            kdf = kser.to_frame()
-            scol = kdf._internal.data_spark_columns[0]
+            psdf = psser.to_frame()
+            scol = psdf._internal.data_spark_columns[0]
             spark_columns = [scol[i].alias(str(i)) for i in range(n + 1)]
             column_labels = [(i,) for i in range(n + 1)]
-            internal = kdf._internal.with_new_columns(
+            internal = psdf._internal.with_new_columns(
                 spark_columns,
                 column_labels=cast(Optional[List], column_labels),
                 data_dtypes=([self._data.dtype] * len(column_labels)),
             )
             return DataFrame(internal)
         else:
-            return kser
+            return psser
 
     def translate(self, table) -> "ps.Series":
         """
