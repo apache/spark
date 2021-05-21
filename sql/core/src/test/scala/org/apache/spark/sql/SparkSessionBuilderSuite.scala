@@ -474,11 +474,17 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach wit
   }
 
   test("SPARK-33944: Create a working SparkSession with a broken FileSystem") {
-    val session = SparkSession.builder()
-      .master("local")
-      .config(WAREHOUSE_PATH.key, "my_dir")
-      .config("fs.file.impl", "non.existing.class")
-      .getOrCreate()
-    session.sql("SELECT 1").collect()
+    val msg = "Cannot qualify the warehouse path, leaving it unqualified"
+    val logAppender = new LogAppender(msg)
+    withLogAppender(logAppender) {
+      val session =
+        SparkSession.builder()
+          .master("local")
+          .config(WAREHOUSE_PATH.key, "my_dir")
+          .config("fs.file.impl", "non.existing.class")
+          .getOrCreate()
+      session.sql("SELECT 1").collect()
+    }
+    assert(logAppender.loggingEvents.exists(_.getRenderedMessage.contains(msg)))
   }
 }
