@@ -227,8 +227,6 @@ class Dataset[T] private[sql](
     val plan = queryExecution.nonRootCommandExecuted match {
       case c: Command =>
         LocalRelation(c.output, withAction("command", queryExecution)(_.executeCollect()))
-      case u @ Union(children, _, _) if children.forall(_.isInstanceOf[CommandResult]) =>
-        LocalRelation(u.output, withAction("command", queryExecution)(_.executeCollect()))
       case _ =>
         queryExecution.analyzed
     }

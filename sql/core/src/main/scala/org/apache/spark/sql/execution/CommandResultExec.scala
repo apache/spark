@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.execution.metric.SQLMetrics
 
 /**
- * Physical plan node for collecting data from a command.
+ * Physical plan node for holding data from a command.
  *
  * `rows` may not be serializable and ideally we should not send `rows` and `unsafeRows`
  * to the executors. Thus marking them as transient.

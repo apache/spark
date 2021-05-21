@@ -24,10 +24,10 @@ import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan}
 import org.apache.spark.sql.execution.SparkPlan
 
 /**
- * Logical plan node for collecting data from a command.
+ * Logical plan node for holding data from a command.
  *
- * @param data The local collection holding the data. It doesn't need to be sent to executors
- *             and then doesn't need to be serializable.
+ * The local collection holding the `data`. It doesn't need to be sent to executors
+ * and then doesn't need to be serializable.
  */
 case class CommandResult(
     output: Seq[Attribute],

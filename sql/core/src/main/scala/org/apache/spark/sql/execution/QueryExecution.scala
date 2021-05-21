@@ -76,8 +76,8 @@ class QueryExecution(
   }
 
   lazy val nonRootCommandExecuted: LogicalPlan = analyzed mapChildren { child =>
-    child transform {
-      // SPARK-35378: Eagerly execute non-root Command so that query command with CTE
+    child transformDown {
+      // SPARK-35378: Eagerly execute non-root Command
       case c: Command =>
         val qe = sparkSession.sessionState.executePlan(c)
         CommandResult(
