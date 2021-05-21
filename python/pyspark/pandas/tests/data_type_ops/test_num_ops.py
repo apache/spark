@@ -21,6 +21,7 @@ from distutils.version import LooseVersion
 import pandas as pd
 import numpy as np
 
+from pyspark import pandas as ps
 from pyspark.pandas.config import option_context
 from pyspark.pandas.tests.data_type_ops.testing_utils import TestCasesUtils
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
