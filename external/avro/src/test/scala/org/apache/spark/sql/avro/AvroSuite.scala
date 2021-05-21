@@ -1832,9 +1832,6 @@ abstract class AvroSuite
         if (dt == "date") {
           val df = Seq(dataStr).toDF("str").select($"str".cast("date").as("dt"))
 
-          // By default we should fail to write ancient datetime values.
-          val e = intercept[SparkException](df.write.format("avro").save(path3_0))
-          assert(e.getCause.getCause.getCause.isInstanceOf[SparkUpgradeException])
           checkDefaultLegacyRead(path2_4)
 
           withSQLConf(SQLConf.AVRO_REBASE_MODE_IN_WRITE.key -> CORRECTED.toString) {
@@ -2072,6 +2069,56 @@ abstract class AvroSuite
 
       checkAnswer(df,
         Seq(Row(1), Row(2), Row(3)))
+    }
+  }
+
+  test("SPARK-35427: datetime rebasing in the EXCEPTION mode") {
+    withSQLConf(SQLConf.AVRO_REBASE_MODE_IN_WRITE.key -> EXCEPTION.toString) {
+      Seq("timestamp-millis", "timestamp-micros").foreach { dt =>
+        withTempPath { dir =>
+          val df = Seq("1001-01-01 01:02:03.123456")
+            .toDF("str")
+            .select($"str".cast("timestamp").as("dt"))
+          val avroSchema =
+            s"""
+              |{
+              |  "type" : "record",
+              |  "name" : "test_schema",
+              |  "fields" : [
+              |    {"name": "dt", "type": {"type": "long", "logicalType": "$dt"}}
+              |  ]
+              |}""".stripMargin
+
+          val e = intercept[SparkException] {
+            df.write.format("avro").option("avroSchema", avroSchema).save(dir.getCanonicalPath)
+          }
+          val errMsg = e.getCause.getCause.getCause.asInstanceOf[SparkUpgradeException].getMessage
+          assert(errMsg.contains("You may get a different result due to the upgrading"))
+        }
+      }
+
+      withTempPath { dir =>
+        val df = Seq(java.sql.Date.valueOf("1001-01-01")).toDF("dt")
+        val e = intercept[SparkException] {
+          df.write.format("avro").save(dir.getCanonicalPath)
+        }
+        val errMsg = e.getCause.getCause.getCause.asInstanceOf[SparkUpgradeException].getMessage
+        assert(errMsg.contains("You may get a different result due to the upgrading"))
+      }
+    }
+
+    withSQLConf(SQLConf.AVRO_REBASE_MODE_IN_READ.key -> EXCEPTION.toString) {
+      Seq(
+        "before_1582_date_v2_4_5.avro",
+        "before_1582_timestamp_micros_v2_4_5.avro",
+        "before_1582_timestamp_millis_v2_4_5.avro"
+      ).foreach { fileName =>
+        val e = intercept[SparkException] {
+          spark.read.format("avro").load(getResourceAvroFilePath(fileName)).collect()
+        }
+        val errMsg = e.getCause.asInstanceOf[SparkUpgradeException].getMessage
+        assert(errMsg.contains("You may get a different result due to the upgrading"))
+      }
     }
   }
 }
