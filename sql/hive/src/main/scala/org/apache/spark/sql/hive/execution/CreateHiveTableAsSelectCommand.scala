@@ -58,8 +58,7 @@ trait CreateHiveTableAsSelectBase extends DataWritingCommand {
       DataWritingCommand.propogateMetrics(sparkSession.sparkContext, command, metrics)
     } else {
         tableDesc.storage.locationUri.foreach { p =>
-          DataWritingCommand.assertEmptyRootPath(
-            p, mode, sparkSession.sparkContext.hadoopConfiguration)
+          DataWritingCommand.assertEmptyRootPath(p, mode, sparkSession.sessionState.newHadoopConf)
         }
       // TODO ideally, we should get the output data ready first and then
       // add the relation into catalog, just in case of failure occurs while data
