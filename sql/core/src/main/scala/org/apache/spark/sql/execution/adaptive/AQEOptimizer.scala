@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution.adaptive
 
 import org.apache.spark.sql.catalyst.analysis.UpdateAttributeNullability
-import org.apache.spark.sql.catalyst.optimizer.PropagateEmptyRelation
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, LogicalPlanIntegrity, PlanHelper}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.internal.SQLConf
@@ -29,10 +28,8 @@ import org.apache.spark.util.Utils
  */
 class AQEOptimizer(conf: SQLConf) extends RuleExecutor[LogicalPlan] {
   private val defaultBatches = Seq(
-    Batch("LocalRelation early", Once,
-      ConvertToLocalRelation,
-      EliminateUnnecessaryJoin,
-      PropagateEmptyRelation,
+    Batch("Propagate Empty LocalRelation", Once,
+      PropagateEmptyRelationAdvancedHelper.propagateEmptyRelationAdvanced,
       UpdateAttributeNullability),
     Batch("Demote BroadcastHashJoin", Once, DemoteBroadcastHashJoin)
   )

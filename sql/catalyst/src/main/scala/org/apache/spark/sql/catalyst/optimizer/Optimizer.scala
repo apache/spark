@@ -173,7 +173,8 @@ abstract class Optimizer(catalogManager: CatalogManager)
     // LocalRelation and does not trigger many rules.
     Batch("LocalRelation early", fixedPoint,
       ConvertToLocalRelation,
-      PropagateEmptyRelation,
+      PropagateEmptyRelationBasic,
+      PropagateEmptyRelationAdvanced(),
       // PropagateEmptyRelation can change the nullability of an attribute from nullable to
       // non-nullable when an empty relation child of a Union is removed
       UpdateAttributeNullability) ::
@@ -221,7 +222,8 @@ abstract class Optimizer(catalogManager: CatalogManager)
       ReassignLambdaVariableID) :+
     Batch("LocalRelation", fixedPoint,
       ConvertToLocalRelation,
-      PropagateEmptyRelation,
+      PropagateEmptyRelationBasic,
+      PropagateEmptyRelationAdvanced(),
       // PropagateEmptyRelation can change the nullability of an attribute from nullable to
       // non-nullable when an empty relation child of a Union is removed
       UpdateAttributeNullability) :+
