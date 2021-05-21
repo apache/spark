@@ -255,8 +255,11 @@ REFRESH TABLE my_table;
 ## Data Source Option
 
 Data source options of Parquet can be set via:
-* the `.option`/`.options` methods of `DataFrameReader` or `DataFrameWriter`
-* the `.option`/`.options` methods of `DataStreamReader` or `DataStreamWriter`
+* the `.option`/`.options` methods of
+  *  `DataFrameReader`
+  *  `DataFrameWriter`
+  *  `DataStreamReader`
+  *  `DataStreamWriter`
 
 <table class="table">
   <tr><th><b>Property Name</b></th><th><b>Default</b></th><th><b>Meaning</b></th><th><b>Scope</b></th></tr>
@@ -286,7 +289,20 @@ Data source options of Parquet can be set via:
     </td>
     <td>read</td>
   </tr>
+  <tr>
+    <td><code>mergeSchema</code></td>
+    <td>The SQL config <code>spark.sql.parquet.mergeSchema</code> which is <code>false</code> by default.</td>
+    <td>Sets whether we should merge schemas collected from all Parquet part-files. This will override <code>spark.sql.parquet.mergeSchema</code>.</td>
+    <td>read</td>
+  </tr>
+  <tr>
+    <td><code>compression</code></td>
+    <td>None</td>
+    <td>Compression codec to use when saving to file. This can be one of the known case-insensitive shorten names (none, uncompressed, snappy, gzip, lzo, brotli, lz4, and zstd). This will override <code>spark.sql.parquet.compression.codec</code>. If None is set, it uses the value specified in <code>spark.sql.parquet.compression.codec</code>.</td>
+    <td>write</td>
+  </tr>
 </table>
+Other generic options can be found in <a href="https://spark.apache.org/docs/latest/sql-data-sources-generic-options.html"> Generic Files Source Options</a>
 
 ### Configuration
 
