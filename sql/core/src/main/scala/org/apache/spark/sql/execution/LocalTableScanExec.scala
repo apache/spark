@@ -57,7 +57,7 @@ case class LocalTableScanExec(
   }
 
   override def outputPartitioning: Partitioning = rdd.partitions.length match {
-    case 1 => SinglePartition
+    case single if single <= 1 => SinglePartition
     case other => UnknownPartitioning(other)
   }
 
