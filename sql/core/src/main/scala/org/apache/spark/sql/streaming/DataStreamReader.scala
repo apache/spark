@@ -453,19 +453,16 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
   /**
    * Loads a ORC file stream, returning the result as a `DataFrame`.
    *
-   * You can set the following ORC-specific option(s) for reading ORC files:
+   * You can set the following option(s):
    * <ul>
    * <li>`maxFilesPerTrigger` (default: no max limit): sets the maximum number of new files to be
    * considered in every trigger.</li>
-   * <li>`mergeSchema` (default is the value specified in `spark.sql.orc.mergeSchema`): sets whether
-   * we should merge schemas collected from all ORC part-files. This will override
-   * `spark.sql.orc.mergeSchema`.</li>
-   * <li>`pathGlobFilter`: an optional glob pattern to only include files with paths matching
-   * the pattern. The syntax follows <code>org.apache.hadoop.fs.GlobFilter</code>.
-   * It does not change the behavior of partition discovery.</li>
-   * <li>`recursiveFileLookup`: recursively scan a directory for files. Using this option
-   * disables partition discovery</li>
    * </ul>
+   *
+   * ORC-specific option(s) for reading ORC file stream can be found in
+   * <a href=
+   *   "https://spark.apache.org/docs/latest/sql-data-sources-orc.html#data-source-option">
+   *   Data Source Option</a> in the version you use.
    *
    * @since 2.3.0
    */
