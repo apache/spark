@@ -22,29 +22,32 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.joins.HashedRelationWithAllNullKeys
 
 /**
- * Rule [[PropagateEmptyRelation]] at AQE side.
+ * Rule [[PropagateEmptyRelationBase]] at AQE side.
  */
 object AQEPropagateEmptyRelation extends PropagateEmptyRelationBase {
 
-  override protected def checkRowCount: Option[(LogicalPlan, Boolean) => Boolean] = {
-    case (plan, hasRow) =>
-      Some(plan match {
-        case LogicalQueryStage(_, stage: QueryStageExec) if stage.resultOption.get().isDefined =>
-          stage.getRuntimeStatistics.rowCount match {
-            case Some(count) => hasRow == (count > 0)
-            case _ => false
-          }
-        case _ => false
-      })
+  override protected def checkRowCount(plan: LogicalPlan, hasRow: Boolean): Option[Boolean] = {
+    Some(plan match {
+      case LogicalQueryStage(_, stage: QueryStageExec) if stage.resultOption.get().isDefined =>
+        stage.getRuntimeStatistics.rowCount match {
+          case Some(count) => hasRow == (count > 0)
+          case _ => false
+        }
+      case _ => false
+    })
   }
 
-  override protected def isRelationWithAllNullKeys: Option[LogicalPlan => Boolean] = {
-    case plan =>
-      Some(plan match {
-        case LogicalQueryStage(_, stage: BroadcastQueryStageExec)
-          if stage.resultOption.get().isDefined =>
-          stage.broadcast.relationFuture.get().value == HashedRelationWithAllNullKeys
-        case _ => false
-      })
+  override protected def isRelationWithAllNullKeys(plan: LogicalPlan): Option[Boolean] = {
+    Some(plan match {
+      case LogicalQueryStage(_, stage: BroadcastQueryStageExec)
+        if stage.resultOption.get().isDefined =>
+        stage.broadcast.relationFuture.get().value == HashedRelationWithAllNullKeys
+      case _ => false
+    })
+  }
+
+  // TODO we need use transformUpWithPruning instead of transformUp
+  def apply(plan: LogicalPlan): LogicalPlan = plan.transformUp {
+    applyInternal
   }
 }

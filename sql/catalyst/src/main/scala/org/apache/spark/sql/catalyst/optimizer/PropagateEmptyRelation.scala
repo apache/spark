@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.Literal.FalseLiteral
 import org.apache.spark.sql.catalyst.planning.ExtractSingleColumnNullAwareAntiJoin
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, _}
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.TreePattern.{LOCAL_RELATION, TRUE_OR_FALSE_LITERAL}
 
@@ -91,16 +91,16 @@ object PropagateEmptyRelationBasic extends Rule[LogicalPlan] {
  *     - Aggregate with all empty children and at least one grouping expression.
  *     - Generate(Explode) with all empty children. Others like Hive UDTF may return results.
  */
-trait PropagateEmptyRelationBase extends Rule[LogicalPlan] with CastSupport {
+abstract class PropagateEmptyRelationBase extends Rule[LogicalPlan] with CastSupport {
   /**
    * At AQE side, we use this function to check if a plan has output rows or not
    */
-  protected def checkRowCount: Option[(LogicalPlan, Boolean) => Boolean] = None
+  protected def checkRowCount(plan: LogicalPlan, hasRow: Boolean): Option[Boolean] = None
 
   /**
    * At AQE side, we use the broadcast query stage to do the check
    */
-  protected def isRelationWithAllNullKeys: Option[LogicalPlan => Boolean] = None
+  protected def isRelationWithAllNullKeys(plan: LogicalPlan): Option[Boolean] = None
 
   private def isEmptyLocalRelation(plan: LogicalPlan): Boolean = {
     val defaultEmptyRelation: Boolean = plan match {
@@ -108,11 +108,8 @@ trait PropagateEmptyRelationBase extends Rule[LogicalPlan] with CastSupport {
       case _ => false
     }
 
-    if (checkRowCount.isDefined) {
-      checkRowCount.get.apply(plan, false) || defaultEmptyRelation
-    } else {
-      defaultEmptyRelation
-    }
+    checkRowCount(plan, false).map(_ || defaultEmptyRelation)
+      .getOrElse(defaultEmptyRelation)
   }
 
   private def empty(plan: LogicalPlan) =
@@ -122,12 +119,9 @@ trait PropagateEmptyRelationBase extends Rule[LogicalPlan] with CastSupport {
   private def nullValueProjectList(plan: LogicalPlan): Seq[NamedExpression] =
     plan.output.map{ a => Alias(cast(Literal(null), a.dataType), a.name)(a.exprId) }
 
-  // We can not use transformUpWithPruning here since this rule is used by both normal Optimizer
-  // and AQE Optimizer. And this may only effective at AQE side.
-  def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithPruning(
-    _.containsAnyPattern(LOCAL_RELATION, TRUE_OR_FALSE_LITERAL), ruleId) {
+  protected def applyInternal: PartialFunction[LogicalPlan, LogicalPlan] = {
     case j @ ExtractSingleColumnNullAwareAntiJoin(_, _)
-      if isRelationWithAllNullKeys.isDefined && isRelationWithAllNullKeys.get(j.right) =>
+      if isRelationWithAllNullKeys(j.right).contains(true) =>
       empty(j)
 
     // Joins on empty LocalRelations generated from streaming sources are not eliminated
@@ -162,10 +156,10 @@ trait PropagateEmptyRelationBase extends Rule[LogicalPlan] with CastSupport {
           case _ => p
         }
       } else if (joinType == LeftSemi && conditionOpt.isEmpty &&
-        checkRowCount.isDefined && checkRowCount.get.apply(p.right, true)) {
+        checkRowCount(p.right, true).contains(true)) {
         p.left
       } else if (joinType == LeftAnti && conditionOpt.isEmpty &&
-        checkRowCount.isDefined && checkRowCount.get.apply(p.right, true)) {
+        checkRowCount(p.right, true).contains(true)) {
         empty(p)
       } else {
         p
@@ -199,4 +193,9 @@ trait PropagateEmptyRelationBase extends Rule[LogicalPlan] with CastSupport {
   }
 }
 
-object PropagateEmptyRelation extends PropagateEmptyRelationBase
+object PropagateEmptyRelation extends PropagateEmptyRelationBase {
+  def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithPruning(
+    _.containsAnyPattern(LOCAL_RELATION, TRUE_OR_FALSE_LITERAL), ruleId) {
+    applyInternal
+  }
+}
