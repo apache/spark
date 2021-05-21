@@ -81,7 +81,8 @@ class BooleanOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         self.assert_eq(self.pser / 0.1, self.psser / 0.1)
 
         with option_context("compute.ops_on_diff_frames", True):
-            self.assert_eq(self.pser / self.float_pser, (self.psser / self.float_psser).sort_index())
+            self.assert_eq(
+                self.pser / self.float_pser, (self.psser / self.float_psser).sort_index())
 
             for psser in self.non_numeric_pssers.values():
                 self.assertRaises(TypeError, lambda: self.psser / psser)

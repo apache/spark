@@ -123,7 +123,8 @@ class NumOpsTest(PandasOnSparkTestCase, TestCasesUtils):
                 self.assertRaises(TypeError, lambda: psser // self.non_numeric_pssers["string"])
                 self.assertRaises(TypeError, lambda: psser // self.non_numeric_pssers["datetime"])
                 self.assertRaises(TypeError, lambda: psser // self.non_numeric_pssers["date"])
-                self.assertRaises(TypeError, lambda: psser // self.non_numeric_pssers["categorical"])
+                self.assertRaises(
+                    TypeError, lambda: psser // self.non_numeric_pssers["categorical"])
                 if LooseVersion(pd.__version__) >= LooseVersion("0.25.3"):
                     self.assert_eq(
                         (self.float_psser // self.non_numeric_pssers["bool"]).sort_index(),
@@ -155,7 +156,8 @@ class NumOpsTest(PandasOnSparkTestCase, TestCasesUtils):
                 self.assertRaises(TypeError, lambda: psser ** self.non_numeric_pssers["string"])
                 self.assertRaises(TypeError, lambda: psser ** self.non_numeric_pssers["datetime"])
                 self.assertRaises(TypeError, lambda: psser ** self.non_numeric_pssers["date"])
-                self.assertRaises(TypeError, lambda: psser ** self.non_numeric_pssers["categorical"])
+                self.assertRaises(
+                    TypeError, lambda: psser ** self.non_numeric_pssers["categorical"])
             self.assert_eq(
                 (self.float_psser ** self.non_numeric_pssers["bool"]).sort_index(),
                 self.float_pser ** self.non_numeric_psers["bool"],
