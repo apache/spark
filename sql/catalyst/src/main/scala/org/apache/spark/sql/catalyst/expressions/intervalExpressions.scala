@@ -359,7 +359,7 @@ case class MakeInterval(
   examples = """
     Examples:
       > SELECT _FUNC_(1, 12, 30, 01.001001);
-       1 days 12 hours 30 minutes 1.001001 seconds
+       1 12:30:01.001001000
       > SELECT _FUNC_(100, null, 3);
        NULL
   """,
