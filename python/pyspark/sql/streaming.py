@@ -683,7 +683,7 @@ class DataStreamReader(OptionUtils):
         ----------------
         Extra options
             For the extra options, refer to
-            `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#data-source-option>`_
+            `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#data-source-option>`_.  # noqa
             in the version you use.
 
         Examples
