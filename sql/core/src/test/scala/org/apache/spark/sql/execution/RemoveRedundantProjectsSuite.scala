@@ -220,10 +220,13 @@ abstract class RemoveRedundantProjectsSuiteBase
 
   }
   Seq("true", "false").foreach { codegenEnabled =>
-    test("SPARK-35287: project generating unsafe row " +
+    test("SPARK-35287: project generating unsafe row for DataSourceV2ScanRelation " +
       s"should not be removed (codegen=$codegenEnabled)") {
-      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
-        SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegenEnabled,
+      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegenEnabled,
+        // Set the following properties to ensure SortExec is placed as a following operator
+        // of BatchScamExec, and avoid ShuffleExchangeExec is placed between them.
+        // It's a condition SPARK-35287 can happen.
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
         SQLConf.LEAF_NODE_DEFAULT_PARALLELISM.key -> "1") {
         withTempPath { path =>
           val format = classOf[SimpleWritableDataSource].getName
