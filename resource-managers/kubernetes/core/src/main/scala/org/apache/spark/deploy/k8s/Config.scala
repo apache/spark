@@ -232,6 +232,13 @@ private[spark] object Config extends Logging {
       .stringConf
       .createOptional
 
+  val PRIORITY_CLASS =
+    ConfigBuilder("spark.kubernetes.executor.pod.priorityClassName")
+      .doc("The executor pod priority class name")
+      .internal()
+      .stringConf
+      .createOptional
+
   val KUBERNETES_AUTH_SUBMISSION_CONF_PREFIX =
     "spark.kubernetes.authenticate.submission"
 
