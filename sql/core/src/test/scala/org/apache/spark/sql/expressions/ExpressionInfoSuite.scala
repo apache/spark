@@ -265,13 +265,13 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
     assert(catalog.lookupFunctionInfo(FunctionIdentifier("sum")).getFunctionType === "built-in")
 
     val scalaUDF = IntegratedUDFTestUtils.TestScalaUDF("scalaUDF")
-    val scalaInfo = catalog.lookupFunctionInfo(FunctionIdentifier(scalaUDF.name))
     IntegratedUDFTestUtils.registerTestUDF(scalaUDF, spark)
+    val scalaInfo = catalog.lookupFunctionInfo(FunctionIdentifier(scalaUDF.name))
     assert(scalaInfo.getFunctionType === "scala_udf")
 
     val pythonUDF = IntegratedUDFTestUtils.TestPythonUDF("pythonUDF")
-    val pythonInfo = catalog.lookupFunctionInfo(FunctionIdentifier(pythonUDF.name))
     IntegratedUDFTestUtils.registerTestUDF(pythonUDF, spark)
+    val pythonInfo = catalog.lookupFunctionInfo(FunctionIdentifier(pythonUDF.name))
     assert(pythonInfo.getFunctionType === "python_udf")
   }
 }
