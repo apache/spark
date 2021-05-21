@@ -271,53 +271,10 @@ class DataFrameReader(OptionUtils):
 
         Other Parameters
         ----------------
-        mergeSchema : str or bool, optional
-            sets whether we should merge schemas collected from all
-            Parquet part-files. This will override
-            ``spark.sql.parquet.mergeSchema``. The default value is specified in
-            ``spark.sql.parquet.mergeSchema``.
-        pathGlobFilter : str or bool, optional
-            an optional glob pattern to only include files with paths matching
-            the pattern. The syntax follows `org.apache.hadoop.fs.GlobFilter`.
-            It does not change the behavior of
-            `partition discovery <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#partition-discovery>`_.  # noqa
-        recursiveFileLookup : str or bool, optional
-            recursively scan a directory for files. Using this option
-            disables
-            `partition discovery <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#partition-discovery>`_.  # noqa
-
-            modification times occurring before the specified time. The provided timestamp
-            must be in the following format: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)
-        modifiedBefore (batch only) : an optional timestamp to only include files with
-            modification times occurring before the specified time. The provided timestamp
-            must be in the following format: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)
-        modifiedAfter (batch only) : an optional timestamp to only include files with
-            modification times occurring after the specified time. The provided timestamp
-            must be in the following format: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)
-        datetimeRebaseMode : str, optional
-            the rebasing mode for the values of the ``DATE``, ``TIMESTAMP_MICROS``,
-            ``TIMESTAMP_MILLIS`` logical types from the Julian to Proleptic Gregorian calendar.
-
-                * ``EXCEPTION``: Spark fails in reads of ancient dates/timestamps
-                                 that are ambiguous between the two calendars.
-                *  ``CORRECTED``: loading of dates/timestamps without rebasing.
-                *  ``LEGACY``: perform rebasing of ancient dates/timestamps from the Julian
-                               to Proleptic Gregorian calendar.
-
-            If None is set, the value of the SQL config
-            ``spark.sql.parquet.datetimeRebaseModeInRead`` is used by default.
-        int96RebaseMode : str, optional
-            the rebasing mode for ``INT96`` timestamps from the Julian to
-            Proleptic Gregorian calendar.
-
-                * ``EXCEPTION``: Spark fails in reads of ancient ``INT96`` timestamps
-                                 that are ambiguous between the two calendars.
-                *  ``CORRECTED``: loading of ``INT96`` timestamps without rebasing.
-                *  ``LEGACY``: perform rebasing of ancient ``INT96`` timestamps from the Julian
-                               to Proleptic Gregorian calendar.
-
-            If None is set, the value of the SQL config
-            ``spark.sql.parquet.int96RebaseModeInRead`` is used by default.
+        **options
+            For the extra options, refer to
+            `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#data-source-option>`_  # noqa
+            in the version you use.
 
         Examples
         --------
@@ -1053,12 +1010,13 @@ class DataFrameWriter(OptionUtils):
                 exists.
         partitionBy : str or list, optional
             names of partitioning columns
-        compression : str, optional
-            compression codec to use when saving to file. This can be one of the
-            known case-insensitive shorten names (none, uncompressed, snappy, gzip,
-            lzo, brotli, lz4, and zstd). This will override
-            ``spark.sql.parquet.compression.codec``. If None is set, it uses the
-            value specified in ``spark.sql.parquet.compression.codec``.
+
+        Other Parameters
+        ----------------
+        Extra options
+            For the extra options, refer to
+            `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#data-source-option>`_  # noqa
+            in the version you use.
 
         Examples
         --------
