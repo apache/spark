@@ -116,6 +116,7 @@ private[spark] class HadoopConfDriverFeatureStep(conf: KubernetesConf)
         .withNewMetadata()
           .withName(newConfigMapName)
           .endMetadata()
+        .withImmutable(true)
         .addToData(fileMap)
         .build())
     } else {

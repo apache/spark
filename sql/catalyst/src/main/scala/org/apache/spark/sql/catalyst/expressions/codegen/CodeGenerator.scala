@@ -18,7 +18,6 @@
 package org.apache.spark.sql.catalyst.expressions.codegen
 
 import java.io.ByteArrayInputStream
-import java.util.{Map => JavaMap}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
@@ -28,8 +27,7 @@ import scala.util.control.NonFatal
 import com.google.common.cache.{CacheBuilder, CacheLoader}
 import com.google.common.util.concurrent.{ExecutionError, UncheckedExecutionException}
 import org.codehaus.commons.compiler.{CompileException, InternalCompilerException}
-import org.codehaus.commons.compiler.util.reflect.ByteArrayClassLoader
-import org.codehaus.janino.{ClassBodyEvaluator, SimpleCompiler}
+import org.codehaus.janino.ClassBodyEvaluator
 import org.codehaus.janino.util.ClassFile
 
 import org.apache.spark.{TaskContext, TaskKilledException}
@@ -1434,15 +1432,7 @@ object CodeGenerator extends Logging {
    */
   private def updateAndGetCompilationStats(evaluator: ClassBodyEvaluator): ByteCodeStats = {
     // First retrieve the generated classes.
-    val classes = {
-      val scField = classOf[ClassBodyEvaluator].getDeclaredField("sc")
-      scField.setAccessible(true)
-      val compiler = scField.get(evaluator).asInstanceOf[SimpleCompiler]
-      val loader = compiler.getClassLoader.asInstanceOf[ByteArrayClassLoader]
-      val classesField = loader.getClass.getDeclaredField("classes")
-      classesField.setAccessible(true)
-      classesField.get(loader).asInstanceOf[JavaMap[String, Array[Byte]]].asScala
-    }
+    val classes = evaluator.getBytecodes.asScala
 
     // Then walk the classes to get at the method bytecode.
     val codeAttr = Utils.classForName("org.codehaus.janino.util.ClassFile$CodeAttribute")

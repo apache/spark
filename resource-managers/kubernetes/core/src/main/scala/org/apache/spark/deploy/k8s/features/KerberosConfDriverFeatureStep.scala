@@ -230,6 +230,7 @@ private[spark] class KerberosConfDriverFeatureStep(kubernetesConf: KubernetesDri
           .withNewMetadata()
             .withName(newConfigMapName)
             .endMetadata()
+          .withImmutable(true)
           .addToData(
             Map(file.getName() -> Files.toString(file, StandardCharsets.UTF_8)).asJava)
           .build()
@@ -242,6 +243,7 @@ private[spark] class KerberosConfDriverFeatureStep(kubernetesConf: KubernetesDri
           .withNewMetadata()
             .withName(ktSecretName)
             .endMetadata()
+          .withImmutable(true)
           .addToData(kt.getName(), Base64.encodeBase64String(Files.toByteArray(kt)))
           .build())
       } else {
@@ -253,6 +255,7 @@ private[spark] class KerberosConfDriverFeatureStep(kubernetesConf: KubernetesDri
           .withNewMetadata()
             .withName(dtSecretName)
             .endMetadata()
+          .withImmutable(true)
           .addToData(KERBEROS_SECRET_KEY, Base64.encodeBase64String(delegationTokens))
           .build())
       } else {

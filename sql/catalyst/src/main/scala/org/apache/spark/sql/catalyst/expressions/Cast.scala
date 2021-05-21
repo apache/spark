@@ -438,7 +438,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
           false
         } else {
           if (ansiEnabled) {
-            throw new UnsupportedOperationException(s"invalid input syntax for type boolean: $s")
+            throw QueryExecutionErrors.invalidInputSyntaxForBooleanError(s)
           } else {
             null
           }
@@ -1395,8 +1395,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       val stringUtils = inline"${StringUtils.getClass.getName.stripSuffix("$")}"
       (c, evPrim, evNull) =>
         val castFailureCode = if (ansiEnabled) {
-          val errorMessage = s""""invalid input syntax for type boolean: " + $c"""
-          s"throw new java.lang.UnsupportedOperationException($errorMessage);"
+          s"throw QueryExecutionErrors.invalidInputSyntaxForBooleanError($c);"
         } else {
           s"$evNull = true;"
         }

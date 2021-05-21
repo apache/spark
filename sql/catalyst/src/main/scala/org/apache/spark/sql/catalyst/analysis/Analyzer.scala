@@ -2145,8 +2145,8 @@ class Analyzer(override val catalogManager: CatalogManager)
               expandIdentifier(nameParts) match {
                 case NonSessionCatalogAndIdentifier(catalog, ident) =>
                   if (!catalog.isFunctionCatalog) {
-                    throw new AnalysisException(s"Trying to lookup function '$ident' in " +
-                      s"catalog '${catalog.name()}', but it is not a FunctionCatalog.")
+                    throw QueryCompilationErrors.lookupFunctionInNonFunctionCatalogError(
+                      ident, catalog)
                   }
 
                   val unbound = catalog.asFunctionCatalog.loadFunction(ident)
@@ -2157,9 +2157,8 @@ class Analyzer(override val catalogManager: CatalogManager)
                     unbound.bind(inputType)
                   } catch {
                     case unsupported: UnsupportedOperationException =>
-                      throw new AnalysisException(s"Function '${unbound.name}' cannot process " +
-                        s"input: (${arguments.map(_.dataType.simpleString).mkString(", ")}): " +
-                        unsupported.getMessage, cause = Some(unsupported))
+                      throw QueryCompilationErrors.functionCannotProcessInputError(
+                        unbound, arguments, unsupported)
                   }
 
                   bound match {
