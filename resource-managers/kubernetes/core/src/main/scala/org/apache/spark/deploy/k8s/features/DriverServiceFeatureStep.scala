@@ -21,6 +21,7 @@ import scala.collection.JavaConverters._
 import io.fabric8.kubernetes.api.model.{HasMetadata, ServiceBuilder}
 
 import org.apache.spark.deploy.k8s.{KubernetesDriverConf, KubernetesUtils, SparkPod}
+import org.apache.spark.deploy.k8s.Config.KUBERNETES_LABEL_MAX_LENGTH
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.util.{Clock, SystemClock}
@@ -39,16 +40,17 @@ private[spark] class DriverServiceFeatureStep(
       "managed via a Kubernetes service.")
 
   private val preferredServiceName = s"${kubernetesConf.resourceNamePrefix}$DRIVER_SVC_POSTFIX"
-  private val resolvedServiceName = if (preferredServiceName.length <= MAX_SERVICE_NAME_LENGTH) {
-    preferredServiceName
-  } else {
-    val randomServiceId = KubernetesUtils.uniqueID(clock = clock)
-    val shorterServiceName = s"spark-$randomServiceId$DRIVER_SVC_POSTFIX"
-    logWarning(s"Driver's hostname would preferably be $preferredServiceName, but this is " +
-      s"too long (must be <= $MAX_SERVICE_NAME_LENGTH characters). Falling back to use " +
-      s"$shorterServiceName as the driver service's name.")
-    shorterServiceName
-  }
+  private val resolvedServiceName =
+    if (preferredServiceName.length <= KUBERNETES_LABEL_MAX_LENGTH) {
+      preferredServiceName
+    } else {
+      val randomServiceId = KubernetesUtils.uniqueID(clock = clock)
+      val shorterServiceName = s"spark-$randomServiceId$DRIVER_SVC_POSTFIX"
+      logWarning(s"Driver's hostname would preferably be $preferredServiceName, but this is " +
+        s"too long (must be <= $KUBERNETES_LABEL_MAX_LENGTH characters). Falling back to use " +
+        s"$shorterServiceName as the driver service's name.")
+      shorterServiceName
+    }
 
   private val driverPort = kubernetesConf.sparkConf.getInt(
     config.DRIVER_PORT.key, DEFAULT_DRIVER_PORT)
@@ -100,5 +102,4 @@ private[spark] object DriverServiceFeatureStep {
   val DRIVER_BIND_ADDRESS_KEY = config.DRIVER_BIND_ADDRESS.key
   val DRIVER_HOST_KEY = config.DRIVER_HOST_ADDRESS.key
   val DRIVER_SVC_POSTFIX = "-driver-svc"
-  val MAX_SERVICE_NAME_LENGTH = 63
 }

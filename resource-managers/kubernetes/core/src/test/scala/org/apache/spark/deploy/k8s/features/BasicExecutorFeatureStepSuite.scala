@@ -183,17 +183,18 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     initDefaultProfile(baseConf)
     val step = new BasicExecutorFeatureStep(newExecutorConf(), new SecurityManager(baseConf),
       defaultProfile)
-    assert(step.configurePod(SparkPod.initialPod()).pod.getSpec.getHostname.length === 63)
+    assert(step.configurePod(SparkPod.initialPod()).pod.getSpec.getHostname.length ===
+      KUBERNETES_LABEL_MAX_LENGTH)
   }
 
   test("SPARK-35460: invalid PodNamePrefixes") {
     val namePrefixOld = baseConf.get(KUBERNETES_EXECUTOR_POD_NAME_PREFIX)
     try{
-      Seq("_123", "spark_exec", "spark@").foreach { invalid =>
+      Seq("_123", "spark_exec", "spark@", "a" * 39).foreach { invalid =>
         baseConf.set(KUBERNETES_EXECUTOR_POD_NAME_PREFIX, invalid)
         val e = intercept[IllegalArgumentException](newExecutorConf())
-        assert(e.getMessage.contains("Pod names must consist of lower case alphanumeric" +
-          " characters"))
+        assert(e.getMessage === "must conform https://kubernetes.io/docs/concepts/overview/" +
+          "working-with-objects/names/#dns-label-names and the value length <= 38")
       }
     } finally {
       namePrefixOld.foreach(baseConf.set(KUBERNETES_EXECUTOR_POD_NAME_PREFIX, _))

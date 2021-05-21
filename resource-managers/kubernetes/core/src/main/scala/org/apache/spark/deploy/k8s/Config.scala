@@ -250,21 +250,31 @@ private[spark] object Config extends Logging {
       .stringConf
       .createOptional
 
-  private val podConfValidator =
-    "^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$".r.pattern
+  // the definition of a label in DNS (RFC 1123).
+  private val dns1123LabelFmt = "[a-z0-9]([-a-z0-9]*[a-z0-9])?"
+
+  private val podConfValidator = (s"^$dns1123LabelFmt(\\.$dns1123LabelFmt)*$$").r.pattern
+
+  // The possible longest executor name would be "$prefix-exec-${Long.MaxValue}"
+  private def isValidExecutorPodNamePrefix(prefix: String): Boolean = {
+    val reservedLen = Long.MaxValue.toString.length + 9
+    val validLength = prefix.length + reservedLen <= KUBERNETES_LABEL_MAX_LENGTH
+    validLength && podConfValidator.matcher(prefix).matches()
+  }
 
   val KUBERNETES_EXECUTOR_POD_NAME_PREFIX =
     ConfigBuilder("spark.kubernetes.executor.podNamePrefix")
-      .doc("Prefix to use in front of the executor pod names. Note that pod names must consist" +
-        " of lower case alphanumeric characters, '-' or '.', and must start and end with an" +
-        " alphanumeric character (e.g. 'example.com', regex used for validation is:" +
-        s" ${podConfValidator.toString}")
+      .doc("Prefix to use in front of the executor pod names. It must conform the rules defined" +
+        " by the Kubernetes <a href=\"https://kubernetes.io/docs/concepts/overview/" +
+        "working-with-objects/names/#dns-label-names\">DNS Label Names</a>. Besides, the" +
+        " executor pod names will be generated in the form of" +
+        " <code>$podNamePrefix-exec-$id</code>, where the `id` is a positive long value, " +
+        "so the length of the `podNamePrefix` need to be <= 38(63 - 19 -6).")
       .version("2.3.0")
       .stringConf
-      .checkValue(v => podConfValidator.matcher(v).matches(),
-        "Pod names must consist of lower case alphanumeric characters, '-' or '.'," +
-          " and must start and end with an alphanumeric character (e.g. 'example.com', regex" +
-          s" used for validation is: ${podConfValidator.toString}")
+      .checkValue(isValidExecutorPodNamePrefix,
+        "must conform https://kubernetes.io/docs/concepts/overview/working-with-objects" +
+          "/names/#dns-label-names and the value length <= 38")
       .createOptional
 
   val KUBERNETES_EXECUTOR_DISABLE_CONFIGMAP =
@@ -570,4 +580,6 @@ private[spark] object Config extends Logging {
   val KUBERNETES_VOLUMES_OPTIONS_SERVER_KEY = "options.server"
 
   val KUBERNETES_DRIVER_ENV_PREFIX = "spark.kubernetes.driverEnv."
+
+  val KUBERNETES_LABEL_MAX_LENGTH = 63
 }

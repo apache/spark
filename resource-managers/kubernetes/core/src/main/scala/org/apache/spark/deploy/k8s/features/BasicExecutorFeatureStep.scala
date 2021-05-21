@@ -99,7 +99,7 @@ private[spark] class BasicExecutorFeatureStep(
     // hostname must be no longer than 63 characters, so take the last 63 characters of the pod
     // name as the hostname.  This preserves uniqueness since the end of name contains
     // executorId
-    val hostname = name.substring(Math.max(0, name.length - 63))
+    val hostname = name.substring(Math.max(0, name.length - KUBERNETES_LABEL_MAX_LENGTH))
       // Remove non-word characters from the start of the hostname
       .replaceAll("^[^\\w]+", "")
       // Replace dangerous characters in the remaining string with a safe alternative.
