@@ -257,7 +257,7 @@ private[spark] object Config extends Logging {
 
   // The possible longest executor name would be "$prefix-exec-${Long.MaxValue}"
   private def isValidExecutorPodNamePrefix(prefix: String): Boolean = {
-    val reservedLen = Long.MaxValue.toString.length + 9
+    val reservedLen = Long.MaxValue.toString.length + 6
     val validLength = prefix.length + reservedLen <= KUBERNETES_LABEL_MAX_LENGTH
     validLength && podConfValidator.matcher(prefix).matches()
   }

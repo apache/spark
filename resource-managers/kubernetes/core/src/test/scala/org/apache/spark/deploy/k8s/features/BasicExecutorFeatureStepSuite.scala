@@ -176,41 +176,52 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     checkOwnerReferences(executor.pod, DRIVER_POD_UID)
   }
 
-  test("executor pod hostnames get truncated to 63 characters") {
-    val longPodNamePrefix = "loremipsumdolorsitametvimatelitrefficiendisuscipianturvixlegeresple"
-
-    baseConf.set(KUBERNETES_EXECUTOR_POD_NAME_PREFIX, longPodNamePrefix)
-    initDefaultProfile(baseConf)
-    val step = new BasicExecutorFeatureStep(newExecutorConf(), new SecurityManager(baseConf),
-      defaultProfile)
-    assert(step.configurePod(SparkPod.initialPod()).pod.getSpec.getHostname.length ===
-      KUBERNETES_LABEL_MAX_LENGTH)
-  }
-
-  test("SPARK-35460: invalid PodNamePrefixes") {
+  def withPodNamePrefixRestored(f: => Unit): Unit = {
     val namePrefixOld = baseConf.get(KUBERNETES_EXECUTOR_POD_NAME_PREFIX)
-    try{
-      Seq("_123", "spark_exec", "spark@", "a" * 39).foreach { invalid =>
-        baseConf.set(KUBERNETES_EXECUTOR_POD_NAME_PREFIX, invalid)
-        val e = intercept[IllegalArgumentException](newExecutorConf())
-        assert(e.getMessage === "must conform https://kubernetes.io/docs/concepts/overview/" +
-          "working-with-objects/names/#dns-label-names and the value length <= 38")
-      }
+    try {
+      f
     } finally {
       namePrefixOld.foreach(baseConf.set(KUBERNETES_EXECUTOR_POD_NAME_PREFIX, _))
     }
   }
 
-  test("hostname truncation generates valid host names") {
-    val invalidPrefix = "abcdef-*_/[]{}+==.,;'\"-----------------------------------------------"
+  test("executor pod hostnames get truncated to 63 characters") {
+    withPodNamePrefixRestored {
+      val longPodNamePrefix = "loremipsumdolorsitametvimatelitrefficiendisuscipianturvixlegeresple"
+      baseConf.remove(KUBERNETES_EXECUTOR_POD_NAME_PREFIX)
+      baseConf.set("spark.app.name", longPodNamePrefix)
+      initDefaultProfile(baseConf)
+      val step = new BasicExecutorFeatureStep(newExecutorConf(), new SecurityManager(baseConf),
+        defaultProfile)
+      assert(step.configurePod(SparkPod.initialPod()).pod.getSpec.getHostname.length ===
+        KUBERNETES_LABEL_MAX_LENGTH)
+    }
+  }
 
-    baseConf.set("spark.app.name", invalidPrefix)
-    initDefaultProfile(baseConf)
-    val step = new BasicExecutorFeatureStep(newExecutorConf(), new SecurityManager(baseConf),
-      defaultProfile)
-    val hostname = step.configurePod(SparkPod.initialPod()).pod.getSpec().getHostname()
-    assert(hostname.length <= 63)
-    assert(InternetDomainName.isValid(hostname))
+  test("SPARK-35460: invalid PodNamePrefixes") {
+    withPodNamePrefixRestored {
+      Seq("_123", "spark_exec", "spark@", "a" * 39).foreach { invalid =>
+        baseConf.set(KUBERNETES_EXECUTOR_POD_NAME_PREFIX, invalid)
+        val e = intercept[IllegalArgumentException](newExecutorConf())
+        assert(e.getMessage === s"'$invalid' in spark.kubernetes.executor.podNamePrefix is" +
+          s" invalid. must conform https://kubernetes.io/docs/concepts/overview/" +
+          "working-with-objects/names/#dns-label-names and the value length <= 38")
+      }
+    }
+  }
+
+  test("hostname truncation generates valid host names") {
+    withPodNamePrefixRestored {
+      val invalidPrefix = "abcdef-*_/[]{}+==.,;'\"-----------------------------------------------"
+      baseConf.remove(KUBERNETES_EXECUTOR_POD_NAME_PREFIX)
+      baseConf.set("spark.app.name", invalidPrefix)
+      initDefaultProfile(baseConf)
+      val step = new BasicExecutorFeatureStep(newExecutorConf(), new SecurityManager(baseConf),
+        defaultProfile)
+      val hostname = step.configurePod(SparkPod.initialPod()).pod.getSpec().getHostname()
+      assert(hostname.length <= KUBERNETES_LABEL_MAX_LENGTH)
+      assert(InternetDomainName.isValid(hostname))
+    }
   }
 
   test("classpath and extra java options get translated into environment variables") {
