@@ -3711,7 +3711,9 @@ def schema_of_json(json, options=None):
     json : :class:`~pyspark.sql.Column` or str
         a JSON string or a foldable string column containing a JSON string.
     options : dict, optional
-        options to control parsing. accepts the same options as the JSON datasource
+        options to control parsing. accepts the same options as the JSON datasource.
+        See `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option>`_  # noqa
+        in the version you use.
 
         .. versionchanged:: 3.0
            It accepts `options` parameter to control schema inferring.

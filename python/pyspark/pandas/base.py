@@ -106,9 +106,9 @@ def align_diff_index_ops(func, this_index_ops: "IndexOpsMixin", *args) -> "Index
         )
 
         return column_op(func)(
-            combined["this"]._kser_for(combined["this"]._internal.column_labels[0]),
+            combined["this"]._psser_for(combined["this"]._internal.column_labels[0]),
             *[
-                combined["that"]._kser_for(label)
+                combined["that"]._psser_for(label)
                 for label in combined["that"]._internal.column_labels
             ]
         ).rename(this_index_ops.name)
@@ -153,7 +153,7 @@ def align_diff_index_ops(func, this_index_ops: "IndexOpsMixin", *args) -> "Index
                 return column_op(func)(
                     first_series(combined["this"]),
                     *[
-                        combined["that"]._kser_for(label)
+                        combined["that"]._psser_for(label)
                         for label in combined["that"]._internal.column_labels
                     ]
                 ).rename(this_index_ops.name)
@@ -161,7 +161,7 @@ def align_diff_index_ops(func, this_index_ops: "IndexOpsMixin", *args) -> "Index
                 this = cast(Index, this_index_ops).to_frame().reset_index(drop=True)
 
                 that_series = next(col for col in cols if isinstance(col, Series))
-                that_frame = that_series._kdf[
+                that_frame = that_series._psdf[
                     [
                         cast(Series, col.to_series() if isinstance(col, Index) else col).rename(i)
                         for i, col in enumerate(cols)
@@ -182,7 +182,7 @@ def align_diff_index_ops(func, this_index_ops: "IndexOpsMixin", *args) -> "Index
                 return column_op(func)(
                     self_index,
                     *[
-                        other._kser_for(label)
+                        other._psser_for(label)
                         for label, col in zip(other._internal.column_labels, cols)
                     ]
                 ).rename(that_series.name)
@@ -245,8 +245,8 @@ def column_op(f):
             if isinstance(self, Series) or not any(isinstance(col, Series) for col in cols):
                 index_ops = self._with_new_scol(scol, dtype=dtype)
             else:
-                kser = next(col for col in cols if isinstance(col, Series))
-                index_ops = kser._with_new_scol(scol, dtype=dtype)
+                psser = next(col for col in cols if isinstance(col, Series))
+                index_ops = psser._with_new_scol(scol, dtype=dtype)
         elif get_option("compute.ops_on_diff_frames"):
             index_ops = align_diff_index_ops(f, self, *args)
         else:
@@ -290,7 +290,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
 
     @property
     @abstractmethod
-    def _kdf(self) -> DataFrame:
+    def _psdf(self) -> DataFrame:
         pass
 
     @abstractmethod
@@ -472,7 +472,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         return self.__or__(other)
 
     def __len__(self):
-        return len(self._kdf)
+        return len(self._psdf)
 
     # NDArray Compat
     def __array_ufunc__(self, ufunc: Callable, method: str, *inputs: Any, **kwargs: Any):
@@ -1555,8 +1555,8 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
 
         Series
 
-        >>> kser = ps.Series([100, 200, 300, 400, 500])
-        >>> kser
+        >>> psser = ps.Series([100, 200, 300, 400, 500])
+        >>> psser
         0    100
         1    200
         2    300
@@ -1564,7 +1564,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         4    500
         dtype: int64
 
-        >>> kser.take([0, 2, 4]).sort_index()
+        >>> psser.take([0, 2, 4]).sort_index()
         0    100
         2    300
         4    500
@@ -1572,23 +1572,23 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
 
         Index
 
-        >>> kidx = ps.Index([100, 200, 300, 400, 500])
-        >>> kidx
+        >>> psidx = ps.Index([100, 200, 300, 400, 500])
+        >>> psidx
         Int64Index([100, 200, 300, 400, 500], dtype='int64')
 
-        >>> kidx.take([0, 2, 4]).sort_values()
+        >>> psidx.take([0, 2, 4]).sort_values()
         Int64Index([100, 300, 500], dtype='int64')
 
         MultiIndex
 
-        >>> kmidx = ps.MultiIndex.from_tuples([("x", "a"), ("x", "b"), ("x", "c")])
-        >>> kmidx  # doctest: +SKIP
+        >>> psmidx = ps.MultiIndex.from_tuples([("x", "a"), ("x", "b"), ("x", "c")])
+        >>> psmidx  # doctest: +SKIP
         MultiIndex([('x', 'a'),
                     ('x', 'b'),
                     ('x', 'c')],
                    )
 
-        >>> kmidx.take([0, 2])  # doctest: +SKIP
+        >>> psmidx.take([0, 2])  # doctest: +SKIP
         MultiIndex([('x', 'a'),
                     ('x', 'c')],
                    )
@@ -1598,7 +1598,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         if isinstance(self, ps.Series):
             return cast(ps.Series, self.iloc[indices])
         else:
-            return self._kdf.iloc[indices].index
+            return self._psdf.iloc[indices].index
 
     def factorize(
         self, sort: bool = True, na_sentinel: Optional[int] = -1
@@ -1631,8 +1631,8 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
 
         Examples
         --------
-        >>> kser = ps.Series(['b', None, 'a', 'c', 'b'])
-        >>> codes, uniques = kser.factorize()
+        >>> psser = ps.Series(['b', None, 'a', 'c', 'b'])
+        >>> codes, uniques = psser.factorize()
         >>> codes
         0    1
         1   -1
@@ -1643,7 +1643,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         >>> uniques
         Index(['a', 'b', 'c'], dtype='object')
 
-        >>> codes, uniques = kser.factorize(na_sentinel=None)
+        >>> codes, uniques = psser.factorize(na_sentinel=None)
         >>> codes
         0    1
         1    3
@@ -1654,7 +1654,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         >>> uniques
         Index(['a', 'b', 'c', None], dtype='object')
 
-        >>> codes, uniques = kser.factorize(na_sentinel=-2)
+        >>> codes, uniques = psser.factorize(na_sentinel=-2)
         >>> codes
         0    1
         1   -2
@@ -1667,8 +1667,8 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
 
         For Index:
 
-        >>> kidx = ps.Index(['b', None, 'a', 'c', 'b'])
-        >>> codes, uniques = kidx.factorize()
+        >>> psidx = ps.Index(['b', None, 'a', 'c', 'b'])
+        >>> codes, uniques = psidx.factorize()
         >>> codes
         Int64Index([1, -1, 0, 2, 1], dtype='int64')
         >>> uniques

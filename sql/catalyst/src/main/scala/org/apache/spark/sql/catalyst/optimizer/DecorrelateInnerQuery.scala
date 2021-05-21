@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreePattern.OUTER_REFERENCE
+import org.apache.spark.sql.errors.QueryExecutionErrors
 
 /**
  * Decorrelate the inner query by eliminating outer references and create domain joins.
@@ -243,8 +244,7 @@ object DecorrelateInnerQuery extends PredicateHelper {
             case _ => Join(child, domain, Inner, None, JoinHint.NONE)
           }
         } else {
-          throw new UnsupportedOperationException(
-            s"Unable to rewrite domain join with conditions: $conditions\n$d")
+          throw QueryExecutionErrors.cannotRewriteDomainJoinWithConditionsError(conditions, d)
         }
     }
   }
@@ -473,8 +473,7 @@ object DecorrelateInnerQuery extends PredicateHelper {
             decorrelate(u.child, parentOuterReferences, aggregated)
 
           case o =>
-            throw new UnsupportedOperationException(
-              s"Decorrelate inner query through ${o.nodeName} is not supported.")
+            throw QueryExecutionErrors.decorrelateInnerQueryThroughPlanUnsupportedError(o)
         }
       }
     }

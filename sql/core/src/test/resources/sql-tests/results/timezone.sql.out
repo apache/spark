@@ -62,7 +62,7 @@ SET TIME ZONE 'invalid/zone'
 struct<>
 -- !query output
 java.lang.IllegalArgumentException
-Cannot resolve the given timezone with ZoneId.of(_, ZoneId.SHORT_IDS)
+'invalid/zone' in spark.sql.session.timeZone is invalid. Cannot resolve the given timezone with ZoneId.of(_, ZoneId.SHORT_IDS)
 
 
 -- !query

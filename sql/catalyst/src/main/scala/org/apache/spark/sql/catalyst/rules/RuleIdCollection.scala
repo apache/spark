@@ -19,6 +19,8 @@ package org.apache.spark.sql.catalyst.rules
 
 import scala.collection.mutable
 
+import org.apache.spark.sql.errors.QueryExecutionErrors
+
 // Represent unique rule ids for rules that are invoked multiple times.
 case class RuleId(id: Int) {
   // Currently, there are more than 128 but less than 192 rules needing an id. However, the
@@ -165,7 +167,7 @@ object RuleIdCollection {
     val ruleIdOpt = ruleToId.get(ruleName)
     // Please add the rule name to `rulesWithIds` if rule id is not found.
     if (!ruleIdOpt.isDefined) {
-      throw new NoSuchElementException(s"Rule id not found for $ruleName")
+      throw QueryExecutionErrors.ruleIdNotFoundForRuleError(ruleName)
     }
     ruleIdOpt.get
   }
