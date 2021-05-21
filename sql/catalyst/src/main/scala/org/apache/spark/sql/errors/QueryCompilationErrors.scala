@@ -22,17 +22,18 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, QualifiedTableName, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NamespaceAlreadyExistsException, NoSuchNamespaceException, NoSuchTableException, ResolvedNamespace, ResolvedTable, ResolvedView, TableAlreadyExistsException}
-import org.apache.spark.sql.catalyst.catalog.{CatalogTable, InvalidUDFClassException}
+import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable, InvalidUDFClassException}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, CreateMap, Expression, GroupingID, NamedExpression, SpecifiedWindowFrame, WindowFrame, WindowFunction, WindowSpecDefinition}
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoStatement, LogicalPlan, SerdeInfo}
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.catalyst.util.{toPrettySQL, FailFastMode, ParseMode, PermissiveMode}
-import org.apache.spark.sql.connector.catalog.{Identifier, NamespaceChange, Table, TableCapability, TableChange, V1Table}
+import org.apache.spark.sql.connector.catalog.{CatalogPlugin, Identifier, NamespaceChange, Table, TableCapability, TableChange, V1Table}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+import org.apache.spark.sql.connector.expressions.{NamedReference, Transform}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.streaming.OutputMode
-import org.apache.spark.sql.types.{AbstractDataType, DataType, StructField, StructType}
+import org.apache.spark.sql.types.{AbstractDataType, DataType, NullType, StructField, StructType}
 
 /**
  * Object for grouping error messages from exceptions thrown during query compilation.
@@ -615,12 +616,6 @@ private[spark] object QueryCompilationErrors {
       className: String, func: FunctionIdentifier): Throwable = {
     new AnalysisException(s"Can not load class '$className' when registering " +
       s"the function '$func', please make sure it is on the classpath")
-  }
-
-  def v2CatalogNotSupportFunctionError(
-      catalog: String, namespace: Seq[String]): Throwable = {
-    new AnalysisException("V2 catalog does not support functions yet. " +
-      s"catalog: $catalog, namespace: '${namespace.quoted}'")
   }
 
   def resourceTypeNotSupportedError(resourceType: String): Throwable = {
@@ -1351,5 +1346,109 @@ private[spark] object QueryCompilationErrors {
     new AnalysisException(
       s"Expected udfs have the same evalType but got different evalTypes: " +
         s"${evalTypes.mkString(",")}")
+  }
+
+  def ambiguousFieldNameError(fieldName: String, names: String): Throwable = {
+    new AnalysisException(
+      s"Ambiguous field name: $fieldName. Found multiple columns that can match: $names")
+  }
+
+  def cannotUseIntervalTypeInTableSchemaError(): Throwable = {
+    new AnalysisException("Cannot use interval type in the table schema.")
+  }
+
+  def cannotConvertBucketWithSortColumnsToTransformError(spec: BucketSpec): Throwable = {
+    new AnalysisException(
+      s"Cannot convert bucketing with sort columns to a transform: $spec")
+  }
+
+  def cannotConvertTransformsToPartitionColumnsError(nonIdTransforms: Seq[Transform]): Throwable = {
+    new AnalysisException("Transforms cannot be converted to partition columns: " +
+      nonIdTransforms.map(_.describe).mkString(", "))
+  }
+
+  def cannotPartitionByNestedColumnError(reference: NamedReference): Throwable = {
+    new AnalysisException(s"Cannot partition by nested column: $reference")
+  }
+
+  def cannotUseCatalogError(plugin: CatalogPlugin, msg: String): Throwable = {
+    new AnalysisException(s"Cannot use catalog ${plugin.name}: $msg")
+  }
+
+  def identifierHavingMoreThanTwoNamePartsError(
+      quoted: String, identifier: String): Throwable = {
+    new AnalysisException(s"$quoted is not a valid $identifier as it has more than 2 name parts.")
+  }
+
+  def emptyMultipartIdentifierError(): Throwable = {
+    new AnalysisException("multi-part identifier cannot be empty.")
+  }
+
+  def cannotCreateTablesWithNullTypeError(): Throwable = {
+    new AnalysisException(s"Cannot create tables with ${NullType.simpleString} type.")
+  }
+
+  def functionUnsupportedInV2CatalogError(): Throwable = {
+    new AnalysisException("function is only supported in v1 catalog")
+  }
+
+  def cannotOperateOnHiveDataSourceFilesError(operation: String): Throwable = {
+    new AnalysisException("Hive data source can only be used with tables, you can not " +
+      s"$operation files of Hive data source directly.")
+  }
+
+  def setPathOptionAndCallWithPathParameterError(method: String): Throwable = {
+    new AnalysisException(
+      s"""
+         |There is a 'path' option set and $method() is called with a path
+         |parameter. Either remove the path option, or call $method() without the parameter.
+         |To ignore this check, set '${SQLConf.LEGACY_PATH_OPTION_BEHAVIOR.key}' to 'true'.
+       """.stripMargin.replaceAll("\n", " "))
+  }
+
+  def userSpecifiedSchemaWithTextFileError(): Throwable = {
+    new AnalysisException("User specified schema not supported with `textFile`")
+  }
+
+  def tempViewNotSupportStreamingWriteError(viewName: String): Throwable = {
+    new AnalysisException(s"Temporary view $viewName doesn't support streaming write")
+  }
+
+  def streamingIntoViewNotSupportedError(viewName: String): Throwable = {
+    new AnalysisException(s"Streaming into views $viewName is not supported.")
+  }
+
+  def inputSourceDiffersFromDataSourceProviderError(
+      source: String, tableName: String, table: CatalogTable): Throwable = {
+    new AnalysisException(s"The input source($source) is different from the table " +
+      s"$tableName's data source provider(${table.provider.get}).")
+  }
+
+  def tableNotSupportStreamingWriteError(tableName: String, t: Table): Throwable = {
+    new AnalysisException(s"Table $tableName doesn't support streaming write - $t")
+  }
+
+  def queryNameNotSpecifiedForMemorySinkError(): Throwable = {
+    new AnalysisException("queryName must be specified for memory sink")
+  }
+
+  def sourceNotSupportedWithContinuousTriggerError(source: String): Throwable = {
+    new AnalysisException(s"'$source' is not supported with continuous trigger")
+  }
+
+  def columnNotFoundInExistingColumnsError(
+      columnType: String, columnName: String, validColumnNames: Seq[String]): Throwable = {
+    new AnalysisException(s"$columnType column $columnName not found in " +
+      s"existing columns (${validColumnNames.mkString(", ")})")
+  }
+
+  def operationNotSupportPartitioningError(operation: String): Throwable = {
+    new AnalysisException(s"'$operation' does not support partitioning")
+  }
+
+  def mixedRefsInAggFunc(funcStr: String): Throwable = {
+    val msg = "Found an aggregate function in a correlated predicate that has both " +
+      "outer and local references, which is not supported: " + funcStr
+    new AnalysisException(msg)
   }
 }

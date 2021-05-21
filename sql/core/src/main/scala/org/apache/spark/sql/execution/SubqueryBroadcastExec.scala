@@ -36,7 +36,8 @@ import org.apache.spark.util.ThreadUtils
  *
  * @param index the index of the join key in the list of keys from the build side
  * @param buildKeys the join keys from the build side of the join used
- * @param child the BroadcastExchange from the build side of the join
+ * @param child the BroadcastExchange or the AdaptiveSparkPlan with BroadcastQueryStageExec
+ *              from the build side of the join
  */
 case class SubqueryBroadcastExec(
     name: String,

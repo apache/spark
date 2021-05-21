@@ -17,17 +17,18 @@
 
 import pandas as pd
 
-from pyspark.pandas.testing.utils import ReusedSQLTestCase, SQLTestUtils
 from pyspark.pandas.utils import (
     lazy_property,
     validate_arguments_and_invoke_function,
     validate_bool_kwarg,
 )
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
+from pyspark.testing.sqlutils import SQLTestUtils
 
 some_global_variable = 0
 
 
-class UtilsTest(ReusedSQLTestCase, SQLTestUtils):
+class UtilsTest(PandasOnSparkTestCase, SQLTestUtils):
 
     # a dummy to_html version with an extra parameter that pandas does not support
     # used in test_validate_arguments_and_invoke_function
@@ -67,19 +68,19 @@ class UtilsTest(ReusedSQLTestCase, SQLTestUtils):
 
     def test_validate_bool_kwarg(self):
         # This should pass and run fine
-        koalas = True
-        self.assert_eq(validate_bool_kwarg(koalas, "koalas"), True)
-        koalas = False
-        self.assert_eq(validate_bool_kwarg(koalas, "koalas"), False)
-        koalas = None
-        self.assert_eq(validate_bool_kwarg(koalas, "koalas"), None)
+        pandas_on_spark = True
+        self.assert_eq(validate_bool_kwarg(pandas_on_spark, "pandas_on_spark"), True)
+        pandas_on_spark = False
+        self.assert_eq(validate_bool_kwarg(pandas_on_spark, "pandas_on_spark"), False)
+        pandas_on_spark = None
+        self.assert_eq(validate_bool_kwarg(pandas_on_spark, "pandas_on_spark"), None)
 
         # This should fail because we are explicitly setting a non-boolean value
-        koalas = "true"
+        pandas_on_spark = "true"
         with self.assertRaisesRegex(
-            ValueError, 'For argument "koalas" expected type bool, received type str.'
+            TypeError, 'For argument "pandas_on_spark" expected type bool, received type str.'
         ):
-            validate_bool_kwarg(koalas, "koalas")
+            validate_bool_kwarg(pandas_on_spark, "pandas_on_spark")
 
 
 class TestClassForLazyProp:
@@ -98,7 +99,8 @@ if __name__ == "__main__":
 
     try:
         import xmlrunner  # type: ignore[import]
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
+
+        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

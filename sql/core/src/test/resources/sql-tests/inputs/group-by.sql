@@ -188,3 +188,4 @@ GROUP BY a IS NULL;
 SELECT if(not(a IS NULL), rand(0), 1), count(*) AS c
 FROM testData
 GROUP BY a IS NULL;
+

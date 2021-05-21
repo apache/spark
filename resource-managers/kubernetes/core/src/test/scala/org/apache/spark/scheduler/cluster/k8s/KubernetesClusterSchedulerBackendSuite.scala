@@ -158,10 +158,10 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
 
     backend.start()
     backend.doRemoveExecutor("1", ExecutorKilled)
-    verify(driverEndpointRef, never()).send(RemoveExecutor("1", ExecutorKilled))
+    verify(driverEndpointRef).send(RemoveExecutor("1", ExecutorKilled))
 
     backend.doRemoveExecutor("2", ExecutorKilled)
-    verify(driverEndpointRef, never()).send(RemoveExecutor("1", ExecutorKilled))
+    verify(driverEndpointRef).send(RemoveExecutor("2", ExecutorKilled))
   }
 
   test("Kill executors") {

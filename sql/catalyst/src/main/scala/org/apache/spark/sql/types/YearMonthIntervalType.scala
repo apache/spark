@@ -55,7 +55,7 @@ class YearMonthIntervalType private() extends AtomicType {
 
   private[spark] override def asNullable: YearMonthIntervalType = this
 
-  override def typeName: String = "year-month interval"
+  override def typeName: String = "interval year to month"
 }
 
 /**

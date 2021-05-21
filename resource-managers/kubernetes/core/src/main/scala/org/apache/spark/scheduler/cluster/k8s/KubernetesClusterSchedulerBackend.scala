@@ -58,15 +58,15 @@ private[spark] class KubernetesClusterSchedulerBackend(
 
   private val initialExecutors = SchedulerBackendUtils.getInitialTargetExecutorNumber(conf)
 
+  private val shouldDeleteDriverService = conf.get(KUBERNETES_DRIVER_SERVICE_DELETE_ON_TERMINATION)
+
   private val shouldDeleteExecutors = conf.get(KUBERNETES_DELETE_EXECUTORS)
 
   private val defaultProfile = scheduler.sc.resourceProfileManager.defaultResourceProfile
 
   // Allow removeExecutor to be accessible by ExecutorPodsLifecycleEventHandler
   private[k8s] def doRemoveExecutor(executorId: String, reason: ExecutorLossReason): Unit = {
-    if (isExecutorActive(executorId)) {
-      removeExecutor(executorId, reason)
-    }
+    removeExecutor(executorId, reason)
   }
 
   private def setUpExecutorConfigMap(driverPod: Option[Pod]): Unit = {
@@ -121,6 +121,22 @@ private[spark] class KubernetesClusterSchedulerBackend(
 
     Utils.tryLogNonFatalError {
       pollEvents.stop()
+    }
+
+    if (shouldDeleteDriverService) {
+      Utils.tryLogNonFatalError {
+        kubernetesClient
+          .services()
+          .withLabel(SPARK_APP_ID_LABEL, applicationId())
+          .delete()
+      }
+    }
+
+    Utils.tryLogNonFatalError {
+      kubernetesClient
+        .persistentVolumeClaims()
+        .withLabel(SPARK_APP_ID_LABEL, applicationId())
+        .delete()
     }
 
     if (shouldDeleteExecutors) {

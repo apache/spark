@@ -20,7 +20,9 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.trees.TreePattern.{SUM, TreePattern}
 import org.apache.spark.sql.catalyst.trees.UnaryLike
+import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -48,12 +50,10 @@ case class Sum(child: Expression) extends DeclarativeAggregate with ImplicitCast
   override def inputTypes: Seq[AbstractDataType] =
     Seq(TypeCollection(NumericType, YearMonthIntervalType, DayTimeIntervalType))
 
-  override def checkInputDataTypes(): TypeCheckResult = child.dataType match {
-    case YearMonthIntervalType | DayTimeIntervalType | NullType => TypeCheckResult.TypeCheckSuccess
-    case dt if dt.isInstanceOf[NumericType] => TypeCheckResult.TypeCheckSuccess
-    case other => TypeCheckResult.TypeCheckFailure(
-      s"function sum requires numeric or interval types, not ${other.catalogString}")
-  }
+  override def checkInputDataTypes(): TypeCheckResult =
+    TypeUtils.checkForAnsiIntervalOrNumericType(child.dataType, "sum")
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(SUM)
 
   private lazy val resultType = child.dataType match {
     case DecimalType.Fixed(precision, scale) =>

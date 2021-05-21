@@ -767,4 +767,28 @@ class AnalysisErrorSuite extends AnalysisTest {
       "using ordinal position or wrap it in first() (or first_value) if you don't care " +
       "which value you get." :: Nil)
   }
+
+  test("SPARK-35080: Unsupported correlated equality predicates in subquery") {
+    val a = AttributeReference("a", IntegerType)()
+    val b = AttributeReference("b", IntegerType)()
+    val c = AttributeReference("c", IntegerType)()
+    val t1 = LocalRelation(a, b)
+    val t2 = LocalRelation(c)
+    val conditions = Seq(
+      (abs($"a") === $"c", "abs(a) = outer(c)"),
+      (abs($"a") <=> $"c", "abs(a) <=> outer(c)"),
+      ($"a" + 1 === $"c", "(a + 1) = outer(c)"),
+      ($"a" + $"b" === $"c", "(a + b) = outer(c)"),
+      ($"a" + $"c" === $"b", "(a + outer(c)) = b"),
+      (And($"a" === $"c", Cast($"a", IntegerType) === $"c"), "CAST(a AS INT) = outer(c)"))
+    conditions.foreach { case (cond, msg) =>
+      val plan = Project(
+        ScalarSubquery(
+          Aggregate(Nil, count(Literal(1)).as("cnt") :: Nil,
+            Filter(cond, t1))
+        ).as("sub") :: Nil,
+        t2)
+      assertAnalysisError(plan, s"Correlated column is not allowed in predicate ($msg)" :: Nil)
+    }
+  }
 }

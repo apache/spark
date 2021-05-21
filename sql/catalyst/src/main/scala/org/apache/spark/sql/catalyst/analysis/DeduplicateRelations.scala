@@ -22,10 +22,12 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeMap, AttributeSet, NamedExpression, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.trees.AlwaysProcess
 
 object DeduplicateRelations extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = {
-    renewDuplicatedRelations(Nil, plan)._1.resolveOperatorsUp {
+    renewDuplicatedRelations(Nil, plan)._1.resolveOperatorsUpWithPruning(
+      AlwaysProcess.fn, ruleId) {
       case p: LogicalPlan if !p.childrenResolved => p
       // To resolve duplicate expression IDs for Join.
       case j @ Join(left, right, _, _, _) if !j.duplicateResolved =>
@@ -208,7 +210,7 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
           .nonEmpty =>
         Seq((oldVersion, oldVersion.copy(windowExpressions = newAliases(windowExpressions))))
 
-      case oldVersion @ ScriptTransformation(_, _, output, _, _)
+      case oldVersion @ ScriptTransformation(_, output, _, _)
           if AttributeSet(output).intersect(conflictingAttributes).nonEmpty =>
         Seq((oldVersion, oldVersion.copy(output = output.map(_.newInstance()))))
 

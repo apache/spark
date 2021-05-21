@@ -3,103 +3,103 @@
 -- !query schema
 struct<i_category:string,i_class:string,i_brand:string,i_product_name:string,d_year:int,d_qoy:int,d_moy:int,s_store_id:string,sumsales:decimal(38,2),rk:int>
 -- !query output
-NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL	213030.29	5
-NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL	497449.55	4
-NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL	946101.86	3
-NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL	2171549.36	2
-NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL	1001298828.04	1
-NULL	NULL	NULL	NULL	2001	NULL	NULL	NULL	213030.29	5
-NULL	NULL	NULL	NULL	2001	1	NULL	NULL	34479.00	96
-NULL	NULL	NULL	NULL	2001	3	NULL	NULL	84237.95	65
-NULL	NULL	NULL	NULL	2001	3	9	NULL	56374.56	75
-NULL	NULL	NULL	NULL	2001	4	NULL	NULL	73696.60	69
-NULL	NULL	NULL	NULL	2001	4	12	NULL	37899.23	92
-NULL	NULL	NULL	antiationeinganti                                 	NULL	NULL	NULL	NULL	177219.10	7
-NULL	NULL	NULL	antiationeinganti                                 	2001	NULL	NULL	NULL	177219.10	7
-NULL	NULL	NULL	antiationeinganti                                 	2001	2	NULL	NULL	33639.03	99
-NULL	NULL	NULL	antiationeinganti                                 	2001	3	NULL	NULL	33770.94	98
-NULL	NULL	NULL	antiationeinganti                                 	2001	4	NULL	NULL	86377.39	64
-NULL	NULL	NULL	antiationeinganti                                 	2001	4	12	NULL	45444.79	84
-NULL	NULL	NULL	ationoughtn stpriought                            	NULL	NULL	NULL	NULL	107200.16	42
-NULL	NULL	NULL	ationoughtn stpriought                            	2001	NULL	NULL	NULL	107200.16	42
-NULL	NULL	NULL	ationoughtn stpriought                            	2001	4	NULL	NULL	67776.47	70
-NULL	NULL	NULL	ationoughtn stpriought                            	2001	4	10	NULL	33340.75	100
-NULL	NULL	brandmaxi #x                                      	NULL	NULL	NULL	NULL	NULL	112097.69	39
-NULL	NULL	brandmaxi #x                                      	oughteingought                                    	NULL	NULL	NULL	NULL	112097.69	39
-NULL	NULL	brandmaxi #x                                      	oughteingought                                    	2001	NULL	NULL	NULL	112097.69	39
-NULL	NULL	brandmaxi #x                                      	oughteingought                                    	2001	4	NULL	NULL	43951.85	86
-NULL	NULL	edu packamalg #x                                  	NULL	NULL	NULL	NULL	NULL	81428.06	66
-NULL	NULL	edu packamalg #x                                  	oughtn stn stese                                  	NULL	NULL	NULL	NULL	81428.06	66
-NULL	NULL	edu packamalg #x                                  	oughtn stn stese                                  	2001	NULL	NULL	NULL	81428.06	66
-NULL	NULL	edu packamalg #x                                  	oughtn stn stese                                  	2001	4	NULL	NULL	35042.77	94
-NULL	NULL	exportiedu pack #x                                	NULL	NULL	NULL	NULL	NULL	116528.07	28
-NULL	NULL	exportiedu pack #x                                	NULL	NULL	NULL	NULL	NULL	116528.07	28
-NULL	NULL	exportiedu pack #x                                	NULL	2001	NULL	NULL	NULL	116528.07	28
-NULL	NULL	exportiedu pack #x                                	NULL	2001	4	NULL	NULL	51178.62	81
-NULL	NULL	exportischolar #x                                 	NULL	NULL	NULL	NULL	NULL	138598.49	9
-NULL	NULL	exportischolar #x                                 	prieingeseought                                   	NULL	NULL	NULL	NULL	138598.49	9
-NULL	NULL	exportischolar #x                                 	prieingeseought                                   	2001	NULL	NULL	NULL	138598.49	9
-NULL	NULL	exportischolar #x                                 	prieingeseought                                   	2001	3	NULL	NULL	51880.06	78
-NULL	NULL	exportischolar #x                                 	prieingeseought                                   	2001	3	9	NULL	34850.11	95
-NULL	NULL	exportischolar #x                                 	prieingeseought                                   	2001	4	NULL	NULL	51807.30	79
-NULL	archery                                           	NULL	NULL	NULL	NULL	NULL	NULL	126538.57	16
-NULL	archery                                           	amalgmaxi #x                                      	NULL	NULL	NULL	NULL	NULL	126538.57	16
-NULL	archery                                           	amalgmaxi #x                                      	antioughtn stought                                	NULL	NULL	NULL	NULL	126538.57	16
-NULL	archery                                           	amalgmaxi #x                                      	antioughtn stought                                	2001	NULL	NULL	NULL	126538.57	16
-NULL	archery                                           	amalgmaxi #x                                      	antioughtn stought                                	2001	4	NULL	NULL	66377.95	72
-NULL	camcorders                                        	NULL	NULL	NULL	NULL	NULL	NULL	133625.83	12
-NULL	camcorders                                        	NULL	NULL	NULL	NULL	NULL	NULL	133625.83	12
-NULL	camcorders                                        	NULL	NULL	NULL	NULL	NULL	NULL	133625.83	12
-NULL	camcorders                                        	NULL	NULL	2001	NULL	NULL	NULL	133625.83	12
-NULL	camcorders                                        	NULL	NULL	2001	3	NULL	NULL	54123.96	76
-NULL	camcorders                                        	NULL	NULL	2001	4	NULL	NULL	44320.28	85
-NULL	dresses                                           	NULL	NULL	NULL	NULL	NULL	NULL	115317.62	31
-NULL	dresses                                           	NULL	NULL	NULL	NULL	NULL	NULL	115317.62	31
-NULL	dresses                                           	NULL	antieseoughtcally                                 	NULL	NULL	NULL	NULL	115317.62	31
-NULL	dresses                                           	NULL	antieseoughtcally                                 	2001	NULL	NULL	NULL	115317.62	31
-NULL	dresses                                           	NULL	antieseoughtcally                                 	2001	4	NULL	NULL	53621.08	77
-NULL	flatware                                          	NULL	NULL	NULL	NULL	NULL	NULL	96861.65	56
-NULL	flatware                                          	NULL	NULL	NULL	NULL	NULL	NULL	96861.65	56
-NULL	flatware                                          	NULL	oughteingationn st                                	NULL	NULL	NULL	NULL	96861.65	56
-NULL	flatware                                          	NULL	oughteingationn st                                	2001	NULL	NULL	NULL	96861.65	56
-NULL	flatware                                          	NULL	oughteingationn st                                	2001	3	NULL	NULL	34255.55	97
-NULL	flatware                                          	NULL	oughteingationn st                                	2001	4	NULL	NULL	42069.01	88
-NULL	glassware                                         	NULL	NULL	NULL	NULL	NULL	NULL	106618.97	44
-NULL	glassware                                         	NULL	NULL	NULL	NULL	NULL	NULL	106618.97	44
-NULL	glassware                                         	NULL	NULL	NULL	NULL	NULL	NULL	106618.97	44
-NULL	glassware                                         	NULL	NULL	2001	NULL	NULL	NULL	106618.97	44
-NULL	glassware                                         	NULL	NULL	2001	4	NULL	NULL	51575.84	80
-NULL	pants                                             	NULL	NULL	NULL	NULL	NULL	NULL	93894.90	60
-NULL	pants                                             	exportiimporto #x                                 	NULL	NULL	NULL	NULL	NULL	93894.90	60
-NULL	pants                                             	exportiimporto #x                                 	antibarableableought                              	NULL	NULL	NULL	NULL	93894.90	60
-NULL	pants                                             	exportiimporto #x                                 	antibarableableought                              	2001	NULL	NULL	NULL	93894.90	60
-NULL	pants                                             	exportiimporto #x                                 	antibarableableought                              	2001	3	NULL	NULL	48275.60	82
-NULL	pants                                             	exportiimporto #x                                 	antibarableableought                              	2001	3	8	NULL	38046.99	91
-NULL	scanners                                          	NULL	NULL	NULL	NULL	NULL	NULL	97564.12	52
-NULL	scanners                                          	namelessunivamalg #x                             	NULL	NULL	NULL	NULL	NULL	97564.12	52
-NULL	scanners                                          	namelessunivamalg #x                             	n stbaresepri                                     	NULL	NULL	NULL	NULL	97564.12	52
-NULL	scanners                                          	namelessunivamalg #x                             	n stbaresepri                                     	2001	NULL	NULL	NULL	97564.12	52
-NULL	scanners                                          	namelessunivamalg #x                             	n stbaresepri                                     	2001	4	NULL	NULL	43503.76	87
-NULL	semi-precious                                     	NULL	NULL	NULL	NULL	NULL	NULL	113803.74	35
-NULL	semi-precious                                     	amalgbrand #x                                     	NULL	NULL	NULL	NULL	NULL	113803.74	35
-NULL	semi-precious                                     	amalgbrand #x                                     	ationeseoughtanti                                 	NULL	NULL	NULL	NULL	113803.74	35
-NULL	semi-precious                                     	amalgbrand #x                                     	ationeseoughtanti                                 	2001	NULL	NULL	NULL	113803.74	35
-NULL	semi-precious                                     	amalgbrand #x                                     	ationeseoughtanti                                 	2001	4	NULL	NULL	62265.30	73
-NULL	sports-apparel                                    	NULL	NULL	NULL	NULL	NULL	NULL	117144.79	24
-NULL	sports-apparel                                    	NULL	NULL	NULL	NULL	NULL	NULL	117144.79	24
-NULL	sports-apparel                                    	NULL	NULL	NULL	NULL	NULL	NULL	117144.79	24
-NULL	sports-apparel                                    	NULL	NULL	2001	NULL	NULL	NULL	117144.79	24
-NULL	sports-apparel                                    	NULL	NULL	2001	4	NULL	NULL	66745.05	71
-NULL	sports-apparel                                    	NULL	NULL	2001	4	12	NULL	45659.44	83
-NULL	swimwear                                          	NULL	NULL	NULL	NULL	NULL	NULL	103045.34	48
-NULL	swimwear                                          	edu packamalg #x                                  	NULL	NULL	NULL	NULL	NULL	103045.34	48
-NULL	swimwear                                          	edu packamalg #x                                  	antieingoughtcally                                	NULL	NULL	NULL	NULL	103045.34	48
-NULL	swimwear                                          	edu packamalg #x                                  	antieingoughtcally                                	2001	NULL	NULL	NULL	103045.34	48
-NULL	swimwear                                          	edu packamalg #x                                  	antieingoughtcally                                	2001	3	NULL	NULL	36125.25	93
-NULL	swimwear                                          	edu packamalg #x                                  	antieingoughtcally                                	2001	4	NULL	NULL	41241.08	89
-NULL	womens                                            	NULL	NULL	NULL	NULL	NULL	NULL	121031.97	20
-NULL	womens                                            	amalgedu pack #x                                  	NULL	NULL	NULL	NULL	NULL	121031.97	20
-NULL	womens                                            	amalgedu pack #x                                  	NULL	NULL	NULL	NULL	NULL	121031.97	20
-NULL	womens                                            	amalgedu pack #x                                  	NULL	2001	NULL	NULL	NULL	121031.97	20
-NULL	womens                                            	amalgedu pack #x                                  	NULL	2001	3	NULL	NULL	38120.58	90
-NULL	womens                                            	amalgedu pack #x                                  	NULL	2001	4	NULL	NULL	57168.07	74
+NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL	681149.47	5
+NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL	1474997.55	4
+NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL	1577864.42	3
+NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL	2536204.81	2
+NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL	999668082.59	1
+NULL	NULL	NULL	NULL	2001	NULL	NULL	NULL	681149.47	5
+NULL	NULL	NULL	NULL	2001	1	NULL	NULL	111437.42	32
+NULL	NULL	NULL	NULL	2001	1	1	NULL	36235.73	90
+NULL	NULL	NULL	NULL	2001	1	3	NULL	49252.88	77
+NULL	NULL	NULL	NULL	2001	2	NULL	NULL	78346.18	63
+NULL	NULL	NULL	NULL	2001	2	6	NULL	34840.48	96
+NULL	NULL	NULL	NULL	2001	3	NULL	NULL	141691.87	12
+NULL	NULL	NULL	NULL	2001	3	7	NULL	31988.52	100
+NULL	NULL	NULL	NULL	2001	3	8	NULL	57778.28	69
+NULL	NULL	NULL	NULL	2001	3	9	NULL	51925.07	73
+NULL	NULL	NULL	NULL	2001	4	NULL	NULL	349674.00	7
+NULL	NULL	NULL	NULL	2001	4	10	NULL	89521.66	52
+NULL	NULL	NULL	NULL	2001	4	11	NULL	107989.95	35
+NULL	NULL	NULL	NULL	2001	4	11	AAAAAAAAHAAAAAAA	38673.65	85
+NULL	NULL	NULL	NULL	2001	4	12	NULL	152162.39	11
+NULL	NULL	NULL	NULL	2001	4	12	AAAAAAAACAAAAAAA	36936.71	88
+NULL	NULL	NULL	NULL	2001	4	12	AAAAAAAAKAAAAAAA	35885.68	92
+NULL	NULL	NULL	ationesebareing                                   	NULL	NULL	NULL	NULL	130971.51	13
+NULL	NULL	NULL	ationesebareing                                   	2001	NULL	NULL	NULL	130971.51	13
+NULL	NULL	NULL	ationesebareing                                   	2001	3	NULL	NULL	49334.88	76
+NULL	NULL	NULL	ationesebareing                                   	2001	4	NULL	NULL	36033.41	91
+NULL	NULL	NULL	n stcallyn stn st                                 	NULL	NULL	NULL	NULL	110926.60	33
+NULL	NULL	NULL	n stcallyn stn st                                 	2001	NULL	NULL	NULL	110926.60	33
+NULL	NULL	NULL	n stcallyn stn st                                 	2001	3	NULL	NULL	33118.05	98
+NULL	NULL	NULL	n stcallyn stn st                                 	2001	4	NULL	NULL	41603.21	83
+NULL	NULL	NULL	n stought                                         	NULL	NULL	NULL	NULL	157465.43	9
+NULL	NULL	NULL	n stought                                         	2001	NULL	NULL	NULL	157465.43	9
+NULL	NULL	NULL	n stought                                         	2001	3	NULL	NULL	46371.14	78
+NULL	NULL	NULL	n stought                                         	2001	4	NULL	NULL	65619.67	66
+NULL	NULL	NULL	n stought                                         	2001	4	11	NULL	45528.69	79
+NULL	NULL	NULL	oughtableantiable                                 	NULL	NULL	NULL	NULL	103187.19	40
+NULL	NULL	NULL	oughtableantiable                                 	2001	NULL	NULL	NULL	103187.19	40
+NULL	NULL	NULL	oughtableantiable                                 	2001	4	NULL	NULL	42408.80	82
+NULL	NULL	NULL	oughtablen stationought                           	NULL	NULL	NULL	NULL	86348.22	57
+NULL	NULL	NULL	oughtablen stationought                           	2001	NULL	NULL	NULL	86348.22	57
+NULL	NULL	NULL	oughtablen stationought                           	2001	4	NULL	NULL	35714.86	93
+NULL	NULL	NULL	oughtesebaration                                  	NULL	NULL	NULL	NULL	76325.38	64
+NULL	NULL	NULL	oughtesebaration                                  	2001	NULL	NULL	NULL	76325.38	64
+NULL	NULL	NULL	oughtesebaration                                  	2001	4	NULL	NULL	36610.75	89
+NULL	NULL	NULL	oughteseoughtation                                	NULL	NULL	NULL	NULL	128623.75	19
+NULL	NULL	NULL	oughteseoughtation                                	2001	NULL	NULL	NULL	128623.75	19
+NULL	NULL	NULL	oughteseoughtation                                	2001	3	NULL	NULL	35495.82	94
+NULL	NULL	NULL	oughteseoughtation                                	2001	4	NULL	NULL	57203.17	70
+NULL	NULL	importoamalg #x                                   	NULL	NULL	NULL	NULL	NULL	102866.87	42
+NULL	NULL	importoamalg #x                                   	NULL	NULL	NULL	NULL	NULL	102866.87	42
+NULL	NULL	importoamalg #x                                   	NULL	2001	NULL	NULL	NULL	102866.87	42
+NULL	NULL	importoamalg #x                                   	NULL	2001	4	NULL	NULL	51717.30	74
+NULL	accessories                                       	NULL	NULL	NULL	NULL	NULL	NULL	98994.39	48
+NULL	accessories                                       	NULL	NULL	NULL	NULL	NULL	NULL	98994.39	48
+NULL	accessories                                       	NULL	prin stn stoughtought                             	NULL	NULL	NULL	NULL	98994.39	48
+NULL	accessories                                       	NULL	prin stn stoughtought                             	2001	NULL	NULL	NULL	98994.39	48
+NULL	accessories                                       	NULL	prin stn stoughtought                             	2001	3	NULL	NULL	37246.83	87
+NULL	athletic                                          	NULL	NULL	NULL	NULL	NULL	NULL	122120.16	21
+NULL	athletic                                          	NULL	NULL	NULL	NULL	NULL	NULL	122120.16	21
+NULL	athletic                                          	NULL	NULL	NULL	NULL	NULL	NULL	122120.16	21
+NULL	athletic                                          	NULL	NULL	2001	NULL	NULL	NULL	122120.16	21
+NULL	athletic                                          	NULL	NULL	2001	4	NULL	NULL	63278.49	67
+NULL	athletic                                          	NULL	NULL	2001	4	11	NULL	38216.51	86
+NULL	baseball                                          	NULL	NULL	NULL	NULL	NULL	NULL	105806.96	36
+NULL	baseball                                          	NULL	NULL	NULL	NULL	NULL	NULL	105806.96	36
+NULL	baseball                                          	NULL	NULL	NULL	NULL	NULL	NULL	105806.96	36
+NULL	baseball                                          	NULL	NULL	2001	NULL	NULL	NULL	105806.96	36
+NULL	baseball                                          	NULL	NULL	2001	4	NULL	NULL	58206.33	68
+NULL	country                                           	NULL	NULL	NULL	NULL	NULL	NULL	89164.69	53
+NULL	country                                           	importoscholar #x                                 	NULL	NULL	NULL	NULL	NULL	89164.69	53
+NULL	country                                           	importoscholar #x                                 	NULL	NULL	NULL	NULL	NULL	89164.69	53
+NULL	country                                           	importoscholar #x                                 	NULL	2001	NULL	NULL	NULL	89164.69	53
+NULL	country                                           	importoscholar #x                                 	NULL	2001	4	NULL	NULL	55674.96	71
+NULL	dresses                                           	NULL	NULL	NULL	NULL	NULL	NULL	116126.30	25
+NULL	dresses                                           	NULL	NULL	NULL	NULL	NULL	NULL	217647.20	8
+NULL	dresses                                           	NULL	oughteingantieing                                 	NULL	NULL	NULL	NULL	116126.30	25
+NULL	dresses                                           	NULL	oughteingantieing                                 	2001	NULL	NULL	NULL	116126.30	25
+NULL	dresses                                           	NULL	oughteingantieing                                 	2001	3	NULL	NULL	35421.52	95
+NULL	dresses                                           	NULL	oughteingantieing                                 	2001	4	NULL	NULL	53283.33	72
+NULL	dresses                                           	amalgamalg #x                                     	NULL	NULL	NULL	NULL	NULL	101520.90	45
+NULL	dresses                                           	amalgamalg #x                                     	NULL	NULL	NULL	NULL	NULL	101520.90	45
+NULL	dresses                                           	amalgamalg #x                                     	NULL	2001	NULL	NULL	NULL	101520.90	45
+NULL	dresses                                           	amalgamalg #x                                     	NULL	2001	3	NULL	NULL	32017.28	99
+NULL	dresses                                           	amalgamalg #x                                     	NULL	2001	4	NULL	NULL	34451.25	97
+NULL	infants                                           	NULL	NULL	NULL	NULL	NULL	NULL	128750.23	15
+NULL	infants                                           	importoexporti #x                                 	NULL	NULL	NULL	NULL	NULL	128750.23	15
+NULL	infants                                           	importoexporti #x                                 	antiationeseese                                   	NULL	NULL	NULL	NULL	128750.23	15
+NULL	infants                                           	importoexporti #x                                 	antiationeseese                                   	2001	NULL	NULL	NULL	128750.23	15
+NULL	infants                                           	importoexporti #x                                 	antiationeseese                                   	2001	3	NULL	NULL	40113.56	84
+NULL	infants                                           	importoexporti #x                                 	antiationeseese                                   	2001	4	NULL	NULL	50724.87	75
+NULL	mens                                              	NULL	NULL	NULL	NULL	NULL	NULL	113853.60	28
+NULL	mens                                              	importoedu pack #x                                	NULL	NULL	NULL	NULL	NULL	113853.60	28
+NULL	mens                                              	importoedu pack #x                                	oughtablen steseought                             	NULL	NULL	NULL	NULL	113853.60	28
+NULL	mens                                              	importoedu pack #x                                	oughtablen steseought                             	2001	NULL	NULL	NULL	113853.60	28
+NULL	mens                                              	importoedu pack #x                                	oughtablen steseought                             	2001	3	NULL	NULL	42447.63	81
+NULL	mens                                              	importoedu pack #x                                	oughtablen steseought                             	2001	4	NULL	NULL	43089.74	80
+NULL	shirts                                            	NULL	NULL	NULL	NULL	NULL	NULL	82003.16	59
+NULL	shirts                                            	NULL	NULL	NULL	NULL	NULL	NULL	82003.16	59
+NULL	shirts                                            	NULL	oughtcallyeseantiought                            	NULL	NULL	NULL	NULL	82003.16	59
+NULL	shirts                                            	NULL	oughtcallyeseantiought                            	2001	NULL	NULL	NULL	82003.16	59

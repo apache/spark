@@ -185,12 +185,12 @@ def register_dataframe_accessor(name):
 
         >>> ## Import if the accessor is in the other file.
         >>> # from my_ext_lib import GeoAccessor
-        >>> kdf = ps.DataFrame({"longitude": np.linspace(0,10),
+        >>> psdf = ps.DataFrame({"longitude": np.linspace(0,10),
         ...                     "latitude": np.linspace(0, 20)})
-        >>> kdf.geo.center  # doctest: +SKIP
+        >>> psdf.geo.center  # doctest: +SKIP
         (5.0, 10.0)
 
-        >>> kdf.geo.plot()  # doctest: +SKIP
+        >>> psdf.geo.plot()  # doctest: +SKIP
     """
     from pyspark.pandas import DataFrame
 
@@ -259,9 +259,9 @@ def register_series_accessor(name):
 
         >>> ## Import if the accessor is in the other file.
         >>> # from my_ext_lib import GeoAccessor
-        >>> kdf = ps.DataFrame({"longitude": np.linspace(0,10),
+        >>> psdf = ps.DataFrame({"longitude": np.linspace(0,10),
         ...                     "latitude": np.linspace(0, 20)})
-        >>> kdf.longitude.geo.is_valid  # doctest: +SKIP
+        >>> psdf.longitude.geo.is_valid  # doctest: +SKIP
         True
     """
     from pyspark.pandas import Series
@@ -332,9 +332,9 @@ def register_index_accessor(name):
 
         >>> ## Import if the accessor is in the other file.
         >>> # from my_ext_lib import CustomAccessor
-        >>> kdf = ps.DataFrame({"longitude": np.linspace(0,10),
+        >>> psdf = ps.DataFrame({"longitude": np.linspace(0,10),
         ...                     "latitude": np.linspace(0, 20)})
-        >>> kdf.index.foo.bar  # doctest: +SKIP
+        >>> psdf.index.foo.bar  # doctest: +SKIP
         'baz'
     """
     from pyspark.pandas import Index

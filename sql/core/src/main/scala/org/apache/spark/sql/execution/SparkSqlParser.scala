@@ -335,7 +335,7 @@ class SparkSqlAstBuilder extends AstBuilder {
   }
 
   /**
-   * Create a [[AddFileCommand]], [[AddJarCommand]], [[AddArchiveCommand]],
+   * Create a [[AddFilesCommand]], [[AddJarsCommand]], [[AddArchivesCommand]],
    * [[ListFilesCommand]], [[ListJarsCommand]] or [[ListArchivesCommand]]
    * command depending on the requested operation on resources.
    * Expected format:
@@ -356,15 +356,12 @@ class SparkSqlAstBuilder extends AstBuilder {
       case p => p
     }
 
-    // The implementation of pathForAdd is to keep the compatibility with before SPARK-34977.
-    val pathForAdd = strLiteralDef.findFirstIn(rawArg)
-      .find(p => p.startsWith("\"") || p.startsWith("'")).map(unescapeSQLString).getOrElse(rawArg)
     ctx.op.getType match {
       case SqlBaseParser.ADD =>
         ctx.identifier.getText.toLowerCase(Locale.ROOT) match {
-          case "file" => AddFileCommand(pathForAdd)
-          case "jar" => AddJarCommand(pathForAdd)
-          case "archive" => AddArchiveCommand(pathForAdd)
+          case "files" | "file" => AddFilesCommand(maybePaths)
+          case "jars" | "jar" => AddJarsCommand(maybePaths)
+          case "archives" | "archive" => AddArchivesCommand(maybePaths)
           case other => operationNotAllowed(s"ADD with resource type '$other'", ctx)
         }
       case SqlBaseParser.LIST =>

@@ -61,7 +61,7 @@ class PostgresKrbIntegrationSuite extends DockerKrbJDBCIntegrationSuite {
 
   override protected def setAuthentication(keytabFile: String, principal: String): Unit = {
     val config = new SecureConnectionProvider.JDBCConfiguration(
-      Configuration.getConfiguration, "pgjdbc", keytabFile, principal)
+      Configuration.getConfiguration, "pgjdbc", keytabFile, principal, true)
     Configuration.setConfiguration(config)
   }
 }

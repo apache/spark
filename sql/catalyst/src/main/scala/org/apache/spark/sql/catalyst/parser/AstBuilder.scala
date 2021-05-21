@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.parser
 
 import java.util.Locale
+import java.util.concurrent.TimeUnit
 import javax.xml.bind.DatatypeConverter
 
 import scala.collection.JavaConverters._
@@ -695,8 +696,6 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       isDistinct = false)
 
     ScriptTransformation(
-      // TODO: Remove this logic and see SPARK-34035
-      Seq(UnresolvedStar(None)),
       string(transformClause.script),
       attributes,
       plan,
@@ -994,31 +993,42 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
           .map(groupByExpr => {
             val groupingAnalytics = groupByExpr.groupingAnalytics
             if (groupingAnalytics != null) {
-              val groupingSets = groupingAnalytics.groupingSet.asScala
-                .map(_.expression.asScala.map(e => expression(e)).toSeq)
-              if (groupingAnalytics.CUBE != null) {
-                // CUBE(A, B, (A, B), ()) is not supported.
-                if (groupingSets.exists(_.isEmpty)) {
-                  throw new ParseException("Empty set in CUBE grouping sets is not supported.",
-                    groupingAnalytics)
-                }
-                Cube(groupingSets.toSeq)
-              } else if (groupingAnalytics.ROLLUP != null) {
-                // ROLLUP(A, B, (A, B), ()) is not supported.
-                if (groupingSets.exists(_.isEmpty)) {
-                  throw new ParseException("Empty set in ROLLUP grouping sets is not supported.",
-                    groupingAnalytics)
-                }
-                Rollup(groupingSets.toSeq)
-              } else {
-                assert(groupingAnalytics.GROUPING != null && groupingAnalytics.SETS != null)
-                GroupingSets(groupingSets.toSeq)
-              }
+              visitGroupingAnalytics(groupingAnalytics)
             } else {
               expression(groupByExpr.expression)
             }
           })
       Aggregate(groupByExpressions.toSeq, selectExpressions, query)
+    }
+  }
+
+  override def visitGroupingAnalytics(
+      groupingAnalytics: GroupingAnalyticsContext): BaseGroupingSets = {
+    val groupingSets = groupingAnalytics.groupingSet.asScala
+      .map(_.expression.asScala.map(e => expression(e)).toSeq)
+    if (groupingAnalytics.CUBE != null) {
+      // CUBE(A, B, (A, B), ()) is not supported.
+      if (groupingSets.exists(_.isEmpty)) {
+        throw QueryParsingErrors.invalidGroupingSetError("CUBE", groupingAnalytics)
+      }
+      Cube(groupingSets.toSeq)
+    } else if (groupingAnalytics.ROLLUP != null) {
+      // ROLLUP(A, B, (A, B), ()) is not supported.
+      if (groupingSets.exists(_.isEmpty)) {
+        throw QueryParsingErrors.invalidGroupingSetError("ROLLUP", groupingAnalytics)
+      }
+      Rollup(groupingSets.toSeq)
+    } else {
+      assert(groupingAnalytics.GROUPING != null && groupingAnalytics.SETS != null)
+      val groupingSets = groupingAnalytics.groupingElement.asScala.flatMap { expr =>
+        val groupingAnalytics = expr.groupingAnalytics()
+        if (groupingAnalytics != null) {
+          visitGroupingAnalytics(groupingAnalytics).selectedGroupByExprs
+        } else {
+          Seq(expr.groupingSet().expression().asScala.map(e => expression(e)).toSeq)
+        }
+      }
+      GroupingSets(groupingSets.toSeq)
     }
   }
 
@@ -1806,7 +1816,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     val ignoreNulls =
       Option(ctx.nullsOption).map(_.getType == SqlBaseParser.IGNORE).getOrElse(false)
     val function = UnresolvedFunction(
-      getFunctionIdentifier(ctx.functionName), arguments, isDistinct, filter, ignoreNulls)
+      getFunctionMultiparts(ctx.functionName), arguments, isDistinct, filter, ignoreNulls)
 
     // Check if the function is evaluated in a windowed context.
     ctx.windowSpec match {
@@ -1816,15 +1826,6 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
         WindowExpression(function, visitWindowDef(spec))
       case _ => function
     }
-  }
-
-
-  /**
-   * Create a function database (optional) and name pair, for multipartIdentifier.
-   * This is used in CREATE FUNCTION, DROP FUNCTION, SHOWFUNCTIONS.
-   */
-  protected def visitFunctionName(ctx: MultipartIdentifierContext): FunctionIdentifier = {
-    visitFunctionName(ctx, ctx.parts.asScala.map(_.getText).toSeq)
   }
 
   /**
@@ -1854,6 +1855,14 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       visitFunctionName(ctx.qualifiedName)
     } else {
       FunctionIdentifier(ctx.getText, None)
+    }
+  }
+
+  protected def getFunctionMultiparts(ctx: FunctionNameContext): Seq[String] = {
+    if (ctx.qualifiedName != null) {
+      ctx.qualifiedName().identifier().asScala.map(_.getText).toSeq
+    } else {
+      Seq(ctx.getText)
     }
   }
 
@@ -2306,12 +2315,30 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   /**
-   * Create a [[CalendarInterval]] literal expression. Two syntaxes are supported:
+   * Create a [[CalendarInterval]] or ANSI interval literal expression.
+   * Two syntaxes are supported:
    * - multiple unit value pairs, for instance: interval 2 months 2 days.
    * - from-to unit, for instance: interval '1-2' year to month.
    */
   override def visitInterval(ctx: IntervalContext): Literal = withOrigin(ctx) {
-    Literal(parseIntervalLiteral(ctx), CalendarIntervalType)
+    val calendarInterval = parseIntervalLiteral(ctx)
+    if (ctx.errorCapturingUnitToUnitInterval != null && !conf.legacyIntervalEnabled) {
+      // Check the `to` unit to distinguish year-month and day-time intervals because
+      // `CalendarInterval` doesn't have enough info. For instance, new CalendarInterval(0, 0, 0)
+      // can be derived from INTERVAL '0-0' YEAR TO MONTH as well as from
+      // INTERVAL '0 00:00:00' DAY TO SECOND.
+      val toUnit = ctx.errorCapturingUnitToUnitInterval.body.to.getText.toLowerCase(Locale.ROOT)
+      if (toUnit == "month") {
+        assert(calendarInterval.days == 0 && calendarInterval.microseconds == 0)
+        Literal(calendarInterval.months, YearMonthIntervalType)
+      } else {
+        assert(calendarInterval.months == 0)
+        val micros = IntervalUtils.getDuration(calendarInterval, TimeUnit.MICROSECONDS)
+        Literal(micros, DayTimeIntervalType)
+      }
+    } else {
+      Literal(calendarInterval, CalendarIntervalType)
+    }
   }
 
   /**
@@ -2378,13 +2405,22 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    */
   override def visitUnitToUnitInterval(ctx: UnitToUnitIntervalContext): CalendarInterval = {
     withOrigin(ctx) {
-      val value = Option(ctx.intervalValue.STRING).map(string).getOrElse {
+      val value = Option(ctx.intervalValue.STRING).map(string).map { interval =>
+        if (ctx.intervalValue().MINUS() == null) {
+          interval
+        } else {
+          interval.startsWith("-") match {
+            case true => interval.replaceFirst("-", "")
+            case false => s"-$interval"
+          }
+        }
+      }.getOrElse {
         throw QueryParsingErrors.invalidFromToUnitValueError(ctx.intervalValue)
       }
       try {
         val from = ctx.from.getText.toLowerCase(Locale.ROOT)
         val to = ctx.to.getText.toLowerCase(Locale.ROOT)
-        val interval = (from, to) match {
+        (from, to) match {
           case ("year", "month") =>
             IntervalUtils.fromYearMonthString(value)
           case ("day", "hour") =>
@@ -2402,9 +2438,6 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
           case _ =>
             throw QueryParsingErrors.fromToIntervalUnsupportedError(from, to, ctx)
         }
-        Option(ctx.intervalValue.MINUS)
-          .map(_ => IntervalUtils.negateExact(interval))
-          .getOrElse(interval)
       } catch {
         // Handle Exceptions thrown by CalendarInterval
         case e: IllegalArgumentException =>
@@ -2449,6 +2482,14 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
         val dtStr = if (params.nonEmpty) s"$dt(${params.mkString(",")})" else dt
         throw QueryParsingErrors.dataTypeUnsupportedError(dtStr, ctx)
     }
+  }
+
+  override def visitYearMonthIntervalDataType(ctx: YearMonthIntervalDataTypeContext): DataType = {
+    YearMonthIntervalType
+  }
+
+  override def visitDayTimeIntervalDataType(ctx: DayTimeIntervalDataTypeContext): DataType = {
+    DayTimeIntervalType
   }
 
   /**
