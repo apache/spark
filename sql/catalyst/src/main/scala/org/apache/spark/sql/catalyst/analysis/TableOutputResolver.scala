@@ -64,7 +64,7 @@ object TableOutputResolver {
     }
 
     if (errors.nonEmpty) {
-      throw QueryCompilationErrors.cannotWriteIncompatibleDataToTableError(tableName, errors)
+      throw QueryCompilationErrors.cannotWriteIncompatibleDataToTableError(tableName, errors.toSeq)
     }
 
     if (resolved == query.output) {
