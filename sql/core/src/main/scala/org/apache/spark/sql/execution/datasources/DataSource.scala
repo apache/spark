@@ -525,7 +525,8 @@ case class DataSource(
           assert(unresolved.nameParts.length == 1)
           val name = unresolved.nameParts.head
           outputColumns.find(a => equality(a.name, name)).getOrElse {
-            throw QueryCompilationErrors.cannotResolveAttributeError(name, data)
+            throw QueryCompilationErrors.cannotResolveAttributeError(
+              name, data.output.map(_.name).mkString(", "))
           }
         }
         val resolved = cmd.copy(

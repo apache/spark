@@ -77,44 +77,44 @@ class DataTypeOps(object, metaclass=ABCMeta):
     def pretty_name(self) -> str:
         raise NotImplementedError()
 
-    def __add__(self, left, right) -> Union["Series", "Index"]:
+    def add(self, left, right) -> Union["Series", "Index"]:
         raise TypeError("Addition can not be applied to %s." % self.pretty_name)
 
-    def __sub__(self, left, right) -> Union["Series", "Index"]:
+    def sub(self, left, right) -> Union["Series", "Index"]:
         raise TypeError("Subtraction can not be applied to %s." % self.pretty_name)
 
-    def __mul__(self, left, right) -> Union["Series", "Index"]:
+    def mul(self, left, right) -> Union["Series", "Index"]:
         raise TypeError("Multiplication can not be applied to %s." % self.pretty_name)
 
-    def __truediv__(self, left, right) -> Union["Series", "Index"]:
+    def truediv(self, left, right) -> Union["Series", "Index"]:
         raise TypeError("True division can not be applied to %s." % self.pretty_name)
 
-    def __floordiv__(self, left, right) -> Union["Series", "Index"]:
+    def floordiv(self, left, right) -> Union["Series", "Index"]:
         raise TypeError("Floor division can not be applied to %s." % self.pretty_name)
 
-    def __mod__(self, left, right) -> Union["Series", "Index"]:
+    def mod(self, left, right) -> Union["Series", "Index"]:
         raise TypeError("Modulo can not be applied to %s." % self.pretty_name)
 
-    def __pow__(self, left, right) -> Union["Series", "Index"]:
+    def pow(self, left, right) -> Union["Series", "Index"]:
         raise TypeError("Exponentiation can not be applied to %s." % self.pretty_name)
 
-    def __radd__(self, left, right) -> Union["Series", "Index"]:
+    def radd(self, left, right) -> Union["Series", "Index"]:
         raise TypeError("Addition can not be applied to %s." % self.pretty_name)
 
-    def __rsub__(self, left, right) -> Union["Series", "Index"]:
+    def rsub(self, left, right) -> Union["Series", "Index"]:
         raise TypeError("Subtraction can not be applied to %s." % self.pretty_name)
 
-    def __rmul__(self, left, right) -> Union["Series", "Index"]:
+    def rmul(self, left, right) -> Union["Series", "Index"]:
         raise TypeError("Multiplication can not be applied to %s." % self.pretty_name)
 
-    def __rtruediv__(self, left, right) -> Union["Series", "Index"]:
+    def rtruediv(self, left, right) -> Union["Series", "Index"]:
         raise TypeError("True division can not be applied to %s." % self.pretty_name)
 
-    def __rfloordiv__(self, left, right) -> Union["Series", "Index"]:
+    def rfloordiv(self, left, right) -> Union["Series", "Index"]:
         raise TypeError("Floor division can not be applied to %s." % self.pretty_name)
 
-    def __rmod__(self, left, right) -> Union["Series", "Index"]:
+    def rmod(self, left, right) -> Union["Series", "Index"]:
         raise TypeError("Modulo can not be applied to %s." % self.pretty_name)
 
-    def __rpow__(self, left, right) -> Union["Series", "Index"]:
+    def rpow(self, left, right) -> Union["Series", "Index"]:
         raise TypeError("Exponentiation can not be applied to %s." % self.pretty_name)

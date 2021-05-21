@@ -734,8 +734,8 @@ def plot_frame(
 
     Each plot kind has a corresponding method on the
     ``DataFrame.plot`` accessor:
-    ``kdf.plot(kind='line')`` is equivalent to
-    ``kdf.plot.line()``.
+    ``psdf.plot(kind='line')`` is equivalent to
+    ``psdf.plot.line()``.
 
     Parameters
     ----------

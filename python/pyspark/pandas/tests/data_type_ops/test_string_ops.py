@@ -30,102 +30,103 @@ class StringOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         return pd.Series(["x", "y", "z"])
 
     @property
-    def kser(self):
+    def psser(self):
         return ps.from_pandas(self.pser)
 
     def test_add(self):
-        self.assert_eq(self.pser + "x", self.kser + "x")
-        self.assertRaises(TypeError, lambda: self.kser + 1)
+        self.assert_eq(self.pser + "x", self.psser + "x")
+        self.assertRaises(TypeError, lambda: self.psser + 1)
 
         with option_context("compute.ops_on_diff_frames", True):
             self.assert_eq(
                 self.pser + self.non_numeric_psers["string"],
-                (self.kser + self.non_numeric_ksers["string"]).sort_index(),
+                (self.psser + self.non_numeric_pssers["string"]).sort_index(),
             )
-            self.assertRaises(TypeError, lambda: self.kser + self.non_numeric_ksers["datetime"])
-            self.assertRaises(TypeError, lambda: self.kser + self.non_numeric_ksers["date"])
-            self.assertRaises(TypeError, lambda: self.kser + self.non_numeric_ksers["categorical"])
-            self.assertRaises(TypeError, lambda: self.kser + self.non_numeric_ksers["bool"])
-            for kser in self.numeric_ksers:
-                self.assertRaises(TypeError, lambda: self.kser + kser)
+            self.assertRaises(TypeError, lambda: self.psser + self.non_numeric_pssers["datetime"])
+            self.assertRaises(TypeError, lambda: self.psser + self.non_numeric_pssers["date"])
+            self.assertRaises(
+                TypeError, lambda: self.psser + self.non_numeric_pssers["categorical"])
+            self.assertRaises(TypeError, lambda: self.psser + self.non_numeric_pssers["bool"])
+            for psser in self.numeric_pssers:
+                self.assertRaises(TypeError, lambda: self.psser + psser)
 
     def test_sub(self):
-        self.assertRaises(TypeError, lambda: self.kser - "x")
-        self.assertRaises(TypeError, lambda: self.kser - 1)
+        self.assertRaises(TypeError, lambda: self.psser - "x")
+        self.assertRaises(TypeError, lambda: self.psser - 1)
 
         with option_context("compute.ops_on_diff_frames", True):
-            for kser in self.ksers:
-                self.assertRaises(TypeError, lambda: self.kser - kser)
+            for psser in self.pssers:
+                self.assertRaises(TypeError, lambda: self.psser - psser)
 
     def test_mul(self):
-        self.assertRaises(TypeError, lambda: self.kser * "x")
-        self.assert_eq(self.pser * 1, self.kser * 1)
+        self.assertRaises(TypeError, lambda: self.psser * "x")
+        self.assert_eq(self.pser * 1, self.psser * 1)
 
         with option_context("compute.ops_on_diff_frames", True):
-            for pser, kser in self.pser_kser_pairs:
-                if kser.dtype in [np.int64, np.int32]:
-                    self.assert_eq(self.pser * pser, (self.kser * kser).sort_index())
+            for pser, psser in self.pser_psser_pairs:
+                if psser.dtype in [np.int64, np.int32]:
+                    self.assert_eq(self.pser * pser, (self.psser * psser).sort_index())
                 else:
-                    self.assertRaises(TypeError, lambda: self.kser * kser)
+                    self.assertRaises(TypeError, lambda: self.psser * psser)
 
     def test_truediv(self):
-        self.assertRaises(TypeError, lambda: self.kser / "x")
-        self.assertRaises(TypeError, lambda: self.kser / 1)
+        self.assertRaises(TypeError, lambda: self.psser / "x")
+        self.assertRaises(TypeError, lambda: self.psser / 1)
 
         with option_context("compute.ops_on_diff_frames", True):
-            for kser in self.ksers:
-                self.assertRaises(TypeError, lambda: self.kser / kser)
+            for psser in self.pssers:
+                self.assertRaises(TypeError, lambda: self.psser / psser)
 
     def test_floordiv(self):
-        self.assertRaises(TypeError, lambda: self.kser // "x")
-        self.assertRaises(TypeError, lambda: self.kser // 1)
+        self.assertRaises(TypeError, lambda: self.psser // "x")
+        self.assertRaises(TypeError, lambda: self.psser // 1)
 
         with option_context("compute.ops_on_diff_frames", True):
-            for kser in self.ksers:
-                self.assertRaises(TypeError, lambda: self.kser // kser)
+            for psser in self.pssers:
+                self.assertRaises(TypeError, lambda: self.psser // psser)
 
     def test_mod(self):
-        self.assertRaises(TypeError, lambda: self.kser % "x")
-        self.assertRaises(TypeError, lambda: self.kser % 1)
+        self.assertRaises(TypeError, lambda: self.psser % "x")
+        self.assertRaises(TypeError, lambda: self.psser % 1)
 
         with option_context("compute.ops_on_diff_frames", True):
-            for kser in self.ksers:
-                self.assertRaises(TypeError, lambda: self.kser % kser)
+            for psser in self.pssers:
+                self.assertRaises(TypeError, lambda: self.psser % psser)
 
     def test_pow(self):
-        self.assertRaises(TypeError, lambda: self.kser ** "x")
-        self.assertRaises(TypeError, lambda: self.kser ** 1)
+        self.assertRaises(TypeError, lambda: self.psser ** "x")
+        self.assertRaises(TypeError, lambda: self.psser ** 1)
 
         with option_context("compute.ops_on_diff_frames", True):
-            for kser in self.ksers:
-                self.assertRaises(TypeError, lambda: self.kser ** kser)
+            for psser in self.pssers:
+                self.assertRaises(TypeError, lambda: self.psser ** psser)
 
     def test_radd(self):
-        self.assert_eq("x" + self.pser, "x" + self.kser)
-        self.assertRaises(TypeError, lambda: 1 + self.kser)
+        self.assert_eq("x" + self.pser, "x" + self.psser)
+        self.assertRaises(TypeError, lambda: 1 + self.psser)
 
     def test_rsub(self):
-        self.assertRaises(TypeError, lambda: "x" - self.kser)
-        self.assertRaises(TypeError, lambda: 1 - self.kser)
+        self.assertRaises(TypeError, lambda: "x" - self.psser)
+        self.assertRaises(TypeError, lambda: 1 - self.psser)
 
     def test_rmul(self):
-        self.assertRaises(TypeError, lambda: "x" * self.kser)
-        self.assert_eq(1 * self.pser, 1 * self.kser)
+        self.assertRaises(TypeError, lambda: "x" * self.psser)
+        self.assert_eq(1 * self.pser, 1 * self.psser)
 
     def test_rtruediv(self):
-        self.assertRaises(TypeError, lambda: "x" / self.kser)
-        self.assertRaises(TypeError, lambda: 1 / self.kser)
+        self.assertRaises(TypeError, lambda: "x" / self.psser)
+        self.assertRaises(TypeError, lambda: 1 / self.psser)
 
     def test_rfloordiv(self):
-        self.assertRaises(TypeError, lambda: "x" // self.kser)
-        self.assertRaises(TypeError, lambda: 1 // self.kser)
+        self.assertRaises(TypeError, lambda: "x" // self.psser)
+        self.assertRaises(TypeError, lambda: 1 // self.psser)
 
     def test_rmod(self):
-        self.assertRaises(TypeError, lambda: 1 % self.kser)
+        self.assertRaises(TypeError, lambda: 1 % self.psser)
 
     def test_rpow(self):
-        self.assertRaises(TypeError, lambda: "x" ** self.kser)
-        self.assertRaises(TypeError, lambda: 1 ** self.kser)
+        self.assertRaises(TypeError, lambda: "x" ** self.psser)
+        self.assertRaises(TypeError, lambda: 1 ** self.psser)
 
 
 if __name__ == "__main__":

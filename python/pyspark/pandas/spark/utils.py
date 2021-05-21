@@ -176,7 +176,7 @@ StructField(B,DecimalType(30,15),false)))
         return dt
 
 
-def _test():
+def _test() -> None:
     import doctest
     import sys
     import pyspark.pandas.spark.utils

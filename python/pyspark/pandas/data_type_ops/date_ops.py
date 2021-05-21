@@ -39,7 +39,7 @@ class DateOps(DataTypeOps):
     def pretty_name(self) -> str:
         return 'dates'
 
-    def __sub__(self, left, right) -> Union["Series", "Index"]:
+    def sub(self, left, right) -> Union["Series", "Index"]:
         # Note that date subtraction casts arguments to integer. This is to mimic pandas's
         # behaviors. pandas returns 'timedelta64[ns]' in days from date's subtraction.
         msg = (
@@ -56,7 +56,7 @@ class DateOps(DataTypeOps):
         else:
             raise TypeError("date subtraction can only be applied to date series.")
 
-    def __rsub__(self, left, right) -> Union["Series", "Index"]:
+    def rsub(self, left, right) -> Union["Series", "Index"]:
         # Note that date subtraction casts arguments to integer. This is to mimic pandas's
         # behaviors. pandas returns 'timedelta64[ns]' in days from date's subtraction.
         msg = (

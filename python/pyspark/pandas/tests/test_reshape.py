@@ -43,15 +43,15 @@ class ReshapeTest(PandasOnSparkTestCase):
             ),
             pd.DataFrame({10: [1, 2, 3, 4, 4, 3, 2, 1], 20: list("abcdabcd")}),
         ]:
-            kdf_or_kser = ps.from_pandas(pdf_or_ps)
+            psdf_or_psser = ps.from_pandas(pdf_or_ps)
 
-            self.assert_eq(ps.get_dummies(kdf_or_kser), pd.get_dummies(pdf_or_ps, dtype=np.int8))
+            self.assert_eq(ps.get_dummies(psdf_or_psser), pd.get_dummies(pdf_or_ps, dtype=np.int8))
 
-        kser = ps.Series([1, 1, 1, 2, 2, 1, 3, 4])
+        psser = ps.Series([1, 1, 1, 2, 2, 1, 3, 4])
         with self.assertRaisesRegex(
             NotImplementedError, "get_dummies currently does not support sparse"
         ):
-            ps.get_dummies(kser, sparse=True)
+            ps.get_dummies(psser, sparse=True)
 
     def test_get_dummies_object(self):
         pdf = pd.DataFrame(
@@ -63,35 +63,35 @@ class ReshapeTest(PandasOnSparkTestCase):
                 "c": list("abcdabcd"),
             }
         )
-        kdf = ps.from_pandas(pdf)
+        psdf = ps.from_pandas(pdf)
 
         # Explicitly exclude object columns
         self.assert_eq(
-            ps.get_dummies(kdf, columns=["a", "c"]),
+            ps.get_dummies(psdf, columns=["a", "c"]),
             pd.get_dummies(pdf, columns=["a", "c"], dtype=np.int8),
         )
 
-        self.assert_eq(ps.get_dummies(kdf), pd.get_dummies(pdf, dtype=np.int8))
-        self.assert_eq(ps.get_dummies(kdf.b), pd.get_dummies(pdf.b, dtype=np.int8))
+        self.assert_eq(ps.get_dummies(psdf), pd.get_dummies(pdf, dtype=np.int8))
+        self.assert_eq(ps.get_dummies(psdf.b), pd.get_dummies(pdf.b, dtype=np.int8))
         self.assert_eq(
-            ps.get_dummies(kdf, columns=["b"]), pd.get_dummies(pdf, columns=["b"], dtype=np.int8)
+            ps.get_dummies(psdf, columns=["b"]), pd.get_dummies(pdf, columns=["b"], dtype=np.int8)
         )
 
-        self.assertRaises(KeyError, lambda: ps.get_dummies(kdf, columns=("a", "c")))
-        self.assertRaises(TypeError, lambda: ps.get_dummies(kdf, columns="b"))
+        self.assertRaises(KeyError, lambda: ps.get_dummies(psdf, columns=("a", "c")))
+        self.assertRaises(TypeError, lambda: ps.get_dummies(psdf, columns="b"))
 
         # non-string names
         pdf = pd.DataFrame(
             {10: [1, 2, 3, 4, 4, 3, 2, 1], 20: list("abcdabcd"), 30: list("abcdabcd")}
         )
-        kdf = ps.from_pandas(pdf)
+        psdf = ps.from_pandas(pdf)
 
         self.assert_eq(
-            ps.get_dummies(kdf, columns=[10, 30]),
+            ps.get_dummies(psdf, columns=[10, 30]),
             pd.get_dummies(pdf, columns=[10, 30], dtype=np.int8),
         )
 
-        self.assertRaises(TypeError, lambda: ps.get_dummies(kdf, columns=10))
+        self.assertRaises(TypeError, lambda: ps.get_dummies(psdf, columns=10))
 
     def test_get_dummies_date_datetime(self):
         pdf = pd.DataFrame(
@@ -108,97 +108,97 @@ class ReshapeTest(PandasOnSparkTestCase):
                 ],
             }
         )
-        kdf = ps.from_pandas(pdf)
+        psdf = ps.from_pandas(pdf)
 
-        self.assert_eq(ps.get_dummies(kdf), pd.get_dummies(pdf, dtype=np.int8))
-        self.assert_eq(ps.get_dummies(kdf.d), pd.get_dummies(pdf.d, dtype=np.int8))
-        self.assert_eq(ps.get_dummies(kdf.dt), pd.get_dummies(pdf.dt, dtype=np.int8))
+        self.assert_eq(ps.get_dummies(psdf), pd.get_dummies(pdf, dtype=np.int8))
+        self.assert_eq(ps.get_dummies(psdf.d), pd.get_dummies(pdf.d, dtype=np.int8))
+        self.assert_eq(ps.get_dummies(psdf.dt), pd.get_dummies(pdf.dt, dtype=np.int8))
 
     def test_get_dummies_boolean(self):
         pdf = pd.DataFrame({"b": [True, False, True]})
-        kdf = ps.from_pandas(pdf)
+        psdf = ps.from_pandas(pdf)
 
-        self.assert_eq(ps.get_dummies(kdf), pd.get_dummies(pdf, dtype=np.int8))
-        self.assert_eq(ps.get_dummies(kdf.b), pd.get_dummies(pdf.b, dtype=np.int8))
+        self.assert_eq(ps.get_dummies(psdf), pd.get_dummies(pdf, dtype=np.int8))
+        self.assert_eq(ps.get_dummies(psdf.b), pd.get_dummies(pdf.b, dtype=np.int8))
 
     def test_get_dummies_decimal(self):
         pdf = pd.DataFrame({"d": [Decimal(1.0), Decimal(2.0), Decimal(1)]})
-        kdf = ps.from_pandas(pdf)
+        psdf = ps.from_pandas(pdf)
 
-        self.assert_eq(ps.get_dummies(kdf), pd.get_dummies(pdf, dtype=np.int8))
-        self.assert_eq(ps.get_dummies(kdf.d), pd.get_dummies(pdf.d, dtype=np.int8), almost=True)
+        self.assert_eq(ps.get_dummies(psdf), pd.get_dummies(pdf, dtype=np.int8))
+        self.assert_eq(ps.get_dummies(psdf.d), pd.get_dummies(pdf.d, dtype=np.int8), almost=True)
 
     def test_get_dummies_kwargs(self):
         # pser = pd.Series([1, 1, 1, 2, 2, 1, 3, 4], dtype='category')
         pser = pd.Series([1, 1, 1, 2, 2, 1, 3, 4])
-        kser = ps.from_pandas(pser)
+        psser = ps.from_pandas(pser)
         self.assert_eq(
-            ps.get_dummies(kser, prefix="X", prefix_sep="-"),
+            ps.get_dummies(psser, prefix="X", prefix_sep="-"),
             pd.get_dummies(pser, prefix="X", prefix_sep="-", dtype=np.int8),
         )
 
         self.assert_eq(
-            ps.get_dummies(kser, drop_first=True),
+            ps.get_dummies(psser, drop_first=True),
             pd.get_dummies(pser, drop_first=True, dtype=np.int8),
         )
 
         # nan
         # pser = pd.Series([1, 1, 1, 2, np.nan, 3, np.nan, 5], dtype='category')
         pser = pd.Series([1, 1, 1, 2, np.nan, 3, np.nan, 5])
-        kser = ps.from_pandas(pser)
-        self.assert_eq(ps.get_dummies(kser), pd.get_dummies(pser, dtype=np.int8), almost=True)
+        psser = ps.from_pandas(pser)
+        self.assert_eq(ps.get_dummies(psser), pd.get_dummies(pser, dtype=np.int8), almost=True)
 
         # dummy_na
         self.assert_eq(
-            ps.get_dummies(kser, dummy_na=True), pd.get_dummies(pser, dummy_na=True, dtype=np.int8)
+            ps.get_dummies(psser, dummy_na=True), pd.get_dummies(pser, dummy_na=True, dtype=np.int8)
         )
 
     def test_get_dummies_prefix(self):
         pdf = pd.DataFrame({"A": ["a", "b", "a"], "B": ["b", "a", "c"], "D": [0, 0, 1]})
-        kdf = ps.from_pandas(pdf)
+        psdf = ps.from_pandas(pdf)
 
         self.assert_eq(
-            ps.get_dummies(kdf, prefix=["foo", "bar"]),
+            ps.get_dummies(psdf, prefix=["foo", "bar"]),
             pd.get_dummies(pdf, prefix=["foo", "bar"], dtype=np.int8),
         )
 
         self.assert_eq(
-            ps.get_dummies(kdf, prefix=["foo"], columns=["B"]),
+            ps.get_dummies(psdf, prefix=["foo"], columns=["B"]),
             pd.get_dummies(pdf, prefix=["foo"], columns=["B"], dtype=np.int8),
         )
 
         self.assert_eq(
-            ps.get_dummies(kdf, prefix={"A": "foo", "B": "bar"}),
+            ps.get_dummies(psdf, prefix={"A": "foo", "B": "bar"}),
             pd.get_dummies(pdf, prefix={"A": "foo", "B": "bar"}, dtype=np.int8),
         )
 
         self.assert_eq(
-            ps.get_dummies(kdf, prefix={"B": "foo", "A": "bar"}),
+            ps.get_dummies(psdf, prefix={"B": "foo", "A": "bar"}),
             pd.get_dummies(pdf, prefix={"B": "foo", "A": "bar"}, dtype=np.int8),
         )
 
         self.assert_eq(
-            ps.get_dummies(kdf, prefix={"A": "foo", "B": "bar"}, columns=["A", "B"]),
+            ps.get_dummies(psdf, prefix={"A": "foo", "B": "bar"}, columns=["A", "B"]),
             pd.get_dummies(pdf, prefix={"A": "foo", "B": "bar"}, columns=["A", "B"], dtype=np.int8),
         )
 
         with self.assertRaisesRegex(NotImplementedError, "string types"):
-            ps.get_dummies(kdf, prefix="foo")
+            ps.get_dummies(psdf, prefix="foo")
         with self.assertRaisesRegex(ValueError, "Length of 'prefix' \\(1\\) .* \\(2\\)"):
-            ps.get_dummies(kdf, prefix=["foo"])
+            ps.get_dummies(psdf, prefix=["foo"])
         with self.assertRaisesRegex(ValueError, "Length of 'prefix' \\(2\\) .* \\(1\\)"):
-            ps.get_dummies(kdf, prefix=["foo", "bar"], columns=["B"])
+            ps.get_dummies(psdf, prefix=["foo", "bar"], columns=["B"])
 
         pser = pd.Series([1, 1, 1, 2, 2, 1, 3, 4], name="A")
-        kser = ps.from_pandas(pser)
+        psser = ps.from_pandas(pser)
 
         self.assert_eq(
-            ps.get_dummies(kser, prefix="foo"), pd.get_dummies(pser, prefix="foo", dtype=np.int8)
+            ps.get_dummies(psser, prefix="foo"), pd.get_dummies(pser, prefix="foo", dtype=np.int8)
         )
 
         # columns are ignored.
         self.assert_eq(
-            ps.get_dummies(kser, prefix=["foo"], columns=["B"]),
+            ps.get_dummies(psser, prefix=["foo"], columns=["B"]),
             pd.get_dummies(pser, prefix=["foo"], columns=["B"], dtype=np.int8),
         )
 
@@ -210,14 +210,14 @@ class ReshapeTest(PandasOnSparkTestCase):
                 "B": [0, 0, 1],
             }
         )
-        kdf = ps.from_pandas(pdf)
+        psdf = ps.from_pandas(pdf)
 
         if LooseVersion("0.23.0") <= LooseVersion(pd.__version__):
             exp = pd.get_dummies(pdf, dtype="float64")
         else:
             exp = pd.get_dummies(pdf)
             exp = exp.astype({"A_a": "float64", "A_b": "float64"})
-        res = ps.get_dummies(kdf, dtype="float64")
+        res = ps.get_dummies(psdf, dtype="float64")
         self.assert_eq(res, exp)
 
     def test_get_dummies_multiindex_columns(self):
@@ -228,30 +228,31 @@ class ReshapeTest(PandasOnSparkTestCase):
                 ("y", "c", "3"): list("abcdabcd"),
             }
         )
-        kdf = ps.from_pandas(pdf)
+        psdf = ps.from_pandas(pdf)
 
         self.assert_eq(
-            ps.get_dummies(kdf), pd.get_dummies(pdf, dtype=np.int8).rename(columns=name_like_string)
+            ps.get_dummies(psdf),
+            pd.get_dummies(pdf, dtype=np.int8).rename(columns=name_like_string),
         )
         self.assert_eq(
-            ps.get_dummies(kdf, columns=[("y", "c", "3"), ("x", "a", "1")]),
+            ps.get_dummies(psdf, columns=[("y", "c", "3"), ("x", "a", "1")]),
             pd.get_dummies(pdf, columns=[("y", "c", "3"), ("x", "a", "1")], dtype=np.int8).rename(
                 columns=name_like_string
             ),
         )
         self.assert_eq(
-            ps.get_dummies(kdf, columns=["x"]),
+            ps.get_dummies(psdf, columns=["x"]),
             pd.get_dummies(pdf, columns=["x"], dtype=np.int8).rename(columns=name_like_string),
         )
         self.assert_eq(
-            ps.get_dummies(kdf, columns=("x", "a")),
+            ps.get_dummies(psdf, columns=("x", "a")),
             pd.get_dummies(pdf, columns=("x", "a"), dtype=np.int8).rename(columns=name_like_string),
         )
 
-        self.assertRaises(KeyError, lambda: ps.get_dummies(kdf, columns=["z"]))
-        self.assertRaises(KeyError, lambda: ps.get_dummies(kdf, columns=("x", "c")))
-        self.assertRaises(ValueError, lambda: ps.get_dummies(kdf, columns=[("x",), "c"]))
-        self.assertRaises(TypeError, lambda: ps.get_dummies(kdf, columns="x"))
+        self.assertRaises(KeyError, lambda: ps.get_dummies(psdf, columns=["z"]))
+        self.assertRaises(KeyError, lambda: ps.get_dummies(psdf, columns=("x", "c")))
+        self.assertRaises(ValueError, lambda: ps.get_dummies(psdf, columns=[("x",), "c"]))
+        self.assertRaises(TypeError, lambda: ps.get_dummies(psdf, columns="x"))
 
         # non-string names
         pdf = pd.DataFrame(
@@ -261,23 +262,24 @@ class ReshapeTest(PandasOnSparkTestCase):
                 ("y", 3, "c"): list("abcdabcd"),
             }
         )
-        kdf = ps.from_pandas(pdf)
+        psdf = ps.from_pandas(pdf)
 
         self.assert_eq(
-            ps.get_dummies(kdf), pd.get_dummies(pdf, dtype=np.int8).rename(columns=name_like_string)
+            ps.get_dummies(psdf),
+            pd.get_dummies(pdf, dtype=np.int8).rename(columns=name_like_string),
         )
         self.assert_eq(
-            ps.get_dummies(kdf, columns=[("y", 3, "c"), ("x", 1, "a")]),
+            ps.get_dummies(psdf, columns=[("y", 3, "c"), ("x", 1, "a")]),
             pd.get_dummies(pdf, columns=[("y", 3, "c"), ("x", 1, "a")], dtype=np.int8).rename(
                 columns=name_like_string
             ),
         )
         self.assert_eq(
-            ps.get_dummies(kdf, columns=["x"]),
+            ps.get_dummies(psdf, columns=["x"]),
             pd.get_dummies(pdf, columns=["x"], dtype=np.int8).rename(columns=name_like_string),
         )
         self.assert_eq(
-            ps.get_dummies(kdf, columns=("x", 1)),
+            ps.get_dummies(psdf, columns=("x", 1)),
             pd.get_dummies(pdf, columns=("x", 1), dtype=np.int8).rename(columns=name_like_string),
         )
 
@@ -288,7 +290,8 @@ if __name__ == "__main__":
 
     try:
         import xmlrunner  # type: ignore[import]
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
+
+        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

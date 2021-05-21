@@ -34,12 +34,12 @@ class TestCasesUtils(object):
         return sers
 
     @property
-    def numeric_ksers(self):
+    def numeric_pssers(self):
         return [ps.from_pandas(pser) for pser in self.numeric_psers]
 
     @property
-    def numeric_pser_kser_pairs(self):
-        return zip(self.numeric_psers, self.numeric_ksers)
+    def numeric_pser_psser_pairs(self):
+        return zip(self.numeric_psers, self.numeric_pssers)
 
     @property
     def non_numeric_psers(self):
@@ -55,21 +55,21 @@ class TestCasesUtils(object):
         return psers
 
     @property
-    def non_numeric_ksers(self):
-        ksers = {}
+    def non_numeric_pssers(self):
+        pssers = {}
 
         for k, v in self.non_numeric_psers.items():
-            ksers[k] = ps.from_pandas(v)
-        return ksers
+            pssers[k] = ps.from_pandas(v)
+        return pssers
 
     @property
-    def ksers(self):
-        return self.numeric_ksers + list(self.non_numeric_ksers.values())
+    def pssers(self):
+        return self.numeric_pssers + list(self.non_numeric_pssers.values())
 
     @property
     def psers(self):
         return self.numeric_psers + list(self.non_numeric_psers.values())
 
     @property
-    def pser_kser_pairs(self):
-        return zip(self.psers, self.ksers)
+    def pser_psser_pairs(self):
+        return zip(self.psers, self.pssers)
