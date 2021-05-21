@@ -175,7 +175,7 @@ private[spark] class BasicExecutorFeatureStep(
         .replaceAll(ENV_EXECUTOR_ID, kubernetesConf.executorId))
     }
 
-    // 0 is invalid as kubernetes contain port request, we shall leave it
+    // 0 is invalid as kubernetes containerPort request, we shall leave it unmounted
     val requiredPorts = if (blockManagerPort != 0) {
       Seq(
         (BLOCK_MANAGER_PORT_NAME, blockManagerPort))
