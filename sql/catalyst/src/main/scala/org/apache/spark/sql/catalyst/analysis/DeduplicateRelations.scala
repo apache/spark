@@ -78,7 +78,7 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
    * @param existingRelations the known unique relations for a LogicalPlan
    * @param plan the LogicalPlan that requires the deduplication
    * @return (the new LogicalPlan which already deduplicate all duplicated relations (if any),
-   *         all relations of the new LogicalPlan, whether the plan has changed or not)
+   *         all relations of the new LogicalPlan, whether the plan is changed or not)
    */
   private def renewDuplicatedRelations(
       existingRelations: mutable.HashSet[ReferenceEqualPlanWrapper],
