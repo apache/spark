@@ -642,8 +642,6 @@ class DataStreamReader(OptionUtils):
         Extra options
             For the extra options, refer to
             `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-orc.html#data-source-option>`_  # noqa
-            and
-            `Generic File Source Options <https://spark.apache.org/docs/latest/sql-data-sources-generic-options.html`>_  # noqa
             in the version you use.
 
         Examples
