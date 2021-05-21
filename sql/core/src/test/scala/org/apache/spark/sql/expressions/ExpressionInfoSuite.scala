@@ -63,21 +63,21 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
     assert(errMsg.contains("'group' is malformed in the expression [testName]."))
   }
 
-  test("language in ExpressionInfo") {
+  test("functionType in ExpressionInfo") {
     val info = spark.sessionState.catalog.lookupFunctionInfo(FunctionIdentifier("sum"))
-    assert(info.getLanguage === "built-in")
+    assert(info.getFunctionType === "built-in")
 
-    Seq("python", "java", "scala", "built-in", "hive").foreach { language =>
+    Seq("python_udf", "java_udf", "scala_udf", "built-in", "hive").foreach { functionType =>
       val info = new ExpressionInfo(
-        "testClass", null, "testName", null, "", "", "", "", "", "", language)
-      assert(info.getLanguage === language)
+        "testClass", null, "testName", null, "", "", "", "", "", "", functionType)
+      assert(info.getFunctionType === functionType)
     }
     val errMsg = intercept[IllegalArgumentException] {
-      val invalidLanguage = "invalid_language"
+      val invalidFunctionType = "invalid_function_type"
       new ExpressionInfo(
-        "testClass", null, "testName", null, "", "", "", "", "", "", invalidLanguage)
+        "testClass", null, "testName", null, "", "", "", "", "", "", invalidFunctionType)
     }.getMessage
-    assert(errMsg.contains("'language' is malformed in the expression [testName]."))
+    assert(errMsg.contains("'functionType' is malformed in the expression [testName]."))
   }
 
   test("error handling in ExpressionInfo") {
@@ -259,17 +259,19 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
     }
   }
 
-  test("Check language for different kind of UDFs") {
+  test("Check function type for different kind of UDFs") {
     import org.apache.spark.sql.IntegratedUDFTestUtils
     val catalog = spark.sessionState.catalog
-    assert(catalog.lookupFunctionInfo(FunctionIdentifier("sum")).getLanguage === "built-in")
+    assert(catalog.lookupFunctionInfo(FunctionIdentifier("sum")).getFunctionType === "built-in")
 
     val scalaUDF = IntegratedUDFTestUtils.TestScalaUDF("scalaUDF")
+    val scalaInfo = catalog.lookupFunctionInfo(FunctionIdentifier(scalaUDF.name))
     IntegratedUDFTestUtils.registerTestUDF(scalaUDF, spark)
-    assert(catalog.lookupFunctionInfo(FunctionIdentifier(scalaUDF.name)).getLanguage === "scala")
+    assert(scalaInfo.getFunctionType === "scala_udf")
 
     val pythonUDF = IntegratedUDFTestUtils.TestPythonUDF("pythonUDF")
+    val pythonInfo = catalog.lookupFunctionInfo(FunctionIdentifier(pythonUDF.name))
     IntegratedUDFTestUtils.registerTestUDF(pythonUDF, spark)
-    assert(catalog.lookupFunctionInfo(FunctionIdentifier(pythonUDF.name)).getLanguage === "python")
+    assert(pythonInfo.getFunctionType === "python_udf")
   }
 }

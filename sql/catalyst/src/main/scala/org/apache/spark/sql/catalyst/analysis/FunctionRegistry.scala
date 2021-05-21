@@ -48,10 +48,19 @@ trait FunctionRegistryBase[T] {
   type FunctionBuilder = Seq[Expression] => T
 
   final def registerFunction(
-      name: FunctionIdentifier, builder: FunctionBuilder, language: String): Unit = {
+      name: FunctionIdentifier, builder: FunctionBuilder, functionType: String): Unit = {
     val info = new ExpressionInfo(
-      builder.getClass.getCanonicalName, name.database.orNull, name.funcName,
-      null, "", "", "", "", "", "", language)
+      builder.getClass.getCanonicalName,
+      name.database.orNull,
+      name.funcName,
+      null,
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      functionType)
     registerFunction(name, info, builder)
   }
 
@@ -62,11 +71,11 @@ trait FunctionRegistryBase[T] {
 
   /* Create or replace a temporary function. */
   final def createOrReplaceTempFunction(
-      name: String, builder: FunctionBuilder, language: String): Unit = {
+      name: String, builder: FunctionBuilder, functionType: String): Unit = {
     registerFunction(
       FunctionIdentifier(name),
       builder,
-      language)
+      functionType)
   }
 
   @throws[AnalysisException]("If function does not exist")
@@ -162,7 +171,7 @@ object FunctionRegistryBase {
           df.group(),
           df.since(),
           df.deprecated(),
-          df.language())
+          df.functionType())
       } else {
         // This exists for the backward compatibility with old `ExpressionDescription`s defining
         // the extended description in `extended()`.

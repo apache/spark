@@ -38,7 +38,7 @@ public class ExpressionInfo {
     private String group;
     private String since;
     private String deprecated;
-    private String language;
+    private String functionType;
 
     private static final Set<String> validGroups =
         new HashSet<>(Arrays.asList("agg_funcs", "array_funcs", "binary_funcs", "bitwise_funcs",
@@ -47,8 +47,8 @@ public class ExpressionInfo {
             "lambda_funcs", "map_funcs", "math_funcs", "misc_funcs", "string_funcs", "struct_funcs",
             "window_funcs", "xml_funcs", "table_funcs"));
 
-    private static final Set<String> validLanguages =
-            new HashSet<>(Arrays.asList("python", "scala", "java", "hive", "built-in"));
+    private static final Set<String> validFunctionTypes =
+            new HashSet<>(Arrays.asList("built-in", "hive", "python_udf", "scala_udf", "java_udf"));
 
     public String getClassName() {
         return className;
@@ -99,8 +99,8 @@ public class ExpressionInfo {
         return db;
     }
 
-    public String getLanguage() {
-        return language;
+    public String getFunctionType() {
+        return functionType;
     }
 
     public ExpressionInfo(
@@ -114,7 +114,7 @@ public class ExpressionInfo {
             String group,
             String since,
             String deprecated,
-            String language) {
+            String functionType) {
         assert name != null;
         assert arguments != null;
         assert examples != null;
@@ -123,7 +123,7 @@ public class ExpressionInfo {
         assert group != null;
         assert since != null;
         assert deprecated != null;
-        assert language != null;
+        assert functionType != null;
 
         this.className = className;
         this.db = db;
@@ -135,7 +135,7 @@ public class ExpressionInfo {
         this.group = group;
         this.since = since;
         this.deprecated = deprecated;
-        this.language = language;
+        this.functionType = functionType;
 
         // Make the extended description.
         this.extended = arguments + examples;
@@ -155,10 +155,10 @@ public class ExpressionInfo {
                 this.name + "]. It should be a value in " + validGroups + "; however, " +
                 "got [" + group + "].");
         }
-        if (!language.isEmpty() && !validLanguages.contains(language)) {
-            throw new IllegalArgumentException("'language' is malformed in the expression [" +
-                    this.name + "]. It should be a value in " + validLanguages + "; however, " +
-                    "got [" + language + "].");
+        if (!functionType.isEmpty() && !validFunctionTypes.contains(functionType)) {
+            throw new IllegalArgumentException("'functionType' is malformed in the expression [" +
+                    this.name + "]. It should be a value in " + validFunctionTypes + "; however, " +
+                    "got [" + functionType + "].");
         }
         if (!since.isEmpty()) {
             if (Integer.parseInt(since.split("\\.")[0]) < 0) {
