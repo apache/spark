@@ -16,7 +16,7 @@
 #
 
 import numbers
-from typing import TYPE_CHECKING, Union
+from typing import Any, TYPE_CHECKING, Union
 
 import numpy as np
 from pandas.api.types import CategoricalDtype
@@ -40,7 +40,7 @@ if TYPE_CHECKING:
     from pyspark.pandas.series import Series  # noqa: F401 (SPARK-34943)
 
 
-def is_valid_operand_for_numeric_arithmetic(operand: IndexOpsMixin) -> bool:
+def is_valid_operand_for_numeric_arithmetic(operand: Any) -> bool:
     """Check whether the operand is valid for arithmetic operations against numerics."""
     if isinstance(operand, numbers.Number):
         return True
