@@ -193,7 +193,7 @@ class DataFrameReader(OptionUtils):
 
         Other Parameters
         ----------------
-        Extra options
+        Extra options (keyword argument)
             For the extra options, refer to
             `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#data-source-option>`_  # noqa
             in the version you use.
@@ -1034,7 +1034,7 @@ class DataFrameWriter(OptionUtils):
 
         Other Parameters
         ----------------
-        Extra options
+        Extra options (keyword argument)
             For the extra options, refer to
             `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#data-source-option>`_  # noqa
             in the version you use.
