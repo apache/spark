@@ -65,7 +65,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
         | udfDeterministic: ${udf.udfDeterministic}
       """.stripMargin)
 
-    functionRegistry.createOrReplaceTempFunction(name, udf.builder, "python")
+    functionRegistry.createOrReplaceTempFunction(name, udf.builder, "python_udf")
   }
 
   /**

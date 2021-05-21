@@ -211,12 +211,12 @@ class UDFSuite
     }
   }
 
-  test("check language for hive UDF") {
+  test("check function type for hive UDF") {
     withUserDefinedFunction(functionName -> false) {
       sql(s"CREATE FUNCTION $functionName AS '$functionClass'")
       val info = spark.sessionState.catalog.lookupFunctionInfo(
         FunctionIdentifier(functionName, Some("default")))
-      assert(info.getLanguage == "hive")
+      assert(info.getFunctionType == "hive")
     }
   }
 }
