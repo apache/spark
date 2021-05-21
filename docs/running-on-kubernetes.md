@@ -892,7 +892,7 @@ See the [configuration page](configuration.html) for information on Spark config
     Prefix to use in front of the executor pod names. It must conform the rules defined by the Kubernetes
     <a href="https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#dns-label-names">DNS Label Names</a>.
     Besides, the executor pod names will be generated in the form of <code>$podNamePrefix-exec-$id</code>, where the `id` is
-    a positive long value, so the length of the `podNamePrefix` need to be less than or equal to 38(63 - 19 -6).
+    a positive long value, so the length of the `podNamePrefix` need to be less than or equal to 38(= 63 - 19 - 6).
   </td>
   <td>2.3.0</td>
 </tr>

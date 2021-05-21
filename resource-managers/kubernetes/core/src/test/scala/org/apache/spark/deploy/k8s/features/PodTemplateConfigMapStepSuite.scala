@@ -57,7 +57,7 @@ class PodTemplateConfigMapStepSuite extends SparkFunSuite {
 
     assert(configuredPod.pod.getSpec.getVolumes.size() === 1)
     val volume = configuredPod.pod.getSpec.getVolumes.get(0)
-    val generatedResourceName = s"${kubernetesConf.resourceNamePrefix}$POD_TEMPLATE_CONFIGMAP"
+    val generatedResourceName = s"${kubernetesConf.resourceNamePrefix}-$POD_TEMPLATE_CONFIGMAP"
     assert(volume.getName === Constants.POD_TEMPLATE_VOLUME)
     assert(volume.getConfigMap.getName === generatedResourceName)
     assert(volume.getConfigMap.getItems.size() === 1)

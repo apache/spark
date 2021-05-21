@@ -54,8 +54,7 @@ private[spark] class HadoopConfDriverFeatureStep(conf: KubernetesConf)
     }
   }
 
-  private def newConfigMapName: String =
-    KubernetesClientUtils.configMapName(conf.resourceNamePrefix, "-hadoop-config")
+  private def newConfigMapName: String = s"${conf.resourceNamePrefix}-hadoop-config"
 
   private def hasHadoopConf: Boolean = confDir.isDefined || existingConfMap.isDefined
 

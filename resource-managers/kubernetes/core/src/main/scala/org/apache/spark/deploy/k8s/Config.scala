@@ -257,6 +257,7 @@ private[spark] object Config extends Logging {
 
   // The possible longest executor name would be "$prefix-exec-${Long.MaxValue}"
   private def isValidExecutorPodNamePrefix(prefix: String): Boolean = {
+    // 6 is length of '-exec-'
     val reservedLen = Long.MaxValue.toString.length + 6
     val validLength = prefix.length + reservedLen <= KUBERNETES_LABEL_MAX_LENGTH
     validLength && podConfValidator.matcher(prefix).matches()
@@ -264,12 +265,12 @@ private[spark] object Config extends Logging {
 
   val KUBERNETES_EXECUTOR_POD_NAME_PREFIX =
     ConfigBuilder("spark.kubernetes.executor.podNamePrefix")
-      .doc("Prefix to use in front of the executor pod names. It must conform the rules defined" +
-        " by the Kubernetes <a href=\"https://kubernetes.io/docs/concepts/overview/" +
-        "working-with-objects/names/#dns-label-names\">DNS Label Names</a>. Besides, the" +
-        " executor pod names will be generated in the form of" +
-        " <code>$podNamePrefix-exec-$id</code>, where the `id` is a positive long value, " +
-        "so the length of the `podNamePrefix` need to be <= 38(63 - 19 -6).")
+      .doc("Prefix to use in front of the executor pod names. It must conform the rules defined " +
+        "by the Kubernetes <a href=\"https://kubernetes.io/docs/concepts/overview/" +
+        "working-with-objects/names/#dns-label-names\">DNS Label Names</a>. Besides, the " +
+        "executor pod names will be generated in the form of " +
+        "<code>$podNamePrefix-exec-$id</code>, where the `id` is a positive long value, " +
+        "so the length of the `podNamePrefix` need to be <= 38(= 63 - 19 - 6).")
       .version("2.3.0")
       .stringConf
       .checkValue(isValidExecutorPodNamePrefix,

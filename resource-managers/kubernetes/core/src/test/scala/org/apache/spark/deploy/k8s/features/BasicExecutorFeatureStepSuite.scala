@@ -176,7 +176,7 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     checkOwnerReferences(executor.pod, DRIVER_POD_UID)
   }
 
-  def withPodNamePrefixRestored(f: => Unit): Unit = {
+  def withPodNamePrefix(f: => Unit): Unit = {
     val namePrefixOld = baseConf.get(KUBERNETES_EXECUTOR_POD_NAME_PREFIX)
     try {
       f
@@ -186,7 +186,7 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
   }
 
   test("executor pod hostnames get truncated to 63 characters") {
-    withPodNamePrefixRestored {
+    withPodNamePrefix {
       val longPodNamePrefix = "loremipsumdolorsitametvimatelitrefficiendisuscipianturvixlegeresple"
       baseConf.remove(KUBERNETES_EXECUTOR_POD_NAME_PREFIX)
       baseConf.set("spark.app.name", longPodNamePrefix)
@@ -199,7 +199,7 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
   }
 
   test("SPARK-35460: invalid PodNamePrefixes") {
-    withPodNamePrefixRestored {
+    withPodNamePrefix {
       Seq("_123", "spark_exec", "spark@", "a" * 39).foreach { invalid =>
         baseConf.set(KUBERNETES_EXECUTOR_POD_NAME_PREFIX, invalid)
         val e = intercept[IllegalArgumentException](newExecutorConf())
@@ -211,7 +211,7 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
   }
 
   test("hostname truncation generates valid host names") {
-    withPodNamePrefixRestored {
+    withPodNamePrefix {
       val invalidPrefix = "abcdef-*_/[]{}+==.,;'\"-----------------------------------------------"
       baseConf.remove(KUBERNETES_EXECUTOR_POD_NAME_PREFIX)
       baseConf.set("spark.app.name", invalidPrefix)
