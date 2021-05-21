@@ -341,7 +341,7 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     assert(!SecretVolumeUtils.podHasVolume(podConfigured.pod, SPARK_CONF_VOLUME_EXEC))
   }
 
-  test("SPARK-35482: block manager port") {
+  test("SPARK-35482: user correct block manager port for executor pods") {
     try {
       val initPod = SparkPod.initialPod()
       val sm = new SecurityManager(baseConf)
