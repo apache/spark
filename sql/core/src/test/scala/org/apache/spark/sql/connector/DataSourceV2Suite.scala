@@ -38,7 +38,6 @@ import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV
 import org.apache.spark.sql.execution.exchange.{Exchange, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.{Filter, GreaterThan}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StructType}
@@ -433,27 +432,6 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
         val df = spark.read.format(cls.getName).load()
         // before SPARK-33267 below query just threw NPE
         df.select('i).where("i in (1, null)").collect()
-      }
-    }
-  }
-
-  Seq("true", "false").foreach { codegenEnabled =>
-    test("SPARK-35287: project generating unsafe row " +
-      s"should not be removed (codegen=$codegenEnabled)") {
-      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
-        SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegenEnabled,
-        SQLConf.LEAF_NODE_DEFAULT_PARALLELISM.key -> "1") {
-        withTempPath { path =>
-          val format = classOf[SimpleWritableDataSource].getName
-          spark.range(3).select($"id" as "i", $"id" as "j")
-            .write.format(format).mode("overwrite").save(path.getCanonicalPath)
-
-          val df = spark.read.format(format).load(path.getCanonicalPath)
-          val dfLeft = df.as("x")
-          val dfRight = df.as("y")
-          val join = dfLeft.filter(dfLeft("i") > 0).join(dfRight, "i")
-          assert(join.collect === Array(Row(1, 1, 1), Row(2, 2, 2)))
-        }
       }
     }
   }

@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.{DataFrame, QueryTest, Row}
+import org.apache.spark.sql.connector.SimpleWritableDataSource
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, DisableAdaptiveExecutionSuite, EnableAdaptiveExecutionSuite}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -28,6 +29,7 @@ abstract class RemoveRedundantProjectsSuiteBase
   extends QueryTest
     with SharedSparkSession
     with AdaptiveSparkPlanHelper {
+  import testImplicits._
 
   private def assertProjectExecCount(df: DataFrame, expected: Int): Unit = {
     withClue(df.queryExecution) {
@@ -215,6 +217,27 @@ abstract class RemoveRedundantProjectsSuiteBase
         |LIMIT 10
         |""".stripMargin
     assertProjectExec(query, 0, 3)
+
+  }
+  Seq("true", "false").foreach { codegenEnabled =>
+    test("SPARK-35287: project generating unsafe row " +
+      s"should not be removed (codegen=$codegenEnabled)") {
+      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegenEnabled,
+        SQLConf.LEAF_NODE_DEFAULT_PARALLELISM.key -> "1") {
+        withTempPath { path =>
+          val format = classOf[SimpleWritableDataSource].getName
+          spark.range(3).select($"id" as "i", $"id" as "j")
+            .write.format(format).mode("overwrite").save(path.getCanonicalPath)
+
+          val df = spark.read.format(format).load(path.getCanonicalPath)
+          val dfLeft = df.as("x")
+          val dfRight = df.as("y")
+          val join = dfLeft.filter(dfLeft("i") > 0).join(dfRight, "i")
+          assert(join.collect === Array(Row(1, 1, 1), Row(2, 2, 2)))
+        }
+      }
+    }
   }
 }
 
