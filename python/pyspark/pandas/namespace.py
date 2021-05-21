@@ -387,7 +387,7 @@ def read_csv(
         index_spark_column_names = []
         index_names = []
 
-    kdf = DataFrame(
+    psdf = DataFrame(
         InternalFrame(
             spark_frame=sdf,
             index_spark_columns=[scol_for(sdf, col) for col in index_spark_column_names],
@@ -402,15 +402,15 @@ def read_csv(
     if dtype is not None:
         if isinstance(dtype, dict):
             for col, tpe in dtype.items():
-                kdf[col] = kdf[col].astype(tpe)
+                psdf[col] = psdf[col].astype(tpe)
         else:
-            for col in kdf.columns:
-                kdf[col] = kdf[col].astype(dtype)
+            for col in psdf.columns:
+                psdf[col] = psdf[col].astype(dtype)
 
-    if squeeze and len(kdf.columns) == 1:
-        return first_series(kdf)
+    if squeeze and len(psdf.columns) == 1:
+        return first_series(psdf)
     else:
-        return kdf
+        return psdf
 
 
 def read_json(
@@ -768,16 +768,16 @@ def read_parquet(path, columns=None, index_col=None, pandas_metadata=False, **op
             .head()
         )
 
-    kdf = read_spark_io(path=path, format="parquet", options=options, index_col=index_col)
+    psdf = read_spark_io(path=path, format="parquet", options=options, index_col=index_col)
 
     if columns is not None:
-        new_columns = [c for c in columns if c in kdf.columns]
+        new_columns = [c for c in columns if c in psdf.columns]
         if len(new_columns) > 0:
-            kdf = kdf[new_columns]
+            psdf = psdf[new_columns]
         else:
             sdf = default_session().createDataFrame([], schema=StructType())
             index_spark_columns, index_names = _get_index_map(sdf, index_col)
-            kdf = DataFrame(
+            psdf = DataFrame(
                 InternalFrame(
                     spark_frame=sdf,
                     index_spark_columns=index_spark_columns,
@@ -786,9 +786,9 @@ def read_parquet(path, columns=None, index_col=None, pandas_metadata=False, **op
             )
 
     if index_names is not None:
-        kdf.index.names = index_names
+        psdf.index.names = index_names
 
-    return kdf
+    return psdf
 
 
 def read_clipboard(sep=r"\s+", **kwargs) -> DataFrame:
@@ -1096,9 +1096,9 @@ def read_excel(
             else:
                 pdf = pdf_or_pser
 
-            kdf = from_pandas(pdf)
+            psdf = from_pandas(pdf)
             return_schema = force_decimal_precision_scale(
-                as_nullable_spark_type(kdf._internal.spark_frame.drop(*HIDDEN_COLUMNS).schema)
+                as_nullable_spark_type(psdf._internal.spark_frame.drop(*HIDDEN_COLUMNS).schema)
             )
 
             def output_func(pdf):
@@ -1125,11 +1125,11 @@ def read_excel(
                 .mapInPandas(lambda iterator: map(output_func, iterator), schema=return_schema)
             )
 
-            kdf = DataFrame(kdf._internal.with_new_sdf(sdf))
-            if squeeze and len(kdf.columns) == 1:
-                return first_series(kdf)
+            psdf = DataFrame(psdf._internal.with_new_sdf(sdf))
+            if squeeze and len(psdf.columns) == 1:
+                return first_series(psdf)
             else:
-                return kdf
+                return psdf
 
         if isinstance(pdf_or_psers, dict):
             return OrderedDict(
@@ -1332,7 +1332,7 @@ def read_sql_table(
     reader.options(**options)
     sdf = reader.format("jdbc").load()
     index_spark_columns, index_names = _get_index_map(sdf, index_col)
-    kdf = DataFrame(
+    psdf = DataFrame(
         InternalFrame(
             spark_frame=sdf, index_spark_columns=index_spark_columns, index_names=index_names
         )
@@ -1340,8 +1340,8 @@ def read_sql_table(
     if columns is not None:
         if isinstance(columns, str):
             columns = [columns]
-        kdf = kdf[columns]
-    return kdf
+        psdf = psdf[columns]
+    return psdf
 
 
 # TODO: add `coerce_float`, `params`, and 'parse_dates' parameters
@@ -1584,8 +1584,8 @@ def to_datetime(
     if isinstance(arg, Series):
         return arg.koalas.transform_batch(pandas_to_datetime)
     if isinstance(arg, DataFrame):
-        kdf = arg[["year", "month", "day"]]
-        return kdf.koalas.transform_batch(pandas_to_datetime)
+        psdf = arg[["year", "month", "day"]]
+        return psdf.koalas.transform_batch(pandas_to_datetime)
     return pd.to_datetime(
         arg,
         errors=errors,
@@ -1864,29 +1864,29 @@ def get_dummies(
     if isinstance(data, Series):
         if prefix is not None:
             prefix = [str(prefix)]
-        kdf = data.to_frame()
-        column_labels = kdf._internal.column_labels
+        psdf = data.to_frame()
+        column_labels = psdf._internal.column_labels
         remaining_columns = []
     else:
         if isinstance(prefix, str):
             raise NotImplementedError(
                 "get_dummies currently does not support prefix as string types"
             )
-        kdf = data.copy()
+        psdf = data.copy()
 
         if columns is None:
             column_labels = [
                 label
-                for label in kdf._internal.column_labels
+                for label in psdf._internal.column_labels
                 if isinstance(
-                    kdf._internal.spark_type_for(label), _get_dummies_default_accept_types
+                    psdf._internal.spark_type_for(label), _get_dummies_default_accept_types
                 )
             ]
         else:
             if is_name_like_tuple(columns):
                 column_labels = [
                     label
-                    for label in kdf._internal.column_labels
+                    for label in psdf._internal.column_labels
                     if label[: len(columns)] == columns
                 ]
                 if len(column_labels) == 0:
@@ -1912,12 +1912,12 @@ def get_dummies(
                 column_labels = [
                     label
                     for key in columns
-                    for label in kdf._internal.column_labels
+                    for label in psdf._internal.column_labels
                     if label == key or label[0] == key
                 ]
         if len(column_labels) == 0:
             if columns is None:
-                return kdf
+                return psdf
             raise KeyError("{} not in index".format(columns))
 
         if prefix is None:
@@ -1926,16 +1926,16 @@ def get_dummies(
         column_labels_set = set(column_labels)
         remaining_columns = [
             (
-                kdf[label]
-                if kdf._internal.column_labels_level == 1
-                else kdf[label].rename(name_like_string(label))
+                psdf[label]
+                if psdf._internal.column_labels_level == 1
+                else psdf[label].rename(name_like_string(label))
             )
-            for label in kdf._internal.column_labels
+            for label in psdf._internal.column_labels
             if label not in column_labels_set
         ]
 
     if any(
-        not isinstance(kdf._internal.spark_type_for(label), _get_dummies_acceptable_types)
+        not isinstance(psdf._internal.spark_type_for(label), _get_dummies_acceptable_types)
         for label in column_labels
     ):
         raise NotImplementedError(
@@ -1955,8 +1955,8 @@ def get_dummies(
         prefix = [prefix[column_label[0]] for column_label in column_labels]
 
     all_values = _reduce_spark_multi(
-        kdf._internal.spark_frame,
-        [F.collect_set(kdf._internal.spark_column_for(label)) for label in column_labels],
+        psdf._internal.spark_frame,
+        [F.collect_set(psdf._internal.spark_column_for(label)) for label in column_labels],
     )
     for i, label in enumerate(column_labels):
         values = all_values[i]
@@ -1974,14 +1974,14 @@ def get_dummies(
 
         for value in values:
             remaining_columns.append(
-                (kdf[label].notnull() & (kdf[label] == value))
+                (psdf[label].notnull() & (psdf[label] == value))
                 .astype(dtype)
                 .rename(column_name(value))
             )
         if dummy_na:
-            remaining_columns.append(kdf[label].isnull().astype(dtype).rename(column_name(np.nan)))
+            remaining_columns.append(psdf[label].isnull().astype(dtype).rename(column_name(np.nan)))
 
-    return kdf[remaining_columns]
+    return psdf[remaining_columns]
 
 
 # TODO: there are many parameters to implement and support. See pandas's pd.concat.
@@ -2158,66 +2158,66 @@ def concat(objs, axis=0, join="outer", ignore_index=False, sort=False) -> Union[
 
     axis = validate_axis(axis)
     if axis == 1:
-        kdfs = [obj.to_frame() if isinstance(obj, Series) else obj for obj in objs]
+        psdfs = [obj.to_frame() if isinstance(obj, Series) else obj for obj in objs]
 
-        level = min(kdf._internal.column_labels_level for kdf in kdfs)
-        kdfs = [
-            DataFrame._index_normalized_frame(level, kdf)
-            if kdf._internal.column_labels_level > level
-            else kdf
-            for kdf in kdfs
+        level = min(psdf._internal.column_labels_level for psdf in psdfs)
+        psdfs = [
+            DataFrame._index_normalized_frame(level, psdf)
+            if psdf._internal.column_labels_level > level
+            else psdf
+            for psdf in psdfs
         ]
 
-        concat_kdf = kdfs[0]
-        column_labels = concat_kdf._internal.column_labels.copy()
+        concat_psdf = psdfs[0]
+        column_labels = concat_psdf._internal.column_labels.copy()
 
-        kdfs_not_same_anchor = []
-        for kdf in kdfs[1:]:
-            duplicated = [label for label in kdf._internal.column_labels if label in column_labels]
+        psdfs_not_same_anchor = []
+        for psdf in psdfs[1:]:
+            duplicated = [label for label in psdf._internal.column_labels if label in column_labels]
             if len(duplicated) > 0:
                 pretty_names = [name_like_string(label) for label in duplicated]
                 raise ValueError(
                     "Labels have to be unique; however, got duplicated labels %s." % pretty_names
                 )
-            column_labels.extend(kdf._internal.column_labels)
+            column_labels.extend(psdf._internal.column_labels)
 
-            if same_anchor(concat_kdf, kdf):
-                concat_kdf = DataFrame(
-                    concat_kdf._internal.with_new_columns(
+            if same_anchor(concat_psdf, psdf):
+                concat_psdf = DataFrame(
+                    concat_psdf._internal.with_new_columns(
                         [
-                            concat_kdf._kser_for(label)
-                            for label in concat_kdf._internal.column_labels
+                            concat_psdf._psser_for(label)
+                            for label in concat_psdf._internal.column_labels
                         ]
-                        + [kdf._kser_for(label) for label in kdf._internal.column_labels]
+                        + [psdf._psser_for(label) for label in psdf._internal.column_labels]
                     )
                 )
             else:
-                kdfs_not_same_anchor.append(kdf)
+                psdfs_not_same_anchor.append(psdf)
 
-        if len(kdfs_not_same_anchor) > 0:
+        if len(psdfs_not_same_anchor) > 0:
 
-            def resolve_func(kdf, this_column_labels, that_column_labels):
+            def resolve_func(psdf, this_column_labels, that_column_labels):
                 raise AssertionError("This should not happen.")
 
-            for kdf in kdfs_not_same_anchor:
+            for psdf in psdfs_not_same_anchor:
                 if join == "inner":
-                    concat_kdf = align_diff_frames(
-                        resolve_func, concat_kdf, kdf, fillna=False, how="inner",
+                    concat_psdf = align_diff_frames(
+                        resolve_func, concat_psdf, psdf, fillna=False, how="inner",
                     )
                 elif join == "outer":
-                    concat_kdf = align_diff_frames(
-                        resolve_func, concat_kdf, kdf, fillna=False, how="full",
+                    concat_psdf = align_diff_frames(
+                        resolve_func, concat_psdf, psdf, fillna=False, how="full",
                     )
 
-            concat_kdf = concat_kdf[column_labels]
+            concat_psdf = concat_psdf[column_labels]
 
         if ignore_index:
-            concat_kdf.columns = list(map(str, _range(len(concat_kdf.columns))))
+            concat_psdf.columns = list(map(str, _range(len(concat_psdf.columns))))
 
         if sort:
-            concat_kdf = concat_kdf.sort_index()
+            concat_psdf = concat_psdf.sort_index()
 
-        return concat_kdf
+        return concat_psdf
 
     # Series, Series ...
     # We should return Series if objects are all Series.
@@ -2243,35 +2243,36 @@ def concat(objs, axis=0, join="outer", ignore_index=False, sort=False) -> Union[
     # DataFrame, DataFrame, ...
     # All Series are converted into DataFrame and then compute concat.
     if not ignore_index:
-        indices_of_kdfs = [kdf.index for kdf in objs]
-        index_of_first_kdf = indices_of_kdfs[0]
-        for index_of_kdf in indices_of_kdfs:
-            if index_of_first_kdf.names != index_of_kdf.names:
+        indices_of_psdfs = [psdf.index for psdf in objs]
+        index_of_first_psdf = indices_of_psdfs[0]
+        for index_of_psdf in indices_of_psdfs:
+            if index_of_first_psdf.names != index_of_psdf.names:
                 raise ValueError(
                     "Index type and names should be same in the objects to concatenate. "
                     "You passed different indices "
-                    "{index_of_first_kdf} and {index_of_kdf}".format(
-                        index_of_first_kdf=index_of_first_kdf.names, index_of_kdf=index_of_kdf.names
+                    "{index_of_first_psdf} and {index_of_psdf}".format(
+                        index_of_first_psdf=index_of_first_psdf.names,
+                        index_of_psdf=index_of_psdf.names,
                     )
                 )
 
-    column_labels_of_kdfs = [kdf._internal.column_labels for kdf in objs]
+    column_labels_of_psdfs = [psdf._internal.column_labels for psdf in objs]
     if ignore_index:
-        index_names_of_kdfs = [[] for _ in objs]  # type: List
+        index_names_of_psdfs = [[] for _ in objs]  # type: List
     else:
-        index_names_of_kdfs = [kdf._internal.index_names for kdf in objs]
+        index_names_of_psdfs = [psdf._internal.index_names for psdf in objs]
 
-    if all(name == index_names_of_kdfs[0] for name in index_names_of_kdfs) and all(
-        idx == column_labels_of_kdfs[0] for idx in column_labels_of_kdfs
+    if all(name == index_names_of_psdfs[0] for name in index_names_of_psdfs) and all(
+        idx == column_labels_of_psdfs[0] for idx in column_labels_of_psdfs
     ):
         # If all columns are in the same order and values, use it.
-        kdfs = objs
+        psdfs = objs
     else:
         if join == "inner":
-            interested_columns = set.intersection(*map(set, column_labels_of_kdfs))
+            interested_columns = set.intersection(*map(set, column_labels_of_psdfs))
             # Keep the column order with its firsts DataFrame.
             merged_columns = [
-                label for label in column_labels_of_kdfs[0] if label in interested_columns
+                label for label in column_labels_of_psdfs[0] if label in interested_columns
             ]
 
             # When multi-index column, although pandas is flaky if `join="inner" and sort=False`,
@@ -2280,10 +2281,10 @@ def concat(objs, axis=0, join="outer", ignore_index=False, sort=False) -> Union[
                 # FIXME: better ordering
                 merged_columns = sorted(merged_columns, key=name_like_string)
 
-            kdfs = [kdf[merged_columns] for kdf in objs]
+            psdfs = [psdf[merged_columns] for psdf in objs]
         elif join == "outer":
             merged_columns = []
-            for labels in column_labels_of_kdfs:
+            for labels in column_labels_of_psdfs:
                 merged_columns.extend(label for label in labels if label not in merged_columns)
 
             assert len(merged_columns) > 0
@@ -2300,40 +2301,42 @@ def concat(objs, axis=0, join="outer", ignore_index=False, sort=False) -> Union[
                 # FIXME: better ordering
                 merged_columns = sorted(merged_columns, key=name_like_string)
 
-            kdfs = []
-            for kdf in objs:
-                columns_to_add = list(set(merged_columns) - set(kdf._internal.column_labels))
+            psdfs = []
+            for psdf in objs:
+                columns_to_add = list(set(merged_columns) - set(psdf._internal.column_labels))
 
                 # TODO: NaN and None difference for missing values. pandas seems filling NaN.
-                sdf = kdf._internal.resolved_copy.spark_frame
+                sdf = psdf._internal.resolved_copy.spark_frame
                 for label in columns_to_add:
                     sdf = sdf.withColumn(name_like_string(label), F.lit(None))
 
-                data_columns = kdf._internal.data_spark_column_names + [
+                data_columns = psdf._internal.data_spark_column_names + [
                     name_like_string(label) for label in columns_to_add
                 ]
-                kdf = DataFrame(
-                    kdf._internal.copy(
+                psdf = DataFrame(
+                    psdf._internal.copy(
                         spark_frame=sdf,
                         index_spark_columns=[
-                            scol_for(sdf, col) for col in kdf._internal.index_spark_column_names
+                            scol_for(sdf, col) for col in psdf._internal.index_spark_column_names
                         ],
-                        column_labels=(kdf._internal.column_labels + columns_to_add),
+                        column_labels=(psdf._internal.column_labels + columns_to_add),
                         data_spark_columns=[scol_for(sdf, col) for col in data_columns],
-                        data_dtypes=(kdf._internal.data_dtypes + ([None] * len(columns_to_add))),
+                        data_dtypes=(psdf._internal.data_dtypes + ([None] * len(columns_to_add))),
                     )
                 )
 
-                kdfs.append(kdf[merged_columns])
+                psdfs.append(psdf[merged_columns])
 
     if ignore_index:
-        sdfs = [kdf._internal.spark_frame.select(kdf._internal.data_spark_columns) for kdf in kdfs]
+        sdfs = [
+            psdf._internal.spark_frame.select(psdf._internal.data_spark_columns) for psdf in psdfs
+        ]
     else:
         sdfs = [
-            kdf._internal.spark_frame.select(
-                kdf._internal.index_spark_columns + kdf._internal.data_spark_columns
+            psdf._internal.spark_frame.select(
+                psdf._internal.index_spark_columns + psdf._internal.data_spark_columns
             )
-            for kdf in kdfs
+            for psdf in psdfs
         ]
     concatenated = reduce(lambda x, y: x.union(y), sdfs)
 
@@ -2342,18 +2345,18 @@ def concat(objs, axis=0, join="outer", ignore_index=False, sort=False) -> Union[
         index_names = []
         index_dtypes = []
     else:
-        index_spark_column_names = kdfs[0]._internal.index_spark_column_names
-        index_names = kdfs[0]._internal.index_names
-        index_dtypes = kdfs[0]._internal.index_dtypes
+        index_spark_column_names = psdfs[0]._internal.index_spark_column_names
+        index_names = psdfs[0]._internal.index_names
+        index_dtypes = psdfs[0]._internal.index_dtypes
 
-    result_kdf = DataFrame(
-        kdfs[0]._internal.copy(
+    result_psdf = DataFrame(
+        psdfs[0]._internal.copy(
             spark_frame=concatenated,
             index_spark_columns=[scol_for(concatenated, col) for col in index_spark_column_names],
             index_names=index_names,
             index_dtypes=index_dtypes,
             data_spark_columns=[
-                scol_for(concatenated, col) for col in kdfs[0]._internal.data_spark_column_names
+                scol_for(concatenated, col) for col in psdfs[0]._internal.data_spark_column_names
             ],
             data_dtypes=None,  # TODO: dtypes?
         )
@@ -2365,9 +2368,9 @@ def concat(objs, axis=0, join="outer", ignore_index=False, sort=False) -> Union[
             name = series_names.pop()
         else:
             name = None
-        return first_series(result_kdf).rename(name)
+        return first_series(result_psdf).rename(name)
     else:
-        return result_kdf
+        return result_psdf
 
 
 def melt(frame, id_vars=None, value_vars=None, var_name=None, value_name="value") -> DataFrame:
@@ -2626,24 +2629,24 @@ def merge(
     ...foo        5  foo        5
     ...foo        5  foo        8
 
-    >>> left_kdf = ps.DataFrame({'A': [1, 2]})
-    >>> right_kdf = ps.DataFrame({'B': ['x', 'y']}, index=[1, 2])
+    >>> left_psdf = ps.DataFrame({'A': [1, 2]})
+    >>> right_psdf = ps.DataFrame({'B': ['x', 'y']}, index=[1, 2])
 
-    >>> ps.merge(left_kdf, right_kdf, left_index=True, right_index=True).sort_index()
+    >>> ps.merge(left_psdf, right_psdf, left_index=True, right_index=True).sort_index()
        A  B
     1  2  x
 
-    >>> ps.merge(left_kdf, right_kdf, left_index=True, right_index=True, how='left').sort_index()
+    >>> ps.merge(left_psdf, right_psdf, left_index=True, right_index=True, how='left').sort_index()
        A     B
     0  1  None
     1  2     x
 
-    >>> ps.merge(left_kdf, right_kdf, left_index=True, right_index=True, how='right').sort_index()
+    >>> ps.merge(left_psdf, right_psdf, left_index=True, right_index=True, how='right').sort_index()
          A  B
     1  2.0  x
     2  NaN  y
 
-    >>> ps.merge(left_kdf, right_kdf, left_index=True, right_index=True, how='outer').sort_index()
+    >>> ps.merge(left_psdf, right_psdf, left_index=True, right_index=True, how='outer').sort_index()
          A     B
     0  1.0  None
     1  2.0     x
@@ -2688,14 +2691,14 @@ def to_numeric(arg):
     Examples
     --------
 
-    >>> kser = ps.Series(['1.0', '2', '-3'])
-    >>> kser
+    >>> psser = ps.Series(['1.0', '2', '-3'])
+    >>> psser
     0    1.0
     1      2
     2     -3
     dtype: object
 
-    >>> ps.to_numeric(kser)
+    >>> ps.to_numeric(psser)
     0    1.0
     1    2.0
     2   -3.0
@@ -2703,15 +2706,15 @@ def to_numeric(arg):
 
     If given Series contains invalid value to cast float, just cast it to `np.nan`
 
-    >>> kser = ps.Series(['apple', '1.0', '2', '-3'])
-    >>> kser
+    >>> psser = ps.Series(['apple', '1.0', '2', '-3'])
+    >>> psser
     0    apple
     1      1.0
     2        2
     3       -3
     dtype: object
 
-    >>> ps.to_numeric(kser)
+    >>> ps.to_numeric(psser)
     0    NaN
     1    1.0
     2    2.0
@@ -2822,19 +2825,19 @@ def read_orc(
     if "options" in options and isinstance(options.get("options"), dict) and len(options) == 1:
         options = options.get("options")  # type: ignore
 
-    kdf = read_spark_io(path, format="orc", index_col=index_col, **options)
+    psdf = read_spark_io(path, format="orc", index_col=index_col, **options)
 
     if columns is not None:
-        kdf_columns = kdf.columns
+        psdf_columns = psdf.columns
         new_columns = list()
         for column in list(columns):
-            if column in kdf_columns:
+            if column in psdf_columns:
                 new_columns.append(column)
             else:
                 raise ValueError("Unknown column name '{}'".format(column))
-        kdf = kdf[new_columns]
+        psdf = psdf[new_columns]
 
-    return kdf
+    return psdf
 
 
 def _get_index_map(

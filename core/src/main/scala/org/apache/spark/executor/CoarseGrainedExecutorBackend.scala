@@ -26,6 +26,7 @@ import scala.collection.mutable
 import scala.util.{Failure, Success}
 import scala.util.control.NonFatal
 
+import io.netty.util.internal.PlatformDependent
 import org.json4s.DefaultFormats
 
 import org.apache.spark._
@@ -90,6 +91,14 @@ private[spark] class CoarseGrainedExecutorBackend(
 
     logInfo("Connecting to driver: " + driverUrl)
     try {
+      if (PlatformDependent.directBufferPreferred() &&
+          PlatformDependent.maxDirectMemory() < env.conf.get(MAX_REMOTE_BLOCK_SIZE_FETCH_TO_MEM)) {
+        throw new SparkException(s"Netty direct memory should at least be bigger than " +
+          s"'${MAX_REMOTE_BLOCK_SIZE_FETCH_TO_MEM.key}', but got " +
+          s"${PlatformDependent.maxDirectMemory()} bytes < " +
+          s"${env.conf.get(MAX_REMOTE_BLOCK_SIZE_FETCH_TO_MEM)}")
+      }
+
       _resources = parseOrFindResources(resourcesFileOpt)
     } catch {
       case NonFatal(e) =>

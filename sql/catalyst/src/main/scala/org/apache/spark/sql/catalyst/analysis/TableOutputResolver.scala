@@ -19,10 +19,10 @@ package org.apache.spark.sql.catalyst.analysis
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.{Alias, AnsiCast, Attribute, Cast, NamedExpression}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
 import org.apache.spark.sql.types.DataType
@@ -36,10 +36,7 @@ object TableOutputResolver {
       conf: SQLConf): LogicalPlan = {
 
     if (expected.size < query.output.size) {
-      throw new AnalysisException(
-        s"""Cannot write to '$tableName', too many data columns:
-           |Table columns: ${expected.map(c => s"'${c.name}'").mkString(", ")}
-           |Data columns: ${query.output.map(c => s"'${c.name}'").mkString(", ")}""".stripMargin)
+      throw QueryCompilationErrors.cannotWriteTooManyColumnsToTableError(tableName, expected, query)
     }
 
     val errors = new mutable.ArrayBuffer[String]()
@@ -56,11 +53,8 @@ object TableOutputResolver {
 
     } else {
       if (expected.size > query.output.size) {
-        throw new AnalysisException(
-          s"""Cannot write to '$tableName', not enough data columns:
-             |Table columns: ${expected.map(c => s"'${c.name}'").mkString(", ")}
-             |Data columns: ${query.output.map(c => s"'${c.name}'").mkString(", ")}"""
-            .stripMargin)
+        throw QueryCompilationErrors.cannotWriteNotEnoughColumnsToTableError(
+          tableName, expected, query)
       }
 
       query.output.zip(expected).flatMap {
@@ -70,8 +64,7 @@ object TableOutputResolver {
     }
 
     if (errors.nonEmpty) {
-      throw new AnalysisException(
-        s"Cannot write incompatible data to table '$tableName':\n- ${errors.mkString("\n- ")}")
+      throw QueryCompilationErrors.cannotWriteIncompatibleDataToTableError(tableName, errors.toSeq)
     }
 
     if (resolved == query.output) {

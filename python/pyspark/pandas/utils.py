@@ -117,7 +117,7 @@ def combine_frames(this, *args, how="full", preserve_order_column=False):
             same_anchor(arg, args[0]) for arg in args
         ), "Currently only one different DataFrame (from given Series) is supported"
         assert not same_anchor(this, args[0]), "We don't need to combine. All series is in this."
-        that = args[0]._kdf[list(args)]
+        that = args[0]._psdf[list(args)]
     elif len(args) == 1 and isinstance(args[0], DataFrame):
         assert isinstance(args[0], DataFrame)
         assert not same_anchor(
@@ -294,22 +294,22 @@ def align_diff_frames(
         >>>
         >>> set_option("compute.ops_on_diff_frames", True)
         >>>
-        >>> kdf1 = ps.DataFrame({'a': [9, 8, 7, 6, 5, 4, 3, 2, 1]})
-        >>> kdf2 = ps.DataFrame({'a': [9, 8, 7, 6, 5, 4, 3, 2, 1]})
+        >>> psdf1 = ps.DataFrame({'a': [9, 8, 7, 6, 5, 4, 3, 2, 1]})
+        >>> psdf2 = ps.DataFrame({'a': [9, 8, 7, 6, 5, 4, 3, 2, 1]})
         >>>
-        >>> def func(kdf, this_column_labels, that_column_labels):
-        ...    kdf  # conceptually this is A + B.
+        >>> def func(psdf, this_column_labels, that_column_labels):
+        ...    psdf  # conceptually this is A + B.
         ...
-        ...    # Within this function, Series from A or B can be performed against `kdf`.
-        ...    this_label = this_column_labels[0]  # this is ('a',) from kdf1.
-        ...    that_label = that_column_labels[0]  # this is ('a',) from kdf2.
-        ...    new_series = (kdf[this_label] - kdf[that_label]).rename(str(this_label))
+        ...    # Within this function, Series from A or B can be performed against `psdf`.
+        ...    this_label = this_column_labels[0]  # this is ('a',) from psdf1.
+        ...    that_label = that_column_labels[0]  # this is ('a',) from psdf2.
+        ...    new_series = (psdf[this_label] - psdf[that_label]).rename(str(this_label))
         ...
         ...    # This new series will be placed in new DataFrame.
         ...    yield (new_series, this_label)
         >>>
         >>>
-        >>> align_diff_frames(func, kdf1, kdf2).sort_index()
+        >>> align_diff_frames(func, psdf1, psdf2).sort_index()
            a
         0  0
         1  0
@@ -377,7 +377,7 @@ def align_diff_frames(
                 columns_to_keep.append(F.lit(None).cast(DoubleType()).alias(str(combined_label)))
                 column_labels_to_keep.append(combined_label)
             else:
-                columns_to_keep.append(combined._kser_for(combined_label))
+                columns_to_keep.append(combined._psser_for(combined_label))
                 column_labels_to_keep.append(combined_label)
 
     that_columns_to_apply += additional_that_columns
@@ -385,10 +385,10 @@ def align_diff_frames(
     # Should extract columns to apply and do it in a batch in case
     # it adds new columns for example.
     if len(this_columns_to_apply) > 0 or len(that_columns_to_apply) > 0:
-        kser_set, column_labels_applied = zip(
+        psser_set, column_labels_applied = zip(
             *resolve_func(combined, this_columns_to_apply, that_columns_to_apply)
         )
-        columns_applied = list(kser_set)
+        columns_applied = list(psser_set)
         column_labels_applied = list(column_labels_applied)
     else:
         columns_applied = []
@@ -415,9 +415,9 @@ def align_diff_frames(
         if new_label[1:] not in this_labels:
             other_labels[new_label[1:]] = new_label
 
-    kdf = applied[list(this_labels.values()) + list(other_labels.values())]
-    kdf.columns = kdf.columns.droplevel()
-    return kdf
+    psdf = applied[list(this_labels.values()) + list(other_labels.values())]
+    psdf.columns = psdf.columns.droplevel()
+    return psdf
 
 
 def is_testing():
@@ -737,38 +737,38 @@ def verify_temp_column_name(
     The temporary column names should start and end with `__`. In addition, `column_name_or_label`
     expects a single string, or column labels when `df` is a pandas-on-Spark DataFrame.
 
-    >>> kdf = ps.DataFrame({("x", "a"): ['a', 'b', 'c']})
-    >>> kdf["__dummy__"] = 0
-    >>> kdf[("", "__dummy__")] = 1
-    >>> kdf  # doctest: +NORMALIZE_WHITESPACE
+    >>> psdf = ps.DataFrame({("x", "a"): ['a', 'b', 'c']})
+    >>> psdf["__dummy__"] = 0
+    >>> psdf[("", "__dummy__")] = 1
+    >>> psdf  # doctest: +NORMALIZE_WHITESPACE
        x __dummy__
        a           __dummy__
     0  a         0         1
     1  b         0         1
     2  c         0         1
 
-    >>> verify_temp_column_name(kdf, '__tmp__')
+    >>> verify_temp_column_name(psdf, '__tmp__')
     ('__tmp__', '')
-    >>> verify_temp_column_name(kdf, ('', '__tmp__'))
+    >>> verify_temp_column_name(psdf, ('', '__tmp__'))
     ('', '__tmp__')
-    >>> verify_temp_column_name(kdf, '__dummy__')
+    >>> verify_temp_column_name(psdf, '__dummy__')
     Traceback (most recent call last):
     ...
     AssertionError: ... `(__dummy__, )` ...
-    >>> verify_temp_column_name(kdf, ('', '__dummy__'))
+    >>> verify_temp_column_name(psdf, ('', '__dummy__'))
     Traceback (most recent call last):
     ...
     AssertionError: ... `(, __dummy__)` ...
-    >>> verify_temp_column_name(kdf, 'dummy')
+    >>> verify_temp_column_name(psdf, 'dummy')
     Traceback (most recent call last):
     ...
     AssertionError: ... should be empty or start and end with `__`: ('dummy', '')
-    >>> verify_temp_column_name(kdf, ('', 'dummy'))
+    >>> verify_temp_column_name(psdf, ('', 'dummy'))
     Traceback (most recent call last):
     ...
     AssertionError: ... should be empty or start and end with `__`: ('', 'dummy')
 
-    >>> internal = kdf._internal.resolved_copy
+    >>> internal = psdf._internal.resolved_copy
     >>> sdf = internal.spark_frame
     >>> sdf.select(internal.data_spark_columns).show()  # doctest: +NORMALIZE_WHITESPACE
     +------+---------+-------------+
