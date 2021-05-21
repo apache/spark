@@ -33,10 +33,10 @@ object PropagateEmptyRelationAdvancedHelper {
     case _ => false
   }
 
-  private def checkRowCount(plan: LogicalPlan): Boolean = plan match {
+  private def checkRowCount(plan: LogicalPlan, hasRow: Boolean): Boolean = plan match {
     case LogicalQueryStage(_, stage: QueryStageExec) if stage.resultOption.get().isDefined =>
       stage.getRuntimeStatistics.rowCount match {
-        case Some(count) => count == 0
+        case Some(count) => hasRow == (count > 0)
         case _ => false
       }
     case _ => false
