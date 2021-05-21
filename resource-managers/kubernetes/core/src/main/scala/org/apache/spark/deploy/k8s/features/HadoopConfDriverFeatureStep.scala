@@ -27,7 +27,6 @@ import io.fabric8.kubernetes.api.model._
 import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesUtils, SparkPod}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
-import org.apache.spark.deploy.k8s.submit.KubernetesClientUtils
 
 /**
  * Mounts the Hadoop configuration - either a pre-defined config map, or a local configuration
