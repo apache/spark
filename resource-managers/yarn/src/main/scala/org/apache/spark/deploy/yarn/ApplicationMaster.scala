@@ -428,7 +428,8 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments) extends
       val executorMemory = _sparkConf.get(EXECUTOR_MEMORY).toInt
       val executorCores = _sparkConf.get(EXECUTOR_CORES)
       val dummyRunner = new ExecutorRunnable(None, yarnConf, _sparkConf, driverUrl, "<executorId>",
-        "<hostname>", executorMemory, executorCores, appId, securityMgr, localResources)
+        "<bind-address>", "<hostname>", executorMemory, executorCores, appId,
+        securityMgr, localResources)
       dummyRunner.launchContextDebugInfo()
     }
 

@@ -205,6 +205,18 @@ of the most common options to set are:
   </td>
 </tr>
 <tr>
+<td><code>spark.executor.bindAddress</code></td>
+  <td>(local hostname)</td>
+  <td>
+    Hostname or IP address where to bind listening sockets. This config overrides the SPARK_LOCAL_IP
+    environment variable (see below).
+    <br />It also allows a different address from the local one to be advertised to other
+    executors or external systems. This is useful, for example, when running containers with bridged networking.
+    For this to properly work, the different ports used by the driver (RPC, block manager and UI) need to be
+    forwarded from the container's host.
+  </td>
+</tr>
+<tr>
   <td><code>spark.extraListeners</code></td>
   <td>(none)</td>
   <td>

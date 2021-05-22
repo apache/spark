@@ -98,6 +98,11 @@ package object config {
     .bytesConf(ByteUnit.MiB)
     .createWithDefaultString("1g")
 
+  private[spark] val EXECUTOR_BIND_ADDRESS = ConfigBuilder("spark.executor.bindAddress")
+    .doc("Address where to bind network listen sockets on the executor.")
+    .stringConf
+    .createWithDefault(Utils.localHostName())
+
   private[spark] val EXECUTOR_MEMORY_OVERHEAD = ConfigBuilder("spark.executor.memoryOverhead")
     .doc("The amount of off-heap memory to be allocated per executor in cluster mode, " +
       "in MiB unless otherwise specified.")

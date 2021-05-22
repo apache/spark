@@ -47,6 +47,7 @@ private[yarn] class ExecutorRunnable(
     sparkConf: SparkConf,
     masterAddress: String,
     executorId: String,
+    bindAddress: String,
     hostname: String,
     executorMemory: Int,
     executorCores: Int,
@@ -204,6 +205,7 @@ private[yarn] class ExecutorRunnable(
       Seq("org.apache.spark.executor.CoarseGrainedExecutorBackend",
         "--driver-url", masterAddress,
         "--executor-id", executorId,
+        "--bind-address", bindAddress,
         "--hostname", hostname,
         "--cores", executorCores.toString,
         "--app-id", appId) ++

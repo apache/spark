@@ -507,6 +507,7 @@ private[yarn] class YarnAllocator(
     for (container <- containersToUse) {
       executorIdCounter += 1
       val executorHostname = container.getNodeId.getHost
+      val executorBindAddress = sparkConf.get(EXECUTOR_BIND_ADDRESS.key, executorHostname)
       val containerId = container.getId
       val executorId = executorIdCounter.toString
       assert(container.getResource.getMemory >= resource.getMemory)
@@ -537,6 +538,7 @@ private[yarn] class YarnAllocator(
                   sparkConf,
                   driverUrl,
                   executorId,
+                  executorBindAddress,
                   executorHostname,
                   executorMemory,
                   executorCores,
