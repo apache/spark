@@ -213,6 +213,19 @@ object SparkEnv extends Logging {
   }
 
   /**
+   * Create a SparkEnv for an executor with hostname as executor's bind address.
+   */
+  private[spark] def createExecutorEnv(
+      conf: SparkConf,
+      executorId: String,
+      hostname: String,
+      numCores: Int,
+      ioEncryptionKey: Option[Array[Byte]],
+      isLocal: Boolean): SparkEnv = {
+    createExecutorEnv(conf, executorId, hostname, hostname, numCores, ioEncryptionKey, isLocal)
+  }
+
+  /**
    * Helper method to create a SparkEnv for a driver or an executor.
    */
   private def create(
