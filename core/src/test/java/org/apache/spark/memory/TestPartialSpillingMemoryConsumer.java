@@ -17,10 +17,6 @@
 
 package org.apache.spark.memory;
 
-import com.google.common.annotations.VisibleForTesting;
-
-import org.apache.spark.unsafe.memory.MemoryBlock;
-
 import java.io.IOException;
 
 /**
