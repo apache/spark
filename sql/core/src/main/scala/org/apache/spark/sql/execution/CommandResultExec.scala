@@ -26,8 +26,8 @@ import org.apache.spark.sql.execution.metric.SQLMetrics
 /**
  * Physical plan node for holding data from a command.
  *
- * `rows` may not be serializable and ideally we should not send `rows` and `unsafeRows`
- * to the executors. Thus marking them as transient.
+ * `Row`s may not be serializable and ideally we should not send `Row`s to the executors.
+ * Thus marking them as transient.
  */
 case class CommandResultExec(
     output: Seq[Attribute],

@@ -78,10 +78,17 @@ class QueryExecution(
   lazy val nonRootCommandExecuted: LogicalPlan = analyzed mapChildren { child =>
     child transformDown {
       // SPARK-35378: Eagerly execute non-root Command
+      // Currently, Command returns GenericInternalRow and some Exec casts the output
+      // of child plan to UnsafeRow. If we set Command as the child node or sub query,
+      // then ClassCastException occurs. Such as:
+      // java.lang.ClassCastException
+      // org.apache.spark.sql.catalyst.expressions.GenericInternalRow cannot be cast to
+      // org.apache.spark.sql.catalyst.expressions.UnsafeRow
+      // So eagerly executes Command and converts the output of it to UnsafeRow.
       case c: Command =>
         val qe = sparkSession.sessionState.executePlan(c)
         CommandResult(
-          qe.nonRootCommandExecuted.output,
+          qe.analyzed.output,
           qe.nonRootCommandExecuted,
           qe.executedPlan,
           SQLExecution.withNewExecutionId(qe, Some("command"))(qe.executedPlan.executeCollect()))
