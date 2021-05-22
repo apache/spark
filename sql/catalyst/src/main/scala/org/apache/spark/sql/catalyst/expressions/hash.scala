@@ -238,24 +238,30 @@ case class Crc32(child: Expression)
  * is not exposed to users and should only be set inside spark SQL.
  *
  * The hash value for an expression depends on its type and seed:
- *  - null:               seed
- *  - boolean:            turn boolean into int, 1 for true, 0 for false, and then use murmur3 to
- *                        hash this int with seed.
- *  - byte, short, int:   use murmur3 to hash the input as int with seed.
- *  - long:               use murmur3 to hash the long input with seed.
- *  - float:              turn it into int: java.lang.Float.floatToIntBits(input), and hash it.
- *  - double:             turn it into long: java.lang.Double.doubleToLongBits(input), and hash it.
- *  - decimal:            if it's a small decimal, i.e. precision <= 18, turn it into long and hash
- *                        it. Else, turn it into bytes and hash it.
- *  - calendar interval:  hash `microseconds` first, and use the result as seed to hash `months`.
- *  - binary:             use murmur3 to hash the bytes with seed.
- *  - string:             get the bytes of string and hash it.
- *  - array:              The `result` starts with seed, then use `result` as seed, recursively
- *                        calculate hash value for each element, and assign the element hash value
- *                        to `result`.
- *  - struct:             The `result` starts with seed, then use `result` as seed, recursively
- *                        calculate hash value for each field, and assign the field hash value to
- *                        `result`.
+ *  - null:                    seed
+ *  - boolean:                 turn boolean into int, 1 for true, 0 for false,
+ *                             and then use murmur3 to hash this int with seed.
+ *  - byte, short, int:        use murmur3 to hash the input as int with seed.
+ *  - long:                    use murmur3 to hash the long input with seed.
+ *  - float:                   turn it into int: java.lang.Float.floatToIntBits(input), and hash it.
+ *  - double:                  turn it into long: java.lang.Double.doubleToLongBits(input),
+ *                             and hash it.
+ *  - decimal:                 if it's a small decimal, i.e. precision <= 18, turn it into long
+ *                             and hash it. Else, turn it into bytes and hash it.
+ *  - calendar interval:       hash `microseconds` first, and use the result as seed
+ *                             to hash `months`.
+ *  - interval day to second:  it store long value of `microseconds`, use murmur3 to hash the long
+ *                             input with seed.
+ *  - interval year to month:  it store int value of `months`, use murmur3 to hash the int
+ *                             input with seed.
+ *  - binary:                  use murmur3 to hash the bytes with seed.
+ *  - string:                  get the bytes of string and hash it.
+ *  - array:                   The `result` starts with seed, then use `result` as seed, recursively
+ *                             calculate hash value for each element, and assign the element hash
+ *                             value to `result`.
+ *  - struct:                  The `result` starts with seed, then use `result` as seed, recursively
+ *                             calculate hash value for each field, and assign the field hash value
+ *                             to `result`.
  *
  * Finally we aggregate the hash values for each expression by the same way of struct.
  */
@@ -363,11 +369,25 @@ abstract class HashExpression[E] extends Expression {
   protected def genHashBoolean(input: String, result: String): String =
     genHashInt(s"$input ? 1 : 0", result)
 
-  protected def genHashFloat(input: String, result: String): String =
-    genHashInt(s"Float.floatToIntBits($input)", result)
+  protected def genHashFloat(input: String, result: String): String = {
+    s"""
+       |if($input == -0.0f) {
+       |  ${genHashInt("0", result)}
+       |} else {
+       |  ${genHashInt(s"Float.floatToIntBits($input)", result)}
+       |}
+     """.stripMargin
+  }
 
-  protected def genHashDouble(input: String, result: String): String =
-    genHashLong(s"Double.doubleToLongBits($input)", result)
+  protected def genHashDouble(input: String, result: String): String = {
+    s"""
+      |if($input == -0.0d) {
+      |  ${genHashLong("0L", result)}
+      |} else {
+      |  ${genHashLong(s"Double.doubleToLongBits($input)", result)}
+      |}
+     """.stripMargin
+  }
 
   protected def genHashDecimal(
       ctx: CodegenContext,
@@ -475,6 +495,8 @@ abstract class HashExpression[E] extends Expression {
     case DoubleType => genHashDouble(input, result)
     case d: DecimalType => genHashDecimal(ctx, d, input, result)
     case CalendarIntervalType => genHashCalendarInterval(input, result)
+    case DayTimeIntervalType => genHashLong(input, result)
+    case YearMonthIntervalType => genHashInt(input, result)
     case BinaryType => genHashBytes(input, result)
     case StringType => genHashString(input, result)
     case ArrayType(et, containsNull) => genHashForArray(ctx, input, result, et, containsNull)
@@ -515,7 +537,9 @@ abstract class InterpretedHashFunction {
       case s: Short => hashInt(s, seed)
       case i: Int => hashInt(i, seed)
       case l: Long => hashLong(l, seed)
+      case f: Float if (f == -0.0f) => hashInt(0, seed)
       case f: Float => hashInt(java.lang.Float.floatToIntBits(f), seed)
+      case d: Double if (d == -0.0d) => hashLong(0L, seed)
       case d: Double => hashLong(java.lang.Double.doubleToLongBits(d), seed)
       case d: Decimal =>
         val precision = dataType.asInstanceOf[DecimalType].precision

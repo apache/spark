@@ -40,7 +40,7 @@ class TopNPlotBase:
         if isinstance(data, (Series, DataFrame)):
             data = data.head(max_rows + 1).to_pandas()
         else:
-            raise ValueError("Only DataFrame and Series are supported for plotting.")
+            raise TypeError("Only DataFrame and Series are supported for plotting.")
 
         self.partial = False
         if len(data) > max_rows:
@@ -80,7 +80,7 @@ class SampledPlotBase:
             sampled = data._internal.resolved_copy.spark_frame.sample(fraction=self.fraction)
             return DataFrame(data._internal.with_new_sdf(sampled)).to_pandas()
         else:
-            raise ValueError("Only DataFrame and Series are supported for plotting.")
+            raise TypeError("Only DataFrame and Series are supported for plotting.")
 
     def set_result_text(self, ax):
         assert hasattr(self, "fraction")
@@ -140,17 +140,17 @@ class HistogramPlotBase:
         return np.linspace(boundaries[0], boundaries[1], bins + 1)
 
     @staticmethod
-    def compute_hist(kdf, bins):
+    def compute_hist(psdf, bins):
         # 'data' is a Spark DataFrame that selects one column.
         assert isinstance(bins, (np.ndarray, np.generic))
 
-        sdf = kdf._internal.spark_frame
+        sdf = psdf._internal.spark_frame
         scols = []
         input_column_names = []
-        for label in kdf._internal.column_labels:
+        for label in psdf._internal.column_labels:
             input_column_name = name_like_string(label)
             input_column_names.append(input_column_name)
-            scols.append(kdf._internal.spark_column_for(label).alias(input_column_name))
+            scols.append(psdf._internal.spark_column_for(label).alias(input_column_name))
         sdf = sdf.select(*scols)
 
         # 1. Make the bucket output flat to:
@@ -268,7 +268,7 @@ class BoxPlotBase:
     @staticmethod
     def compute_stats(data, colname, whis, precision):
         # Computes mean, median, Q1 and Q3 with approx_percentile and precision
-        pdf = data._kdf._internal.resolved_copy.spark_frame.agg(
+        pdf = data._psdf._internal.resolved_copy.spark_frame.agg(
             *[
                 F.expr(
                     "approx_percentile(`{}`, {}, {})".format(colname, q, int(1.0 / precision))
@@ -305,7 +305,7 @@ class BoxPlotBase:
         # Builds expression to identify outliers
         expression = F.col("`%s`" % colname).between(lfence, ufence)
         # Creates a column to flag rows as outliers or not
-        return data._kdf._internal.resolved_copy.spark_frame.withColumn(
+        return data._psdf._internal.resolved_copy.spark_frame.withColumn(
             "__{}_outlier".format(colname), ~expression
         )
 

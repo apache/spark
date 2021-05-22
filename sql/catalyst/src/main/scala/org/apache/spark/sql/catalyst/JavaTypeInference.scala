@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.analysis.GetColumnByOrdinal
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.objects._
 import org.apache.spark.sql.catalyst.util.ArrayBasedMapData
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
 
 /**
@@ -140,9 +141,7 @@ object JavaTypeInference {
 
       case other =>
         if (seenTypeSet.contains(other)) {
-          throw new UnsupportedOperationException(
-            "Cannot have circular references in bean class, but got the circular reference " +
-              s"of class $other")
+          throw QueryExecutionErrors.cannotHaveCircularReferencesInBeanClassError(other)
         }
 
         // TODO: we should only collect properties that have getter and setter. However, some tests

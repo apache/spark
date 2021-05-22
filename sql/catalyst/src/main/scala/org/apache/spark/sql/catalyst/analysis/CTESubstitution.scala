@@ -19,10 +19,10 @@ package org.apache.spark.sql.catalyst.analysis
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias, With}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf.{LEGACY_CTE_PRECEDENCE_POLICY, LegacyBehaviorPolicy}
 
 /**
@@ -64,10 +64,7 @@ object CTESubstitution extends Rule[LogicalPlan] {
         relations.foreach {
           case (name, relation) =>
             if (startOfQuery && outerCTERelationNames.exists(resolver(_, name))) {
-              throw new AnalysisException(s"Name $name is ambiguous in nested CTE. " +
-                s"Please set ${LEGACY_CTE_PRECEDENCE_POLICY.key} to CORRECTED so that name " +
-                "defined in inner CTE takes precedence. If set it to LEGACY, outer CTE " +
-                "definitions will take precedence. See more details in SPARK-28228.")
+              throw QueryCompilationErrors.ambiguousRelationAliasNameInNestedCTEError(name)
             }
             // CTE relation is defined as `SubqueryAlias`. Here we skip it and check the child
             // directly, so that `startOfQuery` is set correctly.

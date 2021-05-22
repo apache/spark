@@ -19,13 +19,13 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import scala.annotation.tailrec
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.ExtractFiltersAndInnerJoins
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.TreePattern.{INNER_LIKE_JOIN, OUTER_JOIN}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -189,8 +189,7 @@ object ExtractPythonUDFFromJoinCondition extends Rule[LogicalPlan] with Predicat
         // the plan here, it'll still get a an invalid PythonUDF RuntimeException with message
         // `requires attributes from more than one child`, we throw firstly here for better
         // readable information.
-        throw new AnalysisException("Using PythonUDF in join condition of join type" +
-          s" $joinType is not supported.")
+        throw QueryCompilationErrors.usePythonUDFInJoinConditionUnsupportedError(joinType)
       }
       // If condition expression contains python udf, it will be moved out from
       // the new join conditions.
@@ -206,8 +205,7 @@ object ExtractPythonUDFFromJoinCondition extends Rule[LogicalPlan] with Predicat
       joinType match {
         case _: InnerLike => Filter(udf.reduceLeft(And), newJoin)
         case _ =>
-          throw new AnalysisException("Using PythonUDF in join condition of join type" +
-            s" $joinType is not supported.")
+          throw QueryCompilationErrors.usePythonUDFInJoinConditionUnsupportedError(joinType)
       }
   }
 }
@@ -278,7 +276,13 @@ trait JoinSelectionHelper {
    * Matches a plan whose output should be small enough to be used in broadcast join.
    */
   def canBroadcastBySize(plan: LogicalPlan, conf: SQLConf): Boolean = {
-    plan.stats.sizeInBytes >= 0 && plan.stats.sizeInBytes <= conf.autoBroadcastJoinThreshold
+    val autoBroadcastJoinThreshold = if (plan.stats.isRuntime) {
+      conf.getConf(SQLConf.ADAPTIVE_AUTO_BROADCASTJOIN_THRESHOLD)
+        .getOrElse(conf.autoBroadcastJoinThreshold)
+    } else {
+      conf.autoBroadcastJoinThreshold
+    }
+    plan.stats.sizeInBytes >= 0 && plan.stats.sizeInBytes <= autoBroadcastJoinThreshold
   }
 
   def canBuildBroadcastLeft(joinType: JoinType): Boolean = {

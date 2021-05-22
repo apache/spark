@@ -506,6 +506,14 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
       checkKeywordsExistsInExplain(df2, keywords = "[key1=value1, KEY2=VALUE2]")
     }
   }
+
+  test("SPARK-35225: Handle empty output for analyzed plan") {
+    withTempView("test") {
+      checkKeywordsExistsInExplain(
+        sql("CREATE TEMPORARY VIEW test AS SELECT 1"),
+        "== Analyzed Logical Plan ==\nCreateViewCommand")
+    }
+  }
 }
 
 class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuite {
@@ -556,6 +564,33 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
          |Arguments: isFinalPlan=true
          |""".stripMargin
     )
+  }
+
+  test("SPARK-35133: explain codegen should work with AQE") {
+    withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true") {
+      withTempView("df") {
+        val df = spark.range(5).select(col("id").as("key"), col("id").as("value"))
+        df.createTempView("df")
+
+        val sqlText = "EXPLAIN CODEGEN SELECT key, MAX(value) FROM df GROUP BY key"
+        val expectedCodegenText = "Found 2 WholeStageCodegen subtrees."
+        val expectedNoCodegenText = "Found 0 WholeStageCodegen subtrees."
+        withNormalizedExplain(sqlText) { normalizedOutput =>
+          assert(normalizedOutput.contains(expectedNoCodegenText))
+        }
+
+        val aggDf = df.groupBy('key).agg(max('value))
+        withNormalizedExplain(aggDf, CodegenMode) { normalizedOutput =>
+          assert(normalizedOutput.contains(expectedNoCodegenText))
+        }
+
+        // trigger the final plan for AQE
+        aggDf.collect()
+        withNormalizedExplain(aggDf, CodegenMode) { normalizedOutput =>
+          assert(normalizedOutput.contains(expectedCodegenText))
+        }
+      }
+    }
   }
 }
 

@@ -58,6 +58,7 @@ case class ContinuousScanExec(
       sqlContext.conf.continuousStreamingExecutorPollIntervalMs,
       partitions,
       schema,
-      readerFactory.asInstanceOf[ContinuousPartitionReaderFactory])
+      readerFactory.asInstanceOf[ContinuousPartitionReaderFactory],
+      customMetrics)
   }
 }

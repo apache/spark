@@ -18,10 +18,10 @@
 import pandas as pd
 
 from pyspark import pandas as ps
-from pyspark.pandas.testing.utils import ReusedSQLTestCase
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 
 
-class DefaultIndexTest(ReusedSQLTestCase):
+class DefaultIndexTest(PandasOnSparkTestCase):
     def test_default_index_sequence(self):
         with ps.option_context("compute.default_index_type", "sequence"):
             sdf = self.spark.range(1000)
@@ -45,7 +45,8 @@ if __name__ == "__main__":
 
     try:
         import xmlrunner  # type: ignore[import]
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
+
+        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

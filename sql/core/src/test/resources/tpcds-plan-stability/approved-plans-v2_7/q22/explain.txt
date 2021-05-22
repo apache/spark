@@ -117,7 +117,7 @@ Join condition: None
 
 (21) Expand [codegen id : 4]
 Input [5]: [inv_quantity_on_hand#2, i_brand#9, i_class#10, i_category#11, i_product_name#12]
-Arguments: [List(inv_quantity_on_hand#2, i_product_name#12, i_brand#9, i_class#10, i_category#11, 0), List(inv_quantity_on_hand#2, i_product_name#12, i_brand#9, i_class#10, null, 1), List(inv_quantity_on_hand#2, i_product_name#12, i_brand#9, null, null, 3), List(inv_quantity_on_hand#2, i_product_name#12, null, null, null, 7), List(inv_quantity_on_hand#2, null, null, null, null, 15)], [inv_quantity_on_hand#2, i_product_name#15, i_brand#16, i_class#17, i_category#18, spark_grouping_id#19]
+Arguments: [[inv_quantity_on_hand#2, i_product_name#12, i_brand#9, i_class#10, i_category#11, 0], [inv_quantity_on_hand#2, i_product_name#12, i_brand#9, i_class#10, null, 1], [inv_quantity_on_hand#2, i_product_name#12, i_brand#9, null, null, 3], [inv_quantity_on_hand#2, i_product_name#12, null, null, null, 7], [inv_quantity_on_hand#2, null, null, null, null, 15]], [inv_quantity_on_hand#2, i_product_name#15, i_brand#16, i_class#17, i_category#18, spark_grouping_id#19]
 
 (22) HashAggregate [codegen id : 4]
 Input [6]: [inv_quantity_on_hand#2, i_product_name#15, i_brand#16, i_class#17, i_category#18, spark_grouping_id#19]

@@ -22,7 +22,7 @@ import java.nio.ByteBuffer
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.resource.{ResourceInformation, ResourceProfile}
 import org.apache.spark.rpc.RpcEndpointRef
-import org.apache.spark.scheduler.ExecutorLossReason
+import org.apache.spark.scheduler.{ExecutorLossReason, MiscellaneousProcessDetails}
 import org.apache.spark.util.SerializableBuffer
 
 private[spark] sealed trait CoarseGrainedClusterMessage extends Serializable
@@ -123,6 +123,11 @@ private[spark] object CoarseGrainedClusterMessages {
   // In Yarn mode, these are exchanged between the driver and the AM
 
   case class RegisterClusterManager(am: RpcEndpointRef) extends CoarseGrainedClusterMessage
+
+  // Send Miscellaneous Process information to the driver
+  case class MiscellaneousProcessAdded(
+      time: Long, processId: String, info: MiscellaneousProcessDetails)
+    extends CoarseGrainedClusterMessage
 
   // Used by YARN's client mode AM to retrieve the current set of delegation tokens.
   object RetrieveDelegationTokens extends CoarseGrainedClusterMessage

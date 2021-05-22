@@ -48,7 +48,7 @@ import org.apache.spark.tags.DockerTest
  *  $ git clone https://github.com/oracle/docker-images.git
  *  // Head SHA: 3e352a22618070595f823977a0fd1a3a8071a83c
  *  $ cd docker-images/OracleDatabase/SingleInstance/dockerfiles
- *  $ ./buildDockerImage.sh -v 18.4.0 -x
+ *  $ ./buildContainerImage.sh -v 18.4.0 -x
  *  $ export ORACLE_DOCKER_IMAGE_NAME=oracle/database:18.4.0-xe
  *  $ cd $SPARK_HOME
  *  $ ./build/sbt -Pdocker-integration-tests
@@ -446,9 +446,9 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
       case LogicalRelation(JDBCRelation(_, parts, _), _, _, _) =>
         val whereClauses = parts.map(_.asInstanceOf[JDBCPartition].whereClause).toSet
         assert(whereClauses === Set(
-          """"D" < '2018-07-10' or "D" is null""",
-          """"D" >= '2018-07-10' AND "D" < '2018-07-14'""",
-          """"D" >= '2018-07-14'"""))
+          """"D" < '2018-07-11' or "D" is null""",
+          """"D" >= '2018-07-11' AND "D" < '2018-07-15'""",
+          """"D" >= '2018-07-15'"""))
     }
     assert(df1.collect.toSet === expectedResult)
 

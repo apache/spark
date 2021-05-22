@@ -17,7 +17,7 @@ TakeOrderedAndProject (111)
                :              :     :     :- * Project (20)
                :              :     :     :  +- * BroadcastHashJoin Inner BuildRight (19)
                :              :     :     :     :- * Project (13)
-               :              :     :     :     :  +- SortMergeJoin LeftOuter (12)
+               :              :     :     :     :  +- * SortMergeJoin LeftOuter (12)
                :              :     :     :     :     :- * Sort (5)
                :              :     :     :     :     :  +- Exchange (4)
                :              :     :     :     :     :     +- * Filter (3)
@@ -60,7 +60,7 @@ TakeOrderedAndProject (111)
                :              :     :     :- * Project (59)
                :              :     :     :  +- * BroadcastHashJoin Inner BuildRight (58)
                :              :     :     :     :- * Project (56)
-               :              :     :     :     :  +- SortMergeJoin LeftOuter (55)
+               :              :     :     :     :  +- * SortMergeJoin LeftOuter (55)
                :              :     :     :     :     :- * Sort (48)
                :              :     :     :     :     :  +- Exchange (47)
                :              :     :     :     :     :     +- * Filter (46)
@@ -91,7 +91,7 @@ TakeOrderedAndProject (111)
                               :     :     :- * Project (90)
                               :     :     :  +- * BroadcastHashJoin Inner BuildRight (89)
                               :     :     :     :- * Project (87)
-                              :     :     :     :  +- SortMergeJoin LeftOuter (86)
+                              :     :     :     :  +- * SortMergeJoin LeftOuter (86)
                               :     :     :     :     :- * Sort (79)
                               :     :     :     :     :  +- Exchange (78)
                               :     :     :     :     :     +- * Filter (77)
@@ -161,7 +161,7 @@ Arguments: hashpartitioning(sr_item_sk#10, sr_ticket_number#11, 5), ENSURE_REQUI
 Input [4]: [sr_item_sk#10, sr_ticket_number#11, sr_return_amt#12, sr_net_loss#13]
 Arguments: [sr_item_sk#10 ASC NULLS FIRST, sr_ticket_number#11 ASC NULLS FIRST], false, 0
 
-(12) SortMergeJoin
+(12) SortMergeJoin [codegen id : 9]
 Left keys [2]: [ss_item_sk#1, ss_ticket_number#4]
 Right keys [2]: [sr_item_sk#10, sr_ticket_number#11]
 Join condition: None
@@ -357,7 +357,7 @@ Arguments: hashpartitioning(cr_item_sk#55, cr_order_number#56, 5), ENSURE_REQUIR
 Input [4]: [cr_item_sk#55, cr_order_number#56, cr_return_amount#57, cr_net_loss#58]
 Arguments: [cr_item_sk#55 ASC NULLS FIRST, cr_order_number#56 ASC NULLS FIRST], false, 0
 
-(55) SortMergeJoin
+(55) SortMergeJoin [codegen id : 19]
 Left keys [2]: [cs_item_sk#48, cs_order_number#50]
 Right keys [2]: [cr_item_sk#55, cr_order_number#56]
 Join condition: None
@@ -496,7 +496,7 @@ Arguments: hashpartitioning(wr_item_sk#94, wr_order_number#95, 5), ENSURE_REQUIR
 Input [4]: [wr_item_sk#94, wr_order_number#95, wr_return_amt#96, wr_net_loss#97]
 Arguments: [wr_item_sk#94 ASC NULLS FIRST, wr_order_number#95 ASC NULLS FIRST], false, 0
 
-(86) SortMergeJoin
+(86) SortMergeJoin [codegen id : 29]
 Left keys [2]: [ws_item_sk#86, ws_order_number#89]
 Right keys [2]: [wr_item_sk#94, wr_order_number#95]
 Join condition: None
@@ -590,7 +590,7 @@ Results [5]: [MakeDecimal(sum(UnscaledValue(ws_ext_sales_price#90))#117,17,2) AS
 
 (107) Expand [codegen id : 31]
 Input [5]: [sales#42, returns#43, profit#44, channel#45, id#46]
-Arguments: [ArrayBuffer(sales#42, returns#43, profit#44, channel#45, id#46, 0), ArrayBuffer(sales#42, returns#43, profit#44, channel#45, null, 1), ArrayBuffer(sales#42, returns#43, profit#44, null, null, 3)], [sales#42, returns#43, profit#44, channel#125, id#126, spark_grouping_id#127]
+Arguments: [[sales#42, returns#43, profit#44, channel#45, id#46, 0], [sales#42, returns#43, profit#44, channel#45, null, 1], [sales#42, returns#43, profit#44, null, null, 3]], [sales#42, returns#43, profit#44, channel#125, id#126, spark_grouping_id#127]
 
 (108) HashAggregate [codegen id : 31]
 Input [6]: [sales#42, returns#43, profit#44, channel#125, id#126, spark_grouping_id#127]

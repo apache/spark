@@ -309,11 +309,11 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
       val rightJoinQuery = "SELECT * FROM testDataForJoin right JOIN testData2 ON " +
         "testData2.a = testDataForJoin.a"
 
-      Seq((leftJoinQuery, false), (leftJoinQuery, true), (rightJoinQuery, false),
-        (rightJoinQuery, true)).foreach { case (query, enableWholeStage) =>
+      Seq((leftJoinQuery, 0L, false), (leftJoinQuery, 1L, true), (rightJoinQuery, 0L, false),
+        (rightJoinQuery, 1L, true)).foreach { case (query, nodeId, enableWholeStage) =>
         val df = spark.sql(query)
         testSparkPlanMetrics(df, 1, Map(
-          0L -> (("SortMergeJoin", Map(
+          nodeId -> (("SortMergeJoin", Map(
             // It's 8 because we read 6 rows in the left and 2 row in the right one
             "number of output rows" -> 8L)))),
           enableWholeStage
@@ -517,10 +517,10 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
     withTempView("antiData") {
       anti.createOrReplaceTempView("antiData")
       val query = "SELECT * FROM testData2 ANTI JOIN antiData ON testData2.a = antiData.a"
-      Seq(false, true).foreach { enableWholeStage =>
+      Seq((0L, false), (1L, true)).foreach { case (nodeId, enableWholeStage) =>
         val df = spark.sql(query)
         testSparkPlanMetrics(df, 1, Map(
-          0L -> (("SortMergeJoin", Map("number of output rows" -> 4L)))),
+          nodeId -> (("SortMergeJoin", Map("number of output rows" -> 4L)))),
           enableWholeStage
         )
       }

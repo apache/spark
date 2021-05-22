@@ -23,7 +23,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.UnsafeArrayData
 import org.apache.spark.sql.catalyst.plans.SQLHelper
-import org.apache.spark.sql.catalyst.util.{DateTimeUtils, GenericArrayData, IntervalUtils}
+import org.apache.spark.sql.catalyst.util.{DateTimeConstants, DateTimeUtils, GenericArrayData, IntervalUtils}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -197,8 +197,8 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
       "1970-01-01",
       "1972-12-31",
       "2019-02-16",
-      "2119-03-16").foreach { timestamp =>
-      val input = LocalDate.parse(timestamp)
+      "2119-03-16").foreach { date =>
+      val input = LocalDate.parse(date)
       val result = CatalystTypeConverters.convertToCatalyst(input)
       val expected = DateTimeUtils.localDateToDays(input)
       assert(result === expected)
@@ -291,6 +291,46 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
         val period = IntervalUtils.monthsToPeriod(months)
         assert(
           CatalystTypeConverters.createToScalaConverter(YearMonthIntervalType)(months) === period)
+      }
+    }
+  }
+
+  test("SPARK-35204: createToCatalystConverter for date") {
+    Seq(true, false).foreach { enable =>
+      withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> enable.toString) {
+        Seq(-1234, 0, 1234).foreach { days =>
+          val converter = CatalystTypeConverters.createToCatalystConverter(DateType)
+
+          val ld = LocalDate.ofEpochDay(days)
+          val result1 = converter(ld)
+
+          val d = java.sql.Date.valueOf(ld)
+          val result2 = converter(d)
+
+          val expected = DateTimeUtils.localDateToDays(ld)
+          assert(result1 === expected)
+          assert(result2 === expected)
+        }
+      }
+    }
+  }
+
+  test("SPARK-35204: createToCatalystConverter for timestamp") {
+    Seq(true, false).foreach { enable =>
+      withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> enable.toString) {
+        Seq(-1234, 0, 1234).foreach { seconds =>
+          val converter = CatalystTypeConverters.createToCatalystConverter(TimestampType)
+
+          val i = Instant.ofEpochSecond(seconds)
+          val result1 = converter(i)
+
+          val t = new java.sql.Timestamp(seconds * DateTimeConstants.MILLIS_PER_SECOND)
+          val result2 = converter(t)
+
+          val expected = seconds * DateTimeConstants.MICROS_PER_SECOND
+          assert(result1 === expected)
+          assert(result2 === expected)
+        }
       }
     }
   }
