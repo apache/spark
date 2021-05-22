@@ -219,6 +219,7 @@ abstract class RemoveRedundantProjectsSuiteBase
     assertProjectExec(query, 0, 3)
 
   }
+
   Seq("true", "false").foreach { codegenEnabled =>
     test("SPARK-35287: project generating unsafe row for DataSourceV2ScanRelation " +
       s"should not be removed (codegen=$codegenEnabled)") {
