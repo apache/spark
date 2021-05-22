@@ -222,22 +222,15 @@ abstract class RemoveRedundantProjectsSuiteBase
   Seq("true", "false").foreach { codegenEnabled =>
     test("SPARK-35287: project generating unsafe row for DataSourceV2ScanRelation " +
       s"should not be removed (codegen=$codegenEnabled)") {
-      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegenEnabled,
-        // Set the following properties to ensure SortExec is placed as a following operator
-        // of BatchScamExec, and avoid ShuffleExchangeExec is placed between them.
-        // It's a condition SPARK-35287 can happen.
-        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
-        SQLConf.LEAF_NODE_DEFAULT_PARALLELISM.key -> "1") {
+      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegenEnabled) {
         withTempPath { path =>
           val format = classOf[SimpleWritableDataSource].getName
           spark.range(3).select($"id" as "i", $"id" as "j")
             .write.format(format).mode("overwrite").save(path.getCanonicalPath)
 
-          val df = spark.read.format(format).load(path.getCanonicalPath)
-          val dfLeft = df.as("x")
-          val dfRight = df.as("y")
-          val join = dfLeft.filter(dfLeft("i") > 0).join(dfRight, "i")
-          assert(join.collect === Array(Row(1, 1, 1), Row(2, 2, 2)))
+          val df =
+            spark.read.format(format).load(path.getCanonicalPath).filter($"i" > 0).orderBy($"i")
+          assert(df.collect === Array(Row(1, 1), Row(2, 2)))
         }
       }
     }
