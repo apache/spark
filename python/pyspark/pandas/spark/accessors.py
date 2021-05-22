@@ -20,23 +20,26 @@ Spark related features. Usually, the features here are missing in pandas
 but Spark has it.
 """
 from abc import ABCMeta, abstractmethod
-from typing import TYPE_CHECKING, Optional, Union, List, cast
+from typing import TYPE_CHECKING, Callable, List, Optional, Union, cast
 
 from pyspark import StorageLevel
 from pyspark.sql import Column, DataFrame as SparkDataFrame
 from pyspark.sql.types import DataType, StructType
 
 if TYPE_CHECKING:
+    from pyspark.sql._typing import OptionalPrimitiveType  # noqa: F401 (SPARK-34943)
+    from pyspark._typing import PrimitiveType  # noqa: F401 (SPARK-34943)
+
     import pyspark.pandas as ps  # noqa: F401 (SPARK-34943)
     from pyspark.pandas.base import IndexOpsMixin  # noqa: F401 (SPARK-34943)
     from pyspark.pandas.frame import CachedDataFrame  # noqa: F401 (SPARK-34943)
 
 
-class SparkIndexOpsMethods(object, metaclass=ABCMeta):
+class SparkIndexOpsMethods(metaclass=ABCMeta):
     """Spark related features. Usually, the features here are missing in pandas
     but Spark has it."""
 
-    def __init__(self, data: Union["IndexOpsMixin"]):
+    def __init__(self, data: "IndexOpsMixin"):
         self._data = data
 
     @property
@@ -59,7 +62,7 @@ class SparkIndexOpsMethods(object, metaclass=ABCMeta):
         """
         return self._data._internal.spark_column_for(self._data._column_label)
 
-    def transform(self, func) -> Union["ps.Series", "ps.Index"]:
+    def transform(self, func: Callable[[Column], Column]) -> Union["ps.Series", "ps.Index"]:
         """
         Applies a function that takes and returns a Spark column. It allows to natively
         apply a Spark function and column APIs with the Spark column internally used
@@ -130,12 +133,7 @@ class SparkIndexOpsMethods(object, metaclass=ABCMeta):
 
 
 class SparkSeriesMethods(SparkIndexOpsMethods):
-    def transform(self, func) -> "ps.Series":
-        return cast("ps.Series", super().transform(func))
-
-    transform.__doc__ = SparkIndexOpsMethods.transform.__doc__
-
-    def apply(self, func) -> "ps.Series":
+    def apply(self, func: Callable[[Column], Column]) -> "ps.Series":
         """
         Applies a function that takes and returns a Spark column. It allows to natively
         apply a Spark function and column APIs with the Spark column internally used
@@ -256,11 +254,6 @@ class SparkSeriesMethods(SparkIndexOpsMethods):
 
 
 class SparkIndexMethods(SparkIndexOpsMethods):
-    def transform(self, func) -> "ps.Index":
-        return cast("ps.Index", super().transform(func))
-
-    transform.__doc__ = SparkIndexOpsMethods.transform.__doc__
-
     @property
     def analyzed(self) -> "ps.Index":
         """
@@ -641,7 +634,7 @@ class SparkFrameMethods(object):
         )
         return CachedDataFrame(self._psdf._internal, storage_level=storage_level)
 
-    def hint(self, name: str, *parameters) -> "ps.DataFrame":
+    def hint(self, name: str, *parameters: "PrimitiveType") -> "ps.DataFrame":
         """
         Specifies some hint on the current DataFrame.
 
@@ -685,7 +678,7 @@ class SparkFrameMethods(object):
         mode: str = "overwrite",
         partition_cols: Optional[Union[str, List[str]]] = None,
         index_col: Optional[Union[str, List[str]]] = None,
-        **options
+        **options: "OptionalPrimitiveType",
     ) -> None:
         """
         Write the DataFrame into a Spark table. :meth:`DataFrame.spark.to_table`
@@ -760,7 +753,7 @@ class SparkFrameMethods(object):
         mode: str = "overwrite",
         partition_cols: Optional[Union[str, List[str]]] = None,
         index_col: Optional[Union[str, List[str]]] = None,
-        **options
+        **options: "OptionalPrimitiveType",
     ) -> None:
         """Write the DataFrame out to a Spark data source. :meth:`DataFrame.spark.to_spark_io`
         is an alias of :meth:`DataFrame.to_spark_io`.
@@ -881,7 +874,11 @@ class SparkFrameMethods(object):
         """
         self._psdf._internal.to_internal_spark_frame.explain(extended, mode)
 
-    def apply(self, func, index_col: Optional[Union[str, List[str]]] = None) -> "ps.DataFrame":
+    def apply(
+        self,
+        func: Callable[[SparkDataFrame], SparkDataFrame],
+        index_col: Optional[Union[str, List[str]]] = None,
+    ) -> "ps.DataFrame":
         """
         Applies a function that takes and returns a Spark DataFrame. It allows natively
         apply a Spark function and column APIs with the Spark column internally used
@@ -1227,7 +1224,7 @@ class CachedSparkFrameMethods(SparkFrameMethods):
             self._psdf._cached.unpersist()
 
 
-def _test():
+def _test() -> None:
     import os
     import doctest
     import shutil
