@@ -350,6 +350,6 @@ class DataFramePivotSuite extends QueryTest with SharedSparkSession {
       ("a", -1.0), ("a", 5.5), ("a", 2.5), ("b", 3.0), ("b", 5.2)).toDF("type", "value")
       .groupBy().pivot("type", Seq("a", "b")).agg(
         percentile_approx(col("value"), array(lit(0.5)), lit(10000)))
-    checkAnswer(actual, Seq((Array(2.5), Array(3.0))).toDF)
+    checkAnswer(actual, Row(Array(2.5), Array(3.0)))
   }
 }
