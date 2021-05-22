@@ -690,7 +690,7 @@ def main():
         excluded_tags = determine_tags_to_exclude(changed_modules)
 
     # Run docker-integration-tests only if it's explicitly specified.
-    if opts.modules and modules.docker_integration_tests.name not in opts.modules:
+    if not opts.modules or modules.docker_integration_tests.name not in opts.modules:
         excluded_tags.extend(modules.docker_integration_tests.test_tags)
 
     # If there is no changed module found, tests all.
