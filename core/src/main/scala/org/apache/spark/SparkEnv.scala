@@ -193,6 +193,7 @@ object SparkEnv extends Logging {
   private[spark] def createExecutorEnv(
       conf: SparkConf,
       executorId: String,
+      bindAddress: String,
       hostname: String,
       numCores: Int,
       ioEncryptionKey: Option[Array[Byte]],
@@ -200,7 +201,7 @@ object SparkEnv extends Logging {
     val env = create(
       conf,
       executorId,
-      hostname,
+      bindAddress,
       hostname,
       None,
       isLocal,
