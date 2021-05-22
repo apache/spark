@@ -733,6 +733,17 @@ spark_ganglia_lgpl = Module(
     ]
 )
 
+docker_integration_tests = Module(
+    name="docker-integration-tests",
+    dependencies=[sql],
+    build_profile_flags=["-Pdocker-integration-tests"],
+    source_file_regexes=["external/docker-integration-tests"],
+    sbt_test_goals=["docker-integration-tests/test"],
+    test_tags=[
+        "org.apache.spark.tags.DockerTest"
+    ]
+)
+
 # The root module is a dummy module which is used to run all of the tests.
 # No other modules should directly depend on this module.
 root = Module(

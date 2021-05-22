@@ -61,7 +61,7 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
   import testImplicits._
 
   override val db = new DatabaseOnDocker {
-    override val imageName = sys.env("ORACLE_DOCKER_IMAGE_NAME")
+    lazy override val imageName = sys.env("ORACLE_DOCKER_IMAGE_NAME")
     override val env = Map(
       "ORACLE_PWD" -> "oracle"
     )

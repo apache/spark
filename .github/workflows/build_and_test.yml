@@ -66,6 +66,12 @@ jobs:
             hive: hive2.3
             excluded-tags: org.apache.spark.tags.ExtendedSQLTest
             comment: "- other tests"
+          - modules: docker-integration-tests
+            java: 8
+            hadoop: hadoop3.2
+            hive: hive2.3
+            included-tags: org.apache.spark.tags.DockerTest
+            comment: "- docker integration tests"
     env:
       MODULES_TO_TEST: ${{ matrix.modules }}
       EXCLUDED_TAGS: ${{ matrix.excluded-tags }}
@@ -131,11 +137,21 @@ jobs:
         python3.8 -m pip install numpy 'pyarrow<3.0.0' pandas scipy xmlrunner
         python3.8 -m pip list
     # Run the tests.
+    - name: Install Oracle docker image
+      if: (contains(matrix.modules, 'docker-integration-tests'))
+      run: |
+        pushd /tmp
+        git clone https://github.com/oracle/docker-images.git
+        cd docker-images/OracleDatabase/SingleInstance/dockerfiles
+        ./buildContainerImage.sh -v 18.4.0 -x
+        popd
+    # Run the tests.
     - name: Run tests
       run: |
         export APACHE_SPARK_REF=${{ steps.sync-branch.outputs.APACHE_SPARK_REF }}
         # Hive and SQL tests become flaky when running in parallel as it's too intensive.
         if [[ "$MODULES_TO_TEST" == "hive" ]] || [[ "$MODULES_TO_TEST" == "sql" ]]; then export SERIAL_SBT_TESTS=1; fi
+        if [[ "$MODULES_TO_TEST" == "docker-integration-tests" ]]; then export ORACLE_DOCKER_IMAGE_NAME=oracle/database:18.4.0-xe; fi
         ./dev/run-tests --parallelism 2 --modules "$MODULES_TO_TEST" --included-tags "$INCLUDED_TAGS" --excluded-tags "$EXCLUDED_TAGS"
     - name: Upload test results to report
       if: always()
@@ -489,6 +505,9 @@ jobs:
     name: Run TPC-DS queries with SF=1
     runs-on: ubuntu-20.04
     env:
+      HADOOP_PROFILE: hadoop3.2
+      HIVE_PROFILE: hive2.3
+      GITHUB_PREV_SHA: ${{ github.event.before }}
       SPARK_LOCAL_IP: localhost
     steps:
     - name: Checkout Spark repository
