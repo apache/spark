@@ -18,7 +18,17 @@
 """
 Wrappers around spark that correspond to common pandas functions.
 """
-from typing import Any, Dict, List, Optional, Sized, Tuple, Type, Union, cast
+from typing import (  # noqa: F401 (SPARK-34943)
+    Any,
+    Dict,
+    List,
+    Optional,
+    Sized,
+    Tuple,
+    Type,
+    Union,
+    cast,
+)
 from collections import OrderedDict
 from collections.abc import Iterable
 from distutils.version import LooseVersion
