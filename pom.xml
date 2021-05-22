@@ -408,7 +408,7 @@
       <dependency>
         <groupId>org.apache.xbean</groupId>
         <artifactId>xbean-asm7-shaded</artifactId>
-        <version>4.15</version>
+        <version>4.16</version>
       </dependency>
 
       <!-- Shaded deps marked as provided. These are promoted to compile scope
@@ -2858,12 +2858,12 @@
             <dependency>
               <groupId>org.ow2.asm</groupId>
               <artifactId>asm</artifactId>
-              <version>7.2</version>
+              <version>7.3.1</version>
             </dependency>
             <dependency>
               <groupId>org.ow2.asm</groupId>
               <artifactId>asm-commons</artifactId>
-              <version>7.2</version>
+              <version>7.3.1</version>
             </dependency>
           </dependencies>
         </plugin>
