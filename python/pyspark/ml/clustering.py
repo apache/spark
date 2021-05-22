@@ -189,7 +189,7 @@ class GaussianMixtureModel(JavaModel, _GaussianMixtureParams, JavaMLWritable, Ja
     @since("2.1.0")
     def summary(self):
         """
-        Gets summary (e.g. cluster assignments, cluster sizes) of the model trained on the
+        Gets summary (cluster assignments, cluster sizes) of the model trained on the
         training set. An exception is thrown if no summary exists.
         """
         if self.hasSummary:
@@ -273,8 +273,6 @@ class GaussianMixture(JavaEstimator, _GaussianMixtureParams, JavaMLWritable, Jav
     3
     >>> summary.clusterSizes
     [2, 2, 2]
-    >>> summary.logLikelihood
-    65.02945...
     >>> weights = model.weights
     >>> len(weights)
     3
@@ -560,7 +558,7 @@ class KMeansModel(JavaModel, _KMeansParams, GeneralJavaMLWritable, JavaMLReadabl
     @since("2.1.0")
     def summary(self):
         """
-        Gets summary (e.g. cluster assignments, cluster sizes) of the model trained on the
+        Gets summary (cluster assignments, cluster sizes) of the model trained on the
         training set. An exception is thrown if no summary exists.
         """
         if self.hasSummary:
@@ -828,7 +826,7 @@ class BisectingKMeansModel(JavaModel, _BisectingKMeansParams, JavaMLWritable, Ja
     @since("2.1.0")
     def summary(self):
         """
-        Gets summary (e.g. cluster assignments, cluster sizes) of the model trained on the
+        Gets summary (cluster assignments, cluster sizes) of the model trained on the
         training set. An exception is thrown if no summary exists.
         """
         if self.hasSummary:

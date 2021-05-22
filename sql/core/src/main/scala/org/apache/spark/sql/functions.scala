@@ -2868,6 +2868,25 @@ object functions {
   }
 
   /**
+   * Splits a string into arrays of sentences, where each sentence is an array of words.
+   * @group string_funcs
+   * @since 3.2.0
+   */
+  def sentences(string: Column, language: Column, country: Column): Column = withExpr {
+    Sentences(string.expr, language.expr, country.expr)
+  }
+
+  /**
+   * Splits a string into arrays of sentences, where each sentence is an array of words.
+   * The default locale is used.
+   * @group string_funcs
+   * @since 3.2.0
+   */
+  def sentences(string: Column): Column = withExpr {
+    Sentences(string.expr)
+  }
+
+  /**
    * Translate any character in the src by a character in replaceString.
    * The characters in replaceString correspond to the characters in matchingString.
    * The translate will happen when any character in the string matches the character
@@ -4123,6 +4142,7 @@ object functions {
     JsonTuple(json.expr +: fields.map(Literal.apply))
   }
 
+  // scalastyle:off line.size.limit
   /**
    * (Scala-specific) Parses a column containing a JSON string into a `StructType` with the
    * specified schema. Returns `null`, in the case of an unparseable string.
@@ -4131,13 +4151,19 @@ object functions {
    * @param schema the schema to use when parsing the json string
    * @param options options to control how the json is parsed. Accepts the same options as the
    *                json data source.
+   *                See
+   *                <a href=
+   *                  "https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option">
+   *                  Data Source Option</a> in the version you use.
    *
    * @group collection_funcs
    * @since 2.1.0
    */
+  // scalastyle:on line.size.limit
   def from_json(e: Column, schema: StructType, options: Map[String, String]): Column =
     from_json(e, schema.asInstanceOf[DataType], options)
 
+  // scalastyle:off line.size.limit
   /**
    * (Scala-specific) Parses a column containing a JSON string into a `MapType` with `StringType`
    * as keys type, `StructType` or `ArrayType` with the specified schema.
@@ -4147,14 +4173,20 @@ object functions {
    * @param schema the schema to use when parsing the json string
    * @param options options to control how the json is parsed. accepts the same options and the
    *                json data source.
+   *                See
+   *                <a href=
+   *                  "https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option">
+   *                  Data Source Option</a> in the version you use.
    *
    * @group collection_funcs
    * @since 2.2.0
    */
+  // scalastyle:on line.size.limit
   def from_json(e: Column, schema: DataType, options: Map[String, String]): Column = withExpr {
     JsonToStructs(CharVarcharUtils.failIfHasCharVarchar(schema), options, e.expr)
   }
 
+  // scalastyle:off line.size.limit
   /**
    * (Java-specific) Parses a column containing a JSON string into a `StructType` with the
    * specified schema. Returns `null`, in the case of an unparseable string.
@@ -4163,13 +4195,19 @@ object functions {
    * @param schema the schema to use when parsing the json string
    * @param options options to control how the json is parsed. accepts the same options and the
    *                json data source.
+   *                See
+   *                <a href=
+   *                  "https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option">
+   *                  Data Source Option</a> in the version you use.
    *
    * @group collection_funcs
    * @since 2.1.0
    */
+  // scalastyle:on line.size.limit
   def from_json(e: Column, schema: StructType, options: java.util.Map[String, String]): Column =
     from_json(e, schema, options.asScala.toMap)
 
+  // scalastyle:off line.size.limit
   /**
    * (Java-specific) Parses a column containing a JSON string into a `MapType` with `StringType`
    * as keys type, `StructType` or `ArrayType` with the specified schema.
@@ -4179,10 +4217,15 @@ object functions {
    * @param schema the schema to use when parsing the json string
    * @param options options to control how the json is parsed. accepts the same options and the
    *                json data source.
+   *                See
+   *                <a href=
+   *                  "https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option">
+   *                  Data Source Option</a> in the version you use.
    *
    * @group collection_funcs
    * @since 2.2.0
    */
+  // scalastyle:on line.size.limit
   def from_json(e: Column, schema: DataType, options: java.util.Map[String, String]): Column = {
     from_json(e, CharVarcharUtils.failIfHasCharVarchar(schema), options.asScala.toMap)
   }
@@ -4214,6 +4257,7 @@ object functions {
   def from_json(e: Column, schema: DataType): Column =
     from_json(e, schema, Map.empty[String, String])
 
+  // scalastyle:off line.size.limit
   /**
    * (Java-specific) Parses a column containing a JSON string into a `MapType` with `StringType`
    * as keys type, `StructType` or `ArrayType` with the specified schema.
@@ -4221,14 +4265,22 @@ object functions {
    *
    * @param e a string column containing JSON data.
    * @param schema the schema as a DDL-formatted string.
+   * @param options options to control how the json is parsed. accepts the same options and the
+   *                json data source.
+   *                See
+   *                <a href=
+   *                  "https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option">
+   *                  Data Source Option</a> in the version you use.
    *
    * @group collection_funcs
    * @since 2.1.0
    */
+  // scalastyle:on line.size.limit
   def from_json(e: Column, schema: String, options: java.util.Map[String, String]): Column = {
     from_json(e, schema, options.asScala.toMap)
   }
 
+  // scalastyle:off line.size.limit
   /**
    * (Scala-specific) Parses a column containing a JSON string into a `MapType` with `StringType`
    * as keys type, `StructType` or `ArrayType` with the specified schema.
@@ -4236,10 +4288,17 @@ object functions {
    *
    * @param e a string column containing JSON data.
    * @param schema the schema as a DDL-formatted string.
+   * @param options options to control how the json is parsed. accepts the same options and the
+   *                json data source.
+   *                See
+   *                <a href=
+   *                  "https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option">
+   *                  Data Source Option</a> in the version you use.
    *
    * @group collection_funcs
    * @since 2.3.0
    */
+  // scalastyle:on line.size.limit
   def from_json(e: Column, schema: String, options: Map[String, String]): Column = {
     val dataType = parseTypeWithFallback(
       schema,
@@ -4264,6 +4323,7 @@ object functions {
     from_json(e, schema, Map.empty[String, String].asJava)
   }
 
+  // scalastyle:off line.size.limit
   /**
    * (Java-specific) Parses a column containing a JSON string into a `MapType` with `StringType`
    * as keys type, `StructType` or `ArrayType` of `StructType`s with the specified schema.
@@ -4273,10 +4333,15 @@ object functions {
    * @param schema the schema to use when parsing the json string
    * @param options options to control how the json is parsed. accepts the same options and the
    *                json data source.
+   *                See
+   *                <a href=
+   *                  "https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option">
+   *                  Data Source Option</a> in the version you use.
    *
    * @group collection_funcs
    * @since 2.4.0
    */
+  // scalastyle:on line.size.limit
   def from_json(e: Column, schema: Column, options: java.util.Map[String, String]): Column = {
     withExpr(new JsonToStructs(e.expr, schema.expr, options.asScala.toMap))
   }
@@ -4301,21 +4366,28 @@ object functions {
    */
   def schema_of_json(json: Column): Column = withExpr(new SchemaOfJson(json.expr))
 
+  // scalastyle:off line.size.limit
   /**
    * Parses a JSON string and infers its schema in DDL format using options.
    *
    * @param json a foldable string column containing JSON data.
    * @param options options to control how the json is parsed. accepts the same options and the
-   *                json data source. See [[DataFrameReader#json]].
+   *                json data source.
+   *                See
+   *                <a href=
+   *                  "https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option">
+   *                  Data Source Option</a> in the version you use.
    * @return a column with string literal containing schema in DDL format.
    *
    * @group collection_funcs
    * @since 3.0.0
    */
+  // scalastyle:on line.size.limit
   def schema_of_json(json: Column, options: java.util.Map[String, String]): Column = {
     withExpr(SchemaOfJson(json.expr, options.asScala.toMap))
   }
 
+  // scalastyle:off line.size.limit
   /**
    * (Scala-specific) Converts a column containing a `StructType`, `ArrayType` or
    * a `MapType` into a JSON string with the specified schema.
@@ -4324,16 +4396,22 @@ object functions {
    * @param e a column containing a struct, an array or a map.
    * @param options options to control how the struct column is converted into a json string.
    *                accepts the same options and the json data source.
+   *                See
+   *                <a href=
+   *                  "https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option">
+   *                  Data Source Option</a> in the version you use.
    *                Additionally the function supports the `pretty` option which enables
    *                pretty JSON generation.
    *
    * @group collection_funcs
    * @since 2.1.0
    */
+  // scalastyle:on line.size.limit
   def to_json(e: Column, options: Map[String, String]): Column = withExpr {
     StructsToJson(options, e.expr)
   }
 
+  // scalastyle:off line.size.limit
   /**
    * (Java-specific) Converts a column containing a `StructType`, `ArrayType` or
    * a `MapType` into a JSON string with the specified schema.
@@ -4342,12 +4420,17 @@ object functions {
    * @param e a column containing a struct, an array or a map.
    * @param options options to control how the struct column is converted into a json string.
    *                accepts the same options and the json data source.
+   *                See
+   *                <a href=
+   *                  "https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option">
+   *                  Data Source Option</a> in the version you use.
    *                Additionally the function supports the `pretty` option which enables
    *                pretty JSON generation.
    *
    * @group collection_funcs
    * @since 2.1.0
    */
+  // scalastyle:on line.size.limit
   def to_json(e: Column, options: java.util.Map[String, String]): Column =
     to_json(e, options.asScala.toMap)
 

@@ -33,9 +33,11 @@ case class ApplyFunctionExpression(
 
   /** Returns the result of evaluating this expression on a given input Row */
   override def eval(input: InternalRow): Any = {
-    children.zipWithIndex.foreach {
-      case (expr, pos) =>
-        reusedRow.update(pos, expr.eval(input))
+    var i = 0
+    while (i < children.length) {
+      val expr = children(i)
+      reusedRow.update(i, expr.eval(input))
+      i += 1
     }
 
     function.produceResult(reusedRow)

@@ -20,7 +20,7 @@ Infrastructure of options for pandas-on-Spark.
 """
 from contextlib import contextmanager
 import json
-from typing import Union, Any, Tuple, Callable, List, Dict  # noqa: F401 (SPARK-34943)
+from typing import Any, Callable, Dict, Iterator, List, Tuple, Union  # noqa: F401 (SPARK-34943)
 
 from pyspark._globals import _NoValue, _NoValueType
 
@@ -243,7 +243,7 @@ class OptionError(AttributeError, KeyError):
     pass
 
 
-def show_options():
+def show_options() -> None:
     """
     Make a pretty table that can be copied and pasted into public documentation.
     This is currently for an internal purpose.
@@ -344,7 +344,7 @@ def reset_option(key: str) -> None:
 
 
 @contextmanager
-def option_context(*args):
+def option_context(*args: Any) -> Iterator[None]:
     """
     Context manager to temporarily set options in the `with` statement context.
 
@@ -383,11 +383,11 @@ def _check_option(key: str) -> None:
 class DictWrapper:
     """ provide attribute-style access to a nested dict"""
 
-    def __init__(self, d, prefix=""):
+    def __init__(self, d: Dict[str, Option], prefix: str = ""):
         object.__setattr__(self, "d", d)
         object.__setattr__(self, "prefix", prefix)
 
-    def __setattr__(self, key, val):
+    def __setattr__(self, key: str, val: Any) -> None:
         prefix = object.__getattribute__(self, "prefix")
         d = object.__getattribute__(self, "d")
         if prefix:
@@ -398,7 +398,7 @@ class DictWrapper:
             k for k in d.keys() if all(x in k.split(".") for x in canonical_key.split("."))
         ]
         if len(candidates) == 1 and candidates[0] == canonical_key:
-            return set_option(canonical_key, val)
+            set_option(canonical_key, val)
         else:
             raise OptionError(
                 "No such option: '{}'. Available options are [{}]".format(
@@ -406,7 +406,7 @@ class DictWrapper:
                 )
             )
 
-    def __getattr__(self, key):
+    def __getattr__(self, key: str) -> Union["DictWrapper", Any]:
         prefix = object.__getattribute__(self, "prefix")
         d = object.__getattribute__(self, "d")
         if prefix:
@@ -427,7 +427,7 @@ class DictWrapper:
         else:
             return DictWrapper(d, canonical_key)
 
-    def __dir__(self):
+    def __dir__(self) -> List[str]:
         prefix = object.__getattribute__(self, "prefix")
         d = object.__getattribute__(self, "d")
 
@@ -443,7 +443,7 @@ class DictWrapper:
 options = DictWrapper(_options_dict)
 
 
-def _test():
+def _test() -> None:
     import os
     import doctest
     import sys

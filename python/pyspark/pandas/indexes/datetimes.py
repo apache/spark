@@ -16,10 +16,11 @@
 #
 import datetime
 from functools import partial
-from typing import Any, Optional, Union
+from typing import Any, Optional, Union, cast, no_type_check
 
 import pandas as pd
 from pandas.api.types import is_hashable
+from pandas.tseries.offsets import DateOffset
 from pyspark._globals import _NoValue
 
 from pyspark import pandas as ps
@@ -95,6 +96,7 @@ class DatetimeIndex(Index):
     DatetimeIndex(['1970-01-01', '1970-01-01', '1970-01-01'], dtype='datetime64[ns]', freq=None)
     """
 
+    @no_type_check
     def __new__(
         cls,
         data=None,
@@ -107,14 +109,14 @@ class DatetimeIndex(Index):
         dtype=None,
         copy=False,
         name=None,
-    ):
+    ) -> "DatetimeIndex":
         if not is_hashable(name):
             raise TypeError("Index.name must be a hashable type")
 
         if isinstance(data, (Series, Index)):
             if dtype is None:
                 dtype = "datetime64[ns]"
-            return Index(data, dtype=dtype, copy=copy, name=name)
+            return cast(DatetimeIndex, Index(data, dtype=dtype, copy=copy, name=name))
 
         kwargs = dict(
             data=data,
@@ -129,7 +131,8 @@ class DatetimeIndex(Index):
         )
         if freq is not _NoValue:
             kwargs["freq"] = freq
-        return ps.from_pandas(pd.DatetimeIndex(**kwargs))
+
+        return cast(DatetimeIndex, ps.from_pandas(pd.DatetimeIndex(**kwargs)))
 
     def __getattr__(self, item: str) -> Any:
         if hasattr(MissingPandasLikeDatetimeIndex, item):
@@ -436,7 +439,7 @@ class DatetimeIndex(Index):
     days_in_month.__doc__ = daysinmonth.__doc__
 
     # Methods
-    def ceil(self, freq, *args, **kwargs) -> "DatetimeIndex":
+    def ceil(self, freq: Union[str, DateOffset], *args: Any, **kwargs: Any) -> "DatetimeIndex":
         """
         Perform ceil operation on the data to the specified freq.
 
@@ -466,7 +469,7 @@ class DatetimeIndex(Index):
 
         return DatetimeIndex(self.to_series().dt.ceil(freq, *args, **kwargs))
 
-    def floor(self, freq, *args, **kwargs) -> "DatetimeIndex":
+    def floor(self, freq: Union[str, DateOffset], *args: Any, **kwargs: Any) -> "DatetimeIndex":
         """
         Perform floor operation on the data to the specified freq.
 
@@ -496,7 +499,7 @@ class DatetimeIndex(Index):
 
         return DatetimeIndex(self.to_series().dt.floor(freq, *args, **kwargs))
 
-    def round(self, freq, *args, **kwargs) -> "DatetimeIndex":
+    def round(self, freq: Union[str, DateOffset], *args: Any, **kwargs: Any) -> "DatetimeIndex":
         """
         Perform round operation on the data to the specified freq.
 
@@ -614,7 +617,7 @@ class DatetimeIndex(Index):
         Parameters
         ----------
         date_format : str
-            Date format string (e.g. "%%Y-%%m-%%d").
+            Date format string (example: "%%Y-%%m-%%d").
 
         Returns
         -------
@@ -646,7 +649,7 @@ class DatetimeIndex(Index):
     ) -> Index:
         """
         Return index locations of values between particular times of day
-        (e.g., 9:00-9:30AM).
+        (example: 9:00-9:30AM).
 
         Parameters
         ----------
@@ -663,38 +666,39 @@ class DatetimeIndex(Index):
 
         Examples
         --------
-        >>> kidx = ps.date_range("2000-01-01", periods=3, freq="T")
-        >>> kidx  # doctest: +NORMALIZE_WHITESPACE
+        >>> psidx = ps.date_range("2000-01-01", periods=3, freq="T")
+        >>> psidx  # doctest: +NORMALIZE_WHITESPACE
         DatetimeIndex(['2000-01-01 00:00:00', '2000-01-01 00:01:00',
                        '2000-01-01 00:02:00'],
                       dtype='datetime64[ns]', freq=None)
 
-        >>> kidx.indexer_between_time("00:01", "00:02").sort_values()
+        >>> psidx.indexer_between_time("00:01", "00:02").sort_values()
         Int64Index([1, 2], dtype='int64')
 
-        >>> kidx.indexer_between_time("00:01", "00:02", include_end=False)
+        >>> psidx.indexer_between_time("00:01", "00:02", include_end=False)
         Int64Index([1], dtype='int64')
 
-        >>> kidx.indexer_between_time("00:01", "00:02", include_start=False)
+        >>> psidx.indexer_between_time("00:01", "00:02", include_start=False)
         Int64Index([2], dtype='int64')
         """
 
+        @no_type_check
         def pandas_between_time(pdf) -> ps.DataFrame[int]:
             return pdf.between_time(start_time, end_time, include_start, include_end)
 
-        kdf = self.to_frame()[[]]
-        id_column_name = verify_temp_column_name(kdf, "__id_column__")
-        kdf = kdf.koalas.attach_id_column("distributed-sequence", id_column_name)
+        psdf = self.to_frame()[[]]
+        id_column_name = verify_temp_column_name(psdf, "__id_column__")
+        psdf = psdf.koalas.attach_id_column("distributed-sequence", id_column_name)
         with ps.option_context("compute.default_index_type", "distributed"):
             # The attached index in the statement below will be dropped soon,
             # so we enforce “distributed” default index type
-            kdf = kdf.koalas.apply_batch(pandas_between_time)
-        return ps.Index(first_series(kdf).rename(self.name))
+            psdf = psdf.koalas.apply_batch(pandas_between_time)
+        return ps.Index(first_series(psdf).rename(self.name))
 
     def indexer_at_time(self, time: Union[datetime.time, str], asof: bool = False) -> Index:
         """
         Return index locations of values at particular time of day
-        (e.g. 9:30AM).
+        (example: 9:30AM).
 
         Parameters
         ----------
@@ -709,40 +713,41 @@ class DatetimeIndex(Index):
 
         Examples
         --------
-        >>> kidx = ps.date_range("2000-01-01", periods=3, freq="T")
-        >>> kidx  # doctest: +NORMALIZE_WHITESPACE
+        >>> psidx = ps.date_range("2000-01-01", periods=3, freq="T")
+        >>> psidx  # doctest: +NORMALIZE_WHITESPACE
         DatetimeIndex(['2000-01-01 00:00:00', '2000-01-01 00:01:00',
                        '2000-01-01 00:02:00'],
                       dtype='datetime64[ns]', freq=None)
 
-        >>> kidx.indexer_at_time("00:00")
+        >>> psidx.indexer_at_time("00:00")
         Int64Index([0], dtype='int64')
 
-        >>> kidx.indexer_at_time("00:01")
+        >>> psidx.indexer_at_time("00:01")
         Int64Index([1], dtype='int64')
         """
         if asof:
             raise NotImplementedError("'asof' argument is not supported")
 
+        @no_type_check
         def pandas_at_time(pdf) -> ps.DataFrame[int]:
             return pdf.at_time(time, asof)
 
-        kdf = self.to_frame()[[]]
-        id_column_name = verify_temp_column_name(kdf, "__id_column__")
-        kdf = kdf.koalas.attach_id_column("distributed-sequence", id_column_name)
+        psdf = self.to_frame()[[]]
+        id_column_name = verify_temp_column_name(psdf, "__id_column__")
+        psdf = psdf.koalas.attach_id_column("distributed-sequence", id_column_name)
         with ps.option_context("compute.default_index_type", "distributed"):
             # The attached index in the statement below will be dropped soon,
             # so we enforce “distributed” default index type
-            kdf = kdf.koalas.apply_batch(pandas_at_time)
-        return ps.Index(first_series(kdf).rename(self.name))
+            psdf = psdf.koalas.apply_batch(pandas_at_time)
+        return ps.Index(first_series(psdf).rename(self.name))
 
 
-def disallow_nanoseconds(freq):
+def disallow_nanoseconds(freq: Union[str, DateOffset]) -> None:
     if freq in ["N", "ns"]:
         raise ValueError("nanoseconds is not supported")
 
 
-def _test():
+def _test() -> None:
     import os
     import doctest
     import sys

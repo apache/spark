@@ -299,29 +299,28 @@ class DataFrameSparkIOTest(PandasOnSparkTestCase, TestUtils):
             )
 
             for sheet_name in sheet_names:
-                kdfs = ps.read_excel(open(path1, "rb"), sheet_name=sheet_name, index_col=0)
-                self.assert_eq(kdfs["Sheet_name_1"], pdfs1["Sheet_name_1"])
-                self.assert_eq(kdfs["Sheet_name_2"], pdfs1["Sheet_name_2"])
+                psdfs = ps.read_excel(open(path1, "rb"), sheet_name=sheet_name, index_col=0)
+                self.assert_eq(psdfs["Sheet_name_1"], pdfs1["Sheet_name_1"])
+                self.assert_eq(psdfs["Sheet_name_2"], pdfs1["Sheet_name_2"])
 
-                kdfs = ps.read_excel(
+                psdfs = ps.read_excel(
                     open(path1, "rb"), sheet_name=sheet_name, index_col=0, squeeze=True
                 )
-                self.assert_eq(kdfs["Sheet_name_1"], pdfs1_squeezed["Sheet_name_1"])
-                self.assert_eq(kdfs["Sheet_name_2"], pdfs1_squeezed["Sheet_name_2"])
+                self.assert_eq(psdfs["Sheet_name_1"], pdfs1_squeezed["Sheet_name_1"])
+                self.assert_eq(psdfs["Sheet_name_2"], pdfs1_squeezed["Sheet_name_2"])
 
             self.assert_eq(
-                ps.read_excel(tmp, index_col=0, sheet_name="Sheet_name_2"),
-                pdfs1["Sheet_name_2"],
+                ps.read_excel(tmp, index_col=0, sheet_name="Sheet_name_2"), pdfs1["Sheet_name_2"],
             )
 
             for sheet_name in sheet_names:
-                kdfs = ps.read_excel(tmp, sheet_name=sheet_name, index_col=0)
-                self.assert_eq(kdfs["Sheet_name_1"], pdfs1["Sheet_name_1"])
-                self.assert_eq(kdfs["Sheet_name_2"], pdfs1["Sheet_name_2"])
+                psdfs = ps.read_excel(tmp, sheet_name=sheet_name, index_col=0)
+                self.assert_eq(psdfs["Sheet_name_1"], pdfs1["Sheet_name_1"])
+                self.assert_eq(psdfs["Sheet_name_2"], pdfs1["Sheet_name_2"])
 
-                kdfs = ps.read_excel(tmp, sheet_name=sheet_name, index_col=0, squeeze=True)
-                self.assert_eq(kdfs["Sheet_name_1"], pdfs1_squeezed["Sheet_name_1"])
-                self.assert_eq(kdfs["Sheet_name_2"], pdfs1_squeezed["Sheet_name_2"])
+                psdfs = ps.read_excel(tmp, sheet_name=sheet_name, index_col=0, squeeze=True)
+                self.assert_eq(psdfs["Sheet_name_1"], pdfs1_squeezed["Sheet_name_1"])
+                self.assert_eq(psdfs["Sheet_name_2"], pdfs1_squeezed["Sheet_name_2"])
 
             path2 = "{}/file2.xlsx".format(tmp)
             with pd.ExcelWriter(path2) as writer:
@@ -345,25 +344,25 @@ class DataFrameSparkIOTest(PandasOnSparkTestCase, TestUtils):
             )
 
             for sheet_name in sheet_names:
-                kdfs = ps.read_excel(tmp, sheet_name=sheet_name, index_col=0)
+                psdfs = ps.read_excel(tmp, sheet_name=sheet_name, index_col=0)
                 self.assert_eq(
-                    kdfs["Sheet_name_1"].sort_index(),
+                    psdfs["Sheet_name_1"].sort_index(),
                     pd.concat([pdfs1["Sheet_name_1"], pdfs2["Sheet_name_1"]]).sort_index(),
                 )
                 self.assert_eq(
-                    kdfs["Sheet_name_2"].sort_index(),
+                    psdfs["Sheet_name_2"].sort_index(),
                     pd.concat([pdfs1["Sheet_name_2"], pdfs2["Sheet_name_2"]]).sort_index(),
                 )
 
-                kdfs = ps.read_excel(tmp, sheet_name=sheet_name, index_col=0, squeeze=True)
+                psdfs = ps.read_excel(tmp, sheet_name=sheet_name, index_col=0, squeeze=True)
                 self.assert_eq(
-                    kdfs["Sheet_name_1"].sort_index(),
+                    psdfs["Sheet_name_1"].sort_index(),
                     pd.concat(
                         [pdfs1_squeezed["Sheet_name_1"], pdfs2_squeezed["Sheet_name_1"]]
                     ).sort_index(),
                 )
                 self.assert_eq(
-                    kdfs["Sheet_name_2"].sort_index(),
+                    psdfs["Sheet_name_2"].sort_index(),
                     pd.concat(
                         [pdfs1_squeezed["Sheet_name_2"], pdfs2_squeezed["Sheet_name_2"]]
                     ).sort_index(),
@@ -451,7 +450,8 @@ if __name__ == "__main__":
 
     try:
         import xmlrunner  # type: ignore[import]
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
+
+        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

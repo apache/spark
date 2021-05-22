@@ -58,11 +58,7 @@ except ImportError:
 
 import pyarrow as pa
 import pyspark.sql.types as types
-
-try:
-    from pyspark.sql.types import to_arrow_type, from_arrow_type
-except ImportError:
-    from pyspark.sql.pandas.types import to_arrow_type, from_arrow_type
+from pyspark.sql.pandas.types import to_arrow_type, from_arrow_type
 
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
 from pyspark.pandas.typedef.string_typehints import resolve_string_type_hint

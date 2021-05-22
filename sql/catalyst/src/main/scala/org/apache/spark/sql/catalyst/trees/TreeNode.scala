@@ -40,6 +40,7 @@ import org.apache.spark.sql.catalyst.rules.UnknownRuleId
 import org.apache.spark.sql.catalyst.trees.TreePattern.TreePattern
 import org.apache.spark.sql.catalyst.util.StringUtils.PlanStringConcat
 import org.apache.spark.sql.catalyst.util.truncatedString
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -674,7 +675,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
     // Skip no-arg constructors that are just there for kryo.
     val ctors = allCtors.filter(allowEmptyArgs || _.getParameterTypes.size != 0)
     if (ctors.isEmpty) {
-      sys.error(s"No valid constructor for $nodeName")
+      throw QueryExecutionErrors.constructorNotFoundError(nodeName)
     }
     val allArgs: Array[AnyRef] = if (otherCopyArgs.isEmpty) {
       newArgs
@@ -743,6 +744,18 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
     truncatedString(keyValuePairs, "[", ", ", "]", maxFields) :: Nil
   }
 
+  private def formatArg(arg: Any, maxFields: Int): String = arg match {
+    case seq: Seq[_] =>
+      truncatedString(seq.map(formatArg(_, maxFields)), "[", ", ", "]", maxFields)
+    case set: Set[_] =>
+      // Sort elements for deterministic behaviours
+      truncatedString(set.toSeq.map(formatArg(_, maxFields).sorted), "{", ", ", "}", maxFields)
+    case array: Array[_] =>
+      truncatedString(array.map(formatArg(_, maxFields)), "[", ", ", "]", maxFields)
+    case other =>
+      other.toString
+  }
+
   /** Returns a string representing the arguments to this node, minus any children */
   def argString(maxFields: Int): String = stringArgs.flatMap {
     case tn: TreeNode[_] if allChildren.contains(tn) => Nil
@@ -751,10 +764,15 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
     case tn: TreeNode[_] => tn.simpleString(maxFields) :: Nil
     case seq: Seq[Any] if seq.toSet.subsetOf(allChildren.asInstanceOf[Set[Any]]) => Nil
     case iter: Iterable[_] if iter.isEmpty => Nil
-    case seq: Seq[_] => truncatedString(seq, "[", ", ", "]", maxFields) :: Nil
-    case set: Set[_] => truncatedString(set.toSeq, "{", ", ", "}", maxFields) :: Nil
+    case seq: Seq[_] =>
+      truncatedString(seq.map(formatArg(_, maxFields)), "[", ", ", "]", maxFields) :: Nil
+    case set: Set[_] =>
+      // Sort elements for deterministic behaviours
+      val sortedSeq = set.toSeq.map(formatArg(_, maxFields).sorted)
+      truncatedString(sortedSeq, "{", ", ", "}", maxFields) :: Nil
     case array: Array[_] if array.isEmpty => Nil
-    case array: Array[_] => truncatedString(array, "[", ", ", "]", maxFields) :: Nil
+    case array: Array[_] =>
+      truncatedString(array.map(formatArg(_, maxFields)), "[", ", ", "]", maxFields) :: Nil
     case null => Nil
     case None => Nil
     case Some(null) => Nil
@@ -996,9 +1014,10 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
         ("deserialized" -> s.deserialized) ~ ("replication" -> s.replication)
     case n: TreeNode[_] => n.jsonValue
     case o: Option[_] => o.map(parseToJson)
-    // Recursive scan Seq[TreeNode], Seq[Partitioning], Seq[DataType]
-    case t: Seq[_] if t.forall(_.isInstanceOf[TreeNode[_]]) ||
-      t.forall(_.isInstanceOf[Partitioning]) || t.forall(_.isInstanceOf[DataType]) =>
+    // Recursive scan Seq[Partitioning], Seq[DataType], Seq[Product]
+    case t: Seq[_] if t.forall(_.isInstanceOf[Partitioning]) ||
+      t.forall(_.isInstanceOf[DataType]) ||
+      t.forall(_.isInstanceOf[Product]) =>
       JArray(t.map(parseToJson).toList)
     case t: Seq[_] if t.length > 0 && t.head.isInstanceOf[String] =>
       JString(truncatedString(t, "[", ", ", "]", SQLConf.get.maxToStringFields))
@@ -1036,6 +1055,9 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
     case broadcast: BroadcastMode => true
     case table: CatalogTableType => true
     case storage: CatalogStorageFormat => true
+    // Write out product that contains TreeNode, since there are some Tuples such as cteRelations
+    // in With, branches in CaseWhen which are essential to understand the plan.
+    case p if p.productIterator.exists(_.isInstanceOf[TreeNode[_]]) => true
     case _ => false
   }
 }
