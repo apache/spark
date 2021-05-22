@@ -560,9 +560,6 @@ jobs:
     name: Run TPC-DS queries with SF=1
     runs-on: ubuntu-20.04
     env:
-      HADOOP_PROFILE: hadoop3.2
-      HIVE_PROFILE: hive2.3
-      GITHUB_PREV_SHA: ${{ github.event.before }}
       SPARK_LOCAL_IP: localhost
     steps:
     - name: Checkout Spark repository
