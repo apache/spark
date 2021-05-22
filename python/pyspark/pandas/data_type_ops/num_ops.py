@@ -42,7 +42,7 @@ if TYPE_CHECKING:
 
 def is_valid_operand_for_numeric_arithmetic(operand: Any) -> bool:
     """Check whether the operand is valid for arithmetic operations against numerics."""
-    if isinstance(operand, numbers.Number):
+    if isinstance(operand, numbers.Number) and not isinstance(operand, bool):
         return True
     elif isinstance(operand, IndexOpsMixin):
         if isinstance(operand.dtype, CategoricalDtype):
@@ -122,7 +122,7 @@ class NumericOps(DataTypeOps):
     def radd(self, left, right) -> Union["Series", "Index"]:
         if isinstance(right, str):
             raise TypeError("string addition can only be applied to string series or literals.")
-        if not isinstance(right, numbers.Number):
+        if not isinstance(right, numbers.Number) or isinstance(right, bool):
             raise TypeError("addition can not be applied to given types.")
 
         return column_op(Column.__radd__)(left, right)
@@ -130,21 +130,21 @@ class NumericOps(DataTypeOps):
     def rsub(self, left, right) -> Union["Series", "Index"]:
         if isinstance(right, str):
             raise TypeError("subtraction can not be applied to string series or literals.")
-        if not isinstance(right, numbers.Number):
+        if not isinstance(right, numbers.Number) or isinstance(right, bool):
             raise TypeError("subtraction can not be applied to given types.")
         return column_op(Column.__rsub__)(left, right)
 
     def rmul(self, left, right) -> Union["Series", "Index"]:
         if isinstance(right, str):
             raise TypeError("multiplication can not be applied to a string literal.")
-        if not isinstance(right, numbers.Number):
+        if not isinstance(right, numbers.Number) or isinstance(right, bool):
             raise TypeError("multiplication can not be applied to given types.")
         return column_op(Column.__rmul__)(left, right)
 
     def rpow(self, left, right) -> Union["Series", "Index"]:
         if isinstance(right, str):
             raise TypeError("exponentiation can not be applied on string series or literals.")
-        if not isinstance(right, numbers.Number):
+        if not isinstance(right, numbers.Number) or isinstance(right, bool):
             raise TypeError("exponentiation can not be applied to given types.")
 
         def rpow_func(left, right):
@@ -155,7 +155,7 @@ class NumericOps(DataTypeOps):
     def rmod(self, left, right) -> Union["Series", "Index"]:
         if isinstance(right, str):
             raise TypeError("modulo can not be applied on string series or literals.")
-        if not isinstance(right, numbers.Number):
+        if not isinstance(right, numbers.Number) or isinstance(right, bool):
             raise TypeError("modulo can not be applied to given types.")
 
         def rmod(left, right):
@@ -234,7 +234,7 @@ class IntegralOps(NumericOps):
     def rtruediv(self, left, right) -> Union["Series", "Index"]:
         if isinstance(right, str):
             raise TypeError("division can not be applied on string series or literals.")
-        if not isinstance(right, numbers.Number):
+        if not isinstance(right, numbers.Number) or isinstance(right, bool):
             raise TypeError("division can not be applied to given types.")
 
         def rtruediv(left, right):
@@ -247,7 +247,7 @@ class IntegralOps(NumericOps):
     def rfloordiv(self, left, right) -> Union["Series", "Index"]:
         if isinstance(right, str):
             raise TypeError("division can not be applied on string series or literals.")
-        if not isinstance(right, numbers.Number):
+        if not isinstance(right, numbers.Number) or isinstance(right, bool):
             raise TypeError("division can not be applied to given types.")
 
         def rfloordiv(left, right):
@@ -329,7 +329,7 @@ class FractionalOps(NumericOps):
     def rtruediv(self, left, right) -> Union["Series", "Index"]:
         if isinstance(right, str):
             raise TypeError("division can not be applied on string series or literals.")
-        if not isinstance(right, numbers.Number):
+        if not isinstance(right, numbers.Number) or isinstance(right, bool):
             raise TypeError("division can not be applied to given types.")
 
         def rtruediv(left, right):
@@ -342,7 +342,7 @@ class FractionalOps(NumericOps):
     def rfloordiv(self, left, right) -> Union["Series", "Index"]:
         if isinstance(right, str):
             raise TypeError("division can not be applied on string series or literals.")
-        if not isinstance(right, numbers.Number):
+        if not isinstance(right, numbers.Number) or isinstance(right, bool):
             raise TypeError("division can not be applied to given types.")
 
         def rfloordiv(left, right):
