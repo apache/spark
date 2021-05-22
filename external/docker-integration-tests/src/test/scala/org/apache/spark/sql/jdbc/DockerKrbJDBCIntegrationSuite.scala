@@ -178,7 +178,7 @@ abstract class DockerKrbJDBCIntegrationSuite extends DockerJDBCIntegrationSuite 
             .option("keytab", keytabFullPath)
             .option("principal", principal)
             .option("refreshKrb5Config", "true")
-            .option("query", "SELECT c0 FROM bar")
+            .option("dbtable", "bar")
             .load()
         }
 
@@ -188,7 +188,7 @@ abstract class DockerKrbJDBCIntegrationSuite extends DockerJDBCIntegrationSuite 
           .option("keytab", keytabFullPath)
           .option("principal", principal)
           .option("refreshKrb5Config", "true")
-          .option("query", "SELECT c0 FROM bar")
+          .option("dbtable", "bar")
           .load()
         val result = df.collect().map(_.getString(0))
         assert(result.length === 1)
