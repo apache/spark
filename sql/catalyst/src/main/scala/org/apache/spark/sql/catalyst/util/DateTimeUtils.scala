@@ -429,8 +429,12 @@ object DateTimeUtils {
     val c = if (tz.isEmpty) {
       Calendar.getInstance(timeZone)
     } else {
-      Calendar.getInstance(
-        getTimeZone(f"GMT${tz.get.toChar}${segments(7)}%02d:${segments(8)}%02d"))
+      val tzHour = segments(7).toString
+      val tzMin = segments(8).toString
+      val tzStr = ("GMT" + tz.get.toChar
+        + (if (tzHour.length < 2) "0" else "") + tzHour + ":"
+        + (if (tzMin.length < 2) "0" else "") + tzMin)
+      Calendar.getInstance(getTimeZone(tzStr))
     }
     c.set(Calendar.MILLISECOND, 0)
 
