@@ -2870,13 +2870,15 @@ class DataFrameSuite extends QueryTest
       s
     })
     val df1 = spark.range(5).select(when(functions.length(simpleUDF($"id")) > 0,
-      functions.length(simpleUDF($"id"))))
+      functions.length(simpleUDF($"id"))).otherwise(
+        functions.length(simpleUDF($"id")) + 1))
     df1.collect()
     assert(accum.value == 5)
 
     val nondeterministicUDF = simpleUDF.asNondeterministic()
     val df2 = spark.range(5).select(when(functions.length(nondeterministicUDF($"id")) > 0,
-      functions.length(nondeterministicUDF($"id"))))
+      functions.length(nondeterministicUDF($"id"))).otherwise(
+        functions.length(nondeterministicUDF($"id")) + 1))
     df2.collect()
     assert(accum.value == 15)
   }

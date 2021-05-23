@@ -226,17 +226,6 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
     val equivalence3 = new EquivalentExpressions
     equivalence3.addExprTree(caseWhenExpr3)
     assert(equivalence3.getAllEquivalentExprs().count(_.size == 2) == 0)
-
-    val conditions4 = (GreaterThan(add1, Literal(3)), add1) ::
-      (GreaterThan(add2, Literal(4)), add1) ::
-      (GreaterThan(add2, Literal(5)), add1) :: Nil
-
-    val caseWhenExpr4 = CaseWhen(conditions4, None)
-    val equivalence4 = new EquivalentExpressions
-    equivalence4.addExprTree(caseWhenExpr4)
-
-    // `add1` is not in the elseValue, so we can't extract it from the branches
-    assert(equivalence4.getAllEquivalentExprs.count(_.size == 2) == 0)
   }
 
   test("Children of conditional expressions: Coalesce") {
@@ -328,7 +317,7 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
     val add3 = Add(add1, add2)
     val condition = (GreaterThan(add3, Literal(3)), add3) :: Nil
 
-    val caseWhenExpr = CaseWhen(condition, None)
+    val caseWhenExpr = CaseWhen(condition, Add(add3, Literal(1)))
     val equivalence = new EquivalentExpressions
     equivalence.addExprTree(caseWhenExpr)
 
@@ -364,6 +353,22 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
     equivalence2.addExprTree(Add(Literal(3), add))
     assert(equivalence2.getAllEquivalentExprs() ===
       Seq(Seq(add, add), Seq(Add(Literal(3), add), Add(Literal(3), add))))
+  }
+
+  test("SPARK-35499: Subexpressions should only be extracted from CaseWhen values with an "
+    + "elseValue") {
+    val add1 = Add(Literal(1), Literal(2))
+    val add2 = Add(Literal(2), Literal(3))
+    val conditions = (GreaterThan(add1, Literal(3)), add1) ::
+      (GreaterThan(add2, Literal(4)), add1) ::
+      (GreaterThan(add2, Literal(5)), add1) :: Nil
+
+    val caseWhenExpr = CaseWhen(conditions, None)
+    val equivalence = new EquivalentExpressions
+    equivalence.addExprTree(caseWhenExpr)
+
+    // `add1` is not in the elseValue, so we can't extract it from the branches
+    assert(equivalence.getAllEquivalentExprs().count(_.size == 2) == 0)
   }
 }
 
