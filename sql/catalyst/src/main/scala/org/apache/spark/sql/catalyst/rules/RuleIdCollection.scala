@@ -117,7 +117,6 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.optimizer.OptimizeRepartition" ::
       "org.apache.spark.sql.catalyst.optimizer.OptimizeWindowFunctions" ::
       "org.apache.spark.sql.catalyst.optimizer.OptimizeUpdateFields"::
-      "org.apache.spark.sql.catalyst.optimizer.PropagateEmptyRelationBasic" ::
       "org.apache.spark.sql.catalyst.optimizer.PropagateEmptyRelation" ::
       "org.apache.spark.sql.catalyst.optimizer.PruneFilters" ::
       "org.apache.spark.sql.catalyst.optimizer.PushDownLeftSemiAntiJoin" ::
