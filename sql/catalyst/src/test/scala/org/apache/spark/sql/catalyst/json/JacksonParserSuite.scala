@@ -51,7 +51,7 @@ class JacksonParserSuite extends SparkFunSuite {
         mapIt1.map(_.valueArray()) == mapIt2.map(_.valueArray())
   }
 
-  test("skipping rows using pushdown filters") {
+  test("SPARK-35320 skipping rows using pushdown filters") {
     check(filters = Seq(), expected = Seq(InternalRow(1)))
     check(filters = Seq(EqualTo("i", 1)), expected = Seq(InternalRow(1)))
     check(filters = Seq(EqualTo("i", 2)), expected = Seq.empty)
@@ -70,7 +70,7 @@ class JacksonParserSuite extends SparkFunSuite {
       expected = Seq(InternalRow(1, 3.14)))
   }
 
-  test("JacksonParser ArrayBasedMapData BooleanType key parser") {
+  test("SPARK-35320 JacksonParser ArrayBasedMapData BooleanType key parser") {
     check(s"""{"True": 1}""",
       MapType(BooleanType, IntegerType), Seq(),
       Seq(InternalRow(ArrayBasedMapData(Array(true), Array(1)))),
@@ -78,7 +78,7 @@ class JacksonParserSuite extends SparkFunSuite {
     )
   }
 
-  test("JacksonParser ArrayBasedMapData ByteType key parser") {
+  test("SPARK-35320 JacksonParser ArrayBasedMapData ByteType key parser") {
     check(s"""{"1": 1}""",
       MapType(ByteType, IntegerType), Seq(),
       Seq(InternalRow(ArrayBasedMapData(Array(1.toByte), Array(1)))),
@@ -86,7 +86,7 @@ class JacksonParserSuite extends SparkFunSuite {
     )
   }
 
-  test("JacksonParser ArrayBasedMapData ShortType key parser") {
+  test("SPARK-35320 JacksonParser ArrayBasedMapData ShortType key parser") {
     check(s"""{"1": 1}""",
       MapType(ShortType, IntegerType), Seq(),
       Seq(InternalRow(ArrayBasedMapData(Array(1.toShort), Array(1)))),
@@ -94,7 +94,7 @@ class JacksonParserSuite extends SparkFunSuite {
     )
   }
 
-  test("JacksonParser ArrayBasedMapData IntegerType key parser") {
+  test("SPARK-35320 JacksonParser ArrayBasedMapData IntegerType key parser") {
     check(s"""{"1": 1}""",
       MapType(IntegerType, IntegerType), Seq(),
       Seq(InternalRow(ArrayBasedMapData(Array(1), Array(1)))),
@@ -102,7 +102,7 @@ class JacksonParserSuite extends SparkFunSuite {
     )
   }
 
-  test("JacksonParser ArrayBasedMapData LongType key parser") {
+  test("SPARK-35320 JacksonParser ArrayBasedMapData LongType key parser") {
     check(s"""{"1": 1}""",
       MapType(LongType, IntegerType), Seq(),
       Seq(InternalRow(ArrayBasedMapData(Array(1L), Array(1)))),
@@ -110,7 +110,7 @@ class JacksonParserSuite extends SparkFunSuite {
     )
   }
 
-  test("JacksonParser ArrayBasedMapData FloatType key parser") {
+  test("SPARK-35320 JacksonParser ArrayBasedMapData FloatType key parser") {
     check(s"""{"1": 1}""",
       MapType(FloatType, IntegerType), Seq(),
       Seq(InternalRow(ArrayBasedMapData(Array(1f), Array(1)))),
@@ -133,7 +133,7 @@ class JacksonParserSuite extends SparkFunSuite {
     )
   }
 
-  test("JacksonParser ArrayBasedMapData DoubleType key parser") {
+  test("SPARK-35320 JacksonParser ArrayBasedMapData DoubleType key parser") {
     check(s"""{"1": 1}""",
       MapType(DoubleType, IntegerType), Seq(),
       Seq(InternalRow(ArrayBasedMapData(Array(1d), Array(1)))),
@@ -156,7 +156,7 @@ class JacksonParserSuite extends SparkFunSuite {
     )
   }
 
-  test("JacksonParser ArrayBasedMapData TimestampType key parser") {
+  test("SPARK-35320 JacksonParser ArrayBasedMapData TimestampType key parser") {
     check(s"""{"1970-01-01T00:00:00": 1}""",
       MapType(TimestampType, IntegerType), Seq(),
       Seq(InternalRow(ArrayBasedMapData(Array(0L), Array(1)))),
@@ -164,7 +164,7 @@ class JacksonParserSuite extends SparkFunSuite {
     )
   }
 
-  test("JacksonParser ArrayBasedMapData DateType key parser") {
+  test("SPARK-35320 JacksonParser ArrayBasedMapData DateType key parser") {
     check(s"""{"1970-01-01": 1}""",
       MapType(DateType, IntegerType), Seq(),
       Seq(InternalRow(ArrayBasedMapData(Array(0), Array(1)))),
@@ -172,7 +172,7 @@ class JacksonParserSuite extends SparkFunSuite {
     )
   }
 
-  test("JacksonParser ArrayBasedMapData DecimalType key parser") {
+  test("SPARK-35320 JacksonParser ArrayBasedMapData DecimalType key parser") {
     val decimal = Decimal(20)
     check(s"""{"$decimal": 1}""",
       MapType(DecimalType.IntDecimal, IntegerType), Seq(),
@@ -181,7 +181,7 @@ class JacksonParserSuite extends SparkFunSuite {
     )
   }
 
-  test("JacksonParser ArrayBasedMapData CalendarIntervalType key parser") {
+  test("SPARK-35320 JacksonParser ArrayBasedMapData CalendarIntervalType key parser") {
     val interval =
       IntervalUtils.makeInterval(2, 1, 1, 0, 0, 0, Decimal(0, Decimal.MAX_LONG_DIGITS, 6))
     check(s"""{"$interval": 1}""",
@@ -191,7 +191,7 @@ class JacksonParserSuite extends SparkFunSuite {
     )
   }
 
-  test("JacksonParser ArrayBasedMapData UDT key parser") {
+  test("SPARK-35320 JacksonParser ArrayBasedMapData UDT key parser") {
     object TestJsonKeyUDT extends UserDefinedType[String] {
       override def sqlType: DataType = StringType
       override def serialize(obj: String): Any = obj
@@ -207,7 +207,7 @@ class JacksonParserSuite extends SparkFunSuite {
     )
   }
 
-  test("JacksonParser ArrayBasedMapData StringType key parser") {
+  test("SPARK-35320 JacksonParser ArrayBasedMapData StringType key parser") {
     val valueString = "test"
     check(s"""{"$valueString": 1}""",
       MapType(StringType, IntegerType), Seq(),

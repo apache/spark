@@ -2861,6 +2861,39 @@ class DataFrameSuite extends QueryTest
       checkAnswer(result, Row(0, 0, 0, 0, 100))
     }
   }
+
+  test("SPARK-35320 Read/Write ArrayBasedMapData in Json") {
+    Seq(("True", BooleanType),
+        ("1", ByteType),
+        ("1", ShortType),
+        ("1", IntegerType),
+        ("1", LongType),
+        ("1", FloatType),
+        ("NaN", FloatType),
+        ("Infinity", FloatType),
+        ("-Infinity", FloatType),
+        ("1", DoubleType),
+        ("NaN", DoubleType),
+        ("Infinity", DoubleType),
+        ("-Infinity", DoubleType),
+        ("1970-01-01T00:00:00", TimestampType),
+        ("1970-01-01", DateType),
+        (s"${Decimal(20)}", DecimalType.IntDecimal),
+        ("Test", StringType)).foreach {
+      case (jsonKey, keyType) =>
+        withTempDir { dir =>
+          val colName = "col"
+          val dataType = MapType(keyType, StringType)
+          val jsonDir = new File(dir, "json").getCanonicalPath
+          val df = Seq(s"""{"$jsonKey": 1}""").toDF(colName)
+          df.withColumn(colName, from_json(col(colName), MapType(StringType, StringType)))
+            .write.json(jsonDir)
+          val dfRead = spark.read.schema(StructType(Seq(StructField(colName, dataType)))).json(jsonDir)
+          val dfCompare = df.withColumn(colName, from_json(col(colName), dataType))
+          checkAnswer(dfRead, dfCompare)
+        }
+    }
+  }
 }
 
 case class GroupByKey(a: Int, b: Int)
