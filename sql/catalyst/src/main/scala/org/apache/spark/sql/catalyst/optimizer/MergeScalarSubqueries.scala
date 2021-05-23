@@ -115,8 +115,8 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] with PredicateHelper {
     }).map { case (subqueryIndex, header, mergedPlan, outputMap, merged) =>
       val mappedFirstOutput = mapAttributes(firstOutput, outputMap)
       val headerElements = getHeaderElements(header)
-      var headerIndex = headerElements.indexWhere { case (name, attribute) =>
-        name.value == firstOutput.name && attribute.exprId == mappedFirstOutput.exprId
+      var headerIndex = headerElements.indexWhere {
+        case (_, attribute) => attribute.exprId == mappedFirstOutput.exprId
       }
       if (headerIndex == -1) {
         val newHeaderElements = headerElements :+ (Literal(firstOutput.name) -> mappedFirstOutput)
@@ -133,7 +133,8 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] with PredicateHelper {
 
   // If 2 plans are identical return the attribute mapping from the new to the cached version.
   // Please note that plans containing attributes can be non-equal due to cosmetic differences of
-  // attributes (qualifier, metadata) so only return those attributes where exprId is different.
+  // attributes (qualifier, metadata) so only return those attribute mappings where exprId is
+  // different.
   private def checkIdenticalPlans(newPlan: LogicalPlan, cachedPlan: LogicalPlan) = {
     if (newPlan.canonicalized == cachedPlan.canonicalized) {
       Some(AttributeMap(newPlan.output.zip(cachedPlan.output).filterNot {
@@ -145,7 +146,7 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] with PredicateHelper {
   }
 
   // Try merging 2 plans and return the merged plan with the attribute mapping from the new to the
-  // cached version.
+  // merged version.
   // Please note that merging arbitrary plans can be complicated, the current version supports only
   // some of the most important nodes.
   private def tryMergePlans(
@@ -190,9 +191,11 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] with PredicateHelper {
             }
           }
 
-        // Merging 2 general nodes is complicated. This implementation supports merging 2 nodes
-        // where children can be merged in same order, but the `supportedMerge()` whitelist is also
-        // applied to be on the safe side.
+        // Merging general nodes is complicated and this implementation supports only those nodes
+        // in which the order and the number of output attributes are not relevant
+        // (`supportedMerge()` whitelist).
+        // Also, this implementation supports only those nodes in which children can be merged in
+        // the same order.
         case (np, cp) if supportedMerge(np) && np.getClass == cp.getClass && np.children.nonEmpty &&
           np.children.size == cp.children.size =>
           val merged = np.children.zip(cp.children).map {
@@ -295,7 +298,7 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] with PredicateHelper {
         mapped
       }.toAttribute
     }.filterNot { case (a1, a2) => a1.exprId == a2.exprId })
-    (mergedExpressions, newOutputMap)
+    (mergedExpressions.toSeq, newOutputMap)
   }
 
   // Merging different aggregate implementations could cause performance regression
