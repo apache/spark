@@ -118,7 +118,6 @@ class OptimizerRuleExclusionSuite extends PlanTest {
   test("Verify optimized plan after excluding CombineUnions rule") {
     val excludedRules = Seq(
       ConvertToLocalRelation.ruleName,
-      PropagateEmptyRelationBasic.ruleName,
       PropagateEmptyRelation.ruleName,
       CombineUnions.ruleName)
 

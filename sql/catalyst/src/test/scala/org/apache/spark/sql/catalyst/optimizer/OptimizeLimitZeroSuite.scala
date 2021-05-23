@@ -33,7 +33,6 @@ class OptimizeLimitZeroSuite extends PlanTest {
       Batch("OptimizeLimitZero", Once,
         ReplaceIntersectWithSemiJoin,
         OptimizeLimitZero,
-        PropagateEmptyRelationBasic,
         PropagateEmptyRelation) :: Nil
   }
 

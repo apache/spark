@@ -22,23 +22,25 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.joins.HashedRelationWithAllNullKeys
 
 /**
- * Rule [[PropagateEmptyRelationBase]] at AQE side.
+ * Rule [[PropagateEmptyRelationBase]] at AQE optimizer side.
  */
 object AQEPropagateEmptyRelation extends PropagateEmptyRelationBase {
 
-  override protected def checkRowCount(plan: LogicalPlan, hasRow: Boolean): Option[Boolean] = {
-    Some(plan match {
-      case LogicalQueryStage(_, stage: QueryStageExec) if stage.resultOption.get().isDefined =>
-        stage.getRuntimeStatistics.rowCount match {
-          case Some(count) => hasRow == (count > 0)
-          case _ => false
-        }
-      case _ => false
+  override protected def checkRowCount: Option[(LogicalPlan, Boolean) => Boolean] = {
+    Some((plan, hasRow) => {
+      plan match {
+        case LogicalQueryStage(_, stage: QueryStageExec) if stage.resultOption.get().isDefined =>
+          stage.getRuntimeStatistics.rowCount match {
+            case Some(count) => hasRow == (count > 0)
+            case _ => false
+          }
+        case _ => false
+      }
     })
   }
 
-  override protected def isRelationWithAllNullKeys(plan: LogicalPlan): Option[Boolean] = {
-    Some(plan match {
+  override protected def isRelationWithAllNullKeys: Option[LogicalPlan => Boolean] = {
+    Some({
       case LogicalQueryStage(_, stage: BroadcastQueryStageExec)
         if stage.resultOption.get().isDefined =>
         stage.broadcast.relationFuture.get().value == HashedRelationWithAllNullKeys
@@ -48,6 +50,6 @@ object AQEPropagateEmptyRelation extends PropagateEmptyRelationBase {
 
   // TODO we need use transformUpWithPruning instead of transformUp
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformUp {
-    applyInternal
+    propagateEmptyRelationAdvanced
   }
 }
