@@ -137,7 +137,7 @@
     <!-- After 10.15.1.3, the minimum required version is JDK9 -->
     <derby.version>10.14.2.0</derby.version>
     <parquet.version>1.12.0</parquet.version>
-    <orc.version>1.6.7</orc.version>
+    <orc.version>1.6.8</orc.version>
     <jetty.version>9.4.40.v20210413</jetty.version>
     <jakartaservlet.version>4.0.3</jakartaservlet.version>
     <chill.version>0.9.5</chill.version>
@@ -147,7 +147,7 @@
     If you changes codahale.metrics.version, you also need to change
     the link to metrics.dropwizard.io in docs/monitoring.md.
     -->
-    <codahale.metrics.version>4.1.1</codahale.metrics.version>
+    <codahale.metrics.version>4.2.0</codahale.metrics.version>
     <avro.version>1.10.2</avro.version>
     <aws.kinesis.client.version>1.14.0</aws.kinesis.client.version>
     <!-- Should be consistent with Kinesis client dependency -->
@@ -156,7 +156,7 @@
     <aws.kinesis.producer.version>0.12.8</aws.kinesis.producer.version>
     <!--  org.apache.httpcomponents/httpclient-->
     <commons.httpclient.version>4.5.13</commons.httpclient.version>
-    <commons.httpcore.version>4.4.12</commons.httpcore.version>
+    <commons.httpcore.version>4.4.14</commons.httpcore.version>
     <!--  commons-httpclient/commons-httpclient-->
     <httpclient.classic.version>3.1</httpclient.classic.version>
     <commons.math3.version>3.4.1</commons.math3.version>
@@ -408,7 +408,7 @@
       <dependency>
         <groupId>org.apache.xbean</groupId>
         <artifactId>xbean-asm7-shaded</artifactId>
-        <version>4.15</version>
+        <version>4.16</version>
       </dependency>
 
       <!-- Shaded deps marked as provided. These are promoted to compile scope
@@ -2858,12 +2858,12 @@
             <dependency>
               <groupId>org.ow2.asm</groupId>
               <artifactId>asm</artifactId>
-              <version>7.2</version>
+              <version>7.3.1</version>
             </dependency>
             <dependency>
               <groupId>org.ow2.asm</groupId>
               <artifactId>asm-commons</artifactId>
-              <version>7.2</version>
+              <version>7.3.1</version>
             </dependency>
           </dependencies>
         </plugin>

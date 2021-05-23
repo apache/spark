@@ -2862,6 +2862,25 @@ class DataFrameSuite extends QueryTest
     }
   }
 
+  test("SPARK-35410: SubExpr elimination should not include redundant child exprs " +
+    "for conditional expressions") {
+    val accum = sparkContext.longAccumulator("call")
+    val simpleUDF = udf((s: String) => {
+      accum.add(1)
+      s
+    })
+    val df1 = spark.range(5).select(when(functions.length(simpleUDF($"id")) > 0,
+      functions.length(simpleUDF($"id"))))
+    df1.collect()
+    assert(accum.value == 5)
+
+    val nondeterministicUDF = simpleUDF.asNondeterministic()
+    val df2 = spark.range(5).select(when(functions.length(nondeterministicUDF($"id")) > 0,
+      functions.length(nondeterministicUDF($"id"))))
+    df2.collect()
+    assert(accum.value == 15)
+  }
+
   test("SPARK-35320 Read/Write ArrayBasedMapData in Json") {
     Seq(("True", BooleanType),
         ("1", ByteType),

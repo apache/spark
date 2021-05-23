@@ -310,6 +310,22 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
     }
   }
 
+  test("SPARK-35410: SubExpr elimination should not include redundant child exprs " +
+    "for conditional expressions") {
+    val add1 = Add(Literal(1), Literal(2))
+    val add2 = Add(Literal(2), Literal(3))
+    val add3 = Add(add1, add2)
+    val condition = (GreaterThan(add3, Literal(3)), add3) :: Nil
+
+    val caseWhenExpr = CaseWhen(condition, None)
+    val equivalence = new EquivalentExpressions
+    equivalence.addExprTree(caseWhenExpr)
+
+    val commonExprs = equivalence.getAllEquivalentExprs(1)
+    assert(commonExprs.size == 1)
+    assert(commonExprs.head === Seq(add3, add3))
+  }
+
   test("SPARK-35439: Children subexpr should come first than parent subexpr") {
     val add = Add(Literal(1), Literal(2))
 
