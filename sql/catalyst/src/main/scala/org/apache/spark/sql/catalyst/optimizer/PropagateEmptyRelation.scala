@@ -191,6 +191,7 @@ object PropagateEmptyRelation extends PropagateEmptyRelationBase {
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithPruning(
     _.containsAnyPattern(LOCAL_RELATION, TRUE_OR_FALSE_LITERAL), ruleId) {
-    propagateEmptyRelationBasic.orElse(propagateEmptyRelationAdvanced)
+    // andThen instead of orElse, because there exists some same pattern, like UnaryNode.
+    propagateEmptyRelationBasic.andThen(propagateEmptyRelationAdvanced)
   }
 }
