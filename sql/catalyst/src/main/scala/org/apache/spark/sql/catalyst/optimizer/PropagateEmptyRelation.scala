@@ -63,7 +63,7 @@ abstract class PropagateEmptyRelationBase extends Rule[LogicalPlan] with CastSup
     // as stateful streaming joins need to perform other state management operations other than
     // just processing the input data.
     case p @ Join(_, _, joinType, conditionOpt, _)
-      if !p.children.exists(_.isStreaming) =>
+        if !p.children.exists(_.isStreaming) =>
       val isLeftEmpty = isEmpty(p.left)
       val isRightEmpty = isEmpty(p.right)
       val isFalseCondition = conditionOpt match {
