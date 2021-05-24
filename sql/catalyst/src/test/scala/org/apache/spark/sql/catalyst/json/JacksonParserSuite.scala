@@ -131,6 +131,21 @@ class JacksonParserSuite extends SparkFunSuite {
       Seq(InternalRow(ArrayBasedMapData(Array(Float.NegativeInfinity), Array(1)))),
       compareArrayBasedMapData
     )
+    check(s"""{"inf": 1}""",
+      MapType(FloatType, IntegerType), Seq(),
+      Seq(InternalRow(ArrayBasedMapData(Array(Float.PositiveInfinity), Array(1)))),
+      compareArrayBasedMapData
+    )
+    check(s"""{"+inf": 1}""",
+      MapType(FloatType, IntegerType), Seq(),
+      Seq(InternalRow(ArrayBasedMapData(Array(Float.PositiveInfinity), Array(1)))),
+      compareArrayBasedMapData
+    )
+    check(s"""{"-inf": 1}""",
+      MapType(FloatType, IntegerType), Seq(),
+      Seq(InternalRow(ArrayBasedMapData(Array(Float.NegativeInfinity), Array(1)))),
+      compareArrayBasedMapData
+    )
   }
 
   test("SPARK-35320 JacksonParser ArrayBasedMapData DoubleType key parser") {
@@ -150,6 +165,21 @@ class JacksonParserSuite extends SparkFunSuite {
       compareArrayBasedMapData
     )
     check(s"""{"-Infinity": 1}""",
+      MapType(DoubleType, IntegerType), Seq(),
+      Seq(InternalRow(ArrayBasedMapData(Array(Double.NegativeInfinity), Array(1)))),
+      compareArrayBasedMapData
+    )
+    check(s"""{"inf": 1}""",
+      MapType(DoubleType, IntegerType), Seq(),
+      Seq(InternalRow(ArrayBasedMapData(Array(Double.PositiveInfinity), Array(1)))),
+      compareArrayBasedMapData
+    )
+    check(s"""{"+inf": 1}""",
+      MapType(DoubleType, IntegerType), Seq(),
+      Seq(InternalRow(ArrayBasedMapData(Array(Double.PositiveInfinity), Array(1)))),
+      compareArrayBasedMapData
+    )
+    check(s"""{"-inf": 1}""",
       MapType(DoubleType, IntegerType), Seq(),
       Seq(InternalRow(ArrayBasedMapData(Array(Double.NegativeInfinity), Array(1)))),
       compareArrayBasedMapData

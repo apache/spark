@@ -38,6 +38,8 @@ import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 import org.apache.spark.util.Utils
 
+import java.util.Locale
+
 /**
  * Constructs a parser for a given schema that translates a json string to an [[InternalRow]].
  */
@@ -334,16 +336,16 @@ class JacksonParser(
     case ShortType => (key: String) => key.toShort
     case IntegerType => (key: String) => key.toInt
     case LongType => (key: String) => key.toLong
-    case FloatType => (key: String) => key match {
-      case "NaN" => Float.NaN
-      case "Infinity" => Float.PositiveInfinity
-      case "-Infinity" => Float.NegativeInfinity
+    case FloatType => (key: String) => key.toLowerCase(Locale.ROOT) match {
+      case "nan" => Float.NaN
+      case "inf" | "+inf" | "infinity" | "+infinity" => Float.PositiveInfinity
+      case "-inf" | "-infinity" => Float.NegativeInfinity
       case other: String => other.toFloat
     }
-    case DoubleType => (key: String) => key match {
-      case "NaN" => Double.NaN
-      case "Infinity" => Double.PositiveInfinity
-      case "-Infinity" => Double.NegativeInfinity
+    case DoubleType => (key: String) => key.toLowerCase(Locale.ROOT) match {
+      case "nan" => Double.NaN
+      case "inf" | "+inf" | "infinity" | "+infinity" => Double.PositiveInfinity
+      case "-inf" | "-infinity" => Double.NegativeInfinity
       case other: String => other.toDouble
     }
     case TimestampType => (key: String) => timestampFormatter.parse(key)
