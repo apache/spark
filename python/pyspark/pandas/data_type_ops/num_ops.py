@@ -54,11 +54,12 @@ class NumericOps(DataTypeOps):
         ) or isinstance(right, str):
             raise TypeError("string addition can only be applied to string series or literals.")
 
-        if is_valid_operand_for_numeric_arithmetic(right):
-            right = transform_boolean_operand_to_numeric(right, left.spark.data_type)
-            return column_op(Column.__add__)(left, right)
-        else:
+        if not is_valid_operand_for_numeric_arithmetic(right):
             raise TypeError("addition can not be applied to given types.")
+
+        right = transform_boolean_operand_to_numeric(right, left.spark.data_type)
+
+        return column_op(Column.__add__)(left, right)
 
     def sub(self, left, right) -> Union["Series", "Index"]:
         if (
@@ -66,11 +67,12 @@ class NumericOps(DataTypeOps):
         ) or isinstance(right, str):
             raise TypeError("subtraction can not be applied to string series or literals.")
 
-        if is_valid_operand_for_numeric_arithmetic(right):
-            right = transform_boolean_operand_to_numeric(right, left.spark.data_type)
-            return column_op(Column.__sub__)(left, right)
-        else:
+        if not is_valid_operand_for_numeric_arithmetic(right):
             raise TypeError("subtraction can not be applied to given types.")
+
+        right = transform_boolean_operand_to_numeric(right, left.spark.data_type)
+
+        return column_op(Column.__sub__)(left, right)
 
     def mod(self, left, right) -> Union["Series", "Index"]:
         if (
