@@ -47,8 +47,9 @@ if TYPE_CHECKING:
 
 
 def is_valid_operand_for_numeric_arithmetic(
-        operand: Any,
-        allow_bool_index_ops: bool = True
+    operand: Any,
+    *,
+    allow_bool: bool = True
 ) -> bool:
     """Check whether the operand is valid for arithmetic operations against numerics."""
     if isinstance(operand, numbers.Number) and not isinstance(operand, bool):
@@ -58,7 +59,7 @@ def is_valid_operand_for_numeric_arithmetic(
             return False
         else:
             return isinstance(operand.spark.data_type, NumericType) or (
-                allow_bool_index_ops and isinstance(operand.spark.data_type, BooleanType))
+                allow_bool and isinstance(operand.spark.data_type, BooleanType))
     else:
         return isinstance(operand, Column)
 

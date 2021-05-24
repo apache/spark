@@ -43,7 +43,7 @@ class BooleanOps(DataTypeOps):
         if isinstance(right, numbers.Number):
             left = left.spark.transform(lambda scol: scol.cast(as_spark_type(type(right))))
             return left + right
-        elif is_valid_operand_for_numeric_arithmetic(right, allow_bool_index_ops=False):
+        elif is_valid_operand_for_numeric_arithmetic(right, allow_bool=False):
             left = left = transform_boolean_operand_to_numeric(left, right.spark.data_type)
             return left + right
         else:
@@ -54,7 +54,7 @@ class BooleanOps(DataTypeOps):
         if isinstance(right, numbers.Number):
             left = left.spark.transform(lambda scol: scol.cast(as_spark_type(type(right))))
             return left - right
-        elif is_valid_operand_for_numeric_arithmetic(right, allow_bool_index_ops=False):
+        elif is_valid_operand_for_numeric_arithmetic(right, allow_bool=False):
             left = left = transform_boolean_operand_to_numeric(left, right.spark.data_type)
             return left - right
         else:
@@ -65,7 +65,7 @@ class BooleanOps(DataTypeOps):
         if isinstance(right, numbers.Number):
             left = left.spark.transform(lambda scol: scol.cast(as_spark_type(type(right))))
             return left * right
-        elif is_valid_operand_for_numeric_arithmetic(right, allow_bool_index_ops=False):
+        elif is_valid_operand_for_numeric_arithmetic(right, allow_bool=False):
             left = left = transform_boolean_operand_to_numeric(left, right.spark.data_type)
             return left * right
         else:
@@ -76,7 +76,7 @@ class BooleanOps(DataTypeOps):
         if isinstance(right, numbers.Number):
             left = left.spark.transform(lambda scol: scol.cast(as_spark_type(type(right))))
             return left / right
-        elif is_valid_operand_for_numeric_arithmetic(right, allow_bool_index_ops=False):
+        elif is_valid_operand_for_numeric_arithmetic(right, allow_bool=False):
             left = left = transform_boolean_operand_to_numeric(left, right.spark.data_type)
             return left / right
         else:
@@ -87,7 +87,7 @@ class BooleanOps(DataTypeOps):
         if isinstance(right, numbers.Number):
             left = left.spark.transform(lambda scol: scol.cast(as_spark_type(type(right))))
             return left // right
-        elif is_valid_operand_for_numeric_arithmetic(right, allow_bool_index_ops=False):
+        elif is_valid_operand_for_numeric_arithmetic(right, allow_bool=False):
             left = left = transform_boolean_operand_to_numeric(left, right.spark.data_type)
             return left // right
         else:
@@ -98,7 +98,7 @@ class BooleanOps(DataTypeOps):
         if isinstance(right, numbers.Number):
             left = left.spark.transform(lambda scol: scol.cast(as_spark_type(type(right))))
             return left % right
-        elif is_valid_operand_for_numeric_arithmetic(right, allow_bool_index_ops=False):
+        elif is_valid_operand_for_numeric_arithmetic(right, allow_bool=False):
             left = left = transform_boolean_operand_to_numeric(left, right.spark.data_type)
             return left % right
         else:
@@ -109,7 +109,7 @@ class BooleanOps(DataTypeOps):
         if isinstance(right, numbers.Number):
             left = left.spark.transform(lambda scol: scol.cast(as_spark_type(type(right))))
             return left ** right
-        elif is_valid_operand_for_numeric_arithmetic(right, allow_bool_index_ops=False):
+        elif is_valid_operand_for_numeric_arithmetic(right, allow_bool=False):
             left = left = transform_boolean_operand_to_numeric(left, right.spark.data_type)
             return left ** right
         else:
