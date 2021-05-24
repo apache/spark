@@ -22,11 +22,12 @@ import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 import com.google.common.io.ByteStreams
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.internal.config.IO_COMPRESSION_ZSTD_BUFFERPOOL_ENABLED
 
 class CompressionCodecSuite extends SparkFunSuite {
   val conf = new SparkConf(false)
 
-  def testCodec(codec: CompressionCodec) {
+  def testCodec(codec: CompressionCodec): Unit = {
     // Write 1000 integers to the output stream, compressed.
     val outputStream = new ByteArrayOutputStream()
     val out = codec.compressedOutputStream(outputStream)
@@ -46,7 +47,7 @@ class CompressionCodecSuite extends SparkFunSuite {
 
   test("default compression codec") {
     val codec = CompressionCodec.createCodec(conf)
-    assert(codec.getClass === classOf[SnappyCompressionCodec])
+    assert(codec.getClass === classOf[LZ4CompressionCodec])
     testCodec(codec)
   }
 
@@ -62,12 +63,10 @@ class CompressionCodecSuite extends SparkFunSuite {
     testCodec(codec)
   }
 
-  test("lz4 does not support concatenation of serialized streams") {
+  test("lz4 supports concatenation of serialized streams") {
     val codec = CompressionCodec.createCodec(conf, classOf[LZ4CompressionCodec].getName)
     assert(codec.getClass === classOf[LZ4CompressionCodec])
-    intercept[Exception] {
-      testConcatenationOfSerializedStreams(codec)
-    }
+    testConcatenationOfSerializedStreams(codec)
   }
 
   test("lzf compression codec") {
@@ -100,12 +99,31 @@ class CompressionCodecSuite extends SparkFunSuite {
     testCodec(codec)
   }
 
-  test("snappy does not support concatenation of serialized streams") {
+  test("snappy supports concatenation of serialized streams") {
     val codec = CompressionCodec.createCodec(conf, classOf[SnappyCompressionCodec].getName)
     assert(codec.getClass === classOf[SnappyCompressionCodec])
-    intercept[Exception] {
-      testConcatenationOfSerializedStreams(codec)
+    testConcatenationOfSerializedStreams(codec)
+  }
+
+  test("zstd compression codec") {
+    Seq("true", "false").foreach { flag =>
+      val conf = new SparkConf(false).set(IO_COMPRESSION_ZSTD_BUFFERPOOL_ENABLED.key, flag)
+      val codec = CompressionCodec.createCodec(conf, classOf[ZStdCompressionCodec].getName)
+      assert(codec.getClass === classOf[ZStdCompressionCodec])
+      testCodec(codec)
     }
+  }
+
+  test("zstd compression codec short form") {
+    val codec = CompressionCodec.createCodec(conf, "zstd")
+    assert(codec.getClass === classOf[ZStdCompressionCodec])
+    testCodec(codec)
+  }
+
+  test("zstd supports concatenation of serialized zstd") {
+    val codec = CompressionCodec.createCodec(conf, classOf[ZStdCompressionCodec].getName)
+    assert(codec.getClass === classOf[ZStdCompressionCodec])
+    testConcatenationOfSerializedStreams(codec)
   }
 
   test("bad compression codec") {

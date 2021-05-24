@@ -20,13 +20,11 @@ package org.apache.spark.graphx.util
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 
 import scala.collection.mutable.HashSet
-import scala.language.existentials
+
+import org.apache.xbean.asm7.{ClassReader, ClassVisitor, MethodVisitor}
+import org.apache.xbean.asm7.Opcodes._
 
 import org.apache.spark.util.Utils
-
-import com.esotericsoftware.reflectasm.shaded.org.objectweb.asm.{ClassReader, ClassVisitor, MethodVisitor}
-import com.esotericsoftware.reflectasm.shaded.org.objectweb.asm.Opcodes._
-
 
 /**
  * Includes an utility function to test whether a function accesses a specific attribute
@@ -49,7 +47,7 @@ private[graphx] object BytecodeUtils {
           return true
         }
       }
-      return false
+      false
     }
   }
 
@@ -60,13 +58,13 @@ private[graphx] object BytecodeUtils {
     var stack = List[(Class[_], String)]((cls, method))
 
     while (stack.nonEmpty) {
-      val (c, m) = stack.head
+      val c = stack.head._1
+      val m = stack.head._2
       stack = stack.tail
       seen.add((c, m))
       val finder = new MethodInvocationFinder(c.getName, m)
       getClassReader(c).accept(finder, 0)
       for (classMethod <- finder.methodsInvoked) {
-        // println(classMethod)
         if (classMethod._1 == targetClass && classMethod._2 == targetMethod) {
           return true
         } else if (!seen.contains(classMethod)) {
@@ -74,7 +72,7 @@ private[graphx] object BytecodeUtils {
         }
       }
     }
-    return false
+    false
   }
 
   /**
@@ -94,7 +92,7 @@ private[graphx] object BytecodeUtils {
 
   /**
    * Given the class name, return whether we should look into the class or not. This is used to
-   * skip examing a large quantity of Java or Scala classes that we know for sure wouldn't access
+   * skip examining a large quantity of Java or Scala classes that we know for sure wouldn't access
    * the closures. Note that the class name is expected in ASM style (i.e. use "/" instead of ".").
    */
   private def skipClass(className: String): Boolean = {
@@ -108,21 +106,22 @@ private[graphx] object BytecodeUtils {
    *   MethodInvocationFinder("spark/graph/Foo", "test")
    * its methodsInvoked variable will contain the set of methods invoked directly by
    * Foo.test(). Interface invocations are not returned as part of the result set because we cannot
-   * determine the actual metod invoked by inspecting the bytecode.
+   * determine the actual method invoked by inspecting the bytecode.
    */
   private class MethodInvocationFinder(className: String, methodName: String)
-    extends ClassVisitor(ASM4) {
+    extends ClassVisitor(ASM7) {
 
     val methodsInvoked = new HashSet[(Class[_], String)]
 
     override def visitMethod(access: Int, name: String, desc: String,
                              sig: String, exceptions: Array[String]): MethodVisitor = {
       if (name == methodName) {
-        new MethodVisitor(ASM4) {
-          override def visitMethodInsn(op: Int, owner: String, name: String, desc: String) {
+        new MethodVisitor(ASM7) {
+          override def visitMethodInsn(
+              op: Int, owner: String, name: String, desc: String, itf: Boolean): Unit = {
             if (op == INVOKEVIRTUAL || op == INVOKESPECIAL || op == INVOKESTATIC) {
               if (!skipClass(owner)) {
-                methodsInvoked.add((Class.forName(owner.replace("/", ".")), name))
+                methodsInvoked.add((Utils.classForName(owner.replace("/", ".")), name))
               }
             }
           }

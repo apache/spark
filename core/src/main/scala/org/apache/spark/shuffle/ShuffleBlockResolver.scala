@@ -17,9 +17,8 @@
 
 package org.apache.spark.shuffle
 
-import java.nio.ByteBuffer
 import org.apache.spark.network.buffer.ManagedBuffer
-import org.apache.spark.storage.ShuffleBlockId
+import org.apache.spark.storage.BlockId
 
 private[spark]
 /**
@@ -32,10 +31,14 @@ trait ShuffleBlockResolver {
   type ShuffleId = Int
 
   /**
-   * Retrieve the data for the specified block. If the data for that block is not available,
-   * throws an unspecified exception.
+   * Retrieve the data for the specified block.
+   *
+   * When the dirs parameter is None then use the disk manager's local directories. Otherwise,
+   * read from the specified directories.
+   *
+   * If the data for that block is not available, throws an unspecified exception.
    */
-  def getBlockData(blockId: ShuffleBlockId): ManagedBuffer
+  def getBlockData(blockId: BlockId, dirs: Option[Array[String]] = None): ManagedBuffer
 
   def stop(): Unit
 }

@@ -19,27 +19,42 @@ package org.apache.spark.launcher;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 import static org.apache.spark.launcher.CommandBuilderUtils.*;
+import static org.apache.spark.launcher.CommandBuilderUtils.join;
 
 /**
  * Launcher for Spark applications.
- * <p/>
+ * <p>
  * Use this class to start Spark applications programmatically. The class uses a builder pattern
  * to allow clients to configure the Spark application and launch it as a child process.
+ * </p>
  */
-public class SparkLauncher {
+public class SparkLauncher extends AbstractLauncher<SparkLauncher> {
+
+  private static final Logger LOG = Logger.getLogger(SparkLauncher.class.getName());
 
   /** The Spark master. */
   public static final String SPARK_MASTER = "spark.master";
+
+  /** The Spark deploy mode. */
+  public static final String DEPLOY_MODE = "spark.submit.deployMode";
 
   /** Configuration key for the driver memory. */
   public static final String DRIVER_MEMORY = "spark.driver.memory";
   /** Configuration key for the driver class path. */
   public static final String DRIVER_EXTRA_CLASSPATH = "spark.driver.extraClassPath";
+  /** Configuration key for the default driver VM options. */
+  public static final String DRIVER_DEFAULT_JAVA_OPTIONS = "spark.driver.defaultJavaOptions";
   /** Configuration key for the driver VM options. */
   public static final String DRIVER_EXTRA_JAVA_OPTIONS = "spark.driver.extraJavaOptions";
   /** Configuration key for the driver native library path. */
@@ -49,6 +64,8 @@ public class SparkLauncher {
   public static final String EXECUTOR_MEMORY = "spark.executor.memory";
   /** Configuration key for the executor class path. */
   public static final String EXECUTOR_EXTRA_CLASSPATH = "spark.executor.extraClassPath";
+  /** Configuration key for the default executor VM options. */
+  public static final String EXECUTOR_DEFAULT_JAVA_OPTIONS = "spark.executor.defaultJavaOptions";
   /** Configuration key for the executor VM options. */
   public static final String EXECUTOR_EXTRA_JAVA_OPTIONS = "spark.executor.extraJavaOptions";
   /** Configuration key for the executor native library path. */
@@ -56,7 +73,64 @@ public class SparkLauncher {
   /** Configuration key for the number of executor CPU cores. */
   public static final String EXECUTOR_CORES = "spark.executor.cores";
 
-  private final SparkSubmitCommandBuilder builder;
+  static final String PYSPARK_DRIVER_PYTHON = "spark.pyspark.driver.python";
+
+  static final String PYSPARK_PYTHON = "spark.pyspark.python";
+
+  static final String SPARKR_R_SHELL = "spark.r.shell.command";
+
+  /** Logger name to use when launching a child process. */
+  public static final String CHILD_PROCESS_LOGGER_NAME = "spark.launcher.childProcLoggerName";
+
+  /**
+   * A special value for the resource that tells Spark to not try to process the app resource as a
+   * file. This is useful when the class being executed is added to the application using other
+   * means - for example, by adding jars using the package download feature.
+   */
+  public static final String NO_RESOURCE = "spark-internal";
+
+  /**
+   * Maximum time (in ms) to wait for a child process to connect back to the launcher server
+   * when using @link{#start()}.
+   *
+   * @deprecated use `CHILD_CONNECTION_TIMEOUT`
+   * @since 1.6.0
+   */
+  public static final String DEPRECATED_CHILD_CONNECTION_TIMEOUT =
+    "spark.launcher.childConectionTimeout";
+
+  /**
+   * Maximum time (in ms) to wait for a child process to connect back to the launcher server
+   * when using @link{#start()}.
+   */
+  public static final String CHILD_CONNECTION_TIMEOUT = "spark.launcher.childConnectionTimeout";
+
+  /** Used internally to create unique logger names. */
+  private static final AtomicInteger COUNTER = new AtomicInteger();
+
+  /** Factory for creating OutputRedirector threads. **/
+  static final ThreadFactory REDIRECTOR_FACTORY = new NamedThreadFactory("launcher-proc-%d");
+
+  static final Map<String, String> launcherConfig = new HashMap<>();
+
+  /**
+   * Set a configuration value for the launcher library. These config values do not affect the
+   * launched application, but rather the behavior of the launcher library itself when managing
+   * applications.
+   *
+   * @since 1.6.0
+   * @param name Config name.
+   * @param value Config value.
+   */
+  public static void setConfig(String name, String value) {
+    launcherConfig.put(name, value);
+  }
+
+  // Visible for testing.
+  File workingDir;
+  boolean redirectErrorStream;
+  ProcessBuilder.Redirect errorStream;
+  ProcessBuilder.Redirect outputStream;
 
   public SparkLauncher() {
     this(null);
@@ -68,7 +142,6 @@ public class SparkLauncher {
    * @param env Environment variables to set.
    */
   public SparkLauncher(Map<String, String> env) {
-    this.builder = new SparkSubmitCommandBuilder();
     if (env != null) {
       this.builder.childEnv.putAll(env);
     }
@@ -99,170 +172,272 @@ public class SparkLauncher {
   }
 
   /**
-   * Set a custom properties file with Spark configuration for the application.
+   * Sets the working directory of spark-submit.
    *
-   * @param path Path to custom properties file to use.
+   * @param dir The directory to set as spark-submit's working directory.
    * @return This launcher.
    */
+  public SparkLauncher directory(File dir) {
+    workingDir = dir;
+    return this;
+  }
+
+  /**
+   * Specifies that stderr in spark-submit should be redirected to stdout.
+   *
+   * @return This launcher.
+   */
+  public SparkLauncher redirectError() {
+    redirectErrorStream = true;
+    return this;
+  }
+
+  /**
+   * Redirects error output to the specified Redirect.
+   *
+   * @param to The method of redirection.
+   * @return This launcher.
+   */
+  public SparkLauncher redirectError(ProcessBuilder.Redirect to) {
+    errorStream = to;
+    return this;
+  }
+
+  /**
+   * Redirects standard output to the specified Redirect.
+   *
+   * @param to The method of redirection.
+   * @return This launcher.
+   */
+  public SparkLauncher redirectOutput(ProcessBuilder.Redirect to) {
+    outputStream = to;
+    return this;
+  }
+
+  /**
+   * Redirects error output to the specified File.
+   *
+   * @param errFile The file to which stderr is written.
+   * @return This launcher.
+   */
+  public SparkLauncher redirectError(File errFile) {
+    errorStream = ProcessBuilder.Redirect.to(errFile);
+    return this;
+  }
+
+  /**
+   * Redirects error output to the specified File.
+   *
+   * @param outFile The file to which stdout is written.
+   * @return This launcher.
+   */
+  public SparkLauncher redirectOutput(File outFile) {
+    outputStream = ProcessBuilder.Redirect.to(outFile);
+    return this;
+  }
+
+  /**
+   * Sets all output to be logged and redirected to a logger with the specified name.
+   *
+   * @param loggerName The name of the logger to log stdout and stderr.
+   * @return This launcher.
+   */
+  public SparkLauncher redirectToLog(String loggerName) {
+    setConf(CHILD_PROCESS_LOGGER_NAME, loggerName);
+    return this;
+  }
+
+  // The following methods just delegate to the parent class, but they are needed to keep
+  // binary compatibility with previous versions of this class.
+
+  @Override
   public SparkLauncher setPropertiesFile(String path) {
-    checkNotNull(path, "path");
-    builder.propertiesFile = path;
-    return this;
+    return super.setPropertiesFile(path);
   }
 
-  /**
-   * Set a single configuration value for the application.
-   *
-   * @param key Configuration key.
-   * @param value The value to use.
-   * @return This launcher.
-   */
+  @Override
   public SparkLauncher setConf(String key, String value) {
-    checkNotNull(key, "key");
-    checkNotNull(value, "value");
-    checkArgument(key.startsWith("spark."), "'key' must start with 'spark.'");
-    builder.conf.put(key, value);
-    return this;
+    return super.setConf(key, value);
   }
 
-  /**
-   * Set the application name.
-   *
-   * @param appName Application name.
-   * @return This launcher.
-   */
+  @Override
   public SparkLauncher setAppName(String appName) {
-    checkNotNull(appName, "appName");
-    builder.appName = appName;
-    return this;
+    return super.setAppName(appName);
   }
 
-  /**
-   * Set the Spark master for the application.
-   *
-   * @param master Spark master.
-   * @return This launcher.
-   */
+  @Override
   public SparkLauncher setMaster(String master) {
-    checkNotNull(master, "master");
-    builder.master = master;
-    return this;
+    return super.setMaster(master);
   }
 
-  /**
-   * Set the deploy mode for the application.
-   *
-   * @param mode Deploy mode.
-   * @return This launcher.
-   */
+  @Override
   public SparkLauncher setDeployMode(String mode) {
-    checkNotNull(mode, "mode");
-    builder.deployMode = mode;
-    return this;
+    return super.setDeployMode(mode);
   }
 
-  /**
-   * Set the main application resource. This should be the location of a jar file for Scala/Java
-   * applications, or a python script for PySpark applications.
-   *
-   * @param resource Path to the main application resource.
-   * @return This launcher.
-   */
+  @Override
   public SparkLauncher setAppResource(String resource) {
-    checkNotNull(resource, "resource");
-    builder.appResource = resource;
-    return this;
+    return super.setAppResource(resource);
   }
 
-  /**
-   * Sets the application class name for Java/Scala applications.
-   *
-   * @param mainClass Application's main class.
-   * @return This launcher.
-   */
+  @Override
   public SparkLauncher setMainClass(String mainClass) {
-    checkNotNull(mainClass, "mainClass");
-    builder.mainClass = mainClass;
-    return this;
+    return super.setMainClass(mainClass);
   }
 
-  /**
-   * Adds command line arguments for the application.
-   *
-   * @param args Arguments to pass to the application's main class.
-   * @return This launcher.
-   */
+  @Override
+  public SparkLauncher addSparkArg(String arg) {
+    return super.addSparkArg(arg);
+  }
+
+  @Override
+  public SparkLauncher addSparkArg(String name, String value) {
+    return super.addSparkArg(name, value);
+  }
+
+  @Override
   public SparkLauncher addAppArgs(String... args) {
-    for (String arg : args) {
-      checkNotNull(arg, "arg");
-      builder.appArgs.add(arg);
-    }
-    return this;
+    return super.addAppArgs(args);
   }
 
-  /**
-   * Adds a jar file to be submitted with the application.
-   *
-   * @param jar Path to the jar file.
-   * @return This launcher.
-   */
+  @Override
   public SparkLauncher addJar(String jar) {
-    checkNotNull(jar, "jar");
-    builder.jars.add(jar);
-    return this;
+    return super.addJar(jar);
   }
 
-  /**
-   * Adds a file to be submitted with the application.
-   *
-   * @param file Path to the file.
-   * @return This launcher.
-   */
+  @Override
   public SparkLauncher addFile(String file) {
-    checkNotNull(file, "file");
-    builder.files.add(file);
-    return this;
+    return super.addFile(file);
   }
 
-  /**
-   * Adds a python file / zip / egg to be submitted with the application.
-   *
-   * @param file Path to the file.
-   * @return This launcher.
-   */
+  @Override
   public SparkLauncher addPyFile(String file) {
-    checkNotNull(file, "file");
-    builder.pyFiles.add(file);
-    return this;
+    return super.addPyFile(file);
   }
 
-  /**
-   * Enables verbose reporting for SparkSubmit.
-   *
-   * @param verbose Whether to enable verbose output.
-   * @return This launcher.
-   */
+  @Override
   public SparkLauncher setVerbose(boolean verbose) {
-    builder.verbose = verbose;
-    return this;
+    return super.setVerbose(verbose);
   }
 
   /**
    * Launches a sub-process that will start the configured Spark application.
+   * <p>
+   * The {@link #startApplication(SparkAppHandle.Listener...)} method is preferred when launching
+   * Spark, since it provides better control of the child application.
    *
    * @return A process handle for the Spark app.
    */
   public Process launch() throws IOException {
-    List<String> cmd = new ArrayList<String>();
-    String script = isWindows() ? "spark-submit.cmd" : "spark-submit";
-    cmd.add(join(File.separator, builder.getSparkHome(), "bin", script));
+    ProcessBuilder pb = createBuilder();
+
+    boolean outputToLog = outputStream == null;
+    boolean errorToLog = !redirectErrorStream && errorStream == null;
+
+    String loggerName = getLoggerName();
+    if (loggerName != null && outputToLog && errorToLog) {
+      pb.redirectErrorStream(true);
+    }
+
+    Process childProc = pb.start();
+    if (loggerName != null) {
+      InputStream logStream = outputToLog ? childProc.getInputStream() : childProc.getErrorStream();
+      new OutputRedirector(logStream, loggerName, REDIRECTOR_FACTORY);
+    }
+
+    return childProc;
+  }
+
+  /**
+   * Starts a Spark application.
+   *
+   * <p>
+   * Applications launched by this launcher run as child processes. The child's stdout and stderr
+   * are merged and written to a logger (see <code>java.util.logging</code>) only if redirection
+   * has not otherwise been configured on this <code>SparkLauncher</code>. The logger's name can be
+   * defined by setting {@link #CHILD_PROCESS_LOGGER_NAME} in the app's configuration. If that
+   * option is not set, the code will try to derive a name from the application's name or main
+   * class / script file. If those cannot be determined, an internal, unique name will be used.
+   * In all cases, the logger name will start with "org.apache.spark.launcher.app", to fit more
+   * easily into the configuration of commonly-used logging systems.
+   *
+   * @since 1.6.0
+   * @see AbstractLauncher#startApplication(SparkAppHandle.Listener...)
+   * @param listeners Listeners to add to the handle before the app is launched.
+   * @return A handle for the launched application.
+   */
+  @Override
+  public SparkAppHandle startApplication(SparkAppHandle.Listener... listeners) throws IOException {
+    LauncherServer server = LauncherServer.getOrCreateServer();
+    ChildProcAppHandle handle = new ChildProcAppHandle(server);
+    for (SparkAppHandle.Listener l : listeners) {
+      handle.addListener(l);
+    }
+
+    String secret = server.registerHandle(handle);
+
+    String loggerName = getLoggerName();
+    ProcessBuilder pb = createBuilder();
+    if (LOG.isLoggable(Level.FINE)) {
+      LOG.fine(String.format("Launching Spark application:%n%s", join(" ", pb.command())));
+    }
+
+    boolean outputToLog = outputStream == null;
+    boolean errorToLog = !redirectErrorStream && errorStream == null;
+
+    // Only setup stderr + stdout to logger redirection if user has not otherwise configured output
+    // redirection.
+    if (loggerName == null && (outputToLog || errorToLog)) {
+      String appName;
+      if (builder.appName != null) {
+        appName = builder.appName;
+      } else if (builder.mainClass != null) {
+        int dot = builder.mainClass.lastIndexOf(".");
+        if (dot >= 0 && dot < builder.mainClass.length() - 1) {
+          appName = builder.mainClass.substring(dot + 1, builder.mainClass.length());
+        } else {
+          appName = builder.mainClass;
+        }
+      } else if (builder.appResource != null) {
+        appName = new File(builder.appResource).getName();
+      } else {
+        appName = String.valueOf(COUNTER.incrementAndGet());
+      }
+      String loggerPrefix = getClass().getPackage().getName();
+      loggerName = String.format("%s.app.%s", loggerPrefix, appName);
+    }
+
+    if (outputToLog && errorToLog) {
+      pb.redirectErrorStream(true);
+    }
+
+    pb.environment().put(LauncherProtocol.ENV_LAUNCHER_PORT, String.valueOf(server.getPort()));
+    pb.environment().put(LauncherProtocol.ENV_LAUNCHER_SECRET, secret);
+    try {
+      Process child = pb.start();
+      InputStream logStream = null;
+      if (loggerName != null) {
+        logStream = outputToLog ? child.getInputStream() : child.getErrorStream();
+      }
+      handle.setChildProc(child, loggerName, logStream);
+    } catch (IOException ioe) {
+      handle.kill();
+      throw ioe;
+    }
+
+    return handle;
+  }
+
+  private ProcessBuilder createBuilder() throws IOException {
+    List<String> cmd = new ArrayList<>();
+    cmd.add(findSparkSubmit());
     cmd.addAll(builder.buildSparkSubmitArgs());
 
     // Since the child process is a batch script, let's quote things so that special characters are
     // preserved, otherwise the batch interpreter will mess up the arguments. Batch scripts are
     // weird.
     if (isWindows()) {
-      List<String> winCmd = new ArrayList<String>();
+      List<String> winCmd = new ArrayList<>();
       for (String arg : cmd) {
         winCmd.add(quoteForBatchScript(arg));
       }
@@ -273,7 +448,45 @@ public class SparkLauncher {
     for (Map.Entry<String, String> e : builder.childEnv.entrySet()) {
       pb.environment().put(e.getKey(), e.getValue());
     }
-    return pb.start();
+
+    if (workingDir != null) {
+      pb.directory(workingDir);
+    }
+
+    // Only one of redirectError and redirectError(...) can be specified.
+    // Similarly, if redirectToLog is specified, no other redirections should be specified.
+    checkState(!redirectErrorStream || errorStream == null,
+      "Cannot specify both redirectError() and redirectError(...) ");
+    checkState(getLoggerName() == null ||
+      ((!redirectErrorStream && errorStream == null) || outputStream == null),
+      "Cannot used redirectToLog() in conjunction with other redirection methods.");
+
+    if (redirectErrorStream) {
+      pb.redirectErrorStream(true);
+    }
+    if (errorStream != null) {
+      pb.redirectError(errorStream);
+    }
+    if (outputStream != null) {
+      pb.redirectOutput(outputStream);
+    }
+
+    return pb;
+  }
+
+  @Override
+  SparkLauncher self() {
+    return this;
+  }
+
+  // Visible for testing.
+  String findSparkSubmit() {
+    String script = isWindows() ? "spark-submit.cmd" : "spark-submit";
+    return join(File.separator, builder.getSparkHome(), "bin", script);
+  }
+
+  private String getLoggerName() throws IOException {
+    return builder.getEffectiveConfig().get(CHILD_PROCESS_LOGGER_NAME);
   }
 
 }

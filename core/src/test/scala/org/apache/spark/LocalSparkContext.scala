@@ -17,39 +17,45 @@
 
 package org.apache.spark
 
-import _root_.io.netty.util.internal.logging.{Slf4JLoggerFactory, InternalLoggerFactory}
+import _root_.io.netty.util.internal.logging.{InternalLoggerFactory, Slf4JLoggerFactory}
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.BeforeAndAfterEach
 import org.scalatest.Suite
 
-/** Manages a local `sc` {@link SparkContext} variable, correctly stopping it after each test. */
+import org.apache.spark.resource.ResourceProfile
+
+/** Manages a local `sc` `SparkContext` variable, correctly stopping it after each test. */
 trait LocalSparkContext extends BeforeAndAfterEach with BeforeAndAfterAll { self: Suite =>
 
   @transient var sc: SparkContext = _
 
-  override def beforeAll() {
-    InternalLoggerFactory.setDefaultFactory(new Slf4JLoggerFactory())
+  override def beforeAll(): Unit = {
     super.beforeAll()
+    InternalLoggerFactory.setDefaultFactory(Slf4JLoggerFactory.INSTANCE)
   }
 
-  override def afterEach() {
-    resetSparkContext()
-    super.afterEach()
+  override def afterEach(): Unit = {
+    try {
+      resetSparkContext()
+    } finally {
+      super.afterEach()
+    }
   }
 
   def resetSparkContext(): Unit = {
     LocalSparkContext.stop(sc)
+    ResourceProfile.clearDefaultProfile()
     sc = null
   }
 
 }
 
 object LocalSparkContext {
-  def stop(sc: SparkContext) {
+  def stop(sc: SparkContext): Unit = {
     if (sc != null) {
       sc.stop()
     }
-    // To avoid Akka rebinding to the same port, since it doesn't unbind immediately on shutdown
+    // To avoid RPC rebinding to the same port, since it doesn't unbind immediately on shutdown
     System.clearProperty("spark.driver.port")
   }
 

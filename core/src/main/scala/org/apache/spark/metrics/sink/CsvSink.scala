@@ -23,11 +23,10 @@ import java.util.concurrent.TimeUnit
 
 import com.codahale.metrics.{CsvReporter, MetricRegistry}
 
-import org.apache.spark.SecurityManager
 import org.apache.spark.metrics.MetricsSystem
 
-private[spark] class CsvSink(val property: Properties, val registry: MetricRegistry,
-    securityMgr: SecurityManager) extends Sink {
+private[spark] class CsvSink(
+    val property: Properties, val registry: MetricRegistry) extends Sink {
   val CSV_KEY_PERIOD = "period"
   val CSV_KEY_UNIT = "unit"
   val CSV_KEY_DIR = "directory"
@@ -42,7 +41,7 @@ private[spark] class CsvSink(val property: Properties, val registry: MetricRegis
   }
 
   val pollUnit: TimeUnit = Option(property.getProperty(CSV_KEY_UNIT)) match {
-    case Some(s) => TimeUnit.valueOf(s.toUpperCase())
+    case Some(s) => TimeUnit.valueOf(s.toUpperCase(Locale.ROOT))
     case None => TimeUnit.valueOf(CSV_DEFAULT_UNIT)
   }
 
@@ -59,15 +58,15 @@ private[spark] class CsvSink(val property: Properties, val registry: MetricRegis
       .convertRatesTo(TimeUnit.SECONDS)
       .build(new File(pollDir))
 
-  override def start() {
+  override def start(): Unit = {
     reporter.start(pollPeriod, pollUnit)
   }
 
-  override def stop() {
+  override def stop(): Unit = {
     reporter.stop()
   }
 
-  override def report() {
+  override def report(): Unit = {
     reporter.report()
   }
 }

@@ -22,9 +22,7 @@ import com.typesafe.tools.mima.core._
 import com.typesafe.tools.mima.core.MissingClassProblem
 import com.typesafe.tools.mima.core.MissingTypesProblem
 import com.typesafe.tools.mima.core.ProblemFilters._
-import com.typesafe.tools.mima.plugin.MimaKeys.{binaryIssueFilters, previousArtifact}
-import com.typesafe.tools.mima.plugin.MimaPlugin.mimaDefaultSettings
-
+import com.typesafe.tools.mima.plugin.MimaKeys.{mimaBinaryIssueFilters, mimaPreviousArtifacts, mimaFailOnNoPrevious}
 
 object MimaBuild {
 
@@ -42,14 +40,11 @@ object MimaBuild {
       ProblemFilters.exclude[IncompatibleFieldTypeProblem](fullName)
     )
 
-  // Exclude a single class and its corresponding object
+  // Exclude a single class
   def excludeClass(className: String) = Seq(
-      excludePackage(className),
+      ProblemFilters.exclude[Problem](className + ".*"),
       ProblemFilters.exclude[MissingClassProblem](className),
-      ProblemFilters.exclude[MissingTypesProblem](className),
-      excludePackage(className + "$"),
-      ProblemFilters.exclude[MissingClassProblem](className + "$"),
-      ProblemFilters.exclude[MissingTypesProblem](className + "$")
+      ProblemFilters.exclude[MissingTypesProblem](className)
     )
 
   // Exclude a Spark class, that is in the package org.apache.spark
@@ -59,7 +54,7 @@ object MimaBuild {
 
   // Exclude a Spark package, that is in the package org.apache.spark
   def excludeSparkPackage(packageName: String) = {
-    excludePackage("org.apache.spark." + packageName)
+    ProblemFilters.exclude[Problem]("org.apache.spark." + packageName + ".*")
   }
 
   def ignoredABIProblems(base: File, currentSparkVersion: String) = {
@@ -89,14 +84,17 @@ object MimaBuild {
     ignoredMembers.flatMap(excludeMember) ++ MimaExcludes.excludes(currentSparkVersion)
   }
 
-  def mimaSettings(sparkHome: File, projectRef: ProjectRef) = {
+  def mimaSettings(sparkHome: File, projectRef: ProjectRef): Seq[Setting[_]] = {
     val organization = "org.apache.spark"
-    // TODO: Change this once Spark 1.4.0 is released
-    val previousSparkVersion = "1.4.0-rc4"
-    val fullId = "spark-" + projectRef.project + "_2.10"
-    mimaDefaultSettings ++
-    Seq(previousArtifact := Some(organization % fullId % previousSparkVersion),
-      binaryIssueFilters ++= ignoredABIProblems(sparkHome, version.value))
+    val previousSparkVersion = "3.0.0"
+    val project = projectRef.project
+    val fullId = "spark-" + project + "_2.12"
+
+    Seq(
+      mimaFailOnNoPrevious := true,
+      mimaPreviousArtifacts := Set(organization % fullId % previousSparkVersion),
+      mimaBinaryIssueFilters ++= ignoredABIProblems(sparkHome, version.value)
+    )
   }
 
 }

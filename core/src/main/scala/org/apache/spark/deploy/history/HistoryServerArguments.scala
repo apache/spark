@@ -17,11 +17,14 @@
 
 package org.apache.spark.deploy.history
 
-import org.apache.spark.{Logging, SparkConf}
+import scala.annotation.tailrec
+
+import org.apache.spark.SparkConf
+import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
 
 /**
- * Command-line parser for the master.
+ * Command-line parser for the [[HistoryServer]].
  */
 private[history] class HistoryServerArguments(conf: SparkConf, args: Array[String])
   extends Logging {
@@ -29,15 +32,9 @@ private[history] class HistoryServerArguments(conf: SparkConf, args: Array[Strin
 
   parse(args.toList)
 
+  @tailrec
   private def parse(args: List[String]): Unit = {
     args match {
-      case ("--dir" | "-d") :: value :: tail =>
-        logWarning("Setting log directory through the command line is deprecated as of " +
-          "Spark 1.1.0. Please set this through spark.history.fs.logDirectory instead.")
-        conf.set("spark.history.fs.logDirectory", value)
-        System.setProperty("spark.history.fs.logDirectory", value)
-        parse(tail)
-
       case ("--help" | "-h") :: tail =>
         printUsageAndExit(0)
 
@@ -55,7 +52,8 @@ private[history] class HistoryServerArguments(conf: SparkConf, args: Array[Strin
    // This mutates the SparkConf, so all accesses to it must be made after this line
    Utils.loadDefaultSparkProperties(conf, propertiesFile)
 
-  private def printUsageAndExit(exitCode: Int) {
+  private def printUsageAndExit(exitCode: Int): Unit = {
+    // scalastyle:off println
     System.err.println(
       """
       |Usage: HistoryServer [options]
@@ -81,10 +79,12 @@ private[history] class HistoryServerArguments(conf: SparkConf, args: Array[Strin
       |
       |  spark.history.fs.logDirectory      Directory where app logs are stored
       |                                     (default: file:/tmp/spark-events)
-      |  spark.history.fs.updateInterval    How often to reload log data from storage
+      |  spark.history.fs.update.interval   How often to reload log data from storage
       |                                     (in seconds, default: 10)
       |""".stripMargin)
+    // scalastyle:on println
     System.exit(exitCode)
   }
 
 }
+

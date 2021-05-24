@@ -19,6 +19,7 @@ import cProfile
 import pstats
 import os
 import atexit
+import sys
 
 from pyspark.accumulators import AccumulatorParam
 
@@ -66,8 +67,6 @@ class ProfilerCollector(object):
 
 class Profiler(object):
     """
-    .. note:: DeveloperApi
-
     PySpark supports custom profilers, this is to allow for different profilers to
     be used as well as outputting to different formats than what is provided in the
     BasicProfiler.
@@ -80,6 +79,8 @@ class Profiler(object):
 
     The profiler class is chosen when creating a SparkContext
 
+    Examples
+    --------
     >>> from pyspark import SparkConf, SparkContext
     >>> from pyspark import BasicProfiler
     >>> class MyCustomProfiler(BasicProfiler):
@@ -90,10 +91,16 @@ class Profiler(object):
     >>> sc = SparkContext('local', 'test', conf=conf, profiler_cls=MyCustomProfiler)
     >>> sc.parallelize(range(1000)).map(lambda x: 2 * x).take(10)
     [0, 2, 4, 6, 8, 10, 12, 14, 16, 18]
+    >>> sc.parallelize(range(1000)).count()
+    1000
     >>> sc.show_profiles()
     My custom profiles for RDD:1
-    My custom profiles for RDD:2
+    My custom profiles for RDD:3
     >>> sc.stop()
+
+    Notes
+    -----
+    This API is a developer API.
     """
 
     def __init__(self, ctx):
@@ -101,11 +108,11 @@ class Profiler(object):
 
     def profile(self, func):
         """ Do profiling on the function `func`"""
-        raise NotImplemented
+        raise NotImplementedError
 
     def stats(self):
         """ Return the collected profiling stats (pstats.Stats)"""
-        raise NotImplemented
+        raise NotImplementedError
 
     def show(self, id):
         """ Print the profile stats to stdout, id is the RDD id """
@@ -169,4 +176,6 @@ class BasicProfiler(Profiler):
 
 if __name__ == "__main__":
     import doctest
-    doctest.testmod()
+    (failure_count, test_count) = doctest.testmod()
+    if failure_count:
+        sys.exit(-1)

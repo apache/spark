@@ -17,18 +17,17 @@
 
 package org.apache.spark.api.java
 
+import java.{util => ju}
 import java.util.Map.Entry
 
-import com.google.common.base.Optional
-
-import java.{util => ju}
 import scala.collection.mutable
 
 private[spark] object JavaUtils {
   def optionToOptional[T](option: Option[T]): Optional[T] =
-    option match {
-      case Some(value) => Optional.of(value)
-      case None => Optional.absent()
+    if (option.isDefined) {
+      Optional.of(option.get)
+    } else {
+      Optional.empty[T]
     }
 
   // Workaround for SPARK-3926 / SI-8911
@@ -44,10 +43,17 @@ private[spark] object JavaUtils {
 
     override def size: Int = underlying.size
 
+    // Delegate to implementation because AbstractMap implementation iterates over whole key set
+    override def containsKey(key: AnyRef): Boolean = try {
+      underlying.contains(key.asInstanceOf[A])
+    } catch {
+      case _: ClassCastException => false
+    }
+
     override def get(key: AnyRef): B = try {
       underlying.getOrElse(key.asInstanceOf[A], null.asInstanceOf[B])
     } catch {
-      case ex: ClassCastException => null.asInstanceOf[B]
+      case _: ClassCastException => null.asInstanceOf[B]
     }
 
     override def entrySet: ju.Set[ju.Map.Entry[A, B]] = new ju.AbstractSet[ju.Map.Entry[A, B]] {
@@ -57,9 +63,9 @@ private[spark] object JavaUtils {
         val ui = underlying.iterator
         var prev : Option[A] = None
 
-        def hasNext: Boolean = ui.hasNext
+        override def hasNext: Boolean = ui.hasNext
 
-        def next(): Entry[A, B] = {
+        override def next(): Entry[A, B] = {
           val (k, v) = ui.next()
           prev = Some(k)
           new ju.Map.Entry[A, B] {
@@ -75,7 +81,7 @@ private[spark] object JavaUtils {
           }
         }
 
-        def remove() {
+        override def remove(): Unit = {
           prev match {
             case Some(k) =>
               underlying match {

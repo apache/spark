@@ -20,14 +20,12 @@ package org.apache.spark.mllib.rdd
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
 
-import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.BoundedPriorityQueue
 
 /**
  * Machine learning specific Pair RDD functions.
  */
-@DeveloperApi
 class MLPairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)]) extends Serializable {
   /**
    * Returns the top k (largest) elements for each key from this RDD as defined by the specified
@@ -46,11 +44,10 @@ class MLPairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)]) extends Se
       combOp = (queue1, queue2) => {
         queue1 ++= queue2
       }
-    ).mapValues(_.toArray.sorted(ord.reverse))  // This is an min-heap, so we reverse the order.
+    ).mapValues(_.toArray.sorted(ord.reverse))  // This is a min-heap, so we reverse the order.
   }
 }
 
-@DeveloperApi
 object MLPairRDDFunctions {
   /** Implicit conversion from a pair RDD to MLPairRDDFunctions. */
   implicit def fromPairRDD[K: ClassTag, V: ClassTag](rdd: RDD[(K, V)]): MLPairRDDFunctions[K, V] =

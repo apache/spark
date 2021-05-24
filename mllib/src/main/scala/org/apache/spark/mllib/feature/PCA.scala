@@ -17,9 +17,11 @@
 
 package org.apache.spark.mllib.feature
 
+import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.mllib.linalg.distributed.RowMatrix
+import org.apache.spark.mllib.stat.Statistics
 import org.apache.spark.rdd.RDD
 
 /**
@@ -27,20 +29,41 @@ import org.apache.spark.rdd.RDD
  *
  * @param k number of principal components
  */
-class PCA(val k: Int) {
-  require(k >= 1, s"PCA requires a number of principal components k >= 1 but was given $k")
+@Since("1.4.0")
+class PCA @Since("1.4.0") (@Since("1.4.0") val k: Int) {
+  require(k > 0,
+    s"Number of principal components must be positive but got ${k}")
 
   /**
    * Computes a [[PCAModel]] that contains the principal components of the input vectors.
    *
    * @param sources source vectors
    */
+  @Since("1.4.0")
   def fit(sources: RDD[Vector]): PCAModel = {
-    require(k <= sources.first().size,
-      s"source vector size is ${sources.first().size} must be greater than k=$k")
+    val numFeatures = sources.first().size
+    require(k <= numFeatures,
+      s"source vector size $numFeatures must be no less than k=$k")
 
-    val mat = new RowMatrix(sources)
-    val pc = mat.computePrincipalComponents(k) match {
+    val mat = if (numFeatures > 65535) {
+      val summary = Statistics.colStats(sources.map((_, 1.0)), Seq("mean"))
+      val mean = Vectors.fromML(summary.mean)
+      val meanCenteredRdd = sources.map { row =>
+        BLAS.axpy(-1, mean, row)
+        row
+      }
+      new RowMatrix(meanCenteredRdd)
+    } else {
+      require(PCAUtil.memoryCost(k, numFeatures) < Int.MaxValue,
+        "The param k and numFeatures is too large for SVD computation. " +
+          "Try reducing the parameter k for PCA, or reduce the input feature " +
+          "vector dimension to make this tractable.")
+
+      new RowMatrix(sources)
+    }
+
+    val (pc, explainedVariance) = mat.computePrincipalComponentsAndExplainedVariance(k)
+    val densePC = pc match {
       case dm: DenseMatrix =>
         dm
       case sm: SparseMatrix =>
@@ -53,12 +76,20 @@ class PCA(val k: Int) {
       case m =>
         throw new IllegalArgumentException("Unsupported matrix format. Expected " +
           s"SparseMatrix or DenseMatrix. Instead got: ${m.getClass}")
-
     }
-    new PCAModel(k, pc)
+    val denseExplainedVariance = explainedVariance match {
+      case dv: DenseVector =>
+        dv
+      case sv: SparseVector =>
+        sv.toDense
+    }
+    new PCAModel(k, densePC, denseExplainedVariance)
   }
 
-  /** Java-friendly version of [[fit()]] */
+  /**
+   * Java-friendly version of `fit()`.
+   */
+  @Since("1.4.0")
   def fit(sources: JavaRDD[Vector]): PCAModel = fit(sources.rdd)
 }
 
@@ -68,26 +99,34 @@ class PCA(val k: Int) {
  * @param k number of principal components.
  * @param pc a principal components Matrix. Each column is one principal component.
  */
-class PCAModel private[mllib] (val k: Int, val pc: DenseMatrix) extends VectorTransformer {
+@Since("1.4.0")
+class PCAModel private[spark] (
+    @Since("1.4.0") val k: Int,
+    @Since("1.4.0") val pc: DenseMatrix,
+    @Since("1.6.0") val explainedVariance: DenseVector) extends VectorTransformer {
   /**
    * Transform a vector by computed Principal Components.
    *
    * @param vector vector to be transformed.
-   *               Vector must be the same length as the source vectors given to [[PCA.fit()]].
+   *               Vector must be the same length as the source vectors given to `PCA.fit()`.
    * @return transformed vector. Vector will be of length k.
    */
+  @Since("1.4.0")
   override def transform(vector: Vector): Vector = {
-    vector match {
-      case dv: DenseVector =>
-        pc.transpose.multiply(dv)
-      case SparseVector(size, indices, values) =>
-        /* SparseVector -> single row SparseMatrix */
-        val sm = Matrices.sparse(size, 1, Array(0, indices.length), indices, values).transpose
-        val projection = sm.multiply(pc)
-        Vectors.dense(projection.values)
-      case _ =>
-        throw new IllegalArgumentException("Unsupported vector format. Expected " +
-          s"SparseVector or DenseVector. Instead got: ${vector.getClass}")
-    }
+    pc.transpose.multiply(vector)
   }
+}
+
+private[feature] object PCAUtil {
+
+  // This memory cost formula is from breeze code:
+  // https://github.com/scalanlp/breeze/blob/
+  // 6e541be066d547a097f5089165cd7c38c3ca276d/math/src/main/scala/breeze/linalg/
+  // functions/svd.scala#L87
+  def memoryCost(k: Int, numFeatures: Int): Long = {
+    3L * math.min(k, numFeatures) * math.min(k, numFeatures) +
+      math.max(math.max(k, numFeatures), 4L * math.min(k, numFeatures) *
+      math.min(k, numFeatures) + 4L * math.min(k, numFeatures))
+  }
+
 }

@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
@@ -18,316 +18,52 @@
 #
 
 import itertools
+from argparse import ArgumentParser
 import os
 import re
 import sys
-import shutil
 import subprocess
-from collections import namedtuple
+import glob
+import shutil
 
-SPARK_HOME = os.path.join(os.path.dirname(os.path.realpath(__file__)), "..")
-USER_HOME = os.environ.get("HOME")
+from sparktestsupport import SPARK_HOME, USER_HOME, ERROR_CODES
+from sparktestsupport.shellutils import exit_from_command_with_retcode, run_cmd, rm_r, which
+from sparktestsupport.toposort import toposort_flatten
+import sparktestsupport.modules as modules
 
 
 # -------------------------------------------------------------------------------------------------
-# Test module definitions and functions for traversing module dependency graph
+# Functions for traversing module dependency graph
 # -------------------------------------------------------------------------------------------------
-
-
-all_modules = []
-
-
-class Module(object):
-    """
-    A module is the basic abstraction in our test runner script. Each module consists of a set of
-    source files, a set of test commands, and a set of dependencies on other modules. We use modules
-    to define a dependency graph that lets determine which tests to run based on which files have
-    changed.
-    """
-
-    def __init__(self, name, dependencies, source_file_regexes, build_profile_flags=(),
-                 sbt_test_goals=(), should_run_python_tests=False, should_run_r_tests=False):
-        """
-        Define a new module.
-
-        :param name: A short module name, for display in logging and error messages.
-        :param dependencies: A set of dependencies for this module. This should only include direct
-            dependencies; transitive dependencies are resolved automatically.
-        :param source_file_regexes: a set of regexes that match source files belonging to this
-            module. These regexes are applied by attempting to match at the beginning of the
-            filename strings.
-        :param build_profile_flags: A set of profile flags that should be passed to Maven or SBT in
-            order to build and test this module (e.g. '-PprofileName').
-        :param sbt_test_goals: A set of SBT test goals for testing this module.
-        :param should_run_python_tests: If true, changes in this module will trigger Python tests.
-            For now, this has the effect of causing _all_ Python tests to be run, although in the
-            future this should be changed to run only a subset of the Python tests that depend
-            on this module.
-        :param should_run_r_tests: If true, changes in this module will trigger all R tests.
-        """
-        self.name = name
-        self.dependencies = dependencies
-        self.source_file_prefixes = source_file_regexes
-        self.sbt_test_goals = sbt_test_goals
-        self.build_profile_flags = build_profile_flags
-        self.should_run_python_tests = should_run_python_tests
-        self.should_run_r_tests = should_run_r_tests
-
-        self.dependent_modules = set()
-        for dep in dependencies:
-            dep.dependent_modules.add(self)
-        all_modules.append(self)
-
-    def contains_file(self, filename):
-        return any(re.match(p, filename) for p in self.source_file_prefixes)
-
-
-sql = Module(
-    name="sql",
-    dependencies=[],
-    source_file_regexes=[
-        "sql/(?!hive-thriftserver)",
-        "bin/spark-sql",
-    ],
-    build_profile_flags=[
-        "-Phive",
-    ],
-    sbt_test_goals=[
-        "catalyst/test",
-        "sql/test",
-        "hive/test",
-    ]
-)
-
-
-hive_thriftserver = Module(
-    name="hive-thriftserver",
-    dependencies=[sql],
-    source_file_regexes=[
-        "sql/hive-thriftserver",
-        "sbin/start-thriftserver.sh",
-    ],
-    build_profile_flags=[
-        "-Phive-thriftserver",
-    ],
-    sbt_test_goals=[
-        "hive-thriftserver/test",
-    ]
-)
-
-
-graphx = Module(
-    name="graphx",
-    dependencies=[],
-    source_file_regexes=[
-        "graphx/",
-    ],
-    sbt_test_goals=[
-        "graphx/test"
-    ]
-)
-
-
-streaming = Module(
-    name="streaming",
-    dependencies=[],
-    source_file_regexes=[
-        "streaming",
-    ],
-    sbt_test_goals=[
-        "streaming/test",
-    ]
-)
-
-
-streaming_kinesis_asl = Module(
-    name="kinesis-asl",
-    dependencies=[streaming],
-    source_file_regexes=[
-        "extras/kinesis-asl/",
-    ],
-    build_profile_flags=[
-        "-Pkinesis-asl",
-    ],
-    sbt_test_goals=[
-        "kinesis-asl/test",
-    ]
-)
-
-
-streaming_zeromq = Module(
-    name="streaming-zeromq",
-    dependencies=[streaming],
-    source_file_regexes=[
-        "external/zeromq",
-    ],
-    sbt_test_goals=[
-        "streaming-zeromq/test",
-    ]
-)
-
-
-streaming_twitter = Module(
-    name="streaming-twitter",
-    dependencies=[streaming],
-    source_file_regexes=[
-        "external/twitter",
-    ],
-    sbt_test_goals=[
-        "streaming-twitter/test",
-    ]
-)
-
-
-streaming_mqtt = Module(
-    name="streaming-mqtt",
-    dependencies=[streaming],
-    source_file_regexes=[
-        "external/mqtt",
-    ],
-    sbt_test_goals=[
-        "streaming-mqtt/test",
-    ]
-)
-
-
-streaming_kafka = Module(
-    name="streaming-kafka",
-    dependencies=[streaming],
-    source_file_regexes=[
-        "external/kafka",
-        "external/kafka-assembly",
-    ],
-    sbt_test_goals=[
-        "streaming-kafka/test",
-    ]
-)
-
-
-streaming_flume_sink = Module(
-    name="streaming-flume-sink",
-    dependencies=[streaming],
-    source_file_regexes=[
-        "external/flume-sink",
-    ],
-    sbt_test_goals=[
-        "streaming-flume-sink/test",
-    ]
-)
-
-
-streaming_flume = Module(
-    name="streaming_flume",
-    dependencies=[streaming],
-    source_file_regexes=[
-        "external/flume",
-    ],
-    sbt_test_goals=[
-        "streaming-flume/test",
-    ]
-)
-
-
-mllib = Module(
-    name="mllib",
-    dependencies=[streaming, sql],
-    source_file_regexes=[
-        "data/mllib/",
-        "mllib/",
-    ],
-    sbt_test_goals=[
-        "mllib/test",
-    ]
-)
-
-
-examples = Module(
-    name="examples",
-    dependencies=[graphx, mllib, streaming, sql],
-    source_file_regexes=[
-        "examples/",
-    ],
-    sbt_test_goals=[
-        "examples/test",
-    ]
-)
-
-
-pyspark = Module(
-    name="pyspark",
-    dependencies=[mllib, streaming, streaming_kafka, sql],
-    source_file_regexes=[
-        "python/"
-    ],
-    should_run_python_tests=True
-)
-
-
-sparkr = Module(
-    name="sparkr",
-    dependencies=[sql, mllib],
-    source_file_regexes=[
-        "R/",
-    ],
-    should_run_r_tests=True
-)
-
-
-docs = Module(
-    name="docs",
-    dependencies=[],
-    source_file_regexes=[
-        "docs/",
-    ]
-)
-
-
-ec2 = Module(
-    name="ec2",
-    dependencies=[],
-    source_file_regexes=[
-        "ec2/",
-    ]
-)
-
-
-# The root module is a dummy module which is used to run all of the tests.
-# No other modules should directly depend on this module.
-root = Module(
-    name="root",
-    dependencies=[],
-    source_file_regexes=[],
-    # In order to run all of the tests, enable every test profile:
-    build_profile_flags=
-        list(set(itertools.chain.from_iterable(m.build_profile_flags for m in all_modules))),
-    sbt_test_goals=[
-        "test",
-    ],
-    should_run_python_tests=True,
-    should_run_r_tests=True
-)
 
 
 def determine_modules_for_files(filenames):
     """
     Given a list of filenames, return the set of modules that contain those files.
     If a file is not associated with a more specific submodule, then this method will consider that
-    file to belong to the 'root' module.
+    file to belong to the 'root' module. `.github` directory is counted only in GitHub Actions,
+    and `appveyor.yml` is always ignored because this file is dedicated only to AppVeyor builds.
 
-    >>> sorted(x.name for x in determine_modules_for_files(["python/pyspark/a.py", "sql/test/foo"]))
-    ['pyspark', 'sql']
+    >>> sorted(x.name for x in determine_modules_for_files(["python/pyspark/a.py", "sql/core/foo"]))
+    ['pyspark-core', 'sql']
     >>> [x.name for x in determine_modules_for_files(["file_not_matched_by_any_subproject"])]
     ['root']
+    >>> [x.name for x in determine_modules_for_files(["appveyor.yml"])]
+    []
     """
     changed_modules = set()
     for filename in filenames:
+        if filename in ("appveyor.yml",):
+            continue
+        if ("GITHUB_ACTIONS" not in os.environ) and filename.startswith(".github"):
+            continue
         matched_at_least_one_module = False
-        for module in all_modules:
+        for module in modules.all_modules:
             if module.contains_file(filename):
                 changed_modules.add(module)
                 matched_at_least_one_module = True
         if not matched_at_least_one_module:
-            changed_modules.add(root)
+            changed_modules.add(modules.root)
     return changed_modules
 
 
@@ -352,104 +88,83 @@ def identify_changed_files_from_git_commits(patch_sha, target_branch=None, targe
         run_cmd(['git', 'fetch', 'origin', str(target_branch+':'+target_branch)])
     else:
         diff_target = target_ref
-    raw_output = subprocess.check_output(['git', 'diff', '--name-only', patch_sha, diff_target])
+    raw_output = subprocess.check_output(['git', 'diff', '--name-only', patch_sha, diff_target],
+                                         universal_newlines=True)
     # Remove any empty strings
     return [f for f in raw_output.split('\n') if f]
 
 
-def determine_modules_to_test(changed_modules):
+def setup_test_environ(environ):
+    print("[info] Setup the following environment variables for tests: ")
+    for (k, v) in environ.items():
+        print("%s=%s" % (k, v))
+        os.environ[k] = v
+
+
+def determine_modules_to_test(changed_modules, deduplicated=True):
     """
     Given a set of modules that have changed, compute the transitive closure of those modules'
     dependent modules in order to determine the set of modules that should be tested.
 
-    >>> sorted(x.name for x in determine_modules_to_test([root]))
+    Returns a topologically-sorted list of modules (ties are broken by sorting on module names).
+    If ``deduplicated`` is disabled, the modules are returned without tacking the deduplication
+    by dependencies into account.
+
+    >>> [x.name for x in determine_modules_to_test([modules.root])]
     ['root']
-    >>> sorted(x.name for x in determine_modules_to_test([graphx]))
-    ['examples', 'graphx']
-    >>> sorted(x.name for x in determine_modules_to_test([sql]))
-    ['examples', 'hive-thriftserver', 'mllib', 'pyspark', 'sparkr', 'sql']
+    >>> [x.name for x in determine_modules_to_test([modules.build])]
+    ['root']
+    >>> [x.name for x in determine_modules_to_test([modules.core])]
+    ['root']
+    >>> [x.name for x in determine_modules_to_test([modules.launcher])]
+    ['root']
+    >>> [x.name for x in determine_modules_to_test([modules.graphx])]
+    ['graphx', 'examples']
+    >>> [x.name for x in determine_modules_to_test([modules.sql])]
+    ... # doctest: +NORMALIZE_WHITESPACE
+    ['sql', 'avro', 'hive', 'mllib', 'sql-kafka-0-10', 'examples', 'hive-thriftserver',
+     'pyspark-sql', 'repl', 'sparkr', 'pyspark-mllib', 'pyspark-pandas', 'pyspark-ml']
+    >>> sorted([x.name for x in determine_modules_to_test(
+    ...     [modules.sparkr, modules.sql], deduplicated=False)])
+    ... # doctest: +NORMALIZE_WHITESPACE
+    ['avro', 'examples', 'hive', 'hive-thriftserver', 'mllib', 'pyspark-ml',
+     'pyspark-mllib', 'pyspark-pandas', 'pyspark-sql', 'repl', 'sparkr', 'sql', 'sql-kafka-0-10']
+    >>> sorted([x.name for x in determine_modules_to_test(
+    ...     [modules.sql, modules.core], deduplicated=False)])
+    ... # doctest: +NORMALIZE_WHITESPACE
+    ['avro', 'catalyst', 'core', 'examples', 'graphx', 'hive', 'hive-thriftserver',
+     'mllib', 'mllib-local', 'pyspark-core', 'pyspark-ml', 'pyspark-mllib', 'pyspark-pandas',
+     'pyspark-resource', 'pyspark-sql', 'pyspark-streaming', 'repl', 'root',
+     'sparkr', 'sql', 'sql-kafka-0-10', 'streaming', 'streaming-kafka-0-10',
+     'streaming-kinesis-asl']
     """
-    # If we're going to have to run all of the tests, then we can just short-circuit
-    # and return 'root'. No module depends on root, so if it appears then it will be
-    # in changed_modules.
-    if root in changed_modules:
-        return [root]
     modules_to_test = set()
     for module in changed_modules:
-        modules_to_test = modules_to_test.union(determine_modules_to_test(module.dependent_modules))
-    return modules_to_test.union(set(changed_modules))
+        modules_to_test = modules_to_test.union(
+            determine_modules_to_test(module.dependent_modules, deduplicated))
+    modules_to_test = modules_to_test.union(set(changed_modules))
+
+    if not deduplicated:
+        return modules_to_test
+
+    # If we need to run all of the tests, then we should short-circuit and return 'root'
+    if modules.root in modules_to_test:
+        return [modules.root]
+    return toposort_flatten(
+        {m: set(m.dependencies).intersection(modules_to_test) for m in modules_to_test}, sort=True)
+
+
+def determine_tags_to_exclude(changed_modules):
+    tags = []
+    for m in modules.all_modules:
+        if m not in changed_modules:
+            tags += m.test_tags
+    return tags
 
 
 # -------------------------------------------------------------------------------------------------
 # Functions for working with subprocesses and shell tools
 # -------------------------------------------------------------------------------------------------
-
-def get_error_codes(err_code_file):
-    """Function to retrieve all block numbers from the `run-tests-codes.sh`
-    file to maintain backwards compatibility with the `run-tests-jenkins`
-    script"""
-
-    with open(err_code_file, 'r') as f:
-        err_codes = [e.split()[1].strip().split('=')
-                     for e in f if e.startswith("readonly")]
-        return dict(err_codes)
-
-
-ERROR_CODES = get_error_codes(os.path.join(SPARK_HOME, "dev/run-tests-codes.sh"))
-
-
-def exit_from_command_with_retcode(cmd, retcode):
-    print "[error] running", ' '.join(cmd), "; received return code", retcode
-    sys.exit(int(os.environ.get("CURRENT_BLOCK", 255)))
-
-
-def rm_r(path):
-    """Given an arbitrary path properly remove it with the correct python
-    construct if it exists
-    - from: http://stackoverflow.com/a/9559881"""
-
-    if os.path.isdir(path):
-        shutil.rmtree(path)
-    elif os.path.exists(path):
-        os.remove(path)
-
-
-def run_cmd(cmd):
-    """Given a command as a list of arguments will attempt to execute the
-    command from the determined SPARK_HOME directory and, on failure, print
-    an error message"""
-
-    if not isinstance(cmd, list):
-        cmd = cmd.split()
-    try:
-        subprocess.check_call(cmd)
-    except subprocess.CalledProcessError as e:
-        exit_from_command_with_retcode(e.cmd, e.returncode)
-
-
-def is_exe(path):
-    """Check if a given path is an executable file
-    - from: http://stackoverflow.com/a/377028"""
-
-    return os.path.isfile(path) and os.access(path, os.X_OK)
-
-
-def which(program):
-    """Find and return the given program by its absolute path or 'None'
-    - from: http://stackoverflow.com/a/377028"""
-
-    fpath = os.path.split(program)[0]
-
-    if fpath:
-        if is_exe(program):
-            return program
-    else:
-        for path in os.environ.get("PATH").split(os.pathsep):
-            path = path.strip('"')
-            exe_file = os.path.join(path, program)
-            if is_exe(exe_file):
-                return exe_file
-    return None
 
 
 def determine_java_executable():
@@ -468,41 +183,19 @@ def determine_java_executable():
     return java_exe if java_exe else which("java")
 
 
-JavaVersion = namedtuple('JavaVersion', ['major', 'minor', 'patch', 'update'])
-
-
-def determine_java_version(java_exe):
-    """Given a valid java executable will return its version in named tuple format
-    with accessors '.major', '.minor', '.patch', '.update'"""
-
-    raw_output = subprocess.check_output([java_exe, "-version"],
-                                         stderr=subprocess.STDOUT)
-    raw_version_str = raw_output.split('\n')[0]  # eg 'java version "1.8.0_25"'
-    version_str = raw_version_str.split()[-1].strip('"')  # eg '1.8.0_25'
-    version, update = version_str.split('_')  # eg ['1.8.0', '25']
-
-    # map over the values and convert them to integers
-    version_info = [int(x) for x in version.split('.') + [update]]
-
-    return JavaVersion(major=version_info[0],
-                       minor=version_info[1],
-                       patch=version_info[2],
-                       update=version_info[3])
-
-
 # -------------------------------------------------------------------------------------------------
 # Functions for running the other build and test scripts
 # -------------------------------------------------------------------------------------------------
 
 
 def set_title_and_block(title, err_block):
-    os.environ["CURRENT_BLOCK"] = ERROR_CODES[err_block]
+    os.environ["CURRENT_BLOCK"] = str(ERROR_CODES[err_block])
     line_str = '=' * 72
 
-    print
-    print line_str
-    print title
-    print line_str
+    print('')
+    print(line_str)
+    print(title)
+    print(line_str)
 
 
 def run_apache_rat_checks():
@@ -510,9 +203,21 @@ def run_apache_rat_checks():
     run_cmd([os.path.join(SPARK_HOME, "dev", "check-license")])
 
 
-def run_scala_style_checks():
+def run_scala_style_checks(extra_profiles):
+    build_profiles = extra_profiles + modules.root.build_profile_flags
     set_title_and_block("Running Scala style checks", "BLOCK_SCALA_STYLE")
-    run_cmd([os.path.join(SPARK_HOME, "dev", "lint-scala")])
+    profiles = " ".join(build_profiles)
+    print("[info] Checking Scala style using SBT with these profiles: ", profiles)
+    run_cmd([os.path.join(SPARK_HOME, "dev", "lint-scala"), profiles])
+
+
+def run_java_style_checks(build_profiles):
+    set_title_and_block("Running Java style checks", "BLOCK_JAVA_STYLE")
+    # The same profiles used for building are used to run Checkstyle by SBT as well because
+    # the previous build looks reused for Checkstyle and affecting Checkstyle. See SPARK-27130.
+    profiles = " ".join(build_profiles)
+    print("[info] Checking Java style using SBT with these profiles: ", profiles)
+    run_cmd([os.path.join(SPARK_HOME, "dev", "sbt-checkstyle"), profiles])
 
 
 def run_python_style_checks():
@@ -520,20 +225,33 @@ def run_python_style_checks():
     run_cmd([os.path.join(SPARK_HOME, "dev", "lint-python")])
 
 
+def run_sparkr_style_checks():
+    set_title_and_block("Running R style checks", "BLOCK_R_STYLE")
+
+    if which("R"):
+        # R style check should be executed after `install-dev.sh`.
+        # Since warnings about `no visible global function definition` appear
+        # without the installation. SEE ALSO: SPARK-9121.
+        run_cmd([os.path.join(SPARK_HOME, "dev", "lint-r")])
+    else:
+        print("Ignoring SparkR style check as R was not found in PATH")
+
+
 def build_spark_documentation():
     set_title_and_block("Building Spark Documentation", "BLOCK_DOCUMENTATION")
-    os.environ["PRODUCTION"] = "1 jekyll build"
+    os.environ["PRODUCTION"] = "1"
 
     os.chdir(os.path.join(SPARK_HOME, "docs"))
 
-    jekyll_bin = which("jekyll")
+    bundle_bin = which("bundle")
 
-    if not jekyll_bin:
-        print "[error] Cannot find a version of `jekyll` on the system; please",
-        print "install one and retry to build documentation."
+    if not bundle_bin:
+        print("[error] Cannot find a version of `bundle` on the system; please",
+              " install one with `gem install bundler` and retry to build documentation.")
         sys.exit(int(os.environ.get("CURRENT_BLOCK", 255)))
     else:
-        run_cmd([jekyll_bin, "build"])
+        run_cmd([bundle_bin, "install"])
+        run_cmd([bundle_bin, "exec", "jekyll", "build"])
 
     os.chdir(SPARK_HOME)
 
@@ -542,7 +260,8 @@ def exec_maven(mvn_args=()):
     """Will call Maven in the current directory with the list of mvn_args passed
     in and returns the subprocess for any further processing"""
 
-    run_cmd([os.path.join(SPARK_HOME, "build", "mvn")] + mvn_args)
+    flags = [os.path.join(SPARK_HOME, "build", "mvn")]
+    run_cmd(flags + mvn_args)
 
 
 def exec_sbt(sbt_args=()):
@@ -551,9 +270,9 @@ def exec_sbt(sbt_args=()):
 
     sbt_cmd = [os.path.join(SPARK_HOME, "build", "sbt")] + sbt_args
 
-    sbt_output_filter = re.compile("^.*[info].*Resolving" + "|" +
-                                   "^.*[warn].*Merging" + "|" +
-                                   "^.*[info].*Including")
+    sbt_output_filter = re.compile(b"^.*[info].*Resolving" + b"|" +
+                                   b"^.*[warn].*Merging" + b"|" +
+                                   b"^.*[info].*Including")
 
     # NOTE: echo "q" is needed because sbt on encountering a build file
     # with failure (either resolution or compilation) prompts the user for
@@ -564,142 +283,314 @@ def exec_sbt(sbt_args=()):
                                 stdin=echo_proc.stdout,
                                 stdout=subprocess.PIPE)
     echo_proc.wait()
-    for line in iter(sbt_proc.stdout.readline, ''):
+    for line in iter(sbt_proc.stdout.readline, b''):
         if not sbt_output_filter.match(line):
-            print line,
+            print(line.decode('utf-8'), end='')
     retcode = sbt_proc.wait()
 
-    if retcode > 0:
+    if retcode != 0:
         exit_from_command_with_retcode(sbt_cmd, retcode)
 
 
 def get_hadoop_profiles(hadoop_version):
     """
-    For the given Hadoop version tag, return a list of SBT profile flags for
+    For the given Hadoop version tag, return a list of Maven/SBT profile flags for
     building and testing against that Hadoop version.
     """
 
     sbt_maven_hadoop_profiles = {
-        "hadoop1.0": ["-Phadoop-1", "-Dhadoop.version=1.0.4"],
-        "hadoop2.0": ["-Phadoop-1", "-Dhadoop.version=2.0.0-mr1-cdh4.1.1"],
-        "hadoop2.2": ["-Pyarn", "-Phadoop-2.2"],
-        "hadoop2.3": ["-Pyarn", "-Phadoop-2.3", "-Dhadoop.version=2.3.0"],
+        "hadoop2.7": ["-Phadoop-2.7"],
+        "hadoop3.2": ["-Phadoop-3.2"],
     }
 
     if hadoop_version in sbt_maven_hadoop_profiles:
         return sbt_maven_hadoop_profiles[hadoop_version]
     else:
-        print "[error] Could not find", hadoop_version, "in the list. Valid options",
-        print "are", sbt_maven_hadoop_profiles.keys()
+        print("[error] Could not find", hadoop_version, "in the list. Valid options",
+              " are", sbt_maven_hadoop_profiles.keys())
         sys.exit(int(os.environ.get("CURRENT_BLOCK", 255)))
 
 
-def build_spark_maven(hadoop_version):
+def get_hive_profiles(hive_version):
+    """
+    For the given Hive version tag, return a list of Maven/SBT profile flags for
+    building and testing against that Hive version.
+    """
+
+    sbt_maven_hive_profiles = {
+        "hive2.3": ["-Phive-2.3"],
+    }
+
+    if hive_version in sbt_maven_hive_profiles:
+        return sbt_maven_hive_profiles[hive_version]
+    else:
+        print("[error] Could not find", hive_version, "in the list. Valid options",
+              " are", sbt_maven_hive_profiles.keys())
+        sys.exit(int(os.environ.get("CURRENT_BLOCK", 255)))
+
+
+def build_spark_maven(extra_profiles):
     # Enable all of the profiles for the build:
-    build_profiles = get_hadoop_profiles(hadoop_version) + root.build_profile_flags
+    build_profiles = extra_profiles + modules.root.build_profile_flags
     mvn_goals = ["clean", "package", "-DskipTests"]
     profiles_and_goals = build_profiles + mvn_goals
 
-    print "[info] Building Spark (w/Hive 0.13.1) using Maven with these arguments:",
-    print " ".join(profiles_and_goals)
+    print("[info] Building Spark using Maven with these arguments: ", " ".join(profiles_and_goals))
 
     exec_maven(profiles_and_goals)
 
 
-def build_spark_sbt(hadoop_version):
+def build_spark_sbt(extra_profiles):
     # Enable all of the profiles for the build:
-    build_profiles = get_hadoop_profiles(hadoop_version) + root.build_profile_flags
-    sbt_goals = ["package",
-                 "assembly/assembly",
-                 "streaming-kafka-assembly/assembly"]
+    build_profiles = extra_profiles + modules.root.build_profile_flags
+    sbt_goals = ["test:package",  # Build test jars as some tests depend on them
+                 "streaming-kinesis-asl-assembly/assembly"]
     profiles_and_goals = build_profiles + sbt_goals
 
-    print "[info] Building Spark (w/Hive 0.13.1) using SBT with these arguments:",
-    print " ".join(profiles_and_goals)
+    print("[info] Building Spark using SBT with these arguments: ", " ".join(profiles_and_goals))
 
     exec_sbt(profiles_and_goals)
 
 
-def build_apache_spark(build_tool, hadoop_version):
-    """Will build Spark against Hive v0.13.1 given the passed in build tool (either `sbt` or
-    `maven`). Defaults to using `sbt`."""
+def build_spark_unidoc_sbt(extra_profiles):
+    set_title_and_block("Building Unidoc API Documentation", "BLOCK_DOCUMENTATION")
+    # Enable all of the profiles for the build:
+    build_profiles = extra_profiles + modules.root.build_profile_flags
+    sbt_goals = ["unidoc"]
+    profiles_and_goals = build_profiles + sbt_goals
+
+    print("[info] Building Spark unidoc using SBT with these arguments: ",
+          " ".join(profiles_and_goals))
+
+    exec_sbt(profiles_and_goals)
+
+
+def build_spark_assembly_sbt(extra_profiles, checkstyle=False):
+    # Enable all of the profiles for the build:
+    build_profiles = extra_profiles + modules.root.build_profile_flags
+    sbt_goals = ["assembly/package"]
+    profiles_and_goals = build_profiles + sbt_goals
+    print("[info] Building Spark assembly using SBT with these arguments: ",
+          " ".join(profiles_and_goals))
+    exec_sbt(profiles_and_goals)
+
+    if checkstyle:
+        run_java_style_checks(build_profiles)
+
+    if not os.environ.get("AMPLAB_JENKINS"):
+        build_spark_unidoc_sbt(extra_profiles)
+
+
+def build_apache_spark(build_tool, extra_profiles):
+    """Will build Spark with the extra profiles and the passed in build tool
+    (either `sbt` or `maven`). Defaults to using `sbt`."""
 
     set_title_and_block("Building Spark", "BLOCK_BUILD")
 
     rm_r("lib_managed")
 
     if build_tool == "maven":
-        build_spark_maven(hadoop_version)
+        build_spark_maven(extra_profiles)
     else:
-        build_spark_sbt(hadoop_version)
+        build_spark_sbt(extra_profiles)
 
 
-def detect_binary_inop_with_mima():
+def detect_binary_inop_with_mima(extra_profiles):
+    build_profiles = extra_profiles + modules.root.build_profile_flags
     set_title_and_block("Detecting binary incompatibilities with MiMa", "BLOCK_MIMA")
-    run_cmd([os.path.join(SPARK_HOME, "dev", "mima")])
+    profiles = " ".join(build_profiles)
+    print("[info] Detecting binary incompatibilities with MiMa using SBT with these profiles: ",
+          profiles)
+    run_cmd([os.path.join(SPARK_HOME, "dev", "mima"), profiles])
 
 
 def run_scala_tests_maven(test_profiles):
     mvn_test_goals = ["test", "--fail-at-end"]
+
     profiles_and_goals = test_profiles + mvn_test_goals
 
-    print "[info] Running Spark tests using Maven with these arguments:",
-    print " ".join(profiles_and_goals)
+    print("[info] Running Spark tests using Maven with these arguments: ",
+          " ".join(profiles_and_goals))
 
     exec_maven(profiles_and_goals)
 
 
 def run_scala_tests_sbt(test_modules, test_profiles):
 
-    sbt_test_goals = set(itertools.chain.from_iterable(m.sbt_test_goals for m in test_modules))
+    sbt_test_goals = list(itertools.chain.from_iterable(m.sbt_test_goals for m in test_modules))
 
     if not sbt_test_goals:
         return
 
-    profiles_and_goals = test_profiles + list(sbt_test_goals)
+    profiles_and_goals = test_profiles + sbt_test_goals
 
-    print "[info] Running Spark tests using SBT with these arguments:",
-    print " ".join(profiles_and_goals)
+    print("[info] Running Spark tests using SBT with these arguments: ",
+          " ".join(profiles_and_goals))
 
     exec_sbt(profiles_and_goals)
 
 
-def run_scala_tests(build_tool, hadoop_version, test_modules):
+def run_scala_tests(build_tool, extra_profiles, test_modules, excluded_tags, included_tags):
     """Function to properly execute all tests passed in as a set from the
     `determine_test_suites` function"""
     set_title_and_block("Running Spark unit tests", "BLOCK_SPARK_UNIT_TESTS")
 
     test_modules = set(test_modules)
 
-    test_profiles = get_hadoop_profiles(hadoop_version) + \
+    test_profiles = extra_profiles + \
         list(set(itertools.chain.from_iterable(m.build_profile_flags for m in test_modules)))
+
+    if included_tags:
+        test_profiles += ['-Dtest.include.tags=' + ",".join(included_tags)]
+    if excluded_tags:
+        test_profiles += ['-Dtest.exclude.tags=' + ",".join(excluded_tags)]
+
+    # set up java11 env if this is a pull request build with 'test-java11' in the title
+    if "ghprbPullTitle" in os.environ:
+        if "test-java11" in os.environ["ghprbPullTitle"].lower():
+            os.environ["JAVA_HOME"] = "/usr/java/jdk-11.0.1"
+            os.environ["PATH"] = "%s/bin:%s" % (os.environ["JAVA_HOME"], os.environ["PATH"])
+            test_profiles += ['-Djava.version=11']
+
     if build_tool == "maven":
         run_scala_tests_maven(test_profiles)
     else:
         run_scala_tests_sbt(test_modules, test_profiles)
 
 
-def run_python_tests():
+def run_python_tests(test_modules, parallelism, with_coverage=False):
     set_title_and_block("Running PySpark tests", "BLOCK_PYSPARK_UNIT_TESTS")
 
-    run_cmd([os.path.join(SPARK_HOME, "python", "run-tests")])
+    if with_coverage:
+        # Coverage makes the PySpark tests flaky due to heavy parallelism.
+        # When we run PySpark tests with coverage, it uses 4 for now as
+        # workaround.
+        parallelism = 4
+        script = "run-tests-with-coverage"
+    else:
+        script = "run-tests"
+    command = [os.path.join(SPARK_HOME, "python", script)]
+    if test_modules != [modules.root]:
+        command.append("--modules=%s" % ','.join(m.name for m in test_modules))
+    command.append("--parallelism=%i" % parallelism)
+    if "GITHUB_ACTIONS" in os.environ:
+        # See SPARK-33565. Python 3.8 was temporarily removed as its default Python executables
+        # to test because of Jenkins environment issue. Once Jenkins has Python 3.8 to test,
+        # we should remove this change back and add python3.8 into python/run-tests.py script.
+        command.append("--python-executable=%s" % ','.join(
+            x for x in ["python3.6", "python3.8", "pypy3"] if which(x)))
+    run_cmd(command)
+
+    if with_coverage:
+        post_python_tests_results()
+
+
+def post_python_tests_results():
+    if "SPARK_TEST_KEY" not in os.environ:
+        print("[error] 'SPARK_TEST_KEY' environment variable was not set. Unable to post "
+              "PySpark coverage results.")
+        sys.exit(1)
+    spark_test_key = os.environ.get("SPARK_TEST_KEY")
+    # The steps below upload HTMLs to 'github.com/spark-test/pyspark-coverage-site'.
+    # 1. Clone PySpark coverage site.
+    run_cmd([
+        "git",
+        "clone",
+        "https://spark-test:%s@github.com/spark-test/pyspark-coverage-site.git" % spark_test_key])
+    # 2. Remove existing HTMLs.
+    run_cmd(["rm", "-fr"] + glob.glob("pyspark-coverage-site/*"))
+    # 3. Copy generated coverage HTMLs.
+    for f in glob.glob("%s/python/test_coverage/htmlcov/*" % SPARK_HOME):
+        shutil.copy(f, "pyspark-coverage-site/")
+    os.chdir("pyspark-coverage-site")
+    try:
+        # 4. Check out to a temporary branch.
+        run_cmd(["git", "symbolic-ref", "HEAD", "refs/heads/latest_branch"])
+        # 5. Add all the files.
+        run_cmd(["git", "add", "-A"])
+        # 6. Commit current HTMLs.
+        run_cmd([
+            "git",
+            "-c",
+            "user.name='Apache Spark Test Account'",
+            "-c",
+            "user.email='sparktestacc@gmail.com'",
+            "commit",
+            "-am",
+            "Coverage report at latest commit in Apache Spark"])
+        # 7. Delete the old branch.
+        run_cmd(["git", "branch", "-D", "gh-pages"])
+        # 8. Rename the temporary branch to master.
+        run_cmd(["git", "branch", "-m", "gh-pages"])
+        # 9. Finally, force update to our repository.
+        run_cmd(["git", "push", "-f", "origin", "gh-pages"])
+    finally:
+        os.chdir("..")
+        # 10. Remove the cloned repository.
+        shutil.rmtree("pyspark-coverage-site")
+
+
+def run_python_packaging_tests():
+    set_title_and_block("Running PySpark packaging tests", "BLOCK_PYSPARK_PIP_TESTS")
+    command = [os.path.join(SPARK_HOME, "dev", "run-pip-tests")]
+    run_cmd(command)
+
+
+def run_build_tests():
+    set_title_and_block("Running build tests", "BLOCK_BUILD_TESTS")
+    run_cmd([os.path.join(SPARK_HOME, "dev", "test-dependencies.sh")])
 
 
 def run_sparkr_tests():
     set_title_and_block("Running SparkR tests", "BLOCK_SPARKR_UNIT_TESTS")
 
     if which("R"):
-        run_cmd([os.path.join(SPARK_HOME, "R", "install-dev.sh")])
         run_cmd([os.path.join(SPARK_HOME, "R", "run-tests.sh")])
     else:
-        print "Ignoring SparkR tests as R was not found in PATH"
+        print("Ignoring SparkR tests as R was not found in PATH")
+
+
+def parse_opts():
+    parser = ArgumentParser(
+        prog="run-tests"
+    )
+    parser.add_argument(
+        "-p", "--parallelism", type=int, default=8,
+        help="The number of suites to test in parallel (default %(default)d)"
+    )
+    parser.add_argument(
+        "-m", "--modules", type=str,
+        default=None,
+        help="A comma-separated list of modules to test "
+             "(default: %s)" % ",".join(sorted([m.name for m in modules.all_modules]))
+    )
+    parser.add_argument(
+        "-e", "--excluded-tags", type=str,
+        default=None,
+        help="A comma-separated list of tags to exclude in the tests, "
+             "e.g., org.apache.spark.tags.ExtendedHiveTest "
+    )
+    parser.add_argument(
+        "-i", "--included-tags", type=str,
+        default=None,
+        help="A comma-separated list of tags to include in the tests, "
+             "e.g., org.apache.spark.tags.ExtendedHiveTest "
+    )
+
+    args, unknown = parser.parse_known_args()
+    if unknown:
+        parser.error("Unsupported arguments: %s" % ' '.join(unknown))
+    if args.parallelism < 1:
+        parser.error("Parallelism cannot be less than 1")
+    return args
 
 
 def main():
+    opts = parse_opts()
     # Ensure the user home directory (HOME) is valid and is an absolute directory
     if not USER_HOME or not os.path.isabs(USER_HOME):
-        print "[error] Cannot determine your home directory as an absolute path;",
-        print "ensure the $HOME environment variable is set properly."
+        print("[error] Cannot determine your home directory as an absolute path;",
+              " ensure the $HOME environment variable is set properly.")
         sys.exit(1)
 
     os.chdir(SPARK_HOME)
@@ -708,74 +599,174 @@ def main():
     rm_r(os.path.join(USER_HOME, ".ivy2", "local", "org.apache.spark"))
     rm_r(os.path.join(USER_HOME, ".ivy2", "cache", "org.apache.spark"))
 
-    os.environ["CURRENT_BLOCK"] = ERROR_CODES["BLOCK_GENERAL"]
+    os.environ["CURRENT_BLOCK"] = str(ERROR_CODES["BLOCK_GENERAL"])
 
     java_exe = determine_java_executable()
 
     if not java_exe:
-        print "[error] Cannot find a version of `java` on the system; please",
-        print "install one and retry."
+        print("[error] Cannot find a version of `java` on the system; please",
+              " install one and retry.")
         sys.exit(2)
 
-    java_version = determine_java_version(java_exe)
+    # Install SparkR
+    should_only_test_modules = opts.modules is not None
+    test_modules = []
+    if should_only_test_modules:
+        str_test_modules = [m.strip() for m in opts.modules.split(",")]
+        test_modules = [m for m in modules.all_modules if m.name in str_test_modules]
 
-    if java_version.minor < 8:
-        print "[warn] Java 8 tests will not run because JDK version is < 1.8."
+    if not should_only_test_modules or modules.sparkr in test_modules:
+        # If tests modules are specified, we will not run R linter.
+        # SparkR needs the manual SparkR installation.
+        if which("R"):
+            run_cmd([os.path.join(SPARK_HOME, "R", "install-dev.sh")])
+        else:
+            print("Cannot install SparkR as R was not found in PATH")
 
     if os.environ.get("AMPLAB_JENKINS"):
         # if we're on the Amplab Jenkins build servers setup variables
         # to reflect the environment settings
         build_tool = os.environ.get("AMPLAB_JENKINS_BUILD_TOOL", "sbt")
-        hadoop_version = os.environ.get("AMPLAB_JENKINS_BUILD_PROFILE", "hadoop2.3")
+        hadoop_version = os.environ.get("AMPLAB_JENKINS_BUILD_PROFILE", "hadoop3.2")
+        hive_version = os.environ.get("AMPLAB_JENKINS_BUILD_HIVE_PROFILE", "hive2.3")
         test_env = "amplab_jenkins"
         # add path for Python3 in Jenkins if we're calling from a Jenkins machine
-        os.environ["PATH"] = "/home/anaconda/envs/py3k/bin:" + os.environ.get("PATH")
+        # TODO(sknapp):  after all builds are ported to the ubuntu workers, change this to be:
+        # /home/jenkins/anaconda2/envs/py36/bin
+        os.environ["PATH"] = "/home/anaconda/envs/py36/bin:" + os.environ.get("PATH")
     else:
-        # else we're running locally and can use local settings
+        # else we're running locally or GitHub Actions.
         build_tool = "sbt"
-        hadoop_version = "hadoop2.3"
-        test_env = "local"
+        hadoop_version = os.environ.get("HADOOP_PROFILE", "hadoop3.2")
+        hive_version = os.environ.get("HIVE_PROFILE", "hive2.3")
+        if "GITHUB_ACTIONS" in os.environ:
+            test_env = "github_actions"
+        else:
+            test_env = "local"
 
-    print "[info] Using build tool", build_tool, "with Hadoop profile", hadoop_version,
-    print "under environment", test_env
+    print("[info] Using build tool", build_tool, "with Hadoop profile", hadoop_version,
+          "and Hive profile", hive_version, "under environment", test_env)
+    extra_profiles = get_hadoop_profiles(hadoop_version) + get_hive_profiles(hive_version)
 
-    changed_modules = None
-    changed_files = None
-    if test_env == "amplab_jenkins" and os.environ.get("AMP_JENKINS_PRB"):
+    changed_modules = []
+    changed_files = []
+    included_tags = []
+    excluded_tags = []
+    if should_only_test_modules:
+        # If we're running the tests in GitHub Actions, attempt to detect and test
+        # only the affected modules.
+        if test_env == "github_actions":
+            if os.environ["APACHE_SPARK_REF"] != "":
+                # Fork repository
+                changed_files = identify_changed_files_from_git_commits(
+                    "HEAD", target_ref=os.environ["APACHE_SPARK_REF"])
+            else:
+                # Build for each commit.
+                changed_files = identify_changed_files_from_git_commits(
+                    os.environ["GITHUB_SHA"], target_ref=os.environ["GITHUB_PREV_SHA"])
+
+            modules_to_test = determine_modules_to_test(
+                determine_modules_for_files(changed_files), deduplicated=False)
+
+            if modules.root not in modules_to_test:
+                # If root module is not found, only test the intersected modules.
+                # If root module is found, just run the modules as specified initially.
+                test_modules = list(set(modules_to_test).intersection(test_modules))
+
+        changed_modules = test_modules
+        if len(changed_modules) == 0:
+            print("[info] There are no modules to test, exiting without testing.")
+            return
+
+    # If we're running the tests in AMPLab Jenkins, calculate the diff from the targeted branch, and
+    # detect modules to test.
+    elif test_env == "amplab_jenkins" and os.environ.get("AMP_JENKINS_PRB"):
         target_branch = os.environ["ghprbTargetBranch"]
         changed_files = identify_changed_files_from_git_commits("HEAD", target_branch=target_branch)
         changed_modules = determine_modules_for_files(changed_files)
+        test_modules = determine_modules_to_test(changed_modules)
+        excluded_tags = determine_tags_to_exclude(changed_modules)
+
+    # If there is no changed module found, tests all.
     if not changed_modules:
-        changed_modules = [root]
-    print "[info] Found the following changed modules:", ", ".join(x.name for x in changed_modules)
+        changed_modules = [modules.root]
+    if not test_modules:
+        test_modules = determine_modules_to_test(changed_modules)
 
-    test_modules = determine_modules_to_test(changed_modules)
+    if opts.excluded_tags:
+        excluded_tags.extend([t.strip() for t in opts.excluded_tags.split(",")])
+    if opts.included_tags:
+        included_tags.extend([t.strip() for t in opts.included_tags.split(",")])
 
-    # license checks
-    run_apache_rat_checks()
+    print("[info] Found the following changed modules:",
+          ", ".join(x.name for x in changed_modules))
 
-    # style checks
-    if not changed_files or any(f.endswith(".scala") for f in changed_files):
-        run_scala_style_checks()
-    if not changed_files or any(f.endswith(".py") for f in changed_files):
-        run_python_style_checks()
+    # setup environment variables
+    # note - the 'root' module doesn't collect environment variables for all modules. Because the
+    # environment variables should not be set if a module is not changed, even if running the 'root'
+    # module. So here we should use changed_modules rather than test_modules.
+    test_environ = {}
+    for m in changed_modules:
+        test_environ.update(m.environ)
+    setup_test_environ(test_environ)
+
+    should_run_java_style_checks = False
+    if not should_only_test_modules:
+        # license checks
+        run_apache_rat_checks()
+
+        # style checks
+        if not changed_files or any(f.endswith(".scala")
+                                    or f.endswith("scalastyle-config.xml")
+                                    for f in changed_files):
+            run_scala_style_checks(extra_profiles)
+        if not changed_files or any(f.endswith(".java")
+                                    or f.endswith("checkstyle.xml")
+                                    or f.endswith("checkstyle-suppressions.xml")
+                                    for f in changed_files):
+            # Run SBT Checkstyle after the build to prevent a side-effect to the build.
+            should_run_java_style_checks = True
+        if not changed_files or any(f.endswith("lint-python")
+                                    or f.endswith("tox.ini")
+                                    or f.endswith(".py")
+                                    for f in changed_files):
+            run_python_style_checks()
+        if not changed_files or any(f.endswith(".R")
+                                    or f.endswith("lint-r")
+                                    or f.endswith(".lintr")
+                                    for f in changed_files):
+            run_sparkr_style_checks()
 
     # determine if docs were changed and if we're inside the amplab environment
-    # note - the below commented out until *all* Jenkins workers can get `jekyll` installed
+    # note - the below commented out until *all* Jenkins workers can get the Bundler gem installed
     # if "DOCS" in changed_modules and test_env == "amplab_jenkins":
     #    build_spark_documentation()
 
+    if any(m.should_run_build_tests for m in test_modules) and test_env != "amplab_jenkins":
+        run_build_tests()
+
     # spark build
-    build_apache_spark(build_tool, hadoop_version)
+    build_apache_spark(build_tool, extra_profiles)
 
     # backwards compatibility checks
-    detect_binary_inop_with_mima()
+    if build_tool == "sbt":
+        # Note: compatibility tests only supported in sbt for now
+        detect_binary_inop_with_mima(extra_profiles)
+        # Since we did not build assembly/package before running dev/mima, we need to
+        # do it here because the tests still rely on it; see SPARK-13294 for details.
+        build_spark_assembly_sbt(extra_profiles, should_run_java_style_checks)
 
     # run the test suites
-    run_scala_tests(build_tool, hadoop_version, test_modules)
+    run_scala_tests(build_tool, extra_profiles, test_modules, excluded_tags, included_tags)
 
-    if any(m.should_run_python_tests for m in test_modules):
-        run_python_tests()
+    modules_with_python_tests = [m for m in test_modules if m.python_test_goals]
+    if modules_with_python_tests:
+        # We only run PySpark tests with coverage report in one specific job with
+        # Spark master with SBT in Jenkins.
+        is_sbt_master_job = "SPARK_MASTER_SBT_HADOOP_2_7" in os.environ
+        run_python_tests(
+            modules_with_python_tests, opts.parallelism, with_coverage=is_sbt_master_job)
+        run_python_packaging_tests()
     if any(m.should_run_r_tests for m in test_modules):
         run_sparkr_tests()
 
@@ -784,7 +775,8 @@ def _test():
     import doctest
     failure_count = doctest.testmod()[0]
     if failure_count:
-        exit(-1)
+        sys.exit(-1)
+
 
 if __name__ == "__main__":
     _test()

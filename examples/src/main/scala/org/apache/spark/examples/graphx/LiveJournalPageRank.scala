@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.graphx
 
 /**
@@ -22,7 +23,7 @@ package org.apache.spark.examples.graphx
  * http://snap.stanford.edu/data/soc-LiveJournal1.html.
  */
 object LiveJournalPageRank {
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     if (args.length < 1) {
       System.err.println(
         "Usage: LiveJournalPageRank <edge_list_file>\n" +
@@ -42,3 +43,4 @@ object LiveJournalPageRank {
     Analytics.main(args.patch(0, List("pagerank"), 0))
   }
 }
+// scalastyle:on println

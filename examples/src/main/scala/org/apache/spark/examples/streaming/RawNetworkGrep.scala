@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.streaming
 
 import org.apache.spark.SparkConf
@@ -36,7 +37,7 @@ import org.apache.spark.util.IntParam
  *   <batchMillise> is the Spark Streaming batch duration in milliseconds.
  */
 object RawNetworkGrep {
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     if (args.length != 4) {
       System.err.println("Usage: RawNetworkGrep <numStreams> <host> <port> <batchMillis>")
       System.exit(1)
@@ -53,8 +54,9 @@ object RawNetworkGrep {
       ssc.rawSocketStream[String](host, port, StorageLevel.MEMORY_ONLY_SER_2)).toArray
     val union = ssc.union(rawStreams)
     union.filter(_.contains("the")).count().foreachRDD(r =>
-      println("Grep count: " + r.collect().mkString))
+      println(s"Grep count: ${r.collect().mkString}"))
     ssc.start()
     ssc.awaitTermination()
   }
 }
+// scalastyle:on println

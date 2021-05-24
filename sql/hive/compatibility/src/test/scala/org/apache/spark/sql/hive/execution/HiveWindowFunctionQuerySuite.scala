@@ -18,7 +18,6 @@
 package org.apache.spark.sql.hive.execution
 
 import java.io.File
-import java.util.{Locale, TimeZone}
 
 import org.scalatest.BeforeAndAfter
 
@@ -32,17 +31,12 @@ import org.apache.spark.util.Utils
  * for different tests and there are a few properties needed to let Hive generate golden
  * files, every `createQueryTest` calls should explicitly set `reset` to `false`.
  */
-abstract class HiveWindowFunctionQueryBaseSuite extends HiveComparisonTest with BeforeAndAfter {
-  private val originalTimeZone = TimeZone.getDefault
-  private val originalLocale = Locale.getDefault
+class HiveWindowFunctionQuerySuite extends HiveComparisonTest with BeforeAndAfter {
   private val testTempDir = Utils.createTempDir()
 
-  override def beforeAll() {
-    TestHive.cacheTables = true
-    // Timezone is fixed to America/Los_Angeles for those timezone sensitive tests (timestamp_*)
-    TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
-    // Add Locale setting
-    Locale.setDefault(Locale.US)
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    TestHive.setCacheTables(true)
 
     // Create the table used in windowing.q
     sql("DROP TABLE IF EXISTS part")
@@ -57,7 +51,7 @@ abstract class HiveWindowFunctionQueryBaseSuite extends HiveComparisonTest with 
         |  p_size INT,
         |  p_container STRING,
         |  p_retailprice DOUBLE,
-        |  p_comment STRING)
+        |  p_comment STRING) USING hive
       """.stripMargin)
     val testData1 = TestHive.getHiveFile("data/files/part_tiny.txt").getCanonicalPath
     sql(
@@ -94,16 +88,18 @@ abstract class HiveWindowFunctionQueryBaseSuite extends HiveComparisonTest with 
     // This is used to generate golden files.
     sql("set hive.plan.serialization.format=kryo")
     // Explicitly set fs to local fs.
-    sql(s"set fs.default.name=file://$testTempDir/")
+    sql(s"set fs.defaultFS=file://$testTempDir/")
     // Ask Hive to run jobs in-process as a single map and reduce task.
-    sql("set mapred.job.tracker=local")
+    sql("set mapreduce.jobtracker.address=local")
   }
 
-  override def afterAll() {
-    TestHive.cacheTables = false
-    TimeZone.setDefault(originalTimeZone)
-    Locale.setDefault(originalLocale)
-    TestHive.reset()
+  override def afterAll(): Unit = {
+    try {
+      TestHive.setCacheTables(false)
+      TestHive.reset()
+    } finally {
+      super.afterAll()
+    }
   }
 
   /////////////////////////////////////////////////////////////////////////////
@@ -454,6 +450,9 @@ abstract class HiveWindowFunctionQueryBaseSuite extends HiveComparisonTest with 
       |window w1 as (distribute by p_mfgr sort by p_name rows between 2 preceding and 2 following)
     """.stripMargin, reset = false)
 
+  /* Disabled because:
+     - Spark uses a different default stddev.
+     - Tiny numerical differences in stddev results.
   createQueryTest("windowing.q -- 15. testExpressions",
     s"""
       |select  p_mfgr,p_name, p_size,
@@ -472,7 +471,7 @@ abstract class HiveWindowFunctionQueryBaseSuite extends HiveComparisonTest with 
       |window w1 as (distribute by p_mfgr sort by p_mfgr, p_name
       |             rows between 2 preceding and 2 following)
     """.stripMargin, reset = false)
-
+  */
   createQueryTest("windowing.q -- 16. testMultipleWindows",
     s"""
       |select  p_mfgr,p_name, p_size,
@@ -526,33 +525,11 @@ abstract class HiveWindowFunctionQueryBaseSuite extends HiveComparisonTest with 
       |             rows between 2 preceding and 2 following);
     """.stripMargin, reset = false)
 
-  // collect_set() output array in an arbitrary order, hence causes different result
-  // when running this test suite under Java 7 and 8.
-  // We change the original sql query a little bit for making the test suite passed
-  // under different JDK
-  createQueryTest("windowing.q -- 20. testSTATs",
-    """
-      |select p_mfgr,p_name, p_size, sdev, sdev_pop, uniq_data, var, cor, covarp
-      |from (
-      |select  p_mfgr,p_name, p_size,
-      |stddev(p_retailprice) over w1 as sdev,
-      |stddev_pop(p_retailprice) over w1 as sdev_pop,
-      |collect_set(p_size) over w1 as uniq_size,
-      |variance(p_retailprice) over w1 as var,
-      |corr(p_size, p_retailprice) over w1 as cor,
-      |covar_pop(p_size, p_retailprice) over w1 as covarp
-      |from part
-      |window w1 as (distribute by p_mfgr sort by p_mfgr, p_name
-      |             rows between 2 preceding and 2 following)
-      |) t lateral view explode(uniq_size) d as uniq_data
-      |order by p_mfgr,p_name, p_size, sdev, sdev_pop, uniq_data, var, cor, covarp
-    """.stripMargin, reset = false)
-
   createQueryTest("windowing.q -- 21. testDISTs",
     """
       |select  p_mfgr,p_name, p_size,
       |histogram_numeric(p_retailprice, 5) over w1 as hist,
-      |percentile(p_partkey, 0.5) over w1 as per,
+      |percentile(p_partkey, cast(0.5 as double)) over w1 as per,
       |row_number() over(distribute by p_mfgr sort by p_name) as rn
       |from part
       |window w1 as (distribute by p_mfgr sort by p_mfgr, p_name
@@ -759,51 +736,34 @@ abstract class HiveWindowFunctionQueryBaseSuite extends HiveComparisonTest with 
     """.stripMargin, reset = false)
 }
 
-class HiveWindowFunctionQueryWithoutCodeGenSuite extends HiveWindowFunctionQueryBaseSuite {
-  var originalCodegenEnabled: Boolean = _
-  override def beforeAll(): Unit = {
-    super.beforeAll()
-    originalCodegenEnabled = conf.codegenEnabled
-    sql("set spark.sql.codegen=false")
-  }
-
-  override def afterAll(): Unit = {
-    sql(s"set spark.sql.codegen=$originalCodegenEnabled")
-    super.afterAll()
-  }
-}
-
-abstract class HiveWindowFunctionQueryFileBaseSuite
+class HiveWindowFunctionQueryFileSuite
   extends HiveCompatibilitySuite with BeforeAndAfter {
-  private val originalTimeZone = TimeZone.getDefault
-  private val originalLocale = Locale.getDefault
   private val testTempDir = Utils.createTempDir()
 
-  override def beforeAll() {
-    TestHive.cacheTables = true
-    // Timezone is fixed to America/Los_Angeles for those timezone sensitive tests (timestamp_*)
-    TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
-    // Add Locale setting
-    Locale.setDefault(Locale.US)
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    TestHive.setCacheTables(true)
 
     // The following settings are used for generating golden files with Hive.
     // We have to use kryo to correctly let Hive serialize plans with window functions.
     // This is used to generate golden files.
-    sql("set hive.plan.serialization.format=kryo")
+    // sql("set hive.plan.serialization.format=kryo")
     // Explicitly set fs to local fs.
-    sql(s"set fs.default.name=file://$testTempDir/")
+    // sql(s"set fs.defaultFS=file://$testTempDir/")
     // Ask Hive to run jobs in-process as a single map and reduce task.
-    sql("set mapred.job.tracker=local")
+    // sql("set mapreduce.jobtracker.address=local")
   }
 
-  override def afterAll() {
-    TestHive.cacheTables = false
-    TimeZone.setDefault(originalTimeZone)
-    Locale.setDefault(originalLocale)
-    TestHive.reset()
+  override def afterAll(): Unit = {
+    try {
+      TestHive.setCacheTables(false)
+      TestHive.reset()
+    } finally {
+      super.afterAll()
+    }
   }
 
-  override def blackList: Seq[String] = Seq(
+  override def excludeList: Seq[String] = Seq(
     // Partitioned table functions are not supported.
     "ptf*",
     // tests of windowing.q are in HiveWindowFunctionQueryBaseSuite
@@ -824,30 +784,19 @@ abstract class HiveWindowFunctionQueryFileBaseSuite
     "windowing_ntile",
     "windowing_udaf",
     "windowing_windowspec",
-    "windowing_rank"
-  )
+    "windowing_rank",
 
-  override def whiteList: Seq[String] = Seq(
-    "windowing_udaf2",
+    // These tests DROP TABLE that don't exist (but do not specify IF EXISTS)
     "windowing_columnPruning",
     "windowing_adjust_rowcontainer_sz"
   )
 
+  override def includeList: Seq[String] = Seq(
+    "windowing_udaf2"
+  )
+
+  // Only run those query tests in the realIncludeList (do not try other ignored query files).
   override def testCases: Seq[(String, File)] = super.testCases.filter {
-    case (name, _) => realWhiteList.contains(name)
-  }
-}
-
-class HiveWindowFunctionQueryFileWithoutCodeGenSuite extends HiveWindowFunctionQueryFileBaseSuite {
-  var originalCodegenEnabled: Boolean = _
-  override def beforeAll(): Unit = {
-    super.beforeAll()
-    originalCodegenEnabled = conf.codegenEnabled
-    sql("set spark.sql.codegen=false")
-  }
-
-  override def afterAll(): Unit = {
-    sql(s"set spark.sql.codegen=$originalCodegenEnabled")
-    super.afterAll()
+    case (name, _) => realIncludeList.contains(name)
   }
 }

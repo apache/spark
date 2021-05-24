@@ -17,6 +17,9 @@
 
 package org.apache.spark.scheduler
 
+import org.apache.spark.resource.ResourceProfile
+import org.apache.spark.storage.BlockManagerId
+
 /**
  * A backend interface for scheduling systems that allows plugging in different ones under
  * TaskSchedulerImpl. We assume a Mesos-like model where the application gets resource offers as
@@ -27,11 +30,27 @@ private[spark] trait SchedulerBackend {
 
   def start(): Unit
   def stop(): Unit
+  /**
+   * Update the current offers and schedule tasks
+   */
   def reviveOffers(): Unit
   def defaultParallelism(): Int
 
-  def killTask(taskId: Long, executorId: String, interruptThread: Boolean): Unit =
+  /**
+   * Requests that an executor kills a running task.
+   *
+   * @param taskId Id of the task.
+   * @param executorId Id of the executor the task is running on.
+   * @param interruptThread Whether the executor should interrupt the task thread.
+   * @param reason The reason for the task kill.
+   */
+  def killTask(
+      taskId: Long,
+      executorId: String,
+      interruptThread: Boolean,
+      reason: String): Unit =
     throw new UnsupportedOperationException
+
   def isReady(): Boolean = true
 
   /**
@@ -55,5 +74,35 @@ private[spark] trait SchedulerBackend {
    * @return Map containing the log names and their respective URLs
    */
   def getDriverLogUrls: Option[Map[String, String]] = None
+
+  /**
+   * Get the attributes on driver. These attributes are used to replace log URLs when
+   * custom log url pattern is specified.
+   * @return Map containing attributes on driver.
+   */
+  def getDriverAttributes: Option[Map[String, String]] = None
+
+  /**
+   * Get the max number of tasks that can be concurrent launched based on the ResourceProfile
+   * could be used, even if some of them are being used at the moment.
+   * Note that please don't cache the value returned by this method, because the number can change
+   * due to add/remove executors.
+   *
+   * @param rp ResourceProfile which to use to calculate max concurrent tasks.
+   * @return The max number of tasks that can be concurrent launched currently.
+   */
+  def maxNumConcurrentTasks(rp: ResourceProfile): Int
+
+  /**
+   * Get the list of host locations for push based shuffle
+   *
+   * Currently push based shuffle is disabled for both stage retry and stage reuse cases
+   * (for eg: in the case where few partitions are lost due to failure). Hence this method
+   * should be invoked only once for a ShuffleDependency.
+   * @return List of external shuffle services locations
+   */
+  def getShufflePushMergerLocations(
+      numPartitions: Int,
+      resourceProfileId: Int): Seq[BlockManagerId] = Nil
 
 }

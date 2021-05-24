@@ -17,18 +17,16 @@
 
 package org.apache.spark.metrics.sink
 
-import java.net.InetSocketAddress
-import java.util.Properties
+import java.util.{Locale, Properties}
 import java.util.concurrent.TimeUnit
 
-import com.codahale.metrics.MetricRegistry
-import com.codahale.metrics.graphite.{GraphiteUDP, Graphite, GraphiteReporter}
+import com.codahale.metrics.{Metric, MetricFilter, MetricRegistry}
+import com.codahale.metrics.graphite.{Graphite, GraphiteReporter, GraphiteUDP}
 
-import org.apache.spark.SecurityManager
 import org.apache.spark.metrics.MetricsSystem
 
-private[spark] class GraphiteSink(val property: Properties, val registry: MetricRegistry,
-    securityMgr: SecurityManager) extends Sink {
+private[spark] class GraphiteSink(
+    val property: Properties, val registry: MetricRegistry) extends Sink {
   val GRAPHITE_DEFAULT_PERIOD = 10
   val GRAPHITE_DEFAULT_UNIT = "SECONDS"
   val GRAPHITE_DEFAULT_PREFIX = ""
@@ -39,6 +37,7 @@ private[spark] class GraphiteSink(val property: Properties, val registry: Metric
   val GRAPHITE_KEY_UNIT = "unit"
   val GRAPHITE_KEY_PREFIX = "prefix"
   val GRAPHITE_KEY_PROTOCOL = "protocol"
+  val GRAPHITE_KEY_REGEX = "regex"
 
   def propertyToOption(prop: String): Option[String] = Option(property.getProperty(prop))
 
@@ -59,7 +58,7 @@ private[spark] class GraphiteSink(val property: Properties, val registry: Metric
   }
 
   val pollUnit: TimeUnit = propertyToOption(GRAPHITE_KEY_UNIT) match {
-    case Some(s) => TimeUnit.valueOf(s.toUpperCase())
+    case Some(s) => TimeUnit.valueOf(s.toUpperCase(Locale.ROOT))
     case None => TimeUnit.valueOf(GRAPHITE_DEFAULT_UNIT)
   }
 
@@ -67,27 +66,37 @@ private[spark] class GraphiteSink(val property: Properties, val registry: Metric
 
   MetricsSystem.checkMinimalPollingPeriod(pollUnit, pollPeriod)
 
-  val graphite = propertyToOption(GRAPHITE_KEY_PROTOCOL).map(_.toLowerCase) match {
-    case Some("udp") => new GraphiteUDP(new InetSocketAddress(host, port))
-    case Some("tcp") | None => new Graphite(new InetSocketAddress(host, port))
+  val graphite = propertyToOption(GRAPHITE_KEY_PROTOCOL).map(_.toLowerCase(Locale.ROOT)) match {
+    case Some("udp") => new GraphiteUDP(host, port)
+    case Some("tcp") | None => new Graphite(host, port)
     case Some(p) => throw new Exception(s"Invalid Graphite protocol: $p")
+  }
+
+  val filter = propertyToOption(GRAPHITE_KEY_REGEX) match {
+    case Some(pattern) => new MetricFilter() {
+      override def matches(name: String, metric: Metric): Boolean = {
+        pattern.r.findFirstMatchIn(name).isDefined
+      }
+    }
+    case None => MetricFilter.ALL
   }
 
   val reporter: GraphiteReporter = GraphiteReporter.forRegistry(registry)
       .convertDurationsTo(TimeUnit.MILLISECONDS)
       .convertRatesTo(TimeUnit.SECONDS)
       .prefixedWith(prefix)
+      .filter(filter)
       .build(graphite)
 
-  override def start() {
+  override def start(): Unit = {
     reporter.start(pollPeriod, pollUnit)
   }
 
-  override def stop() {
+  override def stop(): Unit = {
     reporter.stop()
   }
 
-  override def report() {
+  override def report(): Unit = {
     reporter.report()
   }
 }

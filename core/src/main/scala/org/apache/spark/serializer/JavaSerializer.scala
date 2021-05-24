@@ -24,8 +24,8 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.SparkConf
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.util.ByteBufferInputStream
-import org.apache.spark.util.Utils
+import org.apache.spark.internal.config._
+import org.apache.spark.util.{ByteBufferInputStream, ByteBufferOutputStream, Utils}
 
 private[spark] class JavaSerializationStream(
     out: OutputStream, counterReset: Int, extraDebugInfo: Boolean)
@@ -54,8 +54,8 @@ private[spark] class JavaSerializationStream(
     this
   }
 
-  def flush() { objOut.flush() }
-  def close() { objOut.close() }
+  def flush(): Unit = { objOut.flush() }
+  def close(): Unit = { objOut.close() }
 }
 
 private[spark] class JavaDeserializationStream(in: InputStream, loader: ClassLoader)
@@ -63,24 +63,44 @@ private[spark] class JavaDeserializationStream(in: InputStream, loader: ClassLoa
 
   private val objIn = new ObjectInputStream(in) {
     override def resolveClass(desc: ObjectStreamClass): Class[_] =
-      Class.forName(desc.getName, false, loader)
+      try {
+        // scalastyle:off classforname
+        Class.forName(desc.getName, false, loader)
+        // scalastyle:on classforname
+      } catch {
+        case e: ClassNotFoundException =>
+          JavaDeserializationStream.primitiveMappings.getOrElse(desc.getName, throw e)
+      }
   }
 
   def readObject[T: ClassTag](): T = objIn.readObject().asInstanceOf[T]
-  def close() { objIn.close() }
+  def close(): Unit = { objIn.close() }
 }
 
+private object JavaDeserializationStream {
+  val primitiveMappings = Map[String, Class[_]](
+    "boolean" -> classOf[Boolean],
+    "byte" -> classOf[Byte],
+    "char" -> classOf[Char],
+    "short" -> classOf[Short],
+    "int" -> classOf[Int],
+    "long" -> classOf[Long],
+    "float" -> classOf[Float],
+    "double" -> classOf[Double],
+    "void" -> classOf[Void]
+  )
+}
 
 private[spark] class JavaSerializerInstance(
     counterReset: Int, extraDebugInfo: Boolean, defaultClassLoader: ClassLoader)
   extends SerializerInstance {
 
   override def serialize[T: ClassTag](t: T): ByteBuffer = {
-    val bos = new ByteArrayOutputStream()
+    val bos = new ByteBufferOutputStream()
     val out = serializeStream(bos)
     out.writeObject(t)
     out.close()
-    ByteBuffer.wrap(bos.toByteArray)
+    bos.toByteBuffer
   }
 
   override def deserialize[T: ClassTag](bytes: ByteBuffer): T = {
@@ -112,14 +132,14 @@ private[spark] class JavaSerializerInstance(
  * :: DeveloperApi ::
  * A Spark serializer that uses Java's built-in serialization.
  *
- * Note that this serializer is not guaranteed to be wire-compatible across different versions of
+ * @note This serializer is not guaranteed to be wire-compatible across different versions of
  * Spark. It is intended to be used to serialize/de-serialize data within a single
  * Spark application.
  */
 @DeveloperApi
 class JavaSerializer(conf: SparkConf) extends Serializer with Externalizable {
-  private var counterReset = conf.getInt("spark.serializer.objectStreamReset", 100)
-  private var extraDebugInfo = conf.getBoolean("spark.serializer.extraDebugInfo", true)
+  private var counterReset = conf.get(SERIALIZER_OBJECT_STREAM_RESET)
+  private var extraDebugInfo = conf.get(SERIALIZER_EXTRA_DEBUG_INFO)
 
   protected def this() = this(new SparkConf())  // For deserialization only
 

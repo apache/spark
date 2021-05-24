@@ -17,13 +17,14 @@
 
 package org.apache.spark.rpc
 
-import java.net.URI
+import java.io.File
+import java.nio.channels.ReadableByteChannel
 
-import scala.concurrent.{Await, Future}
-import scala.language.postfixOps
+import scala.concurrent.Future
 
 import org.apache.spark.{SecurityManager, SparkConf}
-import org.apache.spark.util.{RpcUtils, Utils}
+import org.apache.spark.rpc.netty.NettyRpcEnvFactory
+import org.apache.spark.util.RpcUtils
 
 
 /**
@@ -32,26 +33,29 @@ import org.apache.spark.util.{RpcUtils, Utils}
  */
 private[spark] object RpcEnv {
 
-  private def getRpcEnvFactory(conf: SparkConf): RpcEnvFactory = {
-    // Add more RpcEnv implementations here
-    val rpcEnvNames = Map("akka" -> "org.apache.spark.rpc.akka.AkkaRpcEnvFactory")
-    val rpcEnvName = conf.get("spark.rpc", "akka")
-    val rpcEnvFactoryClassName = rpcEnvNames.getOrElse(rpcEnvName.toLowerCase, rpcEnvName)
-    Class.forName(rpcEnvFactoryClassName, true, Utils.getContextOrSparkClassLoader).
-      newInstance().asInstanceOf[RpcEnvFactory]
-  }
-
   def create(
       name: String,
       host: String,
       port: Int,
       conf: SparkConf,
-      securityManager: SecurityManager): RpcEnv = {
-    // Using Reflection to create the RpcEnv to avoid to depend on Akka directly
-    val config = RpcEnvConfig(conf, name, host, port, securityManager)
-    getRpcEnvFactory(conf).create(config)
+      securityManager: SecurityManager,
+      clientMode: Boolean = false): RpcEnv = {
+    create(name, host, host, port, conf, securityManager, 0, clientMode)
   }
 
+  def create(
+      name: String,
+      bindAddress: String,
+      advertiseAddress: String,
+      port: Int,
+      conf: SparkConf,
+      securityManager: SecurityManager,
+      numUsableCores: Int,
+      clientMode: Boolean): RpcEnv = {
+    val config = RpcEnvConfig(conf, name, bindAddress, advertiseAddress, port, securityManager,
+      numUsableCores, clientMode)
+    new NettyRpcEnvFactory().create(config)
+  }
 }
 
 
@@ -66,7 +70,7 @@ private[spark] object RpcEnv {
  */
 private[spark] abstract class RpcEnv(conf: SparkConf) {
 
-  private[spark] val defaultLookupTimeout = RpcUtils.lookupTimeout(conf)
+  private[spark] val defaultLookupTimeout = RpcUtils.lookupRpcTimeout(conf)
 
   /**
    * Return RpcEndpointRef of the registered [[RpcEndpoint]]. Will be used to implement
@@ -94,25 +98,15 @@ private[spark] abstract class RpcEnv(conf: SparkConf) {
    * Retrieve the [[RpcEndpointRef]] represented by `uri`. This is a blocking action.
    */
   def setupEndpointRefByURI(uri: String): RpcEndpointRef = {
-    Await.result(asyncSetupEndpointRefByURI(uri), defaultLookupTimeout)
+    defaultLookupTimeout.awaitResult(asyncSetupEndpointRefByURI(uri))
   }
 
   /**
-   * Retrieve the [[RpcEndpointRef]] represented by `systemName`, `address` and `endpointName`
-   * asynchronously.
-   */
-  def asyncSetupEndpointRef(
-      systemName: String, address: RpcAddress, endpointName: String): Future[RpcEndpointRef] = {
-    asyncSetupEndpointRefByURI(uriOf(systemName, address, endpointName))
-  }
-
-  /**
-   * Retrieve the [[RpcEndpointRef]] represented by `systemName`, `address` and `endpointName`.
+   * Retrieve the [[RpcEndpointRef]] represented by `address` and `endpointName`.
    * This is a blocking action.
    */
-  def setupEndpointRef(
-      systemName: String, address: RpcAddress, endpointName: String): RpcEndpointRef = {
-    setupEndpointRefByURI(uriOf(systemName, address, endpointName))
+  def setupEndpointRef(address: RpcAddress, endpointName: String): RpcEndpointRef = {
+    setupEndpointRefByURI(RpcEndpointAddress(address, endpointName).toString)
   }
 
   /**
@@ -134,51 +128,79 @@ private[spark] abstract class RpcEnv(conf: SparkConf) {
   def awaitTermination(): Unit
 
   /**
-   * Create a URI used to create a [[RpcEndpointRef]]. Use this one to create the URI instead of
-   * creating it manually because different [[RpcEnv]] may have different formats.
+   * [[RpcEndpointRef]] cannot be deserialized without [[RpcEnv]]. So when deserializing any object
+   * that contains [[RpcEndpointRef]]s, the deserialization codes should be wrapped by this method.
    */
-  def uriOf(systemName: String, address: RpcAddress, endpointName: String): String
+  def deserialize[T](deserializationAction: () => T): T
+
+  /**
+   * Return the instance of the file server used to serve files. This may be `null` if the
+   * RpcEnv is not operating in server mode.
+   */
+  def fileServer: RpcEnvFileServer
+
+  /**
+   * Open a channel to download a file from the given URI. If the URIs returned by the
+   * RpcEnvFileServer use the "spark" scheme, this method will be called by the Utils class to
+   * retrieve the files.
+   *
+   * @param uri URI with location of the file.
+   */
+  def openChannel(uri: String): ReadableByteChannel
 }
 
+/**
+ * A server used by the RpcEnv to server files to other processes owned by the application.
+ *
+ * The file server can return URIs handled by common libraries (such as "http" or "hdfs"), or
+ * it can return "spark" URIs which will be handled by `RpcEnv#fetchFile`.
+ */
+private[spark] trait RpcEnvFileServer {
+
+  /**
+   * Adds a file to be served by this RpcEnv. This is used to serve files from the driver
+   * to executors when they're stored on the driver's local file system.
+   *
+   * @param file Local file to serve.
+   * @return A URI for the location of the file.
+   */
+  def addFile(file: File): String
+
+  /**
+   * Adds a jar to be served by this RpcEnv. Similar to `addFile` but for jars added using
+   * `SparkContext.addJar`.
+   *
+   * @param file Local file to serve.
+   * @return A URI for the location of the file.
+   */
+  def addJar(file: File): String
+
+  /**
+   * Adds a local directory to be served via this file server.
+   *
+   * @param baseUri Leading URI path (files can be retrieved by appending their relative
+   *                path to this base URI). This cannot be "files" nor "jars".
+   * @param path Path to the local directory.
+   * @return URI for the root of the directory in the file server.
+   */
+  def addDirectory(baseUri: String, path: File): String
+
+  /** Validates and normalizes the base URI for directories. */
+  protected def validateDirectoryUri(baseUri: String): String = {
+    val fixedBaseUri = "/" + baseUri.stripPrefix("/").stripSuffix("/")
+    require(fixedBaseUri != "/files" && fixedBaseUri != "/jars",
+      "Directory URI cannot be /files nor /jars.")
+    fixedBaseUri
+  }
+
+}
 
 private[spark] case class RpcEnvConfig(
     conf: SparkConf,
     name: String,
-    host: String,
+    bindAddress: String,
+    advertiseAddress: String,
     port: Int,
-    securityManager: SecurityManager)
-
-
-/**
- * Represents a host and port.
- */
-private[spark] case class RpcAddress(host: String, port: Int) {
-  // TODO do we need to add the type of RpcEnv in the address?
-
-  val hostPort: String = host + ":" + port
-
-  override val toString: String = hostPort
-}
-
-
-private[spark] object RpcAddress {
-
-  /**
-   * Return the [[RpcAddress]] represented by `uri`.
-   */
-  def fromURI(uri: URI): RpcAddress = {
-    RpcAddress(uri.getHost, uri.getPort)
-  }
-
-  /**
-   * Return the [[RpcAddress]] represented by `uri`.
-   */
-  def fromURIString(uri: String): RpcAddress = {
-    fromURI(new java.net.URI(uri))
-  }
-
-  def fromSparkURL(sparkUrl: String): RpcAddress = {
-    val (host, port) = Utils.extractHostPortFromSparkUrl(sparkUrl)
-    RpcAddress(host, port)
-  }
-}
+    securityManager: SecurityManager,
+    numUsableCores: Int,
+    clientMode: Boolean)

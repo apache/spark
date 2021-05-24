@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.Logging
-import org.apache.spark.sql.catalyst.errors.attachTree
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodeGenContext, GeneratedExpressionCode}
-import org.apache.spark.sql.catalyst.trees
+import org.apache.spark.internal.Logging
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode, FalseLiteral, JavaCode}
+import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.types._
 
 /**
@@ -29,26 +29,38 @@ import org.apache.spark.sql.types._
  * the layout of intermediate tuples, BindReferences should be run after all such transformations.
  */
 case class BoundReference(ordinal: Int, dataType: DataType, nullable: Boolean)
-  extends NamedExpression with trees.LeafNode[Expression] {
+  extends LeafExpression {
 
-  override def toString: String = s"input[$ordinal]"
+  override def toString: String = s"input[$ordinal, ${dataType.simpleString}, $nullable]"
 
-  override def eval(input: InternalRow): Any = input(ordinal)
+  private val accessor: (InternalRow, Int) => Any = InternalRow.getAccessor(dataType, nullable)
 
-  override def name: String = s"i[$ordinal]"
+  // Use special getter for primitive types (for UnsafeRow)
+  override def eval(input: InternalRow): Any = {
+    accessor(input, ordinal)
+  }
 
-  override def toAttribute: Attribute = throw new UnsupportedOperationException
-
-  override def qualifiers: Seq[String] = throw new UnsupportedOperationException
-
-  override def exprId: ExprId = throw new UnsupportedOperationException
-
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    s"""
-        boolean ${ev.isNull} = i.isNullAt($ordinal);
-        ${ctx.javaType(dataType)} ${ev.primitive} = ${ev.isNull} ?
-            ${ctx.defaultValue(dataType)} : (${ctx.getColumn(dataType, ordinal)});
-    """
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    if (ctx.currentVars != null && ctx.currentVars(ordinal) != null) {
+      val oev = ctx.currentVars(ordinal)
+      ev.isNull = oev.isNull
+      ev.value = oev.value
+      ev.copy(code = oev.code)
+    } else {
+      assert(ctx.INPUT_ROW != null, "INPUT_ROW and currentVars cannot both be null.")
+      val javaType = JavaCode.javaType(dataType)
+      val value = CodeGenerator.getValue(ctx.INPUT_ROW, dataType, ordinal.toString)
+      if (nullable) {
+        ev.copy(code =
+          code"""
+             |boolean ${ev.isNull} = ${ctx.INPUT_ROW}.isNullAt($ordinal);
+             |$javaType ${ev.value} = ${ev.isNull} ?
+             |  ${CodeGenerator.defaultValue(dataType)} : ($value);
+           """.stripMargin)
+      } else {
+        ev.copy(code = code"$javaType ${ev.value} = $value;", isNull = FalseLiteral)
+      }
+    }
   }
 }
 
@@ -56,21 +68,29 @@ object BindReferences extends Logging {
 
   def bindReference[A <: Expression](
       expression: A,
-      input: Seq[Attribute],
+      input: AttributeSeq,
       allowFailures: Boolean = false): A = {
     expression.transform { case a: AttributeReference =>
-      attachTree(a, "Binding attribute") {
-        val ordinal = input.indexWhere(_.exprId == a.exprId)
-        if (ordinal == -1) {
-          if (allowFailures) {
-            a
-          } else {
-            sys.error(s"Couldn't find $a in ${input.mkString("[", ",", "]")}")
-          }
+      val ordinal = input.indexOf(a.exprId)
+      if (ordinal == -1) {
+        if (allowFailures) {
+          a
         } else {
-          BoundReference(ordinal, a.dataType, a.nullable)
+          throw new IllegalStateException(
+            s"Couldn't find $a in ${input.attrs.mkString("[", ",", "]")}")
         }
+      } else {
+        BoundReference(ordinal, a.dataType, input(ordinal).nullable)
       }
     }.asInstanceOf[A] // Kind of a hack, but safe.  TODO: Tighten return type when possible.
+  }
+
+  /**
+   * A helper function to bind given expressions to an input schema.
+   */
+  def bindReferences[A <: Expression](
+      expressions: Seq[A],
+      input: AttributeSeq): Seq[A] = {
+    expressions.map(BindReferences.bindReference(_, input))
   }
 }

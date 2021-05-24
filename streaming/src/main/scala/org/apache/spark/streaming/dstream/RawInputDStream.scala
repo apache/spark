@@ -17,19 +17,18 @@
 
 package org.apache.spark.streaming.dstream
 
-import org.apache.spark.{Logging, SparkEnv}
-import org.apache.spark.storage.{StorageLevel, StreamBlockId}
-import org.apache.spark.streaming.StreamingContext
-
-import scala.reflect.ClassTag
-
+import java.io.EOFException
 import java.net.InetSocketAddress
 import java.nio.ByteBuffer
 import java.nio.channels.{ReadableByteChannel, SocketChannel}
-import java.io.EOFException
 import java.util.concurrent.ArrayBlockingQueue
-import org.apache.spark.streaming.receiver.Receiver
 
+import scala.reflect.ClassTag
+
+import org.apache.spark.internal.Logging
+import org.apache.spark.storage.StorageLevel
+import org.apache.spark.streaming.StreamingContext
+import org.apache.spark.streaming.receiver.Receiver
 
 /**
  * An input stream that reads blocks of serialized objects from a given network address.
@@ -39,11 +38,11 @@ import org.apache.spark.streaming.receiver.Receiver
  */
 private[streaming]
 class RawInputDStream[T: ClassTag](
-    @transient ssc_ : StreamingContext,
+    _ssc: StreamingContext,
     host: String,
     port: Int,
     storageLevel: StorageLevel
-  ) extends ReceiverInputDStream[T](ssc_ ) with Logging {
+  ) extends ReceiverInputDStream[T](_ssc) with Logging {
 
   def getReceiver(): Receiver[T] = {
     new RawNetworkReceiver(host, port, storageLevel).asInstanceOf[Receiver[T]]
@@ -56,7 +55,7 @@ class RawNetworkReceiver(host: String, port: Int, storageLevel: StorageLevel)
 
   var blockPushingThread: Thread = null
 
-  def onStart() {
+  def onStart(): Unit = {
     // Open a socket to the target address and keep reading from it
     logInfo("Connecting to " + host + ":" + port)
     val channel = SocketChannel.open()
@@ -68,7 +67,7 @@ class RawNetworkReceiver(host: String, port: Int, storageLevel: StorageLevel)
 
     blockPushingThread = new Thread {
       setDaemon(true)
-      override def run() {
+      override def run(): Unit = {
         var nextBlockNumber = 0
         while (true) {
           val buffer = queue.take()
@@ -93,13 +92,13 @@ class RawNetworkReceiver(host: String, port: Int, storageLevel: StorageLevel)
     }
   }
 
-  def onStop() {
+  def onStop(): Unit = {
     if (blockPushingThread != null) blockPushingThread.interrupt()
   }
 
   /** Read a buffer fully from a given Channel */
-  private def readFully(channel: ReadableByteChannel, dest: ByteBuffer) {
-    while (dest.position < dest.limit) {
+  private def readFully(channel: ReadableByteChannel, dest: ByteBuffer): Unit = {
+    while (dest.position() < dest.limit()) {
       if (channel.read(dest) == -1) {
         throw new EOFException("End of channel")
       }

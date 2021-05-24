@@ -15,86 +15,11 @@
 # limitations under the License.
 #
 
-"""
->>> from pyspark.context import SparkContext
->>> sc = SparkContext('local', 'test')
->>> a = sc.accumulator(1)
->>> a.value
-1
->>> a.value = 2
->>> a.value
-2
->>> a += 5
->>> a.value
-7
-
->>> sc.accumulator(1.0).value
-1.0
-
->>> sc.accumulator(1j).value
-1j
-
->>> rdd = sc.parallelize([1,2,3])
->>> def f(x):
-...     global a
-...     a += x
->>> rdd.foreach(f)
->>> a.value
-13
-
->>> b = sc.accumulator(0)
->>> def g(x):
-...     b.add(x)
->>> rdd.foreach(g)
->>> b.value
-6
-
->>> from pyspark.accumulators import AccumulatorParam
->>> class VectorAccumulatorParam(AccumulatorParam):
-...     def zero(self, value):
-...         return [0.0] * len(value)
-...     def addInPlace(self, val1, val2):
-...         for i in range(len(val1)):
-...              val1[i] += val2[i]
-...         return val1
->>> va = sc.accumulator([1.0, 2.0, 3.0], VectorAccumulatorParam())
->>> va.value
-[1.0, 2.0, 3.0]
->>> def g(x):
-...     global va
-...     va += [x] * 3
->>> rdd.foreach(g)
->>> va.value
-[7.0, 8.0, 9.0]
-
->>> rdd.map(lambda x: a.value).collect() # doctest: +IGNORE_EXCEPTION_DETAIL
-Traceback (most recent call last):
-    ...
-Py4JJavaError:...
-
->>> def h(x):
-...     global a
-...     a.value = 7
->>> rdd.foreach(h) # doctest: +IGNORE_EXCEPTION_DETAIL
-Traceback (most recent call last):
-    ...
-Py4JJavaError:...
-
->>> sc.accumulator([1.0, 2.0, 3.0]) # doctest: +IGNORE_EXCEPTION_DETAIL
-Traceback (most recent call last):
-    ...
-TypeError:...
-"""
-
 import sys
 import select
 import struct
-if sys.version < '3':
-    import SocketServer
-else:
-    import socketserver as SocketServer
+import socketserver as SocketServer
 import threading
-from pyspark.cloudpickle import CloudPickler
 from pyspark.serializers import read_int, PickleSerializer
 
 
@@ -110,23 +35,74 @@ _accumulatorRegistry = {}
 
 def _deserialize_accumulator(aid, zero_value, accum_param):
     from pyspark.accumulators import _accumulatorRegistry
-    accum = Accumulator(aid, zero_value, accum_param)
-    accum._deserialized = True
-    _accumulatorRegistry[aid] = accum
-    return accum
+    # If this certain accumulator was deserialized, don't overwrite it.
+    if aid in _accumulatorRegistry:
+        return _accumulatorRegistry[aid]
+    else:
+        accum = Accumulator(aid, zero_value, accum_param)
+        accum._deserialized = True
+        _accumulatorRegistry[aid] = accum
+        return accum
 
 
 class Accumulator(object):
 
     """
     A shared variable that can be accumulated, i.e., has a commutative and associative "add"
-    operation. Worker tasks on a Spark cluster can add values to an Accumulator with the C{+=}
-    operator, but only the driver program is allowed to access its value, using C{value}.
+    operation. Worker tasks on a Spark cluster can add values to an Accumulator with the `+=`
+    operator, but only the driver program is allowed to access its value, using `value`.
     Updates from the workers get propagated automatically to the driver program.
 
-    While C{SparkContext} supports accumulators for primitive data types like C{int} and
-    C{float}, users can also define accumulators for custom types by providing a custom
-    L{AccumulatorParam} object. Refer to the doctest of this module for an example.
+    While :class:`SparkContext` supports accumulators for primitive data types like :class:`int` and
+    :class:`float`, users can also define accumulators for custom types by providing a custom
+    :py:class:`AccumulatorParam` object. Refer to its doctest for an example.
+
+    Examples
+    --------
+    >>> a = sc.accumulator(1)
+    >>> a.value
+    1
+    >>> a.value = 2
+    >>> a.value
+    2
+    >>> a += 5
+    >>> a.value
+    7
+    >>> sc.accumulator(1.0).value
+    1.0
+    >>> sc.accumulator(1j).value
+    1j
+    >>> rdd = sc.parallelize([1,2,3])
+    >>> def f(x):
+    ...     global a
+    ...     a += x
+    >>> rdd.foreach(f)
+    >>> a.value
+    13
+    >>> b = sc.accumulator(0)
+    >>> def g(x):
+    ...     b.add(x)
+    >>> rdd.foreach(g)
+    >>> b.value
+    6
+
+    >>> rdd.map(lambda x: a.value).collect() # doctest: +IGNORE_EXCEPTION_DETAIL
+    Traceback (most recent call last):
+        ...
+    Py4JJavaError: ...
+
+    >>> def h(x):
+    ...     global a
+    ...     a.value = 7
+    >>> rdd.foreach(h) # doctest: +IGNORE_EXCEPTION_DETAIL
+    Traceback (most recent call last):
+        ...
+    Py4JJavaError: ...
+
+    >>> sc.accumulator([1.0, 2.0, 3.0]) # doctest: +IGNORE_EXCEPTION_DETAIL
+    Traceback (most recent call last):
+        ...
+    TypeError: ...
     """
 
     def __init__(self, aid, value, accum_param):
@@ -177,19 +153,40 @@ class AccumulatorParam(object):
 
     """
     Helper object that defines how to accumulate values of a given type.
+
+    Examples
+    --------
+    >>> from pyspark.accumulators import AccumulatorParam
+    >>> class VectorAccumulatorParam(AccumulatorParam):
+    ...     def zero(self, value):
+    ...         return [0.0] * len(value)
+    ...     def addInPlace(self, val1, val2):
+    ...         for i in range(len(val1)):
+    ...              val1[i] += val2[i]
+    ...         return val1
+    >>> va = sc.accumulator([1.0, 2.0, 3.0], VectorAccumulatorParam())
+    >>> va.value
+    [1.0, 2.0, 3.0]
+    >>> def g(x):
+    ...     global va
+    ...     va += [x] * 3
+    >>> rdd = sc.parallelize([1,2,3])
+    >>> rdd.foreach(g)
+    >>> va.value
+    [7.0, 8.0, 9.0]
     """
 
     def zero(self, value):
         """
         Provide a "zero value" for the type, compatible in dimensions with the
-        provided C{value} (e.g., a zero vector)
+        provided `value` (e.g., a zero vector)
         """
         raise NotImplementedError
 
     def addInPlace(self, value1, value2):
         """
         Add two values of the accumulator's data type, returning a new value;
-        for efficiency, can also update C{value1} in place and return it.
+        for efficiency, can also update `value1` in place and return it.
         """
         raise NotImplementedError
 
@@ -228,19 +225,48 @@ class _UpdateRequestHandler(SocketServer.StreamRequestHandler):
 
     def handle(self):
         from pyspark.accumulators import _accumulatorRegistry
-        while not self.server.server_shutdown:
-            # Poll every 1 second for new data -- don't block in case of shutdown.
-            r, _, _ = select.select([self.rfile], [], [], 1)
-            if self.rfile in r:
-                num_updates = read_int(self.rfile)
-                for _ in range(num_updates):
-                    (aid, update) = pickleSer._read_with_length(self.rfile)
-                    _accumulatorRegistry[aid] += update
-                # Write a byte in acknowledgement
-                self.wfile.write(struct.pack("!b", 1))
+        auth_token = self.server.auth_token
+
+        def poll(func):
+            while not self.server.server_shutdown:
+                # Poll every 1 second for new data -- don't block in case of shutdown.
+                r, _, _ = select.select([self.rfile], [], [], 1)
+                if self.rfile in r:
+                    if func():
+                        break
+
+        def accum_updates():
+            num_updates = read_int(self.rfile)
+            for _ in range(num_updates):
+                (aid, update) = pickleSer._read_with_length(self.rfile)
+                _accumulatorRegistry[aid] += update
+            # Write a byte in acknowledgement
+            self.wfile.write(struct.pack("!b", 1))
+            return False
+
+        def authenticate_and_accum_updates():
+            received_token = self.rfile.read(len(auth_token))
+            if isinstance(received_token, bytes):
+                received_token = received_token.decode("utf-8")
+            if (received_token == auth_token):
+                accum_updates()
+                # we've authenticated, we can break out of the first loop now
+                return True
+            else:
+                raise Exception(
+                    "The value of the provided token to the AccumulatorServer is not correct.")
+
+        # first we keep polling till we've received the authentication token
+        poll(authenticate_and_accum_updates)
+        # now we've authenticated, don't need to check for the token anymore
+        poll(accum_updates)
 
 
 class AccumulatorServer(SocketServer.TCPServer):
+
+    def __init__(self, server_address, RequestHandlerClass, auth_token):
+        SocketServer.TCPServer.__init__(self, server_address, RequestHandlerClass)
+        self.auth_token = auth_token
 
     """
     A simple TCP server that intercepts shutdown() in order to interrupt
@@ -254,9 +280,9 @@ class AccumulatorServer(SocketServer.TCPServer):
         self.server_close()
 
 
-def _start_update_server():
+def _start_update_server(auth_token):
     """Start a TCP server to receive accumulator updates in a daemon thread, and returns it"""
-    server = AccumulatorServer(("localhost", 0), _UpdateRequestHandler)
+    server = AccumulatorServer(("localhost", 0), _UpdateRequestHandler, auth_token)
     thread = threading.Thread(target=server.serve_forever)
     thread.daemon = True
     thread.start()
@@ -264,4 +290,14 @@ def _start_update_server():
 
 if __name__ == "__main__":
     import doctest
-    doctest.testmod()
+
+    from pyspark.context import SparkContext
+    globs = globals().copy()
+    # The small batch size here ensures that we see multiple batches,
+    # even in these small test examples:
+    globs['sc'] = SparkContext('local', 'test')
+    (failure_count, test_count) = doctest.testmod(
+        globs=globs, optionflags=doctest.ELLIPSIS)
+    globs['sc'].stop()
+    if failure_count:
+        sys.exit(-1)

@@ -17,27 +17,26 @@
 
 package org.apache.spark.ml.feature
 
-import scala.beans.BeanInfo
-
-import org.apache.spark.SparkFunSuite
-import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest}
 import org.apache.spark.sql.{DataFrame, Row}
 
-@BeanInfo
-case class NGramTestData(inputTokens: Array[String], wantedNGrams: Array[String])
+case class NGramTestData(inputTokens: Array[String], wantedNGrams: Array[String]) {
+  def getInputTokens: Array[String] = inputTokens
+  def getWantedNGrams: Array[String] = wantedNGrams
+}
 
-class NGramSuite extends SparkFunSuite with MLlibTestSparkContext {
-  import org.apache.spark.ml.feature.NGramSuite._
+class NGramSuite extends MLTest with DefaultReadWriteTest {
+
+  import testImplicits._
 
   test("default behavior yields bigram features") {
     val nGram = new NGram()
       .setInputCol("inputTokens")
       .setOutputCol("nGrams")
-    val dataset = sqlContext.createDataFrame(Seq(
-      NGramTestData(
-        Array("Test", "for", "ngram", "."),
-        Array("Test for", "for ngram", "ngram .")
-    )))
+    val dataset = Seq(NGramTestData(
+      Array("Test", "for", "ngram", "."),
+      Array("Test for", "for ngram", "ngram .")
+    )).toDF()
     testNGram(nGram, dataset)
   }
 
@@ -46,11 +45,10 @@ class NGramSuite extends SparkFunSuite with MLlibTestSparkContext {
       .setInputCol("inputTokens")
       .setOutputCol("nGrams")
       .setN(4)
-    val dataset = sqlContext.createDataFrame(Seq(
-      NGramTestData(
-        Array("a", "b", "c", "d", "e"),
-        Array("a b c d", "b c d e")
-      )))
+    val dataset = Seq(NGramTestData(
+      Array("a", "b", "c", "d", "e"),
+      Array("a b c d", "b c d e")
+    )).toDF()
     testNGram(nGram, dataset)
   }
 
@@ -59,11 +57,7 @@ class NGramSuite extends SparkFunSuite with MLlibTestSparkContext {
       .setInputCol("inputTokens")
       .setOutputCol("nGrams")
       .setN(4)
-    val dataset = sqlContext.createDataFrame(Seq(
-      NGramTestData(
-        Array(),
-        Array()
-      )))
+    val dataset = Seq(NGramTestData(Array(), Array())).toDF()
     testNGram(nGram, dataset)
   }
 
@@ -72,23 +66,25 @@ class NGramSuite extends SparkFunSuite with MLlibTestSparkContext {
       .setInputCol("inputTokens")
       .setOutputCol("nGrams")
       .setN(6)
-    val dataset = sqlContext.createDataFrame(Seq(
-      NGramTestData(
-        Array("a", "b", "c", "d", "e"),
-        Array()
-      )))
+    val dataset = Seq(NGramTestData(
+      Array("a", "b", "c", "d", "e"),
+      Array()
+    )).toDF()
     testNGram(nGram, dataset)
   }
-}
 
-object NGramSuite extends SparkFunSuite {
+  test("read/write") {
+    val t = new NGram()
+      .setInputCol("myInputCol")
+      .setOutputCol("myOutputCol")
+      .setN(3)
+    testDefaultReadWrite(t)
+  }
 
-  def testNGram(t: NGram, dataset: DataFrame): Unit = {
-    t.transform(dataset)
-      .select("nGrams", "wantedNGrams")
-      .collect()
-      .foreach { case Row(actualNGrams, wantedNGrams) =>
+  def testNGram(t: NGram, dataFrame: DataFrame): Unit = {
+    testTransformer[(Seq[String], Seq[String])](dataFrame, t, "nGrams", "wantedNGrams") {
+      case Row(actualNGrams : scala.collection.Seq[_], wantedNGrams: scala.collection.Seq[_]) =>
         assert(actualNGrams === wantedNGrams)
-      }
+    }
   }
 }

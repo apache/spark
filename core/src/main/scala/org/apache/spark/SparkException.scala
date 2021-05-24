@@ -30,3 +30,23 @@ class SparkException(message: String, cause: Throwable)
  */
 private[spark] class SparkDriverExecutionException(cause: Throwable)
   extends SparkException("Execution error", cause)
+
+/**
+ * Exception thrown when the main user code is run as a child process (e.g. pyspark) and we want
+ * the parent SparkSubmit process to exit with the same exit code.
+ */
+private[spark] case class SparkUserAppException(exitCode: Int)
+  extends SparkException(s"User application exited with $exitCode")
+
+/**
+ * Exception thrown when the relative executor to access is dead.
+ */
+private[spark] case class ExecutorDeadException(message: String)
+  extends SparkException(message)
+
+/**
+ * Exception thrown when Spark returns different result after upgrading to a new version.
+ */
+private[spark] class SparkUpgradeException(version: String, message: String, cause: Throwable)
+  extends RuntimeException("You may get a different result due to the upgrading of Spark" +
+    s" $version: $message", cause)

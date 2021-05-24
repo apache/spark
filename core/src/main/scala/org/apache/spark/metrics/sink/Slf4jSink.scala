@@ -17,19 +17,15 @@
 
 package org.apache.spark.metrics.sink
 
-import java.util.Properties
+import java.util.{Locale, Properties}
 import java.util.concurrent.TimeUnit
 
-import com.codahale.metrics.{Slf4jReporter, MetricRegistry}
+import com.codahale.metrics.{MetricRegistry, Slf4jReporter}
 
-import org.apache.spark.SecurityManager
 import org.apache.spark.metrics.MetricsSystem
 
 private[spark] class Slf4jSink(
-    val property: Properties,
-    val registry: MetricRegistry,
-    securityMgr: SecurityManager)
-  extends Sink {
+    val property: Properties, val registry: MetricRegistry) extends Sink {
   val SLF4J_DEFAULT_PERIOD = 10
   val SLF4J_DEFAULT_UNIT = "SECONDS"
 
@@ -42,7 +38,7 @@ private[spark] class Slf4jSink(
   }
 
   val pollUnit: TimeUnit = Option(property.getProperty(SLF4J_KEY_UNIT)) match {
-    case Some(s) => TimeUnit.valueOf(s.toUpperCase())
+    case Some(s) => TimeUnit.valueOf(s.toUpperCase(Locale.ROOT))
     case None => TimeUnit.valueOf(SLF4J_DEFAULT_UNIT)
   }
 
@@ -53,15 +49,15 @@ private[spark] class Slf4jSink(
     .convertRatesTo(TimeUnit.SECONDS)
     .build()
 
-  override def start() {
+  override def start(): Unit = {
     reporter.start(pollPeriod, pollUnit)
   }
 
-  override def stop() {
+  override def stop(): Unit = {
     reporter.stop()
   }
 
-  override def report() {
+  override def report(): Unit = {
     reporter.report()
   }
 }

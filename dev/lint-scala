@@ -20,4 +20,4 @@
 SCRIPT_DIR="$( cd "$( dirname "$0" )" && pwd )"
 SPARK_ROOT_DIR="$(dirname $SCRIPT_DIR)"
 
-"$SCRIPT_DIR/scalastyle"
+"$SCRIPT_DIR/scalastyle" "$1"

@@ -19,11 +19,10 @@ package org.apache.spark.graphx.impl
 
 import scala.reflect.{classTag, ClassTag}
 
-import org.apache.spark.{OneToOneDependency, HashPartitioner}
+import org.apache.spark.{HashPartitioner, OneToOneDependency}
+import org.apache.spark.graphx._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
-
-import org.apache.spark.graphx._
 
 class EdgeRDDImpl[ED: ClassTag, VD: ClassTag] private[graphx] (
     @transient override val partitionsRDD: RDD[(PartitionID, EdgePartition[ED, VD])],
@@ -42,11 +41,11 @@ class EdgeRDDImpl[ED: ClassTag, VD: ClassTag] private[graphx] (
 
   /**
    * If `partitionsRDD` already has a partitioner, use it. Otherwise assume that the
-   * [[PartitionID]]s in `partitionsRDD` correspond to the actual partitions and create a new
+   * `PartitionID`s in `partitionsRDD` correspond to the actual partitions and create a new
    * partitioner that allows co-partitioning with `partitionsRDD`.
    */
   override val partitioner =
-    partitionsRDD.partitioner.orElse(Some(new HashPartitioner(partitions.size)))
+    partitionsRDD.partitioner.orElse(Some(new HashPartitioner(partitions.length)))
 
   override def collect(): Array[Edge[ED]] = this.map(_.copy()).collect()
 
@@ -59,12 +58,14 @@ class EdgeRDDImpl[ED: ClassTag, VD: ClassTag] private[graphx] (
     this
   }
 
-  override def unpersist(blocking: Boolean = true): this.type = {
+  override def unpersist(blocking: Boolean = false): this.type = {
     partitionsRDD.unpersist(blocking)
     this
   }
 
-  /** Persists the edge partitions using `targetStorageLevel`, which defaults to MEMORY_ONLY. */
+  /**
+   * Persists the edge partitions using `targetStorageLevel`, which defaults to MEMORY_ONLY.
+   */
   override def cache(): this.type = {
     partitionsRDD.persist(targetStorageLevel)
     this
@@ -86,7 +87,7 @@ class EdgeRDDImpl[ED: ClassTag, VD: ClassTag] private[graphx] (
 
   /** The number of edges in the RDD. */
   override def count(): Long = {
-    partitionsRDD.map(_._2.size.toLong).reduce(_ + _)
+    partitionsRDD.map(_._2.size.toLong).fold(0)(_ + _)
   }
 
   override def mapValues[ED2: ClassTag](f: Edge[ED] => ED2): EdgeRDDImpl[ED2, VD] =

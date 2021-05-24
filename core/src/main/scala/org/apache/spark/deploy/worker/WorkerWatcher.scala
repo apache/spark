@@ -17,22 +17,21 @@
 
 package org.apache.spark.deploy.worker
 
-import org.apache.spark.Logging
-import org.apache.spark.deploy.DeployMessages.SendHeartbeat
+import org.apache.spark.internal.Logging
 import org.apache.spark.rpc._
 
 /**
- * Actor which connects to a worker process and terminates the JVM if the connection is severed.
+ * Endpoint which connects to a worker process and terminates the JVM if the
+ * connection is severed.
  * Provides fate sharing between a worker and its associated child processes.
  */
-private[spark] class WorkerWatcher(override val rpcEnv: RpcEnv, workerUrl: String)
+private[spark] class WorkerWatcher(
+    override val rpcEnv: RpcEnv, workerUrl: String, isTesting: Boolean = false)
   extends RpcEndpoint with Logging {
 
-  override def onStart() {
-    logInfo(s"Connecting to worker $workerUrl")
-    if (!isTesting) {
-      rpcEnv.asyncSetupEndpointRefByURI(workerUrl)
-    }
+  logInfo(s"Connecting to worker $workerUrl")
+  if (!isTesting) {
+    rpcEnv.asyncSetupEndpointRefByURI(workerUrl)
   }
 
   // Used to avoid shutting down JVM during tests
@@ -41,10 +40,8 @@ private[spark] class WorkerWatcher(override val rpcEnv: RpcEnv, workerUrl: Strin
   // true rather than calling `System.exit`. The user can check `isShutDown` to know if
   // `exitNonZero` is called.
   private[deploy] var isShutDown = false
-  private[deploy] def setTesting(testing: Boolean) = isTesting = testing
-  private var isTesting = false
 
-  // Lets us filter events only from the worker's actor system
+  // Lets filter events only from the worker's rpc system
   private val expectedAddress = RpcAddress.fromURIString(workerUrl)
   private def isWorker(address: RpcAddress) = expectedAddress == address
 
@@ -63,7 +60,7 @@ private[spark] class WorkerWatcher(override val rpcEnv: RpcEnv, workerUrl: Strin
   override def onDisconnected(remoteAddress: RpcAddress): Unit = {
     if (isWorker(remoteAddress)) {
       // This log message will never be seen
-      logError(s"Lost connection to worker actor $workerUrl. Exiting.")
+      logError(s"Lost connection to worker rpc endpoint $workerUrl. Exiting.")
       exitNonZero()
     }
   }

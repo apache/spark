@@ -20,8 +20,8 @@ package org.apache.spark.mllib.linalg.distributed
 import breeze.linalg.{DenseMatrix => BDM}
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.mllib.util.MLlibTestSparkContext
 
 class CoordinateMatrixSuite extends SparkFunSuite with MLlibTestSparkContext {
 
@@ -29,7 +29,7 @@ class CoordinateMatrixSuite extends SparkFunSuite with MLlibTestSparkContext {
   val n = 4
   var mat: CoordinateMatrix = _
 
-  override def beforeAll() {
+  override def beforeAll(): Unit = {
     super.beforeAll()
     val entries = sc.parallelize(Seq(
       (0, 0, 1.0),

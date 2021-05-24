@@ -19,8 +19,10 @@ package org.apache.spark.rdd
 
 import scala.reflect.ClassTag
 
-import org.apache.spark.{Logging, Partitioner, RangePartitioner}
+import org.apache.spark.{InterruptibleIterator, Partitioner, RangePartitioner, TaskContext}
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.internal.Logging
+import org.apache.spark.util.collection.ExternalSorter
 
 /**
  * Extra functions available on RDDs of (key, value) pairs where the key is sortable through
@@ -34,7 +36,8 @@ import org.apache.spark.annotation.DeveloperApi
  *
  *   val rdd: RDD[(String, Int)] = ...
  *   implicit val caseInsensitiveOrdering = new Ordering[String] {
- *     override def compare(a: String, b: String) = a.toLowerCase.compare(b.toLowerCase)
+ *     override def compare(a: String, b: String) =
+ *       a.toLowerCase(Locale.ROOT).compare(b.toLowerCase(Locale.ROOT))
  *   }
  *
  *   // Sort by key, using the above case insensitive ordering.
@@ -45,8 +48,7 @@ class OrderedRDDFunctions[K : Ordering : ClassTag,
                           V: ClassTag,
                           P <: Product2[K, V] : ClassTag] @DeveloperApi() (
     self: RDD[P])
-  extends Logging with Serializable
-{
+  extends Logging with Serializable {
   private val ordering = implicitly[Ordering[K]]
 
   /**
@@ -72,11 +74,20 @@ class OrderedRDDFunctions[K : Ordering : ClassTag,
    * because it can push the sorting down into the shuffle machinery.
    */
   def repartitionAndSortWithinPartitions(partitioner: Partitioner): RDD[(K, V)] = self.withScope {
-    new ShuffledRDD[K, V, V](self, partitioner).setKeyOrdering(ordering)
+    if (self.partitioner == Some(partitioner)) {
+      self.mapPartitions(iter => {
+        val context = TaskContext.get()
+        val sorter = new ExternalSorter[K, V, V](context, None, None, Some(ordering))
+        new InterruptibleIterator(context,
+          sorter.insertAllAndUpdateMetrics(iter).asInstanceOf[Iterator[(K, V)]])
+      }, preservesPartitioning = true)
+    } else {
+      new ShuffledRDD[K, V, V](self, partitioner).setKeyOrdering(ordering)
+    }
   }
 
   /**
-   * Returns an RDD containing only the elements in the the inclusive range `lower` to `upper`.
+   * Returns an RDD containing only the elements in the inclusive range `lower` to `upper`.
    * If the RDD has been partitioned using a `RangePartitioner`, then this operation can be
    * performed efficiently by only scanning the partitions that might contain matching elements.
    * Otherwise, a standard `filter` is applied to all partitions.
@@ -86,12 +97,11 @@ class OrderedRDDFunctions[K : Ordering : ClassTag,
     def inRange(k: K): Boolean = ordering.gteq(k, lower) && ordering.lteq(k, upper)
 
     val rddToFilter: RDD[P] = self.partitioner match {
-      case Some(rp: RangePartitioner[K, V]) => {
-        val partitionIndicies = (rp.getPartition(lower), rp.getPartition(upper)) match {
+      case Some(rp: RangePartitioner[K, V]) =>
+        val partitionIndices = (rp.getPartition(lower), rp.getPartition(upper)) match {
           case (l, u) => Math.min(l, u) to Math.max(l, u)
         }
-        PartitionPruningRDD.create(self, partitionIndicies.contains)
-      }
+        PartitionPruningRDD.create(self, partitionIndices.contains)
       case _ =>
         self
     }

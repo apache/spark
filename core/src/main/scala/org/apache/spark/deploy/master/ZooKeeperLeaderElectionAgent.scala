@@ -17,18 +17,18 @@
 
 package org.apache.spark.deploy.master
 
-import akka.actor.ActorRef
-
-import org.apache.spark.{Logging, SparkConf}
-import org.apache.spark.deploy.master.MasterMessages._
 import org.apache.curator.framework.CuratorFramework
-import org.apache.curator.framework.recipes.leader.{LeaderLatchListener, LeaderLatch}
-import org.apache.spark.deploy.SparkCuratorUtil
+import org.apache.curator.framework.recipes.leader.{LeaderLatch, LeaderLatchListener}
 
-private[master] class ZooKeeperLeaderElectionAgent(val masterActor: LeaderElectable,
+import org.apache.spark.SparkConf
+import org.apache.spark.deploy.SparkCuratorUtil
+import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.Deploy.ZOOKEEPER_DIRECTORY
+
+private[master] class ZooKeeperLeaderElectionAgent(val masterInstance: LeaderElectable,
     conf: SparkConf) extends LeaderLatchListener with LeaderElectionAgent with Logging  {
 
-  val WORKING_DIR = conf.get("spark.deploy.zookeeper.dir", "/spark") + "/leader_election"
+  val workingDir = conf.get(ZOOKEEPER_DIRECTORY).getOrElse("/spark") + "/leader_election"
 
   private var zk: CuratorFramework = _
   private var leaderLatch: LeaderLatch = _
@@ -36,20 +36,20 @@ private[master] class ZooKeeperLeaderElectionAgent(val masterActor: LeaderElecta
 
   start()
 
-  private def start() {
+  private def start(): Unit = {
     logInfo("Starting ZooKeeper LeaderElection agent")
     zk = SparkCuratorUtil.newClient(conf)
-    leaderLatch = new LeaderLatch(zk, WORKING_DIR)
+    leaderLatch = new LeaderLatch(zk, workingDir)
     leaderLatch.addListener(this)
     leaderLatch.start()
   }
 
-  override def stop() {
+  override def stop(): Unit = {
     leaderLatch.close()
     zk.close()
   }
 
-  override def isLeader() {
+  override def isLeader(): Unit = {
     synchronized {
       // could have lost leadership by now.
       if (!leaderLatch.hasLeadership) {
@@ -61,7 +61,7 @@ private[master] class ZooKeeperLeaderElectionAgent(val masterActor: LeaderElecta
     }
   }
 
-  override def notLeader() {
+  override def notLeader(): Unit = {
     synchronized {
       // could have gained leadership by now.
       if (leaderLatch.hasLeadership) {
@@ -73,13 +73,13 @@ private[master] class ZooKeeperLeaderElectionAgent(val masterActor: LeaderElecta
     }
   }
 
-  private def updateLeadershipStatus(isLeader: Boolean) {
+  private def updateLeadershipStatus(isLeader: Boolean): Unit = {
     if (isLeader && status == LeadershipStatus.NOT_LEADER) {
       status = LeadershipStatus.LEADER
-      masterActor.electedLeader()
+      masterInstance.electedLeader()
     } else if (!isLeader && status == LeadershipStatus.LEADER) {
       status = LeadershipStatus.NOT_LEADER
-      masterActor.revokedLeadership()
+      masterInstance.revokedLeadership()
     }
   }
 

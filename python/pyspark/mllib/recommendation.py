@@ -16,9 +16,10 @@
 #
 
 import array
+import sys
 from collections import namedtuple
 
-from pyspark import SparkContext
+from pyspark import SparkContext, since
 from pyspark.rdd import RDD
 from pyspark.mllib.common import JavaModelWrapper, callMLlibFunc, inherit_doc
 from pyspark.mllib.util import JavaLoader, JavaSaveable
@@ -31,6 +32,10 @@ class Rating(namedtuple("Rating", ["user", "product", "rating"])):
     """
     Represents a (user, product, rating) tuple.
 
+    .. versionadded:: 1.2.0
+
+    Examples
+    --------
     >>> r = Rating(1, 2, 5.0)
     >>> (r.user, r.product, r.rating)
     (1, 2, 5.0)
@@ -48,6 +53,10 @@ class MatrixFactorizationModel(JavaModelWrapper, JavaSaveable, JavaLoader):
     """A matrix factorisation model trained by regularized alternating
     least-squares.
 
+    .. versionadded:: 0.9.0
+
+    Examples
+    --------
     >>> r1 = (1, 1, 1.0)
     >>> r2 = (1, 2, 2.0)
     >>> r3 = (2, 1, 2.0)
@@ -74,27 +83,39 @@ class MatrixFactorizationModel(JavaModelWrapper, JavaSaveable, JavaLoader):
 
     >>> first_user = model.userFeatures().take(1)[0]
     >>> latents = first_user[1]
-    >>> len(latents) == 4
-    True
+    >>> len(latents)
+    4
 
     >>> model.productFeatures().collect()
     [(1, array('d', [...])), (2, array('d', [...]))]
 
     >>> first_product = model.productFeatures().take(1)[0]
     >>> latents = first_product[1]
-    >>> len(latents) == 4
-    True
+    >>> len(latents)
+    4
 
-    >>> model = ALS.train(ratings, 1, nonnegative=True, seed=10)
+    >>> products_for_users = model.recommendProductsForUsers(1).collect()
+    >>> len(products_for_users)
+    2
+    >>> products_for_users[0]
+    (1, (Rating(user=1, product=2, rating=...),))
+
+    >>> users_for_products = model.recommendUsersForProducts(1).collect()
+    >>> len(users_for_products)
+    2
+    >>> users_for_products[0]
+    (1, (Rating(user=2, product=1, rating=...),))
+
+    >>> model = ALS.train(ratings, 1, nonnegative=True, seed=123456789)
     >>> model.predict(2, 2)
-    3.8...
+    3.73...
 
     >>> df = sqlContext.createDataFrame([Rating(1, 1, 1.0), Rating(1, 2, 2.0), Rating(2, 1, 2.0)])
-    >>> model = ALS.train(df, 1, nonnegative=True, seed=10)
+    >>> model = ALS.train(df, 1, nonnegative=True, seed=123456789)
     >>> model.predict(2, 2)
-    3.8...
+    3.73...
 
-    >>> model = ALS.trainImplicit(ratings, 1, nonnegative=True, seed=10)
+    >>> model = ALS.trainImplicit(ratings, 1, nonnegative=True, seed=123456789)
     >>> model.predict(2, 2)
     0.4...
 
@@ -112,15 +133,18 @@ class MatrixFactorizationModel(JavaModelWrapper, JavaSaveable, JavaLoader):
     ... except OSError:
     ...     pass
     """
+    @since("0.9.0")
     def predict(self, user, product):
         """
         Predicts rating for the given user and product.
         """
         return self._java_model.predict(int(user), int(product))
 
+    @since("0.9.0")
     def predictAll(self, user_product):
         """
-        Returns a list of predicted ratings for input user and product pairs.
+        Returns a list of predicted ratings for input user and product
+        pairs.
         """
         assert isinstance(user_product, RDD), "user_product should be RDD of (user, product)"
         first = user_product.first()
@@ -128,6 +152,7 @@ class MatrixFactorizationModel(JavaModelWrapper, JavaSaveable, JavaLoader):
         user_product = user_product.map(lambda u_p: (int(u_p[0]), int(u_p[1])))
         return self.call("predict", user_product)
 
+    @since("1.2.0")
     def userFeatures(self):
         """
         Returns a paired RDD, where the first element is the user and the
@@ -135,6 +160,7 @@ class MatrixFactorizationModel(JavaModelWrapper, JavaSaveable, JavaLoader):
         """
         return self.call("getUserFeatures").mapValues(lambda v: array.array('d', v))
 
+    @since("1.2.0")
     def productFeatures(self):
         """
         Returns a paired RDD, where the first element is the product and the
@@ -142,32 +168,59 @@ class MatrixFactorizationModel(JavaModelWrapper, JavaSaveable, JavaLoader):
         """
         return self.call("getProductFeatures").mapValues(lambda v: array.array('d', v))
 
+    @since("1.4.0")
     def recommendUsers(self, product, num):
         """
-        Recommends the top "num" number of users for a given product and returns a list
-        of Rating objects sorted by the predicted rating in descending order.
+        Recommends the top "num" number of users for a given product and
+        returns a list of Rating objects sorted by the predicted rating in
+        descending order.
         """
         return list(self.call("recommendUsers", product, num))
 
+    @since("1.4.0")
     def recommendProducts(self, user, num):
         """
-        Recommends the top "num" number of products for a given user and returns a list
-        of Rating objects sorted by the predicted rating in descending order.
+        Recommends the top "num" number of products for a given user and
+        returns a list of Rating objects sorted by the predicted rating in
+        descending order.
         """
         return list(self.call("recommendProducts", user, num))
 
+    def recommendProductsForUsers(self, num):
+        """
+        Recommends the top "num" number of products for all users. The
+        number of recommendations returned per user may be less than "num".
+        """
+        return self.call("wrappedRecommendProductsForUsers", num)
+
+    def recommendUsersForProducts(self, num):
+        """
+        Recommends the top "num" number of users for all products. The
+        number of recommendations returned per product may be less than
+        "num".
+        """
+        return self.call("wrappedRecommendUsersForProducts", num)
+
     @property
+    @since("1.4.0")
     def rank(self):
+        """Rank for the features in this model"""
         return self.call("rank")
 
     @classmethod
+    @since("1.3.1")
     def load(cls, sc, path):
+        """Load a model from the given path"""
         model = cls._load_java(sc, path)
-        wrapper = sc._jvm.MatrixFactorizationModelWrapper(model)
+        wrapper = sc._jvm.org.apache.spark.mllib.api.python.MatrixFactorizationModelWrapper(model)
         return MatrixFactorizationModel(wrapper)
 
 
 class ALS(object):
+    """Alternating Least Squares matrix factorization
+
+    .. versionadded:: 0.9.0
+    """
 
     @classmethod
     def _prepare(cls, ratings):
@@ -190,6 +243,40 @@ class ALS(object):
     @classmethod
     def train(cls, ratings, rank, iterations=5, lambda_=0.01, blocks=-1, nonnegative=False,
               seed=None):
+        """
+        Train a matrix factorization model given an RDD of ratings by users
+        for a subset of products. The ratings matrix is approximated as the
+        product of two lower-rank matrices of a given rank (number of
+        features). To solve for these features, ALS is run iteratively with
+        a configurable level of parallelism.
+
+        .. versionadded:: 0.9.0
+
+        Parameters
+        ----------
+        ratings : :py:class:`pyspark.RDD`
+            RDD of `Rating` or (userID, productID, rating) tuple.
+        rank : int
+            Number of features to use (also referred to as the number of latent factors).
+        iterations : int, optional
+            Number of iterations of ALS.
+            (default: 5)
+        lambda\\_ : float, optional
+            Regularization parameter.
+            (default: 0.01)
+        blocks : int, optional
+            Number of blocks used to parallelize the computation. A value
+            of -1 will use an auto-configured number of blocks.
+            (default: -1)
+        nonnegative : bool, optional
+            A value of True will solve least-squares with nonnegativity
+            constraints.
+            (default: False)
+        seed : bool, optional
+            Random seed for initial matrix factorization model. A value
+            of None will use system time as the seed.
+            (default: None)
+        """
         model = callMLlibFunc("trainALSModel", cls._prepare(ratings), rank, iterations,
                               lambda_, blocks, nonnegative, seed)
         return MatrixFactorizationModel(model)
@@ -197,6 +284,43 @@ class ALS(object):
     @classmethod
     def trainImplicit(cls, ratings, rank, iterations=5, lambda_=0.01, blocks=-1, alpha=0.01,
                       nonnegative=False, seed=None):
+        """
+        Train a matrix factorization model given an RDD of 'implicit
+        preferences' of users for a subset of products. The ratings matrix
+        is approximated as the product of two lower-rank matrices of a
+        given rank (number of features). To solve for these features, ALS
+        is run iteratively with a configurable level of parallelism.
+
+        .. versionadded:: 0.9.0
+
+        Parameters
+        ----------
+        ratings : :py:class:`pyspark.RDD`
+            RDD of `Rating` or (userID, productID, rating) tuple.
+        rank : int
+            Number of features to use (also referred to as the number of latent factors).
+        iterations : int, optional
+            Number of iterations of ALS.
+            (default: 5)
+        lambda\\_ : float, optional
+            Regularization parameter.
+            (default: 0.01)
+        blocks : int, optional
+            Number of blocks used to parallelize the computation. A value
+            of -1 will use an auto-configured number of blocks.
+            (default: -1)
+        alpha : float, optional
+            A constant used in computing confidence.
+            (default: 0.01)
+        nonnegative : bool, optional
+            A value of True will solve least-squares with nonnegativity
+            constraints.
+            (default: False)
+        seed : int, optional
+            Random seed for initial matrix factorization model. A value
+            of None will use system time as the seed.
+            (default: None)
+        """
         model = callMLlibFunc("trainImplicitALSModel", cls._prepare(ratings), rank,
                               iterations, lambda_, blocks, alpha, nonnegative, seed)
         return MatrixFactorizationModel(model)
@@ -213,7 +337,7 @@ def _test():
     (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     globs['sc'].stop()
     if failure_count:
-        exit(-1)
+        sys.exit(-1)
 
 
 if __name__ == "__main__":

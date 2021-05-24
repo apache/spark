@@ -19,6 +19,7 @@ package org.apache.spark.graphx
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.Utils
 
 class EdgeRDDSuite extends SparkFunSuite with LocalSparkContext {
 
@@ -33,4 +34,40 @@ class EdgeRDDSuite extends SparkFunSuite with LocalSparkContext {
     }
   }
 
+  test("checkpointing") {
+    withSpark { sc =>
+      val verts = sc.parallelize(List((0L, 0), (1L, 1), (1L, 2), (2L, 3), (2L, 3), (2L, 3)))
+      val edges = EdgeRDD.fromEdges(sc.parallelize(List.empty[Edge[Int]]))
+      sc.setCheckpointDir(Utils.createTempDir().getCanonicalPath)
+      edges.checkpoint()
+
+      // EdgeRDD not yet checkpointed
+      assert(!edges.isCheckpointed)
+      assert(!edges.isCheckpointedAndMaterialized)
+      assert(!edges.partitionsRDD.isCheckpointed)
+      assert(!edges.partitionsRDD.isCheckpointedAndMaterialized)
+
+      val data = edges.collect().toSeq // force checkpointing
+
+      // EdgeRDD shows up as checkpointed, but internally it is not.
+      // Only internal partitionsRDD is checkpointed.
+      assert(edges.isCheckpointed)
+      assert(!edges.isCheckpointedAndMaterialized)
+      assert(edges.partitionsRDD.isCheckpointed)
+      assert(edges.partitionsRDD.isCheckpointedAndMaterialized)
+
+      assert(edges.collect().toSeq ===  data) // test checkpointed RDD
+    }
+  }
+
+  test("count") {
+    withSpark { sc =>
+      val empty = EdgeRDD.fromEdges(sc.emptyRDD[Edge[Int]])
+      assert(empty.count === 0)
+
+      val edges = List(Edge(0, 1, ()), Edge(1, 2, ()), Edge(2, 0, ()))
+      val nonempty = EdgeRDD.fromEdges(sc.parallelize(edges))
+      assert(nonempty.count === edges.size)
+    }
+  }
 }

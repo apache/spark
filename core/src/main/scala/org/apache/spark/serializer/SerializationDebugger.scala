@@ -25,7 +25,7 @@ import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.util.control.NonFatal
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 
 private[spark] object SerializationDebugger extends Logging {
 
@@ -53,12 +53,13 @@ private[spark] object SerializationDebugger extends Logging {
   /**
    * Find the path leading to a not serializable object. This method is modeled after OpenJDK's
    * serialization mechanism, and handles the following cases:
-   * - primitives
-   * - arrays of primitives
-   * - arrays of non-primitive objects
-   * - Serializable objects
-   * - Externalizable objects
-   * - writeReplace
+   *
+   *  - primitives
+   *  - arrays of primitives
+   *  - arrays of non-primitive objects
+   *  - Serializable objects
+   *  - Externalizable objects
+   *  - writeReplace
    *
    * It does not yet handle writeObject override, but that shouldn't be too hard to do either.
    */
@@ -154,7 +155,7 @@ private[spark] object SerializationDebugger extends Logging {
 
       // If the object has been replaced using writeReplace(),
       // then call visit() on it again to test its type again.
-      if (!finalObj.eq(o)) {
+      if (finalObj.getClass != o.getClass) {
         return visit(finalObj, s"writeReplace data (class: ${finalObj.getClass.getName})" :: stack)
       }
 
@@ -264,8 +265,13 @@ private[spark] object SerializationDebugger extends Logging {
     if (!desc.hasWriteReplaceMethod) {
       (o, desc)
     } else {
-      // write place
-      findObjectAndDescriptor(desc.invokeWriteReplace(o))
+      val replaced = desc.invokeWriteReplace(o)
+      // `writeReplace` recursion stops when the returned object has the same class.
+      if (replaced.getClass == o.getClass) {
+        (replaced, desc)
+      } else {
+        findObjectAndDescriptor(replaced)
+      }
     }
   }
 
@@ -297,7 +303,7 @@ private[spark] object SerializationDebugger extends Logging {
 
   /** An output stream that emulates /dev/null */
   private class NullOutputStream extends OutputStream {
-    override def write(b: Int) { }
+    override def write(b: Int): Unit = { }
   }
 
   /**
@@ -407,7 +413,9 @@ private[spark] object SerializationDebugger extends Logging {
 
     /** ObjectStreamClass$ClassDataSlot.desc field */
     val DescField: Field = {
+      // scalastyle:off classforname
       val f = Class.forName("java.io.ObjectStreamClass$ClassDataSlot").getDeclaredField("desc")
+      // scalastyle:on classforname
       f.setAccessible(true)
       f
     }

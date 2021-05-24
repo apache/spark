@@ -19,7 +19,6 @@ package org.apache.spark.rdd
 
 import java.io._
 
-import scala.Serializable
 import scala.collection.Map
 import scala.collection.immutable.NumericRange
 import scala.collection.mutable.ArrayBuffer
@@ -32,8 +31,8 @@ import org.apache.spark.util.Utils
 private[spark] class ParallelCollectionPartition[T: ClassTag](
     var rddId: Long,
     var slice: Int,
-    var values: Seq[T])
-    extends Partition with Serializable {
+    var values: Seq[T]
+  ) extends Partition with Serializable {
 
   def iterator: Iterator[T] = values.iterator
 
@@ -83,8 +82,8 @@ private[spark] class ParallelCollectionPartition[T: ClassTag](
 }
 
 private[spark] class ParallelCollectionRDD[T: ClassTag](
-    @transient sc: SparkContext,
-    @transient data: Seq[T],
+    sc: SparkContext,
+    @transient private val data: Seq[T],
     numSlices: Int,
     locationPrefs: Map[Int, Seq[String]])
     extends RDD[T](sc, Nil) {
@@ -116,30 +115,28 @@ private object ParallelCollectionRDD {
    */
   def slice[T: ClassTag](seq: Seq[T], numSlices: Int): Seq[Seq[T]] = {
     if (numSlices < 1) {
-      throw new IllegalArgumentException("Positive number of slices required")
+      throw new IllegalArgumentException("Positive number of partitions required")
     }
     // Sequences need to be sliced at the same set of index positions for operations
     // like RDD.zip() to behave as expected
     def positions(length: Long, numSlices: Int): Iterator[(Int, Int)] = {
-      (0 until numSlices).iterator.map(i => {
+      (0 until numSlices).iterator.map { i =>
         val start = ((i * length) / numSlices).toInt
         val end = (((i + 1) * length) / numSlices).toInt
         (start, end)
-      })
+      }
     }
     seq match {
-      case r: Range => {
-        positions(r.length, numSlices).zipWithIndex.map({ case ((start, end), index) =>
+      case r: Range =>
+        positions(r.length, numSlices).zipWithIndex.map { case ((start, end), index) =>
           // If the range is inclusive, use inclusive range for the last slice
           if (r.isInclusive && index == numSlices - 1) {
             new Range.Inclusive(r.start + start * r.step, r.end, r.step)
+          } else {
+            new Range.Inclusive(r.start + start * r.step, r.start + (end - 1) * r.step, r.step)
           }
-          else {
-            new Range(r.start + start * r.step, r.start + end * r.step, r.step)
-          }
-        }).toSeq.asInstanceOf[Seq[Seq[T]]]
-      }
-      case nr: NumericRange[_] => {
+        }.toSeq.asInstanceOf[Seq[Seq[T]]]
+      case nr: NumericRange[T] =>
         // For ranges of Long, Double, BigInteger, etc
         val slices = new ArrayBuffer[Seq[T]](numSlices)
         var r = nr
@@ -148,15 +145,12 @@ private object ParallelCollectionRDD {
           slices += r.take(sliceSize).asInstanceOf[Seq[T]]
           r = r.drop(sliceSize)
         }
-        slices
-      }
-      case _ => {
+        slices.toSeq
+      case _ =>
         val array = seq.toArray // To prevent O(n^2) operations for List etc
-        positions(array.length, numSlices).map({
-          case (start, end) =>
+        positions(array.length, numSlices).map { case (start, end) =>
             array.slice(start, end).toSeq
-        }).toSeq
-      }
+        }.toSeq
     }
   }
 }

@@ -1,0 +1,565 @@
+                                 Apache License
+                           Version 2.0, January 2004
+                        http://www.apache.org/licenses/
+
+   TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION
+
+   1. Definitions.
+
+      "License" shall mean the terms and conditions for use, reproduction,
+      and distribution as defined by Sections 1 through 9 of this document.
+
+      "Licensor" shall mean the copyright owner or entity authorized by
+      the copyright owner that is granting the License.
+
+      "Legal Entity" shall mean the union of the acting entity and all
+      other entities that control, are controlled by, or are under common
+      control with that entity. For the purposes of this definition,
+      "control" means (i) the power, direct or indirect, to cause the
+      direction or management of such entity, whether by contract or
+      otherwise, or (ii) ownership of fifty percent (50%) or more of the
+      outstanding shares, or (iii) beneficial ownership of such entity.
+
+      "You" (or "Your") shall mean an individual or Legal Entity
+      exercising permissions granted by this License.
+
+      "Source" form shall mean the preferred form for making modifications,
+      including but not limited to software source code, documentation
+      source, and configuration files.
+
+      "Object" form shall mean any form resulting from mechanical
+      transformation or translation of a Source form, including but
+      not limited to compiled object code, generated documentation,
+      and conversions to other media types.
+
+      "Work" shall mean the work of authorship, whether in Source or
+      Object form, made available under the License, as indicated by a
+      copyright notice that is included in or attached to the work
+      (an example is provided in the Appendix below).
+
+      "Derivative Works" shall mean any work, whether in Source or Object
+      form, that is based on (or derived from) the Work and for which the
+      editorial revisions, annotations, elaborations, or other modifications
+      represent, as a whole, an original work of authorship. For the purposes
+      of this License, Derivative Works shall not include works that remain
+      separable from, or merely link (or bind by name) to the interfaces of,
+      the Work and Derivative Works thereof.
+
+      "Contribution" shall mean any work of authorship, including
+      the original version of the Work and any modifications or additions
+      to that Work or Derivative Works thereof, that is intentionally
+      submitted to Licensor for inclusion in the Work by the copyright owner
+      or by an individual or Legal Entity authorized to submit on behalf of
+      the copyright owner. For the purposes of this definition, "submitted"
+      means any form of electronic, verbal, or written communication sent
+      to the Licensor or its representatives, including but not limited to
+      communication on electronic mailing lists, source code control systems,
+      and issue tracking systems that are managed by, or on behalf of, the
+      Licensor for the purpose of discussing and improving the Work, but
+      excluding communication that is conspicuously marked or otherwise
+      designated in writing by the copyright owner as "Not a Contribution."
+
+      "Contributor" shall mean Licensor and any individual or Legal Entity
+      on behalf of whom a Contribution has been received by Licensor and
+      subsequently incorporated within the Work.
+
+   2. Grant of Copyright License. Subject to the terms and conditions of
+      this License, each Contributor hereby grants to You a perpetual,
+      worldwide, non-exclusive, no-charge, royalty-free, irrevocable
+      copyright license to reproduce, prepare Derivative Works of,
+      publicly display, publicly perform, sublicense, and distribute the
+      Work and such Derivative Works in Source or Object form.
+
+   3. Grant of Patent License. Subject to the terms and conditions of
+      this License, each Contributor hereby grants to You a perpetual,
+      worldwide, non-exclusive, no-charge, royalty-free, irrevocable
+      (except as stated in this section) patent license to make, have made,
+      use, offer to sell, sell, import, and otherwise transfer the Work,
+      where such license applies only to those patent claims licensable
+      by such Contributor that are necessarily infringed by their
+      Contribution(s) alone or by combination of their Contribution(s)
+      with the Work to which such Contribution(s) was submitted. If You
+      institute patent litigation against any entity (including a
+      cross-claim or counterclaim in a lawsuit) alleging that the Work
+      or a Contribution incorporated within the Work constitutes direct
+      or contributory patent infringement, then any patent licenses
+      granted to You under this License for that Work shall terminate
+      as of the date such litigation is filed.
+
+   4. Redistribution. You may reproduce and distribute copies of the
+      Work or Derivative Works thereof in any medium, with or without
+      modifications, and in Source or Object form, provided that You
+      meet the following conditions:
+
+      (a) You must give any other recipients of the Work or
+          Derivative Works a copy of this License; and
+
+      (b) You must cause any modified files to carry prominent notices
+          stating that You changed the files; and
+
+      (c) You must retain, in the Source form of any Derivative Works
+          that You distribute, all copyright, patent, trademark, and
+          attribution notices from the Source form of the Work,
+          excluding those notices that do not pertain to any part of
+          the Derivative Works; and
+
+      (d) If the Work includes a "NOTICE" text file as part of its
+          distribution, then any Derivative Works that You distribute must
+          include a readable copy of the attribution notices contained
+          within such NOTICE file, excluding those notices that do not
+          pertain to any part of the Derivative Works, in at least one
+          of the following places: within a NOTICE text file distributed
+          as part of the Derivative Works; within the Source form or
+          documentation, if provided along with the Derivative Works; or,
+          within a display generated by the Derivative Works, if and
+          wherever such third-party notices normally appear. The contents
+          of the NOTICE file are for informational purposes only and
+          do not modify the License. You may add Your own attribution
+          notices within Derivative Works that You distribute, alongside
+          or as an addendum to the NOTICE text from the Work, provided
+          that such additional attribution notices cannot be construed
+          as modifying the License.
+
+      You may add Your own copyright statement to Your modifications and
+      may provide additional or different license terms and conditions
+      for use, reproduction, or distribution of Your modifications, or
+      for any such Derivative Works as a whole, provided Your use,
+      reproduction, and distribution of the Work otherwise complies with
+      the conditions stated in this License.
+
+   5. Submission of Contributions. Unless You explicitly state otherwise,
+      any Contribution intentionally submitted for inclusion in the Work
+      by You to the Licensor shall be under the terms and conditions of
+      this License, without any additional terms or conditions.
+      Notwithstanding the above, nothing herein shall supersede or modify
+      the terms of any separate license agreement you may have executed
+      with Licensor regarding such Contributions.
+
+   6. Trademarks. This License does not grant permission to use the trade
+      names, trademarks, service marks, or product names of the Licensor,
+      except as required for reasonable and customary use in describing the
+      origin of the Work and reproducing the content of the NOTICE file.
+
+   7. Disclaimer of Warranty. Unless required by applicable law or
+      agreed to in writing, Licensor provides the Work (and each
+      Contributor provides its Contributions) on an "AS IS" BASIS,
+      WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+      implied, including, without limitation, any warranties or conditions
+      of TITLE, NON-INFRINGEMENT, MERCHANTABILITY, or FITNESS FOR A
+      PARTICULAR PURPOSE. You are solely responsible for determining the
+      appropriateness of using or redistributing the Work and assume any
+      risks associated with Your exercise of permissions under this License.
+
+   8. Limitation of Liability. In no event and under no legal theory,
+      whether in tort (including negligence), contract, or otherwise,
+      unless required by applicable law (such as deliberate and grossly
+      negligent acts) or agreed to in writing, shall any Contributor be
+      liable to You for damages, including any direct, indirect, special,
+      incidental, or consequential damages of any character arising as a
+      result of this License or out of the use or inability to use the
+      Work (including but not limited to damages for loss of goodwill,
+      work stoppage, computer failure or malfunction, or any and all
+      other commercial damages or losses), even if such Contributor
+      has been advised of the possibility of such damages.
+
+   9. Accepting Warranty or Additional Liability. While redistributing
+      the Work or Derivative Works thereof, You may choose to offer,
+      and charge a fee for, acceptance of support, warranty, indemnity,
+      or other liability obligations and/or rights consistent with this
+      License. However, in accepting such obligations, You may act only
+      on Your own behalf and on Your sole responsibility, not on behalf
+      of any other Contributor, and only if You agree to indemnify,
+      defend, and hold each Contributor harmless for any liability
+      incurred by, or claims asserted against, such Contributor by reason
+      of your accepting any such warranty or additional liability.
+
+   END OF TERMS AND CONDITIONS
+
+   APPENDIX: How to apply the Apache License to your work.
+
+      To apply the Apache License to your work, attach the following
+      boilerplate notice, with the fields enclosed by brackets "[]"
+      replaced with your own identifying information. (Don't include
+      the brackets!)  The text should be enclosed in the appropriate
+      comment syntax for the file format. We also recommend that a
+      file or class name and description of purpose be included on the
+      same "printed page" as the copyright notice for easier
+      identification within third-party archives.
+
+   Copyright [yyyy] [name of copyright owner]
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+
+------------------------------------------------------------------------------------
+This project bundles some components that are also licensed under the Apache
+License Version 2.0:
+
+commons-beanutils:commons-beanutils
+org.apache.zookeeper:zookeeper
+oro:oro
+commons-configuration:commons-configuration
+commons-digester:commons-digester
+com.chuusai:shapeless_2.12
+com.googlecode.javaewah:JavaEWAH
+com.twitter:chill-java
+com.twitter:chill_2.12
+com.univocity:univocity-parsers
+javax.jdo:jdo-api
+joda-time:joda-time
+net.sf.opencsv:opencsv
+org.apache.derby:derby
+org.objenesis:objenesis
+org.roaringbitmap:RoaringBitmap
+org.scalanlp:breeze-macros_2.12
+org.scalanlp:breeze_2.12
+org.typelevel:macro-compat_2.12
+org.yaml:snakeyaml
+org.apache.xbean:xbean-asm7-shaded
+com.squareup.okhttp3:logging-interceptor
+com.squareup.okhttp3:okhttp
+com.squareup.okio:okio
+org.apache.spark:spark-catalyst_2.12
+org.apache.spark:spark-kvstore_2.12
+org.apache.spark:spark-launcher_2.12
+org.apache.spark:spark-mllib-local_2.12
+org.apache.spark:spark-network-common_2.12
+org.apache.spark:spark-network-shuffle_2.12
+org.apache.spark:spark-sketch_2.12
+org.apache.spark:spark-tags_2.12
+org.apache.spark:spark-unsafe_2.12
+commons-httpclient:commons-httpclient
+com.vlkan:flatbuffers
+com.ning:compress-lzf
+io.airlift:aircompressor
+io.dropwizard.metrics:metrics-core
+io.dropwizard.metrics:metrics-graphite
+io.dropwizard.metrics:metrics-json
+io.dropwizard.metrics:metrics-jvm
+io.dropwizard.metrics:metrics-jmx
+org.iq80.snappy:snappy
+com.clearspring.analytics:stream
+com.jamesmurty.utils:java-xmlbuilder
+commons-codec:commons-codec
+commons-collections:commons-collections
+io.fabric8:kubernetes-client
+io.fabric8:kubernetes-model
+io.fabric8:kubernetes-model-common
+io.netty:netty-all
+net.hydromatic:eigenbase-properties
+net.sf.supercsv:super-csv
+org.apache.arrow:arrow-format
+org.apache.arrow:arrow-memory
+org.apache.arrow:arrow-vector
+org.apache.commons:commons-crypto
+org.apache.commons:commons-lang3
+org.apache.hadoop:hadoop-annotations
+org.apache.hadoop:hadoop-auth
+org.apache.hadoop:hadoop-client
+org.apache.hadoop:hadoop-common
+org.apache.hadoop:hadoop-hdfs
+org.apache.hadoop:hadoop-hdfs-client
+org.apache.hadoop:hadoop-mapreduce-client-app
+org.apache.hadoop:hadoop-mapreduce-client-common
+org.apache.hadoop:hadoop-mapreduce-client-core
+org.apache.hadoop:hadoop-mapreduce-client-jobclient
+org.apache.hadoop:hadoop-mapreduce-client-shuffle
+org.apache.hadoop:hadoop-yarn-api
+org.apache.hadoop:hadoop-yarn-client
+org.apache.hadoop:hadoop-yarn-common
+org.apache.hadoop:hadoop-yarn-server-common
+org.apache.hadoop:hadoop-yarn-server-web-proxy
+org.apache.httpcomponents:httpclient
+org.apache.httpcomponents:httpcore
+org.apache.kerby:kerb-admin
+org.apache.kerby:kerb-client
+org.apache.kerby:kerb-common
+org.apache.kerby:kerb-core
+org.apache.kerby:kerb-crypto
+org.apache.kerby:kerb-identity
+org.apache.kerby:kerb-server
+org.apache.kerby:kerb-simplekdc
+org.apache.kerby:kerb-util
+org.apache.kerby:kerby-asn1
+org.apache.kerby:kerby-config
+org.apache.kerby:kerby-pkix
+org.apache.kerby:kerby-util
+org.apache.kerby:kerby-xdr
+org.apache.orc:orc-core
+org.apache.orc:orc-mapreduce
+org.mortbay.jetty:jetty
+org.mortbay.jetty:jetty-util
+com.jolbox:bonecp
+org.json4s:json4s-ast_2.12
+org.json4s:json4s-core_2.12
+org.json4s:json4s-jackson_2.12
+org.json4s:json4s-scalap_2.12
+com.carrotsearch:hppc
+com.fasterxml.jackson.core:jackson-annotations
+com.fasterxml.jackson.core:jackson-core
+com.fasterxml.jackson.core:jackson-databind
+com.fasterxml.jackson.dataformat:jackson-dataformat-yaml
+com.fasterxml.jackson.jaxrs:jackson-jaxrs-base
+com.fasterxml.jackson.jaxrs:jackson-jaxrs-json-provider
+com.fasterxml.jackson.module:jackson-module-jaxb-annotations
+com.fasterxml.jackson.module:jackson-module-paranamer
+com.fasterxml.jackson.module:jackson-module-scala_2.12
+com.github.mifmif:generex
+com.google.code.findbugs:jsr305
+com.google.code.gson:gson
+com.google.flatbuffers:flatbuffers-java
+com.google.guava:guava
+com.google.inject:guice
+com.google.inject.extensions:guice-servlet
+com.twitter:parquet-hadoop-bundle
+commons-cli:commons-cli
+commons-dbcp:commons-dbcp
+commons-io:commons-io
+commons-lang:commons-lang
+commons-logging:commons-logging
+commons-net:commons-net
+commons-pool:commons-pool
+io.fabric8:zjsonpatch
+javax.inject:javax.inject
+javax.validation:validation-api
+log4j:apache-log4j-extras
+log4j:log4j
+net.sf.jpam:jpam
+org.apache.avro:avro
+org.apache.avro:avro-ipc
+org.apache.avro:avro-mapred
+org.apache.commons:commons-compress
+org.apache.commons:commons-math3
+org.apache.curator:curator-client
+org.apache.curator:curator-framework
+org.apache.curator:curator-recipes
+org.apache.directory.api:api-asn1-api
+org.apache.directory.api:api-util
+org.apache.directory.server:apacheds-i18n
+org.apache.directory.server:apacheds-kerberos-codec
+org.apache.htrace:htrace-core
+org.apache.ivy:ivy
+org.apache.mesos:mesos
+org.apache.parquet:parquet-column
+org.apache.parquet:parquet-common
+org.apache.parquet:parquet-encoding
+org.apache.parquet:parquet-format
+org.apache.parquet:parquet-hadoop
+org.apache.parquet:parquet-jackson
+org.apache.thrift:libfb303
+org.apache.thrift:libthrift
+org.codehaus.jackson:jackson-core-asl
+org.codehaus.jackson:jackson-mapper-asl
+org.datanucleus:datanucleus-api-jdo
+org.datanucleus:datanucleus-core
+org.datanucleus:datanucleus-rdbms
+org.lz4:lz4-java
+org.xerial.snappy:snappy-java
+stax:stax-api
+xerces:xercesImpl
+org.codehaus.jackson:jackson-jaxrs
+org.codehaus.jackson:jackson-xc
+org.eclipse.jetty:jetty-client
+org.eclipse.jetty:jetty-continuation
+org.eclipse.jetty:jetty-http
+org.eclipse.jetty:jetty-io
+org.eclipse.jetty:jetty-jndi
+org.eclipse.jetty:jetty-plus
+org.eclipse.jetty:jetty-proxy
+org.eclipse.jetty:jetty-security
+org.eclipse.jetty:jetty-server
+org.eclipse.jetty:jetty-servlet
+org.eclipse.jetty:jetty-servlets
+org.eclipse.jetty:jetty-util
+org.eclipse.jetty:jetty-webapp
+org.eclipse.jetty:jetty-xml
+org.scala-lang.modules:scala-xml_2.12
+com.github.joshelser:dropwizard-metrics-hadoop-metrics2-reporter
+com.zaxxer.HikariCP
+org.apache.hive:hive-beeline
+org.apache.hive:hive-cli
+org.apache.hive:hive-common
+org.apache.hive:hive-exec
+org.apache.hive:hive-jdbc
+org.apache.hive:hive-llap-common
+org.apache.hive:hive-metastore
+org.apache.hive:hive-serde
+org.apache.hive:hive-service-rpc
+org.apache.hive:hive-shims-0.23
+org.apache.hive:hive-shims
+org.apache.hive:hive-common
+org.apache.hive:hive-shims-scheduler
+org.apache.hive:hive-storage-api
+org.apache.hive:hive-vector-code-gen
+org.datanucleus:javax.jdo
+com.tdunning:json
+org.apache.velocity:velocity
+org.apache.yetus:audience-annotations
+
+core/src/main/java/org/apache/spark/util/collection/TimSort.java
+core/src/main/resources/org/apache/spark/ui/static/bootstrap*
+core/src/main/resources/org/apache/spark/ui/static/jsonFormatter*
+core/src/main/resources/org/apache/spark/ui/static/vis*
+docs/js/vendor/bootstrap.js
+
+
+------------------------------------------------------------------------------------
+This product bundles various third-party components under other open source licenses.
+This section summarizes those components and their licenses. See licenses-binary/
+for text of these licenses.
+
+
+BSD 2-Clause
+------------
+
+com.github.luben:zstd-jni
+javolution:javolution
+com.esotericsoftware:kryo-shaded
+com.esotericsoftware:minlog
+com.esotericsoftware:reflectasm
+com.google.protobuf:protobuf-java
+org.codehaus.janino:commons-compiler
+org.codehaus.janino:janino
+jline:jline
+org.jodd:jodd-core
+com.github.wendykierp:JTransforms
+pl.edu.icm:JLargeArrays
+
+
+BSD 3-Clause
+------------
+
+dk.brics.automaton:automaton
+org.antlr:antlr-runtime
+org.antlr:ST4
+org.antlr:stringtemplate
+org.antlr:antlr4-runtime
+antlr:antlr
+com.thoughtworks.paranamer:paranamer
+org.scala-lang:scala-compiler
+org.scala-lang:scala-library
+org.scala-lang:scala-reflect
+org.scala-lang.modules:scala-parser-combinators_2.12
+org.fusesource.leveldbjni:leveldbjni-all
+net.sourceforge.f2j:arpack_combined_all
+xmlenc:xmlenc
+net.sf.py4j:py4j
+org.jpmml:pmml-model
+org.jpmml:pmml-schema
+org.threeten:threeten-extra
+
+python/lib/py4j-*-src.zip
+python/pyspark/cloudpickle.py
+python/pyspark/join.py
+core/src/main/resources/org/apache/spark/ui/static/d3.min.js
+
+The CSS style for the navigation sidebar of the documentation was originally
+submitted by Óscar Nájera for the scikit-learn project. The scikit-learn project
+is distributed under the 3-Clause BSD license.
+
+
+MIT License
+-----------
+
+com.microsoft.sqlserver:mssql-jdbc
+org.typelevel:spire_2.12
+org.typelevel:spire-macros_2.12
+org.typelevel:spire-platform_2.12
+org.typelevel:spire-util_2.12
+org.typelevel:algebra_2.12:jar
+org.typelevel:cats-kernel_2.12
+org.typelevel:machinist_2.12
+net.razorvine:pyrolite
+org.slf4j:jcl-over-slf4j
+org.slf4j:jul-to-slf4j
+org.slf4j:slf4j-api
+org.slf4j:slf4j-log4j12
+com.github.scopt:scopt_2.12
+dev.ludovic.netlib:blas
+dev.ludovic.netlib:arpack
+dev.ludovic.netlib:lapack
+
+core/src/main/resources/org/apache/spark/ui/static/dagre-d3.min.js
+core/src/main/resources/org/apache/spark/ui/static/*dataTables*
+core/src/main/resources/org/apache/spark/ui/static/graphlib-dot.min.js
+core/src/main/resources/org/apache/spark/ui/static/jquery*
+core/src/main/resources/org/apache/spark/ui/static/sorttable.js
+docs/js/vendor/anchor.min.js
+docs/js/vendor/jquery*
+docs/js/vendor/modernizer*
+
+
+Common Development and Distribution License (CDDL) 1.0
+------------------------------------------------------
+
+javax.activation:activation  http://www.oracle.com/technetwork/java/javase/tech/index-jsp-138795.html
+javax.xml.stream:stax-api    https://jcp.org/en/jsr/detail?id=173
+javax.transaction:javax.transaction-api
+
+
+Common Development and Distribution License (CDDL) 1.1
+------------------------------------------------------
+
+javax.el:javax.el-api	https://javaee.github.io/uel-ri/
+javax.servlet.jsp:jsp-api
+javax.transaction:jta http://www.oracle.com/technetwork/java/index.html
+javax.xml.bind:jaxb-api    https://github.com/javaee/jaxb-v2
+org.glassfish.hk2:hk2-api https://github.com/javaee/glassfish
+org.glassfish.hk2:hk2-locator (same)
+org.glassfish.hk2:hk2-utils
+org.glassfish.hk2:osgi-resource-locator
+org.glassfish.hk2.external:aopalliance-repackaged
+org.glassfish.hk2.external:javax.inject
+org.glassfish.jersey.bundles.repackaged:jersey-guava
+org.glassfish.jersey.containers:jersey-container-servlet
+org.glassfish.jersey.containers:jersey-container-servlet-core
+org.glassfish.jersey.core:jersey-client
+org.glassfish.jersey.core:jersey-common
+org.glassfish.jersey.core:jersey-server
+org.glassfish.jersey.media:jersey-media-jaxb
+
+
+Eclipse Distribution License (EDL) 1.0
+--------------------------------------
+
+org.glassfish.jaxb:jaxb-runtime
+jakarta.activation:jakarta.activation-api
+jakarta.xml.bind:jakarta.xml.bind-api
+com.sun.istack:istack-commons-runtime
+
+
+Eclipse Public License (EPL) 2.0
+--------------------------------
+
+jakarta.annotation:jakarta-annotation-api https://projects.eclipse.org/projects/ee4j.ca
+jakarta.servlet:jakarta.servlet-api https://projects.eclipse.org/projects/ee4j.servlet
+jakarta.ws.rs:jakarta.ws.rs-api https://github.com/eclipse-ee4j/jaxrs-api
+org.glassfish.hk2.external:jakarta.inject
+
+
+Public Domain
+-------------
+
+aopalliance:aopalliance
+net.iharder:base64
+org.tukaani:xz
+
+
+Creative Commons CC0 1.0 Universal Public Domain Dedication
+-----------------------------------------------------------
+(see LICENSE-CC0.txt)
+
+data/mllib/images/kittens/29.5.a_b_EGDP022204.jpg
+data/mllib/images/kittens/54893.jpg
+data/mllib/images/kittens/DP153539.jpg
+data/mllib/images/kittens/DP802813.jpg
+data/mllib/images/multi-channel/chr30.4.184.jpg

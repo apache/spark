@@ -17,20 +17,19 @@
 
 package org.apache.spark.mllib.clustering
 
+import java.util.Locale
+
 import breeze.linalg.{DenseVector => BDV}
 
-import org.apache.spark.Logging
-import org.apache.spark.annotation.{DeveloperApi, Experimental}
+import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaPairRDD
 import org.apache.spark.graphx._
-import org.apache.spark.mllib.linalg.Vector
+import org.apache.spark.internal.Logging
+import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.Utils
 
-
 /**
- * :: Experimental ::
- *
  * Latent Dirichlet Allocation (LDA), a topic model designed for text documents.
  *
  * Terminology:
@@ -42,31 +41,38 @@ import org.apache.spark.util.Utils
  *  - Original LDA paper (journal version):
  *    Blei, Ng, and Jordan.  "Latent Dirichlet Allocation."  JMLR, 2003.
  *
- * @see [[http://en.wikipedia.org/wiki/Latent_Dirichlet_allocation Latent Dirichlet allocation
- *       (Wikipedia)]]
+ * @see <a href="http://en.wikipedia.org/wiki/Latent_Dirichlet_allocation">
+ * Latent Dirichlet allocation (Wikipedia)</a>
  */
-@Experimental
+@Since("1.3.0")
 class LDA private (
     private var k: Int,
     private var maxIterations: Int,
-    private var docConcentration: Double,
+    private var docConcentration: Vector,
     private var topicConcentration: Double,
     private var seed: Long,
     private var checkpointInterval: Int,
     private var ldaOptimizer: LDAOptimizer) extends Logging {
 
-  def this() = this(k = 10, maxIterations = 20, docConcentration = -1, topicConcentration = -1,
-    seed = Utils.random.nextLong(), checkpointInterval = 10, ldaOptimizer = new EMLDAOptimizer)
+  /**
+   * Constructs a LDA instance with default parameters.
+   */
+  @Since("1.3.0")
+  def this() = this(k = 10, maxIterations = 20, docConcentration = Vectors.dense(-1),
+    topicConcentration = -1, seed = Utils.random.nextLong(), checkpointInterval = 10,
+    ldaOptimizer = new EMLDAOptimizer)
 
   /**
-   * Number of topics to infer.  I.e., the number of soft cluster centers.
+   * Number of topics to infer, i.e., the number of soft cluster centers.
    */
+  @Since("1.3.0")
   def getK: Int = k
 
   /**
-   * Number of topics to infer.  I.e., the number of soft cluster centers.
+   * Set the number of topics to infer, i.e., the number of soft cluster centers.
    * (default = 10)
    */
+  @Since("1.3.0")
   def setK(k: Int): this.type = {
     require(k > 0, s"LDA k (number of clusters) must be > 0, but was set to $k")
     this.k = k
@@ -77,39 +83,92 @@ class LDA private (
    * Concentration parameter (commonly named "alpha") for the prior placed on documents'
    * distributions over topics ("theta").
    *
-   * This is the parameter to a symmetric Dirichlet distribution.
+   * This is the parameter to a Dirichlet distribution.
    */
-  def getDocConcentration: Double = this.docConcentration
+  @Since("1.5.0")
+  def getAsymmetricDocConcentration: Vector = this.docConcentration
 
   /**
    * Concentration parameter (commonly named "alpha") for the prior placed on documents'
    * distributions over topics ("theta").
    *
-   * This is the parameter to a symmetric Dirichlet distribution, where larger values
-   * mean more smoothing (more regularization).
+   * This method assumes the Dirichlet distribution is symmetric and can be described by a single
+   * `Double` parameter. It should fail if docConcentration is asymmetric.
+   */
+  @Since("1.3.0")
+  def getDocConcentration: Double = {
+    val parameter = docConcentration(0)
+    if (docConcentration.size == 1) {
+      parameter
+    } else {
+      require(docConcentration.toArray.forall(_ == parameter))
+      parameter
+    }
+  }
+
+  /**
+   * Concentration parameter (commonly named "alpha") for the prior placed on documents'
+   * distributions over topics ("theta").
    *
-   * If set to -1, then docConcentration is set automatically.
-   *  (default = -1 = automatic)
+   * This is the parameter to a Dirichlet distribution, where larger values mean more smoothing
+   * (more regularization).
+   *
+   * If set to a singleton vector Vector(-1), then docConcentration is set automatically. If set to
+   * singleton vector Vector(t) where t != -1, then t is replicated to a vector of length k during
+   * `LDAOptimizer.initialize()`. Otherwise, the `docConcentration` vector must be length k.
+   * (default = Vector(-1) = automatic)
    *
    * Optimizer-specific parameter settings:
    *  - EM
-   *     - Value should be > 1.0
-   *     - default = (50 / k) + 1, where 50/k is common in LDA libraries and +1 follows
-   *       Asuncion et al. (2009), who recommend a +1 adjustment for EM.
+   *     - Currently only supports symmetric distributions, so all values in the vector should be
+   *       the same.
+   *     - Values should be greater than 1.0
+   *     - default = uniformly (50 / k) + 1, where 50/k is common in LDA libraries and +1 follows
+   *       from Asuncion et al. (2009), who recommend a +1 adjustment for EM.
    *  - Online
-   *     - Value should be >= 0
-   *     - default = (1.0 / k), following the implementation from
-   *       [[https://github.com/Blei-Lab/onlineldavb]].
+   *     - Values should be greater than or equal to 0
+   *     - default = uniformly (1.0 / k), following the implementation from
+   *       <a href="https://github.com/Blei-Lab/onlineldavb">here</a>.
    */
-  def setDocConcentration(docConcentration: Double): this.type = {
+  @Since("1.5.0")
+  def setDocConcentration(docConcentration: Vector): this.type = {
+    require(docConcentration.size == 1 || docConcentration.size == k,
+      s"Size of docConcentration must be 1 or ${k} but got ${docConcentration.size}")
     this.docConcentration = docConcentration
     this
   }
 
-  /** Alias for [[getDocConcentration]] */
+  /**
+   * Replicates a `Double` docConcentration to create a symmetric prior.
+   */
+  @Since("1.3.0")
+  def setDocConcentration(docConcentration: Double): this.type = {
+    this.docConcentration = Vectors.dense(docConcentration)
+    this
+  }
+
+  /**
+   * Alias for [[getAsymmetricDocConcentration]]
+   */
+  @Since("1.5.0")
+  def getAsymmetricAlpha: Vector = getAsymmetricDocConcentration
+
+  /**
+   * Alias for [[getDocConcentration]]
+   */
+  @Since("1.3.0")
   def getAlpha: Double = getDocConcentration
 
-  /** Alias for [[setDocConcentration()]] */
+  /**
+   * Alias for `setDocConcentration()`
+   */
+  @Since("1.5.0")
+  def setAlpha(alpha: Vector): this.type = setDocConcentration(alpha)
+
+  /**
+   * Alias for `setDocConcentration()`
+   */
+  @Since("1.3.0")
   def setAlpha(alpha: Double): this.type = setDocConcentration(alpha)
 
   /**
@@ -118,9 +177,10 @@ class LDA private (
    *
    * This is the parameter to a symmetric Dirichlet distribution.
    *
-   * Note: The topics' distributions over terms are called "beta" in the original LDA paper
+   * @note The topics' distributions over terms are called "beta" in the original LDA paper
    * by Blei et al., but are called "phi" in many later papers such as Asuncion et al., 2009.
    */
+  @Since("1.3.0")
   def getTopicConcentration: Double = this.topicConcentration
 
   /**
@@ -129,7 +189,7 @@ class LDA private (
    *
    * This is the parameter to a symmetric Dirichlet distribution.
    *
-   * Note: The topics' distributions over terms are called "beta" in the original LDA paper
+   * @note The topics' distributions over terms are called "beta" in the original LDA paper
    * by Blei et al., but are called "phi" in many later papers such as Asuncion et al., 2009.
    *
    * If set to -1, then topicConcentration is set automatically.
@@ -137,43 +197,60 @@ class LDA private (
    *
    * Optimizer-specific parameter settings:
    *  - EM
-   *     - Value should be > 1.0
+   *     - Value should be greater than 1.0
    *     - default = 0.1 + 1, where 0.1 gives a small amount of smoothing and +1 follows
    *       Asuncion et al. (2009), who recommend a +1 adjustment for EM.
    *  - Online
-   *     - Value should be >= 0
+   *     - Value should be greater than or equal to 0
    *     - default = (1.0 / k), following the implementation from
-   *       [[https://github.com/Blei-Lab/onlineldavb]].
+   *       <a href="https://github.com/Blei-Lab/onlineldavb">here</a>.
    */
+  @Since("1.3.0")
   def setTopicConcentration(topicConcentration: Double): this.type = {
     this.topicConcentration = topicConcentration
     this
   }
 
-  /** Alias for [[getTopicConcentration]] */
+  /**
+   * Alias for [[getTopicConcentration]]
+   */
+  @Since("1.3.0")
   def getBeta: Double = getTopicConcentration
 
-  /** Alias for [[setTopicConcentration()]] */
+  /**
+   * Alias for `setTopicConcentration()`
+   */
+  @Since("1.3.0")
   def setBeta(beta: Double): this.type = setTopicConcentration(beta)
 
   /**
-   * Maximum number of iterations for learning.
+   * Maximum number of iterations allowed.
    */
+  @Since("1.3.0")
   def getMaxIterations: Int = maxIterations
 
   /**
-   * Maximum number of iterations for learning.
+   * Set the maximum number of iterations allowed.
    * (default = 20)
    */
+  @Since("1.3.0")
   def setMaxIterations(maxIterations: Int): this.type = {
+    require(maxIterations >= 0,
+      s"Maximum of iterations must be nonnegative but got ${maxIterations}")
     this.maxIterations = maxIterations
     this
   }
 
-  /** Random seed */
+  /**
+   * Random seed for cluster initialization.
+   */
+  @Since("1.3.0")
   def getSeed: Long = seed
 
-  /** Random seed */
+  /**
+   * Set the random seed for cluster initialization.
+   */
+  @Since("1.3.0")
   def setSeed(seed: Long): this.type = {
     this.seed = seed
     this
@@ -182,36 +259,37 @@ class LDA private (
   /**
    * Period (in iterations) between checkpoints.
    */
+  @Since("1.3.0")
   def getCheckpointInterval: Int = checkpointInterval
 
   /**
-   * Period (in iterations) between checkpoints (default = 10). Checkpointing helps with recovery
-   * (when nodes fail). It also helps with eliminating temporary shuffle files on disk, which can be
-   * important when LDA is run for many iterations. If the checkpoint directory is not set in
-   * [[org.apache.spark.SparkContext]], this setting is ignored.
+   * Parameter for set checkpoint interval (greater than or equal to 1) or disable checkpoint (-1).
+   * E.g. 10 means that the cache will get checkpointed every 10 iterations. Checkpointing helps
+   * with recovery (when nodes fail). It also helps with eliminating temporary shuffle files on
+   * disk, which can be important when LDA is run for many iterations. If the checkpoint directory
+   * is not set in [[org.apache.spark.SparkContext]], this setting is ignored. (default = 10)
    *
    * @see [[org.apache.spark.SparkContext#setCheckpointDir]]
    */
+  @Since("1.3.0")
   def setCheckpointInterval(checkpointInterval: Int): this.type = {
+    require(checkpointInterval == -1 || checkpointInterval > 0,
+      s"Period between checkpoints must be -1 or positive but got ${checkpointInterval}")
     this.checkpointInterval = checkpointInterval
     this
   }
 
 
   /**
-   * :: DeveloperApi ::
-   *
    * LDAOptimizer used to perform the actual calculation
    */
-  @DeveloperApi
+  @Since("1.4.0")
   def getOptimizer: LDAOptimizer = ldaOptimizer
 
   /**
-   * :: DeveloperApi ::
-   *
    * LDAOptimizer used to perform the actual calculation (default = EMLDAOptimizer)
    */
-  @DeveloperApi
+  @Since("1.4.0")
   def setOptimizer(optimizer: LDAOptimizer): this.type = {
     this.ldaOptimizer = optimizer
     this
@@ -221,9 +299,10 @@ class LDA private (
    * Set the LDAOptimizer used to perform the actual calculation by algorithm name.
    * Currently "em", "online" are supported.
    */
+  @Since("1.4.0")
   def setOptimizer(optimizerName: String): this.type = {
     this.ldaOptimizer =
-      optimizerName.toLowerCase match {
+      optimizerName.toLowerCase(Locale.ROOT) match {
         case "em" => new EMLDAOptimizer
         case "online" => new OnlineLDAOptimizer
         case other =>
@@ -238,13 +317,14 @@ class LDA private (
    * @param documents  RDD of documents, which are term (word) count vectors paired with IDs.
    *                   The term count vectors are "bags of words" with a fixed-size vocabulary
    *                   (where the vocabulary size is the length of the vector).
-   *                   Document IDs must be unique and >= 0.
+   *                   Document IDs must be unique and greater than or equal to 0.
    * @return  Inferred LDA model
    */
+  @Since("1.3.0")
   def run(documents: RDD[(Long, Vector)]): LDAModel = {
     val state = ldaOptimizer.initialize(documents, this)
     var iter = 0
-    val iterationTimes = Array.fill[Double](maxIterations)(0)
+    val iterationTimes = Array.ofDim[Double](maxIterations)
     while (iter < maxIterations) {
       val start = System.nanoTime()
       state.next()
@@ -255,7 +335,10 @@ class LDA private (
     state.getLDAModel(iterationTimes)
   }
 
-  /** Java-friendly version of [[run()]] */
+  /**
+   * Java-friendly version of `run()`
+   */
+  @Since("1.3.0")
   def run(documents: JavaPairRDD[java.lang.Long, Vector]): LDAModel = {
     run(documents.rdd.asInstanceOf[RDD[(Long, Vector)]])
   }

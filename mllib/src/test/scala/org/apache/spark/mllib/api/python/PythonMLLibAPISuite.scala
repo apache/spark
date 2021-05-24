@@ -18,9 +18,9 @@
 package org.apache.spark.mllib.api.python
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.mllib.linalg.{DenseMatrix, Matrices, Vectors, SparseMatrix}
-import org.apache.spark.mllib.regression.LabeledPoint
+import org.apache.spark.mllib.linalg.{DenseMatrix, Matrices, SparseMatrix, Vectors}
 import org.apache.spark.mllib.recommendation.Rating
+import org.apache.spark.mllib.regression.LabeledPoint
 
 class PythonMLLibAPISuite extends SparkFunSuite {
 
@@ -72,7 +72,7 @@ class PythonMLLibAPISuite extends SparkFunSuite {
     assert(matrix === nm)
 
     // Test conversion for empty matrix
-    val empty = Array[Double]()
+    val empty = Array.empty[Double]
     val emptyMatrix = Matrices.dense(0, 0, empty)
     val ne = SerDe.loads(SerDe.dumps(emptyMatrix)).asInstanceOf[DenseMatrix]
     assert(emptyMatrix == ne)

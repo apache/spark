@@ -1,6 +1,6 @@
 set hive.map.aggr=true;
 set hive.groupby.skewindata=false;
-set mapred.reduce.tasks=31;
+set mapreduce.job.reduces=31;
 
 CREATE TABLE dest1(key STRING, c1 INT, c2 STRING, c3 INT, c4 INT) STORED AS TEXTFILE;
 
@@ -13,7 +13,7 @@ INSERT OVERWRITE TABLE dest1 SELECT substr(src.key,1,1), count(DISTINCT substr(s
 
 SELECT dest1.* FROM dest1 ORDER BY key;
 
--- HIVE-5560 when group by key is used in distinct funtion, invalid result are returned
+-- HIVE-5560 when group by key is used in distinct function, invalid result are returned
 
 EXPLAIN
 FROM src

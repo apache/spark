@@ -24,7 +24,7 @@ package org.apache.spark.sql
  *  - Reading metadata from the Hive Metastore using HiveSerDes.
  *  - Hive UDFs, UDAs, UDTs
  *
- * Users that would like access to this functionality should create a
- * [[hive.HiveContext HiveContext]] instead of a [[SQLContext]].
+ * Note that this is a private package. All classes in this package are considered an internal API
+ * to Spark and are subject to change between minor releases.
  */
 package object hive

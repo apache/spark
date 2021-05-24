@@ -17,21 +17,29 @@
 
 package org.apache.spark.mllib.evaluation
 
-import org.apache.spark.annotation.Experimental
-import org.apache.spark.rdd.RDD
-import org.apache.spark.Logging
+import org.apache.spark.annotation.Since
+import org.apache.spark.internal.Logging
 import org.apache.spark.mllib.linalg.Vectors
-import org.apache.spark.mllib.stat.{MultivariateStatisticalSummary, MultivariateOnlineSummarizer}
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.mllib.stat.Statistics
+import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.{DataFrame, Row}
 
 /**
- * :: Experimental ::
  * Evaluator for regression.
  *
- * @param predictionAndObservations an RDD of (prediction, observation) pairs.
+ * @param predictionAndObservations an RDD of either (prediction, observation, weight)
+ *                                                    or (prediction, observation) pairs
+ * @param throughOrigin True if the regression is through the origin. For example, in linear
+ *                      regression, it will be true without fitting intercept.
  */
-@Experimental
-class RegressionMetrics(predictionAndObservations: RDD[(Double, Double)]) extends Logging {
+@Since("1.2.0")
+class RegressionMetrics @Since("2.0.0") (
+    predictionAndObservations: RDD[_ <: Product], throughOrigin: Boolean)
+    extends Logging {
+
+  @Since("1.2.0")
+  def this(predictionAndObservations: RDD[_ <: Product]) =
+    this(predictionAndObservations, false)
 
   /**
    * An auxiliary constructor taking a DataFrame.
@@ -39,60 +47,90 @@ class RegressionMetrics(predictionAndObservations: RDD[(Double, Double)]) extend
    *                                  prediction and observation
    */
   private[mllib] def this(predictionAndObservations: DataFrame) =
-    this(predictionAndObservations.map(r => (r.getDouble(0), r.getDouble(1))))
+    this(predictionAndObservations.rdd.map {
+      case Row(prediction: Double, label: Double, weight: Double) =>
+        (prediction, label, weight)
+      case Row(prediction: Double, label: Double) =>
+        (prediction, label, 1.0)
+      case other =>
+        throw new IllegalArgumentException(s"Expected Row of tuples, got $other")
+    })
 
   /**
-   * Use MultivariateOnlineSummarizer to calculate summary statistics of observations and errors.
+   * Use SummarizerBuffer to calculate summary statistics of observations and errors.
    */
-  private lazy val summary: MultivariateStatisticalSummary = {
-    val summary: MultivariateStatisticalSummary = predictionAndObservations.map {
-      case (prediction, observation) => Vectors.dense(observation, observation - prediction)
-    }.aggregate(new MultivariateOnlineSummarizer())(
-        (summary, v) => summary.add(v),
-        (sum1, sum2) => sum1.merge(sum2)
-      )
-    summary
+  private lazy val summary = {
+    val weightedVectors = predictionAndObservations.map {
+      case (prediction: Double, observation: Double, weight: Double) =>
+        (Vectors.dense(observation, observation - prediction, prediction), weight)
+      case (prediction: Double, observation: Double) =>
+        (Vectors.dense(observation, observation - prediction, prediction), 1.0)
+    }
+    Statistics.colStats(weightedVectors,
+      Seq("mean", "normL1", "normL2", "variance"))
   }
 
+  private lazy val SSy = math.pow(summary.normL2(0), 2)
+  private lazy val SSerr = math.pow(summary.normL2(1), 2)
+  private lazy val SStot = summary.variance(0) * (summary.weightSum - 1)
+  private lazy val SSreg = math.pow(summary.normL2(2), 2) +
+    math.pow(summary.mean(0), 2) * summary.weightSum -
+    2 * summary.mean(0) * summary.mean(2) * summary.weightSum
+
   /**
-   * Returns the explained variance regression score.
-   * explainedVariance = 1 - variance(y - \hat{y}) / variance(y)
-   * Reference: [[http://en.wikipedia.org/wiki/Explained_variation]]
+   * Returns the variance explained by regression.
+   * explainedVariance = $\sum_i (\hat{y_i} - \bar{y})^2^ / n$
+   * @see <a href="https://en.wikipedia.org/wiki/Fraction_of_variance_unexplained">
+   * Fraction of variance unexplained (Wikipedia)</a>
    */
+  @Since("1.2.0")
   def explainedVariance: Double = {
-    1 - summary.variance(1) / summary.variance(0)
+    SSreg / summary.weightSum
   }
 
   /**
    * Returns the mean absolute error, which is a risk function corresponding to the
    * expected value of the absolute error loss or l1-norm loss.
    */
+  @Since("1.2.0")
   def meanAbsoluteError: Double = {
-    summary.normL1(1) / summary.count
+    summary.normL1(1) / summary.weightSum
   }
 
   /**
    * Returns the mean squared error, which is a risk function corresponding to the
    * expected value of the squared error loss or quadratic loss.
    */
+  @Since("1.2.0")
   def meanSquaredError: Double = {
-    val rmse = summary.normL2(1) / math.sqrt(summary.count)
-    rmse * rmse
+    SSerr / summary.weightSum
   }
 
   /**
    * Returns the root mean squared error, which is defined as the square root of
    * the mean squared error.
    */
+  @Since("1.2.0")
   def rootMeanSquaredError: Double = {
-    summary.normL2(1) / math.sqrt(summary.count)
+    math.sqrt(this.meanSquaredError)
   }
 
   /**
-   * Returns R^2^, the coefficient of determination.
-   * Reference: [[http://en.wikipedia.org/wiki/Coefficient_of_determination]]
+   * Returns R^2^, the unadjusted coefficient of determination.
+   * @see <a href="http://en.wikipedia.org/wiki/Coefficient_of_determination">
+   * Coefficient of determination (Wikipedia)</a>
+   * In case of regression through the origin, the definition of R^2^ is to be modified.
+   * @see <a href="https://online.stat.psu.edu/~ajw13/stat501/SpecialTopics/Reg_thru_origin.pdf">
+   * J. G. Eisenhauer, Regression through the Origin. Teaching Statistics 25, 76-80 (2003)</a>
    */
+  @Since("1.2.0")
   def r2: Double = {
-    1 - math.pow(summary.normL2(1), 2) / (summary.variance(0) * (summary.count - 1))
+    if (throughOrigin) {
+      1 - SSerr / SSy
+    } else {
+      1 - SSerr / SStot
+    }
   }
+
+  private[spark] def count: Long = summary.count
 }

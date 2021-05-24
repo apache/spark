@@ -19,24 +19,29 @@ package org.apache.spark.network.netty
 
 import java.io.InputStreamReader
 import java.nio._
-import java.nio.charset.Charset
+import java.nio.charset.StandardCharsets
 import java.util.concurrent.TimeUnit
 
+import scala.concurrent.Promise
 import scala.concurrent.duration._
-import scala.concurrent.{Await, Promise}
 import scala.util.{Failure, Success, Try}
 
 import com.google.common.io.CharStreams
+import org.mockito.Mockito._
+import org.scalatest.matchers.must.Matchers
+import org.scalatest.matchers.should.Matchers._
+import org.scalatestplus.mockito.MockitoSugar
+
+import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
+import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.Network
+import org.apache.spark.network.{BlockDataManager, BlockTransferService}
 import org.apache.spark.network.buffer.{ManagedBuffer, NioManagedBuffer}
 import org.apache.spark.network.shuffle.BlockFetchingListener
-import org.apache.spark.network.{BlockDataManager, BlockTransferService}
 import org.apache.spark.storage.{BlockId, ShuffleBlockId}
-import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
-import org.mockito.Mockito._
-import org.scalatest.mock.MockitoSugar
-import org.scalatest.ShouldMatchers
+import org.apache.spark.util.ThreadUtils
 
-class NettyBlockTransferSecuritySuite extends SparkFunSuite with MockitoSugar with ShouldMatchers {
+class NettyBlockTransferSecuritySuite extends SparkFunSuite with MockitoSugar with Matchers {
   test("security default off") {
     val conf = new SparkConf()
       .set("spark.app.id", "app-id")
@@ -48,8 +53,8 @@ class NettyBlockTransferSecuritySuite extends SparkFunSuite with MockitoSugar wi
 
   test("security on same password") {
     val conf = new SparkConf()
-      .set("spark.authenticate", "true")
-      .set("spark.authenticate.secret", "good")
+      .set(NETWORK_AUTH_ENABLED, true)
+      .set(AUTH_SECRET, "good")
       .set("spark.app.id", "app-id")
     testConnection(conf, conf) match {
       case Success(_) => // expected
@@ -59,10 +64,10 @@ class NettyBlockTransferSecuritySuite extends SparkFunSuite with MockitoSugar wi
 
   test("security on mismatch password") {
     val conf0 = new SparkConf()
-      .set("spark.authenticate", "true")
-      .set("spark.authenticate.secret", "good")
+      .set(NETWORK_AUTH_ENABLED, true)
+      .set(AUTH_SECRET, "good")
       .set("spark.app.id", "app-id")
-    val conf1 = conf0.clone.set("spark.authenticate.secret", "bad")
+    val conf1 = conf0.clone.set(AUTH_SECRET, "bad")
     testConnection(conf0, conf1) match {
       case Success(_) => fail("Should have failed")
       case Failure(t) => t.getMessage should include ("Mismatched response")
@@ -71,10 +76,10 @@ class NettyBlockTransferSecuritySuite extends SparkFunSuite with MockitoSugar wi
 
   test("security mismatch auth off on server") {
     val conf0 = new SparkConf()
-      .set("spark.authenticate", "true")
-      .set("spark.authenticate.secret", "good")
+      .set(NETWORK_AUTH_ENABLED, true)
+      .set(AUTH_SECRET, "good")
       .set("spark.app.id", "app-id")
-    val conf1 = conf0.clone.set("spark.authenticate", "false")
+    val conf1 = conf0.clone.set(NETWORK_AUTH_ENABLED, false)
     testConnection(conf0, conf1) match {
       case Success(_) => fail("Should have failed")
       case Failure(t) => // any funny error may occur, sever will interpret SASL token as RPC
@@ -83,15 +88,29 @@ class NettyBlockTransferSecuritySuite extends SparkFunSuite with MockitoSugar wi
 
   test("security mismatch auth off on client") {
     val conf0 = new SparkConf()
-      .set("spark.authenticate", "false")
-      .set("spark.authenticate.secret", "good")
+      .set(NETWORK_AUTH_ENABLED, false)
+      .set(AUTH_SECRET, "good")
       .set("spark.app.id", "app-id")
-    val conf1 = conf0.clone.set("spark.authenticate", "true")
+    val conf1 = conf0.clone.set(NETWORK_AUTH_ENABLED, true)
     testConnection(conf0, conf1) match {
       case Success(_) => fail("Should have failed")
       case Failure(t) => t.getMessage should include ("Expected SaslMessage")
     }
   }
+
+  test("security with aes encryption") {
+    val conf = new SparkConf()
+      .set(NETWORK_AUTH_ENABLED, true)
+      .set(AUTH_SECRET, "good")
+      .set("spark.app.id", "app-id")
+      .set(Network.NETWORK_CRYPTO_ENABLED, true)
+      .set(Network.NETWORK_CRYPTO_SASL_FALLBACK, false)
+    testConnection(conf, conf) match {
+      case Success(_) => // expected
+      case Failure(t) => fail(t)
+    }
+  }
+
 
   /**
    * Creates two servers with different configurations and sees if they can talk.
@@ -102,24 +121,27 @@ class NettyBlockTransferSecuritySuite extends SparkFunSuite with MockitoSugar wi
     val blockManager = mock[BlockDataManager]
     val blockId = ShuffleBlockId(0, 1, 2)
     val blockString = "Hello, world!"
-    val blockBuffer = new NioManagedBuffer(ByteBuffer.wrap(blockString.getBytes))
-    when(blockManager.getBlockData(blockId)).thenReturn(blockBuffer)
+    val blockBuffer = new NioManagedBuffer(ByteBuffer.wrap(
+      blockString.getBytes(StandardCharsets.UTF_8)))
+    when(blockManager.getLocalBlockData(blockId)).thenReturn(blockBuffer)
 
     val securityManager0 = new SecurityManager(conf0)
-    val exec0 = new NettyBlockTransferService(conf0, securityManager0, numCores = 1)
+    val exec0 = new NettyBlockTransferService(conf0, securityManager0, "localhost", "localhost", 0,
+      1)
     exec0.init(blockManager)
 
     val securityManager1 = new SecurityManager(conf1)
-    val exec1 = new NettyBlockTransferService(conf1, securityManager1, numCores = 1)
+    val exec1 = new NettyBlockTransferService(conf1, securityManager1, "localhost", "localhost", 0,
+      1)
     exec1.init(blockManager)
 
     val result = fetchBlock(exec0, exec1, "1", blockId) match {
       case Success(buf) =>
         val actualString = CharStreams.toString(
-          new InputStreamReader(buf.createInputStream(), Charset.forName("UTF-8")))
+          new InputStreamReader(buf.createInputStream(), StandardCharsets.UTF_8))
         actualString should equal(blockString)
         buf.release()
-        Success()
+        Success(())
       case Failure(t) =>
         Failure(t)
     }
@@ -146,9 +168,9 @@ class NettyBlockTransferSecuritySuite extends SparkFunSuite with MockitoSugar wi
         override def onBlockFetchSuccess(blockId: String, data: ManagedBuffer): Unit = {
           promise.success(data.retain())
         }
-      })
+      }, null)
 
-    Await.ready(promise.future, FiniteDuration(1000, TimeUnit.MILLISECONDS))
+    ThreadUtils.awaitReady(promise.future, FiniteDuration(10, TimeUnit.SECONDS))
     promise.future.value.get
   }
 }

@@ -17,7 +17,12 @@
 
 package test.org.apache.spark;
 
+import java.util.Map;
+
 import org.apache.spark.TaskContext;
+import org.apache.spark.resource.ResourceInformation;
+import org.apache.spark.util.TaskCompletionListener;
+import org.apache.spark.util.TaskFailureListener;
 
 /**
  * Something to make sure that TaskContext can be used in Java.
@@ -29,13 +34,47 @@ public class JavaTaskContextCompileCheck {
 
     tc.isCompleted();
     tc.isInterrupted();
-    tc.isRunningLocally();
 
     tc.addTaskCompletionListener(new JavaTaskCompletionListenerImpl());
+    tc.addTaskFailureListener(new JavaTaskFailureListenerImpl());
 
     tc.attemptNumber();
     tc.partitionId();
     tc.stageId();
+    tc.stageAttemptNumber();
     tc.taskAttemptId();
+    // this returns a scala Map, so make sure the JMap version give a java type back
+    tc.resources();
+    Map<String, ResourceInformation> resources = tc.resourcesJMap();
+    tc.taskMetrics();
+    tc.taskMemoryManager();
+    tc.getLocalProperties();
   }
+
+  /**
+   * A simple implementation of TaskCompletionListener that makes sure TaskCompletionListener and
+   * TaskContext is Java friendly.
+   */
+  static class JavaTaskCompletionListenerImpl implements TaskCompletionListener {
+    @Override
+    public void onTaskCompletion(TaskContext context) {
+      context.isCompleted();
+      context.isInterrupted();
+      context.stageId();
+      context.stageAttemptNumber();
+      context.partitionId();
+      context.addTaskCompletionListener(this);
+    }
+  }
+
+  /**
+   * A simple implementation of TaskCompletionListener that makes sure TaskCompletionListener and
+   * TaskContext is Java friendly.
+   */
+  static class JavaTaskFailureListenerImpl implements TaskFailureListener {
+    @Override
+    public void onTaskFailure(TaskContext context, Throwable error) {
+    }
+  }
+
 }

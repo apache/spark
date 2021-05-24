@@ -17,37 +17,36 @@
 
 package org.apache.spark.mllib.tree.impurity
 
-import org.apache.spark.annotation.{DeveloperApi, Experimental}
+import java.util.Locale
+
+import org.apache.spark.annotation.Since
 
 /**
- * :: Experimental ::
  * Trait for calculating information gain.
  * This trait is used for
  *  (a) setting the impurity parameter in [[org.apache.spark.mllib.tree.configuration.Strategy]]
  *  (b) calculating impurity values from sufficient statistics.
  */
-@Experimental
+@Since("1.0.0")
 trait Impurity extends Serializable {
 
   /**
-   * :: DeveloperApi ::
    * information calculation for multiclass classification
    * @param counts Array[Double] with counts for each label
    * @param totalCount sum of counts for all labels
    * @return information value, or 0 if totalCount = 0
    */
-  @DeveloperApi
+  @Since("1.1.0")
   def calculate(counts: Array[Double], totalCount: Double): Double
 
   /**
-   * :: DeveloperApi ::
    * information calculation for regression
    * @param count number of instances
    * @param sum sum of labels
    * @param sumSquares summation of squares of the labels
    * @return information value, or 0 if count = 0
    */
-  @DeveloperApi
+  @Since("1.0.0")
   def calculate(count: Double, sum: Double, sumSquares: Double): Double
 }
 
@@ -57,7 +56,7 @@ trait Impurity extends Serializable {
  * Note: Instances of this class do not hold the data; they operate on views of the data.
  * @param statsSize  Length of the vector of sufficient statistics for one bin.
  */
-private[tree] abstract class ImpurityAggregator(val statsSize: Int) extends Serializable {
+private[spark] abstract class ImpurityAggregator(val statsSize: Int) extends Serializable {
 
   /**
    * Merge the stats from one bin into another.
@@ -78,7 +77,12 @@ private[tree] abstract class ImpurityAggregator(val statsSize: Int) extends Seri
    * @param allStats  Flat stats array, with stats for this (node, feature, bin) contiguous.
    * @param offset    Start index of stats for this (node, feature, bin).
    */
-  def update(allStats: Array[Double], offset: Int, label: Double, instanceWeight: Double): Unit
+  def update(
+      allStats: Array[Double],
+      offset: Int,
+      label: Double,
+      numSamples: Int,
+      sampleWeight: Double): Unit
 
   /**
    * Get an [[ImpurityCalculator]] for a (node, feature, bin).
@@ -86,7 +90,6 @@ private[tree] abstract class ImpurityAggregator(val statsSize: Int) extends Seri
    * @param offset    Start index of stats for this (node, feature, bin).
    */
   def getCalculator(allStats: Array[Double], offset: Int): ImpurityCalculator
-
 }
 
 /**
@@ -95,7 +98,7 @@ private[tree] abstract class ImpurityAggregator(val statsSize: Int) extends Seri
  * (node, feature, bin).
  * @param stats  Array of sufficient statistics for a (node, feature, bin).
  */
-private[tree] abstract class ImpurityCalculator(val stats: Array[Double]) {
+private[spark] abstract class ImpurityCalculator(val stats: Array[Double]) extends Serializable {
 
   /**
    * Make a deep copy of this [[ImpurityCalculator]].
@@ -120,6 +123,7 @@ private[tree] abstract class ImpurityCalculator(val stats: Array[Double]) {
       stats(i) += other.stats(i)
       i += 1
     }
+    rawCount += other.rawCount
     this
   }
 
@@ -137,13 +141,19 @@ private[tree] abstract class ImpurityCalculator(val stats: Array[Double]) {
       stats(i) -= other.stats(i)
       i += 1
     }
+    rawCount -= other.rawCount
     this
   }
 
   /**
-   * Number of data points accounted for in the sufficient statistics.
+   * Weighted number of data points accounted for in the sufficient statistics.
    */
-  def count: Long
+  def count: Double
+
+  /**
+   * Raw number of data points accounted for in the sufficient statistics.
+   */
+  var rawCount: Long
 
   /**
    * Prediction which should be made based on the sufficient statistics.
@@ -160,7 +170,7 @@ private[tree] abstract class ImpurityCalculator(val stats: Array[Double]) {
    * Fails if the array is empty.
    */
   protected def indexOfLargestArrayElement(array: Array[Double]): Int = {
-    val result = array.foldLeft(-1, Double.MinValue, 0) {
+    val result = array.foldLeft((-1, Double.MinValue, 0)) {
       case ((maxIndex, maxValue, currentIndex), currentValue) =>
         if (currentValue > maxValue) {
           (currentIndex, currentValue, currentIndex + 1)
@@ -175,4 +185,25 @@ private[tree] abstract class ImpurityCalculator(val stats: Array[Double]) {
     result._1
   }
 
+}
+
+private[spark] object ImpurityCalculator {
+
+  /**
+   * Create an [[ImpurityCalculator]] instance of the given impurity type and with
+   * the given stats.
+   */
+  def getCalculator(
+      impurity: String,
+      stats: Array[Double],
+      rawCount: Long): ImpurityCalculator = {
+    impurity.toLowerCase(Locale.ROOT) match {
+      case "gini" => new GiniCalculator(stats, rawCount)
+      case "entropy" => new EntropyCalculator(stats, rawCount)
+      case "variance" => new VarianceCalculator(stats, rawCount)
+      case _ =>
+        throw new IllegalArgumentException(
+          s"ImpurityCalculator builder did not recognize impurity type: $impurity")
+    }
+  }
 }

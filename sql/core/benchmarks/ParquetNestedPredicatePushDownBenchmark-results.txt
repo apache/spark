@@ -1,0 +1,21 @@
+OpenJDK 64-Bit Server VM 1.8.0_282-b08 on Linux 5.4.0-1043-azure
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+Can skip all row groups:                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Without nested predicate Pushdown                 41268          41398          78          2.5         393.6       1.0X
+With nested predicate Pushdown                       68             81          10       1532.2           0.7     603.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_282-b08 on Linux 5.4.0-1043-azure
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+Can skip some row groups:                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Without nested predicate Pushdown                 41173          41299          80          2.5         392.7       1.0X
+With nested predicate Pushdown                       75             82           9       1404.3           0.7     551.4X
+
+OpenJDK 64-Bit Server VM 1.8.0_282-b08 on Linux 5.4.0-1043-azure
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+Can skip no row groups:                   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Without nested predicate Pushdown                 46265          46390          91          2.3         441.2       1.0X
+With nested predicate Pushdown                    46263          46383         111          2.3         441.2       1.0X
+

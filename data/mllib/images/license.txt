@@ -1,0 +1,13 @@
+The images in the folder "kittens" are under the creative commons CC0 license, or no rights reserved:
+https://creativecommons.org/share-your-work/public-domain/cc0/
+The images are taken from:
+https://ccsearch.creativecommons.org/image/detail/WZnbJSJ2-dzIDiuUUdto3Q==
+https://ccsearch.creativecommons.org/image/detail/_TlKu_rm_QrWlR0zthQTXA==
+https://ccsearch.creativecommons.org/image/detail/OPNnHJb6q37rSZ5o_L5JHQ==
+https://ccsearch.creativecommons.org/image/detail/B2CVP_j5KjwZm7UAVJ3Hvw==
+
+The chr30.4.184.jpg and grayscale.jpg images are also under the CC0 license, taken from:
+https://ccsearch.creativecommons.org/image/detail/8eO_qqotBfEm2UYxirLntw==
+
+The image under "multi-channel" directory is under the CC BY-SA 4.0 license cropped from:
+https://en.wikipedia.org/wiki/Alpha_compositing#/media/File:Hue_alpha_falloff.png

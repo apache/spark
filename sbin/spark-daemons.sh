@@ -17,7 +17,7 @@
 # limitations under the License.
 #
 
-# Run a Spark command on all slave hosts.
+# Run a Spark command on all worker hosts.
 
 usage="Usage: spark-daemons.sh [--config <conf-dir>] [start|stop] command instance-number args..."
 
@@ -27,9 +27,10 @@ if [ $# -le 1 ]; then
   exit 1
 fi
 
-sbin=`dirname "$0"`
-sbin=`cd "$sbin"; pwd`
+if [ -z "${SPARK_HOME}" ]; then
+  export SPARK_HOME="$(cd "`dirname "$0"`"/..; pwd)"
+fi
 
-. "$sbin/spark-config.sh"
+. "${SPARK_HOME}/sbin/spark-config.sh"
 
-exec "$sbin/slaves.sh" cd "$SPARK_HOME" \; "$sbin/spark-daemon.sh" "$@"
+exec "${SPARK_HOME}/sbin/workers.sh" cd "${SPARK_HOME}" \; "${SPARK_HOME}/sbin/spark-daemon.sh" "$@"

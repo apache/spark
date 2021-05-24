@@ -19,16 +19,17 @@ package org.apache.spark.input
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream}
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 
-import com.google.common.io.ByteStreams
+import com.google.common.io.{ByteStreams, Closeables}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce.{InputSplit, JobContext, RecordReader, TaskAttemptContext}
 import org.apache.hadoop.mapreduce.lib.input.{CombineFileInputFormat, CombineFileRecordReader, CombineFileSplit}
 
-import org.apache.spark.annotation.Experimental
-import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.SparkContext
+import org.apache.spark.annotation.Since
+import org.apache.spark.internal.config
 
 /**
  * A general format for reading whole files in as streams, byte arrays,
@@ -43,13 +44,26 @@ private[spark] abstract class StreamFileInputFormat[T]
    * Allow minPartitions set by end-user in order to keep compatibility with old Hadoop API
    * which is set through setMaxSplitSize
    */
-  def setMinPartitions(context: JobContext, minPartitions: Int) {
-    val files = listStatus(context)
-    val totalLen = files.map { file =>
-      if (file.isDir) 0L else file.getLen
-    }.sum
+  def setMinPartitions(sc: SparkContext, context: JobContext, minPartitions: Int): Unit = {
+    val defaultMaxSplitBytes = sc.getConf.get(config.FILES_MAX_PARTITION_BYTES)
+    val openCostInBytes = sc.getConf.get(config.FILES_OPEN_COST_IN_BYTES)
+    val defaultParallelism = Math.max(sc.defaultParallelism, minPartitions)
+    val files = listStatus(context).asScala
+    val totalBytes = files.filterNot(_.isDirectory).map(_.getLen + openCostInBytes).sum
+    val bytesPerCore = totalBytes / defaultParallelism
+    val maxSplitSize = Math.min(defaultMaxSplitBytes, Math.max(openCostInBytes, bytesPerCore))
 
-    val maxSplitSize = Math.ceil(totalLen * 1.0 / files.length).toLong
+    // For small files we need to ensure the min split size per node & rack <= maxSplitSize
+    val jobConfig = context.getConfiguration
+    val minSplitSizePerNode = jobConfig.getLong(CombineFileInputFormat.SPLIT_MINSIZE_PERNODE, 0L)
+    val minSplitSizePerRack = jobConfig.getLong(CombineFileInputFormat.SPLIT_MINSIZE_PERRACK, 0L)
+
+    if (maxSplitSize < minSplitSizePerNode) {
+      super.setMinSplitSizeNode(maxSplitSize)
+    }
+    if (maxSplitSize < minSplitSizePerRack) {
+      super.setMinSplitSizeRack(maxSplitSize)
+    }
     super.setMaxSplitSize(maxSplitSize)
   }
 
@@ -86,7 +100,6 @@ private[spark] abstract class StreamBasedRecordReader[T](
     if (!processed) {
       val fileIn = new PortableDataStream(split, context, index)
       value = parseStream(fileIn)
-      fileIn.close() // if it has not been open yet, close does nothing
       key = fileIn.getPath
       processed = true
       true
@@ -132,23 +145,15 @@ private[spark] class StreamInputFormat extends StreamFileInputFormat[PortableDat
  * @note TaskAttemptContext is not serializable resulting in the confBytes construct
  * @note CombineFileSplit is not serializable resulting in the splitBytes construct
  */
-@Experimental
 class PortableDataStream(
-    @transient isplit: CombineFileSplit,
-    @transient context: TaskAttemptContext,
+    isplit: CombineFileSplit,
+    context: TaskAttemptContext,
     index: Integer)
   extends Serializable {
 
-  // transient forces file to be reopened after being serialization
-  // it is also used for non-serializable classes
-
-  @transient private var fileIn: DataInputStream = null
-  @transient private var isOpen = false
-
   private val confBytes = {
     val baos = new ByteArrayOutputStream()
-    SparkHadoopUtil.get.getConfigurationFromJobContext(context).
-      write(new DataOutputStream(baos))
+    context.getConfiguration.write(new DataOutputStream(baos))
     baos.toByteArray
   }
 
@@ -167,7 +172,7 @@ class PortableDataStream(
 
   @transient private lazy val conf = {
     val bais = new ByteArrayInputStream(confBytes)
-    val nconf = new Configuration()
+    val nconf = new Configuration(false)
     nconf.readFields(new DataInputStream(bais))
     nconf
   }
@@ -180,42 +185,33 @@ class PortableDataStream(
   }
 
   /**
-   * Create a new DataInputStream from the split and context
+   * Create a new DataInputStream from the split and context. The user of this method is responsible
+   * for closing the stream after usage.
    */
+  @Since("1.2.0")
   def open(): DataInputStream = {
-    if (!isOpen) {
-      val pathp = split.getPath(index)
-      val fs = pathp.getFileSystem(conf)
-      fileIn = fs.open(pathp)
-      isOpen = true
-    }
-    fileIn
+    val pathp = split.getPath(index)
+    val fs = pathp.getFileSystem(conf)
+    fs.open(pathp)
   }
 
   /**
    * Read the file as a byte array
    */
+  @Since("1.2.0")
   def toArray(): Array[Byte] = {
-    open()
-    val innerBuffer = ByteStreams.toByteArray(fileIn)
-    close()
-    innerBuffer
-  }
-
-  /**
-   * Close the file (if it is currently open)
-   */
-  def close(): Unit = {
-    if (isOpen) {
-      try {
-        fileIn.close()
-        isOpen = false
-      } catch {
-        case ioe: java.io.IOException => // do nothing
-      }
+    val stream = open()
+    try {
+      ByteStreams.toByteArray(stream)
+    } finally {
+      Closeables.close(stream, true)
     }
   }
 
+  @Since("1.2.0")
   def getPath(): String = path
+
+  @Since("2.2.0")
+  def getConfiguration: Configuration = conf
 }
 

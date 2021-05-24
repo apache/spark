@@ -21,10 +21,10 @@ import re
 line = sys.stdin.readline()
 x = 1
 while line:
-  tem = sys.stdin.readline()
-  if line == tem:
-    x = x + 1
-  else:
-    print str(x).strip()+'\t'+re.sub('\t','_',line.strip())
-    line = tem
-    x = 1
+    tem = sys.stdin.readline()
+    if line == tem:
+        x += 1
+    else:
+        print(str(x).strip()+'\t'+re.sub('\t', '_', line.strip()))
+        line = tem
+        x = 1

@@ -16,14 +16,13 @@
 # specific language governing permissions and limitations
 # under the License.
 #
-import sys, re
-import datetime
+import sys
 import os
 
-table_name=None
-if os.environ.has_key('hive_streaming_tablename'):
-  table_name=os.environ['hive_streaming_tablename']
+table_name = None
+if os.environ in 'hive_streaming_tablename':
+    table_name = os.environ['hive_streaming_tablename']
 
 for line in sys.stdin:
-  print line
-  print >> sys.stderr, "dummy"
+    print(line)
+    print("dummy", file=sys.stderr)

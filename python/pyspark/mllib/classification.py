@@ -16,19 +16,23 @@
 #
 
 from math import exp
+import sys
+import warnings
 
 import numpy
-from numpy import array
 
-from pyspark import RDD
+from pyspark import RDD, since
 from pyspark.mllib.common import callMLlibFunc, _py2java, _java2py
-from pyspark.mllib.linalg import DenseVector, SparseVector, _convert_to_vector
-from pyspark.mllib.regression import LabeledPoint, LinearModel, _regression_train_wrapper
+from pyspark.mllib.linalg import _convert_to_vector
+from pyspark.mllib.regression import (
+    LabeledPoint, LinearModel, _regression_train_wrapper,
+    StreamingLinearAlgorithm)
 from pyspark.mllib.util import Saveable, Loader, inherit_doc
 
 
 __all__ = ['LogisticRegressionModel', 'LogisticRegressionWithSGD', 'LogisticRegressionWithLBFGS',
-           'SVMModel', 'SVMWithSGD', 'NaiveBayesModel', 'NaiveBayes']
+           'SVMModel', 'SVMWithSGD', 'NaiveBayesModel', 'NaiveBayes',
+           'StreamingLogisticRegressionWithSGD']
 
 
 class LinearClassificationModel(LinearModel):
@@ -40,38 +44,36 @@ class LinearClassificationModel(LinearModel):
         super(LinearClassificationModel, self).__init__(weights, intercept)
         self._threshold = None
 
+    @since('1.4.0')
     def setThreshold(self, value):
         """
-        .. note:: Experimental
-
         Sets the threshold that separates positive predictions from
         negative predictions. An example with prediction score greater
-        than or equal to this threshold is identified as an positive,
+        than or equal to this threshold is identified as a positive,
         and negative otherwise. It is used for binary classification
         only.
         """
         self._threshold = value
 
     @property
+    @since('1.4.0')
     def threshold(self):
         """
-        .. note:: Experimental
-
         Returns the threshold (if any) used for converting raw
         prediction scores into 0/1 predictions. It is used for
         binary classification only.
         """
         return self._threshold
 
+    @since('1.4.0')
     def clearThreshold(self):
         """
-        .. note:: Experimental
-
         Clears the threshold so that `predict` will output raw
         prediction scores. It is used for binary classification only.
         """
         self._threshold = None
 
+    @since('1.4.0')
     def predict(self, test):
         """
         Predict values for a single data point or an RDD of points
@@ -86,17 +88,27 @@ class LogisticRegressionModel(LinearClassificationModel):
     Classification model trained using Multinomial/Binary Logistic
     Regression.
 
-    :param weights: Weights computed for every feature.
-    :param intercept: Intercept computed for this model. (Only used
-            in Binary Logistic Regression. In Multinomial Logistic
-            Regression, the intercepts will not be a single value,
-            so the intercepts will be part of the weights.)
-    :param numFeatures: the dimension of the features.
-    :param numClasses: the number of possible outcomes for k classes
-            classification problem in Multinomial Logistic Regression.
-            By default, it is binary logistic regression so numClasses
-            will be set to 2.
+    .. versionadded:: 0.9.0
 
+    Parameters
+    ----------
+    weights : :py:class:`pyspark.mllib.linalg.Vector`
+        Weights computed for every feature.
+    intercept : float
+        Intercept computed for this model. (Only used in Binary Logistic
+        Regression. In Multinomial Logistic Regression, the intercepts will
+        not be a single value, so the intercepts will be part of the
+        weights.)
+    numFeatures : int
+        The dimension of the features.
+    numClasses : int
+        The number of possible outcomes for k classes classification problem
+        in Multinomial Logistic Regression. By default, it is binary
+        logistic regression so numClasses will be set to 2.
+
+    Examples
+    --------
+    >>> from pyspark.mllib.linalg import SparseVector
     >>> data = [
     ...     LabeledPoint(0.0, [0.0, 1.0]),
     ...     LabeledPoint(1.0, [1.0, 0.0]),
@@ -119,9 +131,9 @@ class LogisticRegressionModel(LinearClassificationModel):
     ...     LabeledPoint(1.0, SparseVector(2, {1: 2.0}))
     ... ]
     >>> lrm = LogisticRegressionWithSGD.train(sc.parallelize(sparse_data), iterations=10)
-    >>> lrm.predict(array([0.0, 1.0]))
+    >>> lrm.predict(numpy.array([0.0, 1.0]))
     1
-    >>> lrm.predict(array([1.0, 0.0]))
+    >>> lrm.predict(numpy.array([1.0, 0.0]))
     0
     >>> lrm.predict(SparseVector(2, {1: 1.0}))
     1
@@ -131,7 +143,7 @@ class LogisticRegressionModel(LinearClassificationModel):
     >>> path = tempfile.mkdtemp()
     >>> lrm.save(sc, path)
     >>> sameModel = LogisticRegressionModel.load(sc, path)
-    >>> sameModel.predict(array([0.0, 1.0]))
+    >>> sameModel.predict(numpy.array([0.0, 1.0]))
     1
     >>> sameModel.predict(SparseVector(2, {0: 1.0}))
     0
@@ -163,18 +175,28 @@ class LogisticRegressionModel(LinearClassificationModel):
             self._dataWithBiasSize = None
             self._weightsMatrix = None
         else:
-            self._dataWithBiasSize = self._coeff.size / (self._numClasses - 1)
+            self._dataWithBiasSize = self._coeff.size // (self._numClasses - 1)
             self._weightsMatrix = self._coeff.toArray().reshape(self._numClasses - 1,
                                                                 self._dataWithBiasSize)
 
     @property
+    @since('1.4.0')
     def numFeatures(self):
+        """
+        Dimension of the features.
+        """
         return self._numFeatures
 
     @property
+    @since('1.4.0')
     def numClasses(self):
+        """
+        Number of possible outcomes for k classes classification problem
+        in Multinomial Logistic Regression.
+        """
         return self._numClasses
 
+    @since('0.9.0')
     def predict(self, x):
         """
         Predict values for a single data point or an RDD of points
@@ -213,13 +235,21 @@ class LogisticRegressionModel(LinearClassificationModel):
                         best_class = i + 1
             return best_class
 
+    @since('1.4.0')
     def save(self, sc, path):
+        """
+        Save this model to the given path.
+        """
         java_model = sc._jvm.org.apache.spark.mllib.classification.LogisticRegressionModel(
             _py2java(sc, self._coeff), self.intercept, self.numFeatures, self.numClasses)
         java_model.save(sc._jsc.sc(), path)
 
     @classmethod
+    @since('1.4.0')
     def load(cls, sc, path):
+        """
+        Load a model from the given path.
+        """
         java_model = sc._jvm.org.apache.spark.mllib.classification.LogisticRegressionModel.load(
             sc._jsc.sc(), path)
         weights = _java2py(sc, java_model.weights())
@@ -231,95 +261,140 @@ class LogisticRegressionModel(LinearClassificationModel):
         model.setThreshold(threshold)
         return model
 
+    def __repr__(self):
+        return self._call_java("toString")
+
 
 class LogisticRegressionWithSGD(object):
+    """
+    Train a classification model for Binary Logistic Regression using Stochastic Gradient Descent.
 
+    .. versionadded:: 0.9.0
+    .. deprecated:: 2.0.0
+        Use ml.classification.LogisticRegression or LogisticRegressionWithLBFGS.
+    """
     @classmethod
     def train(cls, data, iterations=100, step=1.0, miniBatchFraction=1.0,
               initialWeights=None, regParam=0.01, regType="l2", intercept=False,
-              validateData=True):
+              validateData=True, convergenceTol=0.001):
         """
         Train a logistic regression model on the given data.
 
-        :param data:              The training data, an RDD of
-                                  LabeledPoint.
-        :param iterations:        The number of iterations
-                                  (default: 100).
-        :param step:              The step parameter used in SGD
-                                  (default: 1.0).
-        :param miniBatchFraction: Fraction of data to be used for each
-                                  SGD iteration (default: 1.0).
-        :param initialWeights:    The initial weights (default: None).
-        :param regParam:          The regularizer parameter
-                                  (default: 0.01).
-        :param regType:           The type of regularizer used for
-                                  training our model.
+        .. versionadded:: 0.9.0
 
-                                  :Allowed values:
-                                     - "l1" for using L1 regularization
-                                     - "l2" for using L2 regularization
-                                     - None for no regularization
+        Parameters
+        ----------
+        data : :py:class:`pyspark.RDD`
+            The training data, an RDD of :py:class:`pyspark.mllib.regression.LabeledPoint`.
+        iterations : int, optional
+            The number of iterations.
+            (default: 100)
+        step : float, optional
+            The step parameter used in SGD.
+            (default: 1.0)
+        miniBatchFraction : float, optional
+            Fraction of data to be used for each SGD iteration.
+            (default: 1.0)
+        initialWeights : :py:class:`pyspark.mllib.linalg.Vector` or convertible, optional
+            The initial weights.
+            (default: None)
+        regParam : float, optional
+            The regularizer parameter.
+            (default: 0.01)
+        regType : str, optional
+            The type of regularizer used for training our model.
+            Supported values:
 
-                                     (default: "l2")
+            - "l1" for using L1 regularization
+            - "l2" for using L2 regularization (default)
+            - None for no regularization
 
-        :param intercept:         Boolean parameter which indicates the
-                                  use or not of the augmented representation
-                                  for training data (i.e. whether bias
-                                  features are activated or not,
-                                  default: False).
-        :param validateData:      Boolean parameter which indicates if
-                                  the algorithm should validate data
-                                  before training. (default: True)
+        intercept : bool, optional
+            Boolean parameter which indicates the use or not of the
+            augmented representation for training data (i.e., whether bias
+            features are activated or not).
+            (default: False)
+        validateData : bool, optional
+            Boolean parameter which indicates if the algorithm should
+            validate data before training.
+            (default: True)
+        convergenceTol : float, optional
+            A condition which decides iteration termination.
+            (default: 0.001)
         """
+        warnings.warn(
+            "Deprecated in 2.0.0. Use ml.classification.LogisticRegression or "
+            "LogisticRegressionWithLBFGS.", FutureWarning)
+
         def train(rdd, i):
             return callMLlibFunc("trainLogisticRegressionModelWithSGD", rdd, int(iterations),
                                  float(step), float(miniBatchFraction), i, float(regParam), regType,
-                                 bool(intercept), bool(validateData))
+                                 bool(intercept), bool(validateData), float(convergenceTol))
 
         return _regression_train_wrapper(train, LogisticRegressionModel, data, initialWeights)
 
 
 class LogisticRegressionWithLBFGS(object):
+    """
+    Train a classification model for Multinomial/Binary Logistic Regression
+    using Limited-memory BFGS.
 
+    Standard feature scaling and L2 regularization are used by default.
+    .. versionadded:: 1.2.0
+    """
     @classmethod
-    def train(cls, data, iterations=100, initialWeights=None, regParam=0.01, regType="l2",
-              intercept=False, corrections=10, tolerance=1e-4, validateData=True, numClasses=2):
+    def train(cls, data, iterations=100, initialWeights=None, regParam=0.0, regType="l2",
+              intercept=False, corrections=10, tolerance=1e-6, validateData=True, numClasses=2):
         """
         Train a logistic regression model on the given data.
 
-        :param data:           The training data, an RDD of
-                               LabeledPoint.
-        :param iterations:     The number of iterations
-                               (default: 100).
-        :param initialWeights: The initial weights (default: None).
-        :param regParam:       The regularizer parameter
-                               (default: 0.01).
-        :param regType:        The type of regularizer used for
-                               training our model.
+        .. versionadded:: 1.2.0
 
-                               :Allowed values:
-                                 - "l1" for using L1 regularization
-                                 - "l2" for using L2 regularization
-                                 - None for no regularization
+        Parameters
+        ----------
+        data : :py:class:`pyspark.RDD`
+            The training data, an RDD of :py:class:`pyspark.mllib.regression.LabeledPoint`.
+        iterations : int, optional
+            The number of iterations.
+            (default: 100)
+        initialWeights : :py:class:`pyspark.mllib.linalg.Vector` or convertible, optional
+            The initial weights.
+            (default: None)
+        regParam : float, optional
+            The regularizer parameter.
+            (default: 0.01)
+        regType : str, optional
+            The type of regularizer used for training our model.
+            Supported values:
 
-                                 (default: "l2")
+            - "l1" for using L1 regularization
+            - "l2" for using L2 regularization (default)
+            - None for no regularization
 
-        :param intercept:      Boolean parameter which indicates the
-                               use or not of the augmented representation
-                               for training data (i.e. whether bias
-                               features are activated or not,
-                               default: False).
-        :param corrections:    The number of corrections used in the
-                               LBFGS update (default: 10).
-        :param tolerance:      The convergence tolerance of iterations
-                               for L-BFGS (default: 1e-4).
-        :param validateData:   Boolean parameter which indicates if the
-                               algorithm should validate data before
-                               training. (default: True)
-        :param numClasses:     The number of classes (i.e., outcomes) a
-                               label can take in Multinomial Logistic
-                               Regression (default: 2).
+        intercept : bool, optional
+            Boolean parameter which indicates the use or not of the
+            augmented representation for training data (i.e., whether bias
+            features are activated or not).
+            (default: False)
+        corrections : int, optional
+            The number of corrections used in the LBFGS update.
+            If a known updater is used for binary classification,
+            it calls the ml implementation and this parameter will
+            have no effect. (default: 10)
+        tolerance : float, optional
+            The convergence tolerance of iterations for L-BFGS.
+            (default: 1e-6)
+        validateData : bool, optional
+            Boolean parameter which indicates if the algorithm should
+            validate data before training.
+            (default: True)
+        numClasses : int, optional
+            The number of classes (i.e., outcomes) a label can take in
+            Multinomial Logistic Regression.
+            (default: 2)
 
+        Examples
+        --------
         >>> data = [
         ...     LabeledPoint(0.0, [0.0, 1.0]),
         ...     LabeledPoint(1.0, [1.0, 0.0]),
@@ -351,9 +426,18 @@ class SVMModel(LinearClassificationModel):
     """
     Model for Support Vector Machines (SVMs).
 
-    :param weights: Weights computed for every feature.
-    :param intercept: Intercept computed for this model.
+    .. versionadded:: 0.9.0
 
+    Parameters
+    ----------
+    weights : :py:class:`pyspark.mllib.linalg.Vector`
+        Weights computed for every feature.
+    intercept : float
+        Intercept computed for this model.
+
+    Examples
+    --------
+    >>> from pyspark.mllib.linalg import SparseVector
     >>> data = [
     ...     LabeledPoint(0.0, [0.0]),
     ...     LabeledPoint(1.0, [1.0]),
@@ -366,7 +450,7 @@ class SVMModel(LinearClassificationModel):
     >>> svm.predict(sc.parallelize([[1.0]])).collect()
     [1]
     >>> svm.clearThreshold()
-    >>> svm.predict(array([1.0]))
+    >>> svm.predict(numpy.array([1.0]))
     1.44...
 
     >>> sparse_data = [
@@ -398,6 +482,7 @@ class SVMModel(LinearClassificationModel):
         super(SVMModel, self).__init__(weights, intercept)
         self._threshold = 0.0
 
+    @since('0.9.0')
     def predict(self, x):
         """
         Predict values for a single data point or an RDD of points
@@ -413,13 +498,21 @@ class SVMModel(LinearClassificationModel):
         else:
             return 1 if margin > self._threshold else 0
 
+    @since('1.4.0')
     def save(self, sc, path):
+        """
+        Save this model to the given path.
+        """
         java_model = sc._jvm.org.apache.spark.mllib.classification.SVMModel(
             _py2java(sc, self._coeff), self.intercept)
         java_model.save(sc._jsc.sc(), path)
 
     @classmethod
+    @since('1.4.0')
     def load(cls, sc, path):
+        """
+        Load a model from the given path.
+        """
         java_model = sc._jvm.org.apache.spark.mllib.classification.SVMModel.load(
             sc._jsc.sc(), path)
         weights = _java2py(sc, java_model.weights())
@@ -431,48 +524,65 @@ class SVMModel(LinearClassificationModel):
 
 
 class SVMWithSGD(object):
+    """
+    Train a Support Vector Machine (SVM) using Stochastic Gradient Descent.
+
+    .. versionadded:: 0.9.0
+    """
 
     @classmethod
     def train(cls, data, iterations=100, step=1.0, regParam=0.01,
               miniBatchFraction=1.0, initialWeights=None, regType="l2",
-              intercept=False, validateData=True):
+              intercept=False, validateData=True, convergenceTol=0.001):
         """
         Train a support vector machine on the given data.
 
-        :param data:              The training data, an RDD of
-                                  LabeledPoint.
-        :param iterations:        The number of iterations
-                                  (default: 100).
-        :param step:              The step parameter used in SGD
-                                  (default: 1.0).
-        :param regParam:          The regularizer parameter
-                                  (default: 0.01).
-        :param miniBatchFraction: Fraction of data to be used for each
-                                  SGD iteration (default: 1.0).
-        :param initialWeights:    The initial weights (default: None).
-        :param regType:           The type of regularizer used for
-                                  training our model.
+        .. versionadded:: 0.9.0
 
-                                  :Allowed values:
-                                     - "l1" for using L1 regularization
-                                     - "l2" for using L2 regularization
-                                     - None for no regularization
+        Parameters
+        ----------
+        data : :py:class:`pyspark.RDD`
+            The training data, an RDD of :py:class:`pyspark.mllib.regression.LabeledPoint`.
+        iterations : int, optional
+            The number of iterations.
+            (default: 100)
+        step : float, optional
+            The step parameter used in SGD.
+            (default: 1.0)
+        regParam : float, optional
+            The regularizer parameter.
+            (default: 0.01)
+        miniBatchFraction : float, optional
+            Fraction of data to be used for each SGD iteration.
+            (default: 1.0)
+        initialWeights : :py:class:`pyspark.mllib.linalg.Vector` or convertible, optional
+            The initial weights.
+            (default: None)
+        regType : str, optional
+            The type of regularizer used for training our model.
+            Allowed values:
 
-                                     (default: "l2")
+            - "l1" for using L1 regularization
+            - "l2" for using L2 regularization (default)
+            - None for no regularization
 
-        :param intercept:         Boolean parameter which indicates the
-                                  use or not of the augmented representation
-                                  for training data (i.e. whether bias
-                                  features are activated or not,
-                                  default: False).
-        :param validateData:      Boolean parameter which indicates if
-                                  the algorithm should validate data
-                                  before training. (default: True)
+        intercept : bool, optional
+            Boolean parameter which indicates the use or not of the
+            augmented representation for training data (i.e. whether bias
+            features are activated or not).
+            (default: False)
+        validateData : bool, optional
+            Boolean parameter which indicates if the algorithm should
+            validate data before training.
+            (default: True)
+        convergenceTol : float, optional
+            A condition which decides iteration termination.
+            (default: 0.001)
         """
         def train(rdd, i):
             return callMLlibFunc("trainSVMModelWithSGD", rdd, int(iterations), float(step),
                                  float(regParam), float(miniBatchFraction), i, regType,
-                                 bool(intercept), bool(validateData))
+                                 bool(intercept), bool(validateData), float(convergenceTol))
 
         return _regression_train_wrapper(train, SVMModel, data, initialWeights)
 
@@ -483,21 +593,30 @@ class NaiveBayesModel(Saveable, Loader):
     """
     Model for Naive Bayes classifiers.
 
-    :param labels: list of labels.
-    :param pi: log of class priors, whose dimension is C,
-            number of labels.
-    :param theta: log of class conditional probabilities, whose
-            dimension is C-by-D, where D is number of features.
+    .. versionadded:: 0.9.0
 
+    Parameters
+    ----------
+    labels : :py:class:`numpy.ndarray`
+        List of labels.
+    pi : :py:class:`numpy.ndarray`
+        Log of class priors, whose dimension is C, number of labels.
+    theta : :py:class:`numpy.ndarray`
+        Log of class conditional probabilities, whose dimension is C-by-D,
+        where D is number of features.
+
+    Examples
+    --------
+    >>> from pyspark.mllib.linalg import SparseVector
     >>> data = [
     ...     LabeledPoint(0.0, [0.0, 0.0]),
     ...     LabeledPoint(0.0, [0.0, 1.0]),
     ...     LabeledPoint(1.0, [1.0, 0.0]),
     ... ]
     >>> model = NaiveBayes.train(sc.parallelize(data))
-    >>> model.predict(array([0.0, 1.0]))
+    >>> model.predict(numpy.array([0.0, 1.0]))
     0.0
-    >>> model.predict(array([1.0, 0.0]))
+    >>> model.predict(numpy.array([1.0, 0.0]))
     1.0
     >>> model.predict(sc.parallelize([[1.0, 0.0]])).collect()
     [1.0]
@@ -523,12 +642,12 @@ class NaiveBayesModel(Saveable, Loader):
     ... except OSError:
     ...     pass
     """
-
     def __init__(self, labels, pi, theta):
         self.labels = labels
         self.pi = pi
         self.theta = theta
 
+    @since('0.9.0')
     def predict(self, x):
         """
         Return the most likely class for a data vector
@@ -540,6 +659,9 @@ class NaiveBayesModel(Saveable, Loader):
         return self.labels[numpy.argmax(self.pi + x.dot(self.theta.transpose()))]
 
     def save(self, sc, path):
+        """
+        Save this model to the given path.
+        """
         java_labels = _py2java(sc, self.labels.tolist())
         java_pi = _py2java(sc, self.pi.tolist())
         java_theta = _py2java(sc, self.theta.tolist())
@@ -548,7 +670,11 @@ class NaiveBayesModel(Saveable, Loader):
         java_model.save(sc._jsc.sc(), path)
 
     @classmethod
+    @since('1.4.0')
     def load(cls, sc, path):
+        """
+        Load a model from the given path.
+        """
         java_model = sc._jvm.org.apache.spark.mllib.classification.NaiveBayesModel.load(
             sc._jsc.sc(), path)
         # Can not unpickle array.array from Pyrolite in Python3 with "bytes"
@@ -559,6 +685,11 @@ class NaiveBayesModel(Saveable, Loader):
 
 
 class NaiveBayes(object):
+    """
+    Train a Multinomial Naive Bayes model.
+
+    .. versionadded:: 0.9.0
+    """
 
     @classmethod
     def train(cls, data, lambda_=1.0):
@@ -566,33 +697,117 @@ class NaiveBayes(object):
         Train a Naive Bayes model given an RDD of (label, features)
         vectors.
 
-        This is the Multinomial NB (U{http://tinyurl.com/lsdw6p}) which
+        This is the `Multinomial NB <http://tinyurl.com/lsdw6p>`_ which
         can handle all kinds of discrete data.  For example, by
         converting documents into TF-IDF vectors, it can be used for
         document classification. By making every vector a 0-1 vector,
-        it can also be used as Bernoulli NB (U{http://tinyurl.com/p7c96j6}).
+        it can also be used as `Bernoulli NB <http://tinyurl.com/p7c96j6>`_.
         The input feature values must be nonnegative.
 
-        :param data: RDD of LabeledPoint.
-        :param lambda_: The smoothing parameter (default: 1.0).
+        .. versionadded:: 0.9.0
+
+        Parameters
+        ----------
+        data : :py:class:`pyspark.RDD`
+            The training data, an RDD of :py:class:`pyspark.mllib.regression.LabeledPoint`.
+        lambda\\_ : float, optional
+            The smoothing parameter.
+            (default: 1.0)
         """
         first = data.first()
         if not isinstance(first, LabeledPoint):
             raise ValueError("`data` should be an RDD of LabeledPoint")
-        labels, pi, theta = callMLlibFunc("trainNaiveBayes", data, lambda_)
+        labels, pi, theta = callMLlibFunc("trainNaiveBayesModel", data, lambda_)
         return NaiveBayesModel(labels.toArray(), pi.toArray(), numpy.array(theta))
+
+
+@inherit_doc
+class StreamingLogisticRegressionWithSGD(StreamingLinearAlgorithm):
+    """
+    Train or predict a logistic regression model on streaming data.
+    Training uses Stochastic Gradient Descent to update the model based on
+    each new batch of incoming data from a DStream.
+
+    Each batch of data is assumed to be an RDD of LabeledPoints.
+    The number of data points per batch can vary, but the number
+    of features must be constant. An initial weight
+    vector must be provided.
+
+    .. versionadded:: 1.5.0
+
+    Parameters
+    ----------
+    stepSize : float, optional
+        Step size for each iteration of gradient descent.
+        (default: 0.1)
+    numIterations : int, optional
+        Number of iterations run for each batch of data.
+        (default: 50)
+    miniBatchFraction : float, optional
+        Fraction of each batch of data to use for updates.
+        (default: 1.0)
+    regParam : float, optional
+        L2 Regularization parameter.
+        (default: 0.0)
+    convergenceTol : float, optional
+        Value used to determine when to terminate iterations.
+        (default: 0.001)
+    """
+    def __init__(self, stepSize=0.1, numIterations=50, miniBatchFraction=1.0, regParam=0.0,
+                 convergenceTol=0.001):
+        self.stepSize = stepSize
+        self.numIterations = numIterations
+        self.regParam = regParam
+        self.miniBatchFraction = miniBatchFraction
+        self.convergenceTol = convergenceTol
+        self._model = None
+        super(StreamingLogisticRegressionWithSGD, self).__init__(
+            model=self._model)
+
+    @since('1.5.0')
+    def setInitialWeights(self, initialWeights):
+        """
+        Set the initial value of weights.
+
+        This must be set before running trainOn and predictOn.
+        """
+        initialWeights = _convert_to_vector(initialWeights)
+
+        # LogisticRegressionWithSGD does only binary classification.
+        self._model = LogisticRegressionModel(
+            initialWeights, 0, initialWeights.size, 2)
+        return self
+
+    @since('1.5.0')
+    def trainOn(self, dstream):
+        """Train the model on the incoming dstream."""
+        self._validate(dstream)
+
+        def update(rdd):
+            # LogisticRegressionWithSGD.train raises an error for an empty RDD.
+            if not rdd.isEmpty():
+                self._model = LogisticRegressionWithSGD.train(
+                    rdd, self.numIterations, self.stepSize,
+                    self.miniBatchFraction, self._model.weights,
+                    regParam=self.regParam, convergenceTol=self.convergenceTol)
+
+        dstream.foreachRDD(update)
 
 
 def _test():
     import doctest
-    from pyspark import SparkContext
+    from pyspark.sql import SparkSession
     import pyspark.mllib.classification
     globs = pyspark.mllib.classification.__dict__.copy()
-    globs['sc'] = SparkContext('local[4]', 'PythonTest', batchSize=2)
+    spark = SparkSession.builder\
+        .master("local[4]")\
+        .appName("mllib.classification tests")\
+        .getOrCreate()
+    globs['sc'] = spark.sparkContext
     (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
-    globs['sc'].stop()
+    spark.stop()
     if failure_count:
-        exit(-1)
+        sys.exit(-1)
 
 if __name__ == "__main__":
     _test()

@@ -15,18 +15,18 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples
 
 import java.util.Random
 
-import breeze.linalg.{Vector, DenseVector}
+import breeze.linalg.{DenseVector, Vector}
 
 /**
  * Logistic regression based classification.
  *
  * This is an example implementation for learning how to use Spark. For more conventional use,
- * please refer to either org.apache.spark.mllib.classification.LogisticRegressionWithSGD or
- * org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS based on your needs.
+ * please refer to org.apache.spark.ml.classification.LogisticRegression.
  */
 object LocalLR {
   val N = 10000  // Number of data points
@@ -40,33 +40,32 @@ object LocalLR {
   def generateData: Array[DataPoint] = {
     def generatePoint(i: Int): DataPoint = {
       val y = if (i % 2 == 0) -1 else 1
-      val x = DenseVector.fill(D){rand.nextGaussian + y * R}
+      val x = DenseVector.fill(D) {rand.nextGaussian + y * R}
       DataPoint(x, y)
     }
     Array.tabulate(N)(generatePoint)
   }
 
-  def showWarning() {
+  def showWarning(): Unit = {
     System.err.println(
       """WARN: This is a naive implementation of Logistic Regression and is given as an example!
-        |Please use either org.apache.spark.mllib.classification.LogisticRegressionWithSGD or
-        |org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS
+        |Please use org.apache.spark.ml.classification.LogisticRegression
         |for more conventional use.
       """.stripMargin)
   }
 
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
 
     showWarning()
 
     val data = generateData
     // Initialize w to a random value
-    var w = DenseVector.fill(D){2 * rand.nextDouble - 1}
-    println("Initial w: " + w)
+    val w = DenseVector.fill(D) {2 * rand.nextDouble - 1}
+    println(s"Initial w: $w")
 
     for (i <- 1 to ITERATIONS) {
-      println("On iteration " + i)
-      var gradient = DenseVector.zeros[Double](D)
+      println(s"On iteration $i")
+      val gradient = DenseVector.zeros[Double](D)
       for (p <- data) {
         val scale = (1 / (1 + math.exp(-p.y * (w.dot(p.x)))) - 1) * p.y
         gradient +=  p.x * scale
@@ -74,6 +73,7 @@ object LocalLR {
       w -= gradient
     }
 
-    println("Final w: " + w)
+    println(s"Final w: $w")
   }
 }
+// scalastyle:on println

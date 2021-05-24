@@ -17,23 +17,21 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import org.apache.spark.sql.catalyst.analysis.{UnresolvedExtractValue, EliminateSubQueries}
+import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, UnresolvedExtractValue}
+import org.apache.spark.sql.catalyst.dsl.expressions._
+import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.plans.PlanTest
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.types._
-
-// For implicit conversions
-import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.dsl.expressions._
 
 class ConstantFoldingSuite extends PlanTest {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
       Batch("AnalysisNodes", Once,
-        EliminateSubQueries) ::
+        EliminateSubqueryAliases) ::
       Batch("ConstantFolding", Once,
         OptimizeIn,
         ConstantFolding,
@@ -162,7 +160,7 @@ class ConstantFoldingSuite extends PlanTest {
       testRelation
         .select(
           Rand(5L) + Literal(1) as Symbol("c1"),
-          Sum('a) as Symbol("c2"))
+          sum('a) as Symbol("c2"))
 
     val optimized = Optimize.execute(originalQuery.analyze)
 
@@ -170,7 +168,7 @@ class ConstantFoldingSuite extends PlanTest {
       testRelation
         .select(
           Rand(5L) + Literal(1.0) as Symbol("c1"),
-          Sum('a) as Symbol("c2"))
+          sum('a) as Symbol("c2"))
         .analyze
 
     comparePlans(optimized, correctAnswer)
@@ -198,8 +196,8 @@ class ConstantFoldingSuite extends PlanTest {
       EqualTo(Literal.create(null, IntegerType), 1) as 'c11,
       EqualTo(1, Literal.create(null, IntegerType)) as 'c12,
 
-      Like(Literal.create(null, StringType), "abc") as 'c13,
-      Like("abc", Literal.create(null, StringType)) as 'c14,
+      new Like(Literal.create(null, StringType), "abc") as 'c13,
+      new Like("abc", Literal.create(null, StringType)) as 'c14,
 
       Upper(Literal.create(null, StringType)) as 'c15,
 
@@ -250,32 +248,53 @@ class ConstantFoldingSuite extends PlanTest {
   }
 
   test("Constant folding test: Fold In(v, list) into true or false") {
-    var originalQuery =
+    val originalQuery =
       testRelation
         .select('a)
         .where(In(Literal(1), Seq(Literal(1), Literal(2))))
 
-    var optimized = Optimize.execute(originalQuery.analyze)
+    val optimized = Optimize.execute(originalQuery.analyze)
 
-    var correctAnswer =
+    val correctAnswer =
       testRelation
         .select('a)
         .where(Literal(true))
         .analyze
 
     comparePlans(optimized, correctAnswer)
+  }
 
-    originalQuery =
+  test("SPARK-33544: Constant folding test with side effects") {
+    val originalQuery =
       testRelation
         .select('a)
-        .where(In(Literal(1), Seq(Literal(1), 'a.attr)))
+        .where(Size(CreateArray(Seq(AssertTrue(false)))) > 0)
 
-    optimized = Optimize.execute(originalQuery.analyze)
+    val optimized = Optimize.execute(originalQuery.analyze)
+    comparePlans(optimized, originalQuery.analyze)
+  }
 
-    correctAnswer =
+  object OptimizeForCreate extends RuleExecutor[LogicalPlan] {
+    val batches =
+      Batch("AnalysisNodes", Once,
+        EliminateSubqueryAliases) ::
+      Batch("ConstantFolding", FixedPoint(4),
+        OptimizeIn,
+        ConstantFolding,
+        PruneFilters) :: Nil
+  }
+
+  test("SPARK-33544: Constant folding test CreateArray") {
+    val originalQuery =
       testRelation
         .select('a)
-        .where(Literal(true))
+        .where(Size(CreateArray(Seq('a))) > 0)
+
+    val optimized = OptimizeForCreate.execute(originalQuery.analyze)
+
+    val correctAnswer =
+      testRelation
+        .select('a)
         .analyze
 
     comparePlans(optimized, correctAnswer)

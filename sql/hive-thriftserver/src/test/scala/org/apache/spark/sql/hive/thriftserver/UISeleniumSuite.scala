@@ -22,21 +22,21 @@ import scala.util.Random
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.openqa.selenium.WebDriver
 import org.openqa.selenium.htmlunit.HtmlUnitDriver
-import org.scalatest.{BeforeAndAfterAll, Matchers}
+import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.Eventually._
-import org.scalatest.selenium.WebBrowser
+import org.scalatest.matchers.must.Matchers
+import org.scalatest.matchers.should.Matchers._
 import org.scalatest.time.SpanSugar._
+import org.scalatestplus.selenium.WebBrowser
 
-import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.ui.SparkUICssErrorHandler
 
 class UISeleniumSuite
-  extends HiveThriftJdbcTest
+  extends HiveThriftServer2TestBase
   with WebBrowser with Matchers with BeforeAndAfterAll {
 
   implicit var webDriver: WebDriver = _
   var server: HiveThriftServer2 = _
-  var hc: HiveContext = _
   val uiPort = 20000 + Random.nextInt(10000)
   override def mode: ServerMode.Value = ServerMode.binary
 
@@ -48,13 +48,16 @@ class UISeleniumSuite
   }
 
   override def afterAll(): Unit = {
-    if (webDriver != null) {
-      webDriver.quit()
+    try {
+      if (webDriver != null) {
+        webDriver.quit()
+      }
+    } finally {
+      super.afterAll()
     }
-    super.afterAll()
   }
 
-  override protected def serverStartCommand(port: Int) = {
+  override protected def serverStartCommand(): Seq[String] = {
     val portConf = if (mode == ServerMode.binary) {
       ConfVars.HIVE_SERVER2_THRIFT_PORT
     } else {
@@ -68,7 +71,7 @@ class UISeleniumSuite
         |  --hiveconf ${ConfVars.METASTOREWAREHOUSE}=$warehousePath
         |  --hiveconf ${ConfVars.HIVE_SERVER2_THRIFT_BIND_HOST}=localhost
         |  --hiveconf ${ConfVars.HIVE_SERVER2_TRANSPORT_MODE}=$mode
-        |  --hiveconf $portConf=$port
+        |  --hiveconf $portConf=0
         |  --driver-class-path ${sys.props("java.class.path")}
         |  --conf spark.ui.enabled=true
         |  --conf spark.ui.port=$uiPort
@@ -76,7 +79,7 @@ class UISeleniumSuite
   }
 
   ignore("thrift server ui test") {
-    withJdbcStatement { statement =>
+    withJdbcStatement("test_map") { statement =>
       val baseURL = s"http://localhost:$uiPort"
 
       val queries = Seq(
@@ -85,12 +88,12 @@ class UISeleniumSuite
 
       queries.foreach(statement.execute)
 
-      eventually(timeout(10 seconds), interval(50 milliseconds)) {
+      eventually(timeout(10.seconds), interval(50.milliseconds)) {
         go to baseURL
         find(cssSelector("""ul li a[href*="sql"]""")) should not be None
       }
 
-      eventually(timeout(10 seconds), interval(50 milliseconds)) {
+      eventually(timeout(10.seconds), interval(50.milliseconds)) {
         go to (baseURL + "/sql")
         find(id("sessionstat")) should not be None
         find(id("sqlstat")) should not be None

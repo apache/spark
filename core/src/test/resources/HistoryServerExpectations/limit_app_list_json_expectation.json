@@ -1,0 +1,46 @@
+[ {
+  "id" : "app-20200706201101-0003",
+  "name" : "Spark shell",
+  "attempts" : [ {
+    "startTime" : "2020-07-07T03:11:00.235GMT",
+    "endTime" : "2020-07-07T03:17:04.231GMT",
+    "lastUpdated" : "",
+    "duration" : 363996,
+    "sparkUser" : "terryk",
+    "completed" : true,
+    "appSparkVersion" : "3.1.0-SNAPSHOT",
+    "lastUpdatedEpoch" : 0,
+    "endTimeEpoch" : 1594091824231,
+    "startTimeEpoch" : 1594091460235
+  } ]
+}, {
+  "id" : "application_1578436911597_0052",
+  "name" : "Spark shell",
+  "attempts" : [ {
+    "startTime" : "2020-01-11T17:44:22.851GMT",
+    "endTime" : "2020-01-11T17:46:42.615GMT",
+    "lastUpdated" : "",
+    "duration" : 139764,
+    "sparkUser" : "tgraves",
+    "completed" : true,
+    "appSparkVersion" : "3.0.0-SNAPSHOT",
+    "endTimeEpoch" : 1578764802615,
+    "startTimeEpoch" : 1578764662851,
+    "lastUpdatedEpoch" : 0
+  } ]
+}, {
+  "id" : "application_1555004656427_0144",
+  "name" : "Spark shell",
+  "attempts" : [ {
+    "startTime" : "2019-07-02T21:02:17.180GMT",
+    "endTime" : "2019-07-02T21:02:35.974GMT",
+    "lastUpdated" : "",
+    "duration" : 18794,
+    "sparkUser" : "tgraves",
+    "completed" : true,
+    "appSparkVersion" : "3.0.0-SNAPSHOT",
+    "startTimeEpoch" : 1562101337180,
+    "lastUpdatedEpoch" : 0,
+    "endTimeEpoch" : 1562101355974
+  } ]
+} ]

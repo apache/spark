@@ -1,6 +1,21 @@
 ---
 layout: global
 title: Accessing OpenStack Swift from Spark
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+ 
+     http://www.apache.org/licenses/LICENSE-2.0
+ 
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
 ---
 
 Spark's support for Hadoop InputFormat allows it to process data in OpenStack Swift using the
@@ -8,7 +23,8 @@ same URI formats as in Hadoop. You can specify a path in Swift as input through 
 URI of the form <code>swift://container.PROVIDER/path</code>. You will also need to set your 
 Swift security credentials, through <code>core-site.xml</code> or via
 <code>SparkContext.hadoopConfiguration</code>.
-Current Swift driver requires Swift to use Keystone authentication method.
+The current Swift driver requires Swift to use the Keystone authentication method, or
+its Rackspace-specific predecessor.
 
 # Configuring Swift for Better Data Locality
 
@@ -19,41 +35,30 @@ Although not mandatory, it is recommended to configure the proxy server of Swift
 
 # Dependencies
 
-The Spark application should include <code>hadoop-openstack</code> dependency.
+The Spark application should include <code>hadoop-openstack</code> dependency, which can
+be done by including the `hadoop-cloud` module for the specific version of spark used.
 For example, for Maven support, add the following to the <code>pom.xml</code> file:
 
 {% highlight xml %}
 <dependencyManagement>
   ...
   <dependency>
-    <groupId>org.apache.hadoop</groupId>
-    <artifactId>hadoop-openstack</artifactId>
-    <version>2.3.0</version>
+    <groupId>org.apache.spark</groupId>
+    <artifactId>hadoop-cloud_2.12</artifactId>
+    <version>${spark.version}</version>
   </dependency>
   ...
 </dependencyManagement>
 {% endhighlight %}
 
-
 # Configuration Parameters
 
 Create <code>core-site.xml</code> and place it inside Spark's <code>conf</code> directory.
-There are two main categories of parameters that should to be configured: declaration of the
-Swift driver and the parameters that are required by Keystone. 
+The main category of parameters that should be configured is the authentication parameters
+required by Keystone.
 
-Configuration of Hadoop to use Swift File system achieved via 
-
-<table class="table">
-<tr><th>Property Name</th><th>Value</th></tr>
-<tr>
-  <td>fs.swift.impl</td>
-  <td>org.apache.hadoop.fs.swift.snative.SwiftNativeFileSystem</td>
-</tr>
-</table>
-
-Additional parameters required by Keystone (v2.0) and should be provided to the Swift driver. Those 
-parameters will be used to perform authentication in Keystone to access Swift. The following table 
-contains a list of Keystone mandatory parameters. <code>PROVIDER</code> can be any name.
+The following table contains a list of Keystone mandatory parameters. <code>PROVIDER</code> can be
+any (alphanumeric) name.
 
 <table class="table">
 <tr><th>Property Name</th><th>Meaning</th><th>Required</th></tr>
@@ -94,7 +99,7 @@ contains a list of Keystone mandatory parameters. <code>PROVIDER</code> can be a
 </tr>
 <tr>
   <td><code>fs.swift.service.PROVIDER.public</code></td>
-  <td>Indicates if all URLs are public</td>
+  <td>Indicates whether to use the public (off cloud) or private (in cloud; no transfer fees) endpoints</td>
   <td>Mandatory</td>
 </tr>
 </table>
@@ -104,10 +109,6 @@ defined for tenant <code>test</code>. Then <code>core-site.xml</code> should inc
 
 {% highlight xml %}
 <configuration>
-  <property>
-    <name>fs.swift.impl</name>
-    <value>org.apache.hadoop.fs.swift.snative.SwiftNativeFileSystem</value>
-  </property>
   <property>
     <name>fs.swift.service.SparkTest.auth.url</name>
     <value>http://127.0.0.1:5000/v2.0/tokens</value>

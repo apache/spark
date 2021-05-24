@@ -17,8 +17,11 @@
 
 package org.apache.spark.mllib.regression
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.internal.config.Kryo._
+import org.apache.spark.ml.feature.{LabeledPoint => NewLabeledPoint}
 import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.serializer.KryoSerializer
 
 class LabeledPointSuite extends SparkFunSuite {
 
@@ -39,5 +42,32 @@ class LabeledPointSuite extends SparkFunSuite {
   test("parse labeled points with v0.9 format") {
     val point = LabeledPoint.parse("1.0,1.0 0.0 -2.0")
     assert(point === LabeledPoint(1.0, Vectors.dense(1.0, 0.0, -2.0)))
+  }
+
+  test("conversions between new ml LabeledPoint and mllib LabeledPoint") {
+    val points: Seq[LabeledPoint] = Seq(
+      LabeledPoint(1.0, Vectors.dense(1.0, 0.0)),
+      LabeledPoint(0.0, Vectors.sparse(2, Array(1), Array(-1.0))))
+
+    val newPoints: Seq[NewLabeledPoint] = points.map(_.asML)
+
+    points.zip(newPoints).foreach { case (p1, p2) =>
+      assert(p1 === LabeledPoint.fromML(p2))
+    }
+  }
+
+  test("Kryo class register") {
+    val conf = new SparkConf(false)
+    conf.set(KRYO_REGISTRATION_REQUIRED, true)
+
+    val ser = new KryoSerializer(conf).newInstance()
+
+    val labeled1 = LabeledPoint(1.0, Vectors.dense(Array(1.0, 2.0)))
+    val labeled2 = LabeledPoint(1.0, Vectors.sparse(10, Array(5, 7), Array(1.0, 2.0)))
+
+    Seq(labeled1, labeled2).foreach { l =>
+      val l2 = ser.deserialize[LabeledPoint](ser.serialize(l))
+      assert(l === l2)
+    }
   }
 }

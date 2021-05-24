@@ -21,7 +21,7 @@ import java.io.IOException;
 import java.io.OutputStream;
 
 import org.apache.spark.annotation.Private;
-import org.apache.spark.executor.ShuffleWriteMetrics;
+import org.apache.spark.shuffle.ShuffleWriteMetricsReporter;
 
 /**
  * Intercepts write calls and tracks total time spent writing in order to update shuffle write
@@ -30,10 +30,11 @@ import org.apache.spark.executor.ShuffleWriteMetrics;
 @Private
 public final class TimeTrackingOutputStream extends OutputStream {
 
-  private final ShuffleWriteMetrics writeMetrics;
+  private final ShuffleWriteMetricsReporter writeMetrics;
   private final OutputStream outputStream;
 
-  public TimeTrackingOutputStream(ShuffleWriteMetrics writeMetrics, OutputStream outputStream) {
+  public TimeTrackingOutputStream(
+      ShuffleWriteMetricsReporter writeMetrics, OutputStream outputStream) {
     this.writeMetrics = writeMetrics;
     this.outputStream = outputStream;
   }
@@ -42,34 +43,34 @@ public final class TimeTrackingOutputStream extends OutputStream {
   public void write(int b) throws IOException {
     final long startTime = System.nanoTime();
     outputStream.write(b);
-    writeMetrics.incShuffleWriteTime(System.nanoTime() - startTime);
+    writeMetrics.incWriteTime(System.nanoTime() - startTime);
   }
 
   @Override
   public void write(byte[] b) throws IOException {
     final long startTime = System.nanoTime();
     outputStream.write(b);
-    writeMetrics.incShuffleWriteTime(System.nanoTime() - startTime);
+    writeMetrics.incWriteTime(System.nanoTime() - startTime);
   }
 
   @Override
   public void write(byte[] b, int off, int len) throws IOException {
     final long startTime = System.nanoTime();
     outputStream.write(b, off, len);
-    writeMetrics.incShuffleWriteTime(System.nanoTime() - startTime);
+    writeMetrics.incWriteTime(System.nanoTime() - startTime);
   }
 
   @Override
   public void flush() throws IOException {
     final long startTime = System.nanoTime();
     outputStream.flush();
-    writeMetrics.incShuffleWriteTime(System.nanoTime() - startTime);
+    writeMetrics.incWriteTime(System.nanoTime() - startTime);
   }
 
   @Override
   public void close() throws IOException {
     final long startTime = System.nanoTime();
     outputStream.close();
-    writeMetrics.incShuffleWriteTime(System.nanoTime() - startTime);
+    writeMetrics.incWriteTime(System.nanoTime() - startTime);
   }
 }

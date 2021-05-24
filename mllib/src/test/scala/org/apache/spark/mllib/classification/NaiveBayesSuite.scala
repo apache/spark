@@ -19,13 +19,15 @@ package org.apache.spark.mllib.classification
 
 import scala.util.Random
 
-import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV, argmax => brzArgmax, sum => brzSum}
+import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV, Vector => BV}
 import breeze.stats.distributions.{Multinomial => BrzMultinomial}
+import org.scalatest.exceptions.TestFailedException
 
 import org.apache.spark.{SparkException, SparkFunSuite}
-import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.{LocalClusterSparkContext, MLlibTestSparkContext}
+import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.util.Utils
 
 object NaiveBayesSuite {
@@ -69,7 +71,7 @@ object NaiveBayesSuite {
           counts.toArray.sortBy(_._1).map(_._2)
         case _ =>
           // This should never happen.
-          throw new UnknownError(s"Invalid modelType: $modelType.")
+          throw new IllegalArgumentException(s"Invalid modelType: $modelType.")
       }
 
       LabeledPoint(y, Vectors.dense(xi))
@@ -89,7 +91,7 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   import NaiveBayes.{Multinomial, Bernoulli}
 
-  def validatePrediction(predictions: Seq[Double], input: Seq[LabeledPoint]) {
+  def validatePrediction(predictions: Seq[Double], input: Seq[LabeledPoint]): Unit = {
     val numOfPredictions = predictions.zip(input).count {
       case (prediction, expected) =>
         prediction != expected.label
@@ -102,17 +104,24 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext {
       piData: Array[Double],
       thetaData: Array[Array[Double]],
       model: NaiveBayesModel): Unit = {
-    def closeFit(d1: Double, d2: Double, precision: Double): Boolean = {
-      (d1 - d2).abs <= precision
-    }
-    val modelIndex = (0 until piData.length).zip(model.labels.map(_.toInt))
-    for (i <- modelIndex) {
-      assert(closeFit(math.exp(piData(i._2)), math.exp(model.pi(i._1)), 0.05))
-    }
-    for (i <- modelIndex) {
-      for (j <- 0 until thetaData(i._2).length) {
-        assert(closeFit(math.exp(thetaData(i._2)(j)), math.exp(model.theta(i._1)(j)), 0.05))
+    val modelIndex = piData.indices.zip(model.labels.map(_.toInt))
+    try {
+      for (i <- modelIndex) {
+        assert(piData(i._2) ~== model.pi(i._1) relTol 0.35)
+        for (j <- thetaData(i._2).indices) {
+          assert(thetaData(i._2)(j) ~== model.theta(i._1)(j) relTol 0.35)
+        }
       }
+    } catch {
+      case e: TestFailedException =>
+        def arr2str(a: Array[Double]): String = a.mkString("[", ", ", "]")
+        def msg(orig: String): String = orig + "\nvalidateModelFit:\n" +
+          " piData: " + arr2str(piData) + "\n" +
+          " thetaData: " + thetaData.map(arr2str).mkString("\n") + "\n" +
+          " model.labels: " + arr2str(model.labels) + "\n" +
+          " model.pi: " + arr2str(model.pi) + "\n" +
+          " model.theta: " + model.theta.map(arr2str).mkString("\n")
+        throw e.modifyMessage(_.map(msg))
     }
   }
 
@@ -154,6 +163,29 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     // Test prediction on Array.
     validatePrediction(validationData.map(row => model.predict(row.features)), validationData)
+
+    // Test posteriors
+    validationData.map(_.features).foreach { features =>
+      val predicted = model.predictProbabilities(features).toArray
+      assert(predicted.sum ~== 1.0 relTol 1.0e-10)
+      val expected = expectedMultinomialProbabilities(model, features)
+      expected.zip(predicted).foreach { case (e, p) => assert(e ~== p relTol 1.0e-10) }
+    }
+  }
+
+  /**
+   * @param model Multinomial Naive Bayes model
+   * @param testData input to compute posterior probabilities for
+   * @return posterior class probabilities (in order of labels) for input
+   */
+  private def expectedMultinomialProbabilities(model: NaiveBayesModel, testData: Vector) = {
+    val piVector = new BDV(model.pi)
+    // model.theta is row-major; treat it as col-major representation of transpose, and transpose:
+    val thetaMatrix = new BDM(model.theta(0).length, model.theta.length, model.theta.flatten).t
+    val logClassProbs: BV[Double] = piVector + (thetaMatrix * testData.asBreeze)
+    val classProbs = logClassProbs.toArray.map(math.exp)
+    val classProbsSum = classProbs.sum
+    classProbs.map(_ / classProbsSum)
   }
 
   test("Naive Bayes Bernoulli") {
@@ -182,6 +214,33 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     // Test prediction on Array.
     validatePrediction(validationData.map(row => model.predict(row.features)), validationData)
+
+    // Test posteriors
+    validationData.map(_.features).foreach { features =>
+      val predicted = model.predictProbabilities(features).toArray
+      assert(predicted.sum ~== 1.0 relTol 1.0e-10)
+      val expected = expectedBernoulliProbabilities(model, features)
+      expected.zip(predicted).foreach { case (e, p) => assert(e ~== p relTol 1.0e-10) }
+    }
+  }
+
+  /**
+   * @param model Bernoulli Naive Bayes model
+   * @param testData input to compute posterior probabilities for
+   * @return posterior class probabilities (in order of labels) for input
+   */
+  private def expectedBernoulliProbabilities(model: NaiveBayesModel, testData: Vector) = {
+    val piVector = new BDV(model.pi)
+    val thetaMatrix = new BDM(model.theta(0).length, model.theta.length, model.theta.flatten).t
+    val negThetaMatrix = new BDM(model.theta(0).length, model.theta.length,
+      model.theta.flatten.map(v => math.log1p(-math.exp(v)))).t
+    val testBreeze = testData.asBreeze
+    val negTestBreeze = new BDV(Array.fill(testBreeze.size)(1.0)) - testBreeze
+    val piTheta: BV[Double] = piVector + (thetaMatrix * testBreeze)
+    val logClassProbs: BV[Double] = piTheta + (negThetaMatrix * negTestBreeze)
+    val classProbs = logClassProbs.toArray.map(math.exp)
+    val classProbsSum = classProbs.sum
+    classProbs.map(_ / classProbsSum)
   }
 
   test("detect negative values") {
@@ -248,7 +307,7 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext {
     val tempDir = Utils.createTempDir()
     val path = tempDir.toURI.toString
 
-    Seq(NaiveBayesSuite.binaryBernoulliModel, NaiveBayesSuite.binaryMultinomialModel).map {
+    Seq(NaiveBayesSuite.binaryBernoulliModel, NaiveBayesSuite.binaryMultinomialModel).foreach {
       model =>
         // Save model, load it back, and compare.
         try {

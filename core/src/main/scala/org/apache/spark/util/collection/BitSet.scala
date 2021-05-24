@@ -17,6 +17,8 @@
 
 package org.apache.spark.util.collection
 
+import java.util.Arrays
+
 /**
  * A simple, fixed-size bit set implementation. This implementation is fast because it avoids
  * safety/bound checking.
@@ -33,16 +35,33 @@ class BitSet(numBits: Int) extends Serializable {
   def capacity: Int = numWords * 64
 
   /**
+   * Clear all set bits.
+   */
+  def clear(): Unit = Arrays.fill(words, 0)
+
+  /**
    * Set all the bits up to a given index
    */
-  def setUntil(bitIndex: Int) {
+  def setUntil(bitIndex: Int): Unit = {
     val wordIndex = bitIndex >> 6 // divide by 64
-    var i = 0
-    while(i < wordIndex) { words(i) = -1; i += 1 }
+    Arrays.fill(words, 0, wordIndex, -1)
     if(wordIndex < words.length) {
       // Set the remaining bits (note that the mask could still be zero)
       val mask = ~(-1L << (bitIndex & 0x3f))
       words(wordIndex) |= mask
+    }
+  }
+
+  /**
+   * Clear all the bits up to a given index
+   */
+  def clearUntil(bitIndex: Int): Unit = {
+    val wordIndex = bitIndex >> 6 // divide by 64
+    Arrays.fill(words, 0, wordIndex, 0)
+    if(wordIndex < words.length) {
+      // Clear the remaining bits
+      val mask = -1L << (bitIndex & 0x3f)
+      words(wordIndex) &= mask
     }
   }
 
@@ -131,12 +150,12 @@ class BitSet(numBits: Int) extends Serializable {
    * Sets the bit at the specified index to true.
    * @param index the bit index
    */
-  def set(index: Int) {
+  def set(index: Int): Unit = {
     val bitmask = 1L << (index & 0x3f)  // mod 64 and shift
     words(index >> 6) |= bitmask        // div by 64 and mask
   }
 
-  def unset(index: Int) {
+  def unset(index: Int): Unit = {
     val bitmask = 1L << (index & 0x3f)  // mod 64 and shift
     words(index >> 6) &= ~bitmask        // div by 64 and mask
   }
@@ -215,6 +234,18 @@ class BitSet(numBits: Int) extends Serializable {
     }
 
     -1
+  }
+
+  /**
+   * Compute bit-wise union with another BitSet and overwrite bits in this BitSet with the result.
+   */
+  def union(other: BitSet): Unit = {
+    require(this.numWords <= other.numWords)
+    var ind = 0
+    while( ind < this.numWords ) {
+      this.words(ind) = this.words(ind) | other.words(ind)
+      ind += 1
+    }
   }
 
   /** Return the number of longs it would take to hold numBits. */

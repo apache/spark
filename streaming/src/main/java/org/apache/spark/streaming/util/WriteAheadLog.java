@@ -21,6 +21,8 @@ import java.nio.ByteBuffer;
 import java.util.Iterator;
 
 /**
+ * :: DeveloperApi ::
+ *
  * This abstract class represents a write ahead log (aka journal) that is used by Spark Streaming
  * to save the received data (by receivers) and associated metadata to a reliable storage, so that
  * they can be recovered after driver failures. See the Spark documentation for more information
@@ -35,26 +37,26 @@ public abstract class WriteAheadLog {
    * ensure that the written data is durable and readable (using the record handle) by the
    * time this function returns.
    */
-  abstract public WriteAheadLogRecordHandle write(ByteBuffer record, long time);
+  public abstract WriteAheadLogRecordHandle write(ByteBuffer record, long time);
 
   /**
    * Read a written record based on the given record handle.
    */
-  abstract public ByteBuffer read(WriteAheadLogRecordHandle handle);
+  public abstract ByteBuffer read(WriteAheadLogRecordHandle handle);
 
   /**
    * Read and return an iterator of all the records that have been written but not yet cleaned up.
    */
-  abstract public Iterator<ByteBuffer> readAll();
+  public abstract Iterator<ByteBuffer> readAll();
 
   /**
    * Clean all the records that are older than the threshold time. It can wait for
    * the completion of the deletion.
    */
-  abstract public void clean(long threshTime, boolean waitForCompletion);
+  public abstract void clean(long threshTime, boolean waitForCompletion);
 
   /**
-   * Close this log and release any resources.
+   * Close this log and release any resources. It must be idempotent.
    */
-  abstract public void close();
+  public abstract void close();
 }

@@ -20,9 +20,8 @@ package org.apache.spark.deploy.worker.ui
 import java.io.File
 import javax.servlet.http.HttpServletRequest
 
-import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.deploy.worker.Worker
-import org.apache.spark.deploy.worker.ui.WorkerWebUI._
+import org.apache.spark.internal.Logging
 import org.apache.spark.ui.{SparkUI, WebUI}
 import org.apache.spark.ui.JettyUtils._
 import org.apache.spark.util.RpcUtils
@@ -35,24 +34,26 @@ class WorkerWebUI(
     val worker: Worker,
     val workDir: File,
     requestedPort: Int)
-  extends WebUI(worker.securityMgr, requestedPort, worker.conf, name = "WorkerUI")
+  extends WebUI(worker.securityMgr, worker.securityMgr.getSSLOptions("standalone"),
+    requestedPort, worker.conf, name = "WorkerUI")
   with Logging {
 
-  private[ui] val timeout = RpcUtils.askTimeout(worker.conf)
+  private[ui] val timeout = RpcUtils.askRpcTimeout(worker.conf)
 
   initialize()
 
   /** Initialize all components of the server. */
-  def initialize() {
+  def initialize(): Unit = {
     val logPage = new LogPage(this)
     attachPage(logPage)
     attachPage(new WorkerPage(this))
-    attachHandler(createStaticHandler(WorkerWebUI.STATIC_RESOURCE_BASE, "/static"))
+    addStaticHandler(WorkerWebUI.STATIC_RESOURCE_BASE)
     attachHandler(createServletHandler("/log",
-      (request: HttpServletRequest) => logPage.renderLog(request), worker.securityMgr))
+      (request: HttpServletRequest) => logPage.renderLog(request),
+      worker.conf))
   }
 }
 
-private[ui] object WorkerWebUI {
+private[worker] object WorkerWebUI {
   val STATIC_RESOURCE_BASE = SparkUI.STATIC_RESOURCE_DIR
 }

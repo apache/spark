@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.annotation.DeveloperApi
+import scala.reflect.internal.util.AbstractFileClassLoader
+
 import org.apache.spark.sql.catalyst.rules
 import org.apache.spark.util.Utils
 
@@ -40,10 +41,8 @@ package object codegen {
   }
 
   /**
-   * :: DeveloperApi ::
    * Dumps the bytecode from a class to the screen using javap.
    */
-  @DeveloperApi
   object DumpByteCode {
     import scala.sys.process._
     val dumpDirectory = Utils.createTempDir()
@@ -54,7 +53,7 @@ package object codegen {
       val classLoader =
         generatedClass
           .getClassLoader
-          .asInstanceOf[scala.tools.nsc.interpreter.AbstractFileClassLoader]
+          .asInstanceOf[AbstractFileClassLoader]
       val generatedBytes = classLoader.classBytes(generatedClass.getName)
 
       val packageDir = new java.io.File(dumpDirectory, generatedClass.getPackage.getName)
@@ -67,8 +66,10 @@ package object codegen {
       outfile.write(generatedBytes)
       outfile.close()
 
+      // scalastyle:off println
       println(
         s"javap -p -v -classpath ${dumpDirectory.getCanonicalPath} ${generatedClass.getName}".!!)
+      // scalastyle:on println
     }
   }
 }

@@ -17,12 +17,14 @@
 
 # Utility functions to deserialize objects from Java.
 
+# nolint start
 # Type mapping from Java to R
 #
 # void -> NULL
 # Int -> integer
 # String -> character
 # Boolean -> logical
+# Float -> double
 # Double -> double
 # Long -> double
 # Array[Byte] -> raw
@@ -31,6 +33,8 @@
 #
 # Array[T] -> list()
 # Object -> jobj
+#
+# nolint end
 
 readObject <- function(con) {
   # Read type first
@@ -39,7 +43,7 @@ readObject <- function(con) {
 }
 
 readTypedObject <- function(con, type) {
-  switch (type,
+  switch(type,
     "i" = readInt(con),
     "c" = readString(con),
     "b" = readBoolean(con),
@@ -47,16 +51,25 @@ readTypedObject <- function(con, type) {
     "r" = readRaw(con),
     "D" = readDate(con),
     "t" = readTime(con),
+    "a" = readArray(con),
     "l" = readList(con),
+    "e" = readEnv(con),
+    "s" = readStruct(con),
     "n" = NULL,
     "j" = getJobj(readString(con)),
-    stop(paste("Unsupported type for deserialization", type)))
+    stop("Unsupported type for deserialization ", type))
+}
+
+readStringData <- function(con, len) {
+  raw <- readBin(con, raw(), len, endian = "big")
+  string <- rawToChar(raw)
+  Encoding(string) <- "UTF-8"
+  string
 }
 
 readString <- function(con) {
   stringLen <- readInt(con)
-  string <- readBin(con, raw(), stringLen, endian = "big")
-  rawToChar(string)
+  readStringData(con, stringLen)
 }
 
 readInt <- function(con) {
@@ -84,8 +97,7 @@ readTime <- function(con) {
   as.POSIXct(t, origin = "1970-01-01")
 }
 
-# We only support lists where all elements are of same type
-readList <- function(con) {
+readArray <- function(con) {
   type <- readType(con)
   len <- readInt(con)
   if (len > 0) {
@@ -99,13 +111,54 @@ readList <- function(con) {
   }
 }
 
+# Read a list. Types of each element may be different.
+# Null objects are read as NA.
+readList <- function(con) {
+  len <- readInt(con)
+  if (len > 0) {
+    l <- vector("list", len)
+    for (i in 1:len) {
+      elem <- readObject(con)
+      if (is.null(elem)) {
+        elem <- NA
+      }
+      l[[i]] <- elem
+    }
+    l
+  } else {
+    list()
+  }
+}
+
+readEnv <- function(con) {
+  env <- new.env()
+  len <- readInt(con)
+  if (len > 0) {
+    for (i in 1:len) {
+      key <- readString(con)
+      value <- readObject(con)
+      env[[key]] <- value
+    }
+  }
+  env
+}
+
+# Read a field of StructType from SparkDataFrame
+# into a named list in R whose class is "struct"
+readStruct <- function(con) {
+  names <- readObject(con)
+  fields <- readObject(con)
+  names(fields) <- names
+  listToStruct(fields)
+}
+
 readRaw <- function(con) {
   dataLen <- readInt(con)
-  data <- readBin(con, raw(), as.integer(dataLen), endian = "big")
+  readBin(con, raw(), as.integer(dataLen), endian = "big")
 }
 
 readRawLen <- function(con, dataLen) {
-  data <- readBin(con, raw(), as.integer(dataLen), endian = "big")
+  readBin(con, raw(), as.integer(dataLen), endian = "big")
 }
 
 readDeserialize <- function(con) {
@@ -131,20 +184,74 @@ readDeserialize <- function(con) {
   }
 }
 
-readDeserializeRows <- function(inputCon) {
-  # readDeserializeRows will deserialize a DataOutputStream composed of
-  # a list of lists. Since the DOS is one continuous stream and
-  # the number of rows varies, we put the readRow function in a while loop
-  # that termintates when the next row is empty.
+readMultipleObjects <- function(inputCon) {
+  # readMultipleObjects will read multiple continuous objects from
+  # a DataOutputStream. There is no preceding field telling the count
+  # of the objects, so the number of objects varies, we try to read
+  # all objects in a loop until the end of the stream.
   data <- list()
-  while(TRUE) {
-    row <- readRow(inputCon)
-    if (length(row) == 0) {
+  while (TRUE) {
+    # If reaching the end of the stream, type returned should be "".
+    type <- readType(inputCon)
+    if (type == "") {
       break
     }
-    data[[length(data) + 1L]] <- row
+    data[[length(data) + 1L]] <- readTypedObject(inputCon, type)
   }
   data # this is a list of named lists now
+}
+
+readMultipleObjectsWithKeys <- function(inputCon) {
+  # readMultipleObjectsWithKeys will read multiple continuous objects from
+  # a DataOutputStream. There is no preceding field telling the count
+  # of the objects, so the number of objects varies, we try to read
+  # all objects in a loop until the end of the stream. This function
+  # is for use by gapply. Each group of rows is followed by the grouping
+  # key for this group which is then followed by next group.
+  keys <- list()
+  data <- list()
+  subData <- list()
+  while (TRUE) {
+    # If reaching the end of the stream, type returned should be "".
+    type <- readType(inputCon)
+    if (type == "") {
+      break
+    } else if (type == "r") {
+      type <- readType(inputCon)
+      # A grouping boundary detected
+      key <- readTypedObject(inputCon, type)
+      index <- length(data) + 1L
+      data[[index]] <- subData
+      keys[[index]] <- key
+      subData <- list()
+    } else {
+      subData[[length(subData) + 1L]] <- readTypedObject(inputCon, type)
+    }
+  }
+  list(keys = keys, data = data) # this is a list of keys and corresponding data
+}
+
+readDeserializeInArrow <- function(inputCon) {
+  if (requireNamespace("arrow", quietly = TRUE)) {
+    # Currently, there looks no way to read batch by batch by socket connection in R side,
+    # See ARROW-4512. Therefore, it reads the whole Arrow streaming-formatted binary at once
+    # for now.
+    dataLen <- readInt(inputCon)
+    arrowData <- readBin(inputCon, raw(), as.integer(dataLen), endian = "big")
+    batches <- arrow::RecordBatchStreamReader$create(arrowData)$batches()
+    lapply(batches, function(batch) as.data.frame(batch))
+  } else {
+    stop("'arrow' package should be installed.")
+  }
+}
+
+readDeserializeWithKeysInArrow <- function(inputCon) {
+  data <- readDeserializeInArrow(inputCon)
+
+  keys <- readMultipleObjects(inputCon)
+
+  # Read keys to map with each grouped batch later.
+  list(keys = keys, data = data)
 }
 
 readRowList <- function(obj) {
@@ -154,31 +261,5 @@ readRowList <- function(obj) {
   # deserialize the row.
   rawObj <- rawConnection(obj, "r+")
   on.exit(close(rawObj))
-  readRow(rawObj)
-}
-
-readRow <- function(inputCon) {
-  numCols <- readInt(inputCon)
-  if (length(numCols) > 0 && numCols > 0) {
-    lapply(1:numCols, function(x) {
-      obj <- readObject(inputCon)
-      if (is.null(obj)) {
-        NA
-      } else {
-        obj
-      }
-    }) # each row is a list now
-  } else {
-    list()
-  }
-}
-
-# Take a single column as Array[Byte] and deserialize it into an atomic vector
-readCol <- function(inputCon, numRows) {
-  # sapply can not work with POSIXlt
-  do.call(c, lapply(1:numRows, function(x) {
-    value <- readObject(inputCon)
-    # Replace NULL with NA so we can coerce to vectors
-    if (is.null(value)) NA else value
-  }))
+  readObject(rawObj)
 }

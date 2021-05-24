@@ -19,22 +19,23 @@ package org.apache.spark.metrics.sink
 
 import java.util.Properties
 
-import com.codahale.metrics.{JmxReporter, MetricRegistry}
-import org.apache.spark.SecurityManager
+import com.codahale.metrics.MetricRegistry
+import com.codahale.metrics.jmx.JmxReporter
 
-private[spark] class JmxSink(val property: Properties, val registry: MetricRegistry,
-    securityMgr: SecurityManager) extends Sink {
+
+private[spark] class JmxSink(
+    val property: Properties, val registry: MetricRegistry) extends Sink {
 
   val reporter: JmxReporter = JmxReporter.forRegistry(registry).build()
 
-  override def start() {
+  override def start(): Unit = {
     reporter.start()
   }
 
-  override def stop() {
+  override def stop(): Unit = {
     reporter.stop()
   }
 
-  override def report() { }
+  override def report(): Unit = { }
 
 }

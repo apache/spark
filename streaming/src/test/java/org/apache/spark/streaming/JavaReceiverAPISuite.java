@@ -18,12 +18,14 @@
 package org.apache.spark.streaming;
 
 import org.apache.spark.api.java.JavaRDD;
+import org.apache.spark.api.java.function.VoidFunction;
 import org.apache.spark.streaming.api.java.JavaDStream;
 import org.apache.spark.streaming.api.java.JavaReceiverInputDStream;
 import org.apache.spark.streaming.api.java.JavaStreamingContext;
-import static org.junit.Assert.*;
 
+import com.google.common.io.Closeables;
 import org.junit.After;
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -36,7 +38,8 @@ import java.io.InputStreamReader;
 import java.io.Serializable;
 import java.net.ConnectException;
 import java.net.Socket;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.nio.charset.StandardCharsets;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
 public class JavaReceiverAPISuite implements Serializable {
@@ -56,89 +59,81 @@ public class JavaReceiverAPISuite implements Serializable {
     TestServer server = new TestServer(0);
     server.start();
 
-    final AtomicLong dataCounter = new AtomicLong(0);
+    AtomicLong dataCounter = new AtomicLong(0);
 
     try {
       JavaStreamingContext ssc = new JavaStreamingContext("local[2]", "test", new Duration(200));
       JavaReceiverInputDStream<String> input =
         ssc.receiverStream(new JavaSocketReceiver("localhost", server.port()));
-      JavaDStream<String> mapped = input.map(new Function<String, String>() {
-        @Override
-        public String call(String v1) throws Exception {
-          return v1 + ".";
-        }
-      });
-      mapped.foreachRDD(new Function<JavaRDD<String>, Void>() {
-        @Override
-        public Void call(JavaRDD<String> rdd) throws Exception {
+      JavaDStream<String> mapped = input.map((Function<String, String>) v1 -> v1 + ".");
+      mapped.foreachRDD((VoidFunction<JavaRDD<String>>) rdd -> {
         long count = rdd.count();
         dataCounter.addAndGet(count);
-        return null;
-        }
       });
 
       ssc.start();
-      long startTime = System.currentTimeMillis();
-      long timeout = 10000;
+      long startTimeNs = System.nanoTime();
+      long timeout = TimeUnit.SECONDS.toNanos(10);
 
       Thread.sleep(200);
       for (int i = 0; i < 6; i++) {
-        server.send("" + i + "\n"); // \n to make sure these are separate lines
+        server.send(i + "\n"); // \n to make sure these are separate lines
         Thread.sleep(100);
       }
-      while (dataCounter.get() == 0 && System.currentTimeMillis() - startTime < timeout) {
+      while (dataCounter.get() == 0 && System.nanoTime() - startTimeNs < timeout) {
         Thread.sleep(100);
       }
       ssc.stop();
-      assertTrue(dataCounter.get() > 0);
+      Assert.assertTrue(dataCounter.get() > 0);
     } finally {
       server.stop();
     }
   }
-}
 
-class JavaSocketReceiver extends Receiver<String> {
+  private static class JavaSocketReceiver extends Receiver<String> {
 
-  String host = null;
-  int port = -1;
+    private String host = null;
+    private int port = -1;
 
-  public JavaSocketReceiver(String host_ , int port_) {
-    super(StorageLevel.MEMORY_AND_DISK());
-    host = host_;
-    port = port_;
-  }
+    JavaSocketReceiver(String host_ , int port_) {
+      super(StorageLevel.MEMORY_AND_DISK());
+      host = host_;
+      port = port_;
+    }
 
-  @Override
-  public void onStart() {
-    new Thread()  {
-      @Override public void run() {
-        receive();
+    @Override
+    public void onStart() {
+      new Thread(this::receive).start();
+    }
+
+    @Override
+    public void onStop() {
+    }
+
+    private void receive() {
+      try {
+        Socket socket = null;
+        BufferedReader in = null;
+        try {
+          socket = new Socket(host, port);
+          in = new BufferedReader(
+              new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
+          String userInput;
+          while ((userInput = in.readLine()) != null) {
+            store(userInput);
+          }
+        } finally {
+          Closeables.close(in, /* swallowIOException = */ true);
+          Closeables.close(socket,  /* swallowIOException = */ true);
+        }
+      } catch(ConnectException ce) {
+        ce.printStackTrace();
+        restart("Could not connect", ce);
+      } catch(Throwable t) {
+        t.printStackTrace();
+        restart("Error receiving data", t);
       }
-    }.start();
-  }
-
-  @Override
-  public void onStop() {
-  }
-
-  private void receive() {
-    Socket socket = null;
-    try {
-      socket = new Socket(host, port);
-      BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-      String userInput;
-      while ((userInput = in.readLine()) != null) {
-        store(userInput);
-      }
-      in.close();
-      socket.close();
-    } catch(ConnectException ce) {
-      ce.printStackTrace();
-      restart("Could not connect", ce);
-    } catch(Throwable t) {
-      t.printStackTrace();
-      restart("Error receiving data", t);
     }
   }
-}
 
+}

@@ -17,11 +17,17 @@
 
 package org.apache.spark.sql.catalyst
 
-import java.math.BigInteger
 import java.sql.{Date, Timestamp}
 
+import scala.reflect.runtime.universe.TypeTag
+
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.FooEnum.FooEnum
+import org.apache.spark.sql.catalyst.analysis.UnresolvedExtractValue
+import org.apache.spark.sql.catalyst.expressions.{CreateNamedStruct, Expression, If, SpecificInternalRow, UpCast}
+import org.apache.spark.sql.catalyst.expressions.objects.{AssertNotNull, NewInstance}
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.CalendarInterval
 
 case class PrimitiveData(
     intField: Int,
@@ -44,7 +50,8 @@ case class NullableData(
     decimalField: java.math.BigDecimal,
     dateField: Date,
     timestampField: Timestamp,
-    binaryField: Array[Byte])
+    binaryField: Array[Byte],
+    intervalField: CalendarInterval)
 
 case class OptionalData(
     intField: Option[Int],
@@ -54,7 +61,8 @@ case class OptionalData(
     shortField: Option[Short],
     byteField: Option[Byte],
     booleanField: Option[Boolean],
-    structField: Option[PrimitiveData])
+    structField: Option[PrimitiveData],
+    intervalField: Option[CalendarInterval])
 
 case class ComplexData(
     arrayField: Seq[Int],
@@ -69,12 +77,109 @@ case class ComplexData(
 case class GenericData[A](
     genericField: A)
 
+object GenericData {
+  type IntData = GenericData[Int]
+}
+
 case class MultipleConstructorsData(a: Int, b: String, c: Double) {
   def this(b: String, a: Int) = this(a, b, c = 1.0)
 }
 
+class FooAnnotation extends scala.annotation.StaticAnnotation
+
+case class FooWithAnnotation(f1: String @FooAnnotation, f2: Option[String] @FooAnnotation)
+
+case class SpecialCharAsFieldData(`field.1`: String, `field 2`: String)
+
+object FooEnum extends Enumeration {
+  type FooEnum = Value
+  val E1, E2 = Value
+}
+
+case class FooClassWithEnum(i: Int, e: FooEnum)
+
+object TestingUDT {
+  @SQLUserDefinedType(udt = classOf[NestedStructUDT])
+  class NestedStruct(val a: Integer, val b: Long, val c: Double)
+
+  class NestedStructUDT extends UserDefinedType[NestedStruct] {
+    override def sqlType: DataType = new StructType()
+      .add("a", IntegerType, nullable = true)
+      .add("b", LongType, nullable = false)
+      .add("c", DoubleType, nullable = false)
+
+    override def serialize(n: NestedStruct): Any = {
+      val row = new SpecificInternalRow(sqlType.asInstanceOf[StructType].map(_.dataType))
+      row.setInt(0, n.a)
+      row.setLong(1, n.b)
+      row.setDouble(2, n.c)
+    }
+
+    override def userClass: Class[NestedStruct] = classOf[NestedStruct]
+
+    override def deserialize(datum: Any): NestedStruct = datum match {
+      case row: InternalRow =>
+        new NestedStruct(row.getInt(0), row.getLong(1), row.getDouble(2))
+    }
+  }
+}
+
+/** An example derived from Twitter/Scrooge codegen for thrift  */
+object ScroogeLikeExample {
+  def apply(x: Int): ScroogeLikeExample = new Immutable(x)
+
+  def unapply(_item: ScroogeLikeExample): Option[Int] = Some(_item.x)
+
+  class Immutable(val x: Int) extends ScroogeLikeExample
+}
+
+trait ScroogeLikeExample extends Product1[Int] with Serializable {
+
+  def x: Int
+
+  def _1: Int = x
+
+  override def canEqual(other: Any): Boolean = other.isInstanceOf[ScroogeLikeExample]
+
+  override def equals(other: Any): Boolean =
+    canEqual(other) &&
+      this.x ==  other.asInstanceOf[ScroogeLikeExample].x
+
+  override def hashCode: Int = x
+}
+
+/** Counter-examples to [[ScroogeLikeExample]] as a trait without a companion object constructor */
+trait TraitProductWithoutCompanion extends Product1[Int] {}
+
+/** Counter-examples to [[ScroogeLikeExample]] as a trait with no-constructor companion object */
+object TraitProductWithNoConstructorCompanion {}
+
+trait TraitProductWithNoConstructorCompanion extends Product1[Int] {}
+
 class ScalaReflectionSuite extends SparkFunSuite {
   import org.apache.spark.sql.catalyst.ScalaReflection._
+
+  // A helper method used to test `ScalaReflection.serializerForType`.
+  private def serializerFor[T: TypeTag]: Expression =
+    serializerForType(ScalaReflection.localTypeOf[T])
+
+  // A helper method used to test `ScalaReflection.deserializerForType`.
+  private def deserializerFor[T: TypeTag]: Expression =
+    deserializerForType(ScalaReflection.localTypeOf[T])
+
+  test("isSubtype") {
+    assert(isSubtype(localTypeOf[Option[Int]], localTypeOf[Option[_]]))
+    assert(isSubtype(localTypeOf[Option[Int]], localTypeOf[Option[Int]]))
+    assert(!isSubtype(localTypeOf[Option[_]], localTypeOf[Option[Int]]))
+  }
+
+  test("SQLUserDefinedType annotation on Scala structure") {
+    val schema = schemaFor[TestingUDT.NestedStruct]
+    assert(schema === Schema(
+      new TestingUDT.NestedStructUDT,
+      nullable = true
+    ))
+  }
 
   test("primitive data") {
     val schema = schemaFor[PrimitiveData]
@@ -102,10 +207,11 @@ class ScalaReflectionSuite extends SparkFunSuite {
         StructField("byteField", ByteType, nullable = true),
         StructField("booleanField", BooleanType, nullable = true),
         StructField("stringField", StringType, nullable = true),
-        StructField("decimalField", DecimalType.Unlimited, nullable = true),
+        StructField("decimalField", DecimalType.SYSTEM_DEFAULT, nullable = true),
         StructField("dateField", DateType, nullable = true),
         StructField("timestampField", TimestampType, nullable = true),
-        StructField("binaryField", BinaryType, nullable = true))),
+        StructField("binaryField", BinaryType, nullable = true),
+        StructField("intervalField", CalendarIntervalType, nullable = true))),
       nullable = true))
   }
 
@@ -120,7 +226,8 @@ class ScalaReflectionSuite extends SparkFunSuite {
         StructField("shortField", ShortType, nullable = true),
         StructField("byteField", ByteType, nullable = true),
         StructField("booleanField", BooleanType, nullable = true),
-        StructField("structField", schemaFor[PrimitiveData].dataType, nullable = true))),
+        StructField("structField", schemaFor[PrimitiveData].dataType, nullable = true),
+        StructField("intervalField", CalendarIntervalType, nullable = true))),
       nullable = true))
   }
 
@@ -186,72 +293,8 @@ class ScalaReflectionSuite extends SparkFunSuite {
       nullable = true))
   }
 
-  test("get data type of a value") {
-    // BooleanType
-    assert(BooleanType === typeOfObject(true))
-    assert(BooleanType === typeOfObject(false))
-
-    // BinaryType
-    assert(BinaryType === typeOfObject("string".getBytes))
-
-    // StringType
-    assert(StringType === typeOfObject("string"))
-
-    // ByteType
-    assert(ByteType === typeOfObject(127.toByte))
-
-    // ShortType
-    assert(ShortType === typeOfObject(32767.toShort))
-
-    // IntegerType
-    assert(IntegerType === typeOfObject(2147483647))
-
-    // LongType
-    assert(LongType === typeOfObject(9223372036854775807L))
-
-    // FloatType
-    assert(FloatType === typeOfObject(3.4028235E38.toFloat))
-
-    // DoubleType
-    assert(DoubleType === typeOfObject(1.7976931348623157E308))
-
-    // DecimalType
-    assert(DecimalType.Unlimited ===
-      typeOfObject(new java.math.BigDecimal("1.7976931348623157E318")))
-
-    // DateType
-    assert(DateType === typeOfObject(Date.valueOf("2014-07-25")))
-
-    // TimestampType
-    assert(TimestampType === typeOfObject(Timestamp.valueOf("2014-07-25 10:26:00")))
-
-    // NullType
-    assert(NullType === typeOfObject(null))
-
-    def typeOfObject1: PartialFunction[Any, DataType] = typeOfObject orElse {
-      case value: java.math.BigInteger => DecimalType.Unlimited
-      case value: java.math.BigDecimal => DecimalType.Unlimited
-      case _ => StringType
-    }
-
-    assert(DecimalType.Unlimited === typeOfObject1(
-      new BigInteger("92233720368547758070")))
-    assert(DecimalType.Unlimited === typeOfObject1(
-      new java.math.BigDecimal("1.7976931348623157E318")))
-    assert(StringType === typeOfObject1(BigInt("92233720368547758070")))
-
-    def typeOfObject2: PartialFunction[Any, DataType] = typeOfObject orElse {
-      case value: java.math.BigInteger => DecimalType.Unlimited
-    }
-
-    intercept[MatchError](typeOfObject2(BigInt("92233720368547758070")))
-
-    def typeOfObject3: PartialFunction[Any, DataType] = typeOfObject orElse {
-      case c: Seq[_] => ArrayType(typeOfObject3(c.head))
-    }
-
-    assert(ArrayType(IntegerType) === typeOfObject3(Seq(1, 2, 3)))
-    assert(ArrayType(ArrayType(IntegerType)) === typeOfObject3(Seq(Seq(1, 2, 3))))
+  test("type-aliased data") {
+    assert(schemaFor[GenericData[Int]] == schemaFor[GenericData.IntData])
   }
 
   test("convert PrimitiveData to catalyst") {
@@ -264,10 +307,10 @@ class ScalaReflectionSuite extends SparkFunSuite {
   test("convert Option[Product] to catalyst") {
     val primitiveData = PrimitiveData(1, 1, 1, 1, 1, 1, true)
     val data = OptionalData(Some(2), Some(2), Some(2), Some(2), Some(2), Some(2), Some(true),
-      Some(primitiveData))
+      Some(primitiveData), Some(new CalendarInterval(1, 2, 3)))
     val dataType = schemaFor[OptionalData].dataType
     val convertedData = InternalRow(2, 2.toLong, 2.toDouble, 2.toFloat, 2.toShort, 2.toByte, true,
-      InternalRow(1, 1, 1, 1, 1, 1, true))
+      InternalRow(1, 1, 1, 1, 1, 1, true), new CalendarInterval(1, 2, 3))
     assert(CatalystTypeConverters.createToCatalystConverter(dataType)(data) === convertedData)
   }
 
@@ -279,5 +322,133 @@ class ScalaReflectionSuite extends SparkFunSuite {
         assert(s.fieldNames === Seq("a", "b", "c"))
         assert(s.fields.map(_.dataType) === Seq(IntegerType, StringType, DoubleType))
     }
+  }
+
+  test("SPARK-15062: Get correct serializer for List[_]") {
+    val list = List(1, 2, 3)
+    val serializer = serializerFor[List[Int]]
+    assert(serializer.isInstanceOf[NewInstance])
+    assert(serializer.asInstanceOf[NewInstance]
+      .cls.isAssignableFrom(classOf[org.apache.spark.sql.catalyst.util.GenericArrayData]))
+  }
+
+  test("SPARK 16792: Get correct deserializer for List[_]") {
+    val listDeserializer = deserializerFor[List[Int]]
+    assert(listDeserializer.dataType == ObjectType(classOf[List[_]]))
+  }
+
+  test("serialize and deserialize arbitrary sequence types") {
+    import scala.collection.immutable.Queue
+    val queueSerializer = serializerFor[Queue[Int]]
+    assert(queueSerializer.dataType ==
+      ArrayType(IntegerType, containsNull = false))
+    val queueDeserializer = deserializerFor[Queue[Int]]
+    assert(queueDeserializer.dataType == ObjectType(classOf[Queue[_]]))
+
+    import scala.collection.mutable.ArrayBuffer
+    val arrayBufferSerializer = serializerFor[ArrayBuffer[Int]]
+    assert(arrayBufferSerializer.dataType ==
+      ArrayType(IntegerType, containsNull = false))
+    val arrayBufferDeserializer = deserializerFor[ArrayBuffer[Int]]
+    assert(arrayBufferDeserializer.dataType == ObjectType(classOf[ArrayBuffer[_]]))
+  }
+
+  test("serialize and deserialize arbitrary map types") {
+    val mapSerializer = serializerFor[Map[Int, Int]]
+    assert(mapSerializer.dataType ==
+      MapType(IntegerType, IntegerType, valueContainsNull = false))
+    val mapDeserializer = deserializerFor[Map[Int, Int]]
+    assert(mapDeserializer.dataType == ObjectType(classOf[Map[_, _]]))
+
+    import scala.collection.immutable.HashMap
+    val hashMapSerializer = serializerFor[HashMap[Int, Int]]
+    assert(hashMapSerializer.dataType ==
+      MapType(IntegerType, IntegerType, valueContainsNull = false))
+    val hashMapDeserializer = deserializerFor[HashMap[Int, Int]]
+    assert(hashMapDeserializer.dataType == ObjectType(classOf[HashMap[_, _]]))
+
+    import scala.collection.mutable.{LinkedHashMap => LHMap}
+    val linkedHashMapSerializer = serializerFor[LHMap[Long, String]]
+    assert(linkedHashMapSerializer.dataType ==
+      MapType(LongType, StringType, valueContainsNull = true))
+    val linkedHashMapDeserializer = deserializerFor[LHMap[Long, String]]
+    assert(linkedHashMapDeserializer.dataType == ObjectType(classOf[LHMap[_, _]]))
+  }
+
+  test("SPARK-22442: Generate correct field names for special characters") {
+    val serializer = serializerFor[SpecialCharAsFieldData]
+      .collect {
+        case If(_, _, s: CreateNamedStruct) => s
+      }.head
+    val deserializer = deserializerFor[SpecialCharAsFieldData]
+    assert(serializer.dataType(0).name == "field.1")
+    assert(serializer.dataType(1).name == "field 2")
+
+    val newInstance = deserializer.collect { case n: NewInstance => n }.head
+
+    val argumentsFields = newInstance.arguments.flatMap { _.collect {
+      case UpCast(u: UnresolvedExtractValue, _, _) => u.extraction.toString
+    }}
+    assert(argumentsFields(0) == "field.1")
+    assert(argumentsFields(1) == "field 2")
+  }
+
+  test("SPARK-22472: add null check for top-level primitive values") {
+    assert(deserializerFor[Int].isInstanceOf[AssertNotNull])
+    assert(!deserializerFor[String].isInstanceOf[AssertNotNull])
+  }
+
+  test("SPARK-23025: schemaFor should support Null type") {
+    val schema = schemaFor[(Int, Null)]
+    assert(schema === Schema(
+      StructType(Seq(
+        StructField("_1", IntegerType, nullable = false),
+        StructField("_2", NullType, nullable = true))),
+      nullable = true))
+  }
+
+  test("SPARK-23835: add null check to non-nullable types in Tuples") {
+    def numberOfCheckedArguments(deserializer: Expression): Int = {
+      val newInstance = deserializer.collect { case n: NewInstance => n}.head
+      newInstance.arguments.count(_.isInstanceOf[AssertNotNull])
+    }
+    assert(numberOfCheckedArguments(deserializerFor[(Double, Double)]) == 2)
+    assert(numberOfCheckedArguments(deserializerFor[(java.lang.Double, Int)]) == 1)
+    assert(numberOfCheckedArguments(deserializerFor[(java.lang.Integer, java.lang.Integer)]) == 0)
+  }
+
+  test("SPARK-8288: schemaFor works for a class with only a companion object constructor") {
+    val schema = schemaFor[ScroogeLikeExample]
+    assert(schema === Schema(
+      StructType(Seq(
+        StructField("x", IntegerType, nullable = false))), nullable = true))
+  }
+
+  test("SPARK-29026: schemaFor for trait without companion object throws exception ") {
+    val e = intercept[UnsupportedOperationException] {
+      schemaFor[TraitProductWithoutCompanion]
+    }
+    assert(e.getMessage.contains("Unable to find constructor"))
+  }
+
+  test("SPARK-29026: schemaFor for trait with no-constructor companion throws exception ") {
+    val e = intercept[UnsupportedOperationException] {
+      schemaFor[TraitProductWithNoConstructorCompanion]
+    }
+    assert(e.getMessage.contains("Unable to find constructor"))
+  }
+
+  test("SPARK-27625: annotated data types") {
+    assert(serializerFor[FooWithAnnotation].dataType == StructType(Seq(
+      StructField("f1", StringType),
+      StructField("f2", StringType))))
+    assert(deserializerFor[FooWithAnnotation].dataType == ObjectType(classOf[FooWithAnnotation]))
+  }
+
+  test("SPARK-32585: Support scala enumeration in ScalaReflection") {
+    assert(serializerFor[FooClassWithEnum].dataType == StructType(Seq(
+      StructField("i", IntegerType, false),
+      StructField("e", StringType, true))))
+    assert(deserializerFor[FooClassWithEnum].dataType == ObjectType(classOf[FooClassWithEnum]))
   }
 }

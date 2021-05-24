@@ -23,10 +23,12 @@ import gc
 import itertools
 import operator
 import random
+import sys
 
-import pyspark.heapq3 as heapq
+import heapq
 from pyspark.serializers import BatchedSerializer, PickleSerializer, FlattenedValuesSerializer, \
     CompressedSerializer, AutoBatchedSerializer
+from pyspark.util import fail_on_stopiteration
 
 
 try:
@@ -35,7 +37,7 @@ try:
     process = None
 
     def get_used_memory():
-        """ Return the used memory in MB """
+        """ Return the used memory in MiB """
         global process
         if process is None or process._pid != os.getpid():
             process = psutil.Process(os.getpid())
@@ -48,7 +50,7 @@ try:
 except ImportError:
 
     def get_used_memory():
-        """ Return the used memory in MB """
+        """ Return the used memory in MiB """
         if platform.system() == 'Linux':
             for line in open('/proc/self/status'):
                 if line.startswith('VmRSS:'):
@@ -93,9 +95,9 @@ class Aggregator(object):
     """
 
     def __init__(self, createCombiner, mergeValue, mergeCombiners):
-        self.createCombiner = createCombiner
-        self.mergeValue = mergeValue
-        self.mergeCombiners = mergeCombiners
+        self.createCombiner = fail_on_stopiteration(createCombiner)
+        self.mergeValue = fail_on_stopiteration(mergeValue)
+        self.mergeCombiners = fail_on_stopiteration(mergeCombiners)
 
 
 class SimpleAggregator(Aggregator):
@@ -129,36 +131,6 @@ class Merger(object):
     def items(self):
         """ Return the merged items ad iterator """
         raise NotImplementedError
-
-
-class InMemoryMerger(Merger):
-
-    """
-    In memory merger based on in-memory dict.
-    """
-
-    def __init__(self, aggregator):
-        Merger.__init__(self, aggregator)
-        self.data = {}
-
-    def mergeValues(self, iterator):
-        """ Combine the items by creator and combiner """
-        # speed up attributes lookup
-        d, creator = self.data, self.agg.createCombiner
-        comb = self.agg.mergeValue
-        for k, v in iterator:
-            d[k] = comb(d[k], v) if k in d else creator(v)
-
-    def mergeCombiners(self, iterator):
-        """ Merge the combined items by mergeCombiner """
-        # speed up attributes lookup
-        d, comb = self.data, self.agg.mergeCombiners
-        for k, v in iterator:
-            d[k] = comb(d[k], v) if k in d else v
-
-    def items(self):
-        """ Return the merged items ad iterator """
-        return iter(self.data.items())
 
 
 def _compressed_serializer(self, serializer=None):
@@ -205,6 +177,8 @@ class ExternalMerger(Merger):
     Finally, if any items were spilled into disks, each partition
     will be merged into `data` and be yielded, then cleared.
 
+    Examples
+    --------
     >>> agg = SimpleAggregator(lambda x, y: x + y)
     >>> merger = ExternalMerger(agg, 10)
     >>> N = 10000
@@ -444,13 +418,14 @@ class ExternalMerger(Merger):
 
 class ExternalSorter(object):
     """
-    ExtenalSorter will divide the elements into chunks, sort them in
+    ExternalSorter will divide the elements into chunks, sort them in
     memory and dump them into disks, finally merge them back.
 
     The spilling will only happen when the used memory goes above
     the limit.
 
-
+    Examples
+    --------
     >>> sorter = ExternalSorter(1)  # 1M
     >>> import random
     >>> l = list(range(1024))
@@ -526,7 +501,7 @@ class ExternalSorter(object):
         if current_chunk:
             chunks.append(iter(current_chunk))
 
-        return heapq.merge(chunks, key=key, reverse=reverse)
+        return heapq.merge(*chunks, key=key, reverse=reverse)
 
 
 class ExternalList(object):
@@ -534,6 +509,8 @@ class ExternalList(object):
     ExternalList can have many items which cannot be hold in memory in
     the same time.
 
+    Examples
+    --------
     >>> l = ExternalList(list(range(100)))
     >>> len(l)
     100
@@ -606,7 +583,7 @@ class ExternalList(object):
         if not os.path.exists(d):
             os.makedirs(d)
         p = os.path.join(d, str(id(self)))
-        self._file = open(p, "wb+", 65536)
+        self._file = open(p, "w+b", 65536)
         self._ser = BatchedSerializer(CompressedSerializer(PickleSerializer()), 1024)
         os.unlink(p)
 
@@ -634,6 +611,8 @@ class ExternalListOfList(ExternalList):
     """
     An external list for list.
 
+    Examples
+    --------
     >>> l = ExternalListOfList([[i, i] for i in range(100)])
     >>> len(l)
     200
@@ -663,6 +642,8 @@ class GroupByKey(object):
     """
     Group a sorted iterator as [(k1, it1), (k2, it2), ...]
 
+    Examples
+    --------
     >>> k = [i // 3 for i in range(6)]
     >>> v = [[i] for i in range(6)]
     >>> g = GroupByKey(zip(k, v))
@@ -824,7 +805,7 @@ class ExternalGroupBy(ExternalMerger):
 
         if self._sorted:
             # all the partitions are already sorted
-            sorted_items = heapq.merge(disk_items, key=operator.itemgetter(0))
+            sorted_items = heapq.merge(*disk_items, key=operator.itemgetter(0))
 
         else:
             # Flatten the combined values, so it will not consume huge
@@ -838,4 +819,6 @@ class ExternalGroupBy(ExternalMerger):
 
 if __name__ == "__main__":
     import doctest
-    doctest.testmod()
+    (failure_count, test_count) = doctest.testmod()
+    if failure_count:
+        sys.exit(-1)

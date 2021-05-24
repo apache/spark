@@ -20,11 +20,14 @@ package org.apache.spark.deploy
 import java.io._
 import java.util.concurrent.{Semaphore, TimeUnit}
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.api.r.RBackend
+import org.apache.spark.{SparkException, SparkUserAppException}
+import org.apache.spark.api.r.{RBackend, RUtils}
+import org.apache.spark.internal.config.R._
+import org.apache.spark.internal.config.SUBMIT_DEPLOY_MODE
 import org.apache.spark.util.RedirectThread
 
 /**
@@ -39,7 +42,20 @@ object RRunner {
 
     // Time to wait for SparkR backend to initialize in seconds
     val backendTimeout = sys.env.getOrElse("SPARKR_BACKEND_TIMEOUT", "120").toInt
-    val rCommand = "Rscript"
+    val rCommand = {
+      // "spark.sparkr.r.command" is deprecated and replaced by "spark.r.command",
+      // but kept here for backward compatibility.
+      var cmd = sys.props.getOrElse(SPARKR_COMMAND.key, SPARKR_COMMAND.defaultValue.get)
+      cmd = sys.props.getOrElse(R_COMMAND.key, cmd)
+      if (sys.props.getOrElse(SUBMIT_DEPLOY_MODE.key, "client") == "client") {
+        cmd = sys.props.getOrElse("spark.r.driver.command", cmd)
+      }
+      cmd
+    }
+
+    //  Connection timeout set by R process on its connection to RBackend in seconds.
+    val backendConnectionTimeout = sys.props.getOrElse(
+      R_BACKEND_CONNECTION_TIMEOUT.key, R_BACKEND_CONNECTION_TIMEOUT.defaultValue.get.toString)
 
     // Check if the file path exists.
     // If not, change directory to current working directory for YARN cluster mode
@@ -54,10 +70,13 @@ object RRunner {
     // Java system properties etc.
     val sparkRBackend = new RBackend()
     @volatile var sparkRBackendPort = 0
+    @volatile var sparkRBackendSecret: String = null
     val initialized = new Semaphore(0)
     val sparkRBackendThread = new Thread("SparkR backend") {
-      override def run() {
-        sparkRBackendPort = sparkRBackend.init()
+      override def run(): Unit = {
+        val (port, authHelper) = sparkRBackend.init()
+        sparkRBackendPort = port
+        sparkRBackendSecret = authHelper.secret
         initialized.release()
         sparkRBackend.run()
       }
@@ -68,12 +87,16 @@ object RRunner {
     if (initialized.tryAcquire(backendTimeout, TimeUnit.SECONDS)) {
       // Launch R
       val returnCode = try {
-        val builder = new ProcessBuilder(Seq(rCommand, rFileNormalized) ++ otherArgs)
+        val builder = new ProcessBuilder((Seq(rCommand, rFileNormalized) ++ otherArgs).asJava)
         val env = builder.environment()
         env.put("EXISTING_SPARKR_BACKEND_PORT", sparkRBackendPort.toString)
-        val sparkHome = System.getenv("SPARK_HOME")
+        env.put("SPARKR_BACKEND_CONNECTION_TIMEOUT", backendConnectionTimeout)
+        val rPackageDir = RUtils.sparkRPackagePath(isDriver = true)
+        // Put the R package directories into an env variable of comma-separated paths
+        env.put("SPARKR_PACKAGE_DIR", rPackageDir.mkString(","))
         env.put("R_PROFILE_USER",
-          Seq(sparkHome, "R", "lib", "SparkR", "profile", "general.R").mkString(File.separator))
+          Seq(rPackageDir(0), "SparkR", "profile", "general.R").mkString(File.separator))
+        env.put("SPARKR_BACKEND_AUTH_SECRET", sparkRBackendSecret)
         builder.redirectErrorStream(true) // Ugly but needed for stdout and stderr to synchronize
         val process = builder.start()
 
@@ -83,10 +106,15 @@ object RRunner {
       } finally {
         sparkRBackend.close()
       }
-      System.exit(returnCode)
+      if (returnCode != 0) {
+        throw new SparkUserAppException(returnCode)
+      }
     } else {
-      System.err.println("SparkR backend did not initialize in " + backendTimeout + " seconds")
-      System.exit(-1)
+      val errorMessage = s"SparkR backend did not initialize in $backendTimeout seconds"
+      // scalastyle:off println
+      System.err.println(errorMessage)
+      // scalastyle:on println
+      throw new SparkException(errorMessage)
     }
   }
 }

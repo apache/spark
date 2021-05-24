@@ -45,18 +45,17 @@ class SplitInfo(
     hashCode
   }
 
-  // This is practically useless since most of the Split impl's dont seem to implement equals :-(
+  // This is practically useless since most of the Split impl's don't seem to implement equals :-(
   // So unless there is identity equality between underlyingSplits, it will always fail even if it
   // is pointing to same block.
   override def equals(other: Any): Boolean = other match {
-    case that: SplitInfo => {
+    case that: SplitInfo =>
       this.hostLocation == that.hostLocation &&
         this.inputFormatClazz == that.inputFormatClazz &&
         this.path == that.path &&
         this.length == that.length &&
         // other split specific checks (like start for FileSplit)
         this.underlyingSplit == that.underlyingSplit
-    }
     case _ => false
   }
 }
@@ -70,7 +69,7 @@ object SplitInfo {
     for (host <- mapredSplit.getLocations) {
       retval += new SplitInfo(inputFormatClazz, host, path, length, mapredSplit)
     }
-    retval
+    retval.toSeq
   }
 
   def toSplitInfo(inputFormatClazz: Class[_], path: String,
@@ -80,6 +79,6 @@ object SplitInfo {
     for (host <- mapreduceSplit.getLocations) {
       retval += new SplitInfo(inputFormatClazz, host, path, length, mapreduceSplit)
     }
-    retval
+    retval.toSeq
   }
 }

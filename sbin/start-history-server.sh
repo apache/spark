@@ -24,16 +24,26 @@
 # Use the SPARK_HISTORY_OPTS environment variable to set history server configuration.
 #
 
-sbin="`dirname "$0"`"
-sbin="`cd "$sbin"; pwd`"
-
-. "$sbin/spark-config.sh"
-. "$SPARK_PREFIX/bin/load-spark-env.sh"
-
-if [ $# != 0 ]; then
-  echo "Using command line arguments for setting the log directory is deprecated. Please "
-  echo "set the spark.history.fs.logDirectory configuration option instead."
-  export SPARK_HISTORY_OPTS="$SPARK_HISTORY_OPTS -Dspark.history.fs.logDirectory=$1"
+if [ -z "${SPARK_HOME}" ]; then
+  export SPARK_HOME="$(cd "`dirname "$0"`"/..; pwd)"
 fi
 
-exec "$sbin"/spark-daemon.sh start org.apache.spark.deploy.history.HistoryServer 1
+# NOTE: This exact class name is matched downstream by SparkSubmit.
+# Any changes need to be reflected there.
+CLASS="org.apache.spark.deploy.history.HistoryServer"
+
+if [[ "$@" = *--help ]] || [[ "$@" = *-h ]]; then
+  echo "Usage: ./sbin/start-history-server.sh [options]"
+  pattern="Usage:"
+  pattern+="\|Using Spark's default log4j profile:"
+  pattern+="\|Started daemon with process name"
+  pattern+="\|Registered signal handler for"
+
+  "${SPARK_HOME}"/bin/spark-class $CLASS --help 2>&1 | grep -v "$pattern" 1>&2
+  exit 1
+fi
+
+. "${SPARK_HOME}/sbin/spark-config.sh"
+. "${SPARK_HOME}/bin/load-spark-env.sh"
+
+exec "${SPARK_HOME}/sbin"/spark-daemon.sh start $CLASS 1 "$@"

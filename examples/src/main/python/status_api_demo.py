@@ -15,11 +15,9 @@
 # limitations under the License.
 #
 
-from __future__ import print_function
-
 import time
 import threading
-import Queue
+import queue as Queue
 
 from pyspark import SparkConf, SparkContext
 

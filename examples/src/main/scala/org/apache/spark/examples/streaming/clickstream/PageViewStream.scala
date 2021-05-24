@@ -15,25 +15,27 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.streaming.clickstream
 
-import org.apache.spark.SparkContext._
-import org.apache.spark.streaming.{Seconds, StreamingContext}
 import org.apache.spark.examples.streaming.StreamingExamples
+import org.apache.spark.streaming.{Seconds, StreamingContext}
+
 // scalastyle:off
-/** Analyses a streaming dataset of web page views. This class demonstrates several types of
-  * operators available in Spark streaming.
-  *
-  * This should be used in tandem with PageViewStream.scala. Example:
-  * To run the generator
-  * `$ bin/run-example org.apache.spark.examples.streaming.clickstream.PageViewGenerator 44444 10`
-  * To process the generated stream
-  * `$ bin/run-example \
-  *    org.apache.spark.examples.streaming.clickstream.PageViewStream errorRatePerZipCode localhost 44444`
-  */
+/**
+ * Analyses a streaming dataset of web page views. This class demonstrates several types of
+ * operators available in Spark streaming.
+ *
+ * This should be used in tandem with PageViewStream.scala. Example:
+ * To run the generator
+ * `$ bin/run-example org.apache.spark.examples.streaming.clickstream.PageViewGenerator 44444 10`
+ * To process the generated stream
+ * `$ bin/run-example \
+ *    org.apache.spark.examples.streaming.clickstream.PageViewStream errorRatePerZipCode localhost 44444`
+ */
 // scalastyle:on
 object PageViewStream {
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     if (args.length != 3) {
       System.err.println("Usage: PageViewStream <metric> <host> <port>")
       System.err.println("<metric> must be one of pageCounts, slidingPageCounts," +
@@ -68,7 +70,7 @@ object PageViewStream {
                                       .groupByKey()
     val errorRatePerZipCode = statusesPerZipCode.map{
       case(zip, statuses) =>
-        val normalCount = statuses.filter(_ == 200).size
+        val normalCount = statuses.count(_ == 200)
         val errorCount = statuses.size - normalCount
         val errorRatio = errorCount.toFloat / statuses.size
         if (errorRatio > 0.05) {
@@ -86,8 +88,10 @@ object PageViewStream {
                                    .map("Unique active users: " + _)
 
     // An external dataset we want to join to this stream
-    val userList = ssc.sparkContext.parallelize(
-       Map(1 -> "Patrick Wendell", 2->"Reynold Xin", 3->"Matei Zaharia").toSeq)
+    val userList = ssc.sparkContext.parallelize(Seq(
+      1 -> "Patrick Wendell",
+      2 -> "Reynold Xin",
+      3 -> "Matei Zaharia"))
 
     metric match {
       case "pageCounts" => pageCounts.print()
@@ -100,10 +104,12 @@ object PageViewStream {
           .foreachRDD((rdd, time) => rdd.join(userList)
             .map(_._2._2)
             .take(10)
-            .foreach(u => println("Saw user %s at time %s".format(u, time))))
-      case _ => println("Invalid metric entered: " + metric)
+            .foreach(u => println(s"Saw user $u at time $time")))
+      case _ => println(s"Invalid metric entered: $metric")
     }
 
     ssc.start()
+    ssc.awaitTermination()
   }
 }
+// scalastyle:on println

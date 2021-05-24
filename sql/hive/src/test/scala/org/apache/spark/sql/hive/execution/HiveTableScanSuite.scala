@@ -17,15 +17,18 @@
 
 package org.apache.spark.sql.hive.execution
 
+import java.io.{File, IOException}
+
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.functions._
-import org.apache.spark.sql.hive.test.TestHive
+import org.apache.spark.sql.functions.col
+import org.apache.spark.sql.hive.test.{TestHive, TestHiveSingleton}
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.hive.test.TestHive.implicits._
-
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.util.Utils
 
-class HiveTableScanSuite extends HiveComparisonTest {
+class HiveTableScanSuite extends HiveComparisonTest with SQLTestUtils with TestHiveSingleton {
 
   createQueryTest("partition_based_table_scan_with_different_serde",
     """
@@ -66,7 +69,7 @@ class HiveTableScanSuite extends HiveComparisonTest {
     TestHive.sql("DROP TABLE IF EXISTS timestamp_query_null")
     TestHive.sql(
       """
-        CREATE EXTERNAL TABLE timestamp_query_null (time TIMESTAMP,id INT)
+        CREATE TABLE timestamp_query_null (time TIMESTAMP,id INT)
         ROW FORMAT DELIMITED
         FIELDS TERMINATED BY ','
         LINES TERMINATED BY '\n'
@@ -81,13 +84,198 @@ class HiveTableScanSuite extends HiveComparisonTest {
   }
 
   test("Spark-4959 Attributes are case sensitive when using a select query from a projection") {
-    sql("create table spark_4959 (col1 string)")
-    sql("""insert into table spark_4959 select "hi" from src limit 1""")
-    table("spark_4959").select(
-      'col1.as("CaseSensitiveColName"),
-      'col1.as("CaseSensitiveColName2")).registerTempTable("spark_4959_2")
+    withTable("spark_4959") {
+      sql("create table spark_4959 (col1 string)")
+      sql("""insert into table spark_4959 select "hi" from src limit 1""")
+      table("spark_4959").select(
+        $"col1".as("CaseSensitiveColName"),
+        $"col1".as("CaseSensitiveColName2")).createOrReplaceTempView("spark_4959_2")
 
-    assert(sql("select CaseSensitiveColName from spark_4959_2").head() === Row("hi"))
-    assert(sql("select casesensitivecolname from spark_4959_2").head() === Row("hi"))
+      assert(sql("select CaseSensitiveColName from spark_4959_2").head() === Row("hi"))
+      assert(sql("select casesensitivecolname from spark_4959_2").head() === Row("hi"))
+    }
+  }
+
+  private def checkNumScannedPartitions(stmt: String, expectedNumParts: Int): Unit = {
+    val plan = sql(stmt).queryExecution.sparkPlan
+    val numPartitions = plan.collectFirst {
+      case p: HiveTableScanExec => p.rawPartitions.length
+    }.getOrElse(0)
+    assert(numPartitions == expectedNumParts)
+  }
+
+  test("Verify SQLConf HIVE_METASTORE_PARTITION_PRUNING") {
+    val view = "src"
+    withTempView(view) {
+      spark.range(1, 5).createOrReplaceTempView(view)
+      val table = "table_with_partition"
+      withTable(table) {
+        sql(
+          s"""
+             |CREATE TABLE $table(id string)
+             |USING hive
+             |PARTITIONED BY (p1 string,p2 string,p3 string,p4 string,p5 string)
+           """.stripMargin)
+        sql(
+          s"""
+             |FROM $view v
+             |INSERT INTO TABLE $table
+             |PARTITION (p1='a',p2='b',p3='c',p4='d',p5='e')
+             |SELECT v.id
+             |INSERT INTO TABLE $table
+             |PARTITION (p1='a',p2='c',p3='c',p4='d',p5='e')
+             |SELECT v.id
+           """.stripMargin)
+
+        Seq("true", "false").foreach { hivePruning =>
+          withSQLConf(SQLConf.HIVE_METASTORE_PARTITION_PRUNING.key -> hivePruning) {
+            // If the pruning predicate is used, getHiveQlPartitions should only return the
+            // qualified partition; Otherwise, it return all the partitions.
+            val expectedNumPartitions = if (hivePruning == "true") 1 else 2
+            checkNumScannedPartitions(
+              stmt = s"SELECT id, p2 FROM $table WHERE p2 <= 'b'", expectedNumPartitions)
+          }
+        }
+
+        Seq("true", "false").foreach { hivePruning =>
+          withSQLConf(SQLConf.HIVE_METASTORE_PARTITION_PRUNING.key -> hivePruning) {
+            // If the pruning predicate does not exist, getHiveQlPartitions should always
+            // return all the partitions.
+            checkNumScannedPartitions(
+              stmt = s"SELECT id, p2 FROM $table WHERE id <= 3", expectedNumParts = 2)
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-16926: number of table and partition columns match for new partitioned table") {
+    val view = "src"
+    withTempView(view) {
+      spark.range(1, 5).createOrReplaceTempView(view)
+      val table = "table_with_partition"
+      withTable(table) {
+        sql(
+          s"""
+             |CREATE TABLE $table(id string)
+             |USING hive
+             |PARTITIONED BY (p1 string,p2 string,p3 string,p4 string,p5 string)
+           """.stripMargin)
+        sql(
+          s"""
+             |FROM $view v
+             |INSERT INTO TABLE $table
+             |PARTITION (p1='a',p2='b',p3='c',p4='d',p5='e')
+             |SELECT v.id
+             |INSERT INTO TABLE $table
+             |PARTITION (p1='a',p2='c',p3='c',p4='d',p5='e')
+             |SELECT v.id
+           """.stripMargin)
+        val scan = getHiveTableScanExec(s"SELECT * FROM $table")
+        val numDataCols = scan.relation.dataCols.length
+        scan.rawPartitions.foreach(p => assert(p.getCols.size == numDataCols))
+      }
+    }
+  }
+
+  test("HiveTableScanExec canonicalization for different orders of partition filters") {
+    val table = "hive_tbl_part"
+    withTable(table) {
+      sql(
+        s"""
+           |CREATE TABLE $table (id int)
+           |USING hive
+           |PARTITIONED BY (a int, b int)
+         """.stripMargin)
+      val scan1 = getHiveTableScanExec(s"SELECT * FROM $table WHERE a = 1 AND b = 2")
+      val scan2 = getHiveTableScanExec(s"SELECT * FROM $table WHERE b = 2 AND a = 1")
+      assert(scan1.sameResult(scan2))
+    }
+  }
+
+  test("SPARK-32867: When explain, HiveTableRelation show limited message") {
+    withSQLConf("hive.exec.dynamic.partition.mode" -> "nonstrict") {
+      withTable("df") {
+        spark.range(30)
+          .select(col("id"), col("id").as("k"))
+          .write
+          .partitionBy("k")
+          .format("hive")
+          .mode("overwrite")
+          .saveAsTable("df")
+
+        val scan1 = getHiveTableScanExec("SELECT * FROM df WHERE df.k < 3")
+        assert(scan1.simpleString(100).replaceAll("#\\d+L", "") ==
+          "Scan hive default.df [id, k]," +
+            " HiveTableRelation [" +
+            "`default`.`df`," +
+            " org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe," +
+            " Data Cols: [id]," +
+            " Partition Cols: [k]," +
+            " Pruned Partitions: [(k=0), (k=1), (k=2)]" +
+            "]," +
+            " [isnotnull(k), (k < 3)]")
+
+        val scan2 = getHiveTableScanExec("SELECT * FROM df WHERE df.k < 30")
+        assert(scan2.simpleString(100).replaceAll("#\\d+L", "") ==
+          "Scan hive default.df [id, k]," +
+            " HiveTableRelation [" +
+            "`default`.`df`," +
+            " org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe," +
+            " Data Cols: [id]," +
+            " Partition Cols: [k]," +
+            " Pruned Partitions: [(k=0), (k=1), (k=10), (k=11), (k=12), (k=13), (k=14), (k=15)," +
+            " (k=16), (k=17), (k=18), (k=19), (k..." +
+            "]," +
+            " [isnotnull(k), (k < 30)]")
+
+        sql(
+          """
+            |ALTER TABLE df PARTITION (k=10) SET SERDE
+            |'org.apache.hadoop.hive.serde2.columnar.ColumnarSerDe';
+          """.stripMargin)
+
+        val scan3 = getHiveTableScanExec("SELECT * FROM df WHERE df.k < 30")
+        assert(scan3.simpleString(100).replaceAll("#\\d+L", "") ==
+          "Scan hive default.df [id, k]," +
+            " HiveTableRelation [" +
+            "`default`.`df`," +
+            " org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe," +
+            " Data Cols: [id]," +
+            " Partition Cols: [k]," +
+            " Pruned Partitions: [(k=0), (k=1)," +
+            " (k=10, org.apache.hadoop.hive.serde2.columnar.ColumnarSerDe)," +
+            " (k=11), (k=12), (k=1..." +
+            "]," +
+            " [isnotnull(k), (k < 30)]")
+      }
+    }
+  }
+
+  test("SPARK-32069: Improve error message on reading unexpected directory") {
+    withTable("t") {
+      withTempDir { f =>
+        sql(s"CREATE TABLE t(i LONG) USING hive LOCATION '${f.getAbsolutePath}'")
+        sql("INSERT INTO t VALUES(1)")
+        val dir = new File(f.getCanonicalPath + "/data")
+        dir.mkdir()
+        sql("set mapreduce.input.fileinputformat.input.dir.recursive=true")
+        assert(sql("select * from t").collect().head.getLong(0) == 1)
+        sql("set mapreduce.input.fileinputformat.input.dir.recursive=false")
+        val e = intercept[IOException] {
+          sql("SELECT * FROM t").collect()
+        }
+        assert(e.getMessage.contains(s"Path: ${dir.getAbsoluteFile} is a directory, " +
+          s"which is not supported by the record reader " +
+          s"when `mapreduce.input.fileinputformat.input.dir.recursive` is false."))
+        dir.delete()
+      }
+    }
+  }
+
+  private def getHiveTableScanExec(query: String): HiveTableScanExec = {
+    sql(query).queryExecution.sparkPlan.collectFirst {
+      case p: HiveTableScanExec => p
+    }.get
   }
 }

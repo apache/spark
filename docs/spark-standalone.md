@@ -1,12 +1,34 @@
 ---
 layout: global
 title: Spark Standalone Mode
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+ 
+     http://www.apache.org/licenses/LICENSE-2.0
+ 
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
 ---
 
 * This will become a table of contents (this text will be scraped).
 {:toc}
 
 In addition to running on the Mesos or YARN cluster managers, Spark also provides a simple standalone deploy mode. You can launch a standalone cluster either manually, by starting a master and workers by hand, or use our provided [launch scripts](#cluster-launch-scripts). It is also possible to run these daemons on a single machine for testing.
+
+# Security
+
+Security features like authentication are not enabled by default. When deploying a cluster that is open to the internet
+or an untrusted network, it's important to secure access to the cluster to prevent unauthorized applications
+from running on the cluster.
+Please see [Spark Security](security.html) and the specific security sections in this doc before running Spark.
 
 # Installing Spark Standalone to a Cluster
 
@@ -24,7 +46,7 @@ the master's web UI, which is [http://localhost:8080](http://localhost:8080) by 
 
 Similarly, you can start one or more workers and connect them to the master via:
 
-    ./sbin/start-slave.sh <master-spark-URL>
+    ./sbin/start-worker.sh <master-spark-URL>
 
 Once you have started a worker, look at the master's web UI ([http://localhost:8080](http://localhost:8080) by default).
 You should see the new node listed there, along with its number of CPUs and memory (minus one gigabyte left for the OS).
@@ -55,7 +77,7 @@ Finally, the following configuration options can be passed to the master and wor
   </tr>
   <tr>
     <td><code>-m MEM</code>, <code>--memory MEM</code></td>
-    <td>Total amount of memory to allow Spark applications to use on the machine, in a format like 1000M or 2G (default: your machine's total RAM minus 1 GB); only on worker</td>
+    <td>Total amount of memory to allow Spark applications to use on the machine, in a format like 1000M or 2G (default: your machine's total RAM minus 1 GiB); only on worker</td>
   </tr>
   <tr>
     <td><code>-d DIR</code>, <code>--work-dir DIR</code></td>
@@ -70,9 +92,9 @@ Finally, the following configuration options can be passed to the master and wor
 
 # Cluster Launch Scripts
 
-To launch a Spark standalone cluster with the launch scripts, you should create a file called conf/slaves in your Spark directory,
+To launch a Spark standalone cluster with the launch scripts, you should create a file called conf/workers in your Spark directory,
 which must contain the hostnames of all the machines where you intend to start Spark workers, one per line.
-If conf/slaves does not exist, the launch scripts defaults to a single machine (localhost), which is useful for testing.
+If conf/workers does not exist, the launch scripts defaults to a single machine (localhost), which is useful for testing.
 Note, the master machine accesses each of the worker machines via ssh. By default, ssh is run in parallel and requires password-less (using a private key) access to be setup.
 If you do not have a password-less setup, you can set the environment variable SPARK_SSH_FOREGROUND and serially provide a password for each worker.
 
@@ -80,12 +102,13 @@ If you do not have a password-less setup, you can set the environment variable S
 Once you've set up this file, you can launch or stop your cluster with the following shell scripts, based on Hadoop's deploy scripts, and available in `SPARK_HOME/sbin`:
 
 - `sbin/start-master.sh` - Starts a master instance on the machine the script is executed on.
-- `sbin/start-slaves.sh` - Starts a slave instance on each machine specified in the `conf/slaves` file.
-- `sbin/start-slave.sh` - Starts a slave instance on the machine the script is executed on.
-- `sbin/start-all.sh` - Starts both a master and a number of slaves as described above.
-- `sbin/stop-master.sh` - Stops the master that was started via the `bin/start-master.sh` script.
-- `sbin/stop-slaves.sh` - Stops all slave instances on the machines specified in the `conf/slaves` file.
-- `sbin/stop-all.sh` - Stops both the master and the slaves as described above.
+- `sbin/start-workers.sh` - Starts a worker instance on each machine specified in the `conf/workers` file.
+- `sbin/start-worker.sh` - Starts a worker instance on the machine the script is executed on.
+- `sbin/start-all.sh` - Starts both a master and a number of workers as described above.
+- `sbin/stop-master.sh` - Stops the master that was started via the `sbin/start-master.sh` script.
+- `sbin/stop-worker.sh` - Stops all worker instances on the machine the script is executed on.
+- `sbin/stop-workers.sh` - Stops all worker instances on the machines specified in the `conf/workers` file.
+- `sbin/stop-all.sh` - Stops both the master and the workers as described above.
 
 Note that these scripts must be executed on the machine you want to run the Spark master on, not your local machine.
 
@@ -94,8 +117,8 @@ You can optionally configure the cluster further by setting environment variable
 <table class="table">
   <tr><th style="width:21%">Environment Variable</th><th>Meaning</th></tr>
   <tr>
-    <td><code>SPARK_MASTER_IP</code></td>
-    <td>Bind the master to a specific IP address, for example a public one.</td>
+    <td><code>SPARK_MASTER_HOST</code></td>
+    <td>Bind the master to a specific hostname or IP address, for example a public one.</td>
   </tr>
   <tr>
     <td><code>SPARK_MASTER_PORT</code></td>
@@ -112,8 +135,8 @@ You can optionally configure the cluster further by setting environment variable
   <tr>
     <td><code>SPARK_LOCAL_DIRS</code></td>
     <td>
-    Directory to use for "scratch" space in Spark, including map output files and RDDs that get 
-    stored on disk. This should be on a fast, local disk in your system. It can also be a 
+    Directory to use for "scratch" space in Spark, including map output files and RDDs that get
+    stored on disk. This should be on a fast, local disk in your system. It can also be a
     comma-separated list of multiple directories on different disks.
     </td>
   </tr>
@@ -123,7 +146,7 @@ You can optionally configure the cluster further by setting environment variable
   </tr>
   <tr>
     <td><code>SPARK_WORKER_MEMORY</code></td>
-    <td>Total amount of memory to allow Spark applications to use on the machine, e.g. <code>1000m</code>, <code>2g</code> (default: total memory minus 1 GB); note that each application's <i>individual</i> memory is configured using its <code>spark.executor.memory</code> property.</td>
+    <td>Total amount of memory to allow Spark applications to use on the machine, e.g. <code>1000m</code>, <code>2g</code> (default: total memory minus 1 GiB); note that each application's <i>individual</i> memory is configured using its <code>spark.executor.memory</code> property.</td>
   </tr>
   <tr>
     <td><code>SPARK_WORKER_PORT</code></td>
@@ -132,15 +155,6 @@ You can optionally configure the cluster further by setting environment variable
   <tr>
     <td><code>SPARK_WORKER_WEBUI_PORT</code></td>
     <td>Port for the worker web UI (default: 8081).</td>
-  </tr>
-  <tr>
-    <td><code>SPARK_WORKER_INSTANCES</code></td>
-    <td>
-      Number of worker instances to run on each machine (default: 1). You can make this more than 1 if
-      you have have very large machines and would like multiple Spark worker processes. If you do set
-      this, make sure to also set <code>SPARK_WORKER_CORES</code> explicitly to limit the cores per worker,
-      or else each worker will try to use all the cores.
-    </td>
   </tr>
   <tr>
     <td><code>SPARK_WORKER_DIR</code></td>
@@ -152,11 +166,15 @@ You can optionally configure the cluster further by setting environment variable
   </tr>
   <tr>
     <td><code>SPARK_DAEMON_MEMORY</code></td>
-    <td>Memory to allocate to the Spark master and worker daemons themselves (default: 512m).</td>
+    <td>Memory to allocate to the Spark master and worker daemons themselves (default: 1g).</td>
   </tr>
   <tr>
     <td><code>SPARK_DAEMON_JAVA_OPTS</code></td>
     <td>JVM options for the Spark master and worker daemons themselves in the form "-Dx=y" (default: none).</td>
+  </tr>
+  <tr>
+    <td><code>SPARK_DAEMON_CLASSPATH</code></td>
+    <td>Classpath for the Spark master and worker daemons themselves (default: none).</td>
   </tr>
   <tr>
     <td><code>SPARK_PUBLIC_DNS</code></td>
@@ -169,13 +187,14 @@ You can optionally configure the cluster further by setting environment variable
 SPARK_MASTER_OPTS supports the following system properties:
 
 <table class="table">
-<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr>
 <tr>
   <td><code>spark.deploy.retainedApplications</code></td>
   <td>200</td>
   <td>
     The maximum number of completed applications to display. Older applications will be dropped from the UI to maintain this limit.<br/>
   </td>
+  <td>0.8.0</td>
 </tr>
 <tr>
   <td><code>spark.deploy.retainedDrivers</code></td>
@@ -183,6 +202,7 @@ SPARK_MASTER_OPTS supports the following system properties:
   <td>
    The maximum number of completed drivers to display. Older drivers will be dropped from the UI to maintain this limit.<br/>
   </td>
+  <td>1.1.0</td>
 </tr>
 <tr>
   <td><code>spark.deploy.spreadOut</code></td>
@@ -192,6 +212,7 @@ SPARK_MASTER_OPTS supports the following system properties:
     to consolidate them onto as few nodes as possible. Spreading out is usually better for
     data locality in HDFS, but consolidating is more efficient for compute-intensive workloads. <br/>
   </td>
+  <td>0.6.1</td>
 </tr>
 <tr>
   <td><code>spark.deploy.defaultCores</code></td>
@@ -203,6 +224,23 @@ SPARK_MASTER_OPTS supports the following system properties:
     Set this lower on a shared cluster to prevent users from grabbing
     the whole cluster by default. <br/>
   </td>
+  <td>0.9.0</td>
+</tr>
+<tr>
+  <td><code>spark.deploy.maxExecutorRetries</code></td>
+  <td>10</td>
+  <td>
+    Limit on the maximum number of back-to-back executor failures that can occur before the
+    standalone cluster manager removes a faulty application. An application will never be removed
+    if it has any running executors. If an application experiences more than
+    <code>spark.deploy.maxExecutorRetries</code> failures in a row, no executors
+    successfully start running in between those failures, and the application has no running
+    executors then the standalone cluster manager will remove the application and mark it as failed.
+    To disable this automatic removal, set <code>spark.deploy.maxExecutorRetries</code> to
+    <code>-1</code>.
+    <br/>
+  </td>
+  <td>1.6.3</td>
 </tr>
 <tr>
   <td><code>spark.worker.timeout</code></td>
@@ -211,20 +249,53 @@ SPARK_MASTER_OPTS supports the following system properties:
     Number of seconds after which the standalone deploy master considers a worker lost if it
     receives no heartbeats.
   </td>
+  <td>0.6.2</td>
+</tr>
+<tr>
+  <td><code>spark.worker.resource.{resourceName}.amount</code></td>
+  <td>(none)</td>
+  <td>
+    Amount of a particular resource to use on the worker.
+  </td>
+  <td>3.0.0</td>
+</tr>
+<tr>
+  <td><code>spark.worker.resource.{resourceName}.discoveryScript</code></td>
+  <td>(none)</td>
+  <td>
+    Path to resource discovery script, which is used to find a particular resource while worker starting up.
+    And the output of the script should be formatted like the <code>ResourceInformation</code> class.
+  </td>
+  <td>3.0.0</td>
+</tr>
+<tr>
+  <td><code>spark.worker.resourcesFile</code></td>
+  <td>(none)</td>
+  <td>
+    Path to resources file which is used to find various resources while worker starting up.
+    The content of resources file should be formatted like <code>
+    [{"id":{"componentName": "spark.worker","resourceName":"gpu"},"addresses":["0","1","2"]}]</code>.
+    If a particular resource is not found in the resources file, the discovery script would be used to
+    find that resource. If the discovery script also does not find the resources, the worker will fail
+    to start up.
+  </td>
+  <td>3.0.0</td>
 </tr>
 </table>
 
 SPARK_WORKER_OPTS supports the following system properties:
 
 <table class="table">
-<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr>
 <tr>
   <td><code>spark.worker.cleanup.enabled</code></td>
   <td>false</td>
   <td>
     Enable periodic cleanup of worker / application directories.  Note that this only affects standalone
     mode, as YARN works differently. Only the directories of stopped applications are cleaned up.
+    This should be enabled if spark.shuffle.service.db.enabled is "true"
   </td>
+  <td>1.0.0</td>
 </tr>
 <tr>
   <td><code>spark.worker.cleanup.interval</code></td>
@@ -233,29 +304,96 @@ SPARK_WORKER_OPTS supports the following system properties:
     Controls the interval, in seconds, at which the worker cleans up old application work dirs
     on the local machine.
   </td>
+  <td>1.0.0</td>
 </tr>
 <tr>
   <td><code>spark.worker.cleanup.appDataTtl</code></td>
-  <td>7 * 24 * 3600 (7 days)</td>
+  <td>604800 (7 days, 7 * 24 * 3600)</td>
   <td>
     The number of seconds to retain application work directories on each worker.  This is a Time To Live
     and should depend on the amount of available disk space you have.  Application logs and jars are
     downloaded to each application work dir.  Over time, the work dirs can quickly fill up disk space,
     especially if you run jobs very frequently.
   </td>
+  <td>1.0.0</td>
+</tr>
+<tr>
+  <td><code>spark.shuffle.service.db.enabled</code></td>
+  <td>true</td>
+  <td>
+    Store External Shuffle service state on local disk so that when the external shuffle service is restarted, it will
+    automatically reload info on current executors.  This only affects standalone mode (yarn always has this behavior
+    enabled).  You should also enable <code>spark.worker.cleanup.enabled</code>, to ensure that the state
+    eventually gets cleaned up.  This config may be removed in the future.
+  </td>
+  <td>3.0.0</td>
+</tr>
+<tr>
+  <td><code>spark.storage.cleanupFilesAfterExecutorExit</code></td>
+  <td>true</td>
+  <td>
+    Enable cleanup non-shuffle files(such as temp. shuffle blocks, cached RDD/broadcast blocks,
+    spill files, etc) of worker directories following executor exits. Note that this doesn't
+    overlap with `spark.worker.cleanup.enabled`, as this enables cleanup of non-shuffle files in
+    local directories of a dead executor, while `spark.worker.cleanup.enabled` enables cleanup of
+    all files/subdirectories of a stopped and timeout application.
+    This only affects Standalone mode, support of other cluster managers can be added in the future.
+  </td>
+  <td>2.4.0</td>
+</tr>
+<tr>
+  <td><code>spark.worker.ui.compressedLogFileLengthCacheSize</code></td>
+  <td>100</td>
+  <td>
+    For compressed log files, the uncompressed file can only be computed by uncompressing the files.
+    Spark caches the uncompressed file size of compressed log files. This property controls the cache
+    size.
+  </td>
+  <td>2.0.2</td>
 </tr>
 </table>
+
+# Resource Allocation and Configuration Overview
+
+Please make sure to have read the Custom Resource Scheduling and Configuration Overview section on the [configuration page](configuration.html). This section only talks about the Spark Standalone specific aspects of resource scheduling.
+
+Spark Standalone has 2 parts, the first is configuring the resources for the Worker, the second is the resource allocation for a specific application.
+
+The user must configure the Workers to have a set of resources available so that it can assign them out to Executors. The <code>spark.worker.resource.{resourceName}.amount</code> is used to control the amount of each resource the worker has allocated. The user must also specify either <code>spark.worker.resourcesFile</code> or <code>spark.worker.resource.{resourceName}.discoveryScript</code> to specify how the Worker discovers the resources its assigned. See the descriptions above for each of those to see which method works best for your setup.
+
+The second part is running an application on Spark Standalone. The only special case from the standard Spark resource configs is when you are running the Driver in client mode. For a Driver in client mode, the user can specify the resources it uses via <code>spark.driver.resourcesFile</code> or <code>spark.driver.resource.{resourceName}.discoveryScript</code>. If the Driver is running on the same host as other Drivers, please make sure the resources file or discovery script only returns resources that do not conflict with other Drivers running on the same node.
+
+Note, the user does not need to specify a discovery script when submitting an application as the Worker will start each Executor with the resources it allocates to it.
 
 # Connecting an Application to the Cluster
 
 To run an application on the Spark cluster, simply pass the `spark://IP:PORT` URL of the master as to the [`SparkContext`
-constructor](programming-guide.html#initializing-spark).
+constructor](rdd-programming-guide.html#initializing-spark).
 
 To run an interactive Spark shell against the cluster, run the following command:
 
     ./bin/spark-shell --master spark://IP:PORT
 
 You can also pass an option `--total-executor-cores <numCores>` to control the number of cores that spark-shell uses on the cluster.
+
+# Client Properties
+
+Spark applications supports the following configuration properties specific to standalone mode: 
+
+<table class="table">
+  <tr><th style="width:21%">Property Name</th><th>Default Value</th><th>Meaning</th><th>Since Version</th></tr>
+  <tr>
+  <td><code>spark.standalone.submit.waitAppCompletion</code></td>
+  <td><code>false</code></td>
+  <td>
+  In standalone cluster mode, controls whether the client waits to exit until the application completes.
+  If set to <code>true</code>, the client process will stay alive polling the driver's status.
+  Otherwise, the client process will exit after submission.
+  </td>
+  <td>3.1.0</td>
+  </tr>
+</table>
+
 
 # Launching Spark Applications
 
@@ -292,9 +430,9 @@ application at a time. You can cap the number of cores by setting `spark.cores.m
 
 {% highlight scala %}
 val conf = new SparkConf()
-             .setMaster(...)
-             .setAppName(...)
-             .set("spark.cores.max", "10")
+  .setMaster(...)
+  .setAppName(...)
+  .set("spark.cores.max", "10")
 val sc = new SparkContext(conf)
 {% endhighlight %}
 
@@ -309,22 +447,37 @@ export SPARK_MASTER_OPTS="-Dspark.deploy.defaultCores=<value>"
 This is useful on shared clusters where users might not have configured a maximum number of cores
 individually.
 
+# Executors Scheduling
+
+The number of cores assigned to each executor is configurable. When `spark.executor.cores` is
+explicitly set, multiple executors from the same application may be launched on the same worker
+if the worker has enough cores and memory. Otherwise, each executor grabs all the cores available
+on the worker by default, in which case only one executor per application may be launched on each
+worker during one single schedule iteration.
+
 # Monitoring and Logging
 
-Spark's standalone mode offers a web-based user interface to monitor the cluster. The master and each worker has its own web UI that shows cluster and job statistics. By default you can access the web UI for the master at port 8080. The port can be changed either in the configuration file or via command-line options.
+Spark's standalone mode offers a web-based user interface to monitor the cluster. The master and each worker has its own web UI that shows cluster and job statistics. By default, you can access the web UI for the master at port 8080. The port can be changed either in the configuration file or via command-line options.
 
-In addition, detailed log output for each job is also written to the work directory of each slave node (`SPARK_HOME/work` by default). You will see two files for each job, `stdout` and `stderr`, with all output it wrote to its console.
+In addition, detailed log output for each job is also written to the work directory of each worker node (`SPARK_HOME/work` by default). You will see two files for each job, `stdout` and `stderr`, with all output it wrote to its console.
 
 
 # Running Alongside Hadoop
 
-You can run Spark alongside your existing Hadoop cluster by just launching it as a separate service on the same machines. To access Hadoop data from Spark, just use a hdfs:// URL (typically `hdfs://<namenode>:9000/path`, but you can find the right URL on your Hadoop Namenode's web UI). Alternatively, you can set up a separate cluster for Spark, and still have it access HDFS over the network; this will be slower than disk-local access, but may not be a concern if you are still running in the same local area network (e.g. you place a few Spark machines on each rack that you have Hadoop on).
+You can run Spark alongside your existing Hadoop cluster by just launching it as a separate service on the same machines. To access Hadoop data from Spark, just use an hdfs:// URL (typically `hdfs://<namenode>:9000/path`, but you can find the right URL on your Hadoop Namenode's web UI). Alternatively, you can set up a separate cluster for Spark, and still have it access HDFS over the network; this will be slower than disk-local access, but may not be a concern if you are still running in the same local area network (e.g. you place a few Spark machines on each rack that you have Hadoop on).
 
 
 # Configuring Ports for Network Security
 
-Spark makes heavy use of the network, and some environments have strict requirements for using
-tight firewall settings. For a complete list of ports to configure, see the
+Generally speaking, a Spark cluster and its services are not deployed on the public internet.
+They are generally private services, and should only be accessible within the network of the
+organization that deploys Spark. Access to the hosts and ports used by Spark services should
+be limited to origin hosts that need to access the services.
+
+This is particularly important for clusters using the standalone resource manager, as they do
+not support fine-grained access control in a way that other resource managers do.
+
+For a complete list of ports to configure, see the
 [security page](security.html#configuring-ports-for-network-security).
 
 # High Availability
@@ -335,29 +488,14 @@ By default, standalone scheduling clusters are resilient to Worker failures (ins
 
 **Overview**
 
-Utilizing ZooKeeper to provide leader election and some state storage, you can launch multiple Masters in your cluster connected to the same ZooKeeper instance. One will be elected "leader" and the others will remain in standby mode. If the current leader dies, another Master will be elected, recover the old Master's state, and then resume scheduling. The entire recovery process (from the time the the first leader goes down) should take between 1 and 2 minutes. Note that this delay only affects scheduling _new_ applications -- applications that were already running during Master failover are unaffected.
+Utilizing ZooKeeper to provide leader election and some state storage, you can launch multiple Masters in your cluster connected to the same ZooKeeper instance. One will be elected "leader" and the others will remain in standby mode. If the current leader dies, another Master will be elected, recover the old Master's state, and then resume scheduling. The entire recovery process (from the time the first leader goes down) should take between 1 and 2 minutes. Note that this delay only affects scheduling _new_ applications -- applications that were already running during Master failover are unaffected.
 
-Learn more about getting started with ZooKeeper [here](http://zookeeper.apache.org/doc/trunk/zookeeperStarted.html).
+Learn more about getting started with ZooKeeper [here](https://zookeeper.apache.org/doc/current/zookeeperStarted.html).
 
 **Configuration**
 
-In order to enable this recovery mode, you can set SPARK_DAEMON_JAVA_OPTS in spark-env using this configuration:
-
-<table class="table">
-  <tr><th style="width:21%">System property</th><th>Meaning</th></tr>
-  <tr>
-    <td><code>spark.deploy.recoveryMode</code></td>
-    <td>Set to ZOOKEEPER to enable standby Master recovery mode (default: NONE).</td>
-  </tr>
-  <tr>
-    <td><code>spark.deploy.zookeeper.url</code></td>
-    <td>The ZooKeeper cluster url (e.g., 192.168.1.100:2181,192.168.1.101:2181).</td>
-  </tr>
-  <tr>
-    <td><code>spark.deploy.zookeeper.dir</code></td>
-    <td>The directory in ZooKeeper to store recovery state (default: /spark).</td>
-  </tr>
-</table>
+In order to enable this recovery mode, you can set SPARK_DAEMON_JAVA_OPTS in spark-env by configuring `spark.deploy.recoveryMode` and related spark.deploy.zookeeper.* configurations.
+For more information about these configurations please refer to the [configuration doc](configuration.html#deploy)
 
 Possible gotcha: If you have multiple Masters in your cluster but fail to correctly configure the Masters to use ZooKeeper, the Masters will fail to discover each other and think they're all leaders. This will not lead to a healthy cluster state (as all Masters will schedule independently).
 
@@ -382,19 +520,21 @@ ZooKeeper is the best way to go for production-level high availability, but if y
 In order to enable this recovery mode, you can set SPARK_DAEMON_JAVA_OPTS in spark-env using this configuration:
 
 <table class="table">
-  <tr><th style="width:21%">System property</th><th>Meaning</th></tr>
+  <tr><th style="width:21%">System property</th><th>Meaning</th><th>Since Version</th></tr>
   <tr>
     <td><code>spark.deploy.recoveryMode</code></td>
     <td>Set to FILESYSTEM to enable single-node recovery mode (default: NONE).</td>
+    <td>0.8.1</td>
   </tr>
   <tr>
     <td><code>spark.deploy.recoveryDirectory</code></td>
     <td>The directory in which Spark will store recovery state, accessible from the Master's perspective.</td>
+    <td>0.8.1</td>
   </tr>
 </table>
 
 **Details**
 
-* This solution can be used in tandem with a process monitor/manager like [monit](http://mmonit.com/monit/), or just to enable manual recovery via restart.
+* This solution can be used in tandem with a process monitor/manager like [monit](https://mmonit.com/monit/), or just to enable manual recovery via restart.
 * While filesystem recovery seems straightforwardly better than not doing any recovery at all, this mode may be suboptimal for certain development or experimental purposes. In particular, killing a master via stop-master.sh does not clean up its recovery state, so whenever you start a new Master, it will enter recovery mode. This could increase the startup time by up to 1 minute if it needs to wait for all previously-registered Workers/clients to timeout.
 * While it's not officially supported, you could mount an NFS directory as the recovery directory. If the original Master node dies completely, you could then start a Master on a different node, which would correctly recover all previously registered Workers/applications (equivalent to ZooKeeper recovery). Future applications will have to be able to find the new Master, however, in order to register.

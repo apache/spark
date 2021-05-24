@@ -218,4 +218,74 @@ class MultivariateOnlineSummarizerSuite extends SparkFunSuite {
     s0.merge(s1)
     assert(s0.mean(0) ~== 1.0 absTol 1e-14)
   }
+
+  test("merging summarizer with weighted samples") {
+    val summarizer = (new MultivariateOnlineSummarizer)
+      .add(instance = Vectors.sparse(3, Seq((0, -0.8), (1, 1.7))), weight = 0.1)
+      .add(Vectors.dense(0.0, -1.2, -1.7), 0.2).merge(
+        (new MultivariateOnlineSummarizer)
+          .add(Vectors.sparse(3, Seq((0, -0.7), (1, 0.01), (2, 1.3))), 0.15)
+          .add(Vectors.dense(-0.5, 0.3, -1.5), 0.05))
+
+    assert(summarizer.count === 4)
+
+    // The following values are hand calculated using the formula:
+    // [[https://en.wikipedia.org/wiki/Weighted_arithmetic_mean#Reliability_weights]]
+    // which defines the reliability weight used for computing the unbiased estimation of variance
+    // for weighted instances.
+    assert(summarizer.mean ~== Vectors.dense(Array(-0.42, -0.107, -0.44))
+      absTol 1E-10, "mean mismatch")
+    assert(summarizer.variance ~== Vectors.dense(Array(0.17657142857, 1.645115714, 2.42057142857))
+      absTol 1E-8, "variance mismatch")
+    assert(summarizer.numNonzeros ~== Vectors.dense(Array(3.0, 4.0, 3.0))
+      absTol 1E-10, "numNonzeros mismatch")
+    assert(summarizer.max ~== Vectors.dense(Array(0.0, 1.7, 1.3)) absTol 1E-10, "max mismatch")
+    assert(summarizer.min ~== Vectors.dense(Array(-0.8, -1.2, -1.7)) absTol 1E-10, "min mismatch")
+    assert(summarizer.normL2 ~== Vectors.dense(0.387298335, 0.762571308141, 0.9715966241192)
+      absTol 1E-8, "normL2 mismatch")
+    assert(summarizer.normL1 ~== Vectors.dense(0.21, 0.4265, 0.61) absTol 1E-10, "normL1 mismatch")
+  }
+
+  test("test min/max with weighted samples (SPARK-16561)") {
+    val summarizer1 = new MultivariateOnlineSummarizer()
+      .add(Vectors.dense(10.0, -10.0), 1e10)
+      .add(Vectors.dense(0.0, 0.0), 1e-7)
+
+    val summarizer2 = new MultivariateOnlineSummarizer()
+    summarizer2.add(Vectors.dense(10.0, -10.0), 1e10)
+    for (i <- 1 to 100) {
+      summarizer2.add(Vectors.dense(0.0, 0.0), 1e-7)
+    }
+
+    val summarizer3 = new MultivariateOnlineSummarizer()
+    for (i <- 1 to 100) {
+      summarizer3.add(Vectors.dense(0.0, 0.0), 1e-7)
+    }
+    summarizer3.add(Vectors.dense(10.0, -10.0), 1e10)
+
+    assert(summarizer1.max ~== Vectors.dense(10.0, 0.0) absTol 1e-14)
+    assert(summarizer1.min ~== Vectors.dense(0.0, -10.0) absTol 1e-14)
+    assert(summarizer2.max ~== Vectors.dense(10.0, 0.0) absTol 1e-14)
+    assert(summarizer2.min ~== Vectors.dense(0.0, -10.0) absTol 1e-14)
+    assert(summarizer3.max ~== Vectors.dense(10.0, 0.0) absTol 1e-14)
+    assert(summarizer3.min ~== Vectors.dense(0.0, -10.0) absTol 1e-14)
+  }
+
+  test ("test zero variance (SPARK-21818)") {
+    val summarizer1 = (new MultivariateOnlineSummarizer)
+      .add(Vectors.dense(3.0), 0.7)
+    val summarizer2 = (new MultivariateOnlineSummarizer)
+      .add(Vectors.dense(3.0), 0.4)
+    val summarizer3 = (new MultivariateOnlineSummarizer)
+      .add(Vectors.dense(3.0), 0.5)
+    val summarizer4 = (new MultivariateOnlineSummarizer)
+      .add(Vectors.dense(3.0), 0.4)
+
+    val summarizer = summarizer1
+      .merge(summarizer2)
+      .merge(summarizer3)
+      .merge(summarizer4)
+
+    assert(summarizer.variance(0) >= 0.0)
+  }
 }

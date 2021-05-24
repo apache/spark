@@ -17,16 +17,7 @@
 # limitations under the License.
 #
 
-sbin="`dirname "$0"`"
-sbin="`cd "$sbin"; pwd`"
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 
-. "$sbin/spark-config.sh"
-
-. "$SPARK_PREFIX/bin/load-spark-env.sh"
-
-# do before the below calls as they exec
-if [ -e "$sbin"/../tachyon/bin/tachyon ]; then
-  "$sbin/slaves.sh" cd "$SPARK_HOME" \; "$sbin"/../tachyon/bin/tachyon killAll tachyon.worker.Worker
-fi
-
-"$sbin/slaves.sh" cd "$SPARK_HOME" \; "$sbin"/stop-slave.sh
+>&2 echo "This script is deprecated, use stop-workers.sh"
+"${DIR}/stop-workers.sh" "$@"

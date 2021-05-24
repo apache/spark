@@ -17,27 +17,15 @@
 
 package org.apache.spark.streaming.scheduler
 
-import org.scalatest.BeforeAndAfter
-
 import org.apache.spark.{SparkConf, SparkFunSuite}
-import org.apache.spark.streaming.{Time, Duration, StreamingContext}
+import org.apache.spark.streaming.{Duration, LocalStreamingContext, StreamingContext, Time}
 
-class InputInfoTrackerSuite extends SparkFunSuite with BeforeAndAfter {
+class InputInfoTrackerSuite extends SparkFunSuite with LocalStreamingContext {
 
-  private var ssc: StreamingContext = _
-
-  before {
+  override def beforeEach(): Unit = {
+    super.beforeEach()
     val conf = new SparkConf().setMaster("local[2]").setAppName("DirectStreamTacker")
-    if (ssc == null) {
-      ssc = new StreamingContext(conf, Duration(1000))
-    }
-  }
-
-  after {
-    if (ssc != null) {
-      ssc.stop()
-      ssc = null
-    }
+    ssc = new StreamingContext(conf, Duration(1000))
   }
 
   test("test report and get InputInfo from InputInfoTracker") {
@@ -46,8 +34,8 @@ class InputInfoTrackerSuite extends SparkFunSuite with BeforeAndAfter {
     val streamId1 = 0
     val streamId2 = 1
     val time = Time(0L)
-    val inputInfo1 = InputInfo(streamId1, 100L)
-    val inputInfo2 = InputInfo(streamId2, 300L)
+    val inputInfo1 = StreamInputInfo(streamId1, 100L)
+    val inputInfo2 = StreamInputInfo(streamId2, 300L)
     inputInfoTracker.reportInfo(time, inputInfo1)
     inputInfoTracker.reportInfo(time, inputInfo2)
 
@@ -63,8 +51,8 @@ class InputInfoTrackerSuite extends SparkFunSuite with BeforeAndAfter {
     val inputInfoTracker = new InputInfoTracker(ssc)
 
     val streamId1 = 0
-    val inputInfo1 = InputInfo(streamId1, 100L)
-    val inputInfo2 = InputInfo(streamId1, 300L)
+    val inputInfo1 = StreamInputInfo(streamId1, 100L)
+    val inputInfo2 = StreamInputInfo(streamId1, 300L)
     inputInfoTracker.reportInfo(Time(0), inputInfo1)
     inputInfoTracker.reportInfo(Time(1), inputInfo2)
 

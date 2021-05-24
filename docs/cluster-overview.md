@@ -1,22 +1,38 @@
 ---
 layout: global
 title: Cluster Mode Overview
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+ 
+     http://www.apache.org/licenses/LICENSE-2.0
+ 
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
 ---
 
 This document gives a short overview of how Spark runs on clusters, to make it easier to understand
 the components involved. Read through the [application submission guide](submitting-applications.html)
-to submit applications to a cluster.
+to learn about launching applications on a cluster.
 
 # Components
 
-Spark applications run as independent sets of processes on a cluster, coordinated by the SparkContext
+Spark applications run as independent sets of processes on a cluster, coordinated by the `SparkContext`
 object in your main program (called the _driver program_).
+
 Specifically, to run on a cluster, the SparkContext can connect to several types of _cluster managers_
-(either Spark's own standalone cluster manager or Mesos/YARN), which allocate resources across
+(either Spark's own standalone cluster manager, Mesos or YARN), which allocate resources across
 applications. Once connected, Spark acquires *executors* on nodes in the cluster, which are
 processes that run computations and store data for your application.
 Next, it sends your application code (defined by JAR or Python files passed to SparkContext) to
-the executors. Finally, SparkContext sends *tasks* for the executors to run.
+the executors. Finally, SparkContext sends *tasks* to the executors to run.
 
 <p style="text-align: center;">
   <img src="img/cluster-overview.png" title="Spark cluster components" alt="Spark cluster components" />
@@ -33,9 +49,9 @@ There are several useful things to note about this architecture:
 2. Spark is agnostic to the underlying cluster manager. As long as it can acquire executor
    processes, and these communicate with each other, it is relatively easy to run it even on a
    cluster manager that also supports other applications (e.g. Mesos/YARN).
-3. The driver program must listen for and accept incoming connections from its executors throughout 
-   its lifetime (e.g., see [spark.driver.port and spark.fileserver.port in the network config 
-   section](configuration.html#networking)). As such, the driver program must be network 
+3. The driver program must listen for and accept incoming connections from its executors throughout
+   its lifetime (e.g., see [spark.driver.port in the network config
+   section](configuration.html#networking)). As such, the driver program must be network
    addressable from the worker nodes.
 4. Because the driver schedules tasks on the cluster, it should be run close to the worker
    nodes, preferably on the same local area network. If you'd like to send requests to the
@@ -44,16 +60,18 @@ There are several useful things to note about this architecture:
 
 # Cluster Manager Types
 
-The system currently supports three cluster managers:
+The system currently supports several cluster managers:
 
 * [Standalone](spark-standalone.html) -- a simple cluster manager included with Spark that makes it
   easy to set up a cluster.
 * [Apache Mesos](running-on-mesos.html) -- a general cluster manager that can also run Hadoop MapReduce
-  and service applications.
+  and service applications. (Deprecated)
 * [Hadoop YARN](running-on-yarn.html) -- the resource manager in Hadoop 2.
+* [Kubernetes](running-on-kubernetes.html) -- an open-source system for automating deployment, scaling,
+  and management of containerized applications.
 
-In addition, Spark's [EC2 launch scripts](ec2-scripts.html) make it easy to launch a standalone
-cluster on Amazon EC2.
+A third-party project (not supported by the Spark project) exists to add support for
+[Nomad](https://github.com/hashicorp/nomad-spark) as a cluster manager.
 
 # Submitting Applications
 

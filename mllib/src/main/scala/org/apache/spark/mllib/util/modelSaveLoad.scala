@@ -24,17 +24,15 @@ import org.json4s._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.SparkContext
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.Since
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.types.{DataType, StructField, StructType}
 
 /**
- * :: DeveloperApi ::
- *
  * Trait for models and transformers which may be saved as files.
  * This should be inherited by the class which implements model instances.
  */
-@DeveloperApi
+@Since("1.3.0")
 trait Saveable {
 
   /**
@@ -44,37 +42,34 @@ trait Saveable {
    *  - human-readable (JSON) model metadata to path/metadata/
    *  - Parquet formatted data to path/data/
    *
-   * The model may be loaded using [[Loader.load]].
+   * The model may be loaded using `Loader.load`.
    *
    * @param sc  Spark context used to save model data.
    * @param path  Path specifying the directory in which to save this model.
    *              If the directory already exists, this method throws an exception.
    */
+  @Since("1.3.0")
   def save(sc: SparkContext, path: String): Unit
-
-  /** Current version of model save/load format. */
-  protected def formatVersion: String
 
 }
 
 /**
- * :: DeveloperApi ::
- *
  * Trait for classes which can load models and transformers from files.
  * This should be inherited by an object paired with the model class.
  */
-@DeveloperApi
+@Since("1.3.0")
 trait Loader[M <: Saveable] {
 
   /**
    * Load a model from the given path.
    *
-   * The model should have been saved by [[Saveable.save]].
+   * The model should have been saved by `Saveable.save`.
    *
    * @param sc  Spark context used for loading model files.
    * @param path  Path specifying the directory to which the model was saved.
    * @return  Model instance
    */
+  @Since("1.3.0")
   def load(sc: SparkContext, path: String): M
 
 }

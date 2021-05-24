@@ -26,11 +26,11 @@ package org.apache.sparktest
  */
 class ImplicitSuite {
 
-  // We only want to test if `implict` works well with the compiler, so we don't need a real
+  // We only want to test if `implicit` works well with the compiler, so we don't need a real
   // SparkContext.
   def mockSparkContext[T]: org.apache.spark.SparkContext = null
 
-  // We only want to test if `implict` works well with the compiler, so we don't need a real RDD.
+  // We only want to test if `implicit` works well with the compiler, so we don't need a real RDD.
   def mockRDD[T]: org.apache.spark.rdd.RDD[T] = null
 
   def testRddToPairRDDFunctions(): Unit = {
@@ -72,26 +72,6 @@ class ImplicitSuite {
   def testNumericRDDToDoubleRDDFunctions(): Unit = {
     val rdd: org.apache.spark.rdd.RDD[Int] = mockRDD
     rdd.stats()
-  }
-
-  def testDoubleAccumulatorParam(): Unit = {
-    val sc = mockSparkContext
-    sc.accumulator(123.4)
-  }
-
-  def testIntAccumulatorParam(): Unit = {
-    val sc = mockSparkContext
-    sc.accumulator(123)
-  }
-
-  def testLongAccumulatorParam(): Unit = {
-    val sc = mockSparkContext
-    sc.accumulator(123L)
-  }
-
-  def testFloatAccumulatorParam(): Unit = {
-    val sc = mockSparkContext
-    sc.accumulator(123F)
   }
 
   def testIntWritableConverter(): Unit = {

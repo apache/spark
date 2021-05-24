@@ -19,8 +19,7 @@ package org.apache.spark.mllib.stat.correlation
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.Logging
-import org.apache.spark.SparkContext._
+import org.apache.spark.internal.Logging
 import org.apache.spark.mllib.linalg.{Matrix, Vector, Vectors}
 import org.apache.spark.rdd.RDD
 
@@ -47,9 +46,7 @@ private[stat] object SpearmanCorrelation extends Correlation with Logging {
   override def computeCorrelationMatrix(X: RDD[Vector]): Matrix = {
     // ((columnIndex, value), rowUid)
     val colBased = X.zipWithUniqueId().flatMap { case (vec, uid) =>
-      vec.toArray.view.zipWithIndex.map { case (v, j) =>
-        ((j, v), uid)
-      }
+      vec.iterator.map(t => (t, uid))
     }
     // global sort by (columnIndex, value)
     val sorted = colBased.sortByKey()
@@ -58,7 +55,7 @@ private[stat] object SpearmanCorrelation extends Correlation with Logging {
       var preCol = -1
       var preVal = Double.NaN
       var startRank = -1.0
-      var cachedUids = ArrayBuffer.empty[Long]
+      val cachedUids = ArrayBuffer.empty[Long]
       val flush: () => Iterable[(Long, (Int, Double))] = () => {
         val averageRank = startRank + (cachedUids.size - 1) / 2.0
         val output = cachedUids.map { uid =>

@@ -1,0 +1,7 @@
+~ decimal field has integer, integer and decimal values. The last value cannot fit to a long
+~ long field has integer, long and integer values.
+~ double field has double, double and decimal values.
+decimal,long,double
+1,1,0.1
+1,9223372036854775807,1.0
+92233720368547758070,1,92233720368547758070

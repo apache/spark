@@ -19,13 +19,12 @@ package org.apache.spark.mllib.feature
 
 import breeze.linalg.{DenseVector => BDV}
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.rdd.RDD
 
 /**
- * :: Experimental ::
  * Inverse document frequency (IDF).
  * The standard formulation is used: `idf = log((m + 1) / (d(t) + 1))`, where `m` is the total
  * number of documents and `d(t)` is the number of documents that contain term `t`.
@@ -33,13 +32,15 @@ import org.apache.spark.rdd.RDD
  * This implementation supports filtering out terms which do not appear in a minimum number
  * of documents (controlled by the variable `minDocFreq`). For terms that are not in
  * at least `minDocFreq` documents, the IDF is found as 0, resulting in TF-IDFs of 0.
+ * The document frequency is 0 as well for such terms
  *
  * @param minDocFreq minimum of documents in which a term
  *                   should appear for filtering
  */
-@Experimental
-class IDF(val minDocFreq: Int) {
+@Since("1.1.0")
+class IDF @Since("1.2.0") (@Since("1.2.0") val minDocFreq: Int) {
 
+  @Since("1.1.0")
   def this() = this(0)
 
   // TODO: Allow different IDF formulations.
@@ -48,19 +49,21 @@ class IDF(val minDocFreq: Int) {
    * Computes the inverse document frequency.
    * @param dataset an RDD of term frequency vectors
    */
+  @Since("1.1.0")
   def fit(dataset: RDD[Vector]): IDFModel = {
-    val idf = dataset.treeAggregate(new IDF.DocumentFrequencyAggregator(
-          minDocFreq = minDocFreq))(
+    val (idf: Vector, docFreq: Array[Long], numDocs: Long) = dataset.treeAggregate(
+      new IDF.DocumentFrequencyAggregator(minDocFreq = minDocFreq))(
       seqOp = (df, v) => df.add(v),
       combOp = (df1, df2) => df1.merge(df2)
     ).idf()
-    new IDFModel(idf)
+    new IDFModel(idf, docFreq, numDocs)
   }
 
   /**
    * Computes the inverse document frequency.
    * @param dataset a JavaRDD of term frequency vectors
    */
+  @Since("1.1.0")
   def fit(dataset: JavaRDD[Vector]): IDFModel = {
     fit(dataset.rdd)
   }
@@ -86,7 +89,7 @@ private object IDF {
       }
       doc match {
         case SparseVector(size, indices, values) =>
-          val nnz = indices.size
+          val nnz = indices.length
           var k = 0
           while (k < nnz) {
             if (values(k) > 0) {
@@ -95,7 +98,7 @@ private object IDF {
             k += 1
           }
         case DenseVector(values) =>
-          val n = values.size
+          val n = values.length
           var j = 0
           while (j < n) {
             if (values(j) > 0.0) {
@@ -126,13 +129,14 @@ private object IDF {
 
     private def isEmpty: Boolean = m == 0L
 
-    /** Returns the current IDF vector. */
-    def idf(): Vector = {
+    /** Returns the current IDF vector, docFreq, number of documents */
+    def idf(): (Vector, Array[Long], Long) = {
       if (isEmpty) {
         throw new IllegalStateException("Haven't seen any document yet.")
       }
       val n = df.length
       val inv = new Array[Double](n)
+      val dfv = new Array[Long](n)
       var j = 0
       while (j < n) {
         /*
@@ -146,20 +150,22 @@ private object IDF {
          */
         if (df(j) >= minDocFreq) {
           inv(j) = math.log((m + 1.0) / (df(j) + 1.0))
+          dfv(j) = df(j)
         }
         j += 1
       }
-      Vectors.dense(inv)
+      (Vectors.dense(inv), dfv, m)
     }
   }
 }
 
 /**
- * :: Experimental ::
  * Represents an IDF model that can transform term frequency vectors.
  */
-@Experimental
-class IDFModel private[spark] (val idf: Vector) extends Serializable {
+@Since("1.1.0")
+class IDFModel private[spark](@Since("1.1.0") val idf: Vector,
+                              @Since("3.0.0") val docFreq: Array[Long],
+                              @Since("3.0.0") val numDocs: Long) extends Serializable {
 
   /**
    * Transforms term frequency (TF) vectors to TF-IDF vectors.
@@ -171,6 +177,7 @@ class IDFModel private[spark] (val idf: Vector) extends Serializable {
    * @param dataset an RDD of term frequency vectors
    * @return an RDD of TF-IDF vectors
    */
+  @Since("1.1.0")
   def transform(dataset: RDD[Vector]): RDD[Vector] = {
     val bcIdf = dataset.context.broadcast(idf)
     dataset.mapPartitions(iter => iter.map(v => IDFModel.transform(bcIdf.value, v)))
@@ -182,6 +189,7 @@ class IDFModel private[spark] (val idf: Vector) extends Serializable {
    * @param v a term frequency vector
    * @return a TF-IDF vector
    */
+  @Since("1.3.0")
   def transform(v: Vector): Vector = IDFModel.transform(idf, v)
 
   /**
@@ -189,43 +197,59 @@ class IDFModel private[spark] (val idf: Vector) extends Serializable {
    * @param dataset a JavaRDD of term frequency vectors
    * @return a JavaRDD of TF-IDF vectors
    */
+  @Since("1.1.0")
   def transform(dataset: JavaRDD[Vector]): JavaRDD[Vector] = {
     transform(dataset.rdd).toJavaRDD()
   }
 }
 
-private object IDFModel {
+private[spark] object IDFModel {
 
   /**
    * Transforms a term frequency (TF) vector to a TF-IDF vector with a IDF vector
    *
    * @param idf an IDF vector
-   * @param v a term frequence vector
+   * @param v a term frequency vector
    * @return a TF-IDF vector
    */
   def transform(idf: Vector, v: Vector): Vector = {
-    val n = v.size
     v match {
       case SparseVector(size, indices, values) =>
-        val nnz = indices.size
-        val newValues = new Array[Double](nnz)
-        var k = 0
-        while (k < nnz) {
-          newValues(k) = values(k) * idf(indices(k))
-          k += 1
-        }
-        Vectors.sparse(n, indices, newValues)
+        val (newIndices, newValues) = transformSparse(idf, indices, values)
+        Vectors.sparse(size, newIndices, newValues)
       case DenseVector(values) =>
-        val newValues = new Array[Double](n)
-        var j = 0
-        while (j < n) {
-          newValues(j) = values(j) * idf(j)
-          j += 1
-        }
+        val newValues = transformDense(idf, values)
         Vectors.dense(newValues)
       case other =>
         throw new UnsupportedOperationException(
           s"Only sparse and dense vectors are supported but got ${other.getClass}.")
     }
+  }
+
+  private[spark] def transformDense(
+      idf: Vector,
+      values: Array[Double]): Array[Double] = {
+    val n = values.length
+    val newValues = new Array[Double](n)
+    var j = 0
+    while (j < n) {
+      newValues(j) = values(j) * idf(j)
+      j += 1
+    }
+    newValues
+  }
+
+  private[spark] def transformSparse(
+      idf: Vector,
+      indices: Array[Int],
+      values: Array[Double]): (Array[Int], Array[Double]) = {
+    val nnz = indices.length
+    val newValues = new Array[Double](nnz)
+    var k = 0
+    while (k < nnz) {
+      newValues(k) = values(k) * idf(indices(k))
+      k += 1
+    }
+    (indices, newValues)
   }
 }

@@ -1,0 +1,152 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+#
+
+#
+# Pull Request Labeler Github Action Configuration: https://github.com/marketplace/actions/labeler
+#
+# Note that we currently cannot use the negatioon operator  (i.e. `!`)  for miniglob matches as they
+# would match any file that doesn't touch them. What's needed is the concept of `any `, which takes a
+# list of constraints / globs and then matches all of the constraints for either `any` of the files or
+# `all` of the files in the change set.
+#
+# However, `any`/`all` are not supported in a released version and testing off of the `main` branch
+# resulted in some other errors when testing.
+#
+# An issue has been opened upstream requesting that a release be cut that has support for all/any:
+#   - https://github.com/actions/labeler/issues/111
+#
+# While we wait for this issue to be handled upstream, we can remove
+# the negated / `!` matches for now and at least have labels again.
+#
+INFRA:
+  - ".github/**/*"
+  - "appveyor.yml"
+  - "tools/**/*"
+  - "dev/create-release/**/*"
+  - ".asf.yaml"
+  - ".gitattributes"
+  - ".gitignore"
+  - "dev/github_jira_sync.py"
+  - "dev/merge_spark_pr.py"
+  - "dev/run-tests-jenkins*"
+BUILD:
+ # Can be supported when a stable release with correct all/any is released
+ #- any: ['dev/**/*', '!dev/github_jira_sync.py', '!dev/merge_spark_pr.py', '!dev/.rat-excludes']
+ - "dev/**/*"
+ - "build/**/*"
+ - "project/**/*"
+ - "assembly/**/*"
+ - "**/*pom.xml"
+ - "bin/docker-image-tool.sh"
+ - "bin/find-spark-home*"
+ - "scalastyle-config.xml"
+ # These can be added in the above `any` clause (and the /dev/**/* glob removed) when
+ # `any`/`all` support is released
+ # - "!dev/github_jira_sync.py"
+ # - "!dev/merge_spark_pr.py"
+ # - "!dev/run-tests-jenkins*"
+ # - "!dev/.rat-excludes"
+DOCS:
+  - "docs/**/*"
+  - "**/README.md"
+  - "**/CONTRIBUTING.md"
+EXAMPLES:
+  - "examples/**/*"
+  - "bin/run-example*"
+# CORE needs to be updated when all/any are released upstream.
+CORE:
+  # - any: ["core/**/*", "!**/*UI.scala", "!**/ui/**/*"] # If any file matches all of the globs defined in the list started by `any`, label is applied.
+  - "core/**/*"
+  - "common/kvstore/**/*"
+  - "common/network-common/**/*"
+  - "common/network-shuffle/**/*"
+  - "python/pyspark/**/*.py"
+  - "python/pyspark/tests/**/*.py"
+SPARK SUBMIT:
+  - "bin/spark-submit*"
+SPARK SHELL:
+  - "repl/**/*"
+  - "bin/spark-shell*"
+SQL:
+#- any: ["**/sql/**/*", "!python/pyspark/sql/avro/**/*", "!python/pyspark/sql/streaming.py", "!python/pyspark/sql/tests/test_streaming.py"]
+  - "**/sql/**/*"
+  - "common/unsafe/**/*"
+  #- "!python/pyspark/sql/avro/**/*"
+  #- "!python/pyspark/sql/streaming.py"
+  #- "!python/pyspark/sql/tests/test_streaming.py"
+  - "bin/spark-sql*"
+  - "bin/beeline*"
+  - "sbin/*thriftserver*.sh"
+  - "**/*SQL*.R"
+  - "**/DataFrame.R"
+  - "**/*WindowSpec.R"
+  - "**/*catalog.R"
+  - "**/*column.R"
+  - "**/*functions.R"
+  - "**/*group.R"
+  - "**/*schema.R"
+  - "**/*types.R"
+AVRO:
+  - "external/avro/**/*"
+  - "python/pyspark/sql/avro/**/*"
+DSTREAM:
+  - "streaming/**/*"
+  - "data/streaming/**/*"
+  - "external/kinesis*"
+  - "external/kafka*"
+  - "python/pyspark/streaming/**/*"
+GRAPHX:
+  - "graphx/**/*"
+  - "data/graphx/**/*"
+ML:
+  - "**/ml/**/*"
+  - "**/*mllib_*.R"
+MLLIB:
+  - "**/spark/mllib/**/*"
+  - "mllib-local/**/*"
+  - "python/pyspark/mllib/**/*"
+STRUCTURED STREAMING:
+  - "**/sql/**/streaming/**/*"
+  - "external/kafka-0-10-sql/**/*"
+  - "python/pyspark/sql/streaming.py"
+  - "python/pyspark/sql/tests/test_streaming.py"
+  - "**/*streaming.R"
+PYTHON:
+  - "bin/pyspark*"
+  - "**/python/**/*"
+R:
+  - "**/r/**/*"
+  - "**/R/**/*"
+  - "bin/sparkR*"
+YARN:
+  - "resource-managers/yarn/**/*"
+MESOS:
+  - "resource-managers/mesos/**/*"
+  - "sbin/*mesos*.sh"
+KUBERNETES:
+  - "resource-managers/kubernetes/**/*"
+WINDOWS:
+  - "**/*.cmd"
+  - "R/pkg/tests/fulltests/test_Windows.R"
+WEB UI:
+  - "**/ui/**/*"
+  - "**/*UI.scala"
+DEPLOY:
+  - "sbin/**/*"
+

@@ -22,9 +22,12 @@ import org.apache.spark.util.ListenerBus
 /**
  * A [[SparkListenerEvent]] bus that relays [[SparkListenerEvent]]s to its listeners
  */
-private[spark] trait SparkListenerBus extends ListenerBus[SparkListener, SparkListenerEvent] {
+private[spark] trait SparkListenerBus
+  extends ListenerBus[SparkListenerInterface, SparkListenerEvent] {
 
-  override def onPostEvent(listener: SparkListener, event: SparkListenerEvent): Unit = {
+  protected override def doPostEvent(
+      listener: SparkListenerInterface,
+      event: SparkListenerEvent): Unit = {
     event match {
       case stageSubmitted: SparkListenerStageSubmitted =>
         listener.onStageSubmitted(stageSubmitted)
@@ -54,11 +57,47 @@ private[spark] trait SparkListenerBus extends ListenerBus[SparkListener, SparkLi
         listener.onApplicationEnd(applicationEnd)
       case metricsUpdate: SparkListenerExecutorMetricsUpdate =>
         listener.onExecutorMetricsUpdate(metricsUpdate)
+      case stageExecutorMetrics: SparkListenerStageExecutorMetrics =>
+        listener.onStageExecutorMetrics(stageExecutorMetrics)
       case executorAdded: SparkListenerExecutorAdded =>
         listener.onExecutorAdded(executorAdded)
       case executorRemoved: SparkListenerExecutorRemoved =>
         listener.onExecutorRemoved(executorRemoved)
-      case logStart: SparkListenerLogStart => // ignore event log metadata
+      case executorBlacklistedForStage: SparkListenerExecutorBlacklistedForStage =>
+        listener.onExecutorBlacklistedForStage(executorBlacklistedForStage)
+      case nodeBlacklistedForStage: SparkListenerNodeBlacklistedForStage =>
+        listener.onNodeBlacklistedForStage(nodeBlacklistedForStage)
+      case executorBlacklisted: SparkListenerExecutorBlacklisted =>
+        listener.onExecutorBlacklisted(executorBlacklisted)
+      case executorUnblacklisted: SparkListenerExecutorUnblacklisted =>
+        listener.onExecutorUnblacklisted(executorUnblacklisted)
+      case nodeBlacklisted: SparkListenerNodeBlacklisted =>
+        listener.onNodeBlacklisted(nodeBlacklisted)
+      case nodeUnblacklisted: SparkListenerNodeUnblacklisted =>
+        listener.onNodeUnblacklisted(nodeUnblacklisted)
+      case executorExcludedForStage: SparkListenerExecutorExcludedForStage =>
+        listener.onExecutorExcludedForStage(executorExcludedForStage)
+      case nodeExcludedForStage: SparkListenerNodeExcludedForStage =>
+        listener.onNodeExcludedForStage(nodeExcludedForStage)
+      case executorExcluded: SparkListenerExecutorExcluded =>
+        listener.onExecutorExcluded(executorExcluded)
+      case executorUnexcluded: SparkListenerExecutorUnexcluded =>
+        listener.onExecutorUnexcluded(executorUnexcluded)
+      case nodeExcluded: SparkListenerNodeExcluded =>
+        listener.onNodeExcluded(nodeExcluded)
+      case nodeUnexcluded: SparkListenerNodeUnexcluded =>
+        listener.onNodeUnexcluded(nodeUnexcluded)
+      case blockUpdated: SparkListenerBlockUpdated =>
+        listener.onBlockUpdated(blockUpdated)
+      case speculativeTaskSubmitted: SparkListenerSpeculativeTaskSubmitted =>
+        listener.onSpeculativeTaskSubmitted(speculativeTaskSubmitted)
+      case unschedulableTaskSetAdded: SparkListenerUnschedulableTaskSetAdded =>
+        listener.onUnschedulableTaskSetAdded(unschedulableTaskSetAdded)
+      case unschedulableTaskSetRemoved: SparkListenerUnschedulableTaskSetRemoved =>
+        listener.onUnschedulableTaskSetRemoved(unschedulableTaskSetRemoved)
+      case resourceProfileAdded: SparkListenerResourceProfileAdded =>
+        listener.onResourceProfileAdded(resourceProfileAdded)
+      case _ => listener.onOtherEvent(event)
     }
   }
 

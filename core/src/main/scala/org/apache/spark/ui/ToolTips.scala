@@ -31,9 +31,13 @@ private[spark] object ToolTips {
   val SHUFFLE_READ_BLOCKED_TIME =
     "Time that the task spent blocked waiting for shuffle data to be read from remote machines."
 
-  val INPUT = "Bytes and records read from Hadoop or from Spark storage."
+  val INPUT = "Bytes read from Hadoop or from Spark storage."
 
-  val OUTPUT = "Bytes and records written to Hadoop."
+  val OUTPUT = "Bytes written to Hadoop."
+
+  val STORAGE_MEMORY =
+    "Memory used / total available memory for storage of data " +
+      "like RDD partitions cached in memory. "
 
   val SHUFFLE_WRITE =
     "Bytes and records written to disk in order to be read by a shuffle in a future stage."
@@ -58,6 +62,13 @@ private[spark] object ToolTips {
     """Time that the executor spent paused for Java garbage collection while the task was
        running."""
 
+  val PEAK_EXECUTION_MEMORY =
+    """Execution memory refers to the memory used by internal data structures created during
+       shuffles, aggregations and joins when Tungsten is enabled. The value of this accumulator
+       should be approximately the sum of the peak sizes across all such data structures created
+       in this task. For SQL jobs, this only tracks all unsafe operators, broadcast joins, and
+       external sort."""
+
   val JOB_TIMELINE =
     """Shows when jobs started and ended and when executors joined or left. Drag to scroll.
        Click Enable Zooming and use mouse wheel to zoom in/out."""
@@ -76,4 +87,16 @@ private[spark] object ToolTips {
        multiple operations (e.g. two map() functions) if they can be pipelined. Some operations
        also create multiple RDDs internally. Cached RDDs are shown in green.
     """
+
+  val TASK_TIME =
+  "Shaded red when garbage collection (GC) time is over 10% of task time"
+
+  val APPLICATION_EXECUTOR_LIMIT =
+    """Maximum number of executors that this application will use. This limit is finite only when
+       dynamic allocation is enabled. The number of granted executors may exceed the limit
+       ephemerally when executors are being killed.
+    """
+
+  val DURATION =
+    "Elapsed time since the stage was submitted until execution completion of all its tasks."
 }

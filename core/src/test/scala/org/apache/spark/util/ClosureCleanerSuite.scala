@@ -18,10 +18,9 @@
 package org.apache.spark.util
 
 import java.io.NotSerializableException
-import java.util.Random
 
-import org.apache.spark.LocalSparkContext._
 import org.apache.spark.{SparkContext, SparkException, SparkFunSuite, TaskContext}
+import org.apache.spark.LocalSparkContext._
 import org.apache.spark.partial.CountEvaluator
 import org.apache.spark.rdd.RDD
 
@@ -73,7 +72,7 @@ class ClosureCleanerSuite extends SparkFunSuite {
       try {
         body
       } catch {
-        case rse: ReturnStatementInClosureException => // Success!
+        case _: ReturnStatementInClosureException => // Success!
         case e @ (_: NotSerializableException | _: SparkException) =>
           fail(s"Expected ReturnStatementInClosureException, but got $e.\n" +
             "This means the closure provided by user is not actually cleaned.")
@@ -91,11 +90,6 @@ class ClosureCleanerSuite extends SparkFunSuite {
       expectCorrectException { TestUserClosuresActuallyCleaned.testKeyBy(rdd) }
       expectCorrectException { TestUserClosuresActuallyCleaned.testMapPartitions(rdd) }
       expectCorrectException { TestUserClosuresActuallyCleaned.testMapPartitionsWithIndex(rdd) }
-      expectCorrectException { TestUserClosuresActuallyCleaned.testMapPartitionsWithContext(rdd) }
-      expectCorrectException { TestUserClosuresActuallyCleaned.testFlatMapWith(rdd) }
-      expectCorrectException { TestUserClosuresActuallyCleaned.testFilterWith(rdd) }
-      expectCorrectException { TestUserClosuresActuallyCleaned.testForEachWith(rdd) }
-      expectCorrectException { TestUserClosuresActuallyCleaned.testMapWith(rdd) }
       expectCorrectException { TestUserClosuresActuallyCleaned.testZipPartitions2(rdd) }
       expectCorrectException { TestUserClosuresActuallyCleaned.testZipPartitions3(rdd) }
       expectCorrectException { TestUserClosuresActuallyCleaned.testZipPartitions4(rdd) }
@@ -125,11 +119,14 @@ class ClosureCleanerSuite extends SparkFunSuite {
   test("createNullValue") {
     new TestCreateNullValue().run()
   }
+
 }
 
 // A non-serializable class we create in closures to make sure that we aren't
 // keeping references to unneeded variables from our outer closures.
 class NonSerializable(val id: Int = -1) {
+  override def hashCode(): Int = id
+
   override def equals(other: Any): Boolean = {
     other match {
       case o: NonSerializable => id == o.id
@@ -150,7 +147,7 @@ object TestObject {
 }
 
 class TestClass extends Serializable {
-  var x = 5
+  val x = 5
 
   def getX: Int = x
 
@@ -182,7 +179,7 @@ class TestClassWithoutFieldAccess {
 
   def run(): Int = {
     var nonSer2 = new NonSerializable
-    var x = 5
+    val x = 5
     withSpark(new SparkContext("local", "test")) { sc =>
       val nums = sc.parallelize(Array(1, 2, 3, 4))
       nums.map(_ + x).reduce(_ + _)
@@ -221,10 +218,10 @@ object TestObjectWithNesting {
     var answer = 0
     withSpark(new SparkContext("local", "test")) { sc =>
       val nums = sc.parallelize(Array(1, 2, 3, 4))
-      var y = 1
+      val y = 1
       for (i <- 1 to 4) {
         var nonSer2 = new NonSerializable
-        var x = i
+        val x = i
         answer += nums.map(_ + x + y).reduce(_ + _)
       }
       answer
@@ -242,7 +239,7 @@ class TestClassWithNesting(val y: Int) extends Serializable {
       val nums = sc.parallelize(Array(1, 2, 3, 4))
       for (i <- 1 to 4) {
         var nonSer2 = new NonSerializable
-        var x = i
+        val x = i
         answer += nums.map(_ + x + getY).reduce(_ + _)
       }
       answer
@@ -269,29 +266,14 @@ private object TestUserClosuresActuallyCleaned {
   def testMapPartitionsWithIndex(rdd: RDD[Int]): Unit = {
     rdd.mapPartitionsWithIndex { (_, it) => return; it }.count()
   }
-  def testFlatMapWith(rdd: RDD[Int]): Unit = {
-    rdd.flatMapWith ((index: Int) => new Random(index + 42)){ (_, it) => return; Seq() }.count()
-  }
-  def testMapWith(rdd: RDD[Int]): Unit = {
-    rdd.mapWith ((index: Int) => new Random(index + 42)){ (_, it) => return; 0 }.count()
-  }
-  def testFilterWith(rdd: RDD[Int]): Unit = {
-    rdd.filterWith ((index: Int) => new Random(index + 42)){ (_, it) => return; true }.count()
-  }
-  def testForEachWith(rdd: RDD[Int]): Unit = {
-    rdd.foreachWith ((index: Int) => new Random(index + 42)){ (_, it) => return }
-  }
-  def testMapPartitionsWithContext(rdd: RDD[Int]): Unit = {
-    rdd.mapPartitionsWithContext { (_, it) => return; it }.count()
-  }
   def testZipPartitions2(rdd: RDD[Int]): Unit = {
-    rdd.zipPartitions(rdd) { case (it1, it2) => return; it1 }.count()
+    rdd.zipPartitions(rdd) { case (it1, _) => return; it1 }.count()
   }
   def testZipPartitions3(rdd: RDD[Int]): Unit = {
-    rdd.zipPartitions(rdd, rdd) { case (it1, it2, it3) => return; it1 }.count()
+    rdd.zipPartitions(rdd, rdd) { case (it1, _, _) => return; it1 }.count()
   }
   def testZipPartitions4(rdd: RDD[Int]): Unit = {
-    rdd.zipPartitions(rdd, rdd, rdd) { case (it1, it2, it3, it4) => return; it1 }.count()
+    rdd.zipPartitions(rdd, rdd, rdd) { case (it1, _, _, _) => return; it1 }.count()
   }
   def testForeach(rdd: RDD[Int]): Unit = { rdd.foreach { _ => return } }
   def testForeachPartition(rdd: RDD[Int]): Unit = { rdd.foreachPartition { _ => return } }
@@ -317,7 +299,7 @@ private object TestUserClosuresActuallyCleaned {
     rdd.aggregateByKey(0)({ case (_, _) => return; 1 }, { case (_, _) => return; 1 }).count()
   }
   def testFoldByKey(rdd: RDD[(Int, Int)]): Unit = { rdd.foldByKey(0) { case (_, _) => return; 1 } }
-  def testReduceByKey(rdd: RDD[(Int, Int)]): Unit = { rdd.reduceByKey { case (_, _) => return; 1 } }
+  def testReduceByKey(rdd: RDD[(Int, Int)]): Unit = { rdd.reduceByKey { (_, _) => return; 1 } }
   def testReduceByKeyLocally(rdd: RDD[(Int, Int)]): Unit = {
     rdd.reduceByKeyLocally { case (_, _) => return; 1 }
   }
@@ -331,17 +313,17 @@ private object TestUserClosuresActuallyCleaned {
   // Test SparkContext runJob
   def testRunJob1(sc: SparkContext): Unit = {
     val rdd = sc.parallelize(1 to 10, 10)
-    sc.runJob(rdd, { (ctx: TaskContext, iter: Iterator[Int]) => return; 1 } )
+    sc.runJob(rdd, { (_: TaskContext, _: Iterator[Int]) => return; 1 } )
   }
   def testRunJob2(sc: SparkContext): Unit = {
     val rdd = sc.parallelize(1 to 10, 10)
-    sc.runJob(rdd, { iter: Iterator[Int] => return; 1 } )
+    sc.runJob(rdd, { _: Iterator[Int] => return; 1 } )
   }
   def testRunApproximateJob(sc: SparkContext): Unit = {
     val rdd = sc.parallelize(1 to 10, 10)
     val evaluator = new CountEvaluator(1, 0.5)
     sc.runApproximateJob(
-      rdd, { (ctx: TaskContext, iter: Iterator[Int]) => return; 1L }, evaluator, 1000)
+      rdd, { (_: TaskContext, _: Iterator[Int]) => return; 1L }, evaluator, 1000)
   }
   def testSubmitJob(sc: SparkContext): Unit = {
     val rdd = sc.parallelize(1 to 10, 10)
@@ -357,7 +339,7 @@ private object TestUserClosuresActuallyCleaned {
 
 class TestCreateNullValue {
 
-  var x = 5
+  val x = 5
 
   def getX: Int = x
 
@@ -375,6 +357,7 @@ class TestCreateNullValue {
     // parameters of the closure constructor. This allows us to test whether
     // null values are created correctly for each type.
     val nestedClosure = () => {
+      // scalastyle:off println
       if (s.toString == "123") { // Don't really output them to avoid noisy
         println(bo)
         println(c)
@@ -389,8 +372,24 @@ class TestCreateNullValue {
       val closure = () => {
         println(getX)
       }
+      // scalastyle:on println
       ClosureCleaner.clean(closure)
     }
     nestedClosure()
   }
+}
+
+abstract class TestAbstractClass extends Serializable {
+  val n1 = 111
+  val s1 = "aaa"
+  protected val d1 = 1.0d
+
+  def run(): Seq[(Int, Int, String, String, Double, Double)]
+  def body(rdd: RDD[Int]): Seq[(Int, Int, String, String, Double, Double)]
+}
+
+abstract class TestAbstractClass2 extends Serializable {
+  val n1 = 111
+  val s1 = "aaa"
+  protected val d1 = 1.0d
 }

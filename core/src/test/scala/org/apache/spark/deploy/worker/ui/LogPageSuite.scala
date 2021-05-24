@@ -22,16 +22,20 @@ import java.io.{File, FileWriter}
 import org.mockito.Mockito.{mock, when}
 import org.scalatest.PrivateMethodTester
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.deploy.worker.Worker
 
 class LogPageSuite extends SparkFunSuite with PrivateMethodTester {
 
   test("get logs simple") {
     val webui = mock(classOf[WorkerWebUI])
+    val worker = mock(classOf[Worker])
     val tmpDir = new File(sys.props("java.io.tmpdir"))
     val workDir = new File(tmpDir, "work-dir")
     workDir.mkdir()
     when(webui.workDir).thenReturn(workDir)
+    when(webui.worker).thenReturn(worker)
+    when(worker.conf).thenReturn(new SparkConf())
     val logPage = new LogPage(webui)
 
     // Prepare some fake log files to read later
@@ -49,7 +53,7 @@ class LogPageSuite extends SparkFunSuite with PrivateMethodTester {
     write(tmpRand, "1 6 4 5 2 7 8")
 
     // Get the logs. All log types other than "stderr" or "stdout" will be rejected
-    val getLog = PrivateMethod[(String, Long, Long, Long)]('getLog)
+    val getLog = PrivateMethod[(String, Long, Long, Long)](Symbol("getLog"))
     val (stdout, _, _, _) =
       logPage invokePrivate getLog(workDir.getAbsolutePath, "stdout", None, 100)
     val (stderr, _, _, _) =

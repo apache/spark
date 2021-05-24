@@ -17,104 +17,174 @@
 
 package org.apache.spark.sql.catalyst
 
-import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
+import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 /**
- * An abstract class for row used internal in Spark SQL, which only contain the columns as
+ * An abstract class for row used internally in Spark SQL, which only contains the columns as
  * internal types.
  */
-abstract class InternalRow extends Row {
-  // A default implementation to change the return type
-  override def copy(): InternalRow = this
+abstract class InternalRow extends SpecializedGetters with Serializable {
 
-  override def equals(o: Any): Boolean = {
-    if (!o.isInstanceOf[Row]) {
-      return false
-    }
+  def numFields: Int
 
-    val other = o.asInstanceOf[Row]
-    if (length != other.length) {
-      return false
-    }
+  // This is only use for test and will throw a null pointer exception if the position is null.
+  def getString(ordinal: Int): String = getUTF8String(ordinal).toString
 
+  def setNullAt(i: Int): Unit
+
+  /**
+   * Updates the value at column `i`. Note that after updating, the given value will be kept in this
+   * row, and the caller side should guarantee that this value won't be changed afterwards.
+   */
+  def update(i: Int, value: Any): Unit
+
+  // default implementation (slow)
+  def setBoolean(i: Int, value: Boolean): Unit = update(i, value)
+  def setByte(i: Int, value: Byte): Unit = update(i, value)
+  def setShort(i: Int, value: Short): Unit = update(i, value)
+  def setInt(i: Int, value: Int): Unit = update(i, value)
+  def setLong(i: Int, value: Long): Unit = update(i, value)
+  def setFloat(i: Int, value: Float): Unit = update(i, value)
+  def setDouble(i: Int, value: Double): Unit = update(i, value)
+
+  /**
+   * Update the decimal column at `i`.
+   *
+   * Note: In order to support update decimal with precision > 18 in UnsafeRow,
+   * CAN NOT call setNullAt() for decimal column on UnsafeRow, call setDecimal(i, null, precision).
+   */
+  def setDecimal(i: Int, value: Decimal, precision: Int): Unit = update(i, value)
+
+  def setInterval(i: Int, value: CalendarInterval): Unit = update(i, value)
+
+  /**
+   * Make a copy of the current [[InternalRow]] object.
+   */
+  def copy(): InternalRow
+
+  /** Returns true if there are any NULL values in this row. */
+  def anyNull: Boolean = {
+    val len = numFields
     var i = 0
-    while (i < length) {
-      if (isNullAt(i) != other.isNullAt(i)) {
-        return false
-      }
-      if (!isNullAt(i)) {
-        val o1 = apply(i)
-        val o2 = other.apply(i)
-        if (o1.isInstanceOf[Array[Byte]]) {
-          // handle equality of Array[Byte]
-          val b1 = o1.asInstanceOf[Array[Byte]]
-          if (!o2.isInstanceOf[Array[Byte]] ||
-            !java.util.Arrays.equals(b1, o2.asInstanceOf[Array[Byte]])) {
-            return false
-          }
-        } else if (o1 != o2) {
-          return false
-        }
-      }
+    while (i < len) {
+      if (isNullAt(i)) { return true }
       i += 1
     }
-    true
+    false
   }
 
-  // Custom hashCode function that matches the efficient code generated version.
-  override def hashCode: Int = {
-    var result: Int = 37
+  /* ---------------------- utility methods for Scala ---------------------- */
+
+  /**
+   * Return a Scala Seq representing the row. Elements are placed in the same order in the Seq.
+   */
+  def toSeq(fieldTypes: Seq[DataType]): Seq[Any] = {
+    val len = numFields
+    assert(len == fieldTypes.length)
+
+    val values = new Array[Any](len)
     var i = 0
-    while (i < length) {
-      val update: Int =
-        if (isNullAt(i)) {
-          0
-        } else {
-          apply(i) match {
-            case b: Boolean => if (b) 0 else 1
-            case b: Byte => b.toInt
-            case s: Short => s.toInt
-            case i: Int => i
-            case l: Long => (l ^ (l >>> 32)).toInt
-            case f: Float => java.lang.Float.floatToIntBits(f)
-            case d: Double =>
-              val b = java.lang.Double.doubleToLongBits(d)
-              (b ^ (b >>> 32)).toInt
-            case a: Array[Byte] => java.util.Arrays.hashCode(a)
-            case other => other.hashCode()
-          }
-        }
-      result = 37 * result + update
+    while (i < len) {
+      values(i) = get(i, fieldTypes(i))
       i += 1
     }
-    result
+    values
   }
+
+  def toSeq(schema: StructType): Seq[Any] = toSeq(schema.map(_.dataType))
 }
 
 object InternalRow {
-  def unapplySeq(row: InternalRow): Some[Seq[Any]] = Some(row.toSeq)
+  /**
+   * This method can be used to construct a [[InternalRow]] with the given values.
+   */
+  def apply(values: Any*): InternalRow = new GenericInternalRow(values.toArray)
 
   /**
-   * This method can be used to construct a [[Row]] with the given values.
+   * This method can be used to construct a [[InternalRow]] from a [[Seq]] of values.
    */
-  def apply(values: Any*): InternalRow = new GenericRow(values.toArray)
+  def fromSeq(values: Seq[Any]): InternalRow = new GenericInternalRow(values.toArray)
+
+  /** Returns an empty [[InternalRow]]. */
+  val empty = apply()
 
   /**
-   * This method can be used to construct a [[Row]] from a [[Seq]] of values.
+   * Copies the given value if it's string/struct/array/map type.
    */
-  def fromSeq(values: Seq[Any]): InternalRow = new GenericRow(values.toArray)
-
-  def fromTuple(tuple: Product): InternalRow = fromSeq(tuple.productIterator.toSeq)
-
-  /**
-   * Merge multiple rows into a single row, one after another.
-   */
-  def merge(rows: InternalRow*): InternalRow = {
-    // TODO: Improve the performance of this if used in performance critical part.
-    new GenericRow(rows.flatMap(_.toSeq).toArray)
+  def copyValue(value: Any): Any = value match {
+    case v: UTF8String => v.copy()
+    case v: InternalRow => v.copy()
+    case v: ArrayData => v.copy()
+    case v: MapData => v.copy()
+    case _ => value
   }
 
-  /** Returns an empty row. */
-  val empty = apply()
+  /**
+   * Returns an accessor for an `InternalRow` with given data type. The returned accessor
+   * actually takes a `SpecializedGetters` input because it can be generalized to other classes
+   * that implements `SpecializedGetters` (e.g., `ArrayData`) too.
+   */
+  def getAccessor(dt: DataType, nullable: Boolean = true): (SpecializedGetters, Int) => Any = {
+    val getValueNullSafe: (SpecializedGetters, Int) => Any = dt match {
+      case BooleanType => (input, ordinal) => input.getBoolean(ordinal)
+      case ByteType => (input, ordinal) => input.getByte(ordinal)
+      case ShortType => (input, ordinal) => input.getShort(ordinal)
+      case IntegerType | DateType | YearMonthIntervalType =>
+        (input, ordinal) => input.getInt(ordinal)
+      case LongType | TimestampType | DayTimeIntervalType =>
+        (input, ordinal) => input.getLong(ordinal)
+      case FloatType => (input, ordinal) => input.getFloat(ordinal)
+      case DoubleType => (input, ordinal) => input.getDouble(ordinal)
+      case StringType => (input, ordinal) => input.getUTF8String(ordinal)
+      case BinaryType => (input, ordinal) => input.getBinary(ordinal)
+      case CalendarIntervalType => (input, ordinal) => input.getInterval(ordinal)
+      case t: DecimalType => (input, ordinal) => input.getDecimal(ordinal, t.precision, t.scale)
+      case t: StructType => (input, ordinal) => input.getStruct(ordinal, t.size)
+      case _: ArrayType => (input, ordinal) => input.getArray(ordinal)
+      case _: MapType => (input, ordinal) => input.getMap(ordinal)
+      case u: UserDefinedType[_] => getAccessor(u.sqlType, nullable)
+      case _ => (input, ordinal) => input.get(ordinal, dt)
+    }
+
+    if (nullable) {
+      (getter, index) => {
+        if (getter.isNullAt(index)) {
+          null
+        } else {
+          getValueNullSafe(getter, index)
+        }
+      }
+    } else {
+      getValueNullSafe
+    }
+  }
+
+  /**
+   * Returns a writer for an `InternalRow` with given data type.
+   */
+  def getWriter(ordinal: Int, dt: DataType): (InternalRow, Any) => Unit = dt match {
+    case BooleanType => (input, v) => input.setBoolean(ordinal, v.asInstanceOf[Boolean])
+    case ByteType => (input, v) => input.setByte(ordinal, v.asInstanceOf[Byte])
+    case ShortType => (input, v) => input.setShort(ordinal, v.asInstanceOf[Short])
+    case IntegerType | DateType | YearMonthIntervalType =>
+      (input, v) => input.setInt(ordinal, v.asInstanceOf[Int])
+    case LongType | TimestampType | DayTimeIntervalType =>
+      (input, v) => input.setLong(ordinal, v.asInstanceOf[Long])
+    case FloatType => (input, v) => input.setFloat(ordinal, v.asInstanceOf[Float])
+    case DoubleType => (input, v) => input.setDouble(ordinal, v.asInstanceOf[Double])
+    case CalendarIntervalType =>
+      (input, v) => input.setInterval(ordinal, v.asInstanceOf[CalendarInterval])
+    case DecimalType.Fixed(precision, _) =>
+      (input, v) => input.setDecimal(ordinal, v.asInstanceOf[Decimal], precision)
+    case udt: UserDefinedType[_] => getWriter(ordinal, udt.sqlType)
+    case NullType => (input, _) => input.setNullAt(ordinal)
+    case StringType => (input, v) => input.update(ordinal, v.asInstanceOf[UTF8String].copy())
+    case _: StructType => (input, v) => input.update(ordinal, v.asInstanceOf[InternalRow].copy())
+    case _: ArrayType => (input, v) => input.update(ordinal, v.asInstanceOf[ArrayData].copy())
+    case _: MapType => (input, v) => input.update(ordinal, v.asInstanceOf[MapData].copy())
+    case _ => (input, v) => input.update(ordinal, v)
+  }
 }

@@ -20,10 +20,9 @@ package org.apache.spark.graphx.impl
 import scala.language.higherKinds
 import scala.reflect.ClassTag
 
-import org.apache.spark.util.collection.BitSet
-
 import org.apache.spark.graphx._
 import org.apache.spark.graphx.util.collection.GraphXPrimitiveKeyOpenHashMap
+import org.apache.spark.util.collection.BitSet
 
 private[graphx] object VertexPartitionBase {
   /**
@@ -58,7 +57,7 @@ private[graphx] object VertexPartitionBase {
  * concrete implementation. [[VertexPartitionBaseOps]] provides a variety of operations for
  * VertexPartitionBase and subclasses that provide implicit evidence of membership in the
  * `VertexPartitionBaseOpsConstructor` typeclass (for example,
- * [[VertexPartition.VertexPartitionOpsConstructor]]).
+ * `VertexPartition.VertexPartitionOpsConstructor`).
  */
 private[graphx] abstract class VertexPartitionBase[@specialized(Long, Int, Double) VD: ClassTag]
   extends Serializable {

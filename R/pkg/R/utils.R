@@ -32,7 +32,7 @@ convertJListToRList <- function(jList, flatten, logicalUpperBound = NULL,
   }
 
   results <- if (arrSize > 0) {
-    lapply(0:(arrSize - 1),
+    lapply(0 : (arrSize - 1),
           function(index) {
             obj <- callJMethod(jList, "get", as.integer(index))
 
@@ -41,14 +41,14 @@ convertJListToRList <- function(jList, flatten, logicalUpperBound = NULL,
               if (isInstanceOf(obj, "scala.Tuple2")) {
                 # JavaPairRDD[Array[Byte], Array[Byte]].
 
-                keyBytes = callJMethod(obj, "_1")
-                valBytes = callJMethod(obj, "_2")
+                keyBytes <- callJMethod(obj, "_1")
+                valBytes <- callJMethod(obj, "_2")
                 res <- list(unserialize(keyBytes),
                   unserialize(valBytes))
               } else {
-                stop(paste("utils.R: convertJListToRList only supports",
-                  "RDD[Array[Byte]] and",
-                  "JavaPairRDD[Array[Byte], Array[Byte]] for now"))
+                stop("utils.R: convertJListToRList only supports ",
+                  "RDD[Array[Byte]] and ",
+                  "JavaPairRDD[Array[Byte], Array[Byte]] for now")
               }
             } else {
               if (inherits(obj, "raw")) {
@@ -108,11 +108,13 @@ isRDD <- function(name, env) {
 #'
 #' @param key the object to be hashed
 #' @return the hash code as an integer
-#' @export
 #' @examples
+#'\dontrun{
 #' hashCode(1L) # 1
 #' hashCode(1.0) # 1072693248
 #' hashCode("1") # 49
+#'}
+#' @note hashCode since 1.4.0
 hashCode <- function(key) {
   if (class(key) == "integer") {
     as.integer(key[[1]])
@@ -123,23 +125,19 @@ hashCode <- function(key) {
     as.integer(bitwXor(intBits[2], intBits[1]))
   } else if (class(key) == "character") {
     # TODO: SPARK-7839 means we might not have the native library available
-    if (is.loaded("stringHashCode")) {
-      .Call("stringHashCode", key)
+    n <- nchar(key)
+    if (n == 0) {
+      0L
     } else {
-      n <- nchar(key)
-      if (n == 0) {
-        0L
-      } else {
-        asciiVals <- sapply(charToRaw(key), function(x) { strtoi(x, 16L) })
-        hashC <- 0
-        for (k in 1:length(asciiVals)) {
-          hashC <- mult31AndAdd(hashC, asciiVals[k])
-        }
-        as.integer(hashC)
+      asciiVals <- sapply(charToRaw(key), function(x) { strtoi(x, 16L) })
+      hashC <- 0
+      for (k in seq_len(length(asciiVals))) {
+        hashC <- mult31AndAdd(hashC, asciiVals[k])
       }
+      as.integer(hashC)
     }
   } else {
-    warning(paste("Could not hash object, returning 0", sep = ""))
+    warning("Could not hash object, returning 0")
     as.integer(0)
   }
 }
@@ -157,8 +155,11 @@ wrapInt <- function(value) {
 
 # Multiply `val` by 31 and add `addVal` to the result. Ensures that
 # integer-overflows are handled at every step.
+#
+# TODO: this function does not handle integer overflow well
 mult31AndAdd <- function(val, addVal) {
-  vec <- c(bitwShiftL(val, c(4,3,2,1,0)), addVal)
+  vec <- c(bitwShiftL(val, c(4, 3, 2, 1, 0)), addVal)
+  vec[is.na(vec)] <- 0
   Reduce(function(a, b) {
           wrapInt(as.numeric(a) + as.numeric(b))
          },
@@ -202,7 +203,7 @@ serializeToString <- function(rdd) {
 # This function amortizes the allocation cost by doubling
 # the size of the list every time it fills up.
 addItemToAccumulator <- function(acc, item) {
-  if(acc$counter == acc$size) {
+  if (acc$counter == acc$size) {
     acc$size <- acc$size * 2
     length(acc$data) <- acc$size
   }
@@ -312,9 +313,19 @@ convertEnvsToList <- function(keys, vals) {
          })
 }
 
+# Utility function to merge 2 environments with the second overriding values in the first
+# env1 is changed in place
+overrideEnvs <- function(env1, env2) {
+  lapply(ls(env2),
+         function(name) {
+           env1[[name]] <- env2[[name]]
+         })
+}
+
 # Utility function to capture the varargs into environment object
 varargsToEnv <- function(...) {
-  pairs <- as.list(substitute(list(...)))[-1L]
+  # Based on http://stackoverflow.com/a/3057419/4577954
+  pairs <- list(...)
   env <- new.env()
   for (name in names(pairs)) {
     env[[name]] <- pairs[[name]]
@@ -322,8 +333,50 @@ varargsToEnv <- function(...) {
   env
 }
 
+# Utility function to capture the varargs into environment object but all values are converted
+# into string.
+varargsToStrEnv <- function(...) {
+  pairs <- list(...)
+  nameList <- names(pairs)
+  env <- new.env()
+  ignoredNames <- list()
+
+  if (is.null(nameList)) {
+    # When all arguments are not named, names(..) returns NULL.
+    ignoredNames <- pairs
+  } else {
+    for (i in seq_along(pairs)) {
+      name <- nameList[i]
+      value <- pairs[i]
+      if (identical(name, "")) {
+        # When some of arguments are not named, name is "".
+        ignoredNames <- append(ignoredNames, value)
+      } else {
+        value <- pairs[[name]]
+        if (!(is.logical(value) || is.numeric(value) || is.character(value) || is.null(value))) {
+          stop("Unsupported type for ", name, " : ", toString(class(value)), ". ",
+               "Supported types are logical, numeric, character and NULL.", call. = FALSE)
+        }
+        if (is.logical(value)) {
+          env[[name]] <- tolower(as.character(value))
+        } else if (is.null(value)) {
+          env[[name]] <- value
+        } else {
+          env[[name]] <- as.character(value)
+        }
+      }
+    }
+  }
+
+  if (length(ignoredNames) != 0) {
+    warning("Unnamed arguments ignored: ", toString(ignoredNames), ".", call. = FALSE)
+  }
+  env
+}
+
 getStorageLevel <- function(newLevel = c("DISK_ONLY",
                                          "DISK_ONLY_2",
+                                         "DISK_ONLY_3",
                                          "MEMORY_AND_DISK",
                                          "MEMORY_AND_DISK_2",
                                          "MEMORY_AND_DISK_SER",
@@ -334,37 +387,74 @@ getStorageLevel <- function(newLevel = c("DISK_ONLY",
                                          "MEMORY_ONLY_SER_2",
                                          "OFF_HEAP")) {
   match.arg(newLevel)
+  storageLevelClass <- "org.apache.spark.storage.StorageLevel"
   storageLevel <- switch(newLevel,
-                         "DISK_ONLY" = callJStatic("org.apache.spark.storage.StorageLevel", "DISK_ONLY"),
-                         "DISK_ONLY_2" = callJStatic("org.apache.spark.storage.StorageLevel", "DISK_ONLY_2"),
-                         "MEMORY_AND_DISK" = callJStatic("org.apache.spark.storage.StorageLevel", "MEMORY_AND_DISK"),
-                         "MEMORY_AND_DISK_2" = callJStatic("org.apache.spark.storage.StorageLevel", "MEMORY_AND_DISK_2"),
-                         "MEMORY_AND_DISK_SER" = callJStatic("org.apache.spark.storage.StorageLevel", "MEMORY_AND_DISK_SER"),
-                         "MEMORY_AND_DISK_SER_2" = callJStatic("org.apache.spark.storage.StorageLevel", "MEMORY_AND_DISK_SER_2"),
-                         "MEMORY_ONLY" = callJStatic("org.apache.spark.storage.StorageLevel", "MEMORY_ONLY"),
-                         "MEMORY_ONLY_2" = callJStatic("org.apache.spark.storage.StorageLevel", "MEMORY_ONLY_2"),
-                         "MEMORY_ONLY_SER" = callJStatic("org.apache.spark.storage.StorageLevel", "MEMORY_ONLY_SER"),
-                         "MEMORY_ONLY_SER_2" = callJStatic("org.apache.spark.storage.StorageLevel", "MEMORY_ONLY_SER_2"),
-                         "OFF_HEAP" = callJStatic("org.apache.spark.storage.StorageLevel", "OFF_HEAP"))
+                         "DISK_ONLY" = callJStatic(storageLevelClass, "DISK_ONLY"),
+                         "DISK_ONLY_2" = callJStatic(storageLevelClass, "DISK_ONLY_2"),
+                         "DISK_ONLY_3" = callJStatic(storageLevelClass, "DISK_ONLY_3"),
+                         "MEMORY_AND_DISK" = callJStatic(storageLevelClass, "MEMORY_AND_DISK"),
+                         "MEMORY_AND_DISK_2" = callJStatic(storageLevelClass, "MEMORY_AND_DISK_2"),
+                         "MEMORY_AND_DISK_SER" = callJStatic(storageLevelClass,
+                                                             "MEMORY_AND_DISK_SER"),
+                         "MEMORY_AND_DISK_SER_2" = callJStatic(storageLevelClass,
+                                                               "MEMORY_AND_DISK_SER_2"),
+                         "MEMORY_ONLY" = callJStatic(storageLevelClass, "MEMORY_ONLY"),
+                         "MEMORY_ONLY_2" = callJStatic(storageLevelClass, "MEMORY_ONLY_2"),
+                         "MEMORY_ONLY_SER" = callJStatic(storageLevelClass, "MEMORY_ONLY_SER"),
+                         "MEMORY_ONLY_SER_2" = callJStatic(storageLevelClass, "MEMORY_ONLY_SER_2"),
+                         "OFF_HEAP" = callJStatic(storageLevelClass, "OFF_HEAP"))
+}
+
+storageLevelToString <- function(levelObj) {
+  useDisk <- callJMethod(levelObj, "useDisk")
+  useMemory <- callJMethod(levelObj, "useMemory")
+  useOffHeap <- callJMethod(levelObj, "useOffHeap")
+  deserialized <- callJMethod(levelObj, "deserialized")
+  replication <- callJMethod(levelObj, "replication")
+  shortName <- if (!useDisk && !useMemory && !useOffHeap && !deserialized && replication == 1) {
+    "NONE"
+  } else if (useDisk && !useMemory && !useOffHeap && !deserialized && replication == 1) {
+    "DISK_ONLY"
+  } else if (useDisk && !useMemory && !useOffHeap && !deserialized && replication == 2) {
+    "DISK_ONLY_2"
+  } else if (useDisk && !useMemory && !useOffHeap && !deserialized && replication == 3) {
+    "DISK_ONLY_3"
+  } else if (!useDisk && useMemory && !useOffHeap && deserialized && replication == 1) {
+    "MEMORY_ONLY"
+  } else if (!useDisk && useMemory && !useOffHeap && deserialized && replication == 2) {
+    "MEMORY_ONLY_2"
+  } else if (!useDisk && useMemory && !useOffHeap && !deserialized && replication == 1) {
+    "MEMORY_ONLY_SER"
+  } else if (!useDisk && useMemory && !useOffHeap && !deserialized && replication == 2) {
+    "MEMORY_ONLY_SER_2"
+  } else if (useDisk && useMemory && !useOffHeap && deserialized && replication == 1) {
+    "MEMORY_AND_DISK"
+  } else if (useDisk && useMemory && !useOffHeap && deserialized && replication == 2) {
+    "MEMORY_AND_DISK_2"
+  } else if (useDisk && useMemory && !useOffHeap && !deserialized && replication == 1) {
+    "MEMORY_AND_DISK_SER"
+  } else if (useDisk && useMemory && !useOffHeap && !deserialized && replication == 2) {
+    "MEMORY_AND_DISK_SER_2"
+  } else if (useDisk && useMemory && useOffHeap && !deserialized && replication == 1) {
+    "OFF_HEAP"
+  } else {
+    NULL
+  }
+  fullInfo <- callJMethod(levelObj, "toString")
+  if (is.null(shortName)) {
+    fullInfo
+  } else {
+    paste(shortName, "-", fullInfo)
+  }
 }
 
 # Utility function for functions where an argument needs to be integer but we want to allow
 # the user to type (for example) `5` instead of `5L` to avoid a confusing error message.
 numToInt <- function(num) {
   if (as.integer(num) != num) {
-    warning(paste("Coercing", as.list(sys.call())[[2]], "to integer."))
+    warning("Coercing ", as.list(sys.call())[[2L]], " to integer.")
   }
   as.integer(num)
-}
-
-# create a Seq in JVM
-toSeq <- function(...) {
-  callJStatic("org.apache.spark.sql.api.r.SQLUtils", "toSeq", list(...))
-}
-
-# create a Seq in JVM from a list
-listToSeq <- function(l) {
-  callJStatic("org.apache.spark.sql.api.r.SQLUtils", "toSeq", l)
 }
 
 # Utility function to recursively traverse the Abstract Syntax Tree (AST) of a
@@ -387,14 +477,17 @@ processClosure <- function(node, oldEnv, defVars, checkedFuncs, newEnv) {
       for (i in 1:nodeLen) {
         processClosure(node[[i]], oldEnv, defVars, checkedFuncs, newEnv)
       }
-    } else {  # if node[[1]] is length of 1, check for some R special functions.
+    } else {
+      # if node[[1]] is length of 1, check for some R special functions.
       nodeChar <- as.character(node[[1]])
-      if (nodeChar == "{" || nodeChar == "(") {  # Skip start symbol.
+      if (nodeChar == "{" || nodeChar == "(") {
+        # Skip start symbol.
         for (i in 2:nodeLen) {
           processClosure(node[[i]], oldEnv, defVars, checkedFuncs, newEnv)
         }
       } else if (nodeChar == "<-" || nodeChar == "=" ||
-                   nodeChar == "<<-") { # Assignment Ops.
+                   nodeChar == "<<-") {
+        # Assignment Ops.
         defVar <- node[[2]]
         if (length(defVar) == 1 && typeof(defVar) == "symbol") {
           # Add the defined variable name into defVars.
@@ -405,14 +498,16 @@ processClosure <- function(node, oldEnv, defVars, checkedFuncs, newEnv) {
         for (i in 3:nodeLen) {
           processClosure(node[[i]], oldEnv, defVars, checkedFuncs, newEnv)
         }
-      } else if (nodeChar == "function") {  # Function definition.
+      } else if (nodeChar == "function") {
+        # Function definition.
         # Add parameter names.
         newArgs <- names(node[[2]])
         lapply(newArgs, function(arg) { addItemToAccumulator(defVars, arg) })
         for (i in 3:nodeLen) {
           processClosure(node[[i]], oldEnv, defVars, checkedFuncs, newEnv)
         }
-      } else if (nodeChar == "$") {  # Skip the field.
+      } else if (nodeChar == "$") {
+        # Skip the field.
         processClosure(node[[2]], oldEnv, defVars, checkedFuncs, newEnv)
       } else if (nodeChar == "::" || nodeChar == ":::") {
         processClosure(node[[3]], oldEnv, defVars, checkedFuncs, newEnv)
@@ -426,7 +521,8 @@ processClosure <- function(node, oldEnv, defVars, checkedFuncs, newEnv) {
                (typeof(node) == "symbol" || typeof(node) == "language")) {
     # Base case: current AST node is a leaf node and a symbol or a function call.
     nodeChar <- as.character(node)
-    if (!nodeChar %in% defVars$data) {  # Not a function parameter or local variable.
+    if (!nodeChar %in% defVars$data) {
+      # Not a function parameter or local variable.
       func.env <- oldEnv
       topEnv <- parent.env(.GlobalEnv)
       # Search in function environment, and function's enclosing environments
@@ -436,20 +532,31 @@ processClosure <- function(node, oldEnv, defVars, checkedFuncs, newEnv) {
       while (!identical(func.env, topEnv)) {
         # Namespaces other than "SparkR" will not be searched.
         if (!isNamespace(func.env) ||
-              (getNamespaceName(func.env) == "SparkR" &&
-              !(nodeChar %in% getNamespaceExports("SparkR")))) {  # Only include SparkR internals.
+            (getNamespaceName(func.env) == "SparkR" &&
+               !(nodeChar %in% getNamespaceExports("SparkR")) &&
+                  # Note that generic S4 methods should not be set to the environment of
+                  # cleaned closure. It does not work with R 4.0.0+. See also SPARK-31918.
+                  nodeChar != "" && !methods::isGeneric(nodeChar, func.env))) {
+          # Only include SparkR internals.
+
           # Set parameter 'inherits' to FALSE since we do not need to search in
           # attached package environments.
           if (tryCatch(exists(nodeChar, envir = func.env, inherits = FALSE),
                        error = function(e) { FALSE })) {
             obj <- get(nodeChar, envir = func.env, inherits = FALSE)
-            if (is.function(obj)) {  # If the node is a function call.
+            if (is.function(obj)) {
+              # If the node is a function call.
               funcList <- mget(nodeChar, envir = checkedFuncs, inherits = F,
                                ifnotfound = list(list(NULL)))[[1]]
               found <- sapply(funcList, function(func) {
-                ifelse(identical(func, obj), TRUE, FALSE)
+                ifelse(
+                  identical(func, obj) &&
+                    # Also check if the parent environment is identical to current parent
+                    identical(parent.env(environment(func)), func.env),
+                  TRUE, FALSE)
               })
-              if (sum(found) > 0) {  # If function has been examined, ignore.
+              if (sum(found) > 0) {
+                # If function has been examined ignore
                 break
               }
               # Function has not been examined, record it and recursively clean its closure.
@@ -482,7 +589,7 @@ processClosure <- function(node, oldEnv, defVars, checkedFuncs, newEnv) {
 #   checkedFunc An environment of function objects examined during cleanClosure. It can be
 #               considered as a "name"-to-"list of functions" mapping.
 # return value
-#   a new version of func that has an correct environment (closure).
+#   a new version of func that has a correct environment (closure).
 cleanClosure <- function(func, checkedFuncs = new.env()) {
   if (is.function(func)) {
     newEnv <- new.env(parent = .GlobalEnv)
@@ -492,7 +599,8 @@ cleanClosure <- function(func, checkedFuncs = new.env()) {
     # environment. First, function's arguments are added to defVars.
     defVars <- initAccumulator()
     argNames <- names(as.list(args(func)))
-    for (i in 1:(length(argNames) - 1)) {  # Remove the ending NULL in pairlist.
+    for (i in 1:(length(argNames) - 1)) {
+      # Remove the ending NULL in pairlist.
       addItemToAccumulator(defVars, argNames[i])
     }
     # Recursively examine variables in the function body.
@@ -526,7 +634,7 @@ appendPartitionLengths <- function(x, other) {
     x <- lapplyPartition(x, appendLength)
     other <- lapplyPartition(other, appendLength)
   }
-  list (x, other)
+  list(x, other)
 }
 
 # Perform zip or cartesian between elements from two RDDs in each partition
@@ -545,9 +653,11 @@ mergePartitions <- function(rdd, zip) {
         lengthOfKeys <- part[[len - lengthOfValues]]
         stopifnot(len == lengthOfKeys + lengthOfValues)
 
-        # For zip operation, check if corresponding partitions of both RDDs have the same number of elements.
+        # For zip operation, check if corresponding partitions
+        # of both RDDs have the same number of elements.
         if (zip && lengthOfKeys != lengthOfValues) {
-          stop("Can only zip RDDs with same number of elements in each pair of corresponding partitions.")
+          stop("Can only zip RDDs with same number of elements ",
+               "in each pair of corresponding partitions.")
         }
 
         if (lengthOfKeys > 1) {
@@ -580,4 +690,249 @@ mergePartitions <- function(rdd, zip) {
   }
 
   PipelinedRDD(rdd, partitionFunc)
+}
+
+# Convert a named list to struct so that
+# SerDe won't confuse between a normal named list and struct
+listToStruct <- function(list) {
+  stopifnot(class(list) == "list")
+  stopifnot(!is.null(names(list)))
+  class(list) <- "struct"
+  list
+}
+
+# Convert a struct to a named list
+structToList <- function(struct) {
+  stopifnot(class(list) == "struct")
+
+  class(struct) <- "list"
+  struct
+}
+
+# Convert a named list to an environment to be passed to JVM
+convertNamedListToEnv <- function(namedList) {
+  # Make sure each item in the list has a name
+  names <- names(namedList)
+  stopifnot(
+    if (is.null(names)) {
+      length(namedList) == 0
+    } else {
+      !any(is.na(names))
+    })
+
+  env <- new.env()
+  for (name in names) {
+    env[[name]] <- namedList[[name]]
+  }
+  env
+}
+
+# Assign a new environment for attach() and with() methods
+assignNewEnv <- function(data) {
+  stopifnot(class(data) == "SparkDataFrame")
+  cols <- columns(data)
+  stopifnot(length(cols) > 0)
+
+  env <- new.env()
+  for (i in seq_len(length(cols))) {
+    assign(x = cols[i], value = data[, cols[i], drop = F], envir = env)
+  }
+  env
+}
+
+# Utility function to split by ',' and whitespace, remove empty tokens
+splitString <- function(input) {
+  Filter(nzchar, unlist(strsplit(input, ",|\\s")))
+}
+
+varargsToJProperties <- function(...) {
+  pairs <- list(...)
+  props <- newJObject("java.util.Properties")
+  if (length(pairs) > 0) {
+    lapply(ls(pairs), function(k) {
+      callJMethod(props, "setProperty", as.character(k), as.character(pairs[[k]]))
+    })
+  }
+  props
+}
+
+launchScript <- function(script, combinedArgs, wait = FALSE, stdout = "", stderr = "") {
+  if (.Platform$OS.type == "windows") {
+    scriptWithArgs <- paste(script, combinedArgs, sep = " ")
+    # on Windows, intern = F seems to mean output to the console. (documentation on this is missing)
+    shell(scriptWithArgs, translate = TRUE, wait = wait, intern = wait)
+  } else {
+    # http://stat.ethz.ch/R-manual/R-devel/library/base/html/system2.html
+    # stdout = F means discard output
+    # stdout = "" means to its console (default)
+    # Note that the console of this child process might not be the same as the running R process.
+    system2(script, combinedArgs, stdout = stdout, wait = wait, stderr = stderr)
+  }
+}
+
+getSparkContext <- function() {
+  if (!exists(".sparkRjsc", envir = .sparkREnv)) {
+    stop("SparkR has not been initialized. Please call sparkR.session()")
+  }
+  sc <- get(".sparkRjsc", envir = .sparkREnv)
+  sc
+}
+
+isMasterLocal <- function(master) {
+  grepl("^local(\\[([0-9]+|\\*)\\])?$", master, perl = TRUE)
+}
+
+isClientMode <- function(master) {
+  grepl("([a-z]+)-client$", master, perl = TRUE)
+}
+
+isSparkRShell <- function() {
+  grepl(".*shell\\.R$", Sys.getenv("R_PROFILE_USER"), perl = TRUE)
+}
+
+# Works identically with `callJStatic(...)` but throws a pretty formatted exception.
+handledCallJStatic <- function(cls, method, ...) {
+  result <- tryCatch(callJStatic(cls, method, ...),
+                     error = function(e) {
+                       captureJVMException(e, method)
+                     })
+  result
+}
+
+# Works identically with `callJMethod(...)` but throws a pretty formatted exception.
+handledCallJMethod <- function(obj, method, ...) {
+  result <- tryCatch(callJMethod(obj, method, ...),
+                     error = function(e) {
+                       captureJVMException(e, method)
+                     })
+  result
+}
+
+captureJVMException <- function(e, method) {
+  rawmsg <- as.character(e)
+  if (any(grepl("^Error in .*?: ", rawmsg))) {
+    # If the exception message starts with "Error in ...", this is possibly
+    # "Error in invokeJava(...)". Here, it replaces the characters to
+    # `paste("Error in", method, ":")` in order to identify which function
+    # was called in JVM side.
+    stacktrace <- strsplit(rawmsg, "Error in .*?: ")[[1]]
+    rmsg <- paste("Error in", method, ":")
+    stacktrace <- paste(rmsg[1], stacktrace[2])
+  } else {
+    # Otherwise, do not convert the error message just in case.
+    stacktrace <- rawmsg
+  }
+
+  # StreamingQueryException could wrap an IllegalArgumentException, so look for that first
+  if (any(grepl("org.apache.spark.sql.streaming.StreamingQueryException: ",
+                stacktrace, fixed = TRUE))) {
+    msg <- strsplit(stacktrace, "org.apache.spark.sql.streaming.StreamingQueryException: ",
+                    fixed = TRUE)[[1]]
+    # Extract "Error in ..." message.
+    rmsg <- msg[1]
+    # Extract the first message of JVM exception.
+    first <- strsplit(msg[2], "\r?\n\tat")[[1]][1]
+    stop(rmsg, "streaming query error - ", first, call. = FALSE)
+  } else if (any(grepl("java.lang.IllegalArgumentException: ", stacktrace, fixed = TRUE))) {
+    msg <- strsplit(stacktrace, "java.lang.IllegalArgumentException: ", fixed = TRUE)[[1]]
+    # Extract "Error in ..." message.
+    rmsg <- msg[1]
+    # Extract the first message of JVM exception.
+    first <- strsplit(msg[2], "\r?\n\tat")[[1]][1]
+    stop(rmsg, "illegal argument - ", first, call. = FALSE)
+  } else if (any(grepl("org.apache.spark.sql.AnalysisException: ", stacktrace, fixed = TRUE))) {
+    msg <- strsplit(stacktrace, "org.apache.spark.sql.AnalysisException: ", fixed = TRUE)[[1]]
+    # Extract "Error in ..." message.
+    rmsg <- msg[1]
+    # Extract the first message of JVM exception.
+    first <- strsplit(msg[2], "\r?\n\tat")[[1]][1]
+    stop(rmsg, "analysis error - ", first, call. = FALSE)
+  } else
+    if (any(grepl("org.apache.spark.sql.catalyst.analysis.NoSuchDatabaseException: ",
+                  stacktrace, fixed = TRUE))) {
+    msg <- strsplit(stacktrace, "org.apache.spark.sql.catalyst.analysis.NoSuchDatabaseException: ",
+                    fixed = TRUE)[[1]]
+    # Extract "Error in ..." message.
+    rmsg <- msg[1]
+    # Extract the first message of JVM exception.
+    first <- strsplit(msg[2], "\r?\n\tat")[[1]][1]
+    stop(rmsg, "no such database - ", first, call. = FALSE)
+  } else
+    if (any(grepl("org.apache.spark.sql.catalyst.analysis.NoSuchTableException: ",
+                  stacktrace, fixed = TRUE))) {
+    msg <- strsplit(stacktrace, "org.apache.spark.sql.catalyst.analysis.NoSuchTableException: ",
+                    fixed = TRUE)[[1]]
+    # Extract "Error in ..." message.
+    rmsg <- msg[1]
+    # Extract the first message of JVM exception.
+    first <- strsplit(msg[2], "\r?\n\tat")[[1]][1]
+    stop(rmsg, "no such table - ", first, call. = FALSE)
+  } else if (any(grepl("org.apache.spark.sql.catalyst.parser.ParseException: ",
+                       stacktrace, fixed = TRUE))) {
+    msg <- strsplit(stacktrace, "org.apache.spark.sql.catalyst.parser.ParseException: ",
+                    fixed = TRUE)[[1]]
+    # Extract "Error in ..." message.
+    rmsg <- msg[1]
+    # Extract the first message of JVM exception.
+    first <- strsplit(msg[2], "\r?\n\tat")[[1]][1]
+    stop(rmsg, "parse error - ", first, call. = FALSE)
+  } else {
+    stop(stacktrace, call. = FALSE)
+  }
+}
+
+# rbind a list of rows with raw (binary) columns
+#
+# @param inputData a list of rows, with each row a list
+# @return data.frame with raw columns as lists
+rbindRaws <- function(inputData) {
+  row1 <- inputData[[1]]
+  rawcolumns <- ("raw" == sapply(row1, class))
+
+  listmatrix <- do.call(rbind, inputData)
+  # A dataframe with all list columns
+  out <- as.data.frame(listmatrix)
+  out[!rawcolumns] <- lapply(out[!rawcolumns], unlist)
+  out
+}
+
+# Get basename without extension from URL
+basenameSansExtFromUrl <- function(url) {
+  # split by '/'
+  splits <- unlist(strsplit(url, "^.+/"))
+  last <- tail(splits, 1)
+  # this is from file_path_sans_ext
+  # first, remove any compression extension
+  filename <- sub("[.](gz|bz2|xz)$", "", last)
+  # then, strip extension by the last '.'
+  sub("([^.]+)\\.[[:alnum:]]+$", "\\1", filename)
+}
+
+isAtomicLengthOne <- function(x) {
+  is.atomic(x) && length(x) == 1
+}
+
+is_windows <- function() {
+  .Platform$OS.type == "windows"
+}
+
+hadoop_home_set <- function() {
+  !identical(Sys.getenv("HADOOP_HOME"), "")
+}
+
+windows_with_hadoop <- function() {
+  !is_windows() || hadoop_home_set()
+}
+
+# get0 not supported before R 3.2.0
+getOne <- function(x, envir, inherits = TRUE, ifnotfound = NULL) {
+  mget(x[1L], envir = envir, inherits = inherits, ifnotfound = list(ifnotfound))[[1L]]
+}
+
+# Returns a vector of parent directories, traversing up count times, starting with a full path
+# e.g. traverseParentDirs("/Users/user/Library/Caches/spark/spark2.2", 1) should return
+# this "/Users/user/Library/Caches/spark/spark2.2"
+# and  "/Users/user/Library/Caches/spark"
+traverseParentDirs <- function(x, count) {
+  if (dirname(x) == x || count <= 0) x else c(x, Recall(dirname(x), count - 1))
 }

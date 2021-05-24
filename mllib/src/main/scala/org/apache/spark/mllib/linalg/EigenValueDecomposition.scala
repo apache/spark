@@ -18,16 +18,11 @@
 package org.apache.spark.mllib.linalg
 
 import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV}
-import com.github.fommil.netlib.ARPACK
-import org.netlib.util.{intW, doubleW}
-
-import org.apache.spark.annotation.Experimental
+import org.netlib.util.{doubleW, intW}
 
 /**
- * :: Experimental ::
  * Compute eigen-decomposition.
  */
-@Experimental
 private[mllib] object EigenValueDecomposition {
   /**
    * Compute the leading k eigenvalues and eigenvectors on a symmetric square matrix using ARPACK.
@@ -36,7 +31,7 @@ private[mllib] object EigenValueDecomposition {
    *
    * @param mul a function that multiplies the symmetric matrix with a DenseVector.
    * @param n dimension of the square matrix (maximum Int.MaxValue).
-   * @param k number of leading eigenvalues required, 0 < k < n.
+   * @param k number of leading eigenvalues required, where k must be positive and less than n.
    * @param tol tolerance of the eigs computation.
    * @param maxIterations the maximum number of Arnoldi update iterations.
    * @return a dense vector of eigenvalues in descending order and a dense matrix of eigenvectors
@@ -46,7 +41,7 @@ private[mllib] object EigenValueDecomposition {
    *       for more details). The maximum number of Arnoldi update iterations is set to 300 in this
    *       function.
    */
-  private[mllib] def symmetricEigs(
+  def symmetricEigs(
       mul: BDV[Double] => BDV[Double],
       n: Int,
       k: Int,
@@ -54,8 +49,6 @@ private[mllib] object EigenValueDecomposition {
       maxIterations: Int): (BDV[Double], BDM[Double]) = {
     // TODO: remove this function and use eigs in breeze when switching breeze version
     require(n > k, s"Number of required eigenvalues $k must be smaller than matrix dimension $n")
-
-    val arpack = ARPACK.getInstance()
 
     // tolerance used in stopping criterion
     val tolW = new doubleW(tol)
@@ -71,7 +64,7 @@ private[mllib] object EigenValueDecomposition {
     // "LM" : compute the NEV largest (in magnitude) eigenvalues
     val which = "LM"
 
-    var iparam = new Array[Int](11)
+    val iparam = new Array[Int](11)
     // use exact shift in each iteration
     iparam(0) = 1
     // maximum number of Arnoldi update iterations, or the actual number of iterations on output
@@ -82,17 +75,17 @@ private[mllib] object EigenValueDecomposition {
     require(n * ncv.toLong <= Integer.MAX_VALUE && ncv * (ncv.toLong + 8) <= Integer.MAX_VALUE,
       s"k = $k and/or n = $n are too large to compute an eigendecomposition")
 
-    var ido = new intW(0)
-    var info = new intW(0)
-    var resid = new Array[Double](n)
-    var v = new Array[Double](n * ncv)
-    var workd = new Array[Double](n * 3)
-    var workl = new Array[Double](ncv * (ncv + 8))
-    var ipntr = new Array[Int](11)
+    val ido = new intW(0)
+    val info = new intW(0)
+    val resid = new Array[Double](n)
+    val v = new Array[Double](n * ncv)
+    val workd = new Array[Double](n * 3)
+    val workl = new Array[Double](ncv * (ncv + 8))
+    val ipntr = new Array[Int](11)
 
     // call ARPACK's reverse communication, first iteration with ido = 0
-    arpack.dsaupd(ido, bmat, n, which, nev.`val`, tolW, resid, ncv, v, n, iparam, ipntr, workd,
-      workl, workl.length, info)
+    ARPACK.nativeARPACK.dsaupd(ido, bmat, n, which, nev.`val`, tolW, resid, ncv,
+      v, n, iparam, ipntr, workd, workl, workl.length, info)
 
     val w = BDV(workd)
 
@@ -109,8 +102,8 @@ private[mllib] object EigenValueDecomposition {
       val y = w.slice(outputOffset, outputOffset + n)
       y := mul(x)
       // call ARPACK's reverse communication
-      arpack.dsaupd(ido, bmat, n, which, nev.`val`, tolW, resid, ncv, v, n, iparam, ipntr,
-        workd, workl, workl.length, info)
+      ARPACK.nativeARPACK.dsaupd(ido, bmat, n, which, nev.`val`, tolW, resid, ncv,
+        v, n, iparam, ipntr, workd, workl, workl.length, info)
     }
 
     if (info.`val` != 0) {
@@ -131,8 +124,8 @@ private[mllib] object EigenValueDecomposition {
     val z = java.util.Arrays.copyOfRange(v, 0, nev.`val` * n)
 
     // call ARPACK's post-processing for eigenvectors
-    arpack.dseupd(true, "A", select, d, z, n, 0.0, bmat, n, which, nev, tol, resid, ncv, v, n,
-      iparam, ipntr, workd, workl, workl.length, info)
+    ARPACK.nativeARPACK.dseupd(true, "A", select, d, z, n, 0.0, bmat, n, which, nev, tol, resid,
+      ncv, v, n, iparam, ipntr, workd, workl, workl.length, info)
 
     // number of computed eigenvalues, might be smaller than k
     val computed = iparam(4)

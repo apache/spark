@@ -19,10 +19,11 @@
 Python package for statistical functions in MLlib.
 """
 
-from pyspark.mllib.stat._statistics import *
+from pyspark.mllib.stat._statistics import Statistics, MultivariateStatisticalSummary
 from pyspark.mllib.stat.distribution import MultivariateGaussian
-from pyspark.mllib.stat.test import ChiSqTestResult
+from pyspark.mllib.stat.test import ChiSqTestResult, KolmogorovSmirnovTestResult
 from pyspark.mllib.stat.KernelDensity import KernelDensity
 
-__all__ = ["Statistics", "MultivariateStatisticalSummary", "ChiSqTestResult",
+__all__ = ["Statistics", "MultivariateStatisticalSummary",
+           "ChiSqTestResult", "KolmogorovSmirnovTestResult",
            "MultivariateGaussian", "KernelDensity"]

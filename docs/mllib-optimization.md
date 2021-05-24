@@ -1,7 +1,22 @@
 ---
 layout: global
-title: Optimization - MLlib
-displayTitle: <a href="mllib-guide.html">MLlib</a> - Optimization
+title: Optimization - RDD-based API
+displayTitle: Optimization - RDD-based API
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+ 
+     http://www.apache.org/licenses/LICENSE-2.0
+ 
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
 ---
 
 * Table of contents
@@ -87,7 +102,7 @@ in the `$t$`-th iteration, with the input parameter `$s=$ stepSize`. Note that s
 step-size for SGD methods can often be delicate in practice and is a topic of active research.
 
 **Gradients.**
-A table of (sub)gradients of the machine learning methods implemented in MLlib, is available in
+A table of (sub)gradients of the machine learning methods implemented in `spark.mllib`, is available in
 the <a href="mllib-classification-regression.html">classification and regression</a> section.
 
 
@@ -96,12 +111,12 @@ As an alternative to just use the subgradient `$R'(\wv)$` of the regularizer in 
 direction, an improved update for some cases can be obtained by using the proximal operator
 instead.
 For the L1-regularizer, the proximal operator is given by soft thresholding, as implemented in
-[L1Updater](api/scala/index.html#org.apache.spark.mllib.optimization.L1Updater).
+[L1Updater](api/scala/org/apache/spark/mllib/optimization/L1Updater.html).
 
 
 ### Update schemes for distributed SGD
 The SGD implementation in
-[GradientDescent](api/scala/index.html#org.apache.spark.mllib.optimization.GradientDescent) uses
+[GradientDescent](api/scala/org/apache/spark/mllib/optimization/GradientDescent.html) uses
 a simple (distributed) sampling of the data examples.
 We recall that the loss part of the optimization problem `$\eqref{eq:regPrimal}$` is
 `$\frac1n \sum_{i=1}^n L(\wv;\x_i,y_i)$`, and therefore `$\frac1n \sum_{i=1}^n L'_{\wv,i}$` would
@@ -116,12 +131,12 @@ is a stochastic gradient. Here `$S$` is the sampled subset of size `$|S|=$ miniB
 $\cdot n$`.
 
 In each iteration, the sampling over the distributed dataset
-([RDD](programming-guide.html#resilient-distributed-datasets-rdds)), as well as the
+([RDD](rdd-programming-guide.html#resilient-distributed-datasets-rdds)), as well as the
 computation of the sum of the partial results from each worker machine is performed by the
 standard spark routines.
 
 If the fraction of points `miniBatchFraction` is set to 1 (default), then the resulting step in
-each iteration is exact (sub)gradient descent. In this case there is no randomness and no
+each iteration is exact (sub)gradient descent. In this case, there is no randomness and no
 variance in the used step directions.
 On the other extreme, if `miniBatchFraction` is chosen very small, such that only a single point
 is sampled, i.e. `$|S|=$ miniBatchFraction $\cdot n = 1$`, then the algorithm is equivalent to
@@ -135,12 +150,12 @@ algorithm in the family of quasi-Newton methods to solve the optimization proble
 quadratic without evaluating the second partial derivatives of the objective function to construct the 
 Hessian matrix. The Hessian matrix is approximated by previous gradient evaluations, so there is no 
 vertical scalability issue (the number of training features) when computing the Hessian matrix 
-explicitly in Newton's method. As a result, L-BFGS often achieves rapider convergence compared with 
+explicitly in Newton's method. As a result, L-BFGS often achieves more rapid convergence compared with
 other first-order optimization. 
 
 ### Choosing an Optimization Method
 
-[Linear methods](mllib-linear-methods.html) use optimization internally, and some linear methods in MLlib support both SGD and L-BFGS.
+[Linear methods](mllib-linear-methods.html) use optimization internally, and some linear methods in `spark.mllib` support both SGD and L-BFGS.
 Different optimization methods can have different convergence guarantees depending on the properties of the objective function, and we cannot cover the literature here.
 In general, when L-BFGS is available, we recommend using it instead of SGD since L-BFGS tends to converge faster (in fewer iterations).
 
@@ -154,7 +169,7 @@ are developed, see the
 section for example.
 
 The SGD class
-[GradientDescent](api/scala/index.html#org.apache.spark.mllib.optimization.GradientDescent)
+[GradientDescent](api/scala/org/apache/spark/mllib/optimization/GradientDescent.html)
 sets the following parameters:
 
 * `Gradient` is a class that computes the stochastic gradient of the function
@@ -180,15 +195,15 @@ each iteration, to compute the gradient direction.
 L-BFGS is currently only a low-level optimization primitive in `MLlib`. If you want to use L-BFGS in various 
 ML algorithms such as Linear Regression, and Logistic Regression, you have to pass the gradient of objective
 function, and updater into optimizer yourself instead of using the training APIs like 
-[LogisticRegressionWithSGD](api/scala/index.html#org.apache.spark.mllib.classification.LogisticRegressionWithSGD).
+[LogisticRegressionWithSGD](api/scala/org/apache/spark/mllib/classification/LogisticRegressionWithSGD.html).
 See the example below. It will be addressed in the next release. 
 
 The L1 regularization by using 
-[L1Updater](api/scala/index.html#org.apache.spark.mllib.optimization.L1Updater) will not work since the 
+[L1Updater](api/scala/org/apache/spark/mllib/optimization/L1Updater.html) will not work since the 
 soft-thresholding logic in L1Updater is designed for gradient descent. See the developer's note.
 
 The L-BFGS method
-[LBFGS.runLBFGS](api/scala/index.html#org.apache.spark.mllib.optimization.LBFGS)
+[LBFGS.runLBFGS](api/scala/org/apache/spark/mllib/optimization/LBFGS.html)
 has the following parameters:
 
 * `Gradient` is a class that computes the gradient of the objective function
@@ -218,152 +233,15 @@ L-BFGS optimizer.
 <div class="codetabs">
 
 <div data-lang="scala" markdown="1">
-{% highlight scala %}
-import org.apache.spark.SparkContext
-import org.apache.spark.mllib.evaluation.BinaryClassificationMetrics
-import org.apache.spark.mllib.linalg.Vectors
-import org.apache.spark.mllib.util.MLUtils
-import org.apache.spark.mllib.classification.LogisticRegressionModel
-import org.apache.spark.mllib.optimization.{LBFGS, LogisticGradient, SquaredL2Updater}
+Refer to the [`LBFGS` Scala docs](api/scala/org/apache/spark/mllib/optimization/LBFGS.html) and [`SquaredL2Updater` Scala docs](api/scala/org/apache/spark/mllib/optimization/SquaredL2Updater.html) for details on the API.
 
-val data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt")
-val numFeatures = data.take(1)(0).features.size
-
-// Split data into training (60%) and test (40%).
-val splits = data.randomSplit(Array(0.6, 0.4), seed = 11L)
-
-// Append 1 into the training data as intercept.
-val training = splits(0).map(x => (x.label, MLUtils.appendBias(x.features))).cache()
-
-val test = splits(1)
-
-// Run training algorithm to build the model
-val numCorrections = 10
-val convergenceTol = 1e-4
-val maxNumIterations = 20
-val regParam = 0.1
-val initialWeightsWithIntercept = Vectors.dense(new Array[Double](numFeatures + 1))
-
-val (weightsWithIntercept, loss) = LBFGS.runLBFGS(
-  training,
-  new LogisticGradient(),
-  new SquaredL2Updater(),
-  numCorrections,
-  convergenceTol,
-  maxNumIterations,
-  regParam,
-  initialWeightsWithIntercept)
-
-val model = new LogisticRegressionModel(
-  Vectors.dense(weightsWithIntercept.toArray.slice(0, weightsWithIntercept.size - 1)),
-  weightsWithIntercept(weightsWithIntercept.size - 1))
-
-// Clear the default threshold.
-model.clearThreshold()
-
-// Compute raw scores on the test set.
-val scoreAndLabels = test.map { point =>
-  val score = model.predict(point.features)
-  (score, point.label)
-}
-
-// Get evaluation metrics.
-val metrics = new BinaryClassificationMetrics(scoreAndLabels)
-val auROC = metrics.areaUnderROC()
-
-println("Loss of each step in training process")
-loss.foreach(println)
-println("Area under ROC = " + auROC)
-{% endhighlight %}
+{% include_example scala/org/apache/spark/examples/mllib/LBFGSExample.scala %}
 </div>
 
 <div data-lang="java" markdown="1">
-{% highlight java %}
-import java.util.Arrays;
-import java.util.Random;
+Refer to the [`LBFGS` Java docs](api/java/org/apache/spark/mllib/optimization/LBFGS.html) and [`SquaredL2Updater` Java docs](api/java/org/apache/spark/mllib/optimization/SquaredL2Updater.html) for details on the API.
 
-import scala.Tuple2;
-
-import org.apache.spark.api.java.*;
-import org.apache.spark.api.java.function.Function;
-import org.apache.spark.mllib.classification.LogisticRegressionModel;
-import org.apache.spark.mllib.evaluation.BinaryClassificationMetrics;
-import org.apache.spark.mllib.linalg.Vector;
-import org.apache.spark.mllib.linalg.Vectors;
-import org.apache.spark.mllib.optimization.*;
-import org.apache.spark.mllib.regression.LabeledPoint;
-import org.apache.spark.mllib.util.MLUtils;
-import org.apache.spark.SparkConf;
-import org.apache.spark.SparkContext;
-
-public class LBFGSExample {
-  public static void main(String[] args) {
-    SparkConf conf = new SparkConf().setAppName("L-BFGS Example");
-    SparkContext sc = new SparkContext(conf);
-    String path = "data/mllib/sample_libsvm_data.txt";
-    JavaRDD<LabeledPoint> data = MLUtils.loadLibSVMFile(sc, path).toJavaRDD();
-    int numFeatures = data.take(1).get(0).features().size();
-    
-    // Split initial RDD into two... [60% training data, 40% testing data].
-    JavaRDD<LabeledPoint> trainingInit = data.sample(false, 0.6, 11L);
-    JavaRDD<LabeledPoint> test = data.subtract(trainingInit);
-    
-    // Append 1 into the training data as intercept.
-    JavaRDD<Tuple2<Object, Vector>> training = data.map(
-      new Function<LabeledPoint, Tuple2<Object, Vector>>() {
-        public Tuple2<Object, Vector> call(LabeledPoint p) {
-          return new Tuple2<Object, Vector>(p.label(), MLUtils.appendBias(p.features()));
-        }
-      });
-    training.cache();
-
-    // Run training algorithm to build the model.
-    int numCorrections = 10;
-    double convergenceTol = 1e-4;
-    int maxNumIterations = 20;
-    double regParam = 0.1;
-    Vector initialWeightsWithIntercept = Vectors.dense(new double[numFeatures + 1]);
-
-    Tuple2<Vector, double[]> result = LBFGS.runLBFGS(
-      training.rdd(),
-      new LogisticGradient(),
-      new SquaredL2Updater(),
-      numCorrections,
-      convergenceTol,
-      maxNumIterations,
-      regParam,
-      initialWeightsWithIntercept);
-    Vector weightsWithIntercept = result._1();
-    double[] loss = result._2();
-
-    final LogisticRegressionModel model = new LogisticRegressionModel(
-      Vectors.dense(Arrays.copyOf(weightsWithIntercept.toArray(), weightsWithIntercept.size() - 1)),
-      (weightsWithIntercept.toArray())[weightsWithIntercept.size() - 1]);
-
-    // Clear the default threshold.
-    model.clearThreshold();
-
-    // Compute raw scores on the test set.
-    JavaRDD<Tuple2<Object, Object>> scoreAndLabels = test.map(
-      new Function<LabeledPoint, Tuple2<Object, Object>>() {
-      public Tuple2<Object, Object> call(LabeledPoint p) {
-        Double score = model.predict(p.features());
-        return new Tuple2<Object, Object>(score, p.label());
-      }
-    });
-
-    // Get evaluation metrics.
-    BinaryClassificationMetrics metrics = 
-      new BinaryClassificationMetrics(scoreAndLabels.rdd());
-    double auROC = metrics.areaUnderROC();
-     
-    System.out.println("Loss of each step in training process");
-    for (double l : loss)
-      System.out.println(l);
-    System.out.println("Area under ROC = " + auROC);
-  }
-}
-{% endhighlight %}
+{% include_example java/org/apache/spark/examples/mllib/JavaLBFGSExample.java %}
 </div>
 </div>
 

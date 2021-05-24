@@ -17,12 +17,10 @@
 
 package org.apache.spark.graphx.impl
 
-import scala.reflect.{classTag, ClassTag}
-
-import org.apache.spark.SparkContext._
-import org.apache.spark.rdd.RDD
+import scala.reflect.ClassTag
 
 import org.apache.spark.graphx._
+import org.apache.spark.rdd.RDD
 
 /**
  * Manages shipping vertex attributes to the edge partitions of an
@@ -42,8 +40,8 @@ class ReplicatedVertexView[VD: ClassTag, ED: ClassTag](
    * shipping level.
    */
   def withEdges[VD2: ClassTag, ED2: ClassTag](
-      edges_ : EdgeRDDImpl[ED2, VD2]): ReplicatedVertexView[VD2, ED2] = {
-    new ReplicatedVertexView(edges_, hasSrcId, hasDstId)
+      _edges: EdgeRDDImpl[ED2, VD2]): ReplicatedVertexView[VD2, ED2] = {
+    new ReplicatedVertexView(_edges, hasSrcId, hasDstId)
   }
 
   /**
@@ -60,7 +58,7 @@ class ReplicatedVertexView[VD: ClassTag, ED: ClassTag](
    * `vertices`. This operation modifies the `ReplicatedVertexView`, and callers can access `edges`
    * afterwards to obtain the upgraded view.
    */
-  def upgrade(vertices: VertexRDD[VD], includeSrc: Boolean, includeDst: Boolean) {
+  def upgrade(vertices: VertexRDD[VD], includeSrc: Boolean, includeDst: Boolean): Unit = {
     val shipSrc = includeSrc && !hasSrcId
     val shipDst = includeDst && !hasDstId
     if (shipSrc || shipDst) {

@@ -1,0 +1,2 @@
+org.apache.spark.sql.execution.ui.SQLHistoryServerPlugin
+org.apache.spark.sql.execution.ui.StreamingQueryHistoryServerPlugin

@@ -20,11 +20,11 @@ package org.apache.spark.mllib.clustering
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.TestingUtils._
-import org.apache.spark.streaming.TestSuiteBase
+import org.apache.spark.streaming.{LocalStreamingContext, TestSuiteBase}
 import org.apache.spark.streaming.dstream.DStream
 import org.apache.spark.util.random.XORShiftRandom
 
-class StreamingKMeansSuite extends SparkFunSuite with TestSuiteBase {
+class StreamingKMeansSuite extends SparkFunSuite with LocalStreamingContext with TestSuiteBase {
 
   override def maxWaitTimeMillis: Int = 30000
 
@@ -46,7 +46,7 @@ class StreamingKMeansSuite extends SparkFunSuite with TestSuiteBase {
     val (input, centers) = StreamingKMeansDataGenerator(numPoints, numBatches, k, d, r, 42)
 
     // setup and run the model training
-    val ssc = setupStreams(input, (inputDStream: DStream[Vector]) => {
+    ssc = setupStreams(input, (inputDStream: DStream[Vector]) => {
       model.trainOn(inputDStream)
       inputDStream.count()
     })
@@ -58,7 +58,7 @@ class StreamingKMeansSuite extends SparkFunSuite with TestSuiteBase {
     // estimated center from streaming should exactly match the arithmetic mean of all data points
     // because the decay factor is set to 1.0
     val grandMean =
-      input.flatten.map(x => x.toBreeze).reduce(_ + _) / (numBatches * numPoints).toDouble
+      input.flatten.map(x => x.asBreeze).reduce(_ + _) / (numBatches * numPoints).toDouble
     assert(model.latestModel().clusterCenters(0) ~== Vectors.dense(grandMean.toArray) absTol 1E-5)
   }
 
@@ -68,6 +68,7 @@ class StreamingKMeansSuite extends SparkFunSuite with TestSuiteBase {
     val k = 2
     val d = 5
     val r = 0.1
+    val seed = 987654321
 
     // create model with two clusters
     val kMeans = new StreamingKMeans()
@@ -79,19 +80,26 @@ class StreamingKMeansSuite extends SparkFunSuite with TestSuiteBase {
         Array(5.0, 5.0))
 
     // generate random data for k-means
-    val (input, centers) = StreamingKMeansDataGenerator(numPoints, numBatches, k, d, r, 42)
+    val (input, centers) = StreamingKMeansDataGenerator(numPoints, numBatches, k, d, r, seed)
 
     // setup and run the model training
-    val ssc = setupStreams(input, (inputDStream: DStream[Vector]) => {
+    ssc = setupStreams(input, (inputDStream: DStream[Vector]) => {
       kMeans.trainOn(inputDStream)
       inputDStream.count()
     })
     runStreams(ssc, numBatches, numBatches)
 
     // check that estimated centers are close to true centers
-    // NOTE exact assignment depends on the initialization!
-    assert(centers(0) ~== kMeans.latestModel().clusterCenters(0) absTol 1E-1)
-    assert(centers(1) ~== kMeans.latestModel().clusterCenters(1) absTol 1E-1)
+    // cluster ordering is arbitrary, so choose closest cluster
+    val d0 = Vectors.sqdist(kMeans.latestModel().clusterCenters(0), centers(0))
+    val d1 = Vectors.sqdist(kMeans.latestModel().clusterCenters(0), centers(1))
+    val (c0, c1) = if (d0 < d1) {
+      (centers(0), centers(1))
+    } else {
+      (centers(1), centers(0))
+    }
+    assert(c0 ~== kMeans.latestModel().clusterCenters(0) absTol 1E-1)
+    assert(c1 ~== kMeans.latestModel().clusterCenters(1) absTol 1E-1)
   }
 
   test("detecting dying clusters") {
@@ -114,7 +122,7 @@ class StreamingKMeansSuite extends SparkFunSuite with TestSuiteBase {
       StreamingKMeansDataGenerator(numPoints, numBatches, k, d, r, 42, Array(Vectors.dense(0.0)))
 
     // setup and run the model training
-    val ssc = setupStreams(input, (inputDStream: DStream[Vector]) => {
+    ssc = setupStreams(input, (inputDStream: DStream[Vector]) => {
       kMeans.trainOn(inputDStream)
       inputDStream.count()
     })

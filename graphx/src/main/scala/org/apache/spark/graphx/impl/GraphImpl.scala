@@ -20,13 +20,10 @@ package org.apache.spark.graphx.impl
 import scala.reflect.{classTag, ClassTag}
 
 import org.apache.spark.HashPartitioner
-import org.apache.spark.SparkContext._
-import org.apache.spark.rdd.{RDD, ShuffledRDD}
-import org.apache.spark.storage.StorageLevel
 import org.apache.spark.graphx._
-import org.apache.spark.graphx.impl.GraphImpl._
 import org.apache.spark.graphx.util.BytecodeUtils
-
+import org.apache.spark.rdd.RDD
+import org.apache.spark.storage.StorageLevel
 
 /**
  * An implementation of [[org.apache.spark.graphx.Graph]] to support computation on graphs.
@@ -45,7 +42,7 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
 
   @transient override val edges: EdgeRDDImpl[ED, VD] = replicatedVertexView.edges
 
-  /** Return a RDD that brings edges together with their source and destination vertices. */
+  /** Return an RDD that brings edges together with their source and destination vertices. */
   @transient override lazy val triplets: RDD[EdgeTriplet[VD, ED]] = {
     replicatedVertexView.upgrade(vertices, true, true)
     replicatedVertexView.edges.partitionsRDD.mapPartitions(_.flatMap {
@@ -77,24 +74,24 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
   override def getCheckpointFiles: Seq[String] = {
     Seq(vertices.getCheckpointFile, replicatedVertexView.edges.getCheckpointFile).flatMap {
       case Some(path) => Seq(path)
-      case None => Seq()
+      case None => Seq.empty
     }
   }
 
-  override def unpersist(blocking: Boolean = true): Graph[VD, ED] = {
+  override def unpersist(blocking: Boolean = false): Graph[VD, ED] = {
     unpersistVertices(blocking)
     replicatedVertexView.edges.unpersist(blocking)
     this
   }
 
-  override def unpersistVertices(blocking: Boolean = true): Graph[VD, ED] = {
+  override def unpersistVertices(blocking: Boolean = false): Graph[VD, ED] = {
     vertices.unpersist(blocking)
     // TODO: unpersist the replicated vertices in `replicatedVertexView` but leave the edges alone
     this
   }
 
   override def partitionBy(partitionStrategy: PartitionStrategy): Graph[VD, ED] = {
-    partitionBy(partitionStrategy, edges.partitions.size)
+    partitionBy(partitionStrategy, edges.partitions.length)
   }
 
   override def partitionBy(
@@ -106,15 +103,16 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
       (part, (e.srcId, e.dstId, e.attr))
     }
       .partitionBy(new HashPartitioner(numPartitions))
-      .mapPartitionsWithIndex( { (pid, iter) =>
-        val builder = new EdgePartitionBuilder[ED, VD]()(edTag, vdTag)
-        iter.foreach { message =>
-          val data = message._2
-          builder.add(data._1, data._2, data._3)
-        }
-        val edgePartition = builder.toEdgePartition
-        Iterator((pid, edgePartition))
-      }, preservesPartitioning = true)).cache()
+      .mapPartitionsWithIndex(
+        { (pid: Int, iter: Iterator[(PartitionID, (VertexId, VertexId, ED))]) =>
+          val builder = new EdgePartitionBuilder[ED, VD]()(edTag, vdTag)
+          iter.foreach { message =>
+            val data = message._2
+            builder.add(data._1, data._2, data._3)
+          }
+          val edgePartition = builder.toEdgePartition
+          Iterator((pid, edgePartition))
+        }, preservesPartitioning = true)).cache()
     GraphImpl.fromExistingRDDs(vertices.withEdges(newEdges), newEdges)
   }
 
@@ -187,31 +185,6 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
   // ///////////////////////////////////////////////////////////////////////////////////////////////
   // Lower level transformation methods
   // ///////////////////////////////////////////////////////////////////////////////////////////////
-
-  override def mapReduceTriplets[A: ClassTag](
-      mapFunc: EdgeTriplet[VD, ED] => Iterator[(VertexId, A)],
-      reduceFunc: (A, A) => A,
-      activeSetOpt: Option[(VertexRDD[_], EdgeDirection)]): VertexRDD[A] = {
-
-    def sendMsg(ctx: EdgeContext[VD, ED, A]) {
-      mapFunc(ctx.toEdgeTriplet).foreach { kv =>
-        val id = kv._1
-        val msg = kv._2
-        if (id == ctx.srcId) {
-          ctx.sendToSrc(msg)
-        } else {
-          assert(id == ctx.dstId)
-          ctx.sendToDst(msg)
-        }
-      }
-    }
-
-    val mapUsesSrcAttr = accessesVertexAttr(mapFunc, "srcAttr")
-    val mapUsesDstAttr = accessesVertexAttr(mapFunc, "dstAttr")
-    val tripletFields = new TripletFields(mapUsesSrcAttr, mapUsesDstAttr, true)
-
-    aggregateMessagesWithActiveSet(sendMsg, reduceFunc, tripletFields, activeSetOpt)
-  }
 
   override def aggregateMessagesWithActiveSet[A: ClassTag](
       sendMsg: EdgeContext[VD, ED, A] => Unit,
@@ -292,7 +265,7 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
     }
   }
 
-  /** Test whether the closure accesses the the attribute with name `attrName`. */
+  /** Test whether the closure accesses the attribute with name `attrName`. */
   private def accessesVertexAttr(closure: AnyRef, attrName: String): Boolean = {
     try {
       BytecodeUtils.invokedMethod(closure, classOf[EdgeTriplet[VD, ED]], attrName)
@@ -305,7 +278,9 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
 
 object GraphImpl {
 
-  /** Create a graph from edges, setting referenced vertices to `defaultVertexAttr`. */
+  /**
+   * Create a graph from edges, setting referenced vertices to `defaultVertexAttr`.
+   */
   def apply[VD: ClassTag, ED: ClassTag](
       edges: RDD[Edge[ED]],
       defaultVertexAttr: VD,
@@ -314,7 +289,9 @@ object GraphImpl {
     fromEdgeRDD(EdgeRDD.fromEdges(edges), defaultVertexAttr, edgeStorageLevel, vertexStorageLevel)
   }
 
-  /** Create a graph from EdgePartitions, setting referenced vertices to `defaultVertexAttr`. */
+  /**
+   * Create a graph from EdgePartitions, setting referenced vertices to `defaultVertexAttr`.
+   */
   def fromEdgePartitions[VD: ClassTag, ED: ClassTag](
       edgePartitions: RDD[(PartitionID, EdgePartition[ED, VD])],
       defaultVertexAttr: VD,
@@ -324,7 +301,9 @@ object GraphImpl {
       vertexStorageLevel)
   }
 
-  /** Create a graph from vertices and edges, setting missing vertices to `defaultVertexAttr`. */
+  /**
+   * Create a graph from vertices and edges, setting missing vertices to `defaultVertexAttr`.
+   */
   def apply[VD: ClassTag, ED: ClassTag](
       vertices: RDD[(VertexId, VD)],
       edges: RDD[Edge[ED]],
@@ -332,9 +311,9 @@ object GraphImpl {
       edgeStorageLevel: StorageLevel,
       vertexStorageLevel: StorageLevel): GraphImpl[VD, ED] = {
     val edgeRDD = EdgeRDD.fromEdges(edges)(classTag[ED], classTag[VD])
-      .withTargetStorageLevel(edgeStorageLevel).cache()
+      .withTargetStorageLevel(edgeStorageLevel)
     val vertexRDD = VertexRDD(vertices, edgeRDD, defaultVertexAttr)
-      .withTargetStorageLevel(vertexStorageLevel).cache()
+      .withTargetStorageLevel(vertexStorageLevel)
     GraphImpl(vertexRDD, edgeRDD)
   }
 
@@ -346,9 +325,14 @@ object GraphImpl {
   def apply[VD: ClassTag, ED: ClassTag](
       vertices: VertexRDD[VD],
       edges: EdgeRDD[ED]): GraphImpl[VD, ED] = {
+
+    vertices.cache()
+
     // Convert the vertex partitions in edges to the correct type
     val newEdges = edges.asInstanceOf[EdgeRDDImpl[ED, _]]
       .mapEdgePartitions((pid, part) => part.withoutVertexAttributes[VD])
+      .cache()
+
     GraphImpl.fromExistingRDDs(vertices, newEdges)
   }
 
@@ -373,7 +357,8 @@ object GraphImpl {
       edgeStorageLevel: StorageLevel,
       vertexStorageLevel: StorageLevel): GraphImpl[VD, ED] = {
     val edgesCached = edges.withTargetStorageLevel(edgeStorageLevel).cache()
-    val vertices = VertexRDD.fromEdges(edgesCached, edgesCached.partitions.size, defaultVertexAttr)
+    val vertices =
+      VertexRDD.fromEdges(edgesCached, edgesCached.partitions.length, defaultVertexAttr)
       .withTargetStorageLevel(vertexStorageLevel)
     fromExistingRDDs(vertices, edgesCached)
   }

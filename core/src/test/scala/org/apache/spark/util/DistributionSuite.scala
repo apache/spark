@@ -17,13 +17,10 @@
 
 package org.apache.spark.util
 
-import org.scalatest.Matchers
+import org.scalatest.matchers.must.Matchers
+import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark.SparkFunSuite
-
-/**
- *
- */
 
 class DistributionSuite extends SparkFunSuite with Matchers {
   test("summary") {

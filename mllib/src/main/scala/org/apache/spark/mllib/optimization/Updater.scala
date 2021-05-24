@@ -19,13 +19,11 @@ package org.apache.spark.mllib.optimization
 
 import scala.math._
 
-import breeze.linalg.{norm => brzNorm, axpy => brzAxpy, Vector => BV}
+import breeze.linalg.{axpy => brzAxpy, norm => brzNorm, Vector => BV}
 
-import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.mllib.linalg.{Vectors, Vector}
+import org.apache.spark.mllib.linalg.{Vector, Vectors}
 
 /**
- * :: DeveloperApi ::
  * Class used to perform steps (weight update) using Gradient Descent methods.
  *
  * For general minimization problems, or for regularized problems of the form
@@ -37,7 +35,6 @@ import org.apache.spark.mllib.linalg.{Vectors, Vector}
  * The updater is responsible to also perform the update coming from the
  * regularization term R(w) (if any regularization is used).
  */
-@DeveloperApi
 abstract class Updater extends Serializable {
   /**
    * Compute an updated value for weights given the gradient, stepSize, iteration number and
@@ -62,11 +59,9 @@ abstract class Updater extends Serializable {
 }
 
 /**
- * :: DeveloperApi ::
  * A simple updater for gradient descent *without* any regularization.
  * Uses a step-size decreasing with the square root of the number of iterations.
  */
-@DeveloperApi
 class SimpleUpdater extends Updater {
   override def compute(
       weightsOld: Vector,
@@ -75,19 +70,18 @@ class SimpleUpdater extends Updater {
       iter: Int,
       regParam: Double): (Vector, Double) = {
     val thisIterStepSize = stepSize / math.sqrt(iter)
-    val brzWeights: BV[Double] = weightsOld.toBreeze.toDenseVector
-    brzAxpy(-thisIterStepSize, gradient.toBreeze, brzWeights)
+    val brzWeights: BV[Double] = weightsOld.asBreeze.toDenseVector
+    brzAxpy(-thisIterStepSize, gradient.asBreeze, brzWeights)
 
     (Vectors.fromBreeze(brzWeights), 0)
   }
 }
 
 /**
- * :: DeveloperApi ::
  * Updater for L1 regularized problems.
  *          R(w) = ||w||_1
  * Uses a step-size decreasing with the square root of the number of iterations.
-
+ *
  * Instead of subgradient of the regularizer, the proximal operator for the
  * L1 regularization is applied after the gradient step. This is known to
  * result in better sparsity of the intermediate solution.
@@ -95,13 +89,12 @@ class SimpleUpdater extends Updater {
  * The corresponding proximal operator for the L1 norm is the soft-thresholding
  * function. That is, each weight component is shrunk towards 0 by shrinkageVal.
  *
- * If w >  shrinkageVal, set weight component to w-shrinkageVal.
- * If w < -shrinkageVal, set weight component to w+shrinkageVal.
- * If -shrinkageVal < w < shrinkageVal, set weight component to 0.
+ * If w is greater than shrinkageVal, set weight component to w-shrinkageVal.
+ * If w is less than -shrinkageVal, set weight component to w+shrinkageVal.
+ * If w is (-shrinkageVal, shrinkageVal), set weight component to 0.
  *
  * Equivalently, set weight component to signum(w) * max(0.0, abs(w) - shrinkageVal)
  */
-@DeveloperApi
 class L1Updater extends Updater {
   override def compute(
       weightsOld: Vector,
@@ -111,8 +104,8 @@ class L1Updater extends Updater {
       regParam: Double): (Vector, Double) = {
     val thisIterStepSize = stepSize / math.sqrt(iter)
     // Take gradient step
-    val brzWeights: BV[Double] = weightsOld.toBreeze.toDenseVector
-    brzAxpy(-thisIterStepSize, gradient.toBreeze, brzWeights)
+    val brzWeights: BV[Double] = weightsOld.asBreeze.toDenseVector
+    brzAxpy(-thisIterStepSize, gradient.asBreeze, brzWeights)
     // Apply proximal operator (soft thresholding)
     val shrinkageVal = regParam * thisIterStepSize
     var i = 0
@@ -128,12 +121,10 @@ class L1Updater extends Updater {
 }
 
 /**
- * :: DeveloperApi ::
  * Updater for L2 regularized problems.
  *          R(w) = 1/2 ||w||^2
  * Uses a step-size decreasing with the square root of the number of iterations.
  */
-@DeveloperApi
 class SquaredL2Updater extends Updater {
   override def compute(
       weightsOld: Vector,
@@ -146,9 +137,9 @@ class SquaredL2Updater extends Updater {
     // w' = w - thisIterStepSize * (gradient + regParam * w)
     // w' = (1 - thisIterStepSize * regParam) * w - thisIterStepSize * gradient
     val thisIterStepSize = stepSize / math.sqrt(iter)
-    val brzWeights: BV[Double] = weightsOld.toBreeze.toDenseVector
+    val brzWeights: BV[Double] = weightsOld.asBreeze.toDenseVector
     brzWeights :*= (1.0 - thisIterStepSize * regParam)
-    brzAxpy(-thisIterStepSize, gradient.toBreeze, brzWeights)
+    brzAxpy(-thisIterStepSize, gradient.asBreeze, brzWeights)
     val norm = brzNorm(brzWeights, 2.0)
 
     (Vectors.fromBreeze(brzWeights), 0.5 * regParam * norm * norm)

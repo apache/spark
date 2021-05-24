@@ -17,6 +17,7 @@
 
 package org.apache.spark.launcher;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -32,7 +33,7 @@ class Main {
 
   /**
    * Usage: Main [class] [class args]
-   * <p/>
+   * <p>
    * This CLI works in two different modes:
    * <ul>
    *   <li>"spark-submit": if <i>class</i> is "org.apache.spark.deploy.SparkSubmit", the
@@ -42,7 +43,7 @@ class Main {
    *
    * This class works in tandem with the "bin/spark-class" script on Unix-like systems, and
    * "bin/spark-class2.cmd" batch script on Windows to execute the final command.
-   * <p/>
+   * <p>
    * On Unix-like systems, the output is a list of command arguments, separated by the NULL
    * character. On Windows, the output is a command line suitable for direct execution from the
    * script.
@@ -50,14 +51,16 @@ class Main {
   public static void main(String[] argsArray) throws Exception {
     checkArgument(argsArray.length > 0, "Not enough arguments: missing class name.");
 
-    List<String> args = new ArrayList<String>(Arrays.asList(argsArray));
+    List<String> args = new ArrayList<>(Arrays.asList(argsArray));
     String className = args.remove(0);
 
     boolean printLaunchCommand = !isEmpty(System.getenv("SPARK_PRINT_LAUNCH_COMMAND"));
-    AbstractCommandBuilder builder;
+    Map<String, String> env = new HashMap<>();
+    List<String> cmd;
     if (className.equals("org.apache.spark.deploy.SparkSubmit")) {
       try {
-        builder = new SparkSubmitCommandBuilder(args);
+        AbstractCommandBuilder builder = new SparkSubmitCommandBuilder(args);
+        cmd = buildCommand(builder, env, printLaunchCommand);
       } catch (IllegalArgumentException e) {
         printLaunchCommand = false;
         System.err.println("Error: " + e.getMessage());
@@ -70,28 +73,26 @@ class Main {
           // Ignore parsing exceptions.
         }
 
-        List<String> help = new ArrayList<String>();
+        List<String> help = new ArrayList<>();
         if (parser.className != null) {
           help.add(parser.CLASS);
           help.add(parser.className);
         }
         help.add(parser.USAGE_ERROR);
-        builder = new SparkSubmitCommandBuilder(help);
+        AbstractCommandBuilder builder = new SparkSubmitCommandBuilder(help);
+        cmd = buildCommand(builder, env, printLaunchCommand);
       }
     } else {
-      builder = new SparkClassCommandBuilder(className, args);
-    }
-
-    Map<String, String> env = new HashMap<String, String>();
-    List<String> cmd = builder.buildCommand(env);
-    if (printLaunchCommand) {
-      System.err.println("Spark Command: " + join(" ", cmd));
-      System.err.println("========================================");
+      AbstractCommandBuilder builder = new SparkClassCommandBuilder(className, args);
+      cmd = buildCommand(builder, env, printLaunchCommand);
     }
 
     if (isWindows()) {
       System.out.println(prepareWindowsCommand(cmd, env));
     } else {
+      // A sequence of NULL character and newline separates command-strings and others.
+      System.out.println('\0');
+
       // In bash, use NULL as the arg separator since it cannot be used in an argument.
       List<String> bashCmd = prepareBashCommand(cmd, env);
       for (String c : bashCmd) {
@@ -99,6 +100,22 @@ class Main {
         System.out.print('\0');
       }
     }
+  }
+
+  /**
+   * Prepare spark commands with the appropriate command builder.
+   * If printLaunchCommand is set then the commands will be printed to the stderr.
+   */
+  private static List<String> buildCommand(
+      AbstractCommandBuilder builder,
+      Map<String, String> env,
+      boolean printLaunchCommand) throws IOException, IllegalArgumentException {
+    List<String> cmd = builder.buildCommand(env);
+    if (printLaunchCommand) {
+      System.err.println("Spark Command: " + join(" ", cmd));
+      System.err.println("========================================");
+    }
+    return cmd;
   }
 
   /**
@@ -130,7 +147,7 @@ class Main {
       return cmd;
     }
 
-    List<String> newCmd = new ArrayList<String>();
+    List<String> newCmd = new ArrayList<>();
     newCmd.add("env");
 
     for (Map.Entry<String, String> e : childEnv.entrySet()) {
@@ -151,7 +168,7 @@ class Main {
 
     @Override
     protected boolean handle(String opt, String value) {
-      if (opt == CLASS) {
+      if (CLASS.equals(opt)) {
         className = value;
       }
       return false;

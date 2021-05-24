@@ -21,12 +21,15 @@ import scala.collection.mutable.Queue
 
 import org.openqa.selenium.WebDriver
 import org.openqa.selenium.htmlunit.HtmlUnitDriver
-import org.scalatest._
+import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.Eventually._
-import org.scalatest.selenium.WebBrowser
+import org.scalatest.matchers.must.Matchers
+import org.scalatest.matchers.should.Matchers._
 import org.scalatest.time.SpanSugar._
+import org.scalatestplus.selenium.WebBrowser
 
 import org.apache.spark._
+import org.apache.spark.internal.config.UI.UI_ENABLED
 import org.apache.spark.ui.SparkUICssErrorHandler
 
 /**
@@ -38,14 +41,19 @@ class UISeleniumSuite
   implicit var webDriver: WebDriver = _
 
   override def beforeAll(): Unit = {
+    super.beforeAll()
     webDriver = new HtmlUnitDriver {
       getWebClient.setCssErrorHandler(new SparkUICssErrorHandler)
     }
   }
 
   override def afterAll(): Unit = {
-    if (webDriver != null) {
-      webDriver.quit()
+    try {
+      if (webDriver != null) {
+        webDriver.quit()
+      }
+    } finally {
+      super.afterAll()
     }
   }
 
@@ -56,8 +64,8 @@ class UISeleniumSuite
     val conf = new SparkConf()
       .setMaster("local")
       .setAppName("test")
-      .set("spark.ui.enabled", "true")
-    val ssc = new StreamingContext(conf, Seconds(1))
+      .set(UI_ENABLED, true)
+    val ssc = new StreamingContext(conf, Milliseconds(100))
     assert(ssc.sc.ui.isDefined, "Spark UI is not started!")
     ssc
   }
@@ -72,7 +80,12 @@ class UISeleniumSuite
     inputStream.foreachRDD { rdd =>
       rdd.foreach(_ => {})
       try {
-        rdd.foreach(_ => throw new RuntimeException("Oops"))
+        rdd.foreach { _ =>
+          // Failing the task with id 15 to ensure only one task fails
+          if (TaskContext.get.taskAttemptId() % 15 == 0) {
+            throw new RuntimeException("Oops")
+          }
+        }
       } catch {
         case e: SparkException if e.getMessage.contains("Oops") =>
       }
@@ -86,22 +99,24 @@ class UISeleniumSuite
 
       val sparkUI = ssc.sparkContext.ui.get
 
-      eventually(timeout(10 seconds), interval(50 milliseconds)) {
-        go to (sparkUI.appUIAddress.stripSuffix("/"))
+      sparkUI.getDelegatingHandlers.count(_.getContextPath.contains("/streaming")) should be (5)
+
+      eventually(timeout(10.seconds), interval(50.milliseconds)) {
+        go to (sparkUI.webUrl.stripSuffix("/"))
         find(cssSelector( """ul li a[href*="streaming"]""")) should not be (None)
       }
 
-      eventually(timeout(10 seconds), interval(50 milliseconds)) {
+      eventually(timeout(10.seconds), interval(500.milliseconds)) {
         // check whether streaming page exists
-        go to (sparkUI.appUIAddress.stripSuffix("/") + "/streaming")
+        go to (sparkUI.webUrl.stripSuffix("/") + "/streaming")
         val h3Text = findAll(cssSelector("h3")).map(_.text).toSeq
         h3Text should contain("Streaming Statistics")
 
         // Check stat table
         val statTableHeaders = findAll(cssSelector("#stat-table th")).map(_.text).toSeq
         statTableHeaders.exists(
-          _.matches("Timelines \\(Last \\d+ batches, \\d+ active, \\d+ completed\\)")) should be
-          (true)
+          _.matches("Timelines \\(Last \\d+ batches, \\d+ active, \\d+ completed\\)")
+        ) should be (true)
         statTableHeaders should contain ("Histograms")
 
         val statTableCells = findAll(cssSelector("#stat-table td")).map(_.text).toSeq
@@ -112,24 +127,37 @@ class UISeleniumSuite
 
         // Check batch tables
         val h4Text = findAll(cssSelector("h4")).map(_.text).toSeq
-        h4Text.exists(_.matches("Active Batches \\(\\d+\\)")) should be (true)
         h4Text.exists(_.matches("Completed Batches \\(last \\d+ out of \\d+\\)")) should be (true)
 
-        findAll(cssSelector("""#active-batches-table th""")).map(_.text).toSeq should be {
-          List("Batch Time", "Input Size", "Scheduling Delay (?)", "Processing Time (?)",
-            "Status")
-        }
-        findAll(cssSelector("""#completed-batches-table th""")).map(_.text).toSeq should be {
-          List("Batch Time", "Input Size", "Scheduling Delay (?)", "Processing Time (?)",
-            "Total Delay (?)")
+        val arrow = 0x25BE.toChar
+        findAll(cssSelector("""#completedBatches-table th""")).map(_.text).toList should be {
+          List(s"Batch Time $arrow", "Records", "Scheduling Delay", "Processing Time",
+            "Total Delay", "Output Ops: Succeeded/Total")
         }
 
-        val batchLinks =
-          findAll(cssSelector("""#completed-batches-table a""")).flatMap(_.attribute("href")).toSeq
+        val pageSize = 1
+        val pagedTablePath = "/streaming/?completedBatches.sort=Batch+Time" +
+          "&completedBatches.desc=true&completedBatches.page=1" +
+          s"&completedBatches.pageSize=$pageSize#completedBatches"
+
+        go to (sparkUI.webUrl.stripSuffix("/") + pagedTablePath)
+        val completedTableRows = findAll(cssSelector("""#completedBatches-table tr"""))
+          .map(_.text).toList
+        // header row + pagesize
+        completedTableRows.length should be (1 + pageSize)
+
+        val sortedBatchTimePath = "/streaming/?&completedBatches.sort=Batch+Time" +
+          s"&completedBatches.desc=false&completedBatches.pageSize=$pageSize#completedBatches"
+
+        // sort batches in ascending order of batch time
+        go to (sparkUI.webUrl.stripSuffix("/") + sortedBatchTimePath)
+
+        val batchLinks = findAll(cssSelector("""#completedBatches-table td a"""))
+          .flatMap(_.attribute("href")).toSeq
         batchLinks.size should be >= 1
 
         // Check a normal batch page
-        go to (batchLinks.last) // Last should be the first batch, so it will have some jobs
+        go to (batchLinks.head) // Head is the first batch, so it will have some jobs
         val summaryText = findAll(cssSelector("li strong")).map(_.text).toSeq
         summaryText should contain ("Batch Duration:")
         summaryText should contain ("Input data size:")
@@ -138,8 +166,10 @@ class UISeleniumSuite
         summaryText should contain ("Total delay:")
 
         findAll(cssSelector("""#batch-job-table th""")).map(_.text).toSeq should be {
-          List("Output Op Id", "Description", "Duration", "Job Id", "Duration",
-            "Stages: Succeeded/Total", "Tasks (for all stages): Succeeded/Total", "Error")
+          List("Output Op Id", "Description", "Output Op Duration (?)", "Status", "Job Id",
+            "Job Duration (?)", "Stages: Succeeded/Total",
+            "Tasks (for all stages): Succeeded/Total",
+            "Error")
         }
 
         // Check we have 2 output op ids
@@ -149,23 +179,23 @@ class UISeleniumSuite
 
         // Check job ids
         val jobIdCells = findAll(cssSelector( """#batch-job-table a""")).toSeq
-        jobIdCells.map(_.text) should be (List("0", "1", "2", "3"))
+        jobIdCells.map(_.text).filter(_.forall(_.isDigit)) should be (List("0", "1", "2", "3"))
 
         val jobLinks = jobIdCells.flatMap(_.attribute("href"))
         jobLinks.size should be (4)
 
         // Check stage progress
-        findAll(cssSelector(""".stage-progress-cell""")).map(_.text).toSeq should be
-          (List("1/1", "1/1", "1/1", "0/1 (1 failed)"))
+        findAll(cssSelector(""".stage-progress-cell""")).map(_.text).toList should be (
+          List("1/1", "1/1", "1/1", "0/1 (1 failed)"))
 
         // Check job progress
-        findAll(cssSelector(""".progress-cell""")).map(_.text).toSeq should be
-          (List("1/1", "1/1", "1/1", "0/1 (1 failed)"))
+        findAll(cssSelector(""".progress-cell""")).map(_.text).toList should be (
+          List("4/4", "4/4", "4/4", "3/4 (1 failed)"))
 
         // Check stacktrace
-        val errorCells = findAll(cssSelector(""".stacktrace-details""")).map(_.text).toSeq
+        val errorCells = findAll(cssSelector(""".stacktrace-details""")).map(_.underlying).toSeq
         errorCells should have size 1
-        errorCells(0) should include("java.lang.RuntimeException: Oops")
+        // Can't get the inner (invisible) text without running JS
 
         // Check the job link in the batch page is right
         go to (jobLinks(0))
@@ -174,23 +204,25 @@ class UISeleniumSuite
         jobDetails should contain("Completed Stages:")
 
         // Check a batch page without id
-        go to (sparkUI.appUIAddress.stripSuffix("/") + "/streaming/batch/")
+        go to (sparkUI.webUrl.stripSuffix("/") + "/streaming/batch/")
         webDriver.getPageSource should include ("Missing id parameter")
 
         // Check a non-exist batch
-        go to (sparkUI.appUIAddress.stripSuffix("/") + "/streaming/batch/?id=12345")
+        go to (sparkUI.webUrl.stripSuffix("/") + "/streaming/batch/?id=12345")
         webDriver.getPageSource should include ("does not exist")
       }
 
       ssc.stop(false)
 
-      eventually(timeout(10 seconds), interval(50 milliseconds)) {
-        go to (sparkUI.appUIAddress.stripSuffix("/"))
+      sparkUI.getDelegatingHandlers.count(_.getContextPath.contains("/streaming")) should be (0)
+
+      eventually(timeout(10.seconds), interval(50.milliseconds)) {
+        go to (sparkUI.webUrl.stripSuffix("/"))
         find(cssSelector( """ul li a[href*="streaming"]""")) should be(None)
       }
 
-      eventually(timeout(10 seconds), interval(50 milliseconds)) {
-        go to (sparkUI.appUIAddress.stripSuffix("/") + "/streaming")
+      eventually(timeout(10.seconds), interval(50.milliseconds)) {
+        go to (sparkUI.webUrl.stripSuffix("/") + "/streaming")
         val h3Text = findAll(cssSelector("h3")).map(_.text).toSeq
         h3Text should not contain("Streaming Statistics")
       }

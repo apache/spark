@@ -20,11 +20,9 @@ package org.apache.spark.graphx.impl
 import scala.reflect.ClassTag
 
 import org.apache.spark._
-import org.apache.spark.SparkContext._
+import org.apache.spark.graphx._
 import org.apache.spark.rdd._
 import org.apache.spark.storage.StorageLevel
-
-import org.apache.spark.graphx._
 
 class VertexRDDImpl[VD] private[graphx] (
     @transient val partitionsRDD: RDD[ShippableVertexPartition[VD]],
@@ -60,12 +58,14 @@ class VertexRDDImpl[VD] private[graphx] (
     this
   }
 
-  override def unpersist(blocking: Boolean = true): this.type = {
+  override def unpersist(blocking: Boolean = false): this.type = {
     partitionsRDD.unpersist(blocking)
     this
   }
 
-  /** Persists the vertex partitions at `targetStorageLevel`, which defaults to MEMORY_ONLY. */
+  /**
+   * Persists the vertex partitions at `targetStorageLevel`, which defaults to MEMORY_ONLY.
+   */
   override def cache(): this.type = {
     partitionsRDD.persist(targetStorageLevel)
     this
@@ -87,7 +87,7 @@ class VertexRDDImpl[VD] private[graphx] (
 
   /** The number of vertices in the RDD. */
   override def count(): Long = {
-    partitionsRDD.map(_.size).reduce(_ + _)
+    partitionsRDD.map(_.size.toLong).fold(0)(_ + _)
   }
 
   override private[graphx] def mapVertexPartitions[VD2: ClassTag](

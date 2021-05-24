@@ -17,19 +17,22 @@
 
 package org.apache.spark.rdd
 
+import java.io.BufferedWriter
 import java.io.File
 import java.io.FilenameFilter
 import java.io.IOException
+import java.io.OutputStreamWriter
 import java.io.PrintWriter
 import java.util.StringTokenizer
+import java.util.concurrent.atomic.AtomicReference
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.collection.Map
 import scala.collection.mutable.ArrayBuffer
 import scala.io.Source
 import scala.reflect.ClassTag
 
-import org.apache.spark.{Partition, SparkEnv, TaskContext}
+import org.apache.spark.{Partition, TaskContext}
 import org.apache.spark.util.Utils
 
 
@@ -43,21 +46,10 @@ private[spark] class PipedRDD[T: ClassTag](
     envVars: Map[String, String],
     printPipeContext: (String => Unit) => Unit,
     printRDDElement: (T, String => Unit) => Unit,
-    separateWorkingDir: Boolean)
+    separateWorkingDir: Boolean,
+    bufferSize: Int,
+    encoding: String)
   extends RDD[String](prev) {
-
-  // Similar to Runtime.exec(), if we are given a single string, split it into words
-  // using a standard StringTokenizer (i.e. by spaces)
-  def this(
-      prev: RDD[T],
-      command: String,
-      envVars: Map[String, String] = Map(),
-      printPipeContext: (String => Unit) => Unit = null,
-      printRDDElement: (T, String => Unit) => Unit = null,
-      separateWorkingDir: Boolean = false) =
-    this(prev, PipedRDD.tokenize(command), envVars, printPipeContext, printRDDElement,
-      separateWorkingDir)
-
 
   override def getPartitions: Array[Partition] = firstParent[T].partitions
 
@@ -72,7 +64,7 @@ private[spark] class PipedRDD[T: ClassTag](
   }
 
   override def compute(split: Partition, context: TaskContext): Iterator[String] = {
-    val pb = new ProcessBuilder(command)
+    val pb = new ProcessBuilder(command.asJava)
     // Add the environmental variables to the process.
     val currentEnvVars = pb.environment()
     envVars.foreach { case (variable, value) => currentEnvVars.put(variable, value) }
@@ -81,7 +73,7 @@ private[spark] class PipedRDD[T: ClassTag](
     // so the user code can access the input filename
     if (split.isInstanceOf[HadoopPartition]) {
       val hadoopSplit = split.asInstanceOf[HadoopPartition]
-      currentEnvVars.putAll(hadoopSplit.getPipeEnvVars())
+      currentEnvVars.putAll(hadoopSplit.getPipeEnvVars().asJava)
     }
 
     // When spark.worker.separated.working.directory option is turned on, each
@@ -117,59 +109,121 @@ private[spark] class PipedRDD[T: ClassTag](
     }
 
     val proc = pb.start()
-    val env = SparkEnv.get
+    val childThreadException = new AtomicReference[Throwable](null)
 
     // Start a thread to print the process's stderr to ours
-    new Thread("stderr reader for " + command) {
-      override def run() {
-        for (line <- Source.fromInputStream(proc.getErrorStream).getLines) {
-          System.err.println(line)
+    val stderrReaderThread = new Thread(s"${PipedRDD.STDERR_READER_THREAD_PREFIX} $command") {
+      override def run(): Unit = {
+        val err = proc.getErrorStream
+        try {
+          for (line <- Source.fromInputStream(err)(encoding).getLines) {
+            // scalastyle:off println
+            System.err.println(line)
+            // scalastyle:on println
+          }
+        } catch {
+          case t: Throwable => childThreadException.set(t)
+        } finally {
+          err.close()
         }
       }
-    }.start()
+    }
+    stderrReaderThread.start()
 
     // Start a thread to feed the process input from our parent's iterator
-    new Thread("stdin writer for " + command) {
-      override def run() {
-        val out = new PrintWriter(proc.getOutputStream)
-
-        // input the pipe context firstly
-        if (printPipeContext != null) {
-          printPipeContext(out.println(_))
-        }
-        for (elem <- firstParent[T].iterator(split, context)) {
-          if (printRDDElement != null) {
-            printRDDElement(elem, out.println(_))
-          } else {
-            out.println(elem)
+    val stdinWriterThread = new Thread(s"${PipedRDD.STDIN_WRITER_THREAD_PREFIX} $command") {
+      override def run(): Unit = {
+        TaskContext.setTaskContext(context)
+        val out = new PrintWriter(new BufferedWriter(
+          new OutputStreamWriter(proc.getOutputStream, encoding), bufferSize))
+        try {
+          // scalastyle:off println
+          // input the pipe context firstly
+          if (printPipeContext != null) {
+            printPipeContext(out.println)
           }
+          for (elem <- firstParent[T].iterator(split, context)) {
+            if (printRDDElement != null) {
+              printRDDElement(elem, out.println)
+            } else {
+              out.println(elem)
+            }
+          }
+          // scalastyle:on println
+        } catch {
+          case t: Throwable => childThreadException.set(t)
+        } finally {
+          out.close()
         }
-        out.close()
       }
-    }.start()
+    }
+    stdinWriterThread.start()
+
+    // interrupts stdin writer and stderr reader threads when the corresponding task is finished.
+    // Otherwise, these threads could outlive the task's lifetime. For example:
+    //   val pipeRDD = sc.range(1, 100).pipe(Seq("cat"))
+    //   val abnormalRDD = pipeRDD.mapPartitions(_ => Iterator.empty)
+    // the iterator generated by PipedRDD is never involved. If the parent RDD's iterator takes a
+    // long time to generate(ShuffledRDD's shuffle operation for example), the stdin writer thread
+    // may consume significant memory and CPU time even if task is already finished.
+    context.addTaskCompletionListener[Unit] { _ =>
+      if (proc.isAlive) {
+        proc.destroy()
+      }
+
+      if (stdinWriterThread.isAlive) {
+        stdinWriterThread.interrupt()
+      }
+      if (stderrReaderThread.isAlive) {
+        stderrReaderThread.interrupt()
+      }
+    }
 
     // Return an iterator that read lines from the process's stdout
-    val lines = Source.fromInputStream(proc.getInputStream).getLines()
+    val lines = Source.fromInputStream(proc.getInputStream)(encoding).getLines
     new Iterator[String] {
-      def next(): String = lines.next()
-      def hasNext: Boolean = {
-        if (lines.hasNext) {
+      def next(): String = {
+        if (!hasNext()) {
+          throw new NoSuchElementException()
+        }
+        lines.next()
+      }
+
+      def hasNext(): Boolean = {
+        val result = if (lines.hasNext) {
           true
         } else {
           val exitStatus = proc.waitFor()
+          cleanup()
           if (exitStatus != 0) {
-            throw new Exception("Subprocess exited with status " + exitStatus)
+            throw new IllegalStateException(s"Subprocess exited with status $exitStatus. " +
+              s"Command ran: " + command.mkString(" "))
           }
-
-          // cleanup task working directory if used
-          if (workInTaskDirectory) {
-            scala.util.control.Exception.ignoring(classOf[IOException]) {
-              Utils.deleteRecursively(new File(taskDirectory))
-            }
-            logDebug("Removed task working directory " + taskDirectory)
-          }
-
           false
+        }
+        propagateChildException()
+        result
+      }
+
+      private def cleanup(): Unit = {
+        // cleanup task working directory if used
+        if (workInTaskDirectory) {
+          scala.util.control.Exception.ignoring(classOf[IOException]) {
+            Utils.deleteRecursively(new File(taskDirectory))
+          }
+          logDebug(s"Removed task working directory $taskDirectory")
+        }
+      }
+
+      private def propagateChildException(): Unit = {
+        val t = childThreadException.get()
+        if (t != null) {
+          val commandRan = command.mkString(" ")
+          logError(s"Caught exception while running pipe() operator. Command ran: $commandRan. " +
+            s"Exception: ${t.getMessage}")
+          proc.destroy()
+          cleanup()
+          throw t
         }
       }
     }
@@ -184,6 +238,9 @@ private object PipedRDD {
     while(tok.hasMoreElements) {
       buf += tok.nextToken()
     }
-    buf
+    buf.toSeq
   }
+
+  val STDIN_WRITER_THREAD_PREFIX = "stdin writer for"
+  val STDERR_READER_THREAD_PREFIX = "stderr reader for"
 }

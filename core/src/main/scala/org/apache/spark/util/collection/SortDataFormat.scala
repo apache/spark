@@ -87,7 +87,7 @@ class KVArraySortDataFormat[K, T <: AnyRef : ClassTag] extends SortDataFormat[K,
 
   override def getKey(data: Array[T], pos: Int): K = data(2 * pos).asInstanceOf[K]
 
-  override def swap(data: Array[T], pos0: Int, pos1: Int) {
+  override def swap(data: Array[T], pos0: Int, pos1: Int): Unit = {
     val tmpKey = data(2 * pos0)
     val tmpVal = data(2 * pos0 + 1)
     data(2 * pos0) = data(2 * pos1)
@@ -96,12 +96,13 @@ class KVArraySortDataFormat[K, T <: AnyRef : ClassTag] extends SortDataFormat[K,
     data(2 * pos1 + 1) = tmpVal
   }
 
-  override def copyElement(src: Array[T], srcPos: Int, dst: Array[T], dstPos: Int) {
+  override def copyElement(src: Array[T], srcPos: Int, dst: Array[T], dstPos: Int): Unit = {
     dst(2 * dstPos) = src(2 * srcPos)
     dst(2 * dstPos + 1) = src(2 * srcPos + 1)
   }
 
-  override def copyRange(src: Array[T], srcPos: Int, dst: Array[T], dstPos: Int, length: Int) {
+  override def copyRange(src: Array[T], srcPos: Int,
+      dst: Array[T], dstPos: Int, length: Int): Unit = {
     System.arraycopy(src, 2 * srcPos, dst, 2 * dstPos, 2 * length)
   }
 

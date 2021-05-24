@@ -15,11 +15,12 @@
 # limitations under the License.
 #
 
-from pyspark.rdd import ignore_unicode_prefix
-from pyspark.sql import since
+import sys
+
 from pyspark.sql.column import Column, _to_seq
 from pyspark.sql.dataframe import DataFrame
-from pyspark.sql.types import *
+from pyspark.sql.pandas.group_ops import PandasGroupedOpsMixin
+from pyspark.sql.types import StructType, StructField, IntegerType, StringType
 
 __all__ = ["GroupedData"]
 
@@ -27,7 +28,7 @@ __all__ = ["GroupedData"]
 def dfapi(f):
     def _api(self):
         name = f.__name__
-        jdf = getattr(self._jdf, name)()
+        jdf = getattr(self._jgd, name)()
         return DataFrame(jdf, self.sql_ctx)
     _api.__name__ = f.__name__
     _api.__doc__ = f.__doc__
@@ -35,160 +36,267 @@ def dfapi(f):
 
 
 def df_varargs_api(f):
-    def _api(self, *args):
+    def _api(self, *cols):
         name = f.__name__
-        jdf = getattr(self._jdf, name)(_to_seq(self.sql_ctx._sc, args))
+        jdf = getattr(self._jgd, name)(_to_seq(self.sql_ctx._sc, cols))
         return DataFrame(jdf, self.sql_ctx)
     _api.__name__ = f.__name__
     _api.__doc__ = f.__doc__
     return _api
 
 
-class GroupedData(object):
+class GroupedData(PandasGroupedOpsMixin):
     """
     A set of methods for aggregations on a :class:`DataFrame`,
     created by :func:`DataFrame.groupBy`.
 
-    .. note:: Experimental
-
     .. versionadded:: 1.3
     """
 
-    def __init__(self, jdf, sql_ctx):
-        self._jdf = jdf
-        self.sql_ctx = sql_ctx
+    def __init__(self, jgd, df):
+        self._jgd = jgd
+        self._df = df
+        self.sql_ctx = df.sql_ctx
 
-    @ignore_unicode_prefix
-    @since(1.3)
     def agg(self, *exprs):
         """Compute aggregates and returns the result as a :class:`DataFrame`.
 
-        The available aggregate functions are `avg`, `max`, `min`, `sum`, `count`.
+        The available aggregate functions can be:
+
+        1. built-in aggregation functions, such as `avg`, `max`, `min`, `sum`, `count`
+
+        2. group aggregate pandas UDFs, created with :func:`pyspark.sql.functions.pandas_udf`
+
+           .. note:: There is no partial aggregation with group aggregate UDFs, i.e.,
+               a full shuffle is required. Also, all the data of a group will be loaded into
+               memory, so the user should be aware of the potential OOM risk if data is skewed
+               and certain groups are too large to fit in memory.
+
+           .. seealso:: :func:`pyspark.sql.functions.pandas_udf`
 
         If ``exprs`` is a single :class:`dict` mapping from string to string, then the key
         is the column to perform aggregation on, and the value is the aggregate function.
 
         Alternatively, ``exprs`` can also be a list of aggregate :class:`Column` expressions.
 
-        :param exprs: a dict mapping from column name (string) to aggregate functions (string),
+        .. versionadded:: 1.3.0
+
+        Parameters
+        ----------
+        exprs : dict
+            a dict mapping from column name (string) to aggregate functions (string),
             or a list of :class:`Column`.
 
+        Notes
+        -----
+        Built-in aggregation functions and group aggregate pandas UDFs cannot be mixed
+        in a single call to this function.
+
+        Examples
+        --------
         >>> gdf = df.groupBy(df.name)
-        >>> gdf.agg({"*": "count"}).collect()
-        [Row(name=u'Alice', COUNT(1)=1), Row(name=u'Bob', COUNT(1)=1)]
+        >>> sorted(gdf.agg({"*": "count"}).collect())
+        [Row(name='Alice', count(1)=1), Row(name='Bob', count(1)=1)]
 
         >>> from pyspark.sql import functions as F
-        >>> gdf.agg(F.min(df.age)).collect()
-        [Row(name=u'Alice', MIN(age)=2), Row(name=u'Bob', MIN(age)=5)]
+        >>> sorted(gdf.agg(F.min(df.age)).collect())
+        [Row(name='Alice', min(age)=2), Row(name='Bob', min(age)=5)]
+
+        >>> from pyspark.sql.functions import pandas_udf, PandasUDFType
+        >>> @pandas_udf('int', PandasUDFType.GROUPED_AGG)  # doctest: +SKIP
+        ... def min_udf(v):
+        ...     return v.min()
+        >>> sorted(gdf.agg(min_udf(df.age)).collect())  # doctest: +SKIP
+        [Row(name='Alice', min_udf(age)=2), Row(name='Bob', min_udf(age)=5)]
         """
         assert exprs, "exprs should not be empty"
         if len(exprs) == 1 and isinstance(exprs[0], dict):
-            jdf = self._jdf.agg(exprs[0])
+            jdf = self._jgd.agg(exprs[0])
         else:
             # Columns
             assert all(isinstance(c, Column) for c in exprs), "all exprs should be Column"
-            jdf = self._jdf.agg(exprs[0]._jc,
+            jdf = self._jgd.agg(exprs[0]._jc,
                                 _to_seq(self.sql_ctx._sc, [c._jc for c in exprs[1:]]))
         return DataFrame(jdf, self.sql_ctx)
 
     @dfapi
-    @since(1.3)
     def count(self):
         """Counts the number of records for each group.
 
-        >>> df.groupBy(df.age).count().collect()
+        .. versionadded:: 1.3.0
+
+        Examples
+        --------
+        >>> sorted(df.groupBy(df.age).count().collect())
         [Row(age=2, count=1), Row(age=5, count=1)]
         """
 
     @df_varargs_api
-    @since(1.3)
     def mean(self, *cols):
         """Computes average values for each numeric columns for each group.
 
         :func:`mean` is an alias for :func:`avg`.
 
-        :param cols: list of column names (string). Non-numeric columns are ignored.
+        .. versionadded:: 1.3.0
 
+        Parameters
+        ----------
+        cols : str
+            column names. Non-numeric columns are ignored.
+
+        Examples
+        --------
         >>> df.groupBy().mean('age').collect()
-        [Row(AVG(age)=3.5)]
+        [Row(avg(age)=3.5)]
         >>> df3.groupBy().mean('age', 'height').collect()
-        [Row(AVG(age)=3.5, AVG(height)=82.5)]
+        [Row(avg(age)=3.5, avg(height)=82.5)]
         """
 
     @df_varargs_api
-    @since(1.3)
     def avg(self, *cols):
         """Computes average values for each numeric columns for each group.
 
         :func:`mean` is an alias for :func:`avg`.
 
-        :param cols: list of column names (string). Non-numeric columns are ignored.
+        .. versionadded:: 1.3.0
 
+        Parameters
+        ----------
+        cols : str
+            column names. Non-numeric columns are ignored.
+
+        Examples
+        --------
         >>> df.groupBy().avg('age').collect()
-        [Row(AVG(age)=3.5)]
+        [Row(avg(age)=3.5)]
         >>> df3.groupBy().avg('age', 'height').collect()
-        [Row(AVG(age)=3.5, AVG(height)=82.5)]
+        [Row(avg(age)=3.5, avg(height)=82.5)]
         """
 
     @df_varargs_api
-    @since(1.3)
     def max(self, *cols):
         """Computes the max value for each numeric columns for each group.
 
+        .. versionadded:: 1.3.0
+
+        Examples
+        --------
         >>> df.groupBy().max('age').collect()
-        [Row(MAX(age)=5)]
+        [Row(max(age)=5)]
         >>> df3.groupBy().max('age', 'height').collect()
-        [Row(MAX(age)=5, MAX(height)=85)]
+        [Row(max(age)=5, max(height)=85)]
         """
 
     @df_varargs_api
-    @since(1.3)
     def min(self, *cols):
         """Computes the min value for each numeric column for each group.
 
-        :param cols: list of column names (string). Non-numeric columns are ignored.
+        .. versionadded:: 1.3.0
 
+        Parameters
+        ----------
+        cols : str
+            column names. Non-numeric columns are ignored.
+
+        Examples
+        --------
         >>> df.groupBy().min('age').collect()
-        [Row(MIN(age)=2)]
+        [Row(min(age)=2)]
         >>> df3.groupBy().min('age', 'height').collect()
-        [Row(MIN(age)=2, MIN(height)=80)]
+        [Row(min(age)=2, min(height)=80)]
         """
 
     @df_varargs_api
-    @since(1.3)
     def sum(self, *cols):
         """Compute the sum for each numeric columns for each group.
 
-        :param cols: list of column names (string). Non-numeric columns are ignored.
+        .. versionadded:: 1.3.0
 
+        Parameters
+        ----------
+        cols : str
+            column names. Non-numeric columns are ignored.
+
+        Examples
+        --------
         >>> df.groupBy().sum('age').collect()
-        [Row(SUM(age)=7)]
+        [Row(sum(age)=7)]
         >>> df3.groupBy().sum('age', 'height').collect()
-        [Row(SUM(age)=7, SUM(height)=165)]
+        [Row(sum(age)=7, sum(height)=165)]
         """
+
+    def pivot(self, pivot_col, values=None):
+        """
+        Pivots a column of the current :class:`DataFrame` and perform the specified aggregation.
+        There are two versions of pivot function: one that requires the caller to specify the list
+        of distinct values to pivot on, and one that does not. The latter is more concise but less
+        efficient, because Spark needs to first compute the list of distinct values internally.
+
+        .. versionadded:: 1.6.0
+
+        Parameters
+        ----------
+        pivot_col : str
+            Name of the column to pivot.
+        values :
+            List of values that will be translated to columns in the output DataFrame.
+
+        Examples
+        --------
+        # Compute the sum of earnings for each year by course with each course as a separate column
+
+        >>> df4.groupBy("year").pivot("course", ["dotNET", "Java"]).sum("earnings").collect()
+        [Row(year=2012, dotNET=15000, Java=20000), Row(year=2013, dotNET=48000, Java=30000)]
+
+        # Or without specifying column values (less efficient)
+
+        >>> df4.groupBy("year").pivot("course").sum("earnings").collect()
+        [Row(year=2012, Java=20000, dotNET=15000), Row(year=2013, Java=30000, dotNET=48000)]
+        >>> df5.groupBy("sales.year").pivot("sales.course").sum("sales.earnings").collect()
+        [Row(year=2012, Java=20000, dotNET=15000), Row(year=2013, Java=30000, dotNET=48000)]
+        """
+        if values is None:
+            jgd = self._jgd.pivot(pivot_col)
+        else:
+            jgd = self._jgd.pivot(pivot_col, values)
+        return GroupedData(jgd, self._df)
 
 
 def _test():
     import doctest
-    from pyspark.context import SparkContext
-    from pyspark.sql import Row, SQLContext
+    from pyspark.sql import Row, SparkSession
     import pyspark.sql.group
     globs = pyspark.sql.group.__dict__.copy()
-    sc = SparkContext('local[4]', 'PythonTest')
+    spark = SparkSession.builder\
+        .master("local[4]")\
+        .appName("sql.group tests")\
+        .getOrCreate()
+    sc = spark.sparkContext
     globs['sc'] = sc
-    globs['sqlContext'] = SQLContext(sc)
+    globs['spark'] = spark
     globs['df'] = sc.parallelize([(2, 'Alice'), (5, 'Bob')]) \
         .toDF(StructType([StructField('age', IntegerType()),
                           StructField('name', StringType())]))
     globs['df3'] = sc.parallelize([Row(name='Alice', age=2, height=80),
                                    Row(name='Bob', age=5, height=85)]).toDF()
+    globs['df4'] = sc.parallelize([Row(course="dotNET", year=2012, earnings=10000),
+                                   Row(course="Java",   year=2012, earnings=20000),
+                                   Row(course="dotNET", year=2012, earnings=5000),
+                                   Row(course="dotNET", year=2013, earnings=48000),
+                                   Row(course="Java",   year=2013, earnings=30000)]).toDF()
+    globs['df5'] = sc.parallelize([
+        Row(training="expert", sales=Row(course="dotNET", year=2012, earnings=10000)),
+        Row(training="junior", sales=Row(course="Java",   year=2012, earnings=20000)),
+        Row(training="expert", sales=Row(course="dotNET", year=2012, earnings=5000)),
+        Row(training="junior", sales=Row(course="dotNET", year=2013, earnings=48000)),
+        Row(training="expert", sales=Row(course="Java",   year=2013, earnings=30000))]).toDF()
 
     (failure_count, test_count) = doctest.testmod(
         pyspark.sql.group, globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF)
-    globs['sc'].stop()
+    spark.stop()
     if failure_count:
-        exit(-1)
+        sys.exit(-1)
 
 
 if __name__ == "__main__":

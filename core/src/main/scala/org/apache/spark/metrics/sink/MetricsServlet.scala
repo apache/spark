@@ -19,7 +19,6 @@ package org.apache.spark.metrics.sink
 
 import java.util.Properties
 import java.util.concurrent.TimeUnit
-
 import javax.servlet.http.HttpServletRequest
 
 import com.codahale.metrics.MetricRegistry
@@ -27,14 +26,11 @@ import com.codahale.metrics.json.MetricsModule
 import com.fasterxml.jackson.databind.ObjectMapper
 import org.eclipse.jetty.servlet.ServletContextHandler
 
-import org.apache.spark.SecurityManager
+import org.apache.spark.SparkConf
 import org.apache.spark.ui.JettyUtils._
 
 private[spark] class MetricsServlet(
-    val property: Properties,
-    val registry: MetricRegistry,
-    securityMgr: SecurityManager)
-  extends Sink {
+    val property: Properties, val registry: MetricRegistry) extends Sink {
 
   val SERVLET_KEY_PATH = "path"
   val SERVLET_KEY_SAMPLE = "sample"
@@ -49,10 +45,10 @@ private[spark] class MetricsServlet(
   val mapper = new ObjectMapper().registerModule(
     new MetricsModule(TimeUnit.SECONDS, TimeUnit.MILLISECONDS, servletShowSample))
 
-  def getHandlers: Array[ServletContextHandler] = {
+  def getHandlers(conf: SparkConf): Array[ServletContextHandler] = {
     Array[ServletContextHandler](
       createServletHandler(servletPath,
-        new ServletParams(request => getMetricsSnapshot(request), "text/json"), securityMgr)
+        new ServletParams(request => getMetricsSnapshot(request), "text/json"), conf)
     )
   }
 
@@ -60,9 +56,9 @@ private[spark] class MetricsServlet(
     mapper.writeValueAsString(registry)
   }
 
-  override def start() { }
+  override def start(): Unit = { }
 
-  override def stop() { }
+  override def stop(): Unit = { }
 
-  override def report() { }
+  override def report(): Unit = { }
 }

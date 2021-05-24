@@ -18,9 +18,9 @@ rem limitations under the License.
 rem
 
 rem Figure out where the Spark framework is installed
-set SPARK_HOME=%~dp0..
+call "%~dp0find-spark-home.cmd"
 
-call %SPARK_HOME%\bin\load-spark-env.cmd
+call "%SPARK_HOME%\bin\load-spark-env.cmd"
 
 rem Test that an argument was given
 if "x%1"=="x" (
@@ -28,41 +28,48 @@ if "x%1"=="x" (
   exit /b 1
 )
 
-rem Find assembly jar
-set SPARK_ASSEMBLY_JAR=0
-
-if exist "%SPARK_HOME%\RELEASE" (
-  set ASSEMBLY_DIR=%SPARK_HOME%\lib
+rem Find Spark jars.
+if exist "%SPARK_HOME%\jars" (
+  set SPARK_JARS_DIR=%SPARK_HOME%\jars
 ) else (
-  set ASSEMBLY_DIR=%SPARK_HOME%\assembly\target\scala-%SPARK_SCALA_VERSION%
+  set SPARK_JARS_DIR=%SPARK_HOME%\assembly\target\scala-%SPARK_SCALA_VERSION%\jars
 )
 
-for %%d in (%ASSEMBLY_DIR%\spark-assembly*hadoop*.jar) do (
-  set SPARK_ASSEMBLY_JAR=%%d
-)
-if "%SPARK_ASSEMBLY_JAR%"=="0" (
-  echo Failed to find Spark assembly JAR.
+if not exist "%SPARK_JARS_DIR%" (
+  echo Failed to find Spark jars directory.
   echo You need to build Spark before running this program.
   exit /b 1
 )
 
-set LAUNCH_CLASSPATH=%SPARK_ASSEMBLY_JAR%
+set LAUNCH_CLASSPATH=%SPARK_JARS_DIR%\*
 
 rem Add the launcher build dir to the classpath if requested.
 if not "x%SPARK_PREPEND_CLASSES%"=="x" (
-  set LAUNCH_CLASSPATH=%SPARK_HOME%\launcher\target\scala-%SPARK_SCALA_VERSION%\classes;%LAUNCH_CLASSPATH%
+  set LAUNCH_CLASSPATH="%SPARK_HOME%\launcher\target\scala-%SPARK_SCALA_VERSION%\classes;%LAUNCH_CLASSPATH%"
 )
-
-set _SPARK_ASSEMBLY=%SPARK_ASSEMBLY_JAR%
 
 rem Figure out where java is.
 set RUNNER=java
-if not "x%JAVA_HOME%"=="x" set RUNNER=%JAVA_HOME%\bin\java
+if not "x%JAVA_HOME%"=="x" (
+  set RUNNER=%JAVA_HOME%\bin\java
+) else (
+  where /q "%RUNNER%"
+  if ERRORLEVEL 1 (
+    echo Java not found and JAVA_HOME environment variable is not set.
+    echo Install Java and set JAVA_HOME to point to the Java installation directory.
+    exit /b 1
+  )
+)
 
 rem The launcher library prints the command to be executed in a single line suitable for being
 rem executed by the batch interpreter. So read all the output of the launcher into a variable.
+:gen
 set LAUNCHER_OUTPUT=%temp%\spark-class-launcher-output-%RANDOM%.txt
-"%RUNNER%" -cp %LAUNCH_CLASSPATH% org.apache.spark.launcher.Main %* > %LAUNCHER_OUTPUT%
+rem SPARK-28302: %RANDOM% would return the same number if we call it instantly after last call,
+rem so we should make it sure to generate unique file to avoid process collision of writing into
+rem the same file concurrently.
+if exist %LAUNCHER_OUTPUT% goto :gen
+"%RUNNER%" -Xmx128m -cp "%LAUNCH_CLASSPATH%" org.apache.spark.launcher.Main %* > %LAUNCHER_OUTPUT%
 for /f "tokens=*" %%i in (%LAUNCHER_OUTPUT%) do (
   set SPARK_CMD=%%i
 )

@@ -19,7 +19,8 @@ package org.apache.spark.util.collection
 
 import scala.collection.mutable.HashSet
 
-import org.scalatest.Matchers
+import org.scalatest.matchers.must.Matchers
+import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.util.SizeEstimator
@@ -48,9 +49,6 @@ class PrimitiveKeyOpenHashMapSuite extends SparkFunSuite with Matchers {
     }
     intercept[IllegalArgumentException] {
       new PrimitiveKeyOpenHashMap[Int, Int](-1)
-    }
-    intercept[IllegalArgumentException] {
-      new PrimitiveKeyOpenHashMap[Int, Int](0)
     }
   }
 

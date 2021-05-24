@@ -17,18 +17,24 @@
 
 package org.apache.spark.deploy
 
+import java.util.concurrent.TimeUnit
+
 import scala.collection.mutable.HashSet
-import scala.concurrent._
+import scala.concurrent.ExecutionContext
+import scala.reflect.ClassTag
+import scala.util.{Failure, Success}
 
-import akka.actor._
-import akka.pattern.ask
-import akka.remote.{AssociationErrorEvent, DisassociatedEvent, RemotingLifecycleEvent}
-import org.apache.log4j.{Level, Logger}
+import org.apache.log4j.Logger
 
-import org.apache.spark.{Logging, SecurityManager, SparkConf}
+import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.master.{DriverState, Master}
-import org.apache.spark.util.{ActorLogReceive, AkkaUtils, RpcUtils, Utils}
+import org.apache.spark.deploy.master.DriverState.DriverState
+import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.internal.config.Network.RPC_ASK_TIMEOUT
+import org.apache.spark.resource.ResourceUtils
+import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef, RpcEnv, ThreadSafeRpcEndpoint}
+import org.apache.spark.util.{SparkExitCode, ThreadUtils, Utils}
 
 /**
  * Proxy that relays messages to the driver.
@@ -36,20 +42,39 @@ import org.apache.spark.util.{ActorLogReceive, AkkaUtils, RpcUtils, Utils}
  * We currently don't support retry if submission fails. In HA mode, client will submit request to
  * all masters and see which one could handle it.
  */
-private class ClientActor(driverArgs: ClientArguments, conf: SparkConf)
-  extends Actor with ActorLogReceive with Logging {
+private class ClientEndpoint(
+    override val rpcEnv: RpcEnv,
+    driverArgs: ClientArguments,
+    masterEndpoints: Seq[RpcEndpointRef],
+    conf: SparkConf)
+  extends ThreadSafeRpcEndpoint with Logging {
 
-  private val masterActors = driverArgs.masters.map { m =>
-    context.actorSelection(Master.toAkkaUrl(m, AkkaUtils.protocol(context.system)))
+  // A scheduled executor used to send messages at the specified time.
+  private val forwardMessageThread =
+    ThreadUtils.newDaemonSingleThreadScheduledExecutor("client-forward-message")
+  // Used to provide the implicit parameter of `Future` methods.
+  private val forwardMessageExecutionContext =
+    ExecutionContext.fromExecutor(forwardMessageThread,
+      t => t match {
+        case ie: InterruptedException => // Exit normally
+        case e: Throwable =>
+          logError(e.getMessage, e)
+          System.exit(SparkExitCode.UNCAUGHT_EXCEPTION)
+      })
+
+   private val lostMasters = new HashSet[RpcAddress]
+   private var activeMasterEndpoint: RpcEndpointRef = null
+   private val waitAppCompletion = conf.get(config.STANDALONE_SUBMIT_WAIT_APP_COMPLETION)
+   private val REPORT_DRIVER_STATUS_INTERVAL = 10000
+   private var submittedDriverID = ""
+   private var driverStatusReported = false
+
+
+  private def getProperty(key: String, conf: SparkConf): Option[String] = {
+    sys.props.get(key).orElse(conf.getOption(key))
   }
-  private val lostMasters = new HashSet[Address]
-  private var activeMasterActor: ActorSelection = null
 
-  val timeout = RpcUtils.askTimeout(conf)
-
-  override def preStart(): Unit = {
-    context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
-
+  override def onStart(): Unit = {
     driverArgs.cmd match {
       case "launch" =>
         // TODO: We could add an env variable here and intercept it in `sc.addJar` that would
@@ -57,120 +82,178 @@ private class ClientActor(driverArgs: ClientArguments, conf: SparkConf)
         //       people call `addJar` assuming the jar is in the same directory.
         val mainClass = "org.apache.spark.deploy.worker.DriverWrapper"
 
-        val classPathConf = "spark.driver.extraClassPath"
-        val classPathEntries = sys.props.get(classPathConf).toSeq.flatMap { cp =>
+        val classPathConf = config.DRIVER_CLASS_PATH.key
+        val classPathEntries = getProperty(classPathConf, conf).toSeq.flatMap { cp =>
           cp.split(java.io.File.pathSeparator)
         }
 
-        val libraryPathConf = "spark.driver.extraLibraryPath"
-        val libraryPathEntries = sys.props.get(libraryPathConf).toSeq.flatMap { cp =>
+        val libraryPathConf = config.DRIVER_LIBRARY_PATH.key
+        val libraryPathEntries = getProperty(libraryPathConf, conf).toSeq.flatMap { cp =>
           cp.split(java.io.File.pathSeparator)
         }
 
-        val extraJavaOptsConf = "spark.driver.extraJavaOptions"
-        val extraJavaOpts = sys.props.get(extraJavaOptsConf)
+        val extraJavaOptsConf = config.DRIVER_JAVA_OPTIONS.key
+        val extraJavaOpts = getProperty(extraJavaOptsConf, conf)
           .map(Utils.splitCommandString).getOrElse(Seq.empty)
+
         val sparkJavaOpts = Utils.sparkJavaOpts(conf)
         val javaOpts = sparkJavaOpts ++ extraJavaOpts
         val command = new Command(mainClass,
           Seq("{{WORKER_URL}}", "{{USER_JAR}}", driverArgs.mainClass) ++ driverArgs.driverOptions,
           sys.env, classPathEntries, libraryPathEntries, javaOpts)
-
+        val driverResourceReqs = ResourceUtils.parseResourceRequirements(conf,
+          config.SPARK_DRIVER_PREFIX)
         val driverDescription = new DriverDescription(
           driverArgs.jarUrl,
           driverArgs.memory,
           driverArgs.cores,
           driverArgs.supervise,
-          command)
-
-        // This assumes only one Master is active at a time
-        for (masterActor <- masterActors) {
-          masterActor ! RequestSubmitDriver(driverDescription)
-        }
+          command,
+          driverResourceReqs)
+        asyncSendToMasterAndForwardReply[SubmitDriverResponse](
+          RequestSubmitDriver(driverDescription))
 
       case "kill" =>
         val driverId = driverArgs.driverId
-        // This assumes only one Master is active at a time
-        for (masterActor <- masterActors) {
-          masterActor ! RequestKillDriver(driverId)
-        }
+        submittedDriverID = driverId
+        asyncSendToMasterAndForwardReply[KillDriverResponse](RequestKillDriver(driverId))
+    }
+    logInfo("... waiting before polling master for driver state")
+    forwardMessageThread.scheduleAtFixedRate(() => Utils.tryLogNonFatalError {
+      monitorDriverStatus()
+    }, 5000, REPORT_DRIVER_STATUS_INTERVAL, TimeUnit.MILLISECONDS)
+  }
+
+  /**
+   * Send the message to master and forward the reply to self asynchronously.
+   */
+  private def asyncSendToMasterAndForwardReply[T: ClassTag](message: Any): Unit = {
+    for (masterEndpoint <- masterEndpoints) {
+      masterEndpoint.ask[T](message).onComplete {
+        case Success(v) => self.send(v)
+        case Failure(e) =>
+          logWarning(s"Error sending messages to master $masterEndpoint", e)
+      }(forwardMessageExecutionContext)
     }
   }
 
-  /* Find out driver status then exit the JVM */
-  def pollAndReportStatus(driverId: String) {
-    println("... waiting before polling master for driver state")
-    Thread.sleep(5000)
-    println("... polling master for driver state")
-    val statusFuture = (activeMasterActor ? RequestDriverStatus(driverId))(timeout)
-      .mapTo[DriverStatusResponse]
-    val statusResponse = Await.result(statusFuture, timeout)
-    statusResponse.found match {
-      case false =>
-        println(s"ERROR: Cluster master did not recognize $driverId")
-        System.exit(-1)
-      case true =>
-        println(s"State of $driverId is ${statusResponse.state.get}")
+  private def monitorDriverStatus(): Unit = {
+    if (submittedDriverID != "") {
+      asyncSendToMasterAndForwardReply[DriverStatusResponse](RequestDriverStatus(submittedDriverID))
+    }
+  }
+
+  /**
+   * Processes and reports the driver status then exit the JVM if the
+   * waitAppCompletion is set to false, else reports the driver status
+   * if debug logs are enabled.
+   */
+
+  def reportDriverStatus(
+      found: Boolean,
+      state: Option[DriverState],
+      workerId: Option[String],
+      workerHostPort: Option[String],
+      exception: Option[Exception]): Unit = {
+    if (found) {
+      // Using driverStatusReported to avoid writing following
+      // logs again when waitAppCompletion is set to true
+      if (!driverStatusReported) {
+        driverStatusReported = true
+        logInfo(s"State of $submittedDriverID is ${state.get}")
         // Worker node, if present
-        (statusResponse.workerId, statusResponse.workerHostPort, statusResponse.state) match {
+        (workerId, workerHostPort, state) match {
           case (Some(id), Some(hostPort), Some(DriverState.RUNNING)) =>
-            println(s"Driver running on $hostPort ($id)")
+            logInfo(s"Driver running on $hostPort ($id)")
           case _ =>
         }
-        // Exception, if present
-        statusResponse.exception.map { e =>
-          println(s"Exception from cluster was: $e")
+      }
+      // Exception, if present
+      exception match {
+        case Some(e) =>
+          logError(s"Exception from cluster was: $e")
           e.printStackTrace()
           System.exit(-1)
+        case _ =>
+          state.get match {
+            case DriverState.FINISHED | DriverState.FAILED |
+                 DriverState.ERROR | DriverState.KILLED =>
+              logInfo(s"State of driver $submittedDriverID is ${state.get}, " +
+                s"exiting spark-submit JVM.")
+              System.exit(0)
+            case _ =>
+              if (!waitAppCompletion) {
+                logInfo(s"spark-submit not configured to wait for completion, " +
+                  s"exiting spark-submit JVM.")
+                System.exit(0)
+              } else {
+                logDebug(s"State of driver $submittedDriverID is ${state.get}, " +
+                  s"continue monitoring driver status.")
+              }
+            }
         }
-        System.exit(0)
+      } else {
+        logError(s"ERROR: Cluster master did not recognize $submittedDriverID")
+        System.exit(-1)
+      }
+    }
+  override def receive: PartialFunction[Any, Unit] = {
+
+    case SubmitDriverResponse(master, success, driverId, message) =>
+      logInfo(message)
+      if (success) {
+        activeMasterEndpoint = master
+        submittedDriverID = driverId.get
+      } else if (!Utils.responseFromBackup(message)) {
+        System.exit(-1)
+      }
+
+    case KillDriverResponse(master, driverId, success, message) =>
+      logInfo(message)
+      if (success) {
+        activeMasterEndpoint = master
+      } else if (!Utils.responseFromBackup(message)) {
+        System.exit(-1)
+      }
+
+    case DriverStatusResponse(found, state, workerId, workerHostPort, exception) =>
+      reportDriverStatus(found, state, workerId, workerHostPort, exception)
+  }
+
+  override def onDisconnected(remoteAddress: RpcAddress): Unit = {
+    if (!lostMasters.contains(remoteAddress)) {
+      logError(s"Error connecting to master $remoteAddress.")
+      lostMasters += remoteAddress
+      // Note that this heuristic does not account for the fact that a Master can recover within
+      // the lifetime of this client. Thus, once a Master is lost it is lost to us forever. This
+      // is not currently a concern, however, because this client does not retry submissions.
+      if (lostMasters.size >= masterEndpoints.size) {
+        logError("No master is available, exiting.")
+        System.exit(-1)
+      }
     }
   }
 
-  override def receiveWithLogging: PartialFunction[Any, Unit] = {
-
-    case SubmitDriverResponse(success, driverId, message) =>
-      println(message)
-      if (success) {
-        activeMasterActor = context.actorSelection(sender.path)
-        pollAndReportStatus(driverId.get)
-      } else if (!Utils.responseFromBackup(message)) {
+  override def onNetworkError(cause: Throwable, remoteAddress: RpcAddress): Unit = {
+    if (!lostMasters.contains(remoteAddress)) {
+      logError(s"Error connecting to master ($remoteAddress).")
+      logError(s"Cause was: $cause")
+      lostMasters += remoteAddress
+      if (lostMasters.size >= masterEndpoints.size) {
+        logError("No master is available, exiting.")
         System.exit(-1)
       }
+    }
+  }
 
+  override def onError(cause: Throwable): Unit = {
+    logError(s"Error processing messages, exiting.")
+    cause.printStackTrace()
+    System.exit(-1)
+  }
 
-    case KillDriverResponse(driverId, success, message) =>
-      println(message)
-      if (success) {
-        activeMasterActor = context.actorSelection(sender.path)
-        pollAndReportStatus(driverId)
-      } else if (!Utils.responseFromBackup(message)) {
-        System.exit(-1)
-      }
-
-    case DisassociatedEvent(_, remoteAddress, _) =>
-      if (!lostMasters.contains(remoteAddress)) {
-        println(s"Error connecting to master $remoteAddress.")
-        lostMasters += remoteAddress
-        // Note that this heuristic does not account for the fact that a Master can recover within
-        // the lifetime of this client. Thus, once a Master is lost it is lost to us forever. This
-        // is not currently a concern, however, because this client does not retry submissions.
-        if (lostMasters.size >= masterActors.size) {
-          println("No master is available, exiting.")
-          System.exit(-1)
-        }
-      }
-
-    case AssociationErrorEvent(cause, _, remoteAddress, _, _) =>
-      if (!lostMasters.contains(remoteAddress)) {
-        println(s"Error connecting to master ($remoteAddress).")
-        println(s"Cause was: $cause")
-        lostMasters += remoteAddress
-        if (lostMasters.size >= masterActors.size) {
-          println("No master is available, exiting.")
-          System.exit(-1)
-        }
-      }
+  override def onStop(): Unit = {
+    forwardMessageThread.shutdownNow()
   }
 }
 
@@ -178,31 +261,35 @@ private class ClientActor(driverArgs: ClientArguments, conf: SparkConf)
  * Executable utility for starting and terminating drivers inside of a standalone cluster.
  */
 object Client {
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
+    // scalastyle:off println
     if (!sys.props.contains("SPARK_SUBMIT")) {
       println("WARNING: This client is deprecated and will be removed in a future version of Spark")
       println("Use ./bin/spark-submit with \"--master spark://host:port\"")
     }
+    // scalastyle:on println
+    new ClientApp().start(args, new SparkConf())
+  }
+}
 
-    val conf = new SparkConf()
+private[spark] class ClientApp extends SparkApplication {
+
+  override def start(args: Array[String], conf: SparkConf): Unit = {
     val driverArgs = new ClientArguments(args)
 
-    if (!driverArgs.logLevel.isGreaterOrEqual(Level.WARN)) {
-      conf.set("spark.akka.logLifecycleEvents", "true")
+    if (!conf.contains(RPC_ASK_TIMEOUT)) {
+      conf.set(RPC_ASK_TIMEOUT, "10s")
     }
-    conf.set("spark.rpc.askTimeout", "10")
-    conf.set("akka.loglevel", driverArgs.logLevel.toString.replace("WARN", "WARNING"))
     Logger.getRootLogger.setLevel(driverArgs.logLevel)
 
-    val (actorSystem, _) = AkkaUtils.createActorSystem(
-      "driverClient", Utils.localHostName(), 0, conf, new SecurityManager(conf))
+    val rpcEnv =
+      RpcEnv.create("driverClient", Utils.localHostName(), 0, conf, new SecurityManager(conf))
 
-    // Verify driverArgs.master is a valid url so that we can use it in ClientActor safely
-    for (m <- driverArgs.masters) {
-      Master.toAkkaUrl(m, AkkaUtils.protocol(actorSystem))
-    }
-    actorSystem.actorOf(Props(classOf[ClientActor], driverArgs, conf))
+    val masterEndpoints = driverArgs.masters.map(RpcAddress.fromSparkURL).
+      map(rpcEnv.setupEndpointRef(_, Master.ENDPOINT_NAME))
+    rpcEnv.setupEndpoint("client", new ClientEndpoint(rpcEnv, driverArgs, masterEndpoints, conf))
 
-    actorSystem.awaitTermination()
+    rpcEnv.awaitTermination()
   }
+
 }

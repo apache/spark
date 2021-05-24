@@ -19,21 +19,23 @@ package org.apache.spark.mllib.pmml.export
 
 import scala.{Array => SArray}
 
-import org.dmg.pmml._
+import org.dmg.pmml.{Array, CompareFunction, ComparisonMeasure, DataDictionary, DataField, DataType,
+  FieldName, MiningField, MiningFunction, MiningSchema, OpType, SquaredEuclidean}
+import org.dmg.pmml.clustering.{Cluster, ClusteringField, ClusteringModel}
 
 import org.apache.spark.mllib.clustering.KMeansModel
 
 /**
  * PMML Model Export for KMeansModel class
  */
-private[mllib] class KMeansPMMLModelExport(model : KMeansModel) extends PMMLModelExport{
+private[mllib] class KMeansPMMLModelExport(model: KMeansModel) extends PMMLModelExport{
 
   populateKMeansPMML(model)
 
   /**
    * Export the input KMeansModel model to PMML format.
    */
-  private def populateKMeansPMML(model : KMeansModel): Unit = {
+  private def populateKMeansPMML(model: KMeansModel): Unit = {
     pmml.getHeader.setDescription("k-means clustering")
 
     if (model.clusterCenters.length > 0) {
@@ -42,42 +44,42 @@ private[mllib] class KMeansPMMLModelExport(model : KMeansModel) extends PMMLMode
       val dataDictionary = new DataDictionary
       val miningSchema = new MiningSchema
       val comparisonMeasure = new ComparisonMeasure()
-        .withKind(ComparisonMeasure.Kind.DISTANCE)
-        .withMeasure(new SquaredEuclidean())
+        .setKind(ComparisonMeasure.Kind.DISTANCE)
+        .setMeasure(new SquaredEuclidean())
       val clusteringModel = new ClusteringModel()
-        .withModelName("k-means")
-        .withMiningSchema(miningSchema)
-        .withComparisonMeasure(comparisonMeasure)
-        .withFunctionName(MiningFunctionType.CLUSTERING)
-        .withModelClass(ClusteringModel.ModelClass.CENTER_BASED)
-        .withNumberOfClusters(model.clusterCenters.length)
+        .setModelName("k-means")
+        .setMiningSchema(miningSchema)
+        .setComparisonMeasure(comparisonMeasure)
+        .setMiningFunction(MiningFunction.CLUSTERING)
+        .setModelClass(ClusteringModel.ModelClass.CENTER_BASED)
+        .setNumberOfClusters(model.clusterCenters.length)
 
       for (i <- 0 until clusterCenter.size) {
         fields(i) = FieldName.create("field_" + i)
-        dataDictionary.withDataFields(new DataField(fields(i), OpType.CONTINUOUS, DataType.DOUBLE))
+        dataDictionary.addDataFields(new DataField(fields(i), OpType.CONTINUOUS, DataType.DOUBLE))
         miningSchema
-          .withMiningFields(new MiningField(fields(i))
-          .withUsageType(FieldUsageType.ACTIVE))
-        clusteringModel.withClusteringFields(
-          new ClusteringField(fields(i)).withCompareFunction(CompareFunctionType.ABS_DIFF))
+          .addMiningFields(new MiningField(fields(i))
+          .setUsageType(MiningField.UsageType.ACTIVE))
+        clusteringModel.addClusteringFields(
+          new ClusteringField(fields(i)).setCompareFunction(CompareFunction.ABS_DIFF))
       }
 
-      dataDictionary.withNumberOfFields(dataDictionary.getDataFields.size)
+      dataDictionary.setNumberOfFields(dataDictionary.getDataFields.size)
 
-      for (i <- 0 until model.clusterCenters.length) {
+      for (i <- model.clusterCenters.indices) {
         val cluster = new Cluster()
-          .withName("cluster_" + i)
-          .withArray(new org.dmg.pmml.Array()
-          .withType(Array.Type.REAL)
-          .withN(clusterCenter.size)
-          .withValue(model.clusterCenters(i).toArray.mkString(" ")))
+          .setName("cluster_" + i)
+          .setArray(new org.dmg.pmml.Array()
+          .setType(Array.Type.REAL)
+          .setN(clusterCenter.size)
+          .setValue(model.clusterCenters(i).toArray.mkString(" ")))
         // we don't have the size of the single cluster but only the centroids (withValue)
         // .withSize(value)
-        clusteringModel.withClusters(cluster)
+        clusteringModel.addClusters(cluster)
       }
 
       pmml.setDataDictionary(dataDictionary)
-      pmml.withModels(clusteringModel)
+      pmml.addModels(clusteringModel)
     }
   }
 }

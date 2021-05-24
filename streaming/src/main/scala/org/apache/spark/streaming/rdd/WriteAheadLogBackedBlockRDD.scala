@@ -27,12 +27,14 @@ import org.apache.spark._
 import org.apache.spark.rdd.BlockRDD
 import org.apache.spark.storage.{BlockId, StorageLevel}
 import org.apache.spark.streaming.util._
-import org.apache.spark.util.SerializableConfiguration
+import org.apache.spark.util._
+import org.apache.spark.util.io.ChunkedByteBuffer
 
 /**
  * Partition class for [[org.apache.spark.streaming.rdd.WriteAheadLogBackedBlockRDD]].
  * It contains information about the id of the blocks having this partition's data and
  * the corresponding record handle in the write ahead log that backs the partition.
+ *
  * @param index index of the partition
  * @param blockId id of the block having the partition data
  * @param isBlockIdValid Whether the block Ids are valid (i.e., the blocks are present in the Spark
@@ -59,9 +61,8 @@ class WriteAheadLogBackedBlockRDDPartition(
  * correctness, and it can be used in situations where it is known that the block
  * does not exist in the Spark executors (e.g. after a failed driver is restarted).
  *
- *
  * @param sc SparkContext
- * @param blockIds Ids of the blocks that contains this RDD's data
+ * @param _blockIds Ids of the blocks that contains this RDD's data
  * @param walRecordHandles Record handles in write ahead logs that contain this RDD's data
  * @param isBlockIdValid Whether the block Ids are valid (i.e., the blocks are present in the Spark
  *                         executors). If not, then block lookups by the block ids will be skipped.
@@ -73,35 +74,35 @@ class WriteAheadLogBackedBlockRDDPartition(
  */
 private[streaming]
 class WriteAheadLogBackedBlockRDD[T: ClassTag](
-    @transient sc: SparkContext,
-    @transient blockIds: Array[BlockId],
-    @transient walRecordHandles: Array[WriteAheadLogRecordHandle],
-    @transient isBlockIdValid: Array[Boolean] = Array.empty,
+    sc: SparkContext,
+    @transient private val _blockIds: Array[BlockId],
+    @transient val walRecordHandles: Array[WriteAheadLogRecordHandle],
+    @transient private val isBlockIdValid: Array[Boolean] = Array.empty,
     storeInBlockManager: Boolean = false,
     storageLevel: StorageLevel = StorageLevel.MEMORY_ONLY_SER)
-  extends BlockRDD[T](sc, blockIds) {
+  extends BlockRDD[T](sc, _blockIds) {
 
   require(
-    blockIds.length == walRecordHandles.length,
-    s"Number of block Ids (${blockIds.length}) must be " +
-      s" same as number of WAL record handles (${walRecordHandles.length}})")
+    _blockIds.length == walRecordHandles.length,
+    s"Number of block Ids (${_blockIds.length}) must be " +
+      s" same as number of WAL record handles (${walRecordHandles.length})")
 
   require(
-    isBlockIdValid.isEmpty || isBlockIdValid.length == blockIds.length,
+    isBlockIdValid.isEmpty || isBlockIdValid.length == _blockIds.length,
     s"Number of elements in isBlockIdValid (${isBlockIdValid.length}) must be " +
-      s" same as number of block Ids (${blockIds.length})")
+      s" same as number of block Ids (${_blockIds.length})")
 
   // Hadoop configuration is not serializable, so broadcast it as a serializable.
   @transient private val hadoopConfig = sc.hadoopConfiguration
   private val broadcastedHadoopConf = new SerializableConfiguration(hadoopConfig)
 
-  override def isValid(): Boolean = true
+  override def isValid: Boolean = true
 
   override def getPartitions: Array[Partition] = {
     assertValid()
-    Array.tabulate(blockIds.length) { i =>
+    Array.tabulate(_blockIds.length) { i =>
       val isValid = if (isBlockIdValid.length == 0) true else isBlockIdValid(i)
-      new WriteAheadLogBackedBlockRDDPartition(i, blockIds(i), isValid, walRecordHandles(i))
+      new WriteAheadLogBackedBlockRDDPartition(i, _blockIds(i), isValid, walRecordHandles(i))
     }
   }
 
@@ -114,11 +115,12 @@ class WriteAheadLogBackedBlockRDD[T: ClassTag](
     assertValid()
     val hadoopConf = broadcastedHadoopConf.value
     val blockManager = SparkEnv.get.blockManager
+    val serializerManager = SparkEnv.get.serializerManager
     val partition = split.asInstanceOf[WriteAheadLogBackedBlockRDDPartition]
     val blockId = partition.blockId
 
     def getBlockFromBlockManager(): Option[Iterator[T]] = {
-      blockManager.get(blockId).map(_.data.asInstanceOf[Iterator[T]])
+      blockManager.get[T](blockId).map(_.data.asInstanceOf[Iterator[T]])
     }
 
     def getBlockFromWriteAheadLog(): Iterator[T] = {
@@ -134,7 +136,7 @@ class WriteAheadLogBackedBlockRDD[T: ClassTag](
         // this dummy directory should not already exist otherwise the WAL will try to recover
         // past events from the directory and throw errors.
         val nonExistentDirectory = new File(
-          System.getProperty("java.io.tmpdir"), UUID.randomUUID().toString).getAbsolutePath
+          System.getProperty("java.io.tmpdir"), UUID.randomUUID().toString).toURI.toString
         writeAheadLog = WriteAheadLogUtils.createLogForReceiver(
           SparkEnv.get.conf, nonExistentDirectory, hadoopConf)
         dataRead = writeAheadLog.read(partition.walRecordHandle)
@@ -156,11 +158,15 @@ class WriteAheadLogBackedBlockRDD[T: ClassTag](
       logInfo(s"Read partition data of $this from write ahead log, record handle " +
         partition.walRecordHandle)
       if (storeInBlockManager) {
-        blockManager.putBytes(blockId, dataRead, storageLevel)
+        blockManager.putBytes(blockId, new ChunkedByteBuffer(dataRead.duplicate()), storageLevel)
         logDebug(s"Stored partition data of $this into block manager with level $storageLevel")
         dataRead.rewind()
       }
-      blockManager.dataDeserialize(blockId, dataRead).asInstanceOf[Iterator[T]]
+      serializerManager
+        .dataDeserializeStream(
+          blockId,
+          new ChunkedByteBuffer(dataRead).toInputStream())(elementClassTag)
+        .asInstanceOf[Iterator[T]]
     }
 
     if (partition.isBlockIdValid) {

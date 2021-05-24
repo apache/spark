@@ -17,14 +17,12 @@
 
 package org.apache.spark.mllib.stat
 
-import com.github.fommil.netlib.BLAS.{getInstance => blas}
-
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaRDD
+import org.apache.spark.ml.linalg.BLAS
 import org.apache.spark.rdd.RDD
 
 /**
- * :: Experimental ::
  * Kernel density estimation. Given a sample from a population, estimate its probability density
  * function at each of the given evaluation points using kernels. Only Gaussian kernel is supported.
  *
@@ -38,7 +36,7 @@ import org.apache.spark.rdd.RDD
  * val densities = kd.estimate(Array(-1.0, 2.0, 5.0))
  * }}}
  */
-@Experimental
+@Since("1.4.0")
 class KernelDensity extends Serializable {
 
   import KernelDensity._
@@ -52,6 +50,7 @@ class KernelDensity extends Serializable {
   /**
    * Sets the bandwidth (standard deviation) of the Gaussian kernel (default: `1.0`).
    */
+  @Since("1.4.0")
   def setBandwidth(bandwidth: Double): this.type = {
     require(bandwidth > 0, s"Bandwidth must be positive, but got $bandwidth.")
     this.bandwidth = bandwidth
@@ -61,6 +60,7 @@ class KernelDensity extends Serializable {
   /**
    * Sets the sample to use for density estimation.
    */
+  @Since("1.4.0")
   def setSample(sample: RDD[Double]): this.type = {
     this.sample = sample
     this
@@ -69,6 +69,7 @@ class KernelDensity extends Serializable {
   /**
    * Sets the sample to use for density estimation (for Java users).
    */
+  @Since("1.4.0")
   def setSample(sample: JavaRDD[java.lang.Double]): this.type = {
     this.sample = sample.rdd.asInstanceOf[RDD[Double]]
     this
@@ -77,6 +78,7 @@ class KernelDensity extends Serializable {
   /**
    * Estimates probability density function at the given array of points.
    */
+  @Since("1.4.0")
   def estimate(points: Array[Double]): Array[Double] = {
     val sample = this.sample
     val bandwidth = this.bandwidth
@@ -96,10 +98,10 @@ class KernelDensity extends Serializable {
         (x._1, x._2 + 1)
       },
       (x, y) => {
-        blas.daxpy(n, 1.0, y._1, 1, x._1, 1)
+        BLAS.nativeBLAS.daxpy(n, 1.0, y._1, 1, x._1, 1)
         (x._1, x._2 + y._2)
       })
-    blas.dscal(n, 1.0 / count, densities, 1)
+    BLAS.nativeBLAS.dscal(n, 1.0 / count, densities, 1)
     densities
   }
 }

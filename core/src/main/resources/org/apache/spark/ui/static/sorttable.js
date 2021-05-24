@@ -89,7 +89,7 @@ sorttable = {
         // make it clickable to sort
         headrow[i].sorttable_columnindex = i;
         headrow[i].sorttable_tbody = table.tBodies[0];
-        dean_addEvent(headrow[i],"click", function(e) {
+        dean_addEvent(headrow[i],"click", sorttable.innerSortFunction = function(e) {
 
           if (this.className.search(/\bsorttable_sorted\b/) != -1) {
             // if we're already sorted by this column, just 
@@ -97,9 +97,14 @@ sorttable = {
             sorttable.reverse(this.sorttable_tbody);
             this.className = this.className.replace('sorttable_sorted',
                                                     'sorttable_sorted_reverse');
-            this.removeChild(document.getElementById('sorttable_sortfwdind'));
+            rowlists = this.parentNode.getElementsByTagName("span");
+            for (var j=0; j < rowlists.length; j++) {
+                if (rowlists[j].className.search(/\bsorttable_sortfwdind\b/) != -1) {
+                    rowlists[j].parentNode.removeChild(rowlists[j]);
+                }
+            }
             sortrevind = document.createElement('span');
-            sortrevind.id = "sorttable_sortrevind";
+            sortrevind.className = "sorttable_sortrevind";
             sortrevind.innerHTML = stIsIE ? '&nbsp<font face="webdings">5</font>' : '&nbsp;&#x25BE;';
             this.appendChild(sortrevind);
             return;
@@ -110,9 +115,14 @@ sorttable = {
             sorttable.reverse(this.sorttable_tbody);
             this.className = this.className.replace('sorttable_sorted_reverse',
                                                   'sorttable_sorted');
-            this.removeChild(document.getElementById('sorttable_sortrevind'));
+            rowlists = this.parentNode.getElementsByTagName("span");
+            for (var j=0; j < rowlists.length; j++) {
+                if (rowlists[j].className.search(/\bsorttable_sortrevind\b/) != -1) {
+                    rowlists[j].parentNode.removeChild(rowlists[j]);
+                }
+            }
             sortfwdind = document.createElement('span');
-            sortfwdind.id = "sorttable_sortfwdind";
+            sortfwdind.className = "sorttable_sortfwdind";
             sortfwdind.innerHTML = stIsIE ? '&nbsp<font face="webdings">6</font>' : '&nbsp;&#x25B4;';
             this.appendChild(sortfwdind);
             return;
@@ -126,14 +136,17 @@ sorttable = {
               cell.className = cell.className.replace('sorttable_sorted','');
             }
           });
-          sortfwdind = document.getElementById('sorttable_sortfwdind');
-          if (sortfwdind) { sortfwdind.parentNode.removeChild(sortfwdind); }
-          sortrevind = document.getElementById('sorttable_sortrevind');
-          if (sortrevind) { sortrevind.parentNode.removeChild(sortrevind); }
+          rowlists = this.parentNode.getElementsByTagName("span");
+          for (var j=0; j < rowlists.length; j++) {
+              if (rowlists[j].className.search(/\bsorttable_sortfwdind\b/) != -1
+                  || rowlists[j].className.search(/\bsorttable_sortrevind\b/) != -1) {
+                  rowlists[j].parentNode.removeChild(rowlists[j]);
+              }
+          }
 
           this.className += ' sorttable_sorted';
           sortfwdind = document.createElement('span');
-          sortfwdind.id = "sorttable_sortfwdind";
+          sortfwdind.className = "sorttable_sortfwdind";
           sortfwdind.innerHTML = stIsIE ? '&nbsp<font face="webdings">6</font>' : '&nbsp;&#x25B4;';
           this.appendChild(sortfwdind);
 
@@ -169,7 +182,7 @@ sorttable = {
     for (var i=0; i<table.tBodies[0].rows.length; i++) {
       text = sorttable.getInnerText(table.tBodies[0].rows[i].cells[column]);
       if (text != '') {
-        if (text.match(/^-?[£$¤]?[\d,.]+%?$/)) {
+        if (text.match(/^-?[Â£$Â¤]?[\d,.]+%?$/)) {
           return sorttable.sort_numeric;
         }
         // check for a date: dd/mm/yyyy or dd/mm/yy 
@@ -207,8 +220,8 @@ sorttable = {
 
     hasInputs = (typeof node.getElementsByTagName == 'function') &&
                  node.getElementsByTagName('input').length;
-    
-    if (node.getAttribute("sorttable_customkey") != null) {
+
+    if (node.nodeType == 1 && node.getAttribute("sorttable_customkey") != null) {
       return node.getAttribute("sorttable_customkey");
     }
     else if (typeof node.textContent != 'undefined' && !hasInputs) {
@@ -266,8 +279,8 @@ sorttable = {
     return aa-bb;
   },
   sort_alpha: function(a,b) {
-    if (a[0]==b[0]) return 0;
-    if (a[0]<b[0]) return -1;
+    if (a[0].toLowerCase()==b[0].toLowerCase()) return 0;
+    if (a[0].toLowerCase()<b[0].toLowerCase()) return -1;
     return 1;
   },
   sort_ddmm: function(a,b) {

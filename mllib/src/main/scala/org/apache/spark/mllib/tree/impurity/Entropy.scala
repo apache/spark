@@ -17,26 +17,25 @@
 
 package org.apache.spark.mllib.tree.impurity
 
-import org.apache.spark.annotation.{DeveloperApi, Experimental}
+import org.apache.spark.annotation.Since
 
 /**
- * :: Experimental ::
- * Class for calculating [[http://en.wikipedia.org/wiki/Binary_entropy_function entropy]] during
- * binary classification.
+ * Class for calculating entropy during multiclass classification.
  */
-@Experimental
+@Since("1.0.0")
 object Entropy extends Impurity {
 
-  private[tree] def log2(x: Double) = scala.math.log(x) / scala.math.log(2)
+  private val _log2 = scala.math.log(2)
+
+  private[tree] def log2(x: Double) = scala.math.log(x) / _log2
 
   /**
-   * :: DeveloperApi ::
    * information calculation for multiclass classification
    * @param counts Array[Double] with counts for each label
    * @param totalCount sum of counts for all labels
    * @return information value, or 0 if totalCount = 0
    */
-  @DeveloperApi
+  @Since("1.1.0")
   override def calculate(counts: Array[Double], totalCount: Double): Double = {
     if (totalCount == 0) {
       return 0
@@ -56,14 +55,13 @@ object Entropy extends Impurity {
   }
 
   /**
-   * :: DeveloperApi ::
    * variance calculation
    * @param count number of instances
    * @param sum sum of labels
    * @param sumSquares summation of squares of the labels
    * @return information value, or 0 if count = 0
    */
-  @DeveloperApi
+  @Since("1.0.0")
   override def calculate(count: Double, sum: Double, sumSquares: Double): Double =
     throw new UnsupportedOperationException("Entropy.calculate")
 
@@ -71,6 +69,7 @@ object Entropy extends Impurity {
    * Get this impurity instance.
    * This is useful for passing impurity parameters to a Strategy in Java.
    */
+  @Since("1.1.0")
   def instance: this.type = this
 
 }
@@ -81,24 +80,30 @@ object Entropy extends Impurity {
  * Note: Instances of this class do not hold the data; they operate on views of the data.
  * @param numClasses  Number of classes for label.
  */
-private[tree] class EntropyAggregator(numClasses: Int)
-  extends ImpurityAggregator(numClasses) with Serializable {
+private[spark] class EntropyAggregator(numClasses: Int)
+  extends ImpurityAggregator(numClasses + 1) with Serializable {
 
   /**
    * Update stats for one (node, feature, bin) with the given label.
    * @param allStats  Flat stats array, with stats for this (node, feature, bin) contiguous.
    * @param offset    Start index of stats for this (node, feature, bin).
    */
-  def update(allStats: Array[Double], offset: Int, label: Double, instanceWeight: Double): Unit = {
-    if (label >= statsSize) {
+  def update(
+      allStats: Array[Double],
+      offset: Int,
+      label: Double,
+      numSamples: Int,
+      sampleWeight: Double): Unit = {
+    if (label >= numClasses) {
       throw new IllegalArgumentException(s"EntropyAggregator given label $label" +
-        s" but requires label < numClasses (= $statsSize).")
+        s" but requires label < numClasses (= ${numClasses}).")
     }
     if (label < 0) {
       throw new IllegalArgumentException(s"EntropyAggregator given label $label" +
         s"but requires label is non-negative.")
     }
-    allStats(offset + label.toInt) += instanceWeight
+    allStats(offset + label.toInt) += numSamples * sampleWeight
+    allStats(offset + statsSize - 1) += numSamples
   }
 
   /**
@@ -107,9 +112,9 @@ private[tree] class EntropyAggregator(numClasses: Int)
    * @param offset    Start index of stats for this (node, feature, bin).
    */
   def getCalculator(allStats: Array[Double], offset: Int): EntropyCalculator = {
-    new EntropyCalculator(allStats.view(offset, offset + statsSize).toArray)
+    new EntropyCalculator(allStats.view.slice(offset, offset + statsSize - 1).toArray,
+      allStats(offset + statsSize - 1).toLong)
   }
-
 }
 
 /**
@@ -118,12 +123,13 @@ private[tree] class EntropyAggregator(numClasses: Int)
  * (node, feature, bin).
  * @param stats  Array of sufficient statistics for a (node, feature, bin).
  */
-private[tree] class EntropyCalculator(stats: Array[Double]) extends ImpurityCalculator(stats) {
+private[spark] class EntropyCalculator(stats: Array[Double], var rawCount: Long)
+  extends ImpurityCalculator(stats) {
 
   /**
    * Make a deep copy of this [[ImpurityCalculator]].
    */
-  def copy: EntropyCalculator = new EntropyCalculator(stats.clone())
+  def copy: EntropyCalculator = new EntropyCalculator(stats.clone(), rawCount)
 
   /**
    * Calculate the impurity from the stored sufficient statistics.
@@ -131,9 +137,9 @@ private[tree] class EntropyCalculator(stats: Array[Double]) extends ImpurityCalc
   def calculate(): Double = Entropy.calculate(stats, stats.sum)
 
   /**
-   * Number of data points accounted for in the sufficient statistics.
+   * Weighted number of data points accounted for in the sufficient statistics.
    */
-  def count: Long = stats.sum.toLong
+  def count: Double = stats.sum
 
   /**
    * Prediction which should be made based on the sufficient statistics.

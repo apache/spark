@@ -17,25 +17,39 @@
 
 package org.apache.spark.ml.feature
 
-import scala.beans.BeanInfo
-
-import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.param.ParamsSuite
-import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest}
 import org.apache.spark.sql.{DataFrame, Row}
 
-@BeanInfo
-case class TokenizerTestData(rawText: String, wantedTokens: Array[String])
+case class TokenizerTestData(rawText: String, wantedTokens: Array[String]) {
+  def getRawText: String = rawText
+  def getWantedTokens: Array[String] = wantedTokens
+}
 
-class TokenizerSuite extends SparkFunSuite {
+class TokenizerSuite extends MLTest with DefaultReadWriteTest {
 
   test("params") {
     ParamsSuite.checkParams(new Tokenizer)
   }
+
+  test("read/write") {
+    val t = new Tokenizer()
+      .setInputCol("myInputCol")
+      .setOutputCol("myOutputCol")
+    testDefaultReadWrite(t)
+  }
 }
 
-class RegexTokenizerSuite extends SparkFunSuite with MLlibTestSparkContext {
-  import org.apache.spark.ml.feature.RegexTokenizerSuite._
+class RegexTokenizerSuite extends MLTest with DefaultReadWriteTest {
+
+  import testImplicits._
+
+  def testRegexTokenizer(t: RegexTokenizer, dataframe: DataFrame): Unit = {
+    testTransformer[(String, Seq[String])](dataframe, t, "tokens", "wantedTokens") {
+      case Row(tokens, wantedTokens) =>
+        assert(tokens === wantedTokens)
+    }
+  }
 
   test("params") {
     ParamsSuite.checkParams(new RegexTokenizer)
@@ -47,38 +61,50 @@ class RegexTokenizerSuite extends SparkFunSuite with MLlibTestSparkContext {
       .setPattern("\\w+|\\p{Punct}")
       .setInputCol("rawText")
       .setOutputCol("tokens")
-    val dataset0 = sqlContext.createDataFrame(Seq(
-      TokenizerTestData("Test for tokenization.", Array("Test", "for", "tokenization", ".")),
-      TokenizerTestData("Te,st. punct", Array("Te", ",", "st", ".", "punct"))
-    ))
+    val dataset0 = Seq(
+      TokenizerTestData("Test for tokenization.", Array("test", "for", "tokenization", ".")),
+      TokenizerTestData("Te,st. punct", Array("te", ",", "st", ".", "punct"))
+    ).toDF()
     testRegexTokenizer(tokenizer0, dataset0)
 
-    val dataset1 = sqlContext.createDataFrame(Seq(
-      TokenizerTestData("Test for tokenization.", Array("Test", "for", "tokenization")),
+    val dataset1 = Seq(
+      TokenizerTestData("Test for tokenization.", Array("test", "for", "tokenization")),
       TokenizerTestData("Te,st. punct", Array("punct"))
-    ))
+    ).toDF()
     tokenizer0.setMinTokenLength(3)
     testRegexTokenizer(tokenizer0, dataset1)
 
     val tokenizer2 = new RegexTokenizer()
       .setInputCol("rawText")
       .setOutputCol("tokens")
-    val dataset2 = sqlContext.createDataFrame(Seq(
-      TokenizerTestData("Test for tokenization.", Array("Test", "for", "tokenization.")),
-      TokenizerTestData("Te,st.  punct", Array("Te,st.", "punct"))
-    ))
+    val dataset2 = Seq(
+      TokenizerTestData("Test for tokenization.", Array("test", "for", "tokenization.")),
+      TokenizerTestData("Te,st.  punct", Array("te,st.", "punct"))
+    ).toDF()
     testRegexTokenizer(tokenizer2, dataset2)
   }
-}
 
-object RegexTokenizerSuite extends SparkFunSuite {
+  test("RegexTokenizer with toLowercase false") {
+    val tokenizer = new RegexTokenizer()
+      .setInputCol("rawText")
+      .setOutputCol("tokens")
+      .setToLowercase(false)
+    val dataset = Seq(
+      TokenizerTestData("JAVA SCALA", Array("JAVA", "SCALA")),
+      TokenizerTestData("java scala", Array("java", "scala"))
+    ).toDF()
+    testRegexTokenizer(tokenizer, dataset)
+  }
 
-  def testRegexTokenizer(t: RegexTokenizer, dataset: DataFrame): Unit = {
-    t.transform(dataset)
-      .select("tokens", "wantedTokens")
-      .collect()
-      .foreach { case Row(tokens, wantedTokens) =>
-        assert(tokens === wantedTokens)
-      }
+  test("read/write") {
+    val t = new RegexTokenizer()
+      .setInputCol("myInputCol")
+      .setOutputCol("myOutputCol")
+      .setMinTokenLength(2)
+      .setGaps(false)
+      .setPattern("hi")
+      .setToLowercase(false)
+    testDefaultReadWrite(t)
   }
 }
+

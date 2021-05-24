@@ -19,7 +19,9 @@ package org.apache.spark.mllib.pmml.export
 
 import scala.{Array => SArray}
 
-import org.dmg.pmml._
+import org.dmg.pmml.{DataDictionary, DataField, DataType, FieldName, MiningField,
+  MiningFunction, MiningSchema, OpType}
+import org.dmg.pmml.regression.{NumericPredictor, RegressionModel, RegressionTable}
 
 import org.apache.spark.mllib.regression.GeneralizedLinearModel
 
@@ -45,31 +47,31 @@ private[mllib] class GeneralizedLinearPMMLModelExport(
       val miningSchema = new MiningSchema
       val regressionTable = new RegressionTable(model.intercept)
       val regressionModel = new RegressionModel()
-        .withFunctionName(MiningFunctionType.REGRESSION)
-        .withMiningSchema(miningSchema)
-        .withModelName(description)
-        .withRegressionTables(regressionTable)
+        .setMiningFunction(MiningFunction.REGRESSION)
+        .setMiningSchema(miningSchema)
+        .setModelName(description)
+        .addRegressionTables(regressionTable)
 
       for (i <- 0 until model.weights.size) {
         fields(i) = FieldName.create("field_" + i)
-        dataDictionary.withDataFields(new DataField(fields(i), OpType.CONTINUOUS, DataType.DOUBLE))
+        dataDictionary.addDataFields(new DataField(fields(i), OpType.CONTINUOUS, DataType.DOUBLE))
         miningSchema
-          .withMiningFields(new MiningField(fields(i))
-          .withUsageType(FieldUsageType.ACTIVE))
-        regressionTable.withNumericPredictors(new NumericPredictor(fields(i), model.weights(i)))
+          .addMiningFields(new MiningField(fields(i))
+          .setUsageType(MiningField.UsageType.ACTIVE))
+        regressionTable.addNumericPredictors(new NumericPredictor(fields(i), model.weights(i)))
       }
 
       // for completeness add target field
       val targetField = FieldName.create("target")
-      dataDictionary.withDataFields(new DataField(targetField, OpType.CONTINUOUS, DataType.DOUBLE))
+      dataDictionary.addDataFields(new DataField(targetField, OpType.CONTINUOUS, DataType.DOUBLE))
       miningSchema
-        .withMiningFields(new MiningField(targetField)
-        .withUsageType(FieldUsageType.TARGET))
+        .addMiningFields(new MiningField(targetField)
+        .setUsageType(MiningField.UsageType.TARGET))
 
-      dataDictionary.withNumberOfFields(dataDictionary.getDataFields.size)
+      dataDictionary.setNumberOfFields(dataDictionary.getDataFields.size)
 
       pmml.setDataDictionary(dataDictionary)
-      pmml.withModels(regressionModel)
+      pmml.addModels(regressionModel)
     }
   }
 }

@@ -1,0 +1,124 @@
+<!--
+Licensed to the Apache Software Foundation (ASF) under one or more
+contributor license agreements.  See the NOTICE file distributed with
+this work for additional information regarding copyright ownership.
+The ASF licenses this file to You under the Apache License, Version 2.0
+(the "License"); you may not use this file except in compliance with
+the License.  You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+-->
+
+<script id="stages-summary-template" type="text/html">
+    <h4 id="summaryMetricsTitle" class="title-table"></h4>
+    <div class="container-fluid">
+        <table id="summary-metrics-table" class="table table-striped compact table-dataTable cell-border">
+            <thead>
+            <th>Metric</th>
+            <th>Min</th>
+            <th>25th percentile</th>
+            <th>Median</th>
+            <th>75th percentile</th>
+            <th>Max</th>
+            </thead>
+            <tbody>
+            </tbody>
+        </table>
+    </div>
+    <a id="aggregatedMetrics" class="collapse-table">
+        <span class="expand-input-rate-arrow arrow-closed" id="arrowtoggle2"></span>
+        <h4 class="title-table">Aggregated Metrics by Executor</h4>
+    </a>
+    <br>
+    <div class="container-fluid d-none" id="toggle-aggregatedMetrics">
+        <table id="summary-executor-table" class="table table-striped compact table-dataTable cell-border">
+            <thead>
+	        <tr>
+                <th>Executor ID</th>
+                <th>Logs</th>
+                <th>Address</th>
+                <th>Task Time</th>
+                <th>Total Tasks</th>
+                <th>Failed Tasks</th>
+                <th>Killed Tasks</th>
+                <th>Succeeded Tasks</th>
+                <th>
+          <span data-toggle="tooltip" data-placement="top"
+                title="Shows if this executor has been excluded by the scheduler due to task failures.">
+            Excluded</span>
+                </th>
+                <th><span id="executor-summary-input">Input Size / Records</span></th>
+                <th><span id="executor-summary-output">Output Size / Records</span></th>
+                <th><span id="executor-summary-shuffle-read">Shuffle Read Size / Records</span></th>
+                <th><span id="executor-summary-shuffle-write">Shuffle Write Size / Records</span></th>
+                <th>Spill (Memory) </th>
+                <th>Spill (Disk) </th>
+                <th>Peak JVM Memory OnHeap / OffHeap</th>
+                <th>Peak Execution Memory OnHeap / OffHeap</th>
+                <th>Peak Storage Memory OnHeap / OffHeap</th>
+                <th>Peak Pool Memory Direct / Mapped</th>
+                </tr>
+            </thead>
+            <tbody>
+            </tbody>
+        </table>
+    </div>
+    <div id="accumulator-update-table">
+        <h4 class="title-table">Accumulators</h4>
+        <div class="container-fluid">
+            <table id="accumulator-table" class="table table-striped compact table-dataTable cell-border">
+                <thead>
+                <th>ID</th>
+                <th>Name</th>
+                <th>Value</th>
+                </thead>
+                <tbody>
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <h4 id="tasksTitle" class="title-table"></h4>
+    <div class="container-fluid">
+            <table id="active-tasks-table" class="table table-striped compact table-dataTable cell-border">
+                <thead>
+                <tr>
+                    <th>Index</th>
+                    <th>Task ID</th>
+                    <th>Attempt</th>
+                    <th>Status</th>
+                    <th>Locality level</th>
+                    <th>Executor ID</th>
+                    <th>Host</th>
+                    <th>Logs</th>
+                    <th>Launch Time</th>
+                    <th>Duration</th>
+                    <th>GC Time</th>
+                    <th>Scheduler Delay</th>
+                    <th>Task Deserialization Time</th>
+                    <th>Shuffle Read Blocked Time</th>
+                    <th>Shuffle Remote Reads</th>
+                    <th>Result Serialization Time</th>
+                    <th>Getting Result Time</th>
+                    <th>Peak Execution Memory</th>
+                    <th>Accumulators</th>
+                    <th>Input Size / Records</th>
+                    <th>Output Size / Records</th>
+                    <th>Shuffle Write Time</th>
+                    <th>Shuffle Write Size / Records</th>
+                    <th>Shuffle Read Size / Records</th>
+                    <th>Spill (Memory)</th>
+                    <th>Spill (Disk)</th>
+                    <th>Errors</th>
+                </tr>
+                </thead>
+                <tbody>
+                </tbody>
+            </table>
+    </div>
+</script>

@@ -18,7 +18,7 @@
 package org.apache.spark.mllib.classification
 
 import org.apache.spark.SparkContext
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.Since
 import org.apache.spark.mllib.classification.impl.GLMClassificationModel
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.optimization._
@@ -33,38 +33,36 @@ import org.apache.spark.rdd.RDD
  * @param weights Weights computed for every feature.
  * @param intercept Intercept computed for this model.
  */
-class SVMModel (
-    override val weights: Vector,
-    override val intercept: Double)
+@Since("0.8.0")
+class SVMModel @Since("1.1.0") (
+    @Since("1.0.0") override val weights: Vector,
+    @Since("0.8.0") override val intercept: Double)
   extends GeneralizedLinearModel(weights, intercept) with ClassificationModel with Serializable
   with Saveable with PMMLExportable {
 
   private var threshold: Option[Double] = Some(0.0)
 
   /**
-   * :: Experimental ::
    * Sets the threshold that separates positive predictions from negative predictions. An example
-   * with prediction score greater than or equal to this threshold is identified as an positive,
+   * with prediction score greater than or equal to this threshold is identified as a positive,
    * and negative otherwise. The default value is 0.0.
    */
-  @Experimental
+  @Since("1.0.0")
   def setThreshold(threshold: Double): this.type = {
     this.threshold = Some(threshold)
     this
   }
 
   /**
-   * :: Experimental ::
    * Returns the threshold (if any) used for converting raw prediction scores into 0/1 predictions.
    */
-  @Experimental
+  @Since("1.3.0")
   def getThreshold: Option[Double] = threshold
 
   /**
-   * :: Experimental ::
    * Clears the threshold so that `predict` will output raw prediction scores.
    */
-  @Experimental
+  @Since("1.0.0")
   def clearThreshold(): this.type = {
     threshold = None
     this
@@ -74,27 +72,28 @@ class SVMModel (
       dataMatrix: Vector,
       weightMatrix: Vector,
       intercept: Double) = {
-    val margin = weightMatrix.toBreeze.dot(dataMatrix.toBreeze) + intercept
+    val margin = weightMatrix.asBreeze.dot(dataMatrix.asBreeze) + intercept
     threshold match {
       case Some(t) => if (margin > t) 1.0 else 0.0
       case None => margin
     }
   }
 
+  @Since("1.3.0")
   override def save(sc: SparkContext, path: String): Unit = {
     GLMClassificationModel.SaveLoadV1_0.save(sc, path, this.getClass.getName,
       numFeatures = weights.size, numClasses = 2, weights, intercept, threshold)
   }
-
-  override protected def formatVersion: String = "1.0"
 
   override def toString: String = {
     s"${super.toString}, numClasses = 2, threshold = ${threshold.getOrElse("None")}"
   }
 }
 
+@Since("1.3.0")
 object SVMModel extends Loader[SVMModel] {
 
+  @Since("1.3.0")
   override def load(sc: SparkContext, path: String): SVMModel = {
     val (loadedClassName, version, metadata) = Loader.loadMetadata(sc, path)
     // Hard-code class name string in case it changes in the future
@@ -123,9 +122,11 @@ object SVMModel extends Loader[SVMModel] {
 
 /**
  * Train a Support Vector Machine (SVM) using Stochastic Gradient Descent. By default L2
- * regularization is used, which can be changed via [[SVMWithSGD.optimizer]].
- * NOTE: Labels used in SVM should be {0, 1}.
+ * regularization is used, which can be changed via `SVMWithSGD.optimizer`.
+ *
+ * @note Labels used in SVM should be {0, 1}.
  */
+@Since("0.8.0")
 class SVMWithSGD private (
     private var stepSize: Double,
     private var numIterations: Int,
@@ -135,6 +136,7 @@ class SVMWithSGD private (
 
   private val gradient = new HingeGradient()
   private val updater = new SquaredL2Updater()
+  @Since("0.8.0")
   override val optimizer = new GradientDescent(gradient, updater)
     .setStepSize(stepSize)
     .setNumIterations(numIterations)
@@ -144,8 +146,9 @@ class SVMWithSGD private (
 
   /**
    * Construct a SVM object with default parameters: {stepSize: 1.0, numIterations: 100,
-   * regParm: 0.01, miniBatchFraction: 1.0}.
+   * regParam: 0.01, miniBatchFraction: 1.0}.
    */
+  @Since("0.8.0")
   def this() = this(1.0, 100, 0.01, 1.0)
 
   override protected def createModel(weights: Vector, intercept: Double) = {
@@ -154,8 +157,11 @@ class SVMWithSGD private (
 }
 
 /**
- * Top-level methods for calling SVM. NOTE: Labels used in SVM should be {0, 1}.
+ * Top-level methods for calling SVM.
+ *
+ * @note Labels used in SVM should be {0, 1}.
  */
+@Since("0.8.0")
 object SVMWithSGD {
 
   /**
@@ -164,8 +170,6 @@ object SVMWithSGD {
    * `miniBatchFraction` fraction of the data to calculate the gradient. The weights used in
    * gradient descent are initialized using the initial weights provided.
    *
-   * NOTE: Labels used in SVM should be {0, 1}.
-   *
    * @param input RDD of (label, array of features) pairs.
    * @param numIterations Number of iterations of gradient descent to run.
    * @param stepSize Step size to be used for each iteration of gradient descent.
@@ -173,7 +177,10 @@ object SVMWithSGD {
    * @param miniBatchFraction Fraction of data to be used per iteration.
    * @param initialWeights Initial set of weights to be used. Array should be equal in size to
    *        the number of features in the data.
+   *
+   * @note Labels used in SVM should be {0, 1}.
    */
+  @Since("0.8.0")
   def train(
       input: RDD[LabeledPoint],
       numIterations: Int,
@@ -189,7 +196,8 @@ object SVMWithSGD {
    * Train a SVM model given an RDD of (label, features) pairs. We run a fixed number
    * of iterations of gradient descent using the specified step size. Each iteration uses
    * `miniBatchFraction` fraction of the data to calculate the gradient.
-   * NOTE: Labels used in SVM should be {0, 1}
+   *
+   * @note Labels used in SVM should be {0, 1}
    *
    * @param input RDD of (label, array of features) pairs.
    * @param numIterations Number of iterations of gradient descent to run.
@@ -197,6 +205,7 @@ object SVMWithSGD {
    * @param regParam Regularization parameter.
    * @param miniBatchFraction Fraction of data to be used per iteration.
    */
+  @Since("0.8.0")
   def train(
       input: RDD[LabeledPoint],
       numIterations: Int,
@@ -210,14 +219,16 @@ object SVMWithSGD {
    * Train a SVM model given an RDD of (label, features) pairs. We run a fixed number
    * of iterations of gradient descent using the specified step size. We use the entire data set to
    * update the gradient in each iteration.
-   * NOTE: Labels used in SVM should be {0, 1}
    *
    * @param input RDD of (label, array of features) pairs.
    * @param stepSize Step size to be used for each iteration of Gradient Descent.
    * @param regParam Regularization parameter.
    * @param numIterations Number of iterations of gradient descent to run.
    * @return a SVMModel which has the weights and offset from training.
+   *
+   * @note Labels used in SVM should be {0, 1}
    */
+  @Since("0.8.0")
   def train(
       input: RDD[LabeledPoint],
       numIterations: Int,
@@ -230,12 +241,14 @@ object SVMWithSGD {
    * Train a SVM model given an RDD of (label, features) pairs. We run a fixed number
    * of iterations of gradient descent using a step size of 1.0. We use the entire data set to
    * update the gradient in each iteration.
-   * NOTE: Labels used in SVM should be {0, 1}
    *
    * @param input RDD of (label, array of features) pairs.
    * @param numIterations Number of iterations of gradient descent to run.
    * @return a SVMModel which has the weights and offset from training.
+   *
+   * @note Labels used in SVM should be {0, 1}
    */
+  @Since("0.8.0")
   def train(input: RDD[LabeledPoint], numIterations: Int): SVMModel = {
     train(input, numIterations, 1.0, 0.01, 1.0)
   }

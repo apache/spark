@@ -17,31 +17,31 @@
 
 package org.apache.spark.mllib.stat.distribution
 
-import breeze.linalg.{DenseVector => DBV, DenseMatrix => DBM, diag, max, eigSym, Vector => BV}
+import breeze.linalg.{diag, eigSym, max, DenseMatrix => DBM, DenseVector => DBV, Vector => BV}
 
-import org.apache.spark.annotation.DeveloperApi;
-import org.apache.spark.mllib.linalg.{Vectors, Vector, Matrices, Matrix}
+import org.apache.spark.annotation.Since
+import org.apache.spark.mllib.linalg.{Matrices, Matrix, Vector, Vectors}
 import org.apache.spark.mllib.util.MLUtils
 
 /**
- * :: DeveloperApi ::
  * This class provides basic functionality for a Multivariate Gaussian (Normal) Distribution. In
  * the event that the covariance matrix is singular, the density will be computed in a
  * reduced dimensional subspace under which the distribution is supported.
- * (see [[http://en.wikipedia.org/wiki/Multivariate_normal_distribution#Degenerate_case]])
+ * (see <a href="http://en.wikipedia.org/wiki/Multivariate_normal_distribution#Degenerate_case">
+ * Degenerate case in Multivariate normal distribution (Wikipedia)</a>)
  *
  * @param mu The mean vector of the distribution
  * @param sigma The covariance matrix of the distribution
  */
-@DeveloperApi
-class MultivariateGaussian (
-    val mu: Vector,
-    val sigma: Matrix) extends Serializable {
+@Since("1.3.0")
+class MultivariateGaussian @Since("1.3.0") (
+    @Since("1.3.0") val mu: Vector,
+    @Since("1.3.0") val sigma: Matrix) extends Serializable {
 
   require(sigma.numCols == sigma.numRows, "Covariance matrix must be square")
   require(mu.size == sigma.numCols, "Mean vector length must match covariance matrix size")
 
-  private val breezeMu = mu.toBreeze.toDenseVector
+  @transient private lazy val breezeMu = mu.asBreeze.toDenseVector
 
   /**
    * private[mllib] constructor
@@ -55,19 +55,27 @@ class MultivariateGaussian (
 
   /**
    * Compute distribution dependent constants:
-   *    rootSigmaInv = D^(-1/2)^ * U, where sigma = U * D * U.t
+   *    rootSigmaInv = D^(-1/2)^ * U.t, where sigma = U * D * U.t
    *    u = log((2*pi)^(-k/2)^ * det(sigma)^(-1/2)^)
    */
-  private val (rootSigmaInv: DBM[Double], u: Double) = calculateCovarianceConstants
+  @transient private lazy val tuple = calculateCovarianceConstants
+  @transient private lazy val rootSigmaInv = tuple._1
+  @transient private lazy val u = tuple._2
 
-  /** Returns density of this multivariate Gaussian at given point, x */
+  /**
+   * Returns density of this multivariate Gaussian at given point, x
+   */
+  @Since("1.3.0")
   def pdf(x: Vector): Double = {
-    pdf(x.toBreeze)
+    pdf(x.asBreeze)
   }
 
-  /** Returns the log-density of this multivariate Gaussian at given point, x */
+  /**
+   * Returns the log-density of this multivariate Gaussian at given point, x
+   */
+  @Since("1.3.0")
   def logpdf(x: Vector): Double = {
-    logpdf(x.toBreeze)
+    logpdf(x.asBreeze)
   }
 
   /** Returns density of this multivariate Gaussian at given point, x */
@@ -99,11 +107,11 @@ class MultivariateGaussian (
    *
    *    sigma = U * D * U.t
    *    inv(Sigma) = U * inv(D) * U.t
-   *               = (D^{-1/2}^ * U).t * (D^{-1/2}^ * U)
+   *               = (D^{-1/2}^ * U.t).t * (D^{-1/2}^ * U.t)
    *
    * and thus
    *
-   *    -0.5 * (x-mu).t * inv(Sigma) * (x-mu) = -0.5 * norm(D^{-1/2}^ * U  * (x-mu))^2^
+   *    -0.5 * (x-mu).t * inv(Sigma) * (x-mu) = -0.5 * norm(D^{-1/2}^ * U.t  * (x-mu))^2^
    *
    * To guard against singular covariance matrices, this method computes both the
    * pseudo-determinant and the pseudo-inverse (Moore-Penrose).  Singular values are considered
@@ -111,7 +119,7 @@ class MultivariateGaussian (
    * relation to the maximum singular value (same tolerance used by, e.g., Octave).
    */
   private def calculateCovarianceConstants: (DBM[Double], Double) = {
-    val eigSym.EigSym(d, u) = eigSym(sigma.toBreeze.toDenseMatrix) // sigma = u * diag(d) * u.t
+    val eigSym.EigSym(d, u) = eigSym(sigma.asBreeze.toDenseMatrix) // sigma = u * diag(d) * u.t
 
     // For numerical stability, values are considered to be non-zero only if they exceed tol.
     // This prevents any inverted value from exceeding (eps * n * max(d))^-1
@@ -125,7 +133,7 @@ class MultivariateGaussian (
       // by inverting the square root of all non-zero values
       val pinvS = diag(new DBV(d.map(v => if (v > tol) math.sqrt(1.0 / v) else 0.0).toArray))
 
-      (pinvS * u, -0.5 * (mu.size * math.log(2.0 * math.Pi) + logPseudoDetSigma))
+      (pinvS * u.t, -0.5 * (mu.size * math.log(2.0 * math.Pi) + logPseudoDetSigma))
     } catch {
       case uex: UnsupportedOperationException =>
         throw new IllegalArgumentException("Covariance matrix has no non-zero singular values")

@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.streaming
 
 import org.apache.spark.SparkConf
@@ -32,7 +33,7 @@ import org.apache.spark.streaming.{Seconds, StreamingContext}
  * Then create a text file in `localdir` and the words in the file will get counted.
  */
 object HdfsWordCount {
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     if (args.length < 1) {
       System.err.println("Usage: HdfsWordCount <directory>")
       System.exit(1)
@@ -53,3 +54,4 @@ object HdfsWordCount {
     ssc.awaitTermination()
   }
 }
+// scalastyle:on println

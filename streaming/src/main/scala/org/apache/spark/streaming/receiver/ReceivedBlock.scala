@@ -20,7 +20,6 @@ package org.apache.spark.streaming.receiver
 import java.nio.ByteBuffer
 
 import scala.collection.mutable.ArrayBuffer
-import scala.language.existentials
 
 /** Trait representing a received block */
 private[streaming] sealed trait ReceivedBlock
@@ -31,5 +30,5 @@ private[streaming] case class ArrayBufferBlock(arrayBuffer: ArrayBuffer[_]) exte
 /** class representing a block received as an Iterator */
 private[streaming] case class IteratorBlock(iterator: Iterator[_]) extends ReceivedBlock
 
-/** class representing a block received as an ByteBuffer */
+/** class representing a block received as a ByteBuffer */
 private[streaming] case class ByteBufferBlock(byteBuffer: ByteBuffer) extends ReceivedBlock

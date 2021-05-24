@@ -18,112 +18,145 @@
 package org.apache.spark.sql.sources
 
 import java.io.File
+import java.nio.charset.StandardCharsets
+import java.nio.file.{Files, Paths}
 
-import org.scalatest.BeforeAndAfterAll
+import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.sql.{SaveMode, SQLConf, DataFrame}
+import org.apache.spark.sql.{AnalysisException, DataFrame, SaveMode}
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
-class SaveLoadSuite extends DataSourceTest with BeforeAndAfterAll {
+class SaveLoadSuite extends DataSourceTest with SharedSparkSession with BeforeAndAfter {
+  import testImplicits._
 
-  import caseInsensitiveContext.sql
-
-  private lazy val sparkContext = caseInsensitiveContext.sparkContext
-
-  var originalDefaultSource: String = null
-
-  var path: File = null
-
-  var df: DataFrame = null
+  protected override lazy val sql = spark.sql _
+  private var originalDefaultSource: String = null
+  private var path: File = null
+  private var df: DataFrame = null
 
   override def beforeAll(): Unit = {
-    originalDefaultSource = caseInsensitiveContext.conf.defaultDataSourceName
+    super.beforeAll()
+    originalDefaultSource = spark.sessionState.conf.defaultDataSourceName
 
     path = Utils.createTempDir()
     path.delete()
 
-    val rdd = sparkContext.parallelize((1 to 10).map(i => s"""{"a":$i, "b":"str${i}"}"""))
-    df = caseInsensitiveContext.read.json(rdd)
-    df.registerTempTable("jsonTable")
+    val ds = (1 to 10).map(i => s"""{"a":$i, "b":"str${i}"}""").toDS()
+    df = spark.read.json(ds)
+    df.createOrReplaceTempView("jsonTable")
   }
 
   override def afterAll(): Unit = {
-    caseInsensitiveContext.conf.setConf(SQLConf.DEFAULT_DATA_SOURCE_NAME, originalDefaultSource)
+    try {
+      spark.conf.set(SQLConf.DEFAULT_DATA_SOURCE_NAME.key, originalDefaultSource)
+    } finally {
+      super.afterAll()
+    }
   }
 
   after {
-    caseInsensitiveContext.conf.setConf(SQLConf.DEFAULT_DATA_SOURCE_NAME, originalDefaultSource)
     Utils.deleteRecursively(path)
   }
 
-  def checkLoad(): Unit = {
-    caseInsensitiveContext.conf.setConf(
-      SQLConf.DEFAULT_DATA_SOURCE_NAME, "org.apache.spark.sql.json")
-    checkAnswer(caseInsensitiveContext.read.load(path.toString), df.collect())
+  def checkLoad(expectedDF: DataFrame = df, tbl: String = "jsonTable"): Unit = {
+    spark.conf.set(SQLConf.DEFAULT_DATA_SOURCE_NAME.key, "org.apache.spark.sql.json")
+    checkAnswer(spark.read.load(path.toString), expectedDF.collect())
 
     // Test if we can pick up the data source name passed in load.
-    caseInsensitiveContext.conf.setConf(SQLConf.DEFAULT_DATA_SOURCE_NAME, "not a source name")
-    checkAnswer(caseInsensitiveContext.read.format("json").load(path.toString), df.collect())
-    checkAnswer(caseInsensitiveContext.read.format("json").load(path.toString), df.collect())
+    spark.conf.set(SQLConf.DEFAULT_DATA_SOURCE_NAME.key, "not a source name")
+    checkAnswer(spark.read.format("json").load(path.toString),
+      expectedDF.collect())
+    checkAnswer(spark.read.format("json").load(path.toString),
+      expectedDF.collect())
     val schema = StructType(StructField("b", StringType, true) :: Nil)
     checkAnswer(
-      caseInsensitiveContext.read.format("json").schema(schema).load(path.toString),
-      sql("SELECT b FROM jsonTable").collect())
+      spark.read.format("json").schema(schema).load(path.toString),
+      sql(s"SELECT b FROM $tbl").collect())
   }
 
   test("save with path and load") {
-    caseInsensitiveContext.conf.setConf(
-      SQLConf.DEFAULT_DATA_SOURCE_NAME, "org.apache.spark.sql.json")
+    spark.conf.set(SQLConf.DEFAULT_DATA_SOURCE_NAME.key, "org.apache.spark.sql.json")
     df.write.save(path.toString)
     checkLoad()
   }
 
   test("save with string mode and path, and load") {
-    caseInsensitiveContext.conf.setConf(
-      SQLConf.DEFAULT_DATA_SOURCE_NAME, "org.apache.spark.sql.json")
+    spark.conf.set(SQLConf.DEFAULT_DATA_SOURCE_NAME.key, "org.apache.spark.sql.json")
     path.createNewFile()
     df.write.mode("overwrite").save(path.toString)
     checkLoad()
   }
 
   test("save with path and datasource, and load") {
-    caseInsensitiveContext.conf.setConf(SQLConf.DEFAULT_DATA_SOURCE_NAME, "not a source name")
+    spark.conf.set(SQLConf.DEFAULT_DATA_SOURCE_NAME.key, "not a source name")
     df.write.json(path.toString)
     checkLoad()
   }
 
   test("save with data source and options, and load") {
-    caseInsensitiveContext.conf.setConf(SQLConf.DEFAULT_DATA_SOURCE_NAME, "not a source name")
+    spark.conf.set(SQLConf.DEFAULT_DATA_SOURCE_NAME.key, "not a source name")
     df.write.mode(SaveMode.ErrorIfExists).json(path.toString)
     checkLoad()
   }
 
   test("save and save again") {
-    df.write.json(path.toString)
-
-    var message = intercept[RuntimeException] {
+    withTempView("jsonTable2") {
       df.write.json(path.toString)
-    }.getMessage
 
-    assert(
-      message.contains("already exists"),
-      "We should complain that the path already exists.")
+      val message = intercept[AnalysisException] {
+        df.write.json(path.toString)
+      }.getMessage
 
-    if (path.exists()) Utils.deleteRecursively(path)
+      assert(
+        message.contains("already exists"),
+        "We should complain that the path already exists.")
 
-    df.write.json(path.toString)
-    checkLoad()
+      if (path.exists()) Utils.deleteRecursively(path)
 
-    df.write.mode(SaveMode.Overwrite).json(path.toString)
-    checkLoad()
+      df.write.json(path.toString)
+      checkLoad()
 
-    message = intercept[RuntimeException] {
+      df.write.mode(SaveMode.Overwrite).json(path.toString)
+      checkLoad()
+
+      // verify the append mode
       df.write.mode(SaveMode.Append).json(path.toString)
-    }.getMessage
+      val df2 = df.union(df)
+      df2.createOrReplaceTempView("jsonTable2")
 
-    assert(
-      message.contains("Append mode is not supported"),
-      "We should complain that 'Append mode is not supported' for JSON source.")
+      checkLoad(df2, "jsonTable2")
+    }
+  }
+
+  test("SPARK-23459: Improve error message when specified unknown column in partition columns") {
+    withTempDir { dir =>
+      val path = dir.getCanonicalPath
+      val unknown = "unknownColumn"
+      val df = Seq(1L -> "a").toDF("i", "j")
+      val schemaCatalog = df.schema.catalogString
+      val e = intercept[AnalysisException] {
+        df.write
+          .format("parquet")
+          .partitionBy(unknown)
+          .save(path)
+      }.getMessage
+      assert(e.contains(s"Partition column `$unknown` not found in schema $schemaCatalog"))
+    }
+  }
+
+  test("skip empty files in non bucketed read") {
+    Seq("csv", "text").foreach { format =>
+      withTempDir { dir =>
+        val path = dir.getCanonicalPath
+        Files.write(Paths.get(path, "empty"), Array.empty[Byte])
+        Files.write(Paths.get(path, "notEmpty"), "a".getBytes(StandardCharsets.UTF_8))
+        val readBack = spark.read.option("wholetext", true).format(format).load(path)
+
+        assert(readBack.rdd.getNumPartitions === 1)
+      }
+    }
   }
 }

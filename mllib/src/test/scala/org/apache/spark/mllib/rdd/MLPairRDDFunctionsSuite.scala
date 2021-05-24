@@ -18,12 +18,12 @@
 package org.apache.spark.mllib.rdd
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.rdd.MLPairRDDFunctions._
+import org.apache.spark.mllib.util.MLlibTestSparkContext
 
 class MLPairRDDFunctionsSuite extends SparkFunSuite with MLlibTestSparkContext {
   test("topByKey") {
-    val topMap = sc.parallelize(Array((1, 7), (1, 3), (1, 6), (1, 1), (1, 2), (3, 2), (3, 7), (5,
+    val topMap = sc.parallelize(Seq((1, 7), (1, 3), (1, 6), (1, 1), (1, 2), (3, 2), (3, 7), (5,
       1), (3, 5)), 2)
       .topByKey(5)
       .collectAsMap()

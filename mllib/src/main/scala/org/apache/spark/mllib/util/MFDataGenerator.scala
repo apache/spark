@@ -19,16 +19,14 @@ package org.apache.spark.mllib.util
 
 import java.{util => ju}
 
-import scala.language.postfixOps
 import scala.util.Random
 
 import org.apache.spark.SparkContext
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.Since
 import org.apache.spark.mllib.linalg.{BLAS, DenseMatrix}
 import org.apache.spark.rdd.RDD
 
 /**
- * :: DeveloperApi ::
  * Generate RDD(s) containing data for Matrix Factorization.
  *
  * This method samples training entries according to the oversampling factor
@@ -51,12 +49,15 @@ import org.apache.spark.rdd.RDD
  *   test           (Boolean) Whether to create testing RDD.
  *   testSampFact   (Double) Percentage of training data to use as test data.
  */
-@DeveloperApi
+@Since("0.8.0")
 object MFDataGenerator {
-  def main(args: Array[String]) {
+  @Since("0.8.0")
+  def main(args: Array[String]): Unit = {
     if (args.length < 2) {
+      // scalastyle:off println
       println("Usage: MFDataGenerator " +
         "<master> <outputDir> [m] [n] [rank] [trainSampFact] [noise] [sigma] [test] [testSampFact]")
+      // scalastyle:on println
       System.exit(1)
     }
 
@@ -101,8 +102,7 @@ object MFDataGenerator {
 
     // optionally generate testing data
     if (test) {
-      val testSampSize = math.min(
-        math.round(sampSize * testSampFact), math.round(mn - sampSize)).toInt
+      val testSampSize = math.min(math.round(sampSize * testSampFact).toInt, mn - sampSize)
       val testOmega = shuffled.slice(sampSize, sampSize + testSampSize)
       val testOrdered = testOmega.sortWith(_ < _).toArray
       val testData: RDD[(Int, Int, Double)] = sc.parallelize(testOrdered)

@@ -17,16 +17,15 @@
 
 package org.apache.spark.mllib.feature
 
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.rdd.RDD
 
 /**
- * :: DeveloperApi ::
  * Trait for transformation of a vector
  */
-@DeveloperApi
+@Since("1.1.0")
 trait VectorTransformer extends Serializable {
 
   /**
@@ -35,6 +34,7 @@ trait VectorTransformer extends Serializable {
    * @param vector vector to be transformed.
    * @return transformed vector.
    */
+  @Since("1.1.0")
   def transform(vector: Vector): Vector
 
   /**
@@ -43,18 +43,20 @@ trait VectorTransformer extends Serializable {
    * @param data RDD[Vector] to be transformed.
    * @return transformed RDD[Vector].
    */
+  @Since("1.1.0")
   def transform(data: RDD[Vector]): RDD[Vector] = {
-    // Later in #1498 , all RDD objects are sent via broadcasting instead of akka.
+    // Later in #1498 , all RDD objects are sent via broadcasting instead of RPC.
     // So it should be no longer necessary to explicitly broadcast `this` object.
     data.map(x => this.transform(x))
   }
 
   /**
-   * Applies transformation on an JavaRDD[Vector].
+   * Applies transformation on a JavaRDD[Vector].
    *
    * @param data JavaRDD[Vector] to be transformed.
    * @return transformed JavaRDD[Vector].
    */
+  @Since("1.1.0")
   def transform(data: JavaRDD[Vector]): JavaRDD[Vector] = {
     transform(data.rdd)
   }

@@ -1,0 +1,25 @@
+================================================================================================
+Benchmark for performance of subexpression elimination
+================================================================================================
+
+Preparing data for benchmarking ...
+OpenJDK 64-Bit Server VM 11.0.10+9-LTS on Linux 5.4.0-1043-azure
+Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
+from_json as subExpr in Project:          Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+subExprElimination false, codegen: true            9888          10006         160          0.0    98884264.7       1.0X
+subExprElimination false, codegen: false           9007           9149         129          0.0    90070910.8       1.1X
+subExprElimination true, codegen: true             1305           1346          53          0.0    13048714.1       7.6X
+subExprElimination true, codegen: false            1316           1323           9          0.0    13162352.5       7.5X
+
+Preparing data for benchmarking ...
+OpenJDK 64-Bit Server VM 11.0.10+9-LTS on Linux 5.4.0-1043-azure
+Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
+from_json as subExpr in Filter:           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+subExprElimination false, codegen: true           14332          15051         631          0.0   143320683.0       1.0X
+subExprElimination false, codegen: false          15083          15663         666          0.0   150832091.2       1.0X
+subExprElimination true, codegen: true             7865           8153         261          0.0    78653514.4       1.8X
+subExprElimination true, codegen: false            8078           8663         605          0.0    80780867.2       1.8X
+
+
