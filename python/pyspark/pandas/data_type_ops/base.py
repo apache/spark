@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+import numbers
 from abc import ABCMeta, abstractmethod
 from typing import Any, TYPE_CHECKING, Union
 
@@ -29,6 +30,7 @@ from pyspark.sql.types import (
     FractionalType,
     IntegralType,
     MapType,
+    NumericType,
     StringType,
     StructType,
     TimestampType,
@@ -37,10 +39,28 @@ from pyspark.sql.types import (
 import pyspark.sql.types as types
 from pyspark.pandas.base import IndexOpsMixin
 from pyspark.pandas.typedef import Dtype
+from pyspark.sql.column import Column
 
 if TYPE_CHECKING:
     from pyspark.pandas.indexes import Index  # noqa: F401 (SPARK-34943)
     from pyspark.pandas.series import Series  # noqa: F401 (SPARK-34943)
+
+
+def is_valid_operand_for_numeric_arithmetic(
+        operand: Any,
+        allow_bool_index_ops: bool = True
+) -> bool:
+    """Check whether the operand is valid for arithmetic operations against numerics."""
+    if isinstance(operand, numbers.Number) and not isinstance(operand, bool):
+        return True
+    elif isinstance(operand, IndexOpsMixin):
+        if isinstance(operand.dtype, CategoricalDtype):
+            return False
+        else:
+            return isinstance(operand.spark.data_type, NumericType) or (
+                allow_bool_index_ops and isinstance(operand.spark.data_type, BooleanType))
+    else:
+        return isinstance(operand, Column)
 
 
 def transform_boolean_operand_to_numeric(operand: Any, spark_type: types.DataType) -> Any:
