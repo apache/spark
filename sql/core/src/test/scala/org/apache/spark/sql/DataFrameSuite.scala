@@ -2907,7 +2907,8 @@ class DataFrameSuite extends QueryTest
           val df = Seq(s"""{"$jsonKey": 1}""").toDF(colName)
           df.withColumn(colName, from_json(col(colName), MapType(StringType, StringType)))
             .write.json(jsonDir)
-          val dfRead = spark.read.schema(StructType(Seq(StructField(colName, dataType)))).json(jsonDir)
+          val dfRead = spark.read.schema(StructType(Seq(StructField(colName, dataType))))
+            .json(jsonDir)
           val dfCompare = df.withColumn(colName, from_json(col(colName), dataType))
           checkAnswer(dfRead, dfCompare)
         }
