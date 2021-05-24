@@ -215,7 +215,7 @@ jobs:
     # Ubuntu 20.04. See also SPARK-33162.
     - name: Install Python packages (Python 3.6)
       run: |
-        python3.6 -m pip install numpy 'pyarrow<3.0.0' pandas scipy xmlrunner
+        python3.6 -m pip install numpy 'pyarrow<3.0.0' pandas scipy xmlrunner plotly>=4.8
         python3.6 -m pip list
     - name: Install Conda for pip packaging test
       run: |

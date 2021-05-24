@@ -39,7 +39,8 @@ if have_plotly:
 
 @unittest.skipIf(
     not have_plotly or LooseVersion(pd.__version__) < "1.0.0",
-    plotly_requirement_message + " Or pandas<1.0; pandas<1.0 does not support latest plotly "
+    ("" if plotly_requirement_message is None else "%s or " % plotly_requirement_message) +
+    "pandas<1.0; pandas<1.0 does not support latest plotly "
     "and/or 'plotting.backend' option.",
 )
 class DataFramePlotPlotlyTest(PandasOnSparkTestCase, TestUtils):
