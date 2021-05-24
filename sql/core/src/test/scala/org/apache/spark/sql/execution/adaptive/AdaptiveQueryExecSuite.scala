@@ -1313,11 +1313,11 @@ class AdaptiveQueryExecSuite
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
       Seq(
         // left semi join and empty left side
-        ("SELECT * FROM (SELECT * FROM testData WHERE key = 0)t1 LEFT SEMI JOIN testData2 t2 ON " +
-          "t1.key = t2.a", true),
+        ("SELECT * FROM (SELECT * FROM testData WHERE value = '0')t1 LEFT SEMI JOIN " +
+          "testData2 t2 ON t1.key = t2.a", true),
         // left anti join and empty left side
-        ("SELECT * FROM (SELECT * FROM testData WHERE key = 0)t1 LEFT ANTI JOIN testData2 t2 ON " +
-          "t1.key = t2.a", true),
+        ("SELECT * FROM (SELECT * FROM testData WHERE value = '0')t1 LEFT ANTI JOIN " +
+          "testData2 t2 ON t1.key = t2.a", true),
         // left outer join and empty left side
         ("SELECT * FROM (SELECT * FROM testData WHERE key = 0)t1 LEFT JOIN testData2 t2 ON " +
           "t1.key = t2.a", true),
