@@ -446,4 +446,10 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(ExtractANSIIntervalMinutes(Literal(null, DayTimeIntervalType)), null)
     checkEvaluation(ExtractANSIIntervalSeconds(Literal(null, DayTimeIntervalType)), null)
   }
+
+  test("SPARK-35129: make_ym_interval") {
+    checkEvaluation(MakeYMInterval(Literal(0), Literal(10)), 10)
+    checkEvaluation(MakeYMInterval(Literal(1), Literal(10)), 22)
+    checkEvaluation(MakeYMInterval(Literal(1), Literal(0)), 12)
+  }
 }
