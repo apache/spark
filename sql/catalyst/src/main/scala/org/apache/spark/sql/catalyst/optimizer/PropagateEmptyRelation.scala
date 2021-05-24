@@ -45,27 +45,18 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{LOCAL_RELATION, TRUE_OR_
  */
 abstract class PropagateEmptyRelationBase extends Rule[LogicalPlan] with CastSupport {
   /**
-   * At AQE side, we use this function to check if a plan has output rows or not
-   */
-  protected def checkRowCount: Option[(LogicalPlan, Boolean) => Boolean] = None
-
-  /**
    * At AQE side, we use the broadcast query stage to do the check
    */
   protected def isRelationWithAllNullKeys: Option[LogicalPlan => Boolean] = None
 
-  protected def isEmptyLocalRelation(plan: LogicalPlan): Boolean = plan match {
+  protected def isEmpty(plan: LogicalPlan): Boolean = plan match {
     case p: LocalRelation => p.data.isEmpty
     case _ => false
   }
 
-  private def isEmptyLocalRelationWithRowCount(plan: LogicalPlan): Boolean = {
-    val defaultEmptyRelation: Boolean = isEmptyLocalRelation(plan)
-    if (checkRowCount.isDefined) {
-      checkRowCount.get.apply(plan, false) || defaultEmptyRelation
-    } else {
-      defaultEmptyRelation
-    }
+  protected def nonEmpty(plan: LogicalPlan): Boolean = plan match {
+    case p: LocalRelation => p.data.nonEmpty
+    case _ => false
   }
 
   protected def empty(plan: LogicalPlan): LocalRelation =
@@ -85,8 +76,8 @@ abstract class PropagateEmptyRelationBase extends Rule[LogicalPlan] with CastSup
     // just processing the input data.
     case p @ Join(_, _, joinType, conditionOpt, _)
       if !p.children.exists(_.isStreaming) =>
-      val isLeftEmpty = isEmptyLocalRelationWithRowCount(p.left)
-      val isRightEmpty = isEmptyLocalRelationWithRowCount(p.right)
+      val isLeftEmpty = isEmpty(p.left)
+      val isRightEmpty = isEmpty(p.right)
       val isFalseCondition = conditionOpt match {
         case Some(FalseLiteral) => true
         case _ => false
@@ -111,18 +102,16 @@ abstract class PropagateEmptyRelationBase extends Rule[LogicalPlan] with CastSup
             Project(nullValueProjectList(p.left) ++ p.right.output, p.right)
           case _ => p
         }
-      } else if (joinType == LeftSemi && conditionOpt.isEmpty &&
-        checkRowCount.isDefined && checkRowCount.get.apply(p.right, true)) {
+      } else if (joinType == LeftSemi && conditionOpt.isEmpty && nonEmpty(p.right)) {
         p.left
-      } else if (joinType == LeftAnti && conditionOpt.isEmpty &&
-        checkRowCount.isDefined && checkRowCount.get.apply(p.right, true)) {
+      } else if (joinType == LeftAnti && conditionOpt.isEmpty && nonEmpty(p.right)) {
         empty(p)
       } else {
         p
       }
 
     case p: UnaryNode
-      if p.children.nonEmpty && p.children.forall(isEmptyLocalRelationWithRowCount) => p match {
+      if p.children.nonEmpty && p.children.forall(isEmpty) => p match {
       case _: Sort => empty(p)
       case _: GlobalLimit if !p.isStreaming => empty(p)
       case _: LocalLimit if !p.isStreaming => empty(p)
@@ -160,8 +149,8 @@ abstract class PropagateEmptyRelationBase extends Rule[LogicalPlan] with CastSup
  */
 object PropagateEmptyRelation extends PropagateEmptyRelationBase {
   private def propagateEmptyRelationBasic: PartialFunction[LogicalPlan, LogicalPlan] = {
-    case p: Union if p.children.exists(isEmptyLocalRelation) =>
-      val newChildren = p.children.filterNot(isEmptyLocalRelation)
+    case p: Union if p.children.exists(isEmpty) =>
+      val newChildren = p.children.filterNot(isEmpty)
       if (newChildren.isEmpty) {
         empty(p)
       } else {
@@ -181,7 +170,7 @@ object PropagateEmptyRelation extends PropagateEmptyRelationBase {
         }
       }
 
-    case p: UnaryNode if p.children.nonEmpty && p.children.forall(isEmptyLocalRelation) &&
+    case p: UnaryNode if p.children.nonEmpty && p.children.forall(isEmpty) &&
       canPropagate(p) =>
       empty(p)
   }

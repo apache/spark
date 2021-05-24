@@ -26,17 +26,16 @@ import org.apache.spark.sql.execution.joins.HashedRelationWithAllNullKeys
  */
 object AQEPropagateEmptyRelation extends PropagateEmptyRelationBase {
 
-  override protected def checkRowCount: Option[(LogicalPlan, Boolean) => Boolean] = {
-    Some((plan, hasRow) => {
-      plan match {
-        case LogicalQueryStage(_, stage: QueryStageExec) if stage.resultOption.get().isDefined =>
-          stage.getRuntimeStatistics.rowCount match {
-            case Some(count) => hasRow == (count > 0)
-            case _ => false
-          }
-        case _ => false
-      }
-    })
+  override protected def isEmpty(plan: LogicalPlan): Boolean =
+    super.isEmpty(plan) || getRowCount(plan).contains(0)
+
+  override protected def nonEmpty(plan: LogicalPlan): Boolean =
+    super.nonEmpty(plan) || getRowCount(plan).exists(_ > 0)
+
+  private def getRowCount(plan: LogicalPlan): Option[BigInt] = plan match {
+    case LogicalQueryStage(_, stage: QueryStageExec) if stage.resultOption.get().isDefined =>
+      stage.getRuntimeStatistics.rowCount
+    case _ => None
   }
 
   override protected def isRelationWithAllNullKeys: Option[LogicalPlan => Boolean] = {
