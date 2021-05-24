@@ -107,6 +107,7 @@ class Iso8601TimestampFormatter(
     try {
       formatter
     } catch checkLegacyFormatter(pattern, legacyFormatter.validatePatternString)
+    ()
   }
 }
 

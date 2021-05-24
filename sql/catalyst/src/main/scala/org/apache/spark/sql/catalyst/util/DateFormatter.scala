@@ -81,6 +81,7 @@ class Iso8601DateFormatter(
     try {
       formatter
     } catch checkLegacyFormatter(pattern, legacyFormatter.validatePatternString)
+    ()
   }
 }
 
