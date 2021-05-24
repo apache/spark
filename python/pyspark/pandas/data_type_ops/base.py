@@ -46,7 +46,7 @@ class DataTypeOps(object, metaclass=ABCMeta):
     def __new__(cls, dtype: Dtype, spark_type: DataType):
         from pyspark.pandas.data_type_ops.boolean_ops import BooleanOps
         from pyspark.pandas.data_type_ops.categorical_ops import CategoricalOps
-        from pyspark.pandas.data_type_ops.complex_ops import ArrayOps, ComplexOps
+        from pyspark.pandas.data_type_ops.complex_ops import ArrayOps, MapOps, StructOps
         from pyspark.pandas.data_type_ops.date_ops import DateOps
         from pyspark.pandas.data_type_ops.datetime_ops import DatetimeOps
         from pyspark.pandas.data_type_ops.num_ops import (
@@ -71,8 +71,10 @@ class DataTypeOps(object, metaclass=ABCMeta):
             return object.__new__(DateOps)
         elif isinstance(spark_type, ArrayType):
             return object.__new__(ArrayOps)
-        elif isinstance(spark_type, MapType) or isinstance(spark_type, StructType):
-            return object.__new__(ComplexOps)
+        elif isinstance(spark_type, MapType):
+            return object.__new__(MapOps)
+        elif isinstance(spark_type, StructType):
+            return object.__new__(StructOps)
         else:
             raise TypeError("Type %s was not understood." % dtype)
 

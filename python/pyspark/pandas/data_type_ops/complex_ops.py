@@ -27,18 +27,7 @@ if TYPE_CHECKING:
     from pyspark.pandas.series import Series  # noqa: F401 (SPARK-34943)
 
 
-class ComplexOps(DataTypeOps):
-    """
-    The class for binary operations of pandas-on-Spark objects with complex types:
-    ArrayType, MapType and StructType.
-    """
-
-    @property
-    def pretty_name(self) -> str:
-        return 'complex types'
-
-
-class ArrayOps(ComplexOps):
+class ArrayOps(DataTypeOps):
     """
     The class for binary operations of pandas-on-Spark objects with ArrayType.
     """
@@ -63,3 +52,23 @@ class ArrayOps(ComplexOps):
                 "Concatenation can only be applied to %s of the same type" % self.pretty_name)
 
         return column_op(F.concat)(left, right)
+
+
+class MapOps(DataTypeOps):
+    """
+    The class for binary operations of pandas-on-Spark objects with MapType.
+    """
+
+    @property
+    def pretty_name(self) -> str:
+        return 'PySpark MapType'
+
+
+class StructOps(DataTypeOps):
+    """
+    The class for binary operations of pandas-on-Spark objects with StructType.
+    """
+
+    @property
+    def pretty_name(self) -> str:
+        return 'PySpark StructType'
