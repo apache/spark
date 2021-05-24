@@ -16,8 +16,9 @@
 #
 
 import numbers
-from typing import TYPE_CHECKING, Union
+from typing import cast, TYPE_CHECKING, Union
 
+from pyspark.pandas.base import IndexOpsMixin
 from pyspark.pandas.data_type_ops.base import (
     is_valid_operand_for_numeric_arithmetic,
     DataTypeOps,
@@ -44,7 +45,8 @@ class BooleanOps(DataTypeOps):
             left = left.spark.transform(lambda scol: scol.cast(as_spark_type(type(right))))
             return left + right
         elif is_valid_operand_for_numeric_arithmetic(right, allow_bool=False):
-            left = transform_boolean_operand_to_numeric(left, right.spark.data_type)
+            left = transform_boolean_operand_to_numeric(
+                left, cast(IndexOpsMixin, right).spark.data_type)
             return left + right
         else:
             raise TypeError(
@@ -55,7 +57,8 @@ class BooleanOps(DataTypeOps):
             left = left.spark.transform(lambda scol: scol.cast(as_spark_type(type(right))))
             return left - right
         elif is_valid_operand_for_numeric_arithmetic(right, allow_bool=False):
-            left = transform_boolean_operand_to_numeric(left, right.spark.data_type)
+            left = transform_boolean_operand_to_numeric(
+                left, cast(IndexOpsMixin, right).spark.data_type)
             return left - right
         else:
             raise TypeError(
@@ -66,7 +69,8 @@ class BooleanOps(DataTypeOps):
             left = left.spark.transform(lambda scol: scol.cast(as_spark_type(type(right))))
             return left * right
         elif is_valid_operand_for_numeric_arithmetic(right, allow_bool=False):
-            left = transform_boolean_operand_to_numeric(left, right.spark.data_type)
+            left = transform_boolean_operand_to_numeric(
+                left, cast(IndexOpsMixin, right).spark.data_type)
             return left * right
         else:
             raise TypeError(
@@ -77,7 +81,8 @@ class BooleanOps(DataTypeOps):
             left = left.spark.transform(lambda scol: scol.cast(as_spark_type(type(right))))
             return left / right
         elif is_valid_operand_for_numeric_arithmetic(right, allow_bool=False):
-            left = transform_boolean_operand_to_numeric(left, right.spark.data_type)
+            left = transform_boolean_operand_to_numeric(
+                left, cast(IndexOpsMixin, right).spark.data_type)
             return left / right
         else:
             raise TypeError(
@@ -88,7 +93,8 @@ class BooleanOps(DataTypeOps):
             left = left.spark.transform(lambda scol: scol.cast(as_spark_type(type(right))))
             return left // right
         elif is_valid_operand_for_numeric_arithmetic(right, allow_bool=False):
-            left = transform_boolean_operand_to_numeric(left, right.spark.data_type)
+            left = transform_boolean_operand_to_numeric(
+                left, cast(IndexOpsMixin, right).spark.data_type)
             return left // right
         else:
             raise TypeError(
@@ -99,7 +105,8 @@ class BooleanOps(DataTypeOps):
             left = left.spark.transform(lambda scol: scol.cast(as_spark_type(type(right))))
             return left % right
         elif is_valid_operand_for_numeric_arithmetic(right, allow_bool=False):
-            left = transform_boolean_operand_to_numeric(left, right.spark.data_type)
+            left = transform_boolean_operand_to_numeric(
+                left, cast(IndexOpsMixin, right).spark.data_type)
             return left % right
         else:
             raise TypeError(
@@ -110,7 +117,8 @@ class BooleanOps(DataTypeOps):
             left = left.spark.transform(lambda scol: scol.cast(as_spark_type(type(right))))
             return left ** right
         elif is_valid_operand_for_numeric_arithmetic(right, allow_bool=False):
-            left = transform_boolean_operand_to_numeric(left, right.spark.data_type)
+            left = transform_boolean_operand_to_numeric(
+                left, cast(IndexOpsMixin, right).spark.data_type)
             return left ** right
         else:
             raise TypeError(
