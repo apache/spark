@@ -28,7 +28,7 @@ import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.shims.Utils
 import org.apache.hadoop.security.{SecurityUtil, UserGroupInformation}
-import org.apache.hive.service.{AbstractService, CompositeService, Service, ServiceException}
+import org.apache.hive.service.{AbstractService, CompositeService, Service}
 import org.apache.hive.service.Service.STATE
 import org.apache.hive.service.auth.HiveAuthFactory
 import org.apache.hive.service.cli._
