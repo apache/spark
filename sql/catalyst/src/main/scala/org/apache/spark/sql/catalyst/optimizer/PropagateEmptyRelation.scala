@@ -44,11 +44,6 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{LOCAL_RELATION, TRUE_OR_
  *     - Generate(Explode) with all empty children. Others like Hive UDTF may return results.
  */
 abstract class PropagateEmptyRelationBase extends Rule[LogicalPlan] with CastSupport {
-  /**
-   * At AQE side, we use the broadcast query stage to do the check
-   */
-  protected def isRelationWithAllNullKeys: Option[LogicalPlan => Boolean] = None
-
   protected def isEmpty(plan: LogicalPlan): Boolean = plan match {
     case p: LocalRelation => p.data.isEmpty
     case _ => false
@@ -66,11 +61,7 @@ abstract class PropagateEmptyRelationBase extends Rule[LogicalPlan] with CastSup
   private def nullValueProjectList(plan: LogicalPlan): Seq[NamedExpression] =
     plan.output.map{ a => Alias(cast(Literal(null), a.dataType), a.name)(a.exprId) }
 
-  protected def propagateEmptyRelationAdvanced: PartialFunction[LogicalPlan, LogicalPlan] = {
-    case j @ ExtractSingleColumnNullAwareAntiJoin(_, _)
-      if isRelationWithAllNullKeys.isDefined && isRelationWithAllNullKeys.get.apply(j.right) =>
-      empty(j)
-
+  protected def commonApplyFunc: PartialFunction[LogicalPlan, LogicalPlan] = {
     // Joins on empty LocalRelations generated from streaming sources are not eliminated
     // as stateful streaming joins need to perform other state management operations other than
     // just processing the input data.
@@ -148,7 +139,7 @@ abstract class PropagateEmptyRelationBase extends Rule[LogicalPlan] with CastSup
  *    - Project/Filter/Sample with all empty children.
  */
 object PropagateEmptyRelation extends PropagateEmptyRelationBase {
-  private def propagateEmptyRelationBasic: PartialFunction[LogicalPlan, LogicalPlan] = {
+  private def applyFunc: PartialFunction[LogicalPlan, LogicalPlan] = {
     case p: Union if p.children.exists(isEmpty) =>
       val newChildren = p.children.filterNot(isEmpty)
       if (newChildren.isEmpty) {
@@ -185,6 +176,6 @@ object PropagateEmptyRelation extends PropagateEmptyRelationBase {
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithPruning(
     _.containsAnyPattern(LOCAL_RELATION, TRUE_OR_FALSE_LITERAL), ruleId) {
-    propagateEmptyRelationBasic.orElse(propagateEmptyRelationAdvanced)
+    applyFunc.orElse(commonApplyFunc)
   }
 }

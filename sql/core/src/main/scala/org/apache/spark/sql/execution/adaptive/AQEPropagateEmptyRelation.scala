@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.adaptive
 
 import org.apache.spark.sql.catalyst.optimizer.PropagateEmptyRelationBase
+import org.apache.spark.sql.catalyst.planning.ExtractSingleColumnNullAwareAntiJoin
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.joins.HashedRelationWithAllNullKeys
 
@@ -25,7 +26,6 @@ import org.apache.spark.sql.execution.joins.HashedRelationWithAllNullKeys
  * Rule [[PropagateEmptyRelationBase]] at AQE optimizer side.
  */
 object AQEPropagateEmptyRelation extends PropagateEmptyRelationBase {
-
   override protected def isEmpty(plan: LogicalPlan): Boolean =
     super.isEmpty(plan) || getRowCount(plan).contains(0)
 
@@ -38,17 +38,20 @@ object AQEPropagateEmptyRelation extends PropagateEmptyRelationBase {
     case _ => None
   }
 
-  override protected def isRelationWithAllNullKeys: Option[LogicalPlan => Boolean] = {
-    Some({
-      case LogicalQueryStage(_, stage: BroadcastQueryStageExec)
-        if stage.resultOption.get().isDefined =>
-        stage.broadcast.relationFuture.get().value == HashedRelationWithAllNullKeys
-      case _ => false
-    })
+  private def isRelationWithAllNullKeys(plan: LogicalPlan): Boolean = plan match {
+    case LogicalQueryStage(_, stage: BroadcastQueryStageExec)
+      if stage.resultOption.get().isDefined =>
+      stage.broadcast.relationFuture.get().value == HashedRelationWithAllNullKeys
+    case _ => false
+  }
+
+  private def eliminateSingleColumnNullAwareAntiJoin: PartialFunction[LogicalPlan, LogicalPlan] = {
+    case j @ ExtractSingleColumnNullAwareAntiJoin(_, _) if isRelationWithAllNullKeys(j.right) =>
+      empty(j)
   }
 
   // TODO we need use transformUpWithPruning instead of transformUp
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformUp {
-    propagateEmptyRelationAdvanced
+    eliminateSingleColumnNullAwareAntiJoin.orElse(commonApplyFunc)
   }
 }
