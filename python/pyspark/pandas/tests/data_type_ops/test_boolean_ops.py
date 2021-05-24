@@ -44,8 +44,12 @@ class BooleanOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         return ps.from_pandas(self.float_pser)
 
     def test_add(self):
-        self.assert_eq(self.pser + 1, self.psser + 1)
-        self.assert_eq(self.pser + 0.1, self.psser + 0.1)
+        pser = self.pser
+        psser = self.psser
+        self.assert_eq(pser + 1, psser + 1)
+        self.assert_eq(pser + 0.1, psser + 0.1)
+        self.assert_eq(pser + pser.astype(int), psser + psser.astype(int))
+        self.assertRaises(TypeError, lambda: psser + psser)
 
         with option_context("compute.ops_on_diff_frames", True):
             for pser, psser in self.numeric_pser_psser_pairs:
@@ -55,8 +59,12 @@ class BooleanOpsTest(PandasOnSparkTestCase, TestCasesUtils):
                 self.assertRaises(TypeError, lambda: self.psser + psser)
 
     def test_sub(self):
-        self.assert_eq(self.pser - 1, self.psser - 1)
-        self.assert_eq(self.pser - 0.1, self.psser - 0.1)
+        pser = self.pser
+        psser = self.psser
+        self.assert_eq(pser - 1, psser - 1)
+        self.assert_eq(pser - 0.1, psser - 0.1)
+        self.assert_eq(pser - pser.astype(int), psser - psser.astype(int))
+        self.assertRaises(TypeError, lambda: psser - psser)
 
         with option_context("compute.ops_on_diff_frames", True):
             for pser, psser in self.numeric_pser_psser_pairs:
@@ -66,8 +74,12 @@ class BooleanOpsTest(PandasOnSparkTestCase, TestCasesUtils):
                 self.assertRaises(TypeError, lambda: self.psser - psser)
 
     def test_mul(self):
-        self.assert_eq(self.pser * 1, self.psser * 1)
-        self.assert_eq(self.pser * 0.1, self.psser * 0.1)
+        pser = self.pser
+        psser = self.psser
+        self.assert_eq(pser * 1, psser * 1)
+        self.assert_eq(pser * 0.1, psser * 0.1)
+        self.assert_eq(pser * pser.astype(int), psser * psser.astype(int))
+        self.assertRaises(TypeError, lambda: psser * psser)
 
         with option_context("compute.ops_on_diff_frames", True):
             for pser, psser in self.numeric_pser_psser_pairs:
@@ -77,9 +89,13 @@ class BooleanOpsTest(PandasOnSparkTestCase, TestCasesUtils):
                 self.assertRaises(TypeError, lambda: self.psser * psser)
 
     def test_truediv(self):
-        self.assert_eq(self.pser / 1, self.psser / 1)
-        self.assert_eq(self.pser / 0.1, self.psser / 0.1)
-
+        pser = self.pser
+        psser = self.psser
+        self.assert_eq(pser / 1, psser / 1)
+        self.assert_eq(pser / 0.1, psser / 0.1)
+        self.assert_eq(pser / pser.astype(int), psser / psser.astype(int))
+        self.assertRaises(TypeError, lambda: psser / psser)
+        
         with option_context("compute.ops_on_diff_frames", True):
             self.assert_eq(
                 self.pser / self.float_pser, (self.psser / self.float_psser).sort_index())
@@ -88,10 +104,17 @@ class BooleanOpsTest(PandasOnSparkTestCase, TestCasesUtils):
                 self.assertRaises(TypeError, lambda: self.psser / psser)
 
     def test_floordiv(self):
+        pser = self.pser
+        psser = self.psser
+
         # float is always returned in pandas-on-Spark
-        self.assert_eq((self.pser // 1).astype("float"), self.psser // 1)
+        self.assert_eq((pser // 1).astype("float"), psser // 1)
+
         # in pandas, 1 // 0.1 = 9.0; in pandas-on-Spark, 1 // 0.1 = 10.0
-        # self.assert_eq(self.pser // 0.1, self.psser // 0.1)
+        # self.assert_eq(pser // 0.1, psser // 0.1)
+
+        self.assert_eq(pser // pser.astype(int), psser // psser.astype(int))
+        self.assertRaises(TypeError, lambda: psser // psser)
 
         with option_context("compute.ops_on_diff_frames", True):
             self.assert_eq(
@@ -102,8 +125,12 @@ class BooleanOpsTest(PandasOnSparkTestCase, TestCasesUtils):
                 self.assertRaises(TypeError, lambda: self.psser // psser)
 
     def test_mod(self):
-        self.assert_eq(self.pser % 1, self.psser % 1)
-        self.assert_eq(self.pser % 0.1, self.psser % 0.1)
+        pser = self.pser
+        psser = self.psser
+        self.assert_eq(pser % 1, psser % 1)
+        self.assert_eq(pser % 0.1, psser % 0.1)
+        self.assert_eq(pser % pser.astype(float), psser % psser.astype(float))
+        self.assertRaises(TypeError, lambda: psser % psser)
 
         with option_context("compute.ops_on_diff_frames", True):
             for pser, psser in self.numeric_pser_psser_pairs:
@@ -113,9 +140,13 @@ class BooleanOpsTest(PandasOnSparkTestCase, TestCasesUtils):
                 self.assertRaises(TypeError, lambda: self.psser % psser)
 
     def test_pow(self):
+        pser = self.pser
+        psser = self.psser
         # float is always returned in pandas-on-Spark
-        self.assert_eq((self.pser ** 1).astype("float"), self.psser ** 1)
-        self.assert_eq(self.pser ** 0.1, self.psser ** 0.1)
+        self.assert_eq((pser ** 1).astype("float"), psser ** 1)
+        self.assert_eq(pser ** 0.1, self.psser ** 0.1)
+        self.assert_eq(pser ** pser.astype(float), psser ** psser.astype(float))
+        self.assertRaises(TypeError, lambda: psser ** psser)
 
         with option_context("compute.ops_on_diff_frames", True):
             self.assert_eq(
