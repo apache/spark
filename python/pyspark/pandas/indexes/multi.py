@@ -18,7 +18,6 @@
 from distutils.version import LooseVersion
 from functools import partial
 from typing import Any, Callable, Iterator, List, Optional, Tuple, Union, cast, no_type_check
-import warnings
 
 import pandas as pd
 from pandas.api.types import is_list_like
@@ -680,16 +679,6 @@ class MultiIndex(Index):
         # So far, we don't have any functions to change the internal state of MultiIndex except for
         # series-like operations. In that case, it creates new Index object instead of MultiIndex.
         return super().to_pandas()
-
-    def toPandas(self) -> pd.MultiIndex:
-        warnings.warn(
-            "MultiIndex.toPandas is deprecated as of MultiIndex.to_pandas. "
-            "Please use the API instead.",
-            FutureWarning,
-        )
-        return self.to_pandas()
-
-    toPandas.__doc__ = to_pandas.__doc__
 
     def nunique(self, dropna: bool = True, approx: bool = False, rsd: float = 0.05) -> int:
         raise NotImplementedError("nunique is not defined for MultiIndex")
