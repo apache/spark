@@ -29,7 +29,7 @@ import org.apache.spark.sql.types._
  *
  * - `BinaryComparison(Cast(fromExp, toType), Literal(value, toType))`
  * - `BinaryComparison(Literal(value, toType), Cast(fromExp, toType))`
- * - `In(Cast(fromExp, toType), Seq((v1, toType), (v2, toType), ...)`
+ * - `In(Cast(fromExp, toType), Seq(Literal(v1, toType), Literal(v2, toType), ...)`
  *
  * This rule optimizes expressions with the above pattern by either replacing the cast with simpler
  * constructs, or moving the cast from the expression side to the literal side, which enables them
@@ -138,12 +138,12 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
         list.map(lit => unwrapCast(EqualTo(in.value, lit)))
           .partition {
             case EqualTo(_, _: Literal) => true
-            case And(IsNull(_), Literal(null, BooleanType)) => false
+            case _ => false
           }
 
       val (nonNullValueList, nullValueList) = newValueList.partition {
         case EqualTo(_, NonNullLiteral(_, _: NumericType)) => true
-        case EqualTo(_, Literal(null, _)) => false
+        case _ => false
       }
       // make sure the new return list have the same dataType.
       val newList = {
