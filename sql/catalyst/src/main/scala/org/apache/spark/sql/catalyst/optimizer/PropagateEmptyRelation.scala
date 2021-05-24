@@ -181,17 +181,21 @@ object PropagateEmptyRelation extends PropagateEmptyRelationBase {
         }
       }
 
-    case p: UnaryNode if p.children.nonEmpty && p.children.forall(isEmptyLocalRelation) => p match {
-      case _: Project => empty(p)
-      case _: Filter => empty(p)
-      case _: Sample => empty(p)
-      case _ => p
-    }
+    case p: UnaryNode if p.children.nonEmpty && p.children.forall(isEmptyLocalRelation) &&
+      canPropagate(p) =>
+      empty(p)
+  }
+
+  // extract the pattern avoid conflict with propagateEmptyRelationAdvanced
+  private def canPropagate(plan: LogicalPlan): Boolean = plan match {
+    case _: Project => true
+    case _: Filter => true
+    case _: Sample => true
+    case _ => false
   }
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithPruning(
     _.containsAnyPattern(LOCAL_RELATION, TRUE_OR_FALSE_LITERAL), ruleId) {
-    // andThen instead of orElse, because there exists some same pattern, like UnaryNode.
-    propagateEmptyRelationBasic.andThen(propagateEmptyRelationAdvanced)
+    propagateEmptyRelationBasic.orElse(propagateEmptyRelationAdvanced)
   }
 }
