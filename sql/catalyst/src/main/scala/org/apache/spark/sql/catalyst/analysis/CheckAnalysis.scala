@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, TypeUtils}
 import org.apache.spark.sql.connector.catalog.{LookupCatalog, SupportsAtomicPartitionManagement, SupportsPartitionManagement, Table}
 import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, After, ColumnPosition, DeleteColumn, RenameColumn, UpdateColumnComment, UpdateColumnNullability, UpdateColumnPosition, UpdateColumnType}
-import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -159,7 +159,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
 
       // `ShowTableExtended` should have been converted to the v1 command if the table is v1.
       case _: ShowTableExtended =>
-        throw new AnalysisException("SHOW TABLE EXTENDED is not supported for v2 tables.")
+        throw QueryCompilationErrors.commandUnsupportedInV2TableError("SHOW TABLE EXTENDED")
 
       case operator: LogicalPlan =>
         // Check argument data types of higher-order functions downwards first.
@@ -836,15 +836,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
           val outer = a.collect { case OuterReference(e) => e.toAttribute }
           val local = a.references -- outer
           if (local.nonEmpty) {
-            val msg =
-              s"""
-                 |Found an aggregate expression in a correlated predicate that has both
-                 |outer and local references, which is not supported yet.
-                 |Aggregate expression: ${SubExprUtils.stripOuterReference(a).sql},
-                 |Outer references: ${outer.map(_.sql).mkString(", ")},
-                 |Local references: ${local.map(_.sql).mkString(", ")}.
-               """.stripMargin.replace("\n", " ").trim()
-            failAnalysis(msg)
+            throw QueryCompilationErrors.mixedRefsInAggFunc(a.sql)
           }
         case _ =>
       }

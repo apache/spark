@@ -22,6 +22,7 @@ import java.util.Locale
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.connector.expressions.{BucketTransform, FieldReference, NamedTransform, Transform}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StructField, StructType}
 
 
@@ -82,7 +83,8 @@ private[spark] object SchemaUtils {
     } else if (resolver == caseInsensitiveResolution) {
       false
     } else {
-      sys.error("A resolver to check if two identifiers are equal must be " +
+      throw QueryExecutionErrors.unreachableError(
+        ": A resolver to check if two identifiers are equal must be " +
         "`caseSensitiveResolution` or `caseInsensitiveResolution` in o.a.s.sql.catalyst.")
     }
   }

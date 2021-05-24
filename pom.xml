@@ -137,7 +137,7 @@
     <!-- After 10.15.1.3, the minimum required version is JDK9 -->
     <derby.version>10.14.2.0</derby.version>
     <parquet.version>1.12.0</parquet.version>
-    <orc.version>1.6.7</orc.version>
+    <orc.version>1.6.8</orc.version>
     <jetty.version>9.4.40.v20210413</jetty.version>
     <jakartaservlet.version>4.0.3</jakartaservlet.version>
     <chill.version>0.9.5</chill.version>
@@ -147,7 +147,7 @@
     If you changes codahale.metrics.version, you also need to change
     the link to metrics.dropwizard.io in docs/monitoring.md.
     -->
-    <codahale.metrics.version>4.1.1</codahale.metrics.version>
+    <codahale.metrics.version>4.2.0</codahale.metrics.version>
     <avro.version>1.10.2</avro.version>
     <aws.kinesis.client.version>1.14.0</aws.kinesis.client.version>
     <!-- Should be consistent with Kinesis client dependency -->
@@ -156,7 +156,7 @@
     <aws.kinesis.producer.version>0.12.8</aws.kinesis.producer.version>
     <!--  org.apache.httpcomponents/httpclient-->
     <commons.httpclient.version>4.5.13</commons.httpclient.version>
-    <commons.httpcore.version>4.4.12</commons.httpcore.version>
+    <commons.httpcore.version>4.4.14</commons.httpcore.version>
     <!--  commons-httpclient/commons-httpclient-->
     <httpclient.classic.version>3.1</httpclient.classic.version>
     <commons.math3.version>3.4.1</commons.math3.version>
@@ -190,7 +190,7 @@
     <jodd.version>3.5.2</jodd.version>
     <jsr305.version>3.0.0</jsr305.version>
     <libthrift.version>0.12.0</libthrift.version>
-    <antlr4.version>4.8-1</antlr4.version>
+    <antlr4.version>4.8</antlr4.version>
     <jpam.version>1.1</jpam.version>
     <selenium.version>3.141.59</selenium.version>
     <htmlunit.version>2.40.0</htmlunit.version>
@@ -204,6 +204,7 @@
     <arrow.version>2.0.0</arrow.version>
     <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
     <leveldbjni.group>org.fusesource.leveldbjni</leveldbjni.group>
+    <kubernetes-client.version>5.4.0</kubernetes-client.version>
 
     <test.java.home>${java.home}</test.java.home>
 
@@ -354,17 +355,17 @@
     </dependency>
     <dependency>
       <groupId>org.scalatestplus</groupId>
-      <artifactId>scalatestplus-scalacheck_${scala.binary.version}</artifactId>
+      <artifactId>scalacheck-1-15_${scala.binary.version}</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>org.scalatestplus</groupId>
-      <artifactId>scalatestplus-mockito_${scala.binary.version}</artifactId>
+      <artifactId>mockito-3-4_${scala.binary.version}</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>org.scalatestplus</groupId>
-      <artifactId>scalatestplus-selenium_${scala.binary.version}</artifactId>
+      <artifactId>selenium-3-141_${scala.binary.version}</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
@@ -407,7 +408,7 @@
       <dependency>
         <groupId>org.apache.xbean</groupId>
         <artifactId>xbean-asm7-shaded</artifactId>
-        <version>4.15</version>
+        <version>4.16</version>
       </dependency>
 
       <!-- Shaded deps marked as provided. These are promoted to compile scope
@@ -940,20 +941,20 @@
       </dependency>
       <dependency>
         <groupId>org.scalatestplus</groupId>
-        <artifactId>scalatestplus-scalacheck_${scala.binary.version}</artifactId>
-        <version>3.1.0.0-RC2</version>
+        <artifactId>scalacheck-1-15_${scala.binary.version}</artifactId>
+        <version>3.2.9.0</version>
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>org.scalatestplus</groupId>
-        <artifactId>scalatestplus-mockito_${scala.binary.version}</artifactId>
-        <version>1.0.0-SNAP5</version>
+        <artifactId>mockito-3-4_${scala.binary.version}</artifactId>
+        <version>3.2.9.0</version>
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>org.scalatestplus</groupId>
-        <artifactId>scalatestplus-selenium_${scala.binary.version}</artifactId>
-        <version>1.0.0-SNAP5</version>
+        <artifactId>selenium-3-141_${scala.binary.version}</artifactId>
+        <version>3.2.9.0</version>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -971,7 +972,7 @@
       <dependency>
         <groupId>org.scalacheck</groupId>
         <artifactId>scalacheck_${scala.binary.version}</artifactId>
-        <version>1.14.2</version>
+        <version>1.15.4</version>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -2857,12 +2858,12 @@
             <dependency>
               <groupId>org.ow2.asm</groupId>
               <artifactId>asm</artifactId>
-              <version>7.2</version>
+              <version>7.3.1</version>
             </dependency>
             <dependency>
               <groupId>org.ow2.asm</groupId>
               <artifactId>asm-commons</artifactId>
-              <version>7.2</version>
+              <version>7.3.1</version>
             </dependency>
           </dependencies>
         </plugin>

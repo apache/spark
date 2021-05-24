@@ -517,10 +517,10 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
     withTempView("antiData") {
       anti.createOrReplaceTempView("antiData")
       val query = "SELECT * FROM testData2 ANTI JOIN antiData ON testData2.a = antiData.a"
-      Seq(false, true).foreach { enableWholeStage =>
+      Seq((0L, false), (1L, true)).foreach { case (nodeId, enableWholeStage) =>
         val df = spark.sql(query)
         testSparkPlanMetrics(df, 1, Map(
-          0L -> (("SortMergeJoin", Map("number of output rows" -> 4L)))),
+          nodeId -> (("SortMergeJoin", Map("number of output rows" -> 4L)))),
           enableWholeStage
         )
       }

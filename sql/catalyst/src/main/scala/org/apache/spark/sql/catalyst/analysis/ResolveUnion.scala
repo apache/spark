@@ -19,12 +19,12 @@ package org.apache.spark.sql.catalyst.analysis
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.optimizer.{CombineUnions, OptimizeUpdateFields}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, Union}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.AlwaysProcess
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.unsafe.types.UTF8String
@@ -195,9 +195,8 @@ object ResolveUnion extends Rule[LogicalPlan] {
         if (allowMissingCol) {
           Alias(Literal(null, lattr.dataType), lattr.name)()
         } else {
-          throw new AnalysisException(
-            s"""Cannot resolve column name "${lattr.name}" among """ +
-              s"""(${rightOutputAttrs.map(_.name).mkString(", ")})""")
+          throw QueryCompilationErrors.cannotResolveColumnNameAmongAttributesError(
+            lattr, rightOutputAttrs)
         }
       }
     }

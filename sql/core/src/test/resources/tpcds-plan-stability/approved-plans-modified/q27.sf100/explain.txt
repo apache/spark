@@ -159,7 +159,7 @@ Input [8]: [ss_item_sk#1, ss_cdemo_sk#2, ss_store_sk#3, ss_quantity#4, ss_list_p
 Output [2]: [s_store_sk#18, s_state#19]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store]
-PushedFilters: [In(s_state, [TN,AL,SD]), IsNotNull(s_store_sk)]
+PushedFilters: [In(s_state, [AL,SD,TN]), IsNotNull(s_store_sk)]
 ReadSchema: struct<s_store_sk:int,s_state:string>
 
 (19) ColumnarToRow [codegen id : 3]
@@ -258,7 +258,7 @@ Input [9]: [ss_item_sk#54, ss_cdemo_sk#55, ss_store_sk#56, ss_quantity#57, ss_li
 Output [2]: [s_store_sk#63, s_state#64]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store]
-PushedFilters: [In(s_state, [TN,AL,SD]), IsNotNull(s_store_sk)]
+PushedFilters: [In(s_state, [AL,SD,TN]), IsNotNull(s_store_sk)]
 ReadSchema: struct<s_store_sk:int,s_state:string>
 
 (40) ColumnarToRow [codegen id : 8]

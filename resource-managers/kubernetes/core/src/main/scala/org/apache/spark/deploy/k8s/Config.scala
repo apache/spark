@@ -70,6 +70,20 @@ private[spark] object Config extends Logging {
       .booleanConf
       .createWithDefault(false)
 
+  val KUBERNETES_DRIVER_REUSE_PVC =
+    ConfigBuilder("spark.kubernetes.driver.reusePersistentVolumeClaim")
+      .doc("If true, driver pod tries to reuse driver-owned on-demand persistent volume claims " +
+        "of the deleted executor pods if exists. This can be useful to reduce executor pod " +
+        "creation delay by skipping persistent volume creations. Note that a pod in " +
+        "`Terminating` pod status is not a deleted pod by definition and its resources " +
+        "including persistent volume claims are not reusable yet. Spark will create new " +
+        "persistent volume claims when there exists no reusable one. In other words, the total " +
+        "number of persistent volume claims can be larger than the number of running executors " +
+        s"sometimes. This config requires ${KUBERNETES_DRIVER_OWN_PVC.key}=true.")
+      .version("3.2.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val KUBERNETES_NAMESPACE =
     ConfigBuilder("spark.kubernetes.namespace")
       .doc("The namespace that will be used for running the driver and executor pods.")

@@ -111,32 +111,24 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       val batchExec = BatchScanExec(relation.output, relation.scan)
       withProjectAndFilter(project, filters, batchExec, !batchExec.supportsColumnar) :: Nil
 
-    case r: StreamingDataSourceV2Relation if r.startOffset.isDefined && r.endOffset.isDefined =>
+    case PhysicalOperation(p, f, r: StreamingDataSourceV2Relation)
+      if r.startOffset.isDefined && r.endOffset.isDefined =>
+
       val microBatchStream = r.stream.asInstanceOf[MicroBatchStream]
       val scanExec = MicroBatchScanExec(
         r.output, r.scan, microBatchStream, r.startOffset.get, r.endOffset.get)
 
-      val withProjection = if (scanExec.supportsColumnar) {
-        scanExec
-      } else {
-        // Add a Project here to make sure we produce unsafe rows.
-        ProjectExec(r.output, scanExec)
-      }
+      // Add a Project here to make sure we produce unsafe rows.
+      withProjectAndFilter(p, f, scanExec, !scanExec.supportsColumnar) :: Nil
 
-      withProjection :: Nil
+    case PhysicalOperation(p, f, r: StreamingDataSourceV2Relation)
+      if r.startOffset.isDefined && r.endOffset.isEmpty =>
 
-    case r: StreamingDataSourceV2Relation if r.startOffset.isDefined && r.endOffset.isEmpty =>
       val continuousStream = r.stream.asInstanceOf[ContinuousStream]
       val scanExec = ContinuousScanExec(r.output, r.scan, continuousStream, r.startOffset.get)
 
-      val withProjection = if (scanExec.supportsColumnar) {
-        scanExec
-      } else {
-        // Add a Project here to make sure we produce unsafe rows.
-        ProjectExec(r.output, scanExec)
-      }
-
-      withProjection :: Nil
+      // Add a Project here to make sure we produce unsafe rows.
+      withProjectAndFilter(p, f, scanExec, !scanExec.supportsColumnar) :: Nil
 
     case WriteToDataSourceV2(relationOpt, writer, query) =>
       val invalidateCacheFunc: () => Unit = () => relationOpt match {

@@ -557,9 +557,16 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
       df.selectExpr("sentences(str, language, country)"),
       Row(Seq(Seq("Hi", "there"), Seq("The", "price", "was"), Seq("But", "not", "now"))))
 
+    checkAnswer(
+      df.select(sentences($"str", $"language", $"country")),
+      Row(Seq(Seq("Hi", "there"), Seq("The", "price", "was"), Seq("But", "not", "now"))))
+
     // Type coercion
     checkAnswer(
       df.selectExpr("sentences(null)", "sentences(10)", "sentences(3.14)"),
+      Row(null, Seq(Seq("10")), Seq(Seq("3.14"))))
+
+    checkAnswer(df.select(sentences(lit(null)), sentences(lit(10)), sentences(lit(3.14))),
       Row(null, Seq(Seq("10")), Seq(Seq("3.14"))))
 
     // Argument number exception

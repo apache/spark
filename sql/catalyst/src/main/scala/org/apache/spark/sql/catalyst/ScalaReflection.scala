@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.analysis.GetColumnByOrdinal
 import org.apache.spark.sql.catalyst.expressions.{Expression, _}
 import org.apache.spark.sql.catalyst.expressions.objects._
 import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
@@ -574,16 +575,15 @@ object ScalaReflection extends ScalaReflection {
 
       case t if definedByConstructorParams(t) =>
         if (seenTypeSet.contains(t)) {
-          throw new UnsupportedOperationException(
-            s"cannot have circular references in class, but got the circular reference of class $t")
+          throw QueryExecutionErrors.cannotHaveCircularReferencesInClassError(t.toString)
         }
 
         val params = getConstructorParameters(t)
         val fields = params.map { case (fieldName, fieldType) =>
           if (SourceVersion.isKeyword(fieldName) ||
               !SourceVersion.isIdentifier(encodeFieldNameToIdentifier(fieldName))) {
-            throw new UnsupportedOperationException(s"`$fieldName` is not a valid identifier of " +
-              "Java and cannot be used as field name\n" + walkedTypePath)
+            throw QueryExecutionErrors.cannotUseInvalidJavaIdentifierAsFieldNameError(
+              fieldName, walkedTypePath)
           }
 
           // SPARK-26730 inputObject won't be null with If's guard below. And KnownNotNul
@@ -607,8 +607,7 @@ object ScalaReflection extends ScalaReflection {
             returnNullable = false))
 
       case _ =>
-        throw new UnsupportedOperationException(
-          s"No Encoder found for $tpe\n" + walkedTypePath)
+        throw QueryExecutionErrors.cannotFindEncoderForTypeError(tpe.toString, walkedTypePath)
     }
   }
 
@@ -701,8 +700,7 @@ object ScalaReflection extends ScalaReflection {
   def attributesFor[T: TypeTag]: Seq[Attribute] = schemaFor[T] match {
     case Schema(s: StructType, _) =>
       s.toAttributes
-    case others =>
-      throw new UnsupportedOperationException(s"Attributes for type $others is not supported")
+    case others => throw QueryExecutionErrors.attributesForTypeUnsupportedError(others)
   }
 
   /** Returns a catalyst DataType and its nullability for the given Scala Type using reflection. */
@@ -791,7 +789,7 @@ object ScalaReflection extends ScalaReflection {
       case t if isSubtype(t, localTypeOf[Enumeration#Value]) =>
         Schema(StringType, nullable = true)
       case other =>
-        throw new UnsupportedOperationException(s"Schema for type $other is not supported")
+        throw QueryExecutionErrors.schemaForTypeUnsupportedError(other.toString)
     }
   }
 
@@ -978,9 +976,7 @@ trait ScalaReflection extends Logging {
    */
   private def getCompanionConstructor(tpe: Type): Symbol = {
     def throwUnsupportedOperation = {
-      throw new UnsupportedOperationException(s"Unable to find constructor for $tpe. " +
-        s"This could happen if $tpe is an interface, or a trait without companion object " +
-        "constructor.")
+      throw QueryExecutionErrors.cannotFindConstructorForTypeError(tpe.toString)
     }
     tpe.typeSymbol.asClass.companion match {
       case NoSymbol => throwUnsupportedOperation
@@ -1003,7 +999,7 @@ trait ScalaReflection extends Logging {
       val primaryConstructorSymbol: Option[Symbol] = constructorSymbol.asTerm.alternatives.find(
         s => s.isMethod && s.asMethod.isPrimaryConstructor)
       if (primaryConstructorSymbol.isEmpty) {
-        sys.error("Internal SQL error: Product object did not have a primary constructor.")
+        throw QueryExecutionErrors.primaryConstructorNotFoundError(tpe.getClass)
       } else {
         primaryConstructorSymbol.get.asMethod.paramLists
       }

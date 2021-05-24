@@ -181,7 +181,7 @@ Input [3]: [c_customer_sk#1, c_current_cdemo_sk#2, c_current_addr_sk#3]
 Output [2]: [ca_address_sk#20, ca_state#21]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer_address]
-PushedFilters: [In(ca_state, [KY,GA,NM]), IsNotNull(ca_address_sk)]
+PushedFilters: [In(ca_state, [GA,KY,NM]), IsNotNull(ca_address_sk)]
 ReadSchema: struct<ca_address_sk:int,ca_state:string>
 
 (31) ColumnarToRow [codegen id : 7]

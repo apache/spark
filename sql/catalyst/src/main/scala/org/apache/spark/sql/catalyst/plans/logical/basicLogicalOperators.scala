@@ -774,18 +774,59 @@ case class Range(
       } else {
         (start + (numElements - 1) * step, start)
       }
+
+      val histogram = if (conf.histogramEnabled) {
+        Some(computeHistogramStatistics())
+      } else {
+        None
+      }
+
       val colStat = ColumnStat(
         distinctCount = Some(numElements),
         max = Some(maxVal),
         min = Some(minVal),
         nullCount = Some(0),
         avgLen = Some(LongType.defaultSize),
-        maxLen = Some(LongType.defaultSize))
+        maxLen = Some(LongType.defaultSize),
+        histogram = histogram)
 
       Statistics(
         sizeInBytes = LongType.defaultSize * numElements,
         rowCount = Some(numElements),
         attributeStats = AttributeMap(Seq(output.head -> colStat)))
+    }
+  }
+
+  private def computeHistogramStatistics(): Histogram = {
+    val numBins = conf.histogramNumBins
+    val height = numElements.toDouble / numBins
+    val percentileArray = (0 to numBins).map(i => i * height).toArray
+
+    val lowerIndexInitial: Double = percentileArray.head
+    val lowerBinValueInitial: Long = getRangeValue(0)
+    val (_, _, binArray) = percentileArray.tail
+      .foldLeft((lowerIndexInitial, lowerBinValueInitial, Seq.empty[HistogramBin])) {
+        case ((lowerIndex, lowerBinValue, binAr), upperIndex) =>
+          // Integer index for upper and lower values in the bin.
+          val upperIndexPos = math.ceil(upperIndex).toInt - 1
+          val lowerIndexPos = math.ceil(lowerIndex).toInt - 1
+
+          val upperBinValue = getRangeValue(math.max(upperIndexPos, 0))
+          val ndv = math.max(upperIndexPos - lowerIndexPos, 1)
+          // Update the lowerIndex and lowerBinValue with upper ones for the next iteration.
+          (upperIndex, upperBinValue, binAr :+ HistogramBin(lowerBinValue, upperBinValue, ndv))
+      }
+    Histogram(height, binArray.toArray)
+  }
+
+  // Utility method to compute histogram
+  private def getRangeValue(index: Int): Long = {
+    assert(index >= 0, "index must be greater than and equal to 0")
+    if (step < 0) {
+      // Reverse the range values for computing histogram, if the step size is negative.
+      start + (numElements.toLong - index - 1) * step
+    } else {
+      start + index * step
     }
   }
 

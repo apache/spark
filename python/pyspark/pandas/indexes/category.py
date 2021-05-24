@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 from functools import partial
-from typing import Any
+from typing import Any, no_type_check
 
 import pandas as pd
 from pandas.api.types import is_hashable
@@ -97,6 +97,7 @@ class CategoricalIndex(Index):
                      categories=['a', 'b', 'c'], ordered=False, dtype='category')
     """
 
+    @no_type_check
     def __new__(cls, data=None, categories=None, ordered=None, dtype=None, copy=False, name=None):
         if not is_hashable(name):
             raise TypeError("Index.name must be a hashable type")
@@ -158,7 +159,7 @@ class CategoricalIndex(Index):
         return self.dtype.categories
 
     @categories.setter
-    def categories(self, categories):
+    def categories(self, categories: pd.Index) -> None:
         raise NotImplementedError()
 
     @property
@@ -188,7 +189,7 @@ class CategoricalIndex(Index):
         raise AttributeError("'CategoricalIndex' object has no attribute '{}'".format(item))
 
 
-def _test():
+def _test() -> None:
     import os
     import doctest
     import sys

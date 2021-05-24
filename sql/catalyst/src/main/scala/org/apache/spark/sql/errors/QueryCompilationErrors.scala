@@ -23,17 +23,20 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, QualifiedTableName, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NamespaceAlreadyExistsException, NoSuchNamespaceException, NoSuchTableException, ResolvedNamespace, ResolvedTable, ResolvedView, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable, InvalidUDFClassException}
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, CreateMap, Expression, GroupingID, NamedExpression, SpecifiedWindowFrame, WindowFrame, WindowFunction, WindowSpecDefinition}
-import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoStatement, LogicalPlan, SerdeInfo}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, AttributeSet, CreateMap, Expression, GroupingID, NamedExpression, SpecifiedWindowFrame, WindowFrame, WindowFunction, WindowSpecDefinition}
+import org.apache.spark.sql.catalyst.plans.JoinType
+import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoStatement, Join, LogicalPlan, SerdeInfo, Window}
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.catalyst.util.{toPrettySQL, FailFastMode, ParseMode, PermissiveMode}
-import org.apache.spark.sql.connector.catalog.{CatalogPlugin, Identifier, NamespaceChange, Table, TableCapability, TableChange, V1Table}
+import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.connector.expressions.{NamedReference, Transform}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.LEGACY_CTE_PRECEDENCE_POLICY
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.streaming.OutputMode
-import org.apache.spark.sql.types.{AbstractDataType, DataType, NullType, StructField, StructType}
+import org.apache.spark.sql.types._
 
 /**
  * Object for grouping error messages from exceptions thrown during query compilation.
@@ -1006,9 +1009,9 @@ private[spark] object QueryCompilationErrors {
     new AnalysisException("Cannot save interval data type into external storage.")
   }
 
-  def cannotResolveAttributeError(name: String, data: LogicalPlan): Throwable = {
+  def cannotResolveAttributeError(name: String, outputStr: String): Throwable = {
     new AnalysisException(
-      s"Unable to resolve $name given [${data.output.map(_.name).mkString(", ")}]")
+      s"Unable to resolve $name given [$outputStr]")
   }
 
   def orcNotUsedWithHiveEnabledError(): Throwable = {
@@ -1390,5 +1393,207 @@ private[spark] object QueryCompilationErrors {
 
   def functionUnsupportedInV2CatalogError(): Throwable = {
     new AnalysisException("function is only supported in v1 catalog")
+  }
+
+  def cannotOperateOnHiveDataSourceFilesError(operation: String): Throwable = {
+    new AnalysisException("Hive data source can only be used with tables, you can not " +
+      s"$operation files of Hive data source directly.")
+  }
+
+  def setPathOptionAndCallWithPathParameterError(method: String): Throwable = {
+    new AnalysisException(
+      s"""
+         |There is a 'path' option set and $method() is called with a path
+         |parameter. Either remove the path option, or call $method() without the parameter.
+         |To ignore this check, set '${SQLConf.LEGACY_PATH_OPTION_BEHAVIOR.key}' to 'true'.
+       """.stripMargin.replaceAll("\n", " "))
+  }
+
+  def userSpecifiedSchemaWithTextFileError(): Throwable = {
+    new AnalysisException("User specified schema not supported with `textFile`")
+  }
+
+  def tempViewNotSupportStreamingWriteError(viewName: String): Throwable = {
+    new AnalysisException(s"Temporary view $viewName doesn't support streaming write")
+  }
+
+  def streamingIntoViewNotSupportedError(viewName: String): Throwable = {
+    new AnalysisException(s"Streaming into views $viewName is not supported.")
+  }
+
+  def inputSourceDiffersFromDataSourceProviderError(
+      source: String, tableName: String, table: CatalogTable): Throwable = {
+    new AnalysisException(s"The input source($source) is different from the table " +
+      s"$tableName's data source provider(${table.provider.get}).")
+  }
+
+  def tableNotSupportStreamingWriteError(tableName: String, t: Table): Throwable = {
+    new AnalysisException(s"Table $tableName doesn't support streaming write - $t")
+  }
+
+  def queryNameNotSpecifiedForMemorySinkError(): Throwable = {
+    new AnalysisException("queryName must be specified for memory sink")
+  }
+
+  def sourceNotSupportedWithContinuousTriggerError(source: String): Throwable = {
+    new AnalysisException(s"'$source' is not supported with continuous trigger")
+  }
+
+  def columnNotFoundInExistingColumnsError(
+      columnType: String, columnName: String, validColumnNames: Seq[String]): Throwable = {
+    new AnalysisException(s"$columnType column $columnName not found in " +
+      s"existing columns (${validColumnNames.mkString(", ")})")
+  }
+
+  def operationNotSupportPartitioningError(operation: String): Throwable = {
+    new AnalysisException(s"'$operation' does not support partitioning")
+  }
+
+  def mixedRefsInAggFunc(funcStr: String): Throwable = {
+    val msg = "Found an aggregate function in a correlated predicate that has both " +
+      "outer and local references, which is not supported: " + funcStr
+    new AnalysisException(msg)
+  }
+
+  def lookupFunctionInNonFunctionCatalogError(
+      ident: Identifier, catalog: CatalogPlugin): Throwable = {
+    new AnalysisException(s"Trying to lookup function '$ident' in " +
+      s"catalog '${catalog.name()}', but it is not a FunctionCatalog.")
+  }
+
+  def functionCannotProcessInputError(
+      unbound: UnboundFunction,
+      arguments: Seq[Expression],
+      unsupported: UnsupportedOperationException): Throwable = {
+    new AnalysisException(s"Function '${unbound.name}' cannot process " +
+      s"input: (${arguments.map(_.dataType.simpleString).mkString(", ")}): " +
+      unsupported.getMessage, cause = Some(unsupported))
+  }
+
+  def ambiguousRelationAliasNameInNestedCTEError(name: String): Throwable = {
+    new AnalysisException(s"Name $name is ambiguous in nested CTE. " +
+      s"Please set ${LEGACY_CTE_PRECEDENCE_POLICY.key} to CORRECTED so that name " +
+      "defined in inner CTE takes precedence. If set it to LEGACY, outer CTE " +
+      "definitions will take precedence. See more details in SPARK-28228.")
+  }
+
+  def commandUnsupportedInV2TableError(name: String): Throwable = {
+    new AnalysisException(s"$name is not supported for v2 tables.")
+  }
+
+  def cannotResolveColumnNameAmongAttributesError(
+      lattr: Attribute, rightOutputAttrs: Seq[Attribute]): Throwable = {
+    new AnalysisException(
+      s"""
+         |Cannot resolve column name "${lattr.name}" among
+         |(${rightOutputAttrs.map(_.name).mkString(", ")})
+       """.stripMargin.replaceAll("\n", " "))
+  }
+
+  def cannotWriteTooManyColumnsToTableError(
+      tableName: String, expected: Seq[Attribute], query: LogicalPlan): Throwable = {
+    new AnalysisException(
+      s"""
+         |Cannot write to '$tableName', too many data columns:
+         |Table columns: ${expected.map(c => s"'${c.name}'").mkString(", ")}
+         |Data columns: ${query.output.map(c => s"'${c.name}'").mkString(", ")}
+       """.stripMargin)
+  }
+
+  def cannotWriteNotEnoughColumnsToTableError(
+      tableName: String, expected: Seq[Attribute], query: LogicalPlan): Throwable = {
+    new AnalysisException(
+      s"""Cannot write to '$tableName', not enough data columns:
+         |Table columns: ${expected.map(c => s"'${c.name}'").mkString(", ")}
+         |Data columns: ${query.output.map(c => s"'${c.name}'").mkString(", ")}"""
+        .stripMargin)
+  }
+
+  def cannotWriteIncompatibleDataToTableError(tableName: String, errors: Seq[String]): Throwable = {
+    new AnalysisException(
+      s"Cannot write incompatible data to table '$tableName':\n- ${errors.mkString("\n- ")}")
+  }
+
+  def secondArgumentOfFunctionIsNotIntegerError(
+      function: String, e: NumberFormatException): Throwable = {
+    new AnalysisException(
+      s"The second argument of '$function' function needs to be an integer.", cause = Some(e))
+  }
+
+  def nonPartitionPruningPredicatesNotExpectedError(
+      nonPartitionPruningPredicates: Seq[Expression]): Throwable = {
+    new AnalysisException(
+      s"Expected only partition pruning predicates: $nonPartitionPruningPredicates")
+  }
+
+  def columnNotDefinedInTableError(
+      colType: String, colName: String, tableName: String, tableCols: Seq[String]): Throwable = {
+    new AnalysisException(s"$colType column $colName is not defined in table $tableName, " +
+      s"defined table columns are: ${tableCols.mkString(", ")}")
+  }
+
+  def invalidLiteralForWindowDurationError(): Throwable = {
+    new AnalysisException("The duration and time inputs to window must be " +
+      "an integer, long or string literal.")
+  }
+
+  def noSuchStructFieldInGivenFieldsError(
+      fieldName: String, fields: Array[StructField]): Throwable = {
+    new AnalysisException(
+      s"No such struct field $fieldName in ${fields.map(_.name).mkString(", ")}")
+  }
+
+  def ambiguousReferenceToFieldsError(fields: String): Throwable = {
+    new AnalysisException(s"Ambiguous reference to fields $fields")
+  }
+
+  def secondArgumentInFunctionIsNotBooleanLiteralError(funcName: String): Throwable = {
+    new AnalysisException(s"The second argument in $funcName should be a boolean literal.")
+  }
+
+  def joinConditionMissingOrTrivialError(
+      join: Join, left: LogicalPlan, right: LogicalPlan): Throwable = {
+    new AnalysisException(
+      s"""Detected implicit cartesian product for ${join.joinType.sql} join between logical plans
+         |${left.treeString(false).trim}
+         |and
+         |${right.treeString(false).trim}
+         |Join condition is missing or trivial.
+         |Either: use the CROSS JOIN syntax to allow cartesian products between these
+         |relations, or: enable implicit cartesian products by setting the configuration
+         |variable spark.sql.crossJoin.enabled=true"""
+        .stripMargin)
+  }
+
+  def usePythonUDFInJoinConditionUnsupportedError(joinType: JoinType): Throwable = {
+    new AnalysisException("Using PythonUDF in join condition of join type" +
+      s" $joinType is not supported.")
+  }
+
+  def conflictingAttributesInJoinConditionError(
+      conflictingAttrs: AttributeSet, outerPlan: LogicalPlan, subplan: LogicalPlan): Throwable = {
+    new AnalysisException("Found conflicting attributes " +
+      s"${conflictingAttrs.mkString(",")} in the condition joining outer plan:\n  " +
+      s"$outerPlan\nand subplan:\n  $subplan")
+  }
+
+  def emptyWindowExpressionError(expr: Window): Throwable = {
+    new AnalysisException(s"Window expression is empty in $expr")
+  }
+
+  def foundDifferentWindowFunctionTypeError(windowExpressions: Seq[NamedExpression]): Throwable = {
+    new AnalysisException(
+      s"Found different window function type in $windowExpressions")
+  }
+
+  def charOrVarcharTypeAsStringUnsupportedError(): Throwable = {
+    new AnalysisException("char/varchar type can only be used in the table schema. " +
+      s"You can set ${SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key} to true, so that Spark" +
+      s" treat them as string type as same as Spark 3.0 and earlier")
+  }
+
+  def invalidPatternError(pattern: String, message: String): Throwable = {
+    new AnalysisException(
+      s"the pattern '$pattern' is invalid, $message")
   }
 }
