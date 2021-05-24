@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.AGGREGATE
 object RemoveRedundantAggregates extends Rule[LogicalPlan] with AliasHelper {
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithPruning(
     _.containsPattern(AGGREGATE), ruleId) {
-    case upper @ Aggregate(_, _, lower: Aggregate) if lowerIsRedundant(upper, lower) =>
+    case upper @ Aggregate(_, _, lower: Aggregate) if isLowerRedundant(upper, lower) =>
       val aliasMap = getAliasMap(lower)
 
       val newAggregate = upper.copy(
@@ -49,9 +49,13 @@ object RemoveRedundantAggregates extends Rule[LogicalPlan] with AliasHelper {
       }
   }
 
-  private def lowerIsRedundant(upper: Aggregate, lower: Aggregate): Boolean = {
-    val upperHasNoAggregateExpressions =
-      !upper.aggregateExpressions.exists(AggregateExpression.containsAggregate)
+  private def isLowerRedundant(upper: Aggregate, lower: Aggregate): Boolean = {
+    val upperHasNoDuplicateSensitiveAgg = upper
+      .aggregateExpressions
+      .forall(expr => expr.find {
+        case ae: AggregateExpression => !EliminateDistinct.isDuplicateAgnostic(ae.aggregateFunction)
+        case e => AggregateExpression.isAggregate(e)
+      }.isEmpty)
 
     lazy val upperRefsOnlyDeterministicNonAgg = upper.references.subsetOf(AttributeSet(
       lower
@@ -61,6 +65,6 @@ object RemoveRedundantAggregates extends Rule[LogicalPlan] with AliasHelper {
         .map(_.toAttribute)
     ))
 
-    upperHasNoAggregateExpressions && upperRefsOnlyDeterministicNonAgg
+    upperHasNoDuplicateSensitiveAgg && upperRefsOnlyDeterministicNonAgg
   }
 }
