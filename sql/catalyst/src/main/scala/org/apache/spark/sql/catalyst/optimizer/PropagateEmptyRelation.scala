@@ -26,12 +26,10 @@ import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.TreePattern.{LOCAL_RELATION, TRUE_OR_FALSE_LITERAL}
 
 /**
- * The rule used by both normal Optimizer and AQE Optimizer for:
+ * The base class of two rules in the normal and AQE Optimizer. It simplifies query plans with
+ * empty or non-empty relations:
  *  1. Binary-node Logical Plans
  *     - Join with one or two empty children (including Intersect/Except).
- *     - Join is single column NULL-aware anti join (NAAJ)
- *       Broadcasted [[HashedRelation]] is [[HashedRelationWithAllNullKeys]]. Eliminate join to an
- *       empty [[LocalRelation]].
  *     - Left semi Join
  *       Right side is non-empty and condition is empty. Eliminate join to its left side.
  *     - Left anti join
@@ -129,7 +127,8 @@ abstract class PropagateEmptyRelationBase extends Rule[LogicalPlan] with CastSup
 }
 
 /**
- * Rule [[PropagateEmptyRelationBase]] at normal optimizer side with the extra pattern:
+ * This rule runs in the normal optimizer and optimizes more cases
+ * compared to [[PropagateEmptyRelationBase]]:
  * 1. Higher-node Logical Plans
  *    - Union with all empty children.
  * 2. Unary-node Logical Plans

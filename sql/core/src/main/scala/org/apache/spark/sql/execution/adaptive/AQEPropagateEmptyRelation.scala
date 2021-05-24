@@ -23,7 +23,11 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.joins.HashedRelationWithAllNullKeys
 
 /**
- * Rule [[PropagateEmptyRelationBase]] at AQE optimizer side.
+ * This rule runs in the AQE optimizer and optimizes more cases
+ * compared to [[PropagateEmptyRelationBase]]:
+ * 1. Join is single column NULL-aware anti join (NAAJ)
+ *    Broadcasted [[HashedRelation]] is [[HashedRelationWithAllNullKeys]]. Eliminate join to an
+ *    empty [[LocalRelation]].
  */
 object AQEPropagateEmptyRelation extends PropagateEmptyRelationBase {
   override protected def isEmpty(plan: LogicalPlan): Boolean =
