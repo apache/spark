@@ -136,7 +136,7 @@ def align_diff_index_ops(func, this_index_ops: "IndexOpsMixin", *args) -> "Index
                     name=this_index_ops.name,
                 )
             elif isinstance(this_index_ops, Series):
-                this = this_index_ops.reset_index()
+                this = cast(DataFrame, this_index_ops.reset_index())
                 that = [
                     cast(Series, col.to_series() if isinstance(col, Index) else col)
                     .rename(i)
