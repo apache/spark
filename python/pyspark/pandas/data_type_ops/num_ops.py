@@ -21,7 +21,7 @@ from typing import Any, TYPE_CHECKING, Union
 import numpy as np
 from pandas.api.types import CategoricalDtype
 
-from pyspark.sql import Column, functions as F
+from pyspark.sql import functions as F
 from pyspark.sql.types import (
     BooleanType,
     NumericType,
@@ -40,7 +40,10 @@ if TYPE_CHECKING:
     from pyspark.pandas.series import Series  # noqa: F401 (SPARK-34943)
 
 
-def is_valid_operand_for_numeric_arithmetic(operand: Any) -> bool:
+def is_valid_operand_for_numeric_arithmetic(
+    operand: Any,
+    allow_bool_index_ops: bool = True
+) -> bool:
     """Check whether the operand is valid for arithmetic operations against numerics."""
     if isinstance(operand, numbers.Number) and not isinstance(operand, bool):
         return True
@@ -48,8 +51,8 @@ def is_valid_operand_for_numeric_arithmetic(operand: Any) -> bool:
         if isinstance(operand.dtype, CategoricalDtype):
             return False
         else:
-            return isinstance(operand.spark.data_type, NumericType) or isinstance(
-                operand.spark.data_type, BooleanType)
+            return isinstance(operand.spark.data_type, NumericType) or (
+                allow_bool_index_ops and isinstance(operand.spark.data_type, BooleanType))
     else:
         return isinstance(operand, Column)
 

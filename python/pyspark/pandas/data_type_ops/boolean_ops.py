@@ -18,24 +18,13 @@
 import numbers
 from typing import TYPE_CHECKING, Union
 
-import numpy as np
-from pandas.api.types import CategoricalDtype
-
-from pyspark.pandas.base import column_op, IndexOpsMixin, numpy_column_op
 from pyspark.pandas.data_type_ops.base import DataTypeOps, transform_boolean_operand_to_numeric
+from pyspark.pandas.data_type_ops.num_ops import is_valid_operand_for_numeric_arithmetic
 from pyspark.pandas.typedef.typehints import as_spark_type
-from pyspark.sql import Column, functions as F
-from pyspark.sql.types import NumericType
 
 if TYPE_CHECKING:
     from pyspark.pandas.indexes import Index  # noqa: F401 (SPARK-34943)
     from pyspark.pandas.series import Series  # noqa: F401 (SPARK-34943)
-
-
-def is_numeric_index_ops(index_ops: IndexOpsMixin) -> bool:
-    """Check if the given index_ops is numeric IndexOpsMixin."""
-    return isinstance(index_ops.spark.data_type, NumericType) and (
-        not isinstance(index_ops.dtype, CategoricalDtype))
 
 
 class BooleanOps(DataTypeOps):
@@ -51,7 +40,7 @@ class BooleanOps(DataTypeOps):
         if isinstance(right, numbers.Number):
             left = left.spark.transform(lambda scol: scol.cast(as_spark_type(type(right))))
             return left + right
-        elif isinstance(right, IndexOpsMixin) and is_numeric_index_ops(right):
+        elif is_valid_operand_for_numeric_arithmetic(right):
             left = transform_boolean_operand_to_numeric(left, right.spark.data_type)
             return left + right
         else:
@@ -62,7 +51,7 @@ class BooleanOps(DataTypeOps):
         if isinstance(right, numbers.Number):
             left = left.spark.transform(lambda scol: scol.cast(as_spark_type(type(right))))
             return left - right
-        elif isinstance(right, IndexOpsMixin) and is_numeric_index_ops(right):
+        elif is_valid_operand_for_numeric_arithmetic(right):
             left = transform_boolean_operand_to_numeric(left, right.spark.data_type)
             return left - right
         else:
@@ -73,7 +62,7 @@ class BooleanOps(DataTypeOps):
         if isinstance(right, numbers.Number):
             left = left.spark.transform(lambda scol: scol.cast(as_spark_type(type(right))))
             return left * right
-        elif isinstance(right, IndexOpsMixin) and is_numeric_index_ops(right):
+        elif is_valid_operand_for_numeric_arithmetic(right):
             left = transform_boolean_operand_to_numeric(left, right.spark.data_type)
             return left * right
         else:
@@ -84,7 +73,7 @@ class BooleanOps(DataTypeOps):
         if isinstance(right, numbers.Number):
             left = left.spark.transform(lambda scol: scol.cast(as_spark_type(type(right))))
             return left / right
-        elif isinstance(right, IndexOpsMixin) and is_numeric_index_ops(right):
+        elif is_valid_operand_for_numeric_arithmetic(right):
             left = transform_boolean_operand_to_numeric(left, right.spark.data_type)
             return left / right
         else:
@@ -95,7 +84,7 @@ class BooleanOps(DataTypeOps):
         if isinstance(right, numbers.Number):
             left = left.spark.transform(lambda scol: scol.cast(as_spark_type(type(right))))
             return left // right
-        elif isinstance(right, IndexOpsMixin) and is_numeric_index_ops(right):
+        elif is_valid_operand_for_numeric_arithmetic(right):
             left = transform_boolean_operand_to_numeric(left, right.spark.data_type)
             return left // right
         else:
@@ -106,7 +95,7 @@ class BooleanOps(DataTypeOps):
         if isinstance(right, numbers.Number):
             left = left.spark.transform(lambda scol: scol.cast(as_spark_type(type(right))))
             return left % right
-        elif isinstance(right, IndexOpsMixin) and is_numeric_index_ops(right):
+        elif is_valid_operand_for_numeric_arithmetic(right):
             left = transform_boolean_operand_to_numeric(left, right.spark.data_type)
             return left % right
         else:
@@ -117,7 +106,7 @@ class BooleanOps(DataTypeOps):
         if isinstance(right, numbers.Number):
             left = left.spark.transform(lambda scol: scol.cast(as_spark_type(type(right))))
             return left ** right
-        elif isinstance(right, IndexOpsMixin) and is_numeric_index_ops(right):
+        elif is_valid_operand_for_numeric_arithmetic(right):
             left = transform_boolean_operand_to_numeric(left, right.spark.data_type)
             return left ** right
         else:
