@@ -50,7 +50,7 @@ class BooleanOps(DataTypeOps):
     def add(self, left, right) -> Union["Series", "Index"]:
         if isinstance(right, numbers.Number):
             left = left.spark.transform(lambda scol: scol.cast(as_spark_type(type(right))))
-            return column_op(Column.__add__)(left, right)
+            return left + right
         elif isinstance(right, IndexOpsMixin) and is_numeric_index_ops(right):
             left = transform_boolean_operand_to_numeric(left, right.spark.data_type)
             return column_op(Column.__add__)(left, right)
@@ -61,7 +61,7 @@ class BooleanOps(DataTypeOps):
     def sub(self, left, right) -> Union["Series", "Index"]:
         if isinstance(right, numbers.Number):
             left = left.spark.transform(lambda scol: scol.cast(as_spark_type(type(right))))
-            return column_op(Column.__sub__)(left, right)
+            return left - right
         elif isinstance(right, IndexOpsMixin) and is_numeric_index_ops(right):
             left = transform_boolean_operand_to_numeric(left, right.spark.data_type)
             return column_op(Column.__sub__)(left, right)
@@ -72,7 +72,7 @@ class BooleanOps(DataTypeOps):
     def mul(self, left, right) -> Union["Series", "Index"]:
         if isinstance(right, numbers.Number):
             left = left.spark.transform(lambda scol: scol.cast(as_spark_type(type(right))))
-            return column_op(Column.__mul__)(left, right)
+            return left * right
         elif isinstance(right, IndexOpsMixin) and is_numeric_index_ops(right):
             left = transform_boolean_operand_to_numeric(left, right.spark.data_type)
             return column_op(Column.__mul__)(left, right)
@@ -90,7 +90,7 @@ class BooleanOps(DataTypeOps):
 
         if isinstance(right, numbers.Number):
             left = left.spark.transform(lambda scol: scol.cast(as_spark_type(type(right))))
-            return numpy_column_op(truediv)(left, right)
+            return left / right
         elif isinstance(right, IndexOpsMixin) and is_numeric_index_ops(right):
             left = transform_boolean_operand_to_numeric(left, right.spark.data_type)
             return numpy_column_op(truediv)(left, right)
@@ -112,7 +112,7 @@ class BooleanOps(DataTypeOps):
 
         if isinstance(right, numbers.Number):
             left = left.spark.transform(lambda scol: scol.cast(as_spark_type(type(right))))
-            return numpy_column_op(floordiv)(left, right)
+            return left // right
         elif isinstance(right, IndexOpsMixin) and is_numeric_index_ops(right):
             left = transform_boolean_operand_to_numeric(left, right.spark.data_type)
             return numpy_column_op(floordiv)(left, right)
@@ -126,7 +126,7 @@ class BooleanOps(DataTypeOps):
 
         if isinstance(right, numbers.Number):
             left = left.spark.transform(lambda scol: scol.cast(as_spark_type(type(right))))
-            return column_op(mod)(left, right)
+            return left % right
         elif isinstance(right, IndexOpsMixin) and is_numeric_index_ops(right):
             left = transform_boolean_operand_to_numeric(left, right.spark.data_type)
             return column_op(mod)(left, right)
@@ -140,7 +140,7 @@ class BooleanOps(DataTypeOps):
 
         if isinstance(right, numbers.Number):
             left = left.spark.transform(lambda scol: scol.cast(as_spark_type(type(right))))
-            return column_op(pow_func)(left, right)
+            return left ** right
         elif isinstance(right, IndexOpsMixin) and is_numeric_index_ops(right):
             left = transform_boolean_operand_to_numeric(left, right.spark.data_type)
             return column_op(pow_func)(left, right)

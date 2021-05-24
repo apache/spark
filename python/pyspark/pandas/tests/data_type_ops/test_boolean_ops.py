@@ -95,7 +95,7 @@ class BooleanOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         self.assert_eq(pser / 0.1, psser / 0.1)
         self.assert_eq(pser / pser.astype(int), psser / psser.astype(int))
         self.assertRaises(TypeError, lambda: psser / psser)
-        
+
         with option_context("compute.ops_on_diff_frames", True):
             self.assert_eq(
                 self.pser / self.float_pser, (self.psser / self.float_psser).sort_index())
