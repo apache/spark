@@ -19,6 +19,7 @@ import datetime
 from distutils.version import LooseVersion
 
 import pandas as pd
+import numpy as np
 
 from pyspark import pandas as ps
 from pyspark.pandas.config import option_context
@@ -188,6 +189,9 @@ class BooleanOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         if LooseVersion(pd.__version__) >= LooseVersion("0.25.3"):
             self.assert_eq(1 // self.pser, 1 // self.psser)
             self.assert_eq(0.1 // self.pser, 0.1 // self.psser)
+        else:
+            self.assert_eq(1 // self.psser, ps.Series([1.0, 1.0, np.inf]))
+            self.assert_eq(0.1 // self.psser, ps.Series([0.0, 0.0, np.inf]))
         self.assertRaises(TypeError, lambda: "x" + self.psser)
         self.assertRaises(TypeError, lambda: datetime.date(1994, 1, 1) // self.psser)
         self.assertRaises(TypeError, lambda: datetime.datetime(1994, 1, 1) // self.psser)

@@ -138,11 +138,16 @@ class NumOpsTest(PandasOnSparkTestCase, TestCasesUtils):
                 self.assertRaises(TypeError, lambda: psser // self.non_numeric_pssers["date"])
                 self.assertRaises(
                     TypeError, lambda: psser // self.non_numeric_pssers["categorical"])
-                if LooseVersion(pd.__version__) >= LooseVersion("0.25.3"):
-                    self.assert_eq(
-                        (self.float_psser // self.non_numeric_pssers["bool"]).sort_index(),
-                        self.float_pser // self.non_numeric_psers["bool"],
-                    )
+            if LooseVersion(pd.__version__) >= LooseVersion("0.25.3"):
+                self.assert_eq(
+                    (self.float_psser // self.non_numeric_pssers["bool"]).sort_index(),
+                    self.float_pser // self.non_numeric_psers["bool"],
+                )
+            else:
+                self.assert_eq(
+                    (self.float_pser // self.non_numeric_psers["bool"]).sort_index(),
+                    ps.Series([1.0, 2.0, np.inf])
+                )
 
         self.assertRaises(TypeError, lambda: self.float_psser // True)
 
