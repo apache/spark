@@ -54,23 +54,21 @@ private[sql] class JacksonGenerator(
   // `ValueWriter`s for all fields of the schema
   private lazy val rootFieldWriters: Array[ValueWriter] = dataType match {
     case st: StructType => st.map(_.dataType).map(makeWriter).toArray
-    case _ => throw new UnsupportedOperationException(
-      s"Initial type ${dataType.catalogString} must be a ${StructType.simpleString}")
+    case _ => throw QueryExecutionErrors.initialTypeNotTargetDataTypeError(
+      dataType, StructType.simpleString)
   }
 
   // `ValueWriter` for array data storing rows of the schema.
   private lazy val arrElementWriter: ValueWriter = dataType match {
     case at: ArrayType => makeWriter(at.elementType)
     case _: StructType | _: MapType => makeWriter(dataType)
-    case _ => throw new UnsupportedOperationException(
-      s"Initial type ${dataType.catalogString} must be " +
-      s"an ${ArrayType.simpleString}, a ${StructType.simpleString} or a ${MapType.simpleString}")
+    case _ => throw QueryExecutionErrors.initialTypeNotTargetDataTypesError(dataType)
   }
 
   private lazy val mapElementWriter: ValueWriter = dataType match {
     case mt: MapType => makeWriter(mt.valueType)
-    case _ => throw new UnsupportedOperationException(
-      s"Initial type ${dataType.catalogString} must be a ${MapType.simpleString}")
+    case _ => throw QueryExecutionErrors.initialTypeNotTargetDataTypeError(
+      dataType, MapType.simpleString)
   }
 
   private val gen = {

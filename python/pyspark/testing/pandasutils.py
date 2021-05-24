@@ -70,7 +70,7 @@ class PandasOnSparkTestCase(unittest.TestCase, SQLTestUtils):
     def tearDownClass(cls):
         # We don't stop Spark session to reuse across all tests.
         # The Spark session will be started and stopped at PyTest session level.
-        # Please see databricks/koalas/conftest.py.
+        # Please see pyspark/pandas/conftest.py.
         pass
 
     def assertPandasEqual(self, left, right, check_exact=True):
@@ -242,12 +242,12 @@ class TestUtils(object):
 
 class ComparisonTestBase(PandasOnSparkTestCase):
     @property
-    def kdf(self):
+    def psdf(self):
         return ps.from_pandas(self.pdf)
 
     @property
     def pdf(self):
-        return self.kdf.to_pandas()
+        return self.psdf.to_pandas()
 
 
 def compare_both(f=None, almost=True):
@@ -264,7 +264,7 @@ def compare_both(f=None, almost=True):
         else:
             compare = self.assertPandasEqual
 
-        for result_pandas, result_spark in zip(f(self, self.pdf), f(self, self.kdf)):
+        for result_pandas, result_spark in zip(f(self, self.pdf), f(self, self.psdf)):
             compare(result_pandas, result_spark.to_pandas())
 
     return wrapped

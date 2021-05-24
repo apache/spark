@@ -39,29 +39,29 @@ class OpsOnDiffFramesGroupByExpandingTest(PandasOnSparkTestCase, TestUtils):
     def _test_groupby_expanding_func(self, f):
         pser = pd.Series([1, 2, 3])
         pkey = pd.Series([1, 2, 3], name="a")
-        kser = ps.from_pandas(pser)
+        psser = ps.from_pandas(pser)
         kkey = ps.from_pandas(pkey)
 
         self.assert_eq(
-            getattr(kser.groupby(kkey).expanding(2), f)().sort_index(),
+            getattr(psser.groupby(kkey).expanding(2), f)().sort_index(),
             getattr(pser.groupby(pkey).expanding(2), f)().sort_index(),
         )
 
         pdf = pd.DataFrame({"a": [1, 2, 3, 2], "b": [4.0, 2.0, 3.0, 1.0]})
         pkey = pd.Series([1, 2, 3, 2], name="a")
-        kdf = ps.from_pandas(pdf)
+        psdf = ps.from_pandas(pdf)
         kkey = ps.from_pandas(pkey)
 
         self.assert_eq(
-            getattr(kdf.groupby(kkey).expanding(2), f)().sort_index(),
+            getattr(psdf.groupby(kkey).expanding(2), f)().sort_index(),
             getattr(pdf.groupby(pkey).expanding(2), f)().sort_index(),
         )
         self.assert_eq(
-            getattr(kdf.groupby(kkey)["b"].expanding(2), f)().sort_index(),
+            getattr(psdf.groupby(kkey)["b"].expanding(2), f)().sort_index(),
             getattr(pdf.groupby(pkey)["b"].expanding(2), f)().sort_index(),
         )
         self.assert_eq(
-            getattr(kdf.groupby(kkey)[["b"]].expanding(2), f)().sort_index(),
+            getattr(psdf.groupby(kkey)[["b"]].expanding(2), f)().sort_index(),
             getattr(pdf.groupby(pkey)[["b"]].expanding(2), f)().sort_index(),
         )
 
@@ -72,34 +72,35 @@ class OpsOnDiffFramesGroupByExpandingTest(PandasOnSparkTestCase, TestUtils):
             self._test_groupby_expanding_func("count")
         else:
             # Series
-            kser = ps.Series([1, 2, 3])
+            psser = ps.Series([1, 2, 3])
             kkey = ps.Series([1, 2, 3], name="a")
             midx = pd.MultiIndex.from_tuples(
-                list(zip(kkey.to_pandas().values, kser.index.to_pandas().values)), names=["a", None]
+                list(zip(kkey.to_pandas().values, psser.index.to_pandas().values)),
+                names=["a", None],
             )
             expected_result = pd.Series([np.nan, np.nan, np.nan], index=midx)
             self.assert_eq(
-                kser.groupby(kkey).expanding(2).count().sort_index(), expected_result.sort_index()
+                psser.groupby(kkey).expanding(2).count().sort_index(), expected_result.sort_index()
             )
 
             # DataFrame
-            kdf = ps.DataFrame({"a": [1, 2, 3, 2], "b": [4.0, 2.0, 3.0, 1.0]})
+            psdf = ps.DataFrame({"a": [1, 2, 3, 2], "b": [4.0, 2.0, 3.0, 1.0]})
             kkey = ps.Series([1, 2, 3, 2], name="a")
             midx = pd.MultiIndex.from_tuples([(1, 0), (2, 1), (2, 3), (3, 2)], names=["a", None])
             expected_result = pd.DataFrame(
                 {"a": [None, None, 2.0, None], "b": [None, None, 2.0, None]}, index=midx
             )
             self.assert_eq(
-                kdf.groupby(kkey).expanding(2).count().sort_index(), expected_result.sort_index()
+                psdf.groupby(kkey).expanding(2).count().sort_index(), expected_result.sort_index()
             )
             expected_result = pd.Series([None, None, 2.0, None], index=midx, name="b")
             self.assert_eq(
-                kdf.groupby(kkey)["b"].expanding(2).count().sort_index(),
+                psdf.groupby(kkey)["b"].expanding(2).count().sort_index(),
                 expected_result.sort_index(),
             )
             expected_result = pd.DataFrame({"b": [None, None, 2.0, None]}, index=midx)
             self.assert_eq(
-                kdf.groupby(kkey)[["b"]].expanding(2).count().sort_index(),
+                psdf.groupby(kkey)[["b"]].expanding(2).count().sort_index(),
                 expected_result.sort_index(),
             )
 
@@ -128,7 +129,8 @@ if __name__ == "__main__":
 
     try:
         import xmlrunner  # type: ignore[import]
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
+
+        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)
