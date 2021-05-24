@@ -191,22 +191,6 @@ class JacksonParserSuite extends SparkFunSuite {
     )
   }
 
-  test("SPARK-35320 JacksonParser ArrayBasedMapData UDT key parser") {
-    object TestJsonKeyUDT extends UserDefinedType[String] {
-      override def sqlType: DataType = StringType
-      override def serialize(obj: String): Any = obj
-      override def deserialize(datum: Any): String = datum.toString
-      override def userClass: Class[String] = classOf[String]
-    }
-
-    val valueString = "test"
-    check(s"""{"$valueString": 1}""",
-      MapType(TestJsonKeyUDT, IntegerType), Seq(),
-      Seq(InternalRow(ArrayBasedMapData(Array(UTF8String.fromString(valueString)), Array(1)))),
-      compareArrayBasedMapData
-    )
-  }
-
   test("SPARK-35320 JacksonParser ArrayBasedMapData StringType key parser") {
     val valueString = "test"
     check(s"""{"$valueString": 1}""",

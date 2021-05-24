@@ -354,7 +354,6 @@ class JacksonParser(
     }
     case CalendarIntervalType => (key: String) =>
       IntervalUtils.safeStringToInterval(UTF8String.fromString(key))
-    case udt: UserDefinedType[_] => (key: String) => makeKeyConverter(udt.sqlType).apply(key)
     case _ => (key: String) => UTF8String.fromString(key)
   }
 
