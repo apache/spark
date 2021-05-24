@@ -40,7 +40,7 @@ class BooleanOps(DataTypeOps):
         return 'booleans'
 
     def add(self, left, right) -> Union["Series", "Index"]:
-        if isinstance(right, numbers.Number):
+        if isinstance(right, numbers.Number) and not isinstance(right, bool):
             left = left.spark.transform(lambda scol: scol.cast(as_spark_type(type(right))))
             return left + right
         elif is_valid_operand_for_numeric_arithmetic(right, allow_bool=False):
@@ -51,7 +51,7 @@ class BooleanOps(DataTypeOps):
                 "Addition can not be applied to %s and the given type." % self.pretty_name)
 
     def sub(self, left, right) -> Union["Series", "Index"]:
-        if isinstance(right, numbers.Number):
+        if isinstance(right, numbers.Number) and not isinstance(right, bool):
             left = left.spark.transform(lambda scol: scol.cast(as_spark_type(type(right))))
             return left - right
         elif is_valid_operand_for_numeric_arithmetic(right, allow_bool=False):
@@ -62,7 +62,7 @@ class BooleanOps(DataTypeOps):
                 "Subtraction can not be applied to %s and the given type." % self.pretty_name)
 
     def mul(self, left, right) -> Union["Series", "Index"]:
-        if isinstance(right, numbers.Number):
+        if isinstance(right, numbers.Number) and not isinstance(right, bool):
             left = left.spark.transform(lambda scol: scol.cast(as_spark_type(type(right))))
             return left * right
         elif is_valid_operand_for_numeric_arithmetic(right, allow_bool=False):
@@ -73,7 +73,7 @@ class BooleanOps(DataTypeOps):
                 "Multiplication can not be applied to %s and the given type." % self.pretty_name)
 
     def truediv(self, left, right) -> Union["Series", "Index"]:
-        if isinstance(right, numbers.Number):
+        if isinstance(right, numbers.Number) and not isinstance(right, bool):
             left = left.spark.transform(lambda scol: scol.cast(as_spark_type(type(right))))
             return left / right
         elif is_valid_operand_for_numeric_arithmetic(right, allow_bool=False):
@@ -84,7 +84,7 @@ class BooleanOps(DataTypeOps):
                 "True division can not be applied to %s and the given type." % self.pretty_name)
 
     def floordiv(self, left, right) -> Union["Series", "Index"]:
-        if isinstance(right, numbers.Number):
+        if isinstance(right, numbers.Number) and not isinstance(right, bool):
             left = left.spark.transform(lambda scol: scol.cast(as_spark_type(type(right))))
             return left // right
         elif is_valid_operand_for_numeric_arithmetic(right, allow_bool=False):
@@ -95,7 +95,7 @@ class BooleanOps(DataTypeOps):
                 "Floor division can not be applied to %s and the given type." % self.pretty_name)
 
     def mod(self, left, right) -> Union["Series", "Index"]:
-        if isinstance(right, numbers.Number):
+        if isinstance(right, numbers.Number) and not isinstance(right, bool):
             left = left.spark.transform(lambda scol: scol.cast(as_spark_type(type(right))))
             return left % right
         elif is_valid_operand_for_numeric_arithmetic(right, allow_bool=False):
@@ -106,7 +106,7 @@ class BooleanOps(DataTypeOps):
                 "Modulo can not be applied to %s and the given type." % self.pretty_name)
 
     def pow(self, left, right) -> Union["Series", "Index"]:
-        if isinstance(right, numbers.Number):
+        if isinstance(right, numbers.Number) and not isinstance(right, bool):
             left = left.spark.transform(lambda scol: scol.cast(as_spark_type(type(right))))
             return left ** right
         elif is_valid_operand_for_numeric_arithmetic(right, allow_bool=False):
@@ -117,7 +117,7 @@ class BooleanOps(DataTypeOps):
                 "Exponentiation can not be applied to %s and the given type." % self.pretty_name)
 
     def radd(self, left, right) -> Union["Series", "Index"]:
-        if isinstance(right, numbers.Number):
+        if isinstance(right, numbers.Number) and not isinstance(right, bool):
             left = left.spark.transform(lambda scol: scol.cast(as_spark_type(type(right))))
             return right + left
         else:
@@ -125,7 +125,7 @@ class BooleanOps(DataTypeOps):
                 "Addition can not be applied to %s and the given type." % self.pretty_name)
 
     def rsub(self, left, right) -> Union["Series", "Index"]:
-        if isinstance(right, numbers.Number):
+        if isinstance(right, numbers.Number) and not isinstance(right, bool):
             left = left.spark.transform(lambda scol: scol.cast(as_spark_type(type(right))))
             return right - left
         else:
@@ -133,7 +133,7 @@ class BooleanOps(DataTypeOps):
                 "Subtraction can not be applied to %s and the given type." % self.pretty_name)
 
     def rmul(self, left, right) -> Union["Series", "Index"]:
-        if isinstance(right, numbers.Number):
+        if isinstance(right, numbers.Number) and not isinstance(right, bool):
             left = left.spark.transform(lambda scol: scol.cast(as_spark_type(type(right))))
             return right * left
         else:
@@ -141,7 +141,7 @@ class BooleanOps(DataTypeOps):
                 "Multiplication can not be applied to %s and the given type." % self.pretty_name)
 
     def rtruediv(self, left, right) -> Union["Series", "Index"]:
-        if isinstance(right, numbers.Number):
+        if isinstance(right, numbers.Number) and not isinstance(right, bool):
             left = left.spark.transform(lambda scol: scol.cast(as_spark_type(type(right))))
             return right / left
         else:
@@ -149,7 +149,7 @@ class BooleanOps(DataTypeOps):
                 "True division can not be applied to %s and the given type." % self.pretty_name)
 
     def rfloordiv(self, left, right) -> Union["Series", "Index"]:
-        if isinstance(right, numbers.Number):
+        if isinstance(right, numbers.Number) and not isinstance(right, bool):
             left = left.spark.transform(lambda scol: scol.cast(as_spark_type(type(right))))
             return right // left
         else:
@@ -157,7 +157,7 @@ class BooleanOps(DataTypeOps):
                 "Floor division can not be applied to %s and the given type." % self.pretty_name)
 
     def rpow(self, left, right) -> Union["Series", "Index"]:
-        if isinstance(right, numbers.Number):
+        if isinstance(right, numbers.Number) and not isinstance(right, bool):
             left = left.spark.transform(lambda scol: scol.cast(as_spark_type(type(right))))
             return right ** left
         else:
@@ -165,7 +165,7 @@ class BooleanOps(DataTypeOps):
                 "Exponentiation can not be applied to %s and the given type." % self.pretty_name)
 
     def rmod(self, left, right) -> Union["Series", "Index"]:
-        if isinstance(right, numbers.Number):
+        if isinstance(right, numbers.Number) and not isinstance(right, bool):
             left = left.spark.transform(lambda scol: scol.cast(as_spark_type(type(right))))
             return right % left
         else:

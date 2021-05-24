@@ -51,6 +51,7 @@ class BooleanOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         self.assert_eq(pser + 0.1, psser + 0.1)
         self.assert_eq(pser + pser.astype(int), psser + psser.astype(int))
         self.assertRaises(TypeError, lambda: psser + psser)
+        self.assertRaises(TypeError, lambda: psser + True)
 
         with option_context("compute.ops_on_diff_frames", True):
             for pser, psser in self.numeric_pser_psser_pairs:
@@ -66,6 +67,7 @@ class BooleanOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         self.assert_eq(pser - 0.1, psser - 0.1)
         self.assert_eq(pser - pser.astype(int), psser - psser.astype(int))
         self.assertRaises(TypeError, lambda: psser - psser)
+        self.assertRaises(TypeError, lambda: psser - True)
 
         with option_context("compute.ops_on_diff_frames", True):
             for pser, psser in self.numeric_pser_psser_pairs:
@@ -81,6 +83,7 @@ class BooleanOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         self.assert_eq(pser * 0.1, psser * 0.1)
         self.assert_eq(pser * pser.astype(int), psser * psser.astype(int))
         self.assertRaises(TypeError, lambda: psser * psser)
+        self.assertRaises(TypeError, lambda: psser * True)
 
         with option_context("compute.ops_on_diff_frames", True):
             for pser, psser in self.numeric_pser_psser_pairs:
@@ -96,6 +99,7 @@ class BooleanOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         self.assert_eq(pser / 0.1, psser / 0.1)
         self.assert_eq(pser / pser.astype(int), psser / psser.astype(int))
         self.assertRaises(TypeError, lambda: psser / psser)
+        self.assertRaises(TypeError, lambda: psser / True)
 
         with option_context("compute.ops_on_diff_frames", True):
             self.assert_eq(
@@ -116,6 +120,7 @@ class BooleanOpsTest(PandasOnSparkTestCase, TestCasesUtils):
 
         self.assert_eq(pser // pser.astype(int), psser // psser.astype(int))
         self.assertRaises(TypeError, lambda: psser // psser)
+        self.assertRaises(TypeError, lambda: psser // True)
 
         with option_context("compute.ops_on_diff_frames", True):
             self.assert_eq(
@@ -132,6 +137,7 @@ class BooleanOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         self.assert_eq(pser % 0.1, psser % 0.1)
         self.assert_eq(pser % pser.astype(float), psser % psser.astype(float))
         self.assertRaises(TypeError, lambda: psser % psser)
+        self.assertRaises(TypeError, lambda: psser % True)
 
         with option_context("compute.ops_on_diff_frames", True):
             for pser, psser in self.numeric_pser_psser_pairs:
@@ -148,6 +154,7 @@ class BooleanOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         self.assert_eq(pser ** 0.1, self.psser ** 0.1)
         self.assert_eq(pser ** pser.astype(float), psser ** psser.astype(float))
         self.assertRaises(TypeError, lambda: psser ** psser)
+        self.assertRaises(TypeError, lambda: psser ** True)
 
         with option_context("compute.ops_on_diff_frames", True):
             self.assert_eq(
@@ -161,6 +168,7 @@ class BooleanOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         self.assert_eq(1 + self.pser, 1 + self.psser)
         self.assert_eq(0.1 + self.pser, 0.1 + self.psser)
         self.assertRaises(TypeError, lambda: "x" + self.psser)
+        self.assertRaises(TypeError, lambda: True + self.psser)
         self.assertRaises(TypeError, lambda: datetime.date(1994, 1, 1) + self.psser)
         self.assertRaises(TypeError, lambda: datetime.datetime(1994, 1, 1) + self.psser)
 
@@ -168,6 +176,7 @@ class BooleanOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         self.assert_eq(1 - self.pser, 1 - self.psser)
         self.assert_eq(0.1 - self.pser, 0.1 - self.psser)
         self.assertRaises(TypeError, lambda: "x" - self.psser)
+        self.assertRaises(TypeError, lambda: True - self.psser)
         self.assertRaises(TypeError, lambda: datetime.date(1994, 1, 1) - self.psser)
         self.assertRaises(TypeError, lambda: datetime.datetime(1994, 1, 1) - self.psser)
 
@@ -175,6 +184,7 @@ class BooleanOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         self.assert_eq(1 * self.pser, 1 * self.psser)
         self.assert_eq(0.1 * self.pser, 0.1 * self.psser)
         self.assertRaises(TypeError, lambda: "x" * self.psser)
+        self.assertRaises(TypeError, lambda: True * self.psser)
         self.assertRaises(TypeError, lambda: datetime.date(1994, 1, 1) * self.psser)
         self.assertRaises(TypeError, lambda: datetime.datetime(1994, 1, 1) * self.psser)
 
@@ -182,6 +192,7 @@ class BooleanOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         self.assert_eq(1 / self.pser, 1 / self.psser)
         self.assert_eq(0.1 / self.pser, 0.1 / self.psser)
         self.assertRaises(TypeError, lambda: "x" / self.psser)
+        self.assertRaises(TypeError, lambda: True / self.psser)
         self.assertRaises(TypeError, lambda: datetime.date(1994, 1, 1) / self.psser)
         self.assertRaises(TypeError, lambda: datetime.datetime(1994, 1, 1) / self.psser)
 
@@ -193,6 +204,7 @@ class BooleanOpsTest(PandasOnSparkTestCase, TestCasesUtils):
             self.assert_eq(1 // self.psser, ps.Series([1.0, 1.0, np.inf]))
             self.assert_eq(0.1 // self.psser, ps.Series([0.0, 0.0, np.inf]))
         self.assertRaises(TypeError, lambda: "x" + self.psser)
+        self.assertRaises(TypeError, lambda: True + self.psser)
         self.assertRaises(TypeError, lambda: datetime.date(1994, 1, 1) // self.psser)
         self.assertRaises(TypeError, lambda: datetime.datetime(1994, 1, 1) // self.psser)
 
@@ -201,6 +213,7 @@ class BooleanOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         self.assert_eq((1 ** self.pser).astype(float), 1 ** self.psser)
         self.assert_eq(0.1 ** self.pser, 0.1 ** self.psser)
         self.assertRaises(TypeError, lambda: "x" ** self.psser)
+        self.assertRaises(TypeError, lambda: True ** self.psser)
         self.assertRaises(TypeError, lambda: datetime.date(1994, 1, 1) ** self.psser)
         self.assertRaises(TypeError, lambda: datetime.datetime(1994, 1, 1) ** self.psser)
 
@@ -213,7 +226,7 @@ class BooleanOpsTest(PandasOnSparkTestCase, TestCasesUtils):
             0.1 % self.psser,
         )
         self.assertRaises(TypeError, lambda: datetime.date(1994, 1, 1) % self.psser)
-        self.assertRaises(TypeError, lambda: datetime.datetime(1994, 1, 1) % self.psser)
+        self.assertRaises(TypeError, lambda: True % self.psser)
 
 
 if __name__ == "__main__":
