@@ -47,6 +47,7 @@ class NumOpsTest(PandasOnSparkTestCase, TestCasesUtils):
             self.assert_eq(pser + pser, psser + psser)
             self.assert_eq(pser + 1, psser + 1)
             # self.assert_eq(pser + 0.1, psser + 0.1)
+            self.assert_eq(pser + pser.astype(bool), psser + psser.astype(bool))
 
         with option_context("compute.ops_on_diff_frames", True):
             for pser, psser in self.numeric_pser_psser_pairs:
@@ -59,13 +60,14 @@ class NumOpsTest(PandasOnSparkTestCase, TestCasesUtils):
                     pser + self.non_numeric_psers["bool"],
                 )
 
-            self.assertRaises(TypeError, lambda: self.float_psser + True)
+        self.assertRaises(TypeError, lambda: self.float_psser + True)
 
     def test_sub(self):
         for pser, psser in self.numeric_pser_psser_pairs:
             self.assert_eq(pser - pser, psser - psser)
             self.assert_eq(pser - 1, psser - 1)
             # self.assert_eq(pser - 0.1, psser - 0.1)
+            self.assert_eq(pser - pser.astype(bool), psser - psser.astype(bool))
 
         with option_context("compute.ops_on_diff_frames", True):
             for pser, psser in self.numeric_pser_psser_pairs:
@@ -83,6 +85,7 @@ class NumOpsTest(PandasOnSparkTestCase, TestCasesUtils):
     def test_mul(self):
         for pser, psser in self.numeric_pser_psser_pairs:
             self.assert_eq(pser * pser, psser * psser)
+            self.assert_eq(pser * pser.astype(bool), psser * psser.astype(bool))
 
         with option_context("compute.ops_on_diff_frames", True):
             for pser, psser in self.numeric_pser_psser_pairs:
@@ -107,6 +110,7 @@ class NumOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         for pser, psser in self.numeric_pser_psser_pairs:
             if psser.dtype in [float, int, np.int32]:
                 self.assert_eq(pser / pser, psser / psser)
+                self.assert_eq(pser / pser.astype(bool), psser / psser.astype(bool))
 
         with option_context("compute.ops_on_diff_frames", True):
             for pser, psser in self.numeric_pser_psser_pairs:
@@ -125,6 +129,7 @@ class NumOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         for pser, psser in self.numeric_pser_psser_pairs:
             if psser.dtype == float:
                 self.assert_eq(pser // pser, psser // psser)
+                self.assert_eq(pser // pser.astype(bool), psser // psser.astype(bool))
 
         with option_context("compute.ops_on_diff_frames", True):
             for pser, psser in self.numeric_pser_psser_pairs:
@@ -144,6 +149,7 @@ class NumOpsTest(PandasOnSparkTestCase, TestCasesUtils):
     def test_mod(self):
         for pser, psser in self.numeric_pser_psser_pairs:
             self.assert_eq(pser % pser, psser % psser)
+            self.assert_eq(pser % pser.astype(bool), psser % psser.astype(bool))
 
         with option_context("compute.ops_on_diff_frames", True):
             for pser, psser in self.numeric_pser_psser_pairs:
@@ -162,6 +168,7 @@ class NumOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         for pser, psser in self.numeric_pser_psser_pairs:
             if psser.dtype == float:
                 self.assert_eq(pser ** pser, psser ** psser)
+                self.assert_eq(pser ** pser.astype(bool), psser ** psser.astype(bool))
 
         with option_context("compute.ops_on_diff_frames", True):
             for pser, psser in self.numeric_pser_psser_pairs:
