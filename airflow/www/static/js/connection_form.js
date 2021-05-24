@@ -20,6 +20,10 @@
  * Created by janomar on 23/07/15.
  */
 
+import getMetaValue from './meta_value';
+
+const restApiEnabled = getMetaValue('rest_api_enabled') === 'True';
+
 function decode(str) {
   return new DOMParser().parseFromString(str, "text/html").documentElement.textContent
 }
@@ -67,6 +71,18 @@ $(document).ready(function () {
   // Save all DOM elements into a map on load.
   const controlsContainer = getControlsContainer();
   const connTypesToControlsMap = getConnTypesToControlsMap();
+
+  // Create a test connection button & insert it right next to the save (submit) button
+  const testConnBtn = $('<button id="test-connection" type="button" class="btn btn-sm btn-primary" ' +
+    'style="margin-left: 3px; pointer-events: all">Test\n <i class="fa fa-rocket"></i></button>');
+
+  if (!restApiEnabled) {
+    $(testConnBtn).addClass('disabled')
+      .attr('title', 'Airflow REST APIs have been disabled. '
+        + 'See api->auth_backend section of the Airflow configuration.');
+  }
+
+  $(testConnBtn).insertAfter($('form#model_form div.well.well-sm button:submit'));
 
   /**
    * Changes the connection type.
@@ -139,6 +155,67 @@ $(document).ready(function () {
       }
     }
   }
+
+  /**
+   * Produces JSON stringified data from a html form data
+   *
+   * @param {string} selector Jquery from selector string.
+   * @returns {string} Form data as a JSON string
+   */
+  function getSerializedFormData(selector) {
+    const outObj = {};
+    const inArray = $(selector).serializeArray();
+
+    $.each(inArray, function () {
+      if (this.name === 'conn_id') {
+        outObj.connection_id = this.value;
+      } else if (this.value !== '' && this.name !== 'csrf_token') {
+        outObj[this.name] = this.value;
+      }
+    });
+
+    return JSON.stringify(outObj);
+  }
+
+  /**
+   * Displays the Flask style alert on UI via JS
+   *
+   * @param {boolean} status - true for success, false for error
+   * @param {string} message - The text message to show in alert box
+   */
+  function displayAlert(status, message) {
+    const alertClass = status ? 'alert-success' : 'alert-error';
+    let alertBox = $('.container .row .alert');
+    if (alertBox.length) {
+      alertBox.removeClass('alert-success').removeClass('alert-error');
+      alertBox.addClass(alertClass);
+      alertBox.text(message);
+      alertBox.show();
+    } else {
+      alertBox = $('<div class="alert ' + alertClass + '">\n' +
+                   '<button type="button" class="close" data-dismiss="alert">×</button>\n' + message + '</div>');
+
+      $('.container .row').prepend(alertBox).show();
+    }
+  }
+
+  // Bind click event to Test Connection button & perform an AJAX call via REST API
+  $('#test-connection').on('click', (e) => {
+    e.preventDefault();
+    $.ajax({
+      url: '/api/v1/connections/test',
+      type: 'post',
+      contentType: 'application/json',
+      dataType: 'json',
+      data: getSerializedFormData('form#model_form'),
+      success(data) {
+        displayAlert(data.status, data.message);
+      },
+      error(jq, err, msg) {
+        displayAlert(false, msg);
+      },
+    });
+  });
 
   const connTypeElem = document.getElementById('conn_type');
   $(connTypeElem).on('change', (e) => {
