@@ -34,7 +34,7 @@ TakeOrderedAndProject (29)
 Output [5]: [i_item_sk#1, i_item_id#2, i_item_desc#3, i_current_price#4, i_manufact_id#5]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/item]
-PushedFilters: [IsNotNull(i_current_price), GreaterThanOrEqual(i_current_price,68.00), LessThanOrEqual(i_current_price,98.00), In(i_manufact_id, [677,940,694,808]), IsNotNull(i_item_sk)]
+PushedFilters: [IsNotNull(i_current_price), GreaterThanOrEqual(i_current_price,68.00), LessThanOrEqual(i_current_price,98.00), In(i_manufact_id, [677,694,808,940]), IsNotNull(i_item_sk)]
 ReadSchema: struct<i_item_sk:int,i_item_id:string,i_item_desc:string,i_current_price:decimal(7,2),i_manufact_id:int>
 
 (2) ColumnarToRow [codegen id : 3]
@@ -92,7 +92,7 @@ Input [2]: [d_date_sk#11, d_date#12]
 
 (14) Filter [codegen id : 2]
 Input [2]: [d_date_sk#11, d_date#12]
-Condition : (((isnotnull(d_date#12) AND (d_date#12 >= 10988)) AND (d_date#12 <= 11048)) AND isnotnull(d_date_sk#11))
+Condition : (((isnotnull(d_date#12) AND (d_date#12 >= 2000-02-01)) AND (d_date#12 <= 2000-04-01)) AND isnotnull(d_date_sk#11))
 
 (15) Project [codegen id : 2]
 Output [1]: [d_date_sk#11]

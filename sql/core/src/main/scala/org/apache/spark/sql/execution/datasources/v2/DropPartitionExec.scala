@@ -30,7 +30,7 @@ case class DropPartitionExec(
     partSpecs: Seq[ResolvedPartitionSpec],
     ignoreIfNotExists: Boolean,
     purge: Boolean,
-    refreshCache: () => Unit) extends V2CommandExec {
+    refreshCache: () => Unit) extends LeafV2CommandExec {
   import DataSourceV2Implicits._
 
   override def output: Seq[Attribute] = Seq.empty

@@ -161,11 +161,11 @@ class FPGrowth(JavaEstimator, _FPGrowthParams, JavaMLWritable, JavaMLReadable):
     .. [1] Haoyuan Li, Yi Wang, Dong Zhang, Ming Zhang, and Edward Y. Chang. 2008.
         Pfp: parallel fp-growth for query recommendation.
         In Proceedings of the 2008 ACM conference on Recommender systems (RecSys '08).
-        Association for Computing Machinery, New York, NY, USA, 107–114.
+        Association for Computing Machinery, New York, NY, USA, 107-114.
         DOI: https://doi.org/10.1145/1454008.1454027
     .. [2] Jiawei Han, Jian Pei, and Yiwen Yin. 2000.
         Mining frequent patterns without candidate generation.
-        SIGMOD Rec. 29, 2 (June 2000), 1–12.
+        SIGMOD Rec. 29, 2 (June 2000), 1-12.
         DOI: https://doi.org/10.1145/335191.335372
 
 

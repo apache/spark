@@ -20,10 +20,14 @@ package org.apache.spark.scheduler
 import java.io.FileNotFoundException
 import java.util.Properties
 
-import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkFunSuite}
+import org.apache.hadoop.fs.Path
+import org.apache.hadoop.util.VersionInfo
+
+import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkFunSuite, TestUtils}
 import org.apache.spark.internal.config.SCHEDULER_ALLOCATION_FILE
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.scheduler.SchedulingMode._
+import org.apache.spark.util.Utils
 
 /**
  * Tests that pools and the associated scheduling algorithms for FIFO and fair scheduling work
@@ -87,7 +91,7 @@ class PoolSuite extends SparkFunSuite with LocalSparkContext {
     val taskScheduler = new TaskSchedulerImpl(sc)
 
     val rootPool = new Pool("", FAIR, 0, 0)
-    val schedulableBuilder = new FairSchedulableBuilder(rootPool, sc.conf)
+    val schedulableBuilder = new FairSchedulableBuilder(rootPool, sc)
     schedulableBuilder.buildPools()
 
     // Ensure that the XML file was read in correctly.
@@ -185,9 +189,10 @@ class PoolSuite extends SparkFunSuite with LocalSparkContext {
     val xmlPath = getClass.getClassLoader.getResource("fairscheduler-with-invalid-data.xml")
       .getFile()
     val conf = new SparkConf().set(SCHEDULER_ALLOCATION_FILE, xmlPath)
+    sc = new SparkContext(LOCAL, APP_NAME, conf)
 
     val rootPool = new Pool("", FAIR, 0, 0)
-    val schedulableBuilder = new FairSchedulableBuilder(rootPool, conf)
+    val schedulableBuilder = new FairSchedulableBuilder(rootPool, sc)
     schedulableBuilder.buildPools()
 
     verifyPool(rootPool, schedulableBuilder.DEFAULT_POOL_NAME, 0, 1, FIFO)
@@ -239,7 +244,7 @@ class PoolSuite extends SparkFunSuite with LocalSparkContext {
     val taskScheduler = new TaskSchedulerImpl(sc)
 
     val rootPool = new Pool("", SchedulingMode.FAIR, initMinShare = 0, initWeight = 0)
-    val schedulableBuilder = new FairSchedulableBuilder(rootPool, sc.conf)
+    val schedulableBuilder = new FairSchedulableBuilder(rootPool, sc)
     schedulableBuilder.buildPools()
 
     // Submit a new task set manager with pool properties set to null. This should result
@@ -267,7 +272,7 @@ class PoolSuite extends SparkFunSuite with LocalSparkContext {
     val taskScheduler = new TaskSchedulerImpl(sc)
 
     val rootPool = new Pool("", SchedulingMode.FAIR, initMinShare = 0, initWeight = 0)
-    val schedulableBuilder = new FairSchedulableBuilder(rootPool, sc.conf)
+    val schedulableBuilder = new FairSchedulableBuilder(rootPool, sc)
     schedulableBuilder.buildPools()
 
     assert(rootPool.getSchedulableByName(TEST_POOL) === null)
@@ -302,7 +307,7 @@ class PoolSuite extends SparkFunSuite with LocalSparkContext {
     sc = new SparkContext(LOCAL, APP_NAME, conf)
 
     val rootPool = new Pool("", SchedulingMode.FAIR, 0, 0)
-    val schedulableBuilder = new FairSchedulableBuilder(rootPool, sc.conf)
+    val schedulableBuilder = new FairSchedulableBuilder(rootPool, sc)
     schedulableBuilder.buildPools()
 
     verifyPool(rootPool, schedulableBuilder.DEFAULT_POOL_NAME, 0, 1, FIFO)
@@ -317,7 +322,7 @@ class PoolSuite extends SparkFunSuite with LocalSparkContext {
     sc = new SparkContext(LOCAL, APP_NAME, conf)
 
     val rootPool = new Pool("", SchedulingMode.FAIR, 0, 0)
-    val schedulableBuilder = new FairSchedulableBuilder(rootPool, sc.conf)
+    val schedulableBuilder = new FairSchedulableBuilder(rootPool, sc)
     schedulableBuilder.buildPools()
 
     verifyPool(rootPool, schedulableBuilder.DEFAULT_POOL_NAME, 0, 1, FIFO)
@@ -332,9 +337,33 @@ class PoolSuite extends SparkFunSuite with LocalSparkContext {
     sc = new SparkContext(LOCAL, APP_NAME, conf)
 
     val rootPool = new Pool("", SchedulingMode.FAIR, 0, 0)
-    val schedulableBuilder = new FairSchedulableBuilder(rootPool, sc.conf)
+    val schedulableBuilder = new FairSchedulableBuilder(rootPool, sc)
     intercept[FileNotFoundException] {
       schedulableBuilder.buildPools()
+    }
+  }
+
+  test("SPARK-35083: Support remote scheduler pool file") {
+    val hadoopVersion = VersionInfo.getVersion.split("\\.")
+    // HttpFileSystem supported since hadoop 2.9
+    assume(hadoopVersion.head.toInt >= 3 ||
+      (hadoopVersion.head.toInt == 2 && hadoopVersion(1).toInt >= 9))
+
+    val xmlPath = new Path(
+      Utils.getSparkClassLoader.getResource("fairscheduler-with-valid-data.xml").getFile)
+    TestUtils.withHttpServer(xmlPath.getParent.toUri.getPath) { baseURL =>
+      val conf = new SparkConf().set(SCHEDULER_ALLOCATION_FILE,
+        baseURL + "fairscheduler-with-valid-data.xml")
+      sc = new SparkContext(LOCAL, APP_NAME, conf)
+
+      val rootPool = new Pool("", SchedulingMode.FAIR, 0, 0)
+      val schedulableBuilder = new FairSchedulableBuilder(rootPool, sc)
+      schedulableBuilder.buildPools()
+
+      verifyPool(rootPool, schedulableBuilder.DEFAULT_POOL_NAME, 0, 1, FIFO)
+      verifyPool(rootPool, "pool1", 3, 1, FIFO)
+      verifyPool(rootPool, "pool2", 4, 2, FAIR)
+      verifyPool(rootPool, "pool3", 2, 3, FAIR)
     }
   }
 

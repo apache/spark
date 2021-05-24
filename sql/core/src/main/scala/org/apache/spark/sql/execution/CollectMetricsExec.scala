@@ -78,6 +78,9 @@ case class CollectMetricsExec(
       }
     }
   }
+
+  override protected def withNewChildInternal(newChild: SparkPlan): CollectMetricsExec =
+    copy(child = newChild)
 }
 
 object CollectMetricsExec {

@@ -91,7 +91,7 @@ class SubExprEvaluationRuntime(cacheMaxEntries: Int) {
 
     val proxyMap = new IdentityHashMap[Expression, ExpressionProxy]
 
-    val commonExprs = equivalentExpressions.getAllEquivalentExprs.filter(_.size > 1)
+    val commonExprs = equivalentExpressions.getAllEquivalentExprs(1)
     commonExprs.foreach { e =>
       val expr = e.head
       val proxy = ExpressionProxy(expr, proxyExpressionCurrentId, this)
@@ -121,11 +121,10 @@ class SubExprEvaluationRuntime(cacheMaxEntries: Int) {
 case class ExpressionProxy(
     child: Expression,
     id: Int,
-    runtime: SubExprEvaluationRuntime) extends Expression {
+    runtime: SubExprEvaluationRuntime) extends UnaryExpression {
 
   final override def dataType: DataType = child.dataType
   final override def nullable: Boolean = child.nullable
-  final override def children: Seq[Expression] = child :: Nil
 
   // `ExpressionProxy` is for interpreted expression evaluation only. So cannot `doGenCode`.
   final override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
@@ -141,6 +140,9 @@ case class ExpressionProxy(
   }
 
   override def hashCode(): Int = this.id.hashCode()
+
+  override protected def withNewChildInternal(newChild: Expression): ExpressionProxy =
+    copy(child = newChild)
 }
 
 /**

@@ -61,7 +61,55 @@ desc formatted char_part;
 MSCK REPAIR TABLE char_part;
 desc formatted char_part;
 
+create temporary view str_view as select c, v from values
+    (null, null),
+    (null, 'S'),
+    ('N', 'N '),
+    ('Ne', 'Sp'),
+    ('Net  ', 'Spa  '),
+    ('NetE', 'Spar'),
+    ('NetEa ', 'Spark '),
+    ('NetEas ', 'Spark'),
+    ('NetEase', 'Spark-') t(c, v);
+
+create table char_tbl4(c7 char(7), c8 char(8), v varchar(6), s string) using parquet;
+insert into char_tbl4 select c, c, v, c from str_view;
+
+select c7, c8, v, s from char_tbl4;
+select c7, c8, v, s from char_tbl4 where c7 = c8;
+select c7, c8, v, s from char_tbl4 where c7 = v;
+select c7, c8, v, s from char_tbl4 where c7 = s;
+select c7, c8, v, s from char_tbl4 where c7 = 'NetEase               ';
+select c7, c8, v, s from char_tbl4 where v = 'Spark ';
+select c7, c8, v, s from char_tbl4 order by c7;
+select c7, c8, v, s from char_tbl4 order by v;
+
+select ascii(c7), ascii(c8), ascii(v), ascii(s) from char_tbl4;
+select base64(c7), base64(c8), base64(v), ascii(s) from char_tbl4;
+select bit_length(c7), bit_length(c8), bit_length(v), bit_length(s) from char_tbl4;
+select char_length(c7), char_length(c8), char_length(v), char_length(s) from char_tbl4;
+select octet_length(c7), octet_length(c8), octet_length(v), octet_length(s) from char_tbl4;
+select concat_ws('|', c7, c8), concat_ws('|', c7, v), concat_ws('|', c7, s), concat_ws('|', v, s) from char_tbl4;
+select concat(c7, c8), concat(c7, v), concat(c7, s), concat(v, s) from char_tbl4;
+select like(c7, 'Ne     _'), like(c8, 'Ne     _') from char_tbl4;
+select like(v, 'Spark_') from char_tbl4;
+select c7 = c8, upper(c7) = upper(c8), lower(c7) = lower(c8) from char_tbl4 where s = 'NetEase';
+select c7 = s, upper(c7) = upper(s), lower(c7) = lower(s) from char_tbl4 where s = 'NetEase';
+select c7 = 'NetEase', upper(c7) = upper('NetEase'), lower(c7) = lower('NetEase') from char_tbl4 where s = 'NetEase';
+select printf('Hey, %s%s%s%s', c7, c8, v, s) from char_tbl4;
+select repeat(c7, 2), repeat(c8, 2), repeat(v, 2), repeat(s, 2) from char_tbl4;
+select replace(c7, 'Net', 'Apache'), replace(c8, 'Net', 'Apache'), replace(v, 'Spark', 'Kyuubi'), replace(s, 'Net', 'Apache') from char_tbl4;
+select rpad(c7, 10), rpad(c8, 5), rpad(v, 5), rpad(s, 5)  from char_tbl4;
+select rtrim(c7), rtrim(c8), rtrim(v), rtrim(s) from char_tbl4;
+select split(c7, 'e'), split(c8, 'e'), split(v, 'a'), split(s, 'e') from char_tbl4;
+select substring(c7, 2), substring(c8, 2), substring(v, 3), substring(s, 2) from char_tbl4;
+select left(c7, 2), left(c8, 2), left(v, 3), left(s, 2) from char_tbl4;
+select right(c7, 2), right(c8, 2), right(v, 3), right(s, 2) from char_tbl4;
+select typeof(c7), typeof(c8), typeof(v), typeof(s) from char_tbl4 limit 1;
+select cast(c7 as char(1)), cast(c8 as char(10)), cast(v as char(1)), cast(v as varchar(1)), cast(s as char(5)) from char_tbl4;
+
 -- char_tbl has renamed to char_tbl1
 drop table char_tbl1;
 drop table char_tbl2;
 drop table char_tbl3;
+drop table char_tbl4;

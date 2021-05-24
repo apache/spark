@@ -18,18 +18,20 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.analysis.PullOutNondeterministic
-import org.apache.spark.sql.catalyst.expressions.{AliasHelper, AttributeSet, Expression, PythonUDF}
+import org.apache.spark.sql.catalyst.expressions.{AliasHelper, AttributeSet}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.trees.TreePattern.AGGREGATE
 
 /**
  * Remove redundant aggregates from a query plan. A redundant aggregate is an aggregate whose
  * only goal is to keep distinct values, while its parent aggregate would ignore duplicate values.
  */
 object RemoveRedundantAggregates extends Rule[LogicalPlan] with AliasHelper {
-  def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
-    case upper @ Aggregate(_, _, lower: Aggregate) if isLowerRedundant(upper, lower) =>
+  def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithPruning(
+    _.containsPattern(AGGREGATE), ruleId) {
+    case upper @ Aggregate(_, _, lower: Aggregate) if lowerIsRedundant(upper, lower) =>
       val aliasMap = getAliasMap(lower)
 
       val newAggregate = upper.copy(
@@ -39,7 +41,7 @@ object RemoveRedundantAggregates extends Rule[LogicalPlan] with AliasHelper {
           replaceAliasButKeepName(_, aliasMap))
       )
 
-      // We might have introduced non-deterministic grouping expressions
+      // We might have introduces non-deterministic grouping expression
       if (newAggregate.groupingExpressions.exists(!_.deterministic)) {
         PullOutNondeterministic.applyLocally.applyOrElse(newAggregate, identity[LogicalPlan])
       } else {
@@ -47,31 +49,18 @@ object RemoveRedundantAggregates extends Rule[LogicalPlan] with AliasHelper {
       }
   }
 
-  private def isLowerRedundant(upper: Aggregate, lower: Aggregate): Boolean = {
-    val upperHasNoDuplicateSensitiveAgg = !upper
-      .aggregateExpressions
-      .exists(isDuplicateSensitiveAggregate)
+  private def lowerIsRedundant(upper: Aggregate, lower: Aggregate): Boolean = {
+    val upperHasNoAggregateExpressions =
+      !upper.aggregateExpressions.exists(AggregateExpression.containsAggregate)
 
     lazy val upperRefsOnlyDeterministicNonAgg = upper.references.subsetOf(AttributeSet(
       lower
         .aggregateExpressions
         .filter(_.deterministic)
-        .filterNot(isAggregate)
+        .filterNot(AggregateExpression.containsAggregate)
         .map(_.toAttribute)
     ))
 
-    upperHasNoDuplicateSensitiveAgg && upperRefsOnlyDeterministicNonAgg
-  }
-
-  private def isAggregate(expr: Expression): Boolean = {
-    expr.find(e => e.isInstanceOf[AggregateExpression] ||
-      PythonUDF.isGroupedAggPandasUDF(e)).isDefined
-  }
-
-  private def isDuplicateSensitiveAggregate(expr: Expression): Boolean = {
-    expr.find {
-      case ae: AggregateExpression => !EliminateDistinct.isDuplicateAgnostic(ae.aggregateFunction)
-      case e => PythonUDF.isGroupedAggPandasUDF(e)
-    }.isDefined
+    upperHasNoAggregateExpressions && upperRefsOnlyDeterministicNonAgg
   }
 }

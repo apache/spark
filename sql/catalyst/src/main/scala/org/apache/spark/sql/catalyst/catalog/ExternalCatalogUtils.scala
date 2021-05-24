@@ -22,11 +22,11 @@ import java.net.URI
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.util.Shell
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{And, AttributeReference, BoundReference, Expression, Predicate}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
+import org.apache.spark.sql.errors.QueryCompilationErrors
 
 object ExternalCatalogUtils {
   // This duplicates default value of Hive `ConfVars.DEFAULTPARTITIONNAME`, since catalyst doesn't
@@ -119,12 +119,16 @@ object ExternalCatalogUtils {
     }
   }
 
-  def getPartitionPathString(col: String, value: String): String = {
-    val partitionString = if (value == null || value.isEmpty) {
+  def getPartitionValueString(value: String): String = {
+    if (value == null || value.isEmpty) {
       DEFAULT_PARTITION_NAME
     } else {
       escapePathName(value)
     }
+  }
+
+  def getPartitionPathString(col: String, value: String): String = {
+    val partitionString = getPartitionValueString(value)
     escapePathName(col) + "=" + partitionString
   }
 
@@ -144,7 +148,7 @@ object ExternalCatalogUtils {
         _.references.map(_.name).toSet.subsetOf(partitionColumnNames)
       }
       if (nonPartitionPruningPredicates.nonEmpty) {
-        throw new AnalysisException("Expected only partition pruning predicates: " +
+        throw QueryCompilationErrors.nonPartitionPruningPredicatesNotExpectedError(
           nonPartitionPruningPredicates)
       }
 
@@ -239,8 +243,8 @@ object CatalogUtils {
       colType: String,
       resolver: Resolver): String = {
     tableCols.find(resolver(_, colName)).getOrElse {
-      throw new AnalysisException(s"$colType column $colName is not defined in table $tableName, " +
-        s"defined table columns are: ${tableCols.mkString(", ")}")
+      throw QueryCompilationErrors.columnNotDefinedInTableError(
+        colType, colName, tableName, tableCols)
     }
   }
 }

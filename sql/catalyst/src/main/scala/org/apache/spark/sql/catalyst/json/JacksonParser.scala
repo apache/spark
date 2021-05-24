@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.{InternalRow, NoopFilters, StructFilters}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types._
@@ -117,7 +118,7 @@ class JacksonParser(
           array.toArray[InternalRow](schema)
         }
       case START_ARRAY =>
-        throw new RuntimeException("Parsing JSON arrays as structs is forbidden.")
+        throw QueryExecutionErrors.cannotParseJsonArraysAsStructsError()
     }
   }
 
@@ -201,8 +202,8 @@ class JacksonParser(
             case "NaN" => Float.NaN
             case "Infinity" => Float.PositiveInfinity
             case "-Infinity" => Float.NegativeInfinity
-            case other => throw new RuntimeException(
-              s"Cannot parse $other as ${FloatType.catalogString}.")
+            case other => throw QueryExecutionErrors.cannotParseStringAsDataTypeError(
+              other, FloatType)
           }
       }
 
@@ -218,7 +219,7 @@ class JacksonParser(
             case "Infinity" => Double.PositiveInfinity
             case "-Infinity" => Double.NegativeInfinity
             case other =>
-              throw new RuntimeException(s"Cannot parse $other as ${DoubleType.catalogString}.")
+              throw QueryExecutionErrors.cannotParseStringAsDataTypeError(other, DoubleType)
           }
       }
 
@@ -359,20 +360,17 @@ class JacksonParser(
     case VALUE_STRING if parser.getTextLength < 1 && allowEmptyString =>
       dataType match {
         case FloatType | DoubleType | TimestampType | DateType =>
-          throw new RuntimeException(
-            s"Failed to parse an empty string for data type ${dataType.catalogString}")
+          throw QueryExecutionErrors.failToParseEmptyStringForDataTypeError(dataType)
         case _ => null
       }
 
     case VALUE_STRING if parser.getTextLength < 1 =>
-      throw new RuntimeException(
-        s"Failed to parse an empty string for data type ${dataType.catalogString}")
+      throw QueryExecutionErrors.failToParseEmptyStringForDataTypeError(dataType)
 
     case token =>
       // We cannot parse this token based on the given data type. So, we throw a
       // RuntimeException and this exception will be caught by `parse` method.
-      throw new RuntimeException(
-        s"Failed to parse a value for data type ${dataType.catalogString} (current token: $token).")
+      throw QueryExecutionErrors.failToParseValueForDataTypeError(dataType, token)
   }
 
   /**
@@ -465,7 +463,7 @@ class JacksonParser(
         parser.nextToken() match {
           case null => None
           case _ => rootConverter.apply(parser) match {
-            case null => throw new RuntimeException("Root converter returned null")
+            case null => throw QueryExecutionErrors.rootConverterReturnNullError()
             case rows => rows.toSeq
           }
         }

@@ -95,7 +95,7 @@ public abstract class RowBasedKeyValueBatch extends MemoryConsumer implements Cl
 
   protected RowBasedKeyValueBatch(StructType keySchema, StructType valueSchema, int maxRows,
                                 TaskMemoryManager manager) {
-    super(manager, manager.pageSizeBytes(), manager.getTungstenMemoryMode());
+    super(manager, manager.getTungstenMemoryMode());
 
     this.keySchema = keySchema;
     this.valueSchema = valueSchema;

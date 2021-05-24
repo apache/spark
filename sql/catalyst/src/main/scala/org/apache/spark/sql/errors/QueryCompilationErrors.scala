@@ -21,22 +21,27 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, QualifiedTableName, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{ResolvedNamespace, ResolvedTable, ResolvedView}
-import org.apache.spark.sql.catalyst.catalog.{CatalogTable, InvalidUDFClassException}
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CreateMap, Expression, GroupingID, NamedExpression, SpecifiedWindowFrame, WindowFrame, WindowFunction, WindowSpecDefinition}
-import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoStatement, LogicalPlan, SerdeInfo}
+import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NamespaceAlreadyExistsException, NoSuchNamespaceException, NoSuchTableException, ResolvedNamespace, ResolvedTable, ResolvedView, TableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable, InvalidUDFClassException}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, AttributeSet, CreateMap, Expression, GroupingID, NamedExpression, SpecifiedWindowFrame, WindowFrame, WindowFunction, WindowSpecDefinition}
+import org.apache.spark.sql.catalyst.plans.JoinType
+import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoStatement, Join, LogicalPlan, SerdeInfo, Window}
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.catalyst.util.{toPrettySQL, FailFastMode, ParseMode, PermissiveMode}
-import org.apache.spark.sql.connector.catalog.{TableChange, V1Table}
+import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
+import org.apache.spark.sql.connector.expressions.{NamedReference, Transform}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.LEGACY_CTE_PRECEDENCE_POLICY
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.streaming.OutputMode
-import org.apache.spark.sql.types.{AbstractDataType, DataType, StructField, StructType}
+import org.apache.spark.sql.types._
 
 /**
- * Object for grouping all error messages of the query compilation.
- * Currently it includes all AnalysisExceptions.
+ * Object for grouping error messages from exceptions thrown during query compilation.
+ * As commands are executed eagerly, this also includes errors thrown during the execution of
+ * commands, which users can see immediately.
  */
 private[spark] object QueryCompilationErrors {
 
@@ -267,9 +272,17 @@ private[spark] object QueryCompilationErrors {
       s"(valid range is [1, $size])", t.origin.line, t.origin.startPosition)
   }
 
-  def groupByPositionRangeError(index: Int, size: Int, t: TreeNode[_]): Throwable = {
+  def groupByPositionRefersToAggregateFunctionError(
+      index: Int,
+      expr: Expression): Throwable = {
+    new AnalysisException(s"GROUP BY $index refers to an expression that is or contains " +
+      "an aggregate function. Aggregate functions are not allowed in GROUP BY, " +
+      s"but got ${expr.sql}")
+  }
+
+  def groupByPositionRangeError(index: Int, size: Int): Throwable = {
     new AnalysisException(s"GROUP BY position $index is not in select list " +
-      s"(valid range is [1, $size])", t.origin.line, t.origin.startPosition)
+      s"(valid range is [1, $size])")
   }
 
   def generatorNotExpectedError(name: FunctionIdentifier, classCanonicalName: String): Throwable = {
@@ -608,12 +621,6 @@ private[spark] object QueryCompilationErrors {
       s"the function '$func', please make sure it is on the classpath")
   }
 
-  def v2CatalogNotSupportFunctionError(
-      catalog: String, namespace: Seq[String]): Throwable = {
-    new AnalysisException("V2 catalog does not support functions yet. " +
-      s"catalog: $catalog, namespace: '${namespace.quoted}'")
-  }
-
   def resourceTypeNotSupportedError(resourceType: String): Throwable = {
     new AnalysisException(s"Resource Type '$resourceType' is not supported.")
   }
@@ -744,6 +751,205 @@ private[spark] object QueryCompilationErrors {
       "Use sparkSession.udf.register(...) instead.")
   }
 
+  def batchWriteCapabilityError(
+      table: Table, v2WriteClassName: String, v1WriteClassName: String): Throwable = {
+    new AnalysisException(
+      s"Table ${table.name} declares ${TableCapability.V1_BATCH_WRITE} capability but " +
+        s"$v2WriteClassName is not an instance of $v1WriteClassName")
+  }
+
+  def unsupportedDeleteByConditionWithSubqueryError(condition: Option[Expression]): Throwable = {
+    new AnalysisException(
+      s"Delete by condition with subquery is not supported: $condition")
+  }
+
+  def cannotTranslateExpressionToSourceFilterError(f: Expression): Throwable = {
+    new AnalysisException("Exec update failed:" +
+      s" cannot translate expression to source filter: $f")
+  }
+
+  def cannotDeleteTableWhereFiltersError(table: Table, filters: Array[Filter]): Throwable = {
+    new AnalysisException(
+      s"Cannot delete from table ${table.name} where ${filters.mkString("[", ", ", "]")}")
+  }
+
+  def deleteOnlySupportedWithV2TablesError(): Throwable = {
+    new AnalysisException("DELETE is only supported with v2 tables.")
+  }
+
+  def describeDoesNotSupportPartitionForV2TablesError(): Throwable = {
+    new AnalysisException("DESCRIBE does not support partition for v2 tables.")
+  }
+
+  def cannotReplaceMissingTableError(
+      tableIdentifier: Identifier): Throwable = {
+    new CannotReplaceMissingTableException(tableIdentifier)
+  }
+
+  def cannotReplaceMissingTableError(
+      tableIdentifier: Identifier, cause: Option[Throwable]): Throwable = {
+    new CannotReplaceMissingTableException(tableIdentifier, cause)
+  }
+
+  def unsupportedTableOperationError(table: Table, cmd: String): Throwable = {
+    new AnalysisException(s"Table ${table.name} does not support $cmd.")
+  }
+
+  def unsupportedBatchReadError(table: Table): Throwable = {
+    unsupportedTableOperationError(table, "batch scan")
+  }
+
+  def unsupportedMicroBatchOrContinuousScanError(table: Table): Throwable = {
+    unsupportedTableOperationError(table, "either micro-batch or continuous scan")
+  }
+
+  def unsupportedAppendInBatchModeError(table: Table): Throwable = {
+    unsupportedTableOperationError(table, "append in batch mode")
+  }
+
+  def unsupportedDynamicOverwriteInBatchModeError(table: Table): Throwable = {
+    unsupportedTableOperationError(table, "dynamic overwrite in batch mode")
+  }
+
+  def unsupportedTruncateInBatchModeError(table: Table): Throwable = {
+    unsupportedTableOperationError(table, "truncate in batch mode")
+  }
+
+  def unsupportedOverwriteByFilterInBatchModeError(table: Table): Throwable = {
+    unsupportedTableOperationError(table, "overwrite by filter in batch mode")
+  }
+
+  def streamingSourcesDoNotSupportCommonExecutionModeError(
+      microBatchSources: Seq[String],
+      continuousSources: Seq[String]): Throwable = {
+    new AnalysisException(
+      "The streaming sources in a query do not have a common supported execution mode.\n" +
+        "Sources support micro-batch: " + microBatchSources.mkString(", ") + "\n" +
+        "Sources support continuous: " + continuousSources.mkString(", "))
+  }
+
+  def noSuchTableError(ident: Identifier): Throwable = {
+    new NoSuchTableException(ident)
+  }
+
+  def noSuchNamespaceError(namespace: Array[String]): Throwable = {
+    new NoSuchNamespaceException(namespace)
+  }
+
+  def tableAlreadyExistsError(ident: Identifier): Throwable = {
+    new TableAlreadyExistsException(ident)
+  }
+
+  def requiresSinglePartNamespaceError(ident: Identifier): Throwable = {
+    new NoSuchTableException(
+      s"V2 session catalog requires a single-part namespace: ${ident.quoted}")
+  }
+
+  def namespaceAlreadyExistsError(namespace: Array[String]): Throwable = {
+    new NamespaceAlreadyExistsException(namespace)
+  }
+
+  private def notSupportedInJDBCCatalog(cmd: String): Throwable = {
+    new AnalysisException(s"$cmd is not supported in JDBC catalog.")
+  }
+
+  def cannotCreateJDBCTableUsingProviderError(): Throwable = {
+    notSupportedInJDBCCatalog("CREATE TABLE ... USING ...")
+  }
+
+  def cannotCreateJDBCTableUsingLocationError(): Throwable = {
+    notSupportedInJDBCCatalog("CREATE TABLE ... LOCATION ...")
+  }
+
+  def cannotCreateJDBCNamespaceUsingProviderError(): Throwable = {
+    notSupportedInJDBCCatalog("CREATE NAMESPACE ... LOCATION ...")
+  }
+
+  def cannotCreateJDBCNamespaceWithPropertyError(k: String): Throwable = {
+    notSupportedInJDBCCatalog(s"CREATE NAMESPACE with property $k")
+  }
+
+  def cannotSetJDBCNamespaceWithPropertyError(k: String): Throwable = {
+    notSupportedInJDBCCatalog(s"SET NAMESPACE with property $k")
+  }
+
+  def cannotUnsetJDBCNamespaceWithPropertyError(k: String): Throwable = {
+    notSupportedInJDBCCatalog(s"Remove NAMESPACE property $k")
+  }
+
+  def unsupportedJDBCNamespaceChangeInCatalogError(changes: Seq[NamespaceChange]): Throwable = {
+    new AnalysisException(s"Unsupported NamespaceChange $changes in JDBC catalog.")
+  }
+
+  private def tableDoesNotSupportError(cmd: String, table: Table): Throwable = {
+    new AnalysisException(s"Table does not support $cmd: ${table.name}")
+  }
+
+  def tableDoesNotSupportReadsError(table: Table): Throwable = {
+    tableDoesNotSupportError("reads", table)
+  }
+
+  def tableDoesNotSupportWritesError(table: Table): Throwable = {
+    tableDoesNotSupportError("writes", table)
+  }
+
+  def tableDoesNotSupportDeletesError(table: Table): Throwable = {
+    tableDoesNotSupportError("deletes", table)
+  }
+
+  def tableDoesNotSupportTruncatesError(table: Table): Throwable = {
+    tableDoesNotSupportError("truncates", table)
+  }
+
+  def tableDoesNotSupportPartitionManagementError(table: Table): Throwable = {
+    tableDoesNotSupportError("partition management", table)
+  }
+
+  def tableDoesNotSupportAtomicPartitionManagementError(table: Table): Throwable = {
+    tableDoesNotSupportError("atomic partition management", table)
+  }
+
+  def cannotRenameTableWithAlterViewError(): Throwable = {
+    new AnalysisException(
+      "Cannot rename a table with ALTER VIEW. Please use ALTER TABLE instead.")
+  }
+
+  private def notSupportedForV2TablesError(cmd: String): Throwable = {
+    new AnalysisException(s"$cmd is not supported for v2 tables.")
+  }
+
+  def analyzeTableNotSupportedForV2TablesError(): Throwable = {
+    notSupportedForV2TablesError("ANALYZE TABLE")
+  }
+
+  def alterTableRecoverPartitionsNotSupportedForV2TablesError(): Throwable = {
+    notSupportedForV2TablesError("ALTER TABLE ... RECOVER PARTITIONS")
+  }
+
+  def alterTableSerDePropertiesNotSupportedForV2TablesError(): Throwable = {
+    notSupportedForV2TablesError("ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]")
+  }
+
+  def loadDataNotSupportedForV2TablesError(): Throwable = {
+    notSupportedForV2TablesError("LOAD DATA")
+  }
+
+  def showCreateTableNotSupportedForV2TablesError(): Throwable = {
+    notSupportedForV2TablesError("SHOW CREATE TABLE")
+  }
+
+  def truncateTableNotSupportedForV2TablesError(): Throwable = {
+    notSupportedForV2TablesError("TRUNCATE TABLE")
+  }
+
+  def showColumnsNotSupportedForV2TablesError(): Throwable = {
+    notSupportedForV2TablesError("SHOW COLUMNS")
+  }
+
+  def repairTableNotSupportedForV2TablesError(): Throwable = {
+    notSupportedForV2TablesError("MSCK REPAIR TABLE")
+  }
+
   def databaseFromV1SessionCatalogNotSpecifiedError(): Throwable = {
     new AnalysisException("Database from v1 session catalog is not specified")
   }
@@ -803,9 +1009,9 @@ private[spark] object QueryCompilationErrors {
     new AnalysisException("Cannot save interval data type into external storage.")
   }
 
-  def cannotResolveAttributeError(name: String, data: LogicalPlan): Throwable = {
+  def cannotResolveAttributeError(name: String, outputStr: String): Throwable = {
     new AnalysisException(
-      s"Unable to resolve $name given [${data.output.map(_.name).mkString(", ")}]")
+      s"Unable to resolve $name given [$outputStr]")
   }
 
   def orcNotUsedWithHiveEnabledError(): Throwable = {
@@ -1068,10 +1274,6 @@ private[spark] object QueryCompilationErrors {
       s"createTableColumnTypes option column $col not found in schema ${schema.catalogString}")
   }
 
-  def parquetTypeUnsupportedError(parquetType: String): Throwable = {
-    new AnalysisException(s"Parquet type not supported: $parquetType")
-  }
-
   def parquetTypeUnsupportedYetError(parquetType: String): Throwable = {
     new AnalysisException(s"Parquet type not yet supported: $parquetType")
   }
@@ -1086,5 +1288,312 @@ private[spark] object QueryCompilationErrors {
 
   def cannotConvertDataTypeToParquetTypeError(field: StructField): Throwable = {
     new AnalysisException(s"Unsupported data type ${field.dataType.catalogString}")
+  }
+
+  def incompatibleViewSchemaChange(
+      viewName: String,
+      colName: String,
+      expectedNum: Int,
+      actualCols: Seq[Attribute]): Throwable = {
+    new AnalysisException(s"The SQL query of view $viewName has an incompatible schema change " +
+      s"and column $colName cannot be resolved. Expected $expectedNum columns named $colName but " +
+      s"got ${actualCols.map(_.name).mkString("[", ",", "]")}")
+  }
+
+  def numberOfPartitionsNotAllowedWithUnspecifiedDistributionError(): Throwable = {
+    throw new AnalysisException("The number of partitions can't be specified with unspecified" +
+      " distribution. Invalid writer requirements detected.")
+  }
+
+  def cannotApplyTableValuedFunctionError(
+      name: String, arguments: String, usage: String, details: String = ""): Throwable = {
+    new AnalysisException(s"Table-valued function $name with alternatives: $usage\n" +
+      s"cannot be applied to ($arguments): $details")
+  }
+
+  def incompatibleRangeInputDataTypeError(
+      expression: Expression, dataType: DataType): Throwable = {
+    new AnalysisException(s"Incompatible input data type. " +
+      s"Expected: ${dataType.typeName}; Found: ${expression.dataType.typeName}")
+  }
+
+  def groupAggPandasUDFUnsupportedByStreamingAggError(): Throwable = {
+    new AnalysisException("Streaming aggregation doesn't support group aggregate pandas UDF")
+  }
+
+  def streamJoinStreamWithoutEqualityPredicateUnsupportedError(plan: LogicalPlan): Throwable = {
+    new AnalysisException(
+      "Stream-stream join without equality predicate is not supported", plan = Some(plan))
+  }
+
+  def cannotUseMixtureOfAggFunctionAndGroupAggPandasUDFError(): Throwable = {
+    new AnalysisException(
+      "Cannot use a mixture of aggregate function and group aggregate pandas UDF")
+  }
+
+  def ambiguousAttributesInSelfJoinError(
+      ambiguousAttrs: Seq[AttributeReference]): Throwable = {
+    new AnalysisException(
+      s"""
+         |Column ${ambiguousAttrs.mkString(", ")} are ambiguous. It's probably because
+         |you joined several Datasets together, and some of these Datasets are the same.
+         |This column points to one of the Datasets but Spark is unable to figure out
+         |which one. Please alias the Datasets with different names via `Dataset.as`
+         |before joining them, and specify the column using qualified name, e.g.
+         |`df.as("a").join(df.as("b"), $$"a.id" > $$"b.id")`. You can also set
+         |${SQLConf.FAIL_AMBIGUOUS_SELF_JOIN_ENABLED.key} to false to disable this check.
+       """.stripMargin.replaceAll("\n", " "))
+  }
+
+  def unexpectedEvalTypesForUDFsError(evalTypes: Set[Int]): Throwable = {
+    new AnalysisException(
+      s"Expected udfs have the same evalType but got different evalTypes: " +
+        s"${evalTypes.mkString(",")}")
+  }
+
+  def ambiguousFieldNameError(fieldName: String, names: String): Throwable = {
+    new AnalysisException(
+      s"Ambiguous field name: $fieldName. Found multiple columns that can match: $names")
+  }
+
+  def cannotUseIntervalTypeInTableSchemaError(): Throwable = {
+    new AnalysisException("Cannot use interval type in the table schema.")
+  }
+
+  def cannotConvertBucketWithSortColumnsToTransformError(spec: BucketSpec): Throwable = {
+    new AnalysisException(
+      s"Cannot convert bucketing with sort columns to a transform: $spec")
+  }
+
+  def cannotConvertTransformsToPartitionColumnsError(nonIdTransforms: Seq[Transform]): Throwable = {
+    new AnalysisException("Transforms cannot be converted to partition columns: " +
+      nonIdTransforms.map(_.describe).mkString(", "))
+  }
+
+  def cannotPartitionByNestedColumnError(reference: NamedReference): Throwable = {
+    new AnalysisException(s"Cannot partition by nested column: $reference")
+  }
+
+  def cannotUseCatalogError(plugin: CatalogPlugin, msg: String): Throwable = {
+    new AnalysisException(s"Cannot use catalog ${plugin.name}: $msg")
+  }
+
+  def identifierHavingMoreThanTwoNamePartsError(
+      quoted: String, identifier: String): Throwable = {
+    new AnalysisException(s"$quoted is not a valid $identifier as it has more than 2 name parts.")
+  }
+
+  def emptyMultipartIdentifierError(): Throwable = {
+    new AnalysisException("multi-part identifier cannot be empty.")
+  }
+
+  def cannotCreateTablesWithNullTypeError(): Throwable = {
+    new AnalysisException(s"Cannot create tables with ${NullType.simpleString} type.")
+  }
+
+  def functionUnsupportedInV2CatalogError(): Throwable = {
+    new AnalysisException("function is only supported in v1 catalog")
+  }
+
+  def cannotOperateOnHiveDataSourceFilesError(operation: String): Throwable = {
+    new AnalysisException("Hive data source can only be used with tables, you can not " +
+      s"$operation files of Hive data source directly.")
+  }
+
+  def setPathOptionAndCallWithPathParameterError(method: String): Throwable = {
+    new AnalysisException(
+      s"""
+         |There is a 'path' option set and $method() is called with a path
+         |parameter. Either remove the path option, or call $method() without the parameter.
+         |To ignore this check, set '${SQLConf.LEGACY_PATH_OPTION_BEHAVIOR.key}' to 'true'.
+       """.stripMargin.replaceAll("\n", " "))
+  }
+
+  def userSpecifiedSchemaWithTextFileError(): Throwable = {
+    new AnalysisException("User specified schema not supported with `textFile`")
+  }
+
+  def tempViewNotSupportStreamingWriteError(viewName: String): Throwable = {
+    new AnalysisException(s"Temporary view $viewName doesn't support streaming write")
+  }
+
+  def streamingIntoViewNotSupportedError(viewName: String): Throwable = {
+    new AnalysisException(s"Streaming into views $viewName is not supported.")
+  }
+
+  def inputSourceDiffersFromDataSourceProviderError(
+      source: String, tableName: String, table: CatalogTable): Throwable = {
+    new AnalysisException(s"The input source($source) is different from the table " +
+      s"$tableName's data source provider(${table.provider.get}).")
+  }
+
+  def tableNotSupportStreamingWriteError(tableName: String, t: Table): Throwable = {
+    new AnalysisException(s"Table $tableName doesn't support streaming write - $t")
+  }
+
+  def queryNameNotSpecifiedForMemorySinkError(): Throwable = {
+    new AnalysisException("queryName must be specified for memory sink")
+  }
+
+  def sourceNotSupportedWithContinuousTriggerError(source: String): Throwable = {
+    new AnalysisException(s"'$source' is not supported with continuous trigger")
+  }
+
+  def columnNotFoundInExistingColumnsError(
+      columnType: String, columnName: String, validColumnNames: Seq[String]): Throwable = {
+    new AnalysisException(s"$columnType column $columnName not found in " +
+      s"existing columns (${validColumnNames.mkString(", ")})")
+  }
+
+  def operationNotSupportPartitioningError(operation: String): Throwable = {
+    new AnalysisException(s"'$operation' does not support partitioning")
+  }
+
+  def mixedRefsInAggFunc(funcStr: String): Throwable = {
+    val msg = "Found an aggregate function in a correlated predicate that has both " +
+      "outer and local references, which is not supported: " + funcStr
+    new AnalysisException(msg)
+  }
+
+  def lookupFunctionInNonFunctionCatalogError(
+      ident: Identifier, catalog: CatalogPlugin): Throwable = {
+    new AnalysisException(s"Trying to lookup function '$ident' in " +
+      s"catalog '${catalog.name()}', but it is not a FunctionCatalog.")
+  }
+
+  def functionCannotProcessInputError(
+      unbound: UnboundFunction,
+      arguments: Seq[Expression],
+      unsupported: UnsupportedOperationException): Throwable = {
+    new AnalysisException(s"Function '${unbound.name}' cannot process " +
+      s"input: (${arguments.map(_.dataType.simpleString).mkString(", ")}): " +
+      unsupported.getMessage, cause = Some(unsupported))
+  }
+
+  def ambiguousRelationAliasNameInNestedCTEError(name: String): Throwable = {
+    new AnalysisException(s"Name $name is ambiguous in nested CTE. " +
+      s"Please set ${LEGACY_CTE_PRECEDENCE_POLICY.key} to CORRECTED so that name " +
+      "defined in inner CTE takes precedence. If set it to LEGACY, outer CTE " +
+      "definitions will take precedence. See more details in SPARK-28228.")
+  }
+
+  def commandUnsupportedInV2TableError(name: String): Throwable = {
+    new AnalysisException(s"$name is not supported for v2 tables.")
+  }
+
+  def cannotResolveColumnNameAmongAttributesError(
+      lattr: Attribute, rightOutputAttrs: Seq[Attribute]): Throwable = {
+    new AnalysisException(
+      s"""
+         |Cannot resolve column name "${lattr.name}" among
+         |(${rightOutputAttrs.map(_.name).mkString(", ")})
+       """.stripMargin.replaceAll("\n", " "))
+  }
+
+  def cannotWriteTooManyColumnsToTableError(
+      tableName: String, expected: Seq[Attribute], query: LogicalPlan): Throwable = {
+    new AnalysisException(
+      s"""
+         |Cannot write to '$tableName', too many data columns:
+         |Table columns: ${expected.map(c => s"'${c.name}'").mkString(", ")}
+         |Data columns: ${query.output.map(c => s"'${c.name}'").mkString(", ")}
+       """.stripMargin)
+  }
+
+  def cannotWriteNotEnoughColumnsToTableError(
+      tableName: String, expected: Seq[Attribute], query: LogicalPlan): Throwable = {
+    new AnalysisException(
+      s"""Cannot write to '$tableName', not enough data columns:
+         |Table columns: ${expected.map(c => s"'${c.name}'").mkString(", ")}
+         |Data columns: ${query.output.map(c => s"'${c.name}'").mkString(", ")}"""
+        .stripMargin)
+  }
+
+  def cannotWriteIncompatibleDataToTableError(tableName: String, errors: Seq[String]): Throwable = {
+    new AnalysisException(
+      s"Cannot write incompatible data to table '$tableName':\n- ${errors.mkString("\n- ")}")
+  }
+
+  def secondArgumentOfFunctionIsNotIntegerError(
+      function: String, e: NumberFormatException): Throwable = {
+    new AnalysisException(
+      s"The second argument of '$function' function needs to be an integer.", cause = Some(e))
+  }
+
+  def nonPartitionPruningPredicatesNotExpectedError(
+      nonPartitionPruningPredicates: Seq[Expression]): Throwable = {
+    new AnalysisException(
+      s"Expected only partition pruning predicates: $nonPartitionPruningPredicates")
+  }
+
+  def columnNotDefinedInTableError(
+      colType: String, colName: String, tableName: String, tableCols: Seq[String]): Throwable = {
+    new AnalysisException(s"$colType column $colName is not defined in table $tableName, " +
+      s"defined table columns are: ${tableCols.mkString(", ")}")
+  }
+
+  def invalidLiteralForWindowDurationError(): Throwable = {
+    new AnalysisException("The duration and time inputs to window must be " +
+      "an integer, long or string literal.")
+  }
+
+  def noSuchStructFieldInGivenFieldsError(
+      fieldName: String, fields: Array[StructField]): Throwable = {
+    new AnalysisException(
+      s"No such struct field $fieldName in ${fields.map(_.name).mkString(", ")}")
+  }
+
+  def ambiguousReferenceToFieldsError(fields: String): Throwable = {
+    new AnalysisException(s"Ambiguous reference to fields $fields")
+  }
+
+  def secondArgumentInFunctionIsNotBooleanLiteralError(funcName: String): Throwable = {
+    new AnalysisException(s"The second argument in $funcName should be a boolean literal.")
+  }
+
+  def joinConditionMissingOrTrivialError(
+      join: Join, left: LogicalPlan, right: LogicalPlan): Throwable = {
+    new AnalysisException(
+      s"""Detected implicit cartesian product for ${join.joinType.sql} join between logical plans
+         |${left.treeString(false).trim}
+         |and
+         |${right.treeString(false).trim}
+         |Join condition is missing or trivial.
+         |Either: use the CROSS JOIN syntax to allow cartesian products between these
+         |relations, or: enable implicit cartesian products by setting the configuration
+         |variable spark.sql.crossJoin.enabled=true"""
+        .stripMargin)
+  }
+
+  def usePythonUDFInJoinConditionUnsupportedError(joinType: JoinType): Throwable = {
+    new AnalysisException("Using PythonUDF in join condition of join type" +
+      s" $joinType is not supported.")
+  }
+
+  def conflictingAttributesInJoinConditionError(
+      conflictingAttrs: AttributeSet, outerPlan: LogicalPlan, subplan: LogicalPlan): Throwable = {
+    new AnalysisException("Found conflicting attributes " +
+      s"${conflictingAttrs.mkString(",")} in the condition joining outer plan:\n  " +
+      s"$outerPlan\nand subplan:\n  $subplan")
+  }
+
+  def emptyWindowExpressionError(expr: Window): Throwable = {
+    new AnalysisException(s"Window expression is empty in $expr")
+  }
+
+  def foundDifferentWindowFunctionTypeError(windowExpressions: Seq[NamedExpression]): Throwable = {
+    new AnalysisException(
+      s"Found different window function type in $windowExpressions")
+  }
+
+  def charOrVarcharTypeAsStringUnsupportedError(): Throwable = {
+    new AnalysisException("char/varchar type can only be used in the table schema. " +
+      s"You can set ${SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key} to true, so that Spark" +
+      s" treat them as string type as same as Spark 3.0 and earlier")
+  }
+
+  def invalidPatternError(pattern: String, message: String): Throwable = {
+    new AnalysisException(
+      s"the pattern '$pattern' is invalid, $message")
   }
 }
