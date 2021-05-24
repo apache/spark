@@ -100,8 +100,7 @@ abstract class PropagateEmptyRelationBase extends Rule[LogicalPlan] with CastSup
         p
       }
 
-    case p: UnaryNode
-      if p.children.nonEmpty && p.children.forall(isEmpty) => p match {
+    case p: UnaryNode if p.children.nonEmpty && p.children.forall(isEmpty) => p match {
       case _: Sort => empty(p)
       case _: GlobalLimit if !p.isStreaming => empty(p)
       case _: LocalLimit if !p.isStreaming => empty(p)
@@ -162,8 +161,7 @@ object PropagateEmptyRelation extends PropagateEmptyRelationBase {
         }
       }
 
-    case p: UnaryNode if p.children.nonEmpty && p.children.forall(isEmpty) &&
-      canPropagate(p) =>
+    case p: UnaryNode if p.children.nonEmpty && p.children.forall(isEmpty) && canPropagate(p) =>
       empty(p)
   }
 
