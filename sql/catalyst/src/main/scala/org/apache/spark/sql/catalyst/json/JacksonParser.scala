@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.json
 
 import java.io.{ByteArrayOutputStream, CharConversionException}
 import java.nio.charset.MalformedInputException
+import java.util.Locale
 
 import scala.collection.mutable.ArrayBuffer
 import scala.util.control.NonFatal
@@ -37,8 +38,6 @@ import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 import org.apache.spark.util.Utils
-
-import java.util.Locale
 
 /**
  * Constructs a parser for a given schema that translates a json string to an [[InternalRow]].
