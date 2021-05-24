@@ -111,35 +111,31 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       val batchExec = BatchScanExec(relation.output, relation.scan)
       withProjectAndFilter(project, filters, batchExec, !batchExec.supportsColumnar) :: Nil
 
-    case r: StreamingDataSourceV2Relation if r.startOffset.isDefined && r.endOffset.isDefined =>
+    case PhysicalOperation(p, f, r: StreamingDataSourceV2Relation)
+      if r.startOffset.isDefined && r.endOffset.isDefined =>
+
       val microBatchStream = r.stream.asInstanceOf[MicroBatchStream]
       val scanExec = MicroBatchScanExec(
         r.output, r.scan, microBatchStream, r.startOffset.get, r.endOffset.get)
 
-      val withProjection = if (scanExec.supportsColumnar) {
-        scanExec
-      } else {
-        // Add a Project here to make sure we produce unsafe rows.
-        ProjectExec(r.output, scanExec)
-      }
+      // Add a Project here to make sure we produce unsafe rows.
+      withProjectAndFilter(p, f, scanExec, !scanExec.supportsColumnar) :: Nil
 
-      withProjection :: Nil
+    case PhysicalOperation(p, f, r: StreamingDataSourceV2Relation)
+      if r.startOffset.isDefined && r.endOffset.isEmpty =>
 
-    case r: StreamingDataSourceV2Relation if r.startOffset.isDefined && r.endOffset.isEmpty =>
       val continuousStream = r.stream.asInstanceOf[ContinuousStream]
       val scanExec = ContinuousScanExec(r.output, r.scan, continuousStream, r.startOffset.get)
 
-      val withProjection = if (scanExec.supportsColumnar) {
-        scanExec
-      } else {
-        // Add a Project here to make sure we produce unsafe rows.
-        ProjectExec(r.output, scanExec)
+      // Add a Project here to make sure we produce unsafe rows.
+      withProjectAndFilter(p, f, scanExec, !scanExec.supportsColumnar) :: Nil
+
+    case WriteToDataSourceV2(relationOpt, writer, query) =>
+      val invalidateCacheFunc: () => Unit = () => relationOpt match {
+        case Some(r) => session.sharedState.cacheManager.uncacheQuery(session, r, cascade = true)
+        case None => ()
       }
-
-      withProjection :: Nil
-
-    case WriteToDataSourceV2(writer, query) =>
-      WriteToDataSourceV2Exec(writer, planLater(query)) :: Nil
+      WriteToDataSourceV2Exec(writer, invalidateCacheFunc, planLater(query)) :: Nil
 
     case CreateV2Table(catalog, ident, schema, parts, props, ifNotExists) =>
       val propsWithOwner = CatalogV2Util.withDefaultOwnership(props)
@@ -411,7 +407,11 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       CacheTableAsSelectExec(r.tempViewName, r.plan, r.originalText, r.isLazy, r.options) :: Nil
 
     case r: UncacheTable =>
-      UncacheTableExec(r.table, cascade = !r.isTempView) :: Nil
+      def isTempView(table: LogicalPlan): Boolean = table match {
+        case SubqueryAlias(_, v: View) => v.isTempView
+        case _ => false
+      }
+      UncacheTableExec(r.table, cascade = !isTempView(r.table)) :: Nil
 
     case SetTableLocation(table: ResolvedTable, partitionSpec, location) =>
       if (partitionSpec.nonEmpty) {

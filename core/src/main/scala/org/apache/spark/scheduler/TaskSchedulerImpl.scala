@@ -128,7 +128,7 @@ private[spark] class TaskSchedulerImpl(
 
   @volatile private var hasReceivedTask = false
   @volatile private var hasLaunchedTask = false
-  private val starvationTimer = new Timer(true)
+  private val starvationTimer = new Timer("task-starvation-timer", true)
 
   // Incrementing task IDs
   val nextTaskId = new AtomicLong(0)
@@ -152,7 +152,7 @@ private[spark] class TaskSchedulerImpl(
 
   protected val executorIdToHost = new HashMap[String, String]
 
-  private val abortTimer = new Timer(true)
+  private val abortTimer = new Timer("task-abort-timer", true)
   // Exposed for testing
   val unschedulableTaskSetToExpiryTime = new HashMap[TaskSetManager, Long]
 
@@ -205,7 +205,7 @@ private[spark] class TaskSchedulerImpl(
         case SchedulingMode.FIFO =>
           new FIFOSchedulableBuilder(rootPool)
         case SchedulingMode.FAIR =>
-          new FairSchedulableBuilder(rootPool, conf)
+          new FairSchedulableBuilder(rootPool, sc)
         case _ =>
           throw new IllegalArgumentException(s"Unsupported $SCHEDULER_MODE_PROPERTY: " +
           s"$schedulingMode")

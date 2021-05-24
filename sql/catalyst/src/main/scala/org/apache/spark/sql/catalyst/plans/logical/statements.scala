@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.trees.{LeafLike, UnaryLike}
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition
 import org.apache.spark.sql.connector.expressions.Transform
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types.{DataType, StructType}
 
 /**
@@ -118,13 +119,7 @@ object SerdeInfo {
       props1: Map[String, String], props2: Map[String, String]): Unit = {
     val conflictKeys = props1.keySet.intersect(props2.keySet)
     if (conflictKeys.nonEmpty) {
-      throw new UnsupportedOperationException(
-        s"""
-          |Cannot safely merge SERDEPROPERTIES:
-          |${props1.map { case (k, v) => s"$k=$v" }.mkString("{", ",", "}")}
-          |${props2.map { case (k, v) => s"$k=$v" }.mkString("{", ",", "}")}
-          |The conflict keys: ${conflictKeys.mkString(", ")}
-          |""".stripMargin)
+      throw QueryExecutionErrors.cannotSafelyMergeSerdePropertiesError(props1, props2, conflictKeys)
     }
   }
 }
@@ -167,6 +162,8 @@ case class CreateTableAsSelectStatement(
     ifNotExists: Boolean) extends UnaryParsedStatement {
 
   override def child: LogicalPlan = asSelect
+  override protected def withNewChildInternal(newChild: LogicalPlan): CreateTableAsSelectStatement =
+    copy(asSelect = newChild)
 }
 
 /**
@@ -181,7 +178,10 @@ case class CreateViewStatement(
     child: LogicalPlan,
     allowExisting: Boolean,
     replace: Boolean,
-    viewType: ViewType) extends UnaryParsedStatement
+    viewType: ViewType) extends UnaryParsedStatement {
+  override protected def withNewChildInternal(newChild: LogicalPlan): CreateViewStatement =
+    copy(child = newChild)
+}
 
 /**
  * A REPLACE TABLE command, as parsed from SQL.
@@ -220,6 +220,8 @@ case class ReplaceTableAsSelectStatement(
     orCreate: Boolean) extends UnaryParsedStatement {
 
   override def child: LogicalPlan = asSelect
+  override protected def withNewChildInternal(
+    newChild: LogicalPlan): ReplaceTableAsSelectStatement = copy(asSelect = newChild)
 }
 
 
@@ -300,6 +302,8 @@ case class InsertIntoStatement(
     "IF NOT EXISTS is only valid with static partitions")
 
   override def child: LogicalPlan = query
+  override protected def withNewChildInternal(newChild: LogicalPlan): InsertIntoStatement =
+    copy(query = newChild)
 }
 
 /**

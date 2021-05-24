@@ -101,7 +101,7 @@ Input [5]: [ws_item_sk#1, ws_net_paid#2, i_item_sk#8, i_class#9, i_category#10]
 
 (17) Expand [codegen id : 3]
 Input [3]: [ws_net_paid#2, i_category#10, i_class#9]
-Arguments: [List(ws_net_paid#2, i_category#10, i_class#9, 0), List(ws_net_paid#2, i_category#10, null, 1), List(ws_net_paid#2, null, null, 3)], [ws_net_paid#2, i_category#12, i_class#13, spark_grouping_id#14]
+Arguments: [[ws_net_paid#2, i_category#10, i_class#9, 0], [ws_net_paid#2, i_category#10, null, 1], [ws_net_paid#2, null, null, 3]], [ws_net_paid#2, i_category#12, i_class#13, spark_grouping_id#14]
 
 (18) HashAggregate [codegen id : 3]
 Input [4]: [ws_net_paid#2, i_category#12, i_class#13, spark_grouping_id#14]

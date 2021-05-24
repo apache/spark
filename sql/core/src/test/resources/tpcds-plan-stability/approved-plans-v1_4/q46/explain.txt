@@ -63,7 +63,7 @@ Condition : (((isnotnull(ss_store_sk#4) AND isnotnull(ss_hdemo_sk#2)) AND isnotn
 Output [3]: [d_date_sk#10, d_year#11, d_dow#12]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
-PushedFilters: [In(d_dow, [6,0]), In(d_year, [1999,2000,2001]), IsNotNull(d_date_sk)]
+PushedFilters: [In(d_dow, [0,6]), In(d_year, [1999,2000,2001]), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_year:int,d_dow:int>
 
 (5) ColumnarToRow [codegen id : 1]

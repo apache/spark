@@ -17,7 +17,7 @@ TakeOrderedAndProject (111)
                :              :     :     :- * Project (20)
                :              :     :     :  +- * BroadcastHashJoin Inner BuildRight (19)
                :              :     :     :     :- * Project (13)
-               :              :     :     :     :  +- SortMergeJoin LeftOuter (12)
+               :              :     :     :     :  +- * SortMergeJoin LeftOuter (12)
                :              :     :     :     :     :- * Sort (5)
                :              :     :     :     :     :  +- Exchange (4)
                :              :     :     :     :     :     +- * Filter (3)
@@ -60,7 +60,7 @@ TakeOrderedAndProject (111)
                :              :     :     :- * Project (59)
                :              :     :     :  +- * BroadcastHashJoin Inner BuildRight (58)
                :              :     :     :     :- * Project (56)
-               :              :     :     :     :  +- SortMergeJoin LeftOuter (55)
+               :              :     :     :     :  +- * SortMergeJoin LeftOuter (55)
                :              :     :     :     :     :- * Sort (48)
                :              :     :     :     :     :  +- Exchange (47)
                :              :     :     :     :     :     +- * Filter (46)
@@ -91,7 +91,7 @@ TakeOrderedAndProject (111)
                               :     :     :- * Project (90)
                               :     :     :  +- * BroadcastHashJoin Inner BuildRight (89)
                               :     :     :     :- * Project (87)
-                              :     :     :     :  +- SortMergeJoin LeftOuter (86)
+                              :     :     :     :  +- * SortMergeJoin LeftOuter (86)
                               :     :     :     :     :- * Sort (79)
                               :     :     :     :     :  +- Exchange (78)
                               :     :     :     :     :     +- * Filter (77)
@@ -129,18 +129,18 @@ Condition : ((isnotnull(ss_store_sk#2) AND isnotnull(ss_item_sk#1)) AND isnotnul
 
 (4) Exchange
 Input [7]: [ss_item_sk#1, ss_store_sk#2, ss_promo_sk#3, ss_ticket_number#4, ss_ext_sales_price#5, ss_net_profit#6, ss_sold_date_sk#7]
-Arguments: hashpartitioning(cast(ss_item_sk#1 as bigint), cast(ss_ticket_number#4 as bigint), 5), ENSURE_REQUIREMENTS, [id=#9]
+Arguments: hashpartitioning(ss_item_sk#1, ss_ticket_number#4, 5), ENSURE_REQUIREMENTS, [id=#9]
 
 (5) Sort [codegen id : 2]
 Input [7]: [ss_item_sk#1, ss_store_sk#2, ss_promo_sk#3, ss_ticket_number#4, ss_ext_sales_price#5, ss_net_profit#6, ss_sold_date_sk#7]
-Arguments: [cast(ss_item_sk#1 as bigint) ASC NULLS FIRST, cast(ss_ticket_number#4 as bigint) ASC NULLS FIRST], false, 0
+Arguments: [ss_item_sk#1 ASC NULLS FIRST, ss_ticket_number#4 ASC NULLS FIRST], false, 0
 
 (6) Scan parquet default.store_returns
 Output [5]: [sr_item_sk#10, sr_ticket_number#11, sr_return_amt#12, sr_net_loss#13, sr_returned_date_sk#14]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_returns]
 PushedFilters: [IsNotNull(sr_item_sk), IsNotNull(sr_ticket_number)]
-ReadSchema: struct<sr_item_sk:bigint,sr_ticket_number:bigint,sr_return_amt:decimal(7,2),sr_net_loss:decimal(7,2)>
+ReadSchema: struct<sr_item_sk:int,sr_ticket_number:int,sr_return_amt:decimal(7,2),sr_net_loss:decimal(7,2)>
 
 (7) ColumnarToRow [codegen id : 3]
 Input [5]: [sr_item_sk#10, sr_ticket_number#11, sr_return_amt#12, sr_net_loss#13, sr_returned_date_sk#14]
@@ -161,8 +161,8 @@ Arguments: hashpartitioning(sr_item_sk#10, sr_ticket_number#11, 5), ENSURE_REQUI
 Input [4]: [sr_item_sk#10, sr_ticket_number#11, sr_return_amt#12, sr_net_loss#13]
 Arguments: [sr_item_sk#10 ASC NULLS FIRST, sr_ticket_number#11 ASC NULLS FIRST], false, 0
 
-(12) SortMergeJoin
-Left keys [2]: [cast(ss_item_sk#1 as bigint), cast(ss_ticket_number#4 as bigint)]
+(12) SortMergeJoin [codegen id : 9]
+Left keys [2]: [ss_item_sk#1, ss_ticket_number#4]
 Right keys [2]: [sr_item_sk#10, sr_ticket_number#11]
 Join condition: None
 
@@ -357,7 +357,7 @@ Arguments: hashpartitioning(cr_item_sk#55, cr_order_number#56, 5), ENSURE_REQUIR
 Input [4]: [cr_item_sk#55, cr_order_number#56, cr_return_amount#57, cr_net_loss#58]
 Arguments: [cr_item_sk#55 ASC NULLS FIRST, cr_order_number#56 ASC NULLS FIRST], false, 0
 
-(55) SortMergeJoin
+(55) SortMergeJoin [codegen id : 19]
 Left keys [2]: [cs_item_sk#48, cs_order_number#50]
 Right keys [2]: [cr_item_sk#55, cr_order_number#56]
 Join condition: None
@@ -464,18 +464,18 @@ Condition : ((isnotnull(ws_web_site_sk#87) AND isnotnull(ws_item_sk#86)) AND isn
 
 (78) Exchange
 Input [7]: [ws_item_sk#86, ws_web_site_sk#87, ws_promo_sk#88, ws_order_number#89, ws_ext_sales_price#90, ws_net_profit#91, ws_sold_date_sk#92]
-Arguments: hashpartitioning(cast(ws_item_sk#86 as bigint), cast(ws_order_number#89 as bigint), 5), ENSURE_REQUIREMENTS, [id=#93]
+Arguments: hashpartitioning(ws_item_sk#86, ws_order_number#89, 5), ENSURE_REQUIREMENTS, [id=#93]
 
 (79) Sort [codegen id : 22]
 Input [7]: [ws_item_sk#86, ws_web_site_sk#87, ws_promo_sk#88, ws_order_number#89, ws_ext_sales_price#90, ws_net_profit#91, ws_sold_date_sk#92]
-Arguments: [cast(ws_item_sk#86 as bigint) ASC NULLS FIRST, cast(ws_order_number#89 as bigint) ASC NULLS FIRST], false, 0
+Arguments: [ws_item_sk#86 ASC NULLS FIRST, ws_order_number#89 ASC NULLS FIRST], false, 0
 
 (80) Scan parquet default.web_returns
 Output [5]: [wr_item_sk#94, wr_order_number#95, wr_return_amt#96, wr_net_loss#97, wr_returned_date_sk#98]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/web_returns]
 PushedFilters: [IsNotNull(wr_item_sk), IsNotNull(wr_order_number)]
-ReadSchema: struct<wr_item_sk:bigint,wr_order_number:bigint,wr_return_amt:decimal(7,2),wr_net_loss:decimal(7,2)>
+ReadSchema: struct<wr_item_sk:int,wr_order_number:int,wr_return_amt:decimal(7,2),wr_net_loss:decimal(7,2)>
 
 (81) ColumnarToRow [codegen id : 23]
 Input [5]: [wr_item_sk#94, wr_order_number#95, wr_return_amt#96, wr_net_loss#97, wr_returned_date_sk#98]
@@ -496,8 +496,8 @@ Arguments: hashpartitioning(wr_item_sk#94, wr_order_number#95, 5), ENSURE_REQUIR
 Input [4]: [wr_item_sk#94, wr_order_number#95, wr_return_amt#96, wr_net_loss#97]
 Arguments: [wr_item_sk#94 ASC NULLS FIRST, wr_order_number#95 ASC NULLS FIRST], false, 0
 
-(86) SortMergeJoin
-Left keys [2]: [cast(ws_item_sk#86 as bigint), cast(ws_order_number#89 as bigint)]
+(86) SortMergeJoin [codegen id : 29]
+Left keys [2]: [ws_item_sk#86, ws_order_number#89]
 Right keys [2]: [wr_item_sk#94, wr_order_number#95]
 Join condition: None
 
@@ -590,7 +590,7 @@ Results [5]: [MakeDecimal(sum(UnscaledValue(ws_ext_sales_price#90))#117,17,2) AS
 
 (107) Expand [codegen id : 31]
 Input [5]: [sales#42, returns#43, profit#44, channel#45, id#46]
-Arguments: [List(sales#42, returns#43, profit#44, channel#45, id#46, 0), List(sales#42, returns#43, profit#44, channel#45, null, 1), List(sales#42, returns#43, profit#44, null, null, 3)], [sales#42, returns#43, profit#44, channel#125, id#126, spark_grouping_id#127]
+Arguments: [[sales#42, returns#43, profit#44, channel#45, id#46, 0], [sales#42, returns#43, profit#44, channel#45, null, 1], [sales#42, returns#43, profit#44, null, null, 3]], [sales#42, returns#43, profit#44, channel#125, id#126, spark_grouping_id#127]
 
 (108) HashAggregate [codegen id : 31]
 Input [6]: [sales#42, returns#43, profit#44, channel#125, id#126, spark_grouping_id#127]

@@ -163,7 +163,7 @@ Input [10]: [ss_customer_sk#10, ss_hdemo_sk#11, ss_addr_sk#12, ss_store_sk#13, s
 Output [2]: [s_store_sk#24, s_city#25]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store]
-PushedFilters: [In(s_city, [Midway,Fairview]), IsNotNull(s_store_sk)]
+PushedFilters: [In(s_city, [Fairview,Midway]), IsNotNull(s_store_sk)]
 ReadSchema: struct<s_store_sk:int,s_city:string>
 
 (26) ColumnarToRow [codegen id : 8]

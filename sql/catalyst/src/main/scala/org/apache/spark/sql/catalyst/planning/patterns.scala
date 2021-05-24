@@ -18,12 +18,12 @@
 package org.apache.spark.sql.catalyst.planning
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.optimizer.JoinSelectionHelper
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 
 trait OperationHelper {
@@ -297,11 +297,9 @@ object PhysicalAggregation {
       val aggregateExpressions = resultExpressions.flatMap { expr =>
         expr.collect {
           // addExpr() always returns false for non-deterministic expressions and do not add them.
-          case agg: AggregateExpression
-            if !equivalentAggregateExpressions.addExpr(agg) => agg
-          case udf: PythonUDF
-            if PythonUDF.isGroupedAggPandasUDF(udf) &&
-              !equivalentAggregateExpressions.addExpr(udf) => udf
+          case a
+            if AggregateExpression.isAggregate(a) && !equivalentAggregateExpressions.addExpr(a) =>
+            a
         }
       }
 
@@ -333,7 +331,7 @@ object PhysicalAggregation {
           case ue: PythonUDF if PythonUDF.isGroupedAggPandasUDF(ue) =>
             equivalentAggregateExpressions.getEquivalentExprs(ue).headOption
               .getOrElse(ue).asInstanceOf[PythonUDF].resultAttribute
-          case expression =>
+          case expression if !expression.foldable =>
             // Since we're using `namedGroupingAttributes` to extract the grouping key
             // columns, we need to replace grouping key expressions with their corresponding
             // attributes. We do not rely on the equality check at here since attributes may
@@ -371,15 +369,14 @@ object PhysicalWindow {
 
       // The window expression should not be empty here, otherwise it's a bug.
       if (windowExpressions.isEmpty) {
-        throw new AnalysisException(s"Window expression is empty in $expr")
+        throw QueryCompilationErrors.emptyWindowExpressionError(expr)
       }
 
       val windowFunctionType = windowExpressions.map(WindowFunctionType.functionType)
         .reduceLeft { (t1: WindowFunctionType, t2: WindowFunctionType) =>
           if (t1 != t2) {
             // We shouldn't have different window function type here, otherwise it's a bug.
-            throw new AnalysisException(
-              s"Found different window function type in $windowExpressions")
+            throw QueryCompilationErrors.foundDifferentWindowFunctionTypeError(windowExpressions)
           } else {
             t1
           }

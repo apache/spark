@@ -72,6 +72,13 @@
       <type>test-jar</type>
       <scope>test</scope>
     </dependency>
+    <dependency>
+      <groupId>org.apache.parquet</groupId>
+      <artifactId>parquet-hadoop</artifactId>
+      <version>${parquet.version}</version>
+      <type>test-jar</type>
+      <scope>test</scope>
+    </dependency>
 <!--
     <dependency>
       <groupId>com.google.guava</groupId>

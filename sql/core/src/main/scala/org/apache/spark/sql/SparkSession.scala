@@ -18,7 +18,7 @@
 package org.apache.spark.sql
 
 import java.io.Closeable
-import java.util.UUID
+import java.util.{ServiceLoader, UUID}
 import java.util.concurrent.TimeUnit._
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
 
@@ -949,6 +949,7 @@ object SparkSession extends Logging {
           // Do not update `SparkConf` for existing `SparkContext`, as it's shared by all sessions.
         }
 
+        loadExtensions(extensions)
         applyExtensions(
           sparkContext.getConf.get(StaticSQLConf.SPARK_SESSION_EXTENSIONS).getOrElse(Seq.empty),
           extensions)
@@ -1202,5 +1203,23 @@ object SparkSession extends Logging {
       }
     }
     extensions
+  }
+
+  /**
+   * Load extensions from [[ServiceLoader]] and use them
+   */
+  private def loadExtensions(extensions: SparkSessionExtensions): Unit = {
+    val loader = ServiceLoader.load(classOf[SparkSessionExtensionsProvider],
+      Utils.getContextOrSparkClassLoader)
+    val loadedExts = loader.iterator()
+
+    while (loadedExts.hasNext) {
+      try {
+        val ext = loadedExts.next()
+        ext(extensions)
+      } catch {
+        case e: Throwable => logWarning("Failed to load session extension", e)
+      }
+    }
   }
 }

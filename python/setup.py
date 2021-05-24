@@ -220,6 +220,14 @@ try:
                   'pyspark.bin',
                   'pyspark.sbin',
                   'pyspark.jars',
+                  'pyspark.pandas',
+                  'pyspark.pandas.data_type_ops',
+                  'pyspark.pandas.indexes',
+                  'pyspark.pandas.missing',
+                  'pyspark.pandas.plot',
+                  'pyspark.pandas.spark',
+                  'pyspark.pandas.typedef',
+                  'pyspark.pandas.usage_logging',
                   'pyspark.python.pyspark',
                   'pyspark.python.lib',
                   'pyspark.data',
@@ -257,7 +265,12 @@ try:
             'sql': [
                 'pandas>=%s' % _minimum_pandas_version,
                 'pyarrow>=%s' % _minimum_pyarrow_version,
-            ]
+            ],
+            'pandas_on_spark': [
+                'pandas>=%s' % _minimum_pandas_version,
+                'pyarrow>=%s' % _minimum_pyarrow_version,
+                'numpy>=1.14,<1.20.0',
+            ],
         },
         python_requires='>=3.6',
         classifiers=[

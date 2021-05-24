@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.{FUNC_ALIAS, Func
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.catalyst.trees.TreePattern.{CREATE_NAMED_STRUCT, TreePattern}
 import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.internal.SQLConf
@@ -102,6 +103,9 @@ case class CreateArray(children: Seq[Expression], useStringTypeWhenEmpty: Boolea
   }
 
   override def prettyName: String = "array"
+
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): CreateArray =
+    copy(children = newChildren)
 }
 
 object CreateArray {
@@ -254,6 +258,9 @@ case class CreateMap(children: Seq[Expression], useStringTypeWhenEmpty: Boolean)
   }
 
   override def prettyName: String = "map"
+
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): CreateMap =
+    copy(children = newChildren)
 }
 
 object CreateMap {
@@ -314,6 +321,10 @@ case class MapFromArrays(left: Expression, right: Expression)
   }
 
   override def prettyName: String = "map_from_arrays"
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): MapFromArrays =
+    copy(left = newLeft, right = newRight)
 }
 
 /**
@@ -415,6 +426,8 @@ case class CreateNamedStruct(children: Seq[Expression]) extends Expression with 
 
   override def foldable: Boolean = valExprs.forall(_.foldable)
 
+  final override val nodePatterns: Seq[TreePattern] = Seq(CREATE_NAMED_STRUCT)
+
   override lazy val dataType: StructType = {
     val fields = names.zip(valExprs).map {
       case (name, expr) =>
@@ -493,6 +506,9 @@ case class CreateNamedStruct(children: Seq[Expression]) extends Expression with 
     val childrenSQL = children.indices.filter(_ % 2 == 1).map(children(_).sql).mkString(", ")
     s"$alias($childrenSQL)"
   }.getOrElse(super.sql)
+
+  override protected def withNewChildrenInternal(
+    newChildren: IndexedSeq[Expression]): CreateNamedStruct = copy(children = newChildren)
 }
 
 /**
@@ -576,6 +592,13 @@ case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: E
   }
 
   override def prettyName: String = "str_to_map"
+
+  override protected def withNewChildrenInternal(
+      newFirst: Expression, newSecond: Expression, newThird: Expression): Expression = copy(
+    text = newFirst,
+    pairDelim = newSecond,
+    keyValueDelim = newThird
+  )
 }
 
 /**
@@ -627,6 +650,9 @@ case class WithField(name: String, valExpr: Expression)
     "WithField.nullable should not be called.")
 
   override def prettyName: String = "WithField"
+
+  override protected def withNewChildInternal(newChild: Expression): WithField =
+    copy(valExpr = newChild)
 }
 
 /**
@@ -658,6 +684,9 @@ case class UpdateFields(structExpr: Expression, fieldOps: Seq[StructFieldsOperat
   override def children: Seq[Expression] = structExpr +: fieldOps.collect {
     case e: Expression => e
   }
+
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
+    super.legacyWithNewChildren(newChildren)
 
   override def dataType: StructType = StructType(newFields)
 

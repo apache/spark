@@ -9,9 +9,9 @@ TakeOrderedAndProject (51)
                :  +- * Project (41)
                :     +- * BroadcastHashJoin Inner BuildRight (40)
                :        :- * Project (34)
-               :        :  +- SortMergeJoin LeftAnti (33)
-               :        :     :- SortMergeJoin LeftAnti (25)
-               :        :     :  :- SortMergeJoin LeftSemi (17)
+               :        :  +- * SortMergeJoin LeftAnti (33)
+               :        :     :- * SortMergeJoin LeftAnti (25)
+               :        :     :  :- * SortMergeJoin LeftSemi (17)
                :        :     :  :  :- * Sort (5)
                :        :     :  :  :  +- Exchange (4)
                :        :     :  :  :     +- * Filter (3)
@@ -123,7 +123,7 @@ Arguments: hashpartitioning(ss_customer_sk#5, 5), ENSURE_REQUIREMENTS, [id=#12]
 Input [1]: [ss_customer_sk#5]
 Arguments: [ss_customer_sk#5 ASC NULLS FIRST], false, 0
 
-(17) SortMergeJoin
+(17) SortMergeJoin [codegen id : 6]
 Left keys [1]: [c_customer_sk#1]
 Right keys [1]: [ss_customer_sk#5]
 Join condition: None
@@ -135,18 +135,18 @@ Location: InMemoryFileIndex []
 PartitionFilters: [isnotnull(ws_sold_date_sk#14), dynamicpruningexpression(ws_sold_date_sk#14 IN dynamicpruning#7)]
 ReadSchema: struct<ws_bill_customer_sk:int>
 
-(19) ColumnarToRow [codegen id : 7]
+(19) ColumnarToRow [codegen id : 8]
 Input [2]: [ws_bill_customer_sk#13, ws_sold_date_sk#14]
 
 (20) ReusedExchange [Reuses operator id: 12]
 Output [1]: [d_date_sk#15]
 
-(21) BroadcastHashJoin [codegen id : 7]
+(21) BroadcastHashJoin [codegen id : 8]
 Left keys [1]: [ws_sold_date_sk#14]
 Right keys [1]: [d_date_sk#15]
 Join condition: None
 
-(22) Project [codegen id : 7]
+(22) Project [codegen id : 8]
 Output [1]: [ws_bill_customer_sk#13]
 Input [3]: [ws_bill_customer_sk#13, ws_sold_date_sk#14, d_date_sk#15]
 
@@ -154,11 +154,11 @@ Input [3]: [ws_bill_customer_sk#13, ws_sold_date_sk#14, d_date_sk#15]
 Input [1]: [ws_bill_customer_sk#13]
 Arguments: hashpartitioning(ws_bill_customer_sk#13, 5), ENSURE_REQUIREMENTS, [id=#16]
 
-(24) Sort [codegen id : 8]
+(24) Sort [codegen id : 9]
 Input [1]: [ws_bill_customer_sk#13]
 Arguments: [ws_bill_customer_sk#13 ASC NULLS FIRST], false, 0
 
-(25) SortMergeJoin
+(25) SortMergeJoin [codegen id : 10]
 Left keys [1]: [c_customer_sk#1]
 Right keys [1]: [ws_bill_customer_sk#13]
 Join condition: None
@@ -170,18 +170,18 @@ Location: InMemoryFileIndex []
 PartitionFilters: [isnotnull(cs_sold_date_sk#18), dynamicpruningexpression(cs_sold_date_sk#18 IN dynamicpruning#7)]
 ReadSchema: struct<cs_ship_customer_sk:int>
 
-(27) ColumnarToRow [codegen id : 10]
+(27) ColumnarToRow [codegen id : 12]
 Input [2]: [cs_ship_customer_sk#17, cs_sold_date_sk#18]
 
 (28) ReusedExchange [Reuses operator id: 12]
 Output [1]: [d_date_sk#19]
 
-(29) BroadcastHashJoin [codegen id : 10]
+(29) BroadcastHashJoin [codegen id : 12]
 Left keys [1]: [cs_sold_date_sk#18]
 Right keys [1]: [d_date_sk#19]
 Join condition: None
 
-(30) Project [codegen id : 10]
+(30) Project [codegen id : 12]
 Output [1]: [cs_ship_customer_sk#17]
 Input [3]: [cs_ship_customer_sk#17, cs_sold_date_sk#18, d_date_sk#19]
 
@@ -189,16 +189,16 @@ Input [3]: [cs_ship_customer_sk#17, cs_sold_date_sk#18, d_date_sk#19]
 Input [1]: [cs_ship_customer_sk#17]
 Arguments: hashpartitioning(cs_ship_customer_sk#17, 5), ENSURE_REQUIREMENTS, [id=#20]
 
-(32) Sort [codegen id : 11]
+(32) Sort [codegen id : 13]
 Input [1]: [cs_ship_customer_sk#17]
 Arguments: [cs_ship_customer_sk#17 ASC NULLS FIRST], false, 0
 
-(33) SortMergeJoin
+(33) SortMergeJoin [codegen id : 15]
 Left keys [1]: [c_customer_sk#1]
 Right keys [1]: [cs_ship_customer_sk#17]
 Join condition: None
 
-(34) Project [codegen id : 13]
+(34) Project [codegen id : 15]
 Output [2]: [c_current_cdemo_sk#2, c_current_addr_sk#3]
 Input [3]: [c_customer_sk#1, c_current_cdemo_sk#2, c_current_addr_sk#3]
 
@@ -206,17 +206,17 @@ Input [3]: [c_customer_sk#1, c_current_cdemo_sk#2, c_current_addr_sk#3]
 Output [2]: [ca_address_sk#21, ca_state#22]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer_address]
-PushedFilters: [In(ca_state, [KY,GA,NM]), IsNotNull(ca_address_sk)]
+PushedFilters: [In(ca_state, [GA,KY,NM]), IsNotNull(ca_address_sk)]
 ReadSchema: struct<ca_address_sk:int,ca_state:string>
 
-(36) ColumnarToRow [codegen id : 12]
+(36) ColumnarToRow [codegen id : 14]
 Input [2]: [ca_address_sk#21, ca_state#22]
 
-(37) Filter [codegen id : 12]
+(37) Filter [codegen id : 14]
 Input [2]: [ca_address_sk#21, ca_state#22]
 Condition : (ca_state#22 IN (KY,GA,NM) AND isnotnull(ca_address_sk#21))
 
-(38) Project [codegen id : 12]
+(38) Project [codegen id : 14]
 Output [1]: [ca_address_sk#21]
 Input [2]: [ca_address_sk#21, ca_state#22]
 
@@ -224,12 +224,12 @@ Input [2]: [ca_address_sk#21, ca_state#22]
 Input [1]: [ca_address_sk#21]
 Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#23]
 
-(40) BroadcastHashJoin [codegen id : 13]
+(40) BroadcastHashJoin [codegen id : 15]
 Left keys [1]: [c_current_addr_sk#3]
 Right keys [1]: [ca_address_sk#21]
 Join condition: None
 
-(41) Project [codegen id : 13]
+(41) Project [codegen id : 15]
 Output [1]: [c_current_cdemo_sk#2]
 Input [3]: [c_current_cdemo_sk#2, c_current_addr_sk#3, ca_address_sk#21]
 
@@ -251,16 +251,16 @@ Input [6]: [cd_demo_sk#25, cd_gender#26, cd_marital_status#27, cd_education_stat
 Input [6]: [cd_demo_sk#25, cd_gender#26, cd_marital_status#27, cd_education_status#28, cd_purchase_estimate#29, cd_credit_rating#30]
 Condition : isnotnull(cd_demo_sk#25)
 
-(46) BroadcastHashJoin [codegen id : 14]
+(46) BroadcastHashJoin [codegen id : 16]
 Left keys [1]: [c_current_cdemo_sk#2]
 Right keys [1]: [cd_demo_sk#25]
 Join condition: None
 
-(47) Project [codegen id : 14]
+(47) Project [codegen id : 16]
 Output [5]: [cd_gender#26, cd_marital_status#27, cd_education_status#28, cd_purchase_estimate#29, cd_credit_rating#30]
 Input [7]: [c_current_cdemo_sk#2, cd_demo_sk#25, cd_gender#26, cd_marital_status#27, cd_education_status#28, cd_purchase_estimate#29, cd_credit_rating#30]
 
-(48) HashAggregate [codegen id : 14]
+(48) HashAggregate [codegen id : 16]
 Input [5]: [cd_gender#26, cd_marital_status#27, cd_education_status#28, cd_purchase_estimate#29, cd_credit_rating#30]
 Keys [5]: [cd_gender#26, cd_marital_status#27, cd_education_status#28, cd_purchase_estimate#29, cd_credit_rating#30]
 Functions [1]: [partial_count(1)]
@@ -271,7 +271,7 @@ Results [6]: [cd_gender#26, cd_marital_status#27, cd_education_status#28, cd_pur
 Input [6]: [cd_gender#26, cd_marital_status#27, cd_education_status#28, cd_purchase_estimate#29, cd_credit_rating#30, count#32]
 Arguments: hashpartitioning(cd_gender#26, cd_marital_status#27, cd_education_status#28, cd_purchase_estimate#29, cd_credit_rating#30, 5), ENSURE_REQUIREMENTS, [id=#33]
 
-(50) HashAggregate [codegen id : 15]
+(50) HashAggregate [codegen id : 17]
 Input [6]: [cd_gender#26, cd_marital_status#27, cd_education_status#28, cd_purchase_estimate#29, cd_credit_rating#30, count#32]
 Keys [5]: [cd_gender#26, cd_marital_status#27, cd_education_status#28, cd_purchase_estimate#29, cd_credit_rating#30]
 Functions [1]: [count(1)]
