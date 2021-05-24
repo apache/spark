@@ -131,12 +131,14 @@ abstract class PropagateEmptyRelationBase extends Rule[LogicalPlan] with CastSup
 }
 
 /**
- * Rule [[PropagateEmptyRelationBase]] at normal optimizer side.
- * With the extra optimal pattern:
+ * Rule [[PropagateEmptyRelationBase]] at normal optimizer side with the extra pattern:
  * 1. Higher-node Logical Plans
  *    - Union with all empty children.
  * 2. Unary-node Logical Plans
  *    - Project/Filter/Sample with all empty children.
+ *
+ * The reason why we don't apply this rule at AQE optimizer side is: the benefit is not big enough
+ * and it may introduce extra exchanges.
  */
 object PropagateEmptyRelation extends PropagateEmptyRelationBase {
   private def applyFunc: PartialFunction[LogicalPlan, LogicalPlan] = {
