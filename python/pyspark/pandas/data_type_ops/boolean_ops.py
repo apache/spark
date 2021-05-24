@@ -41,88 +41,89 @@ class BooleanOps(DataTypeOps):
         return 'booleans'
 
     def add(self, left, right) -> Union["Series", "Index"]:
-        if isinstance(right, numbers.Number) and not isinstance(right, bool):
-            left = left.spark.transform(lambda scol: scol.cast(as_spark_type(type(right))))
-            return left + right
-        elif is_valid_operand_for_numeric_arithmetic(right, allow_bool=False):
-            left = transform_boolean_operand_to_numeric(
-                left, cast(IndexOpsMixin, right).spark.data_type)
-            return left + right
-        else:
+        if not is_valid_operand_for_numeric_arithmetic(right, allow_bool=False):
             raise TypeError(
                 "Addition can not be applied to %s and the given type." % self.pretty_name)
 
-    def sub(self, left, right) -> Union["Series", "Index"]:
         if isinstance(right, numbers.Number) and not isinstance(right, bool):
             left = left.spark.transform(lambda scol: scol.cast(as_spark_type(type(right))))
-            return left - right
-        elif is_valid_operand_for_numeric_arithmetic(right, allow_bool=False):
-            left = transform_boolean_operand_to_numeric(
-                left, cast(IndexOpsMixin, right).spark.data_type)
-            return left - right
+            return left + right
         else:
+            assert isinstance(right, IndexOpsMixin)
+            left = transform_boolean_operand_to_numeric(left, right.spark.data_type)
+            return left + right
+
+    def sub(self, left, right) -> Union["Series", "Index"]:
+        if not is_valid_operand_for_numeric_arithmetic(right, allow_bool=False):
             raise TypeError(
                 "Subtraction can not be applied to %s and the given type." % self.pretty_name)
+        if isinstance(right, numbers.Number) and not isinstance(right, bool):
+            left = left.spark.transform(lambda scol: scol.cast(as_spark_type(type(right))))
+            return left - right
+        else:
+            assert isinstance(right, IndexOpsMixin)
+            left = transform_boolean_operand_to_numeric(left, right.spark.data_type)
+            return left - right
 
     def mul(self, left, right) -> Union["Series", "Index"]:
-        if isinstance(right, numbers.Number) and not isinstance(right, bool):
-            left = left.spark.transform(lambda scol: scol.cast(as_spark_type(type(right))))
-            return left * right
-        elif is_valid_operand_for_numeric_arithmetic(right, allow_bool=False):
-            left = transform_boolean_operand_to_numeric(
-                left, cast(IndexOpsMixin, right).spark.data_type)
-            return left * right
-        else:
+        if not is_valid_operand_for_numeric_arithmetic(right, allow_bool=False):
             raise TypeError(
                 "Multiplication can not be applied to %s and the given type." % self.pretty_name)
+        if isinstance(right, numbers.Number) and not isinstance(right, bool):
+            left = left.spark.transform(lambda scol: scol.cast(as_spark_type(type(right))))
+            return left * right
+        else:
+            assert isinstance(right, IndexOpsMixin)
+            left = transform_boolean_operand_to_numeric(left, right.spark.data_type)
+            return left * right
 
     def truediv(self, left, right) -> Union["Series", "Index"]:
-        if isinstance(right, numbers.Number) and not isinstance(right, bool):
-            left = left.spark.transform(lambda scol: scol.cast(as_spark_type(type(right))))
-            return left / right
-        elif is_valid_operand_for_numeric_arithmetic(right, allow_bool=False):
-            left = transform_boolean_operand_to_numeric(
-                left, cast(IndexOpsMixin, right).spark.data_type)
-            return left / right
-        else:
+        if not is_valid_operand_for_numeric_arithmetic(right, allow_bool=False):
             raise TypeError(
                 "True division can not be applied to %s and the given type." % self.pretty_name)
+        if isinstance(right, numbers.Number) and not isinstance(right, bool):
+            left = left.spark.transform(lambda scol: scol.cast(as_spark_type(type(right))))
+            return left / right
+        else:
+            assert isinstance(right, IndexOpsMixin)
+            left = transform_boolean_operand_to_numeric(left, right.spark.data_type)
+            return left / right
 
     def floordiv(self, left, right) -> Union["Series", "Index"]:
-        if isinstance(right, numbers.Number) and not isinstance(right, bool):
-            left = left.spark.transform(lambda scol: scol.cast(as_spark_type(type(right))))
-            return left // right
-        elif is_valid_operand_for_numeric_arithmetic(right, allow_bool=False):
-            left = transform_boolean_operand_to_numeric(
-                left, cast(IndexOpsMixin, right).spark.data_type)
-            return left // right
-        else:
+        if not is_valid_operand_for_numeric_arithmetic(right, allow_bool=False):
             raise TypeError(
                 "Floor division can not be applied to %s and the given type." % self.pretty_name)
+        if isinstance(right, numbers.Number) and not isinstance(right, bool):
+            left = left.spark.transform(lambda scol: scol.cast(as_spark_type(type(right))))
+            return left // right
+        else:
+            assert isinstance(right, IndexOpsMixin)
+            left = transform_boolean_operand_to_numeric(left, right.spark.data_type)
+            return left // right
 
     def mod(self, left, right) -> Union["Series", "Index"]:
-        if isinstance(right, numbers.Number) and not isinstance(right, bool):
-            left = left.spark.transform(lambda scol: scol.cast(as_spark_type(type(right))))
-            return left % right
-        elif is_valid_operand_for_numeric_arithmetic(right, allow_bool=False):
-            left = transform_boolean_operand_to_numeric(
-                left, cast(IndexOpsMixin, right).spark.data_type)
-            return left % right
-        else:
+        if not is_valid_operand_for_numeric_arithmetic(right, allow_bool=False):
             raise TypeError(
                 "Modulo can not be applied to %s and the given type." % self.pretty_name)
+        if isinstance(right, numbers.Number) and not isinstance(right, bool):
+            left = left.spark.transform(lambda scol: scol.cast(as_spark_type(type(right))))
+            return left % right
+        else:
+            assert isinstance(right, IndexOpsMixin)
+            left = transform_boolean_operand_to_numeric(left, right.spark.data_type)
+            return left % right
 
     def pow(self, left, right) -> Union["Series", "Index"]:
+        if not is_valid_operand_for_numeric_arithmetic(right, allow_bool=False):
+            raise TypeError(
+                "Exponentiation can not be applied to %s and the given type." % self.pretty_name)
         if isinstance(right, numbers.Number) and not isinstance(right, bool):
             left = left.spark.transform(lambda scol: scol.cast(as_spark_type(type(right))))
             return left ** right
-        elif is_valid_operand_for_numeric_arithmetic(right, allow_bool=False):
-            left = transform_boolean_operand_to_numeric(
-                left, cast(IndexOpsMixin, right).spark.data_type)
-            return left ** right
         else:
-            raise TypeError(
-                "Exponentiation can not be applied to %s and the given type." % self.pretty_name)
+            assert isinstance(right, IndexOpsMixin)
+            left = transform_boolean_operand_to_numeric(left, right.spark.data_type)
+            return left ** right
 
     def radd(self, left, right) -> Union["Series", "Index"]:
         if isinstance(right, numbers.Number) and not isinstance(right, bool):
