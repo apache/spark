@@ -204,7 +204,6 @@ object OptimizeSkewedJoin extends CustomShuffleReaderRule {
         noSkewPartitionSpec
       }
 
-      // A skewed partition should never be coalesced, but skip it here just to be safe.
       val rightParts = if (isRightSkew) {
         val skewSpecs = createSkewPartitionSpecs(
           right.mapStats.get.shuffleId, partitionIndex, rightTargetSize)

@@ -67,34 +67,46 @@ object ShufflePartitionsUtil extends Logging {
     logInfo(s"For shuffle($shuffleIds), advisory target size: $advisoryTargetSize, " +
       s"actual target size $targetSize.")
 
-    val numShuffles = mapOutputStatistics.length
+    // If `inputPartitionSpecs` are all empty, it means skew join optimization is not applied.
+    if (inputPartitionSpecs.forall(_.isEmpty)) {
+      coalescePartitionsWithoutSkew(mapOutputStatistics, targetSize)
+    } else {
+      coalescePartitionsWithSkew(mapOutputStatistics, inputPartitionSpecs, targetSize)
+    }
+  }
+
+  private def coalescePartitionsWithoutSkew(
+      mapOutputStatistics: Seq[Option[MapOutputStatistics]],
+      targetSize: Long): Seq[Seq[ShufflePartitionSpec]] = {
     // `ShuffleQueryStageExec#mapStats` returns None when the input RDD has 0 partitions,
     // we should skip it when calculating the `partitionStartIndices`.
     val validMetrics = mapOutputStatistics.flatten
-
-    if (inputPartitionSpecs.forall(_.isEmpty)) {
-      // If all input RDDs have 0 partition, we create an empty partition for every shuffle reader.
-      if (validMetrics.isEmpty) {
-        return Seq.fill(numShuffles)(Seq(CoalescedPartitionSpec(0, 0)))
-      }
-
-      // We may have different pre-shuffle partition numbers, don't reduce shuffle partition number
-      // in that case. For example when we union fully aggregated data (data is arranged to a single
-      // partition) and a result of a SortMergeJoin (multiple partitions).
-      if (validMetrics.map(_.bytesByPartitionId.length).distinct.length > 1) {
-        return Seq.empty
-      }
-
-      val numPartitions = validMetrics.head.bytesByPartitionId.length
-      val newPartitionSpecs = coalescePartitions(
-        0, numPartitions, validMetrics, targetSize)
-      if (newPartitionSpecs.length < numPartitions) {
-        return Seq.fill(numShuffles)(newPartitionSpecs)
-      } else {
-        return Seq.empty
-      }
+    val numShuffles = mapOutputStatistics.length
+    // If all input RDDs have 0 partition, we create an empty partition for every shuffle reader.
+    if (validMetrics.isEmpty) {
+      return Seq.fill(numShuffles)(Seq(CoalescedPartitionSpec(0, 0)))
     }
 
+    // We may have different pre-shuffle partition numbers, don't reduce shuffle partition number
+    // in that case. For example when we union fully aggregated data (data is arranged to a single
+    // partition) and a result of a SortMergeJoin (multiple partitions).
+    if (validMetrics.map(_.bytesByPartitionId.length).distinct.length > 1) {
+      return Seq.empty
+    }
+
+    val numPartitions = validMetrics.head.bytesByPartitionId.length
+    val newPartitionSpecs = coalescePartitions(0, numPartitions, validMetrics, targetSize)
+    if (newPartitionSpecs.length < numPartitions) {
+      Seq.fill(numShuffles)(newPartitionSpecs)
+    } else {
+      Seq.empty
+    }
+  }
+
+  private def coalescePartitionsWithSkew(
+      mapOutputStatistics: Seq[Option[MapOutputStatistics]],
+      inputPartitionSpecs: Seq[Option[Seq[ShufflePartitionSpec]]],
+      targetSize: Long): Seq[Seq[ShufflePartitionSpec]] = {
     // Do not coalesce if any of the map output stats are missing or if not all shuffles have
     // partition specs, which should not happen in practice.
     if (!mapOutputStatistics.forall(_.isDefined) || !inputPartitionSpecs.forall(_.isDefined)) {
@@ -103,6 +115,7 @@ object ShufflePartitionsUtil extends Logging {
       return Seq.empty
     }
 
+    val validMetrics = mapOutputStatistics.map(_.get)
     // Extract the start indices of each partition spec. Give invalid index -1 to unexpected
     // partition specs. When we reach here, it means skew join optimization has been applied.
     val partitionIndicesSeq = inputPartitionSpecs.map(_.get.map {
@@ -119,12 +132,15 @@ object ShufflePartitionsUtil extends Logging {
     // The indices may look like [0, 1, 2, 2, 2, 3, 4, 4, 5], and the repeated `2` and `4` mean
     // skewed partitions.
     val partitionIndices = partitionIndicesSeq.head
-    val newPartitionSpecsSeq = Seq.fill(numShuffles)(ArrayBuffer.empty[ShufflePartitionSpec])
+    // The fist index must be 0.
+    assert(partitionIndices.head == 0)
+    val newPartitionSpecsSeq = Seq.fill(mapOutputStatistics.length)(
+      ArrayBuffer.empty[ShufflePartitionSpec])
     val numPartitions = partitionIndices.length
-    var i = 0
+    var i = 1
     var start = 0
     while (i < numPartitions) {
-      if (i > 0 && partitionIndices(i - 1) == partitionIndices(i)) {
+      if (partitionIndices(i - 1) == partitionIndices(i)) {
         // a skew section detected, starting from partition(i - 1).
         val repeatValue = partitionIndices(i)
         // coalesce any partitions before partition(i - 1) and after the end of latest skew section.
@@ -146,13 +162,8 @@ object ShufflePartitionsUtil extends Logging {
         start = repeatIndex
         i = repeatIndex
       } else {
-        // The first index must be 0. Other indices outside of the skew section should be larger
-        // than the previous one by 1.
-        if (i == 0) {
-          assert(partitionIndices(i) == 0)
-        } else {
-          assert(partitionIndices(i - 1) + 1 == partitionIndices(i))
-        }
+        // Indices outside of the skew section should be larger than the previous one by 1.
+        assert(partitionIndices(i - 1) + 1 == partitionIndices(i))
         // no skew section detected, advance to the next index.
         i += 1
       }

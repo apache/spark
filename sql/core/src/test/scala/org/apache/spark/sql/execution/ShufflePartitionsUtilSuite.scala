@@ -283,6 +283,12 @@ class ShufflePartitionsUtilSuite extends SparkFunSuite {
     }
   }
 
+  test("return Nil if cannot coalesce") {
+    val targetSize = 100
+    val bytesByPartitionId = Array[Long](110, 120, 130)
+    checkEstimation(Array(bytesByPartitionId), Nil, targetSize)
+  }
+
   test("coalesce after skew splitting") {
     val targetSize = 100
 
