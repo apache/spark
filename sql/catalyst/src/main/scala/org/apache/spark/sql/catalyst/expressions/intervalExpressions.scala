@@ -357,11 +357,11 @@ case class MakeInterval(
   examples = """
     Examples:
       > SELECT _FUNC_(1, 2);
-       14
+       1-2
       > SELECT _FUNC_(1, 0);
-       12
+       1-0
       > SELECT _FUNC_(0, 1);
-       1
+       0-1
   """,
   since = "3.2.0",
   group = "datetime_funcs")
