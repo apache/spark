@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.optimizer.RemoveNoopUnion
 import org.apache.spark.sql.catalyst.plans.logical.Union
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SharedSparkSession}
+import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SharedSparkSession, SQLTestData}
 import org.apache.spark.sql.test.SQLTestData.NullStrings
 import org.apache.spark.sql.types._
 
@@ -857,6 +857,23 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
             |) group by key, expr
             |""".stripMargin)
         checkAnswer(distinctUnionDF4, expected)
+      }
+    }
+  }
+
+  test("SPARK-34548: Remove unnecessary children from Union") {
+    Seq(RemoveNoopUnion.ruleName, "").map { ruleName =>
+      withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> ruleName) {
+        val testDataCopy = spark.sparkContext.parallelize(
+          (1 to 100).map(i => SQLTestData.TestData(i, i.toString))).toDF()
+
+        val distinctUnionDF1 = testData.union(testData).union(testDataCopy).distinct()
+        val expected = testData.union(testDataCopy).distinct()
+        checkAnswer(distinctUnionDF1, expected)
+
+        val distinctUnionDF2 = testData.union(testData).union(testDataCopy)
+          .dropDuplicates(Seq("key"))
+        checkAnswer(distinctUnionDF2, expected)
       }
     }
   }

@@ -220,6 +220,14 @@ try:
                   'pyspark.bin',
                   'pyspark.sbin',
                   'pyspark.jars',
+                  'pyspark.pandas',
+                  'pyspark.pandas.data_type_ops',
+                  'pyspark.pandas.indexes',
+                  'pyspark.pandas.missing',
+                  'pyspark.pandas.plot',
+                  'pyspark.pandas.spark',
+                  'pyspark.pandas.typedef',
+                  'pyspark.pandas.usage_logging',
                   'pyspark.python.pyspark',
                   'pyspark.python.lib',
                   'pyspark.data',
@@ -250,14 +258,19 @@ try:
         license='http://www.apache.org/licenses/LICENSE-2.0',
         # Don't forget to update python/docs/source/getting_started/install.rst
         # if you're updating the versions or dependencies.
-        install_requires=['py4j==0.10.9.1'],
+        install_requires=['py4j==0.10.9.2'],
         extras_require={
             'ml': ['numpy>=1.7'],
             'mllib': ['numpy>=1.7'],
             'sql': [
                 'pandas>=%s' % _minimum_pandas_version,
                 'pyarrow>=%s' % _minimum_pyarrow_version,
-            ]
+            ],
+            'pandas_on_spark': [
+                'pandas>=%s' % _minimum_pandas_version,
+                'pyarrow>=%s' % _minimum_pyarrow_version,
+                'numpy>=1.14,<1.20.0',
+            ],
         },
         python_requires='>=3.6',
         classifiers=[

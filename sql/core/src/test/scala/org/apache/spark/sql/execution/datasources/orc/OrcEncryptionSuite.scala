@@ -17,11 +17,13 @@
 
 package org.apache.spark.sql.execution.datasources.orc
 
+import java.util.Random
+
+import org.apache.orc.impl.HadoopShimsFactory
+
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.tags.DedicatedJVMTest
 
-@DedicatedJVMTest
 class OrcEncryptionSuite extends OrcTest with SharedSparkSession {
   import testImplicits._
 
@@ -30,6 +32,11 @@ class OrcEncryptionSuite extends OrcTest with SharedSparkSession {
     Row(null, "841626795E7D351555B835A002E3BF10669DE9B81C95A3D59E10865AC37EA7C3", "Dongjoon Hyun")
 
   test("Write and read an encrypted file") {
+    val conf = spark.sessionState.newHadoopConf()
+    val provider = HadoopShimsFactory.get.getHadoopKeyProvider(conf, new Random)
+    assume(!provider.getKeyNames.isEmpty,
+      s"$provider doesn't has the test keys. ORC shim is created with old Hadoop libraries")
+
     val df = originalData.toDF("ssn", "email", "name")
 
     withTempPath { dir =>
@@ -53,9 +60,14 @@ class OrcEncryptionSuite extends OrcTest with SharedSparkSession {
   }
 
   test("Write and read an encrypted table") {
+    val conf = spark.sessionState.newHadoopConf()
+    val provider = HadoopShimsFactory.get.getHadoopKeyProvider(conf, new Random)
+    assume(!provider.getKeyNames.isEmpty,
+      s"$provider doesn't has the test keys. ORC shim is created with old Hadoop libraries")
+
     val df = originalData.toDF("ssn", "email", "name")
 
-    withTempPath { dir =>
+    withTempDir { dir =>
       val path = dir.getAbsolutePath
       withTable("encrypted") {
         sql(
@@ -94,6 +106,56 @@ class OrcEncryptionSuite extends OrcTest with SharedSparkSession {
             |)
             |""".stripMargin)
         checkAnswer(sql("SELECT * FROM normal"), rowDataWithoutKey)
+      }
+    }
+  }
+
+  test("SPARK-35325: Write and read encrypted nested columns") {
+    val conf = spark.sessionState.newHadoopConf()
+    val provider = HadoopShimsFactory.get.getHadoopKeyProvider(conf, new Random)
+    assume(!provider.getKeyNames.isEmpty,
+      s"$provider doesn't has the test keys. ORC shim is created with old Hadoop libraries")
+
+    val originalNestedData = Row(1, Row("123456789", "dongjoon@apache.org", "Dongjoon"))
+    val rowNestedDataWithoutKey =
+      Row(1, Row(null, "841626795E7D351555B835A002E3BF10669DE9B81C95A3D59E10865AC37EA7C3",
+        "Dongjoon"))
+
+    withTempDir { dir =>
+      val path = dir.getAbsolutePath
+      withTable("encrypted") {
+        sql(
+          s"""
+            |CREATE TABLE encrypted (
+            |  id INT,
+            |  contact struct<ssn:STRING, email:STRING, name:STRING>
+            |)
+            |USING ORC
+            |LOCATION "$path"
+            |OPTIONS (
+            |  hadoop.security.key.provider.path "test:///",
+            |  orc.key.provider "hadoop",
+            |  orc.encrypt "pii:contact.ssn,contact.email",
+            |  orc.mask "nullify:contact.ssn;sha256:contact.email"
+            |)
+            |""".stripMargin)
+        sql("INSERT INTO encrypted VALUES(1, ('123456789', 'dongjoon@apache.org', 'Dongjoon'))")
+        checkAnswer(sql("SELECT * FROM encrypted"), originalNestedData)
+      }
+      withTable("normal") {
+        sql(
+          s"""
+            |CREATE TABLE normal (
+            |  id INT,
+            |  contact struct<ssn:STRING, email:STRING, name:STRING>
+            |)
+            |USING ORC
+            |LOCATION "$path"
+            |OPTIONS (
+            |  orc.key.provider "memory"
+            |)
+            |""".stripMargin)
+        checkAnswer(sql("SELECT * FROM normal"), rowNestedDataWithoutKey)
       }
     }
   }

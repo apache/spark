@@ -32,6 +32,7 @@ import org.apache.hadoop.io.{BytesWritable, LongWritable, Text}
 import org.apache.hadoop.mapred.TextInputFormat
 import org.apache.hadoop.mapreduce.lib.input.{TextInputFormat => NewTextInputFormat}
 import org.json4s.{DefaultFormats, Extraction}
+import org.junit.Assert.{assertEquals, assertFalse}
 import org.scalatest.concurrent.Eventually
 import org.scalatest.matchers.must.Matchers._
 
@@ -1035,13 +1036,10 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     }
   }
 
-  test("SPARK-33084: Add jar support Ivy URI -- default transitive = false") {
+  test("SPARK-33084: Add jar support Ivy URI -- default transitive = true") {
     sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local-cluster[3, 1, 1024]"))
     sc.addJar("ivy://org.apache.hive:hive-storage-api:2.7.0")
     assert(sc.listJars().exists(_.contains("org.apache.hive_hive-storage-api-2.7.0.jar")))
-    assert(!sc.listJars().exists(_.contains("commons-lang_commons-lang-2.6.jar")))
-
-    sc.addJar("ivy://org.apache.hive:hive-storage-api:2.7.0?transitive=true")
     assert(sc.listJars().exists(_.contains("commons-lang_commons-lang-2.6.jar")))
   }
 
@@ -1081,6 +1079,22 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
         .head.getRenderedMessage
       dependencyJars.foreach(jar => assert(existMsg.contains(jar)))
     }
+  }
+
+  test("SPARK-34506: Add jar support Ivy URI -- transitive=false will not download " +
+    "dependency jars") {
+    sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local-cluster[3, 1, 1024]"))
+    sc.addJar("ivy://org.apache.hive:hive-storage-api:2.7.0?transitive=false")
+    assert(sc.listJars().exists(_.contains("org.apache.hive_hive-storage-api-2.7.0.jar")))
+    assert(!sc.listJars().exists(_.contains("commons-lang_commons-lang-2.6.jar")))
+  }
+
+  test("SPARK-34506: Add jar support Ivy URI -- test exclude param when transitive unspecified") {
+    sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local-cluster[3, 1, 1024]"))
+    sc.addJar("ivy://org.apache.hive:hive-storage-api:2.7.0?exclude=commons-lang:commons-lang")
+    assert(sc.listJars().exists(_.contains("org.apache.hive_hive-storage-api-2.7.0.jar")))
+    assert(sc.listJars().exists(_.contains("org.slf4j_slf4j-api-1.7.10.jar")))
+    assert(!sc.listJars().exists(_.contains("commons-lang_commons-lang-2.6.jar")))
   }
 
   test("SPARK-33084: Add jar support Ivy URI -- test exclude param when transitive=true") {
@@ -1131,24 +1145,24 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
 
   test("SPARK-33084: Add jar support Ivy URI -- test param key case sensitive") {
     sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local-cluster[3, 1, 1024]"))
-    sc.addJar("ivy://org.apache.hive:hive-storage-api:2.7.0?TRANSITIVE=true")
+    sc.addJar("ivy://org.apache.hive:hive-storage-api:2.7.0?transitive=false")
     assert(sc.listJars().exists(_.contains("org.apache.hive_hive-storage-api-2.7.0.jar")))
     assert(!sc.listJars().exists(_.contains("commons-lang_commons-lang-2.6.jar")))
 
-    sc.addJar("ivy://org.apache.hive:hive-storage-api:2.7.0?transitive=true")
+    sc.addJar("ivy://org.apache.hive:hive-storage-api:2.7.0?TRANSITIVE=false")
     assert(sc.listJars().exists(_.contains("org.apache.hive_hive-storage-api-2.7.0.jar")))
     assert(sc.listJars().exists(_.contains("commons-lang_commons-lang-2.6.jar")))
   }
 
-  test("SPARK-33084: Add jar support Ivy URI -- test transitive value case sensitive") {
+  test("SPARK-33084: Add jar support Ivy URI -- test transitive value case insensitive") {
     sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local-cluster[3, 1, 1024]"))
-    sc.addJar("ivy://org.apache.hive:hive-storage-api:2.7.0?transitive=TRUE")
+    sc.addJar("ivy://org.apache.hive:hive-storage-api:2.7.0?transitive=FALSE")
     assert(sc.listJars().exists(_.contains("org.apache.hive_hive-storage-api-2.7.0.jar")))
     assert(!sc.listJars().exists(_.contains("commons-lang_commons-lang-2.6.jar")))
 
-    sc.addJar("ivy://org.apache.hive:hive-storage-api:2.7.0?transitive=true")
+    sc.addJar("ivy://org.apache.hive:hive-storage-api:2.7.0?transitive=false")
     assert(sc.listJars().exists(_.contains("org.apache.hive_hive-storage-api-2.7.0.jar")))
-    assert(sc.listJars().exists(_.contains("commons-lang_commons-lang-2.6.jar")))
+    assert(!sc.listJars().exists(_.contains("commons-lang_commons-lang-2.6.jar")))
   }
 
   test("SPARK-34346: hadoop configuration priority for spark/hive/hadoop configs") {
@@ -1183,6 +1197,93 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       "spark.hadoop configs have higher priority than hive/hadoop ones")
     assert(sc.hadoopConfiguration.get(bufferKey).toInt === 65536,
       "spark configs have higher priority than spark.hadoop configs")
+  }
+
+  test("SPARK-34225: addFile/addJar shouldn't further encode URI if a URI form string is passed") {
+    withTempDir { dir =>
+      val jar1 = File.createTempFile("testprefix", "test jar.jar", dir)
+      val jarUrl1 = jar1.toURI.toString
+      val file1 = File.createTempFile("testprefix", "test file.txt", dir)
+      val fileUrl1 = file1.toURI.toString
+      val jar2 = File.createTempFile("testprefix", "test %20jar.jar", dir)
+      val file2 = File.createTempFile("testprefix", "test %20file.txt", dir)
+
+      try {
+        sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
+        sc.addJar(jarUrl1)
+        sc.addFile(fileUrl1)
+        sc.addJar(jar2.toString)
+        sc.addFile(file2.toString)
+        sc.parallelize(Array(1), 1).map { x =>
+          val gottenJar1 = new File(SparkFiles.get(jar1.getName))
+          if (!gottenJar1.exists()) {
+            throw new SparkException("file doesn't exist : " + jar1)
+          }
+          val gottenFile1 = new File(SparkFiles.get(file1.getName))
+          if (!gottenFile1.exists()) {
+            throw new SparkException("file doesn't exist : " + file1)
+          }
+          val gottenJar2 = new File(SparkFiles.get(jar2.getName))
+          if (!gottenJar2.exists()) {
+            throw new SparkException("file doesn't exist : " + jar2)
+          }
+          val gottenFile2 = new File(SparkFiles.get(file2.getName))
+          if (!gottenFile2.exists()) {
+            throw new SparkException("file doesn't exist : " + file2)
+          }
+          x
+        }.collect()
+      } finally {
+        sc.stop()
+      }
+    }
+  }
+
+  test("SPARK-35383: Fill missing S3A magic committer configs if needed") {
+    val c1 = new SparkConf().setAppName("s3a-test").setMaster("local")
+    sc = new SparkContext(c1)
+    assertFalse(sc.getConf.contains("spark.hadoop.fs.s3a.committer.name"))
+
+    resetSparkContext()
+    val c2 = c1.clone.set("spark.hadoop.fs.s3a.bucket.mybucket.committer.magic.enabled", "false")
+    sc = new SparkContext(c2)
+    assertFalse(sc.getConf.contains("spark.hadoop.fs.s3a.committer.name"))
+
+    resetSparkContext()
+    val c3 = c1.clone.set("spark.hadoop.fs.s3a.bucket.mybucket.committer.magic.enabled", "true")
+    sc = new SparkContext(c3)
+    Seq(
+      "spark.hadoop.fs.s3a.committer.magic.enabled" -> "true",
+      "spark.hadoop.fs.s3a.committer.name" -> "magic",
+      "spark.hadoop.mapreduce.outputcommitter.factory.scheme.s3a" ->
+        "org.apache.hadoop.fs.s3a.commit.S3ACommitterFactory",
+      "spark.sql.parquet.output.committer.class" ->
+        "org.apache.spark.internal.io.cloud.BindingParquetOutputCommitter",
+      "spark.sql.sources.commitProtocolClass" ->
+        "org.apache.spark.internal.io.cloud.PathOutputCommitProtocol"
+    ).foreach { case (k, v) =>
+      assertEquals(v, sc.getConf.get(k))
+    }
+
+    // Respect a user configuration
+    resetSparkContext()
+    val c4 = c1.clone
+      .set("spark.hadoop.fs.s3a.committer.magic.enabled", "false")
+      .set("spark.hadoop.fs.s3a.bucket.mybucket.committer.magic.enabled", "true")
+    sc = new SparkContext(c4)
+    Seq(
+      "spark.hadoop.fs.s3a.committer.magic.enabled" -> "false",
+      "spark.hadoop.fs.s3a.committer.name" -> null,
+      "spark.hadoop.mapreduce.outputcommitter.factory.scheme.s3a" -> null,
+      "spark.sql.parquet.output.committer.class" -> null,
+      "spark.sql.sources.commitProtocolClass" -> null
+    ).foreach { case (k, v) =>
+      if (v == null) {
+        assertFalse(sc.getConf.contains(k))
+      } else {
+        assertEquals(v, sc.getConf.get(k))
+      }
+    }
   }
 }
 

@@ -45,10 +45,10 @@ class K8sSubmitOpSuite extends SparkFunSuite with BeforeAndAfter {
   private var podOperations: PODS = _
 
   @Mock
-  private var driverPodOperations1: PodResource[Pod, DoneablePod] = _
+  private var driverPodOperations1: PodResource[Pod] = _
 
   @Mock
-  private var driverPodOperations2: PodResource[Pod, DoneablePod] = _
+  private var driverPodOperations2: PodResource[Pod] = _
 
   @Mock
   private var kubernetesClient: KubernetesClient = _

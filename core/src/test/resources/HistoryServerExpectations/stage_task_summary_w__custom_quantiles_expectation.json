@@ -1,5 +1,6 @@
 {
   "quantiles" : [ 0.01, 0.5, 0.99 ],
+  "duration" : [ 21.0, 40.0, 435.0 ],
   "executorDeserializeTime" : [ 1.0, 3.0, 36.0 ],
   "executorDeserializeCpuTime" : [ 0.0, 0.0, 0.0 ],
   "executorRunTime" : [ 16.0, 28.0, 351.0 ],

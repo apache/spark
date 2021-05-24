@@ -20,14 +20,14 @@ package org.apache.spark.sql.catalyst.parser
 import java.util.Locale
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, GlobalTempView, LocalTempView, PersistedView, UnresolvedAttribute, UnresolvedFunc, UnresolvedNamespace, UnresolvedRelation, UnresolvedStar, UnresolvedTable, UnresolvedTableOrView, UnresolvedView}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, GlobalTempView, LocalTempView, PersistedView, UnresolvedAttribute, UnresolvedFunc, UnresolvedInlineTable, UnresolvedNamespace, UnresolvedRelation, UnresolvedStar, UnresolvedTable, UnresolvedTableOrView, UnresolvedView}
 import org.apache.spark.sql.catalyst.catalog.{ArchiveResource, BucketSpec, FileResource, FunctionResource, JarResource}
-import org.apache.spark.sql.catalyst.expressions.{EqualTo, Literal}
+import org.apache.spark.sql.catalyst.expressions.{EqualTo, Hex, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition.{after, first}
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
 import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType, TimestampType}
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 class DDLParserSuite extends AnalysisTest {
   import CatalystSqlParser._
@@ -1519,9 +1519,8 @@ class DDLParserSuite extends AnalysisTest {
       SubqueryAlias("source", UnresolvedRelation(Seq("testcat2", "ns1", "ns2", "tbl"))),
       EqualTo(UnresolvedAttribute("target.col1"), UnresolvedAttribute("source.col1")),
       Seq(DeleteAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("delete")))),
-        UpdateAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("update"))), Seq())),
-      Seq(InsertAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("insert"))),
-        Seq()))))
+        UpdateStarAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("update"))))),
+      Seq(InsertStarAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("insert")))))))
   }
 
   test("merge into table: columns aliases are not allowed") {
@@ -1870,6 +1869,15 @@ class DDLParserSuite extends AnalysisTest {
     intercept("analyze table a.b.c compute statistics xxxx",
       "Expected `NOSCAN` instead of `xxxx`")
     intercept("analyze table a.b.c partition (a) compute statistics xxxx",
+      "Expected `NOSCAN` instead of `xxxx`")
+  }
+
+  test("SPARK-33687: analyze tables statistics") {
+    comparePlans(parsePlan("ANALYZE TABLES IN a.b.c COMPUTE STATISTICS"),
+      AnalyzeTables(UnresolvedNamespace(Seq("a", "b", "c")), noScan = false))
+    comparePlans(parsePlan("ANALYZE TABLES FROM a COMPUTE STATISTICS NOSCAN"),
+      AnalyzeTables(UnresolvedNamespace(Seq("a")), noScan = true))
+    intercept("ANALYZE TABLES IN a.b.c COMPUTE STATISTICS xxxx",
       "Expected `NOSCAN` instead of `xxxx`")
   }
 
@@ -2487,5 +2495,29 @@ class DDLParserSuite extends AnalysisTest {
       None)
 
     testCreateOrReplaceDdl(sql, expectedTableSpec, expectedIfNotExists = false)
+  }
+
+  test("SPARK-33474: Support typed literals as partition spec values") {
+    def insertPartitionPlan(part: String): InsertIntoStatement = {
+      InsertIntoStatement(
+        UnresolvedRelation(Seq("t")),
+        Map("part" -> Some(part)),
+        Seq.empty[String],
+        UnresolvedInlineTable(Seq("col1"), Seq(Seq(Literal("a")))),
+        overwrite = false, ifPartitionNotExists = false)
+    }
+    val binaryStr = "Spark SQL"
+    val binaryHexStr = Hex.hex(UTF8String.fromString(binaryStr).getBytes).toString
+    val dateTypeSql = "INSERT INTO t PARTITION(part = date'2019-01-02') VALUES('a')"
+    val interval = new CalendarInterval(7, 1, 1000).toString
+    val intervalTypeSql = s"INSERT INTO t PARTITION(part = interval'$interval') VALUES('a')"
+    val timestamp = "2019-01-02 11:11:11"
+    val timestampTypeSql = s"INSERT INTO t PARTITION(part = timestamp'$timestamp') VALUES('a')"
+    val binaryTypeSql = s"INSERT INTO t PARTITION(part = X'$binaryHexStr') VALUES('a')"
+
+    comparePlans(parsePlan(dateTypeSql), insertPartitionPlan("2019-01-02"))
+    comparePlans(parsePlan(intervalTypeSql), insertPartitionPlan(interval))
+    comparePlans(parsePlan(timestampTypeSql), insertPartitionPlan(timestamp))
+    comparePlans(parsePlan(binaryTypeSql), insertPartitionPlan(binaryStr))
   }
 }

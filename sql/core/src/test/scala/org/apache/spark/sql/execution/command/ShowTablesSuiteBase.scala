@@ -106,6 +106,18 @@ trait ShowTablesSuiteBase extends QueryTest with DDLCommandTestUtils {
     }
   }
 
+  test("SPARK-34560: unique attribute references") {
+    withNamespaceAndTable("ns1", "tbl1") { t1 =>
+      sql(s"CREATE TABLE $t1 (col INT) $defaultUsing")
+      val show1 = sql(s"SHOW TABLES IN $catalog.ns1")
+      withNamespaceAndTable("ns2", "tbl2") { t2 =>
+        sql(s"CREATE TABLE $t2 (col INT) $defaultUsing")
+        val show2 = sql(s"SHOW TABLES IN $catalog.ns2")
+        assert(!show1.join(show2).where(show1("tableName") =!= show2("tableName")).isEmpty)
+      }
+    }
+  }
+
   test("change current catalog and namespace with USE statements") {
     withNamespaceAndTable("ns", "table") { t =>
       sql(s"CREATE TABLE $t (name STRING, id INT) $defaultUsing")

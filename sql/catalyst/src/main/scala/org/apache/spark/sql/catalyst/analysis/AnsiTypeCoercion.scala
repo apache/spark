@@ -74,8 +74,9 @@ import org.apache.spark.sql.types._
  */
 object AnsiTypeCoercion extends TypeCoercionBase {
   override def typeCoercionRules: List[Rule[LogicalPlan]] =
-    InConversion ::
-      WidenSetOperationTypes ::
+    WidenSetOperationTypes ::
+    CombinedTypeCoercionRule(
+      InConversion ::
       PromoteStringLiterals ::
       DecimalPrecision ::
       FunctionArgumentConversion ::
@@ -90,39 +91,35 @@ object AnsiTypeCoercion extends TypeCoercionBase {
       ImplicitTypeCasts ::
       DateTimeOperations ::
       WindowFrameCoercion ::
-      StringLiteralCoercion ::
-      Nil
+      StringLiteralCoercion :: Nil) :: Nil
 
-  override def findTightestCommonType(t1: DataType, t2: DataType): Option[DataType] = {
-    (t1, t2) match {
-      case (t1, t2) if t1 == t2 => Some(t1)
-      case (NullType, t1) => Some(t1)
-      case (t1, NullType) => Some(t1)
+  val findTightestCommonType: (DataType, DataType) => Option[DataType] = {
+    case (t1, t2) if t1 == t2 => Some(t1)
+    case (NullType, t1) => Some(t1)
+    case (t1, NullType) => Some(t1)
 
-      case (t1: IntegralType, t2: DecimalType) if t2.isWiderThan(t1) =>
-        Some(t2)
-      case (t1: DecimalType, t2: IntegralType) if t1.isWiderThan(t2) =>
-        Some(t1)
+    case (t1: IntegralType, t2: DecimalType) if t2.isWiderThan(t1) =>
+      Some(t2)
+    case (t1: DecimalType, t2: IntegralType) if t1.isWiderThan(t2) =>
+      Some(t1)
 
-      case (t1: NumericType, t2: NumericType)
-          if !t1.isInstanceOf[DecimalType] && !t2.isInstanceOf[DecimalType] =>
-        val index = numericPrecedence.lastIndexWhere(t => t == t1 || t == t2)
-        val widerType = numericPrecedence(index)
-        if (widerType == FloatType) {
-          // If the input type is an Integral type and a Float type, simply return Double type as
-          // the tightest common type to avoid potential precision loss on converting the Integral
-          // type as Float type.
-          Some(DoubleType)
-        } else {
-          Some(widerType)
-        }
+    case (t1: NumericType, t2: NumericType)
+        if !t1.isInstanceOf[DecimalType] && !t2.isInstanceOf[DecimalType] =>
+      val index = numericPrecedence.lastIndexWhere(t => t == t1 || t == t2)
+      val widerType = numericPrecedence(index)
+      if (widerType == FloatType) {
+        // If the input type is an Integral type and a Float type, simply return Double type as
+        // the tightest common type to avoid potential precision loss on converting the Integral
+        // type as Float type.
+        Some(DoubleType)
+      } else {
+        Some(widerType)
+      }
 
-      case (_: TimestampType, _: DateType) | (_: DateType, _: TimestampType) =>
-        Some(TimestampType)
+    case (_: TimestampType, _: DateType) | (_: DateType, _: TimestampType) =>
+      Some(TimestampType)
 
-      case (t1, t2) => findTypeForComplex(t1, t2, findTightestCommonType)
-    }
-
+    case (t1, t2) => findTypeForComplex(t1, t2, findTightestCommonType)
   }
 
   override def findWiderTypeForTwo(t1: DataType, t2: DataType): Option[DataType] = {
@@ -158,7 +155,10 @@ object AnsiTypeCoercion extends TypeCoercionBase {
       case _ if expectedType.acceptsType(inType) => Some(inType)
 
       // Cast null type (usually from null literals) into target types
-      case (NullType, target) => Some(target.defaultConcreteType)
+      // By default, the result type is `target.defaultConcreteType`. When the target type is
+      // `TypeCollection`, there is another branch to find the "closet convertible data type" below.
+      case (NullType, target) if !target.isInstanceOf[TypeCollection] =>
+        Some(target.defaultConcreteType)
 
       // This type coercion system will allow implicit converting String type literals as other
       // primitive types, in case of breaking too many existing Spark SQL queries.
@@ -191,9 +191,35 @@ object AnsiTypeCoercion extends TypeCoercionBase {
       case (DateType, TimestampType) => Some(TimestampType)
 
       // When we reach here, input type is not acceptable for any types in this type collection,
-      // try to find the first one we can implicitly cast.
+      // first try to find the all the expected types we can implicitly cast:
+      //   1. if there is no convertible data types, return None;
+      //   2. if there is only one convertible data type, cast input as it;
+      //   3. otherwise if there are multiple convertible data types, find the closet convertible
+      //      data type among them. If there is no such a data type, return None.
       case (_, TypeCollection(types)) =>
-        types.flatMap(implicitCast(inType, _, isInputFoldable)).headOption
+        // Since Spark contains special objects like `NumericType` and `DecimalType`, which accepts
+        // multiple types and they are `AbstractDataType` instead of `DataType`, here we use the
+        // conversion result their representation.
+        val convertibleTypes = types.flatMap(implicitCast(inType, _, isInputFoldable))
+        if (convertibleTypes.isEmpty) {
+          None
+        } else {
+          // find the closet convertible data type, which can be implicit cast to all other
+          // convertible types.
+          val closestConvertibleType = convertibleTypes.find { dt =>
+            convertibleTypes.forall { target =>
+              implicitCast(dt, target, isInputFoldable = false).isDefined
+            }
+          }
+          // If the closet convertible type is Float type and the convertible types contains Double
+          // type, simply return Double type as the closet convertible type to avoid potential
+          // precision loss on converting the Integral type as Float type.
+          if (closestConvertibleType.contains(FloatType) && convertibleTypes.contains(DoubleType)) {
+            Some(DoubleType)
+          } else {
+            closestConvertibleType
+          }
+        }
 
       // Implicit cast between array types.
       //
@@ -231,15 +257,14 @@ object AnsiTypeCoercion extends TypeCoercionBase {
    */
   object PromoteStringLiterals extends TypeCoercionRule {
     private def castExpr(expr: Expression, targetType: DataType): Expression = {
-      (expr.dataType, targetType) match {
-        case (NullType, dt) => Literal.create(null, targetType)
-        case (l, dt) if (l != dt) => Cast(expr, targetType)
+      expr.dataType match {
+        case NullType => Literal.create(null, targetType)
+        case l if l != targetType => Cast(expr, targetType)
         case _ => expr
       }
     }
 
-    override protected def coerceTypes(
-        plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
+    override def transform: PartialFunction[Expression, Expression] = {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
 
@@ -249,7 +274,7 @@ object AnsiTypeCoercion extends TypeCoercionBase {
       case b @ BinaryOperator(left @ AtomicType(), right @ StringType()) if right.foldable =>
         b.makeCopy(Array(left, castExpr(right, left.dataType)))
 
-      case Abs(e @ StringType()) if e.foldable => Abs(Cast(e, DoubleType))
+      case Abs(e @ StringType(), failOnError) if e.foldable => Abs(Cast(e, DoubleType), failOnError)
       case m @ UnaryMinus(e @ StringType(), _) if e.foldable =>
         m.withNewChildren(Seq(Cast(e, DoubleType)))
       case UnaryPositive(e @ StringType()) if e.foldable => UnaryPositive(Cast(e, DoubleType))

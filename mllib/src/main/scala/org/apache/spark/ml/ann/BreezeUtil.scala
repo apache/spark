@@ -18,7 +18,8 @@
 package org.apache.spark.ml.ann
 
 import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV}
-import com.github.fommil.netlib.BLAS.{getInstance => NativeBLAS}
+
+import org.apache.spark.ml.linalg.BLAS
 
 /**
  * In-place DGEMM and DGEMV for Breeze
@@ -41,7 +42,7 @@ private[ann] object BreezeUtil {
     require(A.cols == B.rows, "A & B Dimension mismatch!")
     require(A.rows == C.rows, "A & C Dimension mismatch!")
     require(B.cols == C.cols, "A & C Dimension mismatch!")
-    NativeBLAS.dgemm(transposeString(A), transposeString(B), C.rows, C.cols, A.cols,
+    BLAS.nativeBLAS.dgemm(transposeString(A), transposeString(B), C.rows, C.cols, A.cols,
       alpha, A.data, A.offset, A.majorStride, B.data, B.offset, B.majorStride,
       beta, C.data, C.offset, C.rows)
   }
@@ -57,7 +58,7 @@ private[ann] object BreezeUtil {
   def dgemv(alpha: Double, A: BDM[Double], x: BDV[Double], beta: Double, y: BDV[Double]): Unit = {
     require(A.cols == x.length, "A & x Dimension mismatch!")
     require(A.rows == y.length, "A & y Dimension mismatch!")
-    NativeBLAS.dgemv(transposeString(A), A.rows, A.cols,
+    BLAS.nativeBLAS.dgemv(transposeString(A), A.rows, A.cols,
       alpha, A.data, A.offset, A.majorStride, x.data, x.offset, x.stride,
       beta, y.data, y.offset, y.stride)
   }

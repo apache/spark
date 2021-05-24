@@ -24,10 +24,9 @@ import scala.collection.mutable
 import scala.collection.mutable.ArrayBuilder
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NoSuchNamespaceException, NoSuchTableException}
 import org.apache.spark.sql.connector.catalog.{Identifier, NamespaceChange, SupportsNamespaces, Table, TableCatalog, TableChange}
 import org.apache.spark.sql.connector.expressions.Transform
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcOptionsInWrite, JDBCRDD, JdbcUtils}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects}
@@ -35,8 +34,6 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class JDBCTableCatalog extends TableCatalog with SupportsNamespaces with Logging {
-  import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.NamespaceHelper
-
   private var catalogName: String = null
   private var options: JDBCOptions = _
   private var dialect: JdbcDialect = _
@@ -109,7 +106,7 @@ class JDBCTableCatalog extends TableCatalog with SupportsNamespaces with Logging
       val schema = JDBCRDD.resolveTable(optionsWithTableName)
       JDBCTable(ident, schema, optionsWithTableName)
     } catch {
-      case _: SQLException => throw new NoSuchTableException(ident)
+      case _: SQLException => throw QueryCompilationErrors.noSuchTableError(ident)
     }
   }
 
@@ -120,7 +117,7 @@ class JDBCTableCatalog extends TableCatalog with SupportsNamespaces with Logging
       properties: java.util.Map[String, String]): Table = {
     checkNamespace(ident.namespace())
     if (partitions.nonEmpty) {
-      throw new UnsupportedOperationException("Cannot create JDBC table with partition")
+      throw QueryExecutionErrors.cannotCreateJDBCTableWithPartitionsError()
     }
 
     var tableOptions = options.parameters + (JDBCOptions.JDBC_TABLE_NAME -> getTableName(ident))
@@ -131,12 +128,10 @@ class JDBCTableCatalog extends TableCatalog with SupportsNamespaces with Logging
         case (k, v) => k match {
           case TableCatalog.PROP_COMMENT => tableComment = v
           case TableCatalog.PROP_PROVIDER =>
-            throw new AnalysisException("CREATE TABLE ... USING ... is not supported in" +
-              " JDBC catalog.")
+            throw QueryCompilationErrors.cannotCreateJDBCTableUsingProviderError()
           case TableCatalog.PROP_OWNER => // owner is ignored. It is default to current user name.
           case TableCatalog.PROP_LOCATION =>
-            throw new AnalysisException("CREATE TABLE ... LOCATION ... is not supported in" +
-              " JDBC catalog.")
+            throw QueryCompilationErrors.cannotCreateJDBCTableUsingLocationError()
           case _ => tableProperties = tableProperties + " " + s"$k $v"
         }
       }
@@ -205,18 +200,20 @@ class JDBCTableCatalog extends TableCatalog with SupportsNamespaces with Logging
       case Array(_) if namespaceExists(namespace) =>
         Array()
       case _ =>
-        throw new NoSuchNamespaceException(namespace)
+        throw QueryCompilationErrors.noSuchNamespaceError(namespace)
     }
   }
 
   override def loadNamespaceMetadata(namespace: Array[String]): util.Map[String, String] = {
     namespace match {
       case Array(db) =>
-        if (!namespaceExists(namespace)) throw new NoSuchNamespaceException(db)
+        if (!namespaceExists(namespace)) {
+          throw QueryCompilationErrors.noSuchNamespaceError(Array(db))
+        }
         mutable.HashMap[String, String]().asJava
 
       case _ =>
-        throw new NoSuchNamespaceException(namespace)
+        throw QueryCompilationErrors.noSuchNamespaceError(namespace)
     }
   }
 
@@ -231,11 +228,9 @@ class JDBCTableCatalog extends TableCatalog with SupportsNamespaces with Logging
             case SupportsNamespaces.PROP_COMMENT => comment = v
             case SupportsNamespaces.PROP_OWNER => // ignore
             case SupportsNamespaces.PROP_LOCATION =>
-              throw new AnalysisException("CREATE NAMESPACE ... LOCATION ... is not supported in" +
-                " JDBC catalog.")
+              throw QueryCompilationErrors.cannotCreateJDBCNamespaceUsingProviderError()
             case _ =>
-              throw new AnalysisException(s"CREATE NAMESPACE with property $k is not supported in" +
-                " JDBC catalog.")
+              throw QueryCompilationErrors.cannotCreateJDBCNamespaceWithPropertyError(k)
           }
         }
       }
@@ -246,10 +241,10 @@ class JDBCTableCatalog extends TableCatalog with SupportsNamespaces with Logging
       }
 
     case Array(_) =>
-      throw new NamespaceAlreadyExistsException(namespace)
+      throw QueryCompilationErrors.namespaceAlreadyExistsError(namespace)
 
     case _ =>
-      throw new IllegalArgumentException(s"Invalid namespace name: ${namespace.quoted}")
+      throw QueryExecutionErrors.invalidNamespaceNameError(namespace)
   }
 
   override def alterNamespace(namespace: Array[String], changes: NamespaceChange*): Unit = {
@@ -262,8 +257,7 @@ class JDBCTableCatalog extends TableCatalog with SupportsNamespaces with Logging
                 JdbcUtils.createNamespaceComment(conn, options, db, set.value)
               }
             } else {
-              throw new AnalysisException(s"SET NAMESPACE with property ${set.property} " +
-                "is not supported in JDBC catalog.")
+              throw QueryCompilationErrors.cannotSetJDBCNamespaceWithPropertyError(set.property)
             }
 
           case unset: NamespaceChange.RemoveProperty =>
@@ -272,23 +266,22 @@ class JDBCTableCatalog extends TableCatalog with SupportsNamespaces with Logging
                 JdbcUtils.removeNamespaceComment(conn, options, db)
               }
             } else {
-              throw new AnalysisException(s"Remove NAMESPACE property ${unset.property} " +
-                "is not supported in JDBC catalog.")
+              throw QueryCompilationErrors.cannotUnsetJDBCNamespaceWithPropertyError(unset.property)
             }
 
           case _ =>
-            throw new AnalysisException(s"Unsupported NamespaceChange $changes in JDBC catalog.")
+            throw QueryCompilationErrors.unsupportedJDBCNamespaceChangeInCatalogError(changes)
         }
 
       case _ =>
-        throw new NoSuchNamespaceException(namespace)
+        throw QueryCompilationErrors.noSuchNamespaceError(namespace)
     }
   }
 
   override def dropNamespace(namespace: Array[String]): Boolean = namespace match {
     case Array(db) if namespaceExists(namespace) =>
       if (listTables(Array(db)).nonEmpty) {
-        throw new IllegalStateException(s"Namespace ${namespace.quoted} is not empty")
+        throw QueryExecutionErrors.namespaceNotEmptyError(namespace)
       }
       withConnection { conn =>
         classifyException(s"Failed drop name space: $db") {
@@ -298,13 +291,13 @@ class JDBCTableCatalog extends TableCatalog with SupportsNamespaces with Logging
       }
 
     case _ =>
-      throw new NoSuchNamespaceException(namespace)
+      throw QueryCompilationErrors.noSuchNamespaceError(namespace)
   }
 
   private def checkNamespace(namespace: Array[String]): Unit = {
     // In JDBC there is no nested database/schema
     if (namespace.length > 1) {
-      throw new NoSuchNamespaceException(namespace)
+      throw QueryCompilationErrors.noSuchNamespaceError(namespace)
     }
   }
 

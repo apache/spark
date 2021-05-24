@@ -49,7 +49,7 @@ ALTER TABLE table_identifier partition_spec RENAME TO partition_spec
 
 * **partition_spec**
 
-    Partition to be renamed.
+    Partition to be renamed. Note that one can use a typed literal (e.g., date'2019-01-02') in the partition spec.
 
     **Syntax:** `PARTITION ( partition_col_name  = partition_col_val [ , ... ] )`
 
@@ -126,7 +126,7 @@ ALTER TABLE table_identifier ADD [IF NOT EXISTS]
 
 * **partition_spec**
 
-    Partition to be added.
+    Partition to be added. Note that one can use a typed literal (e.g., date'2019-01-02') in the partition spec.
 
     **Syntax:** `PARTITION ( partition_col_name  = partition_col_val [ , ... ] )`
 
@@ -152,7 +152,7 @@ ALTER TABLE table_identifier DROP [ IF EXISTS ] partition_spec [PURGE]
 
 * **partition_spec**
 
-    Partition to be dropped.
+    Partition to be dropped. Note that one can use a typed literal (e.g., date'2019-01-02') in the partition spec.
 
     **Syntax:** `PARTITION ( partition_col_name  = partition_col_val [ , ... ] )`
      
@@ -217,7 +217,7 @@ ALTER TABLE table_identifier [ partition_spec ] SET LOCATION 'new_location'
 
 * **partition_spec**
 
-    Specifies the partition on which the property has to be set.
+    Specifies the partition on which the property has to be set. Note that one can use a typed literal (e.g., date'2019-01-02') in the partition spec.
 
     **Syntax:** `PARTITION ( partition_col_name  = partition_col_val [ , ... ] )`
 

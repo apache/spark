@@ -130,7 +130,7 @@ Input [7]: [inv_warehouse_sk#2, inv_quantity_on_hand#3, i_brand#10, i_class#11, 
 
 (23) Expand [codegen id : 4]
 Input [5]: [inv_quantity_on_hand#3, i_product_name#13, i_brand#10, i_class#11, i_category#12]
-Arguments: [List(inv_quantity_on_hand#3, i_product_name#13, i_brand#10, i_class#11, i_category#12, 0), List(inv_quantity_on_hand#3, i_product_name#13, i_brand#10, i_class#11, null, 1), List(inv_quantity_on_hand#3, i_product_name#13, i_brand#10, null, null, 3), List(inv_quantity_on_hand#3, i_product_name#13, null, null, null, 7), List(inv_quantity_on_hand#3, null, null, null, null, 15)], [inv_quantity_on_hand#3, i_product_name#17, i_brand#18, i_class#19, i_category#20, spark_grouping_id#21]
+Arguments: [[inv_quantity_on_hand#3, i_product_name#13, i_brand#10, i_class#11, i_category#12, 0], [inv_quantity_on_hand#3, i_product_name#13, i_brand#10, i_class#11, null, 1], [inv_quantity_on_hand#3, i_product_name#13, i_brand#10, null, null, 3], [inv_quantity_on_hand#3, i_product_name#13, null, null, null, 7], [inv_quantity_on_hand#3, null, null, null, null, 15]], [inv_quantity_on_hand#3, i_product_name#17, i_brand#18, i_class#19, i_category#20, spark_grouping_id#21]
 
 (24) HashAggregate [codegen id : 4]
 Input [6]: [inv_quantity_on_hand#3, i_product_name#17, i_brand#18, i_class#19, i_category#20, spark_grouping_id#21]

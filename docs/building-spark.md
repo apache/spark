@@ -51,7 +51,7 @@ You can fix these problems by setting the `MAVEN_OPTS` variable as discussed bef
 
 ### build/mvn
 
-Spark now comes packaged with a self-contained Maven installation to ease building and deployment of Spark from source located under the `build/` directory. This script will automatically download and setup all necessary build requirements ([Maven](https://maven.apache.org/), [Scala](https://www.scala-lang.org/), and [Zinc](https://github.com/typesafehub/zinc)) locally within the `build/` directory itself. It honors any `mvn` binary if present already, however, will pull down its own copy of Scala and Zinc regardless to ensure proper version requirements are met. `build/mvn` execution acts as a pass through to the `mvn` call allowing easy transition from previous build methods. As an example, one can build a version of Spark as follows:
+Spark now comes packaged with a self-contained Maven installation to ease building and deployment of Spark from source located under the `build/` directory. This script will automatically download and setup all necessary build requirements ([Maven](https://maven.apache.org/), [Scala](https://www.scala-lang.org/)) locally within the `build/` directory itself. It honors any `mvn` binary if present already, however, will pull down its own copy of Scala regardless to ensure proper version requirements are met. `build/mvn` execution acts as a pass through to the `mvn` call allowing easy transition from previous build methods. As an example, one can build a version of Spark as follows:
 
     ./build/mvn -DskipTests clean package
 
@@ -163,9 +163,8 @@ For the meanings of these two options, please carefully read the [Setting up Mav
 
 ## Speeding up Compilation
 
-Developers who compile Spark frequently may want to speed up compilation; e.g., by using Zinc
-(for developers who build with Maven) or by avoiding re-compilation of the assembly JAR (for
-developers who build with SBT).  For more information about how to do this, refer to the
+Developers who compile Spark frequently may want to speed up compilation; e.g., by avoiding re-compilation of the
+assembly JAR (for developers who build with SBT).  For more information about how to do this, refer to the
 [Useful Developer Tools page](https://spark.apache.org/developer-tools.html#reducing-build-times).
 
 ## Encrypted Filesystems
