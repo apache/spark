@@ -209,7 +209,7 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
       (GreaterThan(add2, Literal(4)), add1) ::
       (GreaterThan(add2, Literal(5)), add1) :: Nil
 
-    val caseWhenExpr2 = CaseWhen(conditions2, None)
+    val caseWhenExpr2 = CaseWhen(conditions2, add1)
     val equivalence2 = new EquivalentExpressions
     equivalence2.addExprTree(caseWhenExpr2)
 
@@ -308,6 +308,22 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
 
       CodeGenerator.compile(code)
     }
+  }
+
+  test("SPARK-35499: Subexpressions should only be extracted from CaseWhen values with an "
+    + "elseValue") {
+    val add1 = Add(Literal(1), Literal(2))
+    val add2 = Add(Literal(2), Literal(3))
+    val conditions = (GreaterThan(add1, Literal(3)), add1) ::
+      (GreaterThan(add2, Literal(4)), add1) ::
+      (GreaterThan(add2, Literal(5)), add1) :: Nil
+
+    val caseWhenExpr = CaseWhen(conditions, None)
+    val equivalence = new EquivalentExpressions
+    equivalence.addExprTree(caseWhenExpr)
+
+    // `add1` is not in the elseValue, so we can't extract it from the branches
+    assert(equivalence.getAllEquivalentExprs.count(_.size == 2) == 0)
   }
 }
 

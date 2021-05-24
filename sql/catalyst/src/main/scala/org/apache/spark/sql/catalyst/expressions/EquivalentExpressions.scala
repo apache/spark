@@ -128,7 +128,13 @@ class EquivalentExpressions {
       // a subexpression among values doesn't need to be in conditions because no matter which
       // condition is true, it will be evaluated.
       val conditions = c.branches.tail.map(_._1)
-      val values = c.branches.map(_._2) ++ c.elseValue
+      // For an expression to be in all branch values of a CaseWhen statement, it must also be in
+      // the elseValue.
+      val values = if (c.elseValue.nonEmpty) {
+        c.branches.map(_._2) ++ c.elseValue
+      } else {
+        Nil
+      }
       Seq(conditions, values)
     case c: Coalesce => Seq(c.children.tail)
     case _ => Nil
