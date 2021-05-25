@@ -45,7 +45,7 @@ Data source options of text can be set via:
   *  `DataFrameWriter`
   *  `DataStreamReader`
   *  `DataStreamWriter`
-  *  `OPTIONS` clause at [CREATE TABLE USING DATA_SOURCE](sql-ref-syntax-ddl-create-table-datasource.html)
+*  `OPTIONS` clause at [CREATE TABLE USING DATA_SOURCE](sql-ref-syntax-ddl-create-table-datasource.html)
 
 <table class="table">
   <tr><th><b>Property Name</b></th><th><b>Default</b></th><th><b>Meaning</b></th><th><b>Scope</b></th></tr>

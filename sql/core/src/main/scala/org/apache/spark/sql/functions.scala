@@ -4607,6 +4607,7 @@ object functions {
   @scala.annotation.varargs
   def map_concat(cols: Column*): Column = withExpr { MapConcat(cols.map(_.expr)) }
 
+  // scalastyle:off line.size.limit
   /**
    * Parses a column containing a CSV string into a `StructType` with the specified schema.
    * Returns `null`, in the case of an unparseable string.
@@ -4615,15 +4616,21 @@ object functions {
    * @param schema the schema to use when parsing the CSV string
    * @param options options to control how the CSV is parsed. accepts the same options and the
    *                CSV data source.
+   *                See
+   *                <a href=
+   *                  "https://spark.apache.org/docs/latest/sql-data-sources-csv.html#data-source-option">
+   *                  Data Source Option</a> in the version you use.
    *
    * @group collection_funcs
    * @since 3.0.0
    */
+  // scalastyle:on line.size.limit
   def from_csv(e: Column, schema: StructType, options: Map[String, String]): Column = withExpr {
     val replaced = CharVarcharUtils.failIfHasCharVarchar(schema).asInstanceOf[StructType]
     CsvToStructs(replaced, options, e.expr)
   }
 
+  // scalastyle:off line.size.limit
   /**
    * (Java-specific) Parses a column containing a CSV string into a `StructType`
    * with the specified schema. Returns `null`, in the case of an unparseable string.
@@ -4632,10 +4639,15 @@ object functions {
    * @param schema the schema to use when parsing the CSV string
    * @param options options to control how the CSV is parsed. accepts the same options and the
    *                CSV data source.
+   *                See
+   *                <a href=
+   *                  "https://spark.apache.org/docs/latest/sql-data-sources-csv.html#data-source-option">
+   *                  Data Source Option</a> in the version you use.
    *
    * @group collection_funcs
    * @since 3.0.0
    */
+  // scalastyle:on line.size.limit
   def from_csv(e: Column, schema: Column, options: java.util.Map[String, String]): Column = {
     withExpr(new CsvToStructs(e.expr, schema.expr, options.asScala.toMap))
   }
@@ -4660,32 +4672,44 @@ object functions {
    */
   def schema_of_csv(csv: Column): Column = withExpr(new SchemaOfCsv(csv.expr))
 
+  // scalastyle:off line.size.limit
   /**
    * Parses a CSV string and infers its schema in DDL format using options.
    *
    * @param csv a foldable string column containing a CSV string.
    * @param options options to control how the CSV is parsed. accepts the same options and the
-   *                json data source. See [[DataFrameReader#csv]].
+   *                CSV data source.
+   *                See
+   *                <a href=
+   *                  "https://spark.apache.org/docs/latest/sql-data-sources-csv.html#data-source-option">
+   *                  Data Source Option</a> in the version you use.
    * @return a column with string literal containing schema in DDL format.
    *
    * @group collection_funcs
    * @since 3.0.0
    */
+  // scalastyle:on line.size.limit
   def schema_of_csv(csv: Column, options: java.util.Map[String, String]): Column = {
     withExpr(SchemaOfCsv(csv.expr, options.asScala.toMap))
   }
 
+  // scalastyle:off line.size.limit
   /**
    * (Java-specific) Converts a column containing a `StructType` into a CSV string with
    * the specified schema. Throws an exception, in the case of an unsupported type.
    *
    * @param e a column containing a struct.
    * @param options options to control how the struct column is converted into a CSV string.
-   *                It accepts the same options and the json data source.
+   *                It accepts the same options and the CSV data source.
+   *                See
+   *                <a href=
+   *                  "https://spark.apache.org/docs/latest/sql-data-sources-csv.html#data-source-option">
+   *                  Data Source Option</a> in the version you use.
    *
    * @group collection_funcs
    * @since 3.0.0
    */
+  // scalastyle:on line.size.limit
   def to_csv(e: Column, options: java.util.Map[String, String]): Column = withExpr {
     StructsToCsv(options.asScala.toMap, e.expr)
   }
