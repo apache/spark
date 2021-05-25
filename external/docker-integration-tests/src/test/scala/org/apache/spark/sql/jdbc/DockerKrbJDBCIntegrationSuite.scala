@@ -178,19 +178,7 @@ abstract class DockerKrbJDBCIntegrationSuite extends DockerJDBCIntegrationSuite 
             .option("keytab", keytabFullPath)
             .option("principal", principal)
             .option("refreshKrb5Config", "true")
-            .option("query", "SELECT 1")
-            .load()
-        }
-
-        // Set the authentic krb5.conf but doesn't refresh config
-        // so this assertion is expected to fail.
-        intercept[Exception] {
-          sys.props(KRB5_CONF_PROP) = origKrb5Conf
-          spark.read.format("jdbc")
-            .option("url", jdbcUrl)
-            .option("keytab", keytabFullPath)
-            .option("principal", principal)
-            .option("query", "SELECT 1")
+            .option("dbtable", "bar")
             .load()
         }
 
@@ -200,11 +188,11 @@ abstract class DockerKrbJDBCIntegrationSuite extends DockerJDBCIntegrationSuite 
           .option("keytab", keytabFullPath)
           .option("principal", principal)
           .option("refreshKrb5Config", "true")
-          .option("query", "SELECT 1")
+          .option("dbtable", "bar")
           .load()
-        val result = df.collect().map(_.getInt(0))
+        val result = df.collect().map(_.getString(0))
         assert(result.length === 1)
-        assert(result(0) === 1)
+        assert(result(0) === "hello")
       } finally {
         sys.props(KRB5_CONF_PROP) = origKrb5Conf
       }

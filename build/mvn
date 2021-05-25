@@ -51,7 +51,7 @@ install_app() {
     # check if we already have the tarball
     # check if we have curl installed
     # download application
-    if [ ! -f "${local_tarball}" -a $(command -v curl) ]; then
+    if [ ! -f "${local_tarball}" -a "$(command -v curl)" ]; then
       echo "exec: curl ${curl_opts} ${remote_tarball}" 1>&2
       curl ${curl_opts} "${remote_tarball}" > "${local_tarball}"
       if [ ! -z "${checksum_suffix}" ]; then
@@ -60,7 +60,7 @@ install_app() {
       fi
     fi
     # if the file still doesn't exist, lets try `wget` and cross our fingers
-    if [ ! -f "${local_tarball}" -a $(command -v wget) ]; then
+    if [ ! -f "${local_tarball}" -a "$(command -v wget)" ]; then
       echo "exec: wget ${wget_opts} ${remote_tarball}" 1>&2
       wget ${wget_opts} -O "${local_tarball}" "${remote_tarball}"
       if [ ! -z "${checksum_suffix}" ]; then
@@ -74,14 +74,18 @@ install_app() {
       exit 2
     fi
     # Checksum may not have been specified; don't check if doesn't exist
-    if [ -f "${local_checksum}" ]; then
-      echo "  ${local_tarball}" >> ${local_checksum} # two spaces + file are important!
-      # Assuming SHA512 here for now
-      echo "Veryfing checksum from ${local_checksum}" 1>&2
-      if ! shasum -a 512 -q -c "${local_checksum}" ; then
-        echo "Bad checksum from ${remote_checksum}"
-        exit 2
+    if [ "$(command -v shasum)" ]; then
+      if [ -f "${local_checksum}" ]; then
+        echo "  ${local_tarball}" >> ${local_checksum} # two spaces + file are important!
+        # Assuming SHA512 here for now
+        echo "Veryfing checksum from ${local_checksum}" 1>&2
+        if ! shasum -a 512 -c "${local_checksum}" > /dev/null ; then
+          echo "Bad checksum from ${remote_checksum}"
+          exit 2
+        fi
       fi
+    else
+      echo "Skipping checksum because shasum is not installed." 1>&2
     fi
 
     cd "${_DIR}" && tar -xzf "${local_tarball}"

@@ -328,7 +328,7 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
   }
 
   /**
-   * If CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING is disabled, just return original session.
+   * If CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING is enabled, just return original session.
    */
   private def getOrCloneSessionWithConfigsOff(session: SparkSession): SparkSession = {
     if (session.sessionState.conf.getConf(SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING)) {

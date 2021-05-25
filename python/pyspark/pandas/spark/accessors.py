@@ -20,23 +20,26 @@ Spark related features. Usually, the features here are missing in pandas
 but Spark has it.
 """
 from abc import ABCMeta, abstractmethod
-from typing import TYPE_CHECKING, Optional, Union, List, cast
+from typing import TYPE_CHECKING, Callable, List, Optional, Union, cast
 
 from pyspark import StorageLevel
 from pyspark.sql import Column, DataFrame as SparkDataFrame
 from pyspark.sql.types import DataType, StructType
 
 if TYPE_CHECKING:
+    from pyspark.sql._typing import OptionalPrimitiveType  # noqa: F401 (SPARK-34943)
+    from pyspark._typing import PrimitiveType  # noqa: F401 (SPARK-34943)
+
     import pyspark.pandas as ps  # noqa: F401 (SPARK-34943)
     from pyspark.pandas.base import IndexOpsMixin  # noqa: F401 (SPARK-34943)
     from pyspark.pandas.frame import CachedDataFrame  # noqa: F401 (SPARK-34943)
 
 
-class SparkIndexOpsMethods(object, metaclass=ABCMeta):
+class SparkIndexOpsMethods(metaclass=ABCMeta):
     """Spark related features. Usually, the features here are missing in pandas
     but Spark has it."""
 
-    def __init__(self, data: Union["IndexOpsMixin"]):
+    def __init__(self, data: "IndexOpsMixin"):
         self._data = data
 
     @property
@@ -59,7 +62,7 @@ class SparkIndexOpsMethods(object, metaclass=ABCMeta):
         """
         return self._data._internal.spark_column_for(self._data._column_label)
 
-    def transform(self, func) -> Union["ps.Series", "ps.Index"]:
+    def transform(self, func: Callable[[Column], Column]) -> Union["ps.Series", "ps.Index"]:
         """
         Applies a function that takes and returns a Spark column. It allows to natively
         apply a Spark function and column APIs with the Spark column internally used
@@ -130,12 +133,7 @@ class SparkIndexOpsMethods(object, metaclass=ABCMeta):
 
 
 class SparkSeriesMethods(SparkIndexOpsMethods):
-    def transform(self, func) -> "ps.Series":
-        return cast("ps.Series", super().transform(func))
-
-    transform.__doc__ = SparkIndexOpsMethods.transform.__doc__
-
-    def apply(self, func) -> "ps.Series":
+    def apply(self, func: Callable[[Column], Column]) -> "ps.Series":
         """
         Applies a function that takes and returns a Spark column. It allows to natively
         apply a Spark function and column APIs with the Spark column internally used
@@ -256,11 +254,6 @@ class SparkSeriesMethods(SparkIndexOpsMethods):
 
 
 class SparkIndexMethods(SparkIndexOpsMethods):
-    def transform(self, func) -> "ps.Index":
-        return cast("ps.Index", super().transform(func))
-
-    transform.__doc__ = SparkIndexOpsMethods.transform.__doc__
-
     @property
     def analyzed(self) -> "ps.Index":
         """
@@ -310,7 +303,7 @@ class SparkFrameMethods(object):
     but Spark has it."""
 
     def __init__(self, frame: "ps.DataFrame"):
-        self._kdf = frame
+        self._psdf = frame
 
     def schema(self, index_col: Optional[Union[str, List[str]]] = None) -> StructType:
         """
@@ -400,7 +393,7 @@ class SparkFrameMethods(object):
         See Also
         --------
         DataFrame.to_spark
-        DataFrame.to_koalas
+        DataFrame.to_pandas_on_spark
         DataFrame.spark.frame
 
         Examples
@@ -444,7 +437,7 @@ class SparkFrameMethods(object):
 
         >>> spark_df = df.to_spark(index_col="index")
         >>> spark_df = spark_df.filter("a == 2")
-        >>> spark_df.to_koalas(index_col="index")  # doctest: +NORMALIZE_WHITESPACE
+        >>> spark_df.to_pandas_on_spark(index_col="index")  # doctest: +NORMALIZE_WHITESPACE
                a  b  c
         index
         1      2  5  8
@@ -464,7 +457,7 @@ class SparkFrameMethods(object):
 
         Likewise, can be converted to back to pandas-on-Spark DataFrame.
 
-        >>> new_spark_df.to_koalas(
+        >>> new_spark_df.to_pandas_on_spark(
         ...     index_col=["index_1", "index_2"])  # doctest: +NORMALIZE_WHITESPACE
                          b  c
         index_1 index_2
@@ -474,15 +467,15 @@ class SparkFrameMethods(object):
         """
         from pyspark.pandas.utils import name_like_string
 
-        kdf = self._kdf
+        psdf = self._psdf
 
         data_column_names = []
         data_columns = []
         for i, (label, spark_column, column_name) in enumerate(
             zip(
-                kdf._internal.column_labels,
-                kdf._internal.data_spark_columns,
-                kdf._internal.data_spark_column_names,
+                psdf._internal.column_labels,
+                psdf._internal.data_spark_columns,
+                psdf._internal.data_spark_column_names,
             )
         ):
             name = str(i) if label is None else name_like_string(label)
@@ -492,12 +485,12 @@ class SparkFrameMethods(object):
             data_columns.append(spark_column)
 
         if index_col is None:
-            return kdf._internal.spark_frame.select(data_columns)
+            return psdf._internal.spark_frame.select(data_columns)
         else:
             if isinstance(index_col, str):
                 index_col = [index_col]
 
-            old_index_scols = kdf._internal.index_spark_columns
+            old_index_scols = psdf._internal.index_spark_columns
 
             if len(index_col) != len(old_index_scols):
                 raise ValueError(
@@ -511,7 +504,7 @@ class SparkFrameMethods(object):
             new_index_scols = [
                 index_scol.alias(col) for index_scol, col in zip(old_index_scols, index_col)
             ]
-            return kdf._internal.spark_frame.select(new_index_scols + data_columns)
+            return psdf._internal.spark_frame.select(new_index_scols + data_columns)
 
     def cache(self) -> "CachedDataFrame":
         """
@@ -558,10 +551,10 @@ class SparkFrameMethods(object):
         """
         from pyspark.pandas.frame import CachedDataFrame
 
-        self._kdf._update_internal_frame(
-            self._kdf._internal.resolved_copy, requires_same_anchor=False
+        self._psdf._update_internal_frame(
+            self._psdf._internal.resolved_copy, requires_same_anchor=False
         )
-        return CachedDataFrame(self._kdf._internal)
+        return CachedDataFrame(self._psdf._internal)
 
     def persist(
         self, storage_level: StorageLevel = StorageLevel.MEMORY_AND_DISK
@@ -636,12 +629,12 @@ class SparkFrameMethods(object):
         """
         from pyspark.pandas.frame import CachedDataFrame
 
-        self._kdf._update_internal_frame(
-            self._kdf._internal.resolved_copy, requires_same_anchor=False
+        self._psdf._update_internal_frame(
+            self._psdf._internal.resolved_copy, requires_same_anchor=False
         )
-        return CachedDataFrame(self._kdf._internal, storage_level=storage_level)
+        return CachedDataFrame(self._psdf._internal, storage_level=storage_level)
 
-    def hint(self, name: str, *parameters) -> "ps.DataFrame":
+    def hint(self, name: str, *parameters: "PrimitiveType") -> "ps.DataFrame":
         """
         Specifies some hint on the current DataFrame.
 
@@ -675,7 +668,7 @@ class SparkFrameMethods(object):
         """
         from pyspark.pandas.frame import DataFrame
 
-        internal = self._kdf._internal.resolved_copy
+        internal = self._psdf._internal.resolved_copy
         return DataFrame(internal.with_new_sdf(internal.spark_frame.hint(name, *parameters)))
 
     def to_table(
@@ -685,7 +678,7 @@ class SparkFrameMethods(object):
         mode: str = "overwrite",
         partition_cols: Optional[Union[str, List[str]]] = None,
         index_col: Optional[Union[str, List[str]]] = None,
-        **options
+        **options: "OptionalPrimitiveType",
     ) -> None:
         """
         Write the DataFrame into a Spark table. :meth:`DataFrame.spark.to_table`
@@ -749,7 +742,7 @@ class SparkFrameMethods(object):
         if "options" in options and isinstance(options.get("options"), dict) and len(options) == 1:
             options = options.get("options")  # type: ignore
 
-        self._kdf.spark.frame(index_col=index_col).write.saveAsTable(
+        self._psdf.spark.frame(index_col=index_col).write.saveAsTable(
             name=name, format=format, mode=mode, partitionBy=partition_cols, **options
         )
 
@@ -760,7 +753,7 @@ class SparkFrameMethods(object):
         mode: str = "overwrite",
         partition_cols: Optional[Union[str, List[str]]] = None,
         index_col: Optional[Union[str, List[str]]] = None,
-        **options
+        **options: "OptionalPrimitiveType",
     ) -> None:
         """Write the DataFrame out to a Spark data source. :meth:`DataFrame.spark.to_spark_io`
         is an alias of :meth:`DataFrame.to_spark_io`.
@@ -822,7 +815,7 @@ class SparkFrameMethods(object):
         if "options" in options and isinstance(options.get("options"), dict) and len(options) == 1:
             options = options.get("options")  # type: ignore
 
-        self._kdf.spark.frame(index_col=index_col).write.save(
+        self._psdf.spark.frame(index_col=index_col).write.save(
             path=path, format=format, mode=mode, partitionBy=partition_cols, **options
         )
 
@@ -879,9 +872,13 @@ class SparkFrameMethods(object):
         == Physical Plan ==
         ...
         """
-        self._kdf._internal.to_internal_spark_frame.explain(extended, mode)
+        self._psdf._internal.to_internal_spark_frame.explain(extended, mode)
 
-    def apply(self, func, index_col: Optional[Union[str, List[str]]] = None) -> "ps.DataFrame":
+    def apply(
+        self,
+        func: Callable[[SparkDataFrame], SparkDataFrame],
+        index_col: Optional[Union[str, List[str]]] = None,
+    ) -> "ps.DataFrame":
         """
         Applies a function that takes and returns a Spark DataFrame. It allows natively
         apply a Spark function and column APIs with the Spark column internally used
@@ -893,7 +890,7 @@ class SparkFrameMethods(object):
             expensive in general.
 
         .. note:: it will lose column labels. This is a synonym of
-            ``func(kdf.to_spark(index_col)).to_koalas(index_col)``.
+            ``func(psdf.to_spark(index_col)).to_pandas_on_spark(index_col)``.
 
         Parameters
         ----------
@@ -910,14 +907,14 @@ class SparkFrameMethods(object):
 
         Examples
         --------
-        >>> kdf = ps.DataFrame({"a": [1, 2, 3], "b": [4, 5, 6]}, columns=["a", "b"])
-        >>> kdf
+        >>> psdf = ps.DataFrame({"a": [1, 2, 3], "b": [4, 5, 6]}, columns=["a", "b"])
+        >>> psdf
            a  b
         0  1  4
         1  2  5
         2  3  6
 
-        >>> kdf.spark.apply(
+        >>> psdf.spark.apply(
         ...     lambda sdf: sdf.selectExpr("a + b as c", "index"), index_col="index")
         ... # doctest: +NORMALIZE_WHITESPACE
                c
@@ -929,7 +926,7 @@ class SparkFrameMethods(object):
         The case below ends up with using the default index, which should be avoided
         if possible.
 
-        >>> kdf.spark.apply(lambda sdf: sdf.groupby("a").count().sort("a"))
+        >>> psdf.spark.apply(lambda sdf: sdf.groupby("a").count().sort("a"))
            a  count
         0  1      1
         1  2      1
@@ -941,7 +938,8 @@ class SparkFrameMethods(object):
                 "The output of the function [%s] should be of a "
                 "pyspark.sql.DataFrame; however, got [%s]." % (func, type(output))
             )
-        return output.to_koalas(index_col)
+        psdf = output.to_pandas_on_spark(index_col)  # type: ignore
+        return cast("ps.DataFrame", psdf)
 
     def repartition(self, num_partitions: int) -> "ps.DataFrame":
         """
@@ -959,19 +957,19 @@ class SparkFrameMethods(object):
 
         Examples
         --------
-        >>> kdf = ps.DataFrame({"age": [5, 5, 2, 2],
+        >>> psdf = ps.DataFrame({"age": [5, 5, 2, 2],
         ...         "name": ["Bob", "Bob", "Alice", "Alice"]}).set_index("age")
-        >>> kdf.sort_index()  # doctest: +NORMALIZE_WHITESPACE
+        >>> psdf.sort_index()  # doctest: +NORMALIZE_WHITESPACE
               name
         age
         2    Alice
         2    Alice
         5      Bob
         5      Bob
-        >>> new_kdf = kdf.spark.repartition(7)
-        >>> new_kdf.to_spark().rdd.getNumPartitions()
+        >>> new_psdf = psdf.spark.repartition(7)
+        >>> new_psdf.to_spark().rdd.getNumPartitions()
         7
-        >>> new_kdf.sort_index()   # doctest: +NORMALIZE_WHITESPACE
+        >>> new_psdf.sort_index()   # doctest: +NORMALIZE_WHITESPACE
               name
         age
         2    Alice
@@ -981,7 +979,7 @@ class SparkFrameMethods(object):
         """
         from pyspark.pandas.frame import DataFrame
 
-        internal = self._kdf._internal.resolved_copy
+        internal = self._psdf._internal.resolved_copy
         repartitioned_sdf = internal.spark_frame.repartition(num_partitions)
         return DataFrame(internal.with_new_sdf(repartitioned_sdf))
 
@@ -1010,19 +1008,19 @@ class SparkFrameMethods(object):
 
         Examples
         --------
-        >>> kdf = ps.DataFrame({"age": [5, 5, 2, 2],
+        >>> psdf = ps.DataFrame({"age": [5, 5, 2, 2],
         ...         "name": ["Bob", "Bob", "Alice", "Alice"]}).set_index("age")
-        >>> kdf.sort_index()  # doctest: +NORMALIZE_WHITESPACE
+        >>> psdf.sort_index()  # doctest: +NORMALIZE_WHITESPACE
               name
         age
         2    Alice
         2    Alice
         5      Bob
         5      Bob
-        >>> new_kdf = kdf.spark.coalesce(1)
-        >>> new_kdf.to_spark().rdd.getNumPartitions()
+        >>> new_psdf = psdf.spark.coalesce(1)
+        >>> new_psdf.to_spark().rdd.getNumPartitions()
         1
-        >>> new_kdf.sort_index()   # doctest: +NORMALIZE_WHITESPACE
+        >>> new_psdf.sort_index()   # doctest: +NORMALIZE_WHITESPACE
               name
         age
         2    Alice
@@ -1032,7 +1030,7 @@ class SparkFrameMethods(object):
         """
         from pyspark.pandas.frame import DataFrame
 
-        internal = self._kdf._internal.resolved_copy
+        internal = self._psdf._internal.resolved_copy
         coalesced_sdf = internal.spark_frame.coalesce(num_partitions)
         return DataFrame(internal.with_new_sdf(coalesced_sdf))
 
@@ -1054,14 +1052,14 @@ class SparkFrameMethods(object):
 
         Examples
         --------
-        >>> kdf = ps.DataFrame({"a": ["a", "b", "c"]})
-        >>> kdf
+        >>> psdf = ps.DataFrame({"a": ["a", "b", "c"]})
+        >>> psdf
            a
         0  a
         1  b
         2  c
-        >>> new_kdf = kdf.spark.checkpoint()  # doctest: +SKIP
-        >>> new_kdf  # doctest: +SKIP
+        >>> new_psdf = psdf.spark.checkpoint()  # doctest: +SKIP
+        >>> new_psdf  # doctest: +SKIP
            a
         0  a
         1  b
@@ -1069,7 +1067,7 @@ class SparkFrameMethods(object):
         """
         from pyspark.pandas.frame import DataFrame
 
-        internal = self._kdf._internal.resolved_copy
+        internal = self._psdf._internal.resolved_copy
         checkpointed_sdf = internal.spark_frame.checkpoint(eager)
         return DataFrame(internal.with_new_sdf(checkpointed_sdf))
 
@@ -1092,14 +1090,14 @@ class SparkFrameMethods(object):
 
         Examples
         --------
-        >>> kdf = ps.DataFrame({"a": ["a", "b", "c"]})
-        >>> kdf
+        >>> psdf = ps.DataFrame({"a": ["a", "b", "c"]})
+        >>> psdf
            a
         0  a
         1  b
         2  c
-        >>> new_kdf = kdf.spark.local_checkpoint()
-        >>> new_kdf
+        >>> new_psdf = psdf.spark.local_checkpoint()
+        >>> new_psdf
            a
         0  a
         1  b
@@ -1107,7 +1105,7 @@ class SparkFrameMethods(object):
         """
         from pyspark.pandas.frame import DataFrame
 
-        internal = self._kdf._internal.resolved_copy
+        internal = self._psdf._internal.resolved_copy
         checkpointed_sdf = internal.spark_frame.localCheckpoint(eager)
         return DataFrame(internal.with_new_sdf(checkpointed_sdf))
 
@@ -1161,7 +1159,7 @@ class SparkFrameMethods(object):
         """
         from pyspark.pandas.frame import DataFrame
 
-        return DataFrame(self._kdf._internal.resolved_copy)
+        return DataFrame(self._psdf._internal.resolved_copy)
 
 
 class CachedSparkFrameMethods(SparkFrameMethods):
@@ -1201,7 +1199,7 @@ class CachedSparkFrameMethods(SparkFrameMethods):
         ...
         Memory Serialized 1x Replicated
         """
-        return self._kdf._cached.storageLevel
+        return self._psdf._cached.storageLevel
 
     def unpersist(self) -> None:
         """
@@ -1222,11 +1220,11 @@ class CachedSparkFrameMethods(SparkFrameMethods):
 
         >>> df.spark.unpersist()
         """
-        if self._kdf._cached.is_cached:
-            self._kdf._cached.unpersist()
+        if self._psdf._cached.is_cached:
+            self._psdf._cached.unpersist()
 
 
-def _test():
+def _test() -> None:
     import os
     import doctest
     import shutil

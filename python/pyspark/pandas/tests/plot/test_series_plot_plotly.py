@@ -37,10 +37,10 @@ if have_plotly:
     import plotly.graph_objs as go
 
 
+@unittest.skipIf(not have_plotly, plotly_requirement_message)
 @unittest.skipIf(
-    not have_plotly or LooseVersion(pd.__version__) < "1.0.0",
-    plotly_requirement_message + " Or pandas<1.0; pandas<1.0 does not support latest plotly "
-    "and/or 'plotting.backend' option.",
+    LooseVersion(pd.__version__) < "1.0.0",
+    "pandas<1.0; pandas<1.0 does not support latest plotly and/or 'plotting.backend' option.",
 )
 class SeriesPlotPlotlyTest(PandasOnSparkTestCase, TestUtils):
     @classmethod
@@ -66,36 +66,36 @@ class SeriesPlotPlotlyTest(PandasOnSparkTestCase, TestUtils):
         )
 
     @property
-    def kdf1(self):
+    def psdf1(self):
         return ps.from_pandas(self.pdf1)
 
     @property
-    def kdf2(self):
+    def psdf2(self):
         return ps.range(1002)
 
     @property
     def pdf2(self):
-        return self.kdf2.to_pandas()
+        return self.psdf2.to_pandas()
 
     def test_bar_plot(self):
         pdf = self.pdf1
-        kdf = self.kdf1
+        psdf = self.psdf1
 
-        self.assertEqual(pdf["a"].plot(kind="bar"), kdf["a"].plot(kind="bar"))
-        self.assertEqual(pdf["a"].plot.bar(), kdf["a"].plot.bar())
+        self.assertEqual(pdf["a"].plot(kind="bar"), psdf["a"].plot(kind="bar"))
+        self.assertEqual(pdf["a"].plot.bar(), psdf["a"].plot.bar())
 
     def test_line_plot(self):
         pdf = self.pdf1
-        kdf = self.kdf1
+        psdf = self.psdf1
 
-        self.assertEqual(pdf["a"].plot(kind="line"), kdf["a"].plot(kind="line"))
-        self.assertEqual(pdf["a"].plot.line(), kdf["a"].plot.line())
+        self.assertEqual(pdf["a"].plot(kind="line"), psdf["a"].plot(kind="line"))
+        self.assertEqual(pdf["a"].plot.line(), psdf["a"].plot.line())
 
     def test_barh_plot(self):
         pdf = self.pdf1
-        kdf = self.kdf1
+        psdf = self.psdf1
 
-        self.assertEqual(pdf["a"].plot(kind="barh"), kdf["a"].plot(kind="barh"))
+        self.assertEqual(pdf["a"].plot(kind="barh"), psdf["a"].plot(kind="barh"))
 
     def test_area_plot(self):
         pdf = pd.DataFrame(
@@ -106,45 +106,45 @@ class SeriesPlotPlotlyTest(PandasOnSparkTestCase, TestUtils):
             },
             index=pd.date_range(start="2018/01/01", end="2018/07/01", freq="M"),
         )
-        kdf = ps.from_pandas(pdf)
+        psdf = ps.from_pandas(pdf)
 
-        self.assertEqual(pdf["sales"].plot(kind="area"), kdf["sales"].plot(kind="area"))
-        self.assertEqual(pdf["sales"].plot.area(), kdf["sales"].plot.area())
+        self.assertEqual(pdf["sales"].plot(kind="area"), psdf["sales"].plot(kind="area"))
+        self.assertEqual(pdf["sales"].plot.area(), psdf["sales"].plot.area())
 
         # just a sanity check for df.col type
-        self.assertEqual(pdf.sales.plot(kind="area"), kdf.sales.plot(kind="area"))
+        self.assertEqual(pdf.sales.plot(kind="area"), psdf.sales.plot(kind="area"))
 
     def test_pie_plot(self):
-        kdf = self.kdf1
-        pdf = kdf.to_pandas()
+        psdf = self.psdf1
+        pdf = psdf.to_pandas()
         self.assertEqual(
-            kdf["a"].plot(kind="pie"), express.pie(pdf, values=pdf.columns[0], names=pdf.index),
+            psdf["a"].plot(kind="pie"), express.pie(pdf, values=pdf.columns[0], names=pdf.index),
         )
 
         # TODO: support multi-index columns
         # columns = pd.MultiIndex.from_tuples([("x", "y")])
-        # kdf.columns = columns
+        # psdf.columns = columns
         # pdf.columns = columns
         # self.assertEqual(
-        #     kdf[("x", "y")].plot(kind="pie"),
+        #     psdf[("x", "y")].plot(kind="pie"),
         #     express.pie(pdf, values=pdf.iloc[:, 0].to_numpy(), names=pdf.index.to_numpy()),
         # )
 
         # TODO: support multi-index
-        # kdf = ps.DataFrame(
+        # psdf = ps.DataFrame(
         #     {
         #         "a": [1, 2, 3, 4, 5, 6, 7, 8, 9, 15, 50],
         #         "b": [2, 3, 4, 5, 7, 9, 10, 15, 34, 45, 49]
         #     },
         #     index=pd.MultiIndex.from_tuples([("x", "y")] * 11),
         # )
-        # pdf = kdf.to_pandas()
+        # pdf = psdf.to_pandas()
         # self.assertEqual(
-        #     kdf["a"].plot(kind="pie"), express.pie(pdf, values=pdf.columns[0], names=pdf.index),
+        #     psdf["a"].plot(kind="pie"), express.pie(pdf, values=pdf.columns[0], names=pdf.index),
         # )
 
     def test_hist_plot(self):
-        def check_hist_plot(kser):
+        def check_hist_plot(psser):
             bins = np.array([1.0, 5.9, 10.8, 15.7, 20.6, 25.5, 30.4, 35.3, 40.2, 45.1, 50.0])
             data = np.array([5.0, 4.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0])
             prev = bins[0]
@@ -154,7 +154,7 @@ class SeriesPlotPlotlyTest(PandasOnSparkTestCase, TestUtils):
                 prev = b
             text_bins[-1] = text_bins[-1][:-1] + "]"
             bins = 0.5 * (bins[:-1] + bins[1:])
-            name_a = name_like_string(kser.name)
+            name_a = name_like_string(psser.name)
             bars = [
                 go.Bar(
                     x=bins,
@@ -169,22 +169,22 @@ class SeriesPlotPlotlyTest(PandasOnSparkTestCase, TestUtils):
             fig["layout"]["yaxis"]["title"] = "count"
 
             self.assertEqual(
-                pprint.pformat(kser.plot(kind="hist").to_dict()), pprint.pformat(fig.to_dict())
+                pprint.pformat(psser.plot(kind="hist").to_dict()), pprint.pformat(fig.to_dict())
             )
 
-        kdf1 = self.kdf1
-        check_hist_plot(kdf1["a"])
+        psdf1 = self.psdf1
+        check_hist_plot(psdf1["a"])
 
         columns = pd.MultiIndex.from_tuples([("x", "y")])
-        kdf1.columns = columns
-        check_hist_plot(kdf1[("x", "y")])
+        psdf1.columns = columns
+        check_hist_plot(psdf1[("x", "y")])
 
     def test_pox_plot(self):
-        def check_pox_plot(kser):
+        def check_pox_plot(psser):
             fig = go.Figure()
             fig.add_trace(
                 go.Box(
-                    name=name_like_string(kser.name),
+                    name=name_like_string(psser.name),
                     q1=[3],
                     median=[6],
                     q3=[9],
@@ -196,29 +196,29 @@ class SeriesPlotPlotlyTest(PandasOnSparkTestCase, TestUtils):
                     notched=False,
                 )
             )
-            fig["layout"]["xaxis"]["title"] = name_like_string(kser.name)
+            fig["layout"]["xaxis"]["title"] = name_like_string(psser.name)
             fig["layout"]["yaxis"]["title"] = "value"
 
             self.assertEqual(
-                pprint.pformat(kser.plot(kind="box").to_dict()), pprint.pformat(fig.to_dict())
+                pprint.pformat(psser.plot(kind="box").to_dict()), pprint.pformat(fig.to_dict())
             )
 
-        kdf1 = self.kdf1
-        check_pox_plot(kdf1["a"])
+        psdf1 = self.psdf1
+        check_pox_plot(psdf1["a"])
 
         columns = pd.MultiIndex.from_tuples([("x", "y")])
-        kdf1.columns = columns
-        check_pox_plot(kdf1[("x", "y")])
+        psdf1.columns = columns
+        check_pox_plot(psdf1[("x", "y")])
 
     def test_pox_plot_arguments(self):
         with self.assertRaisesRegex(ValueError, "does not support"):
-            self.kdf1.a.plot.box(boxpoints="all")
+            self.psdf1.a.plot.box(boxpoints="all")
         with self.assertRaisesRegex(ValueError, "does not support"):
-            self.kdf1.a.plot.box(notched=True)
-        self.kdf1.a.plot.box(hovertext="abc")  # other arguments should not throw an exception
+            self.psdf1.a.plot.box(notched=True)
+        self.psdf1.a.plot.box(hovertext="abc")  # other arguments should not throw an exception
 
     def test_kde_plot(self):
-        kdf = ps.DataFrame({"a": [1, 2, 3, 4, 5]})
+        psdf = ps.DataFrame({"a": [1, 2, 3, 4, 5]})
         pdf = pd.DataFrame(
             {
                 "Density": [0.05709372, 0.07670272, 0.05709372],
@@ -227,7 +227,7 @@ class SeriesPlotPlotlyTest(PandasOnSparkTestCase, TestUtils):
             }
         )
 
-        actual = kdf.a.plot.kde(bw_method=5, ind=3)
+        actual = psdf.a.plot.kde(bw_method=5, ind=3)
 
         expected = express.line(pdf, x="index", y="Density")
         expected["layout"]["xaxis"]["title"] = None
@@ -240,7 +240,8 @@ if __name__ == "__main__":
 
     try:
         import xmlrunner  # type: ignore[import]
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
+
+        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

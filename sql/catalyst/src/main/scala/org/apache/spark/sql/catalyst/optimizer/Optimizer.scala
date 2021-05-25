@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions._
@@ -30,6 +29,7 @@ import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.AlwaysProcess
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.connector.catalog.CatalogManager
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -363,7 +363,7 @@ object EliminateDistinct extends Rule[LogicalPlan] {
       ae.copy(isDistinct = false)
   }
 
-  private def isDuplicateAgnostic(af: AggregateFunction): Boolean = af match {
+  def isDuplicateAgnostic(af: AggregateFunction): Boolean = af match {
     case _: Max => true
     case _: Min => true
     case _: BitAndAgg => true
@@ -504,47 +504,6 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = removeRedundantAliases(plan, AttributeSet.empty)
-}
-
-/**
- * Remove redundant aggregates from a query plan. A redundant aggregate is an aggregate whose
- * only goal is to keep distinct values, while its parent aggregate would ignore duplicate values.
- */
-object RemoveRedundantAggregates extends Rule[LogicalPlan] with AliasHelper {
-  def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithPruning(
-    _.containsPattern(AGGREGATE), ruleId) {
-    case upper @ Aggregate(_, _, lower: Aggregate) if lowerIsRedundant(upper, lower) =>
-      val aliasMap = getAliasMap(lower)
-
-      val newAggregate = upper.copy(
-        child = lower.child,
-        groupingExpressions = upper.groupingExpressions.map(replaceAlias(_, aliasMap)),
-        aggregateExpressions = upper.aggregateExpressions.map(
-          replaceAliasButKeepName(_, aliasMap))
-      )
-
-      // We might have introduces non-deterministic grouping expression
-      if (newAggregate.groupingExpressions.exists(!_.deterministic)) {
-        PullOutNondeterministic.applyLocally.applyOrElse(newAggregate, identity[LogicalPlan])
-      } else {
-        newAggregate
-      }
-  }
-
-  private def lowerIsRedundant(upper: Aggregate, lower: Aggregate): Boolean = {
-    val upperHasNoAggregateExpressions =
-      !upper.aggregateExpressions.exists(AggregateExpression.containsAggregate)
-
-    lazy val upperRefsOnlyDeterministicNonAgg = upper.references.subsetOf(AttributeSet(
-      lower
-        .aggregateExpressions
-        .filter(_.deterministic)
-        .filterNot(AggregateExpression.containsAggregate)
-        .map(_.toAttribute)
-    ))
-
-    upperHasNoAggregateExpressions && upperRefsOnlyDeterministicNonAgg
-  }
 }
 
 /**
@@ -1698,16 +1657,7 @@ object CheckCartesianProducts extends Rule[LogicalPlan] with PredicateHelper {
     } else plan.transformWithPruning(_.containsAnyPattern(INNER_LIKE_JOIN, OUTER_JOIN))  {
       case j @ Join(left, right, Inner | LeftOuter | RightOuter | FullOuter, _, _)
         if isCartesianProduct(j) =>
-          throw new AnalysisException(
-            s"""Detected implicit cartesian product for ${j.joinType.sql} join between logical plans
-               |${left.treeString(false).trim}
-               |and
-               |${right.treeString(false).trim}
-               |Join condition is missing or trivial.
-               |Either: use the CROSS JOIN syntax to allow cartesian products between these
-               |relations, or: enable implicit cartesian products by setting the configuration
-               |variable spark.sql.crossJoin.enabled=true"""
-            .stripMargin)
+          throw QueryCompilationErrors.joinConditionMissingOrTrivialError(j, left, right)
     }
 }
 

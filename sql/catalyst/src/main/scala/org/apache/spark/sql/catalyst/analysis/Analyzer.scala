@@ -770,6 +770,10 @@ class Analyzer(override val catalogManager: CatalogManager)
                   First(ifExpr(expr), true)
                 case Last(expr, _) =>
                   Last(ifExpr(expr), true)
+                case a: ApproximatePercentile =>
+                  // ApproximatePercentile takes two literals for accuracy and percentage which
+                  // should not be wrapped by if-else.
+                  a.withNewChildren(ifExpr(a.first) :: a.second :: a.third :: Nil)
                 case a: AggregateFunction =>
                   a.withNewChildren(a.children.map(ifExpr))
               }.transform {
@@ -2145,8 +2149,8 @@ class Analyzer(override val catalogManager: CatalogManager)
               expandIdentifier(nameParts) match {
                 case NonSessionCatalogAndIdentifier(catalog, ident) =>
                   if (!catalog.isFunctionCatalog) {
-                    throw new AnalysisException(s"Trying to lookup function '$ident' in " +
-                      s"catalog '${catalog.name()}', but it is not a FunctionCatalog.")
+                    throw QueryCompilationErrors.lookupFunctionInNonFunctionCatalogError(
+                      ident, catalog)
                   }
 
                   val unbound = catalog.asFunctionCatalog.loadFunction(ident)
@@ -2157,9 +2161,8 @@ class Analyzer(override val catalogManager: CatalogManager)
                     unbound.bind(inputType)
                   } catch {
                     case unsupported: UnsupportedOperationException =>
-                      throw new AnalysisException(s"Function '${unbound.name}' cannot process " +
-                        s"input: (${arguments.map(_.dataType.simpleString).mkString(", ")}): " +
-                        unsupported.getMessage, cause = Some(unsupported))
+                      throw QueryCompilationErrors.functionCannotProcessInputError(
+                        unbound, arguments, unsupported)
                   }
 
                   bound match {
@@ -2204,11 +2207,12 @@ class Analyzer(override val catalogManager: CatalogManager)
         findMethod(scalarFunc, MAGIC_METHOD_NAME, argClasses) match {
           case Some(m) if Modifier.isStatic(m.getModifiers) =>
             StaticInvoke(scalarFunc.getClass, scalarFunc.resultType(),
-              MAGIC_METHOD_NAME, arguments, returnNullable = scalarFunc.isResultNullable)
+              MAGIC_METHOD_NAME, arguments, propagateNull = false,
+              returnNullable = scalarFunc.isResultNullable)
           case Some(_) =>
             val caller = Literal.create(scalarFunc, ObjectType(scalarFunc.getClass))
             Invoke(caller, MAGIC_METHOD_NAME, scalarFunc.resultType(),
-              arguments, returnNullable = scalarFunc.isResultNullable)
+              arguments, propagateNull = false, returnNullable = scalarFunc.isResultNullable)
           case _ =>
             // TODO: handle functions defined in Scala too - in Scala, even if a
             //  subclass do not override the default method in parent interface
