@@ -50,7 +50,10 @@ trait InvokeLike extends Expression with NonSQLExpression {
 
   def propagateNull: Boolean
 
-  protected lazy val needNullCheck: Boolean = propagateNull && arguments.exists(_.nullable)
+  protected lazy val needNullCheck: Boolean = needNullCheckForIndex.contains(true)
+  protected lazy val needNullCheckForIndex: Array[Boolean] =
+    arguments.map(a => a.nullable && (propagateNull ||
+        ScalaReflection.dataTypeJavaClass(a.dataType).isPrimitive)).toArray
   protected lazy val evaluatedArgs: Array[Object] = new Array[Object](arguments.length)
   private lazy val boxingFn: Any => Any =
     ScalaReflection.typeBoxedJavaMapping
@@ -89,7 +92,7 @@ trait InvokeLike extends Expression with NonSQLExpression {
       val reset = s"$resultIsNull = false;"
       val argCodes = arguments.zipWithIndex.map { case (e, i) =>
         val expr = e.genCode(ctx)
-        val updateResultIsNull = if (e.nullable) {
+        val updateResultIsNull = if (needNullCheckForIndex(i)) {
           s"$resultIsNull = ${expr.isNull};"
         } else {
           ""
@@ -131,11 +134,14 @@ trait InvokeLike extends Expression with NonSQLExpression {
   def invoke(obj: Any, method: Method, input: InternalRow): Any = {
     var i = 0
     val len = arguments.length
+    var resultNull = false
     while (i < len) {
-      evaluatedArgs(i) = arguments(i).eval(input).asInstanceOf[Object]
+      val result = arguments(i).eval(input).asInstanceOf[Object]
+      evaluatedArgs(i) = result
+      resultNull = resultNull || (result == null && needNullCheckForIndex(i))
       i += 1
     }
-    if (needNullCheck && evaluatedArgs.contains(null)) {
+    if (needNullCheck && resultNull) {
       // return null if one of arguments is null
       null
     } else {
@@ -226,7 +232,9 @@ object SerializerSupport {
  * @param functionName The name of the method to call.
  * @param arguments An optional list of expressions to pass as arguments to the function.
  * @param propagateNull When true, and any of the arguments is null, null will be returned instead
- *                      of calling the function.
+ *                      of calling the function. Also note: when this is false but any of the
+ *                      arguments is of primitive type and is null, null also will be returned
+ *                      without invoking the function.
  * @param returnNullable When false, indicating the invoked method will always return
  *                       non-null value.
  */
@@ -318,7 +326,9 @@ case class StaticInvoke(
  * @param arguments An optional list of expressions, whose evaluation will be passed to the
   *                 function.
  * @param propagateNull When true, and any of the arguments is null, null will be returned instead
- *                      of calling the function.
+ *                      of calling the function. Also note: when this is false but any of the
+ *                      arguments is of primitive type and is null, null also will be returned
+ *                      without invoking the function.
  * @param returnNullable When false, indicating the invoked method will always return
  *                       non-null value.
  */
@@ -452,7 +462,9 @@ object NewInstance {
  * @param cls The class to construct.
  * @param arguments A list of expression to use as arguments to the constructor.
  * @param propagateNull When true, if any of the arguments is null, then null will be returned
- *                      instead of trying to construct the object.
+ *                      instead of trying to construct the object. Also note: when this is false
+ *                      but any of the arguments is of primitive type and is null, null also will
+ *                      be returned without constructing the object.
  * @param dataType The type of object being constructed, as a Spark SQL datatype.  This allows you
  *                 to manually specify the type when the object in question is a valid internal
  *                 representation (i.e. ArrayData) instead of an object.

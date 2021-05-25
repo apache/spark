@@ -88,7 +88,7 @@ Arguments: [ss_item_sk#1 ASC NULLS FIRST], false, 0
 Output [6]: [i_item_sk#9, i_item_id#10, i_item_desc#11, i_current_price#12, i_class#13, i_category#14]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/item]
-PushedFilters: [In(i_category, [Jewelry                                           ,Sports                                            ,Books                                             ]), IsNotNull(i_item_sk)]
+PushedFilters: [In(i_category, [Books                                             ,Jewelry                                           ,Sports                                            ]), IsNotNull(i_item_sk)]
 ReadSchema: struct<i_item_sk:int,i_item_id:string,i_item_desc:string,i_current_price:decimal(7,2),i_class:string,i_category:string>
 
 (14) ColumnarToRow [codegen id : 4]

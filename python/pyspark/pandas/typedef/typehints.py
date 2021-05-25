@@ -21,7 +21,7 @@ Utilities to deal with types. This is mostly focused on python3.
 import datetime
 import decimal
 from inspect import getfullargspec, isclass
-from typing import Generic, List, Optional, Tuple, TypeVar, Union  # noqa: F401
+from typing import Any, Callable, Generic, List, Optional, Tuple, TypeVar, Union  # noqa: F401
 
 import numpy as np
 import pandas as pd
@@ -58,11 +58,7 @@ except ImportError:
 
 import pyarrow as pa
 import pyspark.sql.types as types
-
-try:
-    from pyspark.sql.types import to_arrow_type, from_arrow_type
-except ImportError:
-    from pyspark.sql.pandas.types import to_arrow_type, from_arrow_type
+from pyspark.sql.pandas.types import to_arrow_type, from_arrow_type
 
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
 from pyspark.pandas.typedef.string_typehints import resolve_string_type_hint
@@ -82,7 +78,7 @@ class SeriesType(Generic[T]):
         self.dtype = dtype
         self.spark_type = spark_type
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return "SeriesType[{}]".format(self.spark_type)
 
 
@@ -100,7 +96,7 @@ class DataFrameType(object):
             ]
         )  # type: types.StructType
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return "DataFrameType[{}]".format(self.spark_type)
 
 
@@ -110,16 +106,16 @@ class ScalarType(object):
         self.dtype = dtype
         self.spark_type = spark_type
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return "ScalarType[{}]".format(self.spark_type)
 
 
 # The type is left unspecified or we do not know about this type.
 class UnknownType(object):
-    def __init__(self, tpe):
+    def __init__(self, tpe: Any):
         self.tpe = tpe
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return "UnknownType[{}]".format(self.tpe)
 
 
@@ -266,7 +262,7 @@ def spark_type_to_pandas_dtype(
         return np.dtype(to_arrow_type(spark_type).to_pandas_dtype())
 
 
-def pandas_on_spark_type(tpe) -> Tuple[Dtype, types.DataType]:
+def pandas_on_spark_type(tpe: Union[str, type, Dtype]) -> Tuple[Dtype, types.DataType]:
     """
     Convert input into a pandas only dtype object or a numpy dtype object,
     and its corresponding Spark DataType.
@@ -326,7 +322,7 @@ def infer_pd_series_spark_type(pser: pd.Series, dtype: Dtype) -> types.DataType:
         return as_spark_type(dtype)
 
 
-def infer_return_type(f) -> Union[SeriesType, DataFrameType, ScalarType, UnknownType]:
+def infer_return_type(f: Callable) -> Union[SeriesType, DataFrameType, ScalarType, UnknownType]:
     """
     Infer the return type from the return type annotation of the given function.
 
@@ -521,7 +517,7 @@ def infer_return_type(f) -> Union[SeriesType, DataFrameType, ScalarType, Unknown
         return ScalarType(*types)
 
 
-def _test():
+def _test() -> None:
     import doctest
     import sys
     import pyspark.pandas.typedef.typehints

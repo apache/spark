@@ -14,6 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from inspect import FullArgSpec
+from typing import List, Optional, Type, cast as _cast  # noqa: F401
+
 import numpy as np  # noqa: F401
 import pandas  # noqa: F401
 import pandas as pd  # noqa: F401
@@ -22,7 +25,7 @@ from pandas import *  # noqa: F401
 from inspect import getfullargspec  # noqa: F401
 
 
-def resolve_string_type_hint(tpe):
+def resolve_string_type_hint(tpe: str) -> Optional[Type]:
     import pyspark.pandas as ps
     from pyspark.pandas import DataFrame, Series
 
@@ -34,4 +37,4 @@ def resolve_string_type_hint(tpe):
     }
     # This is a hack to resolve the forward reference string.
     exec("def func() -> %s: pass\narg_spec = getfullargspec(func)" % tpe, globals(), locs)
-    return locs["arg_spec"].annotations.get("return", None)
+    return _cast(FullArgSpec, locs["arg_spec"]).annotations.get("return", None)
