@@ -839,8 +839,12 @@ object DateTimeUtils {
    * is valid for the `toZone` time zone, thus the local date-time may be adjusted.
    */
   def convertTz(micros: Long, fromZone: ZoneId, toZone: ZoneId): Long = {
-    val rebasedDateTime = getLocalDateTime(micros, toZone).atZone(fromZone)
-    instantToMicros(rebasedDateTime.toInstant)
+    val localDateTime = toJavaTimestamp(micros).toLocalDateTime
+    val zonedDateTimeFromZone = ZonedDateTime.of(localDateTime, fromZone)
+    val zonedDateTimeToZone = zonedDateTimeFromZone.withZoneSameInstant(toZone)
+    val localDateTimeConverted = zonedDateTimeToZone.toLocalDateTime
+    val timestamp = Timestamp.valueOf(localDateTimeConverted)
+    return timestamp.getTime*1000 + timestamp.getNanos%1000000/1000
   }
 
   /**
