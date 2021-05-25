@@ -134,16 +134,18 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
     // and this rule doesn't convert in when `in.list` is empty.
     case in @ In(Cast(fromExp, toType: NumericType, _), list @ Seq(firstLit, _*))
         if canImplicitlyCast(fromExp, toType, firstLit.dataType) && in.inSetConvertible =>
-      val (newValueList, exp) =
+      val (newValueList, expr) =
         list.map(lit => unwrapCast(EqualTo(in.value, lit)))
           .partition {
             case EqualTo(_, _: Literal) => true
-            case _ => false
+            case And(IsNull(_), Literal(null, BooleanType)) => false
+            case _ => throw new IllegalStateException("Illegal unwrap cast result found.")
           }
 
       val (nonNullValueList, nullValueList) = newValueList.partition {
         case EqualTo(_, NonNullLiteral(_, _: NumericType)) => true
-        case _ => false
+        case EqualTo(_, Literal(null, _)) => false
+        case _ => throw new IllegalStateException("Illegal unwrap cast result found.")
       }
       // make sure the new return list have the same dataType.
       val newList = {
@@ -165,11 +167,13 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
       }
 
       val unwrapIn = In(fromExp, newList)
-      // since `exp` are all the same,
-      // convert to a single value `And(IsNull(_), Literal(null, BooleanType))`.
-      exp.headOption match {
-        case Some(falseIfNotNull) => Or(falseIfNotNull, unwrapIn)
-        case _ => unwrapIn
+      expr.headOption match {
+        case None => unwrapIn
+        // since `expr` are all the same,
+        // convert to a single value `And(IsNull(_), Literal(null, BooleanType))`.
+        case Some(falseIfNotNull)
+            if expr.map(_.canonicalized).distinct.length == 1 => Or(falseIfNotNull, unwrapIn)
+        case _ => exp
       }
 
     case _ => exp
