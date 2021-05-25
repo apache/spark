@@ -344,6 +344,10 @@ class BlockManagerMasterEndpoint(
 
   private def removeBlockManager(blockManagerId: BlockManagerId): Unit = {
     val info = blockManagerInfo(blockManagerId)
+
+    // Not removing info from the blockManagerInfo map, but only updating the removal timestamp of
+    // the executor in BlockManagerInfo. This info will be removed from blockManagerInfo map by the
+    // blockManagerInfoCleaner once now() - info.executorRemovalTs > executorTimeoutMs.
     info.updateExecutorRemovalTs()
 
     // Remove the block manager from blockManagerIdByExecutor.
