@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import java.util.Objects
-
 import org.apache.spark.sql.catalyst.expressions.Attribute
 
 /**
@@ -164,22 +162,6 @@ case object SHUFFLE_REPLICATE_NL extends JoinStrategyHint {
   override def displayName: String = "shuffle_replicate_nl"
   override def hintAliases: Set[String] = Set(
     "SHUFFLE_REPLICATE_NL")
-}
-
-/**
- * An internal hint contains some JoinStrategyHint, used by adaptive query execution.
- */
-case class JoinStrategyHintCollection(hints: Seq[JoinStrategyHint]) extends JoinStrategyHint {
-  override def displayName: String = s"(${hints.mkString(", ")})"
-  override def hintAliases: Set[String] = Set.empty
-
-  override def hashCode(): Int = Objects.hash(hints)
-  override def equals(obj: Any): Boolean = {
-    obj match {
-      case strategy: JoinStrategyHint => hints.contains(strategy)
-      case _ => false
-    }
-  }
 }
 
 /**

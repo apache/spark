@@ -17,15 +17,17 @@
 
 package org.apache.spark.sql.execution.adaptive
 
-import org.apache.spark.sql.catalyst.plans.logical.{HintInfo, Join, JoinStrategyHint, JoinStrategyHintCollection, LogicalPlan, NO_BROADCAST_HASH, PREFER_SHUFFLE_HASH}
+import org.apache.spark.sql.catalyst.plans.logical.{HintInfo, Join, JoinStrategyHint, LogicalPlan, NO_BROADCAST_HASH, PREFER_SHUFFLE_HASH, SHUFFLE_HASH}
 import org.apache.spark.sql.catalyst.rules.Rule
 
 /**
  * This optimization rule includes two join selection:
  *   1. detects a join child that has a high ratio of empty partitions and adds a
- *      no_broadcast_hash_join hint to avoid it being broadcast.
+ *      NO_BROADCAST_HASH hint to avoid it being broadcast.
  *   2. detects a join child that every partition size less than local map threshold and adds a
- *      prefer_shuffled_hash hint to encourage being shuffle hash join instead of sort merge join.
+ *      PREFER_SHUFFLE_HASH hint to encourage being shuffle hash join instead of sort merge join.
+ *   3. if a join satisfies both NO_BROADCAST_HASH and PREFER_SHUFFLE_HASH,
+ *      then add a SHUFFLE_HASH hint.
  */
 object DynamicJoinSelection extends Rule[LogicalPlan] {
 
@@ -45,14 +47,17 @@ object DynamicJoinSelection extends Rule[LogicalPlan] {
   private def selectJoinStrategy(plan: LogicalPlan): Option[JoinStrategyHint] = plan match {
     case LogicalQueryStage(_, stage: ShuffleQueryStageExec) if stage.resultOption.get().isDefined
       && stage.mapStats.isDefined =>
-      var strategies = Seq[JoinStrategyHint]()
-      if (shouldDemoteBroadcastHashJoin(stage)) {
-        strategies = strategies ++ Seq(NO_BROADCAST_HASH)
+      val demoteBroadcastHash = shouldDemoteBroadcastHashJoin(stage)
+      val preferShuffleHash = preferShuffledHashJoin(stage)
+      if (demoteBroadcastHash && preferShuffleHash) {
+        Some(SHUFFLE_HASH)
+      } else if (demoteBroadcastHash) {
+        Some(NO_BROADCAST_HASH)
+      } else if (preferShuffleHash) {
+        Some(PREFER_SHUFFLE_HASH)
+      } else {
+        None
       }
-      if (preferShuffledHashJoin(stage)) {
-        strategies = strategies ++ Seq(PREFER_SHUFFLE_HASH)
-      }
-      Some(JoinStrategyHintCollection(strategies))
 
     case _ => None
   }
