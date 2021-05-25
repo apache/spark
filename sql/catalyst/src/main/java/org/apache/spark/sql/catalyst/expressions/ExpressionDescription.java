@@ -31,7 +31,7 @@ import java.lang.annotation.RetentionPolicy;
  * `usage()` will be used for the function usage in brief way.
  *
  * These below are concatenated and used for the function usage in verbose way, suppose arguments,
- * examples, note, group, functionType, since and deprecated will be provided.
+ * examples, note, group, source, since and deprecated will be provided.
  *
  * `arguments()` describes arguments for the expression.
  *
@@ -42,7 +42,7 @@ import java.lang.annotation.RetentionPolicy;
  * `group()` describes the category that the expression belongs to. The valid value is
  * "agg_funcs", "array_funcs", "datetime_funcs", "json_funcs", "map_funcs" and "window_funcs".
  *
- * `functionType()` describe the type of the function. The valid value is "built-in", "hive",
+ * `source()` describe the source of the function. The valid value is "built-in", "hive",
  * "python_udf", "scala_udf", "java_udf".
  *
  * `since()` contains version information for the expression. Version is specified by,
@@ -51,7 +51,7 @@ import java.lang.annotation.RetentionPolicy;
  * `deprecated()` contains deprecation information for the expression optionally, for example,
  * "Deprecated since 2.2.0. Use something else instead".
  *
- * The format, in particular for `arguments()`, `examples()`,`note()`, `group()`, `functionType()`,
+ * The format, in particular for `arguments()`, `examples()`,`note()`, `group()`, `source()`,
  * `since()` and `deprecated()`,  should strictly be as follows.
  *
  * <pre>
@@ -75,7 +75,7 @@ import java.lang.annotation.RetentionPolicy;
  *     ...
  *   """,
  *   group = "agg_funcs",
- *   functionType = "built-in",
+ *   source = "built-in",
  *   since = "3.0.0",
  *   deprecated = """
  *     ...
@@ -116,5 +116,5 @@ public @interface ExpressionDescription {
     String group() default "";
     String since() default "";
     String deprecated() default "";
-    String functionType() default "built-in";
+    String source() default "built-in";
 }

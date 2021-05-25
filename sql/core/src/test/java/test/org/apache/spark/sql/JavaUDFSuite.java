@@ -144,10 +144,10 @@ public class JavaUDFSuite implements Serializable {
 
   @SuppressWarnings("unchecked")
   @Test
-  public void functionTypeTest() {
+  public void sourceTest() {
     spark.udf().register("stringLengthTest", (String str) -> str.length(), DataTypes.IntegerType);
     ExpressionInfo info = spark.sessionState().catalog().lookupFunctionInfo(
             FunctionIdentifier.apply("stringLengthTest"));
-    Assert.assertEquals("java_udf", info.getFunctionType());
+    Assert.assertEquals("java_udf", info.getSource());
   }
 }

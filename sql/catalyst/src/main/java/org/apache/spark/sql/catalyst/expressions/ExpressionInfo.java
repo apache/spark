@@ -38,7 +38,7 @@ public class ExpressionInfo {
     private String group;
     private String since;
     private String deprecated;
-    private String functionType;
+    private String source;
 
     private static final Set<String> validGroups =
         new HashSet<>(Arrays.asList("agg_funcs", "array_funcs", "binary_funcs", "bitwise_funcs",
@@ -47,7 +47,7 @@ public class ExpressionInfo {
             "lambda_funcs", "map_funcs", "math_funcs", "misc_funcs", "string_funcs", "struct_funcs",
             "window_funcs", "xml_funcs", "table_funcs"));
 
-    private static final Set<String> validFunctionTypes =
+    private static final Set<String> validSources =
             new HashSet<>(Arrays.asList("built-in", "hive", "python_udf", "scala_udf", "java_udf"));
 
     public String getClassName() {
@@ -99,8 +99,8 @@ public class ExpressionInfo {
         return db;
     }
 
-    public String getFunctionType() {
-        return functionType;
+    public String getSource() {
+        return source;
     }
 
     public ExpressionInfo(
@@ -114,7 +114,7 @@ public class ExpressionInfo {
             String group,
             String since,
             String deprecated,
-            String functionType) {
+            String source) {
         assert name != null;
         assert arguments != null;
         assert examples != null;
@@ -123,7 +123,7 @@ public class ExpressionInfo {
         assert group != null;
         assert since != null;
         assert deprecated != null;
-        assert functionType != null;
+        assert source != null;
 
         this.className = className;
         this.db = db;
@@ -135,7 +135,7 @@ public class ExpressionInfo {
         this.group = group;
         this.since = since;
         this.deprecated = deprecated;
-        this.functionType = functionType;
+        this.source = source;
 
         // Make the extended description.
         this.extended = arguments + examples;
@@ -155,10 +155,10 @@ public class ExpressionInfo {
                 this.name + "]. It should be a value in " + validGroups + "; however, " +
                 "got [" + group + "].");
         }
-        if (!functionType.isEmpty() && !validFunctionTypes.contains(functionType)) {
-            throw new IllegalArgumentException("'functionType' is malformed in the expression [" +
-                    this.name + "]. It should be a value in " + validFunctionTypes + "; however, " +
-                    "got [" + functionType + "].");
+        if (!source.isEmpty() && !validSources.contains(source)) {
+            throw new IllegalArgumentException("'source' is malformed in the expression [" +
+                    this.name + "]. It should be a value in " + validSources + "; however, " +
+                    "got [" + source + "].");
         }
         if (!since.isEmpty()) {
             if (Integer.parseInt(since.split("\\.")[0]) < 0) {
