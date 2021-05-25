@@ -661,8 +661,8 @@ private[sql] class TestHiveSessionStateBuilder(
 
   override def overrideConfs: Map[String, String] = TestHiveContext.overrideConfs
 
-  override def createQueryExecution: (LogicalPlan) => QueryExecution = { plan =>
-    new TestHiveQueryExecution(session.asInstanceOf[TestHiveSparkSession], plan)
+  override def createQueryExecution: (LogicalPlan, Boolean) => QueryExecution = {
+    (plan, _) => new TestHiveQueryExecution(session.asInstanceOf[TestHiveSparkSession], plan)
   }
 
   override protected def newBuilder: NewBuilder = new TestHiveSessionStateBuilder(_, _)

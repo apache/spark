@@ -310,8 +310,8 @@ abstract class BaseSessionStateBuilder(
   /**
    * Create a query execution object.
    */
-  protected def createQueryExecution: LogicalPlan => QueryExecution = { plan =>
-    new QueryExecution(session, plan)
+  protected def createQueryExecution: (LogicalPlan, Boolean) => QueryExecution = {
+    (plan, isExecutingCommand) => QueryExecution(session, plan, isExecutingCommand)
   }
 
   /**

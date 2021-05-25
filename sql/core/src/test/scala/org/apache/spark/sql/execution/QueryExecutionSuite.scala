@@ -240,23 +240,25 @@ class QueryExecutionSuite extends SharedSparkSession {
     }
   }
 
-  test("SPARK-35378: Eagerly execute non-root Command") {
+  test("SPARK-35378: Eagerly execute Command") {
     def qe(logicalPlan: LogicalPlan): QueryExecution = new QueryExecution(spark, logicalPlan)
 
     val showTables = ShowTables(UnresolvedNamespace(Seq.empty[String]), None)
     val showTablesQe = qe(showTables)
-    assert(showTablesQe.nonRootCommandExecuted.isInstanceOf[ShowTablesCommand])
-    assert(showTablesQe.executedPlan.isInstanceOf[ExecutedCommandExec])
-    assert(showTablesQe.executedPlan.asInstanceOf[ExecutedCommandExec]
+    assert(showTablesQe.commandExecuted.isInstanceOf[CommandResult])
+    assert(showTablesQe.executedPlan.isInstanceOf[CommandResultExec])
+    val showTablesResultExec = showTablesQe.executedPlan.asInstanceOf[CommandResultExec]
+    assert(showTablesResultExec.commandPhysicalPlan.isInstanceOf[ExecutedCommandExec])
+    assert(showTablesResultExec.commandPhysicalPlan.asInstanceOf[ExecutedCommandExec]
       .cmd.isInstanceOf[ShowTablesCommand])
 
     val project = Project(showTables.output, SubqueryAlias("s", showTables))
     val projectQe = qe(project)
-    assert(projectQe.nonRootCommandExecuted.isInstanceOf[Project])
-    assert(projectQe.nonRootCommandExecuted.children.length == 1)
-    assert(projectQe.nonRootCommandExecuted.children(0).isInstanceOf[SubqueryAlias])
-    assert(projectQe.nonRootCommandExecuted.children(0).children.length == 1)
-    assert(projectQe.nonRootCommandExecuted.children(0).children(0).isInstanceOf[CommandResult])
+    assert(projectQe.commandExecuted.isInstanceOf[Project])
+    assert(projectQe.commandExecuted.children.length == 1)
+    assert(projectQe.commandExecuted.children(0).isInstanceOf[SubqueryAlias])
+    assert(projectQe.commandExecuted.children(0).children.length == 1)
+    assert(projectQe.commandExecuted.children(0).children(0).isInstanceOf[CommandResult])
     assert(projectQe.executedPlan.isInstanceOf[CommandResultExec])
     val cmdResultExec = projectQe.executedPlan.asInstanceOf[CommandResultExec]
     assert(cmdResultExec.commandPhysicalPlan.isInstanceOf[ExecutedCommandExec])

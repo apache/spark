@@ -55,7 +55,8 @@ import org.apache.spark.util.Utils
 class QueryExecution(
     val sparkSession: SparkSession,
     val logical: LogicalPlan,
-    val tracker: QueryPlanningTracker = new QueryPlanningTracker) extends Logging {
+    val tracker: QueryPlanningTracker = new QueryPlanningTracker,
+    val isExecutingCommand: Boolean = false) extends Logging {
 
   val id: Long = QueryExecution.nextExecutionId
 
@@ -75,25 +76,23 @@ class QueryExecution(
     sparkSession.sessionState.analyzer.executeAndCheck(logical, tracker)
   }
 
-  lazy val nonRootCommandExecuted: LogicalPlan = analyzed mapChildren { child =>
-    child transformDown {
-      // SPARK-35378: Eagerly execute non-root Command
-      // Currently, Command returns GenericInternalRow and some Exec casts the output
-      // of child plan to UnsafeRow. If we set Command as the child node or sub query,
-      // then ClassCastException occurs. Such as:
-      // java.lang.ClassCastException
-      // org.apache.spark.sql.catalyst.expressions.GenericInternalRow cannot be cast to
-      // org.apache.spark.sql.catalyst.expressions.UnsafeRow
-      // So eagerly executes Command and converts the output of it to UnsafeRow.
-      case c: Command =>
-        val qe = sparkSession.sessionState.executePlan(c)
-        CommandResult(
-          qe.analyzed.output,
-          qe.nonRootCommandExecuted,
-          qe.executedPlan,
-          SQLExecution.withNewExecutionId(qe, Some("command"))(qe.executedPlan.executeCollect()))
-      case other => other
-    }
+  // SPARK-35378: Eagerly execute Command
+  // Currently, Command returns GenericInternalRow and some Exec casts the output
+  // of child plan to UnsafeRow. If we set Command as the child node or sub query,
+  // then ClassCastException occurs. Such as:
+  // java.lang.ClassCastException
+  // org.apache.spark.sql.catalyst.expressions.GenericInternalRow cannot be cast to
+  // org.apache.spark.sql.catalyst.expressions.UnsafeRow
+  // So eagerly executes Command and converts the output of it to UnsafeRow.
+  lazy val commandExecuted: LogicalPlan = analyzed transformDown {
+    case c: Command if isExecutingCommand == false =>
+      val qe = sparkSession.sessionState.executePlan(c, true)
+      CommandResult(
+        qe.analyzed.output,
+        qe.commandExecuted,
+        qe.executedPlan,
+        SQLExecution.withNewExecutionId(qe, Some("command"))(qe.executedPlan.executeCollect()))
+    case other => other
   }
 
   lazy val withCachedData: LogicalPlan = sparkSession.withActive {
@@ -101,7 +100,7 @@ class QueryExecution(
     assertSupported()
     // clone the plan to avoid sharing the plan instance between different stages like analyzing,
     // optimizing and planning.
-    sparkSession.sharedState.cacheManager.useCachedData(nonRootCommandExecuted.clone())
+    sparkSession.sharedState.cacheManager.useCachedData(commandExecuted.clone())
   }
 
   lazy val optimizedPlan: LogicalPlan = executePhase(QueryPlanningTracker.OPTIMIZATION) {
@@ -358,6 +357,12 @@ class QueryExecution(
 }
 
 object QueryExecution {
+  def apply(
+      sparkSession: SparkSession,
+      logical: LogicalPlan,
+      isExecutingCommand: Boolean): QueryExecution =
+    new QueryExecution(sparkSession, logical, new QueryPlanningTracker, isExecutingCommand)
+
   private val _nextExecutionId = new AtomicLong(0)
 
   private def nextExecutionId: Long = _nextExecutionId.getAndIncrement
