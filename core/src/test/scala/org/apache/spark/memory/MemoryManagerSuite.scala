@@ -260,9 +260,10 @@ private[memory] trait MemoryManagerSuite extends SparkFunSuite with BeforeAndAft
     assert(!t2Result1.isCompleted)
     assert(c2.getUsed() === 0L)
 
-    // t1 attempts to acquire 500 bytes, causing its existing reservation to spill partially. t2 is
-    // first in line for the freed memory, so t1 must try again, causing the rest of the reservation
-    // to spill.
+    // t1 attempts to acquire 500 bytes, causing its existing reservation to spill partially. After
+    // the spill, t1 is still at its fair share of 500 bytes, so it cannot acquire memory and t2
+    // gets the freed memory instead. t1 must try again, causing the rest of the reservation to
+    // spill.
     val t1Result2 = Future { c1.acquireMemory(500L) }
 
     // The spill should release enough memory for both t1's and t2's reservations to be satisfied.
