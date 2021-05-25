@@ -388,13 +388,8 @@ case class MakeDuration(
     this(days, hours, mins, Literal(Decimal(0, Decimal.MAX_LONG_DIGITS, 6)),
       SQLConf.get.ansiEnabled)
   }
-  def this(
-      days: Expression,
-      hours: Expression) = {
-    this(days, hours, Literal(0))
-  }
-  def this(days: Expression) =
-    this(days, Literal(0))
+  def this(days: Expression, hours: Expression) = this(days, hours, Literal(0))
+  def this(days: Expression) = this(days, Literal(0))
   def this() = this(Literal(0))
 
   override def first: Expression = days
