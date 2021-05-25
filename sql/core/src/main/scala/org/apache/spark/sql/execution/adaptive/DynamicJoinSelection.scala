@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.adaptive
 
+import org.apache.spark.MapOutputStatistics
 import org.apache.spark.sql.catalyst.plans.logical.{HintInfo, Join, JoinStrategyHint, LogicalPlan, NO_BROADCAST_HASH, PREFER_SHUFFLE_HASH, SHUFFLE_HASH}
 import org.apache.spark.sql.catalyst.rules.Rule
 
@@ -31,24 +32,23 @@ import org.apache.spark.sql.catalyst.rules.Rule
  */
 object DynamicJoinSelection extends Rule[LogicalPlan] {
 
-  private def shouldDemoteBroadcastHashJoin(stage: ShuffleQueryStageExec): Boolean = {
-    val mapStats = stage.mapStats.get
+  private def shouldDemoteBroadcastHashJoin(mapStats: MapOutputStatistics): Boolean = {
     val partitionCnt = mapStats.bytesByPartitionId.length
     val nonZeroCnt = mapStats.bytesByPartitionId.count(_ > 0)
     partitionCnt > 0 && nonZeroCnt > 0 &&
       (nonZeroCnt * 1.0 / partitionCnt) < conf.nonEmptyPartitionRatioForBroadcastJoin
   }
 
-  private def preferShuffledHashJoin(stage: ShuffleQueryStageExec): Boolean = {
+  private def preferShuffledHashJoin(mapStats: MapOutputStatistics): Boolean = {
     val localMapThreshold = conf.shuffleHashJoinLocalMapThreshold
-    stage.mapStats.get.bytesByPartitionId.forall(_ <= localMapThreshold)
+    mapStats.bytesByPartitionId.forall(_ <= localMapThreshold)
   }
 
   private def selectJoinStrategy(plan: LogicalPlan): Option[JoinStrategyHint] = plan match {
     case LogicalQueryStage(_, stage: ShuffleQueryStageExec) if stage.resultOption.get().isDefined
       && stage.mapStats.isDefined =>
-      val demoteBroadcastHash = shouldDemoteBroadcastHashJoin(stage)
-      val preferShuffleHash = preferShuffledHashJoin(stage)
+      val demoteBroadcastHash = shouldDemoteBroadcastHashJoin(stage.mapStats.get)
+      val preferShuffleHash = preferShuffledHashJoin(stage.mapStats.get)
       if (demoteBroadcastHash && preferShuffleHash) {
         Some(SHUFFLE_HASH)
       } else if (demoteBroadcastHash) {
