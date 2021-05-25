@@ -42,7 +42,7 @@ import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.scheduler.local.LocalSchedulerBackend
 import org.apache.spark.shuffle.{FetchFailedException, MetadataFetchFailedException}
 import org.apache.spark.storage.{BlockId, BlockManagerId, BlockManagerMaster}
-import org.apache.spark.util.{AccumulatorContext, AccumulatorV2, CallSite, LongAccumulator, Utils}
+import org.apache.spark.util.{AccumulatorContext, AccumulatorV2, CallSite, Clock, LongAccumulator, SystemClock, Utils}
 
 class DAGSchedulerEventProcessLoopTester(dagScheduler: DAGScheduler)
   extends DAGSchedulerEventProcessLoop(dagScheduler) {
@@ -295,6 +295,35 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     }
   }
 
+  class MyDAGScheduler(
+      sc: SparkContext,
+      taskScheduler: TaskScheduler,
+      listenerBus: LiveListenerBus,
+      mapOutputTracker: MapOutputTrackerMaster,
+      blockManagerMaster: BlockManagerMaster,
+      env: SparkEnv,
+      clock: Clock = new SystemClock(),
+      shuffleMergeFinalize: Boolean = true,
+      shuffleMergeRegister: Boolean = true
+  ) extends DAGScheduler(
+      sc, taskScheduler, listenerBus, mapOutputTracker, blockManagerMaster, env, clock) {
+    /**
+     * Schedules shuffle merge finalize.
+     */
+    override private[scheduler] def scheduleShuffleMergeFinalize(
+        shuffleMapStage: ShuffleMapStage): Unit = {
+      if (shuffleMergeRegister) {
+        for (part <- 0 until shuffleMapStage.shuffleDep.partitioner.numPartitions) {
+          val mergeStatuses = Seq((part, makeMergeStatus("")))
+          handleRegisterMergeStatuses(shuffleMapStage, mergeStatuses)
+        }
+        if (shuffleMergeFinalize) {
+          handleShuffleMergeFinalized(shuffleMapStage)
+        }
+      }
+    }
+  }
+
   override def beforeEach(): Unit = {
     super.beforeEach()
     firstInit = true
@@ -322,26 +351,14 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     broadcastManager = new BroadcastManager(true, sc.getConf)
     mapOutputTracker = spy(new MyMapOutputTrackerMaster(sc.getConf, broadcastManager))
     blockManagerMaster = spy(new MyBlockManagerMaster(sc.getConf))
-    scheduler = new DAGScheduler(
+    scheduler = new MyDAGScheduler(
       sc,
       taskScheduler,
       sc.listenerBus,
       mapOutputTracker,
       blockManagerMaster,
-      sc.env) {
-      /**
-       * Schedules shuffle merge finalize.
-       */
-      override private[scheduler] def scheduleShuffleMergeFinalize(
-          shuffleMapStage: ShuffleMapStage): Unit = {
-        for (part <- 0 until shuffleMapStage.shuffleDep.partitioner.numPartitions) {
-          val mergeStatuses = Seq((part, makeMergeStatus("")))
-          handleRegisterMergeStatuses(shuffleMapStage, mergeStatuses)
-        }
-        shuffleMapStage.shuffleDep.markShuffleMergeFinalized()
-        handleShuffleMergeFinalized(shuffleMapStage)
-      }
-    }
+      sc.env)
+
     dagEventProcessLoopTester = new DAGSchedulerEventProcessLoopTester(scheduler)
   }
 
@@ -3641,6 +3658,92 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     assertDataStructuresEmpty()
   }
 
+  test("SPARK-32920: Merge results should be unregistered if the running stage is cancelled" +
+    " before shuffle merge is finalized") {
+    initPushBasedShuffleConfs(conf)
+    DAGSchedulerSuite.clearMergerLocs
+    DAGSchedulerSuite.addMergerLocs(Seq("host1", "host2", "host3", "host4", "host5"))
+    scheduler = new MyDAGScheduler(
+      sc,
+      taskScheduler,
+      sc.listenerBus,
+      mapOutputTracker,
+      blockManagerMaster,
+      sc.env,
+      shuffleMergeFinalize = false)
+    dagEventProcessLoopTester = new DAGSchedulerEventProcessLoopTester(scheduler)
+
+    val parts = 2
+    val shuffleMapRdd = new MyRDD(sc, parts, Nil)
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(parts))
+    val reduceRdd = new MyRDD(sc, parts, List(shuffleDep), tracker = mapOutputTracker)
+
+    // Submit a reduce job that depends which will create a map stage
+    submit(reduceRdd, (0 until parts).toArray)
+    // Complete shuffle map stage successfully on hostA
+    complete(taskSets(0), taskSets(0).tasks.zipWithIndex.map {
+      case (task, _) =>
+        (Success, makeMapStatus("hostA", parts))
+    }.toSeq)
+
+    val shuffleMapStageToCancel = scheduler.stageIdToStage(0).asInstanceOf[ShuffleMapStage]
+    runEvent(StageCancelled(0, Option("Explicit cancel check")))
+    scheduler.handleShuffleMergeFinalized(shuffleMapStageToCancel)
+    assert(mapOutputTracker.getNumAvailableMergeResults(shuffleDep.shuffleId) == 0)
+  }
+
+  test("SPARK-32920: Merge results should not get registered after shuffle merge finalization") {
+    initPushBasedShuffleConfs(conf)
+    DAGSchedulerSuite.clearMergerLocs
+    DAGSchedulerSuite.addMergerLocs(Seq("host1", "host2", "host3", "host4", "host5"))
+
+    scheduler = new MyDAGScheduler(
+      sc,
+      taskScheduler,
+      sc.listenerBus,
+      mapOutputTracker,
+      blockManagerMaster,
+      sc.env,
+      shuffleMergeFinalize = false,
+      shuffleMergeRegister = false)
+    dagEventProcessLoopTester = new DAGSchedulerEventProcessLoopTester(scheduler)
+
+    val parts = 2
+    val shuffleMapRdd = new MyRDD(sc, parts, Nil)
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(parts))
+    val reduceRdd = new MyRDD(sc, parts, List(shuffleDep), tracker = mapOutputTracker)
+
+    // Submit a reduce job that depends which will create a map stage
+    submit(reduceRdd, (0 until parts).toArray)
+    // Complete shuffle map stage successfully on hostA
+    complete(taskSets(0), taskSets(0).tasks.zipWithIndex.map {
+      case (task, _) =>
+        (Success, makeMapStatus("hostA", parts))
+    }.toSeq)
+    val shuffleMapStage = scheduler.stageIdToStage(0).asInstanceOf[ShuffleMapStage]
+    scheduler.handleRegisterMergeStatuses(shuffleMapStage, Seq((0, makeMergeStatus("hostA"))))
+    scheduler.handleShuffleMergeFinalized(shuffleMapStage)
+    scheduler.handleRegisterMergeStatuses(shuffleMapStage, Seq((1, makeMergeStatus("hostA"))))
+    assert(mapOutputTracker.getNumAvailableMergeResults(shuffleDep.shuffleId) == 1)
+  }
+
+  test("SPARK-32920: Disable push based shuffle in the case of a barrier stage") {
+    initPushBasedShuffleConfs(conf)
+    DAGSchedulerSuite.clearMergerLocs
+    DAGSchedulerSuite.addMergerLocs(Seq("host1", "host2", "host3", "host4", "host5"))
+
+    val parts = 2
+    val shuffleMapRdd = new MyRDD(sc, parts, Nil).barrier().mapPartitions(iter => iter)
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(parts))
+    val reduceRdd = new MyRDD(sc, parts, List(shuffleDep), tracker = mapOutputTracker)
+
+    // Submit a reduce job that depends which will create a map stage
+    submit(reduceRdd, (0 until parts).toArray)
+    completeShuffleMapStageSuccessfully(0, 0, reduceRdd.partitions.length)
+    val shuffleMapStage = scheduler.stageIdToStage(0).asInstanceOf[ShuffleMapStage]
+    assert(!shuffleMapStage.shuffleDep.shuffleMergeEnabled)
+  }
+
   test("SPARK-32920: metadata fetch failure should not unregister map status") {
     initPushBasedShuffleConfs(conf)
     val parts = 2
@@ -3765,6 +3868,11 @@ private class PushBasedSchedulerBackend(
     } else {
       mergerLocations
     }
+  }
+
+  // Currently this is only used in tests specifically for Push based shuffle
+  override def maxNumConcurrentTasks(rp: ResourceProfile): Int = {
+    2
   }
 }
 

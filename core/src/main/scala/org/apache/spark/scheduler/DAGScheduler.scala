@@ -1337,6 +1337,9 @@ private[spark] class DAGScheduler(
     stage match {
       case sms: ShuffleMapStage if stage.isIndeterminate && !sms.isAvailable =>
         mapOutputTracker.unregisterAllMapOutput(sms.shuffleDep.shuffleId)
+        if (sms.shuffleDep.shuffleMergeEnabled) {
+          mapOutputTracker.unregisterAllMergeResult(sms.shuffleDep.shuffleId)
+        }
       case _ =>
     }
 
@@ -1725,7 +1728,7 @@ private[spark] class DAGScheduler(
             }
         }
 
-      case FetchFailed(bmAddress, shuffleId, _, mapIndex, _, failureMessage) =>
+      case FetchFailed(bmAddress, shuffleId, _, mapIndex, reduceId, failureMessage) =>
         val failedStage = stageIdToStage(task.stageId)
         val mapStage = shuffleIdToMapStage(shuffleId)
 
@@ -1759,6 +1762,10 @@ private[spark] class DAGScheduler(
           } else if (mapIndex != -1) {
             // Mark the map whose fetch failed as broken in the map stage
             mapOutputTracker.unregisterMapOutput(shuffleId, mapIndex, bmAddress)
+            if (mapStage.shuffleDep.shuffleMergeEnabled) {
+              mapOutputTracker.
+                unregisterMergeResult(shuffleId, reduceId, bmAddress, Option(mapIndex))
+            }
           }
 
           if (failedStage.rdd.isBarrier()) {
@@ -2060,17 +2067,16 @@ private[spark] class DAGScheduler(
       stage.shuffleDep.getMergerLocs.zipWithIndex.foreach {
         case (shuffleServiceLoc, index) =>
           // Sends async request to shuffle service to finalize shuffle merge on that host
-          // TODO: Cancel finalizeShuffleMerge if the stage is cancelled
+          // TODO: SPARK-35536: Cancel finalizeShuffleMerge if the stage is cancelled
           // TODO: during shuffleMergeFinalizeWaitSec
           shuffleClient.finalizeShuffleMerge(shuffleServiceLoc.host,
             shuffleServiceLoc.port, shuffleId,
             new MergeFinalizerListener {
               override def onShuffleMergeSuccess(statuses: MergeStatuses): Unit = {
                 assert(shuffleId == statuses.shuffleId)
-                eventProcessLoop.post(
-                  RegisterMergeStatuses(stage,
-                    MergeStatus.convertMergeStatusesToMergeStatusArr(statuses, shuffleServiceLoc)))
                 if (!timedOut.get()) {
+                  eventProcessLoop.post(RegisterMergeStatuses(stage, MergeStatus.
+                        convertMergeStatusesToMergeStatusArr(statuses, shuffleServiceLoc)))
                   increaseAndCheckResponseCount()
                   results(index).set(true)
                 }
@@ -2146,13 +2152,14 @@ private[spark] class DAGScheduler(
     }
   }
 
-  private[scheduler] def handleShuffleMergeFinalized(
-      stage: ShuffleMapStage): Unit = {
+  private[scheduler] def handleShuffleMergeFinalized(stage: ShuffleMapStage): Unit = {
     // Only update MapOutputTracker metadata if the stage is still active. i.e not cancelled.
     if (runningStages.contains(stage)) {
       stage.shuffleDep.markShuffleMergeFinalized()
       processShuffleMapStageCompletion(stage)
     } else {
+      // TODO: SPARK-35549: Currently merge statuses results which come after shuffle merge
+      // TODO: is finalized is not registered.
       mapOutputTracker.unregisterAllMergeResult(stage.shuffleDep.shuffleId)
     }
   }

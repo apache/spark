@@ -97,7 +97,9 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
     shuffleId, this)
 
   // By default, shuffle merge is enabled for ShuffleDependency if push based shuffle is enabled
-  private[this] var _shuffleMergeEnabled = Utils.isPushBasedShuffleEnabled(rdd.sparkContext.getConf)
+  private[this] var _shuffleMergeEnabled = Utils.isPushBasedShuffleEnabled(rdd.sparkContext.getConf) &&
+    // TODO: SPARK-35547: Push based shuffle is currently unsupported for Barrier stages
+    !rdd.isBarrier()
 
   private[spark] def setShuffleMergeEnabled(shuffleMergeEnabled: Boolean): Unit = {
     _shuffleMergeEnabled = shuffleMergeEnabled
