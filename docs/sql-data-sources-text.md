@@ -21,8 +21,6 @@ license: |
 
 Spark SQL provides `spark.read().text("file_name")` to read a file or directory of text files into a Spark DataFrame, and `dataframe.write().text("path")` to write to a text file. When reading a text file, each line becomes each row that has string "value" column by default. The line separator can be changed as shown in the example below. The `option()` function can be used to customize the behavior of reading or writing, such as controlling behavior of the line separator, compression, and so on.
 
-<!--TODO(SPARK-34491): add `option()` document reference-->
-
 <div class="codetabs">
 
 <div data-lang="scala"  markdown="1">
@@ -38,3 +36,35 @@ Spark SQL provides `spark.read().text("file_name")` to read a file or directory 
 </div>
 
 </div>
+
+## Data Source Option
+
+Data source options of CSV can be set via:
+* the `.option`/`.options` methods of
+  *  `DataFrameReader`
+  *  `DataFrameWriter`
+  *  `DataStreamReader`
+  *  `DataStreamWriter`
+
+<table class="table">
+  <tr><th><b>Property Name</b></th><th><b>Default</b></th><th><b>Meaning</b></th><th><b>Scope</b></th></tr>
+  <tr>
+    <td><code>wholetext</code></td>
+    <td>None</td>
+    <td>If true, read each file from input path(s) as a single row.</td>
+    <td>read</td>
+  </tr>
+  <tr>
+    <td><code>lineSep</code></td>
+    <td>None</td>
+    <td>Defines the line separator that should be used for parsing. If None is set, it covers all <code>\\r</code>, <code>\\r\\n</code> and <code>\\n</code>. Maximum length is 1 character.</td>
+    <td>read/write</td>
+  </tr>
+  <tr>
+    <td><code>compression</code></td>
+    <td>None</td>
+    <td>Compression codec to use when saving to file. This can be one of the known case-insensitive shorten names (none, bzip2, gzip, lz4, snappy and deflate).</td>
+    <td>write</td>
+  </tr>
+</table>
+Other generic options can be found in <a href="https://spark.apache.org/docs/latest/sql-data-sources-generic-options.html"> Generic File Source Options</a>.

@@ -313,28 +313,13 @@ class DataFrameReader(OptionUtils):
         ----------
         paths : str or list
             string, or list of strings, for input path(s).
-        wholetext : str or bool, optional
-            if true, read each file from input path(s) as a single row.
-        lineSep : str, optional
-            defines the line separator that should be used for parsing. If None is
-            set, it covers all ``\\r``, ``\\r\\n`` and ``\\n``.
-        pathGlobFilter : str or bool, optional
-            an optional glob pattern to only include files with paths matching
-            the pattern. The syntax follows `org.apache.hadoop.fs.GlobFilter`.
-            It does not change the behavior of
-            `partition discovery <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#partition-discovery>`_.  # noqa
-        recursiveFileLookup : str or bool, optional
-            recursively scan a directory for files. Using this option disables
-            `partition discovery <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#partition-discovery>`_.  # noqa
 
-            modification times occurring before the specified time. The provided timestamp
-            must be in the following format: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)
-        modifiedBefore (batch only) : an optional timestamp to only include files with
-            modification times occurring before the specified time. The provided timestamp
-            must be in the following format: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)
-        modifiedAfter (batch only) : an optional timestamp to only include files with
-            modification times occurring after the specified time. The provided timestamp
-            must be in the following format: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)
+        Other Parameters
+        ----------------
+        Extra options
+            For the extra options, refer to
+            `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-text.html#data-source-option>`_  # noqa
+            in the version you use.
 
         Examples
         --------
@@ -1038,13 +1023,13 @@ class DataFrameWriter(OptionUtils):
         ----------
         path : str
             the path in any Hadoop supported file system
-        compression : str, optional
-            compression codec to use when saving to file. This can be one of the
-            known case-insensitive shorten names (none, bzip2, gzip, lz4,
-            snappy and deflate).
-        lineSep : str, optional
-            defines the line separator that should be used for writing. If None is
-            set, it uses the default value, ``\\n``.
+
+        Other Parameters
+        ----------------
+        Extra options
+            For the extra options, refer to
+            `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-text.html#data-source-option>`_  # noqa
+            in the version you use.
 
         The DataFrame must have only one column that is of string type.
         Each row becomes a new line in the output file.
