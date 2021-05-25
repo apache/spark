@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.plans.logical.statsEstimation
 import scala.collection.mutable.ArrayBuffer
 import scala.math.BigDecimal.RoundingMode
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, Expression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, Expression, Substring}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.types.{DecimalType, _}
 
@@ -80,6 +80,31 @@ object EstimationUtils {
     expressions.collect {
       case alias @ Alias(attr: Attribute, _) if attributeStats.contains(attr) =>
         alias.toAttribute -> attributeStats(attr)
+      case alias @ Alias(expn: Expression, _) if isExpressionStatsExist(expn, attributeStats) =>
+        getExpressionStats(alias.toAttribute, expn, attributeStats)
+    }
+  }
+
+  // Support for substring expressions.
+  // TODO: Support for more expressions like Multiply.
+  private def isExpressionStatsExist(
+      expn: Expression,
+      attributeStats: AttributeMap[ColumnStat]) = {
+    expn match {
+      case Substring(attr: Attribute, _, _) => attributeStats.contains(attr)
+      case _ => false
+    }
+  }
+
+  // Substring stats will be upper bounded to child stats (distictCount, nullCount).
+  // Return the stats of child in case of substring.
+  private def getExpressionStats(
+      attribute: Attribute,
+      expn: Expression,
+      attributeStats: AttributeMap[ColumnStat]) = {
+    expn match {
+      case Substring(attr: Attribute, _, _) if attributeStats.contains(attr) =>
+        attribute -> attributeStats(attr)
     }
   }
 

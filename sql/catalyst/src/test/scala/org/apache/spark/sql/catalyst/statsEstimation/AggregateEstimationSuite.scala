@@ -17,12 +17,13 @@
 
 package org.apache.spark.sql.catalyst.statsEstimation
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, AttributeReference, Literal, Substring}
 import org.apache.spark.sql.catalyst.expressions.aggregate.Count
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils._
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.StringType
 
 
 class AggregateEstimationSuite extends StatsEstimationTestBase with PlanTest {
@@ -42,6 +43,9 @@ class AggregateEstimationSuite extends StatsEstimationTestBase with PlanTest {
     attr("key32") -> ColumnStat(distinctCount = Some(0), min = None, max = None,
       nullCount = Some(4), avgLen = Some(4), maxLen = Some(4)),
     attr("key33") -> ColumnStat(distinctCount = Some(2), min = None, max = None,
+      nullCount = Some(2), avgLen = Some(4), maxLen = Some(4)),
+    AttributeReference("key41", StringType)()
+      -> ColumnStat(distinctCount = Some(2), min = None, max = None,
       nullCount = Some(2), avgLen = Some(4), maxLen = Some(4))
   ))
 
@@ -159,6 +163,27 @@ class AggregateEstimationSuite extends StatsEstimationTestBase with PlanTest {
         // From UnaryNode.computeStats, childSize * outputRowSize / childRowSize
         Statistics(sizeInBytes = 48 * (8 + 4 + 8) / (8 + 4)))
     }
+  }
+
+  test("stats should present if the group by key contains substring") {
+    val tableColumns = Seq("key41", "key12")
+    val namedGroupByExpression = Seq(Alias(Substring(nameToAttr("key41"),
+      Literal(1), Literal(2)), "abc")())
+    val rowCount = 4
+    val child = Project(namedGroupByExpression, StatsTestPlan(
+      outputList = tableColumns.map(nameToAttr),
+      rowCount,
+      // rowCount * (overhead + column size)
+      size = Some(4 * (8 + 4)),
+      attributeStats = AttributeMap(tableColumns.map(nameToColInfo))))
+    val testAgg = Aggregate(
+      groupingExpressions = namedGroupByExpression.map(_.toAttribute),
+      aggregateExpressions = namedGroupByExpression.map(_.toAttribute),
+      child)
+    val expectedColStats = Seq("abc" -> nameToColInfo("key41")._2)
+    val expectedAttrStats = toAttributeMap(expectedColStats, testAgg)
+
+    assert(testAgg.stats.attributeStats == expectedAttrStats)
   }
 
   private def checkAggStats(
