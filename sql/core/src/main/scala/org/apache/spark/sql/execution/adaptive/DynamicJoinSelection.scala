@@ -22,10 +22,11 @@ import org.apache.spark.sql.catalyst.plans.logical.{HintInfo, Join, JoinStrategy
 import org.apache.spark.sql.catalyst.rules.Rule
 
 /**
- * This optimization rule includes two join selection:
+ * This optimization rule includes three join selection:
  *   1. detects a join child that has a high ratio of empty partitions and adds a
- *      NO_BROADCAST_HASH hint to avoid it being broadcast.
- *   2. detects a join child that every partition size less than local map threshold and adds a
+ *      NO_BROADCAST_HASH hint to avoid it being broadcast, as shuffle join is faster in this case:
+ *      many tasks complete immediately since one join side is empty.
+ *   2. detects a join child that every partition size is less than local map threshold and adds a
  *      PREFER_SHUFFLE_HASH hint to encourage being shuffle hash join instead of sort merge join.
  *   3. if a join satisfies both NO_BROADCAST_HASH and PREFER_SHUFFLE_HASH,
  *      then add a SHUFFLE_HASH hint.
