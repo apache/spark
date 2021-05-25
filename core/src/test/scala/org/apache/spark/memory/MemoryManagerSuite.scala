@@ -252,6 +252,7 @@ private[memory] trait MemoryManagerSuite extends SparkFunSuite with BeforeAndAft
     val t1Result1 = Future { c1.acquireMemory(1000L) }
     assert(ThreadUtils.awaitResult(t1Result1, futureTimeout) === 1000L)
     assert(c1.getUsed() === 1000L)
+    assert(c1.getSpilledBytes() === 0L)
 
     // t2 attempts to acquire 500 bytes. This should block since there is no memory available.
     val t2Result1 = Future { c2.acquireMemory(500L) }
@@ -267,6 +268,7 @@ private[memory] trait MemoryManagerSuite extends SparkFunSuite with BeforeAndAft
     // The spill should release enough memory for both t1's and t2's reservations to be satisfied.
     assert(ThreadUtils.awaitResult(t2Result1, futureTimeout) === 500L)
     assert(ThreadUtils.awaitResult(t1Result2, futureTimeout) === 500L)
+    assert(c1.getSpilledBytes() === 1000L)
     assert(c1.getUsed() === 500L)
     assert(c2.getUsed() === 500L)
   }

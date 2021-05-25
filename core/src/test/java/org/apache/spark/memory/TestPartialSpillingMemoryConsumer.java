@@ -24,6 +24,8 @@ import java.io.IOException;
  * request rather than releasing all its memory.
  */
 public class TestPartialSpillingMemoryConsumer extends TestMemoryConsumer {
+  private long spilledBytes = 0L;
+
   public TestPartialSpillingMemoryConsumer(TaskMemoryManager memoryManager, MemoryMode mode) {
     super(memoryManager, mode);
   }
@@ -36,6 +38,11 @@ public class TestPartialSpillingMemoryConsumer extends TestMemoryConsumer {
     long used = getUsed();
     long released = Math.min(used, size);
     free(released);
+    spilledBytes += released;
     return released;
+  }
+
+  public long getSpilledBytes() {
+    return spilledBytes;
   }
 }
