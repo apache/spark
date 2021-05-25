@@ -581,32 +581,30 @@ private[kafka010] object KafkaSourceProvider extends Logging {
       defaultOffsets: KafkaOffsetRangeLimit): KafkaOffsetRangeLimit = {
     // The order below represents "preferences"
 
-    // 1. global timestamp
     if (params.contains(globalOffsetTimestampOptionKey)) {
+      // 1. global timestamp
       val tsStr = params(globalOffsetTimestampOptionKey).trim
       try {
         val ts = tsStr.toLong
-        return GlobalTimestampRangeLimit(ts)
+        GlobalTimestampRangeLimit(ts)
       } catch {
         case _: NumberFormatException =>
           throw new IllegalArgumentException(s"Expected a single long value, got $tsStr")
       }
-    }
-
-    // 2. timestamp per topic partition
-    if (params.contains(offsetByTimestampOptionKey)) {
+    } else if (params.contains(offsetByTimestampOptionKey)) {
+      // 2. timestamp per topic partition
       val json = params(offsetByTimestampOptionKey).trim
-      return SpecificTimestampRangeLimit(JsonUtils.partitionTimestamps(json))
-    }
-
-    // 3. latest/earliest/offset
-    params.get(offsetOptionKey).map(_.trim) match {
-      case Some(offset) if offset.toLowerCase(Locale.ROOT) == "latest" =>
-        LatestOffsetRangeLimit
-      case Some(offset) if offset.toLowerCase(Locale.ROOT) == "earliest" =>
-        EarliestOffsetRangeLimit
-      case Some(json) => SpecificOffsetRangeLimit(JsonUtils.partitionOffsets(json))
-      case None => defaultOffsets
+      SpecificTimestampRangeLimit(JsonUtils.partitionTimestamps(json))
+    } else {
+      // 3. latest/earliest/offset
+      params.get(offsetOptionKey).map(_.trim) match {
+        case Some(offset) if offset.toLowerCase(Locale.ROOT) == "latest" =>
+          LatestOffsetRangeLimit
+        case Some(offset) if offset.toLowerCase(Locale.ROOT) == "earliest" =>
+          EarliestOffsetRangeLimit
+        case Some(json) => SpecificOffsetRangeLimit(JsonUtils.partitionOffsets(json))
+        case None => defaultOffsets
+      }
     }
   }
 

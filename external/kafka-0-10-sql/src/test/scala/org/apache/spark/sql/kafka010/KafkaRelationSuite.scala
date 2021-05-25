@@ -293,7 +293,7 @@ abstract class KafkaRelationSuiteBase extends QueryTest with SharedSparkSession 
     TestUtils.assertExceptionMsg(e, "No offset matched from request")
   }
 
-  test("specifying both global timestamp and specific timestamp for partition") {
+  test("preferences on offset related options") {
     val (topic, timestamps) = prepareTimestampRelatedUnitTest
 
     /*
@@ -305,17 +305,30 @@ abstract class KafkaRelationSuiteBase extends QueryTest with SharedSparkSession 
     * specific timestamp for partition
     starting only presented as "second", and ending not presented
 
-    Here we expect global timestamp will take effect.
-     */
-    verifyTimestampRelatedQueryResult({ df =>
-      val startTopicTimestamps = Map(
-        (0 to 2).map(new TopicPartition(topic, _) -> timestamps(1)): _*)
-      val startingTimestamps = JsonUtils.partitionTimestamps(startTopicTimestamps)
+    * offsets
+    starting only presented as "earliest", and ending not presented
 
+    The preference goes to global timestamp -> timestamp for partition -> offsets
+     */
+
+    val startTopicTimestamps = Map(
+      (0 to 2).map(new TopicPartition(topic, _) -> timestamps(1)): _*)
+    val startingTimestamps = JsonUtils.partitionTimestamps(startTopicTimestamps)
+
+    // all options are specified: global timestamp
+    verifyTimestampRelatedQueryResult({ df =>
       df
         .option("startingTimestamp", timestamps(2))
         .option("startingOffsetsByTimestamp", startingTimestamps)
+        .option("startingOffsets", "earliest")
     }, topic, 20 to 29)
+
+    // timestamp for partition and offsets are specified: timestamp for partition
+    verifyTimestampRelatedQueryResult({ df =>
+      df
+        .option("startingOffsetsByTimestamp", startingTimestamps)
+        .option("startingOffsets", "earliest")
+    }, topic, 10 to 29)
   }
 
   test("no matched offset for timestamp - endingOffsets") {
