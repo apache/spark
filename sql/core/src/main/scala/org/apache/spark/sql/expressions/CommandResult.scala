@@ -26,8 +26,8 @@ import org.apache.spark.sql.execution.SparkPlan
 /**
  * Logical plan node for holding data from a command.
  *
- * The local collection holding the `data`. It doesn't need to be sent to executors
- * and then doesn't need to be serializable.
+ * `Row`s may not be serializable and ideally we should not send `Row`s to the executors.
+ * Thus marking them as transient.
  */
 case class CommandResult(
     output: Seq[Attribute],
