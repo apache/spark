@@ -42,6 +42,10 @@ from pyspark.sql.types import (
 
 import pyspark.sql.types as types
 from pyspark.pandas.typedef import Dtype
+from pyspark.pandas.typedef.typehints import extension_object_dtypes_available
+
+if extension_object_dtypes_available:
+    from pandas import BooleanDtype
 
 if TYPE_CHECKING:
     from pyspark.pandas.indexes import Index  # noqa: F401 (SPARK-34943)
@@ -85,6 +89,7 @@ class DataTypeOps(object, metaclass=ABCMeta):
     def __new__(cls, dtype: Dtype, spark_type: DataType):
         from pyspark.pandas.data_type_ops.binary_ops import BinaryOps
         from pyspark.pandas.data_type_ops.boolean_ops import BooleanOps
+        from pyspark.pandas.data_type_ops.boolean_ops import BooleanExtensionOps
         from pyspark.pandas.data_type_ops.categorical_ops import CategoricalOps
         from pyspark.pandas.data_type_ops.complex_ops import ArrayOps, MapOps, StructOps
         from pyspark.pandas.data_type_ops.date_ops import DateOps
@@ -106,7 +111,10 @@ class DataTypeOps(object, metaclass=ABCMeta):
         elif isinstance(spark_type, StringType):
             return object.__new__(StringOps)
         elif isinstance(spark_type, BooleanType):
-            return object.__new__(BooleanOps)
+            if extension_object_dtypes_available and isinstance(dtype, BooleanDtype):
+                return object.__new__(BooleanExtensionOps)
+            else:
+                return object.__new__(BooleanOps)
         elif isinstance(spark_type, TimestampType):
             return object.__new__(DatetimeOps)
         elif isinstance(spark_type, DateType):
@@ -175,6 +183,18 @@ class DataTypeOps(object, metaclass=ABCMeta):
 
     def rpow(self, left, right) -> Union["Series", "Index"]:
         raise TypeError("Exponentiation can not be applied to %s." % self.pretty_name)
+
+    def __and__(self, left, right) -> Union["Series", "Index"]:
+        raise TypeError("Bitwise and can not be applied to %s." % self.pretty_name)
+
+    def __or__(self, left, right) -> Union["Series", "Index"]:
+        raise TypeError("Bitwise or can not be applied to %s." % self.pretty_name)
+
+    def rand(self, left, right) -> Union["Series", "Index"]:
+        return left.__and__(right)
+
+    def ror(self, left, right) -> Union["Series", "Index"]:
+        return left.__or__(right)
 
     def restore(self, col: pd.Series) -> pd.Series:
         """Restore column when to_pandas."""
