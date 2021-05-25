@@ -164,7 +164,7 @@ object PropagateEmptyRelation extends PropagateEmptyRelationBase {
       empty(p)
   }
 
-  // extract the pattern avoid conflict with propagateEmptyRelationAdvanced
+  // extract the pattern avoid conflict with commonApplyFunc
   private def canPropagate(plan: LogicalPlan): Boolean = plan match {
     case _: Project => true
     case _: Filter => true
