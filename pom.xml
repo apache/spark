@@ -3387,6 +3387,8 @@
                   <arg>-Wconf:msg=Auto-application to \`\(\)\` is deprecated:s</arg>
                   <arg>-Wconf:msg=method with a single empty parameter list overrides method without any parameter list:s</arg>
                   <arg>-Wconf:msg=method without a parameter list overrides a method with a single empty one:s</arg>
+                  <!-- SPARK-35496 Suppress `The outer reference in this type test cannot be checked at run time` -->
+                  <arg>-Wconf:msg=outer reference:s</arg>
                 </args>
                 <compilerPlugins combine.self="override">
                 </compilerPlugins>
