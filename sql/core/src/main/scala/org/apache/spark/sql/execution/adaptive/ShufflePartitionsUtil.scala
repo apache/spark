@@ -176,7 +176,7 @@ object ShufflePartitionsUtil extends Logging {
     }
     // only return coalesced result if any coalescing has happened.
     if (newPartitionSpecsSeq.head.length < numPartitions) {
-      newPartitionSpecsSeq
+      newPartitionSpecsSeq.toSeq
     } else {
       Seq.empty
     }
