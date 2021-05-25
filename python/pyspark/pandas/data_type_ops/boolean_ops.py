@@ -16,7 +16,7 @@
 #
 
 import numbers
-from typing import cast, TYPE_CHECKING, Union
+from typing import TYPE_CHECKING, Union
 
 from pyspark.pandas.base import IndexOpsMixin
 from pyspark.pandas.data_type_ops.base import (
