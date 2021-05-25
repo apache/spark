@@ -63,21 +63,21 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
     assert(errMsg.contains("'group' is malformed in the expression [testName]."))
   }
 
-  test("functionType in ExpressionInfo") {
+  test("source in ExpressionInfo") {
     val info = spark.sessionState.catalog.lookupFunctionInfo(FunctionIdentifier("sum"))
-    assert(info.getFunctionType === "built-in")
+    assert(info.getSource === "built-in")
 
-    Seq("python_udf", "java_udf", "scala_udf", "built-in", "hive").foreach { functionType =>
+    Seq("python_udf", "java_udf", "scala_udf", "built-in", "hive").foreach { source =>
       val info = new ExpressionInfo(
-        "testClass", null, "testName", null, "", "", "", "", "", "", functionType)
-      assert(info.getFunctionType === functionType)
+        "testClass", null, "testName", null, "", "", "", "", "", "", source)
+      assert(info.getSource === source)
     }
     val errMsg = intercept[IllegalArgumentException] {
-      val invalidFunctionType = "invalid_function_type"
+      val invalidSource = "invalid_source"
       new ExpressionInfo(
-        "testClass", null, "testName", null, "", "", "", "", "", "", invalidFunctionType)
+        "testClass", null, "testName", null, "", "", "", "", "", "", invalidSource)
     }.getMessage
-    assert(errMsg.contains("'functionType' is malformed in the expression [testName]."))
+    assert(errMsg.contains("'source' is malformed in the expression [testName]."))
   }
 
   test("error handling in ExpressionInfo") {
