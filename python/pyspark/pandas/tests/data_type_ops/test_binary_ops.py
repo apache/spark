@@ -33,12 +33,18 @@ class BinaryOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         return ps.from_pandas(self.pser)
 
     def test_add(self):
-        self.assertRaises(TypeError, lambda: self.psser + "x")
-        self.assertRaises(TypeError, lambda: self.psser + 1)
+        psser = self.psser
+        pser = self.pser
+        self.assert_eq(psser + b'1', pser + b'1')
+        self.assert_eq(psser + psser, pser + pser)
+        self.assert_eq(psser + psser.astype('bytes'), pser + pser.astype('bytes'))
+        self.assertRaises(TypeError, lambda: psser + "x")
+        self.assertRaises(TypeError, lambda: psser + 1)
 
         with option_context("compute.ops_on_diff_frames", True):
             for psser in self.pssers:
                 self.assertRaises(TypeError, lambda: self.psser + psser)
+            self.assert_eq(self.psser + self.psser, self.pser + self.pser)
 
     def test_sub(self):
         self.assertRaises(TypeError, lambda: self.psser - "x")
@@ -89,6 +95,7 @@ class BinaryOpsTest(PandasOnSparkTestCase, TestCasesUtils):
                 self.assertRaises(TypeError, lambda: self.psser ** psser)
 
     def test_radd(self):
+        self.assert_eq(b'1' + self.psser, b'1' + self.pser)
         self.assertRaises(TypeError, lambda: "x" + self.psser)
         self.assertRaises(TypeError, lambda: 1 + self.psser)
 

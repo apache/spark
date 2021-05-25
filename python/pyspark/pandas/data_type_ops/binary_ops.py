@@ -15,7 +15,16 @@
 # limitations under the License.
 #
 
+from typing import TYPE_CHECKING, Union
+
+from pyspark.sql import functions as F
+from pyspark.sql.types import BinaryType
+from pyspark.pandas.base import column_op, IndexOpsMixin
 from pyspark.pandas.data_type_ops.base import DataTypeOps
+
+if TYPE_CHECKING:
+    from pyspark.pandas.indexes import Index  # noqa: F401 (SPARK-34943)
+    from pyspark.pandas.series import Series  # noqa: F401 (SPARK-34943)
 
 
 class BinaryOps(DataTypeOps):
@@ -26,3 +35,19 @@ class BinaryOps(DataTypeOps):
     @property
     def pretty_name(self) -> str:
         return 'binaries'
+
+    def add(self, left, right) -> Union["Series", "Index"]:
+        if isinstance(right, IndexOpsMixin) and isinstance(right.spark.data_type, BinaryType):
+            return column_op(F.concat)(left, right)
+        elif isinstance(right, bytes):
+            return column_op(F.concat)(left, F.lit(right))
+        else:
+            raise TypeError(
+                "Concatenation can not be applied to %s and the given type." % self.pretty_name)
+
+    def radd(self, left, right) -> Union["Series", "Index"]:
+        if isinstance(right, bytes):
+            return left._with_new_scol(F.concat(F.lit(right), left.spark.column))
+        else:
+            raise TypeError(
+                "Concatenation can not be applied to %s and the given type." % self.pretty_name)
