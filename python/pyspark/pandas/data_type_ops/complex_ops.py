@@ -61,7 +61,7 @@ class MapOps(DataTypeOps):
 
     @property
     def pretty_name(self) -> str:
-        return 'PySpark MapType'
+        return 'maps'
 
 
 class StructOps(DataTypeOps):
@@ -71,4 +71,4 @@ class StructOps(DataTypeOps):
 
     @property
     def pretty_name(self) -> str:
-        return 'PySpark StructType'
+        return 'structs'
