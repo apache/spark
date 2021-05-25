@@ -118,7 +118,7 @@ trait ShowTablesSuiteBase extends command.ShowTablesSuiteBase {
         assert(sql("show table extended like 'tbl'").schema.fieldNames ===
           Seq("namespace", "tableName", "isTemporary", "information"))
         assert(sql("show table extended like 'tbl'").schema.last.dataType ===
-          MapType(StringType, StringType))
+          MapType(StringType, StringType, false))
 
         // Keep the legacy output schema
         withSQLConf(SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA.key -> "true") {

@@ -846,7 +846,7 @@ case class ShowTablesCommand(
         if (isExtended) {
           val information = catalog.getTempViewOrPermanentTableMetadata(tableIdent)
           val infoValue = if (conf.getConf(SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA)) {
-            s"${information.simpleString}\n"
+            information.simpleString
           } else {
             information.toLinkedHashMap
           }
@@ -875,7 +875,7 @@ case class ShowTablesCommand(
       val tableName = tableIdent.table
       val isTemp = catalog.isTempView(tableIdent)
       val infoValue = if (conf.getConf(SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA)) {
-        s"${partition.simpleString}\n"
+        partition.simpleString
       } else {
         partition.toLinkedHashMap
       }

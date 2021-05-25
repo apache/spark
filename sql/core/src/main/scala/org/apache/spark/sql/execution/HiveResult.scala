@@ -67,9 +67,13 @@ object HiveResult {
       command.executeCollect().map(_.getString(1))
     // SHOW TABLE EXTENDED in Hive only output the information column.
     case command @ ExecutedCommandExec(s: ShowTablesCommand) if s.isExtended =>
-      command.executeCollect().map(_.getMap(3))
-        .map(m => m.keyArray().array.zip(m.valueArray().array)
-          .map(kv => s"${kv._1}:${kv._2}").mkString("\n"))
+      if (s.conf.getConf(SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA)) {
+        command.executeCollect().map(_.getString(3) + "\n")
+      } else {
+        command.executeCollect().map(_.getMap(3))
+          .map(m => m.keyArray().array.zip(m.valueArray().array)
+            .map(kv => s"${kv._1}:${kv._2}").mkString("\n") + "\n")
+      }
     // SHOW TABLES in Hive only output table names while our v2 command outputs
     // namespace and table name.
     case command : ShowTablesExec =>

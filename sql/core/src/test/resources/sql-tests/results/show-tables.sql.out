@@ -133,6 +133,7 @@ Location [not included in comparison]/{warehouse_dir}/showdb.db/show_t1
 Partition Provider:Catalog
 Partition Columns:[`c`, `d`]
 Schema:struct<a:string,b:int,c:string,d:string>
+
 Database:showdb
 Table:show_t2
 Created Time [not included in comparison]
@@ -142,6 +143,7 @@ Type:MANAGED
 Provider:parquet
 Location [not included in comparison]/{warehouse_dir}/showdb.db/show_t2
 Schema:struct<b:string,d:int>
+
 Table:show_t3
 Created Time [not included in comparison]
 Last Access [not included in comparison]

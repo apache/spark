@@ -419,7 +419,7 @@ case class CatalogTable(
     map ++= storage.toLinkedHashMap
     if (tracksPartitionsInCatalog) map.put("Partition Provider", "Catalog")
     if (partitionColumnNames.nonEmpty) map.put("Partition Columns", partitionColumns)
-    if (schema.nonEmpty) map.put("Schema", schema.simpleString)
+    if (schema.nonEmpty) map.put("Schema", schema.catalogString)
 
     map
   }
