@@ -87,8 +87,9 @@ private[kafka010] trait KafkaOffsetReader {
    * @param timestamp the timestamp.
    * @param failsOnNoMatchingOffset whether to fail the query when no matched offset can be found.
    */
-  def fetchGlobalTimestampBasedOffsets(timestamp: Long,
-    failsOnNoMatchingOffset: Boolean): KafkaSourceOffset
+  def fetchGlobalTimestampBasedOffsets(
+      timestamp: Long,
+      failsOnNoMatchingOffset: Boolean): KafkaSourceOffset
 
   /**
    * Fetch the earliest offsets for the topic partitions that are indicated
