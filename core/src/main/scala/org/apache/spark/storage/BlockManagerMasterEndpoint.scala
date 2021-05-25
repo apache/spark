@@ -752,13 +752,13 @@ class BlockManagerMasterEndpoint(
   private def cleanBlockManagerInfo(): Unit = {
     logDebug("Cleaning blockManagerInfo")
     val now = System.currentTimeMillis()
-    val (expiredEntries, _) = blockManagerInfo.partition { case (_, bmInfo) =>
+    val expiredBmIds = blockManagerInfo.filter { case (_, bmInfo) =>
       // bmInfo.executorRemovalTs.get cannot be None when BM is not alive
       !bmInfo.isAlive && (now - bmInfo.executorRemovalTs.get) > executorTimeoutMs
-    }
-    expiredEntries.foreach { case (id, _) =>
-      logInfo(s"Cleaning expired $id from blockManagerInfo")
-      blockManagerInfo.remove(id)
+    }.keys
+    expiredBmIds.foreach { bmId =>
+      logInfo(s"Cleaning expired $bmId from blockManagerInfo")
+      blockManagerInfo.remove(bmId)
     }
   }
 }
@@ -911,7 +911,8 @@ private[spark] class BlockManagerInfo(
   def updateExecutorRemovalTs(): Unit = {
     if (!isAlive) {
       logWarning(s"executorRemovalTs is already set to ${_executorRemovalTs.get}")
+    } else {
+      _executorRemovalTs = Some(System.currentTimeMillis())
     }
-    _executorRemovalTs = Some(System.currentTimeMillis())
   }
 }
