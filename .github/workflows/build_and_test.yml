@@ -219,6 +219,8 @@ jobs:
         python3.6 -m pip list
     - name: List Python packages (Python 3.8)
       run: |
+        curl https://bootstrap.pypa.io/get-pip.py -o get-pip.py
+        python3.8 get-pip.py
         python3.8 -m pip list
     - name: Install Conda for pip packaging test
       run: |
