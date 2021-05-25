@@ -846,9 +846,9 @@ case class Aggregate(
     copy(child = newChild)
 
   // Whether this Aggregate operator is equally the Distinct operator.
-  private[sql] def isEquallyDistinct: Boolean = {
+  private[sql] def isDistinct: Boolean = {
     groupingExpressions.size == aggregateExpressions.size &&
-      groupingExpressions.zip(aggregateExpressions).forall(e => e._1.fastEquals(e._2))
+      groupingExpressions.zip(aggregateExpressions).forall(e => e._1.semanticEquals(e._2))
   }
 }
 

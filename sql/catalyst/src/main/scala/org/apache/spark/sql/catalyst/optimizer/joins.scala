@@ -172,16 +172,16 @@ object EliminateOuterJoin extends Rule[LogicalPlan] with PredicateHelper {
       if (j.joinType == newJoinType) f else Filter(condition, j.copy(joinType = newJoinType))
 
     case a @ Aggregate(_, _, Join(left, _, LeftOuter, _, _))
-        if a.isEquallyDistinct && a.references.subsetOf(AttributeSet(left.output)) =>
+        if a.isDistinct && a.references.subsetOf(AttributeSet(left.output)) =>
       a.copy(child = left)
     case a @ Aggregate(_, _, Join(_, right, RightOuter, _, _))
-        if a.isEquallyDistinct && a.references.subsetOf(AttributeSet(right.output)) =>
+        if a.isDistinct && a.references.subsetOf(AttributeSet(right.output)) =>
       a.copy(child = right)
     case a @ Aggregate(_, _, p @ Project(_, Join(left, _, LeftOuter, _, _)))
-        if a.isEquallyDistinct && a.references.subsetOf(AttributeSet(left.output)) =>
+        if a.isDistinct && a.references.subsetOf(AttributeSet(left.output)) =>
       a.copy(child = p.copy(child = left))
     case a @ Aggregate(_, _, p @ Project(_, Join(_, right, RightOuter, _, _)))
-        if a.isEquallyDistinct && a.references.subsetOf(AttributeSet(right.output)) =>
+        if a.isDistinct && a.references.subsetOf(AttributeSet(right.output)) =>
       a.copy(child = p.copy(child = right))
   }
 }
