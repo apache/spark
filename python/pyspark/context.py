@@ -1126,7 +1126,7 @@ class SparkContext(object):
         ...     try:
         ...         sc.setJobGroup("job_to_cancel", "some description")
         ...         result = sc.parallelize(range(x)).map(map_func).collect()
-        ...     except RuntimeError as e:
+        ...     except Exception as e:
         ...         result = "Cancelled"
         ...     lock.release()
         >>> def stop_job():
