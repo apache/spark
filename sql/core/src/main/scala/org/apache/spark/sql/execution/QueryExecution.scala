@@ -84,8 +84,14 @@ class QueryExecution(
   // org.apache.spark.sql.catalyst.expressions.GenericInternalRow cannot be cast to
   // org.apache.spark.sql.catalyst.expressions.UnsafeRow
   // So eagerly executes Command and converts the output of it to UnsafeRow.
-  lazy val commandExecuted: LogicalPlan = analyzed transformDown {
-    case c: Command if isExecutingCommand == false =>
+  lazy val commandExecuted: LogicalPlan = if (isExecutingCommand) {
+    analyzed.mapChildren(eagerlyExecuteCommands)
+  } else {
+    eagerlyExecuteCommands(analyzed)
+  }
+
+  private def eagerlyExecuteCommands(p: LogicalPlan) = p transformDown {
+    case c: Command =>
       val qe = sparkSession.sessionState.executePlan(c, true)
       CommandResult(
         qe.analyzed.output,
@@ -357,12 +363,6 @@ class QueryExecution(
 }
 
 object QueryExecution {
-  def apply(
-      sparkSession: SparkSession,
-      logical: LogicalPlan,
-      isExecutingCommand: Boolean): QueryExecution =
-    new QueryExecution(sparkSession, logical, new QueryPlanningTracker, isExecutingCommand)
-
   private val _nextExecutionId = new AtomicLong(0)
 
   private def nextExecutionId: Long = _nextExecutionId.getAndIncrement

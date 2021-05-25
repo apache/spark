@@ -33,6 +33,6 @@ case class CommandResult(
     output: Seq[Attribute],
     commandLogicalPlan: LogicalPlan,
     commandPhysicalPlan: SparkPlan,
-    data: Seq[InternalRow]) extends LeafNode {
+    @transient rows: Seq[InternalRow]) extends LeafNode {
   override def innerChildren: Seq[QueryPlan[_]] = Seq(commandLogicalPlan)
 }
