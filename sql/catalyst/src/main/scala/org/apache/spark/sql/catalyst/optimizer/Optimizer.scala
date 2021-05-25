@@ -363,7 +363,7 @@ object EliminateDistinct extends Rule[LogicalPlan] {
       ae.copy(isDistinct = false)
   }
 
-  private def isDuplicateAgnostic(af: AggregateFunction): Boolean = af match {
+  def isDuplicateAgnostic(af: AggregateFunction): Boolean = af match {
     case _: Max => true
     case _: Min => true
     case _: BitAndAgg => true
@@ -504,47 +504,6 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = removeRedundantAliases(plan, AttributeSet.empty)
-}
-
-/**
- * Remove redundant aggregates from a query plan. A redundant aggregate is an aggregate whose
- * only goal is to keep distinct values, while its parent aggregate would ignore duplicate values.
- */
-object RemoveRedundantAggregates extends Rule[LogicalPlan] with AliasHelper {
-  def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithPruning(
-    _.containsPattern(AGGREGATE), ruleId) {
-    case upper @ Aggregate(_, _, lower: Aggregate) if lowerIsRedundant(upper, lower) =>
-      val aliasMap = getAliasMap(lower)
-
-      val newAggregate = upper.copy(
-        child = lower.child,
-        groupingExpressions = upper.groupingExpressions.map(replaceAlias(_, aliasMap)),
-        aggregateExpressions = upper.aggregateExpressions.map(
-          replaceAliasButKeepName(_, aliasMap))
-      )
-
-      // We might have introduces non-deterministic grouping expression
-      if (newAggregate.groupingExpressions.exists(!_.deterministic)) {
-        PullOutNondeterministic.applyLocally.applyOrElse(newAggregate, identity[LogicalPlan])
-      } else {
-        newAggregate
-      }
-  }
-
-  private def lowerIsRedundant(upper: Aggregate, lower: Aggregate): Boolean = {
-    val upperHasNoAggregateExpressions =
-      !upper.aggregateExpressions.exists(AggregateExpression.containsAggregate)
-
-    lazy val upperRefsOnlyDeterministicNonAgg = upper.references.subsetOf(AttributeSet(
-      lower
-        .aggregateExpressions
-        .filter(_.deterministic)
-        .filterNot(AggregateExpression.containsAggregate)
-        .map(_.toAttribute)
-    ))
-
-    upperHasNoAggregateExpressions && upperRefsOnlyDeterministicNonAgg
-  }
 }
 
 /**
