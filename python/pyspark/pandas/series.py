@@ -22,7 +22,6 @@ import datetime
 import re
 import inspect
 import sys
-import warnings
 from collections.abc import Mapping
 from functools import partial, wraps, reduce
 from typing import Any, Generic, Iterable, List, Optional, Tuple, TypeVar, Union, cast
@@ -466,17 +465,6 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         [Int64Index([0, 1, 2], dtype='int64')]
         """
         return [self.index]
-
-    @property
-    def spark_type(self):
-        warnings.warn(
-            "Series.spark_type is deprecated as of Series.spark.data_type. "
-            "Please use the API instead.",
-            FutureWarning,
-        )
-        return self.spark.data_type
-
-    spark_type.__doc__ = SparkSeriesMethods.data_type.__doc__
 
     # Arithmetic Operators
     def add(self, other) -> "Series":
@@ -1017,14 +1005,6 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         else:
             return self.apply(arg)
 
-    def alias(self, name) -> "Series":
-        """An alias for :meth:`Series.rename`."""
-        warnings.warn(
-            "Series.alias is deprecated as of Series.rename. Please use the API instead.",
-            FutureWarning,
-        )
-        return self.rename(name)
-
     @property
     def shape(self):
         """Return a tuple of the shape of the underlying data."""
@@ -1517,16 +1497,6 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         Name: dogs, dtype: float64
         """
         return self._to_internal_pandas().copy()
-
-    # Alias to maintain backward compatibility with Spark
-    def toPandas(self) -> pd.Series:
-        warnings.warn(
-            "Series.toPandas is deprecated as of Series.to_pandas. Please use the API instead.",
-            FutureWarning,
-        )
-        return self.to_pandas()
-
-    toPandas.__doc__ = to_pandas.__doc__
 
     def to_list(self) -> List:
         """
@@ -3299,16 +3269,6 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             return DataFrame(internal)
         else:
             return self.apply(func, args=args, **kwargs)
-
-    def transform_batch(self, func, *args, **kwargs) -> "ps.Series":
-        warnings.warn(
-            "Series.transform_batch is deprecated as of Series.koalas.transform_batch. "
-            "Please use the API instead.",
-            FutureWarning,
-        )
-        return self.koalas.transform_batch(func, *args, **kwargs)
-
-    transform_batch.__doc__ = PandasOnSparkSeriesMethods.transform_batch.__doc__
 
     def round(self, decimals=0) -> "Series":
         """

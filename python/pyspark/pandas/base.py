@@ -22,7 +22,6 @@ from abc import ABCMeta, abstractmethod
 from functools import wraps, partial
 from itertools import chain
 from typing import Any, Callable, Optional, Tuple, Union, cast, TYPE_CHECKING
-import warnings
 
 import numpy as np
 import pandas as pd  # noqa: F401
@@ -306,17 +305,6 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
     @abstractmethod
     def spark(self) -> SparkIndexOpsMethods:
         pass
-
-    @property
-    def spark_column(self) -> Column:
-        warnings.warn(
-            "Series.spark_column is deprecated as of Series.spark.column. "
-            "Please use the API instead.",
-            FutureWarning,
-        )
-        return self.spark.column
-
-    spark_column.__doc__ = SparkIndexOpsMethods.column.__doc__
 
     @property
     def _dtype_op(self):
