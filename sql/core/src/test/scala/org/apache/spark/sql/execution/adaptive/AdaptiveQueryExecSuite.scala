@@ -1308,7 +1308,8 @@ class AdaptiveQueryExecSuite
     }
   }
 
-  test("SPARK-35455: Enhance EliminateUnnecessaryJoin - single join") {
+  test("SPARK-35455: Unify empty relation optimization between normal and AQE optimizer " +
+    "- single join") {
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
       Seq(
@@ -1344,7 +1345,8 @@ class AdaptiveQueryExecSuite
     }
   }
 
-  test("SPARK-35455: Enhance EliminateUnnecessaryJoin - multi join") {
+  test("SPARK-35455: Unify empty relation optimization between normal and AQE optimizer " +
+    "- multi join") {
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
       Seq(
