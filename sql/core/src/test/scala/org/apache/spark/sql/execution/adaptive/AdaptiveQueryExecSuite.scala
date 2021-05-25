@@ -1709,7 +1709,7 @@ class AdaptiveQueryExecSuite
   }
 
   test("SPARK-35264: Support AQE side shuffled hash join formula") {
-    withTable("t1", "t2") {
+    withTempView("t1", "t2") {
       def checkJoinStrategy(shouldShuffleHashJoin: Boolean): Unit = {
         val (origin1, adaptive1) = runAdaptiveAndVerifyResult(
           "SELECT t1.c1, t2.c1 FROM t1 JOIN t2 ON t1.c1 = t2.c1")
@@ -1741,13 +1741,13 @@ class AdaptiveQueryExecSuite
       withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "3",
         SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
         SQLConf.PREFER_SORTMERGEJOIN.key -> "true") {
-        withSQLConf(SQLConf.ADAPTIVE_SHUFFLE_HASH_JOIN_LOCAL_MAP_THRESHOLD.key -> "318") {
+        withSQLConf(SQLConf.ADAPTIVE_SHUFFLE_HASH_JOIN_LOCAL_MAP_THRESHOLD.key -> "400") {
           checkJoinStrategy(true)
         }
-        withSQLConf(SQLConf.ADAPTIVE_SHUFFLE_HASH_JOIN_LOCAL_MAP_THRESHOLD.key -> "317") {
+        withSQLConf(SQLConf.ADAPTIVE_SHUFFLE_HASH_JOIN_LOCAL_MAP_THRESHOLD.key -> "300") {
           checkJoinStrategy(false)
         }
-        withSQLConf(SQLConf.ADAPTIVE_SHUFFLE_HASH_JOIN_LOCAL_MAP_THRESHOLD.key -> "926") {
+        withSQLConf(SQLConf.ADAPTIVE_SHUFFLE_HASH_JOIN_LOCAL_MAP_THRESHOLD.key -> "1000") {
           checkJoinStrategy(true)
         }
       }
