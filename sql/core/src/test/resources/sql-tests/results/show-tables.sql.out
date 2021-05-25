@@ -122,42 +122,33 @@ SHOW TABLE EXTENDED LIKE 'show_t*'
 -- !query schema
 struct<namespace:string,tableName:string,isTemporary:boolean,information:map<string,string>>
 -- !query output
-Database: showdb
-Table: show_t1
+Database:showdb
+Table:show_t1
 Created Time [not included in comparison]
 Last Access [not included in comparison]
 Created By [not included in comparison]
-Type: MANAGED
-Provider: parquet
+Type:MANAGED
+Provider:parquet
 Location [not included in comparison]/{warehouse_dir}/showdb.db/show_t1
-Partition Provider: Catalog
-Partition Columns: [`c`, `d`]
-Schema: root
- |-- a: string (nullable = true)
- |-- b: integer (nullable = true)
- |-- c: string (nullable = true)
- |-- d: string (nullable = true)
-
-Database: showdb
-Table: show_t2
+Partition Provider:Catalog
+Partition Columns:[`c`, `d`]
+Schema:struct<a:string,b:int,c:string,d:string>
+Database:showdb
+Table:show_t2
 Created Time [not included in comparison]
 Last Access [not included in comparison]
 Created By [not included in comparison]
-Type: MANAGED
-Provider: parquet
+Type:MANAGED
+Provider:parquet
 Location [not included in comparison]/{warehouse_dir}/showdb.db/show_t2
-Schema: root
- |-- b: string (nullable = true)
- |-- d: integer (nullable = true)
-
-Table: show_t3
+Schema:struct<b:string,d:int>
+Table:show_t3
 Created Time [not included in comparison]
 Last Access [not included in comparison]
 Created By [not included in comparison]
-Type: VIEW
-Table Properties: []
-Schema: root
- |-- e: integer (nullable = true)
+Type:VIEW
+Table Properties:[]
+Schema:struct<e:int>
 
 
 -- !query
@@ -179,7 +170,7 @@ SHOW TABLE EXTENDED LIKE 'show_t1' PARTITION(c='Us', d=1)
 -- !query schema
 struct<namespace:string,tableName:string,isTemporary:boolean,information:map<string,string>>
 -- !query output
-Partition Values: [c=Us, d=1]
+Partition Values:[c=Us, d=1]
 Location [not included in comparison]/{warehouse_dir}/showdb.db/show_t1/c=Us/d=1
 Created Time [not included in comparison]
 Last Access [not included in comparison]

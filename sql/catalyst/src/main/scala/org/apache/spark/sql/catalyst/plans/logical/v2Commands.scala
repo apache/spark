@@ -612,7 +612,7 @@ object ShowTableExtended {
     AttributeReference("namespace", StringType, nullable = false)(),
     AttributeReference("tableName", StringType, nullable = false)(),
     AttributeReference("isTemporary", BooleanType, nullable = false)(),
-    AttributeReference("information", MapType(StringType, StringType), nullable = false)())
+    AttributeReference("information", MapType(StringType, StringType, false), nullable = false)())
 }
 
 /**

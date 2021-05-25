@@ -48,8 +48,8 @@ license: |
   - In Spark 3.2, the auto-generated `Cast` (such as those added by type coercion rules) will be stripped when generating column alias names. E.g., `sql("SELECT floor(1)").columns` will be `FLOOR(1)` instead of `FLOOR(CAST(1 AS DOUBLE))`.
   
   - In Spark 3.2, the output schema of `SHOW TABLES` becomes `namespace: string, tableName: string, isTemporary: boolean`. In Spark 3.1 or earlier, the `namespace` field was named `database` for the builtin catalog, and there is no `isTemporary` field for v2 catalogs. To restore the old schema with the builtin catalog, you can set `spark.sql.legacy.keepCommandOutputSchema` to `true`.
-  
-  - In Spark 3.2, the output schema of `SHOW TABLE EXTENDED` becomes `namespace: string, tableName: string, isTemporary: boolean, information: map[string, string]`. In Spark 3.1 or earlier, the `namespace` field was named `database` for the builtin catalog, and no change for the v2 catalogs. To restore the old schema with the builtin catalog, you can set `spark.sql.legacy.keepCommandOutputSchema` to `true`.
+
+  - In Spark 3.2, the output schema of `SHOW TABLE EXTENDED` becomes `namespace: string, tableName: string, isTemporary: boolean, information: map<string, string>`. In Spark 3.1 or earlier, the `namespace` field was named `database` for the builtin catalog, and no change for the v2 catalogs. In Spark 3.1 or earlier, the `information` field was string type. To restore the old schema, you can set `spark.sql.legacy.keepCommandOutputSchema` to `true`.
 
   - In Spark 3.2, the output schema of `SHOW TBLPROPERTIES` becomes `key: string, value: string` whether you specify the table property key or not. In Spark 3.1 and earlier, the output schema of `SHOW TBLPROPERTIES` is `value: string` when you specify the table property key. To restore the old schema with the builtin catalog, you can set `spark.sql.legacy.keepCommandOutputSchema` to `true`.
 
