@@ -593,19 +593,13 @@ class DataStreamReader(OptionUtils):
         ----------
         paths : str or list
             string, or list of strings, for input path(s).
-        wholetext : str or bool, optional
-            if true, read each file from input path(s) as a single row.
-        lineSep : str, optional
-            defines the line separator that should be used for parsing. If None is
-            set, it covers all ``\\r``, ``\\r\\n`` and ``\\n``.
-        pathGlobFilter : str or bool, optional
-            an optional glob pattern to only include files with paths matching
-            the pattern. The syntax follows `org.apache.hadoop.fs.GlobFilter`.
-            It does not change the behavior of `partition discovery`_.
-        recursiveFileLookup : str or bool, optional
-            recursively scan a directory for files. Using this option
-            disables
-            `partition discovery <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#partition-discovery>`_.  # noqa
+
+        Other Parameters
+        ----------------
+        Extra options
+            For the extra options, refer to
+            `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-text.html#data-source-option>`_  # noqa
+            in the version you use.
 
         Notes
         -----
