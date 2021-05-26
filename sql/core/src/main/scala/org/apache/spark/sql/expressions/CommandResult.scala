@@ -26,8 +26,8 @@ import org.apache.spark.sql.execution.SparkPlan
 /**
  * Logical plan node for holding data from a command.
  *
- * `Row`s may not be serializable and ideally we should not send `Row`s to the executors.
- * Thus marking them as transient.
+ * `rows` may not be serializable and ideally we should not send `rows` to the executors.
+ * Thus marking it as transient.
  */
 case class CommandResult(
     output: Seq[Attribute],
