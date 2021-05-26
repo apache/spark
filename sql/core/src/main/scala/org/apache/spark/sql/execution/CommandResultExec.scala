@@ -32,7 +32,7 @@ import org.apache.spark.sql.execution.metric.SQLMetrics
 case class CommandResultExec(
     output: Seq[Attribute],
     commandPhysicalPlan: SparkPlan,
-    @transient rows: Seq[InternalRow]) extends LeafExecNode {
+    @transient rows: Seq[InternalRow]) extends LeafExecNode with InputRDDCodegen {
 
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
@@ -90,4 +90,9 @@ case class CommandResultExec(
     longMetric("numOutputRows").add(taken.size)
     taken.toArray
   }
+
+  // Input is already UnsafeRows.
+  override protected val createUnsafeProjection: Boolean = false
+
+  override def inputRDD: RDD[InternalRow] = rdd
 }
