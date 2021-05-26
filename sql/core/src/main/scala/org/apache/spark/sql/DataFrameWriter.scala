@@ -31,7 +31,6 @@ import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.connector.catalog.{CatalogPlugin, CatalogV2Implicits, CatalogV2Util, Identifier, SupportsCatalogOptions, Table, TableCatalog, TableProvider, V1Table}
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.connector.expressions.{FieldReference, IdentityTransform, Transform}
-import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, DataSourceUtils, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.v2._
@@ -909,8 +908,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    */
   private def runCommand(session: SparkSession, name: String)(command: LogicalPlan): Unit = {
     val qe = session.sessionState.executePlan(command)
-    // call `QueryExecution.toRDD` to trigger the execution of commands.
-    SQLExecution.withNewExecutionId(qe, Some(name))(qe.toRdd)
+    // call `QueryExecution.commandExecuted` to trigger the execution of commands.
+    qe.commandExecuted
   }
 
   private def lookupV2Provider(): Option[TableProvider] = {
