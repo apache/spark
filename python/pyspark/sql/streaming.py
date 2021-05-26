@@ -1179,15 +1179,15 @@ class DataStreamWriter(object):
             # 'close(error)' methods.
 
             if not hasattr(f, 'process'):
-                raise Exception("Provided object does not have a 'process' method")
+                raise AttributeError("Provided object does not have a 'process' method")
 
             if not callable(getattr(f, 'process')):
-                raise Exception("Attribute 'process' in provided object is not callable")
+                raise TypeError("Attribute 'process' in provided object is not callable")
 
             def doesMethodExist(method_name):
                 exists = hasattr(f, method_name)
                 if exists and not callable(getattr(f, method_name)):
-                    raise Exception(
+                    raise TypeError(
                         "Attribute '%s' in provided object is not callable" % method_name)
                 return exists
 
@@ -1199,7 +1199,7 @@ class DataStreamWriter(object):
                 if epoch_id:
                     epoch_id = int(epoch_id)
                 else:
-                    raise Exception("Could not get batch id from TaskContext")
+                    raise RuntimeError("Could not get batch id from TaskContext")
 
                 # Check if the data should be processed
                 should_process = True
