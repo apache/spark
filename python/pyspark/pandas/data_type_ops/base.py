@@ -39,7 +39,6 @@ from pyspark.sql.types import (
 import pyspark.sql.types as types
 from pyspark.pandas.base import IndexOpsMixin
 from pyspark.pandas.typedef import Dtype
-from pyspark.sql.column import Column
 
 if TYPE_CHECKING:
     from pyspark.pandas.indexes import Index  # noqa: F401 (SPARK-34943)
@@ -61,7 +60,7 @@ def is_valid_operand_for_numeric_arithmetic(
             return isinstance(operand.spark.data_type, NumericType) or (
                 allow_bool and isinstance(operand.spark.data_type, BooleanType))
     else:
-        return isinstance(operand, Column)
+        return False
 
 
 def transform_boolean_operand_to_numeric(operand: Any, spark_type: types.DataType) -> Any:
