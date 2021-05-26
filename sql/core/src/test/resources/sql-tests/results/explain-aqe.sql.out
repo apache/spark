@@ -925,10 +925,7 @@ Created By [not included in comparison]
 Type: MANAGED
 Provider: PARQUET
 Location [not included in comparison]/{warehouse_dir}/explain_temp1
-Schema: root
--- key: integer (nullable = true)
--- val: integer (nullable = true)
-), false
+Schema: struct<key:int,val:int>), false
 
 (4) SubqueryAlias
 Arguments: spark_catalog.default.explain_temp1
