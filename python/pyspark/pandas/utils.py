@@ -96,7 +96,7 @@ def same_anchor(
         this_internal.spark_frame is that_internal.spark_frame
         and this_internal.index_level == that_internal.index_level
         and all(
-            this_scol._jc.equals(that_scol._jc)  # type: ignore
+            spark_column_equals(this_scol, that_scol)
             for this_scol, that_scol in zip(
                 this_internal.index_spark_columns, that_internal.index_spark_columns
             )
@@ -859,6 +859,26 @@ def verify_temp_column_name(
     )
 
     return column_name_or_label
+
+
+def spark_column_equals(left: spark.Column, right: spark.Column) -> bool:
+    """
+    Check both `left` and `right` have the same expressions.
+
+    >>> spark_column_equals(F.lit(0), F.lit(0))
+    True
+    >>> spark_column_equals(F.lit(0) + 1, F.lit(0) + 1)
+    True
+    >>> spark_column_equals(F.lit(0) + 1, F.lit(0) + 2)
+    False
+    >>> sdf1 = ps.DataFrame({"x": ['a', 'b', 'c']}).to_spark()
+    >>> spark_column_equals(sdf1["x"] + 1, sdf1["x"] + 1)
+    True
+    >>> sdf2 = ps.DataFrame({"x": ['a', 'b', 'c']}).to_spark()
+    >>> spark_column_equals(sdf1["x"] + 1, sdf2["x"] + 1)
+    False
+    """
+    return left._jc.equals(right._jc)  # type: ignore
 
 
 def compare_null_first(
