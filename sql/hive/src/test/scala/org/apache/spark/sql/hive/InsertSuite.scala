@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive
 
 import java.io.File
+import java.util.Locale
 
 import com.google.common.io.Files
 import org.apache.hadoop.fs.Path
@@ -868,6 +869,72 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
 
       assert(!e.contains("get partition: Value for key d is null or empty"))
       assert(e.contains("Partition spec is invalid"))
+    }
+  }
+
+  test("Insert data with different cases") {
+    withTable("TEST1") {
+      val createHive =
+        """
+          |      create table TEST1(
+          |        v1 BIGINT,
+          |        s1 INT)
+          |        partitioned by (pk BIGINT)
+          |        clustered by (v1)
+          |        sorted by (s1)
+          |        into 200 buckets
+          |        STORED AS PARQUET
+          |""".stripMargin
+
+      val insertString =
+        """
+          |      insert into test1
+          |      select
+          |      * from values(1,1,1)
+          |""".stripMargin
+
+      val dropString = "drop table if exists test1"
+
+
+      spark.sql(dropString)
+      spark.sql(createHive.toLowerCase(Locale.ROOT))
+
+      spark.sql(insertString.toLowerCase(Locale.ROOT))
+      spark.sql(insertString.toUpperCase(Locale.ROOT))
+
+      spark.sql(dropString)
+      spark.sql(createHive.toUpperCase(Locale.ROOT))
+
+      spark.sql(insertString.toLowerCase(Locale.ROOT))
+      spark.sql(insertString.toUpperCase(Locale.ROOT))
+
+      val createSpark =
+        """
+          |      create table TEST1(
+          |        ENCRYPTED_USER_ID BIGINT,
+          |        USER_CNTRY_ID INT,
+          |        USER_ID BIGINT)
+          |        using parquet
+          |        partitioned by (USER_ID)
+          |        clustered by (encrypted_USER_ID)
+          |        sorted by (USER_CNTRY_ID)
+          |        into 200 buckets
+          |        tblproperties ("auto.purge"="true")
+          |
+          |""".stripMargin
+
+      spark.sql(dropString)
+      spark.sql(createSpark.toLowerCase(Locale.ROOT))
+
+      spark.sql(insertString.toLowerCase(Locale.ROOT))
+      spark.sql(insertString.toUpperCase(Locale.ROOT))
+
+
+      spark.sql(dropString)
+      spark.sql(createSpark.toUpperCase(Locale.ROOT))
+
+      spark.sql(insertString.toLowerCase(Locale.ROOT))
+      spark.sql(insertString.toUpperCase(Locale.ROOT))
     }
   }
 }

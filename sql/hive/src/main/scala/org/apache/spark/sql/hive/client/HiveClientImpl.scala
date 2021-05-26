@@ -1092,14 +1092,28 @@ private[hive] object HiveClientImpl extends Logging {
       hiveTable.setViewExpandedText(t)
     }
 
+    // hive may convert schema into lower cases while bucketSpec will not
+    // only convert if case not match
+    def convertColumnNames(schema: StructType, names: Seq[String]): Seq[String] = {
+      names.map(name => {
+        val s = schema.find(col => col.name.equalsIgnoreCase(name))
+        if (s.isDefined) {
+          s.get.name
+        } else {
+          name
+        }
+      })
+    }
+
     table.bucketSpec match {
       case Some(bucketSpec) if !HiveExternalCatalog.isDatasourceTable(table) =>
         hiveTable.setNumBuckets(bucketSpec.numBuckets)
-        hiveTable.setBucketCols(bucketSpec.bucketColumnNames.toList.asJava)
+        hiveTable.setBucketCols(
+          convertColumnNames(table.schema, bucketSpec.bucketColumnNames).toList.asJava)
 
         if (bucketSpec.sortColumnNames.nonEmpty) {
           hiveTable.setSortCols(
-            bucketSpec.sortColumnNames
+            convertColumnNames(table.schema, bucketSpec.sortColumnNames)
               .map(col => new Order(col, HIVE_COLUMN_ORDER_ASC))
               .toList
               .asJava
