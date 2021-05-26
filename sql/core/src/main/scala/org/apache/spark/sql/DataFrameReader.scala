@@ -773,24 +773,9 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    *   spark.read().text("/path/to/spark/README.md")
    * }}}
    *
-   * You can set the following text-specific option(s) for reading text files:
-   * <ul>
-   * <li>`wholetext` (default `false`): If true, read a file as a single row and not split by "\n".
-   * </li>
-   * <li>`lineSep` (default covers all `\r`, `\r\n` and `\n`): defines the line separator
-   * that should be used for parsing.</li>
-   * <li>`pathGlobFilter`: an optional glob pattern to only include files with paths matching
-   * the pattern. The syntax follows <code>org.apache.hadoop.fs.GlobFilter</code>.
-   * It does not change the behavior of partition discovery.</li>
-   * <li>`modifiedBefore` (batch only): an optional timestamp to only include files with
-   * modification times  occurring before the specified Time. The provided timestamp
-   * must be in the following form: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)</li>
-   * <li>`modifiedAfter` (batch only): an optional timestamp to only include files with
-   * modification times occurring after the specified Time. The provided timestamp
-   * must be in the following form: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)</li>
-   * <li>`recursiveFileLookup`: recursively scan a directory for files. Using this option
-   * disables partition discovery</li>
-   * </ul>
+   * You can find the text-specific options for reading text files in
+   * <a href="https://spark.apache.org/docs/latest/sql-data-sources-text.html#data-source-option">
+   *   Data Source Option</a> in the version you use.
    *
    * @param paths input paths
    * @since 1.6.0

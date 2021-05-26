@@ -1461,7 +1461,18 @@ class SessionCatalog(
     if (functionRegistry.functionExists(func) && !overrideIfExists) {
       throw QueryCompilationErrors.functionAlreadyExistsError(func)
     }
-    val info = new ExpressionInfo(funcDefinition.className, func.database.orNull, func.funcName)
+    val info = new ExpressionInfo(
+      funcDefinition.className,
+      func.database.orNull,
+      func.funcName,
+      null,
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "hive")
     val builder =
       functionBuilder.getOrElse {
         val className = funcDefinition.className
@@ -1552,7 +1563,15 @@ class SessionCatalog(
           new ExpressionInfo(
             metadata.className,
             qualifiedName.database.orNull,
-            qualifiedName.identifier)
+            qualifiedName.identifier,
+            null,
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "hive")
         } else {
           failFunctionLookup(name)
         }

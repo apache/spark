@@ -593,19 +593,13 @@ class DataStreamReader(OptionUtils):
         ----------
         paths : str or list
             string, or list of strings, for input path(s).
-        wholetext : str or bool, optional
-            if true, read each file from input path(s) as a single row.
-        lineSep : str, optional
-            defines the line separator that should be used for parsing. If None is
-            set, it covers all ``\\r``, ``\\r\\n`` and ``\\n``.
-        pathGlobFilter : str or bool, optional
-            an optional glob pattern to only include files with paths matching
-            the pattern. The syntax follows `org.apache.hadoop.fs.GlobFilter`.
-            It does not change the behavior of `partition discovery`_.
-        recursiveFileLookup : str or bool, optional
-            recursively scan a directory for files. Using this option
-            disables
-            `partition discovery <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#partition-discovery>`_.  # noqa
+
+        Other Parameters
+        ----------------
+        Extra options
+            For the extra options, refer to
+            `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-text.html#data-source-option>`_  # noqa
+            in the version you use.
 
         Notes
         -----
@@ -1179,15 +1173,15 @@ class DataStreamWriter(object):
             # 'close(error)' methods.
 
             if not hasattr(f, 'process'):
-                raise Exception("Provided object does not have a 'process' method")
+                raise AttributeError("Provided object does not have a 'process' method")
 
             if not callable(getattr(f, 'process')):
-                raise Exception("Attribute 'process' in provided object is not callable")
+                raise TypeError("Attribute 'process' in provided object is not callable")
 
             def doesMethodExist(method_name):
                 exists = hasattr(f, method_name)
                 if exists and not callable(getattr(f, method_name)):
-                    raise Exception(
+                    raise TypeError(
                         "Attribute '%s' in provided object is not callable" % method_name)
                 return exists
 
@@ -1199,7 +1193,7 @@ class DataStreamWriter(object):
                 if epoch_id:
                     epoch_id = int(epoch_id)
                 else:
-                    raise Exception("Could not get batch id from TaskContext")
+                    raise RuntimeError("Could not get batch id from TaskContext")
 
                 # Check if the data should be processed
                 should_process = True
