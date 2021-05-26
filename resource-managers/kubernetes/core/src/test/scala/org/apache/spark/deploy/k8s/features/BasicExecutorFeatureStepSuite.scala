@@ -218,6 +218,49 @@ class BasicExecutorFeatureStepSuite
 
   }
 
+  test("Test default pod priority") {
+    val conf = baseConf.clone()
+    val step = new BasicExecutorFeatureStep(
+      KubernetesConf(
+        conf,
+        KubernetesExecutorSpecificConf("1", Some(DRIVER_POD)),
+        RESOURCE_NAME_PREFIX,
+        APP_ID,
+        LABELS,
+        ANNOTATIONS,
+        Map.empty,
+        Map.empty,
+        Map.empty,
+        Nil,
+        Nil,
+        Seq.empty[String]))
+    val executor = step.configurePod(SparkPod.initialPod())
+
+    assert(executor.pod.getSpec.getPriorityClassName == null )
+  }
+
+  test("Set pod priority") {
+    val conf = baseConf.clone()
+    conf.set("spark.kubernetes.executor.pod.priorityClassName", "some-priority")
+    val step = new BasicExecutorFeatureStep(
+      KubernetesConf(
+        conf,
+        KubernetesExecutorSpecificConf("1", Some(DRIVER_POD)),
+        RESOURCE_NAME_PREFIX,
+        APP_ID,
+        LABELS,
+        ANNOTATIONS,
+        Map.empty,
+        Map.empty,
+        Map.empty,
+        Nil,
+        Nil,
+        Seq.empty[String]))
+    val executor = step.configurePod(SparkPod.initialPod())
+
+    assert(executor.pod.getSpec.getPriorityClassName == "some-priority" )
+  }
+
   // There is always exactly one controller reference, and it points to the driver pod.
   private def checkOwnerReferences(executor: Pod, driverPodUid: String): Unit = {
     assert(executor.getMetadata.getOwnerReferences.size() === 1)

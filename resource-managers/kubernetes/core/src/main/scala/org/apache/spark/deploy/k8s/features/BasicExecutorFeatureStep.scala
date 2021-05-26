@@ -80,6 +80,12 @@ private[spark] class BasicExecutorFeatureStep(
       executorCores.toString
     }
   private val executorLimitCores = kubernetesConf.get(KUBERNETES_EXECUTOR_LIMIT_CORES)
+  private val priorityClass =
+    if (kubernetesConf.sparkConf.contains(PRIORITY_CLASS)) {
+    kubernetesConf.get(PRIORITY_CLASS).get
+  } else {
+    null
+  }
 
   override def configurePod(pod: SparkPod): SparkPod = {
     val name = s"$executorPodNamePrefix-exec-${kubernetesConf.roleSpecificConf.executorId}"
@@ -186,6 +192,9 @@ private[spark] class BasicExecutorFeatureStep(
         .withNodeSelector(kubernetesConf.nodeSelector().asJava)
         .addToImagePullSecrets(kubernetesConf.imagePullSecrets(): _*)
 
+    if (priorityClass != null) {
+      executorPodBuilder = executorPodBuilder.withPriorityClassName(priorityClass)
+    }
 
     var tolerartions = new ListBuffer[Toleration]()
     for (tolerartion <- kubernetesConf.tolerations) {
