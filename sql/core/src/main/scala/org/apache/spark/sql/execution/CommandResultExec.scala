@@ -26,6 +26,7 @@ import org.apache.spark.sql.execution.metric.SQLMetrics
 /**
  * Physical plan node for holding data from a command.
  *
+ * `commandPhysicalPlan` just used to display by execute explain.
  * `rows` may not be serializable and ideally we should not send `rows` to the executors.
  * Thus marking it as transient.
  */
