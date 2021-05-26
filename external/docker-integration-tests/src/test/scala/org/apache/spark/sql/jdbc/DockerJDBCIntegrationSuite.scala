@@ -100,7 +100,7 @@ abstract class DockerJDBCIntegrationSuite extends SharedSparkSession with Eventu
   val keepContainer =
     sys.props.getOrElse("spark.test.docker.keepContainer", "false").toBoolean
   val removePulledImage =
-    sys.props.getOrElse("spark.test.docker.removePulledImage", "false").toBoolean
+    sys.props.getOrElse("spark.test.docker.removePulledImage", "true").toBoolean
 
   private var docker: DockerClient = _
   // Configure networking (necessary for boot2docker / Docker Machine)
