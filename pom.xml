@@ -264,6 +264,7 @@
     <spark.test.home>${session.executionRootDirectory}</spark.test.home>
     <spark.test.webdriver.chrome.driver></spark.test.webdriver.chrome.driver>
     <spark.test.docker.keepContainer>false</spark.test.docker.keepContainer>
+    <spark.test.docker.removePulledImage>true</spark.test.docker.removePulledImage>
 
     <CodeCacheSize>1g</CodeCacheSize>
     <!-- Needed for consistent times -->
@@ -2728,6 +2729,7 @@
               <spark.unsafe.exceptionOnMemoryLeak>true</spark.unsafe.exceptionOnMemoryLeak>
               <spark.test.webdriver.chrome.driver>${spark.test.webdriver.chrome.driver}</spark.test.webdriver.chrome.driver>
               <spark.test.docker.keepContainer>${spark.test.docker.keepContainer}</spark.test.docker.keepContainer>
+              <spark.test.docker.removePulledImage>${spark.test.docker.removePulledImage}</spark.test.docker.removePulledImage>
               <!-- Needed by sql/hive tests. -->
               <test.src.tables>__not_used__</test.src.tables>
             </systemProperties>
