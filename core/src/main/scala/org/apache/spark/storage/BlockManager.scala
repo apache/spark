@@ -678,7 +678,7 @@ private[spark] class BlockManager(
       classTag: ClassTag[_],
       isDecommissioning: Boolean): Boolean = {
     putBytes(blockId, new ChunkedByteBuffer(data.nioByteBuffer()), level,
-      isDecommissioning)(classTag)
+      isDecommissioning = isDecommissioning)(classTag)
   }
 
   override def putBlockDataAsStream(
@@ -722,7 +722,7 @@ private[spark] class BlockManager(
         channel.close()
         val blockSize = channel.getCount
         val blockStored = TempFileBasedBlockStoreUpdater(
-          blockId, level, classTag, tmpFile, blockSize, !isDecommissioning).save()
+          blockId, level, classTag, tmpFile, blockSize, canEvictBlocks = !isDecommissioning).save()
         if (!blockStored) {
           throw new Exception(s"Failure while trying to store block $blockId on $blockManagerId.")
         }
@@ -1318,7 +1318,7 @@ private[spark] class BlockManager(
     require(bytes != null, "Bytes is null")
     val blockStoreUpdater =
       ByteBufferBlockStoreUpdater(blockId, level, implicitly[ClassTag[T]], bytes, tellMaster,
-        !isDecommissioning)
+        canEvictBlocks = !isDecommissioning)
     blockStoreUpdater.save()
   }
 

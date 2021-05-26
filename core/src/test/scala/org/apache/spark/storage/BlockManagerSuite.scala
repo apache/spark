@@ -2075,6 +2075,39 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     store.putSingle(broadcast0BlockId, a, StorageLevel.DISK_ONLY)
   }
 
+  test("SPARK-35533: test cached rdd migration with no memory available on peers") {
+    val store1 = makeBlockManager(3500, "exec1")
+    val store2 = makeBlockManager(4000, "exec2")
+
+    val data1 = new Array[Byte](500)
+    val blockId1 = rdd(0, 0)
+    val data2 = new Array[Byte](1500)
+    val blockId2 = rdd(1, 0)
+
+    store1.putSingle(blockId1, data1, StorageLevel.MEMORY_ONLY)
+    store2.putSingle(blockId2, data2, StorageLevel.MEMORY_ONLY)
+    assert(master.getLocations(blockId1) === Seq(store1.blockManagerId))
+    assert(master.getLocations(blockId2) === Seq(store2.blockManagerId))
+
+    val decomManager = new BlockManagerDecommissioner(conf, store1)
+    decomManager.decommissionRddCacheBlocks()
+    // blockId1 is offloaded to store2 as enough memory is available
+    assert(master.getLocations(blockId1) === Seq(store2.blockManagerId))
+    assert(master.getLocations(blockId2) === Seq(store2.blockManagerId))
+
+    val data3 = new Array[Byte](1500)
+    val blockId3 = rdd(2, 0)
+    store1.putSingle(blockId3, data3, StorageLevel.MEMORY_ONLY)
+    assert(master.getLocations(blockId3) === Seq(store1.blockManagerId))
+    decomManager.decommissionRddCacheBlocks()
+    // blocId3 is not offloaded to store2 as enough memory is not available and cached blocks won't
+    // be dropped to accommodate blocks from decommissioned block manager
+    assert(master.getLocations(blockId3) === Seq(store1.blockManagerId))
+    assert(master.getLocations(blockId1) === Seq(store2.blockManagerId))
+    assert(master.getLocations(blockId2) === Seq(store2.blockManagerId))
+
+  }
+
   class MockBlockTransferService(
       val maxFailures: Int,
       override val hostName: String = "MockBlockTransferServiceHost") extends BlockTransferService {
