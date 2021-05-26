@@ -30,6 +30,7 @@ import org.apache.spark.sql.types._
  * - `BinaryComparison(Cast(fromExp, toType), Literal(value, toType))`
  * - `BinaryComparison(Literal(value, toType), Cast(fromExp, toType))`
  * - `In(Cast(fromExp, toType), Seq(Literal(v1, toType), Literal(v2, toType), ...)`
+ * - `InSet(Cast(fromExp, toType), Set(v1, v2, ...))`
  *
  * This rule optimizes expressions with the above pattern by either replacing the cast with simpler
  * constructs, or moving the cast from the expression side to the literal side, which enables them
@@ -87,7 +88,7 @@ import org.apache.spark.sql.types._
  * `and(isnull(fromExp), null)`, to enable further optimization and filter pushdown to data sources.
  * Similarly, `if(isnull(fromExp), null, true)` is represented with `or(isnotnull(fromExp), null)`.
  *
- * For `In` operation, first the rule transform the expression to Equals:
+ * For `In/InSet` operation, first the rule transform the expression to Equals:
  * `Seq(
  *   EqualTo(Cast(fromExp, toType), Literal(v1, toType)),
  *   EqualTo(Cast(fromExp, toType), Literal(v2, toType)),
@@ -132,7 +133,10 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
 
     // As the analyzer makes sure that the list of In is already of the same data type, then the
     // rule can simply check the first literal in `in.list` can implicitly cast to `toType` or not,
-    // and this rule doesn't convert in when `in.list` is empty.
+    // and note that:
+    // 1. this rule doesn't convert in when `in.list` is empty.
+    // 2. this rule only handles the case when both `fromExp` and value in `in.list` are of numeric
+    // type.
     case in @ In(Cast(fromExp, toType: NumericType, _), list @ Seq(firstLit, _*))
         if canImplicitlyCast(fromExp, toType, firstLit.dataType) && in.inSetConvertible =>
       val (newValueList, expr) =
@@ -177,6 +181,9 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
         case _ => exp
       }
 
+    // The same with `In` expression, the analyzer makes sure that the hset of InSet is already of
+    // the same data type, so simply check `fromExp.dataType` can implicitly cast to `toType` and
+    // both `fromExp.dataType` and `toType` is numeric type or not.
     case inSet @ InSet(Cast(fromExp, toType: NumericType, _), hset)
         if hset.nonEmpty && canImplicitlyCast(fromExp, toType, toType) =>
       val (newValueSet, expr) =
