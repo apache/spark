@@ -151,7 +151,8 @@ private[spark] class UnifiedMemoryManager(
   override def acquireStorageMemory(
       blockId: BlockId,
       numBytes: Long,
-      memoryMode: MemoryMode): Boolean = synchronized {
+      memoryMode: MemoryMode,
+      canEvictBlocks: Boolean = true): Boolean = synchronized {
     assertInvariants()
     assert(numBytes >= 0)
     val (executionPool, storagePool, maxMemory) = memoryMode match {
@@ -178,14 +179,15 @@ private[spark] class UnifiedMemoryManager(
       executionPool.decrementPoolSize(memoryBorrowedFromExecution)
       storagePool.incrementPoolSize(memoryBorrowedFromExecution)
     }
-    storagePool.acquireMemory(blockId, numBytes)
+    storagePool.acquireMemory(blockId, numBytes, canEvictBlocks)
   }
 
   override def acquireUnrollMemory(
       blockId: BlockId,
       numBytes: Long,
-      memoryMode: MemoryMode): Boolean = synchronized {
-    acquireStorageMemory(blockId, numBytes, memoryMode)
+      memoryMode: MemoryMode,
+      canEvictBlocks: Boolean): Boolean = synchronized {
+    acquireStorageMemory(blockId, numBytes, memoryMode, canEvictBlocks)
   }
 }
 

@@ -91,7 +91,11 @@ private[spark] abstract class MemoryManager(
    *
    * @return whether all N bytes were successfully granted.
    */
-  def acquireStorageMemory(blockId: BlockId, numBytes: Long, memoryMode: MemoryMode): Boolean
+  def acquireStorageMemory(
+      blockId: BlockId,
+      numBytes: Long,
+      memoryMode: MemoryMode,
+      canEvictBlocks: Boolean): Boolean
 
   /**
    * Acquire N bytes of memory to unroll the given block, evicting existing ones if necessary.
@@ -102,7 +106,11 @@ private[spark] abstract class MemoryManager(
    *
    * @return whether all N bytes were successfully granted.
    */
-  def acquireUnrollMemory(blockId: BlockId, numBytes: Long, memoryMode: MemoryMode): Boolean
+  def acquireUnrollMemory(
+      blockId: BlockId,
+      numBytes: Long,
+      memoryMode: MemoryMode,
+      canEvictBlocks: Boolean): Boolean
 
   /**
    * Try to acquire up to `numBytes` of execution memory for the current task and return the

@@ -100,12 +100,13 @@ class NettyBlockRpcServer(
 
       case uploadBlock: UploadBlock =>
         // StorageLevel and ClassTag are serialized as bytes using our JavaSerializer.
-        val (level, classTag) = deserializeMetadata(uploadBlock.metadata)
+        val (level, classTag, isDecommissioning) = deserializeMetadata(uploadBlock.metadata)
         val data = new NioManagedBuffer(ByteBuffer.wrap(uploadBlock.blockData))
         val blockId = BlockId(uploadBlock.blockId)
         logDebug(s"Receiving replicated block $blockId with level ${level} " +
           s"from ${client.getSocketAddress}")
-        val blockStored = blockManager.putBlockData(blockId, data, level, classTag)
+        val blockStored = blockManager.putBlockData(blockId, data, level, classTag,
+          isDecommissioning)
         if (blockStored) {
           responseContext.onSuccess(ByteBuffer.allocate(0))
         } else {
@@ -142,20 +143,21 @@ class NettyBlockRpcServer(
       responseContext: RpcResponseCallback): StreamCallbackWithID = {
     val message =
       BlockTransferMessage.Decoder.fromByteBuffer(messageHeader).asInstanceOf[UploadBlockStream]
-    val (level, classTag) = deserializeMetadata(message.metadata)
+    val (level, classTag, isDecommissioning) = deserializeMetadata(message.metadata)
     val blockId = BlockId(message.blockId)
     logDebug(s"Receiving replicated block $blockId with level ${level} as stream " +
       s"from ${client.getSocketAddress}")
     // This will return immediately, but will setup a callback on streamData which will still
     // do all the processing in the netty thread.
-    blockManager.putBlockDataAsStream(blockId, level, classTag)
+    blockManager.putBlockDataAsStream(blockId, level, classTag, isDecommissioning)
   }
 
-  private def deserializeMetadata[T](metadata: Array[Byte]): (StorageLevel, ClassTag[T]) = {
+  private def deserializeMetadata[T](metadata: Array[Byte]): (StorageLevel, ClassTag[T],
+    Boolean) = {
     serializer
       .newInstance()
       .deserialize(ByteBuffer.wrap(metadata))
-      .asInstanceOf[(StorageLevel, ClassTag[T])]
+      .asInstanceOf[(StorageLevel, ClassTag[T], Boolean)]
   }
 
   override def getStreamManager(): StreamManager = streamManager

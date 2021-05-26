@@ -1656,7 +1656,8 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
           blockId: BlockId,
           blockData: ManagedBuffer,
           level: StorageLevel,
-          classTag: ClassTag[_]): Future[Unit] = {
+          classTag: ClassTag[_],
+          canEvictBlocks: Boolean): Future[Unit] = {
         throw new InterruptedException("Intentional interrupt")
       }
     }
@@ -2103,7 +2104,8 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
         blockId: BlockId,
         blockData: ManagedBuffer,
         level: StorageLevel,
-        classTag: ClassTag[_]): Future[Unit] = {
+        classTag: ClassTag[_],
+        canEvictBlocks: Boolean): Future[Unit] = {
       import scala.concurrent.ExecutionContext.Implicits.global
       Future {}
     }

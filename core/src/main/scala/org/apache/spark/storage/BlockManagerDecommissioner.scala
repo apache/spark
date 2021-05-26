@@ -326,7 +326,8 @@ private[storage] class BlockManagerDecommissioner(
       blockToReplicate.blockId,
       blockToReplicate.replicas.toSet,
       blockToReplicate.maxReplicas,
-      maxReplicationFailures = Some(maxReplicationFailuresForDecommission))
+      maxReplicationFailures = Some(maxReplicationFailuresForDecommission),
+      isDecommissioning = true)
     if (replicatedSuccessfully) {
       logInfo(s"Block ${blockToReplicate.blockId} offloaded successfully, Removing block now")
       bm.removeBlock(blockToReplicate.blockId)

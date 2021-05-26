@@ -62,7 +62,8 @@ abstract class BlockTransferService extends BlockStoreClient {
       blockId: BlockId,
       blockData: ManagedBuffer,
       level: StorageLevel,
-      classTag: ClassTag[_]): Future[Unit]
+      classTag: ClassTag[_],
+      isDecommissioning: Boolean = false): Future[Unit]
 
   /**
    * A special case of [[fetchBlocks]], as it fetches only one block and is blocking.
@@ -117,8 +118,10 @@ abstract class BlockTransferService extends BlockStoreClient {
       blockId: BlockId,
       blockData: ManagedBuffer,
       level: StorageLevel,
-      classTag: ClassTag[_]): Unit = {
-    val future = uploadBlock(hostname, port, execId, blockId, blockData, level, classTag)
+      classTag: ClassTag[_],
+      isDecommissioning: Boolean = false): Unit = {
+    val future = uploadBlock(hostname, port, execId, blockId, blockData, level, classTag,
+      isDecommissioning)
     ThreadUtils.awaitResult(future, Duration.Inf)
   }
 }

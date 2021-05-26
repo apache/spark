@@ -82,7 +82,8 @@ class TestMemoryManager(conf: SparkConf)
   override def acquireStorageMemory(
       blockId: BlockId,
       numBytes: Long,
-      memoryMode: MemoryMode): Boolean = {
+      memoryMode: MemoryMode,
+      canEvictBlocks: Boolean): Boolean = {
     require(numBytes >= 0)
     true
   }
@@ -90,7 +91,8 @@ class TestMemoryManager(conf: SparkConf)
   override def acquireUnrollMemory(
       blockId: BlockId,
       numBytes: Long,
-      memoryMode: MemoryMode): Boolean = {
+      memoryMode: MemoryMode,
+      canEvictBlocks: Boolean): Boolean = {
     require(numBytes >= 0)
     true
   }

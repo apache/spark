@@ -149,9 +149,10 @@ private[spark] class MemoryStore(
       blockId: BlockId,
       size: Long,
       memoryMode: MemoryMode,
-      _bytes: () => ChunkedByteBuffer): Boolean = {
+      _bytes: () => ChunkedByteBuffer,
+      canEvictBlocks: Boolean = true): Boolean = {
     require(!contains(blockId), s"Block $blockId is already present in the MemoryStore")
-    if (memoryManager.acquireStorageMemory(blockId, size, memoryMode)) {
+    if (memoryManager.acquireStorageMemory(blockId, size, memoryMode, canEvictBlocks)) {
       // We acquired enough memory for the block, so go ahead and put it
       val bytes = _bytes()
       assert(bytes.size == size)
@@ -193,7 +194,8 @@ private[spark] class MemoryStore(
       values: Iterator[T],
       classTag: ClassTag[T],
       memoryMode: MemoryMode,
-      valuesHolder: ValuesHolder[T]): Either[Long, Long] = {
+      valuesHolder: ValuesHolder[T],
+      canEvictBlocks: Boolean = true): Either[Long, Long] = {
     require(!contains(blockId), s"Block $blockId is already present in the MemoryStore")
 
     // Number of elements unrolled so far
@@ -213,7 +215,7 @@ private[spark] class MemoryStore(
 
     // Request enough memory to begin unrolling
     keepUnrolling =
-      reserveUnrollMemoryForThisTask(blockId, initialMemoryThreshold, memoryMode)
+      reserveUnrollMemoryForThisTask(blockId, initialMemoryThreshold, memoryMode, canEvictBlocks)
 
     if (!keepUnrolling) {
       logWarning(s"Failed to reserve initial memory threshold of " +
@@ -231,7 +233,7 @@ private[spark] class MemoryStore(
         if (currentSize >= memoryThreshold) {
           val amountToRequest = (currentSize * memoryGrowthFactor - memoryThreshold).toLong
           keepUnrolling =
-            reserveUnrollMemoryForThisTask(blockId, amountToRequest, memoryMode)
+            reserveUnrollMemoryForThisTask(blockId, amountToRequest, memoryMode, canEvictBlocks)
           if (keepUnrolling) {
             unrollMemoryUsedByThisBlock += amountToRequest
           }
@@ -250,7 +252,8 @@ private[spark] class MemoryStore(
       val size = entryBuilder.preciseSize
       if (size > unrollMemoryUsedByThisBlock) {
         val amountToRequest = size - unrollMemoryUsedByThisBlock
-        keepUnrolling = reserveUnrollMemoryForThisTask(blockId, amountToRequest, memoryMode)
+        keepUnrolling = reserveUnrollMemoryForThisTask(blockId, amountToRequest, memoryMode,
+          canEvictBlocks)
         if (keepUnrolling) {
           unrollMemoryUsedByThisBlock += amountToRequest
         }
@@ -261,7 +264,8 @@ private[spark] class MemoryStore(
         // Synchronize so that transfer is atomic
         memoryManager.synchronized {
           releaseUnrollMemoryForThisTask(memoryMode, unrollMemoryUsedByThisBlock)
-          val success = memoryManager.acquireStorageMemory(blockId, entry.size, memoryMode)
+          val success = memoryManager.acquireStorageMemory(blockId, entry.size, memoryMode,
+            canEvictBlocks)
           assert(success, "transferring unroll memory to storage memory failed")
         }
 
@@ -297,11 +301,12 @@ private[spark] class MemoryStore(
   private[storage] def putIteratorAsValues[T](
       blockId: BlockId,
       values: Iterator[T],
-      classTag: ClassTag[T]): Either[PartiallyUnrolledIterator[T], Long] = {
+      classTag: ClassTag[T],
+      canEvictBlocks: Boolean = true): Either[PartiallyUnrolledIterator[T], Long] = {
 
     val valuesHolder = new DeserializedValuesHolder[T](classTag)
 
-    putIterator(blockId, values, classTag, MemoryMode.ON_HEAP, valuesHolder) match {
+    putIterator(blockId, values, classTag, MemoryMode.ON_HEAP, valuesHolder, canEvictBlocks) match {
       case Right(storedSize) => Right(storedSize)
       case Left(unrollMemoryUsedByThisBlock) =>
         val unrolledIterator = if (valuesHolder.vector != null) {
@@ -577,9 +582,10 @@ private[spark] class MemoryStore(
   def reserveUnrollMemoryForThisTask(
       blockId: BlockId,
       memory: Long,
-      memoryMode: MemoryMode): Boolean = {
+      memoryMode: MemoryMode,
+      canEvictBlocks: Boolean = true): Boolean = {
     memoryManager.synchronized {
-      val success = memoryManager.acquireUnrollMemory(blockId, memory, memoryMode)
+      val success = memoryManager.acquireUnrollMemory(blockId, memory, memoryMode, canEvictBlocks)
       if (success) {
         val taskAttemptId = currentTaskAttemptId()
         val unrollMemoryMap = memoryMode match {

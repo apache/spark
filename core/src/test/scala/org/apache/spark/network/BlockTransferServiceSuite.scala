@@ -87,7 +87,8 @@ class BlockTransferServiceSuite extends SparkFunSuite with TimeLimits {
           blockId: BlockId,
           blockData: ManagedBuffer,
           level: StorageLevel,
-          classTag: ClassTag[_]): Future[Unit] = {
+          classTag: ClassTag[_],
+          canEvictBlocks: Boolean): Future[Unit] = {
         // This method is unused in this test
         throw new UnsupportedOperationException("uploadBlock")
       }

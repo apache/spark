@@ -68,9 +68,12 @@ private[memory] class StorageMemoryPool(
    *
    * @return whether all N bytes were successfully granted.
    */
-  def acquireMemory(blockId: BlockId, numBytes: Long): Boolean = lock.synchronized {
+  def acquireMemory(
+      blockId: BlockId,
+      numBytes: Long,
+      canEvictBlocks: Boolean): Boolean = lock.synchronized {
     val numBytesToFree = math.max(0, numBytes - memoryFree)
-    acquireMemory(blockId, numBytes, numBytesToFree)
+    acquireMemory(blockId, numBytes, numBytesToFree, canEvictBlocks)
   }
 
   /**
@@ -84,11 +87,12 @@ private[memory] class StorageMemoryPool(
   def acquireMemory(
       blockId: BlockId,
       numBytesToAcquire: Long,
-      numBytesToFree: Long): Boolean = lock.synchronized {
+      numBytesToFree: Long,
+      canEvictBlocks: Boolean): Boolean = lock.synchronized {
     assert(numBytesToAcquire >= 0)
     assert(numBytesToFree >= 0)
     assert(memoryUsed <= poolSize)
-    if (numBytesToFree > 0) {
+    if (numBytesToFree > 0 && canEvictBlocks) {
       memoryStore.evictBlocksToFreeSpace(Some(blockId), numBytesToFree, memoryMode)
     }
     // NOTE: If the memory store evicts blocks, then those evictions will synchronously call

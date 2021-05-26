@@ -286,7 +286,8 @@ private[spark] class BlockManager(
       level: StorageLevel,
       classTag: ClassTag[T],
       tellMaster: Boolean,
-      keepReadLock: Boolean) {
+      keepReadLock: Boolean,
+      canEvictBlocks: Boolean) {
 
     /**
      *  Reads the block content into the memory. If the update of the block store is based on a
@@ -301,7 +302,7 @@ private[spark] class BlockManager(
     private def saveDeserializedValuesToMemoryStore(inputStream: InputStream): Boolean = {
       try {
         val values = serializerManager.dataDeserializeStream(blockId, inputStream)(classTag)
-        memoryStore.putIteratorAsValues(blockId, values, classTag) match {
+        memoryStore.putIteratorAsValues(blockId, values, classTag, canEvictBlocks) match {
           case Right(_) => true
           case Left(iter) =>
             // If putting deserialized values in memory failed, we will put the bytes directly
@@ -323,7 +324,7 @@ private[spark] class BlockManager(
         } else {
           bytes
         }
-      })
+      }, canEvictBlocks)
     }
 
     /**
@@ -408,8 +409,10 @@ private[spark] class BlockManager(
       classTag: ClassTag[T],
       bytes: ChunkedByteBuffer,
       tellMaster: Boolean = true,
-      keepReadLock: Boolean = false)
-    extends BlockStoreUpdater[T](bytes.size, blockId, level, classTag, tellMaster, keepReadLock) {
+      keepReadLock: Boolean = false,
+      canEvictBlocks: Boolean = true)
+    extends BlockStoreUpdater[T](bytes.size, blockId, level, classTag, tellMaster, keepReadLock,
+      canEvictBlocks) {
 
     override def readToByteBuffer(): ChunkedByteBuffer = bytes
 
@@ -433,8 +436,10 @@ private[spark] class BlockManager(
       tmpFile: File,
       blockSize: Long,
       tellMaster: Boolean = true,
-      keepReadLock: Boolean = false)
-    extends BlockStoreUpdater[T](blockSize, blockId, level, classTag, tellMaster, keepReadLock) {
+      keepReadLock: Boolean = false,
+      canEvictBlocks: Boolean = true)
+    extends BlockStoreUpdater[T](blockSize, blockId, level, classTag, tellMaster, keepReadLock,
+      canEvictBlocks) {
 
     override def readToByteBuffer(): ChunkedByteBuffer = {
       val allocator = level.memoryMode match {
@@ -670,14 +675,17 @@ private[spark] class BlockManager(
       blockId: BlockId,
       data: ManagedBuffer,
       level: StorageLevel,
-      classTag: ClassTag[_]): Boolean = {
-    putBytes(blockId, new ChunkedByteBuffer(data.nioByteBuffer()), level)(classTag)
+      classTag: ClassTag[_],
+      isDecommissioning: Boolean): Boolean = {
+    putBytes(blockId, new ChunkedByteBuffer(data.nioByteBuffer()), level,
+      isDecommissioning)(classTag)
   }
 
   override def putBlockDataAsStream(
       blockId: BlockId,
       level: StorageLevel,
-      classTag: ClassTag[_]): StreamCallbackWithID = {
+      classTag: ClassTag[_],
+      isDecommissioning: Boolean = false): StreamCallbackWithID = {
 
     checkShouldStore(blockId)
 
@@ -714,7 +722,7 @@ private[spark] class BlockManager(
         channel.close()
         val blockSize = channel.getCount
         val blockStored = TempFileBasedBlockStoreUpdater(
-          blockId, level, classTag, tmpFile, blockSize).save()
+          blockId, level, classTag, tmpFile, blockSize, !isDecommissioning).save()
         if (!blockStored) {
           throw new Exception(s"Failure while trying to store block $blockId on $blockManagerId.")
         }
@@ -1305,10 +1313,12 @@ private[spark] class BlockManager(
       blockId: BlockId,
       bytes: ChunkedByteBuffer,
       level: StorageLevel,
-      tellMaster: Boolean = true): Boolean = {
+      tellMaster: Boolean = true,
+      isDecommissioning: Boolean = false): Boolean = {
     require(bytes != null, "Bytes is null")
     val blockStoreUpdater =
-      ByteBufferBlockStoreUpdater(blockId, level, implicitly[ClassTag[T]], bytes, tellMaster)
+      ByteBufferBlockStoreUpdater(blockId, level, implicitly[ClassTag[T]], bytes, tellMaster,
+        !isDecommissioning)
     blockStoreUpdater.save()
   }
 
@@ -1617,7 +1627,8 @@ private[spark] class BlockManager(
       blockId: BlockId,
       existingReplicas: Set[BlockManagerId],
       maxReplicas: Int,
-      maxReplicationFailures: Option[Int] = None): Boolean = {
+      maxReplicationFailures: Option[Int] = None,
+      isDecommissioning: Boolean = false): Boolean = {
     logInfo(s"Using $blockManagerId to pro-actively replicate $blockId")
     blockInfoManager.lockForReading(blockId).forall { info =>
       val data = doGetLocalBytes(blockId, info)
@@ -1633,7 +1644,8 @@ private[spark] class BlockManager(
       getPeers(forceFetch = true)
       try {
         replicate(
-          blockId, data, storageLevel, info.classTag, existingReplicas, maxReplicationFailures)
+          blockId, data, storageLevel, info.classTag, existingReplicas, maxReplicationFailures,
+          isDecommissioning)
       } finally {
         logDebug(s"Releasing lock for $blockId")
         releaseLockAndDispose(blockId, data)
@@ -1651,7 +1663,8 @@ private[spark] class BlockManager(
       level: StorageLevel,
       classTag: ClassTag[_],
       existingReplicas: Set[BlockManagerId] = Set.empty,
-      maxReplicationFailures: Option[Int] = None): Boolean = {
+      maxReplicationFailures: Option[Int] = None,
+      isDecommissioning: Boolean = false): Boolean = {
 
     val maxReplicationFailureCount = maxReplicationFailures.getOrElse(
       conf.get(config.STORAGE_MAX_REPLICATION_FAILURE))
@@ -1696,7 +1709,8 @@ private[spark] class BlockManager(
           blockId,
           buffer,
           tLevel,
-          classTag)
+          classTag,
+          isDecommissioning)
         logTrace(s"Replicated $blockId of ${data.size} bytes to $peer" +
           s" in ${(System.nanoTime - onePeerStartTime).toDouble / 1e6} ms")
         peersForReplication = peersForReplication.tail
