@@ -27,9 +27,10 @@ import org.apache.spark.sql.execution.SparkPlan
 /**
  * Logical plan node for holding data from a command.
  *
- * `commandLogicalPlan` and `commandPhysicalPlan` just used to display by execute explain.
+ * `commandLogicalPlan` and `commandPhysicalPlan` are just used to display the plan tree
+ * for EXPLAIN.
  * `rows` may not be serializable and ideally we should not send `rows` to the executors.
- * Thus marking it as transient.
+ * Thus marking them as transient.
  */
 case class CommandResult(
     output: Seq[Attribute],
