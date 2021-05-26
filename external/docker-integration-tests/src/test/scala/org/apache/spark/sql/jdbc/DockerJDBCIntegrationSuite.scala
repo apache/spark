@@ -92,7 +92,8 @@ abstract class DatabaseOnDocker {
       containerConfigBuilder: ContainerConfig.Builder): Unit = {}
 }
 
-abstract class DockerJDBCIntegrationSuite extends SharedSparkSession with Eventually {
+abstract class DockerJDBCIntegrationSuite
+  extends SharedSparkSession with Eventually with DockerIntegrationFunSuite {
 
   protected val dockerIp = DockerUtils.getDockerIp()
   val db: DatabaseOnDocker
@@ -115,69 +116,72 @@ abstract class DockerJDBCIntegrationSuite extends SharedSparkSession with Eventu
   protected var jdbcUrl: String = _
 
   override def beforeAll(): Unit = {
-    super.beforeAll()
-    try {
-      docker = DefaultDockerClient.fromEnv.build()
-      // Check that Docker is actually up
+    runIfTestsEnabled(s"Prepare for $this.getClass.getName") {
+      super.beforeAll()
       try {
-        docker.ping()
+        docker = DefaultDockerClient.fromEnv.build()
+        // Check that Docker is actually up
+        try {
+          docker.ping()
+        } catch {
+          case NonFatal(e) =>
+            log.error("Exception while connecting to Docker. Check whether Docker is running.")
+            throw e
+        }
+        // Ensure that the Docker image is installed:
+        try {
+          docker.inspectImage(db.imageName)
+        } catch {
+          case e: ImageNotFoundException =>
+            log.warn(s"Docker image ${db.imageName} not found; pulling image from registry")
+            docker.pull(db.imageName)
+            pulled = true
+        }
+        val hostConfigBuilder = HostConfig.builder()
+          .privileged(db.privileged)
+          .networkMode("bridge")
+          .ipcMode(if (db.usesIpc) "host" else "")
+          .portBindings(
+            Map(s"${db.jdbcPort}/tcp" ->
+              List(PortBinding.of(dockerIp, externalPort)).asJava).asJava)
+        // Create the database container:
+        val containerConfigBuilder = ContainerConfig.builder()
+          .image(db.imageName)
+          .networkDisabled(false)
+          .env(db.env.map { case (k, v) => s"$k=$v" }.toSeq.asJava)
+          .exposedPorts(s"${db.jdbcPort}/tcp")
+        if (db.getEntryPoint.isDefined) {
+          containerConfigBuilder.entrypoint(db.getEntryPoint.get)
+        }
+        if (db.getStartupProcessName.isDefined) {
+          containerConfigBuilder.cmd(db.getStartupProcessName.get)
+        }
+        db.beforeContainerStart(hostConfigBuilder, containerConfigBuilder)
+        containerConfigBuilder.hostConfig(hostConfigBuilder.build())
+        val config = containerConfigBuilder.build()
+        // Create the database container:
+        containerId = docker.createContainer(config).id
+        // Start the container and wait until the database can accept JDBC connections:
+        docker.startContainer(containerId)
+        jdbcUrl = db.getJdbcUrl(dockerIp, externalPort)
+        var conn: Connection = null
+        eventually(connectionTimeout, interval(1.second)) {
+          conn = getConnection()
+        }
+        // Run any setup queries:
+        try {
+          dataPreparation(conn)
+        } finally {
+          conn.close()
+        }
       } catch {
         case NonFatal(e) =>
-          log.error("Exception while connecting to Docker. Check whether Docker is running.")
-          throw e
+          try {
+            afterAll()
+          } finally {
+            throw e
+          }
       }
-      // Ensure that the Docker image is installed:
-      try {
-        docker.inspectImage(db.imageName)
-      } catch {
-        case e: ImageNotFoundException =>
-          log.warn(s"Docker image ${db.imageName} not found; pulling image from registry")
-          docker.pull(db.imageName)
-          pulled = true
-      }
-      val hostConfigBuilder = HostConfig.builder()
-        .privileged(db.privileged)
-        .networkMode("bridge")
-        .ipcMode(if (db.usesIpc) "host" else "")
-        .portBindings(
-          Map(s"${db.jdbcPort}/tcp" -> List(PortBinding.of(dockerIp, externalPort)).asJava).asJava)
-      // Create the database container:
-      val containerConfigBuilder = ContainerConfig.builder()
-        .image(db.imageName)
-        .networkDisabled(false)
-        .env(db.env.map { case (k, v) => s"$k=$v" }.toSeq.asJava)
-        .exposedPorts(s"${db.jdbcPort}/tcp")
-      if (db.getEntryPoint.isDefined) {
-        containerConfigBuilder.entrypoint(db.getEntryPoint.get)
-      }
-      if (db.getStartupProcessName.isDefined) {
-        containerConfigBuilder.cmd(db.getStartupProcessName.get)
-      }
-      db.beforeContainerStart(hostConfigBuilder, containerConfigBuilder)
-      containerConfigBuilder.hostConfig(hostConfigBuilder.build())
-      val config = containerConfigBuilder.build()
-      // Create the database container:
-      containerId = docker.createContainer(config).id
-      // Start the container and wait until the database can accept JDBC connections:
-      docker.startContainer(containerId)
-      jdbcUrl = db.getJdbcUrl(dockerIp, externalPort)
-      var conn: Connection = null
-      eventually(connectionTimeout, interval(1.second)) {
-        conn = getConnection()
-      }
-      // Run any setup queries:
-      try {
-        dataPreparation(conn)
-      } finally {
-        conn.close()
-      }
-    } catch {
-      case NonFatal(e) =>
-        try {
-          afterAll()
-        } finally {
-          throw e
-        }
     }
   }
 

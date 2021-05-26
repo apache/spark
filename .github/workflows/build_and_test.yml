@@ -635,6 +635,7 @@ jobs:
       GITHUB_PREV_SHA: ${{ github.event.before }}
       SPARK_LOCAL_IP: localhost
       ORACLE_DOCKER_IMAGE_NAME: oracle/database:18.4.0-xe
+      ENABLE_DOCKER_INTEGRATION_TESTS: 1
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v2

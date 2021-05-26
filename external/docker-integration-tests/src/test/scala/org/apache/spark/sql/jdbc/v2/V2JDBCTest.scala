@@ -20,12 +20,13 @@ package org.apache.spark.sql.jdbc.v2
 import org.apache.log4j.Level
 
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.jdbc.DockerIntegrationFunSuite
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.DockerTest
 
 @DockerTest
-private[v2] trait V2JDBCTest extends SharedSparkSession {
+private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFunSuite {
   val catalogName: String
   // dialect specific update column type test
   def testUpdateColumnType(tbl: String): Unit
@@ -62,7 +63,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession {
 
   def testCreateTableWithProperty(tbl: String): Unit = {}
 
-  test("SPARK-33034: ALTER TABLE ... add new columns") {
+  testIfEnabled("SPARK-33034: ALTER TABLE ... add new columns") {
     withTable(s"$catalogName.alt_table") {
       sql(s"CREATE TABLE $catalogName.alt_table (ID STRING)")
       var t = spark.table(s"$catalogName.alt_table")
@@ -90,7 +91,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession {
     assert(msg.contains("Table not found"))
   }
 
-  test("SPARK-33034: ALTER TABLE ... drop column") {
+  testIfEnabled("SPARK-33034: ALTER TABLE ... drop column") {
     withTable(s"$catalogName.alt_table") {
       sql(s"CREATE TABLE $catalogName.alt_table (C1 INTEGER, C2 STRING, c3 INTEGER)")
       sql(s"ALTER TABLE $catalogName.alt_table DROP COLUMN C1")
@@ -111,7 +112,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession {
     assert(msg.contains("Table not found"))
   }
 
-  test("SPARK-33034: ALTER TABLE ... update column type") {
+  testIfEnabled("SPARK-33034: ALTER TABLE ... update column type") {
     withTable(s"$catalogName.alt_table") {
       testUpdateColumnType(s"$catalogName.alt_table")
       // Update not existing column
@@ -127,7 +128,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession {
     assert(msg.contains("Table not found"))
   }
 
-  test("SPARK-33034: ALTER TABLE ... rename column") {
+  testIfEnabled("SPARK-33034: ALTER TABLE ... rename column") {
     withTable(s"$catalogName.alt_table") {
       sql(s"CREATE TABLE $catalogName.alt_table (ID STRING NOT NULL," +
         s" ID1 STRING NOT NULL, ID2 STRING NOT NULL)")
@@ -145,7 +146,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession {
     assert(msg.contains("Table not found"))
   }
 
-  test("SPARK-33034: ALTER TABLE ... update column nullability") {
+  testIfEnabled("SPARK-33034: ALTER TABLE ... update column nullability") {
     withTable(s"$catalogName.alt_table") {
       testUpdateColumnNullability(s"$catalogName.alt_table")
     }
@@ -156,7 +157,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession {
     assert(msg.contains("Table not found"))
   }
 
-  test("CREATE TABLE with table comment") {
+  testIfEnabled("CREATE TABLE with table comment") {
     withTable(s"$catalogName.new_table") {
       val logAppender = new LogAppender("table comment")
       withLogAppender(logAppender) {
@@ -170,7 +171,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession {
     }
   }
 
-  test("CREATE TABLE with table property") {
+  testIfEnabled("CREATE TABLE with table property") {
     withTable(s"$catalogName.new_table") {
       val m = intercept[AnalysisException] {
         sql(s"CREATE TABLE $catalogName.new_table (i INT) TBLPROPERTIES('a'='1')")

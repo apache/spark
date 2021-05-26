@@ -74,7 +74,7 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
       "'jumps', 'over', 'the', 'lazy', 'dog')").executeUpdate()
   }
 
-  test("Basic test") {
+  testIfEnabled("Basic test") {
     val df = sqlContext.read.jdbc(jdbcUrl, "tbl", new Properties)
     val rows = df.collect()
     assert(rows.length == 2)
@@ -84,7 +84,7 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(types(1).equals("class java.lang.String"))
   }
 
-  test("Numeric types") {
+  testIfEnabled("Numeric types") {
     val df = sqlContext.read.jdbc(jdbcUrl, "numbers", new Properties)
     val rows = df.collect()
     assert(rows.length == 1)
@@ -111,7 +111,7 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(rows(0).getDouble(8) == 1.0000000000000002)
   }
 
-  test("Date types") {
+  testIfEnabled("Date types") {
     withDefaultTimeZone(UTC) {
       val df = sqlContext.read.jdbc(jdbcUrl, "dates", new Properties)
       val rows = df.collect()
@@ -132,7 +132,7 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
     }
   }
 
-  test("String types") {
+  testIfEnabled("String types") {
     val df = sqlContext.read.jdbc(jdbcUrl, "strings", new Properties)
     val rows = df.collect()
     assert(rows.length == 1)
@@ -158,7 +158,7 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(java.util.Arrays.equals(rows(0).getAs[Array[Byte]](8), Array[Byte](100, 111, 103)))
   }
 
-  test("Basic write test") {
+  testIfEnabled("Basic write test") {
     val df1 = sqlContext.read.jdbc(jdbcUrl, "numbers", new Properties)
     val df2 = sqlContext.read.jdbc(jdbcUrl, "dates", new Properties)
     val df3 = sqlContext.read.jdbc(jdbcUrl, "strings", new Properties)
@@ -167,7 +167,7 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
     df3.write.jdbc(jdbcUrl, "stringscopy", new Properties)
   }
 
-  test("query JDBC option") {
+  testIfEnabled("query JDBC option") {
     val expectedResult = Set(
       (42, "fred"),
       (17, "dave")

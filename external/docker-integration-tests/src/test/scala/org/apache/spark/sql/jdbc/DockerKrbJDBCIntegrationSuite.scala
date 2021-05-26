@@ -42,27 +42,29 @@ abstract class DockerKrbJDBCIntegrationSuite extends DockerJDBCIntegrationSuite 
   protected def setAuthentication(keytabFile: String, principal: String): Unit
 
   override def beforeAll(): Unit = {
-    SecurityUtils.setGlobalKrbDebug(true)
+    runIfTestsEnabled(s"Prepare for ${this.getClass.getName}") {
+      SecurityUtils.setGlobalKrbDebug(true)
 
-    val kdcDir = Utils.createTempDir()
-    val kdcConf = MiniKdc.createConf()
-    kdcConf.setProperty(MiniKdc.DEBUG, "true")
-    kdc = new MiniKdc(kdcConf, kdcDir)
-    kdc.start()
+      val kdcDir = Utils.createTempDir()
+      val kdcConf = MiniKdc.createConf()
+      kdcConf.setProperty(MiniKdc.DEBUG, "true")
+      kdc = new MiniKdc(kdcConf, kdcDir)
+      kdc.start()
 
-    principal = s"$userName@${kdc.getRealm}"
+      principal = s"$userName@${kdc.getRealm}"
 
-    entryPointDir = Utils.createTempDir()
-    initDbDir = Utils.createTempDir()
-    val keytabFile = new File(initDbDir, keytabFileName)
-    keytabFullPath = keytabFile.getAbsolutePath
-    kdc.createPrincipal(keytabFile, userName)
-    logInfo(s"Created keytab file: $keytabFullPath")
+      entryPointDir = Utils.createTempDir()
+      initDbDir = Utils.createTempDir()
+      val keytabFile = new File(initDbDir, keytabFileName)
+      keytabFullPath = keytabFile.getAbsolutePath
+      kdc.createPrincipal(keytabFile, userName)
+      logInfo(s"Created keytab file: $keytabFullPath")
 
-    setAuthentication(keytabFullPath, principal)
+      setAuthentication(keytabFullPath, principal)
 
-    // This must be executed intentionally later
-    super.beforeAll()
+      // This must be executed intentionally later
+      super.beforeAll()
+    }
   }
 
   override def afterAll(): Unit = {
@@ -107,7 +109,7 @@ abstract class DockerKrbJDBCIntegrationSuite extends DockerJDBCIntegrationSuite 
     conn.prepareStatement("INSERT INTO bar VALUES ('hello')").executeUpdate()
   }
 
-  test("Basic read test in query option") {
+  testIfEnabled("Basic read test in query option") {
     // This makes sure Spark must do authentication
     Configuration.setConfiguration(null)
 
@@ -124,7 +126,7 @@ abstract class DockerKrbJDBCIntegrationSuite extends DockerJDBCIntegrationSuite 
     assert(df.collect().toSet === expectedResult)
   }
 
-  test("Basic read test in create table path") {
+  testIfEnabled("Basic read test in create table path") {
     // This makes sure Spark must do authentication
     Configuration.setConfiguration(null)
 
@@ -141,7 +143,7 @@ abstract class DockerKrbJDBCIntegrationSuite extends DockerJDBCIntegrationSuite 
     assert(sql("select c0 from queryOption").collect().toSet === expectedResult)
   }
 
-  test("Basic write test") {
+  testIfEnabled("Basic write test") {
     // This makes sure Spark must do authentication
     Configuration.setConfiguration(null)
 
@@ -162,7 +164,7 @@ abstract class DockerKrbJDBCIntegrationSuite extends DockerJDBCIntegrationSuite 
     assert(rows(0).getString(1) === "bar")
   }
 
-  test("SPARK-35226: JDBCOption should accept refreshKrb5Config parameter") {
+  testIfEnabled("SPARK-35226: JDBCOption should accept refreshKrb5Config parameter") {
     // This makes sure Spark must do authentication
     Configuration.setConfiguration(null)
     withTempDir { dir =>

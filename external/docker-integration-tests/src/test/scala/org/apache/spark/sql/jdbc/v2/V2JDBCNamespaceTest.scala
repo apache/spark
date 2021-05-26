@@ -24,16 +24,17 @@ import org.apache.log4j.Level
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.connector.catalog.NamespaceChange
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
+import org.apache.spark.sql.jdbc.DockerIntegrationFunSuite
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.tags.DockerTest
 
 @DockerTest
-private[v2] trait V2JDBCNamespaceTest extends SharedSparkSession {
+private[v2] trait V2JDBCNamespaceTest extends SharedSparkSession with DockerIntegrationFunSuite {
   val catalog = new JDBCTableCatalog()
 
   def builtinNamespaces: Array[Array[String]]
 
-  test("listNamespaces: basic behavior") {
+  testIfEnabled("listNamespaces: basic behavior") {
     catalog.createNamespace(Array("foo"), Map("comment" -> "test comment").asJava)
     assert(catalog.listNamespaces() === Array(Array("foo")) ++ builtinNamespaces)
     assert(catalog.listNamespaces(Array("foo")) === Array())

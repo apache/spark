@@ -80,7 +80,7 @@ class DB2IntegrationSuite extends DockerJDBCIntegrationSuite {
       + "'<cinfo cid=\"10\"><name>Kathy</name></cinfo>')").executeUpdate()
   }
 
-  test("Basic test") {
+  testIfEnabled("Basic test") {
     val df = sqlContext.read.jdbc(jdbcUrl, "tbl", new Properties)
     val rows = df.collect()
     assert(rows.length == 2)
@@ -90,7 +90,7 @@ class DB2IntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(types(1).equals("class java.lang.String"))
   }
 
-  test("Numeric types") {
+  testIfEnabled("Numeric types") {
     val df = sqlContext.read.jdbc(jdbcUrl, "numbers", new Properties)
     val rows = df.collect()
     assert(rows.length == 1)
@@ -119,7 +119,7 @@ class DB2IntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(rows(0).getDecimal(9) == new BigDecimal("1234567891234567.123456789123456789"))
   }
 
-  test("Date types") {
+  testIfEnabled("Date types") {
     withDefaultTimeZone(UTC) {
       val df = sqlContext.read.jdbc(jdbcUrl, "dates", new Properties)
       val rows = df.collect()
@@ -135,7 +135,7 @@ class DB2IntegrationSuite extends DockerJDBCIntegrationSuite {
     }
   }
 
-  test("String types") {
+  testIfEnabled("String types") {
     val df = sqlContext.read.jdbc(jdbcUrl, "strings", new Properties)
     val rows = df.collect()
     assert(rows.length == 1)
@@ -152,7 +152,7 @@ class DB2IntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(rows(0).getString(4).equals("""<cinfo cid="10"><name>Kathy</name></cinfo>"""))
   }
 
-  test("Basic write test") {
+  testIfEnabled("Basic write test") {
     // cast decflt column with precision value of 38 to DB2 max decimal precision value of 31.
     val df1 = sqlContext.read.jdbc(jdbcUrl, "numbers", new Properties)
       .selectExpr("small", "med", "big", "deci", "flt", "dbl", "real",
@@ -173,7 +173,7 @@ class DB2IntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(rows(0).getString(2) == "1")
   }
 
-  test("query JDBC option") {
+  testIfEnabled("query JDBC option") {
     val expectedResult = Set(
       (42, "fred"),
       (17, "dave")

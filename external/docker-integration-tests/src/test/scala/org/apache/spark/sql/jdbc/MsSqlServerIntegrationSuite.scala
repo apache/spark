@@ -141,7 +141,7 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite {
       """.stripMargin).executeUpdate()
   }
 
-  test("Basic test") {
+  testIfEnabled("Basic test") {
     val df = spark.read.jdbc(jdbcUrl, "tbl", new Properties)
     val rows = df.collect()
     assert(rows.length == 2)
@@ -151,7 +151,7 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(types(1).equals("class java.lang.String"))
   }
 
-  test("Numeric types") {
+  testIfEnabled("Numeric types") {
     Seq(true, false).foreach { flag =>
       withSQLConf(SQLConf.LEGACY_MSSQLSERVER_NUMERIC_MAPPING_ENABLED.key -> s"$flag") {
         val df = spark.read.jdbc(jdbcUrl, "numbers", new Properties)
@@ -206,7 +206,7 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite {
     }
   }
 
-  test("Date types") {
+  testIfEnabled("Date types") {
     withDefaultTimeZone(UTC) {
       val df = spark.read.jdbc(jdbcUrl, "dates", new Properties)
       val rows = df.collect()
@@ -229,7 +229,7 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite {
     }
   }
 
-  test("String types") {
+  testIfEnabled("String types") {
     val df = spark.read.jdbc(jdbcUrl, "strings", new Properties)
     val rows = df.collect()
     assert(rows.length == 1)
@@ -258,7 +258,7 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(java.util.Arrays.equals(row.getAs[Array[Byte]](8), Array[Byte](100, 111, 103)))
   }
 
-  test("Basic write test") {
+  testIfEnabled("Basic write test") {
     val df1 = spark.read.jdbc(jdbcUrl, "numbers", new Properties)
     val df2 = spark.read.jdbc(jdbcUrl, "dates", new Properties)
     val df3 = spark.read.jdbc(jdbcUrl, "strings", new Properties)
@@ -267,7 +267,7 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite {
     df3.write.jdbc(jdbcUrl, "stringscopy", new Properties)
   }
 
-  test("SPARK-33813: MsSqlServerDialect should support spatial types") {
+  testIfEnabled("SPARK-33813: MsSqlServerDialect should support spatial types") {
     val df = spark.read.jdbc(jdbcUrl, "spatials", new Properties)
     val rows = df.collect()
     assert(rows.length == 1)

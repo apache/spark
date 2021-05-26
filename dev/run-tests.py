@@ -689,9 +689,9 @@ def main():
         test_modules = determine_modules_to_test(changed_modules)
         excluded_tags = determine_tags_to_exclude(changed_modules)
 
-    # Run docker-integration-tests only if it's explicitly specified.
-    if not opts.modules or modules.docker_integration_tests.name not in opts.modules:
-        excluded_tags.extend(modules.docker_integration_tests.test_tags)
+    # With this script, disable docker integration by default.
+    if not os.environ.get("ENABLE_DOCKER_INTEGRATION_TESTS"):
+        os.environ["ENABLE_DOCKER_INTEGRATION_TESTS"] = "0"
 
     # If there is no changed module found, tests all.
     if not changed_modules:
