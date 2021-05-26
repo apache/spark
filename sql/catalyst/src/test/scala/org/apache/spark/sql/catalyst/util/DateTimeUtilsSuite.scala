@@ -540,6 +540,49 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       test("2016-11-06 02:00:00", tz, "2016-11-06 10:00:00.0")
     }
   }
+  /*
+    Before this patch, fromUTCtime and toUTCtime produced wrong result on Daylight Saving Time changes days
+    For example, in LA in 1960, timezone switch from UTC-7h to UTC-8h at 2AM in 1960-09-25 and
+    from UTC-8h to UTC-7h in 1960-04-24 but previous func have the cutoff at 8AM
+   */
+  test("SPARK 30696: fromUTCtime and toUTCtime produce wrong result " +
+    "on Daylight Saving Time changes days ") {
+
+    val tz = LA.getId
+
+    def testToUTCTime(utc: String, tz: String, expected: String): Unit = {
+      assert(toJavaTimestamp(toUTCTime(fromJavaTimestamp(Timestamp.valueOf(utc)), tz)).toString
+        === expected)
+    }
+
+    testToUTCTime("1960-09-25 00:30:00", tz, "1960-09-25 07:30:00.0")
+    testToUTCTime("1960-09-25 01:00:00", tz, "1960-09-25 08:00:00.0")
+    testToUTCTime("1960-09-25 01:30:00", tz, "1960-09-25 08:30:00.0")
+    testToUTCTime("1960-09-25 01:59:59", tz, "1960-09-25 08:59:59.0")
+    testToUTCTime("1960-09-25 02:00:00", tz, "1960-09-25 10:00:00.0")
+    testToUTCTime("1960-09-25 07:00:00", tz, "1960-09-25 15:00:00.0")
+    testToUTCTime("1960-09-25 07:30:00", tz, "1960-09-25 15:30:00.0")
+    testToUTCTime("1960-09-25 08:00:00", tz, "1960-09-25 16:00:00.0")
+    testToUTCTime("1960-09-25 08:30:00", tz, "1960-09-25 16:30:00.0")
+
+    def testFromUTCTime(utc: String, tz: String, expected: String): Unit = {
+      assert(toJavaTimestamp(fromUTCTime(fromJavaTimestamp(Timestamp.valueOf(utc)), tz)).toString
+        === expected)
+    }
+
+    testFromUTCTime("1960-09-25 07:30:00", tz, "1960-09-25 00:30:00.0")
+    testFromUTCTime("1960-09-25 08:00:00", tz, "1960-09-25 01:00:00.0")
+    testFromUTCTime("1960-09-25 08:30:00", tz, "1960-09-25 01:30:00.0")
+    testFromUTCTime("1960-09-25 08:59:59", tz, "1960-09-25 01:59:59.0")
+    testFromUTCTime("1960-09-25 09:00:00", tz, "1960-09-25 01:00:00.0")
+    testFromUTCTime("1960-09-25 09:30:00", tz, "1960-09-25 01:30:00.0")
+    testFromUTCTime("1960-09-25 10:00:00", tz, "1960-09-25 02:00:00.0")
+    testFromUTCTime("1960-09-25 15:00:00", tz, "1960-09-25 07:00:00.0")
+    testFromUTCTime("1960-09-25 15:30:00", tz, "1960-09-25 07:30:00.0")
+    testFromUTCTime("1960-09-25 16:00:00", tz, "1960-09-25 08:00:00.0")
+    testFromUTCTime("1960-09-25 16:30:00", tz, "1960-09-25 08:30:00.0")
+
+  }
 
   test("trailing characters while converting string to timestamp") {
     val s = UTF8String.fromString("2019-10-31T10:59:23Z:::")
@@ -787,4 +830,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       }
     }
   }
+
+
+
 }
