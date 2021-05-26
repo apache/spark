@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import scala.collection.immutable.HashSet
+
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans.DslLogicalPlan
 import org.apache.spark.sql.catalyst.expressions._
@@ -233,29 +235,43 @@ class UnwrapCastInBinaryComparisonSuite extends PlanTest with ExpressionEvalHelp
     assert(getRange(DecimalType(5, 2)).isEmpty)
   }
 
-  test("SPARK-35316: unwrap should support In predicate.") {
+  test("SPARK-35316: unwrap should support In/InSet predicate.") {
     val longLit = Literal.create(null, LongType)
     val intLit = Literal.create(null, IntegerType)
     val shortLit = Literal.create(null, ShortType)
-    assertEquivalent(
-      Cast(f, LongType).in(1.toLong, 2.toLong, 3.toLong), f.in(1.toShort, 2.toShort, 3.toShort))
+
+    def checkInAndInSet(in: In, expected: Expression): Unit = {
+      assertEquivalent(in, expected)
+      val toInSet = (in: In) => InSet(in.value, HashSet() ++ in.list.map(_.eval()))
+      val expectedInSet = expected match {
+        case expectedIn: In =>
+          toInSet(expectedIn)
+        case Or(falseIfNotNull: And, expectedIn: In) =>
+          Or(falseIfNotNull, toInSet(expectedIn))
+      }
+      assertEquivalent(toInSet(in), expectedInSet)
+    }
+
+    checkInAndInSet(
+      In(Cast(f, LongType), Seq(1.toLong, 2.toLong, 3.toLong)),
+      f.in(1.toShort, 2.toShort, 3.toShort))
 
     // in.list contains the value which out of `fromType` range
-    assertEquivalent(
-      Cast(f, LongType).in(1.toLong, Int.MaxValue.toLong, Long.MaxValue),
+    checkInAndInSet(
+      In(Cast(f, LongType), Seq(1.toLong, Int.MaxValue.toLong, Long.MaxValue)),
       Or(falseIfNotNull(f), f.in(1.toShort)))
 
     // in.list is empty
-    assertEquivalent(
-      Cast(f, IntegerType).in(), Cast(f, IntegerType).in())
+    checkInAndInSet(
+      In(Cast(f, IntegerType), Seq.empty), Cast(f, IntegerType).in())
 
     // in.list contains null value
-    assertEquivalent(
-      Cast(f, IntegerType).in(intLit), f.in(shortLit))
-    assertEquivalent(
-      Cast(f, IntegerType).in(intLit, 1), f.in(shortLit, 1.toShort))
-    assertEquivalent(
-      Cast(f, LongType).in(longLit, 1.toLong, Long.MaxValue),
+    checkInAndInSet(
+      In(Cast(f, IntegerType), Seq(intLit)), f.in(shortLit))
+    checkInAndInSet(
+      In(Cast(f, IntegerType), Seq(intLit, 1)), f.in(shortLit, 1.toShort))
+    checkInAndInSet(
+      In(Cast(f, LongType), Seq(longLit, 1.toLong, Long.MaxValue)),
       Or(falseIfNotNull(f), f.in(shortLit, 1.toShort))
     )
   }
