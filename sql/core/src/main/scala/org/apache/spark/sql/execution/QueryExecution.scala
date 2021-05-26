@@ -77,9 +77,9 @@ class QueryExecution(
   }
 
   // SPARK-35378: Commands should be executed eagerly so that `sql("INSERT ...")` can trigger the
-  // table insertion immediately without a `.collect()`. We also need to eagerly execute commands,
-  // because many commands return `GenericInternalRow` and can't be put in a query plan directly,
-  // otherwise the query engine may cast `GenericInternalRow` to `UnsafeRow` and fail.
+  // table insertion immediately without a `.collect()`. We also need to eagerly execute non-root
+  // commands, because many commands return `GenericInternalRow` and can't be put in a query plan
+  // directly, otherwise the query engine may cast `GenericInternalRow` to `UnsafeRow` and fail.
   lazy val commandExecuted: LogicalPlan = if (isExecutingCommand) {
     analyzed.mapChildren(eagerlyExecuteCommands)
   } else {
