@@ -133,7 +133,7 @@ public class TaskMemoryManager {
    * Acquire N bytes of memory for a consumer. If there is no enough memory, it will call
    * spill() of consumers to release more memory.
    *
-   * @return number of bytes successfully granted (>= N).
+   * @return number of bytes successfully granted.
    */
   public long acquireExecutionMemory(long required, MemoryConsumer consumer) {
     assert(required >= 0);
