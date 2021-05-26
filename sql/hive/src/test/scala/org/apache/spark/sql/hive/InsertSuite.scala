@@ -911,15 +911,13 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
       val createSpark =
         """
           |      create table TEST1(
-          |        ENCRYPTED_USER_ID BIGINT,
-          |        USER_CNTRY_ID INT,
-          |        USER_ID BIGINT)
+          |        v1 BIGINT,
+          |        s1 INT)
           |        using parquet
-          |        partitioned by (USER_ID)
-          |        clustered by (encrypted_USER_ID)
-          |        sorted by (USER_CNTRY_ID)
+          |        partitioned by (pk BIGINT)
+          |        clustered by (v1)
+          |        sorted by (s1)
           |        into 200 buckets
-          |        tblproperties ("auto.purge"="true")
           |
           |""".stripMargin
 
