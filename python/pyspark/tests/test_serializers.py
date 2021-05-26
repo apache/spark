@@ -98,7 +98,7 @@ class SerializationTestCase(unittest.TestCase):
 
         class Unpicklable(object):
             def __reduce__(self):
-                raise Exception("not picklable")
+                raise RuntimeError("not picklable")
 
         global exit
         exit = Unpicklable()

@@ -546,4 +546,104 @@ class MemoryStoreSuite
       }
     }
   }
+
+  test("put user-defined objects to MemoryStore and remove") {
+    val (memoryStore, _) = makeMemoryStore(12000)
+    val blockId = BlockId("rdd_3_10")
+    case class DummyAllocator() {
+      private var allocated: Int = 0
+      def alloc(size: Int): Unit = synchronized {
+        allocated += size
+      }
+      def release(size: Int): Unit = synchronized {
+        allocated -= size
+      }
+      def getAllocatedMemory: Int = synchronized {
+        allocated
+      }
+    }
+    case class NativeObject(alloc: DummyAllocator, size: Int)
+      extends KnownSizeEstimation
+      with AutoCloseable {
+      alloc.alloc(size)
+      var allocated_size: Int = size
+      override def estimatedSize: Long = allocated_size
+      override def close(): Unit = synchronized {
+        alloc.release(allocated_size)
+        allocated_size = 0
+      }
+    }
+    val allocator = DummyAllocator()
+    val nativeObjList = List.fill(40)(NativeObject(allocator, 100))
+    def nativeObjIterator: Iterator[Any] = nativeObjList.iterator.asInstanceOf[Iterator[Any]]
+    def putIteratorAsValues[T](
+        blockId: BlockId,
+        iter: Iterator[T],
+        classTag: ClassTag[T]): Either[PartiallyUnrolledIterator[T], Long] = {
+      memoryStore.putIteratorAsValues(blockId, iter, classTag)
+    }
+
+    // Unroll with plenty of space. This should succeed and cache both blocks.
+    assert(putIteratorAsValues("b1", nativeObjIterator, ClassTag.Any).isRight)
+    assert(putIteratorAsValues("b2", nativeObjIterator, ClassTag.Any).isRight)
+
+    memoryStore.remove("b1")
+    memoryStore.remove("b2")
+
+    // Check if allocator was cleared.
+    while (allocator.getAllocatedMemory > 0) {
+      Thread.sleep(500)
+    }
+    assert(allocator.getAllocatedMemory == 0)
+  }
+
+  test("put user-defined objects to MemoryStore and clear") {
+    val (memoryStore, _) = makeMemoryStore(12000)
+    val blockId = BlockId("rdd_3_10")
+    case class DummyAllocator() {
+      private var allocated: Int = 0
+      def alloc(size: Int): Unit = synchronized {
+        allocated += size
+      }
+      def release(size: Int): Unit = synchronized {
+        allocated -= size
+      }
+      def getAllocatedMemory: Int = synchronized {
+        allocated
+      }
+    }
+    case class NativeObject(alloc: DummyAllocator, size: Int)
+      extends KnownSizeEstimation
+      with AutoCloseable {
+
+      alloc.alloc(size)
+      var allocated_size: Int = size
+      override def estimatedSize: Long = allocated_size
+      override def close(): Unit = synchronized {
+        Thread.sleep(10)
+        alloc.release(allocated_size)
+        allocated_size = 0
+      }
+    }
+    val allocator = DummyAllocator()
+    val nativeObjList = List.fill(40)(NativeObject(allocator, 100))
+    def nativeObjIterator: Iterator[Any] = nativeObjList.iterator.asInstanceOf[Iterator[Any]]
+    def putIteratorAsValues[T](
+        blockId: BlockId,
+        iter: Iterator[T],
+        classTag: ClassTag[T]): Either[PartiallyUnrolledIterator[T], Long] = {
+      memoryStore.putIteratorAsValues(blockId, iter, classTag)
+    }
+
+    // Unroll with plenty of space. This should succeed and cache both blocks.
+    assert(putIteratorAsValues("b1", nativeObjIterator, ClassTag.Any).isRight)
+    assert(putIteratorAsValues("b2", nativeObjIterator, ClassTag.Any).isRight)
+
+    memoryStore.clear
+    // Check if allocator was cleared.
+    while (allocator.getAllocatedMemory > 0) {
+      Thread.sleep(500)
+    }
+    assert(allocator.getAllocatedMemory == 0)
+  }
 }

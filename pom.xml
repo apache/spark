@@ -186,7 +186,7 @@
     <guava.version>14.0.1</guava.version>
     <janino.version>3.1.4</janino.version>
     <jersey.version>2.34</jersey.version>
-    <joda.version>2.10.5</joda.version>
+    <joda.version>2.10.10</joda.version>
     <jodd.version>3.5.2</jodd.version>
     <jsr305.version>3.0.0</jsr305.version>
     <libthrift.version>0.12.0</libthrift.version>
@@ -264,6 +264,7 @@
     <spark.test.home>${session.executionRootDirectory}</spark.test.home>
     <spark.test.webdriver.chrome.driver></spark.test.webdriver.chrome.driver>
     <spark.test.docker.keepContainer>false</spark.test.docker.keepContainer>
+    <spark.test.docker.removePulledImage>true</spark.test.docker.removePulledImage>
 
     <CodeCacheSize>1g</CodeCacheSize>
     <!-- Needed for consistent times -->
@@ -890,7 +891,7 @@
       <dependency>
         <groupId>org.json4s</groupId>
         <artifactId>json4s-jackson_${scala.binary.version}</artifactId>
-        <version>3.7.0-M5</version>
+        <version>3.7.0-M11</version>
         <exclusions>
           <exclusion>
             <groupId>com.fasterxml.jackson.core</groupId>
@@ -2728,6 +2729,7 @@
               <spark.unsafe.exceptionOnMemoryLeak>true</spark.unsafe.exceptionOnMemoryLeak>
               <spark.test.webdriver.chrome.driver>${spark.test.webdriver.chrome.driver}</spark.test.webdriver.chrome.driver>
               <spark.test.docker.keepContainer>${spark.test.docker.keepContainer}</spark.test.docker.keepContainer>
+              <spark.test.docker.removePulledImage>${spark.test.docker.removePulledImage}</spark.test.docker.removePulledImage>
               <!-- Needed by sql/hive tests. -->
               <test.src.tables>__not_used__</test.src.tables>
             </systemProperties>

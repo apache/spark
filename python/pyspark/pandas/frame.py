@@ -2298,27 +2298,6 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
     T = property(transpose)
 
-    def apply_batch(self, func, args=(), **kwds) -> "DataFrame":
-        warnings.warn(
-            "DataFrame.apply_batch is deprecated as of DataFrame.koalas.apply_batch. "
-            "Please use the API instead.",
-            FutureWarning,
-        )
-        return self.koalas.apply_batch(func, args=args, **kwds)
-
-    apply_batch.__doc__ = PandasOnSparkFrameMethods.apply_batch.__doc__
-
-    # TODO: Remove this API.
-    def map_in_pandas(self, func) -> "DataFrame":
-        warnings.warn(
-            "DataFrame.map_in_pandas is deprecated as of DataFrame.koalas.apply_batch. "
-            "Please use the API instead.",
-            FutureWarning,
-        )
-        return self.koalas.apply_batch(func)
-
-    map_in_pandas.__doc__ = PandasOnSparkFrameMethods.apply_batch.__doc__
-
     def apply(self, func, axis=0, args=(), **kwds) -> Union["Series", "DataFrame", "Index"]:
         """
         Apply a function along an axis of the DataFrame.
@@ -2767,16 +2746,6 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             return self._apply_series_op(
                 lambda psser: psser.koalas.transform_batch(func, *args, **kwargs)
             )
-
-    def transform_batch(self, func, *args, **kwargs) -> "DataFrame":
-        warnings.warn(
-            "DataFrame.transform_batch is deprecated as of DataFrame.koalas.transform_batch. "
-            "Please use the API instead.",
-            FutureWarning,
-        )
-        return self.koalas.transform_batch(func, *args, **kwargs)
-
-    transform_batch.__doc__ = PandasOnSparkFrameMethods.transform_batch.__doc__
 
     def pop(self, item) -> "DataFrame":
         """
@@ -4573,36 +4542,6 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             )
             return DataFrame(internal)
 
-    def cache(self) -> "CachedDataFrame":
-        warnings.warn(
-            "DataFrame.cache is deprecated as of DataFrame.spark.cache. "
-            "Please use the API instead.",
-            FutureWarning,
-        )
-        return self.spark.cache()
-
-    cache.__doc__ = SparkFrameMethods.cache.__doc__
-
-    def persist(self, storage_level=StorageLevel.MEMORY_AND_DISK) -> "CachedDataFrame":
-        warnings.warn(
-            "DataFrame.persist is deprecated as of DataFrame.spark.persist. "
-            "Please use the API instead.",
-            FutureWarning,
-        )
-        return self.spark.persist(storage_level)
-
-    persist.__doc__ = SparkFrameMethods.persist.__doc__
-
-    def hint(self, name: str, *parameters) -> "DataFrame":
-        warnings.warn(
-            "DataFrame.hint is deprecated as of DataFrame.spark.hint. "
-            "Please use the API instead.",
-            FutureWarning,
-        )
-        return self.spark.hint(name, *parameters)
-
-    hint.__doc__ = SparkFrameMethods.hint.__doc__
-
     def to_table(
         self,
         name: str,
@@ -4874,17 +4813,6 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         3   0.2   0.1
         """
         return self._internal.to_pandas_frame.copy()
-
-    # Alias to maintain backward compatibility with Spark
-    def toPandas(self) -> pd.DataFrame:
-        warnings.warn(
-            "DataFrame.toPandas is deprecated as of DataFrame.to_pandas. "
-            "Please use the API instead.",
-            FutureWarning,
-        )
-        return self.to_pandas()
-
-    toPandas.__doc__ = to_pandas.__doc__
 
     def assign(self, **kwargs) -> "DataFrame":
         """
@@ -6344,26 +6272,6 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 [label if len(label) > 1 else label[0] for label in self._internal.column_labels]
             ),
         )
-
-    def spark_schema(self, index_col: Optional[Union[str, List[str]]] = None) -> StructType:
-        warnings.warn(
-            "DataFrame.spark_schema is deprecated as of DataFrame.spark.schema. "
-            "Please use the API instead.",
-            FutureWarning,
-        )
-        return self.spark.schema(index_col)
-
-    spark_schema.__doc__ = SparkFrameMethods.schema.__doc__
-
-    def print_schema(self, index_col: Optional[Union[str, List[str]]] = None) -> None:
-        warnings.warn(
-            "DataFrame.print_schema is deprecated as of DataFrame.spark.print_schema. "
-            "Please use the API instead.",
-            FutureWarning,
-        )
-        return self.spark.print_schema(index_col)
-
-    print_schema.__doc__ = SparkFrameMethods.print_schema.__doc__
 
     def select_dtypes(self, include=None, exclude=None) -> "DataFrame":
         """
@@ -10926,16 +10834,6 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         else:
             return DataFrame(internal)
 
-    def explain(self, extended: Optional[bool] = None, mode: Optional[str] = None) -> None:
-        warnings.warn(
-            "DataFrame.explain is deprecated as of DataFrame.spark.explain. "
-            "Please use the API instead.",
-            FutureWarning,
-        )
-        return self.spark.explain(extended, mode)
-
-    explain.__doc__ = SparkFrameMethods.explain.__doc__
-
     def take(self, indices, axis=0, **kwargs) -> "DataFrame":
         """
         Return the elements in the given *positional* indices along an axis.
@@ -11928,27 +11826,6 @@ class CachedDataFrame(DataFrame):
 
     # create accessor for Spark related methods.
     spark = CachedAccessor("spark", CachedSparkFrameMethods)
-
-    @property
-    def storage_level(self) -> StorageLevel:
-        warnings.warn(
-            "DataFrame.storage_level is deprecated as of DataFrame.spark.storage_level. "
-            "Please use the API instead.",
-            FutureWarning,
-        )
-        return self.spark.storage_level
-
-    storage_level.__doc__ = CachedSparkFrameMethods.storage_level.__doc__
-
-    def unpersist(self) -> None:
-        warnings.warn(
-            "DataFrame.unpersist is deprecated as of DataFrame.spark.unpersist. "
-            "Please use the API instead.",
-            FutureWarning,
-        )
-        return self.spark.unpersist()
-
-    unpersist.__doc__ = CachedSparkFrameMethods.unpersist.__doc__
 
 
 def _test():
