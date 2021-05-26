@@ -22,6 +22,7 @@ from pandas.api.types import CategoricalDtype
 
 from pyspark.sql.types import (
     ArrayType,
+    BinaryType,
     BooleanType,
     DataType,
     DateType,
@@ -44,6 +45,7 @@ class DataTypeOps(object, metaclass=ABCMeta):
     """The base class for binary operations of pandas-on-Spark objects (of different data types)."""
 
     def __new__(cls, dtype: Dtype, spark_type: DataType):
+        from pyspark.pandas.data_type_ops.binary_ops import BinaryOps
         from pyspark.pandas.data_type_ops.boolean_ops import BooleanOps
         from pyspark.pandas.data_type_ops.categorical_ops import CategoricalOps
         from pyspark.pandas.data_type_ops.complex_ops import ArrayOps, MapOps, StructOps
@@ -69,6 +71,8 @@ class DataTypeOps(object, metaclass=ABCMeta):
             return object.__new__(DatetimeOps)
         elif isinstance(spark_type, DateType):
             return object.__new__(DateOps)
+        elif isinstance(spark_type, BinaryType):
+            return object.__new__(BinaryOps)
         elif isinstance(spark_type, ArrayType):
             return object.__new__(ArrayOps)
         elif isinstance(spark_type, MapType):

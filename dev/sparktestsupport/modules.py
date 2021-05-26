@@ -611,6 +611,7 @@ pyspark_pandas = Module(
         "pyspark.pandas.spark.utils",
         "pyspark.pandas.typedef.typehints",
         # unittests
+        "pyspark.pandas.tests.data_type_ops.test_binary_ops",
         "pyspark.pandas.tests.data_type_ops.test_boolean_ops",
         "pyspark.pandas.tests.data_type_ops.test_categorical_ops",
         "pyspark.pandas.tests.data_type_ops.test_complex_ops",
