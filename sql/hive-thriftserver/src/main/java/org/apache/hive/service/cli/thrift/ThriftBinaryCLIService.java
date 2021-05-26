@@ -98,8 +98,7 @@ public class ThriftBinaryCLIService extends ThriftCLIService {
           .processorFactory(processorFactory).transportFactory(transportFactory)
           .protocolFactory(new TBinaryProtocol.Factory())
           .inputProtocolFactory(new TBinaryProtocol.Factory(true, true, maxMessageSize, maxMessageSize))
-          .requestTimeout(requestTimeout).requestTimeoutUnit(TimeUnit.SECONDS)
-          .beBackoffSlotLength(beBackoffSlotLength).beBackoffSlotLengthUnit(TimeUnit.MILLISECONDS)
+          .stopTimeoutVal(requestTimeout).stopTimeoutUnit(TimeUnit.SECONDS)
           .executorService(executorService);
 
       // TCP Server
