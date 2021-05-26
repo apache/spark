@@ -520,6 +520,22 @@ class FileIndexSuite extends SharedSparkSession {
       SQLConf.get.setConf(StaticSQLConf.METADATA_CACHE_TTL_SECONDS, previousValue)
     }
   }
+
+  test("SPARK-28098 - supporting read partitioned Hive tables with subdirectories") {
+    withTempPath { dir =>
+      spark
+        .range(2)
+        .select(col("id").as("p"), col("id"))
+        .write
+        .partitionBy("p")
+        .orc(s"${dir.getAbsolutePath}/sub1/sub2")
+      val path = new Path(dir.getAbsolutePath)
+      val fileIndex = new InMemoryFileIndex(spark, Seq(path), Map.empty, None)
+      val partitionValues = fileIndex.partitionSpec().partitions.map(_.values)
+      assert(partitionValues.length == 2 && partitionValues(0).numFields == 1 &&
+        partitionValues(1).numFields == 1)
+    }
+  }
 }
 
 object DeletionRaceFileSystem {
