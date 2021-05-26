@@ -146,11 +146,7 @@ object NestedColumnAliasing {
     val nestedFieldToAlias = attributeToExtractValuesAndAliases.values.flatten.toMap
 
     // A reference attribute can have multiple aliases for nested fields.
-    val attrToAliases = new AttributeMap(
-      attributeToExtractValuesAndAliases.map { case (attr, evAliasSeq) =>
-        attr.exprId -> (attr, evAliasSeq.map(_._2))
-      }
-    )
+    val attrToAliases = AttributeMap(attributeToExtractValuesAndAliases.mapValues(_.map(_._2)))
 
     plan match {
       case Project(projectList, child) =>
@@ -245,7 +241,9 @@ object NestedColumnAliasing {
     val otherRootReferences = new mutable.ArrayBuffer[AttributeReference]()
     exprList.foreach { e =>
       collectRootReferenceAndExtractValue(e).foreach {
-        case ev: ExtractValue => nestedFieldReferences.append(ev)
+        case ev: ExtractValue =>
+          assert(ev.references.size == 1, s"$ev should have one reference")
+          nestedFieldReferences.append(ev)
         case ar: AttributeReference => otherRootReferences.append(ar)
       }
     }
@@ -306,7 +304,7 @@ object GeneratorNestedColumnAliasing {
     // when `nestedSchemaPruningEnabled` is on, nested columns will be pruned further at
     // file format readers if it is supported.
     case Project(projectList, g: Generate) if (SQLConf.get.nestedPruningOnExpressions ||
-      SQLConf.get.nestedSchemaPruningEnabled) && canPruneGenerator(g.generator) =>
+        SQLConf.get.nestedSchemaPruningEnabled) && canPruneGenerator(g.generator) =>
       // On top on `Generate`, a `Project` that might have nested column accessors.
       // We try to get alias maps for both project list and generator's children expressions.
       val attrToExtractValues = NestedColumnAliasing.getAttributeToExtractValues(
@@ -373,9 +371,7 @@ object GeneratorNestedColumnAliasing {
             val updatedGenerate = rewrittenG.copy(generatorOutput = updatedGeneratorOutput)
 
             // Replace nested column accessor with generator output.
-            val attrExprIdsOnGenerator = attrToExtractValuesOnGenerator.map { case (attr, _) =>
-              attr.exprId
-            }.toSet
+            val attrExprIdsOnGenerator = attrToExtractValuesOnGenerator.keys.map(_.exprId).toSet
             val updatedProject = p.withNewChildren(Seq(updatedGenerate)).transformExpressions {
               case f: ExtractValue if nestedFieldsOnGenerator.contains(f) =>
                 updatedGenerate.output
