@@ -876,21 +876,21 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
     withTable("TEST1") {
       val createHive =
         """
-          |      create table TEST1(
-          |        v1 BIGINT,
-          |        s1 INT)
-          |        partitioned by (pk BIGINT)
-          |        clustered by (v1)
-          |        sorted by (s1)
-          |        into 200 buckets
-          |        STORED AS PARQUET
+          |create table TEST1(
+          |v1 BIGINT,
+          |s1 INT)
+          |partitioned by (pk BIGINT)
+          |clustered by (v1)
+          |sorted by (s1)
+          |into 200 buckets
+          |STORED AS PARQUET
           |""".stripMargin
 
       val insertString =
         """
-          |      insert into test1
-          |      select
-          |      * from values(1,1,1)
+          |insert into test1
+          |select
+          |* from values(1,1,1)
           |""".stripMargin
 
       val dropString = "drop table if exists test1"
@@ -910,14 +910,14 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
 
       val createSpark =
         """
-          |      create table TEST1(
-          |        v1 BIGINT,
-          |        s1 INT)
-          |        using parquet
-          |        partitioned by (pk BIGINT)
-          |        clustered by (v1)
-          |        sorted by (s1)
-          |        into 200 buckets
+          |create table TEST1(
+          |v1 BIGINT,
+          |s1 INT)
+          |using parquet
+          |partitioned by (pk BIGINT)
+          |clustered by (v1)
+          |sorted by (s1)
+          |into 200 buckets
           |
           |""".stripMargin
 
