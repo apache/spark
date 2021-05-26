@@ -147,7 +147,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
         |    throw new AnalysisException("Invalid number of arguments for function " + name +
         |      ". Expected: $x; Found: " + e.length)
         |  }
-        |  functionRegistry.createOrReplaceTempFunction(name, builder)
+        |  functionRegistry.createOrReplaceTempFunction(name, builder, "scala_udf")
         |  finalUdf
         |}""".stripMargin)
     }
@@ -173,7 +173,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
         |    throw new AnalysisException("Invalid number of arguments for function " + name +
         |      ". Expected: $i; Found: " + e.length)
         |  }
-        |  functionRegistry.createOrReplaceTempFunction(name, builder)
+        |  functionRegistry.createOrReplaceTempFunction(name, builder, "java_udf")
         |}""".stripMargin)
     }
     */
