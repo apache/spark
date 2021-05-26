@@ -240,7 +240,7 @@ class QueryExecutionSuite extends SharedSparkSession {
     }
   }
 
-  test("SPARK-35378: Eagerly execute Command") {
+  test("SPARK-35378: Eagerly execute non-root Command") {
     def qe(logicalPlan: LogicalPlan): QueryExecution = new QueryExecution(spark, logicalPlan)
 
     val showTables = ShowTables(UnresolvedNamespace(Seq.empty[String]), None)
