@@ -1592,10 +1592,10 @@ def to_datetime(
         )
 
     if isinstance(arg, Series):
-        return arg.koalas.transform_batch(pandas_to_datetime)
+        return arg.pandas_on_spark.transform_batch(pandas_to_datetime)
     if isinstance(arg, DataFrame):
         psdf = arg[["year", "month", "day"]]
-        return psdf.koalas.transform_batch(pandas_to_datetime)
+        return psdf.pandas_on_spark.transform_batch(pandas_to_datetime)
     return pd.to_datetime(
         arg,
         errors=errors,
