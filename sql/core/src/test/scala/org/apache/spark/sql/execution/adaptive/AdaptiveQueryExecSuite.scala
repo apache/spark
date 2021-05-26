@@ -1711,12 +1711,12 @@ class AdaptiveQueryExecSuite
   test("SPARK-35264: Support AQE side shuffled hash join formula") {
     withTempView("t1", "t2") {
       def checkJoinStrategy(shouldShuffleHashJoin: Boolean): Unit = {
-        Seq("-1", "100000").foreach { max =>
-          withSQLConf(SQLConf.ADAPTIVE_MAX_SHUFFLE_HASH_JOIN_LOCAL_MAP_THRESHOLD.key -> max) {
+        Seq("100", "100000").foreach { size =>
+          withSQLConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> size) {
             val (origin1, adaptive1) = runAdaptiveAndVerifyResult(
               "SELECT t1.c1, t2.c1 FROM t1 JOIN t2 ON t1.c1 = t2.c1")
             assert(findTopLevelSortMergeJoin(origin1).size === 1)
-            if (shouldShuffleHashJoin && max.toInt > 0) {
+            if (shouldShuffleHashJoin && size.toInt < 100000) {
               val shj = findTopLevelShuffledHashJoin(adaptive1)
               assert(shj.size === 1)
               assert(shj.head.buildSide == BuildRight)
@@ -1744,13 +1744,15 @@ class AdaptiveQueryExecSuite
       withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "3",
         SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
         SQLConf.PREFER_SORTMERGEJOIN.key -> "true") {
-        withSQLConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "400") {
+        // check default value
+        checkJoinStrategy(false)
+        withSQLConf(SQLConf.ADAPTIVE_MAX_SHUFFLE_HASH_JOIN_LOCAL_MAP_THRESHOLD.key -> "400") {
           checkJoinStrategy(true)
         }
-        withSQLConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "300") {
+        withSQLConf(SQLConf.ADAPTIVE_MAX_SHUFFLE_HASH_JOIN_LOCAL_MAP_THRESHOLD.key -> "300") {
           checkJoinStrategy(false)
         }
-        withSQLConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "1000") {
+        withSQLConf(SQLConf.ADAPTIVE_MAX_SHUFFLE_HASH_JOIN_LOCAL_MAP_THRESHOLD.key -> "1000") {
           checkJoinStrategy(true)
         }
       }

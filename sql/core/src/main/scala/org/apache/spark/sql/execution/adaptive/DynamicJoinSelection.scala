@@ -46,7 +46,7 @@ object DynamicJoinSelection extends Rule[LogicalPlan] {
       conf.getConf(SQLConf.ADAPTIVE_MAX_SHUFFLE_HASH_JOIN_LOCAL_MAP_THRESHOLD)
     val advisoryPartitionSize = conf.getConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES)
     if (maxShuffledHashJoinLocalMapThreshold.exists(_ >= advisoryPartitionSize)) {
-      mapStats.bytesByPartitionId.forall(_ <= advisoryPartitionSize)
+      mapStats.bytesByPartitionId.forall(_ <= maxShuffledHashJoinLocalMapThreshold.get)
     } else {
       false
     }
