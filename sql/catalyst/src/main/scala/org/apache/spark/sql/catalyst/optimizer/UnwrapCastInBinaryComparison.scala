@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.Literal.FalseLiteral
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.TreePattern.{BINARY_COMPARISON, IN}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{BINARY_COMPARISON, IN, INSET}
 import org.apache.spark.sql.types._
 
 /**
@@ -97,10 +97,11 @@ import org.apache.spark.sql.types._
  */
 object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
-    _.containsAnyPattern(BINARY_COMPARISON, IN), ruleId) {
+    _.containsAnyPattern(BINARY_COMPARISON, IN, INSET), ruleId) {
     case l: LogicalPlan =>
-      l.transformExpressionsUpWithPruning(_.containsAnyPattern(BINARY_COMPARISON, IN), ruleId) {
-        case e @ (BinaryComparison(_, _) | In(_, _)) => unwrapCast(e)
+      l.transformExpressionsUpWithPruning(
+        _.containsAnyPattern(BINARY_COMPARISON, IN, INSET), ruleId) {
+        case e @ (BinaryComparison(_, _) | In(_, _) | InSet(_, _)) => unwrapCast(e)
       }
   }
 
@@ -171,8 +172,26 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
         case None => unwrapIn
         // since `expr` are all the same,
         // convert to a single value `And(IsNull(_), Literal(null, BooleanType))`.
-        case Some(falseIfNotNull)
+        case Some(falseIfNotNull @ And(IsNull(_), Literal(null, BooleanType)))
             if expr.map(_.canonicalized).distinct.length == 1 => Or(falseIfNotNull, unwrapIn)
+        case _ => exp
+      }
+
+    case inSet @ InSet(Cast(fromExp, toType: NumericType, _), hset)
+        if hset.nonEmpty && canImplicitlyCast(fromExp, toType, toType) =>
+      val (newValueSet, expr) =
+        hset.map(lit => unwrapCast(EqualTo(inSet.child, Literal.create(lit, toType))))
+          .partition {
+            case EqualTo(_, _: Literal) => true
+            case And(IsNull(_), Literal(null, BooleanType)) => false
+            case _ => throw new IllegalStateException("Illegal unwrap cast result found.")
+          }
+      val newSet = newValueSet.map {case EqualTo(_, lit: Literal) => lit.value}
+      val unwrapInSet = InSet(fromExp, newSet)
+      expr.headOption match {
+        case None => unwrapInSet
+        case Some(falseIfNotNull @ And(IsNull(_), Literal(null, BooleanType)))
+          if expr.map(_.canonicalized).size == 1 => Or(falseIfNotNull, unwrapInSet)
         case _ => exp
       }
 
