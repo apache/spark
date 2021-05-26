@@ -607,7 +607,7 @@ object SQLConf {
         s"sort merge join regardless of the value of ${PREFER_SORTMERGEJOIN.key}.")
       .version("3.2.0")
       .bytesConf(ByteUnit.BYTE)
-      .createOptional
+      .createWithDefault(0L)
 
   val SUBEXPRESSION_ELIMINATION_ENABLED =
     buildConf("spark.sql.subexpressionElimination.enabled")
