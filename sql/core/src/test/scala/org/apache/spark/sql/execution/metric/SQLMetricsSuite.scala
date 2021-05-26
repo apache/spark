@@ -106,10 +106,12 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
     val expected1 = Seq(
       Map("number of output rows" -> 2L,
         "avg hash probe bucket list iters" ->
-          aggregateMetricsPattern),
+          aggregateMetricsPattern,
+        "number of tasks fall-backed to sort-based aggregation" -> 0L),
       Map("number of output rows" -> 1L,
         "avg hash probe bucket list iters" ->
-          aggregateMetricsPattern))
+          aggregateMetricsPattern,
+        "number of tasks fall-backed to sort-based aggregation" -> 0L))
     val shuffleExpected1 = Map(
       "records read" -> 2L,
       "local blocks read" -> 2L,
@@ -126,10 +128,12 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
     val expected2 = Seq(
       Map("number of output rows" -> 4L,
         "avg hash probe bucket list iters" ->
-          aggregateMetricsPattern),
+          aggregateMetricsPattern,
+        "number of tasks fall-backed to sort-based aggregation" -> 0L),
       Map("number of output rows" -> 3L,
         "avg hash probe bucket list iters" ->
-          aggregateMetricsPattern))
+          aggregateMetricsPattern,
+        "number of tasks fall-backed to sort-based aggregation" -> 0L))
 
     val shuffleExpected2 = Map(
       "records read" -> 4L,
