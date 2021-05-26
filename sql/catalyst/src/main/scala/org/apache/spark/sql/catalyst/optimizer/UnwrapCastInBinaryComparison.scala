@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{BINARY_COMPARISON, IN, I
 import org.apache.spark.sql.types._
 
 /**
- * Unwrap casts in binary comparison or `In` operations with patterns like following:
+ * Unwrap casts in binary comparison or `In/InSet` operations with patterns like following:
  *
  * - `BinaryComparison(Cast(fromExp, toType), Literal(value, toType))`
  * - `BinaryComparison(Literal(value, toType), Cast(fromExp, toType))`
