@@ -602,9 +602,9 @@ object SQLConf {
     buildConf("spark.sql.adaptive.maxShuffledHashJoinLocalMapThreshold")
       .doc("Configures the maximum size in bytes per partition that can be allowed to build " +
         "local hash map. If this value is not smaller than " +
-        s"${ADVISORY_PARTITION_SIZE_IN_BYTES.key} and all the partition size not larger than " +
-        "this config, join selection prefer to use shuffled hash join instead of sort merge join" +
-        s"regardless of the value of ${PREFER_SORTMERGEJOIN.key}.")
+        s"${ADVISORY_PARTITION_SIZE_IN_BYTES.key} and all the partition size are not larger " +
+        "than this config, join selection prefer to use shuffled hash join instead of " +
+        s"sort merge join regardless of the value of ${PREFER_SORTMERGEJOIN.key}.")
       .version("3.2.0")
       .bytesConf(ByteUnit.BYTE)
       .createOptional
