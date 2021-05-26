@@ -96,10 +96,11 @@ case class AdaptiveSparkPlanExec(
   @transient private val queryStageOptimizerRules: Seq[Rule[SparkPlan]] = Seq(
     PlanAdaptiveDynamicPruningFilters(this),
     ReuseAdaptiveSubquery(context.subqueryCache),
-    CoalesceShufflePartitions(context.session),
-    // The following two rules need to make use of 'CustomShuffleReaderExec.partitionSpecs'
-    // added by `CoalesceShufflePartitions`. So they must be executed after it.
+    // Skew join does not handle `CustomShuffleReader` so needs to be applied first.
     OptimizeSkewedJoin,
+    CoalesceShufflePartitions(context.session),
+    // `OptimizeLocalShuffleReader` needs to make use of 'CustomShuffleReaderExec.partitionSpecs'
+    // added by `CoalesceShufflePartitions`, and must be executed after it.
     OptimizeLocalShuffleReader
   )
 

@@ -295,8 +295,18 @@ jobs:
     # Ubuntu 20.04. See also SPARK-33162.
     - name: Install Python packages (Python 3.6)
       run: |
-        python3.6 -m pip install numpy 'pyarrow<3.0.0' pandas scipy xmlrunner
+        python3.6 -m pip install numpy 'pyarrow<3.0.0' pandas scipy xmlrunner plotly>=4.8
         python3.6 -m pip list
+    # TODO(SPARK-35507) Move Python 3.9 installtation to the docker image
+    - name: Install Python 3.9
+      uses: actions/setup-python@v2
+      with:
+        python-version: 3.9
+        architecture: x64
+    - name: Install Python packages (Python 3.9)
+      run: |
+        python3.9 -m pip install numpy 'pyarrow<5.0.0' pandas scipy xmlrunner plotly>=4.8
+        python3.9 -m pip list
     - name: Install Conda for pip packaging test
       run: |
         curl -s https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh > miniconda.sh
