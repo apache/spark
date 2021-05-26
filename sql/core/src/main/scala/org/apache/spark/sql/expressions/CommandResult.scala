@@ -20,7 +20,8 @@ package org.apache.spark.sql.expressions
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
+import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils
 import org.apache.spark.sql.execution.SparkPlan
 
 /**
@@ -35,4 +36,7 @@ case class CommandResult(
     commandPhysicalPlan: SparkPlan,
     @transient rows: Seq[InternalRow]) extends LeafNode {
   override def innerChildren: Seq[QueryPlan[_]] = Seq(commandLogicalPlan)
+
+  override def computeStats(): Statistics =
+    Statistics(sizeInBytes = EstimationUtils.getSizePerRow(output) * rows.length)
 }

@@ -31,7 +31,7 @@ import org.apache.spark.sql.execution.metric.SQLMetrics
  */
 case class CommandResultExec(
     output: Seq[Attribute],
-    commandPhysicalPlan: SparkPlan,
+    @transient commandPhysicalPlan: SparkPlan,
     @transient rows: Seq[InternalRow]) extends LeafExecNode with InputRDDCodegen {
 
   override lazy val metrics = Map(
