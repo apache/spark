@@ -188,9 +188,9 @@ class SparkContext(object):
 
         # Check that we have at least the required parameters
         if not self._conf.contains("spark.master"):
-            raise TypeError("A master URL must be set in your configuration")
+            raise RuntimeError("A master URL must be set in your configuration")
         if not self._conf.contains("spark.app.name"):
-            raise TypeError("An application name must be set in your configuration")
+            raise RuntimeError("An application name must be set in your configuration")
 
         # Read back our properties from the conf in case we loaded some of them from
         # the classpath or an external config file
