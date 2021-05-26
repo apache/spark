@@ -204,7 +204,7 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
       }
 
       // Extract major.minor for testing Spark 3.1.x and 3.0.x with metastore 2.3.8 and Java 11.
-      val hiveMetastoreVersion = """^\d+\.\d+""".r.findFirstIn(hiveVersion)
+      val hiveMetastoreVersion = """^\d+\.\d+""".r.findFirstIn(hiveVersion).get
       val args = Seq(
         "--name", "prepare testing tables",
         "--master", "local[2]",
