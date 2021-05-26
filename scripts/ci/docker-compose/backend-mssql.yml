@@ -18,24 +18,16 @@
 version: "2.2"
 services:
   airflow:
-    image: ${AIRFLOW_IMAGE}
     environment:
-      - USER=root
-      - ADDITIONAL_PATH=~/.local/bin
-      - CELERY_BROKER_URLS=amqp://guest:guest@rabbitmq:5672,redis://redis:6379/0
-      - KUBECONFIG=/files/.kube/config
-      - HOST_HOME=${HOME}
-    env_file:
-      - _docker.env
+      - BACKEND=mssql
+      - AIRFLOW__CORE__SQL_ALCHEMY_CONN=mssql+pyodbc://sa:Airflow123@mssql:1433/master?driver=ODBC+Driver+17+for+SQL+Server
+      - AIRFLOW__CELERY__RESULT_BACKEND=db+mssql+pyodbc://sa:Airflow123@mssql:1433/master?driver=ODBC+Driver+17+for+SQL+Server
+    depends_on:
+      - mssql
+  mssql:
+    image: mcr.microsoft.com/mssql/server:${MSSQL_VERSION}
+    environment:
+      - ACCEPT_EULA=Y
+      - SA_PASSWORD=Airflow123
     volumes:
-      # Pass docker to inside of the container so that Kind and Moto tests can use it.
-      - /var/run/docker.sock:/var/run/docker.sock
-      - /dev/urandom:/dev/random   # Required to get non-blocking entropy source
-    ports:
-      - "${WEBSERVER_HOST_PORT}:8080"
-      - "${FLOWER_HOST_PORT}:5555"
-volumes:
-  sqlite-db-volume:
-  postgres-db-volume:
-  mysql-db-volume:
-  mssql-db-volume:
+      - mssql-db-volume:/var/opt/mssql

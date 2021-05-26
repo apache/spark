@@ -17,25 +17,6 @@
 ---
 version: "2.2"
 services:
-  airflow:
-    image: ${AIRFLOW_IMAGE}
-    environment:
-      - USER=root
-      - ADDITIONAL_PATH=~/.local/bin
-      - CELERY_BROKER_URLS=amqp://guest:guest@rabbitmq:5672,redis://redis:6379/0
-      - KUBECONFIG=/files/.kube/config
-      - HOST_HOME=${HOME}
-    env_file:
-      - _docker.env
-    volumes:
-      # Pass docker to inside of the container so that Kind and Moto tests can use it.
-      - /var/run/docker.sock:/var/run/docker.sock
-      - /dev/urandom:/dev/random   # Required to get non-blocking entropy source
+  mssql:
     ports:
-      - "${WEBSERVER_HOST_PORT}:8080"
-      - "${FLOWER_HOST_PORT}:5555"
-volumes:
-  sqlite-db-volume:
-  postgres-db-volume:
-  mysql-db-volume:
-  mssql-db-volume:
+      - "${MSSQL_HOST_PORT}:1433"
