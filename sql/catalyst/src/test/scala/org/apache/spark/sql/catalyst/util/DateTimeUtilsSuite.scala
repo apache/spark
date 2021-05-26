@@ -830,7 +830,4 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       }
     }
   }
-
-
-
 }
