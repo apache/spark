@@ -138,7 +138,6 @@ object NumberConverter {
     }
     decode(v, Math.abs(toBase), temp)
 
-
     // Find the first non-zero digit or the last digits if all are zero.
     val firstNonZeroPos = {
       val firstNonZero = temp.indexWhere( _ != 0)
