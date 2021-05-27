@@ -133,10 +133,7 @@ private[spark] class DiskStore(
     FileUtils.moveFile(sourceFile, targetFile)
   }
 
-  def contains(blockId: BlockId): Boolean = {
-    val file = diskManager.getFile(blockId.name)
-    file.exists()
-  }
+  def contains(blockId: BlockId): Boolean = diskManager.containsBlock(blockId)
 
   private def openForWrite(file: File): WritableByteChannel = {
     val out = new FileOutputStream(file).getChannel()
