@@ -38,6 +38,7 @@ import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.network.shuffle._
 import org.apache.spark.network.util.{NettyUtils, TransportConf}
 import org.apache.spark.shuffle.{FetchFailedException, ShuffleReadMetricsReporter}
+import org.apache.spark.storage.BlockManagerId.SHUFFLE_MERGER_IDENTIFIER
 import org.apache.spark.storage.ShuffleBlockFetcherIterator.{FetchBlockInfo, FetchRequest, IgnoreFetchResult, MergedBlocksMetaFailedFetchResult, MergedBlocksMetaFetchResult, SuccessFetchResult}
 import org.apache.spark.util.{CompletionIterator, TaskCompletionListener, Utils}
 
@@ -923,7 +924,7 @@ final class ShuffleBlockFetcherIterator(
           // Set result to null to trigger another iteration of the while loop to get either
           // a SuccessFetchResult or a FailureFetchResult.
           result = null
-  
+
         case MergedBlocksMetaFetchResult(shuffleId, reduceId, blockSize, numChunks, bitmaps,
         address, _) =>
           // The original meta request is processed so we decrease numBlocksToFetch by 1. We will
@@ -1454,7 +1455,7 @@ private class PushBasedFetchHelper(
   private[this] val startTimeNs = System.nanoTime()
 
   private[this] val localShuffleMergerBlockMgrId = BlockManagerId(
-    BlockManagerId.SHUFFLE_MERGER_IDENTIFIER, blockManager.blockManagerId.host,
+    SHUFFLE_MERGER_IDENTIFIER, blockManager.blockManagerId.host,
     blockManager.blockManagerId.port, blockManager.blockManagerId.topologyInfo)
 
   /** A map for storing merged block shuffle chunk bitmap */
@@ -1464,7 +1465,7 @@ private class PushBasedFetchHelper(
    * Returns true if the address is for a push-merged block.
    */
   def isMergedShuffleBlockAddress(address: BlockManagerId): Boolean = {
-    BlockManagerId.SHUFFLE_MERGER_IDENTIFIER.equals(address.executorId)
+    SHUFFLE_MERGER_IDENTIFIER.equals(address.executorId)
   }
 
   /**
@@ -1550,13 +1551,14 @@ private class PushBasedFetchHelper(
   }
 
   /**
-   * Fetch the merged local blocks dirs/blocks..
+   * Fetch the merged blocks dirs if they are not in the cache and eventually fetch merged local
+   * blocks.
    */
   private def fetchMergedLocalBlocks(
     hostLocalDirManager: HostLocalDirManager,
     mergedLocalBlocks: mutable.LinkedHashSet[BlockId]): Unit = {
     val cachedMergerDirs = hostLocalDirManager.getCachedHostLocalDirs.get(
-      BlockManagerId.SHUFFLE_MERGER_IDENTIFIER)
+      SHUFFLE_MERGER_IDENTIFIER)
     if (cachedMergerDirs.isDefined) {
       logDebug(s"Fetching local merged blocks with cached executors dir: " +
         s"${cachedMergerDirs.get.mkString(", ")}")
@@ -1565,13 +1567,13 @@ private class PushBasedFetchHelper(
     } else {
       logDebug(s"Asynchronous fetching local merged blocks without cached executors dir")
       hostLocalDirManager.getHostLocalDirs(localShuffleMergerBlockMgrId.host,
-        localShuffleMergerBlockMgrId.port, Array(BlockManagerId.SHUFFLE_MERGER_IDENTIFIER)) {
+        localShuffleMergerBlockMgrId.port, Array(SHUFFLE_MERGER_IDENTIFIER)) {
         case Success(dirs) =>
           mergedLocalBlocks.takeWhile {
             blockId =>
               logDebug(s"Successfully fetched local dirs: " +
-                s"${dirs.get(BlockManagerId.SHUFFLE_MERGER_IDENTIFIER).mkString(", ")}")
-              fetchMergedLocalBlock(blockId, dirs(BlockManagerId.SHUFFLE_MERGER_IDENTIFIER),
+                s"${dirs.get(SHUFFLE_MERGER_IDENTIFIER).mkString(", ")}")
+              fetchMergedLocalBlock(blockId, dirs(SHUFFLE_MERGER_IDENTIFIER),
                 localShuffleMergerBlockMgrId)
           }
           logDebug(s"Got local merged blocks (without cached executors' dir) in " +
