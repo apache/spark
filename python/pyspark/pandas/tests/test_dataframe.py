@@ -121,7 +121,7 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         psdf = ps.from_pandas(pdf)
 
         self._check_extension(psdf, pdf)
-        self._check_extension(psdf + F.lit(1).cast("byte"), pdf + 1)
+        # self._check_extension(psdf + F.lit(1).cast("byte"), pdf + 1)
         self._check_extension(psdf + psdf, pdf + pdf)
 
     @unittest.skipIf(not extension_dtypes_available, "pandas extension dtypes are not available")
