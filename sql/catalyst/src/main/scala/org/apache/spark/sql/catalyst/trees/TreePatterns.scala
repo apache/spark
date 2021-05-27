@@ -28,6 +28,7 @@ object TreePattern extends Enumeration  {
   val ATTRIBUTE_REFERENCE: Value = Value
   val APPEND_COLUMNS: Value = Value
   val AVERAGE: Value = Value
+  val BASE_GROUPING_SETS: Value = Value
   val BINARY_ARITHMETIC: Value = Value
   val BINARY_COMPARISON: Value = Value
   val BOOL_AGG: Value = Value

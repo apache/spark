@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
+import org.apache.spark.sql.catalyst.trees.TreePattern.{BASE_GROUPING_SETS, TreePattern}
 import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -44,6 +45,7 @@ trait BaseGroupingSets extends Expression with CodegenFallback {
   override def foldable: Boolean = false
   override def nullable: Boolean = true
   override def eval(input: InternalRow): Any = throw new UnsupportedOperationException
+  final override val nodePatterns: Seq[TreePattern] = Seq(BASE_GROUPING_SETS)
 }
 
 object BaseGroupingSets {
