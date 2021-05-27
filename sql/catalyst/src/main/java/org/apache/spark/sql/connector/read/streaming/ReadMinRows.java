@@ -19,6 +19,8 @@ package org.apache.spark.sql.connector.read.streaming;
 
 import org.apache.spark.annotation.Evolving;
 
+import java.util.Objects;
+
 /**
  * Represents a {@link ReadLimit} where the {@link MicroBatchStream} should scan approximately
  * at least the given minimum number of rows.
@@ -29,27 +31,35 @@ import org.apache.spark.annotation.Evolving;
 @Evolving
 public final class ReadMinRows implements ReadLimit {
   private long rows;
+  private long maxTriggerDelayMs;
 
-  ReadMinRows(long rows) {
+  ReadMinRows(long rows, long maxTriggerDelayMs) {
     this.rows = rows;
+    this.maxTriggerDelayMs = maxTriggerDelayMs;
   }
 
   /** Approximate minimum rows to scan. */
   public long minRows() { return this.rows; }
 
+  /** Approximate maximum trigger delay. */
+  public long maxTriggerDelayMs() { return this.maxTriggerDelayMs; }
+
   @Override
   public String toString() {
-    return "MinRows: " + minRows();
+    return "ReadMinRows{" + "rows=" + rows + ", maxTriggerDelayMs=" + maxTriggerDelayMs + '}';
   }
 
   @Override
   public boolean equals(Object o) {
     if (this == o) return true;
     if (o == null || getClass() != o.getClass()) return false;
-    ReadMinRows other = (ReadMinRows) o;
-    return other.minRows() == minRows();
+    ReadMinRows that = (ReadMinRows) o;
+    return rows == that.rows &&
+            maxTriggerDelayMs() == that.maxTriggerDelayMs();
   }
 
   @Override
-  public int hashCode() { return Long.hashCode(this.rows); }
+  public int hashCode() {
+    return Objects.hash(rows, maxTriggerDelayMs());
+  }
 }

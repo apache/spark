@@ -31,7 +31,9 @@ import org.apache.spark.annotation.Evolving;
  */
 @Evolving
 public interface ReadLimit {
-  static ReadLimit minRows(long rows) { return new ReadMinRows(rows); }
+  static ReadLimit minRows(long rows, long maxTriggerDelayMs) {
+    return new ReadMinRows(rows, maxTriggerDelayMs);
+  }
 
   static ReadLimit maxRows(long rows) { return new ReadMaxRows(rows); }
 
@@ -39,7 +41,7 @@ public interface ReadLimit {
 
   static ReadLimit allAvailable() { return ReadAllAvailable.INSTANCE; }
 
-  static ReadLimit compositeLimit(long minRows, long maxRows) {
-    return new CompositeReadLimit(minRows, maxRows);
+  static ReadLimit compositeLimit(ReadLimit[] readLimits) {
+    return new CompositeReadLimit(readLimits);
   }
 }

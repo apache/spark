@@ -49,6 +49,12 @@ class KafkaSourceProviderSuite extends SparkFunSuite {
     verifyFieldsInMicroBatchStream(KafkaSourceProvider.MAX_OFFSET_PER_TRIGGER, expected, stream => {
       assert(Some(expected.toLong) === stream.maxOffsetsPerTrigger)
     })
+    verifyFieldsInMicroBatchStream(KafkaSourceProvider.MIN_OFFSET_PER_TRIGGER, expected, stream => {
+      assert(Some(expected.toLong) === stream.minOffsetPerTrigger)
+    })
+    verifyFieldsInMicroBatchStream(KafkaSourceProvider.MAX_TRIGGER_DELAY, expected, stream => {
+      assert(expected.toLong === stream.maxTriggerDelayMs)
+    })
     verifyFieldsInMicroBatchStream(KafkaSourceProvider.FETCH_OFFSET_NUM_RETRY, expected, stream => {
       assert(expected.toInt === stream.kafkaOffsetReader.maxOffsetFetchAttempts)
     })

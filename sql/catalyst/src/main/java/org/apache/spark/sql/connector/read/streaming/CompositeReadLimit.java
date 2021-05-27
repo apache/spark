@@ -19,7 +19,7 @@ package org.apache.spark.sql.connector.read.streaming;
 
 import org.apache.spark.annotation.Evolving;
 
-import java.util.Objects;
+import java.util.Arrays;
 
 /**
  /**
@@ -31,31 +31,29 @@ import java.util.Objects;
  */
 @Evolving
 public final class CompositeReadLimit implements ReadLimit {
-  private long minRows, maxRows;
+  private ReadLimit[] readLimits;
 
-  CompositeReadLimit(long minRows, long maxRows) {
-    this.minRows = minRows;
-    this.maxRows = maxRows;
+  CompositeReadLimit(ReadLimit[] readLimits) {
+    this.readLimits = readLimits;
   }
 
-  /** Approximate minimum rows to scan. */
-  public long minRows() { return this.minRows; }
+  public ReadLimit[] getReadLimits() { return readLimits; }
 
-
-  /** Approximate maximum rows to scan. */
-  public long maxRows() { return this.maxRows; }
+  @Override
+  public String toString() {
+    return "CompositeReadLimit{" + "readLimits=" + Arrays.toString(readLimits) + '}';
+  }
 
   @Override
   public boolean equals(Object o) {
     if (this == o) return true;
     if (o == null || getClass() != o.getClass()) return false;
     CompositeReadLimit that = (CompositeReadLimit) o;
-    return minRows == that.minRows &&
-            maxRows == that.maxRows;
+    return Arrays.equals(getReadLimits(), that.getReadLimits());
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(this.minRows, this.maxRows);
+    return Arrays.hashCode(getReadLimits());
   }
 }
