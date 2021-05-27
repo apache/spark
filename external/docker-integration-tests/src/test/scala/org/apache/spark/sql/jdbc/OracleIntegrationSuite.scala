@@ -50,6 +50,7 @@ import org.apache.spark.tags.DockerTest
  *  $ cd docker-images/OracleDatabase/SingleInstance/dockerfiles
  *  $ ./buildContainerImage.sh -v 18.4.0 -x
  *  $ export ORACLE_DOCKER_IMAGE_NAME=oracle/database:18.4.0-xe
+ *  $ export ENABLE_DOCKER_INTEGRATION_TESTS=1
  *  $ cd $SPARK_HOME
  *  $ ./build/sbt -Pdocker-integration-tests
  *    "testOnly org.apache.spark.sql.jdbc.OracleIntegrationSuite"
@@ -151,7 +152,7 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
     conn.commit()
   }
 
-  testIfEnabled("SPARK-16625 : Importing Oracle numeric types") {
+  test("SPARK-16625 : Importing Oracle numeric types") {
     val df = sqlContext.read.jdbc(jdbcUrl, "numerics", new Properties)
     val rows = df.collect()
     assert(rows.size == 1)
@@ -167,7 +168,7 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
   }
 
 
-  testIfEnabled("SPARK-12941: String datatypes to be mapped to Varchar in Oracle") {
+  test("SPARK-12941: String datatypes to be mapped to Varchar in Oracle") {
     // create a sample dataframe with string type
     val df1 = sparkContext.parallelize(Seq(("foo"))).toDF("x")
     // write the dataframe to the oracle table tbl
@@ -183,7 +184,7 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
     assert(rows(0).getString(0).equals("foo"))
   }
 
-  testIfEnabled("SPARK-16625: General data types to be mapped to Oracle") {
+  test("SPARK-16625: General data types to be mapped to Oracle") {
     val props = new Properties()
     props.put("oracle.jdbc.mapDateToTimestamp", "false")
 
@@ -254,7 +255,7 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
     assert(values.getTimestamp(10).equals(timestampVal))
   }
 
-  testIfEnabled("SPARK-19318: connection property keys should be case-sensitive") {
+  test("SPARK-19318: connection property keys should be case-sensitive") {
     def checkRow(row: Row): Unit = {
       assert(row.getDecimal(0).equals(BigDecimal.valueOf(1)))
       assert(row.getDate(1).equals(Date.valueOf("1991-11-09")))
@@ -265,14 +266,14 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
     checkRow(sql("SELECT * FROM datetime1 where id = 1").head())
   }
 
-  testIfEnabled("SPARK-20557: column type TIMESTAMP with TIME ZONE should be recognized") {
+  test("SPARK-20557: column type TIMESTAMP with TIME ZONE should be recognized") {
     val dfRead = sqlContext.read.jdbc(jdbcUrl, "ts_with_timezone", new Properties)
     val rows = dfRead.collect()
     val types = rows(0).toSeq.map(x => x.getClass.toString)
     assert(types(1).equals("class java.sql.Timestamp"))
   }
 
-  testIfEnabled("Column type TIMESTAMP with SESSION_LOCAL_TIMEZONE is different from default") {
+  test("Column type TIMESTAMP with SESSION_LOCAL_TIMEZONE is different from default") {
     val defaultJVMTimeZone = TimeZone.getDefault
     // Pick the timezone different from the current default time zone of JVM
     val sofiaTimeZone = TimeZone.getTimeZone("Europe/Sofia")
@@ -289,7 +290,7 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
     }
   }
 
-  testIfEnabled("Column TIMESTAMP with TIME ZONE(JVM timezone)") {
+  test("Column TIMESTAMP with TIME ZONE(JVM timezone)") {
     def checkRow(row: Row, ts: String): Unit = {
       assert(row.getTimestamp(1).equals(Timestamp.valueOf(ts)))
     }
@@ -312,7 +313,7 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
     }
   }
 
-  testIfEnabled(
+  test(
     "SPARK-18004: Make sure date or timestamp related predicate is pushed down correctly") {
     val props = new Properties()
     props.put("oracle.jdbc.mapDateToTimestamp", "false")
@@ -361,7 +362,7 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
     assert(row.getTimestamp(1).equals(timestampVal))
   }
 
-  testIfEnabled("SPARK-20427/SPARK-20921: read table use custom schema by jdbc api") {
+  test("SPARK-20427/SPARK-20921: read table use custom schema by jdbc api") {
     // default will throw IllegalArgumentException
     val e = intercept[org.apache.spark.SparkException] {
       spark.read.jdbc(jdbcUrl, "tableWithCustomSchema", new Properties()).collect()
@@ -389,7 +390,7 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
     assert(values.getBoolean(2) == false)
   }
 
-  testIfEnabled("SPARK-22303: handle BINARY_DOUBLE and BINARY_FLOAT as DoubleType and FloatType") {
+  test("SPARK-22303: handle BINARY_DOUBLE and BINARY_FLOAT as DoubleType and FloatType") {
     val tableName = "oracle_types"
     val schema = StructType(Seq(
       StructField("d", DoubleType, true),
@@ -417,7 +418,7 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
     assert(values.getFloat(1) === 2.2f)
   }
 
-  testIfEnabled("SPARK-22814 support date/timestamp types in partitionColumn") {
+  test("SPARK-22814 support date/timestamp types in partitionColumn") {
     val expectedResult = Set(
       (1, "2018-07-06", "2018-07-06 05:50:00"),
       (2, "2018-07-06", "2018-07-06 08:10:08"),
@@ -476,7 +477,7 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
     assert(df2.collect.toSet === expectedResult)
   }
 
-  testIfEnabled("query JDBC option") {
+  test("query JDBC option") {
     val expectedResult = Set(
       (1, "1991-11-09", "1996-01-01 01:23:45")
     ).map { case (id, date, timestamp) =>
@@ -504,7 +505,7 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
     assert(sql("select id, d, t from queryOption").collect.toSet == expectedResult)
   }
 
-  testIfEnabled("SPARK-32992: map Oracle's ROWID type to StringType") {
+  test("SPARK-32992: map Oracle's ROWID type to StringType") {
     val rows = spark.read.format("jdbc")
       .option("url", jdbcUrl)
       .option("query", "SELECT ROWID from datetime")

@@ -31,7 +31,7 @@ import org.apache.spark.tags.DockerTest
 /**
  * To run this test suite for a specific version (e.g., postgres:13.0):
  * {{{
- *   POSTGRES_DOCKER_IMAGE_NAME=postgres:13.0
+ *   ENABLE_DOCKER_INTEGRATION_TESTS=1 POSTGRES_DOCKER_IMAGE_NAME=postgres:13.0
  *     ./build/sbt -Pdocker-integration-tests
  *     "testOnly org.apache.spark.sql.jdbc.PostgresIntegrationSuite"
  * }}}
@@ -140,7 +140,7 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
       "('$1,000.00')").executeUpdate()
   }
 
-  testIfEnabled("Type mapping for various types") {
+  test("Type mapping for various types") {
     val df = sqlContext.read.jdbc(jdbcUrl, "bar", new Properties)
     val rows = df.collect().sortBy(_.toString())
     assert(rows.length == 2)
@@ -240,7 +240,7 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(0.until(16).forall(rows(1).isNullAt(_)))
   }
 
-  testIfEnabled("Basic write test") {
+  test("Basic write test") {
     val df = sqlContext.read.jdbc(jdbcUrl, "bar", new Properties)
     // Test only that it doesn't crash.
     df.write.jdbc(jdbcUrl, "public.barcopy", new Properties)
@@ -253,7 +253,7 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
     }: _*).write.jdbc(jdbcUrl, "public.barcopy2", new Properties)
   }
 
-  testIfEnabled("Creating a table with shorts and floats") {
+  test("Creating a table with shorts and floats") {
     sqlContext.createDataFrame(Seq((1.0f, 1.toShort)))
       .write.jdbc(jdbcUrl, "shortfloat", new Properties)
     val schema = sqlContext.read.jdbc(jdbcUrl, "shortfloat", new Properties).schema
@@ -261,7 +261,7 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(schema(1).dataType == ShortType)
   }
 
-  testIfEnabled("SPARK-20557: column type TIMESTAMP with TIME ZONE and TIME with TIME ZONE " +
+  test("SPARK-20557: column type TIMESTAMP with TIME ZONE and TIME with TIME ZONE " +
     "should be recognized") {
     // When using JDBC to read the columns of TIMESTAMP with TIME ZONE and TIME with TIME ZONE
     // the actual types are java.sql.Types.TIMESTAMP and java.sql.Types.TIME
@@ -272,7 +272,7 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(types(2).equals("class java.sql.Timestamp"))
   }
 
-  testIfEnabled("SPARK-22291: Conversion error when transforming array types of " +
+  test("SPARK-22291: Conversion error when transforming array types of " +
     "uuid, inet and cidr to StingType in PostgreSQL") {
     val df = sqlContext.read.jdbc(jdbcUrl, "st_with_array", new Properties)
     val rows = df.collect()
@@ -310,7 +310,7 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(rows(0).getSeq(26) == Seq("10:20:10,14,15"))
   }
 
-  testIfEnabled("query JDBC option") {
+  test("query JDBC option") {
     val expectedResult = Set(
       (42, 123456789012345L)
     ).map { case (c1, c3) =>
@@ -335,7 +335,7 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(sql("select c1, c3 from queryOption").collect.toSet == expectedResult)
   }
 
-  testIfEnabled("write byte as smallint") {
+  test("write byte as smallint") {
     sqlContext.createDataFrame(Seq((1.toByte, 2.toShort)))
       .write.jdbc(jdbcUrl, "byte_to_smallint_test", new Properties)
     val df = sqlContext.read.jdbc(jdbcUrl, "byte_to_smallint_test", new Properties)
@@ -348,7 +348,7 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(rows(0).getShort(1) === 2)
   }
 
-  testIfEnabled("character type tests") {
+  test("character type tests") {
     val df = sqlContext.read.jdbc(jdbcUrl, "char_types", new Properties)
     val row = df.collect()
     assert(row.length == 1)
@@ -360,7 +360,7 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(row(0).getString(4) === "q")
   }
 
-  testIfEnabled("SPARK-32576: character array type tests") {
+  test("SPARK-32576: character array type tests") {
     val df = sqlContext.read.jdbc(jdbcUrl, "char_array_types", new Properties)
     val row = df.collect()
     assert(row.length == 1)
@@ -372,7 +372,7 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(row(0).getSeq[String](4) === Seq("q", "r"))
   }
 
-  testIfEnabled("SPARK-34333: money type tests") {
+  test("SPARK-34333: money type tests") {
     val df = sqlContext.read.jdbc(jdbcUrl, "money_types", new Properties)
     val row = df.collect()
     assert(row.length === 1)

@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.jdbc
 
+import org.scalactic.source.Position
+import org.scalatest.Tag
+
 import org.apache.spark.SparkFunSuite
 
 /**
@@ -25,15 +28,16 @@ import org.apache.spark.SparkFunSuite
  */
 trait DockerIntegrationFunSuite extends SparkFunSuite {
   private val envVarNameForEnablingTests = "ENABLE_DOCKER_INTEGRATION_TESTS"
-  private val shouldRunTests = sys.env.getOrElse(envVarNameForEnablingTests, "1") match {
+  private val shouldRunTests = sys.env.getOrElse(envVarNameForEnablingTests, "0") match {
     case "1" => true
     case _ => false
   }
 
   /** Run the test if environment variable is set or ignore the test */
-  def testIfEnabled(testName: String)(testBody: => Unit): Unit = {
+  override def test(testName: String, testTags: Tag*)(testBody: => Any)
+    (implicit pos: Position): Unit = {
     if (shouldRunTests) {
-      test(testName)(testBody)
+      super.test(testName)(testBody)
     } else {
       ignore(s"$testName [enable by setting env var $envVarNameForEnablingTests=1]")(testBody)
     }

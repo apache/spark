@@ -41,8 +41,7 @@ abstract class DockerKrbJDBCIntegrationSuite extends DockerJDBCIntegrationSuite 
   protected var keytabFullPath: String = _
   protected def setAuthentication(keytabFile: String, principal: String): Unit
 
-  override def beforeAll(): Unit = {
-    runIfTestsEnabled(s"Prepare for ${this.getClass.getName}") {
+  override def beforeAll(): Unit = runIfTestsEnabled(s"Prepare for ${this.getClass.getName}") {
       SecurityUtils.setGlobalKrbDebug(true)
 
       val kdcDir = Utils.createTempDir()
@@ -64,7 +63,6 @@ abstract class DockerKrbJDBCIntegrationSuite extends DockerJDBCIntegrationSuite 
 
       // This must be executed intentionally later
       super.beforeAll()
-    }
   }
 
   override def afterAll(): Unit = {
@@ -109,7 +107,7 @@ abstract class DockerKrbJDBCIntegrationSuite extends DockerJDBCIntegrationSuite 
     conn.prepareStatement("INSERT INTO bar VALUES ('hello')").executeUpdate()
   }
 
-  testIfEnabled("Basic read test in query option") {
+  test("Basic read test in query option") {
     // This makes sure Spark must do authentication
     Configuration.setConfiguration(null)
 
@@ -126,7 +124,7 @@ abstract class DockerKrbJDBCIntegrationSuite extends DockerJDBCIntegrationSuite 
     assert(df.collect().toSet === expectedResult)
   }
 
-  testIfEnabled("Basic read test in create table path") {
+  test("Basic read test in create table path") {
     // This makes sure Spark must do authentication
     Configuration.setConfiguration(null)
 
@@ -143,7 +141,7 @@ abstract class DockerKrbJDBCIntegrationSuite extends DockerJDBCIntegrationSuite 
     assert(sql("select c0 from queryOption").collect().toSet === expectedResult)
   }
 
-  testIfEnabled("Basic write test") {
+  test("Basic write test") {
     // This makes sure Spark must do authentication
     Configuration.setConfiguration(null)
 
@@ -164,7 +162,7 @@ abstract class DockerKrbJDBCIntegrationSuite extends DockerJDBCIntegrationSuite 
     assert(rows(0).getString(1) === "bar")
   }
 
-  testIfEnabled("SPARK-35226: JDBCOption should accept refreshKrb5Config parameter") {
+  test("SPARK-35226: JDBCOption should accept refreshKrb5Config parameter") {
     // This makes sure Spark must do authentication
     Configuration.setConfiguration(null)
     withTempDir { dir =>

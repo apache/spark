@@ -749,6 +749,9 @@ docker_integration_tests = Module(
     build_profile_flags=["-Pdocker-integration-tests"],
     source_file_regexes=["external/docker-integration-tests"],
     sbt_test_goals=["docker-integration-tests/test"],
+    environ={
+        "ENABLE_DOCKER_INTEGRATION_TESTS": "1"
+    },
     test_tags=[
         "org.apache.spark.tags.DockerTest"
     ]

@@ -115,8 +115,7 @@ abstract class DockerJDBCIntegrationSuite
   private var pulled: Boolean = false
   protected var jdbcUrl: String = _
 
-  override def beforeAll(): Unit = {
-    runIfTestsEnabled(s"Prepare for $this.getClass.getName") {
+  override def beforeAll(): Unit = runIfTestsEnabled(s"Prepare for ${this.getClass.getName}") {
       super.beforeAll()
       try {
         docker = DefaultDockerClient.fromEnv.build()
@@ -182,7 +181,6 @@ abstract class DockerJDBCIntegrationSuite
             throw e
           }
       }
-    }
   }
 
   override def afterAll(): Unit = {

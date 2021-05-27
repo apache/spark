@@ -28,7 +28,7 @@ import org.apache.spark.tags.DockerTest
 /**
  * To run this test suite for a specific version (e.g., 2019-GA-ubuntu-16.04):
  * {{{
- *   MSSQLSERVER_DOCKER_IMAGE_NAME=2019-GA-ubuntu-16.04
+ *   ENABLE_DOCKER_INTEGRATION_TESTS=1 MSSQLSERVER_DOCKER_IMAGE_NAME=2019-GA-ubuntu-16.04
  *     ./build/sbt -Pdocker-integration-tests
  *     "testOnly org.apache.spark.sql.jdbc.MsSqlServerIntegrationSuite"
  * }}}
@@ -141,7 +141,7 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite {
       """.stripMargin).executeUpdate()
   }
 
-  testIfEnabled("Basic test") {
+  test("Basic test") {
     val df = spark.read.jdbc(jdbcUrl, "tbl", new Properties)
     val rows = df.collect()
     assert(rows.length == 2)
@@ -151,7 +151,7 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(types(1).equals("class java.lang.String"))
   }
 
-  testIfEnabled("Numeric types") {
+  test("Numeric types") {
     Seq(true, false).foreach { flag =>
       withSQLConf(SQLConf.LEGACY_MSSQLSERVER_NUMERIC_MAPPING_ENABLED.key -> s"$flag") {
         val df = spark.read.jdbc(jdbcUrl, "numbers", new Properties)
@@ -206,7 +206,7 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite {
     }
   }
 
-  testIfEnabled("Date types") {
+  test("Date types") {
     withDefaultTimeZone(UTC) {
       val df = spark.read.jdbc(jdbcUrl, "dates", new Properties)
       val rows = df.collect()
@@ -229,7 +229,7 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite {
     }
   }
 
-  testIfEnabled("String types") {
+  test("String types") {
     val df = spark.read.jdbc(jdbcUrl, "strings", new Properties)
     val rows = df.collect()
     assert(rows.length == 1)
@@ -258,7 +258,7 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(java.util.Arrays.equals(row.getAs[Array[Byte]](8), Array[Byte](100, 111, 103)))
   }
 
-  testIfEnabled("Basic write test") {
+  test("Basic write test") {
     val df1 = spark.read.jdbc(jdbcUrl, "numbers", new Properties)
     val df2 = spark.read.jdbc(jdbcUrl, "dates", new Properties)
     val df3 = spark.read.jdbc(jdbcUrl, "strings", new Properties)
@@ -267,7 +267,7 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite {
     df3.write.jdbc(jdbcUrl, "stringscopy", new Properties)
   }
 
-  testIfEnabled("SPARK-33813: MsSqlServerDialect should support spatial types") {
+  test("SPARK-33813: MsSqlServerDialect should support spatial types") {
     val df = spark.read.jdbc(jdbcUrl, "spatials", new Properties)
     val rows = df.collect()
     assert(rows.length == 1)

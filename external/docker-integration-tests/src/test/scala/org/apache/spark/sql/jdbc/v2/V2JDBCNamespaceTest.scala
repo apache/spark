@@ -34,7 +34,7 @@ private[v2] trait V2JDBCNamespaceTest extends SharedSparkSession with DockerInte
 
   def builtinNamespaces: Array[Array[String]]
 
-  testIfEnabled("listNamespaces: basic behavior") {
+  test("listNamespaces: basic behavior") {
     catalog.createNamespace(Array("foo"), Map("comment" -> "test comment").asJava)
     assert(catalog.listNamespaces() === Array(Array("foo")) ++ builtinNamespaces)
     assert(catalog.listNamespaces(Array("foo")) === Array())
