@@ -540,10 +540,13 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       test("2016-11-06 02:00:00", tz, "2016-11-06 10:00:00.0")
     }
   }
-  /*
-    Before this patch, fromUTCtime and toUTCtime produced wrong result on Daylight Saving Time changes days
-    For example, in LA in 1960, timezone switch from UTC-7h to UTC-8h at 2AM in 1960-09-25 and
-    from UTC-8h to UTC-7h in 1960-04-24 but previous func have the cutoff at 8AM
+
+  /**
+   *  Before this patch, fromUTCtime and toUTCtime produced wrong result
+   *  on Daylight Saving Time changes days
+   *  For example, in LA in 1960, timezone switch at 2AM from UTC-7h to UTC-8h in
+   *  1960-09-25 and from UTC-8h to UTC-7h in 1960-04-24 but previous func
+   *  have the cutoff at 8AM
    */
   test("SPARK 30696: fromUTCtime and toUTCtime produce wrong result " +
     "on Daylight Saving Time changes days ") {
