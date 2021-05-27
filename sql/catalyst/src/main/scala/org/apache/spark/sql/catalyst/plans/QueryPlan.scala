@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.rules.RuleId
 import org.apache.spark.sql.catalyst.rules.UnknownRuleId
 import org.apache.spark.sql.catalyst.trees.{AlwaysProcess, CurrentOrigin, TreeNode, TreeNodeTag}
+import org.apache.spark.sql.catalyst.trees.TreePattern.OUTER_REFERENCE
 import org.apache.spark.sql.catalyst.trees.TreePatternBits
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructType}
@@ -218,7 +219,10 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
   /**
    * Returns the result of running [[transformExpressions]] on this node
    * and all its children. Note that this method skips expressions inside subqueries.
+   *
+   * This function has been deprecated, call transformAllExpressionsWithPruning instead.
    */
+  @deprecated("This method is deprecated and will be removed in future versions.", "3.2.0")
   def transformAllExpressions(rule: PartialFunction[Expression, Expression]): this.type = {
     transformAllExpressionsWithPruning(AlwaysProcess.fn, UnknownRuleId)(rule)
   }
@@ -539,7 +543,8 @@ object QueryPlan extends PredicateHelper {
     e.transformUp {
       case s: PlanExpression[QueryPlan[_] @unchecked] =>
         // Normalize the outer references in the subquery plan.
-        val normalizedPlan = s.plan.transformAllExpressions {
+        val normalizedPlan = s.plan.transformAllExpressionsWithPruning(
+          _.containsPattern(OUTER_REFERENCE)) {
           case OuterReference(r) => OuterReference(QueryPlan.normalizeExpressions(r, input))
         }
         s.withNewPlan(normalizedPlan)

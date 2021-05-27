@@ -22,7 +22,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan}
-import org.apache.spark.sql.catalyst.trees.TreePattern.{EXISTS_SUBQUERY, LIST_SUBQUERY, PLAN_EXPRESSION, SCALAR_SUBQUERY, TreePattern}
+import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types._
 import org.apache.spark.util.collection.BitSet
@@ -138,10 +138,11 @@ object SubExprUtils extends PredicateHelper {
    * of the input logical plan.
    */
   def stripOuterReferences(p: LogicalPlan): LogicalPlan = {
-    p.transformAllExpressions {
+    p.transformAllExpressionsWithPruning(_.containsPattern(OUTER_REFERENCE)) {
       case OuterReference(a) => a
     }
   }
+
 
   /**
    * Given a logical plan, returns TRUE if it has an outer reference and false otherwise.

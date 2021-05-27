@@ -203,6 +203,8 @@ case class CurrentBatchTimestamp(
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
 
+  final override val nodePatterns: Seq[TreePattern] = Seq(CURRENT_LIKE)
+
   override def prettyName: String = "current_batch_timestamp"
 
   override protected def initializeInternal(partitionIndex: Int): Unit = {}
