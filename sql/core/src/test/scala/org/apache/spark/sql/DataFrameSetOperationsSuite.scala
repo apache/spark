@@ -736,37 +736,6 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("SPARK-32376: Make unionByName null-filling behavior work with struct columns" +
-      " - case-insensitive cases") {
-    val df1 = Seq((0, UnionClass1d(0, 1L, UnionClass2(1, "2")))).toDF("id", "a")
-    val df2 = Seq((1, UnionClass1c(1, 2L, UnionClass4(2, 3L)))).toDF("id", "a")
-
-    var unionDf = df1.unionByName(df2, true)
-    assert(unionDf.schema.toDDL ==
-      "`id` INT,`a` STRUCT<`a`: INT, `b`: BIGINT, " +
-        "`Nested`: STRUCT<`a`: INT, `c`: STRING, `b`: BIGINT>>")
-    checkAnswer(unionDf,
-      Row(0, Row(0, 1, Row(1, "2", null))) ::
-        Row(1, Row(1, 2, Row(2, null, 3L))) :: Nil)
-
-    unionDf = df2.unionByName(df1, true)
-    assert(unionDf.schema.toDDL ==
-      "`id` INT,`a` STRUCT<`a`: INT, `b`: BIGINT, " +
-        "`nested`: STRUCT<`A`: INT, `b`: BIGINT, `c`: STRING>>")
-    checkAnswer(unionDf,
-      Row(1, Row(1, 2, Row(2, 3L, null))) ::
-        Row(0, Row(0, 1, Row(1, null, "2"))) :: Nil)
-
-    val df3 = Seq((2, UnionClass1b(2, 3L, UnionClass3(4, 5L)))).toDF("id", "a")
-    unionDf = df2.unionByName(df3, true)
-    assert(unionDf.schema.toDDL ==
-      "`id` INT,`a` STRUCT<`a`: INT, `b`: BIGINT, " +
-        "`nested`: STRUCT<`A`: INT, `b`: BIGINT>>")
-    checkAnswer(unionDf,
-      Row(1, Row(1, 2, Row(2, 3L))) ::
-        Row(2, Row(2, 3, Row(4, 5L))) :: Nil)
-  }
-
   test("SPARK-32376: Make unionByName null-filling behavior work with struct columns - edge case") {
     val nestedStructType1 = StructType(Seq(
       StructField("b", StringType)))
@@ -777,11 +746,11 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
       StructField("a", StringType)))
     val nestedStructValues2 = Row("b", "a")
 
-    val df1: DataFrame = spark.createDataFrame(
+    val df1 = spark.createDataFrame(
       sparkContext.parallelize(Row(nestedStructValues1) :: Nil),
       StructType(Seq(StructField("topLevelCol", nestedStructType1))))
 
-    val df2: DataFrame = spark.createDataFrame(
+    val df2 = spark.createDataFrame(
       sparkContext.parallelize(Row(nestedStructValues2) :: Nil),
       StructType(Seq(StructField("topLevelCol", nestedStructType2))))
 
@@ -809,11 +778,11 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
     ))
     val nestedStructValues2 = Row(Row("aa"), Row("bb"))
 
-    val df1: DataFrame = spark.createDataFrame(
+    val df1 = spark.createDataFrame(
       sparkContext.parallelize(Row(nestedStructValues1) :: Nil),
       StructType(Seq(StructField("topLevelCol", nestedStructType1))))
 
-    val df2: DataFrame = spark.createDataFrame(
+    val df2 = spark.createDataFrame(
       sparkContext.parallelize(Row(nestedStructValues2) :: Nil),
       StructType(Seq(StructField("topLevelCol", nestedStructType2))))
 
@@ -853,7 +822,7 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
         depthCounter -= 1
       }
 
-      val df: DataFrame = spark.createDataFrame(
+      val df = spark.createDataFrame(
         sparkContext.parallelize(Row(struct) :: Nil),
         StructType(Seq(StructField("nested0Col0", structType))))
 
@@ -958,7 +927,6 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
 case class UnionClass1a(a: Int, b: Long, nested: UnionClass2)
 case class UnionClass1b(a: Int, b: Long, nested: UnionClass3)
 case class UnionClass1c(a: Int, b: Long, nested: UnionClass4)
-case class UnionClass1d(a: Int, b: Long, Nested: UnionClass2)
 
 case class UnionClass2(a: Int, c: String)
 case class UnionClass3(a: Int, b: Long)

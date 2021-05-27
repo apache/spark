@@ -150,95 +150,36 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
     assert(fromDDL(interval).toDDL === interval)
   }
 
-  test("find missing (nested) fields") {
-    val schema = StructType.fromDDL("c1 INT, c2 STRUCT<c3: INT, c4: STRUCT<c5: INT, c6: INT>>")
+  test("SPARK-35290: Struct merging case insensitive") {
+    val schema1 = StructType.fromDDL("a1 INT, a2 STRING, nested STRUCT<b1: INT, b2: STRING>")
+    val schema2 = StructType.fromDDL("A2 STRING, a3 DOUBLE, nested STRUCT<B2: STRING, b3: DOUBLE>")
     val resolver = SQLConf.get.resolver
 
-    val source1 = StructType.fromDDL("c1 INT")
-    val missing1 = StructType.fromDDL("c2 STRUCT<c3: INT, c4: STRUCT<c5: INT, c6: INT>>")
-    assert(StructType.findMissingFields(source1, schema, resolver)
-      .exists(_.sameType(missing1)))
+    assert(schema1.merge(schema2, resolver).sameType(StructType.fromDDL(
+      "a1 INT, a2 STRING, nested STRUCT<b1: INT, b2: STRING, b3: DOUBLE>, a3 DOUBLE"
+    )))
 
-    val source2 = StructType.fromDDL("c1 INT, c3 STRING")
-    val missing2 = StructType.fromDDL("c2 STRUCT<c3: INT, c4: STRUCT<c5: INT, c6: INT>>")
-    assert(StructType.findMissingFields(source2, schema, resolver)
-      .exists(_.sameType(missing2)))
-
-    val source3 = StructType.fromDDL("c1 INT, c2 STRUCT<c3: INT>")
-    val missing3 = StructType.fromDDL("c2 STRUCT<c4: STRUCT<c5: INT, c6: INT>>")
-    assert(StructType.findMissingFields(source3, schema, resolver)
-      .exists(_.sameType(missing3)))
-
-    val source4 = StructType.fromDDL("c1 INT, c2 STRUCT<c3: INT, c4: STRUCT<c6: INT>>")
-    val missing4 = StructType.fromDDL("c2 STRUCT<c4: STRUCT<c5: INT>>")
-    assert(StructType.findMissingFields(source4, schema, resolver)
-      .exists(_.sameType(missing4)))
+    assert(schema2.merge(schema1, resolver).sameType(StructType.fromDDL(
+      "a2 STRING, a3 DOUBLE, nested STRUCT<b2: STRING, b3: DOUBLE, b1: INT>, a1 INT"
+    )))
   }
 
-  test("find missing (nested) fields: array and map") {
-    val resolver = SQLConf.get.resolver
-
-    val schemaWithArray = StructType.fromDDL("c1 INT, c2 ARRAY<STRUCT<c3: INT, c4: LONG>>")
-    val source5 = StructType.fromDDL("c1 INT")
-    val missing5 = StructType.fromDDL("c2 ARRAY<STRUCT<c3: INT, c4: LONG>>")
-    assert(
-      StructType.findMissingFields(source5, schemaWithArray, resolver)
-        .exists(_.sameType(missing5)))
-
-    val schemaWithMap1 = StructType.fromDDL(
-      "c1 INT, c2 MAP<STRUCT<c3: INT, c4: LONG>, STRING>, c3 LONG")
-    val source6 = StructType.fromDDL("c1 INT, c3 LONG")
-    val missing6 = StructType.fromDDL("c2 MAP<STRUCT<c3: INT, c4: LONG>, STRING>")
-    assert(
-      StructType.findMissingFields(source6, schemaWithMap1, resolver)
-        .exists(_.sameType(missing6)))
-
-    val schemaWithMap2 = StructType.fromDDL(
-      "c1 INT, c2 MAP<STRING, STRUCT<c3: INT, c4: LONG>>, c3 STRING")
-    val source7 = StructType.fromDDL("c1 INT, c3 STRING")
-    val missing7 = StructType.fromDDL("c2 MAP<STRING, STRUCT<c3: INT, c4: LONG>>")
-    assert(
-      StructType.findMissingFields(source7, schemaWithMap2, resolver)
-        .exists(_.sameType(missing7)))
-
-    // Unsupported: nested struct in array, map
-    val source8 = StructType.fromDDL("c1 INT, c2 ARRAY<STRUCT<c3: INT>>")
-    // `findMissingFields` doesn't support looking into nested struct in array type.
-    assert(StructType.findMissingFields(source8, schemaWithArray, resolver).isEmpty)
-
-    val source9 = StructType.fromDDL("c1 INT, c2 MAP<STRUCT<c3: INT>, STRING>, c3 LONG")
-    // `findMissingFields` doesn't support looking into nested struct in map type.
-    assert(StructType.findMissingFields(source9, schemaWithMap1, resolver).isEmpty)
-
-    val source10 = StructType.fromDDL("c1 INT, c2 MAP<STRING, STRUCT<c3: INT>>, c3 STRING")
-    // `findMissingFields` doesn't support looking into nested struct in map type.
-    assert(StructType.findMissingFields(source10, schemaWithMap2, resolver).isEmpty)
-  }
-
-  test("find missing (nested) fields: case sensitive cases") {
+  test("SPARK-35290: Struct merging case sensitive") {
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
-      val schema = StructType.fromDDL("c1 INT, c2 STRUCT<c3: INT, C4: STRUCT<C5: INT, c6: INT>>")
+      val schema1 = StructType.fromDDL("a1 INT, a2 STRING, nested STRUCT<b1: INT, b2: STRING>")
+      val schema2 = StructType.fromDDL(
+        "A2 STRING, a3 DOUBLE, nested STRUCT<B2: STRING, b3: DOUBLE>")
       val resolver = SQLConf.get.resolver
 
-      val source1 = StructType.fromDDL("c1 INT, C2 LONG")
-      val missing1 = StructType.fromDDL("c2 STRUCT<c3: INT, C4: STRUCT<C5: INT, c6: INT>>")
-      assert(StructType.findMissingFields(source1, schema, resolver)
-        .exists(_.sameType(missing1)))
+      assert(schema1.merge(schema2, resolver).sameType(StructType.fromDDL(
+        "a1 INT, a2 STRING, nested STRUCT<b1: INT, b2: STRING, B2: STRING, b3: DOUBLE>, " +
+          "A2 STRING, a3 DOUBLE"
+      )))
 
-      val source2 = StructType.fromDDL("c2 LONG")
-      val missing2 = StructType.fromDDL("c1 INT")
-      assert(StructType.findMissingFields(source2, schema, resolver)
-        .exists(_.sameType(missing2)))
-
-      val source3 = StructType.fromDDL("c1 INT, c2 STRUCT<c3: INT, C4: STRUCT<c5: INT>>")
-      val missing3 = StructType.fromDDL("c2 STRUCT<C4: STRUCT<C5: INT, c6: INT>>")
-      assert(StructType.findMissingFields(source3, schema, resolver)
-        .exists(_.sameType(missing3)))
-
-      val source4 = StructType.fromDDL("c1 INT, c2 STRUCT<c3: INT, C4: STRUCT<C5: Int>>")
-      val missing4 = StructType.fromDDL("c2 STRUCT<C4: STRUCT<c6: INT>>")
-      assert(StructType.findMissingFields(source4, schema, resolver)
-        .exists(_.sameType(missing4)))
+      assert(schema2.merge(schema1, resolver).sameType(StructType.fromDDL(
+        "A2 STRING, a3 DOUBLE, nested STRUCT<B2: STRING, b3: DOUBLE, b1: INT, b2: STRING>, " +
+          "a1 INT, a2 STRING"
+      )))
     }
   }
 

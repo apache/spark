@@ -22,6 +22,7 @@ import com.fasterxml.jackson.core.JsonParseException
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.StringUtils.StringConcat
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.DataTypeTestUtils.dayTimeIntervalTypes
 
 class DataTypeSuite extends SparkFunSuite {
@@ -153,7 +154,7 @@ class DataTypeSuite extends SparkFunSuite {
       StructField("b", LongType) :: Nil)
 
     val message = intercept[SparkException] {
-      left.merge(right)
+      left.merge(right, SQLConf.get.resolver)
     }.getMessage
     assert(message.equals("Failed to merge fields 'b' and 'b'. " +
       "Failed to merge incompatible data types float and bigint"))

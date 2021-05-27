@@ -483,7 +483,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
    * 4. Otherwise, `this` and `that` are considered as conflicting schemas and an exception would be
    *    thrown.
    */
-  private[sql] def merge(that: StructType, resolver: Resolver = _ == _): StructType =
+  private[sql] def merge(that: StructType, resolver: Resolver): StructType =
     StructType.merge(resolver)(this, that).asInstanceOf[StructType]
 
   override private[spark] def asNullable: StructType = {
@@ -629,40 +629,5 @@ object StructType extends AbstractDataType {
     map.sizeHint(fields.length)
     fields.foreach(s => map.put(s.name, s))
     map
-  }
-
-  /**
-   * Returns a `StructType` that contains missing fields recursively from `source` to `target`.
-   * Note that this doesn't support looking into array type and map type recursively.
-   */
-  def findMissingFields(
-      source: StructType,
-      target: StructType,
-      resolver: Resolver): Option[StructType] = {
-    def bothStructType(dt1: DataType, dt2: DataType): Boolean =
-      dt1.isInstanceOf[StructType] && dt2.isInstanceOf[StructType]
-
-    val newFields = mutable.ArrayBuffer.empty[StructField]
-
-    target.fields.foreach { field =>
-      val found = source.fields.find(f => resolver(field.name, f.name))
-      if (found.isEmpty) {
-        // Found a missing field in `source`.
-        newFields += field
-      } else if (bothStructType(found.get.dataType, field.dataType) &&
-          !found.get.dataType.sameType(field.dataType)) {
-        // Found a field with same name, but different data type.
-        findMissingFields(found.get.dataType.asInstanceOf[StructType],
-          field.dataType.asInstanceOf[StructType], resolver).map { missingType =>
-          newFields += found.get.copy(dataType = missingType)
-        }
-      }
-    }
-
-    if (newFields.isEmpty) {
-      None
-    } else {
-      Some(StructType(newFields.toSeq))
-    }
   }
 }

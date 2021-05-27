@@ -33,18 +33,19 @@ import org.apache.spark.sql.util.SchemaUtils
  */
 object ResolveUnion extends Rule[LogicalPlan] {
   /**
-   * Adds missing fields recursively into given `col` expression, based on the target `StructType`.
-   * This is called by `compareAndAddFields` when we find two struct columns with same name but
-   * different nested fields. This method will find out the missing nested fields from `col` to
-   * `target` struct and add these missing nested fields. Currently we don't support finding out
-   * missing nested fields of struct nested in array or struct nested in map.
+   * Adds missing fields recursively into given `col` expression, based on the expected struct
+   * fields from merging the two schemas. This is called by `compareAndAddFields` when we find two
+   * struct columns with same name but different nested fields. This method will recursively
+   * return a new struct with all of the expected fields, adding null values when `col` doesn't
+   * already contain them. Currently we don't support merging structs nested inside of arrays
+   * or maps.
    */
   private def addFields(col: Expression, expectedFields: Seq[StructField]): Expression = {
     assert(col.dataType.isInstanceOf[StructType], "Only support StructType.")
 
     val resolver = conf.resolver
     val colType = col.dataType.asInstanceOf[StructType]
-    val newStructFields = expectedFields.flatMap(expectedField => {
+    val newStructFields = expectedFields.flatMap { expectedField =>
       val currentField = colType.fields.find(f => resolver(f.name, expectedField.name))
 
       val newExpression = (currentField, expectedField.dataType) match {
@@ -60,11 +61,11 @@ object ResolveUnion extends Rule[LogicalPlan] {
             }
         case (Some(cf), _) =>
           ExtractValue(col, Literal(cf.name), resolver)
-        case (_, expectedType) =>
+        case (None, expectedType) =>
           Literal(null, expectedType)
       }
       Literal(expectedField.name) :: newExpression :: Nil
-    })
+    }
     CreateNamedStruct(newStructFields)
   }
 
@@ -99,11 +100,7 @@ object ResolveUnion extends Rule[LogicalPlan] {
             // like that. We will sort columns in the struct expression to make sure two sides of
             // union have consistent schema.
             aliased += foundAttr
-            val targetType = try {
-              target.merge(source, conf.resolver)
-            } catch { case e: Throwable =>
-              throw QueryExecutionErrors.failedToMergeIncompatibleSchemasError(target, source, e)
-            }
+            val targetType = target.merge(source, conf.resolver)
             Alias(addFields(foundAttr, targetType.fields.toSeq), foundAttr.name)()
           case _ =>
             // We don't need/try to add missing fields if:
