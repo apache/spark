@@ -24,8 +24,7 @@ import com.fasterxml.jackson.core.`type`.TypeReference
 import com.fasterxml.jackson.databind.json.JsonMapper
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
 
-import org.apache.spark.internal.config.{
-  SHOW_SPARK_ERROR_FIELDS, SHOW_STACKTRACE_FOR_USER_FACING_ERRORS}
+import org.apache.spark.internal.config.SHOW_SPARK_ERROR_FIELDS
 import org.apache.spark.util.Utils
 
 /**
@@ -46,7 +45,8 @@ case class ErrorInfo(sqlState: Option[String], messageFormatLines: Seq[String]) 
  * construct error messages.
  */
 object SparkError {
-  val errorClassesUrl: URL = Utils.getSparkClassLoader.getResource("error/error-classes.json")
+  val errorClassesPath: String = "org/apache/spark/error/error-classes.json"
+  val errorClassesUrl: URL = Utils.getSparkClassLoader.getResource(errorClassesPath)
   val mapper: JsonMapper = JsonMapper.builder()
     .addModule(DefaultScalaModule)
     .build()
@@ -80,8 +80,8 @@ object SparkError {
  */
 trait SparkError extends Throwable {
   // Should be provided during Exception invocation
-  val errorClass: Option[String] = None
-  val messageParameters: Seq[String] = Seq.empty
+  val errorClass: Option[String]
+  val messageParameters: Seq[String]
 
   // Derived from error class
   val errorInfo: Option[ErrorInfo] = errorClass.flatMap(SparkError.errorClassToInfoMap.get)

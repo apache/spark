@@ -14,5 +14,9 @@
   "WRITING_JOB_ABORTED_ERROR": {
     "sqlState": "40000",
     "messageFormatLines": ["Writing job aborted"]
+  },
+  "SECOND_FUNCTION_ARGUMENT_NOT_INTEGER_ERROR": {
+    "sqlState": "22023",
+    "messageFormatLines": ["The second argument of '%s' function needs to be an integer."]
   }
 }

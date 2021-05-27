@@ -34,14 +34,19 @@ class AnalysisException protected[sql] (
     // Some plans fail to serialize due to bugs in scala collections.
     @transient val plan: Option[LogicalPlan] = None,
     val cause: Option[Throwable] = None,
-    errorClass: Option[String] = None,
-    messageParameters: Seq[String] = Seq.empty)
+    val errorClass: Option[String] = None,
+    val messageParameters: Seq[String] = Seq.empty)
   extends Exception(message, cause.orNull) with SparkError with Serializable {
 
-  def this(errorClass: String, messageParameters: Seq[String]) =
-    this(SparkError.getMessage(errorClass, messageParameters),
+  def this(errorClass: String, messageParameters: Seq[String], cause: Option[Throwable]) =
+    this(
+      SparkError.getMessage(errorClass, messageParameters),
       errorClass = Some(errorClass),
-      messageParameters = messageParameters)
+      messageParameters = messageParameters,
+      cause = cause)
+
+  def this(errorClass: String, messageParameters: Seq[String]) =
+    this(errorClass = errorClass, messageParameters = messageParameters, cause = None)
 
   def withPosition(line: Option[Int], startPosition: Option[Int]): AnalysisException = {
     val newException = new AnalysisException(

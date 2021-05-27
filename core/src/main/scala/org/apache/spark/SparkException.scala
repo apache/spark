@@ -20,8 +20,8 @@ package org.apache.spark
 class SparkException(
     message: String,
     cause: Throwable,
-    errorClass: Option[String],
-    messageParameters: Seq[String])
+    val errorClass: Option[String],
+    val messageParameters: Seq[String])
   extends Exception(message, cause) with SparkError {
 
   def this(message: String, cause: Throwable) =
@@ -70,8 +70,8 @@ private[spark] class SparkUpgradeException(version: String, message: String, cau
  * Arithmetic exception thrown from Spark with an error class.
  */
 private[spark] class SparkArithmeticException(
-    errorClass: Option[String],
-    messageParameters: Seq[String])
+    val errorClass: Option[String],
+    val messageParameters: Seq[String])
   extends ArithmeticException(SparkError.getMessage(errorClass.get, messageParameters))
     with SparkError {
 
