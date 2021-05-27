@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.connector.read;
 
+import org.apache.spark.annotation.Experimental;
 import org.apache.spark.sql.catalyst.InternalRow;
 
 /**
@@ -24,6 +25,7 @@ import org.apache.spark.sql.catalyst.InternalRow;
  *
  * @since 3.2.0
  */
+@Experimental
 public interface LocalScan extends Scan {
   InternalRow[] rows();
 }
