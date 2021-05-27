@@ -37,31 +37,31 @@ import org.apache.spark.util.Utils
  * plan incrementally. Possibly preserving state in between each execution.
  */
 class IncrementalExecution(
-  sparkSession: SparkSession,
-  logicalPlan: LogicalPlan,
-  val outputMode: OutputMode,
-  val checkpointLocation: String,
-  val queryId: UUID,
-  val runId: UUID,
-  val currentBatchId: Long,
-  val offsetSeqMetadata: OffsetSeqMetadata)
+    sparkSession: SparkSession,
+    logicalPlan: LogicalPlan,
+    val outputMode: OutputMode,
+    val checkpointLocation: String,
+    val queryId: UUID,
+    val runId: UUID,
+    val currentBatchId: Long,
+    val offsetSeqMetadata: OffsetSeqMetadata)
   extends QueryExecution(sparkSession, logicalPlan) with Logging {
 
   // Modified planner with stateful operations.
   override val planner: SparkPlanner = new SparkPlanner(
-    sparkSession,
-    sparkSession.sessionState.experimentalMethods) {
+      sparkSession,
+      sparkSession.sessionState.experimentalMethods) {
     override def strategies: Seq[Strategy] =
       extraPlanningStrategies ++
-        sparkSession.sessionState.planner.strategies
+      sparkSession.sessionState.planner.strategies
 
     override def extraPlanningStrategies: Seq[Strategy] =
       StreamingJoinStrategy ::
-        StatefulAggregationStrategy ::
-        FlatMapGroupsWithStateStrategy ::
-        StreamingRelationStrategy ::
-        StreamingDeduplicationStrategy ::
-        StreamingGlobalLimitStrategy(outputMode) :: Nil
+      StatefulAggregationStrategy ::
+      FlatMapGroupsWithStateStrategy ::
+      StreamingRelationStrategy ::
+      StreamingDeduplicationStrategy ::
+      StreamingGlobalLimitStrategy(outputMode) :: Nil
   }
 
   private[sql] val numStateStores = offsetSeqMetadata.conf.get(SQLConf.SHUFFLE_PARTITIONS.key)
@@ -117,8 +117,8 @@ class IncrementalExecution(
             statefulOpFound = true
 
           case e: ShuffleExchangeLike =>
-          // Don't search recursively any further as any child stateful operator as we
-          // are only looking for stateful subplans that this plan has narrow dependencies on.
+            // Don't search recursively any further as any child stateful operator as we
+            // are only looking for stateful subplans that this plan has narrow dependencies on.
 
           case p: SparkPlan =>
             p.children.foreach(findStatefulOp)
@@ -131,8 +131,8 @@ class IncrementalExecution(
 
     override def apply(plan: SparkPlan): SparkPlan = plan transform {
       case StateStoreSaveExec(keys, None, None, None, stateFormatVersion,
-      UnaryExecNode(agg,
-      StateStoreRestoreExec(_, None, _, child))) =>
+             UnaryExecNode(agg,
+               StateStoreRestoreExec(_, None, _, child))) =>
         val aggStateInfo = nextStatefulOperationStateInfo
         StateStoreSaveExec(
           keys,

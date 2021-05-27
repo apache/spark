@@ -28,7 +28,7 @@ import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, HashedRelati
  * A rule to insert dynamic pruning predicates in order to reuse the results of broadcast.
  */
 case class PlanAdaptiveDynamicPruningFilters(
-  rootPlan: AdaptiveSparkPlanExec) extends Rule[SparkPlan] with AdaptiveSparkPlanHelper {
+    rootPlan: AdaptiveSparkPlanExec) extends Rule[SparkPlan] with AdaptiveSparkPlanHelper {
   def apply(plan: SparkPlan): SparkPlan = {
     if (!conf.dynamicPartitionPruningEnabled) {
       return plan
@@ -36,8 +36,8 @@ case class PlanAdaptiveDynamicPruningFilters(
 
     plan transformAllExpressions {
       case DynamicPruningExpression(InSubqueryExec(
-      value, SubqueryAdaptiveBroadcastExec(name, index, buildKeys,
-      adaptivePlan: AdaptiveSparkPlanExec), exprId, _)) =>
+          value, SubqueryAdaptiveBroadcastExec(name, index, buildKeys,
+          adaptivePlan: AdaptiveSparkPlanExec), exprId, _)) =>
         val packedKeys = BindReferences.bindReferences(
           HashJoin.rewriteKeyExpr(buildKeys), adaptivePlan.executedPlan.output)
         val mode = HashedRelationBroadcastMode(packedKeys)

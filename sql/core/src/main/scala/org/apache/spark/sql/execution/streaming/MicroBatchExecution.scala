@@ -35,11 +35,11 @@ import org.apache.spark.sql.streaming.Trigger
 import org.apache.spark.util.{Clock, Utils}
 
 class MicroBatchExecution(
-  sparkSession: SparkSession,
-  trigger: Trigger,
-  triggerClock: Clock,
-  extraOptions: Map[String, String],
-  plan: WriteToStream)
+    sparkSession: SparkSession,
+    trigger: Trigger,
+    triggerClock: Clock,
+    extraOptions: Map[String, String],
+    plan: WriteToStream)
   extends StreamExecution(
     sparkSession, plan.name, plan.resolvedCheckpointLocation, plan.inputQuery, plan.sink, trigger,
     triggerClock, plan.outputMode, plan.deleteCheckpointOnStop) {
@@ -314,8 +314,8 @@ class MicroBatchExecution(
                   val start = committedOffsets.get(source).map(_.asInstanceOf[Offset])
                   source.getBatch(start, end)
                 case nonV1Tuple =>
-                // The V2 API does not have the same edge case requiring getBatch to be called
-                // here, so we do nothing here.
+                  // The V2 API does not have the same edge case requiring getBatch to be called
+                  // here, so we do nothing here.
               }
               currentBatchId = latestCommittedBatchId + 1
               isCurrentBatchConstructed = false
@@ -330,8 +330,8 @@ class MicroBatchExecution(
                     source.getBatch(start, end)
                   }
                 case nonV1Tuple =>
-                // The V2 API does not have the same edge case requiring getBatch to be called
-                // here, so we do nothing here.
+                  // The V2 API does not have the same edge case requiring getBatch to be called
+                  // here, so we do nothing here.
               }
             } else if (latestCommittedBatchId < latestBatchId - 1) {
               logWarning(s"Batch completion log latest batch id is " +
@@ -429,9 +429,9 @@ class MicroBatchExecution(
     val shouldConstructNextBatch = isNewDataAvailable || lastExecutionRequiresAnotherBatch
     logTrace(
       s"noDataBatchesEnabled = $noDataBatchesEnabled, " +
-        s"lastExecutionRequiresAnotherBatch = $lastExecutionRequiresAnotherBatch, " +
-        s"isNewDataAvailable = $isNewDataAvailable, " +
-        s"shouldConstructNextBatch = $shouldConstructNextBatch")
+      s"lastExecutionRequiresAnotherBatch = $lastExecutionRequiresAnotherBatch, " +
+      s"isNewDataAvailable = $isNewDataAvailable, " +
+      s"shouldConstructNextBatch = $shouldConstructNextBatch")
 
     if (shouldConstructNextBatch) {
       // Commit the next batch offset range to the offset log

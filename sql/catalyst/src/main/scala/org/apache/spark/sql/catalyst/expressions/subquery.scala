@@ -61,9 +61,9 @@ abstract class PlanExpression[T <: QueryPlan[_]] extends Expression {
  * A base interface for expressions that contain a [[LogicalPlan]].
  */
 abstract class SubqueryExpression(
-  plan: LogicalPlan,
-  children: Seq[Expression],
-  exprId: ExprId) extends PlanExpression[LogicalPlan] {
+    plan: LogicalPlan,
+    children: Seq[Expression],
+    exprId: ExprId) extends PlanExpression[LogicalPlan] {
   override lazy val resolved: Boolean = childrenResolved && plan.resolved
   override lazy val references: AttributeSet =
     if (plan.resolved) super.references -- plan.outputSet else super.references
@@ -239,9 +239,9 @@ object SubExprUtils extends PredicateHelper {
  * Note: `exprId` is used to have a unique name in explain string output.
  */
 case class ScalarSubquery(
-  plan: LogicalPlan,
-  children: Seq[Expression] = Seq.empty,
-  exprId: ExprId = NamedExpression.newExprId)
+    plan: LogicalPlan,
+    children: Seq[Expression] = Seq.empty,
+    exprId: ExprId = NamedExpression.newExprId)
   extends SubqueryExpression(plan, children, exprId) with Unevaluable {
   override def dataType: DataType = {
     assert(plan.schema.fields.nonEmpty, "Scalar subquery should have only one column")
@@ -285,10 +285,10 @@ object ScalarSubquery {
  * }}}
  */
 case class ListQuery(
-  plan: LogicalPlan,
-  children: Seq[Expression] = Seq.empty,
-  exprId: ExprId = NamedExpression.newExprId,
-  childOutputs: Seq[Attribute] = Seq.empty)
+    plan: LogicalPlan,
+    children: Seq[Expression] = Seq.empty,
+    exprId: ExprId = NamedExpression.newExprId,
+    childOutputs: Seq[Attribute] = Seq.empty)
   extends SubqueryExpression(plan, children, exprId) with Unevaluable {
   override def dataType: DataType = if (childOutputs.length > 1) {
     childOutputs.toStructType
@@ -340,9 +340,9 @@ case class ListQuery(
  * }}}
  */
 case class Exists(
-  plan: LogicalPlan,
-  children: Seq[Expression] = Seq.empty,
-  exprId: ExprId = NamedExpression.newExprId)
+    plan: LogicalPlan,
+    children: Seq[Expression] = Seq.empty,
+    exprId: ExprId = NamedExpression.newExprId)
   extends SubqueryExpression(plan, children, exprId) with Predicate with Unevaluable {
   override def nullable: Boolean = false
   override def withNewPlan(plan: LogicalPlan): Exists = copy(plan = plan)
