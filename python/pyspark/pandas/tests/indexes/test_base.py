@@ -1253,40 +1253,39 @@ class IndexesTest(PandasOnSparkTestCase, TestUtils):
             self.assert_eq(psmidx.is_monotonic_increasing, False)
             self.assert_eq(psmidx.is_monotonic_decreasing, False)
 
-        # Disable the test cases below because pandas returns `True` or `False` randomly.
-        # else:
-        #     [(-5, None), (-4, None), (-3, None), (-2, None), (-1, None)]
-        #     psdf = ps.DataFrame({"a": [-5, -4, -3, -2, -1], "b": [1, 1, 1, 1, 1]})
-        #     psdf["b"] = None
-        #     psmidx = psdf.set_index(["a", "b"]).index
-        #     pmidx = psmidx.to_pandas()
-        #     self.assert_eq(psmidx.is_monotonic_increasing, pmidx.is_monotonic_increasing)
-        #     self.assert_eq(psmidx.is_monotonic_decreasing, pmidx.is_monotonic_decreasing)
+        else:
+            [(-5, None), (-4, None), (-3, None), (-2, None), (-1, None)]
+            psdf = ps.DataFrame({"a": [-5, -4, -3, -2, -1], "b": [1, 1, 1, 1, 1]})
+            psdf["b"] = None
+            psmidx = psdf.set_index(["a", "b"]).index
+            pmidx = psmidx.to_pandas()
+            self.assert_eq(psmidx.is_monotonic_increasing, pmidx.is_monotonic_increasing)
+            self.assert_eq(psmidx.is_monotonic_decreasing, pmidx.is_monotonic_decreasing)
 
-        #     [(None, "e"), (None, "c"), (None, "b"), (None, "d"), (None, "a")]
-        #     psdf = ps.DataFrame({"a": [1, 1, 1, 1, 1], "b": ["e", "c", "b", "d", "a"]})
-        #     psdf["a"] = None
-        #     psmidx = psdf.set_index(["a", "b"]).index
-        #     pmidx = psmidx.to_pandas()
-        #     self.assert_eq(psmidx.is_monotonic_increasing, pmidx.is_monotonic_increasing)
-        #     self.assert_eq(psmidx.is_monotonic_decreasing, pmidx.is_monotonic_decreasing)
+            [(None, "e"), (None, "c"), (None, "b"), (None, "d"), (None, "a")]
+            psdf = ps.DataFrame({"a": [1, 1, 1, 1, 1], "b": ["e", "c", "b", "d", "a"]})
+            psdf["a"] = None
+            psmidx = psdf.set_index(["a", "b"]).index
+            pmidx = psmidx.to_pandas()
+            self.assert_eq(psmidx.is_monotonic_increasing, pmidx.is_monotonic_increasing)
+            self.assert_eq(psmidx.is_monotonic_decreasing, pmidx.is_monotonic_decreasing)
 
-        #     [(None, None), (None, None), (None, None), (None, None), (None, None)]
-        #     psdf = ps.DataFrame({"a": [1, 1, 1, 1, 1], "b": [1, 1, 1, 1, 1]})
-        #     psdf["a"] = None
-        #     psdf["b"] = None
-        #     psmidx = psdf.set_index(["a", "b"]).index
-        #     pmidx = psmidx.to_pandas()
-        #     self.assert_eq(psmidx.is_monotonic_increasing, pmidx.is_monotonic_increasing)
-        #     self.assert_eq(psmidx.is_monotonic_decreasing, pmidx.is_monotonic_decreasing)
-        #     [(None, None)]
-        #     psdf = ps.DataFrame({"a": [1], "b": [1]})
-        #     psdf["a"] = None
-        #     psdf["b"] = None
-        #     psmidx = psdf.set_index(["a", "b"]).index
-        #     pmidx = psmidx.to_pandas()
-        #     self.assert_eq(psmidx.is_monotonic_increasing, pmidx.is_monotonic_increasing)
-        #     self.assert_eq(psmidx.is_monotonic_decreasing, pmidx.is_monotonic_decreasing)
+            [(None, None), (None, None), (None, None), (None, None), (None, None)]
+            psdf = ps.DataFrame({"a": [1, 1, 1, 1, 1], "b": [1, 1, 1, 1, 1]})
+            psdf["a"] = None
+            psdf["b"] = None
+            psmidx = psdf.set_index(["a", "b"]).index
+            pmidx = psmidx.to_pandas()
+            self.assert_eq(psmidx.is_monotonic_increasing, pmidx.is_monotonic_increasing)
+            self.assert_eq(psmidx.is_monotonic_decreasing, pmidx.is_monotonic_decreasing)
+            [(None, None)]
+            psdf = ps.DataFrame({"a": [1], "b": [1]})
+            psdf["a"] = None
+            psdf["b"] = None
+            psmidx = psdf.set_index(["a", "b"]).index
+            pmidx = psmidx.to_pandas()
+            self.assert_eq(psmidx.is_monotonic_increasing, pmidx.is_monotonic_increasing)
+            self.assert_eq(psmidx.is_monotonic_decreasing, pmidx.is_monotonic_decreasing)
 
     def test_difference(self):
         # Index
