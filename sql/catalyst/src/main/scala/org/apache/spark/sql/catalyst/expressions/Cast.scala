@@ -1826,7 +1826,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
 
-  final override val nodePatterns: Seq[TreePattern] = Seq(CAST)
+  final override def nodePatternsInternal(): Seq[TreePattern] = Seq(CAST)
 
   override protected val ansiEnabled: Boolean = SQLConf.get.ansiEnabled
 

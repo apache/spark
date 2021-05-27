@@ -44,6 +44,7 @@ object TreePattern extends Enumeration  {
   val EXPRESSION_WITH_RANDOM_SEED: Value = Value
   val EXTRACT_VALUE: Value = Value
   val GENERATE: Value = Value
+  val HIGH_ORDER_FUNCTION: Value = Value
   val IF: Value = Value
   val IN: Value = Value
   val IN_SUBQUERY: Value = Value
@@ -66,6 +67,7 @@ object TreePattern extends Enumeration  {
   val SCALAR_SUBQUERY: Value = Value
   val SORT: Value = Value
   val SUM: Value = Value
+  val TIME_ZONE_AWARE_EXPRESSION: Value = Value
   val TRUE_OR_FALSE_LITERAL: Value = Value
   val WINDOW_EXPRESSION: Value = Value
   val UNARY_POSITIVE: Value = Value
