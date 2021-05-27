@@ -42,27 +42,27 @@ abstract class DockerKrbJDBCIntegrationSuite extends DockerJDBCIntegrationSuite 
   protected def setAuthentication(keytabFile: String, principal: String): Unit
 
   override def beforeAll(): Unit = runIfTestsEnabled(s"Prepare for ${this.getClass.getName}") {
-      SecurityUtils.setGlobalKrbDebug(true)
+    SecurityUtils.setGlobalKrbDebug(true)
 
-      val kdcDir = Utils.createTempDir()
-      val kdcConf = MiniKdc.createConf()
-      kdcConf.setProperty(MiniKdc.DEBUG, "true")
-      kdc = new MiniKdc(kdcConf, kdcDir)
-      kdc.start()
+    val kdcDir = Utils.createTempDir()
+    val kdcConf = MiniKdc.createConf()
+    kdcConf.setProperty(MiniKdc.DEBUG, "true")
+    kdc = new MiniKdc(kdcConf, kdcDir)
+    kdc.start()
 
-      principal = s"$userName@${kdc.getRealm}"
+    principal = s"$userName@${kdc.getRealm}"
 
-      entryPointDir = Utils.createTempDir()
-      initDbDir = Utils.createTempDir()
-      val keytabFile = new File(initDbDir, keytabFileName)
-      keytabFullPath = keytabFile.getAbsolutePath
-      kdc.createPrincipal(keytabFile, userName)
-      logInfo(s"Created keytab file: $keytabFullPath")
+    entryPointDir = Utils.createTempDir()
+    initDbDir = Utils.createTempDir()
+    val keytabFile = new File(initDbDir, keytabFileName)
+    keytabFullPath = keytabFile.getAbsolutePath
+    kdc.createPrincipal(keytabFile, userName)
+    logInfo(s"Created keytab file: $keytabFullPath")
 
-      setAuthentication(keytabFullPath, principal)
+    setAuthentication(keytabFullPath, principal)
 
-      // This must be executed intentionally later
-      super.beforeAll()
+    // This must be executed intentionally later
+    super.beforeAll()
   }
 
   override def afterAll(): Unit = {
