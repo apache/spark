@@ -37,7 +37,7 @@ trait DockerIntegrationFunSuite extends SparkFunSuite {
   override def test(testName: String, testTags: Tag*)(testBody: => Any)
     (implicit pos: Position): Unit = {
     if (shouldRunTests) {
-      super.test(testName)(testBody)
+      super.test(testName, testTags: _*)(testBody)
     } else {
       ignore(s"$testName [enable by setting env var $envVarNameForEnablingTests=1]")(testBody)
     }
