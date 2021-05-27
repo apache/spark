@@ -1707,4 +1707,55 @@ class AdaptiveQueryExecSuite
       }
     }
   }
+
+  test("SPARK-35264: Support AQE side shuffled hash join formula") {
+    withTempView("t1", "t2") {
+      def checkJoinStrategy(shouldShuffleHashJoin: Boolean): Unit = {
+        Seq("100", "100000").foreach { size =>
+          withSQLConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> size) {
+            val (origin1, adaptive1) = runAdaptiveAndVerifyResult(
+              "SELECT t1.c1, t2.c1 FROM t1 JOIN t2 ON t1.c1 = t2.c1")
+            assert(findTopLevelSortMergeJoin(origin1).size === 1)
+            if (shouldShuffleHashJoin && size.toInt < 100000) {
+              val shj = findTopLevelShuffledHashJoin(adaptive1)
+              assert(shj.size === 1)
+              assert(shj.head.buildSide == BuildRight)
+            } else {
+              assert(findTopLevelSortMergeJoin(adaptive1).size === 1)
+            }
+          }
+        }
+        // respect user specified join hint
+        val (origin2, adaptive2) = runAdaptiveAndVerifyResult(
+          "SELECT /*+ MERGE(t1) */ t1.c1, t2.c1 FROM t1 JOIN t2 ON t1.c1 = t2.c1")
+        assert(findTopLevelSortMergeJoin(origin2).size === 1)
+        assert(findTopLevelSortMergeJoin(adaptive2).size === 1)
+      }
+
+      spark.sparkContext.parallelize(
+        (1 to 100).map(i => TestData(i, i.toString)), 10)
+        .toDF("c1", "c2").createOrReplaceTempView("t1")
+      spark.sparkContext.parallelize(
+        (1 to 10).map(i => TestData(i, i.toString)), 5)
+        .toDF("c1", "c2").createOrReplaceTempView("t2")
+
+      // t1 partition size: [926, 729, 731]
+      // t2 partition size: [318, 120, 0]
+      withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "3",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.PREFER_SORTMERGEJOIN.key -> "true") {
+        // check default value
+        checkJoinStrategy(false)
+        withSQLConf(SQLConf.ADAPTIVE_MAX_SHUFFLE_HASH_JOIN_LOCAL_MAP_THRESHOLD.key -> "400") {
+          checkJoinStrategy(true)
+        }
+        withSQLConf(SQLConf.ADAPTIVE_MAX_SHUFFLE_HASH_JOIN_LOCAL_MAP_THRESHOLD.key -> "300") {
+          checkJoinStrategy(false)
+        }
+        withSQLConf(SQLConf.ADAPTIVE_MAX_SHUFFLE_HASH_JOIN_LOCAL_MAP_THRESHOLD.key -> "1000") {
+          checkJoinStrategy(true)
+        }
+      }
+    }
+  }
 }

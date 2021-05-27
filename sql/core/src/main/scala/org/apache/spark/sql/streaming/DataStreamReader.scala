@@ -413,20 +413,15 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    *   spark.readStream().text("/path/to/directory/")
    * }}}
    *
-   * You can set the following text-specific options to deal with text files:
+   * You can set the following option(s):
    * <ul>
    * <li>`maxFilesPerTrigger` (default: no max limit): sets the maximum number of new files to be
    * considered in every trigger.</li>
-   * <li>`wholetext` (default `false`): If true, read a file as a single row and not split by "\n".
-   * </li>
-   * <li>`lineSep` (default covers all `\r`, `\r\n` and `\n`): defines the line separator
-   * that should be used for parsing.</li>
-   * <li>`pathGlobFilter`: an optional glob pattern to only include files with paths matching
-   * the pattern. The syntax follows <code>org.apache.hadoop.fs.GlobFilter</code>.
-   * It does not change the behavior of partition discovery.</li>
-   * <li>`recursiveFileLookup`: recursively scan a directory for files. Using this option
-   * disables partition discovery</li>
    * </ul>
+   *
+   * You can find the text-specific options for reading text files in
+   * <a href="https://spark.apache.org/docs/latest/sql-data-sources-text.html#data-source-option">
+   *   Data Source Option</a> in the version you use.
    *
    * @since 2.0.0
    */

@@ -1217,4 +1217,17 @@ object QueryExecutionErrors {
       s"Parse Mode: ${FailFastMode.name}. To process malformed records as null " +
       "result, try setting the option 'mode' as 'PERMISSIVE'.", e)
   }
+
+  def remoteOperationsUnsupportedError(): Throwable = {
+    new RuntimeException("Remote operations not supported")
+  }
+
+  def invalidKerberosConfigForHiveServer2Error(): Throwable = {
+    new IOException(
+      "HiveServer2 Kerberos principal or keytab is not correctly configured")
+  }
+
+  def parentSparkUIToAttachTabNotFoundError(): Throwable = {
+    new SparkException("Parent SparkUI to attach this tab to not found!")
+  }
 }

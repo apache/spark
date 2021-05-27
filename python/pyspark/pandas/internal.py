@@ -54,6 +54,7 @@ from pyspark.pandas.utils import (
     lazy_property,
     name_like_string,
     scol_for,
+    spark_column_equals,
     verify_temp_column_name,
 )
 
@@ -547,7 +548,7 @@ class InternalFrame(object):
                 scol_for(spark_frame, col)
                 for col in spark_frame.columns
                 if all(
-                    not scol_for(spark_frame, col)._jc.equals(index_scol._jc)  # type: ignore
+                    not spark_column_equals(scol_for(spark_frame, col), index_scol)
                     for index_scol in index_spark_columns
                 )
                 and col not in HIDDEN_COLUMNS
@@ -879,7 +880,7 @@ class InternalFrame(object):
             spark_column
             for spark_column in self.data_spark_columns
             if all(
-                not spark_column._jc.equals(scol._jc)  # type: ignore
+                not spark_column_equals(spark_column, scol)
                 for scol in index_spark_columns
             )
         ]
@@ -929,7 +930,7 @@ class InternalFrame(object):
         data_columns = []
         for spark_column in self.data_spark_columns:
             if all(
-                not spark_column._jc.equals(scol._jc)  # type: ignore
+                not spark_column_equals(spark_column, scol)
                 for scol in index_spark_columns
             ):
                 data_columns.append(spark_column)
@@ -967,7 +968,7 @@ class InternalFrame(object):
             for index_spark_column_name, index_spark_column in zip(
                 self.index_spark_column_names, self.index_spark_columns
             ):
-                if spark_column._jc.equals(index_spark_column._jc):  # type: ignore
+                if spark_column_equals(spark_column, index_spark_column):
                     column_names.append(index_spark_column_name)
                     break
             else:
