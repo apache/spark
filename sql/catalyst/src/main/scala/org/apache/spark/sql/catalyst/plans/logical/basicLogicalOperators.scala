@@ -1187,6 +1187,8 @@ case class SubqueryAlias(
 
   override def doCanonicalize(): LogicalPlan = child.canonicalized
 
+  final override val nodePatterns: Seq[TreePattern] = Seq(SUBQUERY_ALIAS)
+
   override protected def withNewChildInternal(newChild: LogicalPlan): SubqueryAlias =
     copy(child = newChild)
 }
