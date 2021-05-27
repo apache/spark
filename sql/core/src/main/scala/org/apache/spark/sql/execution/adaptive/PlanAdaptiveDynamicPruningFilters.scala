@@ -35,7 +35,8 @@ case class PlanAdaptiveDynamicPruningFilters(
       return plan
     }
 
-    plan.transformAllExpressionsWithPruning(_.containsPattern(DYNAMIC_PRUNING_SUBQUERY)) {
+    plan.transformAllExpressionsWithPruning(
+      _.containsAllPatterns(DYNAMIC_PRUNING_EXPRESSION, IN_SUBQUERY_EXEC)) {
       case DynamicPruningExpression(InSubqueryExec(
           value, SubqueryAdaptiveBroadcastExec(name, index, buildKeys,
           adaptivePlan: AdaptiveSparkPlanExec), exprId, _)) =>
