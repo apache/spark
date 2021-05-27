@@ -51,6 +51,7 @@ from pyspark.pandas.utils import (
     name_like_string,
     same_anchor,
     scol_for,
+    spark_column_equals,
     verify_temp_column_name,
 )
 
@@ -710,7 +711,7 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
                 self._internal.data_dtypes,
             ):
                 for scol in data_spark_columns:
-                    if new_scol._jc.equals(scol._jc):
+                    if spark_column_equals(new_scol, scol):
                         new_scol = F.when(cond, value).otherwise(scol).alias(spark_column_name)
                         new_dtype = spark_type_to_pandas_dtype(
                             self._internal.spark_frame.select(new_scol).schema[0].dataType,
