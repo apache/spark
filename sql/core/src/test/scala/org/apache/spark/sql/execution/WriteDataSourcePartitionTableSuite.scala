@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution
 
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
@@ -25,7 +26,7 @@ class WriteDataSourcePartitionTableSuite extends WritePartitionTableSuite with S
   protected val tableProvider = "PARQUET"
 }
 
-abstract class WritePartitionTableSuite extends SQLTestUtils {
+abstract class WritePartitionTableSuite extends SQLTestUtils with AdaptiveSparkPlanHelper {
 
   protected val tableProvider: String
 
@@ -38,14 +39,14 @@ abstract class WritePartitionTableSuite extends SQLTestUtils {
           val df = sql(
             s"""CREATE TABLE t1 USING $tableProvider PARTITIONED BY (p1, p2)
                |AS (SELECT id, id AS  p1, id AS p2 FROM range(5))""".stripMargin)
-          val partitionings = df.queryExecution.executedPlan.collect {
+          val partitions = collect(df.queryExecution.executedPlan) {
             case s: ShuffleExchangeExec => s
           }
           assert(spark.table("t1").count() === 5)
           if (repartitionBeforeInsert) {
-            assert(partitionings.size === 1)
+            assert(partitions.size === 1)
           } else {
-            assert(partitionings.size === 0)
+            assert(partitions.size === 0)
           }
         }
       }
@@ -66,14 +67,14 @@ abstract class WritePartitionTableSuite extends SQLTestUtils {
               |USING PARQUET
               |PARTITIONED BY (p1, p2)""".stripMargin)
           val df = sql("INSERT INTO t1 SELECT id, id AS  p1, id AS p2 FROM range(5)")
-          val partitionings = df.queryExecution.executedPlan.collect {
+          val partitions = collect(df.queryExecution.executedPlan) {
             case s: ShuffleExchangeExec => s
           }
           assert(spark.table("t1").count() === 5)
           if (repartitionBeforeInsert) {
-            assert(partitionings.size === 1)
+            assert(partitions.size === 1)
           } else {
-            assert(partitionings.size === 0)
+            assert(partitions.size === 0)
           }
         }
       }
@@ -149,11 +150,11 @@ abstract class WritePartitionTableSuite extends SQLTestUtils {
             """INSERT INTO t1 PARTITION(p1 = 1, p2) SELECT id, id AS p2 FROM range(5)
               | DISTRIBUTE BY p2
               |""".stripMargin)
-          val partitionings = df.queryExecution.executedPlan.collect {
+          val partitions = collect(df.queryExecution.executedPlan) {
             case s: ShuffleExchangeExec => s
           }
           assert(spark.table("t1").count() === 5)
-          assert(partitionings.size === 1)
+          assert(partitions.size === 1)
         }
       }
     }
@@ -176,14 +177,14 @@ abstract class WritePartitionTableSuite extends SQLTestUtils {
             """INSERT INTO t1 PARTITION(p1 = 1, p2) SELECT id, id AS p2 FROM range(5)
               | DISTRIBUTE BY id
               |""".stripMargin)
-          val partitionings = df.queryExecution.executedPlan.collect {
+          val partitions = collect(df.queryExecution.executedPlan) {
             case s: ShuffleExchangeExec => s
           }
           assert(spark.table("t1").count() === 5)
           if (repartitionBeforeInsert) {
-            assert(partitionings.size === 2)
+            assert(partitions.size === 2)
           } else {
-            assert(partitionings.size === 1)
+            assert(partitions.size === 1)
           }
         }
       }
@@ -207,14 +208,14 @@ abstract class WritePartitionTableSuite extends SQLTestUtils {
             """INSERT INTO t1 PARTITION(P2, p1=3) SELECT id, cast(id as bigint) AS P2 FROM range(5)
               | DISTRIBUTE BY id
               |""".stripMargin)
-          val partitionings = df.queryExecution.executedPlan.collect {
+          val partitions = collect(df.queryExecution.executedPlan) {
             case s: ShuffleExchangeExec => s
           }
           assert(spark.table("t1").count() === 5)
           if (repartitionBeforeInsert) {
-            assert(partitionings.size === 2)
+            assert(partitions.size === 2)
           } else {
-            assert(partitionings.size === 1)
+            assert(partitions.size === 1)
           }
         }
       }

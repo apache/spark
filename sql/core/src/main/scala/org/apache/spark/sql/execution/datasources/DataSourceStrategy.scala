@@ -226,7 +226,7 @@ object DataSourceAnalysis extends Rule[LogicalPlan] with CastSupport {
  *
  * Note that, this rule must be run after `DataSourceAnalysis`.
  */
-case class RepartitionBeforeInsertDataSourceTable(conf: SQLConf) extends Rule[LogicalPlan] {
+object RepartitionBeforeInsertDataSourceTable extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = {
     if (conf.repartitionBeforeInsert) {
       insertRepartition(plan)

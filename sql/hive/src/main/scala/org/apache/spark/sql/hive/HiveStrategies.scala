@@ -186,7 +186,7 @@ object HiveAnalysis extends Rule[LogicalPlan] {
  *
  * Note that, this rule must be run after `HiveAnalysis`.
  */
-case class RepartitionBeforeInsertHiveTable(conf: SQLConf) extends Rule[LogicalPlan] {
+object RepartitionBeforeInsertHiveTable extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = {
     if (conf.repartitionBeforeInsert) {
       insertRepartition(plan)
