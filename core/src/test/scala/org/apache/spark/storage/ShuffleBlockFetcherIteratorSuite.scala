@@ -1426,8 +1426,8 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     assert(!iterator.hasNext)
   }
 
-  test("failure to fetch a remote merged block chunk initiates the fallback of" +
-      " deferred shuffle chunks immediately") {
+  test("failure to fetch a remote merged block chunk initiates the fallback of " +
+    "deferred shuffle chunks immediately") {
     val blockChunks = Map[BlockId, ManagedBuffer](
       ShuffleBlockChunkId(0, 2, 0) -> createMockManagedBuffer(),
       // ShuffleBlockChunk(0, 2, 1) will cause a failure as it is not in block-chunks.
@@ -1493,8 +1493,8 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       ShuffleBlockId(0, 5, 2), ShuffleBlockId(0, 6, 2)))
   }
 
-  test("failure to fetch a remote merged block chunk initiates the fallback of" +
-    " deferred shuffle chunks immediately which got deferred") {
+  test("failure to fetch a remote merged block chunk initiates the fallback of " +
+    "deferred shuffle chunks immediately which got deferred") {
     val blockChunks = Map[BlockId, ManagedBuffer](
       ShuffleBlockChunkId(0, 2, 0) -> createMockManagedBuffer(),
       ShuffleBlockChunkId(0, 2, 1) -> createMockManagedBuffer(),

@@ -934,7 +934,7 @@ final class ShuffleBlockFetcherIterator(
           val blocksToRequest = pushBasedFetchHelper.createChunkBlockInfosFromMetaResponse(
             shuffleId, reduceId, blockSize, numChunks, bitmaps)
           val additionalRemoteReqs = new ArrayBuffer[FetchRequest]
-          collectFetchRequests(address, blocksToRequest, additionalRemoteReqs)
+          collectFetchRequests(address, blocksToRequest.toSeq, additionalRemoteReqs)
           fetchRequests ++= additionalRemoteReqs
           // Set result to null to force another iteration.
           result = null
@@ -1492,11 +1492,11 @@ private class PushBasedFetchHelper(
   }
 
   def createChunkBlockInfosFromMetaResponse(
-    shuffleId: Int,
-    reduceId: Int,
-    blockSize: Long,
-    numChunks: Int,
-    bitmaps: Array[RoaringBitmap]): ArrayBuffer[(BlockId, Long, Int)] = {
+      shuffleId: Int,
+      reduceId: Int,
+      blockSize: Long,
+      numChunks: Int,
+      bitmaps: Array[RoaringBitmap]): ArrayBuffer[(BlockId, Long, Int)] = {
     val approxChunkSize = blockSize / numChunks
     val blocksToRequest: ArrayBuffer[(BlockId, Long, Int)] =
       new ArrayBuffer[(BlockId, Long, Int)]()
@@ -1544,7 +1544,7 @@ private class PushBasedFetchHelper(
 
   // Fetch all outstanding merged local blocks
   def fetchAllMergedLocalBlocks(
-    mergedLocalBlocks: mutable.LinkedHashSet[BlockId]): Unit = {
+      mergedLocalBlocks: mutable.LinkedHashSet[BlockId]): Unit = {
     if (mergedLocalBlocks.nonEmpty) {
       blockManager.hostLocalDirManager.foreach(fetchMergedLocalBlocks(_, mergedLocalBlocks))
     }
@@ -1555,8 +1555,8 @@ private class PushBasedFetchHelper(
    * blocks.
    */
   private def fetchMergedLocalBlocks(
-    hostLocalDirManager: HostLocalDirManager,
-    mergedLocalBlocks: mutable.LinkedHashSet[BlockId]): Unit = {
+      hostLocalDirManager: HostLocalDirManager,
+      mergedLocalBlocks: mutable.LinkedHashSet[BlockId]): Unit = {
     val cachedMergerDirs = hostLocalDirManager.getCachedHostLocalDirs.get(
       SHUFFLE_MERGER_IDENTIFIER)
     if (cachedMergerDirs.isDefined) {
@@ -1601,9 +1601,9 @@ private class PushBasedFetchHelper(
    * @return Boolean represents successful or failed fetch
    */
   private[this] def fetchMergedLocalBlock(
-    blockId: BlockId,
-    localDirs: Array[String],
-    blockManagerId: BlockManagerId): Boolean = {
+      blockId: BlockId,
+      localDirs: Array[String],
+      blockManagerId: BlockManagerId): Boolean = {
     try {
       val shuffleBlockId = blockId.asInstanceOf[ShuffleBlockId]
       val chunksMeta = blockManager.getMergedBlockMeta(shuffleBlockId, localDirs)
