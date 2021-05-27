@@ -282,12 +282,12 @@ class BlockManagerMasterEndpoint(
         }
       }
       bmIdsExecutor.foreach { bmId =>
-        blockManagerInfo.get(bmId).filter(_.isAlive).foreach { bmInfo =>
+        aliveBlockManagerInfo(bmId).foreach { bmInfo =>
           bmInfo.removeBlock(blockId)
         }
       }
     }
-    val removeRddFromExecutorsFutures = blockManagerInfo.values.filter(_.isAlive).map { bmInfo =>
+    val removeRddFromExecutorsFutures = allAliveBlockManagerInfos().map { bmInfo =>
       bmInfo.storageEndpoint.ask[Int](removeMsg).recover {
         // use 0 as default value means no blocks were removed
         handleBlockRemovalFailure("RDD", rddId.toString, bmInfo.blockManagerId, 0)
@@ -313,7 +313,7 @@ class BlockManagerMasterEndpoint(
     // Nothing to do in the BlockManagerMasterEndpoint data structures
     val removeMsg = RemoveShuffle(shuffleId)
     Future.sequence(
-      blockManagerInfo.values.filter(_.isAlive).map { bm =>
+      allAliveBlockManagerInfos().map { bm =>
         bm.storageEndpoint.ask[Boolean](removeMsg).recover {
           // use false as default value means no shuffle data were removed
           handleBlockRemovalFailure("shuffle", shuffleId.toString, bm.blockManagerId, false)
@@ -329,8 +329,8 @@ class BlockManagerMasterEndpoint(
    */
   private def removeBroadcast(broadcastId: Long, removeFromDriver: Boolean): Future[Seq[Int]] = {
     val removeMsg = RemoveBroadcast(broadcastId, removeFromDriver)
-    val requiredBlockManagers = blockManagerInfo.values.filter { info =>
-      info.isAlive && (removeFromDriver || !info.blockManagerId.isDriver)
+    val requiredBlockManagers = allAliveBlockManagerInfos().filter { info =>
+      removeFromDriver || !info.blockManagerId.isDriver
     }
     val futures = requiredBlockManagers.map { bm =>
       bm.storageEndpoint.ask[Int](removeMsg).recover {
@@ -375,7 +375,7 @@ class BlockManagerMasterEndpoint(
         val i = (new Random(blockId.hashCode)).nextInt(locations.size)
         val blockLocations = locations.toSeq
         val candidateBMId = blockLocations(i)
-        blockManagerInfo.get(candidateBMId).filter(_.isAlive).foreach { bm =>
+        aliveBlockManagerInfo(candidateBMId).foreach { bm =>
           val remainingLocations = locations.toSeq.filter(bm => bm != candidateBMId)
           val replicateMsg = ReplicateBlock(blockId, remainingLocations, maxReplicas)
           bm.storageEndpoint.ask[Boolean](replicateMsg)
@@ -411,7 +411,7 @@ class BlockManagerMasterEndpoint(
    */
   private def getReplicateInfoForRDDBlocks(blockManagerId: BlockManagerId): Seq[ReplicateBlock] = {
     try {
-      blockManagerInfo.get(blockManagerId).filter(_.isAlive).map { info =>
+      aliveBlockManagerInfo(blockManagerId).map { info =>
         val rddBlocks = info.blocks.keySet().asScala.filter(_.isRDD)
         rddBlocks.map { blockId =>
           val currentBlockLocations = blockLocations.get(blockId)
@@ -434,8 +434,7 @@ class BlockManagerMasterEndpoint(
     val locations = blockLocations.get(blockId)
     if (locations != null) {
       locations.foreach { blockManagerId: BlockManagerId =>
-        val blockManager = blockManagerInfo.get(blockManagerId).filter(_.isAlive)
-        blockManager.foreach { bm =>
+        aliveBlockManagerInfo(blockManagerId).foreach { bm =>
           // Remove the block from the BlockManager.
           // Doesn't actually wait for a confirmation and the message might get lost.
           // If message loss becomes frequent, we should add retry logic here.
@@ -450,14 +449,14 @@ class BlockManagerMasterEndpoint(
 
   // Return a map from the block manager id to max memory and remaining memory.
   private def memoryStatus: Map[BlockManagerId, (Long, Long)] = {
-    blockManagerInfo.filter(_._2.isAlive).map { case (blockManagerId, info) =>
-      (blockManagerId, (info.maxMem, info.remainingMem))
+    allAliveBlockManagerInfos().map { info =>
+      (info.blockManagerId, (info.maxMem, info.remainingMem))
     }.toMap
   }
 
   private def storageStatus: Array[StorageStatus] = {
-    blockManagerInfo.filter(_._2.isAlive).map { case (blockManagerId, info) =>
-      new StorageStatus(blockManagerId, info.maxMem, Some(info.maxOnHeapMem),
+    allAliveBlockManagerInfos().map { info =>
+      new StorageStatus(info.blockManagerId, info.maxMem, Some(info.maxOnHeapMem),
         Some(info.maxOffHeapMem), info.blocks.asScala)
     }.toArray
   }
@@ -479,7 +478,7 @@ class BlockManagerMasterEndpoint(
      * Futures to avoid potential deadlocks. This can arise if there exists a block manager
      * that is also waiting for this master endpoint's response to a previous message.
      */
-    blockManagerInfo.values.filter(_.isAlive).map { info =>
+    allAliveBlockManagerInfos().map { info =>
       val blockStatusFuture =
         if (askStorageEndpoints) {
           info.storageEndpoint.ask[Option[BlockStatus]](getBlockStatus)
@@ -503,7 +502,7 @@ class BlockManagerMasterEndpoint(
       askStorageEndpoints: Boolean): Future[Seq[BlockId]] = {
     val getMatchingBlockIds = GetMatchingBlockIds(filter)
     Future.sequence(
-      blockManagerInfo.values.filter(_.isAlive).map { info =>
+      allAliveBlockManagerInfos().map { info =>
         val future =
           if (askStorageEndpoints) {
             info.storageEndpoint.ask[Seq[BlockId]](getMatchingBlockIds)
@@ -660,7 +659,7 @@ class BlockManagerMasterEndpoint(
       if (externalShuffleServiceRddFetchEnabled && bmId.port == externalShuffleServicePort) {
         Option(blockStatusByShuffleService(bmId).get(blockId))
       } else {
-        blockManagerInfo.get(bmId).filter(_.isAlive).flatMap(_.getStatus(blockId))
+        aliveBlockManagerInfo(bmId).flatMap(_.getStatus(blockId))
       }
     }
 
@@ -671,9 +670,7 @@ class BlockManagerMasterEndpoint(
         // can be used to access this block even when the original executor is already stopped.
         loc.host == requesterHost &&
           (loc.port == externalShuffleServicePort ||
-            blockManagerInfo
-              .get(loc)
-              .filter(_.isAlive)
+            aliveBlockManagerInfo(loc)
               .flatMap(_.getStatus(blockId).map(_.storageLevel.useDisk))
               .getOrElse(false))
       }.flatMap { bmId => Option(executorIdToLocalDirs.getIfPresent(bmId.executorId)) }
@@ -690,7 +687,7 @@ class BlockManagerMasterEndpoint(
 
   /** Get the list of the peers of the given block manager */
   private def getPeers(blockManagerId: BlockManagerId): Seq[BlockManagerId] = {
-    val blockManagerIds = blockManagerInfo.filter(_._2.isAlive).keySet
+    val blockManagerIds = allAliveBlockManagerInfos().map(_.blockManagerId).toSet
     if (blockManagerIds.contains(blockManagerId)) {
       blockManagerIds
         .filterNot { _.isDriver }
@@ -742,7 +739,7 @@ class BlockManagerMasterEndpoint(
   private def getExecutorEndpointRef(executorId: String): Option[RpcEndpointRef] = {
     for (
       blockManagerId <- blockManagerIdByExecutor.get(executorId);
-      info <- blockManagerInfo.get(blockManagerId).filter(_.isAlive)
+      info <- aliveBlockManagerInfo(blockManagerId)
     ) yield {
       info.storageEndpoint
     }
@@ -765,6 +762,11 @@ class BlockManagerMasterEndpoint(
       blockManagerInfo.remove(bmId)
     }
   }
+
+  @inline private def aliveBlockManagerInfo(bmId: BlockManagerId): Option[BlockManagerInfo] =
+    blockManagerInfo.get(bmId).filter(_.isAlive)
+
+  @inline private def allAliveBlockManagerInfos() = blockManagerInfo.values.filter(_.isAlive)
 }
 
 @DeveloperApi
