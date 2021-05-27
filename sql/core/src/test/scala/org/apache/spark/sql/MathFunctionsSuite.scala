@@ -203,6 +203,13 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
       df.selectExpr("""conv("9223372036854775807", 36, -16)"""), Row("-1")) // for overflow
   }
 
+  test("SPARK-33428 conv function has different behavior with mySQL's conv function") {
+    val df = Seq(("abc"), ("  abc"), ("abc  "), ("  abc  "),
+      ("aaaaaaa0aaaaaaa0aaaaaaa0aaaaaaa0aaaaaaa0aaaaaaa0aaaaaaa0aaaaaaa0aaaaaaa0")).toDF("num")
+    checkAnswer(df.select(conv('num, 16, 10)),
+      Seq(Row("2748"), Row("2748"), Row("2748"), Row("2748"), Row("18446744073709551615")))
+  }
+
   test("floor") {
     testOneToOneMathFunction(floor, (d: Double) => math.floor(d).toLong)
   }
