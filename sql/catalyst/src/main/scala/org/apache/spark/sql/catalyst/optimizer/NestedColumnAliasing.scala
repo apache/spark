@@ -242,7 +242,8 @@ object NestedColumnAliasing {
     exprList.foreach { e =>
       collectRootReferenceAndExtractValue(e).foreach {
         case ev: ExtractValue =>
-          assert(ev.references.size == 1, s"$ev should have one reference")
+          assert(ev.references.toSeq.map(_.exprId).distinct.size == 1,
+            s"$ev should have one reference, but found ${ev.references}")
           nestedFieldReferences.append(ev)
         case ar: AttributeReference => otherRootReferences.append(ar)
       }
