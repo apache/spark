@@ -63,6 +63,7 @@ object TreePattern extends Enumeration  {
   val NULL_LITERAL: Value = Value
   val SERIALIZE_FROM_OBJECT: Value = Value
   val OUTER_REFERENCE: Value = Value
+  val PIVOT: Value = Value
   val PLAN_EXPRESSION: Value = Value
   val RUNTIME_REPLACEABLE: Value = Value
   val SCALAR_SUBQUERY: Value = Value

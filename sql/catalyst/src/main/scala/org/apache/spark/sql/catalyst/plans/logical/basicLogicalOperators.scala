@@ -1057,6 +1057,7 @@ case class Pivot(
     groupByExprsOpt.getOrElse(Seq.empty).map(_.toAttribute) ++ pivotAgg
   }
   override def metadataOutput: Seq[Attribute] = Nil
+  final override val nodePatterns: Seq[TreePattern] = Seq(PIVOT)
 
   override protected def withNewChildInternal(newChild: LogicalPlan): Pivot = copy(child = newChild)
 }
