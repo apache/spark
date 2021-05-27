@@ -830,8 +830,6 @@ case class ShowTablesCommand(
     isExtended: Boolean = false,
     partitionSpec: Option[TablePartitionSpec] = None) extends LeafRunnableCommand {
 
-  private val keepLegacySchema = output(3).dataType == StringType
-
   override def run(sparkSession: SparkSession): Seq[Row] = {
     // Since we need to return a Seq of rows, we will call getTables directly
     // instead of calling tables in sparkSession.
@@ -847,7 +845,7 @@ case class ShowTablesCommand(
         val isTemp = catalog.isTempView(tableIdent)
         if (isExtended) {
           val catalogTable = catalog.getTempViewOrPermanentTableMetadata(tableIdent)
-          val infoValue = if (keepLegacySchema) {
+          val infoValue = if (output(3).dataType == StringType) {
             catalogTable.simpleString
           } else {
             catalogTable.toLinkedHashMap
@@ -876,7 +874,11 @@ case class ShowTablesCommand(
       val database = tableIdent.database.getOrElse("")
       val tableName = tableIdent.table
       val isTemp = catalog.isTempView(tableIdent)
-      val infoValue = if (keepLegacySchema) partition.simpleString else partition.toLinkedHashMap
+      val infoValue = if (output(3).dataType == StringType) {
+        partition.simpleString
+      } else {
+        partition.toLinkedHashMap
+      }
       Seq(Row(database, tableName, isTemp, infoValue))
     }
   }
