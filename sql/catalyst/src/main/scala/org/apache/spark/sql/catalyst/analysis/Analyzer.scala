@@ -345,8 +345,9 @@ class Analyzer(override val catalogManager: CatalogManager)
    */
   object ResolveBinaryArithmetic extends Rule[LogicalPlan] {
     override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
-      AlwaysProcess.fn, ruleId) {
-      case p: LogicalPlan => p.transformExpressionsUpWithPruning(AlwaysProcess.fn, ruleId) {
+      _.containsPattern(BINARY_ARITHMETIC), ruleId) {
+      case p: LogicalPlan => p.transformExpressionsUpWithPruning(
+        _.containsPattern(BINARY_ARITHMETIC), ruleId) {
         case a @ Add(l, r, f) if a.childrenResolved => (l.dataType, r.dataType) match {
           case (DateType, DayTimeIntervalType) => TimeAdd(Cast(l, TimestampType), r)
           case (DayTimeIntervalType, DateType) => TimeAdd(Cast(r, TimestampType), l)
@@ -1876,7 +1877,7 @@ class Analyzer(override val catalogManager: CatalogManager)
     private def allowGroupByAlias: Boolean = conf.groupByAliases && !conf.ansiEnabled
 
     override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
-      AlwaysProcess.fn, ruleId) {
+      _.containsPattern(AGGREGATE), ruleId) {
       case agg @ Aggregate(groups, aggs, child)
           if allowGroupByAlias && child.resolved && aggs.forall(_.resolved) &&
             groups.exists(!_.resolved) =>
@@ -2404,7 +2405,7 @@ class Analyzer(override val catalogManager: CatalogManager)
    */
   object GlobalAggregates extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
-      AlwaysProcess.fn, ruleId) {
+      _.containsPattern(PROJECT), ruleId) {
       case Project(projectList, child) if containsAggregates(projectList) =>
         Aggregate(Nil, projectList, child)
     }
@@ -2779,7 +2780,7 @@ class Analyzer(override val catalogManager: CatalogManager)
    */
   object ResolveGenerate extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
-      AlwaysProcess.fn, ruleId) {
+      _.containsPattern(GENERATE), ruleId) {
       case g: Generate if !g.child.resolved || !g.generator.resolved => g
       case g: Generate if !g.resolved =>
         g.copy(generatorOutput = makeGeneratorOutput(g.generator, g.generatorOutput.map(_.name)))
@@ -3906,7 +3907,7 @@ object TimeWindowing extends Rule[LogicalPlan] {
  */
 object ResolveCreateNamedStruct extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveExpressionsWithPruning(
-    AlwaysProcess.fn, ruleId) {
+    _.containsPattern(CREATE_NAMED_STRUCT), ruleId) {
     case e: CreateNamedStruct if !e.resolved =>
       val children = e.children.grouped(2).flatMap {
         case Seq(NamePlaceholder, e: NamedExpression) if e.resolved =>

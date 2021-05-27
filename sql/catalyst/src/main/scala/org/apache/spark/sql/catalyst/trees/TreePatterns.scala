@@ -92,6 +92,7 @@ object TreePattern extends Enumeration  {
   val UNION: Value = Value
   val TYPED_FILTER: Value = Value
   val WINDOW: Value = Value
+  val WITH_WINDOW_DEFINITION: Value = Value
 
   // Execution expression patterns (alphabetically ordered)
   val IN_SUBQUERY_EXEC: Value = Value
