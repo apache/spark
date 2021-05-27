@@ -2343,11 +2343,11 @@ class Analyzer(override val catalogManager: CatalogManager)
     private def resolveSubQueries(plan: LogicalPlan, plans: Seq[LogicalPlan]): LogicalPlan = {
       plan.transformAllExpressionsWithPruning(_.containsAnyPattern(SCALAR_SUBQUERY,
         EXISTS_SUBQUERY, IN_SUBQUERY), ruleId) {
-        case s @ ScalarSubquery(sub, _, exprId) if !sub.resolved =>
+        case s @ ScalarSubquery(sub, _, exprId, _) if !sub.resolved =>
           resolveSubQuery(s, plans)(ScalarSubquery(_, _, exprId))
-        case e @ Exists(sub, _, exprId) if !sub.resolved =>
+        case e @ Exists(sub, _, exprId, _) if !sub.resolved =>
           resolveSubQuery(e, plans)(Exists(_, _, exprId))
-        case InSubquery(values, l @ ListQuery(_, _, exprId, _))
+        case InSubquery(values, l @ ListQuery(_, _, exprId, _, _))
             if values.forall(_.resolved) && !l.resolved =>
           val expr = resolveSubQuery(l, plans)((plan, exprs) => {
             ListQuery(plan, exprs, exprId, plan.output)
