@@ -652,6 +652,9 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
     # create accessor for pandas-on-Spark specific methods.
     pandas_on_spark = CachedAccessor("pandas_on_spark", PandasOnSparkSeriesMethods)
 
+    # keep the name "koalas" for backward compatibility.
+    koalas = CachedAccessor("koalas", PandasOnSparkSeriesMethods)
+
     # Comparison Operators
     def eq(self, other) -> bool:
         """

@@ -884,6 +884,9 @@ class DataFrame(Frame, Generic[T]):
     # create accessor for pandas-on-Spark specific methods.
     pandas_on_spark = CachedAccessor("pandas_on_spark", PandasOnSparkFrameMethods)
 
+    # keep the name "koalas" for backward compatibility.
+    koalas = CachedAccessor("koalas", PandasOnSparkFrameMethods)
+
     def hist(self, bins=10, **kwds):
         return self.plot.hist(bins, **kwds)
 
