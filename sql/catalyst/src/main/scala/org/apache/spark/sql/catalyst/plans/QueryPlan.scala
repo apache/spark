@@ -219,10 +219,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
   /**
    * Returns the result of running [[transformExpressions]] on this node
    * and all its children. Note that this method skips expressions inside subqueries.
-   *
-   * This function has been deprecated, call transformAllExpressionsWithPruning instead.
    */
-  @deprecated("This method is deprecated and will be removed in future versions.", "3.2.0")
   def transformAllExpressions(rule: PartialFunction[Expression, Expression]): this.type = {
     transformAllExpressionsWithPruning(AlwaysProcess.fn, UnknownRuleId)(rule)
   }
