@@ -268,9 +268,9 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
    *                     as only unresolved logical plan can't get output.
    */
   def transformUpWithNewOutput(
-    rule: PartialFunction[PlanType, (PlanType, Seq[(Attribute, Attribute)])],
-    skipCond: PlanType => Boolean = _ => false,
-    canGetOutput: PlanType => Boolean = _ => true): PlanType = {
+      rule: PartialFunction[PlanType, (PlanType, Seq[(Attribute, Attribute)])],
+      skipCond: PlanType => Boolean = _ => false,
+      canGetOutput: PlanType => Boolean = _ => true): PlanType = {
     def rewrite(plan: PlanType): (PlanType, Seq[(Attribute, Attribute)]) = {
       if (skipCond(plan)) {
         plan -> Nil
@@ -356,8 +356,8 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
    * outer references to refer to the new attributes.
    */
   protected def updateOuterReferencesInSubquery(
-    plan: PlanType,
-    attrMap: AttributeMap[Attribute]): PlanType = {
+      plan: PlanType,
+      attrMap: AttributeMap[Attribute]): PlanType = {
     plan.transformDown { case currentFragment =>
       currentFragment.transformExpressions {
         case OuterReference(a: AttributeReference) =>
@@ -571,12 +571,12 @@ object QueryPlan extends PredicateHelper {
    * Converts the query plan to string and appends it via provided function.
    */
   def append[T <: QueryPlan[T]](
-    plan: => QueryPlan[T],
-    append: String => Unit,
-    verbose: Boolean,
-    addSuffix: Boolean,
-    maxFields: Int = SQLConf.get.maxToStringFields,
-    printOperatorId: Boolean = false): Unit = {
+      plan: => QueryPlan[T],
+      append: String => Unit,
+      verbose: Boolean,
+      addSuffix: Boolean,
+      maxFields: Int = SQLConf.get.maxToStringFields,
+      printOperatorId: Boolean = false): Unit = {
     try {
       plan.treeString(append, verbose, addSuffix, maxFields, printOperatorId)
     } catch {
