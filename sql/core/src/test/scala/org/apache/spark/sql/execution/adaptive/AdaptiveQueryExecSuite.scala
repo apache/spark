@@ -237,6 +237,7 @@ class AdaptiveQueryExecSuite
     withSQLConf(
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
       SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "true",
+      SQLConf.ADAPTIVE_MAX_SHUFFLE_HASH_JOIN_LOCAL_MAP_THRESHOLD.key -> "0",
       SQLConf.ADAPTIVE_OPTIMIZER_EXCLUDED_RULES.key -> AQEPropagateEmptyRelation.ruleName) {
       val df1 = spark.range(10).withColumn("a", 'id)
       val df2 = spark.range(10).withColumn("b", 'id)
@@ -581,6 +582,7 @@ class AdaptiveQueryExecSuite
     withSQLConf(
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80",
+      SQLConf.ADAPTIVE_MAX_SHUFFLE_HASH_JOIN_LOCAL_MAP_THRESHOLD.key -> "0",
       SQLConf.BROADCAST_HASH_JOIN_OUTPUT_PARTITIONING_EXPAND_LIMIT.key -> "0") {
       val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(
         "SELECT * FROM testData " +
@@ -617,6 +619,7 @@ class AdaptiveQueryExecSuite
   test("Avoid changing merge join to broadcast join if too many empty partitions on build plan") {
     withSQLConf(
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.ADAPTIVE_MAX_SHUFFLE_HASH_JOIN_LOCAL_MAP_THRESHOLD.key -> "0",
       SQLConf.NON_EMPTY_PARTITION_RATIO_FOR_BROADCAST_JOIN.key -> "0.5") {
       // `testData` is small enough to be broadcast but has empty partition ratio over the config.
       withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80") {
@@ -664,6 +667,7 @@ class AdaptiveQueryExecSuite
     withSQLConf(
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+      SQLConf.ADAPTIVE_MAX_SHUFFLE_HASH_JOIN_LOCAL_MAP_THRESHOLD.key -> "0",
       SQLConf.SKEW_JOIN_SKEWED_PARTITION_THRESHOLD.key -> "100",
       SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "100") {
       withTempView("skewData1", "skewData2") {
@@ -1472,6 +1476,7 @@ class AdaptiveQueryExecSuite
     }
 
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.ADAPTIVE_MAX_SHUFFLE_HASH_JOIN_LOCAL_MAP_THRESHOLD.key -> "0",
       SQLConf.SHUFFLE_PARTITIONS.key -> "5") {
       val df = sql(
         """
@@ -1676,7 +1681,8 @@ class AdaptiveQueryExecSuite
   test("SPARK-35264: Support AQE side broadcastJoin threshold") {
     withTempView("t1", "t2") {
       def checkJoinStrategy(shouldBroadcast: Boolean): Unit = {
-        withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+        withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+          SQLConf.ADAPTIVE_MAX_SHUFFLE_HASH_JOIN_LOCAL_MAP_THRESHOLD.key -> "0") {
           val (origin, adaptive) = runAdaptiveAndVerifyResult(
             "SELECT t1.c1, t2.c1 FROM t1 JOIN t2 ON t1.c1 = t2.c1")
           assert(findTopLevelSortMergeJoin(origin).size == 1)
@@ -1744,8 +1750,6 @@ class AdaptiveQueryExecSuite
       withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "3",
         SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
         SQLConf.PREFER_SORTMERGEJOIN.key -> "true") {
-        // check default value
-        checkJoinStrategy(false)
         withSQLConf(SQLConf.ADAPTIVE_MAX_SHUFFLE_HASH_JOIN_LOCAL_MAP_THRESHOLD.key -> "400") {
           checkJoinStrategy(true)
         }
