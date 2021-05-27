@@ -70,7 +70,6 @@ case class ScalarSubquery(
   override def nullable: Boolean = true
   override def toString: String = plan.simpleString(SQLConf.get.maxToStringFields)
   override def withNewPlan(query: BaseSubqueryExec): ScalarSubquery = copy(plan = query)
-  final override def nodePatternsInternal: Seq[TreePattern] = Seq(SCALAR_SUBQUERY_EXEC)
 
   override def semanticEquals(other: Expression): Boolean = other match {
     case s: ScalarSubquery => plan.sameResult(s.plan)

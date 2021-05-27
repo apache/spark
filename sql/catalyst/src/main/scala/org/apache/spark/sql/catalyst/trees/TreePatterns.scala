@@ -91,7 +91,6 @@ object TreePattern extends Enumeration  {
 
   // Execution expression patterns (alphabetically ordered)
   val IN_SUBQUERY_EXEC: Value = Value
-  val SCALAR_SUBQUERY_EXEC: Value = Value
 
   // Execution Plan patterns (alphabetically ordered)
   val EXCHANGE: Value = Value
