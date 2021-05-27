@@ -203,15 +203,19 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
       df.selectExpr("""conv("9223372036854775807", 36, -16)"""), Row("-1")) // for overflow
   }
 
-  test("SPARK-33428 conv function has different behavior with mySQL's conv function") {
-    val df = Seq(("abc"), ("  abc"), ("abc  "), ("  abc  "),
-      ("aaaaaaa0aaaaaaa0aaaaaaa0aaaaaaa0aaaaaaa0aaaaaaa0aaaaaaa0aaaaaaa0aaaaaaa0")).toDF("num")
+  test("SPARK-33428 conv function should trim input string") {
+    val df = Seq(("abc"), ("  abc"), ("abc  "), ("  abc  ")).toDF("num")
     checkAnswer(df.select(conv('num, 16, 10)),
-      Seq(Row("2748"), Row("2748"), Row("2748"), Row("2748"), Row("18446744073709551615")))
-
+      Seq(Row("2748"), Row("2748"), Row("2748"), Row("2748")))
     checkAnswer(df.select(conv('num, 16, -10)),
-      Seq(Row("2748"), Row("2748"), Row("2748"), Row("2748"), Row("-1")))
+      Seq(Row("2748"), Row("2748"), Row("2748"), Row("2748")))
+  }
 
+  test("SPARK-33428 conv function shouldn't raise error  input string is too big") {
+    val df = Seq((
+      "aaaaaaa0aaaaaaa0aaaaaaa0aaaaaaa0aaaaaaa0aaaaaaa0aaaaaaa0aaaaaaa0aaaaaaa0")).toDF("num")
+    checkAnswer(df.select(conv('num, 16, 10)), Row("18446744073709551615"))
+    checkAnswer(df.select(conv('num, 16, -10)), Row("-1"))
   }
 
   test("floor") {
