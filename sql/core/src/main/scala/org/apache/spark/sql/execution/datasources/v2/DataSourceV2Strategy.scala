@@ -108,7 +108,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     case PhysicalOperation(project, filters,
         DataSourceV2ScanRelation(_, scan: LocalScan, output)) =>
       val localScanExec = LocalTableScanExec(output, scan.rows().toSeq)
-      withProjectAndFilter(project, filters, localScanExec, needsUnsafeConversion = true) :: Nil
+      withProjectAndFilter(project, filters, localScanExec, needsUnsafeConversion = false) :: Nil
 
     case PhysicalOperation(project, filters, relation: DataSourceV2ScanRelation) =>
       // projection and filters were already pushed down in the optimizer.
