@@ -2148,4 +2148,11 @@ package object config {
       // batch of block will be loaded in memory with memory mapping, which has higher overhead
       // with small MB sized chunk of data.
       .createWithDefaultString("3m")
+
+  private[spark] val SHOW_SPARK_ERROR_FIELDS =
+    ConfigBuilder("spark.showSparkErrorFields")
+      .doc("When true, it adds Spark error fields to their error messages.")
+      .version("3.2.0")
+      .booleanConf
+      .createWithDefault(false)
 }

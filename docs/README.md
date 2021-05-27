@@ -109,6 +109,8 @@ $ bundle exec jekyll serve --watch
 $ PRODUCTION=1 bundle exec jekyll build
 ```
 
+NOTE: To skip generating the error class table, set `SKIP_ERROR_CLASS=1`.
+
 ## API Docs (Scaladoc, Javadoc, Sphinx, roxygen2, MkDocs)
 
 You can build just the Spark scaladoc and javadoc by running `./build/sbt unidoc` from the `$SPARK_HOME` directory.

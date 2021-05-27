@@ -28,7 +28,7 @@ import com.fasterxml.jackson.core.JsonToken
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.codehaus.commons.compiler.{CompileException, InternalCompilerException}
 
-import org.apache.spark.{Partition, SparkException, SparkUpgradeException}
+import org.apache.spark.{Partition, SparkArithmeticException, SparkException, SparkUpgradeException}
 import org.apache.spark.executor.CommitDeniedException
 import org.apache.spark.memory.SparkOutOfMemoryError
 import org.apache.spark.sql.catalyst.ScalaReflection.Schema
@@ -128,7 +128,7 @@ object QueryExecutionErrors {
   }
 
   def divideByZeroError(): ArithmeticException = {
-    new ArithmeticException("divide by zero")
+    new SparkArithmeticException("DIVIDE_BY_ZERO_ERROR", Seq.empty)
   }
 
   def invalidArrayIndexError(index: Int, numElements: Int): ArrayIndexOutOfBoundsException = {
@@ -598,7 +598,10 @@ object QueryExecutionErrors {
   }
 
   def writingJobAbortedError(e: Throwable): Throwable = {
-    new SparkException("Writing job aborted.", e)
+    new SparkException(
+      errorClass = "WRITING_JOB_ABORTED_ERROR",
+      messageParameters = Seq.empty,
+      cause = e)
   }
 
   def commitDeniedError(
