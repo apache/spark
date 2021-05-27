@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, UnaryNode}
+import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
@@ -529,6 +530,7 @@ case class UnresolvedAlias(
   override def dataType: DataType = throw new UnresolvedException("dataType")
   override def name: String = throw new UnresolvedException("name")
   override def newInstance(): NamedExpression = throw new UnresolvedException("newInstance")
+  final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_ALIAS)
 
   override lazy val resolved = false
 

@@ -29,7 +29,6 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions.{CurrentDate, CurrentTimestamp}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.streaming.{StreamingRelationV2, WriteToStream}
-import org.apache.spark.sql.catalyst.trees.TreePattern.CURRENT_LIKE
 import org.apache.spark.sql.connector.catalog.{SupportsRead, SupportsWrite, TableCapability}
 import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, Offset => OffsetV2, PartitionOffset, ReadLimit}
 import org.apache.spark.sql.execution.SQLExecution
@@ -39,11 +38,11 @@ import org.apache.spark.sql.streaming.Trigger
 import org.apache.spark.util.Clock
 
 class ContinuousExecution(
-    sparkSession: SparkSession,
-    trigger: Trigger,
-    triggerClock: Clock,
-    extraOptions: Map[String, String],
-    plan: WriteToStream)
+  sparkSession: SparkSession,
+  trigger: Trigger,
+  triggerClock: Clock,
+  extraOptions: Map[String, String],
+  plan: WriteToStream)
   extends StreamExecution(
     sparkSession, plan.name, plan.resolvedCheckpointLocation, plan.inputQuery, plan.sink,
     trigger, triggerClock, plan.outputMode, plan.deleteCheckpointOnStop) {
@@ -171,7 +170,7 @@ class ContinuousExecution(
         relation.copy(startOffset = Some(startOffset))
     }
 
-    withNewSources.transformAllExpressionsWithPruning(_.containsPattern(CURRENT_LIKE)) {
+    withNewSources.transformAllExpressions {
       case (_: CurrentTimestamp | _: CurrentDate) =>
         throw new IllegalStateException(
           "CurrentTimestamp and CurrentDate not yet supported for continuous processing")
@@ -259,9 +258,9 @@ class ContinuousExecution(
       }
     } catch {
       case t: Throwable if StreamExecution.isInterruptionException(t, sparkSession.sparkContext) &&
-          state.get() == RECONFIGURING =>
+        state.get() == RECONFIGURING =>
         logInfo(s"Query $id ignoring exception from reconfiguring: $t")
-        // interrupted by reconfiguration - swallow exception so we can restart the query
+      // interrupted by reconfiguration - swallow exception so we can restart the query
     } finally {
       // The above execution may finish before getting interrupted, for example, a Spark job having
       // 0 partitions will complete immediately. Then the interrupted status will sneak here.
@@ -293,9 +292,9 @@ class ContinuousExecution(
    * Report ending partition offsets for the given reader at the given epoch.
    */
   def addOffset(
-      epoch: Long,
-      stream: ContinuousStream,
-      partitionOffsets: Seq[PartitionOffset]): Unit = {
+    epoch: Long,
+    stream: ContinuousStream,
+    partitionOffsets: Seq[PartitionOffset]): Unit = {
     assert(sources.length == 1, "only one continuous source supported currently")
 
     val globalOffset = stream.mergeOffsets(partitionOffsets.toArray)

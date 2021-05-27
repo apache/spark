@@ -94,9 +94,6 @@ object TreePattern extends Enumeration  {
   val WINDOW: Value = Value
   val WITH_WINDOW_DEFINITION: Value = Value
 
-  // Execution expression patterns (alphabetically ordered)
-  val IN_SUBQUERY_EXEC: Value = Value
-
-  // Execution Plan patterns (alphabetically ordered)
-  val EXCHANGE: Value = Value
+  // Unresolved expression patterns (Alphabetically ordered)
+  val UNRESOLVED_ALIAS: Value = Value
 }

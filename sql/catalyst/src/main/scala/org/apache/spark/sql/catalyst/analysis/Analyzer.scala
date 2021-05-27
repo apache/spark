@@ -424,7 +424,9 @@ class Analyzer(override val catalogManager: CatalogManager)
    */
   object ResolveAliases extends Rule[LogicalPlan] {
     private def assignAliases(exprs: Seq[NamedExpression]) = {
-      exprs.map(_.transformUp { case u @ UnresolvedAlias(child, optGenAliasFunc) =>
+      exprs.map(_.transformUpWithPruning(_.containsPattern(UNRESOLVED_ALIAS))
+        {
+          case u @ UnresolvedAlias(child, optGenAliasFunc) =>
           child match {
             case ne: NamedExpression => ne
             case go @ GeneratorOuter(g: Generator) if g.resolved => MultiAlias(go, Nil)
@@ -444,7 +446,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       exprs.exists(_.find(_.isInstanceOf[UnresolvedAlias]).isDefined)
 
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
-      AlwaysProcess.fn, ruleId) {
+      _.containsPattern(UNRESOLVED_ALIAS), ruleId) {
       case Aggregate(groups, aggs, child) if child.resolved && hasUnresolvedAlias(aggs) =>
         Aggregate(groups, assignAliases(aggs), child)
 

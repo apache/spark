@@ -26,7 +26,6 @@ import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.expressions.{CurrentBatchTimestamp, ExpressionWithRandomSeed}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.execution.{LocalLimitExec, QueryExecution, SparkPlan, SparkPlanner, UnaryExecNode}
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeLike
 import org.apache.spark.sql.internal.SQLConf
@@ -38,31 +37,31 @@ import org.apache.spark.util.Utils
  * plan incrementally. Possibly preserving state in between each execution.
  */
 class IncrementalExecution(
-    sparkSession: SparkSession,
-    logicalPlan: LogicalPlan,
-    val outputMode: OutputMode,
-    val checkpointLocation: String,
-    val queryId: UUID,
-    val runId: UUID,
-    val currentBatchId: Long,
-    val offsetSeqMetadata: OffsetSeqMetadata)
+  sparkSession: SparkSession,
+  logicalPlan: LogicalPlan,
+  val outputMode: OutputMode,
+  val checkpointLocation: String,
+  val queryId: UUID,
+  val runId: UUID,
+  val currentBatchId: Long,
+  val offsetSeqMetadata: OffsetSeqMetadata)
   extends QueryExecution(sparkSession, logicalPlan) with Logging {
 
   // Modified planner with stateful operations.
   override val planner: SparkPlanner = new SparkPlanner(
-      sparkSession,
-      sparkSession.sessionState.experimentalMethods) {
+    sparkSession,
+    sparkSession.sessionState.experimentalMethods) {
     override def strategies: Seq[Strategy] =
       extraPlanningStrategies ++
-      sparkSession.sessionState.planner.strategies
+        sparkSession.sessionState.planner.strategies
 
     override def extraPlanningStrategies: Seq[Strategy] =
       StreamingJoinStrategy ::
-      StatefulAggregationStrategy ::
-      FlatMapGroupsWithStateStrategy ::
-      StreamingRelationStrategy ::
-      StreamingDeduplicationStrategy ::
-      StreamingGlobalLimitStrategy(outputMode) :: Nil
+        StatefulAggregationStrategy ::
+        FlatMapGroupsWithStateStrategy ::
+        StreamingRelationStrategy ::
+        StreamingDeduplicationStrategy ::
+        StreamingGlobalLimitStrategy(outputMode) :: Nil
   }
 
   private[sql] val numStateStores = offsetSeqMetadata.conf.get(SQLConf.SHUFFLE_PARTITIONS.key)
@@ -77,8 +76,7 @@ class IncrementalExecution(
   override
   lazy val optimizedPlan: LogicalPlan = executePhase(QueryPlanningTracker.OPTIMIZATION) {
     sparkSession.sessionState.optimizer.executeAndTrack(withCachedData,
-      tracker).transformAllExpressionsWithPruning(
-      _.containsAnyPattern(CURRENT_LIKE, EXPRESSION_WITH_RANDOM_SEED)) {
+      tracker) transformAllExpressions {
       case ts @ CurrentBatchTimestamp(timestamp, _, _) =>
         logInfo(s"Current batch timestamp = $timestamp")
         ts.toLiteral
@@ -119,8 +117,8 @@ class IncrementalExecution(
             statefulOpFound = true
 
           case e: ShuffleExchangeLike =>
-            // Don't search recursively any further as any child stateful operator as we
-            // are only looking for stateful subplans that this plan has narrow dependencies on.
+          // Don't search recursively any further as any child stateful operator as we
+          // are only looking for stateful subplans that this plan has narrow dependencies on.
 
           case p: SparkPlan =>
             p.children.foreach(findStatefulOp)
@@ -133,8 +131,8 @@ class IncrementalExecution(
 
     override def apply(plan: SparkPlan): SparkPlan = plan transform {
       case StateStoreSaveExec(keys, None, None, None, stateFormatVersion,
-             UnaryExecNode(agg,
-               StateStoreRestoreExec(_, None, _, child))) =>
+      UnaryExecNode(agg,
+      StateStoreRestoreExec(_, None, _, child))) =>
         val aggStateInfo = nextStatefulOperationStateInfo
         StateStoreSaveExec(
           keys,

@@ -267,7 +267,7 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
         }.getOrElse(currentFragment)
     }
 
-    newPlan.transformAllExpressionsWithPruning(_.containsPattern(PLAN_EXPRESSION)) {
+    newPlan transformAllExpressions {
       case s: SubqueryExpression => s.withNewPlan(useCachedData(s.plan))
     }
   }

@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution.adaptive
 import org.apache.spark.sql.catalyst.expressions.{BindReferences, DynamicPruningExpression, Literal}
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.exchange.BroadcastExchangeExec
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, HashedRelationBroadcastMode, HashJoin}
@@ -29,16 +28,16 @@ import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, HashedRelati
  * A rule to insert dynamic pruning predicates in order to reuse the results of broadcast.
  */
 case class PlanAdaptiveDynamicPruningFilters(
-    rootPlan: AdaptiveSparkPlanExec) extends Rule[SparkPlan] with AdaptiveSparkPlanHelper {
+  rootPlan: AdaptiveSparkPlanExec) extends Rule[SparkPlan] with AdaptiveSparkPlanHelper {
   def apply(plan: SparkPlan): SparkPlan = {
     if (!conf.dynamicPartitionPruningEnabled) {
       return plan
     }
 
-    plan.transformAllExpressionsWithPruning(_.containsPattern(DYNAMIC_PRUNING_SUBQUERY)) {
+    plan transformAllExpressions {
       case DynamicPruningExpression(InSubqueryExec(
-          value, SubqueryAdaptiveBroadcastExec(name, index, buildKeys,
-          adaptivePlan: AdaptiveSparkPlanExec), exprId, _)) =>
+      value, SubqueryAdaptiveBroadcastExec(name, index, buildKeys,
+      adaptivePlan: AdaptiveSparkPlanExec), exprId, _)) =>
         val packedKeys = BindReferences.bindReferences(
           HashJoin.rewriteKeyExpr(buildKeys), adaptivePlan.executedPlan.output)
         val mode = HashedRelationBroadcastMode(packedKeys)
