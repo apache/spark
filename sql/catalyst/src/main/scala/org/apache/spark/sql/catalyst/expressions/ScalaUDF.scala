@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.trees.TreePattern.{SCALA_UDF, TreePattern}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types.{AbstractDataType, AnyDataType, DataType}
 import org.apache.spark.util.Utils
@@ -56,6 +57,8 @@ case class ScalaUDF(
   extends Expression with NonSQLExpression with UserDefinedExpression {
 
   override lazy val deterministic: Boolean = udfDeterministic && children.forall(_.deterministic)
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(SCALA_UDF)
 
   override def toString: String = s"$name(${children.mkString(", ")})"
 

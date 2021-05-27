@@ -1869,7 +1869,7 @@ class Analyzer(override val catalogManager: CatalogManager)
 
     private def mayResolveAttrByAggregateExprs(
         exprs: Seq[Expression], aggs: Seq[NamedExpression], child: LogicalPlan): Seq[Expression] = {
-      exprs.map { _.transform {
+      exprs.map { _.transformWithPruning(_.containsPattern(UNRESOLVED_ATTRIBUTE)) {
         case u: UnresolvedAttribute if notResolvableByChild(u.name, child) =>
           aggs.find(ne => resolver(ne.name, u.name)).getOrElse(u)
       }}
@@ -1879,7 +1879,7 @@ class Analyzer(override val catalogManager: CatalogManager)
     private def allowGroupByAlias: Boolean = conf.groupByAliases && !conf.ansiEnabled
 
     override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
-      _.containsPattern(AGGREGATE), ruleId) {
+      _.containsAllPatterns(AGGREGATE, UNRESOLVED_ATTRIBUTE), ruleId) {
       case agg @ Aggregate(groups, aggs, child)
           if allowGroupByAlias && child.resolved && aggs.forall(_.resolved) &&
             groups.exists(!_.resolved) =>
@@ -1897,7 +1897,7 @@ class Analyzer(override val catalogManager: CatalogManager)
    */
   object ResolveMissingReferences extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
-      AlwaysProcess.fn, ruleId) {
+      _.containsAnyPattern(SORT, FILTER, REPARTITION_OPERATION), ruleId) {
       // Skip sort with aggregate. This will be handled in ResolveAggregateFunctions
       case sa @ Sort(_, _, child: Aggregate) => sa
 
@@ -2003,7 +2003,7 @@ class Analyzer(override val catalogManager: CatalogManager)
   object LookupFunctions extends Rule[LogicalPlan] {
     override def apply(plan: LogicalPlan): LogicalPlan = {
       val externalFunctionNameSet = new mutable.HashSet[FunctionIdentifier]()
-      plan.resolveExpressions {
+      plan.resolveExpressionsWithPruning(_.containsAnyPattern(UNRESOLVED_FUNCTION)) {
         case f @ UnresolvedFunction(AsFunctionIdentifier(ident), _, _, _, _) =>
           if (externalFunctionNameSet.contains(normalizeFuncName(ident)) ||
             v1SessionCatalog.isRegisteredFunction(ident)) {
@@ -2048,14 +2048,15 @@ class Analyzer(override val catalogManager: CatalogManager)
   object ResolveFunctions extends Rule[LogicalPlan] {
     val trimWarningEnabled = new AtomicBoolean(true)
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
-      AlwaysProcess.fn, ruleId) {
+      _.containsAnyPattern(UNRESOLVED_FUNC, UNRESOLVED_FUNCTION, GENERATOR), ruleId) {
       // Resolve functions with concrete relations from v2 catalog.
       case UnresolvedFunc(multipartIdent) =>
         val funcIdent = parseSessionCatalogFunctionIdentifier(multipartIdent)
         ResolvedFunc(Identifier.of(funcIdent.database.toArray, funcIdent.funcName))
 
       case q: LogicalPlan =>
-        q.transformExpressionsWithPruning(AlwaysProcess.fn, ruleId) {
+        q.transformExpressionsWithPruning(
+          _.containsAnyPattern(UNRESOLVED_FUNCTION, GENERATOR), ruleId) {
           case u if !u.childrenResolved => u // Skip until children are resolved.
           case u @ UnresolvedGenerator(name, children) =>
             withPosition(u) {
@@ -2278,9 +2279,9 @@ class Analyzer(override val catalogManager: CatalogManager)
      * resolved outer references are wrapped in an [[OuterReference]]
      */
     private def resolveOuterReferences(plan: LogicalPlan, outer: LogicalPlan): LogicalPlan = {
-      plan resolveOperatorsDown {
+      plan.resolveOperatorsDownWithPruning(_.containsPattern(UNRESOLVED_ATTRIBUTE)) {
         case q: LogicalPlan if q.childrenResolved && !q.resolved =>
-          q transformExpressions {
+          q.transformExpressionsWithPruning(_.containsPattern(UNRESOLVED_ATTRIBUTE)) {
             case u @ UnresolvedAttribute(nameParts) =>
               withPosition(u) {
                 try {
@@ -2384,7 +2385,7 @@ class Analyzer(override val catalogManager: CatalogManager)
   object ResolveSubqueryColumnAliases extends Rule[LogicalPlan] {
 
      def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
-       AlwaysProcess.fn, ruleId) {
+       _.containsPattern(UNRESOLVED_SUBQUERY_COLUMN_ALIAS), ruleId) {
       case u @ UnresolvedSubqueryColumnAliases(columnNames, child) if child.resolved =>
         // Resolves output attributes if a query has alias names in its subquery:
         // e.g., SELECT * FROM (SELECT 1 AS a, 1 AS b) t(col1, col2)
@@ -2437,7 +2438,7 @@ class Analyzer(override val catalogManager: CatalogManager)
    */
   object ResolveAggregateFunctions extends Rule[LogicalPlan] with AliasHelper {
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
-      AlwaysProcess.fn, ruleId) {
+      _.containsPattern(AGGREGATE), ruleId) {
       // Resolve aggregate with having clause to Filter(..., Aggregate()). Note, to avoid wrongly
       // resolve the having condition expression, here we skip resolving it in ResolveReferences
       // and transform it to Filter after aggregate is resolved. See more details in SPARK-31519.
@@ -2670,7 +2671,7 @@ class Analyzer(override val catalogManager: CatalogManager)
     }
 
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
-      AlwaysProcess.fn, ruleId) {
+      _.containsPattern(GENERATOR), ruleId) {
       case Project(projectList, _) if projectList.exists(hasNestedGenerator) =>
         val nestedGenerator = projectList.find(hasNestedGenerator).get
         throw QueryCompilationErrors.nestedGeneratorError(trimAlias(nestedGenerator))
@@ -3022,7 +3023,7 @@ class Analyzer(override val catalogManager: CatalogManager)
     // We have to use transformDown at here to make sure the rule of
     // "Aggregate with Having clause" will be triggered.
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsDownWithPruning(
-      AlwaysProcess.fn, ruleId) {
+      _.containsPattern(WINDOW_EXPRESSION), ruleId) {
 
       case Filter(condition, _) if hasWindowFunction(condition) =>
         throw QueryCompilationErrors.windowFunctionNotAllowedError("WHERE")
@@ -3104,10 +3105,11 @@ class Analyzer(override val catalogManager: CatalogManager)
    * and we should return null if the input is null.
    */
   object HandleNullInputsForUDF extends Rule[LogicalPlan] {
-    override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
+    override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
+      _.containsPattern(SCALA_UDF)) {
       case p if !p.resolved => p // Skip unresolved nodes.
 
-      case p => p transformExpressionsUp {
+      case p => p.transformExpressionsUpWithPruning(_.containsPattern(SCALA_UDF)) {
 
         case udf: ScalaUDF if udf.inputPrimitives.contains(true) =>
           // Otherwise, add special handling of null for fields that can't accept null.
@@ -3153,10 +3155,10 @@ class Analyzer(override val catalogManager: CatalogManager)
    */
   object ResolveEncodersInUDF extends Rule[LogicalPlan] {
     override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
-      AlwaysProcess.fn, ruleId) {
+      _.containsPattern(SCALA_UDF), ruleId) {
       case p if !p.resolved => p // Skip unresolved nodes.
 
-      case p => p.transformExpressionsUpWithPruning(AlwaysProcess.fn, ruleId) {
+      case p => p.transformExpressionsUpWithPruning(_.containsPattern(SCALA_UDF), ruleId) {
 
         case udf: ScalaUDF if udf.inputEncoders.nonEmpty =>
           val boundEncoders = udf.inputEncoders.zipWithIndex.map { case (encOpt, i) =>
@@ -3245,7 +3247,7 @@ class Analyzer(override val catalogManager: CatalogManager)
    */
   object ResolveOutputRelation extends Rule[LogicalPlan] {
     override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
-      AlwaysProcess.fn, ruleId) {
+      _.containsPattern(COMMAND), ruleId) {
       case v2Write: V2WriteCommand
           if v2Write.table.resolved && v2Write.query.resolved && !v2Write.outputResolved =>
         validateStoreAssignmentPolicy()
@@ -3375,11 +3377,12 @@ class Analyzer(override val catalogManager: CatalogManager)
    */
   object ResolveDeserializer extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
-      AlwaysProcess.fn, ruleId) {
+      _.containsPattern(UNRESOLVED_DESERIALIZER), ruleId) {
       case p if !p.childrenResolved => p
       case p if p.resolved => p
 
-      case p => p.transformExpressionsWithPruning(AlwaysProcess.fn, ruleId) {
+      case p => p.transformExpressionsWithPruning(
+        _.containsPattern(UNRESOLVED_DESERIALIZER), ruleId) {
         case UnresolvedDeserializer(deserializer, inputAttributes) =>
           val inputs = if (inputAttributes.isEmpty) {
             p.children.flatMap(_.output)
@@ -3471,11 +3474,11 @@ class Analyzer(override val catalogManager: CatalogManager)
    */
   object ResolveNewInstance extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
-      AlwaysProcess.fn, ruleId) {
+      _.containsPattern(NEW_INSTANCE), ruleId) {
       case p if !p.childrenResolved => p
       case p if p.resolved => p
 
-      case p => p.transformExpressionsUpWithPruning(AlwaysProcess.fn, ruleId) {
+      case p => p.transformExpressionsUpWithPruning(_.containsPattern(NEW_INSTANCE), ruleId) {
         case n: NewInstance if n.childrenResolved && !n.resolved =>
           val outer = OuterScopes.getOuterScope(n.cls)
           if (outer == null) {
@@ -3499,11 +3502,11 @@ class Analyzer(override val catalogManager: CatalogManager)
     }
 
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
-      AlwaysProcess.fn, ruleId) {
+      _.containsPattern(UP_CAST), ruleId) {
       case p if !p.childrenResolved => p
       case p if p.resolved => p
 
-      case p => p.transformExpressionsWithPruning(AlwaysProcess.fn, ruleId) {
+      case p => p.transformExpressionsWithPruning(_.containsPattern(UP_CAST), ruleId) {
         case u @ UpCast(child, _, _) if !child.resolved => u
 
         case UpCast(_, target, _) if target != DecimalType && !target.isInstanceOf[DataType] =>
