@@ -208,6 +208,10 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
       ("aaaaaaa0aaaaaaa0aaaaaaa0aaaaaaa0aaaaaaa0aaaaaaa0aaaaaaa0aaaaaaa0aaaaaaa0")).toDF("num")
     checkAnswer(df.select(conv('num, 16, 10)),
       Seq(Row("2748"), Row("2748"), Row("2748"), Row("2748"), Row("18446744073709551615")))
+
+    checkAnswer(df.select(conv('num, 16, -10)),
+      Seq(Row("2748"), Row("2748"), Row("2748"), Row("2748"), Row("-1")))
+
   }
 
   test("floor") {

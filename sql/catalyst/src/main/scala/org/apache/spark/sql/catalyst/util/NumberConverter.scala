@@ -113,6 +113,7 @@ object NumberConverter {
 
     // Copy the digits in the right side of the array
     val temp = new Array[Byte](64)
+    var v: Long = -1
     if ((n.length == 65 && negative) || n.length <= 64) {
       var i = 1
       while (i <= n.length - first) {
@@ -122,22 +123,21 @@ object NumberConverter {
       char2byte(fromBase, temp.length - n.length + first, temp)
 
       // Do the conversion by going through a 64 bit integer
-      var v = encode(fromBase, temp.length - n.length + first, temp)
-      if (negative && toBase > 0) {
-        if (v < 0) {
-          v = -1
-        } else {
-          v = -v
-        }
-      }
-      if (toBase < 0 && v < 0) {
-        v = -v
-        negative = true
-      }
-      decode(v, Math.abs(toBase), temp)
-    } else {
-      decode(-1, Math.abs(toBase), temp)
+      v = encode(fromBase, temp.length - n.length + first, temp)
     }
+    if (negative && toBase > 0) {
+      if (v < 0) {
+        v = -1
+      } else {
+        v = -v
+      }
+    }
+    if (toBase < 0 && v < 0) {
+      v = -v
+      negative = true
+    }
+    decode(v, Math.abs(toBase), temp)
+
 
     // Find the first non-zero digit or the last digits if all are zero.
     val firstNonZeroPos = {
