@@ -313,8 +313,7 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
     }
   }
 
-  test(
-    "SPARK-18004: Make sure date or timestamp related predicate is pushed down correctly") {
+  test("SPARK-18004: Make sure date or timestamp related predicate is pushed down correctly") {
     val props = new Properties()
     props.put("oracle.jdbc.mapDateToTimestamp", "false")
 
