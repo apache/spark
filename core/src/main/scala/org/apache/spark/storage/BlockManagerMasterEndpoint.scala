@@ -345,9 +345,10 @@ class BlockManagerMasterEndpoint(
   private def removeBlockManager(blockManagerId: BlockManagerId): Unit = {
     val info = blockManagerInfo(blockManagerId)
 
-    // Not removing info from the blockManagerInfo map, but only setting the removal timestamp of
-    // the executor in BlockManagerInfo. This info will be removed from blockManagerInfo map by the
-    // blockManagerInfoCleaner once now() - info.executorRemovalTs > executorTimeoutMs.
+    // SPARK-35011: Not removing info from the blockManagerInfo map, but only setting the removal
+    // timestamp of the executor in BlockManagerInfo. This info will be removed from
+    // blockManagerInfo map by the blockManagerInfoCleaner once
+    // now() - info.executorRemovalTs > executorTimeoutMs.
     //
     // We are delaying the removal of BlockManagerInfo to avoid a BlockManager reregistration
     // while a executor is shutting. This unwanted reregistration causes inconsistent bookkeeping
