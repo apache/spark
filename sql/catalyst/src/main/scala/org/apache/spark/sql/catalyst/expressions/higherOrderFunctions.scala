@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion, UnresolvedException}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, QuaternaryLike, TernaryLike}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{LAMBDA_FUNCTION, TreePattern}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -109,6 +110,7 @@ case class LambdaFunction(
   override def children: Seq[Expression] = function +: arguments
   override def dataType: DataType = function.dataType
   override def nullable: Boolean = function.nullable
+  final override val nodePatterns: Seq[TreePattern] = Seq(LAMBDA_FUNCTION)
 
   lazy val bound: Boolean = arguments.forall(_.resolved)
 

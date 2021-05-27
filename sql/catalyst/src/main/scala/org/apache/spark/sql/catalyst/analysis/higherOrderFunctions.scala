@@ -34,7 +34,8 @@ import org.apache.spark.sql.types.DataType
 case class ResolveHigherOrderFunctions(catalogManager: CatalogManager)
   extends Rule[LogicalPlan] with LookupCatalog {
 
-  override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveExpressions {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveExpressionsWithPruning(
+    _.containsPattern(LAMBDA_FUNCTION), ruleId) {
     case u @ UnresolvedFunction(AsFunctionIdentifier(ident), children, false, filter, ignoreNulls)
         if hasLambdaAndResolvedArguments(children) =>
       withPosition(u) {

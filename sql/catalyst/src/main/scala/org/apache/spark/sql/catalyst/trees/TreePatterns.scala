@@ -50,6 +50,7 @@ object TreePattern extends Enumeration  {
   val INSET: Value = Value
   val INTERSECT: Value = Value
   val JSON_TO_STRUCT: Value = Value
+  val LAMBDA_FUNCTION: Value = Value
   val LAMBDA_VARIABLE: Value = Value
   val LIKE_FAMLIY: Value = Value
   val LIST_SUBQUERY: Value = Value
@@ -73,6 +74,7 @@ object TreePattern extends Enumeration  {
 
   // Logical plan patterns (alphabetically ordered)
   val AGGREGATE: Value = Value
+  val DATA_SOURCE_V2_RELATION: Value = Value
   val DISTINCT_LIKE: Value = Value
   val EXCEPT: Value = Value
   val FILTER: Value = Value
