@@ -830,7 +830,7 @@ case class ShowTablesCommand(
     isExtended: Boolean = false,
     partitionSpec: Option[TablePartitionSpec] = None) extends LeafRunnableCommand {
 
-  private val keepLegacySchema = conf.getConf(SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA)
+  private val keepLegacySchema = output(3).dataType == StringType
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     // Since we need to return a Seq of rows, we will call getTables directly

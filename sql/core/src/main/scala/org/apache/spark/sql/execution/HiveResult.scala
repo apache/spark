@@ -67,7 +67,7 @@ object HiveResult {
       command.executeCollect().map(_.getString(1))
     // SHOW TABLE EXTENDED in Hive only output the information column.
     case command @ ExecutedCommandExec(s: ShowTablesCommand) if s.isExtended =>
-      if (s.conf.getConf(SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA)) {
+      if (s.output(3).dataType == StringType) {
         command.executeCollect().map(_.getString(3) + "\n")
       } else {
         command.executeCollect().map(_.getMap(3))
