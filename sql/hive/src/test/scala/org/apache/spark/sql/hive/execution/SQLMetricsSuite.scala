@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.hive.execution
 
+import org.apache.spark.sql.execution.CommandResultExec
 import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecutionSuite
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
 import org.apache.spark.sql.execution.metric.SQLMetricsTestUtils
@@ -42,9 +43,11 @@ class SQLMetricsSuite extends SQLMetricsTestUtils with TestHiveSingleton
       withSQLConf(HiveUtils.CONVERT_METASTORE_CTAS.key -> canOptimized.toString) {
         withTable("t") {
           val df = sql(s"CREATE TABLE t STORED AS PARQUET AS SELECT 1 as a")
+          val wholeStageCodegenExec = df.queryExecution.executedPlan
+          assert(wholeStageCodegenExec.children.length == 1)
+          val commandResultExec = wholeStageCodegenExec.children(0).asInstanceOf[CommandResultExec]
           val dataWritingCommandExec =
-            df.queryExecution.executedPlan.asInstanceOf[DataWritingCommandExec]
-          dataWritingCommandExec.executeCollect()
+            commandResultExec.commandPhysicalPlan.asInstanceOf[DataWritingCommandExec]
           val createTableAsSelect = dataWritingCommandExec.cmd
           if (canOptimized) {
             assert(createTableAsSelect.isInstanceOf[OptimizedCreateHiveTableAsSelectCommand])
