@@ -123,16 +123,28 @@ class AggregateOptimizeSuite extends AnalysisTest {
     }
   }
 
-  test("SPARK-34808: EliminateOuterJoin must before RemoveRepetitionFromGroupExpressions") {
+  test("SPARK-34808: aggregateExpressions only contains groupingExpressions") {
     val x = testRelation.subquery('x)
     val y = testRelation.subquery('y)
-    val query = Distinct(x.join(y, LeftOuter, Some("x.a".attr === "y.a".attr))
-      .select("x.b".attr, "x.b".attr))
-    val correctAnswer =
-      x.select("x.b".attr, "x.b".attr).groupBy("x.b".attr)("x.b".attr, "x.b".attr)
+    withSQLConf(AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      comparePlans(
+        Optimize.execute(
+          Distinct(x.join(y, LeftOuter, Some("x.a".attr === "y.a".attr))
+            .select("x.b".attr, "x.b".attr)).analyze),
+        x.select("x.b".attr, "x.b".attr).groupBy("x.b".attr)("x.b".attr, "x.b".attr).analyze)
 
-    withSQLConf(AUTO_BROADCASTJOIN_THRESHOLD.key -> s"-1") {
-      comparePlans(Optimize.execute(query.analyze), correctAnswer.analyze)
+      comparePlans(
+        Optimize.execute(
+          x.join(y, LeftOuter, Some("x.a".attr === "y.a".attr))
+            .groupBy("x.a".attr, "x.b".attr)("x.b".attr, "x.a".attr).analyze),
+        x.groupBy("x.a".attr, "x.b".attr)("x.b".attr, "x.a".attr).analyze)
+
+      comparePlans(
+        Optimize.execute(
+          x.join(y, LeftOuter, Some("x.a".attr === "y.a".attr))
+            .groupBy("x.a".attr)("x.a".attr, Literal(1)).analyze),
+        x.join(y, LeftOuter, Some("x.a".attr === "y.a".attr))
+          .groupBy("x.a".attr)("x.a".attr, Literal(1)).analyze)
     }
   }
 }
