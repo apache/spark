@@ -287,7 +287,7 @@ class BlockManagerMasterEndpoint(
         }
       }
     }
-    val removeRddFromExecutorsFutures = allAliveBlockManagerInfos().map { bmInfo =>
+    val removeRddFromExecutorsFutures = allAliveBlockManagerInfos.map { bmInfo =>
       bmInfo.storageEndpoint.ask[Int](removeMsg).recover {
         // use 0 as default value means no blocks were removed
         handleBlockRemovalFailure("RDD", rddId.toString, bmInfo.blockManagerId, 0)
@@ -313,7 +313,7 @@ class BlockManagerMasterEndpoint(
     // Nothing to do in the BlockManagerMasterEndpoint data structures
     val removeMsg = RemoveShuffle(shuffleId)
     Future.sequence(
-      allAliveBlockManagerInfos().map { bm =>
+      allAliveBlockManagerInfos.map { bm =>
         bm.storageEndpoint.ask[Boolean](removeMsg).recover {
           // use false as default value means no shuffle data were removed
           handleBlockRemovalFailure("shuffle", shuffleId.toString, bm.blockManagerId, false)
@@ -329,7 +329,7 @@ class BlockManagerMasterEndpoint(
    */
   private def removeBroadcast(broadcastId: Long, removeFromDriver: Boolean): Future[Seq[Int]] = {
     val removeMsg = RemoveBroadcast(broadcastId, removeFromDriver)
-    val requiredBlockManagers = allAliveBlockManagerInfos().filter { info =>
+    val requiredBlockManagers = allAliveBlockManagerInfos.filter { info =>
       removeFromDriver || !info.blockManagerId.isDriver
     }
     val futures = requiredBlockManagers.map { bm =>
@@ -345,10 +345,34 @@ class BlockManagerMasterEndpoint(
   private def removeBlockManager(blockManagerId: BlockManagerId): Unit = {
     val info = blockManagerInfo(blockManagerId)
 
-    // Not removing info from the blockManagerInfo map, but only updating the removal timestamp of
+    // Not removing info from the blockManagerInfo map, but only setting the removal timestamp of
     // the executor in BlockManagerInfo. This info will be removed from blockManagerInfo map by the
     // blockManagerInfoCleaner once now() - info.executorRemovalTs > executorTimeoutMs.
-    info.updateExecutorRemovalTs()
+    //
+    // We are delaying the removal of BlockManagerInfo to avoid a BlockManager reregistration
+    // while a executor is shutting. This unwanted reregistration causes inconsistent bookkeeping
+    // of executors in Spark.
+    //
+    // Let's assume we removed the BlockManagerInfo from the blockManagerInfo map and let's consider
+    // the following set of events:
+    // - CoarseGrainedSchedulerBackend issues async StopExecutor on executorEndpoint
+    // - CoarseGrainedSchedulerBackend removes that executor from Driver's internal data structures
+    //   and publishes SparkListenerExecutorRemoved on the listenerBus
+    // - Executor has still not processed StopExecutor from the Driver
+    // - Driver receives heartbeat from the Executor, since it cannot find the executorId in its
+    //   blockManagerInfo map, it responds with HeartbeatResponse(reregisterBlockManager = true)
+    // - BlockManager on the Executor reregisters with the BlockManagerMaster and
+    //   SparkListenerBlockManagerAdded is published on the listenerBus
+    // - Executor starts processing the StopExecutor and exits
+    // - AppStatusListener picks the SparkListenerBlockManagerAdded event and updates AppStatusStore
+    // - statusTracker.getExecutorInfos refers AppStatusStore to get the list of executors which
+    //   thus returns the dead executor as alive.
+    //
+    // Delaying the removal of BlockManagerInfo from the blockManagerInfo map until
+    // (now() - info.executorRemovalTs > executorTimeoutMs) ensures
+    // BlockManagerMasterHeartbeatEndpoint does not ask the BlockManager on a recently removed
+    // executor to reregister on BlockManagerHeartbeat message.
+    info.setExecutorRemovalTs()
 
     // Remove the block manager from blockManagerIdByExecutor.
     blockManagerIdByExecutor -= blockManagerId.executorId
@@ -449,13 +473,13 @@ class BlockManagerMasterEndpoint(
 
   // Return a map from the block manager id to max memory and remaining memory.
   private def memoryStatus: Map[BlockManagerId, (Long, Long)] = {
-    allAliveBlockManagerInfos().map { info =>
+    allAliveBlockManagerInfos.map { info =>
       (info.blockManagerId, (info.maxMem, info.remainingMem))
     }.toMap
   }
 
   private def storageStatus: Array[StorageStatus] = {
-    allAliveBlockManagerInfos().map { info =>
+    allAliveBlockManagerInfos.map { info =>
       new StorageStatus(info.blockManagerId, info.maxMem, Some(info.maxOnHeapMem),
         Some(info.maxOffHeapMem), info.blocks.asScala)
     }.toArray
@@ -478,7 +502,7 @@ class BlockManagerMasterEndpoint(
      * Futures to avoid potential deadlocks. This can arise if there exists a block manager
      * that is also waiting for this master endpoint's response to a previous message.
      */
-    allAliveBlockManagerInfos().map { info =>
+    allAliveBlockManagerInfos.map { info =>
       val blockStatusFuture =
         if (askStorageEndpoints) {
           info.storageEndpoint.ask[Option[BlockStatus]](getBlockStatus)
@@ -502,7 +526,7 @@ class BlockManagerMasterEndpoint(
       askStorageEndpoints: Boolean): Future[Seq[BlockId]] = {
     val getMatchingBlockIds = GetMatchingBlockIds(filter)
     Future.sequence(
-      allAliveBlockManagerInfos().map { info =>
+      allAliveBlockManagerInfos.map { info =>
         val future =
           if (askStorageEndpoints) {
             info.storageEndpoint.ask[Seq[BlockId]](getMatchingBlockIds)
@@ -687,7 +711,7 @@ class BlockManagerMasterEndpoint(
 
   /** Get the list of the peers of the given block manager */
   private def getPeers(blockManagerId: BlockManagerId): Seq[BlockManagerId] = {
-    val blockManagerIds = allAliveBlockManagerInfos().map(_.blockManagerId).toSet
+    val blockManagerIds = allAliveBlockManagerInfos.map(_.blockManagerId).toSet
     if (blockManagerIds.contains(blockManagerId)) {
       blockManagerIds
         .filterNot { _.isDriver }
@@ -766,7 +790,8 @@ class BlockManagerMasterEndpoint(
   @inline private def aliveBlockManagerInfo(bmId: BlockManagerId): Option[BlockManagerInfo] =
     blockManagerInfo.get(bmId).filter(_.isAlive)
 
-  @inline private def allAliveBlockManagerInfos() = blockManagerInfo.values.filter(_.isAlive)
+  @inline private def allAliveBlockManagerInfos: Iterable[BlockManagerInfo] =
+    blockManagerInfo.values.filter(_.isAlive)
 }
 
 @DeveloperApi
@@ -914,7 +939,7 @@ private[spark] class BlockManagerInfo(
 
   def isAlive: Boolean = _executorRemovalTs.isEmpty
 
-  def updateExecutorRemovalTs(): Unit = {
+  def setExecutorRemovalTs(): Unit = {
     if (!isAlive) {
       logWarning(s"executorRemovalTs is already set to ${_executorRemovalTs.get}")
     } else {
