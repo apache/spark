@@ -353,24 +353,7 @@ class BlockManagerMasterEndpoint(
     // We are delaying the removal of BlockManagerInfo to avoid a BlockManager reregistration
     // while a executor is shutting. This unwanted reregistration causes inconsistent bookkeeping
     // of executors in Spark.
-    //
-    // Let's assume we removed the BlockManagerInfo from the blockManagerInfo map and let's consider
-    // the following set of events:
-    // - CoarseGrainedSchedulerBackend issues async StopExecutor on executorEndpoint
-    // - CoarseGrainedSchedulerBackend removes that executor from Driver's internal data structures
-    //   and publishes SparkListenerExecutorRemoved on the listenerBus
-    // - Executor has still not processed StopExecutor from the Driver
-    // - Driver receives heartbeat from the Executor, since it cannot find the executorId in its
-    //   blockManagerInfo map, it responds with HeartbeatResponse(reregisterBlockManager = true)
-    // - BlockManager on the Executor reregisters with the BlockManagerMaster and
-    //   SparkListenerBlockManagerAdded is published on the listenerBus
-    // - Executor starts processing the StopExecutor and exits
-    // - AppStatusListener picks the SparkListenerBlockManagerAdded event and updates AppStatusStore
-    // - statusTracker.getExecutorInfos refers AppStatusStore to get the list of executors which
-    //   thus returns the dead executor as alive.
-    //
-    // Delaying the removal of BlockManagerInfo from the blockManagerInfo map until
-    // (now() - info.executorRemovalTs > executorTimeoutMs) ensures
+    // Delaying this removal until blockManagerInfoCleaner decides to remove it ensures
     // BlockManagerMasterHeartbeatEndpoint does not ask the BlockManager on a recently removed
     // executor to reregister on BlockManagerHeartbeat message.
     info.setExecutorRemovalTs()
