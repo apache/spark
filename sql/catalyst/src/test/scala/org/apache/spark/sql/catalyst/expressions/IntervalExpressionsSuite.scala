@@ -280,7 +280,7 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
-  test("SPARK-35130: make duration") {
+  test("SPARK-35130: make day time interval") {
     def check(
         days: Int = 0,
         hours: Int = 0,
@@ -289,7 +289,7 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         millis: Int = 0,
         micros: Int = 0): Unit = {
       val secFrac = DateTimeTestUtils.secFrac(seconds, millis, micros)
-      val durationExpr = MakeDuration(Literal(days), Literal(hours), Literal(minutes),
+      val durationExpr = MakeDTInterval(Literal(days), Literal(hours), Literal(minutes),
         Literal(Decimal(secFrac, Decimal.MAX_LONG_DIGITS, 6)))
       val expected = secFrac + minutes * MICROS_PER_MINUTE + hours * MICROS_PER_HOUR +
           days * MICROS_PER_DAY
@@ -310,7 +310,7 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       micros = Int.MaxValue)
   }
 
-  test("SPARK-35130: ANSI mode make duration") {
+  test("SPARK-35130: ANSI mode make day time interval") {
     def check(
         days: Int = 0,
         hours: Int = 0,
@@ -319,7 +319,7 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         millis: Int = 0,
         micros: Int = 0): Unit = {
       val secFrac = DateTimeTestUtils.secFrac(seconds, millis, micros)
-      val durationExpr = MakeDuration(Literal(days), Literal(hours), Literal(minutes),
+      val durationExpr = MakeDTInterval(Literal(days), Literal(hours), Literal(minutes),
         Literal(Decimal(secFrac, Decimal.MAX_LONG_DIGITS, 6)))
       val expected = secFrac + minutes * MICROS_PER_MINUTE + hours * MICROS_PER_HOUR +
           days * MICROS_PER_DAY
@@ -334,7 +334,7 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         millis: Int = 0,
         micros: Int = 0): Unit = {
       val secFrac = DateTimeTestUtils.secFrac(seconds, millis, micros)
-      val durationExpr = MakeDuration(Literal(days), Literal(hours), Literal(minutes),
+      val durationExpr = MakeDTInterval(Literal(days), Literal(hours), Literal(minutes),
         Literal(Decimal(secFrac, Decimal.MAX_LONG_DIGITS, 6)))
       checkExceptionInExpression[ArithmeticException](durationExpr, EmptyRow, "")
     }

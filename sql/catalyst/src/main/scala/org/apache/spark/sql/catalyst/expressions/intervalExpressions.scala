@@ -366,7 +366,7 @@ case class MakeInterval(
   since = "3.2.0",
   group = "datetime_funcs")
 // scalastyle:on line.size.limit
-case class MakeDuration(
+case class MakeDTInterval(
     days: Expression,
     hours: Expression,
     mins: Expression,
@@ -410,7 +410,7 @@ case class MakeDuration(
       min: Any,
       sec: Any): Any = {
     try {
-      IntervalUtils.makeDuration(
+      IntervalUtils.makeMicrosInterval(
         day.asInstanceOf[Int],
         hour.asInstanceOf[Int],
         min.asInstanceOf[Int],
@@ -426,7 +426,7 @@ case class MakeDuration(
       val failOnErrorBranch = if (failOnError) "throw e;" else s"${ev.isNull} = true;"
       s"""
         try {
-          ${ev.value} = $iu.makeDuration($day, $hour, $min, $sec);
+          ${ev.value} = $iu.makeMicrosInterval($day, $hour, $min, $sec);
         } catch (java.lang.ArithmeticException e) {
           $failOnErrorBranch
         }
@@ -434,13 +434,13 @@ case class MakeDuration(
     })
   }
 
-  override def prettyName: String = "make_duration"
+  override def prettyName: String = "make_dt_interval"
 
   override protected def withNewChildrenInternal(
       days: Expression,
       hours: Expression,
       mins: Expression,
-      secs: Expression): MakeDuration =
+      secs: Expression): MakeDTInterval =
     copy(days, hours, mins, secs)
 }
 

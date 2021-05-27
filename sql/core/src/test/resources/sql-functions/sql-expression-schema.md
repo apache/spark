@@ -170,7 +170,7 @@
 | org.apache.spark.sql.catalyst.expressions.Lower | lcase | SELECT lcase('SparkSql') | struct<lcase(SparkSql):string> |
 | org.apache.spark.sql.catalyst.expressions.Lower | lower | SELECT lower('SparkSql') | struct<lower(SparkSql):string> |
 | org.apache.spark.sql.catalyst.expressions.MakeDate | make_date | SELECT make_date(2013, 7, 15) | struct<make_date(2013, 7, 15):date> |
-| org.apache.spark.sql.catalyst.expressions.MakeDuration | make_duration | SELECT make_duration(1, 12, 30, 01.001001) | struct<make_duration(1, 12, 30, 1.001001):interval day to second> |
+| org.apache.spark.sql.catalyst.expressions.MakeDTInterval | make_dt_interval | SELECT make_dt_interval(1, 12, 30, 01.001001) | struct<make_dt_interval(1, 12, 30, 1.001001):interval day to second> |
 | org.apache.spark.sql.catalyst.expressions.MakeInterval | make_interval | SELECT make_interval(100, 11, 1, 1, 12, 30, 01.001001) | struct<make_interval(100, 11, 1, 1, 12, 30, 1.001001):interval> |
 | org.apache.spark.sql.catalyst.expressions.MakeTimestamp | make_timestamp | SELECT make_timestamp(2014, 12, 28, 6, 30, 45.887) | struct<make_timestamp(2014, 12, 28, 6, 30, 45.887):timestamp> |
 | org.apache.spark.sql.catalyst.expressions.MakeYMInterval | make_ym_interval | SELECT make_ym_interval(1, 2) | struct<make_ym_interval(1, 2):interval year to month> |

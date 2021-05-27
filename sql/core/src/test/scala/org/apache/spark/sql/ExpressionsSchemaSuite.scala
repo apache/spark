@@ -170,7 +170,7 @@ class ExpressionsSchemaSuite extends QueryTest with SharedSparkSession {
           funcName = segments(2).trim,
           sql = segments(3).trim,
           schema = segments(4).trim)
-      }
+      }.sortBy(_.className)
 
       assert(numberOfQueries == expectedOutputs.size,
         s"expected outputs size: ${expectedOutputs.size} not same as numberOfQueries: " +
