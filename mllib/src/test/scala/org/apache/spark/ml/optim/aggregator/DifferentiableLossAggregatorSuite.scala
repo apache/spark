@@ -16,13 +16,10 @@
  */
 package org.apache.spark.ml.optim.aggregator
 
-import java.lang.{Double => JDouble}
-
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg.{BLAS, Vector, Vectors}
 import org.apache.spark.ml.util.TestingUtils._
-import org.apache.spark.util.Utils
 
 class DifferentiableLossAggregatorSuite extends SparkFunSuite {
 
@@ -115,7 +112,7 @@ class DifferentiableLossAggregatorSuite extends SparkFunSuite {
     BLAS.scal(weight1, addedGradients)
     BLAS.axpy(weight2, grad2, addedGradients)
     BLAS.scal(1 / (weight1 + weight2), addedGradients)
-    assert(merged.gradient === addedGradients)
+    assert(merged.gradient ~== addedGradients relTol 10e-5)
   }
 
   test("loss, gradient, weight") {
@@ -152,43 +149,10 @@ object DifferentiableLossAggregatorSuite {
 
     override def add(instance: Instance): TestAggregator = {
       val error = instance.label - BLAS.dot(coefficients, instance.features)
-      val mathCls = Utils.classForName("java.lang.Math")
-      try {
-        // Code path for Java 11.
-        val fma = mathCls.getMethod("fma", classOf[Double], classOf[Double], classOf[Double])
-        weightSum = fma.invoke(
-          null,
-          JDouble.valueOf(1.0),
-          JDouble.valueOf(weightSum),
-          JDouble.valueOf(instance.weight)).asInstanceOf[Double]
-        lossSum = fma.invoke(
-          null,
-          JDouble.valueOf(instance.weight),
-          fma.invoke(
-            null,
-            JDouble.valueOf(error),
-            JDouble.valueOf(error / 2.0), JDouble.valueOf(-0.0)),
-          JDouble.valueOf(lossSum)).asInstanceOf[Double]
-        (0 until dim).foreach { j =>
-          gradientSumArray(j) =
-            fma.invoke(
-              null,
-              JDouble.valueOf(instance.weight),
-              fma.invoke(
-                null,
-                JDouble.valueOf(error),
-                JDouble.valueOf(instance.features(j)),
-                JDouble.valueOf(-0.0)),
-              JDouble.valueOf(gradientSumArray(j))).asInstanceOf[Double]
-        }
-      } catch {
-        case _: NoSuchMethodException =>
-          // Code path for Java 8.
-          weightSum += instance.weight
-          lossSum += instance.weight * error * error / 2.0
-          (0 until dim).foreach { j =>
-            gradientSumArray(j) += instance.weight * error * instance.features(j)
-          }
+      weightSum += instance.weight
+      lossSum += instance.weight * error * error / 2.0
+      (0 until dim).foreach { j =>
+        gradientSumArray(j) += instance.weight * error * instance.features(j)
       }
       this
     }
