@@ -618,6 +618,7 @@ case class UnresolvedOrdinal(ordinal: Int)
   override def dataType: DataType = throw new UnresolvedException("dataType")
   override def nullable: Boolean = throw new UnresolvedException("nullable")
   override lazy val resolved = false
+  final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_ORDINAL)
 }
 
 /**

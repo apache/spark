@@ -98,4 +98,5 @@ object TreePattern extends Enumeration  {
 
   // Unresolved expression patterns (Alphabetically ordered)
   val UNRESOLVED_ALIAS: Value = Value
+  val UNRESOLVED_ORDINAL: Value = Value
 }

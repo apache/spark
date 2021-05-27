@@ -1801,7 +1801,7 @@ class Analyzer(override val catalogManager: CatalogManager)
    */
   object ResolveOrdinalInOrderByAndGroupBy extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
-      AlwaysProcess.fn, ruleId) {
+      _.containsPattern(UNRESOLVED_ORDINAL), ruleId) {
       case p if !p.childrenResolved => p
       // Replace the index with the related attribute for ORDER BY,
       // which is a 1-base position of the projection list.
