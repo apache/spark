@@ -3024,8 +3024,8 @@ select udf(b.unique1) from
 struct<udf(unique1):int>
 -- !query output
 NULL
-NULL
 0
+NULL
 NULL
 NULL
 
