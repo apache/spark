@@ -447,7 +447,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
       .option("kafka.metadata.max.age.ms", "1")
       .option("minOffsetsPerTrigger", 15)
       .option("maxTriggerDelay", "10s")
-      .option("maxOffsetsPerTrigger",20)
+      .option("maxOffsetsPerTrigger", 20)
       .option("subscribe", topic)
       .option("startingOffsets", "earliest")
     val kafka = reader.load()
