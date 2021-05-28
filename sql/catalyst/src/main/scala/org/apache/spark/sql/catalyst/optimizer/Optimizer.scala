@@ -683,7 +683,8 @@ object PushProjectionThroughUnion extends Rule[LogicalPlan] with PredicateHelper
     result.asInstanceOf[A]
   }
 
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+  def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
+    _.containsAllPatterns(UNION, PROJECT)) {
 
     // Push down deterministic projection through UNION ALL
     case p @ Project(projectList, u: Union) =>
@@ -1283,7 +1284,8 @@ object PruneFilters extends Rule[LogicalPlan] with PredicateHelper {
  *  Filter-Join-Join-Join. Most predicates can be pushed down in a single pass.
  */
 object PushDownPredicates extends Rule[LogicalPlan] with PredicateHelper {
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+  def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
+    _.containsAnyPattern(FILTER, JOIN)) {
     CombineFilters.applyLocally
       .orElse(PushPredicateThroughNonJoin.applyLocally)
       .orElse(PushPredicateThroughJoin.applyLocally)
@@ -1298,7 +1300,8 @@ object PushDownPredicates extends Rule[LogicalPlan] with PredicateHelper {
  * This heuristic is valid assuming the expression evaluation cost is minimal.
  */
 object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelper {
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform applyLocally
+  def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
+    _.containsPattern(FILTER))(applyLocally)
 
   val applyLocally: PartialFunction[LogicalPlan, LogicalPlan] = {
     // SPARK-13473: We can't push the predicate down when the underlying projection output non-
@@ -1507,7 +1510,8 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
     case _ => false
   }
 
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform applyLocally
+  def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
+    _.containsAnyPattern(FILTER, JOIN))(applyLocally)
 
   val applyLocally: PartialFunction[LogicalPlan, LogicalPlan] = {
     // push the where condition down into join filter
