@@ -143,7 +143,6 @@ object SubExprUtils extends PredicateHelper {
     }
   }
 
-
   /**
    * Given a logical plan, returns TRUE if it has an outer reference and false otherwise.
    */
