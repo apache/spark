@@ -2147,6 +2147,8 @@ private[spark] class DAGScheduler(
       stage: ShuffleMapStage,
       mergeStatuses: Seq[(Int, MergeStatus)]): Unit = {
     // Register merge statuses if the stage is still running and shuffle merge is not finalized yet.
+    // TODO: SPARK-35549: Currently merge statuses results which come after shuffle merge
+    // TODO: is finalized is not registered.
     if (runningStages.contains(stage) && !stage.shuffleDep.shuffleMergeFinalized) {
       mapOutputTracker.registerMergeResults(stage.shuffleDep.shuffleId, mergeStatuses)
     }
@@ -2158,8 +2160,8 @@ private[spark] class DAGScheduler(
       stage.shuffleDep.markShuffleMergeFinalized()
       processShuffleMapStageCompletion(stage)
     } else {
-      // TODO: SPARK-35549: Currently merge statuses results which come after shuffle merge
-      // TODO: is finalized is not registered.
+      // Unregister all merge results if the stage is currently not
+      // active (i.e. the stage is cancelled)
       mapOutputTracker.unregisterAllMergeResult(stage.shuffleDep.shuffleId)
     }
   }
