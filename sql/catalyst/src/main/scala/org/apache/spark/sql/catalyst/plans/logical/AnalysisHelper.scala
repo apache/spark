@@ -91,7 +91,9 @@ trait AnalysisHelper extends QueryPlan[LogicalPlan] { self: LogicalPlan =>
           }
         } else {
           CurrentOrigin.withOrigin(origin) {
-            rule.applyOrElse(afterRuleOnChildren, identity[LogicalPlan])
+            val afterRule = rule.applyOrElse(afterRuleOnChildren, identity[LogicalPlan])
+            afterRule.copyTagsFrom(self)
+            afterRule
           }
         }
       }
