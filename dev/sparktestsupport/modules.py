@@ -17,7 +17,6 @@
 
 from functools import total_ordering
 import itertools
-import os
 import re
 
 all_modules = []
@@ -743,20 +742,6 @@ spark_ganglia_lgpl = Module(
     build_profile_flags=["-Pspark-ganglia-lgpl"],
     source_file_regexes=[
         "external/spark-ganglia-lgpl",
-    ]
-)
-
-docker_integration_tests = Module(
-    name="docker-integration-tests",
-    dependencies=[],
-    build_profile_flags=["-Pdocker-integration-tests"],
-    source_file_regexes=["external/docker-integration-tests"],
-    sbt_test_goals=["docker-integration-tests/test"],
-    environ=None if "GITHUB_ACTIONS" not in os.environ else {
-        "ENABLE_DOCKER_INTEGRATION_TESTS": "1"
-    },
-    test_tags=[
-        "org.apache.spark.tags.DockerTest"
     ]
 )
 
