@@ -105,9 +105,10 @@ object TreePattern extends Enumeration  {
   // Unresolved expression patterns (Alphabetically ordered)
   val UNRESOLVED_ALIAS: Value = Value
   val UNRESOLVED_ATTRIBUTE: Value = Value
+  val UNRESOLVED_DESERIALIZER: Value = Value
   val UNRESOLVED_ORDINAL: Value = Value
   val UNRESOLVED_FUNCTION: Value = Value
-  val UNRESOLVED_DESERIALIZER: Value = Value
+  val UNRESOLVED_HINT: Value = Value
 
   // Unresolved Plan patterns (Alphabetically ordered)
   val UNRESOLVED_SUBQUERY_COLUMN_ALIAS: Value = Value
