@@ -20,12 +20,13 @@ package org.apache.spark.sql.execution.datasources.v2.parquet
 import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.connector.expressions.{Aggregation, Count, Max, Min}
 import org.apache.spark.sql.connector.read.{Scan, SupportsPushDownAggregates, SupportsPushDownFilters}
 import org.apache.spark.sql.execution.datasources.PartitioningAwareFileIndex
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetFilters, SparkToParquetSchemaConverter}
 import org.apache.spark.sql.execution.datasources.v2.FileScanBuilder
-import org.apache.spark.sql.sources.{Aggregation, Count, Filter, Max, Min}
-import org.apache.spark.sql.types.{LongType, StructField, StructType}
+import org.apache.spark.sql.sources.Filter
+import org.apache.spark.sql.types.{ArrayType, LongType, MapType, StructField, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 case class ParquetScanBuilder(
@@ -76,15 +77,27 @@ case class ParquetScanBuilder(
   override def pushAggregation(aggregation: Aggregation): Unit = {
     if (!sparkSession.sessionState.conf.parquetAggregatePushDown ||
       aggregation.groupByColumns.nonEmpty) {
-      Aggregation.empty
       return
     }
 
-    aggregation.aggregateExpressions.foreach { _ match {
-        // parquet's statistics doesn't have distinct count info
-        case Seq(Max(_, _)) | Seq(Min(_, _)) | Seq(Count(_, _, false)) =>
-        case _ => Aggregation.empty
-      }
+    aggregation.aggregateExpressions.foreach {
+      case Max(col, _) =>
+        dataSchema.fields(dataSchema.fieldNames.toList.indexOf(col.fieldNames.head))
+          .dataType match {
+          // not push down nested column
+          case StructType(_) | ArrayType(_, _) | MapType(_, _, _) => return
+          case _ =>
+        }
+      case Min(col, _) =>
+        dataSchema.fields(dataSchema.fieldNames.toList.indexOf(col.fieldNames.head))
+          .dataType match {
+          // not push down nested column
+          case StructType(_) | ArrayType(_, _) | MapType(_, _, _) => return
+          case _ =>
+        }
+      // not push down distinct count
+      case Count(_, _, false) =>
+      case _ => return
     }
     this.pushedAggregations = aggregation
   }
@@ -97,15 +110,15 @@ case class ParquetScanBuilder(
 
   override def getPushDownAggSchema: StructType = {
     var schema = new StructType()
-    pushedAggregations.aggregateExpressions.map {
-      case Seq(Max(col, _)) =>
-        val field = dataSchema.fields(dataSchema.fieldNames.toList.indexOf(col))
+    pushedAggregations.aggregateExpressions.foreach {
+      case Max(col, _) =>
+        val field = dataSchema.fields(dataSchema.fieldNames.toList.indexOf(col.fieldNames.head))
         schema = schema.add(field.copy("max(" + field.name + ")"))
-      case Seq(Min(col, _)) =>
-        val field = dataSchema.fields(dataSchema.fieldNames.toList.indexOf(col))
+      case Min(col, _) =>
+        val field = dataSchema.fields(dataSchema.fieldNames.toList.indexOf(col.fieldNames.head))
         schema = schema.add(field.copy("min(" + field.name + ")"))
-      case Seq(Count(col, _, _)) =>
-        if (col.equals("1")) {
+      case Count(col, _, _) =>
+        if (col.fieldNames.head.equals("1")) {
           schema = schema.add(new StructField("count(*)", LongType))
         } else {
           schema = schema.add(new StructField("count(" + col + ")", LongType))

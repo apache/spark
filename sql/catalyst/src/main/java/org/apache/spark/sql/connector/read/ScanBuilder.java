@@ -24,15 +24,13 @@ import org.apache.spark.annotation.Evolving;
  * interfaces to do operator pushdown, and keep the operator pushdown result in the returned
  * {@link Scan}.
  *
+ * The operators in the Scan can be pushed down to the data source layer.
+ * If applicable (the operator is present and the source supports that operator), Spark pushes
+ * down filters to the source first, then push down aggregation and apply column pruning.
+ *
  * @since 3.0.0
  */
 @Evolving
 public interface ScanBuilder {
-  enum orders { FILTER, AGGREGATE, COLUMNS };
-
-  // Orders of operators push down. Spark will push down filters first, then aggregates, and finally
-  // column pruning (if applicable).
-  orders[] PUSH_DOWN_ORDERS = {orders.FILTER, orders.AGGREGATE, orders.COLUMNS};
-
   Scan build();
 }

@@ -34,13 +34,14 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.connector.expressions.Aggregation
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader}
 import org.apache.spark.sql.execution.datasources.{DataSourceUtils, PartitionedFile, RecordReaderIterator}
 import org.apache.spark.sql.execution.datasources.parquet._
 import org.apache.spark.sql.execution.datasources.v2._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
-import org.apache.spark.sql.sources.{Aggregation, Filter}
+import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.{AtomicType, StructType}
 import org.apache.spark.sql.vectorized.ColumnarBatch
 import org.apache.spark.util.SerializableConfiguration
@@ -145,9 +146,7 @@ case class ParquetPartitionReaderFactory(
         override def get(): InternalRow = {
           count += 1
           val footer = getFooter(file)
-          val (parquetTypes, values) =
-            ParquetUtils.getPushedDownAggResult(footer, dataSchema, aggregation)
-          ParquetUtils.aggResultToSparkInternalRows(footer, parquetTypes, values, aggSchema,
+          ParquetUtils.createInternalRowFromAggResult(footer, dataSchema, aggregation, aggSchema,
             datetimeRebaseModeInRead, int96RebaseModeInRead, convertTz(isCreatedByParquetMr(file)))
         }
 
@@ -181,9 +180,7 @@ case class ParquetPartitionReaderFactory(
         override def get(): ColumnarBatch = {
           count += 1
           val footer = getFooter(file)
-          val (parquetTypes, values) =
-            ParquetUtils.getPushedDownAggResult(footer, dataSchema, aggregation)
-          ParquetUtils.aggResultToSparkColumnarBatch(footer, parquetTypes, values, aggSchema,
+          ParquetUtils.createColumnarBatchFromAggResult(footer, dataSchema, aggregation, aggSchema,
             enableOffHeapColumnVector, datetimeRebaseModeInRead, int96RebaseModeInRead,
             convertTz(isCreatedByParquetMr(file)))
         }

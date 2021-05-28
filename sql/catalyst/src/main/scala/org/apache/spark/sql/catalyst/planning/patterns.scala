@@ -48,6 +48,14 @@ trait OperationHelper {
           .map(Alias(_, a.name)(a.exprId, a.qualifier)).getOrElse(a)
     }
   }
+
+  protected def hasCommonNonDeterministic(
+      expr: Seq[Expression],
+      aliases: AttributeMap[Expression]): Boolean = {
+    expr.exists(_.collect {
+      case a: AttributeReference if aliases.contains(a) => aliases(a)
+    }.exists(!_.deterministic))
+  }
 }
 
 /**
@@ -114,14 +122,6 @@ object ScanOperation extends OperationHelper with PredicateHelper {
         Some((fields.getOrElse(child.output), filters, child))
       case None => None
     }
-  }
-
-  private def hasCommonNonDeterministic(
-      expr: Seq[Expression],
-      aliases: AttributeMap[Expression]): Boolean = {
-    expr.exists(_.collect {
-      case a: AttributeReference if aliases.contains(a) => aliases(a)
-    }.exists(!_.deterministic))
   }
 
   private def collectProjectsAndFilters(plan: LogicalPlan): ScanReturnType = {

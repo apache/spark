@@ -15,24 +15,26 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.sources
+package org.apache.spark.sql.connector.expressions
 
 import org.apache.spark.sql.types.DataType
 
 // Aggregate Functions in SQL statement.
 // e.g. SELECT COUNT(EmployeeID), Max(salary), deptID FROM dept GROUP BY deptID
 // aggregateExpressions are (COUNT(EmployeeID), Max(salary)), groupByColumns are (deptID)
-case class Aggregation(aggregateExpressions: Seq[Seq[AggregateFunc]],
-                       groupByColumns: Seq[String])
+case class Aggregation(aggregateExpressions: Seq[AggregateFunc],
+                       groupByColumns: Seq[FieldReference])
 
 abstract class AggregateFunc
 
-case class Min(column: String, dataType: DataType) extends AggregateFunc
-case class Max(column: String, dataType: DataType) extends AggregateFunc
-case class Sum(column: String, dataType: DataType, isDistinct: Boolean) extends AggregateFunc
-case class Count(column: String, dataType: DataType, isDistinct: Boolean) extends AggregateFunc
+case class Min(column: FieldReference, dataType: DataType) extends AggregateFunc
+case class Max(column: FieldReference, dataType: DataType) extends AggregateFunc
+case class Sum(column: FieldReference, dataType: DataType, isDistinct: Boolean)
+  extends AggregateFunc
+case class Count(column: FieldReference, dataType: DataType, isDistinct: Boolean)
+  extends AggregateFunc
 
 object Aggregation {
   // Returns an empty Aggregate
-  def empty: Aggregation = Aggregation(Seq.empty[Seq[AggregateFunc]], Seq.empty[String])
+  def empty: Aggregation = Aggregation(Seq.empty[AggregateFunc], Seq.empty[FieldReference])
 }

@@ -100,7 +100,6 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         output.toStructType,
         translated.toSet,
         pushed.toSet,
-        aggregation,
         unsafeRowRDD,
         v1Relation,
         tableIdentifier = None)

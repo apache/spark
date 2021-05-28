@@ -18,7 +18,7 @@
 package org.apache.spark.sql.connector.read;
 
 import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.sources.Aggregation;
+import org.apache.spark.sql.connector.expressions.Aggregation;
 import org.apache.spark.sql.types.StructType;
 
 /**

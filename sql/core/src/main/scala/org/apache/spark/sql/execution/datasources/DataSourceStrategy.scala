@@ -40,6 +40,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.connector.catalog.SupportsRead
 import org.apache.spark.sql.connector.catalog.TableCapability._
+import org.apache.spark.sql.connector.expressions.{AggregateFunc, Count, FieldReference, Max, Min}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.{RowDataSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.command._
@@ -333,7 +334,6 @@ object DataSourceStrategy
         l.output.toStructType,
         Set.empty,
         Set.empty,
-        Aggregation.empty,
         toCatalystRDD(l, baseRelation.buildScan()),
         baseRelation,
         None) :: Nil
@@ -407,7 +407,6 @@ object DataSourceStrategy
         requestedColumns.toStructType,
         pushedFilters.toSet,
         handledFilters,
-        Aggregation.empty,
         scanBuilder(requestedColumns, candidatePredicates, pushedFilters),
         relation.relation,
         relation.catalogTable.map(_.identifier))
@@ -430,7 +429,6 @@ object DataSourceStrategy
         requestedColumns.toStructType,
         pushedFilters.toSet,
         handledFilters,
-        Aggregation.empty,
         scanBuilder(requestedColumns, candidatePredicates, pushedFilters),
         relation.relation,
         relation.catalogTable.map(_.identifier))
@@ -679,19 +677,19 @@ object DataSourceStrategy
 
   protected[sql] def translateAggregate(
       aggregates: AggregateExpression,
-      pushableColumn: PushableColumnBase): Option[Seq[AggregateFunc]] = {
+      pushableColumn: PushableColumnBase): Option[AggregateFunc] = {
     aggregates.aggregateFunction match {
-      case min@aggregate.Min(pushableColumn(name)) =>
-        Some(Seq(Min(name, min.dataType)))
-      case max@aggregate.Max(pushableColumn(name)) =>
-        Some(Seq(Max(name, max.dataType)))
+      case min @ aggregate.Min(pushableColumn(name)) =>
+        Some(Min(FieldReference(Seq(name)), min.dataType))
+      case max @ aggregate.Max(pushableColumn(name)) =>
+        Some(Max(FieldReference(Seq(name)), max.dataType))
       case count: aggregate.Count =>
         val columnName = count.children.head match {
           // SELECT COUNT(*) FROM table is translated to SELECT 1 FROM table
           case Literal(_, _) => "1"
           case pushableColumn(name) => name
         }
-        Some(Seq(Count(columnName, count.dataType, aggregates.isDistinct)))
+        Some(Count(FieldReference(Seq(columnName)), count.dataType, aggregates.isDistinct))
       case _ => None
     }
   }
