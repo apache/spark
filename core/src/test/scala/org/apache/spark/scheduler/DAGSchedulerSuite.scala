@@ -3686,13 +3686,15 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
         (Success, makeMapStatus("hostA", parts))
     }.toSeq)
 
+    assert(mapOutputTracker.getNumAvailableMergeResults(shuffleDep.shuffleId) == parts)
     val shuffleMapStageToCancel = scheduler.stageIdToStage(0).asInstanceOf[ShuffleMapStage]
     runEvent(StageCancelled(0, Option("Explicit cancel check")))
     scheduler.handleShuffleMergeFinalized(shuffleMapStageToCancel)
     assert(mapOutputTracker.getNumAvailableMergeResults(shuffleDep.shuffleId) == 0)
   }
 
-  test("SPARK-32920: Merge results should not get registered after shuffle merge finalization") {
+  test("SPARK-32920: SPARK-35549: Merge results should not get registered" +
+    " after shuffle merge finalization") {
     initPushBasedShuffleConfs(conf)
     DAGSchedulerSuite.clearMergerLocs
     DAGSchedulerSuite.addMergerLocs(Seq("host1", "host2", "host3", "host4", "host5"))
