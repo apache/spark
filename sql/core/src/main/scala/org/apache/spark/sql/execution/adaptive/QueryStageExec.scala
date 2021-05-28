@@ -95,15 +95,13 @@ abstract class QueryStageExec extends LeafExecNode {
   /**
    * Compute the statistics of the query stage if executed, otherwise None.
    */
-  def computeStats(): Option[Statistics] = {
-    if (isMaterialized) {
-      val runtimeStats = getRuntimeStatistics
-      val dataSize = runtimeStats.sizeInBytes.max(0)
-      val numOutputRows = runtimeStats.rowCount.map(_.max(0))
-      Some(Statistics(dataSize, numOutputRows, isRuntime = true))
-    } else {
-      None
-    }
+  def computeStats(): Option[Statistics] = if (isMaterialized) {
+    val runtimeStats = getRuntimeStatistics
+    val dataSize = runtimeStats.sizeInBytes.max(0)
+    val numOutputRows = runtimeStats.rowCount.map(_.max(0))
+    Some(Statistics(dataSize, numOutputRows, isRuntime = true))
+  } else {
+    None
   }
 
   @transient
