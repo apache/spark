@@ -379,6 +379,7 @@ class StatsTest(PandasOnSparkTestCase, SQLTestUtils):
         # https://github.com/numpy/numpy/pull/16273#discussion_r641264085 which pandas inherits
         # but this behavior is inconsistent in pandas context.
         # Boolean column in quantile tests are excluded for now.
+        # TODO(SPARK-35555): track and match the behavior of quantile to pandas'
         pdf = pd.DataFrame({"i": [0, 1, 2], "s": ["x", "y", "z"]})
         psdf = ps.from_pandas(pdf)
         self.assert_eq(
