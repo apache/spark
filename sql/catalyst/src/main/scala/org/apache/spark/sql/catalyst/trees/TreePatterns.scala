@@ -39,6 +39,7 @@ object TreePattern extends Enumeration  {
   val CREATE_NAMED_STRUCT: Value = Value
   val CURRENT_LIKE: Value = Value
   val DESERIALIZE_TO_OBJECT: Value = Value
+  val DYNAMIC_PRUNING_EXPRESSION: Value = Value
   val DYNAMIC_PRUNING_SUBQUERY: Value = Value
   val EXISTS_SUBQUERY = Value
   val EXPRESSION_WITH_RANDOM_SEED: Value = Value
@@ -68,6 +69,7 @@ object TreePattern extends Enumeration  {
   val TRUE_OR_FALSE_LITERAL: Value = Value
   val WINDOW_EXPRESSION: Value = Value
   val UNARY_POSITIVE: Value = Value
+  val UPDATE_FIELDS: Value = Value
   val UPPER_OR_LOWER: Value = Value
 
   // Logical plan patterns (alphabetically ordered)
@@ -87,4 +89,10 @@ object TreePattern extends Enumeration  {
   val UNION: Value = Value
   val TYPED_FILTER: Value = Value
   val WINDOW: Value = Value
+
+  // Execution expression patterns (alphabetically ordered)
+  val IN_SUBQUERY_EXEC: Value = Value
+
+  // Execution Plan patterns (alphabetically ordered)
+  val EXCHANGE: Value = Value
 }

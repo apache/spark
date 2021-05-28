@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.adaptive
 import org.apache.spark.sql.catalyst.expressions.{BindReferences, DynamicPruningExpression, Literal}
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.exchange.BroadcastExchangeExec
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, HashedRelationBroadcastMode, HashJoin}
@@ -34,7 +35,8 @@ case class PlanAdaptiveDynamicPruningFilters(
       return plan
     }
 
-    plan transformAllExpressions {
+    plan.transformAllExpressionsWithPruning(
+      _.containsAllPatterns(DYNAMIC_PRUNING_EXPRESSION, IN_SUBQUERY_EXEC)) {
       case DynamicPruningExpression(InSubqueryExec(
           value, SubqueryAdaptiveBroadcastExec(name, index, buildKeys,
           adaptivePlan: AdaptiveSparkPlanExec), exprId, _)) =>
