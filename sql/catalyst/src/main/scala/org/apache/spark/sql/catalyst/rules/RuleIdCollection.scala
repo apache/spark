@@ -89,6 +89,7 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.analysis.SubstituteUnresolvedOrdinals" ::
       "org.apache.spark.sql.catalyst.analysis.TimeWindowing" ::
       "org.apache.spark.sql.catalyst.analysis.UpdateOuterReferences" ::
+      "org.apache.spark.sql.catalyst.analysis.UpdateAttributeNullability" ::
       // Catalyst Optimizer rules
       "org.apache.spark.sql.catalyst.optimizer.BooleanSimplification" ::
       "org.apache.spark.sql.catalyst.optimizer.CollapseProject" ::
