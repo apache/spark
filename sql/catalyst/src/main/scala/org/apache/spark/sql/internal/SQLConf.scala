@@ -606,7 +606,8 @@ object SQLConf {
         "than this config, join selection prefer to use shuffled hash join instead of " +
         s"sort merge join regardless of the value of ${PREFER_SORTMERGEJOIN.key}.")
       .version("3.2.0")
-      .fallbackConf(ADVISORY_PARTITION_SIZE_IN_BYTES)
+      .bytesConf(ByteUnit.BYTE)
+      .createWithDefaultString("64MB")
 
   val SUBEXPRESSION_ELIMINATION_ENABLED =
     buildConf("spark.sql.subexpressionElimination.enabled")
