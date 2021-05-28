@@ -23,8 +23,9 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.{expressions, InternalRow}
-import org.apache.spark.sql.catalyst.expressions.{CreateNamedStruct, Expression, ExprId, InSet, ListQuery, Literal, PlanExpression}
+import org.apache.spark.sql.catalyst.expressions.{CreateNamedStruct, Expression, ExprId, GetStructField, InSet, ListQuery, Literal, PlanExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
+import org.apache.spark.sql.catalyst.optimizer.ScalarSubqueryReference
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.{LeafLike, UnaryLike}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{IN_SUBQUERY, SCALAR_SUBQUERY}
@@ -177,13 +178,26 @@ case class InSubqueryExec(
  */
 case class PlanSubqueries(sparkSession: SparkSession) extends Rule[SparkPlan] {
   def apply(plan: SparkPlan): SparkPlan = {
-    plan.transformAllExpressionsWithPruning(_.containsAnyPattern(SCALAR_SUBQUERY, IN_SUBQUERY)) {
+    val (plannedCommonScalarSubqueries, child) = plan match {
+      case css: CommonScalarSubqueriesExec =>
+        css.scalarSubqueries.asInstanceOf[Seq[expressions.ScalarSubquery]].map { sub =>
+          val executedPlan = QueryExecution.prepareExecutedPlan(sparkSession, sub.plan)
+          SubqueryExec.createForScalarSubquery(s"scalar-subquery#${sub.exprId.id}", executedPlan)
+        } -> css.child
+      case _ => Seq.empty -> plan
+    }
+
+    child.transformAllExpressionsWithPruning(_.containsAnyPattern(SCALAR_SUBQUERY, IN_SUBQUERY)) {
       case subquery: expressions.ScalarSubquery =>
         val executedPlan = QueryExecution.prepareExecutedPlan(sparkSession, subquery.plan)
         ScalarSubquery(
           SubqueryExec.createForScalarSubquery(
             s"scalar-subquery#${subquery.exprId.id}", executedPlan),
           subquery.exprId)
+      case ssr: ScalarSubqueryReference =>
+        GetStructField(
+          ScalarSubquery(plannedCommonScalarSubqueries(ssr.subqueryIndex), ssr.exprId),
+          ssr.headerIndex)
       case expressions.InSubquery(values, ListQuery(query, _, exprId, _)) =>
         val expr = if (values.length == 1) {
           values.head
@@ -210,6 +224,7 @@ object ReuseSubquery extends Rule[SparkPlan] {
     if (!conf.subqueryReuseEnabled) {
       return plan
     }
+
     // Build a hash map using schema of subqueries to avoid O(N*N) sameResult calls.
     val subqueries = mutable.HashMap[StructType, ArrayBuffer[BaseSubqueryExec]]()
     plan transformAllExpressions {

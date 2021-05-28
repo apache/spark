@@ -30,7 +30,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.expressions.{Attribute, ExprId}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, ReturnAnswer}
 import org.apache.spark.sql.catalyst.rules.{PlanChangeLogger, Rule}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
@@ -716,8 +716,8 @@ case class AdaptiveExecutionContext(session: SparkSession, qe: QueryExecution) {
   /**
    * The subquery-reuse map shared across the entire query.
    */
-  val subqueryCache: TrieMap[SparkPlan, BaseSubqueryExec] =
-    new TrieMap[SparkPlan, BaseSubqueryExec]()
+  val subqueryCache: TrieMap[SparkPlan, (BaseSubqueryExec, ExprId)] =
+    new TrieMap[SparkPlan, (BaseSubqueryExec, ExprId)]()
 
   /**
    * The exchange-reuse map shared across the entire query, including sub-queries.

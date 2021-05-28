@@ -21,9 +21,9 @@ import scala.collection.mutable.ListBuffer
 
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Join, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, CommonScalarSubqueries, Filter, Join, LogicalPlan, Project, Subquery}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.TreePattern.SCALAR_SUBQUERY
+import org.apache.spark.sql.catalyst.trees.TreePattern.{SCALAR_SUBQUERY, TreePattern}
 import org.apache.spark.sql.types.DataType
 
 /**
@@ -81,11 +81,26 @@ import org.apache.spark.sql.types.DataType
 object MergeScalarSubqueries extends Rule[LogicalPlan] with PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = {
     if (conf.scalarSubqueryMergeEabled && conf.subqueryReuseEnabled) {
-      // Plan of subqueries and a flag is the plan is merged
-      val cache = ListBuffer.empty[(Project, Boolean)]
-      removeReferences(insertReferences(plan, cache), cache)
+      plan match {
+        case Subquery(_: CommonScalarSubqueries, _) => plan
+        case s: Subquery => s.copy(child = extractCommonScalarSubqueries(s.child))
+        case _: CommonScalarSubqueries => plan
+        case _ => extractCommonScalarSubqueries(plan)
+      }
     } else {
       plan
+    }
+  }
+
+  private def extractCommonScalarSubqueries(plan: LogicalPlan) = {
+    // Plan of subqueries and a flag is the plan is merged
+    val cache = ListBuffer.empty[(Project, Boolean)]
+    val newPlan = removeReferences(insertReferences(plan, cache), cache)
+    if (cache.nonEmpty) {
+      val scalarSubqueries = cache.map { case (header, _) => ScalarSubquery(header) }.toSeq
+      CommonScalarSubqueries(scalarSubqueries, newPlan)
+    } else {
+      newPlan
     }
   }
 
@@ -340,17 +355,28 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] with PredicateHelper {
   private def removeReferences(
       plan: LogicalPlan,
       cache: ListBuffer[(Project, Boolean)]): LogicalPlan = {
-    plan.transformAllExpressions {
+    val nonMergedSubqueriesBefore = cache.scanLeft(0) {
+      case (nonMergedSubqueriesBefore, (_, merged)) =>
+        nonMergedSubqueriesBefore + (if (merged) 0 else 1)
+    }.toArray
+    val newPlan = plan.transformAllExpressions {
       case ssr: ScalarSubqueryReference =>
         val (header, merged) = cache(ssr.subqueryIndex)
         if (merged) {
-          GetStructField(
-            ScalarSubquery(plan = header, exprId = ssr.exprId),
-            ssr.headerIndex)
+          if (nonMergedSubqueriesBefore(ssr.subqueryIndex) > 0) {
+            ssr.copy(subqueryIndex =
+              ssr.subqueryIndex - nonMergedSubqueriesBefore(ssr.subqueryIndex))
+          } else {
+            ssr
+          }
         } else {
           ScalarSubquery(plan = header.child, exprId = ssr.exprId)
         }
     }
+    cache.zipWithIndex.collect {
+      case ((_, merged), i) if !merged => i
+    }.reverse.foreach(cache.remove)
+    newPlan
   }
 }
 
@@ -364,4 +390,6 @@ case class ScalarSubqueryReference(
     dataType: DataType,
     exprId: ExprId) extends LeafExpression with Unevaluable {
   override def nullable: Boolean = true
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(SCALAR_SUBQUERY)
 }

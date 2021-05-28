@@ -65,6 +65,16 @@ object Subquery {
     Subquery(s.plan, SubqueryExpression.hasCorrelatedSubquery(s))
 }
 
+case class CommonScalarSubqueries(scalarSubqueries: Seq[ScalarSubquery], child: LogicalPlan)
+  extends OrderPreservingUnaryNode with PredicateHelper {
+  override def output: Seq[Attribute] = child.output
+
+  override def maxRows: Option[Long] = child.maxRows
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): CommonScalarSubqueries =
+    copy(child = newChild)
+}
+
 case class Project(projectList: Seq[NamedExpression], child: LogicalPlan)
     extends OrderPreservingUnaryNode {
   override def output: Seq[Attribute] = projectList.map(_.toAttribute)

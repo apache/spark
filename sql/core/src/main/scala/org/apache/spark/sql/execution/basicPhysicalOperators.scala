@@ -112,6 +112,17 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
     copy(child = newChild)
 }
 
+case class CommonScalarSubqueriesExec(scalarSubqueries: Seq[Expression], child: SparkPlan)
+  extends UnaryExecNode {
+  override def output: Seq[Attribute] = child.output
+
+  protected override def doExecute(): RDD[InternalRow] =
+    throw new UnsupportedOperationException(s"$nodeName does not implement doExecute")
+
+  override protected def withNewChildInternal(newChild: SparkPlan): CommonScalarSubqueriesExec =
+    copy(child = newChild)
+}
+
 trait GeneratePredicateHelper extends PredicateHelper {
   self: CodegenSupport =>
 
