@@ -872,7 +872,7 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
     }
   }
 
-  test("Insert data with different cases") {
+  test("SPARK-35531 Insert data with different cases") {
     withTable("TEST1") {
       val createHive =
         """
