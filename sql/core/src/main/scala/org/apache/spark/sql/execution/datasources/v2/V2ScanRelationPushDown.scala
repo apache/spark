@@ -200,6 +200,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with AliasHelper
           val pushedFilters = sHolder.builder match {
             case f: SupportsPushDownFilters =>
               f.pushedFilters()
+            case _ => Array.empty[sources.Filter]
           }
           V1ScanWrapper(v1, translated, pushedFilters, Aggregation.empty)
         case _ => scan
