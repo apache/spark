@@ -41,7 +41,7 @@ abstract class DockerKrbJDBCIntegrationSuite extends DockerJDBCIntegrationSuite 
   protected var keytabFullPath: String = _
   protected def setAuthentication(keytabFile: String, principal: String): Unit
 
-  override def beforeAll(): Unit = runIfTestsEnabled(s"Prepare for ${this.getClass.getName}") {
+  override def beforeAll(): Unit = {
     SecurityUtils.setGlobalKrbDebug(true)
 
     val kdcDir = Utils.createTempDir()
