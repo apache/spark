@@ -104,7 +104,6 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
             psser = ps.from_pandas(pser)
 
             self._check_extension(psser, pser)
-            self._check_extension(psser + F.lit(1).cast("byte"), pser + 1)
             self._check_extension(psser + psser, pser + pser)
 
     @unittest.skipIf(
