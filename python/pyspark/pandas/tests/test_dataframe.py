@@ -27,7 +27,6 @@ import pandas as pd
 from pandas.tseries.offsets import DateOffset
 from pyspark import StorageLevel
 from pyspark.ml.linalg import SparseVector
-from pyspark.sql import functions as F
 from pyspark.sql.types import StructType
 
 from pyspark import pandas as ps

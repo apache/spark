@@ -25,7 +25,6 @@ from datetime import datetime, timedelta
 import numpy as np
 import pandas as pd
 from pyspark.ml.linalg import SparseVector
-from pyspark.sql import functions as F
 
 from pyspark import pandas as ps
 from pyspark.testing.pandasutils import (
