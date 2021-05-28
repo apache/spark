@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.catalyst.util
 
-import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -65,9 +65,7 @@ class FailureSafeParser[IN](
         case DropMalformedMode =>
           Iterator.empty
         case FailFastMode =>
-          throw new SparkException("Malformed records are detected in record parsing. " +
-            s"Parse Mode: ${FailFastMode.name}. To process malformed records as null " +
-            "result, try setting the option 'mode' as 'PERMISSIVE'.", e)
+          throw QueryExecutionErrors.malformedRecordsDetectedInRecordParsingError(e)
       }
     }
   }

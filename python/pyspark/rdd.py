@@ -88,7 +88,7 @@ def portable_hash(x):
     """
 
     if 'PYTHONHASHSEED' not in os.environ:
-        raise Exception("Randomness of hash of string should be disabled via PYTHONHASHSEED")
+        raise RuntimeError("Randomness of hash of string should be disabled via PYTHONHASHSEED")
 
     if x is None:
         return 0
@@ -259,7 +259,7 @@ class RDD(object):
 
     def __getnewargs__(self):
         # This method is called when attempting to pickle an RDD, which is always an error:
-        raise Exception(
+        raise RuntimeError(
             "It appears that you are attempting to broadcast an RDD or reference an RDD from an "
             "action or transformation. RDD transformations and actions can only be invoked by the "
             "driver, not inside of other transformations; for example, "
@@ -892,8 +892,8 @@ class RDD(object):
             def check_return_code():
                 pipe.wait()
                 if checkCode and pipe.returncode:
-                    raise Exception("Pipe function `%s' exited "
-                                    "with error code %d" % (command, pipe.returncode))
+                    raise RuntimeError("Pipe function `%s' exited "
+                                       "with error code %d" % (command, pipe.returncode))
                 else:
                     for i in range(0):
                         yield i

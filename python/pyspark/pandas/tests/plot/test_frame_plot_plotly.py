@@ -37,10 +37,10 @@ if have_plotly:
     import plotly.graph_objs as go
 
 
+@unittest.skipIf(not have_plotly, plotly_requirement_message)
 @unittest.skipIf(
-    not have_plotly or LooseVersion(pd.__version__) < "1.0.0",
-    plotly_requirement_message + " Or pandas<1.0; pandas<1.0 does not support latest plotly "
-    "and/or 'plotting.backend' option.",
+    LooseVersion(pd.__version__) < "1.0.0",
+    "pandas<1.0; pandas<1.0 does not support latest plotly and/or 'plotting.backend' option.",
 )
 class DataFramePlotPlotlyTest(PandasOnSparkTestCase, TestUtils):
     @classmethod
@@ -67,30 +67,30 @@ class DataFramePlotPlotlyTest(PandasOnSparkTestCase, TestUtils):
         )
 
     @property
-    def kdf1(self):
+    def psdf1(self):
         return ps.from_pandas(self.pdf1)
 
     def test_line_plot(self):
-        def check_line_plot(pdf, kdf):
-            self.assertEqual(pdf.plot(kind="line"), kdf.plot(kind="line"))
-            self.assertEqual(pdf.plot.line(), kdf.plot.line())
+        def check_line_plot(pdf, psdf):
+            self.assertEqual(pdf.plot(kind="line"), psdf.plot(kind="line"))
+            self.assertEqual(pdf.plot.line(), psdf.plot.line())
 
         pdf1 = self.pdf1
-        kdf1 = self.kdf1
-        check_line_plot(pdf1, kdf1)
+        psdf1 = self.psdf1
+        check_line_plot(pdf1, psdf1)
 
     def test_area_plot(self):
-        def check_area_plot(pdf, kdf):
-            self.assertEqual(pdf.plot(kind="area"), kdf.plot(kind="area"))
-            self.assertEqual(pdf.plot.area(), kdf.plot.area())
+        def check_area_plot(pdf, psdf):
+            self.assertEqual(pdf.plot(kind="area"), psdf.plot(kind="area"))
+            self.assertEqual(pdf.plot.area(), psdf.plot.area())
 
         pdf = self.pdf1
-        kdf = self.kdf1
-        check_area_plot(pdf, kdf)
+        psdf = self.psdf1
+        check_area_plot(pdf, psdf)
 
     def test_area_plot_y(self):
-        def check_area_plot_y(pdf, kdf, y):
-            self.assertEqual(pdf.plot.area(y=y), kdf.plot.area(y=y))
+        def check_area_plot_y(pdf, psdf, y):
+            self.assertEqual(pdf.plot.area(y=y), psdf.plot.area(y=y))
 
         # test if frame area plot is correct when y is specified
         pdf = pd.DataFrame(
@@ -101,95 +101,97 @@ class DataFramePlotPlotlyTest(PandasOnSparkTestCase, TestUtils):
             },
             index=pd.date_range(start="2018/01/01", end="2018/07/01", freq="M"),
         )
-        kdf = ps.from_pandas(pdf)
-        check_area_plot_y(pdf, kdf, y="sales")
+        psdf = ps.from_pandas(pdf)
+        check_area_plot_y(pdf, psdf, y="sales")
 
     def test_barh_plot_with_x_y(self):
-        def check_barh_plot_with_x_y(pdf, kdf, x, y):
-            self.assertEqual(pdf.plot(kind="barh", x=x, y=y), kdf.plot(kind="barh", x=x, y=y))
-            self.assertEqual(pdf.plot.barh(x=x, y=y), kdf.plot.barh(x=x, y=y))
+        def check_barh_plot_with_x_y(pdf, psdf, x, y):
+            self.assertEqual(pdf.plot(kind="barh", x=x, y=y), psdf.plot(kind="barh", x=x, y=y))
+            self.assertEqual(pdf.plot.barh(x=x, y=y), psdf.plot.barh(x=x, y=y))
 
         # this is testing plot with specified x and y
         pdf1 = pd.DataFrame({"lab": ["A", "B", "C"], "val": [10, 30, 20]})
-        kdf1 = ps.from_pandas(pdf1)
-        check_barh_plot_with_x_y(pdf1, kdf1, x="lab", y="val")
+        psdf1 = ps.from_pandas(pdf1)
+        check_barh_plot_with_x_y(pdf1, psdf1, x="lab", y="val")
 
     def test_barh_plot(self):
-        def check_barh_plot(pdf, kdf):
-            self.assertEqual(pdf.plot(kind="barh"), kdf.plot(kind="barh"))
-            self.assertEqual(pdf.plot.barh(), kdf.plot.barh())
+        def check_barh_plot(pdf, psdf):
+            self.assertEqual(pdf.plot(kind="barh"), psdf.plot(kind="barh"))
+            self.assertEqual(pdf.plot.barh(), psdf.plot.barh())
 
         # this is testing when x or y is not assigned
         pdf1 = pd.DataFrame({"lab": [20.1, 40.5, 60.6], "val": [10, 30, 20]})
-        kdf1 = ps.from_pandas(pdf1)
-        check_barh_plot(pdf1, kdf1)
+        psdf1 = ps.from_pandas(pdf1)
+        check_barh_plot(pdf1, psdf1)
 
     def test_bar_plot(self):
-        def check_bar_plot(pdf, kdf):
-            self.assertEqual(pdf.plot(kind="bar"), kdf.plot(kind="bar"))
-            self.assertEqual(pdf.plot.bar(), kdf.plot.bar())
+        def check_bar_plot(pdf, psdf):
+            self.assertEqual(pdf.plot(kind="bar"), psdf.plot(kind="bar"))
+            self.assertEqual(pdf.plot.bar(), psdf.plot.bar())
 
         pdf1 = self.pdf1
-        kdf1 = self.kdf1
-        check_bar_plot(pdf1, kdf1)
+        psdf1 = self.psdf1
+        check_bar_plot(pdf1, psdf1)
 
     def test_bar_with_x_y(self):
         # this is testing plot with specified x and y
         pdf = pd.DataFrame({"lab": ["A", "B", "C"], "val": [10, 30, 20]})
-        kdf = ps.from_pandas(pdf)
+        psdf = ps.from_pandas(pdf)
 
         self.assertEqual(
-            pdf.plot(kind="bar", x="lab", y="val"), kdf.plot(kind="bar", x="lab", y="val")
+            pdf.plot(kind="bar", x="lab", y="val"), psdf.plot(kind="bar", x="lab", y="val")
         )
-        self.assertEqual(pdf.plot.bar(x="lab", y="val"), kdf.plot.bar(x="lab", y="val"))
+        self.assertEqual(pdf.plot.bar(x="lab", y="val"), psdf.plot.bar(x="lab", y="val"))
 
     def test_scatter_plot(self):
-        def check_scatter_plot(pdf, kdf, x, y, c):
-            self.assertEqual(pdf.plot.scatter(x=x, y=y), kdf.plot.scatter(x=x, y=y))
-            self.assertEqual(pdf.plot(kind="scatter", x=x, y=y), kdf.plot(kind="scatter", x=x, y=y))
+        def check_scatter_plot(pdf, psdf, x, y, c):
+            self.assertEqual(pdf.plot.scatter(x=x, y=y), psdf.plot.scatter(x=x, y=y))
+            self.assertEqual(
+                pdf.plot(kind="scatter", x=x, y=y), psdf.plot(kind="scatter", x=x, y=y)
+            )
 
             # check when keyword c is given as name of a column
             self.assertEqual(
-                pdf.plot.scatter(x=x, y=y, c=c, s=50), kdf.plot.scatter(x=x, y=y, c=c, s=50)
+                pdf.plot.scatter(x=x, y=y, c=c, s=50), psdf.plot.scatter(x=x, y=y, c=c, s=50)
             )
 
         # Use pandas scatter plot example
         pdf1 = pd.DataFrame(np.random.rand(50, 4), columns=["a", "b", "c", "d"])
-        kdf1 = ps.from_pandas(pdf1)
-        check_scatter_plot(pdf1, kdf1, x="a", y="b", c="c")
+        psdf1 = ps.from_pandas(pdf1)
+        check_scatter_plot(pdf1, psdf1, x="a", y="b", c="c")
 
     def test_pie_plot(self):
-        def check_pie_plot(kdf):
-            pdf = kdf.to_pandas()
+        def check_pie_plot(psdf):
+            pdf = psdf.to_pandas()
             self.assertEqual(
-                kdf.plot(kind="pie", y=kdf.columns[0]),
+                psdf.plot(kind="pie", y=psdf.columns[0]),
                 express.pie(pdf, values="a", names=pdf.index),
             )
 
             self.assertEqual(
-                kdf.plot(kind="pie", values="a"), express.pie(pdf, values="a"),
+                psdf.plot(kind="pie", values="a"), express.pie(pdf, values="a"),
             )
 
-        kdf1 = self.kdf1
-        check_pie_plot(kdf1)
+        psdf1 = self.psdf1
+        check_pie_plot(psdf1)
 
         # TODO: support multi-index columns
         # columns = pd.MultiIndex.from_tuples([("x", "y"), ("y", "z")])
-        # kdf1.columns = columns
-        # check_pie_plot(kdf1)
+        # psdf1.columns = columns
+        # check_pie_plot(psdf1)
 
         # TODO: support multi-index
-        # kdf1 = ps.DataFrame(
+        # psdf1 = ps.DataFrame(
         #     {
         #         "a": [1, 2, 3, 4, 5, 6, 7, 8, 9, 15, 50],
         #         "b": [2, 3, 4, 5, 7, 9, 10, 15, 34, 45, 49]
         #     },
         #     index=pd.MultiIndex.from_tuples([("x", "y")] * 11),
         # )
-        # check_pie_plot(kdf1)
+        # check_pie_plot(psdf1)
 
     def test_hist_plot(self):
-        def check_hist_plot(kdf):
+        def check_hist_plot(psdf):
             bins = np.array([1.0, 5.9, 10.8, 15.7, 20.6, 25.5, 30.4, 35.3, 40.2, 45.1, 50.0])
             data = [
                 np.array([5.0, 4.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0]),
@@ -202,8 +204,8 @@ class DataFramePlotPlotlyTest(PandasOnSparkTestCase, TestUtils):
                 prev = b
             text_bins[-1] = text_bins[-1][:-1] + "]"
             bins = 0.5 * (bins[:-1] + bins[1:])
-            name_a = name_like_string(kdf.columns[0])
-            name_b = name_like_string(kdf.columns[1])
+            name_a = name_like_string(psdf.columns[0])
+            name_b = name_like_string(psdf.columns[1])
             bars = [
                 go.Bar(
                     x=bins,
@@ -225,18 +227,18 @@ class DataFramePlotPlotlyTest(PandasOnSparkTestCase, TestUtils):
             fig["layout"]["yaxis"]["title"] = "count"
 
             self.assertEqual(
-                pprint.pformat(kdf.plot(kind="hist").to_dict()), pprint.pformat(fig.to_dict())
+                pprint.pformat(psdf.plot(kind="hist").to_dict()), pprint.pformat(fig.to_dict())
             )
 
-        kdf1 = self.kdf1
-        check_hist_plot(kdf1)
+        psdf1 = self.psdf1
+        check_hist_plot(psdf1)
 
         columns = pd.MultiIndex.from_tuples([("x", "y"), ("y", "z")])
-        kdf1.columns = columns
-        check_hist_plot(kdf1)
+        psdf1.columns = columns
+        check_hist_plot(psdf1)
 
     def test_kde_plot(self):
-        kdf = ps.DataFrame({"a": [1, 2, 3, 4, 5], "b": [1, 3, 5, 7, 9], "c": [2, 4, 6, 8, 10]})
+        psdf = ps.DataFrame({"a": [1, 2, 3, 4, 5], "b": [1, 3, 5, 7, 9], "c": [2, 4, 6, 8, 10]})
 
         pdf = pd.DataFrame(
             {
@@ -256,7 +258,7 @@ class DataFramePlotPlotlyTest(PandasOnSparkTestCase, TestUtils):
             }
         )
 
-        actual = kdf.plot.kde(bw_method=5, ind=3)
+        actual = psdf.plot.kde(bw_method=5, ind=3)
 
         expected = express.line(pdf, x="index", y="Density", color="names")
         expected["layout"]["xaxis"]["title"] = None
@@ -269,7 +271,8 @@ if __name__ == "__main__":
 
     try:
         import xmlrunner  # type: ignore[import]
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
+
+        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

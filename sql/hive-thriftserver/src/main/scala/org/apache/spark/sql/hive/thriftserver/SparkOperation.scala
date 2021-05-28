@@ -102,7 +102,7 @@ private[hive] trait SparkOperation extends Operation with Logging {
         statementId, e.getMessage, Utils.exceptionString(e))
       e match {
         case _: HiveSQLException => throw e
-        case _ => throw new HiveSQLException(s"Error operating $getType ${e.getMessage}", e)
+        case _ => throw HiveThriftServerErrors.hiveOperatingError(getType, e)
       }
   }
 }

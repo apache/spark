@@ -14,12 +14,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from typing import Any, Optional, Tuple, Union, cast
+
 import pandas as pd
 from pandas.api.types import is_hashable
 
 from pyspark import pandas as ps
 from pyspark.pandas.indexes.base import Index
 from pyspark.pandas.series import Series
+from pyspark.pandas.typedef.typehints import Dtype
 
 
 class NumericIndex(Index):
@@ -81,16 +84,24 @@ class Int64Index(IntegerIndex):
     Int64Index([1, 2, 3], dtype='int64')
     """
 
-    def __new__(cls, data=None, dtype=None, copy=False, name=None):
+    def __new__(
+        cls,
+        data: Optional[Any] = None,
+        dtype: Optional[Union[str, Dtype]] = None,
+        copy: bool = False,
+        name: Optional[Union[Any, Tuple]] = None,
+    ) -> "Int64Index":
         if not is_hashable(name):
             raise TypeError("Index.name must be a hashable type")
 
         if isinstance(data, (Series, Index)):
             if dtype is None:
                 dtype = "int64"
-            return Index(data, dtype=dtype, copy=copy, name=name)
+            return cast(Int64Index, Index(data, dtype=dtype, copy=copy, name=name))
 
-        return ps.from_pandas(pd.Int64Index(data=data, dtype=dtype, copy=copy, name=name))
+        return cast(
+            Int64Index, ps.from_pandas(pd.Int64Index(data=data, dtype=dtype, copy=copy, name=name))
+        )
 
 
 class Float64Index(NumericIndex):
@@ -135,19 +146,28 @@ class Float64Index(NumericIndex):
     Float64Index([1.0, 2.0, 3.0], dtype='float64')
     """
 
-    def __new__(cls, data=None, dtype=None, copy=False, name=None):
+    def __new__(
+        cls,
+        data: Optional[Any] = None,
+        dtype: Optional[Union[str, Dtype]] = None,
+        copy: bool = False,
+        name: Optional[Union[Any, Tuple]] = None,
+    ) -> "Float64Index":
         if not is_hashable(name):
             raise TypeError("Index.name must be a hashable type")
 
         if isinstance(data, (Series, Index)):
             if dtype is None:
                 dtype = "float64"
-            return Index(data, dtype=dtype, copy=copy, name=name)
+            return cast(Float64Index, Index(data, dtype=dtype, copy=copy, name=name))
 
-        return ps.from_pandas(pd.Float64Index(data=data, dtype=dtype, copy=copy, name=name))
+        return cast(
+            Float64Index,
+            ps.from_pandas(pd.Float64Index(data=data, dtype=dtype, copy=copy, name=name)),
+        )
 
 
-def _test():
+def _test() -> None:
     import os
     import doctest
     import sys

@@ -108,23 +108,6 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * All options are maintained in a case-insensitive way in terms of key names.
    * If a new option has the same key case-insensitively, it will override the existing option.
    *
-   * You can set the following option(s):
-   * <ul>
-   * <li>`timeZone` (default session local timezone): sets the string that indicates a time zone ID
-   * to be used to format timestamps in the JSON/CSV datasources or partition values. The following
-   * formats of `timeZone` are supported:
-   *   <ul>
-   *     <li> Region-based zone ID: It should have the form 'area/city', such as
-   *         'America/Los_Angeles'.</li>
-   *     <li> Zone offset: It should be in the format '(+|-)HH:mm', for example '-08:00'
-   *          or '+01:00'. Also 'UTC' and 'Z' are supported as aliases of '+00:00'.</li>
-   *   </ul>
-   * Other short names like 'CST' are not recommended to use because they can be ambiguous.
-   * If it isn't set, the current value of the SQL config `spark.sql.session.timeZone` is
-   * used by default.
-   * </li>
-   * </ul>
-   *
    * @since 1.4.0
    */
   def option(key: String, value: String): DataFrameWriter[T] = {
@@ -168,23 +151,6 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * All options are maintained in a case-insensitive way in terms of key names.
    * If a new option has the same key case-insensitively, it will override the existing option.
    *
-   * You can set the following option(s):
-   * <ul>
-   * <li>`timeZone` (default session local timezone): sets the string that indicates a time zone ID
-   * to be used to format timestamps in the JSON/CSV datasources or partition values. The following
-   * formats of `timeZone` are supported:
-   *   <ul>
-   *     <li> Region-based zone ID: It should have the form 'area/city', such as
-   *         'America/Los_Angeles'.</li>
-   *     <li> Zone offset: It should be in the format '(+|-)HH:mm', for example '-08:00'
-   *          or '+01:00'. Also 'UTC' and 'Z' are supported as aliases of '+00:00'.</li>
-   *   </ul>
-   * Other short names like 'CST' are not recommended to use because they can be ambiguous.
-   * If it isn't set, the current value of the SQL config `spark.sql.session.timeZone` is
-   * used by default.
-   * </li>
-   * </ul>
-   *
    * @since 1.4.0
    */
   def options(options: scala.collection.Map[String, String]): DataFrameWriter[T] = {
@@ -197,23 +163,6 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    *
    * All options are maintained in a case-insensitive way in terms of key names.
    * If a new option has the same key case-insensitively, it will override the existing option.
-   *
-   * You can set the following option(s):
-   * <ul>
-   * <li>`timeZone` (default session local timezone): sets the string that indicates a time zone ID
-   * to be used to format timestamps in the JSON/CSV datasources or partition values. The following
-   * formats of `timeZone` are supported:
-   *   <ul>
-   *     <li> Region-based zone ID: It should have the form 'area/city', such as
-   *         'America/Los_Angeles'.</li>
-   *     <li> Zone offset: It should be in the format '(+|-)HH:mm', for example '-08:00'
-   *          or '+01:00'. Also 'UTC' and 'Z' are supported as aliases of '+00:00'.</li>
-   *   </ul>
-   * Other short names like 'CST' are not recommended to use because they can be ambiguous.
-   * If it isn't set, the current value of the SQL config `spark.sql.session.timeZone` is
-   * used by default.
-   * </li>
-   * </ul>
    *
    * @since 1.4.0
    */
@@ -825,27 +774,9 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    *   format("json").save(path)
    * }}}
    *
-   * You can set the following JSON-specific option(s) for writing JSON files:
-   * <ul>
-   * <li>`compression` (default `null`): compression codec to use when saving to file. This can be
-   * one of the known case-insensitive shorten names (`none`, `bzip2`, `gzip`, `lz4`,
-   * `snappy` and `deflate`). </li>
-   * <li>`dateFormat` (default `yyyy-MM-dd`): sets the string that indicates a date format.
-   * Custom date formats follow the formats at
-   * <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">
-   *   Datetime Patterns</a>.
-   * This applies to date type.</li>
-   * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss[.SSS][XXX]`): sets the string that
-   * indicates a timestamp format. Custom date formats follow the formats at
-   * <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">
-   *   Datetime Patterns</a>.
-   * This applies to timestamp type.</li>
-   * <li>`encoding` (by default it is not set): specifies encoding (charset) of saved json
-   * files. If it is not set, the UTF-8 charset will be used. </li>
-   * <li>`lineSep` (default `\n`): defines the line separator that should be used for writing.</li>
-   * <li>`ignoreNullFields` (default `true`): Whether to ignore null fields
-   * when generating JSON objects. </li>
-   * </ul>
+   * You can find the JSON-specific options for writing JSON files in
+   * <a href="https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option">
+   *   Data Source Option</a> in the version you use.
    *
    * @since 1.4.0
    */
@@ -860,13 +791,10 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    *   format("parquet").save(path)
    * }}}
    *
-   * You can set the following Parquet-specific option(s) for writing Parquet files:
-   * <ul>
-   * <li>`compression` (default is the value specified in `spark.sql.parquet.compression.codec`):
-   * compression codec to use when saving to file. This can be one of the known case-insensitive
-   * shorten names(`none`, `uncompressed`, `snappy`, `gzip`, `lzo`, `brotli`, `lz4`, and `zstd`).
-   * This will override `spark.sql.parquet.compression.codec`.</li>
-   * </ul>
+   * Parquet-specific option(s) for writing Parquet files can be found in
+   * <a href=
+   *   "https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#data-source-option">
+   *   Data Source Option</a> in the version you use.
    *
    * @since 1.4.0
    */
@@ -881,14 +809,10 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    *   format("orc").save(path)
    * }}}
    *
-   * You can set the following ORC-specific option(s) for writing ORC files:
-   * <ul>
-   * <li>`compression` (default is the value specified in `spark.sql.orc.compression.codec`):
-   * compression codec to use when saving to file. This can be one of the known case-insensitive
-   * shorten names(`none`, `snappy`, `zlib`, `lzo`, and `zstd`). This will override
-   * `orc.compress` and `spark.sql.orc.compression.codec`. If `orc.compress` is given,
-   * it overrides `spark.sql.orc.compression.codec`.</li>
-   * </ul>
+   * ORC-specific option(s) for writing ORC files can be found in
+   * <a href=
+   *   "https://spark.apache.org/docs/latest/sql-data-sources-orc.html#data-source-option">
+   *   Data Source Option</a> in the version you use.
    *
    * @since 1.5.0
    */
@@ -909,13 +833,9 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * }}}
    * The text files will be encoded as UTF-8.
    *
-   * You can set the following option(s) for writing text files:
-   * <ul>
-   * <li>`compression` (default `null`): compression codec to use when saving to file. This can be
-   * one of the known case-insensitive shorten names (`none`, `bzip2`, `gzip`, `lz4`,
-   * `snappy` and `deflate`). </li>
-   * <li>`lineSep` (default `\n`): defines the line separator that should be used for writing.</li>
-   * </ul>
+   * You can find the text-specific options for writing text files in
+   * <a href="https://spark.apache.org/docs/latest/sql-data-sources-text.html#data-source-option">
+   *   Data Source Option</a> in the version you use.
    *
    * @since 1.6.0
    */

@@ -378,20 +378,6 @@ class DataStreamReader(OptionUtils):
     def option(self, key, value):
         """Adds an input option for the underlying data source.
 
-        You can set the following option(s) for reading files:
-            * ``timeZone``: sets the string that indicates a time zone ID to be used to parse
-                timestamps in the JSON/CSV datasources or partition values. The following
-                formats of `timeZone` are supported:
-
-                * Region-based zone ID: It should have the form 'area/city', such as \
-                  'America/Los_Angeles'.
-                * Zone offset: It should be in the format '(+|-)HH:mm', for example '-08:00' or \
-                 '+01:00'. Also 'UTC' and 'Z' are supported as aliases of '+00:00'.
-
-                Other short names like 'CST' are not recommended to use because they can be
-                ambiguous. If it isn't set, the current value of the SQL config
-                ``spark.sql.session.timeZone`` is used by default.
-
         .. versionadded:: 2.0.0
 
         Notes
@@ -407,20 +393,6 @@ class DataStreamReader(OptionUtils):
 
     def options(self, **options):
         """Adds input options for the underlying data source.
-
-        You can set the following option(s) for reading files:
-            * ``timeZone``: sets the string that indicates a time zone ID to be used to parse
-                timestamps in the JSON/CSV datasources or partition values. The following
-                formats of `timeZone` are supported:
-
-                * Region-based zone ID: It should have the form 'area/city', such as \
-                  'America/Los_Angeles'.
-                * Zone offset: It should be in the format '(+|-)HH:mm', for example '-08:00' or \
-                 '+01:00'. Also 'UTC' and 'Z' are supported as aliases of '+00:00'.
-
-                Other short names like 'CST' are not recommended to use because they can be
-                ambiguous. If it isn't set, the current value of the SQL config
-                ``spark.sql.session.timeZone`` is used by default.
 
         .. versionadded:: 2.0.0
 
@@ -507,102 +479,13 @@ class DataStreamReader(OptionUtils):
         schema : :class:`pyspark.sql.types.StructType` or str, optional
             an optional :class:`pyspark.sql.types.StructType` for the input schema
             or a DDL-formatted string (For example ``col0 INT, col1 DOUBLE``).
-        primitivesAsString : str or bool, optional
-            infers all primitive values as a string type. If None is set,
-            it uses the default value, ``false``.
-        prefersDecimal : str or bool, optional
-            infers all floating-point values as a decimal type. If the values
-            do not fit in decimal, then it infers them as doubles. If None is
-            set, it uses the default value, ``false``.
-        allowComments : str or bool, optional
-            ignores Java/C++ style comment in JSON records. If None is set,
-            it uses the default value, ``false``.
-        allowUnquotedFieldNames : str or bool, optional
-            allows unquoted JSON field names. If None is set,
-            it uses the default value, ``false``.
-        allowSingleQuotes : str or bool, optional
-            allows single quotes in addition to double quotes. If None is
-            set, it uses the default value, ``true``.
-        allowNumericLeadingZero : str or bool, optional
-            allows leading zeros in numbers (e.g. 00012). If None is
-            set, it uses the default value, ``false``.
-        allowBackslashEscapingAnyCharacter : str or bool, optional
-            allows accepting quoting of all character
-            using backslash quoting mechanism. If None is
-            set, it uses the default value, ``false``.
-        mode : str, optional
-            allows a mode for dealing with corrupt records during parsing. If None is
-            set, it uses the default value, ``PERMISSIVE``.
 
-            * ``PERMISSIVE``: when it meets a corrupted record, puts the malformed string \
-              into a field configured by ``columnNameOfCorruptRecord``, and sets malformed \
-              fields to ``null``. To keep corrupt records, an user can set a string type \
-              field named ``columnNameOfCorruptRecord`` in an user-defined schema. If a \
-              schema does not have the field, it drops corrupt records during parsing. \
-              When inferring a schema, it implicitly adds a ``columnNameOfCorruptRecord`` \
-              field in an output schema.
-            *  ``DROPMALFORMED``: ignores the whole corrupted records.
-            *  ``FAILFAST``: throws an exception when it meets corrupted records.
-
-        columnNameOfCorruptRecord : str, optional
-            allows renaming the new field having malformed string
-            created by ``PERMISSIVE`` mode. This overrides
-            ``spark.sql.columnNameOfCorruptRecord``. If None is set,
-            it uses the value specified in
-            ``spark.sql.columnNameOfCorruptRecord``.
-        dateFormat : str, optional
-            sets the string that indicates a date format. Custom date formats
-            follow the formats at
-            `datetime pattern <https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html>`_.  # noqa
-            This applies to date type. If None is set, it uses the
-            default value, ``yyyy-MM-dd``.
-        timestampFormat : str, optional
-            sets the string that indicates a timestamp format.
-            Custom date formats follow the formats at
-            `datetime pattern <https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html>`_.  # noqa
-            This applies to timestamp type. If None is set, it uses the
-            default value, ``yyyy-MM-dd'T'HH:mm:ss[.SSS][XXX]``.
-        multiLine : str or bool, optional
-            parse one record, which may span multiple lines, per file. If None is
-            set, it uses the default value, ``false``.
-        allowUnquotedControlChars : str or bool, optional
-            allows JSON Strings to contain unquoted control
-            characters (ASCII characters with value less than 32,
-            including tab and line feed characters) or not.
-        lineSep : str, optional
-            defines the line separator that should be used for parsing. If None is
-            set, it covers all ``\\r``, ``\\r\\n`` and ``\\n``.
-        locale : str, optional
-            sets a locale as language tag in IETF BCP 47 format. If None is set,
-            it uses the default value, ``en-US``. For instance, ``locale`` is used while
-            parsing dates and timestamps.
-        dropFieldIfAllNull : str or bool, optional
-            whether to ignore column of all null values or empty
-            array/struct during schema inference. If None is set, it
-            uses the default value, ``false``.
-        encoding : str or bool, optional
-            allows to forcibly set one of standard basic or extended encoding for
-            the JSON files. For example UTF-16BE, UTF-32LE. If None is set,
-            the encoding of input JSON will be detected automatically
-            when the multiLine option is set to ``true``.
-        pathGlobFilter : str or bool, optional
-            an optional glob pattern to only include files with paths matching
-            the pattern. The syntax follows `org.apache.hadoop.fs.GlobFilter`.
-            It does not change the behavior of
-            `partition discovery <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#partition-discovery>`_.  # noqa
-        recursiveFileLookup : str or bool, optional
-            recursively scan a directory for files. Using this option
-            disables
-            `partition discovery <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#partition-discovery>`_.  # noqa
-        allowNonNumericNumbers : str or bool, optional
-            allows JSON parser to recognize set of "Not-a-Number" (NaN)
-            tokens as legal floating number values. If None is set,
-            it uses the default value, ``true``.
-
-                * ``+INF``: for positive infinity, as well as alias of
-                            ``+Infinity`` and ``Infinity``.
-                *  ``-INF``: for negative infinity, alias ``-Infinity``.
-                *  ``NaN``: for other not-a-numbers, like result of division by zero.
+        Other Parameters
+        ----------------
+        Extra options
+            For the extra options, refer to
+            `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option>`_  # noqa
+            in the version you use.
 
         Notes
         -----
@@ -637,20 +520,12 @@ class DataStreamReader(OptionUtils):
 
         .. versionadded:: 2.3.0
 
-        Parameters
-        ----------
-        mergeSchema : str or bool, optional
-            sets whether we should merge schemas collected from all
-            ORC part-files. This will override ``spark.sql.orc.mergeSchema``.
-            The default value is specified in ``spark.sql.orc.mergeSchema``.
-        pathGlobFilter : str or bool, optional
-            an optional glob pattern to only include files with paths matching
-            the pattern. The syntax follows `org.apache.hadoop.fs.GlobFilter`.
-            It does not change the behavior of `partition discovery`_.
-        recursiveFileLookup : str or bool, optional
-            recursively scan a directory for files. Using this option
-            disables
-            `partition discovery <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#partition-discovery>`_.  # noqa
+        Other Parameters
+        ----------------
+        Extra options
+            For the extra options, refer to
+            `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-orc.html#data-source-option>`_  # noqa
+            in the version you use.
 
         Examples
         --------
@@ -676,43 +551,15 @@ class DataStreamReader(OptionUtils):
 
         Parameters
         ----------
-        mergeSchema : str or bool, optional
-            sets whether we should merge schemas collected from all
-            Parquet part-files. This will override
-            ``spark.sql.parquet.mergeSchema``. The default value is specified in
-            ``spark.sql.parquet.mergeSchema``.
-        pathGlobFilter : str or bool, optional
-            an optional glob pattern to only include files with paths matching
-            the pattern. The syntax follows `org.apache.hadoop.fs.GlobFilter`.
-            It does not change the behavior of `partition discovery`_.
-        recursiveFileLookup : str or bool, optional
-            recursively scan a directory for files. Using this option
-            disables
-            `partition discovery <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#partition-discovery>`_.  # noqa
-        datetimeRebaseMode : str, optional
-            the rebasing mode for the values of the ``DATE``, ``TIMESTAMP_MICROS``,
-            ``TIMESTAMP_MILLIS`` logical types from the Julian to Proleptic Gregorian calendar.
+        path : str
+            the path in any Hadoop supported file system
 
-                * ``EXCEPTION``: Spark fails in reads of ancient dates/timestamps
-                                 that are ambiguous between the two calendars.
-                *  ``CORRECTED``: loading of dates/timestamps without rebasing.
-                *  ``LEGACY``: perform rebasing of ancient dates/timestamps from the Julian
-                               to Proleptic Gregorian calendar.
-
-            If None is set, the value of the SQL config
-            ``spark.sql.parquet.datetimeRebaseModeInRead`` is used by default.
-        int96RebaseMode : str, optional
-            the rebasing mode for ``INT96`` timestamps from the Julian to
-            Proleptic Gregorian calendar.
-
-                * ``EXCEPTION``: Spark fails in reads of ancient ``INT96`` timestamps
-                                 that are ambiguous between the two calendars.
-                *  ``CORRECTED``: loading of ``INT96`` timestamps without rebasing.
-                *  ``LEGACY``: perform rebasing of ancient ``INT96`` timestamps from the Julian
-                               to Proleptic Gregorian calendar.
-
-            If None is set, the value of the SQL config
-            ``spark.sql.parquet.int96RebaseModeInRead`` is used by default.
+        Other Parameters
+        ----------------
+        Extra options
+            For the extra options, refer to
+            `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#data-source-option>`_.  # noqa
+            in the version you use.
 
         Examples
         --------
@@ -746,19 +593,13 @@ class DataStreamReader(OptionUtils):
         ----------
         paths : str or list
             string, or list of strings, for input path(s).
-        wholetext : str or bool, optional
-            if true, read each file from input path(s) as a single row.
-        lineSep : str, optional
-            defines the line separator that should be used for parsing. If None is
-            set, it covers all ``\\r``, ``\\r\\n`` and ``\\n``.
-        pathGlobFilter : str or bool, optional
-            an optional glob pattern to only include files with paths matching
-            the pattern. The syntax follows `org.apache.hadoop.fs.GlobFilter`.
-            It does not change the behavior of `partition discovery`_.
-        recursiveFileLookup : str or bool, optional
-            recursively scan a directory for files. Using this option
-            disables
-            `partition discovery <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#partition-discovery>`_.  # noqa
+
+        Other Parameters
+        ----------------
+        Extra options
+            For the extra options, refer to
+            `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-text.html#data-source-option>`_  # noqa
+            in the version you use.
 
         Notes
         -----
@@ -1083,20 +924,6 @@ class DataStreamWriter(object):
     def option(self, key, value):
         """Adds an output option for the underlying data source.
 
-        You can set the following option(s) for writing files:
-            * ``timeZone``: sets the string that indicates a time zone ID to be used to format
-                timestamps in the JSON/CSV datasources or partition values. The following
-                formats of `timeZone` are supported:
-
-                * Region-based zone ID: It should have the form 'area/city', such as \
-                  'America/Los_Angeles'.
-                * Zone offset: It should be in the format '(+|-)HH:mm', for example '-08:00' or \
-                 '+01:00'. Also 'UTC' and 'Z' are supported as aliases of '+00:00'.
-
-                Other short names like 'CST' are not recommended to use because they can be
-                ambiguous. If it isn't set, the current value of the SQL config
-                ``spark.sql.session.timeZone`` is used by default.
-
         .. versionadded:: 2.0.0
 
         Notes
@@ -1108,20 +935,6 @@ class DataStreamWriter(object):
 
     def options(self, **options):
         """Adds output options for the underlying data source.
-
-        You can set the following option(s) for writing files:
-            * ``timeZone``: sets the string that indicates a time zone ID to be used to format
-                timestamps in the JSON/CSV datasources or partition values. The following
-                formats of `timeZone` are supported:
-
-                * Region-based zone ID: It should have the form 'area/city', such as \
-                  'America/Los_Angeles'.
-                * Zone offset: It should be in the format '(+|-)HH:mm', for example '-08:00' or \
-                 '+01:00'. Also 'UTC' and 'Z' are supported as aliases of '+00:00'.
-
-                Other short names like 'CST' are not recommended to use because they can be
-                ambiguous. If it isn't set, the current value of the SQL config
-                ``spark.sql.session.timeZone`` is used by default.
 
         .. versionadded:: 2.0.0
 
@@ -1360,15 +1173,15 @@ class DataStreamWriter(object):
             # 'close(error)' methods.
 
             if not hasattr(f, 'process'):
-                raise Exception("Provided object does not have a 'process' method")
+                raise AttributeError("Provided object does not have a 'process' method")
 
             if not callable(getattr(f, 'process')):
-                raise Exception("Attribute 'process' in provided object is not callable")
+                raise TypeError("Attribute 'process' in provided object is not callable")
 
             def doesMethodExist(method_name):
                 exists = hasattr(f, method_name)
                 if exists and not callable(getattr(f, method_name)):
-                    raise Exception(
+                    raise TypeError(
                         "Attribute '%s' in provided object is not callable" % method_name)
                 return exists
 
@@ -1380,7 +1193,7 @@ class DataStreamWriter(object):
                 if epoch_id:
                     epoch_id = int(epoch_id)
                 else:
-                    raise Exception("Could not get batch id from TaskContext")
+                    raise RuntimeError("Could not get batch id from TaskContext")
 
                 # Check if the data should be processed
                 should_process = True

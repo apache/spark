@@ -56,7 +56,7 @@ class StatCounter(object):
     # Merge another StatCounter into this one, adding up the internal statistics.
     def mergeStats(self, other):
         if not isinstance(other, StatCounter):
-            raise Exception("Can only merge Statcounters!")
+            raise TypeError("Can only merge StatCounter but got %s" % type(other))
 
         if other is self:  # reference equality holds
             self.merge(copy.deepcopy(other))  # Avoid overwriting fields in a weird order

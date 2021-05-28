@@ -225,7 +225,8 @@ trait SimpleHigherOrderFunction extends HigherOrderFunction with BinaryLike[Expr
    * in order to save null-check code.
    */
   protected def nullSafeEval(inputRow: InternalRow, argumentValue: Any): Any =
-    sys.error(s"UnaryHigherOrderFunction must override either eval or nullSafeEval")
+    throw QueryExecutionErrors.notOverrideExpectedMethodsError("UnaryHigherOrderFunction",
+      "eval", "nullSafeEval")
 
   override def eval(inputRow: InternalRow): Any = {
     val value = argument.eval(inputRow)

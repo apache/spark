@@ -173,8 +173,14 @@ case class In(attribute: String, values: Array[Any]) extends Filter {
       a == attribute && vs.length == values.length && vs.zip(values).forall(x => x._1 == x._2)
     case _ => false
   }
+  private def formatValue(v: Any): String = v match {
+    case null => "null"
+    case ar: Seq[Any] => ar.map(formatValue).mkString("[", ", ", "]")
+    case _ => v.toString
+  }
   override def toString: String = {
-    s"In($attribute, [${values.mkString(",")}])"
+    // Sort elements for deterministic behaviours
+    s"In($attribute, [${values.map(formatValue).sorted.mkString(",")}])"
   }
 
   override def references: Array[String] = Array(attribute) ++ values.flatMap(findReferences)

@@ -92,13 +92,16 @@ abstract class DatabaseOnDocker {
       containerConfigBuilder: ContainerConfig.Builder): Unit = {}
 }
 
-abstract class DockerJDBCIntegrationSuite extends SharedSparkSession with Eventually {
+abstract class DockerJDBCIntegrationSuite
+  extends SharedSparkSession with Eventually with DockerIntegrationFunSuite {
 
   protected val dockerIp = DockerUtils.getDockerIp()
   val db: DatabaseOnDocker
   val connectionTimeout = timeout(5.minutes)
   val keepContainer =
     sys.props.getOrElse("spark.test.docker.keepContainer", "false").toBoolean
+  val removePulledImage =
+    sys.props.getOrElse("spark.test.docker.removePulledImage", "true").toBoolean
 
   private var docker: DockerClient = _
   // Configure networking (necessary for boot2docker / Docker Machine)
@@ -109,9 +112,10 @@ abstract class DockerJDBCIntegrationSuite extends SharedSparkSession with Eventu
     port
   }
   private var containerId: String = _
+  private var pulled: Boolean = false
   protected var jdbcUrl: String = _
 
-  override def beforeAll(): Unit = {
+  override def beforeAll(): Unit = runIfTestsEnabled(s"Prepare for ${this.getClass.getName}") {
     super.beforeAll()
     try {
       docker = DefaultDockerClient.fromEnv.build()
@@ -130,6 +134,7 @@ abstract class DockerJDBCIntegrationSuite extends SharedSparkSession with Eventu
         case e: ImageNotFoundException =>
           log.warn(s"Docker image ${db.imageName} not found; pulling image from registry")
           docker.pull(db.imageName)
+          pulled = true
       }
       val hostConfigBuilder = HostConfig.builder()
         .privileged(db.privileged)
@@ -215,6 +220,9 @@ abstract class DockerJDBCIntegrationSuite extends SharedSparkSession with Eventu
           }
       } finally {
         docker.removeContainer(containerId)
+        if (removePulledImage && pulled) {
+          docker.removeImage(db.imageName)
+        }
       }
     }
   }

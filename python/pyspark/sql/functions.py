@@ -2681,6 +2681,45 @@ def overlay(src, replace, pos, len=-1):
     ))
 
 
+def sentences(string, language=None, country=None):
+    """
+    Splits a string into arrays of sentences, where each sentence is an array of words.
+    The 'language' and 'country' arguments are optional, and if omitted, the default locale is used.
+
+    .. versionadded:: 3.2.0
+
+    Parameters
+    ----------
+    string : :class:`~pyspark.sql.Column` or str
+        a string to be split
+    language : :class:`~pyspark.sql.Column` or str, optional
+        a language of the locale
+    country : :class:`~pyspark.sql.Column` or str, optional
+        a country of the locale
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([["This is an example sentence."]], ["string"])
+    >>> df.select(sentences(df.string, lit("en"), lit("US"))).show(truncate=False)
+    +-----------------------------------+
+    |sentences(string, en, US)          |
+    +-----------------------------------+
+    |[[This, is, an, example, sentence]]|
+    +-----------------------------------+
+    """
+    if language is None:
+        language = lit("")
+    if country is None:
+        country = lit("")
+
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.sentences(
+        _to_java_column(string),
+        _to_java_column(language),
+        _to_java_column(country)
+    ))
+
+
 def substring(str, pos, len):
     """
     Substring starts at `pos` and is of length `len` when str is String type or
@@ -3672,7 +3711,9 @@ def schema_of_json(json, options=None):
     json : :class:`~pyspark.sql.Column` or str
         a JSON string or a foldable string column containing a JSON string.
     options : dict, optional
-        options to control parsing. accepts the same options as the JSON datasource
+        options to control parsing. accepts the same options as the JSON datasource.
+        See `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option>`_  # noqa
+        in the version you use.
 
         .. versionchanged:: 3.0
            It accepts `options` parameter to control schema inferring.
@@ -4254,7 +4295,10 @@ def _create_lambda(f):
 
     argnames = ["x", "y", "z"]
     args = [
-        _unresolved_named_lambda_variable(arg) for arg in argnames[: len(parameters)]
+        _unresolved_named_lambda_variable(
+            expressions.UnresolvedNamedLambdaVariable.freshVarName(arg)
+        )
+        for arg in argnames[: len(parameters)]
     ]
 
     result = f(*args)
