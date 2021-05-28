@@ -37,14 +37,13 @@ object AQEPropagateEmptyRelation extends PropagateEmptyRelationBase {
     super.nonEmpty(plan) || getRowCount(plan).exists(_ > 0)
 
   private def getRowCount(plan: LogicalPlan): Option[BigInt] = plan match {
-    case LogicalQueryStage(_, stage: QueryStageExec) if stage.resultOption.get().isDefined =>
+    case LogicalQueryStage(_, stage: QueryStageExec) if stage.isMaterialized =>
       stage.getRuntimeStatistics.rowCount
     case _ => None
   }
 
   private def isRelationWithAllNullKeys(plan: LogicalPlan): Boolean = plan match {
-    case LogicalQueryStage(_, stage: BroadcastQueryStageExec)
-      if stage.resultOption.get().isDefined =>
+    case LogicalQueryStage(_, stage: BroadcastQueryStageExec) if stage.isMaterialized =>
       stage.broadcast.relationFuture.get().value == HashedRelationWithAllNullKeys
     case _ => false
   }

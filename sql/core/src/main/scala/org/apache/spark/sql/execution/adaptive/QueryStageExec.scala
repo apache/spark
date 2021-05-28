@@ -95,11 +95,15 @@ abstract class QueryStageExec extends LeafExecNode {
   /**
    * Compute the statistics of the query stage if executed, otherwise None.
    */
-  def computeStats(): Option[Statistics] = resultOption.get().map { _ =>
-    val runtimeStats = getRuntimeStatistics
-    val dataSize = runtimeStats.sizeInBytes.max(0)
-    val numOutputRows = runtimeStats.rowCount.map(_.max(0))
-    Statistics(dataSize, numOutputRows, isRuntime = true)
+  def computeStats(): Option[Statistics] = {
+    if (isMaterialized) {
+      val runtimeStats = getRuntimeStatistics
+      val dataSize = runtimeStats.sizeInBytes.max(0)
+      val numOutputRows = runtimeStats.rowCount.map(_.max(0))
+      Some(Statistics(dataSize, numOutputRows, isRuntime = true))
+    } else {
+      None
+    }
   }
 
   @transient
@@ -107,6 +111,7 @@ abstract class QueryStageExec extends LeafExecNode {
   protected var _resultOption = new AtomicReference[Option[Any]](None)
 
   private[adaptive] def resultOption: AtomicReference[Option[Any]] = _resultOption
+  private[adaptive] def isMaterialized: Boolean = resultOption.get().isDefined
 
   override def output: Seq[Attribute] = plan.output
   override def outputPartitioning: Partitioning = plan.outputPartitioning
