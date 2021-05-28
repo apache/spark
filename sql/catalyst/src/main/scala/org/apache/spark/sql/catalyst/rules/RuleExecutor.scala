@@ -64,6 +64,7 @@ class PlanChangeLogger[TreeType <: TreeNode[_]] extends Logging {
 
         logBasedOnLevel(message)
       }
+      println(s"$ruleName applied")
     }
   }
 
