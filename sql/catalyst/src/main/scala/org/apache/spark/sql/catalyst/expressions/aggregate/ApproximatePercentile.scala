@@ -50,7 +50,8 @@ import org.apache.spark.sql.types._
  *                           DEFAULT_PERCENTILE_ACCURACY.
  */
 @ExpressionDescription(
-  usage = """
+  usage =
+    """
     _FUNC_(col, percentage [, accuracy]) - Returns the approximate `percentile` of the numeric
       column `col` which is the smallest value in the ordered `col` values (sorted from least to
       greatest) such that no more than `percentage` of `col` values is less than the value
@@ -62,7 +63,8 @@ import org.apache.spark.sql.types._
       In this case, returns the approximate percentile array of column `col` at the given
       percentage array.
   """,
-  examples = """
+  examples =
+    """
     Examples:
       > SELECT _FUNC_(col, array(0.5, 0.4, 0.1), 100) FROM VALUES (0), (1), (2), (10) AS tab(col);
        [1,1,0]
@@ -77,10 +79,14 @@ case class ApproximatePercentile(
     accuracyExpression: Expression,
     override val mutableAggBufferOffset: Int,
     override val inputAggBufferOffset: Int)
-  extends TypedImperativeAggregate[PercentileDigest] with ImplicitCastInputTypes
-  with TernaryLike[Expression] {
+    extends TypedImperativeAggregate[PercentileDigest]
+    with ImplicitCastInputTypes
+    with TernaryLike[Expression] {
 
-  def this(child: Expression, percentageExpression: Expression, accuracyExpression: Expression) = {
+  def this(
+      child: Expression,
+      percentageExpression: Expression,
+      accuracyExpression: Expression) = {
     this(child, percentageExpression, accuracyExpression, 0, 0)
   }
 
@@ -94,8 +100,10 @@ case class ApproximatePercentile(
   override def inputTypes: Seq[AbstractDataType] = {
     // Support NumericType, DateType and TimestampType since their internal types are all numeric,
     // and can be easily cast to double for processing.
-    Seq(TypeCollection(NumericType, DateType, TimestampType),
-      TypeCollection(DoubleType, ArrayType(DoubleType, containsNull = false)), IntegralType)
+    Seq(
+      TypeCollection(NumericType, DateType, TimestampType),
+      TypeCollection(DoubleType, ArrayType(DoubleType, containsNull = false)),
+      IntegralType)
   }
 
   // Mark as lazy so that percentageExpression is not evaluated during tree transformation.
@@ -114,11 +122,12 @@ case class ApproximatePercentile(
     } else if (!percentageExpression.foldable || !accuracyExpression.foldable) {
       TypeCheckFailure(s"The accuracy or percentage provided must be a constant literal")
     } else if (accuracy <= 0 || accuracy > Int.MaxValue) {
-      TypeCheckFailure(s"The accuracy provided must be a literal between (0, ${Int.MaxValue}]" +
-        s" (current value = $accuracy)")
+      TypeCheckFailure(
+        s"The accuracy provided must be a literal between (0, ${Int.MaxValue}]" +
+          s" (current value = $accuracy)")
     } else if (percentages == null) {
       TypeCheckFailure("Percentage value must not be null")
-    } else if (percentages.exists(percentage => percentage < 0.0D || percentage > 1.0D)) {
+    } else if (percentages.exists(percentage => percentage < 0.0d || percentage > 1.0d)) {
       TypeCheckFailure(
         s"All percentage values must be between 0.0 and 1.0 " +
           s"(current = ${percentages.mkString(", ")})")
@@ -128,7 +137,7 @@ case class ApproximatePercentile(
   }
 
   override def createAggregationBuffer(): PercentileDigest = {
-    val relativeError = 1.0D / accuracy
+    val relativeError = 1.0d / accuracy
     new PercentileDigest(relativeError)
   }
 
@@ -210,8 +219,11 @@ case class ApproximatePercentile(
   }
 
   override protected def withNewChildrenInternal(
-      newFirst: Expression, newSecond: Expression, newThird: Expression): ApproximatePercentile =
+      newFirst: Expression,
+      newSecond: Expression,
+      newThird: Expression): ApproximatePercentile =
     copy(child = newFirst, percentageExpression = newSecond, accuracyExpression = newThird)
+
 }
 
 object ApproximatePercentile {
@@ -261,25 +273,19 @@ object ApproximatePercentile {
      *   val Array(p25, median, p75) = percentileDigest.getPercentiles(Array(0.25, 0.5, 0.75))
      * }}}
      */
-    def getPercentiles(percentages: Array[Double]): Array[Double] = {
+    def getPercentiles(percentages: Array[Double]): Seq[Double] = {
       if (!isCompressed) compress()
       if (summaries.count == 0 || percentages.length == 0) {
         Array.emptyDoubleArray
       } else {
-        val result = new Array[Double](percentages.length)
-        var i = 0
-        while (i < percentages.length) {
-          // Since summaries.count != 0, the query here never return None.
-          result(i) = summaries.query(percentages(i)).get
-          i += 1
-        }
-        result
+        summaries.query(percentages).get
       }
     }
 
     private final def compress(): Unit = {
       summaries = summaries.compress()
     }
+
   }
 
   /**
@@ -292,10 +298,10 @@ object ApproximatePercentile {
     private final def length(summaries: QuantileSummaries): Int = {
       // summaries.compressThreshold, summary.relativeError, summary.count
       Ints.BYTES + Doubles.BYTES + Longs.BYTES +
-      // length of summary.sampled
-      Ints.BYTES +
-      // summary.sampled, Array[Stat(value: Double, g: Long, delta: Long)]
-      summaries.sampled.length * (Doubles.BYTES + Longs.BYTES + Longs.BYTES)
+        // length of summary.sampled
+        Ints.BYTES +
+        // summary.sampled, Array[Stat(value: Double, g: Long, delta: Long)]
+        summaries.sampled.length * (Doubles.BYTES + Longs.BYTES + Longs.BYTES)
     }
 
     final def serialize(obj: PercentileDigest): Array[Byte] = {
@@ -336,6 +342,7 @@ object ApproximatePercentile {
       val summary = new QuantileSummaries(compressThreshold, relativeError, sampled, count, true)
       new PercentileDigest(summary)
     }
+
   }
 
   val serializer: PercentileDigestSerializer = new PercentileDigestSerializer
