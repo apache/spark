@@ -85,7 +85,6 @@ object TreePattern extends Enumeration  {
   // Logical plan patterns (alphabetically ordered)
   val AGGREGATE: Value = Value
   val COMMAND: Value = Value
-  val DATA_SOURCE_V2_RELATION: Value = Value
   val DISTINCT_LIKE: Value = Value
   val EVENT_TIME_WATERMARK: Value = Value
   val EXCEPT: Value = Value

@@ -946,7 +946,7 @@ class Analyzer(override val catalogManager: CatalogManager)
     import org.apache.spark.sql.catalyst.util._
 
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsDownWithPruning(
-      _.containsPattern(DATA_SOURCE_V2_RELATION), ruleId) {
+      AlwaysProcess.fn, ruleId) {
       // Add metadata output to all node types
       case node if node.children.nonEmpty && node.resolved && hasMetadataCol(node) =>
         val inputAttrs = AttributeSet(node.children.flatMap(_.output))
