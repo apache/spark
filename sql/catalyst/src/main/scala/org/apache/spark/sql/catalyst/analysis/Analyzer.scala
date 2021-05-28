@@ -3702,7 +3702,8 @@ class Analyzer(override val catalogManager: CatalogManager)
    * being optimized. This rule should run after all other analysis rules are run.
    */
   object HandleAnalysisOnlyCommand extends Rule[LogicalPlan] {
-    override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+    override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
+      _.containsPattern(COMMAND)) {
       case c: AnalysisOnlyCommand if c.resolved =>
         checkAnalysis(c)
         c.markAsAnalyzed()
@@ -3825,7 +3826,7 @@ object TimeWindowing extends Rule[LogicalPlan] {
    *         the Filter operator for correctness and Project for usability.
    */
   def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
-    AlwaysProcess.fn, ruleId) {
+    _.containsPattern(TIME_WINDOW), ruleId) {
     case p: LogicalPlan if p.children.size == 1 =>
       val child = p.children.head
       val windowExpressions =
