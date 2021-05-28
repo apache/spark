@@ -394,7 +394,8 @@ object CreateStruct {
       "",
       "struct_funcs",
       "1.4.0",
-      "")
+      "",
+      "built-in")
     ("struct", (info, this.create))
   }
 }

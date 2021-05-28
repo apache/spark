@@ -770,6 +770,10 @@ class Analyzer(override val catalogManager: CatalogManager)
                   First(ifExpr(expr), true)
                 case Last(expr, _) =>
                   Last(ifExpr(expr), true)
+                case a: ApproximatePercentile =>
+                  // ApproximatePercentile takes two literals for accuracy and percentage which
+                  // should not be wrapped by if-else.
+                  a.withNewChildren(ifExpr(a.first) :: a.second :: a.third :: Nil)
                 case a: AggregateFunction =>
                   a.withNewChildren(a.children.map(ifExpr))
               }.transform {

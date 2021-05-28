@@ -833,13 +833,9 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * }}}
    * The text files will be encoded as UTF-8.
    *
-   * You can set the following option(s) for writing text files:
-   * <ul>
-   * <li>`compression` (default `null`): compression codec to use when saving to file. This can be
-   * one of the known case-insensitive shorten names (`none`, `bzip2`, `gzip`, `lz4`,
-   * `snappy` and `deflate`). </li>
-   * <li>`lineSep` (default `\n`): defines the line separator that should be used for writing.</li>
-   * </ul>
+   * You can find the text-specific options for writing text files in
+   * <a href="https://spark.apache.org/docs/latest/sql-data-sources-text.html#data-source-option">
+   *   Data Source Option</a> in the version you use.
    *
    * @since 1.6.0
    */

@@ -100,8 +100,7 @@ object DataWritingCommand {
       metrics.values.toSeq)
   }
   /**
-   * When execute CTAS operators, if the  location is not empty,
-   * Spark SQL will throw[[AnalysisException]].
+   * When execute CTAS operators, and the location is not empty, throw [[AnalysisException]].
    * For CTAS, the SaveMode is always [[ErrorIfExists]]
    *
    * @param tablePath Table location.
