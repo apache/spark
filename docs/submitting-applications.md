@@ -146,7 +146,7 @@ export HADOOP_CONF_DIR=XXX
 ./bin/spark-submit \
   --class org.apache.spark.examples.SparkPi \
   --master k8s://xx.yy.zz.ww:443 \
-  --deploy-mode cluster \
+  --deploy-mode cluster \  # can be client for client mode
   --executor-memory 20G \
   --num-executors 50 \
   http://path/to/examples.jar \
