@@ -75,9 +75,25 @@ object HiveResult {
       command.executeCollect().map(_.getString(1))
     case other =>
       val timeFormatters = getTimeFormatters
-      val result: Seq[Seq[Any]] = other.executeCollectPublic().map(_.toSeq).toSeq
+      val commandPhysicalPlans = other collect {
+        case commandResultExec: CommandResultExec => commandResultExec.commandPhysicalPlan
+      }
+      val hasCommandResult = commandPhysicalPlans exists {
+        case ExecutedCommandExec(_: ShowTablesCommand) => true
+        case ExecutedCommandExec(_: ShowViewsCommand) => true
+        case _ => false
+      }
+      val result: Seq[Seq[Any]] = if (hasCommandResult) {
+        other.executeCollectPublic().map(row => Row(row.get(1))).map(_.toSeq).toSeq
+      } else {
+        other.executeCollectPublic().map(_.toSeq).toSeq
+      }
       // We need the types so we can output struct field names
-      val types = executedPlan.output.map(_.dataType)
+      val types = if (hasCommandResult) {
+        Seq(executedPlan.output(1).dataType)
+      } else {
+        executedPlan.output.map(_.dataType)
+      }
       // Reformat to match hive tab delimited output.
       result.map(_.zip(types).map(e => toHiveString(e, false, timeFormatters)))
         .map(_.mkString("\t"))
