@@ -245,8 +245,9 @@ private[spark] object JettyUtils extends Logging {
       conf: SparkConf,
       serverName: String = ""): ServerInfo = {
 
+    val defaultPoolSize = if (serverName == "HistoryServerUI") 1000 else 200
     // Start the server first, with no connectors.
-    val pool = new QueuedThreadPool
+    val pool = new QueuedThreadPool(defaultPoolSize)
     if (serverName.nonEmpty) {
       pool.setName(serverName)
     }
@@ -301,9 +302,7 @@ private[spark] object JettyUtils extends Logging {
 
         connector.start()
         // The number of selectors always equals to the number of acceptors
-        minThreads += math.max(connector.getAcceptors * 2,
-          // Avoid jetty `Insufficient configured threads` error
-          pool.getThreadPoolBudget.getLeasedThreads)
+        minThreads += connector.getAcceptors * 2
 
         (connector, connector.getLocalPort())
       }
@@ -351,7 +350,7 @@ private[spark] object JettyUtils extends Logging {
       }
 
       server.addConnector(httpConnector)
-      pool.setMaxThreads(math.max(conf.get(UI_THREADS), minThreads))
+      pool.setMaxThreads(math.max(pool.getMaxThreads, minThreads))
       ServerInfo(server, httpPort, securePort, conf, collection)
     } catch {
       case e: Exception =>

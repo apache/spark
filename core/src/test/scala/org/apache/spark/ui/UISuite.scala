@@ -407,25 +407,18 @@ class UISuite extends SparkFunSuite {
     }
   }
 
-  test("SPARK-34449: Make thread pool of jetty server in Web UIs configurable") {
-    val (conf, securityMgr, sslOptions) = sslDisabledConf()
-    conf.set(UI.UI_THREADS, 123)
-    val serverInfo1 = JettyUtils.startJettyServer("0.0.0.0", 0, sslOptions, conf)
-    try {
-      assert(serverInfo1.server.getThreadPool.asInstanceOf[QueuedThreadPool].getMaxThreads === 123)
-    } finally {
-      stopServer(serverInfo1)
-    }
-    conf.set(UI.UI_THREADS, 1)
+  test("SPARK-34449: default thread pool size of different jetty servers") {
+    val (conf, _, sslOptions) = sslDisabledConf()
 
-    val serverInfo2 = JettyUtils.startJettyServer("0.0.0.0", 0, sslOptions, conf)
-    try {
-      val queuedThreadPool = serverInfo2.server.getThreadPool.asInstanceOf[QueuedThreadPool]
-      val leasedThreads = queuedThreadPool.getThreadPoolBudget.getLeasedThreads
-      assert(leasedThreads > 1, "we shall meet the basic requirement for jetty to be responsive")
-      assert(queuedThreadPool.getMaxThreads === leasedThreads + 1)
-    } finally {
-      stopServer(serverInfo2)
+    Seq("MasterUI", "SparkUI", "", "HistoryServerUI").foreach { name =>
+      val defaultPoolSize = if (name == "HistoryServerUI") 1000 else 200
+      val serverInfo = JettyUtils.startJettyServer("0.0.0.0", 0, sslOptions, conf, name)
+      try {
+        assert(serverInfo.server.getThreadPool.asInstanceOf[QueuedThreadPool].getMaxThreads ===
+          defaultPoolSize)
+      } finally {
+        stopServer(serverInfo)
+      }
     }
   }
 
