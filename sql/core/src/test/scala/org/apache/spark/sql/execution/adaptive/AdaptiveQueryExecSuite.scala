@@ -1579,7 +1579,7 @@ class AdaptiveQueryExecSuite
   test("SPARK-34091: Batch shuffle fetch in AQE partition coalescing") {
     withSQLConf(
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
-      SQLConf.SHUFFLE_PARTITIONS.key -> "10000",
+      SQLConf.SHUFFLE_PARTITIONS.key -> "10",
       SQLConf.FETCH_SHUFFLE_BLOCKS_IN_BATCH.key -> "true") {
       withTable("t1") {
         spark.range(100).selectExpr("id + 1 as a").write.format("parquet").saveAsTable("t1")

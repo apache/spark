@@ -23,7 +23,8 @@ object TreePattern extends Enumeration  {
 
   // Enum Ids start from 0.
   // Expression patterns (alphabetically ordered)
-  val ALIAS: Value = Value(0)
+  val AGGREGATE_EXPRESSION = Value(0)
+  val ALIAS: Value = Value
   val AND_OR: Value = Value
   val ATTRIBUTE_REFERENCE: Value = Value
   val APPEND_COLUMNS: Value = Value
@@ -40,6 +41,7 @@ object TreePattern extends Enumeration  {
   val CREATE_NAMED_STRUCT: Value = Value
   val CURRENT_LIKE: Value = Value
   val DESERIALIZE_TO_OBJECT: Value = Value
+  val DYNAMIC_PRUNING_EXPRESSION: Value = Value
   val DYNAMIC_PRUNING_SUBQUERY: Value = Value
   val EXISTS_SUBQUERY = Value
   val EXPRESSION_WITH_RANDOM_SEED: Value = Value
@@ -67,6 +69,7 @@ object TreePattern extends Enumeration  {
   val OUTER_REFERENCE: Value = Value
   val PIVOT: Value = Value
   val PLAN_EXPRESSION: Value = Value
+  val PYTHON_UDF: Value = Value
   val RUNTIME_REPLACEABLE: Value = Value
   val SCALAR_SUBQUERY: Value = Value
   val SCALA_UDF: Value = Value
@@ -115,4 +118,10 @@ object TreePattern extends Enumeration  {
   // Unresolved Plan patterns (Alphabetically ordered)
   val UNRESOLVED_SUBQUERY_COLUMN_ALIAS: Value = Value
   val UNRESOLVED_FUNC: Value = Value
+
+  // Execution expression patterns (alphabetically ordered)
+  val IN_SUBQUERY_EXEC: Value = Value
+
+  // Execution Plan patterns (alphabetically ordered)
+  val EXCHANGE: Value = Value
 }
