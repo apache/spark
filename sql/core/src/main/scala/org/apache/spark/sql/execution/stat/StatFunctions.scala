@@ -22,14 +22,7 @@ import java.util.Locale
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Column, DataFrame, Dataset, Row}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{
-  AttributeReference,
-  Cast,
-  Expression,
-  GenericInternalRow,
-  GetArrayItem,
-  Literal
-}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Cast, Expression, GenericInternalRow, GetArrayItem, Literal}
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.catalyst.util.{GenericArrayData, QuantileSummaries}
@@ -75,13 +68,13 @@ object StatFunctions extends Logging {
       cols: Seq[String],
       probabilities: Seq[Double],
       relativeError: Double): Seq[Seq[Double]] = {
-    require(relativeError >= 0, s"Relative Error must be non-negative but got $relativeError")
+    require(relativeError >= 0,
+      s"Relative Error must be non-negative but got $relativeError")
     val columns: Seq[Column] = cols.map { colName =>
       val field = df.resolve(colName)
-      require(
-        field.dataType.isInstanceOf[NumericType],
+      require(field.dataType.isInstanceOf[NumericType],
         s"Quantile calculation for column $colName with data type ${field.dataType}" +
-          " is not supported.")
+        " is not supported.")
       Column(Cast(Column(colName).expr, DoubleType))
     }
     val emptySummaries = Array.fill(cols.size)(
@@ -109,7 +102,12 @@ object StatFunctions extends Logging {
     }
     val summaries = df.select(columns: _*).rdd.treeAggregate(emptySummaries)(apply, merge)
 
-    summaries.map { summary => summary.query(probabilities).get }
+    summaries.map {
+      summary => summary.query(probabilities) match {
+        case Some(q) => q
+        case None => Seq()
+      }
+    }
   }
 
   /** Calculate the Pearson Correlation Coefficient for the given columns */
@@ -138,7 +136,6 @@ object StatFunctions extends Logging {
       MkY += deltaY * (y - yAvg)
       this
     }
-
     // merge counters from other partitions. Formula can be found at:
     // http://en.wikipedia.org/wiki/Algorithms_for_calculating_variance
     def merge(other: CovarianceCounter): this.type = {
@@ -155,37 +152,26 @@ object StatFunctions extends Logging {
       }
       this
     }
-
     // return the sample covariance for the observed examples
     def cov: Double = Ck / (count - 1)
   }
 
-  private def collectStatisticalData(
-      df: DataFrame,
-      cols: Seq[String],
-      functionName: String): CovarianceCounter = {
-    require(
-      cols.length == 2,
-      s"Currently $functionName calculation is supported " +
-        "between two columns.")
-    cols.map(name => (name, df.resolve(name))).foreach {
-      case (name, data) =>
-        require(
-          data.dataType.isInstanceOf[NumericType],
-          s"Currently $functionName calculation " +
-            s"for columns with dataType ${data.dataType.catalogString} not supported.")
+  private def collectStatisticalData(df: DataFrame, cols: Seq[String],
+              functionName: String): CovarianceCounter = {
+    require(cols.length == 2, s"Currently $functionName calculation is supported " +
+      "between two columns.")
+    cols.map(name => (name, df.resolve(name))).foreach { case (name, data) =>
+      require(data.dataType.isInstanceOf[NumericType], s"Currently $functionName calculation " +
+        s"for columns with dataType ${data.dataType.catalogString} not supported.")
     }
     val columns = cols.map(n => Column(Cast(Column(n).expr, DoubleType)))
-    df.select(columns: _*)
-      .queryExecution
-      .toRdd
-      .treeAggregate(new CovarianceCounter)(
-        seqOp = (counter, row) => {
-          counter.add(row.getDouble(0), row.getDouble(1))
-        },
-        combOp = (baseCounter, other) => {
-          baseCounter.merge(other)
-        })
+    df.select(columns: _*).queryExecution.toRdd.treeAggregate(new CovarianceCounter)(
+      seqOp = (counter, row) => {
+        counter.add(row.getDouble(0), row.getDouble(1))
+      },
+      combOp = (baseCounter, other) => {
+        baseCounter.merge(other)
+    })
   }
 
   /**
@@ -204,9 +190,8 @@ object StatFunctions extends Logging {
     val tableName = s"${col1}_$col2"
     val counts = df.groupBy(col1, col2).agg(count("*")).take(1e6.toInt)
     if (counts.length == 1e6.toInt) {
-      logWarning(
-        "The maximum limit of 1e6 pairs have been collected, which may not be all of " +
-          "the pairs. Please try reducing the amount of distinct items in your columns.")
+      logWarning("The maximum limit of 1e6 pairs have been collected, which may not be all of " +
+        "the pairs. Please try reducing the amount of distinct items in your columns.")
     }
     def cleanElement(element: Any): String = {
       if (element == null) "null" else element.toString
@@ -215,27 +200,21 @@ object StatFunctions extends Logging {
     val distinctCol2: Map[Any, Int] =
       counts.map(e => cleanElement(e.get(1))).distinct.sorted.zipWithIndex.toMap
     val columnSize = distinctCol2.size
-    require(
-      columnSize < 1e4,
-      s"The number of distinct values for $col2, can't " +
-        s"exceed 1e4. Currently $columnSize")
-    val table = counts
-      .groupBy(_.get(0))
-      .map {
-        case (col1Item, rows) =>
-          val countsRow = new GenericInternalRow(columnSize + 1)
-          rows.foreach { (row: Row) =>
-            // row.get(0) is column 1
-            // row.get(1) is column 2
-            // row.get(2) is the frequency
-            val columnIndex = distinctCol2(cleanElement(row.get(1)))
-            countsRow.setLong(columnIndex + 1, row.getLong(2))
-          }
-          // the value of col1 is the first value, the rest are the counts
-          countsRow.update(0, UTF8String.fromString(cleanElement(col1Item)))
-          countsRow
+    require(columnSize < 1e4, s"The number of distinct values for $col2, can't " +
+      s"exceed 1e4. Currently $columnSize")
+    val table = counts.groupBy(_.get(0)).map { case (col1Item, rows) =>
+      val countsRow = new GenericInternalRow(columnSize + 1)
+      rows.foreach { (row: Row) =>
+        // row.get(0) is column 1
+        // row.get(1) is column 2
+        // row.get(2) is the frequency
+        val columnIndex = distinctCol2(cleanElement(row.get(1)))
+        countsRow.setLong(columnIndex + 1, row.getLong(2))
       }
-      .toSeq
+      // the value of col1 is the first value, the rest are the counts
+      countsRow.update(0, UTF8String.fromString(cleanElement(col1Item)))
+      countsRow
+    }.toSeq
     // Back ticks can't exist in DataFrame column names, therefore drop them. To be able to accept
     // special keywords and `.`, wrap the column names in ``.
     def cleanColumnName(name: String): String = {
@@ -274,18 +253,17 @@ object StatFunctions extends Logging {
         percentileIndex += 1
         (child: Expression) =>
           GetArrayItem(
-            new ApproximatePercentile(
-              child,
+            new ApproximatePercentile(child,
               Literal(new GenericArrayData(percentiles), ArrayType(DoubleType, false)))
               .toAggregateExpression(),
             Literal(index))
       } else {
         stats.toLowerCase(Locale.ROOT) match {
           case "count" => (child: Expression) => Count(child).toAggregateExpression()
-          case "count_distinct" =>
-            (child: Expression) => Count(child).toAggregateExpression(isDistinct = true)
-          case "approx_count_distinct" =>
-            (child: Expression) => HyperLogLogPlusPlus(child).toAggregateExpression()
+          case "count_distinct" => (child: Expression) =>
+            Count(child).toAggregateExpression(isDistinct = true)
+          case "approx_count_distinct" => (child: Expression) =>
+            HyperLogLogPlusPlus(child).toAggregateExpression()
           case "mean" => (child: Expression) => Average(child).toAggregateExpression()
           case "stddev" => (child: Expression) => StddevSamp(child).toAggregateExpression()
           case "min" => (child: Expression) => Min(child).toAggregateExpression()
@@ -328,5 +306,4 @@ object StatFunctions extends Logging {
 
     Dataset.ofRows(ds.sparkSession, LocalRelation(output, result))
   }
-
 }
