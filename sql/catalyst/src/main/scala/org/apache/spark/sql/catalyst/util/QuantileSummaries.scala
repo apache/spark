@@ -47,8 +47,7 @@ class QuantileSummaries(
     val relativeError: Double,
     val sampled: Array[Stats] = Array.empty,
     val count: Long = 0L,
-    var compressed: Boolean = false)
-    extends Serializable {
+    var compressed: Boolean = false) extends Serializable {
 
   // a buffer of latest samples seen so far
   private val headSampled: ArrayBuffer[Double] = ArrayBuffer.empty
@@ -388,5 +387,4 @@ object QuantileSummaries {
     }
     res.toArray
   }
-
 }

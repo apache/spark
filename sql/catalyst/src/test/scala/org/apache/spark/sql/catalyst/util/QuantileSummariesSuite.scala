@@ -30,7 +30,10 @@ class QuantileSummariesSuite extends SparkFunSuite {
   private val decreasing = "decreasing" -> (n until 0 by -1).map(_.toDouble)
   private val random = "random" -> Seq.fill(n)(math.ceil(r.nextDouble() * 1000))
 
-  private def buildSummary(data: Seq[Double], epsi: Double, threshold: Int): QuantileSummaries = {
+  private def buildSummary(
+      data: Seq[Double],
+      epsi: Double,
+      threshold: Int): QuantileSummaries = {
     var summary = new QuantileSummaries(threshold, epsi)
     data.foreach { x =>
       summary = summary.insert(x)
@@ -103,8 +106,7 @@ class QuantileSummariesSuite extends SparkFunSuite {
   for {
     (seq_name, data) <- Seq(increasing, decreasing, random)
     epsi <- Seq(0.1, 0.0001) // With a significant value and with full precision
-    compression <-
-      Seq(1000, 10) // This interleaves n so that we test without and with compression
+    compression <- Seq(1000, 10) // This interleaves n so that we test without and with compression
   } {
 
     test(s"Extremas with epsi=$epsi and seq=$seq_name, compression=$compression") {
@@ -127,9 +129,8 @@ class QuantileSummariesSuite extends SparkFunSuite {
       checkQuantiles(Seq(0.9999, 0.9, 0.5, 0.1, 0.001), data, s)
     }
 
-    test(
-      s"Some quantile values with epsi=$epsi and seq=$seq_name, compression=$compression " +
-        s"(interleaved)") {
+    test(s"Some quantile values with epsi=$epsi and seq=$seq_name, compression=$compression " +
+      s"(interleaved)") {
       val s = buildCompressSummary(data, epsi, compression)
       assert(s.count == data.size, s"Found count=${s.count} but data size=${data.size}")
       checkQuantile(0.9999, data, s)
@@ -189,8 +190,7 @@ class QuantileSummariesSuite extends SparkFunSuite {
       data.sliding(2).map(_.head).toSeq -> data.sliding(2).map(_.last).toSeq
     }
 
-    test(
-      s"Merging interleaved lists with epsi=$epsi and seq=$seq_name, compression=$compression") {
+    test(s"Merging interleaved lists with epsi=$epsi and seq=$seq_name, compression=$compression") {
       val s1 = buildSummary(data11, epsi, compression)
       val s2 = buildSummary(data12, epsi, compression)
       val s = s1.merge(s2)
