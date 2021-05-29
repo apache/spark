@@ -45,7 +45,9 @@ abstract class FileTable(
     val caseSensitiveMap = options.asCaseSensitiveMap.asScala.toMap
     // Hadoop Configurations are case sensitive.
     val hadoopConf = sparkSession.sessionState.newHadoopConfWithOptions(caseSensitiveMap)
-    if (FileStreamSink.hasMetadata(paths, hadoopConf, sparkSession.sessionState.conf)) {
+    val ignoreMetadata = sparkSession.sessionState.conf.fileStreamSinkMetadataIgnored
+    if (!ignoreMetadata &&
+        FileStreamSink.hasMetadata(paths, hadoopConf, sparkSession.sessionState.conf)) {
       // We are reading from the results of a streaming query. We will load files from
       // the metadata log instead of listing them using HDFS APIs.
       new MetadataLogFileIndex(sparkSession, new Path(paths.head),
