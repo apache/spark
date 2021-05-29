@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import scala.collection.mutable.ArrayBuffer
 import scala.util.Random
 
 import org.apache.spark.SparkFunSuite
