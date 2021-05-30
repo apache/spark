@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.plans.logical.statsEstimation
 import scala.collection.mutable.ArrayBuffer
 import scala.math.BigDecimal.RoundingMode
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, Expression, Substring}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, Expression, Literal, StringRepeat, Substring}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.types.{DecimalType, _}
 
@@ -89,22 +89,45 @@ object EstimationUtils {
   // TODO: Support for more expressions like Multiply.
   private def isExpressionStatsExist(
       expn: Expression,
-      attributeStats: AttributeMap[ColumnStat]) = {
-    expn match {
-      case Substring(attr: Attribute, _, _) => attributeStats.contains(attr)
-      case _ => false
-    }
-  }
+      attributeStats: AttributeMap[ColumnStat]) = expn match {
+        case Substring(attr: Attribute, _, _) => attributeStats.contains(attr)
+        case StringRepeat(attr: Attribute, Literal(_, IntegerType)) =>
+          attributeStats.contains(attr)
+        case _: Literal => true
+        case _ => false
+      }
 
-  // Substring stats will be upper bounded to child stats (distictCount, nullCount).
-  // Return the stats of child in case of substring.
   private def getExpressionStats(
       attribute: Attribute,
       expn: Expression,
       attributeStats: AttributeMap[ColumnStat]) = {
     expn match {
+      // Substring stats will be upper bounded to str expression stats.
+      // Return the stats of str expression in case of substring.
       case Substring(attr: Attribute, _, _) if attributeStats.contains(attr) =>
         attribute -> attributeStats(attr)
+      // String repeat stats will be upper bounded to str expression stats * times.
+      case StringRepeat(attr: Attribute, Literal(n, IntegerType))
+        if attributeStats.contains(attr) =>
+        val stats = attributeStats(attr)
+        val times = n.asInstanceOf[Int]
+        val newStats = if (times > 0) {
+          stats.copy(avgLen = Some(stats.avgLen.get * times),
+            maxLen = Some(stats.maxLen.get * times))
+        } else {
+          stats.copy(distinctCount = Some(1), avgLen = Some(0), maxLen = Some(0))
+        }
+        attribute -> newStats
+      case l: Literal =>
+        val stats = if (l.dataType == StringType) {
+          ColumnStat(distinctCount = Some(1), nullCount = Some(0),
+            avgLen = Some(l.dataType.defaultSize), maxLen = Some(l.dataType.defaultSize))
+        } else {
+          ColumnStat(distinctCount = Some(1), min = Some(l.value),
+            max = Some(l.value), nullCount = Some(0), avgLen = Some(l.dataType.defaultSize),
+            maxLen = Some(l.dataType.defaultSize))
+        }
+        attribute -> stats
     }
   }
 

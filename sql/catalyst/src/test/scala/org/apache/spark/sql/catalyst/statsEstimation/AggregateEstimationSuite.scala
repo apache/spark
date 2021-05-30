@@ -17,13 +17,13 @@
 
 package org.apache.spark.sql.catalyst.statsEstimation
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, AttributeReference, Literal, Substring}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, AttributeReference, Literal, StringRepeat, Substring}
 import org.apache.spark.sql.catalyst.expressions.aggregate.Count
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.StringType
+import org.apache.spark.sql.types.{IntegerType, StringType}
 
 
 class AggregateEstimationSuite extends StatsEstimationTestBase with PlanTest {
@@ -183,6 +183,59 @@ class AggregateEstimationSuite extends StatsEstimationTestBase with PlanTest {
     val expectedColStats = Seq("abc" -> nameToColInfo("key41")._2)
     val expectedAttrStats = toAttributeMap(expectedColStats, testAgg)
 
+    assert(testAgg.stats.attributeStats == expectedAttrStats)
+  }
+
+  test("stats should present if the group by key contains repeat string") {
+    val tableColumns = Seq("key41", "key12")
+    val namedGroupByExpression = Seq(Alias(StringRepeat(nameToAttr("key41"),
+      Literal(2)), "abc")())
+    val rowCount = 4
+    val child = Project(namedGroupByExpression, StatsTestPlan(
+      outputList = tableColumns.map(nameToAttr),
+      rowCount,
+      // rowCount * (overhead + column size)
+      size = Some(4 * (8 + 4)),
+      attributeStats = AttributeMap(tableColumns.map(nameToColInfo))))
+    val testAgg = Aggregate(
+      groupingExpressions = namedGroupByExpression.map(_.toAttribute),
+      aggregateExpressions = namedGroupByExpression.map(_.toAttribute),
+      child)
+    val expectedColStats = Seq("abc" -> nameToColInfo("key41")._2
+      .copy(avgLen = Some(8), maxLen = Some(8)))
+    val expectedAttrStats = toAttributeMap(expectedColStats, testAgg)
+    assert(testAgg.stats.attributeStats == expectedAttrStats)
+  }
+
+  test("stats should present if the group by key contains literal expressions") {
+    val tableColumns = Seq("key41", "key12")
+    val namedGroupByExpressions = Seq(Alias(Literal(2), "gp1")(), Alias(Literal("store"), "gp2")())
+    val rowCount = 4
+    val child = Project(namedGroupByExpressions, StatsTestPlan(
+      outputList = tableColumns.map(nameToAttr),
+      rowCount,
+      // rowCount * (overhead + column size)
+      size = Some(4 * (8 + 4)),
+      attributeStats = AttributeMap(tableColumns.map(nameToColInfo))))
+    val testAgg = Aggregate(
+      groupingExpressions = namedGroupByExpressions.map(_.toAttribute),
+      aggregateExpressions = namedGroupByExpressions.map(_.toAttribute),
+      child)
+    val expectedColStats = Seq("gp1" -> ColumnStat(
+      distinctCount = Some(1),
+      nullCount = Some(0),
+      min = Some(2),
+      max = Some(2),
+      avgLen = Some(IntegerType.defaultSize),
+      maxLen = Some(IntegerType.defaultSize)),
+      "gp2" -> ColumnStat(
+        distinctCount = Some(1),
+        nullCount = Some(0),
+        min = None,
+        max = None,
+        avgLen = Some(StringType.defaultSize),
+        maxLen = Some(StringType.defaultSize)))
+    val expectedAttrStats = toAttributeMap(expectedColStats, testAgg)
     assert(testAgg.stats.attributeStats == expectedAttrStats)
   }
 
