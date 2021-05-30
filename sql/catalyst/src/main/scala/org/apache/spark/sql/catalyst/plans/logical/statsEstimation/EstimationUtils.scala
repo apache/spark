@@ -95,7 +95,7 @@ object EstimationUtils {
           attributeStats.contains(attr)
         case _: Literal => true
         case _ => false
-      }
+  }
 
   private def getExpressionStats(
       attribute: Attribute,
