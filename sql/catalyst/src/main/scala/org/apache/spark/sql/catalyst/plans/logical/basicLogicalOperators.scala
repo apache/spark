@@ -886,6 +886,11 @@ case class Aggregate(
 
   override protected def withNewChildInternal(newChild: LogicalPlan): Aggregate =
     copy(child = newChild)
+
+  // Whether this Aggregate operator is equally the Distinct operator.
+  private[sql] def isDistinct: Boolean = {
+    aggregateExpressions.forall(a => groupingExpressions.exists(g => a.semanticEquals(g)))
+  }
 }
 
 case class Window(
