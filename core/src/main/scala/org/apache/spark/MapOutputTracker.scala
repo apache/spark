@@ -720,7 +720,7 @@ private[spark] class MapOutputTrackerMaster(
     }
   }
 
-  def registerMergeResult(shuffleId: Int, reduceId: Int, status: MergeStatus): Unit = {
+  def registerMergeResult(shuffleId: Int, reduceId: Int, status: MergeStatus) {
     shuffleStatuses(shuffleId).addMergeResult(reduceId, status)
   }
 
