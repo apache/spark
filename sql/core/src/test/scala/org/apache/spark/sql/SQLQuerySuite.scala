@@ -1084,7 +1084,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     checkAnswer(sql("SET io.file.buffer.size"), Row("io.file.buffer.size", "65536"))
   }
 
-  test("Set command should redact sensitive data") {
+  test("SPARK-35576: Set command should redact sensitive data") {
     val key1 = "test.password"
     val value1 = "test.value1"
     val key2 = "test.token"
