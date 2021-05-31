@@ -269,11 +269,9 @@ jobs:
         echo "::set-output name=APACHE_SPARK_REF::$apache_spark_ref"
     - name: Install R 4.1
       uses: r-lib/actions/setup-r@v1
-      if: contains(matrix.modules, 'sparkr')
       with:
         r-version: 4.1
     - name: Install R packages
-      if: contains(matrix.modules, 'sparkr')
       run: |
         # qpdf is required to reduce the size of PDFs to make CRAN check pass. See SPARK-32497.
         sudo apt-get install -y libcurl4-openssl-dev qpdf
