@@ -195,8 +195,10 @@ class DataFrameReader(OptionUtils):
         ----------------
         Extra options
             For the extra options, refer to
-            `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option>`_  # noqa
+            `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option>`_
             in the version you use.
+
+            .. # noqa
 
         Examples
         --------
@@ -273,8 +275,10 @@ class DataFrameReader(OptionUtils):
         ----------------
         **options
             For the extra options, refer to
-            `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#data-source-option>`_  # noqa
+            `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#data-source-option>`_
             in the version you use.
+
+            .. # noqa
 
         Examples
         --------
@@ -318,8 +322,10 @@ class DataFrameReader(OptionUtils):
         ----------------
         Extra options
             For the extra options, refer to
-            `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-text.html#data-source-option>`_  # noqa
+            `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-text.html#data-source-option>`_
             in the version you use.
+
+            .. # noqa
 
         Examples
         --------
@@ -369,8 +375,10 @@ class DataFrameReader(OptionUtils):
         ----------------
         Extra options
             For the extra options, refer to
-            `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-csv.html#data-source-option>`_  # noqa
+            `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-csv.html#data-source-option>`_
             in the version you use.
+
+            .. # noqa
 
         Examples
         --------
@@ -436,8 +444,10 @@ class DataFrameReader(OptionUtils):
         ----------------
         Extra options
             For the extra options, refer to
-            `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-orc.html#data-source-option>`_  # noqa
+            `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-orc.html#data-source-option>`_
             in the version you use.
+
+            .. # noqa
 
         Examples
         --------
@@ -804,8 +814,10 @@ class DataFrameWriter(OptionUtils):
         ----------------
         Extra options
             For the extra options, refer to
-            `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option>`_  # noqa
+            `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option>`_
             in the version you use.
+
+            .. # noqa
 
         Examples
         --------
@@ -841,8 +853,10 @@ class DataFrameWriter(OptionUtils):
         ----------------
         Extra options
             For the extra options, refer to
-            `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#data-source-option>`_  # noqa
+            `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#data-source-option>`_
             in the version you use.
+
+            .. # noqa
 
         Examples
         --------
@@ -869,8 +883,10 @@ class DataFrameWriter(OptionUtils):
         ----------------
         Extra options
             For the extra options, refer to
-            `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-text.html#data-source-option>`_  # noqa
+            `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-text.html#data-source-option>`_
             in the version you use.
+
+            .. # noqa
 
         The DataFrame must have only one column that is of string type.
         Each row becomes a new line in the output file.
@@ -903,8 +919,10 @@ class DataFrameWriter(OptionUtils):
         ----------------
         Extra options
             For the extra options, refer to
-            `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-csv.html#data-source-option>`_  # noqa
+            `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-csv.html#data-source-option>`_
             in the version you use.
+
+            .. # noqa
 
         Examples
         --------
@@ -944,8 +962,10 @@ class DataFrameWriter(OptionUtils):
         ----------------
         Extra options
             For the extra options, refer to
-            `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-orc.html#data-source-option>`_  # noqa
+            `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-orc.html#data-source-option>`_
             in the version you use.
+
+            .. # noqa
 
         Examples
         --------

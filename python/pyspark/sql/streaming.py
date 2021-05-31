@@ -484,8 +484,10 @@ class DataStreamReader(OptionUtils):
         ----------------
         Extra options
             For the extra options, refer to
-            `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option>`_  # noqa
+            `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option>`_
             in the version you use.
+
+            .. # noqa
 
         Notes
         -----
@@ -524,8 +526,10 @@ class DataStreamReader(OptionUtils):
         ----------------
         Extra options
             For the extra options, refer to
-            `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-orc.html#data-source-option>`_  # noqa
+            `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-orc.html#data-source-option>`_
             in the version you use.
+
+            .. # noqa
 
         Examples
         --------
@@ -558,8 +562,10 @@ class DataStreamReader(OptionUtils):
         ----------------
         Extra options
             For the extra options, refer to
-            `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#data-source-option>`_.  # noqa
+            `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#data-source-option>`_.
             in the version you use.
+
+            .. # noqa
 
         Examples
         --------
@@ -598,8 +604,10 @@ class DataStreamReader(OptionUtils):
         ----------------
         Extra options
             For the extra options, refer to
-            `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-text.html#data-source-option>`_  # noqa
+            `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-text.html#data-source-option>`_
             in the version you use.
+
+            .. # noqa
 
         Notes
         -----
@@ -649,8 +657,10 @@ class DataStreamReader(OptionUtils):
         ----------------
         Extra options
             For the extra options, refer to
-            `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-csv.html#data-source-option>`_  # noqa
+            `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-csv.html#data-source-option>`_
             in the version you use.
+
+            .. # noqa
 
         Notes
         -----

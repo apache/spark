@@ -57,25 +57,25 @@ Data source options of CSV can be set via:
   <tr>
     <td><code>sep</code></td>
     <td>,</td>
-    <td>Sets a separator (one or more characters) for each field and value.</td>
+    <td>Sets a separator for each field and value. This separator can be one or more characters.</td>
     <td>read/write</td>
   </tr>
   <tr>
     <td><code>encoding</code></td>
     <td><code>UTF-8</code> for reading, not set for writing</td>
-    <td>Specifies encoding (charset) for reading or writing CSV files</td>
+    <td>For reading, decodes the CSV files by the given encoding type. For writing, specifies encoding (charset) of saved CSV files</td>
     <td>read/write</td>
   </tr>
   <tr>
     <td><code>quote</code></td>
-    <td>"</td>
-    <td>Sets a single character used for escaping quoted values where the separator can be part of the value. If you would like to turn off quotations, you need to set an empty string. If an empty string is set, it uses <code>u0000</code> (null character) for wirting, and it disables the quotation handling for reading.</td>
+    <td>""</td>
+    <td>Sets a single character used for escaping quoted values where the separator can be part of the value. For reading, If you would like to turn off quotations, you need to set not `null` but an empty string. This behaviour is different from <code>com.databricks.spark.csv</code>. For writing, If an empty string is set, it uses <code>u0000</code> (null character).</td>
     <td>read/write</td>
   </tr>
   <tr>
     <td><code>quoteAll</code></td>
     <td>false</td>
-    <td>A flag indicating whether all values should always be enclosed in quotes. It only escapes values containing a quote character by default.</td>
+    <td>A flag indicating whether all values should always be enclosed in quotes. Default is to only escape values containing a quote character.</td>
     <td>write</td>
   </tr>
   <tr>
@@ -87,13 +87,13 @@ Data source options of CSV can be set via:
   <tr>
     <td><code>escapeQuotes</code></td>
     <td>true</td>
-    <td>A flag indicating whether values containing quotes should always be enclosed in quotes. It escapes all values containing a quote character by default.</td>
+    <td>A flag indicating whether values containing quotes should always be enclosed in quotes. Default is to escape all values containing a quote character.</td>
     <td>write</td>
   </tr>
   <tr>
     <td><code>comment</code></td>
     <td>empty string</td>
-    <td>Sets a single character used for skipping lines beginning with this character. It's disabled by default</td>
+    <td>Sets a single character used for skipping lines beginning with this character. By default, it is disabled.</td>
     <td>read</td>
   </tr>
   <tr>
@@ -207,13 +207,13 @@ Data source options of CSV can be set via:
   <tr>
     <td><code>samplingRatio</code></td>
     <td>1.0</td>
-    <td>Defines fraction of input CSV objects used for schema inferring.</td>
+    <td>Defines fraction of rows used for schema inferring.</td>
     <td>read</td>
   </tr>
   <tr>
     <td><code>emptyValue</code></td>
     <td>empty string</td>
-    <td>Sets the string representation of an empty value. It's disabled by default</td>
+    <td>Sets the string representation of an empty value.</td>
     <td>read/write</td>
   </tr>
   <tr>
