@@ -45,9 +45,14 @@ private[spark] class BasicExecutorFeatureStep(
   private val blockManagerPort = kubernetesConf
     .sparkConf
     .getInt(BLOCK_MANAGER_PORT.key, DEFAULT_BLOCKMANAGER_PORT)
+  private val hostNetwork = kubernetesConf.get(KUBERNETES_EXECUTOR_HOSTNETWORK)
 
   require(blockManagerPort == 0 || (1024 <= blockManagerPort && blockManagerPort < 65536),
     "port number must be 0 or in [1024, 65535]")
+
+  if (hostNetwork) {
+    require(blockManagerPort == 0, "when enable hostNetwork executor port should be random")
+  }
 
   private val executorPodNamePrefix = kubernetesConf.resourceNamePrefix
 
@@ -267,6 +272,7 @@ private[spark] class BasicExecutorFeatureStep(
         .endMetadata()
       .editOrNewSpec()
         .withHostname(hostname)
+        .withHostNetwork(hostNetwork)
         .withRestartPolicy("Never")
         .addToNodeSelector(kubernetesConf.nodeSelector.asJava)
         .addToImagePullSecrets(kubernetesConf.imagePullSecrets: _*)

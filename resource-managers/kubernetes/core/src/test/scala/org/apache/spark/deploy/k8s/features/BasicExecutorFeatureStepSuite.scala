@@ -370,6 +370,15 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     }
   }
 
+  test("test enable hostNetwork") {
+    baseConf.set(KUBERNETES_EXECUTOR_HOSTNETWORK, true)
+    baseConf.set(BLOCK_MANAGER_PORT, 0)
+    val baseDriverPod = SparkPod.initialPod()
+    val basicExecutorPod = new BasicExecutorFeatureStep(
+      newExecutorConf(), new SecurityManager(baseConf), defaultProfile).configurePod(baseDriverPod)
+    assert(basicExecutorPod.pod.getSpec.getHostNetwork == true)
+  }
+
   // There is always exactly one controller reference, and it points to the driver pod.
   private def checkOwnerReferences(executor: Pod, driverPodUid: String): Unit = {
     assert(executor.getMetadata.getOwnerReferences.size() === 1)

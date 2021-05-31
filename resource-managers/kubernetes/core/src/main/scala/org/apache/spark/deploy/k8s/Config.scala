@@ -473,6 +473,13 @@ private[spark] object Config extends Logging {
   val KUBERNETES_AUTH_SUBMISSION_CONF_PREFIX =
     "spark.kubernetes.authenticate.submission"
 
+  val KUBERNETES_EXECUTOR_HOSTNETWORK =
+    ConfigBuilder("spark.kubernetes.executor.hostNetwork.enable")
+    .doc("executor pod with hostNetwork status")
+    .version("3.2.0")
+    .booleanConf
+    .createWithDefault(false)
+
   val KUBERNETES_TRUST_CERTIFICATES =
     ConfigBuilder("spark.kubernetes.trust.certificates")
       .doc("If set to true then client can submit to kubernetes cluster only with token")
