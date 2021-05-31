@@ -267,17 +267,6 @@ jobs:
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit"
         echo "::set-output name=APACHE_SPARK_REF::$apache_spark_ref"
-    - name: Install R 4.1
-      uses: r-lib/actions/setup-r@v1
-      with:
-        r-version: 4.1
-    - name: Install R packages
-      run: |
-        # qpdf is required to reduce the size of PDFs to make CRAN check pass. See SPARK-32497.
-        sudo apt-get install -y libcurl4-openssl-dev qpdf
-        sudo Rscript -e "install.packages(c('knitr', 'rmarkdown', 'testthat', 'devtools', 'e1071', 'survival', 'arrow', 'roxygen2'), repos='https://cloud.r-project.org/')"
-        # Show installed packages in R.
-        sudo Rscript -e 'pkg_list <- as.data.frame(installed.packages()[, c(1,3:4)]); pkg_list[is.na(pkg_list$Priority), 1:2, drop = FALSE]'
     # Cache local repositories. Note that GitHub Actions cache has a 2G limit.
     - name: Cache Scala, SBT and Maven
       uses: actions/cache@v2
@@ -304,7 +293,6 @@ jobs:
         export TZ=UTC
         export _R_CHECK_SYSTEM_CLOCK_=FALSE
         export APACHE_SPARK_REF=${{ steps.sync-branch.outputs.APACHE_SPARK_REF }}
-        R --version
         ./dev/run-tests --parallelism 2 --modules sparkr
     - name: Upload test results to report
       if: always()
