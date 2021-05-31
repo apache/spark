@@ -312,7 +312,15 @@ case class AdaptiveSparkPlanExec(
   }
 
   override def doExecuteBroadcast[T](): broadcast.Broadcast[T] = {
-    getFinalPhysicalPlan().doExecuteBroadcast()
+    getFinalPhysicalPlan() match {
+      case b: BroadcastExchangeExec => b.doExecuteBroadcast()
+      case b: BroadcastQueryStageExec => b.doExecuteBroadcast()
+      case other =>
+        initialPlan match {
+          case b: BroadcastExchangeExec => b.copy(child = other).doExecuteBroadcast()
+          case _ => other.doExecuteBroadcast()
+        }
+    }
   }
 
   protected override def stringArgs: Iterator[Any] = Iterator(s"isFinalPlan=$isFinalPlan")
