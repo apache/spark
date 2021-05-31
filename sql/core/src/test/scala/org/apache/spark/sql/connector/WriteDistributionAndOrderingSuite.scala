@@ -20,7 +20,8 @@ package org.apache.spark.sql.connector
 import java.util.Collections
 
 import org.scalatest.BeforeAndAfter
-import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, catalyst}
+
+import org.apache.spark.sql.{catalyst, AnalysisException, DataFrame, QueryTest}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.plans.physical
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, RangePartitioning, UnknownPartitioning}
