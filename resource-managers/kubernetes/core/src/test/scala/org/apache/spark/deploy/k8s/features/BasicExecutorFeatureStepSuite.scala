@@ -370,7 +370,7 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     }
   }
 
-  test("test enable hostNetwork") {
+  test("SPARK-35572 test enable hostNetwork") {
     baseConf.set(KUBERNETES_EXECUTOR_HOSTNETWORK, true)
     baseConf.set(BLOCK_MANAGER_PORT, 0)
     val baseDriverPod = SparkPod.initialPod()

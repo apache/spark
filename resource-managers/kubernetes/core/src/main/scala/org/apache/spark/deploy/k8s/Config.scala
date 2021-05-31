@@ -475,10 +475,10 @@ private[spark] object Config extends Logging {
 
   val KUBERNETES_EXECUTOR_HOSTNETWORK =
     ConfigBuilder("spark.kubernetes.executor.hostNetwork.enable")
-    .doc("executor pod with hostNetwork status")
-    .version("3.2.0")
-    .booleanConf
-    .createWithDefault(false)
+      .doc("executor pod with hostNetwork status")
+      .version("3.2.0")
+      .booleanConf
+      .createWithDefault(false)
 
   val KUBERNETES_TRUST_CERTIFICATES =
     ConfigBuilder("spark.kubernetes.trust.certificates")
