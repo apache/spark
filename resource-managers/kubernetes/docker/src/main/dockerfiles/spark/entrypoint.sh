@@ -67,6 +67,14 @@ elif ! [ -z ${SPARK_HOME+x} ]; then
   SPARK_CLASSPATH="$SPARK_HOME/conf:$SPARK_CLASSPATH";
 fi
 
+# when user want to formulate the IP they need, they can use this conf to post host
+if ! [ -z "${SPARK_EXECUTOR_POD_IP_OVERWRITE}" ]; then
+    SPARK_EXECUTOR_POD_IP_OVERWRITE=$(dig "${SPARK_EXECUTOR_POD_IP_OVERWRITE}" +short)
+fi
+if ! [ -z "${SPARK_EXECUTOR_POD_IP_OVERWRITE}" ]; then
+    SPARK_EXECUTOR_POD_IP=${SPARK_EXECUTOR_POD_IP_OVERWRITE}
+fi
+
 case "$1" in
   driver)
     shift 1
