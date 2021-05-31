@@ -255,9 +255,9 @@ class QueryExecution(
 
     // trigger to compute stats for logical plans
     try {
-      // This will trigger to compute stats for all the nodes in the plan, including subqueries
-      // and update the statsCache corresponding to the node, if the stats doesn't exist in the
-      // statsCache.
+      // This will trigger to compute stats for all the nodes in the plan, including subqueries,
+      // if the stats doesn't exist in the statsCache and update the statsCache corresponding
+      // to the node.
       optimizedPlan.collectWithSubqueries {
         case plan => plan.stats
       }
