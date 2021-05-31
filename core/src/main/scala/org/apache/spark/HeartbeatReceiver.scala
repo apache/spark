@@ -67,7 +67,7 @@ private[spark] case class HeartbeatResponse(reregisterBlockManager: Boolean)
 private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
   extends SparkListener with ThreadSafeRpcEndpoint with Logging {
 
-  def this(sc: SparkContext) {
+  def this(sc: SparkContext) = {
     this(sc, new SystemClock)
   }
 
