@@ -165,7 +165,7 @@ private[hive] class HiveClientImpl(
       state.getTmpOutputFile.delete()
       state.setTmpOutputFile(null)
     }
-    // SPARK-35556: there are some UTS testing multiple versions of hive such as
+    // SPARK-35556: there are some UTs testing multiple versions of hive such as
     // `org.apache.spark.sql.hive.client.VersionsSuite`, so we need to ensure that
     // the `getTmpErrOutputFile` method exists in the hive version being tested,
     // because the `getTmpErrOutputFile` method was added after hive 2.0.
