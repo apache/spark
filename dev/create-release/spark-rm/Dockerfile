@@ -40,7 +40,9 @@ ARG APT_INSTALL="apt-get install --no-install-recommends -y"
 # TODO(SPARK-32407): Sphinx 3.1+ does not correctly index nested classes.
 #   See also https://github.com/sphinx-doc/sphinx/issues/7551.
 #   We should use the latest Sphinx version once this is fixed.
-ARG PIP_PKGS="sphinx==3.0.4 mkdocs==1.1.2 numpy==1.19.4 pydata_sphinx_theme==0.4.1 ipython==7.19.0 nbsphinx==0.8.0 numpydoc==1.1.0"
+# TODO(SPARK-35375): Jinja2 3.0.0+ causes error when building with Sphinx.
+#   See also https://issues.apache.org/jira/browse/SPARK-35375.
+ARG PIP_PKGS="sphinx==3.0.4 mkdocs==1.1.2 numpy==1.19.4 pydata_sphinx_theme==0.4.1 ipython==7.19.0 nbsphinx==0.8.0 numpydoc==1.1.0 jinja2==2.11.3"
 ARG GEM_PKGS="bundler:2.2.9"
 
 # Install extra needed repos and refresh.

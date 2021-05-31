@@ -173,6 +173,14 @@ case object NO_BROADCAST_HASH extends JoinStrategyHint {
 }
 
 /**
+ * An internal hint to encourage shuffle hash join, used by adaptive query execution.
+ */
+case object PREFER_SHUFFLE_HASH extends JoinStrategyHint {
+  override def displayName: String = "prefer_shuffle_hash"
+  override def hintAliases: Set[String] = Set.empty
+}
+
+/**
  * The callback for implementing customized strategies of handling hint errors.
  */
 trait HintErrorHandler {

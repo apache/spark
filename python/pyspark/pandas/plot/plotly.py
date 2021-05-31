@@ -30,8 +30,7 @@ if TYPE_CHECKING:
     import pyspark.pandas as ps  # noqa: F401 (SPARK-34943)
 
 
-def plot_pandas_on_spark(
-        data: Union["ps.DataFrame", "ps.Series"], kind: str, **kwargs):
+def plot_pandas_on_spark(data: Union["ps.DataFrame", "ps.Series"], kind: str, **kwargs):
     import plotly
 
     # pandas-on-Spark specific plots
@@ -76,9 +75,9 @@ def plot_histogram(data: Union["ps.DataFrame", "ps.Series"], **kwargs):
     import plotly.graph_objs as go
 
     bins = kwargs.get("bins", 10)
-    kdf, bins = HistogramPlotBase.prepare_hist_data(data, bins)
+    psdf, bins = HistogramPlotBase.prepare_hist_data(data, bins)
     assert len(bins) > 2, "the number of buckets must be higher than 2."
-    output_series = HistogramPlotBase.compute_hist(kdf, bins)
+    output_series = HistogramPlotBase.compute_hist(psdf, bins)
     prev = float("%.9f" % bins[0])  # to make it prettier, truncate.
     text_bins = []
     for b in bins[1:]:
@@ -185,19 +184,19 @@ def plot_kde(data: Union["ps.DataFrame", "ps.Series"], **kwargs):
     if isinstance(data, ps.DataFrame) and "color" not in kwargs:
         kwargs["color"] = "names"
 
-    kdf = KdePlotBase.prepare_kde_data(data)
-    sdf = kdf._internal.spark_frame
-    data_columns = kdf._internal.data_spark_columns
+    psdf = KdePlotBase.prepare_kde_data(data)
+    sdf = psdf._internal.spark_frame
+    data_columns = psdf._internal.data_spark_columns
     ind = KdePlotBase.get_ind(sdf.select(*data_columns), kwargs.pop("ind", None))
     bw_method = kwargs.pop("bw_method", None)
 
     pdfs = []
-    for label in kdf._internal.column_labels:
+    for label in psdf._internal.column_labels:
         pdfs.append(
             pd.DataFrame(
                 {
                     "Density": KdePlotBase.compute_kde(
-                        sdf.select(kdf._internal.spark_column_for(label)),
+                        sdf.select(psdf._internal.spark_column_for(label)),
                         ind=ind,
                         bw_method=bw_method,
                     ),

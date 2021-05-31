@@ -47,9 +47,20 @@ trait FunctionRegistryBase[T] {
 
   type FunctionBuilder = Seq[Expression] => T
 
-  final def registerFunction(name: FunctionIdentifier, builder: FunctionBuilder): Unit = {
+  final def registerFunction(
+      name: FunctionIdentifier, builder: FunctionBuilder, source: String): Unit = {
     val info = new ExpressionInfo(
-      builder.getClass.getCanonicalName, name.database.orNull, name.funcName)
+      builder.getClass.getCanonicalName,
+      name.database.orNull,
+      name.funcName,
+      null,
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      source)
     registerFunction(name, info, builder)
   }
 
@@ -59,10 +70,12 @@ trait FunctionRegistryBase[T] {
     builder: FunctionBuilder): Unit
 
   /* Create or replace a temporary function. */
-  final def createOrReplaceTempFunction(name: String, builder: FunctionBuilder): Unit = {
+  final def createOrReplaceTempFunction(
+      name: String, builder: FunctionBuilder, source: String): Unit = {
     registerFunction(
       FunctionIdentifier(name),
-      builder)
+      builder,
+      source)
   }
 
   @throws[AnalysisException]("If function does not exist")
@@ -157,7 +170,8 @@ object FunctionRegistryBase {
           df.note(),
           df.group(),
           df.since(),
-          df.deprecated())
+          df.deprecated(),
+          df.source())
       } else {
         // This exists for the backward compatibility with old `ExpressionDescription`s defining
         // the extended description in `extended()`.
@@ -379,6 +393,8 @@ object FunctionRegistry {
     expression[Divide]("/"),
     expression[IntegralDivide]("div"),
     expression[Remainder]("%"),
+    expression[TryAdd]("try_add"),
+    expression[TryDivide]("try_divide"),
 
     // aggregate functions
     expression[HyperLogLogPlusPlus]("approx_count_distinct"),
@@ -719,7 +735,7 @@ object FunctionRegistry {
     val usage = "_FUNC_(expr) - Casts the value `expr` to the target data type `_FUNC_`."
     val expressionInfo =
       new ExpressionInfo(clazz.getCanonicalName, null, name, usage, "", "", "",
-        "conversion_funcs", "2.0.1", "")
+        "conversion_funcs", "2.0.1", "", "built-in")
     (name, (expressionInfo, builder))
   }
 

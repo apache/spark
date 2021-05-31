@@ -939,7 +939,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
         Cast(Literal("2011-03-01"), DateType),
         Cast(Literal("2011-04-01"), DateType),
         Option(Literal(stringToInterval("interval 1 hour")))), null,
-        "sequence step must be a day interval if start and end values are dates")
+        "sequence step must be an interval of day granularity if start and end values are dates")
     }
   }
 
@@ -1098,7 +1098,8 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
           Literal(Date.valueOf("2018-01-05")),
           Literal(Period.ofDays(2))),
         EmptyRow,
-        "sequence step must be a day interval year to month if start and end values are dates")
+        "sequence step must be an interval year to month of day granularity" +
+          " if start and end values are dates")
 
       checkExceptionInExpression[IllegalArgumentException](
         new Sequence(

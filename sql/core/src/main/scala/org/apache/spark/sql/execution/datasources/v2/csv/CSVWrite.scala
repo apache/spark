@@ -14,58 +14,48 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.execution.datasources.v2.orc
+package org.apache.spark.sql.execution.datasources.v2.csv
 
-import org.apache.hadoop.mapred.JobConf
 import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
-import org.apache.orc.OrcConf.{COMPRESS, MAPRED_OUTPUT_SCHEMA}
-import org.apache.orc.mapred.OrcStruct
 
+import org.apache.spark.sql.catalyst.csv.CSVOptions
+import org.apache.spark.sql.catalyst.util.CompressionCodecs
 import org.apache.spark.sql.connector.write.LogicalWriteInfo
-import org.apache.spark.sql.execution.datasources.{OutputWriter, OutputWriterFactory}
-import org.apache.spark.sql.execution.datasources.orc.{OrcFileFormat, OrcOptions, OrcOutputWriter, OrcUtils}
-import org.apache.spark.sql.execution.datasources.v2.FileWriteBuilder
+import org.apache.spark.sql.execution.datasources.{CodecStreams, OutputWriter, OutputWriterFactory}
+import org.apache.spark.sql.execution.datasources.csv.CsvOutputWriter
+import org.apache.spark.sql.execution.datasources.v2.FileWrite
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.{DataType, StructType}
 
-class OrcWriteBuilder(
+case class CSVWrite(
     paths: Seq[String],
     formatName: String,
     supportsDataType: DataType => Boolean,
-    info: LogicalWriteInfo)
-  extends FileWriteBuilder(paths, formatName, supportsDataType, info) {
-
+    info: LogicalWriteInfo) extends FileWrite {
   override def prepareWrite(
       sqlConf: SQLConf,
       job: Job,
       options: Map[String, String],
       dataSchema: StructType): OutputWriterFactory = {
-    val orcOptions = new OrcOptions(options, sqlConf)
-
     val conf = job.getConfiguration
-
-    conf.set(MAPRED_OUTPUT_SCHEMA.getAttribute, OrcFileFormat.getQuotedSchemaString(dataSchema))
-
-    conf.set(COMPRESS.getAttribute, orcOptions.compressionCodec)
-
-    conf.asInstanceOf[JobConf]
-      .setOutputFormat(classOf[org.apache.orc.mapred.OrcOutputFormat[OrcStruct]])
+    val csvOptions = new CSVOptions(
+      options,
+      columnPruning = sqlConf.csvColumnPruning,
+      sqlConf.sessionLocalTimeZone)
+    csvOptions.compressionCodec.foreach { codec =>
+      CompressionCodecs.setCodecConfiguration(conf, codec)
+    }
 
     new OutputWriterFactory {
       override def newInstance(
           path: String,
           dataSchema: StructType,
           context: TaskAttemptContext): OutputWriter = {
-        new OrcOutputWriter(path, dataSchema, context)
+        new CsvOutputWriter(path, dataSchema, context, csvOptions)
       }
 
       override def getFileExtension(context: TaskAttemptContext): String = {
-        val compressionExtension: String = {
-          val name = context.getConfiguration.get(COMPRESS.getAttribute)
-          OrcUtils.extensionsForCompressionCodecNames.getOrElse(name, "")
-        }
-
-        compressionExtension + ".orc"
+        ".csv" + CodecStreams.getCompressionExtension(context)
       }
     }
   }

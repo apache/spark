@@ -28,36 +28,38 @@ from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
 class ExpandingTest(PandasOnSparkTestCase, TestUtils):
     def _test_expanding_func(self, f):
         pser = pd.Series([1, 2, 3], index=np.random.rand(3))
-        kser = ps.from_pandas(pser)
-        self.assert_eq(getattr(kser.expanding(2), f)(), getattr(pser.expanding(2), f)())
-        self.assert_eq(getattr(kser.expanding(2), f)().sum(), getattr(pser.expanding(2), f)().sum())
+        psser = ps.from_pandas(pser)
+        self.assert_eq(getattr(psser.expanding(2), f)(), getattr(pser.expanding(2), f)())
+        self.assert_eq(
+            getattr(psser.expanding(2), f)().sum(), getattr(pser.expanding(2), f)().sum()
+        )
 
         # Multiindex
         pser = pd.Series(
             [1, 2, 3], index=pd.MultiIndex.from_tuples([("a", "x"), ("a", "y"), ("b", "z")])
         )
-        kser = ps.from_pandas(pser)
-        self.assert_eq(getattr(kser.expanding(2), f)(), getattr(pser.expanding(2), f)())
+        psser = ps.from_pandas(pser)
+        self.assert_eq(getattr(psser.expanding(2), f)(), getattr(pser.expanding(2), f)())
 
         pdf = pd.DataFrame(
             {"a": [1.0, 2.0, 3.0, 2.0], "b": [4.0, 2.0, 3.0, 1.0]}, index=np.random.rand(4)
         )
-        kdf = ps.from_pandas(pdf)
-        self.assert_eq(getattr(kdf.expanding(2), f)(), getattr(pdf.expanding(2), f)())
-        self.assert_eq(getattr(kdf.expanding(2), f)().sum(), getattr(pdf.expanding(2), f)().sum())
+        psdf = ps.from_pandas(pdf)
+        self.assert_eq(getattr(psdf.expanding(2), f)(), getattr(pdf.expanding(2), f)())
+        self.assert_eq(getattr(psdf.expanding(2), f)().sum(), getattr(pdf.expanding(2), f)().sum())
 
         # Multiindex column
         columns = pd.MultiIndex.from_tuples([("a", "x"), ("a", "y")])
         pdf.columns = columns
-        kdf.columns = columns
-        self.assert_eq(getattr(kdf.expanding(2), f)(), getattr(pdf.expanding(2), f)())
+        psdf.columns = columns
+        self.assert_eq(getattr(psdf.expanding(2), f)(), getattr(pdf.expanding(2), f)())
 
     def test_expanding_error(self):
         with self.assertRaisesRegex(ValueError, "min_periods must be >= 0"):
             ps.range(10).expanding(-1)
 
         with self.assertRaisesRegex(
-            TypeError, "kdf_or_kser must be a series or dataframe; however, got:.*int"
+            TypeError, "psdf_or_psser must be a series or dataframe; however, got:.*int"
         ):
             Expanding(1, 2)
 
@@ -72,31 +74,31 @@ class ExpandingTest(PandasOnSparkTestCase, TestUtils):
         else:
             # Series
             idx = np.random.rand(3)
-            kser = ps.Series([1, 2, 3], index=idx, name="a")
+            psser = ps.Series([1, 2, 3], index=idx, name="a")
             expected_result = pd.Series([None, 2.0, 3.0], index=idx, name="a")
-            self.assert_eq(kser.expanding(2).count().sort_index(), expected_result.sort_index())
-            self.assert_eq(kser.expanding(2).count().sum(), expected_result.sum())
+            self.assert_eq(psser.expanding(2).count().sort_index(), expected_result.sort_index())
+            self.assert_eq(psser.expanding(2).count().sum(), expected_result.sum())
 
             # MultiIndex
             midx = pd.MultiIndex.from_tuples([("a", "x"), ("a", "y"), ("b", "z")])
-            kser = ps.Series([1, 2, 3], index=midx, name="a")
+            psser = ps.Series([1, 2, 3], index=midx, name="a")
             expected_result = pd.Series([None, 2.0, 3.0], index=midx, name="a")
-            self.assert_eq(kser.expanding(2).count().sort_index(), expected_result.sort_index())
+            self.assert_eq(psser.expanding(2).count().sort_index(), expected_result.sort_index())
 
             # DataFrame
-            kdf = ps.DataFrame({"a": [1, 2, 3, 2], "b": [4.0, 2.0, 3.0, 1.0]})
+            psdf = ps.DataFrame({"a": [1, 2, 3, 2], "b": [4.0, 2.0, 3.0, 1.0]})
             expected_result = pd.DataFrame({"a": [None, 2.0, 3.0, 4.0], "b": [None, 2.0, 3.0, 4.0]})
-            self.assert_eq(kdf.expanding(2).count().sort_index(), expected_result.sort_index())
-            self.assert_eq(kdf.expanding(2).count().sum(), expected_result.sum())
+            self.assert_eq(psdf.expanding(2).count().sort_index(), expected_result.sort_index())
+            self.assert_eq(psdf.expanding(2).count().sum(), expected_result.sum())
 
             # MultiIndex columns
             idx = np.random.rand(4)
-            kdf = ps.DataFrame({"a": [1, 2, 3, 2], "b": [4.0, 2.0, 3.0, 1.0]}, index=idx)
-            kdf.columns = pd.MultiIndex.from_tuples([("a", "x"), ("a", "y")])
+            psdf = ps.DataFrame({"a": [1, 2, 3, 2], "b": [4.0, 2.0, 3.0, 1.0]}, index=idx)
+            psdf.columns = pd.MultiIndex.from_tuples([("a", "x"), ("a", "y")])
             expected_result = pd.DataFrame(
                 {("a", "x"): [None, 2.0, 3.0, 4.0], ("a", "y"): [None, 2.0, 3.0, 4.0]}, index=idx,
             )
-            self.assert_eq(kdf.expanding(2).count().sort_index(), expected_result.sort_index())
+            self.assert_eq(psdf.expanding(2).count().sort_index(), expected_result.sort_index())
 
     def test_expanding_min(self):
         self._test_expanding_func("min")
@@ -118,13 +120,13 @@ class ExpandingTest(PandasOnSparkTestCase, TestUtils):
 
     def _test_groupby_expanding_func(self, f):
         pser = pd.Series([1, 2, 3, 2], index=np.random.rand(4), name="a")
-        kser = ps.from_pandas(pser)
+        psser = ps.from_pandas(pser)
         self.assert_eq(
-            getattr(kser.groupby(kser).expanding(2), f)().sort_index(),
+            getattr(psser.groupby(psser).expanding(2), f)().sort_index(),
             getattr(pser.groupby(pser).expanding(2), f)().sort_index(),
         )
         self.assert_eq(
-            getattr(kser.groupby(kser).expanding(2), f)().sum(),
+            getattr(psser.groupby(psser).expanding(2), f)().sum(),
             getattr(pser.groupby(pser).expanding(2), f)().sum(),
         )
 
@@ -134,50 +136,50 @@ class ExpandingTest(PandasOnSparkTestCase, TestUtils):
             index=pd.MultiIndex.from_tuples([("a", "x"), ("a", "y"), ("b", "z"), ("c", "z")]),
             name="a",
         )
-        kser = ps.from_pandas(pser)
+        psser = ps.from_pandas(pser)
         self.assert_eq(
-            getattr(kser.groupby(kser).expanding(2), f)().sort_index(),
+            getattr(psser.groupby(psser).expanding(2), f)().sort_index(),
             getattr(pser.groupby(pser).expanding(2), f)().sort_index(),
         )
 
         pdf = pd.DataFrame({"a": [1.0, 2.0, 3.0, 2.0], "b": [4.0, 2.0, 3.0, 1.0]})
-        kdf = ps.from_pandas(pdf)
+        psdf = ps.from_pandas(pdf)
         self.assert_eq(
-            getattr(kdf.groupby(kdf.a).expanding(2), f)().sort_index(),
+            getattr(psdf.groupby(psdf.a).expanding(2), f)().sort_index(),
             getattr(pdf.groupby(pdf.a).expanding(2), f)().sort_index(),
         )
         self.assert_eq(
-            getattr(kdf.groupby(kdf.a).expanding(2), f)().sum(),
+            getattr(psdf.groupby(psdf.a).expanding(2), f)().sum(),
             getattr(pdf.groupby(pdf.a).expanding(2), f)().sum(),
         )
         self.assert_eq(
-            getattr(kdf.groupby(kdf.a + 1).expanding(2), f)().sort_index(),
+            getattr(psdf.groupby(psdf.a + 1).expanding(2), f)().sort_index(),
             getattr(pdf.groupby(pdf.a + 1).expanding(2), f)().sort_index(),
         )
         self.assert_eq(
-            getattr(kdf.b.groupby(kdf.a).expanding(2), f)().sort_index(),
+            getattr(psdf.b.groupby(psdf.a).expanding(2), f)().sort_index(),
             getattr(pdf.b.groupby(pdf.a).expanding(2), f)().sort_index(),
         )
         self.assert_eq(
-            getattr(kdf.groupby(kdf.a)["b"].expanding(2), f)().sort_index(),
+            getattr(psdf.groupby(psdf.a)["b"].expanding(2), f)().sort_index(),
             getattr(pdf.groupby(pdf.a)["b"].expanding(2), f)().sort_index(),
         )
         self.assert_eq(
-            getattr(kdf.groupby(kdf.a)[["b"]].expanding(2), f)().sort_index(),
+            getattr(psdf.groupby(psdf.a)[["b"]].expanding(2), f)().sort_index(),
             getattr(pdf.groupby(pdf.a)[["b"]].expanding(2), f)().sort_index(),
         )
 
         # Multiindex column
         columns = pd.MultiIndex.from_tuples([("a", "x"), ("a", "y")])
         pdf.columns = columns
-        kdf.columns = columns
+        psdf.columns = columns
         self.assert_eq(
-            getattr(kdf.groupby(("a", "x")).expanding(2), f)().sort_index(),
+            getattr(psdf.groupby(("a", "x")).expanding(2), f)().sort_index(),
             getattr(pdf.groupby(("a", "x")).expanding(2), f)().sort_index(),
         )
 
         self.assert_eq(
-            getattr(kdf.groupby([("a", "x"), ("a", "y")]).expanding(2), f)().sort_index(),
+            getattr(psdf.groupby([("a", "x"), ("a", "y")]).expanding(2), f)().sort_index(),
             getattr(pdf.groupby([("a", "x"), ("a", "y")]).expanding(2), f)().sort_index(),
         )
 
@@ -188,18 +190,18 @@ class ExpandingTest(PandasOnSparkTestCase, TestUtils):
             self._test_groupby_expanding_func("count")
         else:
             # Series
-            kser = ps.Series([1, 2, 3, 2], index=np.random.rand(4))
+            psser = ps.Series([1, 2, 3, 2], index=np.random.rand(4))
             midx = pd.MultiIndex.from_tuples(
-                list(zip(kser.to_pandas().values, kser.index.to_pandas().values))
+                list(zip(psser.to_pandas().values, psser.index.to_pandas().values))
             )
             expected_result = pd.Series([np.nan, np.nan, np.nan, 2], index=midx)
             self.assert_eq(
-                kser.groupby(kser).expanding(2).count().sort_index(), expected_result.sort_index()
+                psser.groupby(psser).expanding(2).count().sort_index(), expected_result.sort_index()
             )
-            self.assert_eq(kser.groupby(kser).expanding(2).count().sum(), expected_result.sum())
+            self.assert_eq(psser.groupby(psser).expanding(2).count().sum(), expected_result.sum())
 
             # MultiIndex
-            kser = ps.Series(
+            psser = ps.Series(
                 [1, 2, 3, 2],
                 index=pd.MultiIndex.from_tuples([("a", "x"), ("a", "y"), ("b", "z"), ("a", "y")]),
             )
@@ -208,19 +210,19 @@ class ExpandingTest(PandasOnSparkTestCase, TestUtils):
             )
             expected_result = pd.Series([np.nan, np.nan, np.nan, 2], index=midx)
             self.assert_eq(
-                kser.groupby(kser).expanding(2).count().sort_index(), expected_result.sort_index()
+                psser.groupby(psser).expanding(2).count().sort_index(), expected_result.sort_index()
             )
 
             # DataFrame
-            kdf = ps.DataFrame({"a": [1, 2, 3, 2], "b": [4.0, 2.0, 3.0, 1.0]})
+            psdf = ps.DataFrame({"a": [1, 2, 3, 2], "b": [4.0, 2.0, 3.0, 1.0]})
             midx = pd.MultiIndex.from_tuples([(1, 0), (2, 1), (2, 3), (3, 2)], names=["a", None])
             expected_result = pd.DataFrame(
                 {"a": [None, None, 2.0, None], "b": [None, None, 2.0, None]}, index=midx
             )
             self.assert_eq(
-                kdf.groupby(kdf.a).expanding(2).count().sort_index(), expected_result.sort_index()
+                psdf.groupby(psdf.a).expanding(2).count().sort_index(), expected_result.sort_index()
             )
-            self.assert_eq(kdf.groupby(kdf.a).expanding(2).count().sum(), expected_result.sum())
+            self.assert_eq(psdf.groupby(psdf.a).expanding(2).count().sum(), expected_result.sum())
             expected_result = pd.DataFrame(
                 {"a": [None, None, 2.0, None], "b": [None, None, 2.0, None]},
                 index=pd.MultiIndex.from_tuples(
@@ -228,26 +230,27 @@ class ExpandingTest(PandasOnSparkTestCase, TestUtils):
                 ),
             )
             self.assert_eq(
-                kdf.groupby(kdf.a + 1).expanding(2).count().sort_index(),
+                psdf.groupby(psdf.a + 1).expanding(2).count().sort_index(),
                 expected_result.sort_index(),
             )
             expected_result = pd.Series([None, None, 2.0, None], index=midx, name="b")
             self.assert_eq(
-                kdf.b.groupby(kdf.a).expanding(2).count().sort_index(), expected_result.sort_index()
+                psdf.b.groupby(psdf.a).expanding(2).count().sort_index(),
+                expected_result.sort_index(),
             )
             self.assert_eq(
-                kdf.groupby(kdf.a)["b"].expanding(2).count().sort_index(),
+                psdf.groupby(psdf.a)["b"].expanding(2).count().sort_index(),
                 expected_result.sort_index(),
             )
             expected_result = pd.DataFrame({"b": [None, None, 2.0, None]}, index=midx)
             self.assert_eq(
-                kdf.groupby(kdf.a)[["b"]].expanding(2).count().sort_index(),
+                psdf.groupby(psdf.a)[["b"]].expanding(2).count().sort_index(),
                 expected_result.sort_index(),
             )
 
             # MultiIndex column
-            kdf = ps.DataFrame({"a": [1, 2, 3, 2], "b": [4.0, 2.0, 3.0, 1.0]})
-            kdf.columns = pd.MultiIndex.from_tuples([("a", "x"), ("a", "y")])
+            psdf = ps.DataFrame({"a": [1, 2, 3, 2], "b": [4.0, 2.0, 3.0, 1.0]})
+            psdf.columns = pd.MultiIndex.from_tuples([("a", "x"), ("a", "y")])
             midx = pd.MultiIndex.from_tuples(
                 [(1, 0), (2, 1), (2, 3), (3, 2)], names=[("a", "x"), None]
             )
@@ -256,7 +259,7 @@ class ExpandingTest(PandasOnSparkTestCase, TestUtils):
             )
             expected_result.columns = pd.MultiIndex.from_tuples([("a", "x"), ("a", "y")])
             self.assert_eq(
-                kdf.groupby(("a", "x")).expanding(2).count().sort_index(),
+                psdf.groupby(("a", "x")).expanding(2).count().sort_index(),
                 expected_result.sort_index(),
             )
             midx = pd.MultiIndex.from_tuples(
@@ -271,7 +274,7 @@ class ExpandingTest(PandasOnSparkTestCase, TestUtils):
                 index=midx,
             )
             self.assert_eq(
-                kdf.groupby([("a", "x"), ("a", "y")]).expanding(2).count().sort_index(),
+                psdf.groupby([("a", "x"), ("a", "y")]).expanding(2).count().sort_index(),
                 expected_result.sort_index(),
             )
 
@@ -300,7 +303,8 @@ if __name__ == "__main__":
 
     try:
         import xmlrunner  # type: ignore[import]
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
+
+        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

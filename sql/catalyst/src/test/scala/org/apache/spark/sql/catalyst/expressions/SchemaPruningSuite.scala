@@ -129,4 +129,18 @@ class SchemaPruningSuite extends SparkFunSuite with SQLHelper {
       }
     }
   }
+
+  test("SPARK-35232: getRootFields/pruneDataSchema should retain attribute metadata") {
+    val metadata = new MetadataBuilder().putString("foo", "bar").build()
+    val attr = AttributeReference("my_attr", IntegerType, metadata = metadata)()
+
+    val rootFields = SchemaPruning.getRootFields(attr)
+    assert(rootFields.length == 1)
+    val field = rootFields.head.field
+    assert(field.metadata.getString("foo") == "bar")
+
+    val schema = StructType(Seq(field))
+    val prunedSchema = SchemaPruning.pruneDataSchema(schema, rootFields)
+    assert(prunedSchema.head.metadata.getString("foo") == "bar")
+  }
 }

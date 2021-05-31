@@ -3670,7 +3670,12 @@ unresolved_named_lambda_var <- function(...) {
     "org.apache.spark.sql.Column",
     newJObject(
       "org.apache.spark.sql.catalyst.expressions.UnresolvedNamedLambdaVariable",
-      list(...)
+      lapply(list(...), function(x) {
+        handledCallJStatic(
+          "org.apache.spark.sql.catalyst.expressions.UnresolvedNamedLambdaVariable",
+          "freshVarName",
+          x)
+      })
     )
   )
   column(jc)

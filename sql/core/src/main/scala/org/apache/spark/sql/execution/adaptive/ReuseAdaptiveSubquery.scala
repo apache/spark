@@ -21,6 +21,7 @@ import scala.collection.concurrent.TrieMap
 
 import org.apache.spark.sql.catalyst.expressions.ExprId
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.trees.TreePattern.PLAN_EXPRESSION
 import org.apache.spark.sql.execution.{BaseSubqueryExec, ExecSubqueryExpression, ReusedSubqueryExec, SparkPlan}
 
 case class ReuseAdaptiveSubquery(
@@ -31,7 +32,7 @@ case class ReuseAdaptiveSubquery(
       return plan
     }
 
-    plan.transformAllExpressions {
+    plan.transformAllExpressionsWithPruning(_.containsPattern(PLAN_EXPRESSION)) {
       case sub: ExecSubqueryExpression =>
         val (newPlan, exprId) =
           reuseMap.getOrElseUpdate(sub.plan.canonicalized, (sub.plan, sub.exprId))

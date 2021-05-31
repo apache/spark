@@ -493,6 +493,7 @@ Functions
     schema_of_csv
     schema_of_json
     second
+    sentences
     sequence
     sha1
     sha2

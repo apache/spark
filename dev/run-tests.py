@@ -122,19 +122,21 @@ def determine_modules_to_test(changed_modules, deduplicated=True):
     ['graphx', 'examples']
     >>> [x.name for x in determine_modules_to_test([modules.sql])]
     ... # doctest: +NORMALIZE_WHITESPACE
-    ['sql', 'avro', 'hive', 'mllib', 'sql-kafka-0-10', 'examples', 'hive-thriftserver',
-     'pyspark-sql', 'repl', 'sparkr', 'pyspark-mllib', 'pyspark-pandas', 'pyspark-ml']
+    ['sql', 'avro', 'hive', 'mllib', 'sql-kafka-0-10', 'examples',
+     'hive-thriftserver', 'pyspark-sql', 'repl', 'sparkr',
+     'pyspark-mllib', 'pyspark-pandas', 'pyspark-ml']
     >>> sorted([x.name for x in determine_modules_to_test(
     ...     [modules.sparkr, modules.sql], deduplicated=False)])
     ... # doctest: +NORMALIZE_WHITESPACE
-    ['avro', 'examples', 'hive', 'hive-thriftserver', 'mllib', 'pyspark-ml',
-     'pyspark-mllib', 'pyspark-pandas', 'pyspark-sql', 'repl', 'sparkr', 'sql', 'sql-kafka-0-10']
+    ['avro', 'examples', 'hive', 'hive-thriftserver', 'mllib',
+     'pyspark-ml', 'pyspark-mllib', 'pyspark-pandas', 'pyspark-sql',
+     'repl', 'sparkr', 'sql', 'sql-kafka-0-10']
     >>> sorted([x.name for x in determine_modules_to_test(
     ...     [modules.sql, modules.core], deduplicated=False)])
     ... # doctest: +NORMALIZE_WHITESPACE
-    ['avro', 'catalyst', 'core', 'examples', 'graphx', 'hive', 'hive-thriftserver',
-     'mllib', 'mllib-local', 'pyspark-core', 'pyspark-ml', 'pyspark-mllib', 'pyspark-pandas',
-     'pyspark-resource', 'pyspark-sql', 'pyspark-streaming', 'repl', 'root',
+    ['avro', 'catalyst', 'core', 'examples', 'graphx', 'hive',
+     'hive-thriftserver', 'mllib', 'mllib-local', 'pyspark-core', 'pyspark-ml', 'pyspark-mllib',
+     'pyspark-pandas', 'pyspark-resource', 'pyspark-sql', 'pyspark-streaming', 'repl', 'root',
      'sparkr', 'sql', 'sql-kafka-0-10', 'streaming', 'streaming-kafka-0-10',
      'streaming-kinesis-asl']
     """
@@ -474,11 +476,11 @@ def run_python_tests(test_modules, parallelism, with_coverage=False):
         command.append("--modules=%s" % ','.join(m.name for m in test_modules))
     command.append("--parallelism=%i" % parallelism)
     if "GITHUB_ACTIONS" in os.environ:
-        # See SPARK-33565. Python 3.8 was temporarily removed as its default Python executables
-        # to test because of Jenkins environment issue. Once Jenkins has Python 3.8 to test,
-        # we should remove this change back and add python3.8 into python/run-tests.py script.
+        # See SPARK-33565. Python 3.9 was temporarily removed as its default Python executables
+        # to test because of Jenkins environment issue. Once Jenkins has Python 3.9 to test,
+        # we should remove this change back and add python3.9 into python/run-tests.py script.
         command.append("--python-executable=%s" % ','.join(
-            x for x in ["python3.6", "python3.8", "pypy3"] if which(x)))
+            x for x in ["python3.6", "python3.9", "pypy3"] if which(x)))
     run_cmd(command)
 
     if with_coverage:
