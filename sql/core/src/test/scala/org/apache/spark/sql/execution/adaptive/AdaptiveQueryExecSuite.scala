@@ -22,6 +22,7 @@ import java.net.URI
 
 import org.apache.log4j.Level
 import org.scalatest.PrivateMethodTester
+
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListenerJobStart}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
