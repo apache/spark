@@ -244,7 +244,7 @@ jobs:
     name: "Build modules: sparkr"
     runs-on: ubuntu-20.04
     container:
-      image: dongjoon/apache-spark-github-action-image:20210530
+      image: dongjoon/apache-spark-github-action-image:20201025
     env:
       HADOOP_PROFILE: hadoop3.2
       HIVE_PROFILE: hive2.3
