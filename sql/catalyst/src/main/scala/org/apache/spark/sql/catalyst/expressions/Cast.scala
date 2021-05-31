@@ -520,9 +520,9 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
   private[this] def castToDate(from: DataType): Any => Any = from match {
     case StringType =>
       if (ansiEnabled) {
-        buildCast[UTF8String](_, s => DateTimeUtils.stringToDateAnsi(s, zoneId))
+        buildCast[UTF8String](_, s => DateTimeUtils.stringToDateAnsi(s))
       } else {
-        buildCast[UTF8String](_, s => DateTimeUtils.stringToDate(s, zoneId).orNull)
+        buildCast[UTF8String](_, s => DateTimeUtils.stringToDate(s).orNull)
       }
     case TimestampType =>
       // throw valid precision more than seconds, according to Hive.
