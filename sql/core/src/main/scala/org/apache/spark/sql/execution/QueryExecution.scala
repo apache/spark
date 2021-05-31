@@ -56,7 +56,8 @@ class QueryExecution(
     val sparkSession: SparkSession,
     val logical: LogicalPlan,
     val tracker: QueryPlanningTracker = new QueryPlanningTracker,
-    val isExecutingCommand: Boolean = false) extends Logging {
+    val isExecutingCommand: Boolean = false,
+    val name: Option[String] = Some("command")) extends Logging {
 
   val id: Long = QueryExecution.nextExecutionId
 
@@ -93,7 +94,7 @@ class QueryExecution(
         qe.analyzed.output,
         qe.commandExecuted,
         qe.executedPlan,
-        SQLExecution.withNewExecutionId(qe, Some("command"))(qe.executedPlan.executeCollect()))
+        SQLExecution.withNewExecutionId(qe, name)(qe.executedPlan.executeCollect()))
     case other => other
   }
 

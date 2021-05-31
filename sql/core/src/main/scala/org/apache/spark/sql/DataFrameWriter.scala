@@ -907,7 +907,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * user-registered callback functions.
    */
   private def runCommand(session: SparkSession, name: String)(command: LogicalPlan): Unit = {
-    val qe = session.sessionState.executePlan(command)
+    val qe = session.sessionState.executePlan(command, name = Some(name))
     // call `QueryExecution.commandExecuted` to trigger the execution of commands.
     qe.commandExecuted
   }

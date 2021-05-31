@@ -76,8 +76,8 @@ case class CommandResultExec(
   }
 
   override def executeCollect(): Array[InternalRow] = {
-    longMetric("numOutputRows").add(unsafeRows.size)
-    unsafeRows
+    longMetric("numOutputRows").add(rows.size)
+    rows.toArray
   }
 
   override def executeTake(limit: Int): Array[InternalRow] = {

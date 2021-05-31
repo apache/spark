@@ -78,25 +78,35 @@ object HiveResult {
       val commandPhysicalPlans = other collect {
         case commandResultExec: CommandResultExec => commandResultExec.commandPhysicalPlan
       }
-      val hasCommandResult = commandPhysicalPlans exists {
+      val needCropOutput = commandPhysicalPlans exists {
+        case _: ShowTablesExec => true
         case ExecutedCommandExec(_: ShowTablesCommand) => true
         case ExecutedCommandExec(_: ShowViewsCommand) => true
         case _ => false
       }
-      val result: Seq[Seq[Any]] = if (hasCommandResult) {
-        other.executeCollectPublic().map(row => Row(row.get(1))).map(_.toSeq).toSeq
-      } else {
-        other.executeCollectPublic().map(_.toSeq).toSeq
+      val hasDescribeTableExec = commandPhysicalPlans exists {
+        case _: DescribeTableExec => true
+        case ExecutedCommandExec(_: DescribeCommandBase) => true
+        case _ => false
       }
-      // We need the types so we can output struct field names
-      val types = if (hasCommandResult) {
-        Seq(executedPlan.output(1).dataType)
+      if (hasDescribeTableExec) {
+        formatDescribeTableOutput(executedPlan.executeCollectPublic())
       } else {
-        executedPlan.output.map(_.dataType)
+        val result: Seq[Seq[Any]] = if (needCropOutput) {
+          other.executeCollectPublic().map(row => Row(row.get(1))).map(_.toSeq).toSeq
+        } else {
+          other.executeCollectPublic().map(_.toSeq).toSeq
+        }
+        // We need the types so we can output struct field names
+        val types = if (hasDescribeTableExec) {
+          Seq(executedPlan.output(1).dataType)
+        } else {
+          executedPlan.output.map(_.dataType)
+        }
+        // Reformat to match hive tab delimited output.
+        result.map(_.zip(types).map(e => toHiveString(e, false, timeFormatters)))
+          .map(_.mkString("\t"))
       }
-      // Reformat to match hive tab delimited output.
-      result.map(_.zip(types).map(e => toHiveString(e, false, timeFormatters)))
-        .map(_.mkString("\t"))
   }
 
   private def formatDescribeTableOutput(rows: Array[Row]): Seq[String] = {
