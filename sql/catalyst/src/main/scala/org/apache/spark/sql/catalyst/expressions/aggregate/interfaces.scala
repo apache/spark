@@ -105,11 +105,7 @@ case class AggregateExpression(
   extends Expression
   with Unevaluable {
 
-  final override val nodePatterns: Seq[TreePattern] =
-    Seq(AGGREGATE_EXPRESSION) ++ nodePatternsInternal
-
-  // Subclasses can override this function to provide more TreePatterns.
-  def nodePatternsInternal(): Seq[TreePattern] = Seq()
+  final override val nodePatterns: Seq[TreePattern] = Seq(AGGREGATE_EXPRESSION)
 
   @transient
   lazy val resultAttribute: Attribute = if (aggregateFunction.resolved) {
