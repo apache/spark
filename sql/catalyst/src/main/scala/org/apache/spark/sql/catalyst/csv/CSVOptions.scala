@@ -206,6 +206,12 @@ class CSVOptions(
     sep
   }
 
+  /**
+   * option to infer date Type in the schema
+   */
+  val inferDateType =
+    parameters.get("inferDateType").map(_.toBoolean).getOrElse(false)
+
   val lineSeparatorInRead: Option[Array[Byte]] = lineSeparator.map { lineSep =>
     lineSep.getBytes(charset)
   }

@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCoercion
 import org.apache.spark.sql.catalyst.expressions.ExprUtils
 import org.apache.spark.sql.catalyst.json.JacksonUtils.nextUntil
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.catalyst.util.LegacyDateFormats.{FAST_DATE_FORMAT, SIMPLE_DATE_FORMAT}
+import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -49,7 +49,7 @@ private[sql] class JsonInferSchema(options: JSONOptions) extends Serializable {
     options.dateFormat,
     options.zoneId,
     options.locale,
-    legacyFormat = SIMPLE_DATE_FORMAT,
+    legacyFormat = FAST_DATE_FORMAT,
     isParsing = true)
 
   /**
@@ -134,7 +134,7 @@ private[sql] class JsonInferSchema(options: JSONOptions) extends Serializable {
         }
         if (options.prefersDecimal && decimalTry.isDefined) {
           decimalTry.get
-        } else if (options.allowDateFormat
+        } else if (options.inferDateType
             && !dateFormatter.isInstanceOf[LegacySimpleDateFormatter] &&
             (allCatch opt dateFormatter.parse(field)).isDefined) {
           DateType

@@ -156,6 +156,12 @@ Data source options of JSON can be set via:
     <td>read</td>
   </tr>
   <tr>
+    <td><code>inferDateType</code></td>
+    <td>false</td>
+    <td>Infers all DateType format for the json. If this is not set, it uses the default value, <code>false</code>.</td>
+    <td>read</td>
+  </tr>
+  <tr>
     <td><code>allowBackslashEscapingAnyCharacter</code></td>
     <td>None</td>
     <td>Allows accepting quoting of all character using backslash quoting mechanism. If None is set, it uses the default value, <code>false</code>.</td>
