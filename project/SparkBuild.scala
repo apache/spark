@@ -203,13 +203,12 @@ object SparkBuild extends PomBuild {
   // Silencer: Scala compiler plugin for warning suppression
   // Aim: enable fatal warnings, but suppress ones related to using of deprecated APIs
   // depends on scala version:
-  // <2.13 - silencer 1.6.0 and compiler settings to enable fatal warnings
-  // 2.13.0,2.13.1 - silencer 1.7.1 and compiler settings to enable fatal warnings
+  // <2.13.2 - silencer 1.7.5 and compiler settings to enable fatal warnings
   // 2.13.2+ - no silencer and configured warnings to achieve the same
   lazy val compilerWarningSettings: Seq[sbt.Def.Setting[_]] = Seq(
     libraryDependencies ++= {
       if (VersionNumber(scalaVersion.value).matchesSemVer(SemanticSelector("<2.13.2"))) {
-        val silencerVersion = if (scalaBinaryVersion.value == "2.13") "1.7.1" else "1.6.0"
+        val silencerVersion = "1.7.5"
         Seq(
           "org.scala-lang.modules" %% "scala-collection-compat" % "2.2.0",
           compilerPlugin("com.github.ghik" % "silencer-plugin" % silencerVersion cross CrossVersion.full),

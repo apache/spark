@@ -599,7 +599,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
   }
 
   test("SPARK-28551: CTAS Hive Table should be with non-existent or empty location") {
-    def executeCTASWithNonEmptyLocation(tempLocation: String) {
+    def executeCTASWithNonEmptyLocation(tempLocation: String): Unit = {
       sql(s"CREATE TABLE ctas1(id string) stored as rcfile LOCATION '$tempLocation/ctas1'")
       sql("INSERT INTO TABLE ctas1 SELECT 'A' ")
       sql(s"""CREATE TABLE ctas_with_existing_location stored as rcfile LOCATION
