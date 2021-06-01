@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.hive.client
 
+import java.io.File
 import java.lang.{Boolean => JBoolean, Integer => JInteger, Long => JLong}
 import java.lang.reflect.{InvocationTargetException, Method, Modifier}
 import java.net.URI
@@ -68,6 +69,13 @@ private[client] sealed abstract class Shim {
    * the current thread to the one set in the HiveConf of this given `state`.
    */
   def setCurrentSessionState(state: SessionState): Unit
+
+  /**
+   * SPARK-35556: `getTmpErrOutputFile` method is added to `SessionState`` after Hive 2.0.
+   * Add this method in `Shim` to ensure that `NoSuchMethodError` is not thrown when call
+   * this method.
+   */
+  def getTmpErrOutputFile(state: SessionState): File
 
   /**
    * This shim is necessary because the return type is different on different versions of Hive.
@@ -302,6 +310,8 @@ private[client] class Shim_v0_12 extends Shim with Logging {
     Thread.currentThread().setContextClassLoader(state.getConf.getClassLoader)
     startMethod.invoke(null, state)
   }
+
+  override def getTmpErrOutputFile(state: SessionState): File = null
 
   override def getDataLocation(table: Table): Option[String] =
     Option(getDataLocationMethod.invoke(table)).map(_.toString())
@@ -1172,6 +1182,10 @@ private[client] class Shim_v2_0 extends Shim_v1_2 {
       JBoolean.TYPE,
       JBoolean.TYPE,
       JLong.TYPE)
+  private lazy val getTmpErrOutputFileMethod =
+    findMethod(
+      classOf[SessionState],
+      "getTmpErrOutputFile")
 
   override def loadPartition(
       hive: Hive,
@@ -1207,6 +1221,10 @@ private[client] class Shim_v2_0 extends Shim_v1_2 {
       listBucketingEnabled: Boolean): Unit = {
     loadDynamicPartitionsMethod.invoke(hive, loadPath, tableName, partSpec, replace: JBoolean,
       numDP: JInteger, listBucketingEnabled: JBoolean, isAcid, txnIdInLoadDynamicPartitions)
+  }
+
+  override def getTmpErrOutputFile(state: SessionState): File = {
+    Option(getTmpErrOutputFileMethod.invoke(state)).map(_.asInstanceOf[File]).orNull
   }
 
 }

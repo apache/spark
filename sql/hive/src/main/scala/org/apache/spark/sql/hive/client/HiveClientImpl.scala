@@ -166,14 +166,12 @@ private[hive] class HiveClientImpl(
       state.setTmpOutputFile(null)
     }
     // SPARK-35556: there are some UTs testing multiple versions of hive such as
-    // `org.apache.spark.sql.hive.client.VersionsSuite`, so we need to ensure that
-    // the `getTmpErrOutputFile` method exists in the hive version being tested,
-    // because the `getTmpErrOutputFile` method was added after hive 2.0.
-    if (state.getClass.getMethods.exists(_.getName == "getTmpErrOutputFile")) {
-      if (state.getTmpErrOutputFile != null) {
-        state.getTmpErrOutputFile.delete()
-        state.setTmpErrOutputFile(null)
-      }
+    // `org.apache.spark.sql.hive.client.VersionsSuite`, but `getTmpErrOutputFile` method
+    // is added to `SessionState`` after Hive 2.0, So we use `Shim` mechanism to ensure that
+    // `NoSuchMethodError` is not thrown when call `getTmpErrOutputFile` method.
+    if (shim.getTmpErrOutputFile(state) != null) {
+      state.getTmpErrOutputFile.delete()
+      state.setTmpErrOutputFile(null)
     }
     state.close()
   }
