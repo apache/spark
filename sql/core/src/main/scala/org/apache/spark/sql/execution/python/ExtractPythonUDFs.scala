@@ -210,7 +210,10 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] with PredicateHelper {
     // eventually. Here we skip subquery, as Python UDF only needs to be extracted once.
     case s: Subquery if s.correlated => plan
 
-    case _ => plan.transformUpWithPruning(_.containsPattern(PYTHON_UDF)) {
+    case _ => plan.transformUpWithPruning(
+      // All cases must contain pattern PYTHON_UDF. PythonUDFs are member fields of BatchEvalPython
+      // and ArrowEvalPython.
+      _.containsPattern(PYTHON_UDF)) {
       // A safe guard. `ExtractPythonUDFs` only runs once, so we will not hit `BatchEvalPython` and
       // `ArrowEvalPython` in the input plan. However if we hit them, we must skip them, as we can't
       // extract Python UDFs from them.
