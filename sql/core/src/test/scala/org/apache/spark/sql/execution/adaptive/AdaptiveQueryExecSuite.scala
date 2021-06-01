@@ -1605,7 +1605,7 @@ class AdaptiveQueryExecSuite
   }
 
   test("SPARK-33933: Materialize BroadcastQueryStage first in AQE") {
-    val testAppender = new LogAppender("aqe query stage materialization order test")
+    val testAppender = new LogAppender("aqe query stage materialization order test", 10000)
     val df = spark.range(1000).select($"id" % 26, $"id" % 10)
       .toDF("index", "pv")
     val dim = Range(0, 26).map(x => (x, ('a' + x).toChar.toString))
