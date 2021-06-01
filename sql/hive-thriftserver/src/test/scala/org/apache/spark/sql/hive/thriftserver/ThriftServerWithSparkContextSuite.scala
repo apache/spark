@@ -118,7 +118,7 @@ trait ThriftServerWithSparkContextSuite extends SharedThriftServer {
     }
   }
 
-  test("get current_user and session_user through thrift server") {
+  test("SPARK-21957: get current_user and session_user through thrift server") {
     val clientUser = "storm_earth_fire_heed_my_call"
     val sql = "select current_user(), session_user()"
 
