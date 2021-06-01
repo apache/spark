@@ -357,7 +357,7 @@ jobs:
         architecture: x64
     - name: Install Python linter dependencies
       run: |
-        python3.6 -m pip install flake8 numpy mypy
+        python3.6 -m pip install flake8 mypy
     - name: Install R linter dependencies and SparkR
       run: |
         apt-get install -y libcurl4-openssl-dev libgit2-dev libssl-dev libxml2-dev
