@@ -16,7 +16,7 @@
 #
 
 import numbers
-from abc import ABCMeta, abstractmethod
+from abc import ABCMeta
 from typing import Any, TYPE_CHECKING, Union
 
 import numpy as np
@@ -123,7 +123,6 @@ class DataTypeOps(object, metaclass=ABCMeta):
         self.spark_type = spark_type
 
     @property
-    @abstractmethod
     def pretty_name(self) -> str:
         raise NotImplementedError()
 

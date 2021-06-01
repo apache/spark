@@ -963,7 +963,7 @@ class InternalFrame(object):
         dtypes = [dtype for dtype in self.index_dtypes]
         spark_types = [
             self.spark_frame.select(scol).schema[0].dataType for scol in self.index_spark_columns]
-        
+
         for spark_column, column_name, dtype in zip(
             self.data_spark_columns, self.data_spark_column_names, self.data_dtypes
         ):
