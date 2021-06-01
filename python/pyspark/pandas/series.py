@@ -650,6 +650,9 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
     )
 
     # create accessor for pandas-on-Spark specific methods.
+    pandas_on_spark = CachedAccessor("pandas_on_spark", PandasOnSparkSeriesMethods)
+
+    # keep the name "koalas" for backward compatibility.
     koalas = CachedAccessor("koalas", PandasOnSparkSeriesMethods)
 
     # Comparison Operators
@@ -3098,7 +3101,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         apply_each = wraps(func)(lambda s: s.apply(func, args=args, **kwds))
 
         if should_infer_schema:
-            return self.koalas._transform_batch(apply_each, None)
+            return self.pandas_on_spark._transform_batch(apply_each, None)
         else:
             sig_return = infer_return_type(func)
             if not isinstance(sig_return, ScalarType):
@@ -3107,7 +3110,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                     "but found type {}".format(sig_return)
                 )
             return_type = cast(ScalarType, sig_return)
-            return self.koalas._transform_batch(apply_each, return_type)
+            return self.pandas_on_spark._transform_batch(apply_each, return_type)
 
     # TODO: not all arguments are implemented comparing to pandas' for now.
     def aggregate(self, func: Union[str, List[str]]) -> Union[Scalar, "Series"]:

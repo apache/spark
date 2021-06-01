@@ -4051,11 +4051,18 @@ class SQLConf extends Serializable with Logging {
    * Redacts the given option map according to the description of SQL_OPTIONS_REDACTION_PATTERN.
    */
   def redactOptions[K, V](options: Map[K, V]): Map[K, V] = {
+    redactOptions(options.toSeq).toMap
+  }
+
+  /**
+   * Redacts the given option map according to the description of SQL_OPTIONS_REDACTION_PATTERN.
+   */
+  def redactOptions[K, V](options: Seq[(K, V)]): Seq[(K, V)] = {
     val regexes = Seq(
       getConf(SQL_OPTIONS_REDACTION_PATTERN),
       SECRET_REDACTION_PATTERN.readFrom(reader))
 
-    regexes.foldLeft(options.toSeq) { case (opts, r) => Utils.redact(Some(r), opts) }.toMap
+    regexes.foldLeft(options) { case (opts, r) => Utils.redact(Some(r), opts) }
   }
 
   /**

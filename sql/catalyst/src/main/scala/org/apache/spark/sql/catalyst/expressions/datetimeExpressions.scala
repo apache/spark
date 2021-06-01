@@ -27,7 +27,7 @@ import org.apache.commons.text.StringEscapeUtils
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.trees.TreePattern.{CURRENT_LIKE, TreePattern}
+import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util.{DateTimeUtils, LegacyDateFormats, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
@@ -44,6 +44,12 @@ trait TimeZoneAwareExpression extends Expression {
   /** The expression is only resolved when the time zone has been set. */
   override lazy val resolved: Boolean =
     childrenResolved && checkInputDataTypes().isSuccess && timeZoneId.isDefined
+
+  final override val nodePatterns: Seq[TreePattern] =
+    Seq(TIME_ZONE_AWARE_EXPRESSION) ++ nodePatternsInternal
+
+  // Subclasses can override this function to provide more TreePatterns.
+  def nodePatternsInternal(): Seq[TreePattern] = Seq()
 
   /** the timezone ID to be used to evaluate value. */
   def timeZoneId: Option[String]
@@ -124,7 +130,7 @@ case class CurrentDate(timeZoneId: Option[String] = None)
 
   override def dataType: DataType = DateType
 
-  final override val nodePatterns: Seq[TreePattern] = Seq(CURRENT_LIKE)
+  final override def nodePatternsInternal(): Seq[TreePattern] = Seq(CURRENT_LIKE)
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
@@ -203,7 +209,7 @@ case class CurrentBatchTimestamp(
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
 
-  final override val nodePatterns: Seq[TreePattern] = Seq(CURRENT_LIKE)
+  final override def nodePatternsInternal(): Seq[TreePattern] = Seq(CURRENT_LIKE)
 
   override def prettyName: String = "current_batch_timestamp"
 

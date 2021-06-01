@@ -55,6 +55,7 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveFunctions" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveGenerate" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveGroupingAnalytics" ::
+      "org.apache.spark.sql.catalyst.analysis.ResolveHigherOrderFunctions" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveInsertInto" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveMissingReferences" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveNaturalAndUsingJoin" ::
@@ -88,6 +89,7 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.analysis.SubstituteUnresolvedOrdinals" ::
       "org.apache.spark.sql.catalyst.analysis.TimeWindowing" ::
       "org.apache.spark.sql.catalyst.analysis.UpdateOuterReferences" ::
+      "org.apache.spark.sql.catalyst.analysis.UpdateAttributeNullability" ::
       // Catalyst Optimizer rules
       "org.apache.spark.sql.catalyst.optimizer.BooleanSimplification" ::
       "org.apache.spark.sql.catalyst.optimizer.CollapseProject" ::
