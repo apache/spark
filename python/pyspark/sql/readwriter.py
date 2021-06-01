@@ -403,7 +403,7 @@ class DataFrameReader(OptionUtils):
             enforceSchema=enforceSchema, emptyValue=emptyValue, locale=locale, lineSep=lineSep,
             pathGlobFilter=pathGlobFilter, recursiveFileLookup=recursiveFileLookup,
             modifiedBefore=modifiedBefore, modifiedAfter=modifiedAfter,
-            unescapedQuoteHandling=unescapedQuoteHandling, inferDateType= inferDateType)
+            unescapedQuoteHandling=unescapedQuoteHandling, inferDateType=inferDateType)
         if isinstance(path, str):
             path = [path]
         if type(path) == list:
