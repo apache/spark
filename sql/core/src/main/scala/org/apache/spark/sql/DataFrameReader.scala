@@ -297,6 +297,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
     format("jdbc").load()
   }
 
+  // scalastyle:off line.size.limit
   /**
    * Construct a `DataFrame` representing the database table accessible via JDBC URL
    * url named table. Partitions of the table will be retrieved in parallel based on the parameters
@@ -305,27 +306,22 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * Don't create too many partitions in parallel on a large cluster; otherwise Spark might crash
    * your external database systems.
    *
+   * You can find the JDBC-specific options for reading table via JDBC in
+   * <a href="https://spark.apache.org/docs/latest/sql-data-sources-jdbc.html#data-source-option">
+   *   Data Source Option</a> in the version you use.
+   *
    * @param table Name of the table in the external database.
-   * @param columnName the name of a column of numeric, date, or timestamp type
-   *                   that will be used for partitioning.
-   * @param lowerBound the minimum value of `columnName` used to decide partition stride.
-   * @param upperBound the maximum value of `columnName` used to decide partition stride.
-   * @param numPartitions the number of partitions. This, along with `lowerBound` (inclusive),
-   *                      `upperBound` (exclusive), form partition strides for generated WHERE
-   *                      clause expressions used to split the column `columnName` evenly. When
-   *                      the input is less than 1, the number is set to 1.
+   * @param columnName alias of `partitionColumn` option. Refer to `partitionColumn` in
+   *                   <a href="https://spark.apache.org/docs/latest/sql-data-sources-jdbc.html#data-source-option">
+   *                     Data Source Option</a> in the version you use.
    * @param connectionProperties JDBC database connection arguments, a list of arbitrary string
    *                             tag/value. Normally at least a "user" and "password" property
    *                             should be included. "fetchsize" can be used to control the
    *                             number of rows per fetch and "queryTimeout" can be used to wait
    *                             for a Statement object to execute to the given number of seconds.
-   *
-   * You can find the other JDBC-specific options for reading table via JDBC in
-   * <a href="https://spark.apache.org/docs/latest/sql-data-sources-jdbc.html#data-source-option">
-   *   Data Source Option</a> in the version you use.
-   *
    * @since 1.4.0
    */
+  // scalastyle:on line.size.limit
   def jdbc(
       url: String,
       table: String,
@@ -352,17 +348,16 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * Don't create too many partitions in parallel on a large cluster; otherwise Spark might crash
    * your external database systems.
    *
+   * You can find the JDBC-specific options for reading table via JDBC in
+   * <a href="https://spark.apache.org/docs/latest/sql-data-sources-jdbc.html#data-source-option">
+   *   Data Source Option</a> in the version you use.
+   *
    * @param table Name of the table in the external database.
    * @param predicates Condition in the where clause for each partition.
    * @param connectionProperties JDBC database connection arguments, a list of arbitrary string
    *                             tag/value. Normally at least a "user" and "password" property
    *                             should be included. "fetchsize" can be used to control the
    *                             number of rows per fetch.
-   *
-   * You can find the other JDBC-specific options for reading table via JDBC in
-   * <a href="https://spark.apache.org/docs/latest/sql-data-sources-jdbc.html#data-source-option">
-   *   Data Source Option</a> in the version you use.
-   *
    * @since 1.4.0
    */
   def jdbc(

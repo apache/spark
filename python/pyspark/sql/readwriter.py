@@ -630,18 +630,9 @@ class DataFrameReader(OptionUtils):
         table : str
             the name of the table
         column : str, optional
-            the name of a column of numeric, date, or timestamp type
-            that will be used for partitioning;
-            if this parameter is specified, then ``numPartitions``, ``lowerBound``
-            (inclusive), and ``upperBound`` (exclusive) will form partition strides
-            for generated WHERE clause expressions used to split the column
-            ``column`` evenly
-        lowerBound : str or int, optional
-            the minimum value of ``column`` used to decide partition stride
-        upperBound : str or int, optional
-            the maximum value of ``column`` used to decide partition stride
-        numPartitions : int, optional
-            the number of partitions
+            alias of ``partitionColumn`` option. Refer to ``partitionColumn`` in
+            `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-jdbc.html#data-source-option>`_
+            in the version you use.
         predicates : list, optional
             a list of expressions suitable for inclusion in WHERE clauses;
             each one defines one partition of the :class:`DataFrame`
