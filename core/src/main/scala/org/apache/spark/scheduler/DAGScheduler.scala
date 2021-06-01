@@ -1763,6 +1763,8 @@ private[spark] class DAGScheduler(
             // Mark the map whose fetch failed as broken in the map stage
             mapOutputTracker.unregisterMapOutput(shuffleId, mapIndex, bmAddress)
             if (mapStage.shuffleDep.shuffleMergeEnabled) {
+              // Possibly unregister the merge result <shuffleId, reduceId>, if the FetchFailed
+              // mapIndex is part of the merge result of <shuffleId, reduceId>
               mapOutputTracker.
                 unregisterMergeResult(shuffleId, reduceId, bmAddress, Option(mapIndex))
             }

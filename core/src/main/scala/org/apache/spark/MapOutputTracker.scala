@@ -737,25 +737,26 @@ private[spark] class MapOutputTrackerMaster(
   }
 
   /**
-   * Unregisters a merge result corresponding to the reduceId if present. If the optional mapId
-   * is specified, it will only unregister the merge result if the mapId is part of that merge
+   * Unregisters a merge result corresponding to the reduceId if present. If the optional mapIndex
+   * is specified, it will only unregister the merge result if the mapIndex is part of that merge
    * result.
    *
    * @param shuffleId the shuffleId.
    * @param reduceId  the reduceId.
    * @param bmAddress block manager address.
-   * @param mapId     the optional mapId which should be checked to see it was part of the merge
-   *                  result.
+   * @param mapIndex  the optional mapIndex which should be checked to see it was part of the
+   *                  merge result.
    */
   def unregisterMergeResult(
     shuffleId: Int,
     reduceId: Int,
     bmAddress: BlockManagerId,
-    mapId: Option[Int] = None) {
+    mapIndex: Option[Int] = None) {
     shuffleStatuses.get(shuffleId) match {
       case Some(shuffleStatus) =>
         val mergeStatus = shuffleStatus.mergeStatuses(reduceId)
-        if (mergeStatus != null && (mapId.isEmpty || mergeStatus.tracker.contains(mapId.get))) {
+        if (mergeStatus != null &&
+          (mapIndex.isEmpty || mergeStatus.tracker.contains(mapIndex.get))) {
           shuffleStatus.removeMergeResult(reduceId, bmAddress)
           incrementEpoch()
         }
