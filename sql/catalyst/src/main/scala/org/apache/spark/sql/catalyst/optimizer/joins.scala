@@ -116,7 +116,7 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
 }
 
 /**
- * Elimination of outer joins, if the predicates can restrict the result sets so that
+ * 1. Elimination of outer joins, if the predicates can restrict the result sets so that
  * all null-supplying rows are eliminated
  *
  * - full outer -> inner if both sides have such predicates
@@ -125,9 +125,14 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
  * - full outer -> left outer if only the left side has such predicates
  * - full outer -> right outer if only the right side has such predicates
  *
+ * 2. Removes outer join if it only has distinct on streamed side
+ * {{{
+ *   SELECT DISTINCT f1 FROM t1 LEFT JOIN t2 ON t1.id = t2.id  ==>  SELECT DISTINCT f1 FROM t1
+ * }}}
+ *
  * This rule should be executed before pushing down the Filter
  */
-object EliminateOuterJoin extends Rule[LogicalPlan] with PredicateHelper {
+object EliminateOuterJoin extends Rule[LogicalPlan] with PredicateHelper with JoinSelectionHelper {
 
   /**
    * Returns whether the expression returns null or false when all inputs are nulls.
@@ -165,6 +170,23 @@ object EliminateOuterJoin extends Rule[LogicalPlan] with PredicateHelper {
     case f @ Filter(condition, j @ Join(_, _, RightOuter | LeftOuter | FullOuter, _, _)) =>
       val newJoinType = buildNewJoinType(f, j)
       if (j.joinType == newJoinType) f else Filter(condition, j.copy(joinType = newJoinType))
+
+    case a @ Aggregate(_, _, join @ Join(left, _, LeftOuter, _, _))
+        if a.isDistinct && a.references.subsetOf(AttributeSet(left.output)) &&
+          !canPlanAsBroadcastHashJoin(join, conf) =>
+      a.copy(child = left)
+    case a @ Aggregate(_, _, join @ Join(_, right, RightOuter, _, _))
+        if a.isDistinct && a.references.subsetOf(AttributeSet(right.output)) &&
+          !canPlanAsBroadcastHashJoin(join, conf) =>
+      a.copy(child = right)
+    case a @ Aggregate(_, _, p @ Project(_, join @ Join(left, _, LeftOuter, _, _)))
+        if a.isDistinct && a.references.subsetOf(AttributeSet(left.output)) &&
+          !canPlanAsBroadcastHashJoin(join, conf) =>
+      a.copy(child = p.copy(child = left))
+    case a @ Aggregate(_, _, p @ Project(_, join @ Join(_, right, RightOuter, _, _)))
+        if a.isDistinct && a.references.subsetOf(AttributeSet(right.output)) &&
+          !canPlanAsBroadcastHashJoin(join, conf) =>
+      a.copy(child = p.copy(child = right))
   }
 }
 

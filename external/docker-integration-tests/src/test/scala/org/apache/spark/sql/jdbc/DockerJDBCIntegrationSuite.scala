@@ -92,7 +92,8 @@ abstract class DatabaseOnDocker {
       containerConfigBuilder: ContainerConfig.Builder): Unit = {}
 }
 
-abstract class DockerJDBCIntegrationSuite extends SharedSparkSession with Eventually {
+abstract class DockerJDBCIntegrationSuite
+  extends SharedSparkSession with Eventually with DockerIntegrationFunSuite {
 
   protected val dockerIp = DockerUtils.getDockerIp()
   val db: DatabaseOnDocker
@@ -114,7 +115,7 @@ abstract class DockerJDBCIntegrationSuite extends SharedSparkSession with Eventu
   private var pulled: Boolean = false
   protected var jdbcUrl: String = _
 
-  override def beforeAll(): Unit = {
+  override def beforeAll(): Unit = runIfTestsEnabled(s"Prepare for ${this.getClass.getName}") {
     super.beforeAll()
     try {
       docker = DefaultDockerClient.fromEnv.build()

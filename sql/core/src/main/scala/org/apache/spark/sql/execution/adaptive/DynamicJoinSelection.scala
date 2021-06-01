@@ -53,7 +53,7 @@ object DynamicJoinSelection extends Rule[LogicalPlan] {
   }
 
   private def selectJoinStrategy(plan: LogicalPlan): Option[JoinStrategyHint] = plan match {
-    case LogicalQueryStage(_, stage: ShuffleQueryStageExec) if stage.resultOption.get().isDefined
+    case LogicalQueryStage(_, stage: ShuffleQueryStageExec) if stage.isMaterialized
       && stage.mapStats.isDefined =>
       val demoteBroadcastHash = shouldDemoteBroadcastHashJoin(stage.mapStats.get)
       val preferShuffleHash = preferShuffledHashJoin(stage.mapStats.get)
