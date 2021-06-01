@@ -53,7 +53,7 @@ class HistoryServer(
     securityManager: SecurityManager,
     port: Int)
   extends WebUI(securityManager, securityManager.getSSLOptions("historyServer"),
-    port, conf, name = "HistoryServerUI")
+    port, conf, poolSize = 1000)
   with Logging with UIRoot with ApplicationCacheOperations {
 
   // How many applications to retain
