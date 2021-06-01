@@ -99,7 +99,7 @@ Data source options of CSV can be set via:
   <tr>
     <td><code>header</code></td>
     <td>false</td>
-    <td>For reading, uses the first line as names of columns. For writing, writes the names of columns as the first line.</td>
+    <td>For reading, uses the first line as names of columns. For writing, writes the names of columns as the first line. Note that if the given path is a RDD of Strings, this header option will remove all lines same with the header if exists.</td>
     <td>read/write</td>
   </tr>
   <tr>
@@ -195,7 +195,7 @@ Data source options of CSV can be set via:
   <tr>
     <td><code>multiLine</code></td>
     <td>false</td>
-    <td>Parse one record, which may span multiple lines.</td>
+    <td>Parse one record, which may span multiple lines, per file.</td>
     <td>read</td>
   </tr>
   <tr>
