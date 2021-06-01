@@ -98,7 +98,7 @@ class YarnShuffleServiceMetrics implements MetricsSource {
             percentileStr = "1stPercentile";
             break;
           case 999:
-            percentileStr = "99.9thPercentile";
+            percentileStr = "999thPercentile";
             break;
           default:
             percentileStr = String.format("%dthPercentile", percentileThousands / 10);
