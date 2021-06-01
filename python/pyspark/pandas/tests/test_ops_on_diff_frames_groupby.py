@@ -49,8 +49,8 @@ class OpsOnDiffFramesGroupByTest(PandasOnSparkTestCase, SQLTestUtils):
         ]
 
         for pdf1, pdf2 in zip(pdfs1, pdfs2):
-            kdf1 = ps.from_pandas(pdf1)
-            kdf2 = ps.from_pandas(pdf2)
+            psdf1 = ps.from_pandas(pdf1)
+            psdf2 = ps.from_pandas(pdf2)
 
             for as_index in [True, False]:
                 if as_index:
@@ -58,18 +58,18 @@ class OpsOnDiffFramesGroupByTest(PandasOnSparkTestCase, SQLTestUtils):
                 else:
                     sort = lambda df: df.sort_values("c").reset_index(drop=True)
                 self.assert_eq(
-                    sort(kdf1.groupby(kdf2.a, as_index=as_index).sum()),
+                    sort(psdf1.groupby(psdf2.a, as_index=as_index).sum()),
                     sort(pdf1.groupby(pdf2.a, as_index=as_index).sum()),
                     almost=as_index,
                 )
 
                 self.assert_eq(
-                    sort(kdf1.groupby(kdf2.a, as_index=as_index).c.sum()),
+                    sort(psdf1.groupby(psdf2.a, as_index=as_index).c.sum()),
                     sort(pdf1.groupby(pdf2.a, as_index=as_index).c.sum()),
                     almost=as_index,
                 )
                 self.assert_eq(
-                    sort(kdf1.groupby(kdf2.a, as_index=as_index)["c"].sum()),
+                    sort(psdf1.groupby(psdf2.a, as_index=as_index)["c"].sum()),
                     sort(pdf1.groupby(pdf2.a, as_index=as_index)["c"].sum()),
                     almost=as_index,
                 )
@@ -81,16 +81,16 @@ class OpsOnDiffFramesGroupByTest(PandasOnSparkTestCase, SQLTestUtils):
         pdf2 = pd.DataFrame(
             {("x", "a"): [1, 2, 6, 4, 4, 6, 4, 3, 7], ("x", "b"): [4, 2, 7, 3, 3, 1, 1, 1, 2]}
         )
-        kdf1 = ps.from_pandas(pdf1)
-        kdf2 = ps.from_pandas(pdf2)
+        psdf1 = ps.from_pandas(pdf1)
+        psdf2 = ps.from_pandas(pdf2)
 
         self.assert_eq(
-            kdf1.groupby(kdf2[("x", "a")]).sum().sort_index(),
+            psdf1.groupby(psdf2[("x", "a")]).sum().sort_index(),
             pdf1.groupby(pdf2[("x", "a")]).sum().sort_index(),
         )
 
         self.assert_eq(
-            kdf1.groupby(kdf2[("x", "a")], as_index=False)
+            psdf1.groupby(psdf2[("x", "a")], as_index=False)
             .sum()
             .sort_values(("y", "c"))
             .reset_index(drop=True),
@@ -100,15 +100,15 @@ class OpsOnDiffFramesGroupByTest(PandasOnSparkTestCase, SQLTestUtils):
             .reset_index(drop=True),
         )
         self.assert_eq(
-            kdf1.groupby(kdf2[("x", "a")])[[("y", "c")]].sum().sort_index(),
+            psdf1.groupby(psdf2[("x", "a")])[[("y", "c")]].sum().sort_index(),
             pdf1.groupby(pdf2[("x", "a")])[[("y", "c")]].sum().sort_index(),
         )
 
     def test_split_apply_combine_on_series(self):
         pdf1 = pd.DataFrame({"C": [0.362, 0.227, 1.267, -0.562], "B": [1, 2, 3, 4]})
         pdf2 = pd.DataFrame({"A": [1, 1, 2, 2]})
-        kdf1 = ps.from_pandas(pdf1)
-        kdf2 = ps.from_pandas(pdf2)
+        psdf1 = ps.from_pandas(pdf1)
+        psdf2 = ps.from_pandas(pdf2)
 
         for as_index in [True, False]:
             if as_index:
@@ -118,48 +118,48 @@ class OpsOnDiffFramesGroupByTest(PandasOnSparkTestCase, SQLTestUtils):
 
             with self.subTest(as_index=as_index):
                 self.assert_eq(
-                    sort(kdf1.groupby(kdf2.A, as_index=as_index).sum()),
+                    sort(psdf1.groupby(psdf2.A, as_index=as_index).sum()),
                     sort(pdf1.groupby(pdf2.A, as_index=as_index).sum()),
                 )
                 self.assert_eq(
-                    sort(kdf1.groupby(kdf2.A, as_index=as_index).B.sum()),
+                    sort(psdf1.groupby(psdf2.A, as_index=as_index).B.sum()),
                     sort(pdf1.groupby(pdf2.A, as_index=as_index).B.sum()),
                 )
                 self.assert_eq(
-                    sort(kdf1.groupby([kdf1.C, kdf2.A], as_index=as_index).sum()),
+                    sort(psdf1.groupby([psdf1.C, psdf2.A], as_index=as_index).sum()),
                     sort(pdf1.groupby([pdf1.C, pdf2.A], as_index=as_index).sum()),
                 )
                 self.assert_eq(
-                    sort(kdf1.groupby([kdf1.C + 1, kdf2.A], as_index=as_index).sum()),
+                    sort(psdf1.groupby([psdf1.C + 1, psdf2.A], as_index=as_index).sum()),
                     sort(pdf1.groupby([pdf1.C + 1, pdf2.A], as_index=as_index).sum()),
                 )
 
         self.assert_eq(
-            kdf1.B.groupby(kdf2.A).sum().sort_index(), pdf1.B.groupby(pdf2.A).sum().sort_index(),
+            psdf1.B.groupby(psdf2.A).sum().sort_index(), pdf1.B.groupby(pdf2.A).sum().sort_index(),
         )
         self.assert_eq(
-            (kdf1.B + 1).groupby(kdf2.A).sum().sort_index(),
+            (psdf1.B + 1).groupby(psdf2.A).sum().sort_index(),
             (pdf1.B + 1).groupby(pdf2.A).sum().sort_index(),
         )
 
         self.assert_eq(
-            kdf1.B.groupby(kdf2.A.rename()).sum().sort_index(),
+            psdf1.B.groupby(psdf2.A.rename()).sum().sort_index(),
             pdf1.B.groupby(pdf2.A.rename()).sum().sort_index(),
         )
         self.assert_eq(
-            kdf1.B.rename().groupby(kdf2.A).sum().sort_index(),
+            psdf1.B.rename().groupby(psdf2.A).sum().sort_index(),
             pdf1.B.rename().groupby(pdf2.A).sum().sort_index(),
         )
         self.assert_eq(
-            kdf1.B.rename().groupby(kdf2.A.rename()).sum().sort_index(),
+            psdf1.B.rename().groupby(psdf2.A.rename()).sum().sort_index(),
             pdf1.B.rename().groupby(pdf2.A.rename()).sum().sort_index(),
         )
 
     def test_aggregate(self):
         pdf1 = pd.DataFrame({"C": [0.362, 0.227, 1.267, -0.562], "B": [1, 2, 3, 4]})
         pdf2 = pd.DataFrame({"A": [1, 1, 2, 2]})
-        kdf1 = ps.from_pandas(pdf1)
-        kdf2 = ps.from_pandas(pdf2)
+        psdf1 = ps.from_pandas(pdf1)
+        psdf2 = ps.from_pandas(pdf2)
 
         for as_index in [True, False]:
             if as_index:
@@ -169,16 +169,16 @@ class OpsOnDiffFramesGroupByTest(PandasOnSparkTestCase, SQLTestUtils):
 
             with self.subTest(as_index=as_index):
                 self.assert_eq(
-                    sort(kdf1.groupby(kdf2.A, as_index=as_index).agg("sum")),
+                    sort(psdf1.groupby(psdf2.A, as_index=as_index).agg("sum")),
                     sort(pdf1.groupby(pdf2.A, as_index=as_index).agg("sum")),
                 )
                 self.assert_eq(
-                    sort(kdf1.groupby(kdf2.A, as_index=as_index).agg({"B": "min", "C": "sum"})),
+                    sort(psdf1.groupby(psdf2.A, as_index=as_index).agg({"B": "min", "C": "sum"})),
                     sort(pdf1.groupby(pdf2.A, as_index=as_index).agg({"B": "min", "C": "sum"})),
                 )
                 self.assert_eq(
                     sort(
-                        kdf1.groupby(kdf2.A, as_index=as_index).agg(
+                        psdf1.groupby(psdf2.A, as_index=as_index).agg(
                             {"B": ["min", "max"], "C": "sum"}
                         )
                     ),
@@ -189,43 +189,43 @@ class OpsOnDiffFramesGroupByTest(PandasOnSparkTestCase, SQLTestUtils):
                     ),
                 )
                 self.assert_eq(
-                    sort(kdf1.groupby([kdf1.C, kdf2.A], as_index=as_index).agg("sum")),
+                    sort(psdf1.groupby([psdf1.C, psdf2.A], as_index=as_index).agg("sum")),
                     sort(pdf1.groupby([pdf1.C, pdf2.A], as_index=as_index).agg("sum")),
                 )
                 self.assert_eq(
-                    sort(kdf1.groupby([kdf1.C + 1, kdf2.A], as_index=as_index).agg("sum")),
+                    sort(psdf1.groupby([psdf1.C + 1, psdf2.A], as_index=as_index).agg("sum")),
                     sort(pdf1.groupby([pdf1.C + 1, pdf2.A], as_index=as_index).agg("sum")),
                 )
 
         # multi-index columns
         columns = pd.MultiIndex.from_tuples([("Y", "C"), ("X", "B")])
         pdf1.columns = columns
-        kdf1.columns = columns
+        psdf1.columns = columns
 
         columns = pd.MultiIndex.from_tuples([("X", "A")])
         pdf2.columns = columns
-        kdf2.columns = columns
+        psdf2.columns = columns
 
         for as_index in [True, False]:
-            stats_kdf = kdf1.groupby(kdf2[("X", "A")], as_index=as_index).agg(
+            stats_psdf = psdf1.groupby(psdf2[("X", "A")], as_index=as_index).agg(
                 {("X", "B"): "min", ("Y", "C"): "sum"}
             )
             stats_pdf = pdf1.groupby(pdf2[("X", "A")], as_index=as_index).agg(
                 {("X", "B"): "min", ("Y", "C"): "sum"}
             )
             self.assert_eq(
-                stats_kdf.sort_values(by=[("X", "B"), ("Y", "C")]).reset_index(drop=True),
+                stats_psdf.sort_values(by=[("X", "B"), ("Y", "C")]).reset_index(drop=True),
                 stats_pdf.sort_values(by=[("X", "B"), ("Y", "C")]).reset_index(drop=True),
             )
 
-        stats_kdf = kdf1.groupby(kdf2[("X", "A")]).agg(
+        stats_psdf = psdf1.groupby(psdf2[("X", "A")]).agg(
             {("X", "B"): ["min", "max"], ("Y", "C"): "sum"}
         )
         stats_pdf = pdf1.groupby(pdf2[("X", "A")]).agg(
             {("X", "B"): ["min", "max"], ("Y", "C"): "sum"}
         )
         self.assert_eq(
-            stats_kdf.sort_values(
+            stats_psdf.sort_values(
                 by=[("X", "B", "min"), ("X", "B", "max"), ("Y", "C", "sum")]
             ).reset_index(drop=True),
             stats_pdf.sort_values(
@@ -236,14 +236,14 @@ class OpsOnDiffFramesGroupByTest(PandasOnSparkTestCase, SQLTestUtils):
     def test_duplicated_labels(self):
         pdf1 = pd.DataFrame({"A": [3, 2, 1]})
         pdf2 = pd.DataFrame({"A": [1, 2, 3]})
-        kdf1 = ps.from_pandas(pdf1)
-        kdf2 = ps.from_pandas(pdf2)
+        psdf1 = ps.from_pandas(pdf1)
+        psdf2 = ps.from_pandas(pdf2)
 
         self.assert_eq(
-            kdf1.groupby(kdf2.A).sum().sort_index(), pdf1.groupby(pdf2.A).sum().sort_index()
+            psdf1.groupby(psdf2.A).sum().sort_index(), pdf1.groupby(pdf2.A).sum().sort_index()
         )
         self.assert_eq(
-            kdf1.groupby(kdf2.A, as_index=False).sum().sort_values("A").reset_index(drop=True),
+            psdf1.groupby(psdf2.A, as_index=False).sum().sort_values("A").reset_index(drop=True),
             pdf1.groupby(pdf2.A, as_index=False).sum().sort_values("A").reset_index(drop=True),
         )
 
@@ -253,23 +253,23 @@ class OpsOnDiffFramesGroupByTest(PandasOnSparkTestCase, SQLTestUtils):
             columns=["a", "b", "c"],
         )
         pkey = pd.Series([1, 1, 2, 3, 5, 8])
-        kdf = ps.from_pandas(pdf)
+        psdf = ps.from_pandas(pdf)
         kkey = ps.from_pandas(pkey)
 
         self.assert_eq(
-            kdf.groupby(kkey).apply(lambda x: x + x.min()).sort_index(),
+            psdf.groupby(kkey).apply(lambda x: x + x.min()).sort_index(),
             pdf.groupby(pkey).apply(lambda x: x + x.min()).sort_index(),
         )
         self.assert_eq(
-            kdf.groupby(kkey)["a"].apply(lambda x: x + x.min()).sort_index(),
+            psdf.groupby(kkey)["a"].apply(lambda x: x + x.min()).sort_index(),
             pdf.groupby(pkey)["a"].apply(lambda x: x + x.min()).sort_index(),
         )
         self.assert_eq(
-            kdf.groupby(kkey)[["a"]].apply(lambda x: x + x.min()).sort_index(),
+            psdf.groupby(kkey)[["a"]].apply(lambda x: x + x.min()).sort_index(),
             pdf.groupby(pkey)[["a"]].apply(lambda x: x + x.min()).sort_index(),
         )
         self.assert_eq(
-            kdf.groupby(["a", kkey]).apply(lambda x: x + x.min()).sort_index(),
+            psdf.groupby(["a", kkey]).apply(lambda x: x + x.min()).sort_index(),
             pdf.groupby(["a", pkey]).apply(lambda x: x + x.min()).sort_index(),
         )
 
@@ -279,23 +279,23 @@ class OpsOnDiffFramesGroupByTest(PandasOnSparkTestCase, SQLTestUtils):
             columns=["a", "b", "c"],
         )
         pkey = pd.Series([1, 1, 2, 3, 5, 8])
-        kdf = ps.from_pandas(pdf)
+        psdf = ps.from_pandas(pdf)
         kkey = ps.from_pandas(pkey)
 
         self.assert_eq(
-            kdf.groupby(kkey).transform(lambda x: x + x.min()).sort_index(),
+            psdf.groupby(kkey).transform(lambda x: x + x.min()).sort_index(),
             pdf.groupby(pkey).transform(lambda x: x + x.min()).sort_index(),
         )
         self.assert_eq(
-            kdf.groupby(kkey)["a"].transform(lambda x: x + x.min()).sort_index(),
+            psdf.groupby(kkey)["a"].transform(lambda x: x + x.min()).sort_index(),
             pdf.groupby(pkey)["a"].transform(lambda x: x + x.min()).sort_index(),
         )
         self.assert_eq(
-            kdf.groupby(kkey)[["a"]].transform(lambda x: x + x.min()).sort_index(),
+            psdf.groupby(kkey)[["a"]].transform(lambda x: x + x.min()).sort_index(),
             pdf.groupby(pkey)[["a"]].transform(lambda x: x + x.min()).sort_index(),
         )
         self.assert_eq(
-            kdf.groupby(["a", kkey]).transform(lambda x: x + x.min()).sort_index(),
+            psdf.groupby(["a", kkey]).transform(lambda x: x + x.min()).sort_index(),
             pdf.groupby(["a", pkey]).transform(lambda x: x + x.min()).sort_index(),
         )
 
@@ -305,23 +305,23 @@ class OpsOnDiffFramesGroupByTest(PandasOnSparkTestCase, SQLTestUtils):
             columns=["a", "b", "c"],
         )
         pkey = pd.Series([1, 1, 2, 3, 5, 8])
-        kdf = ps.from_pandas(pdf)
+        psdf = ps.from_pandas(pdf)
         kkey = ps.from_pandas(pkey)
 
         self.assert_eq(
-            kdf.groupby(kkey).filter(lambda x: any(x.a == 2)).sort_index(),
+            psdf.groupby(kkey).filter(lambda x: any(x.a == 2)).sort_index(),
             pdf.groupby(pkey).filter(lambda x: any(x.a == 2)).sort_index(),
         )
         self.assert_eq(
-            kdf.groupby(kkey)["a"].filter(lambda x: any(x == 2)).sort_index(),
+            psdf.groupby(kkey)["a"].filter(lambda x: any(x == 2)).sort_index(),
             pdf.groupby(pkey)["a"].filter(lambda x: any(x == 2)).sort_index(),
         )
         self.assert_eq(
-            kdf.groupby(kkey)[["a"]].filter(lambda x: any(x.a == 2)).sort_index(),
+            psdf.groupby(kkey)[["a"]].filter(lambda x: any(x.a == 2)).sort_index(),
             pdf.groupby(pkey)[["a"]].filter(lambda x: any(x.a == 2)).sort_index(),
         )
         self.assert_eq(
-            kdf.groupby(["a", kkey]).filter(lambda x: any(x.a == 2)).sort_index(),
+            psdf.groupby(["a", kkey]).filter(lambda x: any(x.a == 2)).sort_index(),
             pdf.groupby(["a", pkey]).filter(lambda x: any(x.a == 2)).sort_index(),
         )
 
@@ -334,22 +334,22 @@ class OpsOnDiffFramesGroupByTest(PandasOnSparkTestCase, SQLTestUtils):
             },
         )
         pkey = pd.Series([1, 1, 1, 1, 2, 2, 2, 3, 3, 3] * 3)
-        kdf = ps.from_pandas(pdf)
+        psdf = ps.from_pandas(pdf)
         kkey = ps.from_pandas(pkey)
 
         self.assert_eq(
-            pdf.groupby(pkey).head(2).sort_index(), kdf.groupby(kkey).head(2).sort_index()
+            pdf.groupby(pkey).head(2).sort_index(), psdf.groupby(kkey).head(2).sort_index()
         )
         self.assert_eq(
-            pdf.groupby("a")["b"].head(2).sort_index(), kdf.groupby("a")["b"].head(2).sort_index()
+            pdf.groupby("a")["b"].head(2).sort_index(), psdf.groupby("a")["b"].head(2).sort_index()
         )
         self.assert_eq(
             pdf.groupby("a")[["b"]].head(2).sort_index(),
-            kdf.groupby("a")[["b"]].head(2).sort_index(),
+            psdf.groupby("a")[["b"]].head(2).sort_index(),
         )
         self.assert_eq(
             pdf.groupby([pkey, "b"]).head(2).sort_index(),
-            kdf.groupby([kkey, "b"]).head(2).sort_index(),
+            psdf.groupby([kkey, "b"]).head(2).sort_index(),
         )
 
     def test_cumcount(self):
@@ -361,20 +361,20 @@ class OpsOnDiffFramesGroupByTest(PandasOnSparkTestCase, SQLTestUtils):
             },
         )
         pkey = pd.Series([1, 1, 2, 3, 5, 8] * 3)
-        kdf = ps.from_pandas(pdf)
+        psdf = ps.from_pandas(pdf)
         kkey = ps.from_pandas(pkey)
 
         for ascending in [True, False]:
             self.assert_eq(
-                kdf.groupby(kkey).cumcount(ascending=ascending).sort_index(),
+                psdf.groupby(kkey).cumcount(ascending=ascending).sort_index(),
                 pdf.groupby(pkey).cumcount(ascending=ascending).sort_index(),
             )
             self.assert_eq(
-                kdf.groupby(kkey)["a"].cumcount(ascending=ascending).sort_index(),
+                psdf.groupby(kkey)["a"].cumcount(ascending=ascending).sort_index(),
                 pdf.groupby(pkey)["a"].cumcount(ascending=ascending).sort_index(),
             )
             self.assert_eq(
-                kdf.groupby(kkey)[["a"]].cumcount(ascending=ascending).sort_index(),
+                psdf.groupby(kkey)[["a"]].cumcount(ascending=ascending).sort_index(),
                 pdf.groupby(pkey)[["a"]].cumcount(ascending=ascending).sort_index(),
             )
 
@@ -387,18 +387,18 @@ class OpsOnDiffFramesGroupByTest(PandasOnSparkTestCase, SQLTestUtils):
             },
         )
         pkey = pd.Series([1, 1, 2, 3, 5, 8] * 3)
-        kdf = ps.from_pandas(pdf)
+        psdf = ps.from_pandas(pdf)
         kkey = ps.from_pandas(pkey)
 
         self.assert_eq(
-            kdf.groupby(kkey).cummin().sort_index(), pdf.groupby(pkey).cummin().sort_index()
+            psdf.groupby(kkey).cummin().sort_index(), pdf.groupby(pkey).cummin().sort_index()
         )
         self.assert_eq(
-            kdf.groupby(kkey)["a"].cummin().sort_index(),
+            psdf.groupby(kkey)["a"].cummin().sort_index(),
             pdf.groupby(pkey)["a"].cummin().sort_index(),
         )
         self.assert_eq(
-            kdf.groupby(kkey)[["a"]].cummin().sort_index(),
+            psdf.groupby(kkey)[["a"]].cummin().sort_index(),
             pdf.groupby(pkey)[["a"]].cummin().sort_index(),
         )
 
@@ -411,18 +411,18 @@ class OpsOnDiffFramesGroupByTest(PandasOnSparkTestCase, SQLTestUtils):
             },
         )
         pkey = pd.Series([1, 1, 2, 3, 5, 8] * 3)
-        kdf = ps.from_pandas(pdf)
+        psdf = ps.from_pandas(pdf)
         kkey = ps.from_pandas(pkey)
 
         self.assert_eq(
-            kdf.groupby(kkey).cummax().sort_index(), pdf.groupby(pkey).cummax().sort_index()
+            psdf.groupby(kkey).cummax().sort_index(), pdf.groupby(pkey).cummax().sort_index()
         )
         self.assert_eq(
-            kdf.groupby(kkey)["a"].cummax().sort_index(),
+            psdf.groupby(kkey)["a"].cummax().sort_index(),
             pdf.groupby(pkey)["a"].cummax().sort_index(),
         )
         self.assert_eq(
-            kdf.groupby(kkey)[["a"]].cummax().sort_index(),
+            psdf.groupby(kkey)[["a"]].cummax().sort_index(),
             pdf.groupby(pkey)[["a"]].cummax().sort_index(),
         )
 
@@ -435,18 +435,18 @@ class OpsOnDiffFramesGroupByTest(PandasOnSparkTestCase, SQLTestUtils):
             },
         )
         pkey = pd.Series([1, 1, 2, 3, 5, 8] * 3)
-        kdf = ps.from_pandas(pdf)
+        psdf = ps.from_pandas(pdf)
         kkey = ps.from_pandas(pkey)
 
         self.assert_eq(
-            kdf.groupby(kkey).cumsum().sort_index(), pdf.groupby(pkey).cumsum().sort_index()
+            psdf.groupby(kkey).cumsum().sort_index(), pdf.groupby(pkey).cumsum().sort_index()
         )
         self.assert_eq(
-            kdf.groupby(kkey)["a"].cumsum().sort_index(),
+            psdf.groupby(kkey)["a"].cumsum().sort_index(),
             pdf.groupby(pkey)["a"].cumsum().sort_index(),
         )
         self.assert_eq(
-            kdf.groupby(kkey)[["a"]].cumsum().sort_index(),
+            psdf.groupby(kkey)[["a"]].cumsum().sort_index(),
             pdf.groupby(pkey)[["a"]].cumsum().sort_index(),
         )
 
@@ -459,21 +459,21 @@ class OpsOnDiffFramesGroupByTest(PandasOnSparkTestCase, SQLTestUtils):
             },
         )
         pkey = pd.Series([1, 1, 2, 3, 5, 8] * 3)
-        kdf = ps.from_pandas(pdf)
+        psdf = ps.from_pandas(pdf)
         kkey = ps.from_pandas(pkey)
 
         self.assert_eq(
-            kdf.groupby(kkey).cumprod().sort_index(),
+            psdf.groupby(kkey).cumprod().sort_index(),
             pdf.groupby(pkey).cumprod().sort_index(),
             almost=True,
         )
         self.assert_eq(
-            kdf.groupby(kkey)["a"].cumprod().sort_index(),
+            psdf.groupby(kkey)["a"].cumprod().sort_index(),
             pdf.groupby(pkey)["a"].cumprod().sort_index(),
             almost=True,
         )
         self.assert_eq(
-            kdf.groupby(kkey)[["a"]].cumprod().sort_index(),
+            psdf.groupby(kkey)[["a"]].cumprod().sort_index(),
             pdf.groupby(pkey)[["a"]].cumprod().sort_index(),
             almost=True,
         )
@@ -487,20 +487,22 @@ class OpsOnDiffFramesGroupByTest(PandasOnSparkTestCase, SQLTestUtils):
             }
         )
         pkey = pd.Series([1, 1, 2, 3, 5, 8] * 3)
-        kdf = ps.from_pandas(pdf)
+        psdf = ps.from_pandas(pdf)
         kkey = ps.from_pandas(pkey)
 
-        self.assert_eq(kdf.groupby(kkey).diff().sort_index(), pdf.groupby(pkey).diff().sort_index())
         self.assert_eq(
-            kdf.groupby(kkey)["a"].diff().sort_index(), pdf.groupby(pkey)["a"].diff().sort_index()
+            psdf.groupby(kkey).diff().sort_index(), pdf.groupby(pkey).diff().sort_index()
         )
         self.assert_eq(
-            kdf.groupby(kkey)[["a"]].diff().sort_index(),
+            psdf.groupby(kkey)["a"].diff().sort_index(), pdf.groupby(pkey)["a"].diff().sort_index()
+        )
+        self.assert_eq(
+            psdf.groupby(kkey)[["a"]].diff().sort_index(),
             pdf.groupby(pkey)[["a"]].diff().sort_index(),
         )
 
-        self.assert_eq(kdf.groupby(kkey).diff().sum(), pdf.groupby(pkey).diff().sum().astype(int))
-        self.assert_eq(kdf.groupby(kkey)["a"].diff().sum(), pdf.groupby(pkey)["a"].diff().sum())
+        self.assert_eq(psdf.groupby(kkey).diff().sum(), pdf.groupby(pkey).diff().sum().astype(int))
+        self.assert_eq(psdf.groupby(kkey)["a"].diff().sum(), pdf.groupby(pkey)["a"].diff().sum())
 
     def test_rank(self):
         pdf = pd.DataFrame(
@@ -511,20 +513,22 @@ class OpsOnDiffFramesGroupByTest(PandasOnSparkTestCase, SQLTestUtils):
             },
         )
         pkey = pd.Series([1, 1, 2, 3, 5, 8] * 3)
-        kdf = ps.from_pandas(pdf)
+        psdf = ps.from_pandas(pdf)
         kkey = ps.from_pandas(pkey)
 
-        self.assert_eq(kdf.groupby(kkey).rank().sort_index(), pdf.groupby(pkey).rank().sort_index())
         self.assert_eq(
-            kdf.groupby(kkey)["a"].rank().sort_index(), pdf.groupby(pkey)["a"].rank().sort_index()
+            psdf.groupby(kkey).rank().sort_index(), pdf.groupby(pkey).rank().sort_index()
         )
         self.assert_eq(
-            kdf.groupby(kkey)[["a"]].rank().sort_index(),
+            psdf.groupby(kkey)["a"].rank().sort_index(), pdf.groupby(pkey)["a"].rank().sort_index()
+        )
+        self.assert_eq(
+            psdf.groupby(kkey)[["a"]].rank().sort_index(),
             pdf.groupby(pkey)[["a"]].rank().sort_index(),
         )
 
-        self.assert_eq(kdf.groupby(kkey).rank().sum(), pdf.groupby(pkey).rank().sum())
-        self.assert_eq(kdf.groupby(kkey)["a"].rank().sum(), pdf.groupby(pkey)["a"].rank().sum())
+        self.assert_eq(psdf.groupby(kkey).rank().sum(), pdf.groupby(pkey).rank().sum())
+        self.assert_eq(psdf.groupby(kkey)["a"].rank().sum(), pdf.groupby(pkey)["a"].rank().sum())
 
     @unittest.skipIf(pd.__version__ < "0.24.0", "not supported before pandas 0.24.0")
     def test_shift(self):
@@ -536,22 +540,25 @@ class OpsOnDiffFramesGroupByTest(PandasOnSparkTestCase, SQLTestUtils):
             },
         )
         pkey = pd.Series([1, 1, 2, 2, 3, 4] * 3)
-        kdf = ps.from_pandas(pdf)
+        psdf = ps.from_pandas(pdf)
         kkey = ps.from_pandas(pkey)
 
         self.assert_eq(
-            kdf.groupby(kkey).shift().sort_index(), pdf.groupby(pkey).shift().sort_index()
+            psdf.groupby(kkey).shift().sort_index(), pdf.groupby(pkey).shift().sort_index()
         )
         self.assert_eq(
-            kdf.groupby(kkey)["a"].shift().sort_index(), pdf.groupby(pkey)["a"].shift().sort_index()
+            psdf.groupby(kkey)["a"].shift().sort_index(),
+            pdf.groupby(pkey)["a"].shift().sort_index(),
         )
         self.assert_eq(
-            kdf.groupby(kkey)[["a"]].shift().sort_index(),
+            psdf.groupby(kkey)[["a"]].shift().sort_index(),
             pdf.groupby(pkey)[["a"]].shift().sort_index(),
         )
 
-        self.assert_eq(kdf.groupby(kkey).shift().sum(), pdf.groupby(pkey).shift().sum().astype(int))
-        self.assert_eq(kdf.groupby(kkey)["a"].shift().sum(), pdf.groupby(pkey)["a"].shift().sum())
+        self.assert_eq(
+            psdf.groupby(kkey).shift().sum(), pdf.groupby(pkey).shift().sum().astype(int)
+        )
+        self.assert_eq(psdf.groupby(kkey)["a"].shift().sum(), pdf.groupby(pkey)["a"].shift().sum())
 
     def test_fillna(self):
         pdf = pd.DataFrame(
@@ -563,42 +570,42 @@ class OpsOnDiffFramesGroupByTest(PandasOnSparkTestCase, SQLTestUtils):
             }
         )
         pkey = pd.Series([1, 1, 2, 2] * 3)
-        kdf = ps.from_pandas(pdf)
+        psdf = ps.from_pandas(pdf)
         kkey = ps.from_pandas(pkey)
 
         self.assert_eq(
-            kdf.groupby(kkey).fillna(0).sort_index(), pdf.groupby(pkey).fillna(0).sort_index()
+            psdf.groupby(kkey).fillna(0).sort_index(), pdf.groupby(pkey).fillna(0).sort_index()
         )
         self.assert_eq(
-            kdf.groupby(kkey)["C"].fillna(0).sort_index(),
+            psdf.groupby(kkey)["C"].fillna(0).sort_index(),
             pdf.groupby(pkey)["C"].fillna(0).sort_index(),
         )
         self.assert_eq(
-            kdf.groupby(kkey)[["C"]].fillna(0).sort_index(),
+            psdf.groupby(kkey)[["C"]].fillna(0).sort_index(),
             pdf.groupby(pkey)[["C"]].fillna(0).sort_index(),
         )
         self.assert_eq(
-            kdf.groupby(kkey).fillna(method="bfill").sort_index(),
+            psdf.groupby(kkey).fillna(method="bfill").sort_index(),
             pdf.groupby(pkey).fillna(method="bfill").sort_index(),
         )
         self.assert_eq(
-            kdf.groupby(kkey)["C"].fillna(method="bfill").sort_index(),
+            psdf.groupby(kkey)["C"].fillna(method="bfill").sort_index(),
             pdf.groupby(pkey)["C"].fillna(method="bfill").sort_index(),
         )
         self.assert_eq(
-            kdf.groupby(kkey)[["C"]].fillna(method="bfill").sort_index(),
+            psdf.groupby(kkey)[["C"]].fillna(method="bfill").sort_index(),
             pdf.groupby(pkey)[["C"]].fillna(method="bfill").sort_index(),
         )
         self.assert_eq(
-            kdf.groupby(kkey).fillna(method="ffill").sort_index(),
+            psdf.groupby(kkey).fillna(method="ffill").sort_index(),
             pdf.groupby(pkey).fillna(method="ffill").sort_index(),
         )
         self.assert_eq(
-            kdf.groupby(kkey)["C"].fillna(method="ffill").sort_index(),
+            psdf.groupby(kkey)["C"].fillna(method="ffill").sort_index(),
             pdf.groupby(pkey)["C"].fillna(method="ffill").sort_index(),
         )
         self.assert_eq(
-            kdf.groupby(kkey)[["C"]].fillna(method="ffill").sort_index(),
+            psdf.groupby(kkey)[["C"]].fillna(method="ffill").sort_index(),
             pdf.groupby(pkey)[["C"]].fillna(method="ffill").sort_index(),
         )
 
@@ -608,7 +615,8 @@ if __name__ == "__main__":
 
     try:
         import xmlrunner  # type: ignore[import]
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
+
+        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

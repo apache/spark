@@ -51,7 +51,7 @@ class PandasOnSparkFrameMethods(object):
     """ pandas-on-Spark specific features for DataFrame. """
 
     def __init__(self, frame: "DataFrame"):
-        self._kdf = frame
+        self._psdf = frame
 
     def attach_id_column(self, id_type: str, column: Union[Any, Tuple]) -> "DataFrame":
         """
@@ -88,19 +88,19 @@ class PandasOnSparkFrameMethods(object):
         Examples
         --------
         >>> df = ps.DataFrame({"x": ['a', 'b', 'c']})
-        >>> df.koalas.attach_id_column(id_type="sequence", column="id")
+        >>> df.pandas_on_spark.attach_id_column(id_type="sequence", column="id")
            x  id
         0  a   0
         1  b   1
         2  c   2
 
-        >>> df.koalas.attach_id_column(id_type="distributed-sequence", column=0)
+        >>> df.pandas_on_spark.attach_id_column(id_type="distributed-sequence", column=0)
            x  0
         0  a  0
         1  b  1
         2  c  2
 
-        >>> df.koalas.attach_id_column(id_type="distributed", column=0.0)
+        >>> df.pandas_on_spark.attach_id_column(id_type="distributed", column=0.0)
         ... # doctest: +ELLIPSIS +NORMALIZE_WHITESPACE
            x  0.0
         0  a  ...
@@ -110,14 +110,14 @@ class PandasOnSparkFrameMethods(object):
         For multi-index columns:
 
         >>> df = ps.DataFrame({("x", "y"): ['a', 'b', 'c']})
-        >>> df.koalas.attach_id_column(id_type="sequence", column=("id-x", "id-y"))
+        >>> df.pandas_on_spark.attach_id_column(id_type="sequence", column=("id-x", "id-y"))
            x id-x
            y id-y
         0  a    0
         1  b    1
         2  c    2
 
-        >>> df.koalas.attach_id_column(id_type="distributed-sequence", column=(0, 1.0))
+        >>> df.pandas_on_spark.attach_id_column(id_type="distributed-sequence", column=(0, 1.0))
            x   0
            y 1.0
         0  a   0
@@ -141,7 +141,7 @@ class PandasOnSparkFrameMethods(object):
         if not is_name_like_tuple(column):
             column = (column,)
 
-        internal = self._kdf._internal
+        internal = self._psdf._internal
 
         if len(column) != internal.column_labels_level:
             raise ValueError(
@@ -205,7 +205,7 @@ class PandasOnSparkFrameMethods(object):
             ...     return pd.DataFrame([len(pdf)])
             ...
             >>> df = ps.DataFrame({'A': range(1000)})
-            >>> df.koalas.apply_batch(length)  # doctest: +SKIP
+            >>> df.pandas_on_spark.apply_batch(length)  # doctest: +SKIP
                 c0
             0   83
             1   83
@@ -263,7 +263,7 @@ class PandasOnSparkFrameMethods(object):
         DataFrame.applymap: For elementwise operations.
         DataFrame.aggregate: Only perform aggregating type operations.
         DataFrame.transform: Only perform transforming type operations.
-        Series.koalas.transform_batch: transform the search as each pandas chunks.
+        Series.pandas_on_spark.transform_batch: transform the search as each pandas chunks.
 
         Examples
         --------
@@ -276,19 +276,19 @@ class PandasOnSparkFrameMethods(object):
 
         >>> def query_func(pdf) -> ps.DataFrame[int, int]:
         ...     return pdf.query('A == 1')
-        >>> df.koalas.apply_batch(query_func)
+        >>> df.pandas_on_spark.apply_batch(query_func)
            c0  c1
         0   1   2
 
         >>> def query_func(pdf) -> ps.DataFrame["A": int, "B": int]:
         ...     return pdf.query('A == 1')
-        >>> df.koalas.apply_batch(query_func)
+        >>> df.pandas_on_spark.apply_batch(query_func)
            A  B
         0  1  2
 
         You can also omit the type hints so pandas-on-Spark infers the return schema as below:
 
-        >>> df.koalas.apply_batch(lambda pdf: pdf.query('A == 1'))
+        >>> df.pandas_on_spark.apply_batch(lambda pdf: pdf.query('A == 1'))
            A  B
         0  1  2
 
@@ -296,7 +296,7 @@ class PandasOnSparkFrameMethods(object):
 
         >>> def calculation(pdf, y, z) -> ps.DataFrame[int, int]:
         ...     return pdf ** y + z
-        >>> df.koalas.apply_batch(calculation, args=(10,), z=20)
+        >>> df.pandas_on_spark.apply_batch(calculation, args=(10,), z=20)
                 c0        c1
         0       21      1044
         1    59069   1048596
@@ -304,13 +304,13 @@ class PandasOnSparkFrameMethods(object):
 
         You can also use ``np.ufunc`` and built-in functions as input.
 
-        >>> df.koalas.apply_batch(np.add, args=(10,))
+        >>> df.pandas_on_spark.apply_batch(np.add, args=(10,))
             A   B
         0  11  12
         1  13  14
         2  15  16
 
-        >>> (df * -1).koalas.apply_batch(abs)
+        >>> (df * -1).pandas_on_spark.apply_batch(abs)
            A  B
         0  1  2
         1  3  4
@@ -335,7 +335,7 @@ class PandasOnSparkFrameMethods(object):
         original_func = func
         func = lambda o: original_func(o, *args, **kwds)
 
-        self_applied = DataFrame(self._kdf._internal.resolved_copy)  # type: DataFrame
+        self_applied = DataFrame(self._psdf._internal.resolved_copy)  # type: DataFrame
 
         if should_infer_schema:
             # Here we execute with the first 1000 to get the return type.
@@ -348,12 +348,12 @@ class PandasOnSparkFrameMethods(object):
                     "The given function should return a frame; however, "
                     "the return type was %s." % type(applied)
                 )
-            kdf = ps.DataFrame(applied)  # type: DataFrame
+            psdf = ps.DataFrame(applied)  # type: DataFrame
             if len(pdf) <= limit:
-                return kdf
+                return psdf
 
             return_schema = force_decimal_precision_scale(
-                as_nullable_spark_type(kdf._internal.to_internal_spark_frame.schema)
+                as_nullable_spark_type(psdf._internal.to_internal_spark_frame.schema)
             )
 
             output_func = GroupBy._make_pandas_df_builder_func(
@@ -364,7 +364,7 @@ class PandasOnSparkFrameMethods(object):
             )
 
             # If schema is inferred, we can restore indexes too.
-            internal = kdf._internal.with_new_sdf(sdf)
+            internal = psdf._internal.with_new_sdf(sdf)
         else:
             return_type = infer_return_type(original_func)
             is_return_dataframe = isinstance(return_type, DataFrameType)
@@ -411,7 +411,7 @@ class PandasOnSparkFrameMethods(object):
             ...     return pd.DataFrame([len(pdf)] * len(pdf))
             ...
             >>> df = ps.DataFrame({'A': range(1000)})
-            >>> df.koalas.transform_batch(length)  # doctest: +SKIP
+            >>> df.pandas_on_spark.transform_batch(length)  # doctest: +SKIP
                 c0
             0   83
             1   83
@@ -461,8 +461,8 @@ class PandasOnSparkFrameMethods(object):
 
         See Also
         --------
-        DataFrame.koalas.apply_batch: For row/columnwise operations.
-        Series.koalas.transform_batch: transform the search as each pandas chunks.
+        DataFrame.pandas_on_spark.apply_batch: For row/columnwise operations.
+        Series.pandas_on_spark.transform_batch: transform the search as each pandas chunks.
 
         Examples
         --------
@@ -475,7 +475,7 @@ class PandasOnSparkFrameMethods(object):
 
         >>> def plus_one_func(pdf) -> ps.DataFrame[int, int]:
         ...     return pdf + 1
-        >>> df.koalas.transform_batch(plus_one_func)
+        >>> df.pandas_on_spark.transform_batch(plus_one_func)
            c0  c1
         0   2   3
         1   4   5
@@ -483,7 +483,7 @@ class PandasOnSparkFrameMethods(object):
 
         >>> def plus_one_func(pdf) -> ps.DataFrame['A': int, 'B': int]:
         ...     return pdf + 1
-        >>> df.koalas.transform_batch(plus_one_func)
+        >>> df.pandas_on_spark.transform_batch(plus_one_func)
            A  B
         0  2  3
         1  4  5
@@ -491,7 +491,7 @@ class PandasOnSparkFrameMethods(object):
 
         >>> def plus_one_func(pdf) -> ps.Series[int]:
         ...     return pdf.B + 1
-        >>> df.koalas.transform_batch(plus_one_func)
+        >>> df.pandas_on_spark.transform_batch(plus_one_func)
         0    3
         1    5
         2    7
@@ -499,13 +499,13 @@ class PandasOnSparkFrameMethods(object):
 
         You can also omit the type hints so pandas-on-Spark infers the return schema as below:
 
-        >>> df.koalas.transform_batch(lambda pdf: pdf + 1)
+        >>> df.pandas_on_spark.transform_batch(lambda pdf: pdf + 1)
            A  B
         0  2  3
         1  4  5
         2  6  7
 
-        >>> (df * -1).koalas.transform_batch(abs)
+        >>> (df * -1).pandas_on_spark.transform_batch(abs)
            A  B
         0  1  2
         1  3  4
@@ -513,7 +513,7 @@ class PandasOnSparkFrameMethods(object):
 
         Note that you should not transform the index. The index information will not change.
 
-        >>> df.koalas.transform_batch(lambda pdf: pdf.B + 1)
+        >>> df.pandas_on_spark.transform_batch(lambda pdf: pdf.B + 1)
         0    3
         1    5
         2    7
@@ -521,7 +521,7 @@ class PandasOnSparkFrameMethods(object):
 
         You can also specify extra arguments as below.
 
-        >>> df.koalas.transform_batch(lambda pdf, a, b, c: pdf.B + a + b + c, 1, 2, c=3)
+        >>> df.pandas_on_spark.transform_batch(lambda pdf, a, b, c: pdf.B + a + b + c, 1, 2, c=3)
         0     8
         1    10
         2    12
@@ -539,7 +539,7 @@ class PandasOnSparkFrameMethods(object):
         original_func = func
         func = lambda o: original_func(o, *args, **kwargs)
 
-        names = self._kdf._internal.to_internal_spark_frame.schema.names
+        names = self._psdf._internal.to_internal_spark_frame.schema.names
 
         def pandas_concat(series):
             # The input can only be a DataFrame for struct from Spark 3.0.
@@ -568,7 +568,7 @@ class PandasOnSparkFrameMethods(object):
             # Here we execute with the first 1000 to get the return type.
             # If the records were less than 1000, it uses pandas API directly for a shortcut.
             limit = ps.get_option("compute.shortcut_limit")
-            pdf = self._kdf.head(limit + 1)._to_internal_pandas()
+            pdf = self._psdf.head(limit + 1)._to_internal_pandas()
             transformed = func(pdf)
             if not isinstance(transformed, (pd.DataFrame, pd.Series)):
                 raise ValueError(
@@ -577,58 +577,56 @@ class PandasOnSparkFrameMethods(object):
                 )
             if len(transformed) != len(pdf):
                 raise ValueError("transform_batch cannot produce aggregated results")
-            kdf_or_kser = ps.from_pandas(transformed)
+            psdf_or_psser = ps.from_pandas(transformed)
 
-            if isinstance(kdf_or_kser, ps.Series):
-                kser = cast(ps.Series, kdf_or_kser)
+            if isinstance(psdf_or_psser, ps.Series):
+                psser = cast(ps.Series, psdf_or_psser)
 
                 spark_return_type = force_decimal_precision_scale(
-                    as_nullable_spark_type(kser.spark.data_type)
+                    as_nullable_spark_type(psser.spark.data_type)
                 )
                 return_schema = StructType(
                     [StructField(SPARK_DEFAULT_SERIES_NAME, spark_return_type)]
                 )
                 output_func = GroupBy._make_pandas_df_builder_func(
-                    self._kdf, apply_func, return_schema, retain_index=False
+                    self._psdf, apply_func, return_schema, retain_index=False
                 )
 
-                pudf = pandas_udf(
-                    pandas_series_func(output_func),
-                    returnType=spark_return_type,
-                    functionType=PandasUDFType.SCALAR,
+                pudf = pandas_udf(returnType=spark_return_type, functionType=PandasUDFType.SCALAR)(
+                    pandas_series_func(output_func)
                 )
-                columns = self._kdf._internal.spark_columns
+                columns = self._psdf._internal.spark_columns
                 # TODO: Index will be lost in this case.
-                internal = self._kdf._internal.copy(
-                    column_labels=kser._internal.column_labels,
+                internal = self._psdf._internal.copy(
+                    column_labels=psser._internal.column_labels,
                     data_spark_columns=[
-                        pudf(F.struct(*columns)).alias(kser._internal.data_spark_column_names[0])
+                        pudf(F.struct(*columns)).alias(psser._internal.data_spark_column_names[0])
                     ],
-                    data_dtypes=kser._internal.data_dtypes,
-                    column_label_names=kser._internal.column_label_names,
+                    data_dtypes=psser._internal.data_dtypes,
+                    column_label_names=psser._internal.column_label_names,
                 )
                 return first_series(DataFrame(internal))
             else:
-                kdf = cast(DataFrame, kdf_or_kser)
+                psdf = cast(DataFrame, psdf_or_psser)
                 if len(pdf) <= limit:
                     # only do the short cut when it returns a frame to avoid
                     # operations on different dataframes in case of series.
-                    return kdf
+                    return psdf
 
                 # Force nullability.
                 return_schema = force_decimal_precision_scale(
-                    as_nullable_spark_type(kdf._internal.to_internal_spark_frame.schema)
+                    as_nullable_spark_type(psdf._internal.to_internal_spark_frame.schema)
                 )
 
-                self_applied = DataFrame(self._kdf._internal.resolved_copy)  # type: DataFrame
+                self_applied = DataFrame(self._psdf._internal.resolved_copy)  # type: DataFrame
 
                 output_func = GroupBy._make_pandas_df_builder_func(
                     self_applied, func, return_schema, retain_index=True
                 )
                 columns = self_applied._internal.spark_columns
 
-                pudf = pandas_udf(
-                    output_func, returnType=return_schema, functionType=PandasUDFType.SCALAR
+                pudf = pandas_udf(returnType=return_schema, functionType=PandasUDFType.SCALAR)(
+                    output_func
                 )
                 temp_struct_column = verify_temp_column_name(
                     self_applied._internal.spark_frame, "__temp_struct__"
@@ -637,7 +635,7 @@ class PandasOnSparkFrameMethods(object):
                 sdf = self_applied._internal.spark_frame.select(applied)
                 sdf = sdf.selectExpr("%s.*" % temp_struct_column)
 
-                return DataFrame(kdf._internal.with_new_sdf(sdf))
+                return DataFrame(psdf._internal.with_new_sdf(sdf))
         else:
             return_type = infer_return_type(original_func)
             is_return_series = isinstance(return_type, SeriesType)
@@ -655,16 +653,14 @@ class PandasOnSparkFrameMethods(object):
                     [StructField(SPARK_DEFAULT_SERIES_NAME, spark_return_type)]
                 )
                 output_func = GroupBy._make_pandas_df_builder_func(
-                    self._kdf, apply_func, return_schema, retain_index=False
+                    self._psdf, apply_func, return_schema, retain_index=False
                 )
 
-                pudf = pandas_udf(
-                    pandas_series_func(output_func),
-                    returnType=spark_return_type,
-                    functionType=PandasUDFType.SCALAR,
+                pudf = pandas_udf(returnType=spark_return_type, functionType=PandasUDFType.SCALAR)(
+                    pandas_series_func(output_func)
                 )
-                columns = self._kdf._internal.spark_columns
-                internal = self._kdf._internal.copy(
+                columns = self._psdf._internal.spark_columns
+                internal = self._psdf._internal.copy(
                     column_labels=[None],
                     data_spark_columns=[pudf(F.struct(*columns)).alias(SPARK_DEFAULT_SERIES_NAME)],
                     data_dtypes=[cast(SeriesType, return_type).dtype],
@@ -674,15 +670,15 @@ class PandasOnSparkFrameMethods(object):
             else:
                 return_schema = cast(DataFrameType, return_type).spark_type
 
-                self_applied = DataFrame(self._kdf._internal.resolved_copy)
+                self_applied = DataFrame(self._psdf._internal.resolved_copy)
 
                 output_func = GroupBy._make_pandas_df_builder_func(
                     self_applied, func, return_schema, retain_index=False
                 )
                 columns = self_applied._internal.spark_columns
 
-                pudf = pandas_udf(
-                    output_func, returnType=return_schema, functionType=PandasUDFType.SCALAR
+                pudf = pandas_udf(returnType=return_schema, functionType=PandasUDFType.SCALAR)(
+                    output_func
                 )
                 temp_struct_column = verify_temp_column_name(
                     self_applied._internal.spark_frame, "__temp_struct__"
@@ -703,7 +699,7 @@ class PandasOnSparkSeriesMethods(object):
     """ pandas-on-Spark specific features for Series. """
 
     def __init__(self, series: "Series"):
-        self._kser = series
+        self._psser = series
 
     def transform_batch(self, func, *args, **kwargs) -> "Series":
         """
@@ -724,7 +720,7 @@ class PandasOnSparkSeriesMethods(object):
             ...     return pd.Series([len(pser)] * len(pser))
             ...
             >>> df = ps.DataFrame({'A': range(1000)})
-            >>> df.A.koalas.transform_batch(length)  # doctest: +SKIP
+            >>> df.A.pandas_on_spark.transform_batch(length)  # doctest: +SKIP
                 c0
             0   83
             1   83
@@ -755,7 +751,8 @@ class PandasOnSparkSeriesMethods(object):
 
         See Also
         --------
-        DataFrame.koalas.apply_batch : Similar but it takes pandas DataFrame as its internal batch.
+        DataFrame.pandas_on_spark.apply_batch : Similar but it takes pandas DataFrame as its
+        internal batch.
 
         Examples
         --------
@@ -768,7 +765,7 @@ class PandasOnSparkSeriesMethods(object):
 
         >>> def plus_one_func(pser) -> ps.Series[np.int64]:
         ...     return pser + 1
-        >>> df.A.koalas.transform_batch(plus_one_func)
+        >>> df.A.pandas_on_spark.transform_batch(plus_one_func)
         0    2
         1    4
         2    6
@@ -776,7 +773,7 @@ class PandasOnSparkSeriesMethods(object):
 
         You can also omit the type hints so pandas-on-Spark infers the return schema as below:
 
-        >>> df.A.koalas.transform_batch(lambda pser: pser + 1)
+        >>> df.A.pandas_on_spark.transform_batch(lambda pser: pser + 1)
         0    2
         1    4
         2    6
@@ -786,7 +783,7 @@ class PandasOnSparkSeriesMethods(object):
 
         >>> def plus_one_func(pser, a, b, c=3) -> ps.Series[np.int64]:
         ...     return pser + a + b + c
-        >>> df.A.koalas.transform_batch(plus_one_func, 1, b=2)
+        >>> df.A.pandas_on_spark.transform_batch(plus_one_func, 1, b=2)
         0     7
         1     9
         2    11
@@ -794,13 +791,13 @@ class PandasOnSparkSeriesMethods(object):
 
         You can also use ``np.ufunc`` and built-in functions as input.
 
-        >>> df.A.koalas.transform_batch(np.add, 10)
+        >>> df.A.pandas_on_spark.transform_batch(np.add, 10)
         0    11
         1    13
         2    15
         Name: A, dtype: int64
 
-        >>> (df * -1).A.koalas.transform_batch(abs)
+        >>> (df * -1).A.pandas_on_spark.transform_batch(abs)
         0    1
         1    3
         2    5
@@ -844,19 +841,19 @@ class PandasOnSparkSeriesMethods(object):
             #  anchor. We should fix this to allow the shortcut or only allow to infer
             #  schema.
             limit = ps.get_option("compute.shortcut_limit")
-            pser = self._kser.head(limit + 1)._to_internal_pandas()
+            pser = self._psser.head(limit + 1)._to_internal_pandas()
             transformed = pser.transform(func)
-            kser = Series(transformed)  # type: Series
+            psser = Series(transformed)  # type: Series
             spark_return_type = force_decimal_precision_scale(
-                as_nullable_spark_type(kser.spark.data_type)
+                as_nullable_spark_type(psser.spark.data_type)
             )
-            dtype = kser.dtype
+            dtype = psser.dtype
         else:
             spark_return_type = return_type.spark_type
             dtype = return_type.dtype
 
-        kdf = self._kser.to_frame()
-        columns = kdf._internal.spark_column_names
+        psdf = self._psser.to_frame()
+        columns = psdf._internal.spark_column_names
 
         def pandas_concat(series):
             # The input can only be a DataFrame for struct from Spark 3.0.
@@ -870,18 +867,16 @@ class PandasOnSparkSeriesMethods(object):
 
         return_schema = StructType([StructField(SPARK_DEFAULT_SERIES_NAME, spark_return_type)])
         output_func = GroupBy._make_pandas_df_builder_func(
-            kdf, apply_func, return_schema, retain_index=False
+            psdf, apply_func, return_schema, retain_index=False
         )
 
-        pudf = pandas_udf(
-            lambda *series: first_series(output_func(pandas_concat(series))),
-            returnType=spark_return_type,
-            functionType=PandasUDFType.SCALAR,
+        pudf = pandas_udf(returnType=spark_return_type, functionType=PandasUDFType.SCALAR)(
+            lambda *series: first_series(output_func(pandas_concat(series)))
         )
 
-        return self._kser._with_new_scol(
-            scol=pudf(*kdf._internal.spark_columns).alias(
-                self._kser._internal.spark_column_names[0]
+        return self._psser._with_new_scol(
+            scol=pudf(*psdf._internal.spark_columns).alias(
+                self._psser._internal.spark_column_names[0]
             ),
             dtype=dtype,
         )

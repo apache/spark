@@ -75,7 +75,13 @@ private[sql] class SharedState(
         logDebug(s"Applying other initial session options to HadoopConf: $k -> $v")
         hadoopConfClone.set(k, v)
     }
-    val qualified = SharedState.qualifyWarehousePath(hadoopConfClone, warehousePath)
+    val qualified = try {
+      SharedState.qualifyWarehousePath(hadoopConfClone, warehousePath)
+    } catch {
+      case NonFatal(e) =>
+        logWarning("Cannot qualify the warehouse path, leaving it unqualified.", e)
+        warehousePath
+    }
     // Set warehouse path in the SparkConf and Hadoop conf, so that it's application wide reachable
     // from `SparkContext`.
     SharedState.setWarehousePathConf(sparkContext.conf, sparkContext.hadoopConfiguration, qualified)

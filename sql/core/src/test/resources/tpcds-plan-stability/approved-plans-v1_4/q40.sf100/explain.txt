@@ -10,7 +10,7 @@ TakeOrderedAndProject (36)
                :     :- * Project (20)
                :     :  +- * BroadcastHashJoin Inner BuildRight (19)
                :     :     :- * Project (13)
-               :     :     :  +- SortMergeJoin LeftOuter (12)
+               :     :     :  +- * SortMergeJoin LeftOuter (12)
                :     :     :     :- * Sort (5)
                :     :     :     :  +- Exchange (4)
                :     :     :     :     +- * Filter (3)
@@ -86,7 +86,7 @@ Arguments: hashpartitioning(cr_order_number#9, cr_item_sk#8, 5), ENSURE_REQUIREM
 Input [3]: [cr_item_sk#8, cr_order_number#9, cr_refunded_cash#10]
 Arguments: [cr_order_number#9 ASC NULLS FIRST, cr_item_sk#8 ASC NULLS FIRST], false, 0
 
-(12) SortMergeJoin
+(12) SortMergeJoin [codegen id : 8]
 Left keys [2]: [cs_order_number#3, cs_item_sk#2]
 Right keys [2]: [cr_order_number#9, cr_item_sk#8]
 Join condition: None

@@ -197,6 +197,17 @@ abstract class DynamicPartitionPruningSuiteBase
             case _ => false
           }.isDefined
           assert(hasReuse, s"$s\nshould have been reused in\n$plan")
+        case a: AdaptiveSparkPlanExec =>
+          val broadcastQueryStage = collectFirst(a) {
+            case b: BroadcastQueryStageExec => b
+          }
+          val broadcastPlan = broadcastQueryStage.get.broadcast
+          val hasReuse = find(plan) {
+            case ReusedExchangeExec(_, e) => e eq broadcastPlan
+            case b: BroadcastExchangeLike => b eq broadcastPlan
+            case _ => false
+          }.isDefined
+          assert(hasReuse, s"$s\nshould have been reused in\n$plan")
         case _ =>
           fail(s"Invalid child node found in\n$s")
       }
@@ -1371,7 +1382,7 @@ abstract class DynamicPartitionPruningSuiteBase
     withSQLConf(
       SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
       SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "true",
-      SQLConf.ADAPTIVE_OPTIMIZER_EXCLUDED_RULES.key -> EliminateUnnecessaryJoin.ruleName) {
+      SQLConf.ADAPTIVE_OPTIMIZER_EXCLUDED_RULES.key -> AQEPropagateEmptyRelation.ruleName) {
       val df = sql(
         """
           |SELECT * FROM fact_sk f
@@ -1461,6 +1472,37 @@ abstract class DynamicPartitionPruningSuiteBase
           checkPartitionPruningPredicate(df, threshold > 10L, false)
         }
       }
+    }
+  }
+
+  test("SPARK-34637: DPP side broadcast query stage is created firstly") {
+    withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "true") {
+      val df = sql(
+        """ WITH v as (
+          |   SELECT f.store_id FROM fact_stats f WHERE f.units_sold = 70 group by f.store_id
+          | )
+          |
+          | SELECT * FROM v v1 join v v2 WHERE v1.store_id = v2.store_id
+        """.stripMargin)
+
+      // A possible resulting query plan:
+      // BroadcastHashJoin
+      // +- HashAggregate
+      //    +- ShuffleQueryStage
+      //       +- Exchange
+      //          +- HashAggregate
+      //             +- Filter
+      //                +- FileScan [PartitionFilters: dynamicpruning#3385]
+      //                     +- SubqueryBroadcast dynamicpruning#3385
+      //                        +- AdaptiveSparkPlan
+      //                           +- BroadcastQueryStage
+      //                              +- BroadcastExchange
+      //
+      // +- BroadcastQueryStage
+      //    +- ReusedExchange
+
+      checkPartitionPruningPredicate(df, false, true)
+      checkAnswer(df, Row(15, 15) :: Nil)
     }
   }
 }

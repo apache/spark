@@ -168,7 +168,7 @@ class Frame(object, metaclass=ABCMeta):
         2    1.0
         Name: A, dtype: float64
         """
-        return self._apply_series_op(lambda kser: kser._cum(F.min, skipna), should_resolve=True)
+        return self._apply_series_op(lambda psser: psser._cum(F.min, skipna), should_resolve=True)
 
     # TODO: add 'axis' parameter
     def cummax(self, skipna: bool = True) -> Union["Series", "DataFrame"]:
@@ -229,7 +229,7 @@ class Frame(object, metaclass=ABCMeta):
         2    1.0
         Name: B, dtype: float64
         """
-        return self._apply_series_op(lambda kser: kser._cum(F.max, skipna), should_resolve=True)
+        return self._apply_series_op(lambda psser: psser._cum(F.max, skipna), should_resolve=True)
 
     # TODO: add 'axis' parameter
     def cumsum(self, skipna: bool = True) -> Union["Series", "DataFrame"]:
@@ -290,7 +290,7 @@ class Frame(object, metaclass=ABCMeta):
         2    6.0
         Name: A, dtype: float64
         """
-        return self._apply_series_op(lambda kser: kser._cumsum(skipna), should_resolve=True)
+        return self._apply_series_op(lambda psser: psser._cumsum(skipna), should_resolve=True)
 
     # TODO: add 'axis' parameter
     # TODO: use pandas_udf to support negative values and other options later
@@ -358,7 +358,7 @@ class Frame(object, metaclass=ABCMeta):
         2    24.0
         Name: A, dtype: float64
         """
-        return self._apply_series_op(lambda kser: kser._cumprod(skipna), should_resolve=True)
+        return self._apply_series_op(lambda psser: psser._cumprod(skipna), should_resolve=True)
 
     # TODO: Although this has removed pandas >= 1.0.0, but we're keeping this as deprecated
     # since we're using this for `DataFrame.info` internally.
@@ -748,12 +748,12 @@ class Frame(object, metaclass=ABCMeta):
 
         if path is None:
             # If path is none, just collect and use pandas's to_csv.
-            kdf_or_ser = self
+            psdf_or_ser = self
             if (LooseVersion("0.24") > LooseVersion(pd.__version__)) and isinstance(
                 self, ps.Series
             ):
                 # 0.23 seems not having 'columns' parameter in Series' to_csv.
-                return kdf_or_ser.to_pandas().to_csv(  # type: ignore
+                return psdf_or_ser.to_pandas().to_csv(  # type: ignore
                     None,
                     sep=sep,
                     na_rep=na_rep,
@@ -762,7 +762,7 @@ class Frame(object, metaclass=ABCMeta):
                     index=False,
                 )
             else:
-                return kdf_or_ser.to_pandas().to_csv(  # type: ignore
+                return psdf_or_ser.to_pandas().to_csv(  # type: ignore
                     None,
                     sep=sep,
                     na_rep=na_rep,
@@ -774,18 +774,18 @@ class Frame(object, metaclass=ABCMeta):
                     index=False,
                 )
 
-        kdf = self
+        psdf = self
         if isinstance(self, ps.Series):
-            kdf = self.to_frame()
+            psdf = self.to_frame()
 
         if columns is None:
-            column_labels = kdf._internal.column_labels
+            column_labels = psdf._internal.column_labels
         else:
             column_labels = []
             for label in columns:
                 if not is_name_like_tuple(label):
                     label = (label,)
-                if label not in kdf._internal.column_labels:
+                if label not in psdf._internal.column_labels:
                     raise KeyError(name_like_string(label))
                 column_labels.append(label)
 
@@ -796,10 +796,10 @@ class Frame(object, metaclass=ABCMeta):
         else:
             index_cols = index_col
 
-        if header is True and kdf._internal.column_labels_level > 1:
+        if header is True and psdf._internal.column_labels_level > 1:
             raise ValueError("to_csv only support one-level index column now")
         elif isinstance(header, list):
-            sdf = kdf.to_spark(index_col)  # type: ignore
+            sdf = psdf.to_spark(index_col)  # type: ignore
             sdf = sdf.select(
                 [scol_for(sdf, name_like_string(label)) for label in index_cols]
                 + [
@@ -811,7 +811,7 @@ class Frame(object, metaclass=ABCMeta):
             )
             header = True
         else:
-            sdf = kdf.to_spark(index_col)  # type: ignore
+            sdf = psdf.to_spark(index_col)  # type: ignore
             sdf = sdf.select(
                 [scol_for(sdf, name_like_string(label)) for label in index_cols]
                 + [
@@ -945,18 +945,18 @@ class Frame(object, metaclass=ABCMeta):
 
         if path is None:
             # If path is none, just collect and use pandas's to_json.
-            kdf_or_ser = self
-            pdf = kdf_or_ser.to_pandas()  # type: ignore
+            psdf_or_ser = self
+            pdf = psdf_or_ser.to_pandas()  # type: ignore
             if isinstance(self, ps.Series):
                 pdf = pdf.to_frame()
             # To make the format consistent and readable by `read_json`, convert it to pandas' and
             # use 'records' orient for now.
             return pdf.to_json(orient="records")
 
-        kdf = self
+        psdf = self
         if isinstance(self, ps.Series):
-            kdf = self.to_frame()
-        sdf = kdf.to_spark(index_col=index_col)  # type: ignore
+            psdf = self.to_frame()
+        sdf = psdf.to_spark(index_col=index_col)  # type: ignore
 
         if num_files is not None:
             sdf = sdf.repartition(num_files)
@@ -1086,7 +1086,7 @@ class Frame(object, metaclass=ABCMeta):
         """
         # Make sure locals() call is at the top of the function so we don't capture local variables.
         args = locals()
-        kdf = self
+        psdf = self
 
         if isinstance(self, ps.DataFrame):
             f = pd.DataFrame.to_excel
@@ -1097,7 +1097,7 @@ class Frame(object, metaclass=ABCMeta):
                 "Constructor expects DataFrame or Series; however, " "got [%s]" % (self,)
             )
         return validate_arguments_and_invoke_function(
-            kdf._to_internal_pandas(), self.to_excel, f, args
+            psdf._to_internal_pandas(), self.to_excel, f, args
         )
 
     def mean(
@@ -1274,10 +1274,10 @@ class Frame(object, metaclass=ABCMeta):
 
         Non-numeric type column is not included to the result.
 
-        >>> kdf = ps.DataFrame({'A': [1, 2, 3, 4, 5],
+        >>> psdf = ps.DataFrame({'A': [1, 2, 3, 4, 5],
         ...                     'B': [10, 20, 30, 40, 50],
         ...                     'C': ['a', 'b', 'c', 'd', 'e']})
-        >>> kdf
+        >>> psdf
            A   B  C
         0  1  10  a
         1  2  20  b
@@ -1285,7 +1285,7 @@ class Frame(object, metaclass=ABCMeta):
         3  4  40  d
         4  5  50  e
 
-        >>> kdf.prod()
+        >>> psdf.prod()
         A         120
         B    12000000
         dtype: int64
@@ -1936,24 +1936,24 @@ class Frame(object, metaclass=ABCMeta):
 
         Examples
         --------
-        >>> kdf = ps.DataFrame({"a": [1, 2, 3], "b": [4, 5, 6]})
-        >>> kdf
+        >>> psdf = ps.DataFrame({"a": [1, 2, 3], "b": [4, 5, 6]})
+        >>> psdf
            a  b
         0  1  4
         1  2  5
         2  3  6
 
-        >>> kdf.sem()
+        >>> psdf.sem()
         a    0.57735
         b    0.57735
         dtype: float64
 
-        >>> kdf.sem(ddof=0)
+        >>> psdf.sem(ddof=0)
         a    0.471405
         b    0.471405
         dtype: float64
 
-        >>> kdf.sem(axis=1)
+        >>> psdf.sem(axis=1)
         0    1.5
         1    1.5
         2    1.5
@@ -1961,17 +1961,17 @@ class Frame(object, metaclass=ABCMeta):
 
         Support for Series
 
-        >>> kser = kdf.a
-        >>> kser
+        >>> psser = psdf.a
+        >>> psser
         0    1
         1    2
         2    3
         Name: a, dtype: int64
 
-        >>> kser.sem()
+        >>> psser.sem()
         0.5773502691896258
 
-        >>> kser.sem(ddof=0)
+        >>> psser.sem(ddof=0)
         0.47140452079103173
         """
         assert ddof in (0, 1)
@@ -2069,16 +2069,16 @@ class Frame(object, metaclass=ABCMeta):
         3  7  40   50
         """
 
-        def abs(kser):
-            if isinstance(kser.spark.data_type, BooleanType):
-                return kser
-            elif isinstance(kser.spark.data_type, NumericType):
-                return kser.spark.transform(F.abs)
+        def abs(psser):
+            if isinstance(psser.spark.data_type, BooleanType):
+                return psser
+            elif isinstance(psser.spark.data_type, NumericType):
+                return psser.spark.transform(F.abs)
             else:
                 raise TypeError(
                     "bad operand type for abs(): {} ({})".format(
-                        spark_type_to_pandas_dtype(kser.spark.data_type),
-                        kser.spark.data_type.simpleString(),
+                        spark_type_to_pandas_dtype(psser.spark.data_type),
+                        psser.spark.data_type.simpleString(),
                     )
                 )
 
@@ -2123,7 +2123,7 @@ class Frame(object, metaclass=ABCMeta):
 
         See Also
         --------
-        koalas.groupby.GroupBy
+        pyspark.pandas.groupby.GroupBy
 
         Examples
         --------
@@ -2280,24 +2280,24 @@ class Frame(object, metaclass=ABCMeta):
 
         Support for DataFrame
 
-        >>> kdf = ps.DataFrame({'a': [None, 2, 3, 2],
+        >>> psdf = ps.DataFrame({'a': [None, 2, 3, 2],
         ...                     'b': [None, 2.0, 3.0, 1.0],
         ...                     'c': [None, 200, 400, 200]},
         ...                     index=['Q', 'W', 'E', 'R'])
-        >>> kdf
+        >>> psdf
              a    b      c
         Q  NaN  NaN    NaN
         W  2.0  2.0  200.0
         E  3.0  3.0  400.0
         R  2.0  1.0  200.0
 
-        >>> kdf.first_valid_index()
+        >>> psdf.first_valid_index()
         'W'
 
         Support for MultiIndex columns
 
-        >>> kdf.columns = pd.MultiIndex.from_tuples([('a', 'x'), ('b', 'y'), ('c', 'z')])
-        >>> kdf
+        >>> psdf.columns = pd.MultiIndex.from_tuples([('a', 'x'), ('b', 'y'), ('c', 'z')])
+        >>> psdf
              a    b      c
              x    y      z
         Q  NaN  NaN    NaN
@@ -2305,7 +2305,7 @@ class Frame(object, metaclass=ABCMeta):
         E  3.0  3.0  400.0
         R  2.0  1.0  200.0
 
-        >>> kdf.first_valid_index()
+        >>> psdf.first_valid_index()
         'W'
 
         Support for Series.
@@ -2353,11 +2353,12 @@ class Frame(object, metaclass=ABCMeta):
 
         with sql_conf({SPARK_CONF_ARROW_ENABLED: False}):
             # Disable Arrow to keep row ordering.
-            first_valid_row = (
+            first_valid_row = cast(
+                pd.DataFrame,
                 self._internal.spark_frame.filter(cond)
                 .select(self._internal.index_spark_columns)
                 .limit(1)
-                .toPandas()
+                .toPandas(),
             )
 
         # For Empty Series or DataFrame, returns None.
@@ -2387,24 +2388,24 @@ class Frame(object, metaclass=ABCMeta):
 
         Support for DataFrame
 
-        >>> kdf = ps.DataFrame({'a': [1, 2, 3, None],
+        >>> psdf = ps.DataFrame({'a': [1, 2, 3, None],
         ...                     'b': [1.0, 2.0, 3.0, None],
         ...                     'c': [100, 200, 400, None]},
         ...                     index=['Q', 'W', 'E', 'R'])
-        >>> kdf
+        >>> psdf
              a    b      c
         Q  1.0  1.0  100.0
         W  2.0  2.0  200.0
         E  3.0  3.0  400.0
         R  NaN  NaN    NaN
 
-        >>> kdf.last_valid_index()  # doctest: +SKIP
+        >>> psdf.last_valid_index()  # doctest: +SKIP
         'E'
 
         Support for MultiIndex columns
 
-        >>> kdf.columns = pd.MultiIndex.from_tuples([('a', 'x'), ('b', 'y'), ('c', 'z')])
-        >>> kdf
+        >>> psdf.columns = pd.MultiIndex.from_tuples([('a', 'x'), ('b', 'y'), ('c', 'z')])
+        >>> psdf
              a    b      c
              x    y      z
         Q  1.0  1.0  100.0
@@ -2412,7 +2413,7 @@ class Frame(object, metaclass=ABCMeta):
         E  3.0  3.0  400.0
         R  NaN  NaN    NaN
 
-        >>> kdf.last_valid_index()  # doctest: +SKIP
+        >>> psdf.last_valid_index()  # doctest: +SKIP
         'E'
 
         Support for Series.
@@ -2878,8 +2879,8 @@ class Frame(object, metaclass=ABCMeta):
 
         Examples
         --------
-        >>> kser = ps.Series(["elk", "pig", "dog", "quetzal"], name="animal")
-        >>> print(kser.to_markdown())  # doctest: +SKIP
+        >>> psser = ps.Series(["elk", "pig", "dog", "quetzal"], name="animal")
+        >>> print(psser.to_markdown())  # doctest: +SKIP
         |    | animal   |
         |---:|:---------|
         |  0 | elk      |
@@ -2887,10 +2888,10 @@ class Frame(object, metaclass=ABCMeta):
         |  2 | dog      |
         |  3 | quetzal  |
 
-        >>> kdf = ps.DataFrame(
+        >>> psdf = ps.DataFrame(
         ...     data={"animal_1": ["elk", "pig"], "animal_2": ["dog", "quetzal"]}
         ... )
-        >>> print(kdf.to_markdown())  # doctest: +SKIP
+        >>> print(psdf.to_markdown())  # doctest: +SKIP
         |    | animal_1   | animal_2   |
         |---:|:-----------|:-----------|
         |  0 | elk        | dog        |
@@ -2903,8 +2904,8 @@ class Frame(object, metaclass=ABCMeta):
             )
         # Make sure locals() call is at the top of the function so we don't capture local variables.
         args = locals()
-        kser_or_kdf = self
-        internal_pandas = kser_or_kdf._to_internal_pandas()
+        psser_or_psdf = self
+        internal_pandas = psser_or_psdf._to_internal_pandas()
         return validate_arguments_and_invoke_function(
             internal_pandas, self.to_markdown, type(internal_pandas).to_markdown, args
         )
@@ -2943,14 +2944,14 @@ class Frame(object, metaclass=ABCMeta):
 
         Examples
         --------
-        >>> kdf = ps.DataFrame({
+        >>> psdf = ps.DataFrame({
         ...     'A': [None, 3, None, None],
         ...     'B': [2, 4, None, 3],
         ...     'C': [None, None, None, 1],
         ...     'D': [0, 1, 5, 4]
         ...     },
         ...     columns=['A', 'B', 'C', 'D'])
-        >>> kdf
+        >>> psdf
              A    B    C  D
         0  NaN  2.0  NaN  0
         1  3.0  4.0  NaN  1
@@ -2959,7 +2960,7 @@ class Frame(object, metaclass=ABCMeta):
 
         Propagate non-null values backward.
 
-        >>> kdf.bfill()
+        >>> psdf.bfill()
              A    B    C  D
         0  3.0  2.0  1.0  0
         1  3.0  4.0  1.0  1
@@ -2968,15 +2969,15 @@ class Frame(object, metaclass=ABCMeta):
 
         For Series
 
-        >>> kser = ps.Series([None, None, None, 1])
-        >>> kser
+        >>> psser = ps.Series([None, None, None, 1])
+        >>> psser
         0    NaN
         1    NaN
         2    NaN
         3    1.0
         dtype: float64
 
-        >>> kser.bfill()
+        >>> psser.bfill()
         0    1.0
         1    1.0
         2    1.0
@@ -3017,14 +3018,14 @@ class Frame(object, metaclass=ABCMeta):
 
         Examples
         --------
-        >>> kdf = ps.DataFrame({
+        >>> psdf = ps.DataFrame({
         ...     'A': [None, 3, None, None],
         ...     'B': [2, 4, None, 3],
         ...     'C': [None, None, None, 1],
         ...     'D': [0, 1, 5, 4]
         ...     },
         ...     columns=['A', 'B', 'C', 'D'])
-        >>> kdf
+        >>> psdf
              A    B    C  D
         0  NaN  2.0  NaN  0
         1  3.0  4.0  NaN  1
@@ -3033,7 +3034,7 @@ class Frame(object, metaclass=ABCMeta):
 
         Propagate non-null values forward.
 
-        >>> kdf.ffill()
+        >>> psdf.ffill()
              A    B    C  D
         0  NaN  2.0  NaN  0
         1  3.0  4.0  NaN  1
@@ -3042,15 +3043,15 @@ class Frame(object, metaclass=ABCMeta):
 
         For Series
 
-        >>> kser = ps.Series([2, 4, None, 3])
-        >>> kser
+        >>> psser = ps.Series([2, 4, None, 3])
+        >>> psser
         0    2.0
         1    4.0
         2    NaN
         3    3.0
         dtype: float64
 
-        >>> kser.ffill()
+        >>> psser.ffill()
         0    2.0
         1    4.0
         2    4.0

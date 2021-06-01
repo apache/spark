@@ -108,29 +108,6 @@ class DataFrameReader(OptionUtils):
     @since(1.5)
     def option(self, key, value):
         """Adds an input option for the underlying data source.
-
-        You can set the following option(s) for reading files:
-            * ``timeZone``: sets the string that indicates a time zone ID to be used to parse
-                timestamps in the JSON/CSV datasources or partition values. The following
-                formats of `timeZone` are supported:
-
-                * Region-based zone ID: It should have the form 'area/city', such as \
-                  'America/Los_Angeles'.
-                * Zone offset: It should be in the format '(+|-)HH:mm', for example '-08:00' or \
-                 '+01:00'. Also 'UTC' and 'Z' are supported as aliases of '+00:00'.
-
-                Other short names like 'CST' are not recommended to use because they can be
-                ambiguous. If it isn't set, the current value of the SQL config
-                ``spark.sql.session.timeZone`` is used by default.
-            * ``pathGlobFilter``: an optional glob pattern to only include files with paths matching
-                the pattern. The syntax follows org.apache.hadoop.fs.GlobFilter.
-                It does not change the behavior of partition discovery.
-            * ``modifiedBefore``: an optional timestamp to only include files with
-                modification times occurring before the specified time. The provided timestamp
-                must be in the following format: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)
-            * ``modifiedAfter``: an optional timestamp to only include files with
-                modification times occurring after the specified time. The provided timestamp
-                must be in the following format: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)
         """
         self._jreader = self._jreader.option(key, to_str(value))
         return self
@@ -138,29 +115,6 @@ class DataFrameReader(OptionUtils):
     @since(1.4)
     def options(self, **options):
         """Adds input options for the underlying data source.
-
-        You can set the following option(s) for reading files:
-            * ``timeZone``: sets the string that indicates a time zone ID to be used to parse
-                timestamps in the JSON/CSV datasources or partition values. The following
-                formats of `timeZone` are supported:
-
-                * Region-based zone ID: It should have the form 'area/city', such as \
-                  'America/Los_Angeles'.
-                * Zone offset: It should be in the format '(+|-)HH:mm', for example '-08:00' or \
-                 '+01:00'. Also 'UTC' and 'Z' are supported as aliases of '+00:00'.
-
-                Other short names like 'CST' are not recommended to use because they can be
-                ambiguous. If it isn't set, the current value of the SQL config
-                ``spark.sql.session.timeZone`` is used by default.
-            * ``pathGlobFilter``: an optional glob pattern to only include files with paths matching
-                the pattern. The syntax follows org.apache.hadoop.fs.GlobFilter.
-                It does not change the behavior of partition discovery.
-            * ``modifiedBefore``: an optional timestamp to only include files with
-                modification times occurring before the specified time. The provided timestamp
-                must be in the following format: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)
-            * ``modifiedAfter``: an optional timestamp to only include files with
-                modification times occurring after the specified time. The provided timestamp
-                must be in the following format: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)
         """
         for k in options:
             self._jreader = self._jreader.option(k, to_str(options[k]))
@@ -236,112 +190,15 @@ class DataFrameReader(OptionUtils):
         schema : :class:`pyspark.sql.types.StructType` or str, optional
             an optional :class:`pyspark.sql.types.StructType` for the input schema or
             a DDL-formatted string (For example ``col0 INT, col1 DOUBLE``).
-        primitivesAsString : str or bool, optional
-            infers all primitive values as a string type. If None is set,
-            it uses the default value, ``false``.
-        prefersDecimal : str or bool, optional
-            infers all floating-point values as a decimal type. If the values
-            do not fit in decimal, then it infers them as doubles. If None is
-            set, it uses the default value, ``false``.
-        allowComments : str or bool, optional
-            ignores Java/C++ style comment in JSON records. If None is set,
-            it uses the default value, ``false``.
-        allowUnquotedFieldNames : str or bool, optional
-            allows unquoted JSON field names. If None is set,
-            it uses the default value, ``false``.
-        allowSingleQuotes : str or bool, optional
-            allows single quotes in addition to double quotes. If None is
-            set, it uses the default value, ``true``.
-        allowNumericLeadingZero : str or bool, optional
-            allows leading zeros in numbers (e.g. 00012). If None is
-            set, it uses the default value, ``false``.
-        allowBackslashEscapingAnyCharacter : str or bool, optional
-            allows accepting quoting of all character
-            using backslash quoting mechanism. If None is
-            set, it uses the default value, ``false``.
-        mode : str, optional
-            allows a mode for dealing with corrupt records during parsing. If None is
-                     set, it uses the default value, ``PERMISSIVE``.
 
-            * ``PERMISSIVE``: when it meets a corrupted record, puts the malformed string \
-              into a field configured by ``columnNameOfCorruptRecord``, and sets malformed \
-              fields to ``null``. To keep corrupt records, an user can set a string type \
-              field named ``columnNameOfCorruptRecord`` in an user-defined schema. If a \
-              schema does not have the field, it drops corrupt records during parsing. \
-              When inferring a schema, it implicitly adds a ``columnNameOfCorruptRecord`` \
-              field in an output schema.
-            *  ``DROPMALFORMED``: ignores the whole corrupted records.
-            *  ``FAILFAST``: throws an exception when it meets corrupted records.
+        Other Parameters
+        ----------------
+        Extra options
+            For the extra options, refer to
+            `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option>`_
+            in the version you use.
 
-        columnNameOfCorruptRecord: str, optional
-            allows renaming the new field having malformed string
-            created by ``PERMISSIVE`` mode. This overrides
-            ``spark.sql.columnNameOfCorruptRecord``. If None is set,
-            it uses the value specified in
-            ``spark.sql.columnNameOfCorruptRecord``.
-        dateFormat : str, optional
-            sets the string that indicates a date format. Custom date formats
-            follow the formats at
-            `datetime pattern <https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html>`_.  # noqa
-            This applies to date type. If None is set, it uses the
-            default value, ``yyyy-MM-dd``.
-        timestampFormat : str, optional
-            sets the string that indicates a timestamp format.
-            Custom date formats follow the formats at
-            `datetime pattern <https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html>`_.  # noqa
-            This applies to timestamp type. If None is set, it uses the
-            default value, ``yyyy-MM-dd'T'HH:mm:ss[.SSS][XXX]``.
-        multiLine : str or bool, optional
-            parse one record, which may span multiple lines, per file. If None is
-            set, it uses the default value, ``false``.
-        allowUnquotedControlChars : str or bool, optional
-            allows JSON Strings to contain unquoted control
-            characters (ASCII characters with value less than 32,
-            including tab and line feed characters) or not.
-        encoding : str or bool, optional
-            allows to forcibly set one of standard basic or extended encoding for
-            the JSON files. For example UTF-16BE, UTF-32LE. If None is set,
-            the encoding of input JSON will be detected automatically
-            when the multiLine option is set to ``true``.
-        lineSep : str, optional
-            defines the line separator that should be used for parsing. If None is
-            set, it covers all ``\\r``, ``\\r\\n`` and ``\\n``.
-        samplingRatio : str or float, optional
-            defines fraction of input JSON objects used for schema inferring.
-            If None is set, it uses the default value, ``1.0``.
-        dropFieldIfAllNull : str or bool, optional
-            whether to ignore column of all null values or empty
-            array/struct during schema inference. If None is set, it
-            uses the default value, ``false``.
-        locale : str, optional
-            sets a locale as language tag in IETF BCP 47 format. If None is set,
-            it uses the default value, ``en-US``. For instance, ``locale`` is used while
-            parsing dates and timestamps.
-        pathGlobFilter : str or bool, optional
-            an optional glob pattern to only include files with paths matching
-            the pattern. The syntax follows `org.apache.hadoop.fs.GlobFilter`.
-            It does not change the behavior of
-            `partition discovery <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#partition-discovery>`_.  # noqa
-        recursiveFileLookup : str or bool, optional
-            recursively scan a directory for files. Using this option
-            disables
-            `partition discovery <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#partition-discovery>`_.  # noqa
-        allowNonNumericNumbers : str or bool
-            allows JSON parser to recognize set of "Not-a-Number" (NaN)
-            tokens as legal floating number values. If None is set,
-            it uses the default value, ``true``.
-
-                * ``+INF``: for positive infinity, as well as alias of
-                            ``+Infinity`` and ``Infinity``.
-                *  ``-INF``: for negative infinity, alias ``-Infinity``.
-                *  ``NaN``: for other not-a-numbers, like result of division by zero.
-        modifiedBefore : an optional timestamp to only include files with
-            modification times occurring before the specified time. The provided timestamp
-            must be in the following format: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)
-        modifiedAfter : an optional timestamp to only include files with
-            modification times occurring after the specified time. The provided timestamp
-            must be in the following format: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)
-
+            .. # noqa
 
         Examples
         --------
@@ -416,53 +273,12 @@ class DataFrameReader(OptionUtils):
 
         Other Parameters
         ----------------
-        mergeSchema : str or bool, optional
-            sets whether we should merge schemas collected from all
-            Parquet part-files. This will override
-            ``spark.sql.parquet.mergeSchema``. The default value is specified in
-            ``spark.sql.parquet.mergeSchema``.
-        pathGlobFilter : str or bool, optional
-            an optional glob pattern to only include files with paths matching
-            the pattern. The syntax follows `org.apache.hadoop.fs.GlobFilter`.
-            It does not change the behavior of
-            `partition discovery <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#partition-discovery>`_.  # noqa
-        recursiveFileLookup : str or bool, optional
-            recursively scan a directory for files. Using this option
-            disables
-            `partition discovery <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#partition-discovery>`_.  # noqa
+        **options
+            For the extra options, refer to
+            `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#data-source-option>`_
+            in the version you use.
 
-            modification times occurring before the specified time. The provided timestamp
-            must be in the following format: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)
-        modifiedBefore (batch only) : an optional timestamp to only include files with
-            modification times occurring before the specified time. The provided timestamp
-            must be in the following format: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)
-        modifiedAfter (batch only) : an optional timestamp to only include files with
-            modification times occurring after the specified time. The provided timestamp
-            must be in the following format: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)
-        datetimeRebaseMode : str, optional
-            the rebasing mode for the values of the ``DATE``, ``TIMESTAMP_MICROS``,
-            ``TIMESTAMP_MILLIS`` logical types from the Julian to Proleptic Gregorian calendar.
-
-                * ``EXCEPTION``: Spark fails in reads of ancient dates/timestamps
-                                 that are ambiguous between the two calendars.
-                *  ``CORRECTED``: loading of dates/timestamps without rebasing.
-                *  ``LEGACY``: perform rebasing of ancient dates/timestamps from the Julian
-                               to Proleptic Gregorian calendar.
-
-            If None is set, the value of the SQL config
-            ``spark.sql.parquet.datetimeRebaseModeInRead`` is used by default.
-        int96RebaseMode : str, optional
-            the rebasing mode for ``INT96`` timestamps from the Julian to
-            Proleptic Gregorian calendar.
-
-                * ``EXCEPTION``: Spark fails in reads of ancient ``INT96`` timestamps
-                                 that are ambiguous between the two calendars.
-                *  ``CORRECTED``: loading of ``INT96`` timestamps without rebasing.
-                *  ``LEGACY``: perform rebasing of ancient ``INT96`` timestamps from the Julian
-                               to Proleptic Gregorian calendar.
-
-            If None is set, the value of the SQL config
-            ``spark.sql.parquet.int96RebaseModeInRead`` is used by default.
+            .. # noqa
 
         Examples
         --------
@@ -501,28 +317,15 @@ class DataFrameReader(OptionUtils):
         ----------
         paths : str or list
             string, or list of strings, for input path(s).
-        wholetext : str or bool, optional
-            if true, read each file from input path(s) as a single row.
-        lineSep : str, optional
-            defines the line separator that should be used for parsing. If None is
-            set, it covers all ``\\r``, ``\\r\\n`` and ``\\n``.
-        pathGlobFilter : str or bool, optional
-            an optional glob pattern to only include files with paths matching
-            the pattern. The syntax follows `org.apache.hadoop.fs.GlobFilter`.
-            It does not change the behavior of
-            `partition discovery <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#partition-discovery>`_.  # noqa
-        recursiveFileLookup : str or bool, optional
-            recursively scan a directory for files. Using this option disables
-            `partition discovery <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#partition-discovery>`_.  # noqa
 
-            modification times occurring before the specified time. The provided timestamp
-            must be in the following format: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)
-        modifiedBefore (batch only) : an optional timestamp to only include files with
-            modification times occurring before the specified time. The provided timestamp
-            must be in the following format: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)
-        modifiedAfter (batch only) : an optional timestamp to only include files with
-            modification times occurring after the specified time. The provided timestamp
-            must be in the following format: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)
+        Other Parameters
+        ----------------
+        Extra options
+            For the extra options, refer to
+            `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-text.html#data-source-option>`_
+            in the version you use.
+
+            .. # noqa
 
         Examples
         --------
@@ -567,172 +370,15 @@ class DataFrameReader(OptionUtils):
         schema : :class:`pyspark.sql.types.StructType` or str, optional
             an optional :class:`pyspark.sql.types.StructType` for the input schema
             or a DDL-formatted string (For example ``col0 INT, col1 DOUBLE``).
-        sep : str, optional
-            sets a separator (one or more characters) for each field and value. If None is
-            set, it uses the default value, ``,``.
-        encoding : str, optional
-            decodes the CSV files by the given encoding type. If None is set,
-            it uses the default value, ``UTF-8``.
-        quote : str, optional
-            sets a single character used for escaping quoted values where the
-            separator can be part of the value. If None is set, it uses the default
-            value, ``"``. If you would like to turn off quotations, you need to set an
-            empty string.
-        escape : str, optional
-            sets a single character used for escaping quotes inside an already
-            quoted value. If None is set, it uses the default value, ``\``.
-        comment : str, optional
-            sets a single character used for skipping lines beginning with this
-            character. By default (None), it is disabled.
-        header : str or bool, optional
-            uses the first line as names of columns. If None is set, it uses the
-            default value, ``false``.
 
-            .. note:: if the given path is a RDD of Strings, this header
-                option will remove all lines same with the header if exists.
+        Other Parameters
+        ----------------
+        Extra options
+            For the extra options, refer to
+            `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-csv.html#data-source-option>`_
+            in the version you use.
 
-        inferSchema : str or bool, optional
-            infers the input schema automatically from data. It requires one extra
-            pass over the data. If None is set, it uses the default value, ``false``.
-        enforceSchema : str or bool, optional
-            If it is set to ``true``, the specified or inferred schema will be
-            forcibly applied to datasource files, and headers in CSV files will be
-            ignored. If the option is set to ``false``, the schema will be
-            validated against all headers in CSV files or the first header in RDD
-            if the ``header`` option is set to ``true``. Field names in the schema
-            and column names in CSV headers are checked by their positions
-            taking into account ``spark.sql.caseSensitive``. If None is set,
-            ``true`` is used by default. Though the default value is ``true``,
-            it is recommended to disable the ``enforceSchema`` option
-            to avoid incorrect results.
-        ignoreLeadingWhiteSpace : str or bool, optional
-            A flag indicating whether or not leading whitespaces from
-            values being read should be skipped. If None is set, it
-            uses the default value, ``false``.
-        ignoreTrailingWhiteSpace : str or bool, optional
-            A flag indicating whether or not trailing whitespaces from
-            values being read should be skipped. If None is set, it
-            uses the default value, ``false``.
-        nullValue : str, optional
-            sets the string representation of a null value. If None is set, it uses
-            the default value, empty string. Since 2.0.1, this ``nullValue`` param
-            applies to all supported types including the string type.
-        nanValue : str, optional
-            sets the string representation of a non-number value. If None is set, it
-            uses the default value, ``NaN``.
-        positiveInf : str, optional
-            sets the string representation of a positive infinity value. If None
-            is set, it uses the default value, ``Inf``.
-        negativeInf : str, optional
-            sets the string representation of a negative infinity value. If None
-            is set, it uses the default value, ``Inf``.
-        dateFormat : str, optional
-            sets the string that indicates a date format. Custom date formats
-            follow the formats at
-            `datetime pattern <https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html>`_.  # noqa
-            This applies to date type. If None is set, it uses the
-            default value, ``yyyy-MM-dd``.
-        timestampFormat : str, optional
-            sets the string that indicates a timestamp format.
-            Custom date formats follow the formats at
-            `datetime pattern <https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html>`_.  # noqa
-            This applies to timestamp type. If None is set, it uses the
-            default value, ``yyyy-MM-dd'T'HH:mm:ss[.SSS][XXX]``.
-        maxColumns : str or int, optional
-            defines a hard limit of how many columns a record can have. If None is
-            set, it uses the default value, ``20480``.
-        maxCharsPerColumn : str or int, optional
-            defines the maximum number of characters allowed for any given
-            value being read. If None is set, it uses the default value,
-            ``-1`` meaning unlimited length.
-        maxMalformedLogPerPartition : str or int, optional
-            this parameter is no longer used since Spark 2.2.0.
-            If specified, it is ignored.
-        mode : str, optional
-            allows a mode for dealing with corrupt records during parsing. If None is
-            set, it uses the default value, ``PERMISSIVE``. Note that Spark tries to
-            parse only required columns in CSV under column pruning. Therefore, corrupt
-            records can be different based on required set of fields. This behavior can
-            be controlled by ``spark.sql.csv.parser.columnPruning.enabled``
-            (enabled by default).
-
-            * ``PERMISSIVE``: when it meets a corrupted record, puts the malformed string \
-              into a field configured by ``columnNameOfCorruptRecord``, and sets malformed \
-              fields to ``null``. To keep corrupt records, an user can set a string type \
-              field named ``columnNameOfCorruptRecord`` in an user-defined schema. If a \
-              schema does not have the field, it drops corrupt records during parsing. \
-              A record with less/more tokens than schema is not a corrupted record to CSV. \
-              When it meets a record having fewer tokens than the length of the schema, \
-              sets ``null`` to extra fields. When the record has more tokens than the \
-              length of the schema, it drops extra tokens.
-            * ``DROPMALFORMED``: ignores the whole corrupted records.
-            * ``FAILFAST``: throws an exception when it meets corrupted records.
-
-        columnNameOfCorruptRecord : str, optional
-            allows renaming the new field having malformed string
-            created by ``PERMISSIVE`` mode. This overrides
-            ``spark.sql.columnNameOfCorruptRecord``. If None is set,
-            it uses the value specified in
-            ``spark.sql.columnNameOfCorruptRecord``.
-        multiLine : str or bool, optional
-            parse records, which may span multiple lines. If None is
-            set, it uses the default value, ``false``.
-        charToEscapeQuoteEscaping : str, optional
-            sets a single character used for escaping the escape for
-            the quote character. If None is set, the default value is
-            escape character when escape and quote characters are
-            different, ``\0`` otherwise.
-        samplingRatio : str or float, optional
-            defines fraction of rows used for schema inferring.
-            If None is set, it uses the default value, ``1.0``.
-        emptyValue : str, optional
-            sets the string representation of an empty value. If None is set, it uses
-            the default value, empty string.
-        locale : str, optional
-            sets a locale as language tag in IETF BCP 47 format. If None is set,
-            it uses the default value, ``en-US``. For instance, ``locale`` is used while
-            parsing dates and timestamps.
-        lineSep : str, optional
-            defines the line separator that should be used for parsing. If None is
-            set, it covers all ``\\r``, ``\\r\\n`` and ``\\n``.
-            Maximum length is 1 character.
-        pathGlobFilter : str or bool, optional
-            an optional glob pattern to only include files with paths matching
-            the pattern. The syntax follows `org.apache.hadoop.fs.GlobFilter`.
-            It does not change the behavior of
-            `partition discovery <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#partition-discovery>`_.  # noqa
-        recursiveFileLookup : str or bool, optional
-            recursively scan a directory for files. Using this option disables
-            `partition discovery <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#partition-discovery>`_.  # noqa
-
-            modification times occurring before the specified time. The provided timestamp
-            must be in the following format: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)
-        modifiedBefore (batch only) : an optional timestamp to only include files with
-            modification times occurring before the specified time. The provided timestamp
-            must be in the following format: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)
-        modifiedAfter (batch only) : an optional timestamp to only include files with
-            modification times occurring after the specified time. The provided timestamp
-            must be in the following format: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)
-        unescapedQuoteHandling : str, optional
-            defines how the CsvParser will handle values with unescaped quotes. If None is
-            set, it uses the default value, ``STOP_AT_DELIMITER``.
-
-            * ``STOP_AT_CLOSING_QUOTE``: If unescaped quotes are found in the input, accumulate
-              the quote character and proceed parsing the value as a quoted value, until a closing
-              quote is found.
-            * ``BACK_TO_DELIMITER``: If unescaped quotes are found in the input, consider the value
-              as an unquoted value. This will make the parser accumulate all characters of the current
-              parsed value until the delimiter is found. If no delimiter is found in the value, the
-              parser will continue accumulating characters from the input until a delimiter or line
-              ending is found.
-            * ``STOP_AT_DELIMITER``: If unescaped quotes are found in the input, consider the value
-              as an unquoted value. This will make the parser accumulate all characters until the
-              delimiter or a line ending is found in the input.
-            * ``SKIP_VALUE``: If unescaped quotes are found in the input, the content parsed
-              for the given value will be skipped and the value set in nullValue will be produced
-              instead.
-            * ``RAISE_ERROR``: If unescaped quotes are found in the input, a TextParsingException
-              will be thrown.
+            .. # noqa
 
         Examples
         --------
@@ -793,28 +439,15 @@ class DataFrameReader(OptionUtils):
         Parameters
         ----------
         path : str or list
-        mergeSchema : str or bool, optional
-            sets whether we should merge schemas collected from all
-            ORC part-files. This will override ``spark.sql.orc.mergeSchema``.
-            The default value is specified in ``spark.sql.orc.mergeSchema``.
-        pathGlobFilter : str or bool
-            an optional glob pattern to only include files with paths matching
-            the pattern. The syntax follows `org.apache.hadoop.fs.GlobFilter`.
-            It does not change the behavior of
-            `partition discovery <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#partition-discovery>`_.  # noqa
-        recursiveFileLookup : str or bool
-            recursively scan a directory for files. Using this option
-            disables
-            `partition discovery <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#partition-discovery>`_.  # noqa
 
-            modification times occurring before the specified time. The provided timestamp
-            must be in the following format: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)
-        modifiedBefore : an optional timestamp to only include files with
-            modification times occurring before the specified time. The provided timestamp
-            must be in the following format: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)
-        modifiedAfter : an optional timestamp to only include files with
-            modification times occurring after the specified time. The provided timestamp
-            must be in the following format: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)
+        Other Parameters
+        ----------------
+        Extra options
+            For the extra options, refer to
+            `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-orc.html#data-source-option>`_
+            in the version you use.
+
+            .. # noqa
 
         Examples
         --------
@@ -957,20 +590,6 @@ class DataFrameWriter(OptionUtils):
     @since(1.5)
     def option(self, key, value):
         """Adds an output option for the underlying data source.
-
-        You can set the following option(s) for writing files:
-            * ``timeZone``: sets the string that indicates a time zone ID to be used to format
-                timestamps in the JSON/CSV datasources or partition values. The following
-                formats of `timeZone` are supported:
-
-                * Region-based zone ID: It should have the form 'area/city', such as \
-                  'America/Los_Angeles'.
-                * Zone offset: It should be in the format '(+|-)HH:mm', for example '-08:00' or \
-                 '+01:00'. Also 'UTC' and 'Z' are supported as aliases of '+00:00'.
-
-                Other short names like 'CST' are not recommended to use because they can be
-                ambiguous. If it isn't set, the current value of the SQL config
-                ``spark.sql.session.timeZone`` is used by default.
         """
         self._jwrite = self._jwrite.option(key, to_str(value))
         return self
@@ -978,20 +597,6 @@ class DataFrameWriter(OptionUtils):
     @since(1.4)
     def options(self, **options):
         """Adds output options for the underlying data source.
-
-        You can set the following option(s) for writing files:
-            * ``timeZone``: sets the string that indicates a time zone ID to be used to format
-                timestamps in the JSON/CSV datasources or partition values. The following
-                formats of `timeZone` are supported:
-
-                * Region-based zone ID: It should have the form 'area/city', such as \
-                  'America/Los_Angeles'.
-                * Zone offset: It should be in the format '(+|-)HH:mm', for example '-08:00' or \
-                 '+01:00'. Also 'UTC' and 'Z' are supported as aliases of '+00:00'.
-
-                Other short names like 'CST' are not recommended to use because they can be
-                ambiguous. If it isn't set, the current value of the SQL config
-                ``spark.sql.session.timeZone`` is used by default.
         """
         for k in options:
             self._jwrite = self._jwrite.option(k, to_str(options[k]))
@@ -1204,31 +809,15 @@ class DataFrameWriter(OptionUtils):
             * ``ignore``: Silently ignore this operation if data already exists.
             * ``error`` or ``errorifexists`` (default case): Throw an exception if data already \
                 exists.
-        compression : str, optional
-            compression codec to use when saving to file. This can be one of the
-            known case-insensitive shorten names (none, bzip2, gzip, lz4,
-            snappy and deflate).
-        dateFormat : str, optional
-            sets the string that indicates a date format. Custom date formats
-            follow the formats at
-            `datetime pattern <https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html>`_.  # noqa
-            This applies to date type. If None is set, it uses the
-            default value, ``yyyy-MM-dd``.
-        timestampFormat : str, optional
-            sets the string that indicates a timestamp format.
-            Custom date formats follow the formats at
-            `datetime pattern <https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html>`_.  # noqa
-            This applies to timestamp type. If None is set, it uses the
-            default value, ``yyyy-MM-dd'T'HH:mm:ss[.SSS][XXX]``.
-        encoding : str, optional
-            specifies encoding (charset) of saved json files. If None is set,
-            the default UTF-8 charset will be used.
-        lineSep : str, optional
-            defines the line separator that should be used for writing. If None is
-            set, it uses the default value, ``\\n``.
-        ignoreNullFields : str or bool, optional
-            Whether to ignore null fields when generating JSON objects.
-            If None is set, it uses the default value, ``true``.
+
+        Other Parameters
+        ----------------
+        Extra options
+            For the extra options, refer to
+            `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option>`_
+            in the version you use.
+
+            .. # noqa
 
         Examples
         --------
@@ -1259,12 +848,15 @@ class DataFrameWriter(OptionUtils):
                 exists.
         partitionBy : str or list, optional
             names of partitioning columns
-        compression : str, optional
-            compression codec to use when saving to file. This can be one of the
-            known case-insensitive shorten names (none, uncompressed, snappy, gzip,
-            lzo, brotli, lz4, and zstd). This will override
-            ``spark.sql.parquet.compression.codec``. If None is set, it uses the
-            value specified in ``spark.sql.parquet.compression.codec``.
+
+        Other Parameters
+        ----------------
+        Extra options
+            For the extra options, refer to
+            `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#data-source-option>`_
+            in the version you use.
+
+            .. # noqa
 
         Examples
         --------
@@ -1286,13 +878,15 @@ class DataFrameWriter(OptionUtils):
         ----------
         path : str
             the path in any Hadoop supported file system
-        compression : str, optional
-            compression codec to use when saving to file. This can be one of the
-            known case-insensitive shorten names (none, bzip2, gzip, lz4,
-            snappy and deflate).
-        lineSep : str, optional
-            defines the line separator that should be used for writing. If None is
-            set, it uses the default value, ``\\n``.
+
+        Other Parameters
+        ----------------
+        Extra options
+            For the extra options, refer to
+            `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-text.html#data-source-option>`_
+            in the version you use.
+
+            .. # noqa
 
         The DataFrame must have only one column that is of string type.
         Each row becomes a new line in the output file.
@@ -1321,68 +915,14 @@ class DataFrameWriter(OptionUtils):
             * ``error`` or ``errorifexists`` (default case): Throw an exception if data already \
                 exists.
 
-        compression : str, optional
-            compression codec to use when saving to file. This can be one of the
-            known case-insensitive shorten names (none, bzip2, gzip, lz4,
-            snappy and deflate).
-        sep : str, optional
-            sets a separator (one or more characters) for each field and value. If None is
-            set, it uses the default value, ``,``.
-        quote : str, optional
-            sets a single character used for escaping quoted values where the
-            separator can be part of the value. If None is set, it uses the default
-            value, ``"``. If an empty string is set, it uses ``u0000`` (null character).
-        escape : str, optional
-            sets a single character used for escaping quotes inside an already
-            quoted value. If None is set, it uses the default value, ``\``
-        escapeQuotes : str or bool, optional
-            a flag indicating whether values containing quotes should always
-            be enclosed in quotes. If None is set, it uses the default value
-            ``true``, escaping all values containing a quote character.
-        quoteAll : str or bool, optional
-            a flag indicating whether all values should always be enclosed in
-            quotes. If None is set, it uses the default value ``false``,
-            only escaping values containing a quote character.
-        header : str or bool, optional
-            writes the names of columns as the first line. If None is set, it uses
-            the default value, ``false``.
-        nullValue : str, optional
-            sets the string representation of a null value. If None is set, it uses
-            the default value, empty string.
-        dateFormat : str, optional
-            sets the string that indicates a date format. Custom date formats follow
-            the formats at
-            `datetime pattern <https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html>`_.  # noqa
-            This applies to date type. If None is set, it uses the
-            default value, ``yyyy-MM-dd``.
-        timestampFormat : str, optional
-            sets the string that indicates a timestamp format.
-            Custom date formats follow the formats at
-            `datetime pattern <https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html>`_.  # noqa
-            This applies to timestamp type. If None is set, it uses the
-            default value, ``yyyy-MM-dd'T'HH:mm:ss[.SSS][XXX]``.
-        ignoreLeadingWhiteSpace : str or bool, optional
-            a flag indicating whether or not leading whitespaces from
-            values being written should be skipped. If None is set, it
-            uses the default value, ``true``.
-        ignoreTrailingWhiteSpace : str or bool, optional
-            a flag indicating whether or not trailing whitespaces from
-            values being written should be skipped. If None is set, it
-            uses the default value, ``true``.
-        charToEscapeQuoteEscaping : str, optional
-            sets a single character used for escaping the escape for
-            the quote character. If None is set, the default value is
-            escape character when escape and quote characters are
-            different, ``\0`` otherwise..
-        encoding : str, optional
-            sets the encoding (charset) of saved csv files. If None is set,
-            the default UTF-8 charset will be used.
-        emptyValue : str, optional
-            sets the string representation of an empty value. If None is set, it uses
-            the default value, ``""``.
-        lineSep : str, optional
-            defines the line separator that should be used for writing. If None is
-            set, it uses the default value, ``\\n``. Maximum length is 1 character.
+        Other Parameters
+        ----------------
+        Extra options
+            For the extra options, refer to
+            `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-csv.html#data-source-option>`_
+            in the version you use.
+
+            .. # noqa
 
         Examples
         --------
@@ -1417,12 +957,15 @@ class DataFrameWriter(OptionUtils):
                 exists.
         partitionBy : str or list, optional
             names of partitioning columns
-        compression : str, optional
-            compression codec to use when saving to file. This can be one of the
-            known case-insensitive shorten names (none, snappy, zlib, lzo, and zstd).
-            This will override ``orc.compress`` and
-            ``spark.sql.orc.compression.codec``. If None is set, it uses the value
-            specified in ``spark.sql.orc.compression.codec``.
+
+        Other Parameters
+        ----------------
+        Extra options
+            For the extra options, refer to
+            `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-orc.html#data-source-option>`_
+            in the version you use.
+
+            .. # noqa
 
         Examples
         --------

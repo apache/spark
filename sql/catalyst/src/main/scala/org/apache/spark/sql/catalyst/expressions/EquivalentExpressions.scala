@@ -83,6 +83,13 @@ class EquivalentExpressions {
    * Adds only expressions which are common in each of given expressions, in a recursive way.
    * For example, given two expressions `(a + (b + (c + 1)))` and `(d + (e + (c + 1)))`,
    * the common expression `(c + 1)` will be added into `equivalenceMap`.
+   *
+   * Note that as we don't know in advance if any child node of an expression will be common
+   * across all given expressions, we count all child nodes when looking through the given
+   * expressions. But when we call `addExprTree` to add common expressions into the map, we
+   * will add recursively the child nodes. So we need to filter the child expressions first.
+   * For example, if `((a + b) + c)` and `(a + b)` are common expressions, we only add
+   * `((a + b) + c)`.
    */
   private def addCommonExprs(
       exprs: Seq[Expression],
@@ -90,13 +97,21 @@ class EquivalentExpressions {
     val exprSetForAll = mutable.Set[Expr]()
     addExprTree(exprs.head, addExprToSet(_, exprSetForAll))
 
-    val commonExprSet = exprs.tail.foldLeft(exprSetForAll) { (exprSet, expr) =>
+    val candidateExprs = exprs.tail.foldLeft(exprSetForAll) { (exprSet, expr) =>
       val otherExprSet = mutable.Set[Expr]()
       addExprTree(expr, addExprToSet(_, otherExprSet))
       exprSet.intersect(otherExprSet)
     }
 
-    commonExprSet.foreach(expr => addFunc(expr.e))
+    // Not all expressions in the set should be added. We should filter out the related
+    // children nodes.
+    val commonExprSet = candidateExprs.filter { candidateExpr =>
+      candidateExprs.forall { expr =>
+        expr == candidateExpr || expr.e.find(_.semanticEquals(candidateExpr.e)).isEmpty
+      }
+    }
+
+    commonExprSet.foreach(expr => addExprTree(expr.e, addFunc))
   }
 
   // There are some special expressions that we should not recurse into all of its children.
@@ -128,7 +143,13 @@ class EquivalentExpressions {
       // a subexpression among values doesn't need to be in conditions because no matter which
       // condition is true, it will be evaluated.
       val conditions = c.branches.tail.map(_._1)
-      val values = c.branches.map(_._2) ++ c.elseValue
+      // For an expression to be in all branch values of a CaseWhen statement, it must also be in
+      // the elseValue.
+      val values = if (c.elseValue.nonEmpty) {
+        c.branches.map(_._2) ++ c.elseValue
+      } else {
+        Nil
+      }
       Seq(conditions, values)
     case c: Coalesce => Seq(c.children.tail)
     case _ => Nil
@@ -164,10 +185,33 @@ class EquivalentExpressions {
   }
 
   /**
-   * Returns all the equivalent sets of expressions.
+   * Returns all the equivalent sets of expressions which appear more than given `repeatTimes`
+   * times.
    */
-  def getAllEquivalentExprs: Seq[Seq[Expression]] = {
-    equivalenceMap.values.map(_.toSeq).toSeq
+  def getAllEquivalentExprs(repeatTimes: Int = 0): Seq[Seq[Expression]] = {
+    equivalenceMap.values.map(_.toSeq).filter(_.size > repeatTimes).toSeq
+      .sortBy(_.head)(new ExpressionContainmentOrdering)
+  }
+
+  /**
+   * Orders `Expression` by parent/child relations. The child expression is smaller
+   * than parent expression. If there is child-parent relationships among the subexpressions,
+   * we want the child expressions come first than parent expressions, so we can replace
+   * child expressions in parent expressions with subexpression evaluation. Note that
+   * this is not for general expression ordering. For example, two irrelevant expressions
+   * will be considered as e1 < e2 and e2 < e1 by this ordering. But for the usage here,
+   * the order of irrelevant expressions does not matter.
+   */
+  class ExpressionContainmentOrdering extends Ordering[Expression] {
+    override def compare(x: Expression, y: Expression): Int = {
+      if (x.semanticEquals(y)) {
+        0
+      } else if (x.find(_.semanticEquals(y)).isDefined) {
+        1
+      } else {
+        -1
+      }
+    }
   }
 
   /**

@@ -354,10 +354,10 @@ class RDDTests(ReusedPySparkTestCase):
         bdata.destroy(blocking=True)
         try:
             self.sc.parallelize(range(1), 1).map(lambda x: len(bdata.value)).sum()
-        except Exception as e:
+        except Exception:
             pass
         else:
-            raise Exception("job should fail after destroy the broadcast")
+            raise AssertionError("job should fail after destroy the broadcast")
 
     def test_multiple_broadcasts(self):
         N = 1 << 21

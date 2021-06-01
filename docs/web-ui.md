@@ -415,6 +415,7 @@ click a "run id" in the tables.
 
 <p style="text-align: center;">
   <img src="img/webui-structured-streaming-detail.png" title="Structured Streaming Query Statistics" alt="Structured Streaming Query Statistics">
+  <img src="img/webui-structured-streaming-detail2.png">
 </p>
 
 The statistics page displays some useful metrics for insight into the status of your streaming 
@@ -431,6 +432,11 @@ The tracked operations are listed as follows.
     * latestOffset & getOffset: Time taken to query the maximum available offset for this source.
     * queryPlanning: Time taken to generates the execution plan.
     * walCommit: Time taken to write the offsets to the metadata log.
+* **Global Watermark Gap.** The gap between batch timestamp and global watermark for the batch.
+* **Aggregated Number Of Total State Rows.** The aggregated number of total state rows.
+* **Aggregated Number Of Updated State Rows.** The aggregated number of updated state rows.
+* **Aggregated State Memory Used In Bytes.** The aggregated state memory used in bytes.
+* **Aggregated Number Of State Rows Dropped By Watermark.** The aggregated number of state rows dropped by watermark.
     
 As an early-release version, the statistics page is still under development and will be improved in
 future releases.

@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-from typing import List, Tuple, TYPE_CHECKING
+from typing import List, Tuple, TYPE_CHECKING, cast
 
 import numpy as np
 import pandas as pd
@@ -33,13 +33,13 @@ if TYPE_CHECKING:
 CORRELATION_OUTPUT_COLUMN = "__correlation_output__"
 
 
-def corr(kdf: "ps.DataFrame", method: str = "pearson") -> pd.DataFrame:
+def corr(psdf: "ps.DataFrame", method: str = "pearson") -> pd.DataFrame:
     """
     The correlation matrix of all the numerical columns of this dataframe.
 
     Only accepts scalar numerical values for now.
 
-    :param kdf: the pandas-on-Spark dataframe.
+    :param psdf: the pandas-on-Spark dataframe.
     :param method: {'pearson', 'spearman'}
                    * pearson : standard correlation coefficient
                    * spearman : Spearman rank correlation
@@ -51,9 +51,9 @@ def corr(kdf: "ps.DataFrame", method: str = "pearson") -> pd.DataFrame:
     B -1.0  1.0
     """
     assert method in ("pearson", "spearman")
-    ndf, column_labels = to_numeric_df(kdf)
+    ndf, column_labels = to_numeric_df(psdf)
     corr = Correlation.corr(ndf, CORRELATION_OUTPUT_COLUMN, method)
-    pcorr = corr.toPandas()
+    pcorr = cast(pd.DataFrame, corr.toPandas())
     arr = pcorr.iloc[0, 0].toArray()
     if column_labels_level(column_labels) > 1:
         idx = pd.MultiIndex.from_tuples(column_labels)
@@ -62,13 +62,13 @@ def corr(kdf: "ps.DataFrame", method: str = "pearson") -> pd.DataFrame:
     return pd.DataFrame(arr, columns=idx, index=idx)
 
 
-def to_numeric_df(kdf: "ps.DataFrame") -> Tuple[pyspark.sql.DataFrame, List[Tuple]]:
+def to_numeric_df(psdf: "ps.DataFrame") -> Tuple[pyspark.sql.DataFrame, List[Tuple]]:
     """
     Takes a dataframe and turns it into a dataframe containing a single numerical
     vector of doubles. This dataframe has a single field called '_1'.
 
     TODO: index is not preserved currently
-    :param kdf: the pandas-on-Spark dataframe.
+    :param psdf: the pandas-on-Spark dataframe.
     :return: a pair of dataframe, list of strings (the name of the columns
              that were converted to numerical types)
 
@@ -81,17 +81,17 @@ def to_numeric_df(kdf: "ps.DataFrame") -> Tuple[pyspark.sql.DataFrame, List[Tupl
         for dt in [np.int8, np.int16, np.int32, np.int64, np.float32, np.float64, np.bool_]
     }
     numeric_column_labels = [
-        label for label in kdf._internal.column_labels if kdf[label].dtype in accepted_types
+        label for label in psdf._internal.column_labels if psdf[label].dtype in accepted_types
     ]
-    numeric_df = kdf._internal.spark_frame.select(
-        *[kdf._internal.spark_column_for(idx) for idx in numeric_column_labels]
+    numeric_df = psdf._internal.spark_frame.select(
+        *[psdf._internal.spark_column_for(idx) for idx in numeric_column_labels]
     )
     va = VectorAssembler(inputCols=numeric_df.columns, outputCol=CORRELATION_OUTPUT_COLUMN)
     v = va.transform(numeric_df).select(CORRELATION_OUTPUT_COLUMN)
     return v, numeric_column_labels
 
 
-def _test():
+def _test() -> None:
     import os
     import doctest
     import sys

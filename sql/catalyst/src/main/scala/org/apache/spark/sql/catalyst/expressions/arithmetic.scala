@@ -209,11 +209,13 @@ abstract class BinaryArithmetic extends BinaryOperator with NullIntolerant {
 
   /** Name of the function for this expression on a [[Decimal]] type. */
   def decimalMethod: String =
-    sys.error("BinaryArithmetics must override either decimalMethod or genCode")
+    throw QueryExecutionErrors.notOverrideExpectedMethodsError("BinaryArithmetics",
+      "decimalMethod", "genCode")
 
   /** Name of the function for this expression on a [[CalendarInterval]] type. */
   def calendarIntervalMethod: String =
-    sys.error("BinaryArithmetics must override either calendarIntervalMethod or genCode")
+    throw QueryExecutionErrors.notOverrideExpectedMethodsError("BinaryArithmetics",
+      "calendarIntervalMethod", "genCode")
 
   // Name of the function for the exact version of this expression in [[Math]].
   // If the option "spark.sql.ansi.enabled" is enabled and there is corresponding
