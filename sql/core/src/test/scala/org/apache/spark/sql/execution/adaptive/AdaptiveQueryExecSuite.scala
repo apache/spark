@@ -27,7 +27,7 @@ import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListe
 import org.apache.spark.sql.{Dataset, QueryTest, Row, SparkSession, Strategy}
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
-import org.apache.spark.sql.execution.{PartialReducerPartitionSpec, QueryExecution, ReusedSubqueryExec, ShuffledRowRDD, SparkPlan, UnaryExecNode}
+import org.apache.spark.sql.execution.{PartialReducerPartitionSpec, QueryExecution, ReusedSubqueryExec, ShuffledRowRDD, SortExec, SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
 import org.apache.spark.sql.execution.datasources.noop.NoopDataSource
@@ -124,6 +124,12 @@ class AdaptiveQueryExecSuite
   private def findTopLevelBaseAggregate(plan: SparkPlan): Seq[BaseAggregateExec] = {
     collect(plan) {
       case agg: BaseAggregateExec => agg
+    }
+  }
+
+  private def findTopLevelSort(plan: SparkPlan): Seq[SortExec] = {
+    collect(plan) {
+      case s: SortExec => s
     }
   }
 
@@ -1383,21 +1389,22 @@ class AdaptiveQueryExecSuite
   test("SPARK-35585: Support propagate empty relation through project/filter") {
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
-      Seq(
-        "SELECT t1.key FROM testData WHERE key = 0 ORDER BY key, value",
+      val (plan1, adaptivePlan1) = runAdaptiveAndVerifyResult(
+        "SELECT t1.key FROM testData WHERE key = 0 ORDER BY key, value")
+      assert(findTopLevelSort(plan1).size == 1)
+      assert(findTopLevelSort(adaptivePlan1).isEmpty)
+
+      val (plan2, adaptivePlan2) = runAdaptiveAndVerifyResult(
         """
           |SELECT t1.key, count(*) FROM testData t1
           | JOIN (SELECT * FROM testData2 WHERE b = 0) t2 ON t1.key = t2.a
           | WHERE t1.key > rand()
           | GROUP BY t1.key
-          |""".stripMargin
-      ).foreach { query =>
-        val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(query)
-        assert(findTopLevelBaseJoin(plan).size == 1)
-        assert(findTopLevelBaseAggregate(plan).size == 2)
-        assert(findTopLevelBaseJoin(adaptivePlan).isEmpty)
-        assert(findTopLevelBaseAggregate(adaptivePlan).isEmpty)
-      }
+          |""".stripMargin)
+      assert(findTopLevelBaseJoin(plan2).size == 1)
+      assert(findTopLevelBaseAggregate(plan2).size == 2)
+      assert(findTopLevelBaseJoin(adaptivePlan2).isEmpty)
+      assert(findTopLevelBaseAggregate(adaptivePlan2).isEmpty)
     }
   }
 
