@@ -62,14 +62,14 @@ Data source options of CSV can be set via:
   </tr>
   <tr>
     <td><code>encoding</code></td>
-    <td><code>UTF-8</code> for reading, not set for writing</td>
+    <td>UTF-8</td>
     <td>For reading, decodes the CSV files by the given encoding type. For writing, specifies encoding (charset) of saved CSV files</td>
     <td>read/write</td>
   </tr>
   <tr>
     <td><code>quote</code></td>
-    <td>""</td>
-    <td>Sets a single character used for escaping quoted values where the separator can be part of the value. For reading, If you would like to turn off quotations, you need to set not `null` but an empty string. This behaviour is different from <code>com.databricks.spark.csv</code>. For writing, If an empty string is set, it uses <code>u0000</code> (null character).</td>
+    <td>"</td>
+    <td>Sets a single character used for escaping quoted values where the separator can be part of the value. For reading, if you would like to turn off quotations, you need to set not <code>null</code> but an empty string. For writing, if an empty string is set, it uses <code>u0000</code> (null character).</td>
     <td>read/write</td>
   </tr>
   <tr>
@@ -92,14 +92,14 @@ Data source options of CSV can be set via:
   </tr>
   <tr>
     <td><code>comment</code></td>
-    <td>empty string</td>
+    <td></td>
     <td>Sets a single character used for skipping lines beginning with this character. By default, it is disabled.</td>
     <td>read</td>
   </tr>
   <tr>
     <td><code>header</code></td>
     <td>false</td>
-    <td>For reading, uses the first line as names of columns. For writing, writes the names of columns as the first line. Note that if the given path is a RDD of Strings, this header option will remove all lines same with the header if exists.</td>
+    <td>For reading, uses the first line as names of columns. For writing, writes the names of columns as the first line.</td>
     <td>read/write</td>
   </tr>
   <tr>
@@ -111,7 +111,7 @@ Data source options of CSV can be set via:
   <tr>
     <td><code>enforceSchema</code></td>
     <td>true</td>
-    <td>If it is set to <code>true</code>, the specified or inferred schema will be forcibly applied to datasource files, and headers in CSV files will be ignored. If the option is set to <code>false</code>, the schema will be validated against all headers in CSV files or the first header in RDD if the <code>header</code> option is set to <code>true</code>. Field names in the schema and column names in CSV headers are checked by their positions taking into account <code>spark.sql.caseSensitive</code>. Though the default value is <code>true</code>, it is recommended to disable the <code>enforceSchema</code> option to avoid incorrect results.</td>
+    <td>If it is set to <code>true</code>, the specified or inferred schema will be forcibly applied to datasource files, and headers in CSV files will be ignored. If the option is set to <code>false</code>, the schema will be validated against all headers in CSV files in the case when the <code>header</code> option is set to <code>true</code>. Field names in the schema and column names in CSV headers are checked by their positions taking into account <code>spark.sql.caseSensitive</code>. Though the default value is true, it is recommended to disable the <code>enforceSchema</code> option to avoid incorrect results.</td>
     <td>read</td>
   </tr>
   <tr>
@@ -128,7 +128,7 @@ Data source options of CSV can be set via:
   </tr>
   <tr>
     <td><code>nullValue</code></td>
-    <td>empty string</td>
+    <td></td>
     <td>Sets the string representation of a null value. Since 2.0.1, this <code>nullValue</code> param applies to all supported types including the string type.</td>
     <td>read/write</td>
   </tr>
@@ -153,7 +153,7 @@ Data source options of CSV can be set via:
   <tr>
     <td><code>dateFormat</code></td>
     <td>yyyy-MM-dd</td>
-    <td>Sets the string that indicates a date format. Custom date formats follow the formats at <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html"> Datetime Patterns</a>. This applies to date type.</td>
+    <td>Sets the string that indicates a date format. Custom date formats follow the formats at <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Datetime Patterns</a>. This applies to date type.</td>
     <td>read/write</td>
   </tr>
   <tr>
@@ -171,13 +171,13 @@ Data source options of CSV can be set via:
   <tr>
     <td><code>maxCharsPerColumn</code></td>
     <td>-1</td>
-    <td>Defines the maximum number of characters allowed for any given value being read. The default value <code>-1</code> means unlimited length.</td>
+    <td>Defines the maximum number of characters allowed for any given value being read. By default, it is -1 meaning unlimited length</td>
     <td>read</td>
   </tr>
   <tr>
     <td><code>mode</code></td>
     <td>PERMISSIVE</td>
-    <td>Allows a mode for dealing with corrupt records during parsing. Note that Spark tries to parse only required columns in CSV under column pruning. Therefore, corrupt records can be different based on required set of fields. This behavior can be controlled by <code>spark.sql.csv.parser.columnPruning.enabled</code> (enabled by default).<br>
+    <td>Allows a mode for dealing with corrupt records during parsing. It supports the following case-insensitive modes. Note that Spark tries to parse only required columns in CSV under column pruning. Therefore, corrupt records can be different based on required set of fields. This behavior can be controlled by <code>spark.sql.csv.parser.columnPruning.enabled</code> (enabled by default).<br>
     <ul>
       <li><code>PERMISSIVE</code>: when it meets a corrupted record, puts the malformed string into a field configured by <code>columnNameOfCorruptRecord</code>, and sets malformed fields to <code>null</code>. To keep corrupt records, an user can set a string type field named <code>columnNameOfCorruptRecord</code> in an user-defined schema. If a schema does not have the field, it drops corrupt records during parsing. A record with less/more tokens than schema is not a corrupted record to CSV. When it meets a record having fewer tokens than the length of the schema, sets <code>null</code> to extra fields. When the record has more tokens than the length of the schema, it drops extra tokens.</li>
       <li><code>DROPMALFORMED</code>: ignores the whole corrupted records.</li>
@@ -195,7 +195,7 @@ Data source options of CSV can be set via:
   <tr>
     <td><code>multiLine</code></td>
     <td>false</td>
-    <td>Parse one record, which may span multiple lines, per file.</td>
+    <td>Parse one record, which may span multiple lines.</td>
     <td>read</td>
   </tr>
   <tr>
@@ -212,26 +212,26 @@ Data source options of CSV can be set via:
   </tr>
   <tr>
     <td><code>emptyValue</code></td>
-    <td>empty string</td>
+    <td><code>empty string</code> (for reading), <code>""</code> (for writing)</td>
     <td>Sets the string representation of an empty value.</td>
     <td>read/write</td>
   </tr>
   <tr>
     <td><code>locale</code></td>
     <td>en-US</td>
-    <td>Sets a locale as language tag in IETF BCP 47 format. For instance, <code>locale</code> is used while parsing dates and timestamps.</td>
+    <td>Sets a locale as language tag in IETF BCP 47 format. For instance, this is used while parsing dates and timestamps.</td>
     <td>read</td>
   </tr>
   <tr>
     <td><code>lineSep</code></td>
     <td><code>\r</code>, <code>\r\n</code> and <code>\n</code> (for reading), <code>\n</code> (for writing)</td>
-    <td>Defines the line separator that should be used for reading or writing.</td>
+    <td>Defines the line separator that should be used for parsing/writing. Maximum length is 1 character.</td>
     <td>read/write</td>
   </tr>
   <tr>
     <td><code>unescapedQuoteHandling</code></td>
     <td>STOP_AT_DELIMITER</td>
-    <td>defines how the CsvParser will handle values with unescaped quotes.<br>
+    <td>Defines how the CsvParser will handle values with unescaped quotes.<br>
     <ul>
       <li><code>STOP_AT_CLOSING_QUOTE</code>: If unescaped quotes are found in the input, accumulate the quote character and proceed parsing the value as a quoted value, until a closing quote is found.</li>
       <li><code>BACK_TO_DELIMITER</code>: If unescaped quotes are found in the input, consider the value as an unquoted value. This will make the parser accumulate all characters of the current parsed value until the delimiter is found. If no delimiter is found in the value, the parser will continue accumulating characters from the input until a delimiter or line ending is found.</li>
@@ -249,4 +249,4 @@ Data source options of CSV can be set via:
     <td>write</td>
   </tr>
 </table>
-Other generic options can be found in <a href="https://spark.apache.org/docs/latest/sql-data-sources-generic-options.html"> Generic File Source Options</a>.
+Other generic options can be found in <a href="https://spark.apache.org/docs/latest/sql-data-sources-generic-options.html">Generic File Source Options</a>.
