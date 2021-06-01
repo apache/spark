@@ -744,7 +744,6 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * while PostgresDialect and default JDBCDirect doesn't. For unknown and unsupported JDBCDirect,
    * the user option `truncate` is ignored.
    *
-   * @param url JDBC database url of the form `jdbc:subprotocol:subname`
    * @param table Name of the table in the external database.
    * @param connectionProperties JDBC database connection arguments, a list of arbitrary string
    *                             tag/value. Normally at least a "user" and "password" property
@@ -754,6 +753,9 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    *                             or "SERIALIZABLE", corresponding to standard transaction
    *                             isolation levels defined by JDBC's Connection object, with default
    *                             of "READ_UNCOMMITTED".
+   * You can find the other JDBC-specific options for writing table via JDBC in
+   * <a href="https://spark.apache.org/docs/latest/sql-data-sources-jdbc.html#data-source-option">
+   *   Data Source Option</a> in the version you use.
    * @since 1.4.0
    */
   def jdbc(url: String, table: String, connectionProperties: Properties): Unit = {

@@ -39,6 +39,8 @@ following command:
 ./bin/spark-shell --driver-class-path postgresql-9.4.1207.jar --jars postgresql-9.4.1207.jar
 {% endhighlight %}
 
+## Data Source Option
+
 Tables from the remote database can be loaded as a DataFrame or Spark SQL temporary view using
 the Data Sources API. Users can specify the JDBC connection properties in the data source options.
 <code>user</code> and <code>password</code> are normally provided as connection properties for
@@ -50,7 +52,7 @@ the following case-insensitive options:
   <tr>
     <td><code>url</code></td>
     <td>
-      The JDBC URL to connect to. The source-specific connection properties may be specified in the URL. e.g., <code>jdbc:postgresql://localhost/test?user=fred&password=secret</code>
+      The JDBC URL of the form <code>jdbc:subprotocol:subname</code> to connect to. The source-specific connection properties may be specified in the URL. e.g., <code>jdbc:postgresql://localhost/test?user=fred&password=secret</code>
     </td>
   </tr>
 

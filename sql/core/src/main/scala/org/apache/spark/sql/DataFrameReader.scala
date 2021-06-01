@@ -282,6 +282,10 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * Construct a `DataFrame` representing the database table accessible via JDBC URL
    * url named table and connection properties.
    *
+   * You can find the JDBC-specific options for reading table via JDBC in
+   * <a href="https://spark.apache.org/docs/latest/sql-data-sources-jdbc.html#data-source-option">
+   *   Data Source Option</a> in the version you use.
+   *
    * @since 1.4.0
    */
   def jdbc(url: String, table: String, properties: Properties): DataFrame = {
@@ -301,7 +305,6 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * Don't create too many partitions in parallel on a large cluster; otherwise Spark might crash
    * your external database systems.
    *
-   * @param url JDBC database url of the form `jdbc:subprotocol:subname`.
    * @param table Name of the table in the external database.
    * @param columnName the name of a column of numeric, date, or timestamp type
    *                   that will be used for partitioning.
@@ -316,6 +319,9 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    *                             should be included. "fetchsize" can be used to control the
    *                             number of rows per fetch and "queryTimeout" can be used to wait
    *                             for a Statement object to execute to the given number of seconds.
+   * You can find the other JDBC-specific options for reading table via JDBC in
+   * <a href="https://spark.apache.org/docs/latest/sql-data-sources-jdbc.html#data-source-option">
+   *   Data Source Option</a> in the version you use.
    * @since 1.4.0
    */
   def jdbc(
@@ -344,13 +350,15 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * Don't create too many partitions in parallel on a large cluster; otherwise Spark might crash
    * your external database systems.
    *
-   * @param url JDBC database url of the form `jdbc:subprotocol:subname`
    * @param table Name of the table in the external database.
    * @param predicates Condition in the where clause for each partition.
    * @param connectionProperties JDBC database connection arguments, a list of arbitrary string
    *                             tag/value. Normally at least a "user" and "password" property
    *                             should be included. "fetchsize" can be used to control the
    *                             number of rows per fetch.
+   * You can find the other JDBC-specific options for reading table via JDBC in
+   * <a href="https://spark.apache.org/docs/latest/sql-data-sources-jdbc.html#data-source-option">
+   *   Data Source Option</a> in the version you use.
    * @since 1.4.0
    */
   def jdbc(

@@ -627,8 +627,6 @@ class DataFrameReader(OptionUtils):
 
         Parameters
         ----------
-        url : str
-            a JDBC URL of the form ``jdbc:subprotocol:subname``
         table : str
             the name of the table
         column : str, optional
@@ -651,6 +649,15 @@ class DataFrameReader(OptionUtils):
             a dictionary of JDBC database connection arguments. Normally at
             least properties "user" and "password" with their corresponding values.
             For example { 'user' : 'SYSTEM', 'password' : 'mypassword' }
+
+        Other Parameters
+        ----------------
+        Extra options
+            For the extra options, refer to
+            `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-jdbc.html#data-source-option>`_
+            in the version you use.
+
+            .. # noqa
 
         Notes
         -----
@@ -1180,8 +1187,6 @@ class DataFrameWriter(OptionUtils):
 
         Parameters
         ----------
-        url : str
-            a JDBC URL of the form ``jdbc:subprotocol:subname``
         table : str
             Name of the table in the external database.
         mode : str, optional
@@ -1196,6 +1201,15 @@ class DataFrameWriter(OptionUtils):
             a dictionary of JDBC database connection arguments. Normally at
             least properties "user" and "password" with their corresponding values.
             For example { 'user' : 'SYSTEM', 'password' : 'mypassword' }
+
+        Other Parameters
+        ----------------
+        Extra options
+            For the extra options, refer to
+            `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-jdbc.html#data-source-option>`_
+            in the version you use.
+
+            .. # noqa
 
         Notes
         -----
