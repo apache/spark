@@ -31,6 +31,7 @@ from pyspark.sql.types import (
     FractionalType,
     IntegralType,
     MapType,
+    NullType,
     NumericType,
     StringType,
     StructType,
@@ -83,6 +84,7 @@ class DataTypeOps(object, metaclass=ABCMeta):
         from pyspark.pandas.data_type_ops.complex_ops import ArrayOps, MapOps, StructOps
         from pyspark.pandas.data_type_ops.date_ops import DateOps
         from pyspark.pandas.data_type_ops.datetime_ops import DatetimeOps
+        from pyspark.pandas.data_type_ops.null_ops import NullOps
         from pyspark.pandas.data_type_ops.num_ops import (
             IntegralOps,
             FractionalOps,
@@ -111,6 +113,8 @@ class DataTypeOps(object, metaclass=ABCMeta):
             return object.__new__(MapOps)
         elif isinstance(spark_type, StructType):
             return object.__new__(StructOps)
+        elif isinstance(spark_type, NullType):
+            return object.__new__(NullOps)
         else:
             raise TypeError("Type %s was not understood." % dtype)
 
