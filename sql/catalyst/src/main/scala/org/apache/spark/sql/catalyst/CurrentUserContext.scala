@@ -21,6 +21,6 @@ import org.apache.spark.util.Utils
 
 object CurrentUserContext {
   val CURRENT_USER: InheritableThreadLocal[String] = new InheritableThreadLocal[String] {
-    override protected def initialValue(): String = Utils.getCurrentUserName()
+    override protected def initialValue(): String = null
   }
 }

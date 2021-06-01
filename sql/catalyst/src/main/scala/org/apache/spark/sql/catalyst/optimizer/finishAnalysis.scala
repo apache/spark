@@ -105,7 +105,7 @@ case class ReplaceCurrentLike(catalogManager: CatalogManager) extends Rule[Logic
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
     val currentNamespace = catalogManager.currentNamespace.quoted
     val currentCatalog = catalogManager.currentCatalog.name()
-    lazy val currentUser = Option(CURRENT_USER.get()).getOrElse(Utils.getCurrentUserName())
+    val currentUser = Option(CURRENT_USER.get()).getOrElse(Utils.getCurrentUserName())
 
     plan.transformAllExpressionsWithPruning(_.containsPattern(CURRENT_LIKE)) {
       case CurrentDatabase() =>
