@@ -1300,8 +1300,7 @@ object PushDownPredicates extends Rule[LogicalPlan] with PredicateHelper {
  * This heuristic is valid assuming the expression evaluation cost is minimal.
  */
 object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelper {
-  def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
-    _.containsPattern(FILTER))(applyLocally)
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform applyLocally
 
   val applyLocally: PartialFunction[LogicalPlan, LogicalPlan] = {
     // SPARK-13473: We can't push the predicate down when the underlying projection output non-
@@ -1510,8 +1509,7 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
     case _ => false
   }
 
-  def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
-    _.containsAnyPattern(FILTER, JOIN))(applyLocally)
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform applyLocally
 
   val applyLocally: PartialFunction[LogicalPlan, LogicalPlan] = {
     // push the where condition down into join filter
