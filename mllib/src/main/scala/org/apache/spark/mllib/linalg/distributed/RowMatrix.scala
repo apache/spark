@@ -439,27 +439,13 @@ class RowMatrix @Since("1.0.0") (
       "  Cannot compute the covariance of a RowMatrix with <= 1 row.")
     val mean = Vectors.fromML(summary.mean)
 
-    val sparsityThreshold = 0.5
-    val sparsity = calcSparsity()
-
-    if (sparsity<sparsityThreshold) {
+    if (rows.first().isInstanceOf[DenseVector]) {
       computeDenseVectorCovariance(mean, n, m)
     } else {
       computeSparseVectorCovariance(mean, n, m)
     }
   }
 
-  /**
-   * Calculate percent sparsity of the matrix as number-of-zero-elements
-   * divided by the total number of elements of the matrix
-   */
-  @Since("3.2.0")
-  def calcSparsity(): Double = {
-
-    rows.map{ vec => (vec.size-vec.numNonzeros) }.sum/
-      (rows.count() * rows.take(1)(0).size).toDouble
-
-  }
 
 
   /**

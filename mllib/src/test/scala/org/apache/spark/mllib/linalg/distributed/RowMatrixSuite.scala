@@ -94,34 +94,6 @@ class RowMatrixSuite extends SparkFunSuite with MLlibTestSparkContext {
   }
 
 
-  test("RowMatrix calculate sparsity of DenseVectors") {
-    val denseData = Seq(
-      Vectors.dense(0.0, 1.0, 2.0, 3.0),
-      Vectors.dense(4.0, 5.0, 6.0, 7.0),
-      Vectors.dense(8.0, 9.0, 0.0, 1.0),
-      Vectors.dense(2.0, 3.0, 4.0, 5.0)
-    )
-    val denseMat = new RowMatrix(sc.parallelize(denseData, 2))
-
-    val calculatedSparsityDenseMat = denseMat.calcSparsity()
-    val expectedSparsityDenseMat = 2/16.0
-    assert(calculatedSparsityDenseMat === expectedSparsityDenseMat)
-  }
-
-  test("RowMatrix calculate sparsity of SparseVectors") {
-    val sparseData = Seq(
-      Vectors.sparse(4, Seq((2, 3.0))),
-      Vectors.dense(3.0, 4.0, 5.0, 0.0),
-      Vectors.sparse(4, Seq((1, 2.0), (3, 4.0))),
-      Vectors.dense(9.0, 0.0, 1.0, 0.0)
-    )
-    val sparseMat = new RowMatrix(sc.parallelize(sparseData, 2))
-
-    val calculatedSparsitySparseMat = sparseMat.calcSparsity()
-    val expectedSparsitySparseMat = 8/16.0
-    assert(calculatedSparsitySparseMat === expectedSparsitySparseMat)
-  }
-
   test("gram") {
     val expected =
       Matrices.dense(n, n, Array(126.0, 54.0, 72.0, 54.0, 66.0, 78.0, 72.0, 78.0, 94.0))
