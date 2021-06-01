@@ -118,18 +118,16 @@ trait ThriftServerWithSparkContextSuite extends SharedThriftServer {
     }
   }
 
-  test("SPARK-21957: get current_user and session_user through thrift server") {
+  test("SPARK-21957: get current_user through thrift server") {
     val clientUser = "storm_earth_fire_heed_my_call"
-    val sql = "select current_user(), session_user()"
+    val sql = "select current_user()"
 
     withCLIServiceClient(clientUser) { client =>
       val sessionHandle = client.openSession(clientUser, "")
       val confOverlay = new java.util.HashMap[java.lang.String, java.lang.String]
       val opHandle = client.executeStatement(sessionHandle, sql, confOverlay)
       val rowSet = client.fetchResults(opHandle)
-      rowSet.toTRowSet.getColumns.forEach { col =>
-        assert(col.getStringVal.getValues.get(0) === clientUser)
-      }
+      assert(rowSet.toTRowSet.getColumns.get(0).getStringVal.getValues.get(0) === clientUser)
     }
   }
 }

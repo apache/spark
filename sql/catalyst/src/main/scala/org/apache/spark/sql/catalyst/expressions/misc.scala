@@ -286,7 +286,7 @@ case class TypeOf(child: Expression) extends UnaryExpression {
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = """_FUNC_() - Return the current user who is running SparkContext for current query execution.""",
+  usage = """_FUNC_() - user name of current execution context.""",
   examples = """
     Examples:
       > SELECT _FUNC_();
