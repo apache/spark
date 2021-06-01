@@ -192,6 +192,23 @@ trait HigherOrderFunction extends Expression with ExpectsInputTypes {
           argumentMap(variable.exprId)
       }
   }
+
+  override lazy val canonicalized: Expression = {
+    var currExprId = -1
+    val argumentMap = functions.flatMap(_.collect {
+      case l: NamedLambdaVariable =>
+        currExprId += 1
+        l.name -> currExprId
+    }).toMap
+
+    val cleaned = this.transformUp {
+      case l: NamedLambdaVariable if argumentMap.contains(l.name) =>
+        val newExprId = argumentMap(l.name)
+        NamedLambdaVariable("none", l.dataType, l.nullable, exprId = ExprId(newExprId), null)
+    }
+    val canonicalizedChildren = cleaned.children.map(_.canonicalized)
+    Canonicalize.execute(withNewChildren(canonicalizedChildren))
+  }
 }
 
 /**
