@@ -1384,11 +1384,7 @@ class AdaptiveQueryExecSuite
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
       Seq(
-        """
-         |SELECT t1.key, count(*) FROM testData t1
-         | JOIN (SELECT * FROM testData2 WHERE b = 0) t2 ON t1.key = t2.a
-         | GROUP BY t1.key
-         |""".stripMargin,
+        "SELECT t1.key FROM testData WHERE key = 0 ORDER BY key, value",
         """
           |SELECT t1.key, count(*) FROM testData t1
           | JOIN (SELECT * FROM testData2 WHERE b = 0) t2 ON t1.key = t2.a
