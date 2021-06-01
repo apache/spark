@@ -41,7 +41,6 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
 
   private val dateFormatter = DateFormatter(
     options.dateFormat,
-    options.zoneId,
     options.locale,
     legacyFormat = FAST_DATE_FORMAT,
     isParsing = true)

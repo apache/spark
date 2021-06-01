@@ -47,7 +47,6 @@ private[sql] class JsonInferSchema(options: JSONOptions) extends Serializable {
 
   private val dateFormatter = DateFormatter(
     options.dateFormat,
-    options.zoneId,
     options.locale,
     legacyFormat = FAST_DATE_FORMAT,
     isParsing = true)
