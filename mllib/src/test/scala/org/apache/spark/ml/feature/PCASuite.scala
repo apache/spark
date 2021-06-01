@@ -69,6 +69,29 @@ class PCASuite extends MLTest with DefaultReadWriteTest {
     }
   }
 
+  test("dataset with dense vetors and sparse vestors should produce same results") {
+    val data1 = Array(
+      Vectors.sparse(5, Seq((1, 1.0), (3, 7.0))),
+      Vectors.dense(2.0, 0.0, 3.0, 4.0, 5.0),
+      Vectors.dense(4.0, 0.0, 0.0, 6.0, 7.0)
+    )
+    val data2 = Array(
+      Vectors.dense(0.0, 1.0, 0.0, 7.0, 0.0),
+      Vectors.dense(2.0, 0.0, 3.0, 4.0, 5.0),
+      Vectors.dense(4.0, 0.0, 0.0, 6.0, 7.0)
+    )
+    val df1 = spark.createDataFrame(data1.map(Tuple1.apply)).toDF("features")
+    val df2 = spark.createDataFrame(data2.map(Tuple1.apply)).toDF("features")
+    val pca = new PCA()
+      .setInputCol("features")
+      .setOutputCol("pcaFeatures")
+      .setK(3)
+    val pcaModel1 = pca.fit(df1)
+    val pcaModel2 = pca.fit(df2)
+    assert(pcaModel1.explainedVariance == pcaModel2.explainedVariance)
+    assert(pcaModel1.pc === pcaModel2.pc)
+  }
+
   test("PCA read/write") {
     val t = new PCA()
       .setInputCol("myInputCol")

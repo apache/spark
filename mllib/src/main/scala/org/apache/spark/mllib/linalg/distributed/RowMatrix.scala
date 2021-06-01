@@ -439,7 +439,8 @@ class RowMatrix @Since("1.0.0") (
       "  Cannot compute the covariance of a RowMatrix with <= 1 row.")
     val mean = Vectors.fromML(summary.mean)
 
-    if (rows.first().isInstanceOf[DenseVector]) {
+    // If all the rows are sparse vectors, then compute based on `computeSparseVectorCovariance`.
+    if (!rows.filter(_.isInstanceOf[DenseVector]).isEmpty()) {
       computeDenseVectorCovariance(mean, n, m)
     } else {
       computeSparseVectorCovariance(mean, n, m)
