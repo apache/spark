@@ -21,7 +21,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSparkSession, TestSQLContext}
 import org.apache.spark.util.ResetSystemProperties
 
-class SetSuite extends QueryTest with SharedSparkSession with ResetSystemProperties  {
+class SetCommandSuite extends QueryTest with SharedSparkSession with ResetSystemProperties  {
   test("SET commands semantics using sql()") {
     spark.sessionState.conf.clear()
     val testKey = "test.key.0"
