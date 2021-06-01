@@ -57,7 +57,7 @@ trait ThriftServerWithSparkContextSuite extends SharedThriftServer {
 
   test("Full stack traces as error message for jdbc or thrift client") {
     val sql = "select date_sub(date'2011-11-11', '1.2')"
-    withCLIServiceClient { client =>
+    withCLIServiceClient() { client =>
       val sessionHandle = client.openSession(user, "")
 
       val confOverlay = new java.util.HashMap[java.lang.String, java.lang.String]
@@ -117,8 +117,22 @@ trait ThriftServerWithSparkContextSuite extends SharedThriftServer {
       }
     }
   }
-}
 
+  test("get current_user and session_user through thrift server") {
+    val clientUser = "storm_earth_fire_heed_my_call"
+    val sql = "select current_user(), session_user()"
+
+    withCLIServiceClient(clientUser) { client =>
+      val sessionHandle = client.openSession(clientUser, "")
+      val confOverlay = new java.util.HashMap[java.lang.String, java.lang.String]
+      val opHandle = client.executeStatement(sessionHandle, sql, confOverlay)
+      val rowSet = client.fetchResults(opHandle)
+      rowSet.toTRowSet.getColumns.forEach { col =>
+        assert(col.getStringVal.getValues.get(0) === clientUser)
+      }
+    }
+  }
+}
 
 class ThriftServerWithSparkContextInBinarySuite extends ThriftServerWithSparkContextSuite {
   override def mode: ServerMode.Value = ServerMode.binary

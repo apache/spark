@@ -40,6 +40,12 @@ class MiscFunctionsSuite extends QueryTest with SharedSparkSession {
       Row(SPARK_VERSION_SHORT + " " + SPARK_REVISION))
     assert(df.schema.fieldNames === Seq("version()"))
   }
+
+  test("get current_user and session_user in normal spark apps") {
+    val df = sql("select current_user(), session_user()")
+    val user = spark.sparkContext.sparkUser
+    checkAnswer(df, Row(user, user))
+  }
 }
 
 object ReflectClass {

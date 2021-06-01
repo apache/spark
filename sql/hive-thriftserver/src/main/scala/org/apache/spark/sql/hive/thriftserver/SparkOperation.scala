@@ -23,6 +23,7 @@ import org.apache.hive.service.cli.operation.Operation
 import org.apache.spark.SparkContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{SparkSession, SQLContext}
+import org.apache.spark.sql.catalyst.SESSION_USER_KEY
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType.{EXTERNAL, MANAGED, VIEW}
 import org.apache.spark.sql.internal.SQLConf
@@ -74,6 +75,7 @@ private[hive] trait SparkOperation extends Operation with Logging {
         case None =>
       }
 
+      sqlContext.sparkContext.setLocalProperty(SESSION_USER_KEY, getParentSession.getUserName)
       // run the body
       f
     } finally {

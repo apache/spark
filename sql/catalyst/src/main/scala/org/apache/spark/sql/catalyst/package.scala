@@ -22,4 +22,5 @@ package org.apache.spark.sql
  * considered an internal API to Spark SQL and are subject to change between minor releases.
  */
 package object catalyst {
+  private[spark] val SESSION_USER_KEY = "spark.sql.session.user"
 }

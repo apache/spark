@@ -19,6 +19,8 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import scala.collection.mutable
 
+import org.apache.spark.SparkContext
+import org.apache.spark.sql.catalyst.SESSION_USER_KEY
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -27,6 +29,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 
 /**
@@ -98,7 +101,7 @@ object ComputeCurrentTime extends Rule[LogicalPlan] {
  * Replaces the expression of CurrentDatabase with the current database name.
  * Replaces the expression of CurrentCatalog with the current catalog name.
  */
-case class GetCurrentDatabaseAndCatalog(catalogManager: CatalogManager) extends Rule[LogicalPlan] {
+case class ReplaceCurrentLike(catalogManager: CatalogManager) extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = {
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
     val currentNamespace = catalogManager.currentNamespace.quoted
@@ -109,6 +112,11 @@ case class GetCurrentDatabaseAndCatalog(catalogManager: CatalogManager) extends 
         Literal.create(currentNamespace, StringType)
       case CurrentCatalog() =>
         Literal.create(currentCatalog, StringType)
+      case CurrentUser() =>
+        val currentUser = SparkContext.getActive.map { sc =>
+          Option(sc.getLocalProperty(SESSION_USER_KEY)).getOrElse(sc.sparkUser)
+        }.getOrElse(Utils.getCurrentUserName())
+        Literal.create(currentUser, StringType)
     }
   }
 }
