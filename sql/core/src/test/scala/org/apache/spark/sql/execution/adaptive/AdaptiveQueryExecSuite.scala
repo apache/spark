@@ -28,6 +28,7 @@ import org.apache.spark.sql.{Dataset, QueryTest, Row, SparkSession, Strategy}
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
 import org.apache.spark.sql.execution.{PartialReducerPartitionSpec, QueryExecution, ReusedSubqueryExec, ShuffledRowRDD, SparkPlan, UnaryExecNode}
+import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
 import org.apache.spark.sql.execution.datasources.noop.NoopDataSource
 import org.apache.spark.sql.execution.datasources.v2.V2TableWriteExec
@@ -117,6 +118,12 @@ class AdaptiveQueryExecSuite
   private def findTopLevelBaseJoin(plan: SparkPlan): Seq[BaseJoinExec] = {
     collect(plan) {
       case j: BaseJoinExec => j
+    }
+  }
+
+  private def findTopLevelBaseAggregate(plan: SparkPlan): Seq[BaseAggregateExec] = {
+    collect(plan) {
+      case agg: BaseAggregateExec => agg
     }
   }
 
@@ -1369,6 +1376,31 @@ class AdaptiveQueryExecSuite
         val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(query)
         assert(findTopLevelBaseJoin(plan).size == 2)
         assert(findTopLevelBaseJoin(adaptivePlan).isEmpty)
+      }
+    }
+  }
+
+  test("SPARK-35585: Support propagate empty relation through project/filter") {
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      Seq(
+        """
+         |SELECT t1.key, count(*) FROM testData t1
+         | JOIN (SELECT * FROM testData2 WHERE b = 0) t2 ON t1.key = t2.a
+         | GROUP BY t1.key
+         |""".stripMargin,
+        """
+          |SELECT t1.key, count(*) FROM testData t1
+          | JOIN (SELECT * FROM testData2 WHERE b = 0) t2 ON t1.key = t2.a
+          | WHERE t1.key > rand()
+          | GROUP BY t1.key
+          |""".stripMargin
+      ).foreach { query =>
+        val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(query)
+        assert(findTopLevelBaseJoin(plan).size == 1)
+        assert(findTopLevelBaseAggregate(plan).size == 2)
+        assert(findTopLevelBaseJoin(adaptivePlan).isEmpty)
+        assert(findTopLevelBaseAggregate(adaptivePlan).isEmpty)
       }
     }
   }
