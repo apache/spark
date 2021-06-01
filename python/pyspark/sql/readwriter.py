@@ -353,7 +353,7 @@ class DataFrameReader(OptionUtils):
             columnNameOfCorruptRecord=None, multiLine=None, charToEscapeQuoteEscaping=None,
             samplingRatio=None, enforceSchema=None, emptyValue=None, locale=None, lineSep=None,
             pathGlobFilter=None, recursiveFileLookup=None, modifiedBefore=None, modifiedAfter=None,
-            unescapedQuoteHandling=None):
+            unescapedQuoteHandling=None, inferDateType=None):
         r"""Loads a CSV file and returns the result as a  :class:`DataFrame`.
 
         This function will go through the input once to determine the input schema if
@@ -403,7 +403,7 @@ class DataFrameReader(OptionUtils):
             enforceSchema=enforceSchema, emptyValue=emptyValue, locale=locale, lineSep=lineSep,
             pathGlobFilter=pathGlobFilter, recursiveFileLookup=recursiveFileLookup,
             modifiedBefore=modifiedBefore, modifiedAfter=modifiedAfter,
-            unescapedQuoteHandling=unescapedQuoteHandling)
+            unescapedQuoteHandling=unescapedQuoteHandling, inferDateType= inferDateType)
         if isinstance(path, str):
             path = [path]
         if type(path) == list:
