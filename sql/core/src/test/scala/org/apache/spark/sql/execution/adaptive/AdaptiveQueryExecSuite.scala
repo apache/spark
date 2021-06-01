@@ -823,7 +823,7 @@ class AdaptiveQueryExecSuite
       val logAppender = new LogAppender("adaptive execution")
       withLogAppender(
         logAppender,
-        loggerName = Some(AdaptiveSparkPlanExec.getClass.getName.dropRight(1)),
+        loggerNames = Seq(AdaptiveSparkPlanExec.getClass.getName.dropRight(1)),
         level = Some(Level.TRACE)) {
         withSQLConf(
           SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
@@ -1613,7 +1613,9 @@ class AdaptiveQueryExecSuite
     val testDf = df.groupBy("index")
       .agg(sum($"pv").alias("pv"))
       .join(dim, Seq("index"))
-    withLogAppender(testAppender, level = Some(Level.DEBUG)) {
+    val loggerNames =
+      Seq(classOf[BroadcastQueryStageExec].getName, classOf[ShuffleQueryStageExec].getName)
+    withLogAppender(testAppender, loggerNames, level = Some(Level.DEBUG)) {
       withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
         val result = testDf.collect()
         assert(result.length == 26)
