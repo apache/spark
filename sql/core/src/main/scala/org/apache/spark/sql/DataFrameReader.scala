@@ -319,9 +319,11 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    *                             should be included. "fetchsize" can be used to control the
    *                             number of rows per fetch and "queryTimeout" can be used to wait
    *                             for a Statement object to execute to the given number of seconds.
+   *
    * You can find the other JDBC-specific options for reading table via JDBC in
    * <a href="https://spark.apache.org/docs/latest/sql-data-sources-jdbc.html#data-source-option">
    *   Data Source Option</a> in the version you use.
+   *
    * @since 1.4.0
    */
   def jdbc(
@@ -356,9 +358,11 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    *                             tag/value. Normally at least a "user" and "password" property
    *                             should be included. "fetchsize" can be used to control the
    *                             number of rows per fetch.
+   *
    * You can find the other JDBC-specific options for reading table via JDBC in
    * <a href="https://spark.apache.org/docs/latest/sql-data-sources-jdbc.html#data-source-option">
    *   Data Source Option</a> in the version you use.
+   *
    * @since 1.4.0
    */
   def jdbc(

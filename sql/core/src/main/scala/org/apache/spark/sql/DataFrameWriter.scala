@@ -753,9 +753,11 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    *                             or "SERIALIZABLE", corresponding to standard transaction
    *                             isolation levels defined by JDBC's Connection object, with default
    *                             of "READ_UNCOMMITTED".
+   *
    * You can find the other JDBC-specific options for writing table via JDBC in
    * <a href="https://spark.apache.org/docs/latest/sql-data-sources-jdbc.html#data-source-option">
    *   Data Source Option</a> in the version you use.
+   *
    * @since 1.4.0
    */
   def jdbc(url: String, table: String, connectionProperties: Properties): Unit = {
