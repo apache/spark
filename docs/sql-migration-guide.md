@@ -91,7 +91,7 @@ license: |
 
   - In Spark 3.2, `CREATE TABLE AS SELECT` with non-empty `LOCATION` will throw `AnalysisException`. To restore the behavior before Spark 3.2, you can set `spark.sql.legacy.allowNonEmptyLocationInCTAS` to `true`.
 
-  - In Spark 3.2, special datetime values such as `epoch`, `today`, `yesterday`, `tomorrow`, and `now` are supported in typed literals only, for instance, `select timestamp'now'`. In Spark 3.1 and 3.0, such special values are supported in any casts of strings to dates/timestamps. To restore the behavior before Spark 3.2, you should preprocess string columns and convert the strings to desired dates/timestamps explicitly using UDF for instance.
+  - In Spark 3.2, special datetime values such as `epoch`, `today`, `yesterday`, `tomorrow`, and `now` are supported in typed literals only, for instance, `select timestamp'now'`. In Spark 3.1 and 3.0, such special values are supported in any casts of strings to dates/timestamps. To have the behavior before Spark 3.2, you should preprocess string columns and convert the strings to desired dates/timestamps explicitly using UDF for instance.
 
 ## Upgrading from Spark SQL 3.0 to 3.1
 
