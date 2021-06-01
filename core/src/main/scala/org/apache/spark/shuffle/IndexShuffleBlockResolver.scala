@@ -246,7 +246,7 @@ private[spark] class IndexShuffleBlockResolver(
         throw new FileNotFoundException("Index file is deleted already.")
       }
       if (dataFile.exists()) {
-        List((indexBlockId, indexBlockData), (dataBlockId, dataBlockData))
+        List((dataBlockId, dataBlockData), (indexBlockId, indexBlockData))
       } else {
         List((indexBlockId, indexBlockData))
       }
