@@ -410,12 +410,14 @@ class UISuite extends SparkFunSuite {
   test("SPARK-34449: default thread pool size of different jetty servers") {
     val (conf, _, sslOptions) = sslDisabledConf()
 
-    Seq("MasterUI", "SparkUI", "", "HistoryServerUI").foreach { name =>
-      val defaultPoolSize = if (name == "HistoryServerUI") 1000 else 200
-      val serverInfo = JettyUtils.startJettyServer("0.0.0.0", 0, sslOptions, conf, name)
+    Seq(10, 200, 500, 1000).foreach { poolSize =>
+      val serverInfo = JettyUtils.startJettyServer("0.0.0.0", 0, sslOptions, conf, "", poolSize)
       try {
-        assert(serverInfo.server.getThreadPool.asInstanceOf[QueuedThreadPool].getMaxThreads ===
-          defaultPoolSize)
+
+        val pool = serverInfo.server.getThreadPool.asInstanceOf[QueuedThreadPool]
+        val leasedThreads = pool.getThreadPoolBudget.getLeasedThreads
+        assert(pool.getMaxThreads === math.max(leasedThreads + 1, poolSize),
+          "we shall meet the basic requirement for jetty to be responsive")
       } finally {
         stopServer(serverInfo)
       }
