@@ -21,13 +21,12 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark._
 import org.apache.spark.sql.{functions, AnalysisException, Dataset, QueryTest, Row, SparkSession}
-import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, InsertIntoStatement, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan, Project}
 import org.apache.spark.sql.execution.{QueryExecution, QueryExecutionException, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
-import org.apache.spark.sql.execution.command.LeafRunnableCommand
-import org.apache.spark.sql.execution.datasources.{CreateTable, InsertIntoHadoopFsRelationCommand}
+import org.apache.spark.sql.execution.command.{CreateDataSourceTableAsSelectCommand, LeafRunnableCommand}
+import org.apache.spark.sql.execution.datasources.InsertIntoHadoopFsRelationCommand
 import org.apache.spark.sql.execution.datasources.json.JsonFileFormat
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StringType
@@ -206,9 +205,9 @@ class DataFrameCallbackSuite extends QueryTest
       sparkContext.listenerBus.waitUntilEmpty()
       assert(commands.length == 3)
       assert(commands(2)._1 == "insertInto")
-      assert(commands(2)._2.isInstanceOf[InsertIntoStatement])
-      assert(commands(2)._2.asInstanceOf[InsertIntoStatement].table
-        .asInstanceOf[UnresolvedRelation].multipartIdentifier == Seq("tab"))
+      assert(commands(2)._2.isInstanceOf[InsertIntoHadoopFsRelationCommand])
+      assert(commands(2)._2.asInstanceOf[InsertIntoHadoopFsRelationCommand]
+        .catalogTable.get.identifier.identifier == "tab")
     }
     // exiting withTable adds commands(3) via onSuccess (drops tab)
 
@@ -217,8 +216,9 @@ class DataFrameCallbackSuite extends QueryTest
       sparkContext.listenerBus.waitUntilEmpty()
       assert(commands.length == 5)
       assert(commands(4)._1 == "saveAsTable")
-      assert(commands(4)._2.isInstanceOf[CreateTable])
-      assert(commands(4)._2.asInstanceOf[CreateTable].tableDesc.partitionColumnNames == Seq("p"))
+      assert(commands(4)._2.isInstanceOf[CreateDataSourceTableAsSelectCommand])
+      assert(commands(4)._2.asInstanceOf[CreateDataSourceTableAsSelectCommand]
+        .table.partitionColumnNames == Seq("p"))
     }
 
     withTable("tab") {

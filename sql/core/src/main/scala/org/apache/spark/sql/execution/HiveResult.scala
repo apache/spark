@@ -80,7 +80,7 @@ object HiveResult {
       }
       val needCropOutput = commandPhysicalPlans exists {
         case _: ShowTablesExec => true
-        case ExecutedCommandExec(_: ShowTablesCommand) => true
+        case ExecutedCommandExec(s: ShowTablesCommand) if !s.isExtended => true
         case ExecutedCommandExec(_: ShowViewsCommand) => true
         case _ => false
       }

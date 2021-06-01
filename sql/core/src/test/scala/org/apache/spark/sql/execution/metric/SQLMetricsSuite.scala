@@ -787,9 +787,7 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
   test("SPARK-34567: Add metrics for CTAS operator") {
     withTable("t") {
       val df = sql("CREATE TABLE t USING PARQUET AS SELECT 1 as a")
-      val wholeStageCodegenExec = df.queryExecution.executedPlan
-      assert(wholeStageCodegenExec.children.length == 1)
-      val commandResultExec = wholeStageCodegenExec.children(0).asInstanceOf[CommandResultExec]
+      val commandResultExec = df.queryExecution.executedPlan.asInstanceOf[CommandResultExec]
       val dataWritingCommandExec =
         commandResultExec.commandPhysicalPlan.asInstanceOf[DataWritingCommandExec]
       val createTableAsSelect = dataWritingCommandExec.cmd
