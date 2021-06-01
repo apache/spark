@@ -19,8 +19,7 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import scala.collection.mutable
 
-import org.apache.spark.SparkContext
-import org.apache.spark.sql.catalyst.SESSION_USER_KEY
+import org.apache.spark.sql.catalyst.CurrentUserContext.CURRENT_USER
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -106,8 +105,7 @@ case class ReplaceCurrentLike(catalogManager: CatalogManager) extends Rule[Logic
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
     val currentNamespace = catalogManager.currentNamespace.quoted
     val currentCatalog = catalogManager.currentCatalog.name()
-    val currentUser = SparkContext.getActive.map(_.getLocalProperty(SESSION_USER_KEY))
-      .getOrElse(Utils.getCurrentUserName())
+    lazy val currentUser = Option(CURRENT_USER.get()).getOrElse(Utils.getCurrentUserName())
 
     plan.transformAllExpressionsWithPruning(_.containsPattern(CURRENT_LIKE)) {
       case CurrentDatabase() =>

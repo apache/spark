@@ -15,11 +15,12 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
+package org.apache.spark.sql.catalyst
 
-/**
- * Catalyst is a library for manipulating relational query plans.  All classes in catalyst are
- * considered an internal API to Spark SQL and are subject to change between minor releases.
- */
-package object catalyst {
+import org.apache.spark.util.Utils
+
+object CurrentUserContext {
+  val CURRENT_USER: InheritableThreadLocal[String] = new InheritableThreadLocal[String] {
+    override protected def initialValue(): String = Utils.getCurrentUserName()
+  }
 }

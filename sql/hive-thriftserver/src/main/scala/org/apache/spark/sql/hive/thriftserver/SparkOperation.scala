@@ -23,7 +23,7 @@ import org.apache.hive.service.cli.operation.Operation
 import org.apache.spark.SparkContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{SparkSession, SQLContext}
-import org.apache.spark.sql.catalyst.SESSION_USER_KEY
+import org.apache.spark.sql.catalyst.CurrentUserContext.CURRENT_USER
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType.{EXTERNAL, MANAGED, VIEW}
 import org.apache.spark.sql.internal.SQLConf
@@ -74,11 +74,11 @@ private[hive] trait SparkOperation extends Operation with Logging {
           sqlContext.sparkContext.setLocalProperty(SparkContext.SPARK_SCHEDULER_POOL, pool)
         case None =>
       }
-
-      sqlContext.sparkContext.setLocalProperty(SESSION_USER_KEY, getParentSession.getUserName)
+      CURRENT_USER.set(getParentSession.getUserName)
       // run the body
       f
     } finally {
+      CURRENT_USER.remove()
       // reset local properties, will also reset SPARK_SCHEDULER_POOL
       sqlContext.sparkContext.setLocalProperties(originalProps)
 
