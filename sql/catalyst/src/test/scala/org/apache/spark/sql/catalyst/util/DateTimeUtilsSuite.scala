@@ -123,8 +123,8 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     checkFromToJavaDate(new Date(df2.parse("1776-07-04 18:30:00 UTC").getTime))
   }
 
-  private def toDate(s: String, zoneId: ZoneId = UTC): Option[Int] = {
-    stringToDate(UTF8String.fromString(s), zoneId)
+  private def toDate(s: String): Option[Int] = {
+    stringToDate(UTF8String.fromString(s))
   }
 
   test("string to date") {
@@ -673,35 +673,35 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     assert(DateTimeUtils.microsToMillis(-157700927876544L) === -157700927877L)
   }
 
-  test("special timestamp values") {
+  test("SPARK-29012: special timestamp values") {
     testSpecialDatetimeValues { zoneId =>
       val tolerance = TimeUnit.SECONDS.toMicros(30)
 
-      assert(toTimestamp("Epoch", zoneId).get === 0)
+      assert(convertSpecialTimestamp("Epoch", zoneId).get === 0)
       val now = instantToMicros(Instant.now())
-      toTimestamp("NOW", zoneId).get should be(now +- tolerance)
-      assert(toTimestamp("now UTC", zoneId) === None)
+      convertSpecialTimestamp("NOW", zoneId).get should be(now +- tolerance)
+      assert(convertSpecialTimestamp("now UTC", zoneId) === None)
       val localToday = LocalDateTime.now(zoneId)
         .`with`(LocalTime.MIDNIGHT)
         .atZone(zoneId)
       val yesterday = instantToMicros(localToday.minusDays(1).toInstant)
-      toTimestamp(" Yesterday", zoneId).get should be(yesterday +- tolerance)
+      convertSpecialTimestamp(" Yesterday", zoneId).get should be(yesterday +- tolerance)
       val today = instantToMicros(localToday.toInstant)
-      toTimestamp("Today ", zoneId).get should be(today +- tolerance)
+      convertSpecialTimestamp("Today ", zoneId).get should be(today +- tolerance)
       val tomorrow = instantToMicros(localToday.plusDays(1).toInstant)
-      toTimestamp(" tomorrow CET ", zoneId).get should be(tomorrow +- tolerance)
+      convertSpecialTimestamp(" tomorrow CET ", zoneId).get should be(tomorrow +- tolerance)
     }
   }
 
-  test("special date values") {
+  test("SPARK-28141: special date values") {
     testSpecialDatetimeValues { zoneId =>
-      assert(toDate("epoch", zoneId).get === 0)
+      assert(convertSpecialDate("epoch", zoneId).get === 0)
       val today = localDateToDays(LocalDate.now(zoneId))
-      assert(toDate("YESTERDAY", zoneId).get === today - 1)
-      assert(toDate(" Now ", zoneId).get === today)
-      assert(toDate("now UTC", zoneId) === None) // "now" does not accept time zones
-      assert(toDate("today", zoneId).get === today)
-      assert(toDate("tomorrow CET ", zoneId).get === today + 1)
+      assert(convertSpecialDate("YESTERDAY", zoneId).get === today - 1)
+      assert(convertSpecialDate(" Now ", zoneId).get === today)
+      assert(convertSpecialDate("now UTC", zoneId) === None) // "now" does not accept time zones
+      assert(convertSpecialDate("today", zoneId).get === today)
+      assert(convertSpecialDate("tomorrow CET ", zoneId).get === today + 1)
     }
   }
 
