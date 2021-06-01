@@ -212,7 +212,7 @@ Data source options of CSV can be set via:
   </tr>
   <tr>
     <td><code>emptyValue</code></td>
-    <td><code>empty string</code> (for reading), <code>""</code> (for writing)</td>
+    <td><code></code> (for reading), <code>""</code> (for writing)</td>
     <td>Sets the string representation of an empty value.</td>
     <td>read/write</td>
   </tr>
