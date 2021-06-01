@@ -505,7 +505,8 @@ object SimplifyConditionals extends Rule[LogicalPlan] with PredicateHelper {
 
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
     _.containsAnyPattern(IF, CASE_WHEN), ruleId) {
-    case q: LogicalPlan => q transformExpressionsUp {
+    case q: LogicalPlan => q.transformExpressionsUpWithPruning(
+      _.containsAnyPattern(IF, CASE_WHEN), ruleId) {
       case If(TrueLiteral, trueValue, _) => trueValue
       case If(FalseLiteral, _, falseValue) => falseValue
       case If(Literal(null, _), _, falseValue) => falseValue
