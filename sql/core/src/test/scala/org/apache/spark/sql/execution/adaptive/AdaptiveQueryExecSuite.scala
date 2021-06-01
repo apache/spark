@@ -1390,7 +1390,7 @@ class AdaptiveQueryExecSuite
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
       val (plan1, adaptivePlan1) = runAdaptiveAndVerifyResult(
-        "SELECT t1.key FROM testData WHERE key = 0 ORDER BY key, value")
+        "SELECT key FROM testData WHERE key = 0 ORDER BY key, value")
       assert(findTopLevelSort(plan1).size == 1)
       assert(findTopLevelSort(adaptivePlan1).isEmpty)
 
