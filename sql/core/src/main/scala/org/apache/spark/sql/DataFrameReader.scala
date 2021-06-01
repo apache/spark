@@ -311,7 +311,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    *   Data Source Option</a> in the version you use.
    *
    * @param table Name of the table in the external database.
-   * @param columnName alias of `partitionColumn` option. Refer to `partitionColumn` in
+   * @param columnName Alias of `partitionColumn` option. Refer to `partitionColumn` in
    *                   <a href="https://spark.apache.org/docs/latest/sql-data-sources-jdbc.html#data-source-option">
    *                     Data Source Option</a> in the version you use.
    * @param connectionProperties JDBC database connection arguments, a list of arbitrary string
