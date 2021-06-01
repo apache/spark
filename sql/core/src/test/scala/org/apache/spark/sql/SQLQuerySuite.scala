@@ -1084,6 +1084,19 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     checkAnswer(sql("SET io.file.buffer.size"), Row("io.file.buffer.size", "65536"))
   }
 
+  test("SPARK-35576: Set command should redact sensitive data") {
+    val key1 = "test.password"
+    val value1 = "test.value1"
+    val key2 = "test.token"
+    val value2 = "test.value2"
+    withSQLConf (key1 -> value1, key2 -> value2) {
+      checkAnswer(sql(s"SET $key1"), Row(key1, "*********(redacted)"))
+      checkAnswer(sql(s"SET $key2"), Row(key2, "*********(redacted)"))
+      val allValues = sql("SET").collect().map(_.getString(1))
+      assert(!allValues.exists(v => v.contains(value1) || v.contains(value2)))
+    }
+  }
+
   test("apply schema") {
     withTempView("applySchema1", "applySchema2", "applySchema3") {
       val schema1 = StructType(
