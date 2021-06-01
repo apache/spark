@@ -120,7 +120,6 @@ case class AggregateExpression(
     UnresolvedAttribute(aggregateFunction.toString)
   }
 
-
   def filterAttributes: AttributeSet = filter.map(_.references).getOrElse(AttributeSet.empty)
 
   // We compute the same thing regardless of our final result.

@@ -467,6 +467,8 @@ case class MultiAlias(child: Expression, names: Seq[String])
 
   override def newInstance(): NamedExpression = throw new UnresolvedException("newInstance")
 
+  final override val nodePatterns: Seq[TreePattern] = Seq(MULTI_ALIAS)
+
   override lazy val resolved = false
 
   override def toString: String = s"$child AS $names"
