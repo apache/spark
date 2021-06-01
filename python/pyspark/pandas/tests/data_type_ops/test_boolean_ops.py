@@ -291,6 +291,193 @@ class BooleanExtensionOpsTest(BooleanOpsTest, PandasOnSparkTestCase, TestCasesUt
     def other_psser(self):
         return ps.from_pandas(self.other_pser)
 
+    def test_add(self):
+        pser = self.pser
+        psser = self.psser
+        self.assert_eq((pser + 1).astype(float), psser + 1)
+        self.assert_eq(pser + 0.1, psser + 0.1)
+        self.assertRaises(TypeError, lambda: psser + psser)
+        self.assertRaises(TypeError, lambda: psser + True)
+
+        with option_context("compute.ops_on_diff_frames", True):
+            for pser, psser in self.numeric_pser_psser_pairs:
+                if pser.dtype in (np.int32, np.int64):
+                    self.assert_eq(
+                        (self.pser + pser).astype(float), (self.psser + psser).sort_index())
+                else:
+                    self.assert_eq(self.pser + pser, (self.psser + psser).sort_index())
+            for psser in self.non_numeric_pssers.values():
+                self.assertRaises(TypeError, lambda: self.psser + psser)
+
+    def test_sub(self):
+        pser = self.pser
+        psser = self.psser
+        self.assert_eq((pser - 1).astype(float), psser - 1)
+        self.assert_eq(pser - 0.1, psser - 0.1)
+        self.assertRaises(TypeError, lambda: psser - psser)
+        self.assertRaises(TypeError, lambda: psser - True)
+
+        with option_context("compute.ops_on_diff_frames", True):
+            for pser, psser in self.numeric_pser_psser_pairs:
+                for pser, psser in self.numeric_pser_psser_pairs:
+                    if pser.dtype in (np.int32, np.int64):
+                        self.assert_eq(
+                            (self.pser - pser).astype(float), (self.psser - psser).sort_index())
+                    else:
+                        self.assert_eq(self.pser - pser, (self.psser - psser).sort_index())
+
+            for psser in self.non_numeric_pssers.values():
+                self.assertRaises(TypeError, lambda: self.psser - psser)
+
+    def test_mul(self):
+        pser = self.pser
+        psser = self.psser
+        self.assert_eq((pser * 1).astype(float), psser * 1)
+        self.assert_eq(pser * 0.1, psser * 0.1)
+        self.assertRaises(TypeError, lambda: psser * psser)
+        self.assertRaises(TypeError, lambda: psser * True)
+
+        with option_context("compute.ops_on_diff_frames", True):
+            for pser, psser in self.numeric_pser_psser_pairs:
+                if pser.dtype in (np.int32, np.int64):
+                    self.assert_eq(
+                        (self.pser * pser).astype(float), (self.psser * psser).sort_index())
+                else:
+                    self.assert_eq(self.pser * pser, (self.psser * psser).sort_index())
+
+            for psser in self.non_numeric_pssers.values():
+                self.assertRaises(TypeError, lambda: self.psser * psser)
+
+    def test_truediv(self):
+        pser = self.pser
+        psser = self.psser
+        self.assert_eq(pser / 1, psser / 1)
+        self.assert_eq(pser / 0.1, psser / 0.1)
+        self.assertRaises(TypeError, lambda: psser / psser)
+        self.assertRaises(TypeError, lambda: psser / True)
+
+        with option_context("compute.ops_on_diff_frames", True):
+            self.assert_eq(
+                self.pser / self.float_pser, (self.psser / self.float_psser).sort_index())
+
+            for psser in self.non_numeric_pssers.values():
+                self.assertRaises(TypeError, lambda: self.psser / psser)
+
+    def test_floordiv(self):
+        pser = self.pser
+        psser = self.psser
+
+        # float is always returned in pandas-on-Spark
+        self.assert_eq((pser // 1).astype("float"), psser // 1)
+
+        # in pandas, 1 // 0.1 = 9.0; in pandas-on-Spark, 1 // 0.1 = 10.0
+        # self.assert_eq(pser // 0.1, psser // 0.1)
+
+        self.assertRaises(TypeError, lambda: psser // psser)
+        self.assertRaises(TypeError, lambda: psser // True)
+
+        with option_context("compute.ops_on_diff_frames", True):
+            self.assert_eq(
+                self.pser // self.float_pser, (self.psser // self.float_psser).sort_index()
+            )
+
+            for psser in self.non_numeric_pssers.values():
+                self.assertRaises(TypeError, lambda: self.psser // psser)
+
+    def test_mod(self):
+        pser = self.pser
+        psser = self.psser
+        self.assert_eq((pser % 1).astype(float), psser % 1)
+        self.assert_eq(pser % 0.1, psser % 0.1)
+        self.assertRaises(TypeError, lambda: psser % psser)
+        self.assertRaises(TypeError, lambda: psser % True)
+
+        with option_context("compute.ops_on_diff_frames", True):
+            for pser, psser in self.numeric_pser_psser_pairs:
+                if pser.dtype in (np.int32, np.int64):
+                    self.assert_eq(
+                        (self.pser % pser).astype(float), (self.psser % psser).sort_index())
+                else:
+                    self.assert_eq(self.pser % pser, (self.psser % psser).sort_index())
+
+            for psser in self.non_numeric_pssers.values():
+                self.assertRaises(TypeError, lambda: self.psser % psser)
+
+    def test_pow(self):
+        pser = self.pser
+        psser = self.psser
+        # float is always returned in pandas-on-Spark
+        self.assert_eq((pser ** 1).astype("float"), psser ** 1)
+        self.assert_eq(pser ** 0.1, self.psser ** 0.1)
+        self.assert_eq(pser ** pser.astype(float), psser ** psser.astype(float))
+        self.assertRaises(TypeError, lambda: psser ** psser)
+        self.assertRaises(TypeError, lambda: psser ** True)
+
+        with option_context("compute.ops_on_diff_frames", True):
+            self.assert_eq(
+                self.pser ** self.float_pser, (self.psser ** self.float_psser).sort_index()
+            )
+
+            for psser in self.non_numeric_pssers.values():
+                self.assertRaises(TypeError, lambda: self.psser ** psser)
+
+    def test_radd(self):
+        self.assert_eq((1 + self.pser).astype(float), 1 + self.psser)
+        self.assert_eq(0.1 + self.pser, 0.1 + self.psser)
+        self.assertRaises(TypeError, lambda: "x" + self.psser)
+        self.assertRaises(TypeError, lambda: True + self.psser)
+        self.assertRaises(TypeError, lambda: datetime.date(1994, 1, 1) + self.psser)
+        self.assertRaises(TypeError, lambda: datetime.datetime(1994, 1, 1) + self.psser)
+
+    def test_rsub(self):
+        self.assert_eq((1 - self.pser).astype(float), 1 - self.psser)
+        self.assert_eq(0.1 - self.pser, 0.1 - self.psser)
+        self.assertRaises(TypeError, lambda: "x" - self.psser)
+        self.assertRaises(TypeError, lambda: True - self.psser)
+        self.assertRaises(TypeError, lambda: datetime.date(1994, 1, 1) - self.psser)
+        self.assertRaises(TypeError, lambda: datetime.datetime(1994, 1, 1) - self.psser)
+
+    def test_rmul(self):
+        self.assert_eq((1 * self.pser).astype(float), 1 * self.psser)
+        self.assert_eq(0.1 * self.pser, 0.1 * self.psser)
+        self.assertRaises(TypeError, lambda: "x" * self.psser)
+        self.assertRaises(TypeError, lambda: True * self.psser)
+        self.assertRaises(TypeError, lambda: datetime.date(1994, 1, 1) * self.psser)
+        self.assertRaises(TypeError, lambda: datetime.datetime(1994, 1, 1) * self.psser)
+
+    def test_rtruediv(self):
+        self.assert_eq(1 / self.pser, 1 / self.psser)
+        self.assert_eq(0.1 / self.pser, 0.1 / self.psser)
+        self.assertRaises(TypeError, lambda: "x" / self.psser)
+        self.assertRaises(TypeError, lambda: True / self.psser)
+        self.assertRaises(TypeError, lambda: datetime.date(1994, 1, 1) / self.psser)
+        self.assertRaises(TypeError, lambda: datetime.datetime(1994, 1, 1) / self.psser)
+
+    def test_rfloordiv(self):
+        self.assert_eq(1 // self.psser, ps.Series([1.0, np.inf, np.nan]))
+        self.assert_eq(0.1 // self.psser, ps.Series([0.0, np.inf, np.nan]))
+        self.assertRaises(TypeError, lambda: "x" + self.psser)
+        self.assertRaises(TypeError, lambda: True + self.psser)
+        self.assertRaises(TypeError, lambda: datetime.date(1994, 1, 1) // self.psser)
+        self.assertRaises(TypeError, lambda: datetime.datetime(1994, 1, 1) // self.psser)
+
+    def test_rpow(self):
+        self.assert_eq(1 ** self.psser, ps.Series([1, 1, 1], dtype=float))
+        self.assert_eq(0.1 ** self.pser, 0.1 ** self.psser)
+        self.assertRaises(TypeError, lambda: "x" ** self.psser)
+        self.assertRaises(TypeError, lambda: True ** self.psser)
+        self.assertRaises(TypeError, lambda: datetime.date(1994, 1, 1) ** self.psser)
+        self.assertRaises(TypeError, lambda: datetime.datetime(1994, 1, 1) ** self.psser)
+
+    def test_rmod(self):
+        self.assert_eq(ps.Series([0, np.nan, np.nan], dtype=float), 1 % self.psser)
+        self.assert_eq(
+            ps.Series([0.10000000000000009, np.nan, np.nan], dtype=float),
+            0.1 % self.psser,
+        )
+        self.assertRaises(TypeError, lambda: datetime.date(1994, 1, 1) % self.psser)
+        self.assertRaises(TypeError, lambda: True % self.psser)
+
     def test_and(self):
         pser = self.pser
         psser = self.psser
