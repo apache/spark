@@ -636,7 +636,8 @@ class DataStreamReader(OptionUtils):
             maxCharsPerColumn=None, maxMalformedLogPerPartition=None, mode=None,
             columnNameOfCorruptRecord=None, multiLine=None, charToEscapeQuoteEscaping=None,
             enforceSchema=None, emptyValue=None, locale=None, lineSep=None,
-            pathGlobFilter=None, recursiveFileLookup=None, unescapedQuoteHandling=None):
+            pathGlobFilter=None, recursiveFileLookup=None, unescapedQuoteHandling=None,
+            inferDateType=None):
         r"""Loads a CSV file stream and returns the result as a :class:`DataFrame`.
 
         This function will go through the input once to determine the input schema if
@@ -686,7 +687,7 @@ class DataStreamReader(OptionUtils):
             charToEscapeQuoteEscaping=charToEscapeQuoteEscaping, enforceSchema=enforceSchema,
             emptyValue=emptyValue, locale=locale, lineSep=lineSep,
             pathGlobFilter=pathGlobFilter, recursiveFileLookup=recursiveFileLookup,
-            unescapedQuoteHandling=unescapedQuoteHandling)
+            unescapedQuoteHandling=unescapedQuoteHandling, inferDateType=inferDateType)
         if isinstance(path, str):
             return self._df(self._jreader.csv(path))
         else:
