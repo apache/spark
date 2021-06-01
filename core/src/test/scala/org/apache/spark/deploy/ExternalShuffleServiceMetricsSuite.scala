@@ -55,6 +55,7 @@ class ExternalShuffleServiceMetricsSuite extends SparkFunSuite {
     assert(source.metricRegistry.getMetrics.keySet().asScala.toSeq.sorted ==
       Seq(
         "blockTransferRate",
+        "blockTransferMessageRate",
         "blockTransferRateBytes",
         "blockTransferAvgSize_1min",
         "numActiveConnections",

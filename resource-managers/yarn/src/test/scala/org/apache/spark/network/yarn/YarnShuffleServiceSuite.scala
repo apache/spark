@@ -405,6 +405,7 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
     // Use sorted Seq instead of Set for easier comparison when there is a mismatch
     assert(metrics.keySet().asScala.toSeq.sorted == Seq(
       "blockTransferRate",
+      "blockTransferMessageRate",
       "blockTransferRateBytes",
       "blockTransferAvgSize_1min",
       "numActiveConnections",

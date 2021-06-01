@@ -308,6 +308,12 @@ public class ExternalBlockHandler extends RpcHandler
     private final Timer finalizeShuffleMergeLatencyMillis = new Timer();
     // Block transfer rate in blocks per second
     private final Meter blockTransferRate = new Meter();
+    // Block fetch message rate per second. When using non-batch fetches
+    // (`OpenBlocks` or `FetchShuffleBlocks` with `batchFetchEnabled` as false), this will be the
+    // same as the `blockTransferRate`. When batch fetches are enabled, this will represent the
+    // number of batch fetches, and `blockTransferRate` will represent the number of blocks
+    // returned by the fetches.
+    private final Meter blockTransferMessageRate = new Meter();
     // Block transfer rate in byte per second
     private final Meter blockTransferRateBytes = new Meter();
     // Number of active connections to the shuffle service
@@ -322,13 +328,17 @@ public class ExternalBlockHandler extends RpcHandler
       allMetrics.put("fetchMergedBlocksMetaLatencyMillis", fetchMergedBlocksMetaLatencyMillis);
       allMetrics.put("finalizeShuffleMergeLatencyMillis", finalizeShuffleMergeLatencyMillis);
       allMetrics.put("blockTransferRate", blockTransferRate);
+      allMetrics.put("blockTransferMessageRate", blockTransferMessageRate);
       allMetrics.put("blockTransferRateBytes", blockTransferRateBytes);
       allMetrics.put("blockTransferAvgSize_1min", new RatioGauge() {
         @Override
         protected Ratio getRatio() {
           return Ratio.of(
               blockTransferRateBytes.getOneMinuteRate(),
-              blockTransferRate.getOneMinuteRate());
+              // use blockTransferMessageRate here instead of blockTransferRate to represent the
+              // average size of the disk read / network message which has more operational impact
+              // than the actual size of the block
+              blockTransferMessageRate.getOneMinuteRate());
         }
       });
       allMetrics.put("registeredExecutorsSize",
@@ -424,6 +434,7 @@ public class ExternalBlockHandler extends RpcHandler
       final ManagedBuffer block = blockDataForIndexFn.apply(index);
       index += 2;
       metrics.blockTransferRate.mark();
+      metrics.blockTransferMessageRate.mark();
       metrics.blockTransferRateBytes.mark(block != null ? block.size() : 0);
       return block;
     }
@@ -471,13 +482,17 @@ public class ExternalBlockHandler extends RpcHandler
           reduceIdx = 0;
           mapIdx += 1;
         }
+        metrics.blockTransferRate.mark();
       } else {
         assert(reduceIds[mapIdx].length == 2);
+        int startReduceId = reduceIds[mapIdx][0];
+        int endReduceId = reduceIds[mapIdx][1];
         block = blockManager.getContinuousBlocksData(appId, execId, shuffleId, mapIds[mapIdx],
-          reduceIds[mapIdx][0], reduceIds[mapIdx][1]);
+          startReduceId, endReduceId);
         mapIdx += 1;
+        metrics.blockTransferRate.mark(endReduceId - startReduceId);
       }
-      metrics.blockTransferRate.mark();
+      metrics.blockTransferMessageRate.mark();
       metrics.blockTransferRateBytes.mark(block != null ? block.size() : 0);
       return block;
     }

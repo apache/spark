@@ -40,7 +40,7 @@ class YarnShuffleServiceMetricsSuite extends SparkFunSuite with Matchers {
   test("metrics named as expected") {
     val allMetrics = Seq(
       "openBlockRequestLatencyMillis", "registerExecutorRequestLatencyMillis",
-      "blockTransferRate", "blockTransferAvgSize_1min",
+      "blockTransferRate", "blockTransferMessageRate", "blockTransferAvgSize_1min",
       "blockTransferRateBytes", "registeredExecutorsSize", "numActiveConnections",
       "numCaughtExceptions", "finalizeShuffleMergeLatencyMillis",
       "fetchMergedBlocksMetaLatencyMillis")
@@ -52,7 +52,7 @@ class YarnShuffleServiceMetricsSuite extends SparkFunSuite with Matchers {
   // these metrics will generate more metrics on the collector
   for (testname <- Seq("openBlockRequestLatencyMillis",
       "registerExecutorRequestLatencyMillis",
-      "blockTransferRateBytes", "blockTransferRate")) {
+      "blockTransferRateBytes", "blockTransferRate", "blockTransferMessageRate")) {
     test(s"$testname - collector receives correct types") {
       val builder = mock(classOf[MetricsRecordBuilder])
       val counterNames = mutable.Buffer[String]()
@@ -75,20 +75,21 @@ class YarnShuffleServiceMetricsSuite extends SparkFunSuite with Matchers {
         metrics.getMetrics.get(testname))
 
       assert(counterNames === Seq(s"${testname}_count"))
-      val (expectLong, expectDouble) = if (testname.matches("blockTransferRate(Bytes)?$")) {
-        // blockTransferRate(Bytes)? metrics are Meter so just have rate information
-        (Seq(), Seq("1", "5", "15", "Mean").map(suffix => s"${testname}_rate$suffix"))
-      } else {
-        // other metrics are Timer so have rate and timing information
-        (
-            Seq(s"${testname}_nanos_max", s"${testname}_nanos_min"),
-            Seq("rate1", "rate5", "rate15", "rateMean", "nanos_mean", "nanos_stdDev",
-              "nanos_1stPercentile", "nanos_5thPercentile", "nanos_25thPercentile",
-              "nanos_50thPercentile", "nanos_75thPercentile", "nanos_95thPercentile",
-              "nanos_98thPercentile", "nanos_99thPercentile", "nanos_99.9thPercentile")
-                .map(suffix => s"${testname}_$suffix")
-        )
-      }
+      val (expectLong, expectDouble) =
+        if (testname.matches("blockTransfer(Message)?Rate(Bytes)?$")) {
+          // blockTransfer(Message)?Rate(Bytes)? metrics are Meter so just have rate information
+          (Seq(), Seq("1", "5", "15", "Mean").map(suffix => s"${testname}_rate$suffix"))
+        } else {
+          // other metrics are Timer so have rate and timing information
+          (
+              Seq(s"${testname}_nanos_max", s"${testname}_nanos_min"),
+              Seq("rate1", "rate5", "rate15", "rateMean", "nanos_mean", "nanos_stdDev",
+                "nanos_1stPercentile", "nanos_5thPercentile", "nanos_25thPercentile",
+                "nanos_50thPercentile", "nanos_75thPercentile", "nanos_95thPercentile",
+                "nanos_98thPercentile", "nanos_99thPercentile", "nanos_99.9thPercentile")
+                  .map(suffix => s"${testname}_$suffix")
+          )
+        }
       assert(gaugeLongNames.sorted === expectLong.sorted)
       assert(gaugeDoubleNames.sorted === expectDouble.sorted)
     }
