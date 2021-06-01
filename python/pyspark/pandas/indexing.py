@@ -51,6 +51,7 @@ from pyspark.pandas.utils import (
     name_like_string,
     same_anchor,
     scol_for,
+    spark_column_equals,
     verify_temp_column_name,
 )
 
@@ -60,38 +61,38 @@ if TYPE_CHECKING:
 
 
 class IndexerLike(object):
-    def __init__(self, kdf_or_kser):
+    def __init__(self, psdf_or_psser):
         from pyspark.pandas.frame import DataFrame
         from pyspark.pandas.series import Series
 
-        assert isinstance(kdf_or_kser, (DataFrame, Series)), "unexpected argument type: {}".format(
-            type(kdf_or_kser)
-        )
-        self._kdf_or_kser = kdf_or_kser
+        assert isinstance(
+            psdf_or_psser, (DataFrame, Series)
+        ), "unexpected argument type: {}".format(type(psdf_or_psser))
+        self._psdf_or_psser = psdf_or_psser
 
     @property
     def _is_df(self):
         from pyspark.pandas.frame import DataFrame
 
-        return isinstance(self._kdf_or_kser, DataFrame)
+        return isinstance(self._psdf_or_psser, DataFrame)
 
     @property
     def _is_series(self):
         from pyspark.pandas.series import Series
 
-        return isinstance(self._kdf_or_kser, Series)
+        return isinstance(self._psdf_or_psser, Series)
 
     @property
-    def _kdf(self):
+    def _psdf(self):
         if self._is_df:
-            return self._kdf_or_kser
+            return self._psdf_or_psser
         else:
             assert self._is_series
-            return self._kdf_or_kser._kdf
+            return self._psdf_or_psser._psdf
 
     @property
     def _internal(self):
-        return self._kdf._internal
+        return self._psdf._internal
 
 
 class AtIndexer(IndexerLike):
@@ -114,9 +115,9 @@ class AtIndexer(IndexerLike):
 
     Examples
     --------
-    >>> kdf = ps.DataFrame([[0, 2, 3], [0, 4, 1], [10, 20, 30]],
+    >>> psdf = ps.DataFrame([[0, 2, 3], [0, 4, 1], [10, 20, 30]],
     ...                    index=[4, 5, 5], columns=['A', 'B', 'C'])
-    >>> kdf
+    >>> psdf
         A   B   C
     4   0   2   3
     5   0   4   1
@@ -124,12 +125,12 @@ class AtIndexer(IndexerLike):
 
     Get value at specified row/column pair
 
-    >>> kdf.at[4, 'B']
+    >>> psdf.at[4, 'B']
     2
 
     Get array if an index occurs multiple times
 
-    >>> kdf.at[5, 'B']
+    >>> psdf.at[5, 'B']
     array([ 4, 20])
     """
 
@@ -139,11 +140,11 @@ class AtIndexer(IndexerLike):
                 raise TypeError("Use DataFrame.at like .at[row_index, column_name]")
             row_sel, col_sel = key
         else:
-            assert self._is_series, type(self._kdf_or_kser)
+            assert self._is_series, type(self._psdf_or_psser)
             if isinstance(key, tuple) and len(key) != 1:
                 raise TypeError("Use Series.at like .at[row_index]")
             row_sel = key
-            col_sel = self._kdf_or_kser._column_label
+            col_sel = self._psdf_or_psser._column_label
 
         if self._internal.index_level == 1:
             if not is_name_like_value(row_sel, allow_none=False, allow_tuple=False):
@@ -209,14 +210,14 @@ class iAtIndexer(IndexerLike):
 
     Get value within a series
 
-    >>> kser = ps.Series([1, 2, 3], index=[10, 20, 30])
-    >>> kser
+    >>> psser = ps.Series([1, 2, 3], index=[10, 20, 30])
+    >>> psser
     10    1
     20    2
     30    3
     dtype: int64
 
-    >>> kser.iat[1]
+    >>> psser.iat[1]
     2
     """
 
@@ -229,14 +230,14 @@ class iAtIndexer(IndexerLike):
             row_sel, col_sel = key
             if not isinstance(row_sel, int) or not isinstance(col_sel, int):
                 raise ValueError("iAt based indexing can only have integer indexers")
-            return self._kdf_or_kser.iloc[row_sel, col_sel]
+            return self._psdf_or_psser.iloc[row_sel, col_sel]
         else:
-            assert self._is_series, type(self._kdf_or_kser)
+            assert self._is_series, type(self._psdf_or_psser)
             if not isinstance(key, int) and len(key) != 1:
                 raise TypeError("Use Series.iat like .iat[row_integer_position]")
             if not isinstance(key, int):
                 raise ValueError("iAt based indexing can only have integer indexers")
-            return self._kdf_or_kser.iloc[key]
+            return self._psdf_or_psser.iloc[key]
 
 
 class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
@@ -337,7 +338,7 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
 
     @abstractmethod
     def _select_rows_by_spark_column(
-        self, rows_sel: spark.column
+        self, rows_sel: spark.Column
     ) -> Tuple[Optional[spark.Column], Optional[int], Optional[int]]:
         """ Select rows by Spark `Column` type key. """
         pass
@@ -415,23 +416,23 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
         from pyspark.pandas.series import Series, first_series
 
         if self._is_series:
-            if isinstance(key, Series) and not same_anchor(key, self._kdf_or_kser):
-                kdf = self._kdf_or_kser.to_frame()
-                temp_col = verify_temp_column_name(kdf, "__temp_col__")
+            if isinstance(key, Series) and not same_anchor(key, self._psdf_or_psser):
+                psdf = self._psdf_or_psser.to_frame()
+                temp_col = verify_temp_column_name(psdf, "__temp_col__")
 
-                kdf[temp_col] = key
-                return type(self)(kdf[self._kdf_or_kser.name])[kdf[temp_col]]
+                psdf[temp_col] = key
+                return type(self)(psdf[self._psdf_or_psser.name])[psdf[temp_col]]
 
             cond, limit, remaining_index = self._select_rows(key)
             if cond is None and limit is None:
-                return self._kdf_or_kser
+                return self._psdf_or_psser
 
-            column_label = self._kdf_or_kser._column_label
+            column_label = self._psdf_or_psser._column_label
             column_labels = [column_label]
             data_spark_columns = [self._internal.spark_column_for(column_label)]
             data_dtypes = [self._internal.dtype_for(column_label)]
             returns_series = True
-            series_name = self._kdf_or_kser.name
+            series_name = self._psdf_or_psser.name
         else:
             assert self._is_df
             if isinstance(key, tuple):
@@ -442,12 +443,12 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
                 rows_sel = key
                 cols_sel = None
 
-            if isinstance(rows_sel, Series) and not same_anchor(rows_sel, self._kdf_or_kser):
-                kdf = self._kdf_or_kser.copy()
-                temp_col = verify_temp_column_name(kdf, "__temp_col__")
+            if isinstance(rows_sel, Series) and not same_anchor(rows_sel, self._psdf_or_psser):
+                psdf = self._psdf_or_psser.copy()
+                temp_col = verify_temp_column_name(psdf, "__temp_col__")
 
-                kdf[temp_col] = rows_sel
-                return type(self)(kdf)[kdf[temp_col], cols_sel][list(self._kdf_or_kser.columns)]
+                psdf[temp_col] = rows_sel
+                return type(self)(psdf)[psdf[temp_col], cols_sel][list(self._psdf_or_psser.columns)]
 
             cond, limit, remaining_index = self._select_rows(rows_sel)
             (
@@ -459,10 +460,10 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
             ) = self._select_cols(cols_sel)
 
             if cond is None and limit is None and returns_series:
-                kser = self._kdf_or_kser._kser_for(column_labels[0])
-                if series_name is not None and series_name != kser.name:
-                    kser = kser.rename(series_name)
-                return kser
+                psser = self._psdf_or_psser._psser_for(column_labels[0])
+                if series_name is not None and series_name != psser.name:
+                    psser = psser.rename(series_name)
+                return psser
 
         if remaining_index is not None:
             index_spark_columns = self._internal.index_spark_columns[-remaining_index:]
@@ -527,26 +528,26 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
             data_dtypes=data_dtypes,
             column_label_names=column_label_names,
         )
-        kdf = DataFrame(internal)
+        psdf = DataFrame(internal)
 
         if returns_series:
-            kdf_or_kser = first_series(kdf)
-            if series_name is not None and series_name != kdf_or_kser.name:
-                kdf_or_kser = kdf_or_kser.rename(series_name)
+            psdf_or_psser = first_series(psdf)
+            if series_name is not None and series_name != psdf_or_psser.name:
+                psdf_or_psser = psdf_or_psser.rename(series_name)
         else:
-            kdf_or_kser = kdf
+            psdf_or_psser = psdf
 
         if remaining_index is not None and remaining_index == 0:
-            pdf_or_pser = kdf_or_kser.head(2).to_pandas()
+            pdf_or_pser = psdf_or_psser.head(2).to_pandas()
             length = len(pdf_or_pser)
             if length == 0:
                 raise KeyError(name_like_string(key))
             elif length == 1:
                 return pdf_or_pser.iloc[0]
             else:
-                return kdf_or_kser
+                return psdf_or_psser
         else:
-            return kdf_or_kser
+            return psdf_or_psser
 
     def __setitem__(self, key, value):
         from pyspark.pandas.frame import DataFrame
@@ -555,46 +556,46 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
         if self._is_series:
             if (
                 isinstance(key, Series)
-                and (isinstance(self, iLocIndexer) or not same_anchor(key, self._kdf_or_kser))
+                and (isinstance(self, iLocIndexer) or not same_anchor(key, self._psdf_or_psser))
             ) or (
                 isinstance(value, Series)
-                and (isinstance(self, iLocIndexer) or not same_anchor(value, self._kdf_or_kser))
+                and (isinstance(self, iLocIndexer) or not same_anchor(value, self._psdf_or_psser))
             ):
-                if self._kdf_or_kser.name is None:
-                    kdf = self._kdf_or_kser.to_frame()
-                    column_label = kdf._internal.column_labels[0]
+                if self._psdf_or_psser.name is None:
+                    psdf = self._psdf_or_psser.to_frame()
+                    column_label = psdf._internal.column_labels[0]
                 else:
-                    kdf = self._kdf_or_kser._kdf.copy()
-                    column_label = self._kdf_or_kser._column_label
-                temp_natural_order = verify_temp_column_name(kdf, "__temp_natural_order__")
-                temp_key_col = verify_temp_column_name(kdf, "__temp_key_col__")
-                temp_value_col = verify_temp_column_name(kdf, "__temp_value_col__")
+                    psdf = self._psdf_or_psser._psdf.copy()
+                    column_label = self._psdf_or_psser._column_label
+                temp_natural_order = verify_temp_column_name(psdf, "__temp_natural_order__")
+                temp_key_col = verify_temp_column_name(psdf, "__temp_key_col__")
+                temp_value_col = verify_temp_column_name(psdf, "__temp_value_col__")
 
-                kdf[temp_natural_order] = F.monotonically_increasing_id()
+                psdf[temp_natural_order] = F.monotonically_increasing_id()
                 if isinstance(key, Series):
-                    kdf[temp_key_col] = key
+                    psdf[temp_key_col] = key
                 if isinstance(value, Series):
-                    kdf[temp_value_col] = value
-                kdf = kdf.sort_values(temp_natural_order).drop(temp_natural_order)
+                    psdf[temp_value_col] = value
+                psdf = psdf.sort_values(temp_natural_order).drop(temp_natural_order)
 
-                kser = kdf._kser_for(column_label)
+                psser = psdf._psser_for(column_label)
                 if isinstance(key, Series):
                     key = F.col(
-                        "`{}`".format(kdf[temp_key_col]._internal.data_spark_column_names[0])
+                        "`{}`".format(psdf[temp_key_col]._internal.data_spark_column_names[0])
                     )
                 if isinstance(value, Series):
                     value = F.col(
-                        "`{}`".format(kdf[temp_value_col]._internal.data_spark_column_names[0])
+                        "`{}`".format(psdf[temp_value_col]._internal.data_spark_column_names[0])
                     )
 
-                type(self)(kser)[key] = value
+                type(self)(psser)[key] = value
 
-                if self._kdf_or_kser.name is None:
-                    kser = kser.rename()
+                if self._psdf_or_psser.name is None:
+                    psser = psser.rename()
 
-                self._kdf_or_kser._kdf._update_internal_frame(
-                    kser._kdf[
-                        self._kdf_or_kser._kdf._internal.column_labels
+                self._psdf_or_psser._psdf._update_internal_frame(
+                    psser._psdf[
+                        self._psdf_or_psser._psdf._internal.column_labels
                     ]._internal.resolved_copy,
                     requires_same_anchor=False,
                 )
@@ -620,14 +621,14 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
                 value = F.lit(value)
             scol = (
                 F.when(cond, value)
-                .otherwise(self._internal.spark_column_for(self._kdf_or_kser._column_label))
-                .alias(name_like_string(self._kdf_or_kser.name or SPARK_DEFAULT_SERIES_NAME))
+                .otherwise(self._internal.spark_column_for(self._psdf_or_psser._column_label))
+                .alias(name_like_string(self._psdf_or_psser.name or SPARK_DEFAULT_SERIES_NAME))
             )
 
             internal = self._internal.with_new_spark_column(
-                self._kdf_or_kser._column_label, scol  # TODO: dtype?
+                self._psdf_or_psser._column_label, scol  # TODO: dtype?
             )
-            self._kdf_or_kser._kdf._update_internal_frame(internal, requires_same_anchor=False)
+            self._psdf_or_psser._psdf._update_internal_frame(internal, requires_same_anchor=False)
         else:
             assert self._is_df
 
@@ -647,36 +648,38 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
 
             if (
                 isinstance(rows_sel, Series)
-                and (isinstance(self, iLocIndexer) or not same_anchor(rows_sel, self._kdf_or_kser))
+                and (
+                    isinstance(self, iLocIndexer) or not same_anchor(rows_sel, self._psdf_or_psser)
+                )
             ) or (
                 isinstance(value, Series)
-                and (isinstance(self, iLocIndexer) or not same_anchor(value, self._kdf_or_kser))
+                and (isinstance(self, iLocIndexer) or not same_anchor(value, self._psdf_or_psser))
             ):
-                kdf = self._kdf_or_kser.copy()
-                temp_natural_order = verify_temp_column_name(kdf, "__temp_natural_order__")
-                temp_key_col = verify_temp_column_name(kdf, "__temp_key_col__")
-                temp_value_col = verify_temp_column_name(kdf, "__temp_value_col__")
+                psdf = self._psdf_or_psser.copy()
+                temp_natural_order = verify_temp_column_name(psdf, "__temp_natural_order__")
+                temp_key_col = verify_temp_column_name(psdf, "__temp_key_col__")
+                temp_value_col = verify_temp_column_name(psdf, "__temp_value_col__")
 
-                kdf[temp_natural_order] = F.monotonically_increasing_id()
+                psdf[temp_natural_order] = F.monotonically_increasing_id()
                 if isinstance(rows_sel, Series):
-                    kdf[temp_key_col] = rows_sel
+                    psdf[temp_key_col] = rows_sel
                 if isinstance(value, Series):
-                    kdf[temp_value_col] = value
-                kdf = kdf.sort_values(temp_natural_order).drop(temp_natural_order)
+                    psdf[temp_value_col] = value
+                psdf = psdf.sort_values(temp_natural_order).drop(temp_natural_order)
 
                 if isinstance(rows_sel, Series):
                     rows_sel = F.col(
-                        "`{}`".format(kdf[temp_key_col]._internal.data_spark_column_names[0])
+                        "`{}`".format(psdf[temp_key_col]._internal.data_spark_column_names[0])
                     )
                 if isinstance(value, Series):
                     value = F.col(
-                        "`{}`".format(kdf[temp_value_col]._internal.data_spark_column_names[0])
+                        "`{}`".format(psdf[temp_value_col]._internal.data_spark_column_names[0])
                     )
 
-                type(self)(kdf)[rows_sel, cols_sel] = value
+                type(self)(psdf)[rows_sel, cols_sel] = value
 
-                self._kdf_or_kser._update_internal_frame(
-                    kdf[list(self._kdf_or_kser.columns)]._internal.resolved_copy,
+                self._psdf_or_psser._update_internal_frame(
+                    psdf[list(self._psdf_or_psser.columns)]._internal.resolved_copy,
                     requires_same_anchor=False,
                 )
                 return
@@ -708,7 +711,7 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
                 self._internal.data_dtypes,
             ):
                 for scol in data_spark_columns:
-                    if new_scol._jc.equals(scol._jc):
+                    if spark_column_equals(new_scol, scol):
                         new_scol = F.when(cond, value).otherwise(scol).alias(spark_column_name)
                         new_dtype = spark_type_to_pandas_dtype(
                             self._internal.spark_frame.select(new_scol).schema[0].dataType,
@@ -739,7 +742,7 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
             internal = self._internal.with_new_columns(
                 new_data_spark_columns, column_labels=column_labels, data_dtypes=new_dtypes
             )
-            self._kdf_or_kser._update_internal_frame(internal, requires_same_anchor=False)
+            self._psdf_or_psser._update_internal_frame(internal, requires_same_anchor=False)
 
 
 class LocIndexer(LocIndexerLike):
@@ -978,7 +981,7 @@ class LocIndexer(LocIndexerLike):
             raise LocIndexer._NotImplemented("Cannot use step with Spark.")
         elif self._internal.index_level == 1:
             sdf = self._internal.spark_frame
-            index = self._kdf_or_kser.index
+            index = self._psdf_or_psser.index
             index_column = index.to_series()
             index_data_type = index_column.spark.data_type
             start = rows_sel.start
@@ -1001,11 +1004,11 @@ class LocIndexer(LocIndexerLike):
             stop = [row[1] for row in start_and_stop if row[0] == stop]
             stop = stop[-1] if len(stop) > 0 else None
 
-            cond = []
+            conds = []  # type: List[spark.Column]
             if start is not None:
-                cond.append(F.col(NATURAL_ORDER_COLUMN_NAME) >= F.lit(start).cast(LongType()))
+                conds.append(F.col(NATURAL_ORDER_COLUMN_NAME) >= F.lit(start).cast(LongType()))
             if stop is not None:
-                cond.append(F.col(NATURAL_ORDER_COLUMN_NAME) <= F.lit(stop).cast(LongType()))
+                conds.append(F.col(NATURAL_ORDER_COLUMN_NAME) <= F.lit(stop).cast(LongType()))
 
             # if index order is not monotonic increasing or decreasing
             # and specified values don't exist in index, raise KeyError
@@ -1020,23 +1023,27 @@ class LocIndexer(LocIndexerLike):
                 if start is None and rows_sel.start is not None:
                     start = rows_sel.start
                     if inc is not False:
-                        cond.append(index_column.spark.column >= F.lit(start).cast(index_data_type))
+                        conds.append(
+                            index_column.spark.column >= F.lit(start).cast(index_data_type)
+                        )
                     elif dec is not False:
-                        cond.append(index_column.spark.column <= F.lit(start).cast(index_data_type))
+                        conds.append(
+                            index_column.spark.column <= F.lit(start).cast(index_data_type)
+                        )
                     else:
                         raise KeyError(rows_sel.start)
                 if stop is None and rows_sel.stop is not None:
                     stop = rows_sel.stop
                     if inc is not False:
-                        cond.append(index_column.spark.column <= F.lit(stop).cast(index_data_type))
+                        conds.append(index_column.spark.column <= F.lit(stop).cast(index_data_type))
                     elif dec is not False:
-                        cond.append(index_column.spark.column >= F.lit(stop).cast(index_data_type))
+                        conds.append(index_column.spark.column >= F.lit(stop).cast(index_data_type))
                     else:
                         raise KeyError(rows_sel.stop)
 
-            return reduce(lambda x, y: x & y, cond), None, None
+            return reduce(lambda x, y: x & y, conds), None, None
         else:
-            index = self._kdf_or_kser.index
+            index = self._psdf_or_psser.index
             index_data_type = [f.dataType for f in index.to_series().spark.data_type]
 
             start = rows_sel.start
@@ -1065,7 +1072,7 @@ class LocIndexer(LocIndexerLike):
                     "Key length ({}) was greater than MultiIndex sort depth".format(depth)
                 )
 
-            conds = []  # type: List[spark.Column]
+            conds = []
             if start is not None:
                 cond = F.lit(True)
                 for scol, value, dt in list(
@@ -1096,7 +1103,7 @@ class LocIndexer(LocIndexerLike):
         if len(rows_sel) == 0:
             return F.lit(False), None, None
         elif self._internal.index_level == 1:
-            index_column = self._kdf_or_kser.index.to_series()
+            index_column = self._psdf_or_psser.index.to_series()
             index_data_type = index_column.spark.data_type
             if len(rows_sel) == 1:
                 return (
@@ -1205,7 +1212,9 @@ class LocIndexer(LocIndexerLike):
     ) -> Tuple[
         List[Tuple], Optional[List[spark.Column]], Optional[List[Dtype]], bool, Optional[Tuple]
     ]:
-        start, stop = self._kdf_or_kser.columns.slice_locs(start=cols_sel.start, end=cols_sel.stop)
+        start, stop = self._psdf_or_psser.columns.slice_locs(
+            start=cols_sel.start, end=cols_sel.stop
+        )
         column_labels = self._internal.column_labels[start:stop]
         data_spark_columns = self._internal.data_spark_columns[start:stop]
         data_dtypes = self._internal.data_dtypes[start:stop]
@@ -1237,7 +1246,7 @@ class LocIndexer(LocIndexerLike):
                     % (len(cast(Sized, cols_sel)), len(self._internal.column_labels))
                 )
             if isinstance(cols_sel, pd.Series):
-                if not cols_sel.index.sort_values().equals(self._kdf.columns.sort_values()):
+                if not cols_sel.index.sort_values().equals(self._psdf.columns.sort_values()):
                     raise SparkPandasIndexingError(
                         "Unalignable boolean Series provided as indexer "
                         "(index of the boolean Series and of the indexed object do not match)"
@@ -1494,7 +1503,7 @@ class iLocIndexer(LocIndexerLike):
         )
 
     def _select_rows_by_spark_column(
-        self, rows_sel: spark.column
+        self, rows_sel: spark.Column
     ) -> Tuple[Optional[spark.Column], Optional[int], Optional[int]]:
         raise iLocIndexer._NotImplemented(
             ".iloc requires numeric slice, conditional "
@@ -1719,8 +1728,8 @@ class iLocIndexer(LocIndexerLike):
                         )
         super().__setitem__(key, value)
         # Update again with resolved_copy to drop extra columns.
-        self._kdf._update_internal_frame(
-            self._kdf._internal.resolved_copy, requires_same_anchor=False
+        self._psdf._update_internal_frame(
+            self._psdf._internal.resolved_copy, requires_same_anchor=False
         )
 
         # Clean up implicitly cached properties to be able to reuse the indexer.

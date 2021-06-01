@@ -371,7 +371,7 @@ case class Conv(numExpr: Expression, fromBaseExpr: Expression, toBaseExpr: Expre
 
   override def nullSafeEval(num: Any, fromBase: Any, toBase: Any): Any = {
     NumberConverter.convert(
-      num.asInstanceOf[UTF8String].getBytes,
+      num.asInstanceOf[UTF8String].trim().getBytes,
       fromBase.asInstanceOf[Int],
       toBase.asInstanceOf[Int])
   }
@@ -380,7 +380,7 @@ case class Conv(numExpr: Expression, fromBaseExpr: Expression, toBaseExpr: Expre
     val numconv = NumberConverter.getClass.getName.stripSuffix("$")
     nullSafeCodeGen(ctx, ev, (num, from, to) =>
       s"""
-       ${ev.value} = $numconv.convert($num.getBytes(), $from, $to);
+       ${ev.value} = $numconv.convert($num.trim().getBytes(), $from, $to);
        if (${ev.value} == null) {
          ${ev.isNull} = true;
        }

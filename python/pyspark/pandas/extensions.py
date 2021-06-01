@@ -14,10 +14,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from typing import Callable, Generic, Optional, Type, TypeVar, Union, TYPE_CHECKING
 import warnings
 
+if TYPE_CHECKING:
+    from pyspark.pandas.frame import DataFrame  # noqa: F401 (SPARK-34943)
+    from pyspark.pandas.indexes import Index  # noqa: F401 (SPARK-34943)
+    from pyspark.pandas.series import Series  # noqa: F401 (SPARK-34943)
 
-class CachedAccessor:
+
+T = TypeVar("T")
+
+
+class CachedAccessor(Generic[T]):
     """
     Custom property-like object.
 
@@ -42,19 +51,23 @@ class CachedAccessor:
     The pandas-on-Spark accessor is modified based on pandas.core.accessor.
     """
 
-    def __init__(self, name, accessor):
+    def __init__(self, name: str, accessor: Type[T]) -> None:
         self._name = name
         self._accessor = accessor
 
-    def __get__(self, obj, cls):
+    def __get__(
+        self, obj: Optional[Union["DataFrame", "Series", "Index"]], cls: Type[T]
+    ) -> Union[T, Type[T]]:
         if obj is None:
             return self._accessor
-        accessor_obj = self._accessor(obj)
+        accessor_obj = self._accessor(obj)  # type: ignore
         object.__setattr__(obj, self._name, accessor_obj)
         return accessor_obj
 
 
-def _register_accessor(name, cls):
+def _register_accessor(
+    name: str, cls: Union[Type["DataFrame"], Type["Series"], Type["Index"]]
+) -> Callable[[Type[T]], Type[T]]:
     """
     Register a custom accessor on {klass} objects.
 
@@ -103,7 +116,7 @@ def _register_accessor(name, cls):
     register_series_accessor, or register_index_accessor.
     """
 
-    def decorator(accessor):
+    def decorator(accessor: Type[T]) -> Type[T]:
         if hasattr(cls, name):
             msg = (
                 "registration of accessor {0} under name '{1}' for type {2} is overriding "
@@ -119,7 +132,7 @@ def _register_accessor(name, cls):
     return decorator
 
 
-def register_dataframe_accessor(name):
+def register_dataframe_accessor(name: str) -> Callable[[Type[T]], Type[T]]:
     """
     Register a custom accessor with a DataFrame
 
@@ -185,19 +198,19 @@ def register_dataframe_accessor(name):
 
         >>> ## Import if the accessor is in the other file.
         >>> # from my_ext_lib import GeoAccessor
-        >>> kdf = ps.DataFrame({"longitude": np.linspace(0,10),
+        >>> psdf = ps.DataFrame({"longitude": np.linspace(0,10),
         ...                     "latitude": np.linspace(0, 20)})
-        >>> kdf.geo.center  # doctest: +SKIP
+        >>> psdf.geo.center  # doctest: +SKIP
         (5.0, 10.0)
 
-        >>> kdf.geo.plot()  # doctest: +SKIP
+        >>> psdf.geo.plot()  # doctest: +SKIP
     """
     from pyspark.pandas import DataFrame
 
     return _register_accessor(name, DataFrame)
 
 
-def register_series_accessor(name):
+def register_series_accessor(name: str) -> Callable[[Type[T]], Type[T]]:
     """
     Register a custom accessor with a Series object
 
@@ -259,9 +272,9 @@ def register_series_accessor(name):
 
         >>> ## Import if the accessor is in the other file.
         >>> # from my_ext_lib import GeoAccessor
-        >>> kdf = ps.DataFrame({"longitude": np.linspace(0,10),
+        >>> psdf = ps.DataFrame({"longitude": np.linspace(0,10),
         ...                     "latitude": np.linspace(0, 20)})
-        >>> kdf.longitude.geo.is_valid  # doctest: +SKIP
+        >>> psdf.longitude.geo.is_valid  # doctest: +SKIP
         True
     """
     from pyspark.pandas import Series
@@ -269,7 +282,7 @@ def register_series_accessor(name):
     return _register_accessor(name, Series)
 
 
-def register_index_accessor(name):
+def register_index_accessor(name: str) -> Callable[[Type[T]], Type[T]]:
     """
     Register a custom accessor with an Index
 
@@ -332,9 +345,9 @@ def register_index_accessor(name):
 
         >>> ## Import if the accessor is in the other file.
         >>> # from my_ext_lib import CustomAccessor
-        >>> kdf = ps.DataFrame({"longitude": np.linspace(0,10),
+        >>> psdf = ps.DataFrame({"longitude": np.linspace(0,10),
         ...                     "latitude": np.linspace(0, 20)})
-        >>> kdf.index.foo.bar  # doctest: +SKIP
+        >>> psdf.index.foo.bar  # doctest: +SKIP
         'baz'
     """
     from pyspark.pandas import Index
@@ -342,7 +355,7 @@ def register_index_accessor(name):
     return _register_accessor(name, Index)
 
 
-def _test():
+def _test() -> None:
     import os
     import doctest
     import sys

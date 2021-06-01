@@ -20,12 +20,14 @@ package org.apache.spark.sql.connector
 import java.util
 import java.util.Collections
 
-import test.org.apache.spark.sql.connector.catalog.functions.{JavaAverage, JavaStrLen}
+import test.org.apache.spark.sql.connector.catalog.functions.{JavaAverage, JavaLongAdd, JavaStrLen}
+import test.org.apache.spark.sql.connector.catalog.functions.JavaLongAdd.JavaLongAddMagic
 import test.org.apache.spark.sql.connector.catalog.functions.JavaStrLen._
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode.{FALLBACK, NO_CODEGEN}
 import org.apache.spark.sql.connector.catalog.{BasicInMemoryTableCatalog, Identifier, InMemoryCatalog, SupportsNamespaces}
 import org.apache.spark.sql.connector.catalog.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -213,6 +215,39 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
       .getMessage.contains("neither implement magic method nor override 'produceResult'"))
   }
 
+  test("SPARK-35389: magic function should handle null arguments") {
+    catalog("testcat").asInstanceOf[SupportsNamespaces].createNamespace(Array("ns"), emptyProps)
+    addFunction(Identifier.of(Array("ns"), "strlen"), new JavaStrLen(new JavaStrLenMagicNullSafe))
+    addFunction(Identifier.of(Array("ns"), "strlen2"),
+      new JavaStrLen(new JavaStrLenStaticMagicNullSafe))
+    Seq("strlen", "strlen2").foreach { name =>
+      checkAnswer(sql(s"SELECT testcat.ns.$name(CAST(NULL as STRING))"), Row(0) :: Nil)
+    }
+  }
+
+  test("SPARK-35389: magic function should handle null primitive arguments") {
+    catalog("testcat").asInstanceOf[SupportsNamespaces].createNamespace(Array("ns"), emptyProps)
+    addFunction(Identifier.of(Array("ns"), "add"), new JavaLongAdd(new JavaLongAddMagic(false)))
+    addFunction(Identifier.of(Array("ns"), "static_add"),
+      new JavaLongAdd(new JavaLongAddMagic(false)))
+
+    Seq("add", "static_add").foreach { name =>
+      Seq(true, false).foreach { codegenEnabled =>
+        val codeGenFactoryMode = if (codegenEnabled) FALLBACK else NO_CODEGEN
+
+        withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegenEnabled.toString,
+          SQLConf.CODEGEN_FACTORY_MODE.key -> codeGenFactoryMode.toString) {
+
+          checkAnswer(sql(s"SELECT testcat.ns.$name(CAST(NULL as BIGINT), 42L)"), Row(null) :: Nil)
+          checkAnswer(sql(s"SELECT testcat.ns.$name(42L, CAST(NULL as BIGINT))"), Row(null) :: Nil)
+          checkAnswer(sql(s"SELECT testcat.ns.$name(42L, 58L)"), Row(100) :: Nil)
+          checkAnswer(sql(s"SELECT testcat.ns.$name(CAST(NULL as BIGINT), CAST(NULL as BIGINT))"),
+            Row(null) :: Nil)
+        }
+      }
+    }
+  }
+
   test("bad bound function (neither scalar nor aggregate)") {
     catalog("testcat").asInstanceOf[SupportsNamespaces].createNamespace(Array("ns"), emptyProps)
     addFunction(Identifier.of(Array("ns"), "strlen"), StrLen(BadBoundFunction))
@@ -306,7 +341,7 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
     }
   }
 
-  private case object StrLenMagic extends ScalarFunction[Int] {
+  case object StrLenMagic extends ScalarFunction[Int] {
     override def inputTypes(): Array[DataType] = Array(StringType)
     override def resultType(): DataType = IntegerType
     override def name(): String = "strlen_magic"
@@ -316,7 +351,7 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
     }
   }
 
-  private case object StrLenBadMagic extends ScalarFunction[Int] {
+  case object StrLenBadMagic extends ScalarFunction[Int] {
     override def inputTypes(): Array[DataType] = Array(StringType)
     override def resultType(): DataType = IntegerType
     override def name(): String = "strlen_bad_magic"
@@ -326,7 +361,7 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
     }
   }
 
-  private case object StrLenBadMagicWithDefault extends ScalarFunction[Int] {
+  case object StrLenBadMagicWithDefault extends ScalarFunction[Int] {
     override def inputTypes(): Array[DataType] = Array(StringType)
     override def resultType(): DataType = IntegerType
     override def name(): String = "strlen_bad_magic"

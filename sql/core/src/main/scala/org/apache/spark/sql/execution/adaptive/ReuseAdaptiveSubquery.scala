@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.adaptive
 import scala.collection.concurrent.TrieMap
 
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.trees.TreePattern.PLAN_EXPRESSION
 import org.apache.spark.sql.execution.{BaseSubqueryExec, ExecSubqueryExpression, ReusedSubqueryExec, SparkPlan}
 
 case class ReuseAdaptiveSubquery(
@@ -30,7 +31,7 @@ case class ReuseAdaptiveSubquery(
       return plan
     }
 
-    plan.transformAllExpressions {
+    plan.transformAllExpressionsWithPruning(_.containsPattern(PLAN_EXPRESSION)) {
       case sub: ExecSubqueryExpression =>
         val newPlan = reuseMap.getOrElseUpdate(sub.plan.canonicalized, sub.plan)
         if (newPlan.ne(sub.plan)) {

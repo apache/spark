@@ -1,44 +1,44 @@
-OpenJDK 64-Bit Server VM 1.8.0_292-b10 on Linux 5.4.0-1046-azure
-Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
+OpenJDK 64-Bit Server VM 1.8.0_292-b10 on Linux 5.4.0-1047-azure
+Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
 scalar function (long + long) -> long, result_nullable = true codegen = true:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------------------------------------------
-native_long_add                                                                        9723          11619        1643         51.4          19.4       1.0X
-java_long_add_default                                                                 38003          38591         513         13.2          76.0       0.3X
-java_long_add_magic                                                                   12398          13007         792         40.3          24.8       0.8X
-java_long_add_static_magic                                                            11551          11711         138         43.3          23.1       0.8X
-scala_long_add_default                                                                39482          39762         275         12.7          79.0       0.2X
-scala_long_add_magic                                                                  12794          12830          33         39.1          25.6       0.8X
+native_long_add                                                                       10886          12302        1539         45.9          21.8       1.0X
+java_long_add_default                                                                 38632          39165         466         12.9          77.3       0.3X
+java_long_add_magic                                                                   14973          15124         197         33.4          29.9       0.7X
+java_long_add_static_magic                                                            12907          13002         145         38.7          25.8       0.8X
+scala_long_add_default                                                                38344          39198        1083         13.0          76.7       0.3X
+scala_long_add_magic                                                                  14571          14706         117         34.3          29.1       0.7X
 
-OpenJDK 64-Bit Server VM 1.8.0_292-b10 on Linux 5.4.0-1046-azure
-Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
+OpenJDK 64-Bit Server VM 1.8.0_292-b10 on Linux 5.4.0-1047-azure
+Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
 scalar function (long + long) -> long, result_nullable = false codegen = true:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 -------------------------------------------------------------------------------------------------------------------------------------------------------------
-native_long_add                                                                         9984          10285         303         50.1          20.0       1.0X
-java_long_add_default                                                                  36510          36989         570         13.7          73.0       0.3X
-java_long_add_magic                                                                    13391          13764         332         37.3          26.8       0.7X
-java_long_add_static_magic                                                             10033          10462         388         49.8          20.1       1.0X
-scala_long_add_default                                                                 35104          35480         375         14.2          70.2       0.3X
-scala_long_add_magic                                                                   13587          13899         366         36.8          27.2       0.7X
+native_long_add                                                                        10845          10876          43         46.1          21.7       1.0X
+java_long_add_default                                                                  35638          35845         236         14.0          71.3       0.3X
+java_long_add_magic                                                                    13464          13571         107         37.1          26.9       0.8X
+java_long_add_static_magic                                                             10918          10999         111         45.8          21.8       1.0X
+scala_long_add_default                                                                 35635          36264         570         14.0          71.3       0.3X
+scala_long_add_magic                                                                   13756          14091         422         36.3          27.5       0.8X
 
-OpenJDK 64-Bit Server VM 1.8.0_292-b10 on Linux 5.4.0-1046-azure
-Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
+OpenJDK 64-Bit Server VM 1.8.0_292-b10 on Linux 5.4.0-1047-azure
+Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
 scalar function (long + long) -> long, result_nullable = true codegen = false:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 -------------------------------------------------------------------------------------------------------------------------------------------------------------
-native_long_add                                                                        32473          32622         247         15.4          64.9       1.0X
-java_long_add_default                                                                  44108          44120          11         11.3          88.2       0.7X
-java_long_add_magic                                                                   166139         167629        1828          3.0         332.3       0.2X
-java_long_add_static_magic                                                            181452         183355        1668          2.8         362.9       0.2X
-scala_long_add_default                                                                 42405          42652         330         11.8          84.8       0.8X
-scala_long_add_magic                                                                  196868         198003        1033          2.5         393.7       0.2X
+native_long_add                                                                        33787          34676        1444         14.8          67.6       1.0X
+java_long_add_default                                                                  43411          44220        1336         11.5          86.8       0.8X
+java_long_add_magic                                                                    51949          52654         965          9.6         103.9       0.7X
+java_long_add_static_magic                                                             47779          47991         246         10.5          95.6       0.7X
+scala_long_add_default                                                                 44375          44752         518         11.3          88.7       0.8X
+scala_long_add_magic                                                                   51306          51976         580          9.7         102.6       0.7X
 
-OpenJDK 64-Bit Server VM 1.8.0_292-b10 on Linux 5.4.0-1046-azure
-Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
+OpenJDK 64-Bit Server VM 1.8.0_292-b10 on Linux 5.4.0-1047-azure
+Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
 scalar function (long + long) -> long, result_nullable = false codegen = false:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 --------------------------------------------------------------------------------------------------------------------------------------------------------------
-native_long_add                                                                         30182          30387         279         16.6          60.4       1.0X
-java_long_add_default                                                                   42862          43009         209         11.7          85.7       0.7X
-java_long_add_magic                                                                    218295         219387        1078          2.3         436.6       0.1X
-java_long_add_static_magic                                                             211812         213150        1898          2.4         423.6       0.1X
-scala_long_add_default                                                                  42401          42642         234         11.8          84.8       0.7X
-scala_long_add_magic                                                                   214497         214760         307          2.3         429.0       0.1X
+native_long_add                                                                         34842          35556        1010         14.4          69.7       1.0X
+java_long_add_default                                                                   44147          44487         503         11.3          88.3       0.8X
+java_long_add_magic                                                                     52048          52729         665          9.6         104.1       0.7X
+java_long_add_static_magic                                                              51537          51848         271          9.7         103.1       0.7X
+scala_long_add_default                                                                  44552          44917         628         11.2          89.1       0.8X
+scala_long_add_magic                                                                    50741          50895         135          9.9         101.5       0.7X
 

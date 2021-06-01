@@ -263,6 +263,15 @@ abstract class KafkaRelationSuiteBase extends QueryTest with SharedSparkSession 
     }, topic, 0 to 19)
   }
 
+  test("global timestamp provided for starting and ending") {
+    val (topic, timestamps) = prepareTimestampRelatedUnitTest
+
+    // timestamp both presented: starting "first" ending "finalized"
+    verifyTimestampRelatedQueryResult({ df =>
+      df.option("startingTimestamp", timestamps(1)).option("endingTimestamp", timestamps(2))
+    }, topic, 10 to 19)
+  }
+
   test("no matched offset for timestamp - startingOffsets") {
     val (topic, timestamps) = prepareTimestampRelatedUnitTest
 
@@ -282,6 +291,44 @@ abstract class KafkaRelationSuiteBase extends QueryTest with SharedSparkSession 
     }
 
     TestUtils.assertExceptionMsg(e, "No offset matched from request")
+  }
+
+  test("preferences on offset related options") {
+    val (topic, timestamps) = prepareTimestampRelatedUnitTest
+
+    /*
+    The test will set both configs differently:
+
+    * global timestamp
+    starting only presented as "third", and ending not presented
+
+    * specific timestamp for partition
+    starting only presented as "second", and ending not presented
+
+    * offsets
+    starting only presented as "earliest", and ending not presented
+
+    The preference goes to global timestamp -> timestamp for partition -> offsets
+     */
+
+    val startTopicTimestamps = Map(
+      (0 to 2).map(new TopicPartition(topic, _) -> timestamps(1)): _*)
+    val startingTimestamps = JsonUtils.partitionTimestamps(startTopicTimestamps)
+
+    // all options are specified: global timestamp
+    verifyTimestampRelatedQueryResult({ df =>
+      df
+        .option("startingTimestamp", timestamps(2))
+        .option("startingOffsetsByTimestamp", startingTimestamps)
+        .option("startingOffsets", "earliest")
+    }, topic, 20 to 29)
+
+    // timestamp for partition and offsets are specified: timestamp for partition
+    verifyTimestampRelatedQueryResult({ df =>
+      df
+        .option("startingOffsetsByTimestamp", startingTimestamps)
+        .option("startingOffsets", "earliest")
+    }, topic, 10 to 29)
   }
 
   test("no matched offset for timestamp - endingOffsets") {

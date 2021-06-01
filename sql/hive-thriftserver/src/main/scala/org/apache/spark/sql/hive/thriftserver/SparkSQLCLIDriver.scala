@@ -44,6 +44,7 @@ import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.client.HiveClientImpl
 import org.apache.spark.sql.hive.security.HiveDelegationTokenProvider
@@ -136,14 +137,14 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     val warehousePath = SharedState.resolveWarehousePath(sparkConf, conf)
     val qualified = SharedState.qualifyWarehousePath(conf, warehousePath)
     SharedState.setWarehousePathConf(sparkConf, conf, qualified)
-    SessionState.start(sessionState)
+    SessionState.setCurrentSessionState(sessionState)
 
     // Clean up after we exit
     ShutdownHookManager.addShutdownHook { () => SparkSQLEnv.stop() }
 
     if (isRemoteMode(sessionState)) {
       // Hive 1.2 + not supported in CLI
-      throw new RuntimeException("Remote operations not supported")
+      throw QueryExecutionErrors.remoteOperationsUnsupportedError()
     }
     // Respect the configurations set by --hiveconf from the command line
     // (based on Hive's CliDriver).
@@ -330,7 +331,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
     }
   } else {
     // Hive 1.2 + not supported in CLI
-    throw new RuntimeException("Remote operations not supported")
+    throw QueryExecutionErrors.remoteOperationsUnsupportedError()
   }
 
   override def setHiveVariables(hiveVariables: java.util.Map[String, String]): Unit = {

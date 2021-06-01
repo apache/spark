@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.Cast.{forceNullable, resolvable
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
-import org.apache.spark.sql.catalyst.trees.TreePattern.{CAST, TreePattern}
+import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
@@ -438,7 +438,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
           false
         } else {
           if (ansiEnabled) {
-            throw new UnsupportedOperationException(s"invalid input syntax for type boolean: $s")
+            throw QueryExecutionErrors.invalidInputSyntaxForBooleanError(s)
           } else {
             null
           }
@@ -1395,8 +1395,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       val stringUtils = inline"${StringUtils.getClass.getName.stripSuffix("$")}"
       (c, evPrim, evNull) =>
         val castFailureCode = if (ansiEnabled) {
-          val errorMessage = s""""invalid input syntax for type boolean: " + $c"""
-          s"throw new java.lang.UnsupportedOperationException($errorMessage);"
+          s"throw QueryExecutionErrors.invalidInputSyntaxForBooleanError($c);"
         } else {
           s"$evNull = true;"
         }
@@ -1827,7 +1826,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
 
-  final override val nodePatterns: Seq[TreePattern] = Seq(CAST)
+  final override def nodePatternsInternal(): Seq[TreePattern] = Seq(CAST)
 
   override protected val ansiEnabled: Boolean = SQLConf.get.ansiEnabled
 
@@ -2030,6 +2029,8 @@ object AnsiCast {
 case class UpCast(child: Expression, target: AbstractDataType, walkedTypePath: Seq[String] = Nil)
   extends UnaryExpression with Unevaluable {
   override lazy val resolved = false
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(UP_CAST)
 
   def dataType: DataType = target match {
     case DecimalType => DecimalType.SYSTEM_DEFAULT
