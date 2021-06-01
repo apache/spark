@@ -90,6 +90,7 @@ private[spark] object KubernetesClientUtils extends Logging {
         .withName(configMapName)
         .withLabels(withLabels.asJava)
         .endMetadata()
+      .withImmutable(true)
       .addToData(confFileMap.asJava)
       .build()
   }

@@ -29,7 +29,7 @@ case class ApplyFunctionExpression(
   override def name: String = function.name()
   override def dataType: DataType = function.resultType()
 
-  private lazy val reusedRow = new GenericInternalRow(children.size)
+  private lazy val reusedRow = new SpecificInternalRow(function.inputTypes())
 
   /** Returns the result of evaluating this expression on a given input Row */
   override def eval(input: InternalRow): Any = {
