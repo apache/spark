@@ -258,18 +258,27 @@ private[spark] object HighlyCompressedMapStatus {
     val threshold = Option(SparkEnv.get)
       .map(_.conf.get(config.SHUFFLE_ACCURATE_BLOCK_THRESHOLD))
       .getOrElse(config.SHUFFLE_ACCURATE_BLOCK_THRESHOLD.defaultValue.get)
+    val minThreshold = Option(SparkEnv.get)
+      .map(_.conf.get(config.SHUFFLE_ACCURATE_SKEWED_BLOCK_THRESHOLD))
+      .getOrElse(config.SHUFFLE_ACCURATE_SKEWED_BLOCK_THRESHOLD.defaultValue.get)
     val hugeBlockSizes = mutable.Map.empty[Int, Byte]
+    val nonEmptyUncompressedSizes = uncompressedSizes.filter(_ > 0)
+    val overallNonEmptyAvgSize = if (nonEmptyUncompressedSizes.nonEmpty) {
+      nonEmptyUncompressedSizes.sum / nonEmptyUncompressedSizes.length
+    } else {
+      0
+    }
     while (i < totalNumBlocks) {
       val size = uncompressedSizes(i)
       if (size > 0) {
         numNonEmptyBlocks += 1
         // Huge blocks are not included in the calculation for average size, thus size for smaller
         // blocks is more accurate.
-        if (size < threshold) {
+        if ((size >= 5 * overallNonEmptyAvgSize && size >= minThreshold) || size >= threshold) {
+          hugeBlockSizes(i) = MapStatus.compressSize(uncompressedSizes(i))
+        } else {
           totalSmallBlockSize += size
           numSmallBlocks += 1
-        } else {
-          hugeBlockSizes(i) = MapStatus.compressSize(uncompressedSizes(i))
         }
       } else {
         emptyBlocks.add(i)

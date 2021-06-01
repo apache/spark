@@ -1178,6 +1178,16 @@ package object config {
       .bytesConf(ByteUnit.BYTE)
       .createWithDefault(100 * 1024 * 1024)
 
+  private[spark] val SHUFFLE_ACCURATE_SKEWED_BLOCK_THRESHOLD =
+    ConfigBuilder("spark.shuffle.accurateSkewedBlockThreshold")
+      .doc("Threshold in bytes above which the size and five times non-empty average size, " +
+        "the skewed shuffle blocks in HighlyCompressedMapStatus is accurately recorded. " +
+        "This helps to prevent OOM by avoiding underestimating skewed shuffle block size " +
+        "when fetch shuffle blocks.")
+      .version("3.2.0")
+      .bytesConf(ByteUnit.BYTE)
+      .createWithDefault(350 * 1024)
+
   private[spark] val SHUFFLE_REGISTRATION_TIMEOUT =
     ConfigBuilder("spark.shuffle.registration.timeout")
       .doc("Timeout in milliseconds for registration to the external shuffle service.")
