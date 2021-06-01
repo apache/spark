@@ -86,7 +86,7 @@ class YarnShuffleServiceMetricsSuite extends SparkFunSuite with Matchers {
               Seq("rate1", "rate5", "rate15", "rateMean", "nanos_mean", "nanos_stdDev",
                 "nanos_1stPercentile", "nanos_5thPercentile", "nanos_25thPercentile",
                 "nanos_50thPercentile", "nanos_75thPercentile", "nanos_95thPercentile",
-                "nanos_98thPercentile", "nanos_99thPercentile", "nanos_99.9thPercentile")
+                "nanos_98thPercentile", "nanos_99thPercentile", "nanos_999thPercentile")
                   .map(suffix => s"${testname}_$suffix")
           )
         }
