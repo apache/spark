@@ -277,6 +277,9 @@ abstract class Optimizer(catalogManager: CatalogManager)
    */
   object OptimizeSubqueries extends Rule[LogicalPlan] {
     private def removeTopLevelSort(plan: LogicalPlan): LogicalPlan = {
+      if (!plan.containsPattern(SORT)) {
+        return plan
+      }
       plan match {
         case Sort(_, _, child) => child
         case Project(fields, child) => Project(fields, removeTopLevelSort(child))
