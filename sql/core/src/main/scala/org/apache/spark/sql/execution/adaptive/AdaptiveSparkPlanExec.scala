@@ -62,7 +62,8 @@ case class AdaptiveSparkPlanExec(
     inputPlan: SparkPlan,
     @transient context: AdaptiveExecutionContext,
     @transient preprocessingRules: Seq[Rule[SparkPlan]],
-    @transient isSubquery: Boolean)
+    @transient isSubquery: Boolean,
+    @transient isSubqueryBroadcastExec: Boolean = false)
   extends LeafExecNode {
 
   @transient private val lock = new Object()
@@ -312,6 +313,7 @@ case class AdaptiveSparkPlanExec(
   }
 
   override def doExecuteBroadcast[T](): broadcast.Broadcast[T] = {
+    assert(getFinalPhysicalPlan().isInstanceOf[BroadcastExchangeExec])
     getFinalPhysicalPlan().doExecuteBroadcast()
   }
 
@@ -596,10 +598,16 @@ case class AdaptiveSparkPlanExec(
     logicalPlan.invalidateStatsCache()
     val optimized = optimizer.execute(logicalPlan)
     val sparkPlan = context.session.sessionState.planner.plan(ReturnAnswer(optimized)).next()
-    val newPlan = applyPhysicalRules(
+    var newPlan = applyPhysicalRules(
       sparkPlan,
       preprocessingRules ++ queryStagePreparationRules,
       Some((planChangeLogger, "AQE Replanning")))
+
+    if (isSubqueryBroadcastExec && currentPhysicalPlan.isInstanceOf[BroadcastExchangeExec]) {
+      val currentBroadcastExchange = currentPhysicalPlan.asInstanceOf[BroadcastExchangeExec]
+      newPlan = currentBroadcastExchange.copy(child = newPlan)
+    }
+
     (newPlan, optimized)
   }
 
