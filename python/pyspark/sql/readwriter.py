@@ -478,23 +478,12 @@ class DataFrameReader(OptionUtils):
 
         Parameters
         ----------
-        url : str
-            a JDBC URL of the form ``jdbc:subprotocol:subname``
         table : str
             the name of the table
         column : str, optional
-            the name of a column of numeric, date, or timestamp type
-            that will be used for partitioning;
-            if this parameter is specified, then ``numPartitions``, ``lowerBound``
-            (inclusive), and ``upperBound`` (exclusive) will form partition strides
-            for generated WHERE clause expressions used to split the column
-            ``column`` evenly
-        lowerBound : str or int, optional
-            the minimum value of ``column`` used to decide partition stride
-        upperBound : str or int, optional
-            the maximum value of ``column`` used to decide partition stride
-        numPartitions : int, optional
-            the number of partitions
+            alias of ``partitionColumn`` option. Refer to ``partitionColumn`` in
+            `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-jdbc.html#data-source-option>`_
+            in the version you use.
         predicates : list, optional
             a list of expressions suitable for inclusion in WHERE clauses;
             each one defines one partition of the :class:`DataFrame`
@@ -502,6 +491,15 @@ class DataFrameReader(OptionUtils):
             a dictionary of JDBC database connection arguments. Normally at
             least properties "user" and "password" with their corresponding values.
             For example { 'user' : 'SYSTEM', 'password' : 'mypassword' }
+
+        Other Parameters
+        ----------------
+        Extra options
+            For the extra options, refer to
+            `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-jdbc.html#data-source-option>`_
+            in the version you use.
+
+            .. # noqa
 
         Notes
         -----
@@ -985,8 +983,6 @@ class DataFrameWriter(OptionUtils):
 
         Parameters
         ----------
-        url : str
-            a JDBC URL of the form ``jdbc:subprotocol:subname``
         table : str
             Name of the table in the external database.
         mode : str, optional
@@ -1001,6 +997,15 @@ class DataFrameWriter(OptionUtils):
             a dictionary of JDBC database connection arguments. Normally at
             least properties "user" and "password" with their corresponding values.
             For example { 'user' : 'SYSTEM', 'password' : 'mypassword' }
+
+        Other Parameters
+        ----------------
+        Extra options
+            For the extra options, refer to
+            `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-jdbc.html#data-source-option>`_
+            in the version you use.
+
+            .. # noqa
 
         Notes
         -----

@@ -46,7 +46,8 @@ private[spark] abstract class WebUI(
     port: Int,
     conf: SparkConf,
     basePath: String = "",
-    name: String = "")
+    name: String = "",
+    poolSize: Int = 200)
   extends Logging {
 
   protected val tabs = ArrayBuffer[WebUITab]()
@@ -143,7 +144,7 @@ private[spark] abstract class WebUI(
     assert(serverInfo.isEmpty, s"Attempted to bind $className more than once!")
     try {
       val host = Option(conf.getenv("SPARK_LOCAL_IP")).getOrElse("0.0.0.0")
-      val server = startJettyServer(host, port, sslOptions, conf, name)
+      val server = startJettyServer(host, port, sslOptions, conf, name, poolSize)
       handlers.foreach(server.addHandler(_, securityManager))
       serverInfo = Some(server)
       logInfo(s"Bound $className to $host, and started at $webUrl")

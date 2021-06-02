@@ -146,6 +146,9 @@ def _auto_patch_spark() -> None:
 
         df.DataFrame.to_pandas_on_spark = DataFrame.to_pandas_on_spark  # type: ignore
 
+        # Keep to_koalas for backward compatibility for now.
+        df.DataFrame.to_koalas = DataFrame.to_koalas  # type: ignore
+
 
 _frame_has_class_getitem = False
 _series_has_class_getitem = False
