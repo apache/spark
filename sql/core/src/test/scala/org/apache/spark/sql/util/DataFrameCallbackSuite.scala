@@ -227,9 +227,7 @@ class DataFrameCallbackSuite extends QueryTest
         spark.range(10).select($"id", $"id").write.insertInto("tab")
       }
       sparkContext.listenerBus.waitUntilEmpty()
-      assert(exceptions.length == 1)
-      assert(exceptions.head._1 == "insertInto")
-      assert(exceptions.head._2 == e)
+      assert(exceptions.length == 0)
     }
   }
 
