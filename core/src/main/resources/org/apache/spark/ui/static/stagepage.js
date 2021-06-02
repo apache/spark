@@ -404,8 +404,8 @@ $(document).ready(function () {
   
         var responseBody = response;
         var dataToShow = {};
-        dataToShow.showInputData = responseBody.inputBytes > 0;
-        dataToShow.showOutputData = responseBody.outputBytes > 0;
+        dataToShow.showInputData = responseBody.inputBytes > 0 || responseBody.inputRecords > 0 ;
+        dataToShow.showOutputData = responseBody.outputBytes > 0 || responseBody.outputRecords > 0;
         dataToShow.showShuffleReadData = responseBody.shuffleReadBytes > 0;
         dataToShow.showShuffleWriteData = responseBody.shuffleWriteBytes > 0;
         dataToShow.showBytesSpilledData =
@@ -976,7 +976,7 @@ $(document).ready(function () {
             },
             {
               data : function (row, type) {
-                if (row.taskMetrics && row.taskMetrics.inputMetrics && row.taskMetrics.inputMetrics.bytesRead > 0) {
+                if (row.taskMetrics && row.taskMetrics.inputMetrics && (row.taskMetrics.inputMetrics.bytesRead > 0 || row.taskMetrics.inputMetrics.recordsRead > 0)) {
                   if (type === 'display') {
                     return formatBytes(row.taskMetrics.inputMetrics.bytesRead, type) + " / " + row.taskMetrics.inputMetrics.recordsRead;
                   } else {
@@ -990,7 +990,7 @@ $(document).ready(function () {
             },
             {
               data : function (row, type) {
-                if (row.taskMetrics && row.taskMetrics.outputMetrics && row.taskMetrics.outputMetrics.bytesWritten > 0) {
+                if (row.taskMetrics && row.taskMetrics.outputMetrics && (row.taskMetrics.outputMetrics.bytesWritten > 0 || row.taskMetrics.outputMetrics.recordsWritten > 0)) {
                   if (type === 'display') {
                     return formatBytes(row.taskMetrics.outputMetrics.bytesWritten, type) + " / " + row.taskMetrics.outputMetrics.recordsWritten;
                   } else {
