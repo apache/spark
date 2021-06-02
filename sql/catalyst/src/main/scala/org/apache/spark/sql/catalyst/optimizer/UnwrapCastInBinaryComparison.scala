@@ -186,30 +186,33 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
     case inSet @ InSet(Cast(fromExp, toType: NumericType, _), hset)
       if hset.nonEmpty && canImplicitlyCast(fromExp, toType, toType) =>
 
-      var (nullList, canCastList, cannotCastList) =
-        (HashSet[Literal](), HashSet[Literal](), HashSet[Expression]())
+      // The same with `In`, there are 3 kinds of literals in the hset:
+      // 1. null literals
+      // 2. The literals that can cast to fromExp.dataType
+      // 3. The literals that cannot cast to fromExp.dataType
+      var (nullSet, canCastSet, cannotCastSet) =
+        (HashSet[Any](), HashSet[Any](), HashSet[Expression]())
       hset.map(value => Literal.create(value, toType))
         .foreach {
-          case lit @ Literal(null, _) => nullList += lit
+          case lit @ Literal(null, _) => nullSet += lit.value
           case lit @ NonNullLiteral(_, _) =>
             unwrapCast(EqualTo(inSet.child, lit)) match {
-              case EqualTo(_, unwrapLit: Literal) => canCastList += unwrapLit
-              case e @ And(IsNull(_), Literal(null, BooleanType)) => cannotCastList += e
+              case EqualTo(_, unwrapLit: Literal) => canCastSet += unwrapLit.value
+              case e @ And(IsNull(_), Literal(null, BooleanType)) => cannotCastSet += e
               case _ => throw new IllegalStateException("Illegal unwrap cast result found.")
             }
         }
 
-      if (canCastList.isEmpty && cannotCastList.isEmpty) {
+      if (canCastSet.isEmpty && cannotCastSet.isEmpty) {
         exp
       } else {
-        val newHSet = nullList ++ canCastList
-        val unwrapInSet = InSet(fromExp, newHSet.map(_.value))
-        cannotCastList.headOption match {
+        val unwrapInSet = InSet(fromExp, nullSet ++ canCastSet)
+        cannotCastSet.headOption match {
           case None => unwrapInSet
           // since `cannotCastList` are all the same,
           // convert to a single value `And(IsNull(_), Literal(null, BooleanType))`.
           case Some(falseIfNotNull @ And(IsNull(_), Literal(null, BooleanType)))
-            if cannotCastList.map(_.canonicalized).size == 1 => Or(falseIfNotNull, unwrapInSet)
+            if cannotCastSet.map(_.canonicalized).size == 1 => Or(falseIfNotNull, unwrapInSet)
           case _ => exp
         }
       }

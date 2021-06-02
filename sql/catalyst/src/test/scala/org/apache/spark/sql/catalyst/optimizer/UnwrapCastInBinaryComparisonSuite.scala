@@ -264,7 +264,7 @@ class UnwrapCastInBinaryComparisonSuite extends PlanTest with ExpressionEvalHelp
     // in.list only contains the value which out of `fromType` range
     checkInAndInSet(
       In(Cast(f, LongType), Seq(Int.MaxValue.toLong, Long.MaxValue)),
-      In(Cast(f, LongType), Seq(Int.MaxValue.toLong, Long.MaxValue)))
+      Or(falseIfNotNull(f), f.in()))
 
     // in.list is empty
     checkInAndInSet(
@@ -273,6 +273,8 @@ class UnwrapCastInBinaryComparisonSuite extends PlanTest with ExpressionEvalHelp
     // in.list contains null value
     checkInAndInSet(
       In(Cast(f, IntegerType), Seq(intLit)), In(Cast(f, IntegerType), Seq(intLit)))
+    checkInAndInSet(
+      In(Cast(f, IntegerType), Seq(intLit, intLit)), In(Cast(f, IntegerType), Seq(intLit, intLit)))
     checkInAndInSet(
       In(Cast(f, IntegerType), Seq(intLit, 1)), f.in(shortLit, 1.toShort))
     checkInAndInSet(
