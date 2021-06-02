@@ -202,6 +202,7 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
               case e @ And(IsNull(_), Literal(null, BooleanType)) => cannotCastSet += e
               case _ => throw new IllegalStateException("Illegal unwrap cast result found.")
             }
+          case _ => throw new IllegalStateException("Illegal value found in hset.")
         }
 
       if (canCastSet.isEmpty && cannotCastSet.isEmpty) {
