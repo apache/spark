@@ -36,6 +36,7 @@ from pyspark.sql.types import (
     StringType,
     StructType,
     TimestampType,
+    UserDefinedType,
 )
 
 import pyspark.sql.types as types
@@ -91,6 +92,7 @@ class DataTypeOps(object, metaclass=ABCMeta):
             FractionalOps,
         )
         from pyspark.pandas.data_type_ops.string_ops import StringOps
+        from pyspark.pandas.data_type_ops.udt_ops import UDTOps
 
         if isinstance(dtype, CategoricalDtype):
             return object.__new__(CategoricalOps)
@@ -116,6 +118,8 @@ class DataTypeOps(object, metaclass=ABCMeta):
             return object.__new__(StructOps)
         elif isinstance(spark_type, NullType):
             return object.__new__(NullOps)
+        elif isinstance(spark_type, UserDefinedType):
+            return object.__new__(UDTOps)
         else:
             raise TypeError("Type %s was not understood." % dtype)
 
