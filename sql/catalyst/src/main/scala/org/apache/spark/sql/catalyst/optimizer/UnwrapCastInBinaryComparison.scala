@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import scala.collection.immutable.HashSet
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.expressions._
@@ -133,9 +134,20 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
         if canImplicitlyCast(fromExp, toType, literalType) =>
       simplifyNumericComparison(be, fromExp, toType, value)
 
+    // As the analyzer makes sure that the list of In is already of the same data type, then the
+    // rule can simply check the first literal in `in.list` can implicitly cast to `toType` or not,
+    // and note that:
+    // 1. this rule doesn't convert in when `in.list` is empty.
+    // 2. this rule only handles the case when both `fromExp` and value in `in.list` are of numeric
+    // type.
     case in @ In(Cast(fromExp, toType: NumericType, _), list @ Seq(firstLit, _*))
       if canImplicitlyCast(fromExp, toType, firstLit.dataType) =>
 
+      // There are 3 kinds of literals in the list:
+      // 1. null literals
+      // 2. The literals that can cast to fromExp.dataType
+      // 3. The literals that cannot cast to fromExp.dataType
+      // null literals is special as we can cast null literals to any data type.
       val (nullList, canCastList, cannotCastList) =
         (ArrayBuffer[Literal](), ArrayBuffer[Literal](), ArrayBuffer[Expression]())
       list.foreach {
@@ -149,9 +161,12 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
         case _ => throw new IllegalStateException("Illegal value found in in.list.")
       }
 
-      if (canCastList.isEmpty) {
+      // return original expression when in.list only contains null values.
+      if (canCastList.isEmpty && cannotCastList.isEmpty) {
         exp
       } else {
+        // cast null value to fromExp.dataType, to make sure the new return list is in the same data
+        // type.
         val newList = nullList.map(lit => Cast(lit, fromExp.dataType)) ++ canCastList
         val unwrapIn = In(fromExp, newList)
         cannotCastList.headOption match {
@@ -159,111 +174,44 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
           // since `cannotCastList` are all the same,
           // convert to a single value `And(IsNull(_), Literal(null, BooleanType))`.
           case Some(falseIfNotNull @ And(IsNull(_), Literal(null, BooleanType)))
-            if canCastList.map(_.canonicalized).distinct.length == 1 => Or(falseIfNotNull, unwrapIn)
+              if cannotCastList.map(_.canonicalized).distinct.length == 1 =>
+            Or(falseIfNotNull, unwrapIn)
           case _ => exp
         }
       }
-
-    // As the analyzer makes sure that the list of In is already of the same data type, then the
-    // rule can simply check the first literal in `in.list` can implicitly cast to `toType` or not,
-    // and note that:
-    // 1. this rule doesn't convert in when `in.list` is empty.
-    // 2. this rule only handles the case when both `fromExp` and value in `in.list` are of numeric
-    // type.
-//    case in @ In(Cast(fromExp, toType: NumericType, _), list @ Seq(firstLit, _*))
-//        if canImplicitlyCast(fromExp, toType, firstLit.dataType) && in.inSetConvertible =>
-//      val (newValueList, expr) =
-//        list.map(lit => unwrapCast(EqualTo(in.value, lit)))
-//          .partition {
-//            case EqualTo(_, _: Literal) => true
-//            case And(IsNull(_), Literal(null, BooleanType)) => false
-//            case _ => throw new IllegalStateException("Illegal unwrap cast result found.")
-//          }
-//
-//      val (nonNullValueList, nullValueList) = newValueList.partition {
-//        case EqualTo(_, NonNullLiteral(_, _: NumericType)) => true
-//        case EqualTo(_, Literal(null, _)) => false
-//        case _ => throw new IllegalStateException("Illegal unwrap cast result found.")
-//      }
-//      // make sure the new return list have the same dataType.
-//      val newList = {
-//        if (nonNullValueList.nonEmpty) {
-//          // cast the null value to the dataType of nonNullValueList
-//          // when the nonNullValueList is nonEmpty.
-//          nullValueList.map {
-//            case EqualTo(_, lit) =>
-//              Cast(lit, nonNullValueList.head.asInstanceOf[EqualTo].left.dataType)
-//          } ++ nonNullValueList.map {case EqualTo(_, lit) => lit}
-//        } else {
-//          // the new value list only contains null value,
-//          // cast the null value to fromExp.dataType.
-//          nullValueList.map {
-//            case EqualTo(_, lit) =>
-//              Cast(lit, fromExp.dataType)
-//          }
-//        }
-//      }
-//
-//      val unwrapIn = In(fromExp, newList)
-//      expr.headOption match {
-//        case None => unwrapIn
-//        // since `expr` are all the same,
-//        // convert to a single value `And(IsNull(_), Literal(null, BooleanType))`.
-//        case Some(falseIfNotNull @ And(IsNull(_), Literal(null, BooleanType)))
-//            if expr.map(_.canonicalized).distinct.length == 1 => Or(falseIfNotNull, unwrapIn)
-//        case _ => exp
-//      }
-
-//    case inSet @ InSet(Cast(fromExp, toType: NumericType, _), hset)
-//      if hset.nonEmpty && canImplicitlyCast(fromExp, toType, toType) =>
-//      val (nullList, canCastList, cannotCastList) =
-//        (ArrayBuffer[Literal](), ArrayBuffer[Literal](), ArrayBuffer[Expression]())
-//      hset.map(lit => EqualTo(inSet.child, Literal.create(lit, toType)))
-//        .foreach {
-//        case lit @ Literal(null, _) => nullList += lit
-//        case lit @ NonNullLiteral(_, _) =>
-//          unwrapCast(EqualTo(inSet.child, lit)) match {
-//            case EqualTo(_, unwrapLit: Literal) => canCastList += unwrapLit
-//            case e @ And(IsNull(_), Literal(null, BooleanType)) => cannotCastList += e
-//            case _ => throw new IllegalStateException("Illegal unwrap cast result found.")
-//          }
-//        case _ => throw new IllegalStateException("Illegal value found in in.list.")
-//      }
-//
-//      if (canCastList.isEmpty) {
-//        exp
-//      } else {
-//        val newList = nullList.map(lit => Cast(lit, fromExp.dataType)) ++ canCastList
-//        val unwrapIn = In(fromExp, newList)
-//        cannotCastList.headOption match {
-//          case None => unwrapIn
-//          // since `cannotCastList` are all the same,
-//          // convert to a single value `And(IsNull(_), Literal(null, BooleanType))`.
-//          case Some(falseIfNotNull @ And(IsNull(_), Literal(null, BooleanType)))
-//            if canCastList.map(_.canonicalized).distinct.length == 1 => Or(falseIfNotNull, unwrapIn)
-//          case _ => exp
-//        }
-//      }
 
     // The same with `In` expression, the analyzer makes sure that the hset of InSet is already of
     // the same data type, so simply check `fromExp.dataType` can implicitly cast to `toType` and
     // both `fromExp.dataType` and `toType` is numeric type or not.
     case inSet @ InSet(Cast(fromExp, toType: NumericType, _), hset)
-        if hset.nonEmpty && canImplicitlyCast(fromExp, toType, toType) =>
-      val (newValueSet, expr) =
-        hset.map(lit => unwrapCast(EqualTo(inSet.child, Literal.create(lit, toType))))
-          .partition {
-            case EqualTo(_, _: Literal) => true
-            case And(IsNull(_), Literal(null, BooleanType)) => false
-            case _ => throw new IllegalStateException("Illegal unwrap cast result found.")
-          }
-      val newSet = newValueSet.map {case EqualTo(_, lit: Literal) => lit.value}
-      val unwrapInSet = InSet(fromExp, newSet)
-      expr.headOption match {
-        case None => unwrapInSet
-        case Some(falseIfNotNull @ And(IsNull(_), Literal(null, BooleanType)))
-          if expr.map(_.canonicalized).size == 1 => Or(falseIfNotNull, unwrapInSet)
-        case _ => exp
+      if hset.nonEmpty && canImplicitlyCast(fromExp, toType, toType) =>
+
+      var (nullList, canCastList, cannotCastList) =
+        (HashSet[Literal](), HashSet[Literal](), HashSet[Expression]())
+      hset.map(value => Literal.create(value, toType))
+        .foreach {
+          case lit @ Literal(null, _) => nullList += lit
+          case lit @ NonNullLiteral(_, _) =>
+            unwrapCast(EqualTo(inSet.child, lit)) match {
+              case EqualTo(_, unwrapLit: Literal) => canCastList += unwrapLit
+              case e @ And(IsNull(_), Literal(null, BooleanType)) => cannotCastList += e
+              case _ => throw new IllegalStateException("Illegal unwrap cast result found.")
+            }
+        }
+
+      if (canCastList.isEmpty && cannotCastList.isEmpty) {
+        exp
+      } else {
+        val newHSet = nullList ++ canCastList
+        val unwrapInSet = InSet(fromExp, newHSet.map(_.value))
+        cannotCastList.headOption match {
+          case None => unwrapInSet
+          // since `cannotCastList` are all the same,
+          // convert to a single value `And(IsNull(_), Literal(null, BooleanType))`.
+          case Some(falseIfNotNull @ And(IsNull(_), Literal(null, BooleanType)))
+            if cannotCastList.map(_.canonicalized).size == 1 => Or(falseIfNotNull, unwrapInSet)
+          case _ => exp
+        }
       }
 
     case _ => exp
