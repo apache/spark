@@ -282,7 +282,8 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * Construct a `DataFrame` representing the database table accessible via JDBC URL
    * url named table and connection properties.
    *
-   * You can find the JDBC-specific option and parameter documentation for reading tables via JDBC in
+   * You can find the JDBC-specific option and parameter documentation for reading tables
+   * via JDBC in
    * <a href="https://spark.apache.org/docs/latest/sql-data-sources-jdbc.html#data-source-option">
    *   Data Source Option</a> in the version you use.
    *
@@ -348,7 +349,8 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * Don't create too many partitions in parallel on a large cluster; otherwise Spark might crash
    * your external database systems.
    *
-   * You can find the JDBC-specific option and parameter documentation for reading tables via JDBC in
+   * You can find the JDBC-specific option and parameter documentation for reading tables
+   * via JDBC in
    * <a href="https://spark.apache.org/docs/latest/sql-data-sources-jdbc.html#data-source-option">
    *   Data Source Option</a> in the version you use.
    *
