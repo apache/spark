@@ -2148,4 +2148,37 @@ package object config {
       // batch of block will be loaded in memory with memory mapping, which has higher overhead
       // with small MB sized chunk of data.
       .createWithDefaultString("3m")
+
+  private[spark] val JAR_IVY_REPO_PATH =
+    ConfigBuilder("spark.jars.ivy")
+      .version("1.3.0")
+      .stringConf
+      .createOptional
+
+  private[spark] val JAR_IVY_SETTING_PATH =
+    ConfigBuilder("spark.jars.ivySettings")
+      .version("2.2.0")
+      .stringConf
+      .createOptional
+
+  private[spark] val JAR_PACKAGES =
+    ConfigBuilder("spark.jars.packages")
+      .version("1.5.0")
+      .stringConf
+      .toSequence
+      .createOptional
+
+  private[spark] val JAR_PACKAGES_EXCLUSIONS =
+    ConfigBuilder("spark.jars.excludes")
+      .version("1.5.0")
+      .stringConf
+      .toSequence
+      .createOptional
+
+  private[spark] val JAR_REPOSITORIES =
+    ConfigBuilder("spark.jars.repositories")
+      .version("2.3.0")
+      .stringConf
+      .toSequence
+      .createOptional
 }
