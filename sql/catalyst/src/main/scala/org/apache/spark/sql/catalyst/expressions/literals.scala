@@ -339,7 +339,7 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
     case other =>
       dataType match {
         case DateType =>
-          DateFormatter(timeZoneId).format(value.asInstanceOf[Int])
+          DateFormatter().format(value.asInstanceOf[Int])
         case TimestampType =>
           TimestampFormatter.getFractionFormatter(timeZoneId).format(value.asInstanceOf[Long])
         case DayTimeIntervalType => toDayTimeIntervalString(value.asInstanceOf[Long], ANSI_STYLE)

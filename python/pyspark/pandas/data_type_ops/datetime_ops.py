@@ -53,7 +53,9 @@ class DatetimeOps(DataTypeOps):
             return left.astype("long") - right.astype("long")
         elif isinstance(right, datetime.datetime):
             warnings.warn(msg, UserWarning)
-            return left.astype("long") - F.lit(right).cast(as_spark_type("long"))
+            return left.astype("long").spark.transform(
+                lambda scol: scol - F.lit(right).cast(as_spark_type("long"))
+            )
         else:
             raise TypeError("datetime subtraction can only be applied to datetime series.")
 
@@ -67,6 +69,8 @@ class DatetimeOps(DataTypeOps):
         )
         if isinstance(right, datetime.datetime):
             warnings.warn(msg, UserWarning)
-            return -(left.astype("long") - F.lit(right).cast(as_spark_type("long")))
+            return -(left.astype("long")).spark.transform(
+                lambda scol: scol - F.lit(right).cast(as_spark_type("long"))
+            )
         else:
             raise TypeError("datetime subtraction can only be applied to datetime series.")

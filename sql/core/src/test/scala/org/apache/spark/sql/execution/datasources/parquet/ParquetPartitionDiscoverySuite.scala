@@ -56,7 +56,7 @@ abstract class ParquetPartitionDiscoverySuite
   val defaultPartitionName = ExternalCatalogUtils.DEFAULT_PARTITION_NAME
 
   val timeZoneId = ZoneId.systemDefault()
-  val df = DateFormatter(timeZoneId)
+  val df = DateFormatter()
   val tf = TimestampFormatter(
     timestampPartitionPattern, timeZoneId, isParsing = true)
 
