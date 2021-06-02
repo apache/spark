@@ -43,7 +43,7 @@ private[spark] object DependencyUtils extends Logging {
       "spark.jars.excludes",
       "spark.jars.packages",
       "spark.jars.repositories",
-      "spark.jars.ivy",
+      config.JAR_IVY_REPO_PATH.key,
       config.JAR_IVY_SETTING_PATH.key
     ).map(sys.props.get(_).orNull)
     IvyProperties(packagesExclusions, packages, repositories, ivyRepoPath, ivySettingsPath)
