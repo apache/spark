@@ -46,8 +46,8 @@ object OrcUtils extends Logging {
     "SNAPPY" -> ".snappy",
     "ZLIB" -> ".zlib",
     "ZSTD" -> ".zstd",
-    "LZO" -> ".lzo",
-    "LZ4" -> ".lz4")
+    "LZ4" -> ".lz4",
+    "LZO" -> ".lzo")
 
   def listOrcFiles(pathStr: String, conf: Configuration): Seq[Path] = {
     val origPath = new Path(pathStr)
