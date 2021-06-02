@@ -224,8 +224,8 @@ class QuantileSummariesSuite extends SparkFunSuite {
         checkQuantile(percentile, data, s)
         percentiles += percentile
       }
-      checkQuantiles(percentiles, data, s)
-      checkQuantiles(percentiles.reverse, data, s)
+      checkQuantiles(percentiles.toSeq, data, s)
+      checkQuantiles(percentiles.reverse.toSeq, data, s)
     }
   }
 }
