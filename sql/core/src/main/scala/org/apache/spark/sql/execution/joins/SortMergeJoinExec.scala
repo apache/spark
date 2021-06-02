@@ -1365,7 +1365,7 @@ private class SortMergeFullOuterJoinScanner(
 
   def advanceNext(): Boolean = {
     // If we already buffered some matching rows, use them directly
-    if (leftIndex <= leftMatches.size || rightIndex <= rightMatches.size) {
+    if (leftIndex < leftMatches.size || rightIndex < rightMatches.size) {
       if (scanNextInBuffered()) {
         return true
       }
