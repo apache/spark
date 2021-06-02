@@ -134,7 +134,7 @@ private[sql] class JsonInferSchema(options: JSONOptions) extends Serializable {
         if (options.prefersDecimal && decimalTry.isDefined) {
           decimalTry.get
         } else if (options.inferDateType
-            && !dateFormatter.isInstanceOf[LegacySimpleDateFormatter] &&
+            && !dateFormatter.isInstanceOf[LegacyFastDateFormatter] &&
             (allCatch opt dateFormatter.parse(field)).isDefined) {
           DateType
         } else if (options.inferTimestamp &&
