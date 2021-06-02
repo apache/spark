@@ -108,7 +108,7 @@ Data source options of JSON can be set via:
   <tr><th><b>Property Name</b></th><th><b>Default</b></th><th><b>Meaning</b></th><th><b>Scope</b></th></tr>
   <tr>
     <!-- TODO(SPARK-35433): Add timeZone to Data Source Option for CSV, too. -->
-    <td><code>session local timezone</code></td>
+    <td><code>timeZone</code></td>
     <td>The SQL config <code>spark.sql.session.timeZone</code></td>
     <td>Sets the string that indicates a time zone ID to be used to format timestamps in the JSON datasources or partition values. The following formats of <code>timeZone</code> are supported:<br>
     <ul>
