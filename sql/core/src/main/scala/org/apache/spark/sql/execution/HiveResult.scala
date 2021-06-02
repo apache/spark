@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution
 
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
-import java.time.{Duration, Instant, LocalDate, Period, ZoneOffset}
+import java.time.{Duration, Instant, LocalDate, Period}
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, TimestampFormatter}
@@ -38,15 +38,7 @@ object HiveResult {
   case class TimeFormatters(date: DateFormatter, timestamp: TimestampFormatter)
 
   def getTimeFormatters: TimeFormatters = {
-    // The date formatter does not depend on Spark's session time zone controlled by
-    // the SQL config `spark.sql.session.timeZone`. The `zoneId` parameter is used only in
-    // parsing of special date values like `now`, `yesterday` and etc. but not in date formatting.
-    // While formatting of:
-    // - `java.time.LocalDate`, zone id is not used by `DateTimeFormatter` at all.
-    // - `java.sql.Date`, the date formatter delegates formatting to the legacy formatter
-    //   which uses the default system time zone `TimeZone.getDefault`. This works correctly
-    //   due to `DateTimeUtils.toJavaDate` which is based on the system time zone too.
-    val dateFormatter = DateFormatter(ZoneOffset.UTC)
+    val dateFormatter = DateFormatter()
     val timestampFormatter = TimestampFormatter.getFractionFormatter(
       DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone))
     TimeFormatters(dateFormatter, timestampFormatter)

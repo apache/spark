@@ -49,6 +49,13 @@ private[kafka010] case class SpecificOffsetRangeLimit(
 private[kafka010] case class SpecificTimestampRangeLimit(
     topicTimestamps: Map[TopicPartition, Long]) extends KafkaOffsetRangeLimit
 
+/**
+ * Represents the desire to bind to earliest offset which timestamp for the offset is equal or
+ * greater than specific timestamp. This applies the timestamp to the all topics/partitions.
+ */
+private[kafka010] case class GlobalTimestampRangeLimit(
+    timestamp: Long) extends KafkaOffsetRangeLimit
+
 private[kafka010] object KafkaOffsetRangeLimit {
   /**
    * Used to denote offset range limits that are resolved via Kafka

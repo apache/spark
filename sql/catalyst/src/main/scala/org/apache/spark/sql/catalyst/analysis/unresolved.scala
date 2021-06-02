@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, UnaryNode}
+import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
@@ -57,6 +58,8 @@ case class UnresolvedRelation(
   override def output: Seq[Attribute] = Nil
 
   override lazy val resolved = false
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_RELATION)
 }
 
 object UnresolvedRelation {
@@ -165,6 +168,7 @@ case class UnresolvedAttribute(nameParts: Seq[String]) extends Attribute with Un
   override def withName(newName: String): UnresolvedAttribute = UnresolvedAttribute.quoted(newName)
   override def withMetadata(newMetadata: Metadata): Attribute = this
   override def withExprId(newExprId: ExprId): UnresolvedAttribute = this
+  final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_ATTRIBUTE)
 
   override def toString: String = s"'$name"
 
@@ -282,6 +286,7 @@ case class UnresolvedFunction(
   override def dataType: DataType = throw new UnresolvedException("dataType")
   override def nullable: Boolean = throw new UnresolvedException("nullable")
   override lazy val resolved = false
+  final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_FUNCTION)
 
   override def prettyName: String = nameParts.quoted
   override def toString: String = {
@@ -462,6 +467,8 @@ case class MultiAlias(child: Expression, names: Seq[String])
 
   override def newInstance(): NamedExpression = throw new UnresolvedException("newInstance")
 
+  final override val nodePatterns: Seq[TreePattern] = Seq(MULTI_ALIAS)
+
   override lazy val resolved = false
 
   override def toString: String = s"$child AS $names"
@@ -529,6 +536,7 @@ case class UnresolvedAlias(
   override def dataType: DataType = throw new UnresolvedException("dataType")
   override def name: String = throw new UnresolvedException("name")
   override def newInstance(): NamedExpression = throw new UnresolvedException("newInstance")
+  final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_ALIAS)
 
   override lazy val resolved = false
 
@@ -556,6 +564,8 @@ case class UnresolvedSubqueryColumnAliases(
 
   override lazy val resolved = false
 
+  final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_SUBQUERY_COLUMN_ALIAS)
+
   override protected def withNewChildInternal(
     newChild: LogicalPlan): UnresolvedSubqueryColumnAliases = copy(child = newChild)
 }
@@ -579,6 +589,7 @@ case class UnresolvedDeserializer(deserializer: Expression, inputAttributes: Seq
   override def dataType: DataType = throw new UnresolvedException("dataType")
   override def nullable: Boolean = throw new UnresolvedException("nullable")
   override lazy val resolved = false
+  final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_DESERIALIZER)
 
   override protected def withNewChildInternal(newChild: Expression): UnresolvedDeserializer =
     copy(deserializer = newChild)
@@ -616,6 +627,7 @@ case class UnresolvedOrdinal(ordinal: Int)
   override def dataType: DataType = throw new UnresolvedException("dataType")
   override def nullable: Boolean = throw new UnresolvedException("nullable")
   override lazy val resolved = false
+  final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_ORDINAL)
 }
 
 /**

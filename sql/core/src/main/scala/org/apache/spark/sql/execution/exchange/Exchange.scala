@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, Expression, SortOrder}
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.vectorized.ColumnarBatch
@@ -39,6 +40,7 @@ import org.apache.spark.sql.vectorized.ColumnarBatch
  */
 abstract class Exchange extends UnaryExecNode {
   override def output: Seq[Attribute] = child.output
+  final override val nodePatterns: Seq[TreePattern] = Seq(EXCHANGE)
 
   override def stringArgs: Iterator[Any] = super.stringArgs ++ Iterator(s"[id=#$id]")
 }
@@ -125,12 +127,12 @@ object ReuseExchange extends Rule[SparkPlan] {
         }
     }
 
-    plan transformUp {
+    plan.transformUpWithPruning(_.containsPattern(EXCHANGE))({
       case exchange: Exchange => reuse(exchange)
-    } transformAllExpressions {
+    }).transformAllExpressionsWithPruning(_.containsPattern(IN_SUBQUERY_EXEC)) {
       // Lookup inside subqueries for duplicate exchanges
       case in: InSubqueryExec =>
-        val newIn = in.plan.transformUp {
+        val newIn = in.plan.transformUpWithPruning(_.containsPattern(EXCHANGE)) {
           case exchange: Exchange => reuse(exchange)
         }
         in.copy(plan = newIn.asInstanceOf[BaseSubqueryExec])

@@ -540,7 +540,7 @@ case class JsonToStructs(
 
   override def nullable: Boolean = true
 
-  final override val nodePatterns: Seq[TreePattern] = Seq(JSON_TO_STRUCT)
+  final override def nodePatternsInternal(): Seq[TreePattern] = Seq(JSON_TO_STRUCT)
 
   // Used in `FunctionRegistry`
   def this(child: Expression, schema: Expression, options: Map[String, String]) =
