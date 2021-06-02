@@ -41,7 +41,7 @@ private[spark] object DependencyUtils extends Logging {
   def getIvyProperties(): IvyProperties = {
     val Seq(packagesExclusions, packages, repositories, ivyRepoPath, ivySettingsPath) = Seq(
       "spark.jars.excludes",
-      "spark.jars.packages",
+      config.JAR_PACKAGES.key,
       "spark.jars.repositories",
       config.JAR_IVY_REPO_PATH.key,
       config.JAR_IVY_SETTING_PATH.key

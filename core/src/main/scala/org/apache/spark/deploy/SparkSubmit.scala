@@ -607,7 +607,7 @@ private[spark] class SparkSubmit extends Logging {
 
       // Propagate attributes for dependency resolution at the driver side
       OptionAssigner(args.packages, STANDALONE | MESOS | KUBERNETES,
-        CLUSTER, confKey = "spark.jars.packages"),
+        CLUSTER, confKey = config.JAR_PACKAGES.key),
       OptionAssigner(args.repositories, STANDALONE | MESOS | KUBERNETES,
         CLUSTER, confKey = "spark.jars.repositories"),
       OptionAssigner(args.ivyRepoPath, STANDALONE | MESOS | KUBERNETES,
