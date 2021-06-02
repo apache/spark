@@ -19,12 +19,15 @@ package org.apache.spark.util
 
 import java.io.File
 import java.net.URI
+
 import org.apache.commons.lang3.StringUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
+
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.deploy.SparkSubmitUtils
-import org.apache.spark.internal.{Logging, config}
+import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config
 
 case class IvyProperties(
     packagesExclusions: String,
