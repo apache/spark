@@ -171,17 +171,17 @@ object EliminateOuterJoin extends Rule[LogicalPlan] with PredicateHelper {
       val newJoinType = buildNewJoinType(f, j)
       if (j.joinType == newJoinType) f else Filter(condition, j.copy(joinType = newJoinType))
 
-    case a @ Aggregate(_, _, join @ Join(left, _, LeftOuter, _, _))
-        if a.isDistinct && a.references.subsetOf(AttributeSet(left.output)) =>
+    case a @ Aggregate(_, _, Join(left, _, LeftOuter, _, _))
+        if a.groupOnly && a.references.subsetOf(AttributeSet(left.output)) =>
       a.copy(child = left)
-    case a @ Aggregate(_, _, join @ Join(_, right, RightOuter, _, _))
-        if a.isDistinct && a.references.subsetOf(AttributeSet(right.output)) =>
+    case a @ Aggregate(_, _, Join(_, right, RightOuter, _, _))
+        if a.groupOnly && a.references.subsetOf(AttributeSet(right.output)) =>
       a.copy(child = right)
-    case a @ Aggregate(_, _, p @ Project(_, join @ Join(left, _, LeftOuter, _, _)))
-        if a.isDistinct && a.references.subsetOf(AttributeSet(left.output)) =>
+    case a @ Aggregate(_, _, p @ Project(_, Join(left, _, LeftOuter, _, _)))
+        if a.groupOnly && a.references.subsetOf(AttributeSet(left.output)) =>
       a.copy(child = p.copy(child = left))
-    case a @ Aggregate(_, _, p @ Project(_, join @ Join(_, right, RightOuter, _, _)))
-        if a.isDistinct && a.references.subsetOf(AttributeSet(right.output)) =>
+    case a @ Aggregate(_, _, p @ Project(_, Join(_, right, RightOuter, _, _)))
+        if a.groupOnly && a.references.subsetOf(AttributeSet(right.output)) =>
       a.copy(child = p.copy(child = right))
   }
 }
