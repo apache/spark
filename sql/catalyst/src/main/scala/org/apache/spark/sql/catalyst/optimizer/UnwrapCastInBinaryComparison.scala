@@ -169,7 +169,7 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
         // cast null value to fromExp.dataType, to make sure the new return list is in the same data
         // type.
         val newList = nullList.map(lit => Cast(lit, fromExp.dataType)) ++ canCastList
-        val unwrapIn = In(fromExp, newList)
+        val unwrapIn = In(fromExp, newList.toSeq)
         cannotCastList.headOption match {
           case None => unwrapIn
           // since `cannotCastList` are all the same,
