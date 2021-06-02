@@ -158,7 +158,7 @@ Data source options of JSON can be set via:
   <tr>
     <td><code>inferDateType</code></td>
     <td>false</td>
-    <td>Infers all DateType format for the json. If this is not set, it uses the default value, <code>false</code>.</td>
+    <td>Infers all DateType format for the JSON. If this is not set, it uses the default value, <code>false</code>.</td>
     <td>read</td>
   </tr>
   <tr>

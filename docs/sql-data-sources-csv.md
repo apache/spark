@@ -251,7 +251,7 @@ Data source options of CSV can be set via:
   <tr>
     <td><code>inferDateType</code></td>
     <td>false</td>
-    <td>Infers all DateType format for the csv. If this is not set, it uses the default value, <code>false</code>.</td>
+    <td>Infers all DateType format for the CSV. If this is not set, it uses the default value, <code>false</code>.</td>
     <td>read</td>
   </tr>
 </table>
