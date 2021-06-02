@@ -16,11 +16,10 @@
  */
 package org.apache.spark.sql.catalyst.parser
 
-import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.{SQLKeywordUtils, TableIdentifier}
 import org.apache.spark.sql.internal.SQLConf
 
-class TableIdentifierParserSuite extends SparkFunSuite with SQLKeywordUtils {
+class TableIdentifierParserSuite extends SQLKeywordUtils {
   import CatalystSqlParser._
 
   // Add "$elem$", "$value$" & "$key$"

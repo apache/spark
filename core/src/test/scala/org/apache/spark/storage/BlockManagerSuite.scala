@@ -1952,15 +1952,19 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     Files.write(bm2.diskBlockManager.getFile(shuffleData2).toPath(), shuffleDataBlockContent)
     val shuffleIndexBlockContent = Array[Byte](5, 6, 7, 8, 9)
     val shuffleIndex = ShuffleIndexBlockId(0, 0, 0)
+    val shuffleIndexOnly = ShuffleIndexBlockId(0, 1, 0)
     val shuffleIndex2 = ShuffleIndexBlockId(1, 0, 0)
     Files.write(bm1.diskBlockManager.getFile(shuffleIndex).toPath(), shuffleIndexBlockContent)
+    Files.write(bm1.diskBlockManager.getFile(shuffleIndexOnly).toPath(), shuffleIndexBlockContent)
     Files.write(bm2.diskBlockManager.getFile(shuffleIndex2).toPath(), shuffleIndexBlockContent)
 
-    mapOutputTracker.registerShuffle(0, 1, MergeStatus.SHUFFLE_PUSH_DUMMY_NUM_REDUCES)
+    mapOutputTracker.registerShuffle(0, 2, MergeStatus.SHUFFLE_PUSH_DUMMY_NUM_REDUCES)
     val decomManager = new BlockManagerDecommissioner(conf, bm1)
     try {
       mapOutputTracker.registerMapOutput(0, 0, MapStatus(bm1.blockManagerId, Array(blockSize), 0))
+      mapOutputTracker.registerMapOutput(0, 1, MapStatus(bm1.blockManagerId, Array(blockSize), 1))
       assert(mapOutputTracker.shuffleStatuses(0).mapStatuses(0).location === bm1.blockManagerId)
+      assert(mapOutputTracker.shuffleStatuses(0).mapStatuses(1).location === bm1.blockManagerId)
 
       val env = mock(classOf[SparkEnv])
       when(env.conf).thenReturn(conf)
@@ -1971,6 +1975,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
       if (willReject) {
         eventually(timeout(1.second), interval(10.milliseconds)) {
           assert(mapOutputTracker.shuffleStatuses(0).mapStatuses(0).location === bm2.blockManagerId)
+          assert(mapOutputTracker.shuffleStatuses(0).mapStatuses(1).location === bm2.blockManagerId)
         }
         assert(Files.readAllBytes(bm2.diskBlockManager.getFile(shuffleData).toPath())
           === shuffleDataBlockContent)
@@ -1985,6 +1990,10 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
       // Avoid thread leak
       decomManager.stopOffloadingShuffleBlocks()
     }
+  }
+
+  test("SPARK-35589: test migration of index-only shuffle blocks during decommissioning") {
+    testShuffleBlockDecommissioning(None, true)
   }
 
   test("test migration of shuffle blocks during decommissioning - no limit") {

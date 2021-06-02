@@ -15,8 +15,8 @@
 # limitations under the License.
 #
 
-import _string
-from typing import Dict, Any, Optional  # noqa: F401 (SPARK-34943)
+import _string  # type: ignore
+from typing import Any, Dict, Optional  # noqa: F401 (SPARK-34943)
 import inspect
 import pandas as pd
 
@@ -34,7 +34,12 @@ from builtins import globals as builtin_globals
 from builtins import locals as builtin_locals
 
 
-def sql(query: str, globals=None, locals=None, **kwargs) -> DataFrame:
+def sql(
+    query: str,
+    globals: Optional[Dict[str, Any]] = None,
+    locals: Optional[Dict[str, Any]] = None,
+    **kwargs: Any
+) -> DataFrame:
     """
     Execute a SQL query and return the result as a pandas-on-Spark DataFrame.
 
@@ -152,7 +157,7 @@ def sql(query: str, globals=None, locals=None, **kwargs) -> DataFrame:
 _CAPTURE_SCOPES = 2
 
 
-def _get_local_scope():
+def _get_local_scope() -> Dict[str, Any]:
     # Get 2 scopes above (_get_local_scope -> sql -> ...) to capture the vars there.
     try:
         return inspect.stack()[_CAPTURE_SCOPES][0].f_locals
@@ -162,13 +167,13 @@ def _get_local_scope():
         return {}
 
 
-def _get_ipython_scope():
+def _get_ipython_scope() -> Dict[str, Any]:
     """
     Tries to extract the dictionary of variables if the program is running
     in an IPython notebook environment.
     """
     try:
-        from IPython import get_ipython
+        from IPython import get_ipython  # type: ignore
 
         shell = get_ipython()
         return shell.user_ns
@@ -257,7 +262,7 @@ class SQLProcessor(object):
                 self._session.catalog.dropTempView(v)
         return DataFrame(sdf)
 
-    def _convert(self, key) -> Any:
+    def _convert(self, key: str) -> Any:
         """
         Given a {} key, returns an equivalent SQL representation.
         This conversion performs all the necessary escaping so that the string
@@ -277,7 +282,7 @@ class SQLProcessor(object):
         self._cached_vars[key] = fillin
         return fillin
 
-    def _convert_var(self, var) -> Any:
+    def _convert_var(self, var: Any) -> Any:
         """
         Converts a python object into a string that is legal SQL.
         """
@@ -303,7 +308,7 @@ class SQLProcessor(object):
         raise ValueError("Unsupported variable type {}: {}".format(type(var).__name__, str(var)))
 
 
-def _test():
+def _test() -> None:
     import os
     import doctest
     import sys

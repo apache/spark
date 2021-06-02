@@ -27,6 +27,7 @@ import org.apache.parquet.hadoop.api.{InitContext, ReadSupport}
 import org.apache.parquet.hadoop.api.ReadSupport.ReadContext
 import org.apache.parquet.io.api.RecordMaterializer
 import org.apache.parquet.schema._
+import org.apache.parquet.schema.LogicalTypeAnnotation.ListLogicalTypeAnnotation
 import org.apache.parquet.schema.Type.Repetition
 
 import org.apache.spark.internal.Logging
@@ -214,13 +215,14 @@ object ParquetReadSupport {
 
     // Unannotated repeated group should be interpreted as required list of required element, so
     // list element type is just the group itself.  Clip it.
-    if (parquetList.getOriginalType == null && parquetList.isRepetition(Repetition.REPEATED)) {
+    if (parquetList.getLogicalTypeAnnotation == null &&
+      parquetList.isRepetition(Repetition.REPEATED)) {
       clipParquetType(parquetList, elementType, caseSensitive)
     } else {
       assert(
-        parquetList.getOriginalType == OriginalType.LIST,
+        parquetList.getLogicalTypeAnnotation.isInstanceOf[ListLogicalTypeAnnotation],
         "Invalid Parquet schema. " +
-          "Original type of annotated Parquet lists must be LIST: " +
+          "Logical type annotation of annotated Parquet lists must be ListLogicalTypeAnnotation: " +
           parquetList.toString)
 
       assert(
@@ -246,7 +248,7 @@ object ParquetReadSupport {
       ) {
         Types
           .buildGroup(parquetList.getRepetition)
-          .as(OriginalType.LIST)
+          .as(LogicalTypeAnnotation.listType())
           .addField(clipParquetType(repeatedGroup, elementType, caseSensitive))
           .named(parquetList.getName)
       } else {
@@ -254,7 +256,7 @@ object ParquetReadSupport {
         // repetition.
         Types
           .buildGroup(parquetList.getRepetition)
-          .as(OriginalType.LIST)
+          .as(LogicalTypeAnnotation.listType())
           .addField(
             Types
               .repeatedGroup()
@@ -285,14 +287,14 @@ object ParquetReadSupport {
     val clippedRepeatedGroup =
       Types
         .repeatedGroup()
-        .as(repeatedGroup.getOriginalType)
+        .as(repeatedGroup.getLogicalTypeAnnotation)
         .addField(clipParquetType(parquetKeyType, keyType, caseSensitive))
         .addField(clipParquetType(parquetValueType, valueType, caseSensitive))
         .named(repeatedGroup.getName)
 
     Types
       .buildGroup(parquetMap.getRepetition)
-      .as(parquetMap.getOriginalType)
+      .as(parquetMap.getLogicalTypeAnnotation)
       .addField(clippedRepeatedGroup)
       .named(parquetMap.getName)
   }
@@ -310,7 +312,7 @@ object ParquetReadSupport {
     val clippedParquetFields = clipParquetGroupFields(parquetRecord, structType, caseSensitive)
     Types
       .buildGroup(parquetRecord.getRepetition)
-      .as(parquetRecord.getOriginalType)
+      .as(parquetRecord.getLogicalTypeAnnotation)
       .addFields(clippedParquetFields: _*)
       .named(parquetRecord.getName)
   }

@@ -36,29 +36,29 @@ class OpsOnDiffFramesGroupByRollingTest(PandasOnSparkTestCase, TestUtils):
     def _test_groupby_rolling_func(self, f):
         pser = pd.Series([1, 2, 3], name="a")
         pkey = pd.Series([1, 2, 3], name="a")
-        kser = ps.from_pandas(pser)
+        psser = ps.from_pandas(pser)
         kkey = ps.from_pandas(pkey)
 
         self.assert_eq(
-            getattr(kser.groupby(kkey).rolling(2), f)().sort_index(),
+            getattr(psser.groupby(kkey).rolling(2), f)().sort_index(),
             getattr(pser.groupby(pkey).rolling(2), f)().sort_index(),
         )
 
         pdf = pd.DataFrame({"a": [1, 2, 3, 2], "b": [4.0, 2.0, 3.0, 1.0]})
         pkey = pd.Series([1, 2, 3, 2], name="a")
-        kdf = ps.from_pandas(pdf)
+        psdf = ps.from_pandas(pdf)
         kkey = ps.from_pandas(pkey)
 
         self.assert_eq(
-            getattr(kdf.groupby(kkey).rolling(2), f)().sort_index(),
+            getattr(psdf.groupby(kkey).rolling(2), f)().sort_index(),
             getattr(pdf.groupby(pkey).rolling(2), f)().sort_index(),
         )
         self.assert_eq(
-            getattr(kdf.groupby(kkey)["b"].rolling(2), f)().sort_index(),
+            getattr(psdf.groupby(kkey)["b"].rolling(2), f)().sort_index(),
             getattr(pdf.groupby(pkey)["b"].rolling(2), f)().sort_index(),
         )
         self.assert_eq(
-            getattr(kdf.groupby(kkey)[["b"]].rolling(2), f)().sort_index(),
+            getattr(psdf.groupby(kkey)[["b"]].rolling(2), f)().sort_index(),
             getattr(pdf.groupby(pkey)[["b"]].rolling(2), f)().sort_index(),
         )
 
@@ -91,7 +91,8 @@ if __name__ == "__main__":
 
     try:
         import xmlrunner  # type: ignore[import]
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
+
+        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

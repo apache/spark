@@ -163,7 +163,7 @@ Condition : isnotnull(i_item_sk#13)
 Output [2]: [i_item_id#15, i_color#16]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/item]
-PushedFilters: [In(i_color, [slate               ,blanched            ,burnished           ])]
+PushedFilters: [In(i_color, [blanched            ,burnished           ,slate               ])]
 ReadSchema: struct<i_item_id:string,i_color:string>
 
 (22) ColumnarToRow [codegen id : 3]

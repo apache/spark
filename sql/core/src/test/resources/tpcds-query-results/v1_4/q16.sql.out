@@ -3,4 +3,4 @@
 -- !query schema
 struct<order count :bigint,total shipping cost :decimal(17,2),total net profit :decimal(17,2)>
 -- !query output
-236	1062963.89	-214910.61
+280	1300478.25	-285761.26

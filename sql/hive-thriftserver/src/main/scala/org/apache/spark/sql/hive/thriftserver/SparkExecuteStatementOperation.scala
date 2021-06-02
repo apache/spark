@@ -255,8 +255,7 @@ private[hive] class SparkExecuteStatementOperation(
           setState(OperationState.ERROR)
           HiveThriftServer2.eventManager.onStatementError(
             statementId, rejected.getMessage, SparkUtils.exceptionString(rejected))
-          throw new HiveSQLException("The background threadpool cannot accept" +
-            " new task for execution, please retry the operation", rejected)
+          throw HiveThriftServerErrors.taskExecutionRejectedError(rejected)
         case NonFatal(e) =>
           logError(s"Error executing query in background", e)
           setState(OperationState.ERROR)
@@ -322,7 +321,7 @@ private[hive] class SparkExecuteStatementOperation(
             statementId, e.getMessage, SparkUtils.exceptionString(e))
           e match {
             case _: HiveSQLException => throw e
-            case _ => throw new HiveSQLException("Error running query: " + e.toString, e)
+            case _ => throw HiveThriftServerErrors.runningQueryError(e)
           }
         }
     } finally {

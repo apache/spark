@@ -23,8 +23,8 @@ TakeOrderedAndProject [channel,id,sales,returns,profit]
                                             Project [ss_store_sk,ss_promo_sk,ss_ext_sales_price,ss_net_profit,ss_sold_date_sk,sr_return_amt,sr_net_loss]
                                               BroadcastHashJoin [ss_item_sk,i_item_sk]
                                                 Project [ss_item_sk,ss_store_sk,ss_promo_sk,ss_ext_sales_price,ss_net_profit,ss_sold_date_sk,sr_return_amt,sr_net_loss]
-                                                  InputAdapter
-                                                    SortMergeJoin [ss_item_sk,ss_ticket_number,sr_item_sk,sr_ticket_number]
+                                                  SortMergeJoin [ss_item_sk,ss_ticket_number,sr_item_sk,sr_ticket_number]
+                                                    InputAdapter
                                                       WholeStageCodegen (2)
                                                         Sort [ss_item_sk,ss_ticket_number]
                                                           InputAdapter
@@ -36,6 +36,7 @@ TakeOrderedAndProject [channel,id,sales,returns,profit]
                                                                       Scan parquet default.store_sales [ss_item_sk,ss_store_sk,ss_promo_sk,ss_ticket_number,ss_ext_sales_price,ss_net_profit,ss_sold_date_sk]
                                                                         SubqueryBroadcast [d_date_sk] #1
                                                                           ReusedExchange [d_date_sk] #4
+                                                    InputAdapter
                                                       WholeStageCodegen (4)
                                                         Sort [sr_item_sk,sr_ticket_number]
                                                           InputAdapter
@@ -92,8 +93,8 @@ TakeOrderedAndProject [channel,id,sales,returns,profit]
                                             Project [cs_catalog_page_sk,cs_promo_sk,cs_ext_sales_price,cs_net_profit,cs_sold_date_sk,cr_return_amount,cr_net_loss]
                                               BroadcastHashJoin [cs_item_sk,i_item_sk]
                                                 Project [cs_catalog_page_sk,cs_item_sk,cs_promo_sk,cs_ext_sales_price,cs_net_profit,cs_sold_date_sk,cr_return_amount,cr_net_loss]
-                                                  InputAdapter
-                                                    SortMergeJoin [cs_item_sk,cs_order_number,cr_item_sk,cr_order_number]
+                                                  SortMergeJoin [cs_item_sk,cs_order_number,cr_item_sk,cr_order_number]
+                                                    InputAdapter
                                                       WholeStageCodegen (12)
                                                         Sort [cs_item_sk,cs_order_number]
                                                           InputAdapter
@@ -104,6 +105,7 @@ TakeOrderedAndProject [channel,id,sales,returns,profit]
                                                                     InputAdapter
                                                                       Scan parquet default.catalog_sales [cs_catalog_page_sk,cs_item_sk,cs_promo_sk,cs_order_number,cs_ext_sales_price,cs_net_profit,cs_sold_date_sk]
                                                                         ReusedSubquery [d_date_sk] #1
+                                                    InputAdapter
                                                       WholeStageCodegen (14)
                                                         Sort [cr_item_sk,cr_order_number]
                                                           InputAdapter
@@ -142,8 +144,8 @@ TakeOrderedAndProject [channel,id,sales,returns,profit]
                                             Project [ws_web_site_sk,ws_promo_sk,ws_ext_sales_price,ws_net_profit,ws_sold_date_sk,wr_return_amt,wr_net_loss]
                                               BroadcastHashJoin [ws_item_sk,i_item_sk]
                                                 Project [ws_item_sk,ws_web_site_sk,ws_promo_sk,ws_ext_sales_price,ws_net_profit,ws_sold_date_sk,wr_return_amt,wr_net_loss]
-                                                  InputAdapter
-                                                    SortMergeJoin [ws_item_sk,ws_order_number,wr_item_sk,wr_order_number]
+                                                  SortMergeJoin [ws_item_sk,ws_order_number,wr_item_sk,wr_order_number]
+                                                    InputAdapter
                                                       WholeStageCodegen (22)
                                                         Sort [ws_item_sk,ws_order_number]
                                                           InputAdapter
@@ -154,6 +156,7 @@ TakeOrderedAndProject [channel,id,sales,returns,profit]
                                                                     InputAdapter
                                                                       Scan parquet default.web_sales [ws_item_sk,ws_web_site_sk,ws_promo_sk,ws_order_number,ws_ext_sales_price,ws_net_profit,ws_sold_date_sk]
                                                                         ReusedSubquery [d_date_sk] #1
+                                                    InputAdapter
                                                       WholeStageCodegen (24)
                                                         Sort [wr_item_sk,wr_order_number]
                                                           InputAdapter

@@ -171,6 +171,82 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
       Seq(Row(0, 0, 0), Row(1, 1, 1), Row(2, 2, 2), Row(3, 3, 3), Row(4, 4, 4)))
   }
 
+  test("Left/Right Outer SortMergeJoin should be included in WholeStageCodegen") {
+    val df1 = spark.range(10).select($"id".as("k1"))
+    val df2 = spark.range(4).select($"id".as("k2"))
+    val df3 = spark.range(6).select($"id".as("k3"))
+
+    // test one left outer sort merge join
+    val oneLeftOuterJoinDF = df1.join(df2.hint("SHUFFLE_MERGE"), $"k1" === $"k2", "left_outer")
+    assert(oneLeftOuterJoinDF.queryExecution.executedPlan.collect {
+      case WholeStageCodegenExec(_ : SortMergeJoinExec) => true
+    }.size === 1)
+    checkAnswer(oneLeftOuterJoinDF, Seq(Row(0, 0), Row(1, 1), Row(2, 2), Row(3, 3), Row(4, null),
+      Row(5, null), Row(6, null), Row(7, null), Row(8, null), Row(9, null)))
+
+    // test one right outer sort merge join
+    val oneRightOuterJoinDF = df2.join(df3.hint("SHUFFLE_MERGE"), $"k2" === $"k3", "right_outer")
+    assert(oneRightOuterJoinDF.queryExecution.executedPlan.collect {
+      case WholeStageCodegenExec(_ : SortMergeJoinExec) => true
+    }.size === 1)
+    checkAnswer(oneRightOuterJoinDF, Seq(Row(0, 0), Row(1, 1), Row(2, 2), Row(3, 3), Row(null, 4),
+      Row(null, 5)))
+
+    // test two sort merge joins
+    val twoJoinsDF = df3.join(df2.hint("SHUFFLE_MERGE"), $"k3" === $"k2", "left_outer")
+      .join(df1.hint("SHUFFLE_MERGE"), $"k3" === $"k1", "right_outer")
+    assert(twoJoinsDF.queryExecution.executedPlan.collect {
+      case WholeStageCodegenExec(_ : SortMergeJoinExec) => true
+    }.size === 2)
+    checkAnswer(twoJoinsDF,
+      Seq(Row(0, 0, 0), Row(1, 1, 1), Row(2, 2, 2), Row(3, 3, 3), Row(4, null, 4), Row(5, null, 5),
+        Row(null, null, 6), Row(null, null, 7), Row(null, null, 8), Row(null, null, 9)))
+  }
+
+  test("Left Semi SortMergeJoin should be included in WholeStageCodegen") {
+    val df1 = spark.range(10).select($"id".as("k1"))
+    val df2 = spark.range(4).select($"id".as("k2"))
+    val df3 = spark.range(6).select($"id".as("k3"))
+
+    // test one left semi sort merge join
+    val oneJoinDF = df1.join(df2.hint("SHUFFLE_MERGE"), $"k1" === $"k2", "left_semi")
+    assert(oneJoinDF.queryExecution.executedPlan.collect {
+      case WholeStageCodegenExec(ProjectExec(_, _ : SortMergeJoinExec)) => true
+    }.size === 1)
+    checkAnswer(oneJoinDF, Seq(Row(0), Row(1), Row(2), Row(3)))
+
+    // test two left semi sort merge joins
+    val twoJoinsDF = df3.join(df2.hint("SHUFFLE_MERGE"), $"k3" === $"k2", "left_semi")
+      .join(df1.hint("SHUFFLE_MERGE"), $"k3" === $"k1", "left_semi")
+    assert(twoJoinsDF.queryExecution.executedPlan.collect {
+      case WholeStageCodegenExec(ProjectExec(_, _ : SortMergeJoinExec)) |
+           WholeStageCodegenExec(_ : SortMergeJoinExec) => true
+    }.size === 2)
+    checkAnswer(twoJoinsDF, Seq(Row(0), Row(1), Row(2), Row(3)))
+  }
+
+  test("Left Anti SortMergeJoin should be included in WholeStageCodegen") {
+    val df1 = spark.range(10).select($"id".as("k1"))
+    val df2 = spark.range(4).select($"id".as("k2"))
+    val df3 = spark.range(6).select($"id".as("k3"))
+
+    // test one left anti sort merge join
+    val oneJoinDF = df1.join(df2.hint("SHUFFLE_MERGE"), $"k1" === $"k2", "left_anti")
+    assert(oneJoinDF.queryExecution.executedPlan.collect {
+      case WholeStageCodegenExec(ProjectExec(_, _ : SortMergeJoinExec)) => true
+    }.size === 1)
+    checkAnswer(oneJoinDF, Seq(Row(4), Row(5), Row(6), Row(7), Row(8), Row(9)))
+
+    // test two left anti sort merge joins
+    val twoJoinsDF = df1.join(df2.hint("SHUFFLE_MERGE"), $"k1" === $"k2", "left_anti")
+      .join(df3.hint("SHUFFLE_MERGE"), $"k1" === $"k3", "left_anti")
+    assert(twoJoinsDF.queryExecution.executedPlan.collect {
+      case WholeStageCodegenExec(ProjectExec(_, _ : SortMergeJoinExec)) |
+           WholeStageCodegenExec(_ : SortMergeJoinExec) => true
+    }.size === 2)
+    checkAnswer(twoJoinsDF, Seq(Row(6), Row(7), Row(8), Row(9)))
+  }
+
   test("Inner/Cross BroadcastNestedLoopJoinExec should be included in WholeStageCodegen") {
     val df1 = spark.range(4).select($"id".as("k1"))
     val df2 = spark.range(3).select($"id".as("k2"))

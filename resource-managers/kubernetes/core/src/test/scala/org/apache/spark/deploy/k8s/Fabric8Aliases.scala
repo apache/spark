@@ -16,7 +16,7 @@
  */
 package org.apache.spark.deploy.k8s
 
-import io.fabric8.kubernetes.api.model.{ConfigMap, ConfigMapList, HasMetadata, Pod, PodList}
+import io.fabric8.kubernetes.api.model.{ConfigMap, ConfigMapList, HasMetadata, PersistentVolumeClaim, PersistentVolumeClaimList, Pod, PodList}
 import io.fabric8.kubernetes.client.dsl.{FilterWatchListDeletable, MixedOperation, NamespaceListVisitFromServerGetDeleteRecreateWaitApplicable, PodResource, Resource}
 
 object Fabric8Aliases {
@@ -28,4 +28,8 @@ object Fabric8Aliases {
   type SINGLE_POD = PodResource[Pod]
   type RESOURCE_LIST = NamespaceListVisitFromServerGetDeleteRecreateWaitApplicable[
     HasMetadata]
+  type PERSISTENT_VOLUME_CLAIMS = MixedOperation[PersistentVolumeClaim, PersistentVolumeClaimList,
+    Resource[PersistentVolumeClaim]]
+  type LABELED_PERSISTENT_VOLUME_CLAIMS =
+    FilterWatchListDeletable[PersistentVolumeClaim, PersistentVolumeClaimList]
 }

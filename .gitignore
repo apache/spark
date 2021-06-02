@@ -18,6 +18,7 @@
 # The star is required for further !.idea/ to work, see https://git-scm.com/docs/gitignore
 .idea/*
 !.idea/vcs.xml
+python/.idea
 .idea_modules/
 .project
 .pydevproject
@@ -54,6 +55,7 @@ sql/docs
 sql/site
 lib_managed/
 lint-r-report.log
+lint-js-report.log
 log/
 logs/
 out/
@@ -105,3 +107,6 @@ spark-warehouse/
 
 # For SBT
 .jvmopts
+
+# For Node.js
+node_modules

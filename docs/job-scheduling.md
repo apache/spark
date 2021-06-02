@@ -142,13 +142,12 @@ an executor should not be idle if there are still pending tasks to be scheduled.
 
 ### Graceful Decommission of Executors
 
-Before dynamic allocation, a Spark executor exits either on failure or when the associated
-application has also exited. In both scenarios, all state associated with the executor is no
-longer needed and can be safely discarded. With dynamic allocation, however, the application
-is still running when an executor is explicitly removed. If the application attempts to access
-state stored in or written by the executor, it will have to perform a recompute the state. Thus,
-Spark needs a mechanism to decommission an executor gracefully by preserving its state before
-removing it.
+Before dynamic allocation, if a Spark executor exits when the associated application has also exited 
+then all state associated with the executor is no longer needed and can be safely discarded. 
+With dynamic allocation, however, the application is still running when an executor is explicitly 
+removed. If the application attempts to access state stored in or written by the executor, it will 
+have to perform a recompute the state. Thus, Spark needs a mechanism to decommission an executor 
+gracefully by preserving its state before removing it.
 
 This requirement is especially important for shuffles. During a shuffle, the Spark executor first
 writes its own map outputs locally to disk, and then acts as the server for those files when other
