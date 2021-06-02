@@ -733,7 +733,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * Don't create too many partitions in parallel on a large cluster; otherwise Spark might crash
    * your external database systems.
    *
-   * You can set the following JDBC-specific option(s) for storing JDBC in
+   * JDBC-specific option and parameter documentation for storing tables via JDBC in
    * <a href="https://spark.apache.org/docs/latest/sql-data-sources-jdbc.html#data-source-option">
    *   Data Source Option</a> in the version you use.
    *

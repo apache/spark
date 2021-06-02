@@ -41,11 +41,15 @@ following command:
 
 ## Data Source Option
 
-Tables from the remote database can be loaded as a DataFrame or Spark SQL temporary view using
-the Data Sources API. Users can specify the JDBC connection properties in the data source options.
+Spark supports the following case-insensitive options for JDBC. The Data source options of JDBC can be set via:
+* the `.option`/`.options` methods of
+  *  `DataFrameReader`
+  *  `DataFrameWriter`
+* `OPTIONS` clause at [CREATE TABLE USING DATA_SOURCE](sql-ref-syntax-ddl-create-table-datasource.html)
+
+For connection properties, users can specify the JDBC connection properties in the data source options.
 <code>user</code> and <code>password</code> are normally provided as connection properties for
-logging into the data sources. In addition to the connection properties, Spark also supports
-the following case-insensitive options:
+logging into the data sources.
 
 <table class="table">
   <tr><th>Property Name</th><th>Meaning</th></tr>
