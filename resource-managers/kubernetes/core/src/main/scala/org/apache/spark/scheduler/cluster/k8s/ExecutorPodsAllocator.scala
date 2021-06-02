@@ -18,6 +18,7 @@ package org.apache.spark.scheduler.cluster.k8s
 
 import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.{AtomicInteger, AtomicLong}
 
 import scala.collection.JavaConverters._
@@ -60,6 +61,8 @@ private[spark] class ExecutorPodsAllocator(
   private val podCreationTimeout = math.max(
     podAllocationDelay * 5,
     conf.get(KUBERNETES_ALLOCATION_EXECUTOR_TIMEOUT))
+
+  private val driverPodReadinessTimeout = 5
 
   private val executorIdleTimeout = conf.get(DYN_ALLOCATION_EXECUTOR_IDLE_TIMEOUT) * 1000
 
@@ -345,6 +348,16 @@ private[spark] class ExecutorPodsAllocator(
       s"ResourceProfile Id: $resourceProfileId, target: $expected running: $running.")
     // Check reusable PVCs for this executor allocation batch
     val reusablePVCs = getReusablePVCs(applicationId, pvcsInUse)
+    // wait until the driver pod is ready to ensure executors can connect to driver svc
+    if (numExecutorsToAllocate > 0) {
+      try {
+        kubernetesClient.pods().inNamespace(namespace).withName(kubernetesDriverPodName.get).
+          waitUntilReady(driverPodReadinessTimeout, TimeUnit.MINUTES)
+      } catch {
+        case e: InterruptedException =>
+          logWarning(s"Timeout waiting for driver pod ${kubernetesDriverPodName.get} get ready")
+      }
+    }
     for ( _ <- 0 until numExecutorsToAllocate) {
       val newExecutorId = EXECUTOR_ID_COUNTER.incrementAndGet()
       val executorConf = KubernetesConf.createExecutorConf(
