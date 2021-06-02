@@ -1143,7 +1143,6 @@ class KafkaMicroBatchV2SourceWithAdminSuite extends KafkaMicroBatchV2SourceSuite
 }
 
 class KafkaMicroBatchV1SourceSuite extends KafkaMicroBatchSourceSuiteBase {
-
   override def beforeAll(): Unit = {
     super.beforeAll()
     spark.conf.set(
@@ -1511,7 +1510,7 @@ abstract class KafkaSourceSuiteBase extends KafkaSourceTest {
       s" (failOnDataLoss: $failOnDataLoss)") {
       val topic = newTopic()
       testFromGlobalTimestamp(topic, failOnDataLoss = failOnDataLoss, addPartitions = true,
-      "subscribe" -> topic)
+        "subscribe" -> topic)
     }
 
     test(s"subscribing topic by pattern from latest offsets (failOnDataLoss: $failOnDataLoss)") {
@@ -1547,7 +1546,6 @@ abstract class KafkaSourceSuiteBase extends KafkaSourceTest {
       s"(failOnDataLoss: $failOnDataLoss)") {
       val topicPrefix = newTopic()
       val topic = topicPrefix + "-suffix"
-
       testFromSpecificTimestamps(
         topic,
         failOnDataLoss = failOnDataLoss,
@@ -1559,7 +1557,6 @@ abstract class KafkaSourceSuiteBase extends KafkaSourceTest {
       s"(failOnDataLoss: $failOnDataLoss)") {
       val topicPrefix = newTopic()
       val topic = topicPrefix + "-suffix"
-
       testFromGlobalTimestamp(
         topic,
         failOnDataLoss = failOnDataLoss,
@@ -1583,7 +1580,6 @@ abstract class KafkaSourceSuiteBase extends KafkaSourceTest {
     "non-matching starting offset") {
     val topicPrefix = newTopic()
     val topic = topicPrefix + "-suffix"
-
     testFromSpecificTimestampsWithNoMatchingStartingOffset(topic,
       "subscribePattern" -> s"$topicPrefix-.*")
   }
@@ -1592,14 +1588,13 @@ abstract class KafkaSourceSuiteBase extends KafkaSourceTest {
     "non-matching starting offset") {
     val topicPrefix = newTopic()
     val topic = topicPrefix + "-suffix"
-
     testFromGlobalTimestampWithNoMatchingStartingOffset(topic,
       "subscribePattern" -> s"$topicPrefix-.*")
   }
 
   private def testFromSpecificTimestampsWithNoMatchingStartingOffset(
-    topic: String,
-    options: (String, String)*): Unit = {
+      topic: String,
+      options: (String, String)*): Unit = {
     testUtils.createTopic(topic, partitions = 5)
 
     val firstTimestamp = System.currentTimeMillis() - 5000
@@ -1648,8 +1643,8 @@ abstract class KafkaSourceSuiteBase extends KafkaSourceTest {
   }
 
   private def testFromGlobalTimestampWithNoMatchingStartingOffset(
-    topic: String,
-    options: (String, String)*): Unit = {
+      topic: String,
+      options: (String, String)*): Unit = {
     testUtils.createTopic(topic, partitions = 5)
 
     val firstTimestamp = System.currentTimeMillis() - 5000
@@ -1903,7 +1898,6 @@ abstract class KafkaSourceSuiteBase extends KafkaSourceTest {
     val firstTimestamp = System.currentTimeMillis() - 5000
     val secondTimestamp = firstTimestamp + 1000
     setupTestMessagesForTestOnTimestampOffsets(topic, firstTimestamp, secondTimestamp)
-
     // here we should add records in partition 4 which match with second timestamp
     // as the query will break if there's no matching records
     sendMessagesWithTimestamp(topic, Array(23, 24).map(_.toString), 4, secondTimestamp)
