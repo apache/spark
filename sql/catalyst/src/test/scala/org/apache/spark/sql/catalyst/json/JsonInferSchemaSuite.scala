@@ -113,7 +113,7 @@ class JsonInferSchemaSuite extends SparkFunSuite with SQLHelper {
     checkType(Map("inferTimestamp" -> "false"), json, StringType)
   }
 
-  test("SPARK-34953 - Allow DateType format while inferring") {
+  test("SPARK-34953: Allow DateType format while inferring") {
     val json = """{"a": "29-01-2020"}"""
     Seq(true, false).foreach { inferDateType =>
       checkType(Map("dateFormat" -> "dd-MM-yyyy", "inferDateType" -> inferDateType.toString),

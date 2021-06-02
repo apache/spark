@@ -193,7 +193,7 @@ class CSVInferSchemaSuite extends SparkFunSuite with SQLHelper {
     Seq("ko-KR", "ru-RU", "de-DE").foreach(checkDecimalInfer(_, DecimalType(7, 0)))
   }
 
-  test("SPARK-34953 - DateType should be inferred when user defined format are provided") {
+  test("SPARK-34953: DateType should be inferred when user defined format are provided") {
     Seq(true, false).foreach { inferDateType =>
       val options = new CSVOptions(Map("dateFormat" -> "dd-MM-yyyy",
         "inferSchema" -> "true", "inferDateType" -> inferDateType.toString), false, "UTC")
