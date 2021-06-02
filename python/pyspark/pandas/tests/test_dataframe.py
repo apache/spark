@@ -27,7 +27,6 @@ import pandas as pd
 from pandas.tseries.offsets import DateOffset
 from pyspark import StorageLevel
 from pyspark.ml.linalg import SparseVector
-from pyspark.sql import functions as F
 from pyspark.sql.types import StructType
 
 from pyspark import pandas as ps
@@ -121,7 +120,6 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         psdf = ps.from_pandas(pdf)
 
         self._check_extension(psdf, pdf)
-        self._check_extension(psdf + F.lit(1).cast("byte"), pdf + 1)
         self._check_extension(psdf + psdf, pdf + pdf)
 
     @unittest.skipIf(not extension_dtypes_available, "pandas extension dtypes are not available")
@@ -4325,30 +4323,31 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         psdf = ps.DataFrame(pdf)
 
         self.assert_eq(
-            psdf.koalas.apply_batch(lambda pdf, a: pdf + a, args=(1,)).sort_index(),
+            psdf.pandas_on_spark.apply_batch(lambda pdf, a: pdf + a, args=(1,)).sort_index(),
             (pdf + 1).sort_index(),
         )
         with option_context("compute.shortcut_limit", 500):
             self.assert_eq(
-                psdf.koalas.apply_batch(lambda pdf: pdf + 1).sort_index(), (pdf + 1).sort_index()
+                psdf.pandas_on_spark.apply_batch(lambda pdf: pdf + 1).sort_index(),
+                (pdf + 1).sort_index(),
             )
             self.assert_eq(
-                psdf.koalas.apply_batch(lambda pdf, b: pdf + b, b=1).sort_index(),
+                psdf.pandas_on_spark.apply_batch(lambda pdf, b: pdf + b, b=1).sort_index(),
                 (pdf + 1).sort_index(),
             )
 
         with self.assertRaisesRegex(AssertionError, "the first argument should be a callable"):
-            psdf.koalas.apply_batch(1)
+            psdf.pandas_on_spark.apply_batch(1)
 
         with self.assertRaisesRegex(TypeError, "The given function.*frame as its type hints"):
 
             def f2(_) -> ps.Series[int]:
                 pass
 
-            psdf.koalas.apply_batch(f2)
+            psdf.pandas_on_spark.apply_batch(f2)
 
         with self.assertRaisesRegex(ValueError, "The given function should return a frame"):
-            psdf.koalas.apply_batch(lambda pdf: 1)
+            psdf.pandas_on_spark.apply_batch(lambda pdf: 1)
 
         # multi-index columns
         columns = pd.MultiIndex.from_tuples([("x", "a"), ("x", "b"), ("y", "c")])
@@ -4356,11 +4355,12 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         psdf.columns = columns
 
         self.assert_eq(
-            psdf.koalas.apply_batch(lambda x: x + 1).sort_index(), (pdf + 1).sort_index()
+            psdf.pandas_on_spark.apply_batch(lambda x: x + 1).sort_index(), (pdf + 1).sort_index()
         )
         with option_context("compute.shortcut_limit", 500):
             self.assert_eq(
-                psdf.koalas.apply_batch(lambda x: x + 1).sort_index(), (pdf + 1).sort_index()
+                psdf.pandas_on_spark.apply_batch(lambda x: x + 1).sort_index(),
+                (pdf + 1).sort_index(),
             )
 
     def test_transform_batch(self):
@@ -4376,46 +4376,46 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         psdf = ps.DataFrame(pdf)
 
         self.assert_eq(
-            psdf.koalas.transform_batch(lambda pdf: pdf.c + 1).sort_index(),
+            psdf.pandas_on_spark.transform_batch(lambda pdf: pdf.c + 1).sort_index(),
             (pdf.c + 1).sort_index(),
         )
         self.assert_eq(
-            psdf.koalas.transform_batch(lambda pdf, a: pdf + a, 1).sort_index(),
+            psdf.pandas_on_spark.transform_batch(lambda pdf, a: pdf + a, 1).sort_index(),
             (pdf + 1).sort_index(),
         )
         self.assert_eq(
-            psdf.koalas.transform_batch(lambda pdf, a: pdf.c + a, a=1).sort_index(),
+            psdf.pandas_on_spark.transform_batch(lambda pdf, a: pdf.c + a, a=1).sort_index(),
             (pdf.c + 1).sort_index(),
         )
 
         with option_context("compute.shortcut_limit", 500):
             self.assert_eq(
-                psdf.koalas.transform_batch(lambda pdf: pdf + 1).sort_index(),
+                psdf.pandas_on_spark.transform_batch(lambda pdf: pdf + 1).sort_index(),
                 (pdf + 1).sort_index(),
             )
             self.assert_eq(
-                psdf.koalas.transform_batch(lambda pdf: pdf.b + 1).sort_index(),
+                psdf.pandas_on_spark.transform_batch(lambda pdf: pdf.b + 1).sort_index(),
                 (pdf.b + 1).sort_index(),
             )
             self.assert_eq(
-                psdf.koalas.transform_batch(lambda pdf, a: pdf + a, 1).sort_index(),
+                psdf.pandas_on_spark.transform_batch(lambda pdf, a: pdf + a, 1).sort_index(),
                 (pdf + 1).sort_index(),
             )
             self.assert_eq(
-                psdf.koalas.transform_batch(lambda pdf, a: pdf.c + a, a=1).sort_index(),
+                psdf.pandas_on_spark.transform_batch(lambda pdf, a: pdf.c + a, a=1).sort_index(),
                 (pdf.c + 1).sort_index(),
             )
 
         with self.assertRaisesRegex(AssertionError, "the first argument should be a callable"):
-            psdf.koalas.transform_batch(1)
+            psdf.pandas_on_spark.transform_batch(1)
 
         with self.assertRaisesRegex(ValueError, "The given function should return a frame"):
-            psdf.koalas.transform_batch(lambda pdf: 1)
+            psdf.pandas_on_spark.transform_batch(lambda pdf: 1)
 
         with self.assertRaisesRegex(
             ValueError, "transform_batch cannot produce aggregated results"
         ):
-            psdf.koalas.transform_batch(lambda pdf: pd.Series(1))
+            psdf.pandas_on_spark.transform_batch(lambda pdf: pd.Series(1))
 
         # multi-index columns
         columns = pd.MultiIndex.from_tuples([("x", "a"), ("x", "b"), ("y", "c")])
@@ -4423,16 +4423,18 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         psdf.columns = columns
 
         self.assert_eq(
-            psdf.koalas.transform_batch(lambda x: x + 1).sort_index(), (pdf + 1).sort_index()
+            psdf.pandas_on_spark.transform_batch(lambda x: x + 1).sort_index(),
+            (pdf + 1).sort_index(),
         )
         with option_context("compute.shortcut_limit", 500):
             self.assert_eq(
-                psdf.koalas.transform_batch(lambda x: x + 1).sort_index(), (pdf + 1).sort_index()
+                psdf.pandas_on_spark.transform_batch(lambda x: x + 1).sort_index(),
+                (pdf + 1).sort_index(),
             )
 
     def test_transform_batch_same_anchor(self):
         psdf = ps.range(10)
-        psdf["d"] = psdf.koalas.transform_batch(lambda pdf: pdf.id + 1)
+        psdf["d"] = psdf.pandas_on_spark.transform_batch(lambda pdf: pdf.id + 1)
         self.assert_eq(
             psdf,
             pd.DataFrame({"id": list(range(10)), "d": list(range(1, 11))}, columns=["id", "d"]),
@@ -4443,7 +4445,7 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         def plus_one(pdf) -> ps.Series[np.int64]:
             return pdf.id + 1
 
-        psdf["d"] = psdf.koalas.transform_batch(plus_one)
+        psdf["d"] = psdf.pandas_on_spark.transform_batch(plus_one)
         self.assert_eq(
             psdf,
             pd.DataFrame({"id": list(range(10)), "d": list(range(1, 11))}, columns=["id", "d"]),
@@ -4454,7 +4456,7 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         def plus_one(ser) -> ps.Series[np.int64]:
             return ser + 1
 
-        psdf["d"] = psdf.id.koalas.transform_batch(plus_one)
+        psdf["d"] = psdf.id.pandas_on_spark.transform_batch(plus_one)
         self.assert_eq(
             psdf,
             pd.DataFrame({"id": list(range(10)), "d": list(range(1, 11))}, columns=["id", "d"]),

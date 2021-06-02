@@ -882,6 +882,9 @@ class DataFrame(Frame, Generic[T]):
     spark = CachedAccessor("spark", SparkFrameMethods)
 
     # create accessor for pandas-on-Spark specific methods.
+    pandas_on_spark = CachedAccessor("pandas_on_spark", PandasOnSparkFrameMethods)
+
+    # keep the name "koalas" for backward compatibility.
     koalas = CachedAccessor("koalas", PandasOnSparkFrameMethods)
 
     def hist(self, bins=10, **kwds):
@@ -2732,7 +2735,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                     as_nullable_spark_type(psdf._internal.spark_type_for(output_label))
                 )
                 applied.append(
-                    psser.koalas._transform_batch(
+                    psser.pandas_on_spark._transform_batch(
                         func=lambda c: func(c, *args, **kwargs),
                         return_type=SeriesType(dtype, return_schema),
                     )
@@ -2744,7 +2747,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             return DataFrame(internal)
         else:
             return self._apply_series_op(
-                lambda psser: psser.koalas.transform_batch(func, *args, **kwargs)
+                lambda psser: psser.pandas_on_spark.transform_batch(func, *args, **kwargs)
             )
 
     def pop(self, item) -> "DataFrame":
@@ -3042,7 +3045,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         # default index, which will never be used. So use "distributed" index as a dummy to
         # avoid overhead.
         with option_context("compute.default_index_type", "distributed"):
-            psdf = psdf.koalas.apply_batch(pandas_between_time)
+            psdf = psdf.pandas_on_spark.apply_batch(pandas_between_time)
 
         return DataFrame(
             self._internal.copy(
@@ -3124,7 +3127,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         # a default index, which will never be used. So use "distributed" index as a dummy
         # to avoid overhead.
         with option_context("compute.default_index_type", "distributed"):
-            psdf = psdf.koalas.apply_batch(pandas_at_time)
+            psdf = psdf.pandas_on_spark.apply_batch(pandas_at_time)
 
         return DataFrame(
             self._internal.copy(
@@ -10739,7 +10742,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         .. note:: This API delegates to Spark SQL so the syntax follows Spark SQL. Therefore, the
             pandas specific syntax such as `@` is not supported. If you want the pandas syntax,
-            you can work around with :meth:`DataFrame.koalas.apply_batch`, but you should
+            you can work around with :meth:`DataFrame.pandas_on_spark.apply_batch`, but you should
             be aware that `query_func` will be executed at different nodes in a distributed manner.
             So, for example, to use `@` syntax, make sure the variable is serialized by, for
             example, putting it within the closure as below.
@@ -10748,7 +10751,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             >>> def query_func(pdf):
             ...     num = 1995
             ...     return pdf.query('A > @num')
-            >>> df.koalas.apply_batch(query_func)
+            >>> df.pandas_on_spark.apply_batch(query_func)
                      A     B
             1996  1996  1996
             1997  1997  1997
@@ -11020,7 +11023,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 result_inner = pd.Series(result_inner).to_frame()
             return result_inner
 
-        result = self.koalas.apply_batch(eval_func)
+        result = self.pandas_on_spark.apply_batch(eval_func)
         if inplace:
             # Here, the result is always a frame because the error is thrown during schema inference
             # from pandas.

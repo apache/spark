@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.optimizer.{CombineUnions, OptimizeUpdateFields}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, Union}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.AlwaysProcess
+import org.apache.spark.sql.catalyst.trees.TreePattern.UNION
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
@@ -250,7 +250,7 @@ object ResolveUnion extends Rule[LogicalPlan] {
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
-    AlwaysProcess.fn, ruleId) {
+    _.containsPattern(UNION), ruleId) {
     case e if !e.childrenResolved => e
 
     case Union(children, byName, allowMissingCol) if byName =>
