@@ -43,9 +43,8 @@ class SQLMetricsSuite extends SQLMetricsTestUtils with TestHiveSingleton
       withSQLConf(HiveUtils.CONVERT_METASTORE_CTAS.key -> canOptimized.toString) {
         withTable("t") {
           val df = sql(s"CREATE TABLE t STORED AS PARQUET AS SELECT 1 as a")
-          val wholeStageCodegenExec = df.queryExecution.executedPlan
-          assert(wholeStageCodegenExec.children.length == 1)
-          val commandResultExec = wholeStageCodegenExec.children(0).asInstanceOf[CommandResultExec]
+          assert(df.queryExecution.executedPlan.isInstanceOf[CommandResultExec])
+          val commandResultExec = df.queryExecution.executedPlan.asInstanceOf[CommandResultExec]
           val dataWritingCommandExec =
             commandResultExec.commandPhysicalPlan.asInstanceOf[DataWritingCommandExec]
           val createTableAsSelect = dataWritingCommandExec.cmd
