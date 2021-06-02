@@ -720,7 +720,7 @@ private[spark] class MapOutputTrackerMaster(
     }
   }
 
-  def registerMergeResult(shuffleId: Int, reduceId: Int, status: MergeStatus) {
+  def registerMergeResult(shuffleId: Int, reduceId: Int, status: MergeStatus): Unit = {
     shuffleStatuses(shuffleId).addMergeResult(reduceId, status)
   }
 
@@ -745,7 +745,7 @@ private[spark] class MapOutputTrackerMaster(
     shuffleId: Int,
     reduceId: Int,
     bmAddress: BlockManagerId,
-    mapId: Option[Int] = None) {
+    mapId: Option[Int] = None): Unit = {
     shuffleStatuses.get(shuffleId) match {
       case Some(shuffleStatus) =>
         val mergeStatus = shuffleStatus.mergeStatuses(reduceId)

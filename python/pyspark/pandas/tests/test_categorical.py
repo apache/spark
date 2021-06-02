@@ -301,7 +301,7 @@ class CategoricalTest(PandasOnSparkTestCase, TestUtils):
         pdf, psdf = self.df_pair
 
         self.assert_eq(
-            psdf.koalas.apply_batch(lambda pdf: pdf.astype(str)).sort_index(),
+            psdf.pandas_on_spark.apply_batch(lambda pdf: pdf.astype(str)).sort_index(),
             pdf.astype(str).sort_index(),
         )
 
@@ -313,7 +313,7 @@ class CategoricalTest(PandasOnSparkTestCase, TestUtils):
         dtype = CategoricalDtype(categories=["a", "b", "c", "d"])
 
         self.assert_eq(
-            psdf.koalas.apply_batch(lambda pdf: pdf.astype(dtype)).sort_index(),
+            psdf.pandas_on_spark.apply_batch(lambda pdf: pdf.astype(dtype)).sort_index(),
             pdf.astype(dtype).sort_index(),
         )
 
@@ -327,7 +327,7 @@ class CategoricalTest(PandasOnSparkTestCase, TestUtils):
             return pdf.astype(str)
 
         self.assert_eq(
-            psdf.koalas.apply_batch(to_str).sort_values(["a", "b"]).reset_index(drop=True),
+            psdf.pandas_on_spark.apply_batch(to_str).sort_values(["a", "b"]).reset_index(drop=True),
             to_str(pdf).sort_values(["a", "b"]).reset_index(drop=True),
         )
 
@@ -343,7 +343,9 @@ class CategoricalTest(PandasOnSparkTestCase, TestUtils):
             return pdf.astype(dtype)
 
         self.assert_eq(
-            psdf.koalas.apply_batch(to_category).sort_values(["a", "b"]).reset_index(drop=True),
+            psdf.pandas_on_spark.apply_batch(to_category)
+            .sort_values(["a", "b"])
+            .reset_index(drop=True),
             to_category(pdf).sort_values(["a", "b"]).reset_index(drop=True),
         )
 
@@ -351,11 +353,11 @@ class CategoricalTest(PandasOnSparkTestCase, TestUtils):
         pdf, psdf = self.df_pair
 
         self.assert_eq(
-            psdf.koalas.transform_batch(lambda pdf: pdf.astype(str)).sort_index(),
+            psdf.pandas_on_spark.transform_batch(lambda pdf: pdf.astype(str)).sort_index(),
             pdf.astype(str).sort_index(),
         )
         self.assert_eq(
-            psdf.koalas.transform_batch(lambda pdf: pdf.b.cat.codes).sort_index(),
+            psdf.pandas_on_spark.transform_batch(lambda pdf: pdf.b.cat.codes).sort_index(),
             pdf.b.cat.codes.sort_index(),
         )
 
@@ -367,11 +369,11 @@ class CategoricalTest(PandasOnSparkTestCase, TestUtils):
         dtype = CategoricalDtype(categories=["a", "b", "c", "d"])
 
         self.assert_eq(
-            psdf.koalas.transform_batch(lambda pdf: pdf.astype(dtype)).sort_index(),
+            psdf.pandas_on_spark.transform_batch(lambda pdf: pdf.astype(dtype)).sort_index(),
             pdf.astype(dtype).sort_index(),
         )
         self.assert_eq(
-            psdf.koalas.transform_batch(lambda pdf: pdf.b.astype(dtype)).sort_index(),
+            psdf.pandas_on_spark.transform_batch(lambda pdf: pdf.b.astype(dtype)).sort_index(),
             pdf.b.astype(dtype).sort_index(),
         )
 
@@ -385,14 +387,14 @@ class CategoricalTest(PandasOnSparkTestCase, TestUtils):
             return pdf.astype(str)
 
         self.assert_eq(
-            psdf.koalas.transform_batch(to_str).sort_index(), to_str(pdf).sort_index(),
+            psdf.pandas_on_spark.transform_batch(to_str).sort_index(), to_str(pdf).sort_index(),
         )
 
         def to_codes(pdf) -> ps.Series[np.int8]:
             return pdf.b.cat.codes
 
         self.assert_eq(
-            psdf.koalas.transform_batch(to_codes).sort_index(), to_codes(pdf).sort_index(),
+            psdf.pandas_on_spark.transform_batch(to_codes).sort_index(), to_codes(pdf).sort_index(),
         )
 
         pdf = pd.DataFrame(
@@ -407,14 +409,15 @@ class CategoricalTest(PandasOnSparkTestCase, TestUtils):
             return pdf.astype(dtype)
 
         self.assert_eq(
-            psdf.koalas.transform_batch(to_category).sort_index(), to_category(pdf).sort_index(),
+            psdf.pandas_on_spark.transform_batch(to_category).sort_index(),
+            to_category(pdf).sort_index(),
         )
 
         def to_category(pdf) -> ps.Series[dtype]:
             return pdf.b.astype(dtype)
 
         self.assert_eq(
-            psdf.koalas.transform_batch(to_category).sort_index(),
+            psdf.pandas_on_spark.transform_batch(to_category).sort_index(),
             to_category(pdf).rename().sort_index(),
         )
 
@@ -422,7 +425,7 @@ class CategoricalTest(PandasOnSparkTestCase, TestUtils):
         pdf, psdf = self.df_pair
 
         self.assert_eq(
-            psdf.a.koalas.transform_batch(lambda pser: pser.astype(str)).sort_index(),
+            psdf.a.pandas_on_spark.transform_batch(lambda pser: pser.astype(str)).sort_index(),
             pdf.a.astype(str).sort_index(),
         )
 
@@ -434,7 +437,7 @@ class CategoricalTest(PandasOnSparkTestCase, TestUtils):
         dtype = CategoricalDtype(categories=["a", "b", "c", "d"])
 
         self.assert_eq(
-            psdf.a.koalas.transform_batch(lambda pser: pser.astype(dtype)).sort_index(),
+            psdf.a.pandas_on_spark.transform_batch(lambda pser: pser.astype(dtype)).sort_index(),
             pdf.a.astype(dtype).sort_index(),
         )
 
@@ -448,7 +451,7 @@ class CategoricalTest(PandasOnSparkTestCase, TestUtils):
             return pser.astype(str)
 
         self.assert_eq(
-            psdf.a.koalas.transform_batch(to_str).sort_index(), to_str(pdf.a).sort_index()
+            psdf.a.pandas_on_spark.transform_batch(to_str).sort_index(), to_str(pdf.a).sort_index()
         )
 
         pdf = pd.DataFrame(
@@ -462,7 +465,8 @@ class CategoricalTest(PandasOnSparkTestCase, TestUtils):
             return pser.astype(dtype)
 
         self.assert_eq(
-            psdf.a.koalas.transform_batch(to_category).sort_index(), to_category(pdf.a).sort_index()
+            psdf.a.pandas_on_spark.transform_batch(to_category).sort_index(),
+            to_category(pdf.a).sort_index(),
         )
 
 

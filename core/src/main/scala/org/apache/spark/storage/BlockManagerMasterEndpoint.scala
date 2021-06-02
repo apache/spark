@@ -574,12 +574,12 @@ class BlockManagerMasterEndpoint(
     if (blockId.isShuffle) {
       blockId match {
         case ShuffleIndexBlockId(shuffleId, mapId, _) =>
-          // Don't update the map output on just the index block
-          logDebug(s"Received shuffle index block update for ${shuffleId} ${mapId}, ignoring.")
+          // We need to update this at index file because there exists the index-only block
+          logDebug(s"Received shuffle index block update for ${shuffleId} ${mapId}, updating.")
+          mapOutputTracker.updateMapOutput(shuffleId, mapId, blockManagerId)
           return true
         case ShuffleDataBlockId(shuffleId: Int, mapId: Long, reduceId: Int) =>
-          logDebug(s"Received shuffle data block update for ${shuffleId} ${mapId}, updating.")
-          mapOutputTracker.updateMapOutput(shuffleId, mapId, blockManagerId)
+          logDebug(s"Received shuffle data block update for ${shuffleId} ${mapId}, ignore.")
           return true
         case _ =>
           logDebug(s"Unexpected shuffle block type ${blockId}" +

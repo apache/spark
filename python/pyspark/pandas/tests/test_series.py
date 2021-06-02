@@ -25,7 +25,6 @@ from datetime import datetime, timedelta
 import numpy as np
 import pandas as pd
 from pyspark.ml.linalg import SparseVector
-from pyspark.sql import functions as F
 
 from pyspark import pandas as ps
 from pyspark.testing.pandasutils import (
@@ -104,7 +103,6 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
             psser = ps.from_pandas(pser)
 
             self._check_extension(psser, pser)
-            self._check_extension(psser + F.lit(1).cast("byte"), pser + 1)
             self._check_extension(psser + psser, pser + pser)
 
     @unittest.skipIf(
@@ -1561,8 +1559,7 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         psser = ps.Series(pser)
 
         self.assert_eq(psser.astype(bool), pser.astype(bool))
-        # Comment out the below test cause because pandas returns `None` or `nan` randomly
-        # self.assert_eq(psser.astype(str), pser.astype(str))
+        self.assert_eq(psser.astype(str), pser.astype(str))
 
         if extension_object_dtypes_available:
             from pandas import BooleanDtype, StringDtype

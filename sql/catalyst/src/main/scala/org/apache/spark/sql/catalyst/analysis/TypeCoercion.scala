@@ -322,7 +322,7 @@ abstract class TypeCoercionBase {
 
       // Handle type casting required between value expression and subquery output
       // in IN subquery.
-      case i @ InSubquery(lhs, ListQuery(sub, children, exprId, _))
+      case i @ InSubquery(lhs, ListQuery(sub, children, exprId, _, conditions))
           if !i.resolved && lhs.length == sub.output.length =>
         // LHS is the value expressions of IN subquery.
         // RHS is the subquery output.
@@ -345,7 +345,7 @@ abstract class TypeCoercionBase {
           }
 
           val newSub = Project(castedRhs, sub)
-          InSubquery(newLhs, ListQuery(newSub, children, exprId, newSub.output))
+          InSubquery(newLhs, ListQuery(newSub, children, exprId, newSub.output, conditions))
         } else {
           i
         }

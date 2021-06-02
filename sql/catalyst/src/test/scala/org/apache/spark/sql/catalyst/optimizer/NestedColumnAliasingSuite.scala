@@ -714,7 +714,7 @@ object NestedColumnAliasingSuite {
   def collectGeneratedAliases(query: LogicalPlan): ArrayBuffer[String] = {
     val aliases = ArrayBuffer[String]()
     query.transformAllExpressions {
-      case a @ Alias(_, name) if name.startsWith("_gen_alias_") =>
+      case a @ Alias(_, name) if name.startsWith("_extract_") =>
         aliases += name
         a
     }

@@ -733,18 +733,10 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * Don't create too many partitions in parallel on a large cluster; otherwise Spark might crash
    * your external database systems.
    *
-   * You can set the following JDBC-specific option(s) for storing JDBC:
-   * <ul>
-   * <li>`truncate` (default `false`): use `TRUNCATE TABLE` instead of `DROP TABLE`.</li>
-   * </ul>
+   * JDBC-specific option and parameter documentation for storing tables via JDBC in
+   * <a href="https://spark.apache.org/docs/latest/sql-data-sources-jdbc.html#data-source-option">
+   *   Data Source Option</a> in the version you use.
    *
-   * In case of failures, users should turn off `truncate` option to use `DROP TABLE` again. Also,
-   * due to the different behavior of `TRUNCATE TABLE` among DBMS, it's not always safe to use this.
-   * MySQLDialect, DB2Dialect, MsSqlServerDialect, DerbyDialect, and OracleDialect supports this
-   * while PostgresDialect and default JDBCDirect doesn't. For unknown and unsupported JDBCDirect,
-   * the user option `truncate` is ignored.
-   *
-   * @param url JDBC database url of the form `jdbc:subprotocol:subname`
    * @param table Name of the table in the external database.
    * @param connectionProperties JDBC database connection arguments, a list of arbitrary string
    *                             tag/value. Normally at least a "user" and "password" property
@@ -833,13 +825,9 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * }}}
    * The text files will be encoded as UTF-8.
    *
-   * You can set the following option(s) for writing text files:
-   * <ul>
-   * <li>`compression` (default `null`): compression codec to use when saving to file. This can be
-   * one of the known case-insensitive shorten names (`none`, `bzip2`, `gzip`, `lz4`,
-   * `snappy` and `deflate`). </li>
-   * <li>`lineSep` (default `\n`): defines the line separator that should be used for writing.</li>
-   * </ul>
+   * You can find the text-specific options for writing text files in
+   * <a href="https://spark.apache.org/docs/latest/sql-data-sources-text.html#data-source-option">
+   *   Data Source Option</a> in the version you use.
    *
    * @since 1.6.0
    */
@@ -854,48 +842,9 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    *   format("csv").save(path)
    * }}}
    *
-   * You can set the following CSV-specific option(s) for writing CSV files:
-   * <ul>
-   * <li>`sep` (default `,`): sets a single character as a separator for each
-   * field and value.</li>
-   * <li>`quote` (default `"`): sets a single character used for escaping quoted values where
-   * the separator can be part of the value. If an empty string is set, it uses `u0000`
-   * (null character).</li>
-   * <li>`escape` (default `\`): sets a single character used for escaping quotes inside
-   * an already quoted value.</li>
-   * <li>`charToEscapeQuoteEscaping` (default `escape` or `\0`): sets a single character used for
-   * escaping the escape for the quote character. The default value is escape character when escape
-   * and quote characters are different, `\0` otherwise.</li>
-   * <li>`escapeQuotes` (default `true`): a flag indicating whether values containing
-   * quotes should always be enclosed in quotes. Default is to escape all values containing
-   * a quote character.</li>
-   * <li>`quoteAll` (default `false`): a flag indicating whether all values should always be
-   * enclosed in quotes. Default is to only escape values containing a quote character.</li>
-   * <li>`header` (default `false`): writes the names of columns as the first line.</li>
-   * <li>`nullValue` (default empty string): sets the string representation of a null value.</li>
-   * <li>`emptyValue` (default `""`): sets the string representation of an empty value.</li>
-   * <li>`encoding` (by default it is not set): specifies encoding (charset) of saved csv
-   * files. If it is not set, the UTF-8 charset will be used.</li>
-   * <li>`compression` (default `null`): compression codec to use when saving to file. This can be
-   * one of the known case-insensitive shorten names (`none`, `bzip2`, `gzip`, `lz4`,
-   * `snappy` and `deflate`). </li>
-   * <li>`dateFormat` (default `yyyy-MM-dd`): sets the string that indicates a date format.
-   * Custom date formats follow the formats at
-   * <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">
-   *   Datetime Patterns</a>.
-   * This applies to date type.</li>
-   * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss[.SSS][XXX]`): sets the string that
-   * indicates a timestamp format. Custom date formats follow the formats at
-   * <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">
-   *   Datetime Patterns</a>.
-   * This applies to timestamp type.</li>
-   * <li>`ignoreLeadingWhiteSpace` (default `true`): a flag indicating whether or not leading
-   * whitespaces from values being written should be skipped.</li>
-   * <li>`ignoreTrailingWhiteSpace` (default `true`): a flag indicating defines whether or not
-   * trailing whitespaces from values being written should be skipped.</li>
-   * <li>`lineSep` (default `\n`): defines the line separator that should be used for writing.
-   * Maximum length is 1 character.</li>
-   * </ul>
+   * You can find the CSV-specific options for writing CSV files in
+   * <a href="https://spark.apache.org/docs/latest/sql-data-sources-csv.html#data-source-option">
+   *   Data Source Option</a> in the version you use.
    *
    * @since 2.0.0
    */

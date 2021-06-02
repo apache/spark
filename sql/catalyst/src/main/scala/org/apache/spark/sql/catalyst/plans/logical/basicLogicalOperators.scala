@@ -621,6 +621,7 @@ case class WithWindowDefinition(
     windowDefinitions: Map[String, WindowSpecDefinition],
     child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
+  final override val nodePatterns: Seq[TreePattern] = Seq(WITH_WINDOW_DEFINITION)
   override protected def withNewChildInternal(newChild: LogicalPlan): WithWindowDefinition =
     copy(child = newChild)
 }
@@ -886,6 +887,11 @@ case class Aggregate(
 
   override protected def withNewChildInternal(newChild: LogicalPlan): Aggregate =
     copy(child = newChild)
+
+  // Whether this Aggregate operator is group only. For example: SELECT a, a FROM t GROUP BY a
+  private[sql] def groupOnly: Boolean = {
+    aggregateExpressions.forall(a => groupingExpressions.exists(g => a.semanticEquals(g)))
+  }
 }
 
 case class Window(
@@ -1056,6 +1062,7 @@ case class Pivot(
     groupByExprsOpt.getOrElse(Seq.empty).map(_.toAttribute) ++ pivotAgg
   }
   override def metadataOutput: Seq[Attribute] = Nil
+  final override val nodePatterns: Seq[TreePattern] = Seq(PIVOT)
 
   override protected def withNewChildInternal(newChild: LogicalPlan): Pivot = copy(child = newChild)
 }
@@ -1184,6 +1191,8 @@ case class SubqueryAlias(
   override def maxRows: Option[Long] = child.maxRows
 
   override def doCanonicalize(): LogicalPlan = child.canonicalized
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(SUBQUERY_ALIAS)
 
   override protected def withNewChildInternal(newChild: LogicalPlan): SubqueryAlias =
     copy(child = newChild)

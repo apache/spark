@@ -22,7 +22,7 @@ import scala.collection.mutable
 import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeMap, AttributeSet, NamedExpression, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.AlwaysProcess
+import org.apache.spark.sql.catalyst.trees.TreePattern._
 
 /**
  * A helper class used to detect duplicate relations fast in `DeduplicateRelations`
@@ -41,7 +41,7 @@ case class ReferenceEqualPlanWrapper(plan: LogicalPlan) {
 object DeduplicateRelations extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = {
     renewDuplicatedRelations(mutable.HashSet.empty, plan)._1.resolveOperatorsUpWithPruning(
-      AlwaysProcess.fn, ruleId) {
+      _.containsAnyPattern(JOIN, INTERSECT, EXCEPT, UNION, COMMAND), ruleId) {
       case p: LogicalPlan if !p.childrenResolved => p
       // To resolve duplicate expression IDs for Join.
       case j @ Join(left, right, _, _, _) if !j.duplicateResolved =>
