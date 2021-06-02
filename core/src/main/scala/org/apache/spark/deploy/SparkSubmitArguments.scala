@@ -189,7 +189,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
     ivySettingsPath = sparkProperties.get(config.JAR_IVY_SETTING_PATH.key)
     packages = Option(packages).orElse(sparkProperties.get(config.JAR_PACKAGES.key)).orNull
     packagesExclusions = Option(packagesExclusions)
-      .orElse(sparkProperties.get("spark.jars.excludes")).orNull
+      .orElse(sparkProperties.get(config.JAR_PACKAGES_EXCLUSIONS.key)).orNull
     repositories = Option(repositories)
       .orElse(sparkProperties.get("spark.jars.repositories")).orNull
     deployMode = Option(deployMode)

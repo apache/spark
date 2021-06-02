@@ -613,7 +613,7 @@ private[spark] class SparkSubmit extends Logging {
       OptionAssigner(args.ivyRepoPath, STANDALONE | MESOS | KUBERNETES,
         CLUSTER, confKey = config.JAR_IVY_REPO_PATH.key),
       OptionAssigner(args.packagesExclusions, STANDALONE | MESOS | KUBERNETES,
-        CLUSTER, confKey = "spark.jars.excludes"),
+        CLUSTER, confKey = config.JAR_PACKAGES_EXCLUSIONS.key),
 
       // Yarn only
       OptionAssigner(args.queue, YARN, ALL_DEPLOY_MODES, confKey = "spark.yarn.queue"),
