@@ -57,7 +57,7 @@ Data source options of text can be set via:
   </tr>
   <tr>
     <td><code>lineSep</code></td>
-    <td><code>\r</code>, <code>\r\n</code>, <code>\n</code> for reading, <code>\n</code> for writing</td>
+    <td><code>\r</code>, <code>\r\n</code>, <code>\n</code> (for reading), <code>\n</code> (for writing)</td>
     <td>Defines the line separator that should be used for reading or writing.</td>
     <td>read/write</td>
   </tr>
