@@ -372,20 +372,16 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
 
   test("SPARK-35572: Configure executor pods with host network enable") {
     baseConf.set(KUBERNETES_EXECUTOR_HOSTNETWORK, true)
-    baseConf.set(BLOCK_MANAGER_PORT, 0)
-    val baseDriverPod = SparkPod.initialPod()
-    val basicExecutorPod = new BasicExecutorFeatureStep(
-      newExecutorConf(), new SecurityManager(baseConf), defaultProfile).configurePod(baseDriverPod)
-    assert(basicExecutorPod.pod.getSpec.getHostNetwork)
-  }
-
-  test("SPARK-35572: Configure executor pods with host network and BLOCK_MANAGER_PORT not be 0") {
-    baseConf.set(KUBERNETES_EXECUTOR_HOSTNETWORK, true)
     val baseDriverPod = SparkPod.initialPod()
     assertThrows[IllegalArgumentException] {
       new BasicExecutorFeatureStep(newExecutorConf(),
         new SecurityManager(baseConf), defaultProfile).configurePod(baseDriverPod)
     }
+
+    baseConf.set(BLOCK_MANAGER_PORT, 0)
+    val basicExecutorPod = new BasicExecutorFeatureStep(
+      newExecutorConf(), new SecurityManager(baseConf), defaultProfile).configurePod(baseDriverPod)
+    assert(basicExecutorPod.pod.getSpec.getHostNetwork)
   }
 
   // There is always exactly one controller reference, and it points to the driver pod.
