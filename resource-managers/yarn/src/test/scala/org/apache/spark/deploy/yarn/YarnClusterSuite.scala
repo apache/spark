@@ -406,13 +406,13 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
         s"local://${emptyIvySettings.getAbsolutePath}", "")
     }
     assert(e1.getMessage.contains("IllegalArgumentException: " +
-      "Scheme local not supported in spark.jars.ivySettings"))
+      "Scheme local not supported in " + config.JAR_IVY_SETTING_PATH.key))
     val e2 = intercept[TestFailedException] {
       testIvySettingsDistribution(clientMode = false,
         s"hdfs://${emptyIvySettings.getAbsolutePath}", "")
     }
     assert(e2.getMessage.contains("IllegalArgumentException: " +
-      "Scheme hdfs not supported in spark.jars.ivySettings"))
+      "Scheme hdfs not supported in " + config.JAR_IVY_SETTING_PATH.key))
   }
 
   def testIvySettingsDistribution(clientMode: Boolean, ivySettingsPath: String,
@@ -423,7 +423,7 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
       mainClassName(YarnAddJarTest.getClass),
       appArgs = Seq(result.getAbsolutePath, expectedIvySettingsPrefixOnDriver,
         prefixMatch.toString),
-      extraConf = Map("spark.jars.ivySettings" -> ivySettingsPath),
+      extraConf = Map(config.JAR_IVY_SETTING_PATH.key -> ivySettingsPath),
       outFile = Option(outFile))
     checkResult(finalState, result, outFile = Option(outFile))
   }
@@ -663,7 +663,7 @@ private object YarnAddJarTest extends Logging {
 
     var result = "failure"
     try {
-      val settingsFile = sc.getConf.get("spark.jars.ivySettings")
+      val settingsFile = sc.getConf.get(config.JAR_IVY_SETTING_PATH.key)
       if (prefixMatch) {
         assert(settingsFile !== expectedIvySettingsPath)
         assert(settingsFile.startsWith(expectedIvySettingsPath))

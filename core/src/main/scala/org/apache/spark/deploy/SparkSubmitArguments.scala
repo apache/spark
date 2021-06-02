@@ -186,7 +186,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
     archives = Option(archives).orElse(sparkProperties.get(config.ARCHIVES.key)).orNull
     pyFiles = Option(pyFiles).orElse(sparkProperties.get(config.SUBMIT_PYTHON_FILES.key)).orNull
     ivyRepoPath = sparkProperties.get("spark.jars.ivy").orNull
-    ivySettingsPath = sparkProperties.get("spark.jars.ivySettings")
+    ivySettingsPath = sparkProperties.get(config.JAR_IVY_SETTING_PATH.key)
     packages = Option(packages).orElse(sparkProperties.get("spark.jars.packages")).orNull
     packagesExclusions = Option(packagesExclusions)
       .orElse(sparkProperties.get("spark.jars.excludes")).orNull

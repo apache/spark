@@ -520,7 +520,7 @@ private[spark] class Client(
 
     // If we passed in a ivySettings file, make sure we copy the file to the distributed cache
     // in cluster mode so that the driver can access it
-    val ivySettings = sparkConf.getOption("spark.jars.ivySettings")
+    val ivySettings = sparkConf.getOption(config.JAR_IVY_SETTING_PATH.key)
     val ivySettingsLocalizedPath: Option[String] = ivySettings match {
       case Some(ivySettingsPath) if isClusterMode =>
         val uri = new URI(ivySettingsPath)
@@ -539,7 +539,7 @@ private[spark] class Client(
             Some(localizedPath)
           case scheme =>
             throw new IllegalArgumentException(s"Scheme $scheme not supported in " +
-              "spark.jars.ivySettings")
+              config.JAR_IVY_SETTING_PATH.key)
         }
       case _ => None
     }
@@ -706,7 +706,7 @@ private[spark] class Client(
     // If propagating the ivySettings file to the distributed cache, override the ivySettings
     // file name with the name of the distributed file.
     ivySettingsLocalizedPath.foreach { path =>
-      confsToOverride.put("spark.jars.ivySettings", path)
+      confsToOverride.put(config.JAR_IVY_SETTING_PATH.key, path)
     }
 
     val localConfArchive = new Path(createConfArchive(confsToOverride).toURI())

@@ -25,12 +25,10 @@ import java.text.ParseException
 import java.util.{ServiceLoader, UUID}
 import java.util.jar.JarInputStream
 import javax.ws.rs.core.UriBuilder
-
 import scala.annotation.tailrec
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 import scala.util.{Properties, Try}
-
 import org.apache.commons.lang3.StringUtils
 import org.apache.hadoop.conf.{Configuration => HadoopConfiguration}
 import org.apache.hadoop.fs.{FileSystem, Path}
@@ -47,11 +45,10 @@ import org.apache.ivy.core.settings.IvySettings
 import org.apache.ivy.plugins.matcher.GlobPatternMatcher
 import org.apache.ivy.plugins.repository.file.FileRepository
 import org.apache.ivy.plugins.resolver.{ChainResolver, FileSystemResolver, IBiblioResolver}
-
 import org.apache.spark._
 import org.apache.spark.api.r.RUtils
 import org.apache.spark.deploy.rest._
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, config}
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.launcher.SparkLauncher
@@ -1299,7 +1296,7 @@ private[spark] object SparkSubmitUtils extends Logging {
     val file = Option(uri.getScheme).getOrElse("file") match {
       case "file" => new File(uri.getPath)
       case scheme => throw new IllegalArgumentException(s"Scheme $scheme not supported in " +
-        "spark.jars.ivySettings")
+        config.JAR_IVY_SETTING_PATH.key)
     }
     require(file.exists(), s"Ivy settings file $file does not exist")
     require(file.isFile(), s"Ivy settings file $file is not a normal file")
