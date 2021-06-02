@@ -191,7 +191,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
     packagesExclusions = Option(packagesExclusions)
       .orElse(sparkProperties.get(config.JAR_PACKAGES_EXCLUSIONS.key)).orNull
     repositories = Option(repositories)
-      .orElse(sparkProperties.get("spark.jars.repositories")).orNull
+      .orElse(sparkProperties.get(config.JAR_REPOSITORIES.key)).orNull
     deployMode = Option(deployMode)
       .orElse(sparkProperties.get(config.SUBMIT_DEPLOY_MODE.key))
       .orElse(env.get("DEPLOY_MODE"))

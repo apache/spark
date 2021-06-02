@@ -609,7 +609,7 @@ private[spark] class SparkSubmit extends Logging {
       OptionAssigner(args.packages, STANDALONE | MESOS | KUBERNETES,
         CLUSTER, confKey = config.JAR_PACKAGES.key),
       OptionAssigner(args.repositories, STANDALONE | MESOS | KUBERNETES,
-        CLUSTER, confKey = "spark.jars.repositories"),
+        CLUSTER, confKey = config.JAR_REPOSITORIES.key),
       OptionAssigner(args.ivyRepoPath, STANDALONE | MESOS | KUBERNETES,
         CLUSTER, confKey = config.JAR_IVY_REPO_PATH.key),
       OptionAssigner(args.packagesExclusions, STANDALONE | MESOS | KUBERNETES,

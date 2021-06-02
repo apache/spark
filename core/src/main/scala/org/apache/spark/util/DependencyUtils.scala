@@ -42,7 +42,7 @@ private[spark] object DependencyUtils extends Logging {
     val Seq(packagesExclusions, packages, repositories, ivyRepoPath, ivySettingsPath) = Seq(
       config.JAR_PACKAGES_EXCLUSIONS.key,
       config.JAR_PACKAGES.key,
-      "spark.jars.repositories",
+      config.JAR_REPOSITORIES.key,
       config.JAR_IVY_REPO_PATH.key,
       config.JAR_IVY_SETTING_PATH.key
     ).map(sys.props.get(_).orNull)
