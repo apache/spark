@@ -16,6 +16,7 @@
 #
 
 import datetime
+import unittest
 from distutils.version import LooseVersion
 
 import pandas as pd
@@ -24,6 +25,7 @@ import numpy as np
 from pyspark import pandas as ps
 from pyspark.pandas.config import option_context
 from pyspark.pandas.tests.data_type_ops.testing_utils import TestCasesUtils
+from pyspark.pandas.typedef.typehints import extension_dtypes_available
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 
 
@@ -274,6 +276,9 @@ class BooleanOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         self.assert_eq(False | pser, False | psser)
 
 
+@unittest.skipIf(
+    not extension_dtypes_available, "pandas extension dtypes are not available"
+)
 class BooleanExtensionOpsTest(BooleanOpsTest, PandasOnSparkTestCase, TestCasesUtils):
     @property
     def pser(self):
@@ -517,7 +522,6 @@ class BooleanExtensionOpsTest(BooleanOpsTest, PandasOnSparkTestCase, TestCasesUt
 
 
 if __name__ == "__main__":
-    import unittest
     from pyspark.pandas.tests.data_type_ops.test_boolean_ops import *  # noqa: F401
 
     try:
