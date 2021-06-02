@@ -65,6 +65,9 @@ object Subquery {
     Subquery(s.plan, SubqueryExpression.hasCorrelatedSubquery(s))
 }
 
+/**
+ * This is a root logical node that contains common scalar subqueries.
+ */
 case class CommonScalarSubqueries(scalarSubqueries: Seq[ScalarSubquery], child: LogicalPlan)
   extends OrderPreservingUnaryNode with PredicateHelper {
   override def output: Seq[Attribute] = child.output

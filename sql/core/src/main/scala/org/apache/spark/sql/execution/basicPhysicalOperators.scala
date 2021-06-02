@@ -112,6 +112,13 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
     copy(child = newChild)
 }
 
+/**
+ * This is a root physical node that contains common scalar subqueries.
+ *
+ * This node is removed from the final physical plan by [[PlanSubqueries]] and
+ * [[PlanAdaptiveSubqueries]] and [[ScalarSubqueryReference]]s are replaced to [[ScalarSubquery]]s
+ * containing planned physical plans.
+ */
 case class CommonScalarSubqueriesExec(scalarSubqueries: Seq[Expression], child: SparkPlan)
   extends UnaryExecNode {
   override def output: Seq[Attribute] = child.output

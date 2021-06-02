@@ -36,15 +36,21 @@ import org.apache.spark.sql.types.DataType
  *   subquery plan, if not then the new subquery plan is added to the cache.
  *   During this first traversal each [[ScalarSubquery]] expression is replaced to a
  *   [[ScalarSubqueryReference]] pointing to its cached version.
- *   The cache uses headers to keep track of if a cache entry is the results of merging 2 or more
+ *   The cache uses a flag to keep track of if a cache entry is a results of merging 2 or more
  *   plans, or it is a plan that was seen only once.
- *   The header is basically a `CreateNamedStructure(name1, attribute1, name2, attribute2, ...)`
- *   expression to form a merged scalar subquery plan.
+ *   Merged plans in the cache get a "header" that is is basically
+ *   `CreateNamedStructure(name1, attribute1, name2, attribute2, ...)`
+ *   expression in new root [[Project]] node. This expression ensures that the merged plan is a
+ *   valid scalar subquery that returns only one value.
  * - A second traversal checks if a [[ScalarSubqueryReference]] is pointing to a merged subquery
- *   plan or not, and either replaces the reference to a
- *   `GetStructField(ScalarSubquery(merged plan with CreateNamedStruct() header))` expression to
- *   select the right scalar value from the merged plan, or restores the original
- *   [[ScalarSubquery]].
+ *   plan or not and either keeps the reference or restores the original [[ScalarSubquery]].
+ *   If there are [[ScalarSubqueryReference]] nodes remained a [[CommonScalarSubqueries]] root node
+ *   is added to the plan with the referenced scalar subqueries.
+ * - [[PlanSubqueries]] or [[PlanAdaptiveSubqueries]] rules do the physical planning of scalar
+ *   subqueries including the ones under [[CommonScalarSubqueriesExec]] node and replace
+ *   each [[ScalarSubqueryReference]] to their referenced physical plan in
+ *   `GetStructField(ScalarSubquery(merged plan with CreateNamedStruct() header))` form. Finally,
+ *   the [[CommonScalarSubqueriesExec]] node is removed from the physical plan.
  * - [[ReuseSubquery]] rule makes sure that merged subqueries are computed only once.
  *
  * Eg. the following query:
