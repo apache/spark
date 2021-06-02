@@ -34,7 +34,7 @@ import org.apache.spark.memory.SparkOutOfMemoryError
 import org.apache.spark.sql.catalyst.ScalaReflection.Schema
 import org.apache.spark.sql.catalyst.WalkedTypePath
 import org.apache.spark.sql.catalyst.analysis.UnresolvedGenerator
-import org.apache.spark.sql.catalyst.catalog.CatalogDatabase
+import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogTable}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression, UnevaluableAggregate}
 import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.plans.logical.{DomainJoin, LogicalPlan}
@@ -1229,5 +1229,31 @@ object QueryExecutionErrors {
 
   def parentSparkUIToAttachTabNotFoundError(): Throwable = {
     new SparkException("Parent SparkUI to attach this tab to not found!")
+  }
+
+  def inferSchemaUnsupportedForHiveError(): Throwable = {
+    new UnsupportedOperationException("inferSchema is not supported for hive data source.")
+  }
+
+  def requestedPartitionsMismatchTablePartitionsError(
+      table: CatalogTable, partition: Map[String, Option[String]]): Throwable = {
+    new SparkException(
+      s"""
+         |Requested partitioning does not match the ${table.identifier.table} table:
+         |Requested partitions: ${partition.keys.mkString(",")}
+         |Table partitions: ${table.partitionColumnNames.mkString(",")}
+       """.stripMargin)
+  }
+
+  def dynamicPartitionKeyNotAmongWrittenPartitionPathsError(key: String): Throwable = {
+    new SparkException(s"Dynamic partition key $key is not among written partition paths.")
+  }
+
+  def cannotRemovePartitionDirError(partitionPath: Path): Throwable = {
+    new RuntimeException(s"Cannot remove partition directory '$partitionPath'")
+  }
+
+  def cannotCreateStagingDirError(message: String, e: IOException): Throwable = {
+    new RuntimeException(s"Cannot create staging directory: $message", e)
   }
 }
