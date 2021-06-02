@@ -145,7 +145,7 @@ case class InsertIntoHiveTable(
 
     // By this time, the partition map must match the table's partition columns
     if (partitionColumnNames.toSet != partition.keySet) {
-      throw QueryExecutionErrors.requestedPartitionsMisMatchTableError(table, partition)
+      throw QueryExecutionErrors.requestedPartitionsMismatchTablePartitionsError(table, partition)
     }
 
     // Validate partition spec if there exist any dynamic partitions

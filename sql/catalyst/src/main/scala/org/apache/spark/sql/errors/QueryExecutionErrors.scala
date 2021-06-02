@@ -1235,7 +1235,7 @@ object QueryExecutionErrors {
     new UnsupportedOperationException("inferSchema is not supported for hive data source.")
   }
 
-  def requestedPartitionsMisMatchTableError(
+  def requestedPartitionsMismatchTablePartitionsError(
       table: CatalogTable, partition: Map[String, Option[String]]): Throwable = {
     new SparkException(
       s"""
