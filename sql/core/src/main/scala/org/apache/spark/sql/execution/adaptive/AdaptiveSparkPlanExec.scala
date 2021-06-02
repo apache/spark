@@ -62,8 +62,7 @@ case class AdaptiveSparkPlanExec(
     inputPlan: SparkPlan,
     @transient context: AdaptiveExecutionContext,
     @transient preprocessingRules: Seq[Rule[SparkPlan]],
-    @transient isSubquery: Boolean,
-    @transient isSubqueryBroadcastExec: Boolean = false)
+    @transient isSubquery: Boolean)
   extends LeafExecNode {
 
   @transient private val lock = new Object()
@@ -598,17 +597,22 @@ case class AdaptiveSparkPlanExec(
     logicalPlan.invalidateStatsCache()
     val optimized = optimizer.execute(logicalPlan)
     val sparkPlan = context.session.sessionState.planner.plan(ReturnAnswer(optimized)).next()
-    var newPlan = applyPhysicalRules(
+    val newPlan = applyPhysicalRules(
       sparkPlan,
       preprocessingRules ++ queryStagePreparationRules,
       Some((planChangeLogger, "AQE Replanning")))
 
-    if (isSubqueryBroadcastExec && currentPhysicalPlan.isInstanceOf[BroadcastExchangeExec]) {
+    // When both enabling AQE and DPP, `PlanAdaptiveDynamicPruningFilters` rule will
+    // add the `BroadcastExchangeExec` node manually in the DPP subquery,
+    // not through `EnsureRequirements` rule. Therefore, when the DPP subquery is complicated
+    // and need to be re-optimized, AQE also need to manually insert the `BroadcastExchangeExec`
+    // node to prevent the loss of the `BroadcastExchangeExec` node in DPP subquery.
+    val finalPlan = if (currentPhysicalPlan.isInstanceOf[BroadcastExchangeExec]) {
       val currentBroadcastExchange = currentPhysicalPlan.asInstanceOf[BroadcastExchangeExec]
-      newPlan = currentBroadcastExchange.copy(child = newPlan)
-    }
+      currentBroadcastExchange.copy(child = newPlan)
+    } else newPlan
 
-    (newPlan, optimized)
+    (finalPlan, optimized)
   }
 
   /**

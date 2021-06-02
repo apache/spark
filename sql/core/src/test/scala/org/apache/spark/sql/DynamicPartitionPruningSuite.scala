@@ -1519,8 +1519,6 @@ abstract class DynamicPartitionPruningSuiteBase
         |WHERE s.country = 'DE' AND s.rn = 1
         |""".stripMargin)
 
-    df.show()
-
     checkAnswer(df,
       Row(3, 2) ::
         Row(3, 2) ::

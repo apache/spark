@@ -57,8 +57,7 @@ case class PlanAdaptiveDynamicPruningFilters(
 
         if (canReuseExchange) {
           exchange.setLogicalLink(adaptivePlan.executedPlan.logicalLink.get)
-          val newAdaptivePlan = adaptivePlan.copy(
-            inputPlan = exchange, isSubqueryBroadcastExec = true)
+          val newAdaptivePlan = adaptivePlan.copy(inputPlan = exchange)
 
           val broadcastValues = SubqueryBroadcastExec(
             name, index, buildKeys, newAdaptivePlan)
