@@ -254,6 +254,11 @@ class NumOpsTest(PandasOnSparkTestCase, TestCasesUtils):
             self.assertRaises(TypeError, lambda: datetime.date(1994, 1, 1) % psser)
             self.assertRaises(TypeError, lambda: datetime.datetime(1994, 1, 1) % psser)
 
+    def test_from_to_pandas(self):
+        for pser, psser in self.numeric_pser_psser_pairs:
+            self.assert_eq(pser, psser.to_pandas())
+            self.assert_eq(ps.from_pandas(pser), psser)
+
 
 if __name__ == "__main__":
     import unittest

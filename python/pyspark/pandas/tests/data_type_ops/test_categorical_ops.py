@@ -115,6 +115,13 @@ class CategoricalOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         self.assertRaises(TypeError, lambda: "x" ** self.psser)
         self.assertRaises(TypeError, lambda: 1 ** self.psser)
 
+    def test_from_to_pandas(self):
+        data = [1, "x", "y"]
+        pser = pd.Series(data, dtype="category")
+        psser = ps.Series(data, dtype="category")
+        self.assert_eq(pser, psser.to_pandas())
+        self.assert_eq(ps.from_pandas(pser), psser)
+
 
 if __name__ == "__main__":
     import unittest
