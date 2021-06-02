@@ -594,7 +594,9 @@ case class AdaptiveSparkPlanExec(
    */
   private def reOptimize(logicalPlan: LogicalPlan): (SparkPlan, LogicalPlan) = {
     logicalPlan.invalidateStatsCache()
-    val optimized = optimizer.execute(logicalPlan)
+    // Clone the logical plan here, in case the AQE optimizer rules change the states of the
+    // logical plan. e.g. ineffective rule bitset.
+    val optimized = optimizer.execute(logicalPlan.clone())
     val sparkPlan = context.session.sessionState.planner.plan(ReturnAnswer(optimized)).next()
     val newPlan = applyPhysicalRules(
       sparkPlan,
