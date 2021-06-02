@@ -102,6 +102,16 @@ private[spark] class ExecutorPodsAllocator(
   @volatile private var deletedExecutorIds = Set.empty[Long]
 
   def start(applicationId: String, schedulerBackend: KubernetesClusterSchedulerBackend): Unit = {
+    // wait until the driver pod is ready to ensure executors can connect to driver svc
+    try {
+      kubernetesClient.pods()
+        .withName(kubernetesDriverPodName.get)
+        .waitUntilReady(driverPodReadinessTimeout, TimeUnit.MINUTES)
+    } catch {
+      case e: InterruptedException =>
+        logWarning(s"Timeout waiting for driver pod ${kubernetesDriverPodName.get} get ready in " +
+          s"namespace $namespace")
+    }
     snapshotsStore.addSubscriber(podAllocationDelay) {
       onNewSnapshots(applicationId, schedulerBackend, _)
     }
@@ -348,16 +358,6 @@ private[spark] class ExecutorPodsAllocator(
       s"ResourceProfile Id: $resourceProfileId, target: $expected running: $running.")
     // Check reusable PVCs for this executor allocation batch
     val reusablePVCs = getReusablePVCs(applicationId, pvcsInUse)
-    // wait until the driver pod is ready to ensure executors can connect to driver svc
-    if (numExecutorsToAllocate > 0) {
-      try {
-        kubernetesClient.pods().inNamespace(namespace).withName(kubernetesDriverPodName.get).
-          waitUntilReady(driverPodReadinessTimeout, TimeUnit.MINUTES)
-      } catch {
-        case e: InterruptedException =>
-          logWarning(s"Timeout waiting for driver pod ${kubernetesDriverPodName.get} get ready")
-      }
-    }
     for ( _ <- 0 until numExecutorsToAllocate) {
       val newExecutorId = EXECUTOR_ID_COUNTER.incrementAndGet()
       val executorConf = KubernetesConf.createExecutorConf(
