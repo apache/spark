@@ -28,7 +28,6 @@ import org.apache.spark.sql.{Dataset, QueryTest, Row, SparkSession, Strategy}
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
 import org.apache.spark.sql.execution.{LocalTableScanExec, PartialReducerPartitionSpec, QueryExecution, ReusedSubqueryExec, ShuffledRowRDD, SortExec, SparkPlan, UnaryExecNode}
-import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
 import org.apache.spark.sql.execution.datasources.noop.NoopDataSource
 import org.apache.spark.sql.execution.datasources.v2.V2TableWriteExec
@@ -118,12 +117,6 @@ class AdaptiveQueryExecSuite
   private def findTopLevelBaseJoin(plan: SparkPlan): Seq[BaseJoinExec] = {
     collect(plan) {
       case j: BaseJoinExec => j
-    }
-  }
-
-  private def findTopLevelBaseAggregate(plan: SparkPlan): Seq[BaseAggregateExec] = {
-    collect(plan) {
-      case agg: BaseAggregateExec => agg
     }
   }
 
@@ -1395,16 +1388,9 @@ class AdaptiveQueryExecSuite
       assert(stripAQEPlan(adaptivePlan1).isInstanceOf[LocalTableScanExec])
 
       val (plan2, adaptivePlan2) = runAdaptiveAndVerifyResult(
-        """
-          |SELECT t1.key, count(*) FROM testData t1
-          | JOIN (SELECT * FROM testData2 WHERE b = 0) t2 ON t1.key = t2.a
-          | WHERE t1.key > rand()
-          | GROUP BY t1.key
-          |""".stripMargin)
-      assert(findTopLevelBaseJoin(plan2).size == 1)
-      assert(findTopLevelBaseAggregate(plan2).size == 2)
-      assert(findTopLevelBaseJoin(adaptivePlan2).isEmpty)
-      assert(findTopLevelBaseAggregate(adaptivePlan2).isEmpty)
+       "SELECT key FROM (SELECT * FROM testData WHERE value = 'no_match' ORDER BY key)" +
+         " WHERE key > rand()")
+      assert(findTopLevelSort(plan2).size == 1)
       assert(stripAQEPlan(adaptivePlan2).isInstanceOf[LocalTableScanExec])
     }
   }
