@@ -129,7 +129,6 @@ class RocksDBSuite extends SparkFunSuite {
     // scalastyle:on line.size.limit
   }
 
-
   def generateFiles(dir: String, fileToLengths: Seq[(String, Int)]): Unit = {
     fileToLengths.foreach { case (fileName, length) =>
       val file = new File(dir, fileName)
