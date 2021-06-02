@@ -137,7 +137,8 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
     // As the analyzer makes sure that the list of In is already of the same data type, then the
     // rule can simply check the first literal in `in.list` can implicitly cast to `toType` or not,
     // and note that:
-    // 1. this rule doesn't convert in when `in.list` is empty.
+    // 1. this rule doesn't convert in when `in.list` is empty or `in.list` contains only null
+    // values.
     // 2. this rule only handles the case when both `fromExp` and value in `in.list` are of numeric
     // type.
     case in @ In(Cast(fromExp, toType: NumericType, _), list @ Seq(firstLit, _*))
@@ -161,7 +162,7 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
         case _ => throw new IllegalStateException("Illegal value found in in.list.")
       }
 
-      // return original expression when in.list only contains null values.
+      // return original expression when in.list contains only null values.
       if (canCastList.isEmpty && cannotCastList.isEmpty) {
         exp
       } else {
