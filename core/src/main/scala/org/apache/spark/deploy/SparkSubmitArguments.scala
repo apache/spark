@@ -200,11 +200,11 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
       .getOrElse(sparkProperties.get(config.EXECUTOR_INSTANCES.key).orNull)
     queue = Option(queue).orElse(sparkProperties.get("spark.yarn.queue")).orNull
     keytab = Option(keytab)
-      .orElse(sparkProperties.get("spark.kerberos.keytab"))
+      .orElse(sparkProperties.get(config.KEYTAB.key))
       .orElse(sparkProperties.get("spark.yarn.keytab"))
       .orNull
     principal = Option(principal)
-      .orElse(sparkProperties.get("spark.kerberos.principal"))
+      .orElse(sparkProperties.get(config.PRINCIPAL.key))
       .orElse(sparkProperties.get("spark.yarn.principal"))
       .orNull
     dynamicAllocationEnabled =
