@@ -371,16 +371,17 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
   }
 
   test("SPARK-35572: Configure executor pods with host network enable") {
+    val baseExecutorPod = SparkPod.initialPod()
+
     baseConf.set(KUBERNETES_EXECUTOR_HOSTNETWORK, true)
-    val baseDriverPod = SparkPod.initialPod()
     assertThrows[IllegalArgumentException] {
       new BasicExecutorFeatureStep(newExecutorConf(),
-        new SecurityManager(baseConf), defaultProfile).configurePod(baseDriverPod)
+        new SecurityManager(baseConf), defaultProfile).configurePod(baseExecutorPod)
     }
 
     baseConf.set(BLOCK_MANAGER_PORT, 0)
-    val basicExecutorPod = new BasicExecutorFeatureStep(
-      newExecutorConf(), new SecurityManager(baseConf), defaultProfile).configurePod(baseDriverPod)
+    val basicExecutorPod = new BasicExecutorFeatureStep(newExecutorConf(),
+      new SecurityManager(baseConf), defaultProfile).configurePod(baseExecutorPod)
     assert(basicExecutorPod.pod.getSpec.getHostNetwork)
   }
 
