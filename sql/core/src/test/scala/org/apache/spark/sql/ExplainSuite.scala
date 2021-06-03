@@ -572,6 +572,7 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
       """
         |(11) AQEShuffleRead
         |Input [5]: [k#x, count#xL, sum#xL, sum#x, count#xL]
+        |Arguments: coalesced
         |""".stripMargin,
       """
         |(16) BroadcastHashJoin
