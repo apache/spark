@@ -81,7 +81,7 @@ class IndexerLike(object):
     @property
     def _psdf(self) -> "DataFrame":
         if self._is_df:
-            return cast(DataFrame, self._psdf_or_psser)
+            return cast("DataFrame", self._psdf_or_psser)
         else:
             assert self._is_series
             return self._psdf_or_psser._psdf
@@ -465,7 +465,7 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
 
             if isinstance(rows_sel, Series) and not same_anchor(rows_sel, self._psdf_or_psser):
                 psdf = self._psdf_or_psser.copy()
-                temp_col = verify_temp_column_name(cast(DataFrame, psdf), "__temp_col__")
+                temp_col = verify_temp_column_name(cast("DataFrame", psdf), "__temp_col__")
 
                 psdf[temp_col] = rows_sel
                 return type(self)(psdf)[psdf[temp_col], cols_sel][list(self._psdf_or_psser.columns)]
