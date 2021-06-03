@@ -2004,10 +2004,6 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     }
   }
 
-  test("SPARK-35589: test migration of index-only shuffle blocks during decommissioning") {
-    testShuffleBlockDecommissioning(None, true)
-  }
-
   test("test migration of shuffle blocks during decommissioning - no limit") {
     testShuffleBlockDecommissioning(None, true)
   }
