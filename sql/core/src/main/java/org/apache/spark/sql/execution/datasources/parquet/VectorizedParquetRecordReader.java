@@ -65,7 +65,7 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
    * For each request column, the reader to read this column. This is NULL if this column
    * is missing from the file, in which case we populate the attribute with NULL.
    */
-  private VectorizedColumnReader[] columnReaders;
+  private NewVectorizedColumnReader[] columnReaders;
 
   /**
    * The number of rows that have been returned.
@@ -327,10 +327,10 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
     }
     List<ColumnDescriptor> columns = requestedSchema.getColumns();
     List<Type> types = requestedSchema.asGroupType().getFields();
-    columnReaders = new VectorizedColumnReader[columns.size()];
+    columnReaders = new NewVectorizedColumnReader[columns.size()];
     for (int i = 0; i < columns.size(); ++i) {
       if (missingColumns[i]) continue;
-      columnReaders[i] = new VectorizedColumnReader(
+      columnReaders[i] = new NewVectorizedColumnReader(
         columns.get(i),
         types.get(i).getLogicalTypeAnnotation(),
         pages.getPageReader(columns.get(i)),
