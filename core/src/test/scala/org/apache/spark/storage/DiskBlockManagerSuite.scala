@@ -86,24 +86,7 @@ class DiskBlockManagerSuite extends SparkFunSuite with BeforeAndAfterEach with B
     assert(diskBlockManager.getAllBlocks().isEmpty)
   }
 
-  test("find active merged shuffle directories") {
-    testConf.set("spark.local.dir", rootDirs)
-    testConf.set("spark.shuffle.push.enabled", "true")
-    testConf.set("spark.shuffle.service.enabled", "true")
-    diskBlockManager = new DiskBlockManager(testConf, deleteFilesOnStop = true)
-    assert(diskBlockManager.activeMergedShuffleDirs.isDefined)
-    assert(diskBlockManager.activeMergedShuffleDirs.get.length == diskBlockManager.localDirs.length)
-    val expected = Array(rootDir0.getAbsolutePath, rootDir1.getAbsolutePath).sorted
-    val actual = diskBlockManager.activeMergedShuffleDirs.get.map(file => file.getParent)
-    assert(expected sameElements actual)
-    // Verify subdirectories creation
-    val mergeDirs = Array(new File(rootDir0, DiskBlockManager.MERGE_MANAGER_DIR).toPath)
-    mergeDirs.foreach { mergeDir =>
-      assert(Files.list(mergeDir).count() === 64)
-    }
-  }
-
-  test("should not create merge directories if one already exists under a local dir") {
+  test("should still create merge directories if one already exists under a local dir") {
     val mergeDir0 = new File(rootDir0, DiskBlockManager.MERGE_MANAGER_DIR)
     if (!mergeDir0.exists()) {
       Files.createDirectories(mergeDir0.toPath)
@@ -116,8 +99,9 @@ class DiskBlockManagerSuite extends SparkFunSuite with BeforeAndAfterEach with B
     testConf.set("spark.shuffle.push.enabled", "true")
     testConf.set("spark.shuffle.service.enabled", "true")
     diskBlockManager = new DiskBlockManager(testConf, deleteFilesOnStop = true)
-    assert(diskBlockManager.activeMergedShuffleDirs.isDefined)
-    assert(diskBlockManager.activeMergedShuffleDirs.get.length == 1)
+    Utils.getConfiguredLocalDirs(testConf).map(
+      rootDir => new File(rootDir, DiskBlockManager.MERGE_MANAGER_DIR))
+      .filter(mergeDir => mergeDir.exists())
   }
 
   def writeToFile(file: File, numBytes: Int): Unit = {

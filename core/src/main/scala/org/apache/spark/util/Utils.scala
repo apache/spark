@@ -317,9 +317,13 @@ private[spark] object Utils extends Logging {
 
   /**
    * Create a directory that is writable by the group.
-   * Grant 770 permission so the shuffle server can create subdirs/files within the merge folder.
+   * Grant the customized permission so the shuffle server can
+   * create subdirs/files within the merge folder.
+   * TODO: Find out why can't we create a dir using java api with permission 770
+   *  Files.createDirectories(mergeDir.toPath, PosixFilePermissions.asFileAttribute(
+   *  PosixFilePermissions.fromString("rwxrwx---")))
    */
-  def createDirWith770(dirToCreate: File): Unit = {
+  def createDirWithCustomizedPermission(dirToCreate: File, permission: String): Unit = {
     var attempts = 0
     val maxAttempts = MAX_DIR_CREATION_ATTEMPTS
     var created: File = null
@@ -332,7 +336,7 @@ private[spark] object Utils extends Logging {
       }
       try {
         val builder = new ProcessBuilder().command(
-          "mkdir", "-m770", dirToCreate.getAbsolutePath)
+          "mkdir", "-p", "-m" + permission, dirToCreate.getAbsolutePath)
         val proc = builder.start()
         val exitCode = proc.waitFor()
         if (dirToCreate.exists()) {
@@ -2613,11 +2617,28 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Push based shuffle can only be enabled when external shuffle service is enabled.
+   * Push based shuffle can only be enabled when the application is submitted
+   * to run in YARN mode, with external shuffle service enabled and
+   * spark.yarn.maxAttempts or the yarn cluster default max attempts is set to 1.
+   * TODO: SPARK-35546 Support push based shuffle with multiple app attempts
    */
   def isPushBasedShuffleEnabled(conf: SparkConf): Boolean = {
     conf.get(PUSH_BASED_SHUFFLE_ENABLED) &&
-      (conf.get(IS_TESTING).getOrElse(false) || conf.get(SHUFFLE_SERVICE_ENABLED))
+      (conf.get(IS_TESTING).getOrElse(false) ||
+        (conf.get(SHUFFLE_SERVICE_ENABLED) &&
+          conf.get(SparkLauncher.SPARK_MASTER, null) == "yarn") &&
+          getYarnMaxAttempts(conf) == 1)
+  }
+
+  /** Returns the maximum number of attempts to register the AM in YARN mode. */
+  def getYarnMaxAttempts(conf: SparkConf): Int = {
+      val sparkMaxAttempts = conf.getOption("spark.yarn.maxAttempts").map(_.toInt)
+      val yarnMaxAttempts = getSparkOrYarnConfig(conf, YarnConfiguration.RM_AM_MAX_ATTEMPTS,
+        YarnConfiguration.DEFAULT_RM_AM_MAX_ATTEMPTS.toString).toInt
+      sparkMaxAttempts match {
+        case Some(x) => if (x <= yarnMaxAttempts) x else yarnMaxAttempts
+        case None => yarnMaxAttempts
+      }
   }
 
   /**

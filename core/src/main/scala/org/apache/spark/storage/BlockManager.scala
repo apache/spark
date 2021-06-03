@@ -735,17 +735,20 @@ private[spark] class BlockManager(
    * Instead of reading the entire file as a single block, we split it into smaller chunks
    * which will be memory efficient when performing certain operations.
    */
-  override def getMergedBlockData(blockId: ShuffleBlockId): Seq[ManagedBuffer] = {
-    shuffleManager.shuffleBlockResolver.getMergedBlockData(blockId)
+  def getLocalMergedBlockData(
+      blockId: ShuffleBlockId,
+      dirs: Array[String]): Seq[ManagedBuffer] = {
+    shuffleManager.shuffleBlockResolver.getMergedBlockData(blockId, Some(dirs))
   }
 
   /**
-   * Get the local merged shuffle block metada data for the given block ID.
+   * Get the local merged shuffle block meta data for the given block ID.
    */
-  def getMergedBlockMeta(blockId: ShuffleBlockId): MergedBlockMeta = {
-    shuffleManager.shuffleBlockResolver.getMergedBlockMeta(blockId)
+  def getLocalMergedBlockMeta(
+      blockId: ShuffleBlockId,
+      dirs: Array[String]): MergedBlockMeta = {
+    shuffleManager.shuffleBlockResolver.getMergedBlockMeta(blockId, Some(dirs))
   }
-
 
   /**
    * Get the BlockStatus for the block identified by the given ID, if it exists.

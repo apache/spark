@@ -45,7 +45,7 @@ private[spark] class DiskBlockManager(conf: SparkConf, var deleteFilesOnStop: Bo
   /* Create one local directory for each path mentioned in spark.local.dir; then, inside this
    * directory, create multiple subdirectories that we will hash files into, in order to avoid
    * having really large inodes at the top level. */
-  private[spark] val localDirs: Array[File] = createLocalDirs(conf)
+  private[spark] val localDirs: Array[File] = createLocalDirs()
   if (localDirs.isEmpty) {
     logError("Failed to create any local dir.")
     System.exit(ExecutorExitCode.DISK_STORE_FAILED_TO_CREATE_DIR)
@@ -57,11 +57,8 @@ private[spark] class DiskBlockManager(conf: SparkConf, var deleteFilesOnStop: Bo
   // of subDirs(i) is protected by the lock of subDirs(i)
   private val subDirs = Array.fill(localDirs.length)(new Array[File](subDirsPerLocalDir))
 
-  /**
-   * Create merge directories
-   */
-  private[spark] val activeMergedShuffleDirs: Option[Array[File]] =
-    createLocalDirsForMergedShuffleBlocks(conf)
+  // Create merge directories
+  createLocalDirsForMergedShuffleBlocks(conf)
 
   private val shutdownHook = addShutdownHook()
 
@@ -96,31 +93,30 @@ private[spark] class DiskBlockManager(conf: SparkConf, var deleteFilesOnStop: Bo
 
   /**
    * This should be in sync with
-   * org.apache.spark.network.shuffle.RemoteBlockPushResolver#getMergedShuffleFile
+   * @see [[org.apache.spark.network.shuffle.RemoteBlockPushResolver#getFile(
+   *     java.lang.String, java.lang.String)]]
    */
-  def getMergedShuffleFile(blockId: BlockId): File = {
+  def getMergedShuffleFile(blockId: BlockId, dirs: Option[Array[String]]): File = {
     blockId match {
       case mergedBlockId: ShuffleMergedBlockId =>
-        getMergedShuffleFile(mergedBlockId.appId, mergedBlockId.name)
+        getMergedShuffleFile(mergedBlockId.name, dirs)
       case mergedIndexBlockId: ShuffleMergedIndexBlockId =>
-        getMergedShuffleFile(mergedIndexBlockId.appId, mergedIndexBlockId.name)
+        getMergedShuffleFile(mergedIndexBlockId.name, dirs)
       case mergedMetaBlockId: ShuffleMergedMetaBlockId =>
-        getMergedShuffleFile(mergedMetaBlockId.appId, mergedMetaBlockId.name)
+        getMergedShuffleFile(mergedMetaBlockId.name, dirs)
       case _ =>
         throw new IllegalArgumentException(
-          s"Only merged block ID is supported, but got ${blockId}")
+          s"Only merged block ID is supported, but got $blockId")
     }
   }
 
-  private def getMergedShuffleFile(appId: String, filename: String): File = {
-    if (activeMergedShuffleDirs.isEmpty) {
+  private def getMergedShuffleFile(filename: String, dirs: Option[Array[String]]): File = {
+    if (dirs.isEmpty) {
       throw new IllegalArgumentException(
-        s"Cannot read $filename because active merged shuffle dirs is empty")
+        s"Cannot read $filename because merged shuffle dirs is empty")
     }
-    val localDirsForMergedShuffleBlock = activeMergedShuffleDirs.get.map(_.getPath)
-    ExecutorDiskUtils.getFile(localDirsForMergedShuffleBlock, subDirsPerLocalDir, filename)
+    ExecutorDiskUtils.getFile(dirs.get, subDirsPerLocalDir, filename)
   }
-
 
   /** Check if disk block manager has a block. */
   def containsBlock(blockId: BlockId): Boolean = {
@@ -178,7 +174,7 @@ private[spark] class DiskBlockManager(conf: SparkConf, var deleteFilesOnStop: Bo
    * located inside configured local directories and won't
    * be deleted on JVM exit when using the external shuffle service.
    */
-  private def createLocalDirs(conf: SparkConf): Array[File] = {
+  private def createLocalDirs(): Array[File] = {
     Utils.getConfiguredLocalDirs(conf).flatMap { rootDir =>
       try {
         val localDir = Utils.createDirectory(rootDir, "blockmgr")
@@ -199,50 +195,36 @@ private[spark] class DiskBlockManager(conf: SparkConf, var deleteFilesOnStop: Bo
    * subdirectories here because currently the shuffle service doesn't have permission to
    * create directories under application local directories.
    */
-  private def createLocalDirsForMergedShuffleBlocks(conf: SparkConf): Option[Array[File]] = {
+  private def createLocalDirsForMergedShuffleBlocks(conf: SparkConf): Unit = {
     if (Utils.isPushBasedShuffleEnabled(conf)) {
       // Will create the merge_manager directory only if it doesn't exist under any local dir.
-      val localDirs = Utils.getConfiguredLocalDirs(conf)
-      var mergeDirCreated = false;
-      for (rootDir <- localDirs) {
-        val mergeDir = new File(rootDir, MERGE_MANAGER_DIR)
-        if (mergeDir.exists()) {
-          logDebug(s"Not creating $mergeDir as it already exists")
-          mergeDirCreated = true
-        }
-      }
-      if (!mergeDirCreated) {
-        // This executor didn't see any merge_manager directories, it will start creating them.
-        // It's possible that the other executors launched at the same time may also reach here but
-        // we are working on the assumption that the executors launched around the same time will
-        // have the same set of application local directories.
-        localDirs.foreach { rootDir =>
-          try {
-            val mergeDir = new File(rootDir, MERGE_MANAGER_DIR)
-            // Only one container will create this directory. The filesystem will handle any race
-            // conditions.
-            if (!mergeDir.exists()) {
-              Utils.createDirWith770(mergeDir)
-              for (dirNum <- 0 until subDirsPerLocalDir) {
-                val sudDir = new File(mergeDir, "%02x".format(dirNum))
-                Utils.createDirWith770(sudDir)
+      Utils.getConfiguredLocalDirs(conf).foreach { rootDir =>
+        try {
+          val mergeDir = new File(rootDir, MERGE_MANAGER_DIR)
+          // This executor does not find merge_manager directory, it will start creating them.
+          // It's possible that the other executors launched at the same time may also reach here
+          // but we are working on the assumption that the executors launched around the same time
+          // will have the same set of application local directories.
+          if (!mergeDir.exists()) {
+            logDebug(
+              s"Try to create $mergeDir and its sub dirs since the merge dir does not exist")
+            for (dirNum <- 0 until subDirsPerLocalDir) {
+              val subDir = new File(mergeDir, "%02x".format(dirNum))
+              if (!subDir.exists()) {
+                // Only one container will create this directory. The filesystem will handle
+                // any race conditions.
+                Utils.createDirWithCustomizedPermission(subDir, "770")
               }
             }
-            logInfo(s"Merge directory at $mergeDir")
-          } catch {
-            case e: IOException =>
-              logError(
-                s"Failed to create merge dir in $rootDir. Ignoring this directory.", e)
           }
+          logInfo(s"Merge directory and its sub dirs get created at $mergeDir")
+        } catch {
+          case e: IOException =>
+            logError(
+              s"Failed to create merge dir in $rootDir. Ignoring this directory.", e)
         }
       }
     }
-    findActiveMergedShuffleDirs(conf)
-  }
-
-  private def findActiveMergedShuffleDirs(conf: SparkConf): Option[Array[File]] = {
-    Option(Utils.getConfiguredLocalDirs(conf).map(
-      rootDir => new File(rootDir, MERGE_MANAGER_DIR)).filter(mergeDir => mergeDir.exists()))
   }
 
   private def addShutdownHook(): AnyRef = {

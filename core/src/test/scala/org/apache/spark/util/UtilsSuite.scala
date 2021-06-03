@@ -17,11 +17,14 @@
 
 package org.apache.spark.util
 
-import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataOutput, DataOutputStream, File, FileOutputStream, PrintStream, SequenceInputStream}
+import java.io._
 import java.lang.reflect.Field
 import java.net.{BindException, ServerSocket, URI}
 import java.nio.{ByteBuffer, ByteOrder}
 import java.nio.charset.StandardCharsets.UTF_8
+import java.nio.file.{Files => JavaFiles}
+import java.nio.file.Paths
+import java.nio.file.attribute.PosixFilePermissions
 import java.text.DecimalFormatSymbols
 import java.util.Locale
 import java.util.concurrent.TimeUnit
@@ -29,16 +32,19 @@ import java.util.zip.GZIPOutputStream
 
 import scala.collection.mutable.ListBuffer
 import scala.util.Random
+
 import com.google.common.io.Files
 import org.apache.commons.io.{FileUtils, IOUtils}
 import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.apache.commons.math3.stat.inference.ChiSquareTest
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
+
 import org.apache.spark.{SparkConf, SparkException, SparkFunSuite, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Tests.IS_TESTING
+import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.scheduler.SparkListener
 import org.apache.spark.util.io.ChunkedByteBufferInputStream
@@ -1435,21 +1441,28 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     assert(message.contains(expected))
   }
 
-  test("isPushBasedShuffleEnabled when both PUSH_BASED_SHUFFLE_ENABLED" +
-    " and SHUFFLE_SERVICE_ENABLED are true") {
+  test("isPushBasedShuffleEnabled when PUSH_BASED_SHUFFLE_ENABLED " +
+    "and SHUFFLE_SERVICE_ENABLED are both set to true in YARN mode with maxAttempts set to 1") {
     val conf = new SparkConf()
     assert(Utils.isPushBasedShuffleEnabled(conf) === false)
     conf.set(PUSH_BASED_SHUFFLE_ENABLED, true)
     conf.set(IS_TESTING, false)
     assert(Utils.isPushBasedShuffleEnabled(conf) === false)
     conf.set(SHUFFLE_SERVICE_ENABLED, true)
+    conf.set(SparkLauncher.SPARK_MASTER, "yarn")
+    conf.set("spark.yarn.maxAttempts", "1")
     assert(Utils.isPushBasedShuffleEnabled(conf) === true)
+    conf.set("spark.yarn.maxAttempts", "2")
+    assert(Utils.isPushBasedShuffleEnabled(conf) === false)
   }
 
   test("Test create dir with 770") {
     val testDir = new File("target/testDir");
     FileUtils.deleteQuietly(testDir)
-    Utils.createDirWith770(testDir)
+    Utils.createDirWithCustomizedPermission(testDir, "770")
+    val permission = PosixFilePermissions.toString(
+      JavaFiles.getPosixFilePermissions(Paths.get("target/testDir")))
+    assert(permission.equals("rwxrwx---"))
     val foo = new File(testDir, "foo.txt")
     Files.touch(foo)
     assert(testDir.exists && testDir.isDirectory)

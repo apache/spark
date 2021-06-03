@@ -211,7 +211,8 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
 
   /**
    * The logic here is consistent with
-   * org.apache.spark.storage.DiskBlockManager#getMergedShuffleFile
+   * @see [[org.apache.spark.storage.DiskBlockManager#getMergedShuffleFile(
+   *      org.apache.spark.storage.BlockId, scala.Option)]]
    */
   private File getFile(String appId, String filename) {
     // TODO: [SPARK-33236] Change the message when this service is able to handle NM restart
@@ -431,7 +432,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       executorInfo.subDirsPerLocalDir));
   }
   private static String generateFileName(AppShuffleId appShuffleId, int reduceId) {
-    return String.format("mergedShuffle_%s_%d_%d", appShuffleId.appId, appShuffleId.shuffleId,
+    return String.format("shuffleMerged_%s_%d_%d", appShuffleId.appId, appShuffleId.shuffleId,
       reduceId);
   }
 
