@@ -27,7 +27,7 @@ import java.util.Arrays;
  * given maximum number of rows with at least the given minimum number of rows.
  *
  * @see SupportsAdmissionControl#latestOffset(Offset, ReadLimit)
- * @since 3.1.2
+ * @since 3.2.0
  */
 @Evolving
 public final class CompositeReadLimit implements ReadLimit {

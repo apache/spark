@@ -160,47 +160,39 @@ private[kafka010] class KafkaSource(
     initialPartitionOffsets
     val currentOffsets = currentPartitionOffsets.orElse(Some(initialPartitionOffsets))
     val latest = kafkaReader.fetchLatestOffsets(currentOffsets)
-    var skipBatch = false
-    val offsets = limit match {
-      case rows: ReadMinRows =>
-        // checking if we need to skip batch based on minOffsetPerTrigger criteria
-        skipBatch = delayBatch(
-          rows.minRows, latest, currentOffsets.get, rows.maxTriggerDelayMs)
-        if (skipBatch) {
-          logDebug(
-            s"Delaying batch as number of records available is less than minOffsetsPerTrigger")
-          // Pass same current offsets as output to skip trigger
-          currentOffsets.get
-        } else latest
-      case rows: ReadMaxRows =>
-        if (currentPartitionOffsets.isEmpty) {
-          rateLimit(rows.maxRows(), initialPartitionOffsets, latest)
-        } else {
-          rateLimit(rows.maxRows(), currentPartitionOffsets.get, latest)
-        }
-      case rows: CompositeReadLimit =>
-        val minRowsLimit = rows.getReadLimits()(0).asInstanceOf[ReadMinRows]
-        val maxRowsLimit = rows.getReadLimits()(1).asInstanceOf[ReadMaxRows]
-        // checking if we need to skip batch based on minOffsetPerTrigger criteria
-        skipBatch = delayBatch(
-          minRowsLimit.minRows, latest, currentOffsets.get, minRowsLimit.maxTriggerDelayMs)
-        if (skipBatch) {
-          logDebug(
-            s"Delaying batch as number of records available is less than minOffsetsPerTrigger")
-          // Pass same current offsets as output to skip trigger
-          currentOffsets.get
-        } else {
-          if (currentPartitionOffsets.isEmpty) {
-            rateLimit(maxRowsLimit.maxRows, initialPartitionOffsets, latest)
-          } else {
-            rateLimit(maxRowsLimit.maxRows, currentPartitionOffsets.get, latest)
-          }
-        }
-      case _: ReadAllAvailable =>
-        latest
+    latestPartitionOffsets = Some(latest)
+
+    val limits: Seq[ReadLimit] = limit match {
+      case rows: CompositeReadLimit => rows.getReadLimits
+      case rows => Seq(rows)
     }
-    if (!skipBatch) {
-      latestPartitionOffsets = Some(latest)
+
+    val offsets = if (limits.exists(_.isInstanceOf[ReadAllAvailable])) {
+      // ReadAllAvailable has the highest priority
+      latest
+    } else {
+      val lowerLimit = limits.find(_.isInstanceOf[ReadMinRows]).map(_.asInstanceOf[ReadMinRows])
+      val upperLimit = limits.find(_.isInstanceOf[ReadMaxRows]).map(_.asInstanceOf[ReadMaxRows])
+
+      lowerLimit.flatMap { limit =>
+        // checking if we need to skip batch based on minOffsetPerTrigger criteria
+        val skipBatch = delayBatch(
+          limit.minRows, latest, currentOffsets.get, limit.maxTriggerDelayMs)
+        if (skipBatch) {
+          logDebug(
+            s"Delaying batch as number of records available is less than minOffsetsPerTrigger")
+          // Pass same current offsets as output to skip trigger
+          Some(currentOffsets.get)
+        } else {
+          None
+        }
+      }.orElse {
+        // checking if we need to adjust a range of offsets based on maxOffsetPerTrigger criteria
+        upperLimit.map { limit =>
+          rateLimit(limit.maxRows, currentPartitionOffsets.getOrElse(initialPartitionOffsets),
+            latest)
+        }
+      }.getOrElse(latest)
     }
     currentPartitionOffsets = Some(offsets)
     logDebug(s"GetOffset: ${offsets.toSeq.map(_.toString).sorted}")
