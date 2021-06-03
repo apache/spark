@@ -102,7 +102,8 @@ private[spark] class ExecutorPodsAllocator(
   @volatile private var deletedExecutorIds = Set.empty[Long]
 
   def start(applicationId: String, schedulerBackend: KubernetesClusterSchedulerBackend): Unit = {
-    // wait until the driver pod is ready to ensure executors can connect to driver svc
+    // Wait until the driver pod is ready before starting executors, as the headless service won't
+    // be resolvable by DNS until the driver pod is ready.
     try {
       kubernetesClient.pods()
         .withName(kubernetesDriverPodName.get)
