@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.rules
 import scala.collection.mutable
 
 import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.util.Utils
 
 // Represent unique rule ids for rules that are invoked multiple times.
 case class RuleId(id: Int) {
@@ -150,6 +151,31 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.optimizer.SimplifyConditionalsInPredicate" ::
       "org.apache.spark.sql.catalyst.optimizer.TransposeWindow" ::
       "org.apache.spark.sql.catalyst.optimizer.UnwrapCastInBinaryComparison" ::  Nil
+  }
+
+  if(Utils.isTesting) {
+    rulesNeedingIds ++ {
+      // In the production code path, The following rules are run CombinedTypeCoercionRule, and
+      // hence we only need to add them in unit testing.
+      "org.apache.spark.sql.catalyst.analysis.AnsiTypeCoercion$PromoteStringLiterals" ::
+      "org.apache.spark.sql.catalyst.analysis.DecimalPrecision" ::
+      "org.apache.spark.sql.catalyst.analysis.TypeCoercion$BooleanEquality" ::
+      "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$CaseWhenCoercion" ::
+      "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$ConcatCoercion" ::
+      "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$DateTimeOperations" ::
+      "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$Division" ::
+      "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$EltCoercion" ::
+      "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$FunctionArgumentConversion" ::
+      "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$IfCoercion" ::
+      "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$ImplicitTypeCasts" ::
+      "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$InConversion" ::
+      "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$IntegralDivision" ::
+      "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$MapZipWithCoercion" ::
+      "org.apache.spark.sql.catalyst.analysis.TypeCoercion$PromoteStrings" ::
+      "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$StackCoercion" ::
+      "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$StringLiteralCoercion" ::
+      "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$WindowFrameCoercion" :: Nil
+    }
   }
 
   // Maps rule names to ids. Rule ids are continuous natural numbers starting from 0.
