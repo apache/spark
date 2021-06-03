@@ -146,7 +146,8 @@ class RocksDBFileManager(
       // the root directory. Normally saveImmutableFilesToDfs will do this initialization, but
       // when there's no data that method won't write any files, and zipToDfsFile uses the
       // CheckpointFileManager.createAtomic API which doesn't auto-initialize parent directories.
-      fm.mkdirs(new Path(dfsRootDir))
+      val path = new Path(dfsRootDir)
+      if (!fm.exists(path)) fm.mkdirs(path)
     }
     zipToDfsFile(localOtherFiles :+ metadataFile, dfsBatchZipFile(version))
     logInfo(s"Saved checkpoint file for version $version")

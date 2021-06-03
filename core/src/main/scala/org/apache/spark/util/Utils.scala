@@ -1134,8 +1134,15 @@ private[spark] object Utils extends Logging {
    */
   def recursiveList(f: File): Array[File] = {
     require(f.isDirectory)
-    val current = f.listFiles
-    current ++ current.filter(_.isDirectory).flatMap(recursiveList)
+    val result = f.listFiles.toBuffer
+    val dirList = result.filter(_.isDirectory)
+    while (dirList.nonEmpty) {
+      val curDir = dirList.remove(0)
+      val files = curDir.listFiles()
+      result ++= files
+      dirList ++= files.filter(_.isDirectory)
+    }
+    result.toArray
   }
 
   /**
