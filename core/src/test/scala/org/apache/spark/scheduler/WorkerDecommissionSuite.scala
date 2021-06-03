@@ -31,6 +31,8 @@ class WorkerDecommissionSuite extends SparkFunSuite with LocalSparkContext {
   override def beforeEach(): Unit = {
     val conf = new SparkConf().setAppName("test")
       .set(config.DECOMMISSION_ENABLED, true)
+      .set(config.EXECUTOR_DECOMMISSION_BATCH_INTERVAL, 1000L)
+      .set(config.EXECUTOR_DECOMMISSION_BATCH_SIZE, 1)
 
     sc = new SparkContext("local-cluster[2, 1, 1024]", "test", conf)
   }
@@ -82,5 +84,30 @@ class WorkerDecommissionSuite extends SparkFunSuite with LocalSparkContext {
       triggeredByExecutor = false)
     val asyncCountResult = ThreadUtils.awaitResult(asyncCount, 20.seconds)
     assert(asyncCountResult === 10)
+  }
+
+  test("Verify executors are decommissioned in batches") {
+    val input = sc.parallelize(1 to 10)
+    input.count()
+    val sleepyRdd = input.mapPartitions{ x =>
+      Thread.sleep(100)
+      x
+    }
+    assert(sleepyRdd.count() === 10)
+    // Decommission all the executors.
+    val sched = sc.schedulerBackend.asInstanceOf[StandaloneSchedulerBackend]
+    assert(sched.getExecutorIds().size === 2)
+    val executorsAndDecomInfo = sched.getExecutorIds().map { execId =>
+      (execId, ExecutorDecommissionInfo(s"Asked to decommission $execId.", None))
+    }
+    sched.decommissionExecutors(
+      executorsAndDecomInfo.toArray,
+      adjustTargetNumExecutors = false,
+      triggeredByExecutor = false)
+    assert(sched.getExecutorsToDecommissionInBatchesSize === 2)
+    Thread.sleep(1000)
+    assert(sched.getExecutorsToDecommissionInBatchesSize === 1)
+    Thread.sleep(1000)
+    assert(sched.getExecutorsToDecommissionInBatchesSize === 1)
   }
 }
