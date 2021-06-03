@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.{Complete, Partial}
 import org.apache.spark.sql.catalyst.optimizer.{ConvertToLocalRelation, NestedColumnAliasingSuite}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalLimit, Project, RepartitionByExpression, Sort}
 import org.apache.spark.sql.catalyst.util.StringUtils
-import org.apache.spark.sql.execution.UnionExec
+import org.apache.spark.sql.execution.{ExpandExec, UnionExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
@@ -40,7 +40,7 @@ import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcScan
 import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
-import org.apache.spark.sql.execution.exchange.ReusedExchangeExec
+import org.apache.spark.sql.execution.exchange.{Exchange, ReusedExchangeExec}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, CartesianProductExec, SortMergeJoinExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -4002,6 +4002,48 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       }
     }
     checkAnswer(sql(s"select /*+ REPARTITION(3, a) */ a b from values('123') t(a)"), Row("123"))
+  }
+
+  test("SPARK-35630: ExpandExec should not introduce unnecessary exchanges") {
+    withTable("test_table") {
+      spark.range(11)
+        .withColumn("group", $"id" % 3)
+        .withColumn("a", $"id" % 5)
+        .withColumn("b", $"id" % 6)
+        .repartition(2)
+        .write.saveAsTable("test_table")
+
+      val table = spark.read.table("test_table")
+
+      Seq(
+        (table.repartition($"group"), 1),
+        (table.repartitionByRange($"group"), 1),
+        (table.repartition($"group", $"id"), 3),
+        (table.repartitionByRange($"group", $"id"), 3)
+      ).foreach {
+        case (df, expectedExchanges) =>
+          val res = df
+            .groupBy("group")
+            .agg(expr("count(distinct a)"), expr("count(distinct b)"))
+
+          val expands = collect(res.queryExecution.executedPlan) {
+            case e: ExpandExec => e
+          }
+          assert(expands.length == 1)
+
+          val exchanges = collect(res.queryExecution.executedPlan) {
+            case e: Exchange => e
+          }
+          assert(exchanges.length == expectedExchanges)
+
+          val expectedAnswer = Seq(
+            Row(0, 4, 2),
+            Row(1, 4, 2),
+            Row(2, 3, 2)
+          )
+          checkAnswer(res, expectedAnswer)
+      }
+    }
   }
 }
 
