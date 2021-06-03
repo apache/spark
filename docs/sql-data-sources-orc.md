@@ -194,7 +194,7 @@ Data source options of ORC can be set via:
   <tr>
     <td><code>compression</code></td>
     <td>None</td>
-    <td>compression codec to use when saving to file. This can be one of the known case-insensitive shorten names (none, snappy, zlib, lzo, and zstd). This will override <code>orc.compress</code> and <code>spark.sql.orc.compression.codec</code>. If None is set, it uses the value specified in <code>spark.sql.orc.compression.codec</code>.</td>
+    <td>compression codec to use when saving to file. This can be one of the known case-insensitive shorten names (none, snappy, zlib, lzo, zstd and lz4). This will override <code>orc.compress</code> and <code>spark.sql.orc.compression.codec</code>. If None is set, it uses the value specified in <code>spark.sql.orc.compression.codec</code>.</td>
     <td>write</td>
   </tr>
 </table>
