@@ -21,7 +21,18 @@ Utilities to deal with types. This is mostly focused on python3.
 import datetime
 import decimal
 from inspect import getfullargspec, isclass
-from typing import Any, Callable, Generic, List, Optional, Tuple, TypeVar, Union  # noqa: F401
+from typing import (  # noqa: F401
+    Any,
+    Callable,
+    Dict,
+    Generic,
+    List,
+    Optional,
+    Tuple,
+    TypeVar,
+    Union,
+    cast,
+)
 
 import numpy as np
 import pandas as pd
@@ -86,15 +97,27 @@ class DataFrameType(object):
     def __init__(
         self, dtypes: List[Dtype], spark_types: List[types.DataType], names: List[Optional[str]]
     ):
+        from pyspark.pandas.internal import Field
         from pyspark.pandas.utils import name_like_string
 
-        self.dtypes = dtypes
-        self.spark_type = types.StructType(
-            [
-                types.StructField(name_like_string(n) if n is not None else ("c%s" % i), t)
-                for i, (n, t) in enumerate(zip(names, spark_types))
-            ]
-        )  # type: types.StructType
+        self.fields = [
+            Field(
+                dtype=dtype,
+                struct_field=types.StructField(
+                    name=(name_like_string(name) if name is not None else ("c%s" % i)),
+                    dataType=spark_type,
+                ),
+            )
+            for i, (name, dtype, spark_type) in enumerate(zip(names, dtypes, spark_types))
+        ]
+
+    @property
+    def dtypes(self) -> List[Dtype]:
+        return [field.dtype for field in self.fields]
+
+    @property
+    def spark_type(self) -> types.StructType:
+        return types.StructType([field.struct_field for field in self.fields])
 
     def __repr__(self) -> str:
         return "DataFrameType[{}]".format(self.spark_type)
