@@ -18,6 +18,7 @@
 package org.apache.spark
 
 import scala.reflect.ClassTag
+
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
 import org.apache.spark.serializer.Serializer
@@ -96,8 +97,10 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
   val shuffleHandle: ShuffleHandle = _rdd.context.env.shuffleManager.registerShuffle(
     shuffleId, this)
 
-  // By default, shuffle merge is enabled for ShuffleDependency if push based shuffle is enabled
-  private[this] var _shuffleMergeEnabled = Utils.isPushBasedShuffleEnabled(rdd.sparkContext.getConf) &&
+  // By default, shuffle merge is enabled for ShuffleDependency if push based shuffle
+  // is enabled
+  private[this] var _shuffleMergeEnabled =
+    Utils.isPushBasedShuffleEnabled(rdd.sparkContext.getConf) &&
     // TODO: SPARK-35547: Push based shuffle is currently unsupported for Barrier stages
     !rdd.isBarrier()
 
