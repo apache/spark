@@ -155,8 +155,8 @@ object RuleIdCollection {
 
   if(Utils.isTesting) {
     rulesNeedingIds ++ {
-      // In the production code path, The following rules are run CombinedTypeCoercionRule, and
-      // hence we only need to add them in unit testing.
+      // In the production code path, the following rules are run in CombinedTypeCoercionRule, and
+      // hence we only need to add them for unit testing.
       "org.apache.spark.sql.catalyst.analysis.AnsiTypeCoercion$PromoteStringLiterals" ::
       "org.apache.spark.sql.catalyst.analysis.DecimalPrecision" ::
       "org.apache.spark.sql.catalyst.analysis.TypeCoercion$BooleanEquality" ::
