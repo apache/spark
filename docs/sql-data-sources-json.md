@@ -99,10 +99,15 @@ SELECT * FROM jsonTable
 
 Data source options of JSON can be set via:
 * the `.option`/`.options` methods of
-  *  `DataFrameReader` 
-  *  `DataFrameWriter`
-  *  `DataStreamReader` 
-  *  `DataStreamWriter`
+  * `DataFrameReader`
+  * `DataFrameWriter`
+  * `DataStreamReader`
+  * `DataStreamWriter`
+* the built-in functions below
+  * `from_json`
+  * `to_json`
+  * `schema_of_json`
+* `OPTIONS` clause at [CREATE TABLE USING DATA_SOURCE](sql-ref-syntax-ddl-create-table-datasource.html)
 
 <table class="table">
   <tr><th><b>Property Name</b></th><th><b>Default</b></th><th><b>Meaning</b></th><th><b>Scope</b></th></tr>
