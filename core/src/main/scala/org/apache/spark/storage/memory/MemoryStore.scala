@@ -396,7 +396,7 @@ private[spark] class MemoryStore(
             o.close()
           } catch {
             case NonFatal(e) =>
-              logWarning(s"Got NonFatal exception during remove", e)
+              logWarning("Fail to close a memory entry", e)
           }
         case _ =>
       }
