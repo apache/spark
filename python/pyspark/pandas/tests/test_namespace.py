@@ -21,6 +21,7 @@ import pandas as pd
 
 from pyspark import pandas as ps
 from pyspark.pandas.namespace import _get_index_map
+from pyspark.pandas.utils import spark_column_equals
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 
@@ -317,7 +318,7 @@ class NamespaceTest(PandasOnSparkTestCase, SQLTestUtils):
             self.assertEqual(len(actual_scols), len(expected_column_names))
             for actual_scol, expected_column_name in zip(actual_scols, expected_column_names):
                 expected_scol = sdf[expected_column_name]
-                self.assertTrue(actual_scol._jc.equals(expected_scol._jc))
+                self.assertTrue(spark_column_equals(actual_scol, expected_scol))
             self.assertEqual(actual_labels, expected_labels)
 
         check(_get_index_map(sdf, "year"), (["year"], [("year",)]))

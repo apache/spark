@@ -18,7 +18,17 @@
 """
 Wrappers around spark that correspond to common pandas functions.
 """
-from typing import Any, Optional, Union, List, Tuple, Type, Sized, cast
+from typing import (  # noqa: F401 (SPARK-34943)
+    Any,
+    Dict,
+    List,
+    Optional,
+    Sized,
+    Tuple,
+    Type,
+    Union,
+    cast,
+)
 from collections import OrderedDict
 from collections.abc import Iterable
 from distutils.version import LooseVersion
@@ -307,7 +317,7 @@ def read_csv(
 
         if isinstance(names, str):
             sdf = reader.schema(names).csv(path)
-            column_labels = OrderedDict((col, col) for col in sdf.columns)
+            column_labels = OrderedDict((col, col) for col in sdf.columns)  # type: Dict[Any, str]
         else:
             sdf = reader.csv(path)
             if is_list_like(names):
@@ -1582,10 +1592,10 @@ def to_datetime(
         )
 
     if isinstance(arg, Series):
-        return arg.koalas.transform_batch(pandas_to_datetime)
+        return arg.pandas_on_spark.transform_batch(pandas_to_datetime)
     if isinstance(arg, DataFrame):
         psdf = arg[["year", "month", "day"]]
-        return psdf.koalas.transform_batch(pandas_to_datetime)
+        return psdf.pandas_on_spark.transform_batch(pandas_to_datetime)
     return pd.to_datetime(
         arg,
         errors=errors,

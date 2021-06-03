@@ -1030,7 +1030,20 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
     case p: Product if shouldConvertToJson(p) =>
       try {
         val fieldNames = getConstructorParameterNames(p.getClass)
-        val fieldValues = p.productIterator.toSeq
+        val fieldValues = {
+          if (p.productArity == fieldNames.length) {
+            p.productIterator.toSeq
+          } else {
+            val clazz = p.getClass
+            // Fallback to use reflection if length of product elements do not match
+            // constructor params.
+            fieldNames.map { fieldName =>
+              val field = clazz.getDeclaredField(fieldName)
+              field.setAccessible(true)
+              field.get(p)
+            }
+          }
+        }
         assert(fieldNames.length == fieldValues.length, s"$simpleClassName fields: " +
           fieldNames.mkString(", ") + s", values: " + fieldValues.mkString(", "))
         ("product-class" -> JString(p.getClass.getName)) :: fieldNames.zip(fieldValues).map {
@@ -1038,6 +1051,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
         }.toList
       } catch {
         case _: RuntimeException => null
+        case _: ReflectiveOperationException => null
       }
     case _ => JNull
   }

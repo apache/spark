@@ -152,7 +152,7 @@ jobs:
     name: "Build modules: ${{ matrix.modules }}"
     runs-on: ubuntu-20.04
     container:
-      image: dongjoon/apache-spark-github-action-image:20201025
+      image: dongjoon/apache-spark-github-action-image:20210602
     strategy:
       fail-fast: false
       matrix:
@@ -215,7 +215,7 @@ jobs:
     # Ubuntu 20.04. See also SPARK-33162.
     - name: Install Python packages (Python 3.6)
       run: |
-        python3.6 -m pip install numpy 'pyarrow<3.0.0' pandas scipy xmlrunner
+        python3.6 -m pip install numpy 'pyarrow<3.0.0' pandas scipy xmlrunner plotly>=4.8
         python3.6 -m pip list
     - name: Install Conda for pip packaging test
       run: |
@@ -244,7 +244,7 @@ jobs:
     name: "Build modules: sparkr"
     runs-on: ubuntu-20.04
     container:
-      image: dongjoon/apache-spark-github-action-image:20201025
+      image: dongjoon/apache-spark-github-action-image:20210602
     env:
       HADOOP_PROFILE: hadoop3.2
       HIVE_PROFILE: hive2.3
@@ -309,7 +309,7 @@ jobs:
       LC_ALL: C.UTF-8
       LANG: C.UTF-8
     container:
-      image: dongjoon/apache-spark-github-action-image:20201025
+      image: dongjoon/apache-spark-github-action-image:20210602
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v2
@@ -361,7 +361,7 @@ jobs:
         #   See also https://github.com/sphinx-doc/sphinx/issues/7551.
         # Jinja2 3.0.0+ causes error when building with Sphinx.
         #   See also https://issues.apache.org/jira/browse/SPARK-35375.
-        python3.6 -m pip install flake8 'sphinx<3.1.0' numpy pydata_sphinx_theme ipython nbsphinx mypy numpydoc 'jinja2<3.0.0'
+        python3.6 -m pip install flake8 pydata_sphinx_theme mypy numpydoc 'jinja2<3.0.0'
     - name: Install R linter dependencies and SparkR
       run: |
         apt-get install -y libcurl4-openssl-dev libgit2-dev libssl-dev libxml2-dev
@@ -614,4 +614,86 @@ jobs:
       uses: actions/upload-artifact@v2
       with:
         name: unit-tests-log-tpcds--8-hadoop3.2-hive2.3
+        path: "**/target/unit-tests.log"
+
+  docker-integration-tests:
+    name: Run docker integration tests
+    runs-on: ubuntu-20.04
+    env:
+      HADOOP_PROFILE: hadoop3.2
+      HIVE_PROFILE: hive2.3
+      GITHUB_PREV_SHA: ${{ github.event.before }}
+      SPARK_LOCAL_IP: localhost
+      ORACLE_DOCKER_IMAGE_NAME: oracle/database:18.4.0-xe
+    steps:
+    - name: Checkout Spark repository
+      uses: actions/checkout@v2
+      with:
+        fetch-depth: 0
+        repository: apache/spark
+        ref: master
+    - name: Sync the current branch with the latest in Apache Spark
+      if: github.repository != 'apache/spark'
+      id: sync-branch
+      run: |
+        apache_spark_ref=`git rev-parse HEAD`
+        git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
+        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
+        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit"
+        echo "::set-output name=APACHE_SPARK_REF::$apache_spark_ref"
+    - name: Cache Scala, SBT and Maven
+      uses: actions/cache@v2
+      with:
+        path: |
+          build/apache-maven-*
+          build/scala-*
+          build/*.jar
+          ~/.sbt
+        key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
+        restore-keys: |
+          build-
+    - name: Cache Coursier local repository
+      uses: actions/cache@v2
+      with:
+        path: ~/.cache/coursier
+        key: docker-integration-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+        restore-keys: |
+          docker-integration-coursier-
+    - name: Install Java 8
+      uses: actions/setup-java@v1
+      with:
+        java-version: 8
+    - name: Cache Oracle docker-images repository
+      id: cache-oracle-docker-images
+      uses: actions/cache@v2
+      with:
+        path: ./oracle/docker-images
+        # key should contains the commit hash of the Oracle docker images to be checkout.
+        key: oracle-docker-images-3f422c4a35b423dfcdbcc57a84f01db6c82eb6c1
+    - name: Checkout Oracle docker-images repository
+      uses: actions/checkout@v2
+      with:
+        fetch-depth: 0
+        repository: oracle/docker-images
+        ref: 3f422c4a35b423dfcdbcc57a84f01db6c82eb6c1
+        path: ./oracle/docker-images
+    - name: Install Oracle Docker image
+      run: |
+        cd oracle/docker-images/OracleDatabase/SingleInstance/dockerfiles
+        ./buildContainerImage.sh -v 18.4.0 -x
+    - name: Run tests
+      run: |
+        export APACHE_SPARK_REF=${{ steps.sync-branch.outputs.APACHE_SPARK_REF }}
+        ./dev/run-tests --parallelism 2 --modules docker-integration-tests --included-tags org.apache.spark.tags.DockerTest
+    - name: Upload test results to report
+      if: always()
+      uses: actions/upload-artifact@v2
+      with:
+        name: test-results-docker-integration--8-hadoop3.2-hive2.3
+        path: "**/target/test-reports/*.xml"
+    - name: Upload unit tests log files
+      if: failure()
+      uses: actions/upload-artifact@v2
+      with:
+        name: unit-tests-log-docker-integration--8-hadoop3.2-hive2.3
         path: "**/target/unit-tests.log"

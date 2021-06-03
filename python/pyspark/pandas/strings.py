@@ -77,7 +77,7 @@ class StringMethods(object):
         def pandas_capitalize(s) -> "ps.Series[str]":
             return s.str.capitalize()
 
-        return self._data.koalas.transform_batch(pandas_capitalize)
+        return self._data.pandas_on_spark.transform_batch(pandas_capitalize)
 
     def title(self) -> "ps.Series":
         """
@@ -105,7 +105,7 @@ class StringMethods(object):
         def pandas_title(s) -> "ps.Series[str]":
             return s.str.title()
 
-        return self._data.koalas.transform_batch(pandas_title)
+        return self._data.pandas_on_spark.transform_batch(pandas_title)
 
     def lower(self) -> "ps.Series":
         """
@@ -179,7 +179,7 @@ class StringMethods(object):
         def pandas_swapcase(s) -> "ps.Series[str]":
             return s.str.swapcase()
 
-        return self._data.koalas.transform_batch(pandas_swapcase)
+        return self._data.pandas_on_spark.transform_batch(pandas_swapcase)
 
     def startswith(self, pattern: str, na: Optional[Any] = None) -> "ps.Series":
         """
@@ -231,7 +231,7 @@ class StringMethods(object):
         def pandas_startswith(s) -> "ps.Series[bool]":
             return s.str.startswith(pattern, na)
 
-        return self._data.koalas.transform_batch(pandas_startswith)
+        return self._data.pandas_on_spark.transform_batch(pandas_startswith)
 
     def endswith(self, pattern: str, na: Optional[Any] = None) -> "ps.Series":
         """
@@ -283,7 +283,7 @@ class StringMethods(object):
         def pandas_endswith(s) -> "ps.Series[bool]":
             return s.str.endswith(pattern, na)
 
-        return self._data.koalas.transform_batch(pandas_endswith)
+        return self._data.pandas_on_spark.transform_batch(pandas_endswith)
 
     def strip(self, to_strip: Optional[str] = None) -> "ps.Series":
         """
@@ -336,7 +336,7 @@ class StringMethods(object):
         def pandas_strip(s) -> "ps.Series[str]":
             return s.str.strip(to_strip)
 
-        return self._data.koalas.transform_batch(pandas_strip)
+        return self._data.pandas_on_spark.transform_batch(pandas_strip)
 
     def lstrip(self, to_strip: Optional[str] = None) -> "ps.Series":
         """
@@ -377,7 +377,7 @@ class StringMethods(object):
         def pandas_lstrip(s) -> "ps.Series[str]":
             return s.str.lstrip(to_strip)
 
-        return self._data.koalas.transform_batch(pandas_lstrip)
+        return self._data.pandas_on_spark.transform_batch(pandas_lstrip)
 
     def rstrip(self, to_strip: Optional[str] = None) -> "ps.Series":
         """
@@ -418,7 +418,7 @@ class StringMethods(object):
         def pandas_rstrip(s) -> "ps.Series[str]":
             return s.str.rstrip(to_strip)
 
-        return self._data.koalas.transform_batch(pandas_rstrip)
+        return self._data.pandas_on_spark.transform_batch(pandas_rstrip)
 
     def get(self, i: int) -> "ps.Series":
         """
@@ -473,7 +473,7 @@ class StringMethods(object):
         def pandas_get(s) -> "ps.Series[str]":
             return s.str.get(i)
 
-        return self._data.koalas.transform_batch(pandas_get)
+        return self._data.pandas_on_spark.transform_batch(pandas_get)
 
     def isalnum(self) -> "ps.Series":
         """
@@ -510,7 +510,7 @@ class StringMethods(object):
         def pandas_isalnum(s) -> "ps.Series[bool]":
             return s.str.isalnum()
 
-        return self._data.koalas.transform_batch(pandas_isalnum)
+        return self._data.pandas_on_spark.transform_batch(pandas_isalnum)
 
     def isalpha(self) -> "ps.Series":
         """
@@ -536,7 +536,7 @@ class StringMethods(object):
         def pandas_isalpha(s) -> "ps.Series[bool]":
             return s.str.isalpha()
 
-        return self._data.koalas.transform_batch(pandas_isalpha)
+        return self._data.pandas_on_spark.transform_batch(pandas_isalpha)
 
     def isdigit(self) -> "ps.Series":
         """
@@ -587,7 +587,7 @@ class StringMethods(object):
         def pandas_isdigit(s) -> "ps.Series[bool]":
             return s.str.isdigit()
 
-        return self._data.koalas.transform_batch(pandas_isdigit)
+        return self._data.pandas_on_spark.transform_batch(pandas_isdigit)
 
     def isspace(self) -> "ps.Series":
         """
@@ -611,7 +611,7 @@ class StringMethods(object):
         def pandas_isspace(s) -> "ps.Series[bool]":
             return s.str.isspace()
 
-        return self._data.koalas.transform_batch(pandas_isspace)
+        return self._data.pandas_on_spark.transform_batch(pandas_isspace)
 
     def islower(self) -> "ps.Series":
         """
@@ -636,7 +636,7 @@ class StringMethods(object):
         def pandas_isspace(s) -> "ps.Series[bool]":
             return s.str.islower()
 
-        return self._data.koalas.transform_batch(pandas_isspace)
+        return self._data.pandas_on_spark.transform_batch(pandas_isspace)
 
     def isupper(self) -> "ps.Series":
         """
@@ -661,7 +661,7 @@ class StringMethods(object):
         def pandas_isspace(s) -> "ps.Series[bool]":
             return s.str.isupper()
 
-        return self._data.koalas.transform_batch(pandas_isspace)
+        return self._data.pandas_on_spark.transform_batch(pandas_isspace)
 
     def istitle(self) -> "ps.Series":
         """
@@ -692,7 +692,7 @@ class StringMethods(object):
         def pandas_istitle(s) -> "ps.Series[bool]":
             return s.str.istitle()
 
-        return self._data.koalas.transform_batch(pandas_istitle)
+        return self._data.pandas_on_spark.transform_batch(pandas_istitle)
 
     def isnumeric(self) -> "ps.Series":
         """
@@ -751,7 +751,7 @@ class StringMethods(object):
         def pandas_isnumeric(s) -> "ps.Series[bool]":
             return s.str.isnumeric()
 
-        return self._data.koalas.transform_batch(pandas_isnumeric)
+        return self._data.pandas_on_spark.transform_batch(pandas_isnumeric)
 
     def isdecimal(self) -> "ps.Series":
         """
@@ -802,7 +802,7 @@ class StringMethods(object):
         def pandas_isdecimal(s) -> "ps.Series[bool]":
             return s.str.isdecimal()
 
-        return self._data.koalas.transform_batch(pandas_isdecimal)
+        return self._data.pandas_on_spark.transform_batch(pandas_isdecimal)
 
     @no_type_check
     def cat(self, others=None, sep=None, na_rep=None, join=None) -> "ps.Series":
@@ -846,7 +846,7 @@ class StringMethods(object):
         def pandas_center(s) -> "ps.Series[str]":
             return s.str.center(width, fillchar)
 
-        return self._data.koalas.transform_batch(pandas_center)
+        return self._data.pandas_on_spark.transform_batch(pandas_center)
 
     def contains(
         self, pat: str, case: bool = True, flags: int = 0, na: Any = None, regex: bool = True
@@ -966,7 +966,7 @@ class StringMethods(object):
         def pandas_contains(s) -> "ps.Series[bool]":
             return s.str.contains(pat, case, flags, na, regex)
 
-        return self._data.koalas.transform_batch(pandas_contains)
+        return self._data.pandas_on_spark.transform_batch(pandas_contains)
 
     def count(self, pat: str, flags: int = 0) -> "ps.Series":
         """
@@ -1017,7 +1017,7 @@ class StringMethods(object):
         def pandas_count(s) -> "ps.Series[int]":
             return s.str.count(pat, flags)
 
-        return self._data.koalas.transform_batch(pandas_count)
+        return self._data.pandas_on_spark.transform_batch(pandas_count)
 
     @no_type_check
     def decode(self, encoding, errors="strict") -> "ps.Series":
@@ -1101,7 +1101,7 @@ class StringMethods(object):
         def pandas_find(s) -> "ps.Series[int]":
             return s.str.find(sub, start, end)
 
-        return self._data.koalas.transform_batch(pandas_find)
+        return self._data.pandas_on_spark.transform_batch(pandas_find)
 
     def findall(self, pat: str, flags: int = 0) -> "ps.Series":
         """
@@ -1231,7 +1231,7 @@ class StringMethods(object):
         def pandas_index(s) -> "ps.Series[np.int64]":
             return s.str.index(sub, start, end)
 
-        return self._data.koalas.transform_batch(pandas_index)
+        return self._data.pandas_on_spark.transform_batch(pandas_index)
 
     def join(self, sep: str) -> "ps.Series":
         """
@@ -1281,7 +1281,7 @@ class StringMethods(object):
         def pandas_join(s) -> "ps.Series[str]":
             return s.str.join(sep)
 
-        return self._data.koalas.transform_batch(pandas_join)
+        return self._data.pandas_on_spark.transform_batch(pandas_join)
 
     def len(self) -> "ps.Series":
         """
@@ -1352,7 +1352,7 @@ class StringMethods(object):
         def pandas_ljust(s) -> "ps.Series[str]":
             return s.str.ljust(width, fillchar)
 
-        return self._data.koalas.transform_batch(pandas_ljust)
+        return self._data.pandas_on_spark.transform_batch(pandas_ljust)
 
     def match(self, pat: str, case: bool = True, flags: int = 0, na: Any = np.NaN) -> "ps.Series":
         """
@@ -1419,7 +1419,7 @@ class StringMethods(object):
         def pandas_match(s) -> "ps.Series[bool]":
             return s.str.match(pat, case, flags, na)
 
-        return self._data.koalas.transform_batch(pandas_match)
+        return self._data.pandas_on_spark.transform_batch(pandas_match)
 
     def normalize(self, form: str) -> "ps.Series":
         """
@@ -1443,7 +1443,7 @@ class StringMethods(object):
         def pandas_normalize(s) -> "ps.Series[str]":
             return s.str.normalize(form)
 
-        return self._data.koalas.transform_batch(pandas_normalize)
+        return self._data.pandas_on_spark.transform_batch(pandas_normalize)
 
     def pad(self, width: int, side: str = "left", fillchar: str = " ") -> "ps.Series":
         """
@@ -1492,7 +1492,7 @@ class StringMethods(object):
         def pandas_pad(s) -> "ps.Series[str]":
             return s.str.pad(width, side, fillchar)
 
-        return self._data.koalas.transform_batch(pandas_pad)
+        return self._data.pandas_on_spark.transform_batch(pandas_pad)
 
     def partition(self, sep: str = " ", expand: bool = True) -> "ps.Series":
         """
@@ -1638,7 +1638,7 @@ class StringMethods(object):
         def pandas_replace(s) -> "ps.Series[str]":
             return s.str.replace(pat, repl, n=n, case=case, flags=flags, regex=regex)
 
-        return self._data.koalas.transform_batch(pandas_replace)
+        return self._data.pandas_on_spark.transform_batch(pandas_replace)
 
     def rfind(self, sub: str, start: int = 0, end: Optional[int] = None) -> "ps.Series":
         """
@@ -1694,7 +1694,7 @@ class StringMethods(object):
         def pandas_rfind(s) -> "ps.Series[int]":
             return s.str.rfind(sub, start, end)
 
-        return self._data.koalas.transform_batch(pandas_rfind)
+        return self._data.pandas_on_spark.transform_batch(pandas_rfind)
 
     def rindex(self, sub: str, start: int = 0, end: Optional[int] = None) -> "ps.Series":
         """
@@ -1738,7 +1738,7 @@ class StringMethods(object):
         def pandas_rindex(s) -> "ps.Series[np.int64]":
             return s.str.rindex(sub, start, end)
 
-        return self._data.koalas.transform_batch(pandas_rindex)
+        return self._data.pandas_on_spark.transform_batch(pandas_rindex)
 
     def rjust(self, width: int, fillchar: str = " ") -> "ps.Series":
         """
@@ -1780,7 +1780,7 @@ class StringMethods(object):
         def pandas_rjust(s) -> "ps.Series[str]":
             return s.str.rjust(width, fillchar)
 
-        return self._data.koalas.transform_batch(pandas_rjust)
+        return self._data.pandas_on_spark.transform_batch(pandas_rjust)
 
     def rpartition(self, sep: str = " ", expand: bool = True) -> "ps.Series":
         """
@@ -1846,7 +1846,7 @@ class StringMethods(object):
         def pandas_slice(s) -> "ps.Series[str]":
             return s.str.slice(start, stop, step)
 
-        return self._data.koalas.transform_batch(pandas_slice)
+        return self._data.pandas_on_spark.transform_batch(pandas_slice)
 
     def slice_replace(
         self, start: Optional[int] = None, stop: Optional[int] = None, repl: Optional[str] = None
@@ -1923,7 +1923,7 @@ class StringMethods(object):
         def pandas_slice_replace(s) -> "ps.Series[str]":
             return s.str.slice_replace(start, stop, repl)
 
-        return self._data.koalas.transform_batch(pandas_slice_replace)
+        return self._data.pandas_on_spark.transform_batch(pandas_slice_replace)
 
     def split(
         self, pat: Optional[str] = None, n: int = -1, expand: bool = False
@@ -2247,7 +2247,7 @@ class StringMethods(object):
         def pandas_translate(s) -> "ps.Series[str]":
             return s.str.translate(table)
 
-        return self._data.koalas.transform_batch(pandas_translate)
+        return self._data.pandas_on_spark.transform_batch(pandas_translate)
 
     def wrap(self, width: int, **kwargs: bool) -> "ps.Series":
         """
@@ -2299,7 +2299,7 @@ class StringMethods(object):
         def pandas_wrap(s) -> "ps.Series[str]":
             return s.str.wrap(width, **kwargs)
 
-        return self._data.koalas.transform_batch(pandas_wrap)
+        return self._data.pandas_on_spark.transform_batch(pandas_wrap)
 
     def zfill(self, width: int) -> "ps.Series":
         """
@@ -2350,7 +2350,7 @@ class StringMethods(object):
         def pandas_zfill(s) -> "ps.Series[str]":
             return s.str.zfill(width)
 
-        return self._data.koalas.transform_batch(pandas_zfill)
+        return self._data.pandas_on_spark.transform_batch(pandas_zfill)
 
     @no_type_check
     def get_dummies(self, sep: str = "|") -> "ps.DataFrame":

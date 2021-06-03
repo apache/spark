@@ -209,7 +209,7 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
       (GreaterThan(add2, Literal(4)), add1) ::
       (GreaterThan(add2, Literal(5)), add1) :: Nil
 
-    val caseWhenExpr2 = CaseWhen(conditions2, None)
+    val caseWhenExpr2 = CaseWhen(conditions2, add1)
     val equivalence2 = new EquivalentExpressions
     equivalence2.addExprTree(caseWhenExpr2)
 
@@ -310,6 +310,22 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
     }
   }
 
+  test("SPARK-35410: SubExpr elimination should not include redundant child exprs " +
+    "for conditional expressions") {
+    val add1 = Add(Literal(1), Literal(2))
+    val add2 = Add(Literal(2), Literal(3))
+    val add3 = Add(add1, add2)
+    val condition = (GreaterThan(add3, Literal(3)), add3) :: Nil
+
+    val caseWhenExpr = CaseWhen(condition, Add(add3, Literal(1)))
+    val equivalence = new EquivalentExpressions
+    equivalence.addExprTree(caseWhenExpr)
+
+    val commonExprs = equivalence.getAllEquivalentExprs(1)
+    assert(commonExprs.size == 1)
+    assert(commonExprs.head === Seq(add3, add3))
+  }
+
   test("SPARK-35439: Children subexpr should come first than parent subexpr") {
     val add = Add(Literal(1), Literal(2))
 
@@ -337,6 +353,22 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
     equivalence2.addExprTree(Add(Literal(3), add))
     assert(equivalence2.getAllEquivalentExprs() ===
       Seq(Seq(add, add), Seq(Add(Literal(3), add), Add(Literal(3), add))))
+  }
+
+  test("SPARK-35499: Subexpressions should only be extracted from CaseWhen values with an "
+    + "elseValue") {
+    val add1 = Add(Literal(1), Literal(2))
+    val add2 = Add(Literal(2), Literal(3))
+    val conditions = (GreaterThan(add1, Literal(3)), add1) ::
+      (GreaterThan(add2, Literal(4)), add1) ::
+      (GreaterThan(add2, Literal(5)), add1) :: Nil
+
+    val caseWhenExpr = CaseWhen(conditions, None)
+    val equivalence = new EquivalentExpressions
+    equivalence.addExprTree(caseWhenExpr)
+
+    // `add1` is not in the elseValue, so we can't extract it from the branches
+    assert(equivalence.getAllEquivalentExprs().count(_.size == 2) == 0)
   }
 }
 

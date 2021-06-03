@@ -38,7 +38,7 @@ from pandas._libs import lib
 
 from pyspark import sql as spark
 from pyspark.sql import functions as F
-from pyspark.sql.types import DataType, FractionalType, IntegralType, TimestampType
+from pyspark.sql.types import FractionalType, IntegralType, TimestampType
 
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
 from pyspark.pandas.config import get_option, option_context
@@ -483,15 +483,6 @@ class Index(IndexOpsMixin):
         """
         return self._to_internal_pandas().copy()
 
-    def toPandas(self) -> pd.Index:
-        warnings.warn(
-            "Index.toPandas is deprecated as of Index.to_pandas. Please use the API instead.",
-            FutureWarning,
-        )
-        return self.to_pandas()
-
-    toPandas.__doc__ = to_pandas.__doc__
-
     def to_numpy(self, dtype: Optional[Union[str, Dtype]] = None, copy: bool = False) -> np.ndarray:
         """
         A NumPy ndarray representing the values in this Index or MultiIndex.
@@ -581,16 +572,6 @@ class Index(IndexOpsMixin):
             return np.array(list(map(lambda x: x.astype(np.int64), self.to_numpy())))
         else:
             return None
-
-    @property
-    def spark_type(self) -> DataType:
-        """ Returns the data type as defined by Spark, as a Spark DataType object."""
-        warnings.warn(
-            "Index.spark_type is deprecated as of Index.spark.data_type. "
-            "Please use the API instead.",
-            FutureWarning,
-        )
-        return self.spark.data_type
 
     @property
     def has_duplicates(self) -> bool:

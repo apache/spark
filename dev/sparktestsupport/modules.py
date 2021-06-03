@@ -17,6 +17,7 @@
 
 from functools import total_ordering
 import itertools
+import os
 import re
 
 all_modules = []
@@ -611,8 +612,10 @@ pyspark_pandas = Module(
         "pyspark.pandas.spark.utils",
         "pyspark.pandas.typedef.typehints",
         # unittests
+        "pyspark.pandas.tests.data_type_ops.test_binary_ops",
         "pyspark.pandas.tests.data_type_ops.test_boolean_ops",
         "pyspark.pandas.tests.data_type_ops.test_categorical_ops",
+        "pyspark.pandas.tests.data_type_ops.test_complex_ops",
         "pyspark.pandas.tests.data_type_ops.test_date_ops",
         "pyspark.pandas.tests.data_type_ops.test_datetime_ops",
         "pyspark.pandas.tests.data_type_ops.test_num_ops",
@@ -740,6 +743,20 @@ spark_ganglia_lgpl = Module(
     build_profile_flags=["-Pspark-ganglia-lgpl"],
     source_file_regexes=[
         "external/spark-ganglia-lgpl",
+    ]
+)
+
+docker_integration_tests = Module(
+    name="docker-integration-tests",
+    dependencies=[],
+    build_profile_flags=["-Pdocker-integration-tests"],
+    source_file_regexes=["external/docker-integration-tests"],
+    sbt_test_goals=["docker-integration-tests/test"],
+    environ=None if "GITHUB_ACTIONS" not in os.environ else {
+        "ENABLE_DOCKER_INTEGRATION_TESTS": "1"
+    },
+    test_tags=[
+        "org.apache.spark.tags.DockerTest"
     ]
 )
 

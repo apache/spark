@@ -485,6 +485,8 @@ case class NewInstance(
 
   override def children: Seq[Expression] = arguments
 
+  final override val nodePatterns: Seq[TreePattern] = Seq(NEW_INSTANCE)
+
   override lazy val resolved: Boolean = {
     // If the class to construct is an inner class, we need to get its outer pointer, or this
     // expression should be regarded as unresolved.
