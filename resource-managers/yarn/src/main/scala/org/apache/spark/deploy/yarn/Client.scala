@@ -400,17 +400,10 @@ private[spark] class Client(
     var destPath = srcPath
     if (force || !compareFs(srcFs, destFs) || "file".equals(srcFs.getScheme)) {
       destPath = new Path(destDir, destName.getOrElse(srcPath.getName()))
-
-      // Check if src and dst are of the same fully qualified path, and skip copying if so.
-      // Otherwise, we'll get exception due to HADOOP-16878
-      val srcFullPath = srcFs.makeQualified(srcPath)
-      val destFullPath = destFs.makeQualified(destPath)
-      if (!srcFullPath.equals(destFullPath)) {
-        logInfo(s"Uploading resource $srcPath -> $destPath")
-        FileUtil.copy(srcFs, srcPath, destFs, destPath, false, hadoopConf)
-        destFs.setReplication(destPath, replication)
-        destFs.setPermission(destPath, new FsPermission(APP_FILE_PERMISSION))
-      }
+      logInfo(s"Uploading resource $srcPath -> $destPath")
+      FileUtil.copy(srcFs, srcPath, destFs, destPath, false, hadoopConf)
+      destFs.setReplication(destPath, replication)
+      destFs.setPermission(destPath, new FsPermission(APP_FILE_PERMISSION))
     } else {
       logInfo(s"Source and destination file systems are the same. Not copying $srcPath")
     }
