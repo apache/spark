@@ -938,7 +938,7 @@ class JDBCSuite extends QueryTest
   test("MsSqlServerDialect jdbc type mapping") {
     val msSqlServerDialect = JdbcDialects.get("jdbc:sqlserver")
     assert(msSqlServerDialect.getJDBCType(TimestampType).map(_.databaseTypeDefinition).get ==
-      "DATETIME")
+      "DATETIME2")
     assert(msSqlServerDialect.getJDBCType(StringType).map(_.databaseTypeDefinition).get ==
       "NVARCHAR(MAX)")
     assert(msSqlServerDialect.getJDBCType(BooleanType).map(_.databaseTypeDefinition).get ==
