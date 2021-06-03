@@ -51,7 +51,7 @@ Data source options of text can be set via:
   <tr><th><b>Property Name</b></th><th><b>Default</b></th><th><b>Meaning</b></th><th><b>Scope</b></th></tr>
   <tr>
     <td><code>wholetext</code></td>
-    <td>false</td>
+    <td><code>false</code></td>
     <td>If true, read each file from input path(s) as a single row.</td>
     <td>read</td>
   </tr>
