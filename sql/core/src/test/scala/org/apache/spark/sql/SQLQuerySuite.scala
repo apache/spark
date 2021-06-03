@@ -4007,23 +4007,29 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
   test("SPARK-35630: ExpandExec should not introduce unnecessary exchanges") {
     withTable("test_table") {
       spark.range(11)
-        .withColumn("group", $"id" % 3)
-        .withColumn("a", $"id" % 5)
+        .withColumn("group1", $"id" % 2)
+        .withColumn("group2", $"id" % 4)
+        .withColumn("a", $"id" % 3)
         .withColumn("b", $"id" % 6)
-        .repartition(2)
         .write.saveAsTable("test_table")
 
       val table = spark.read.table("test_table")
 
       Seq(
-        (table.repartition($"group"), 1),
-        (table.repartitionByRange($"group"), 1),
-        (table.repartition($"group", $"id"), 3),
-        (table.repartitionByRange($"group", $"id"), 3)
+        (table.repartition($"group1"), 1),
+        (table.repartitionByRange($"group1"), 1),
+        (table.repartition($"group2"), 1),
+        (table.repartitionByRange($"group2"), 1),
+        (table.repartition($"group1", $"group2"), 1),
+        (table.repartitionByRange($"group1", $"group2"), 1),
+        (table.repartition($"group1", $"id"), 3),
+        (table.repartitionByRange($"group1", $"id"), 3),
+        (table.repartition($"group2", $"id"), 3),
+        (table.repartitionByRange($"group2", $"id"), 3)
       ).foreach {
         case (df, expectedExchanges) =>
           val res = df
-            .groupBy("group")
+            .groupBy("group1", "group2")
             .agg(expr("count(distinct a)"), expr("count(distinct b)"))
 
           val expands = collect(res.queryExecution.executedPlan) {
@@ -4037,9 +4043,10 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
           assert(exchanges.length == expectedExchanges)
 
           val expectedAnswer = Seq(
-            Row(0, 4, 2),
-            Row(1, 4, 2),
-            Row(2, 3, 2)
+            Row(0, 0, 3, 3),
+            Row(0, 2, 3, 3),
+            Row(1, 1, 3, 3),
+            Row(1, 3, 2, 2)
           )
           checkAnswer(res, expectedAnswer)
       }
