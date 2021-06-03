@@ -2166,19 +2166,19 @@ package object config {
       .version("1.5.0")
       .stringConf
       .toSequence
-      .createOptional
+      .createWithDefault(Nil)
 
   private[spark] val JAR_PACKAGES_EXCLUSIONS =
     ConfigBuilder("spark.jars.excludes")
       .version("1.5.0")
       .stringConf
       .toSequence
-      .createOptional
+      .createWithDefault(Nil)
 
   private[spark] val JAR_REPOSITORIES =
     ConfigBuilder("spark.jars.repositories")
       .version("2.3.0")
       .stringConf
       .toSequence
-      .createOptional
+      .createWithDefault(Nil)
 }
