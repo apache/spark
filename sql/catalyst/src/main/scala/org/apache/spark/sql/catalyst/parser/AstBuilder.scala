@@ -1698,6 +1698,9 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     }
   }
 
+  override def visitCurrentUser(ctx: CurrentUserContext): Expression = withOrigin(ctx) {
+    if (conf.ansiEnabled) CurrentUser() else UnresolvedAttribute.quoted(ctx.CURRENT_USER().getText)
+  }
   /**
    * Create a [[Cast]] expression.
    */

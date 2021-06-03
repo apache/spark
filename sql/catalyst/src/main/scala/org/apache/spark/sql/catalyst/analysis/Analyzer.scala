@@ -1652,6 +1652,7 @@ class Analyzer(override val catalogManager: CatalogManager)
   private val literalFunctions: Seq[(String, () => Expression, Expression => String)] = Seq(
     (CurrentDate().prettyName, () => CurrentDate(), toPrettySQL(_)),
     (CurrentTimestamp().prettyName, () => CurrentTimestamp(), toPrettySQL(_)),
+    (CurrentUser().prettyName, () => CurrentUser(), toPrettySQL),
     (VirtualColumn.hiveGroupingIdName, () => GroupingID(Nil), _ => VirtualColumn.hiveGroupingIdName)
   )
 

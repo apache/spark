@@ -817,6 +817,7 @@ valueExpression
 
 primaryExpression
     : name=(CURRENT_DATE | CURRENT_TIMESTAMP)                                                  #currentDatetime
+    | CURRENT_USER                                                                             #currentUser
     | CASE whenClause+ (ELSE elseExpression=expression)? END                                   #searchedCase
     | CASE value=expression whenClause+ (ELSE elseExpression=expression)? END                  #simpleCase
     | name=(CAST | TRY_CAST) '(' expression AS dataType ')'                                    #cast
