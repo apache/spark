@@ -32,7 +32,10 @@ import org.apache.spark.ml.linalg._
  * NOTE: The feature values are expected to already have be scaled (multiplied by bcInverseStd,
  * but NOT centered) before computation.
  *
- * @param bcCoefficients The coefficients corresponding to the features.
+ * @param bcCoefficients The coefficients corresponding to the features, it includes three parts:
+ *                       1, regression coefficients corresponding to the features;
+ *                       2, the intercept;
+ *                       3, the log of scale parameter.
  * @param fitIntercept Whether to fit an intercept term. When true, will perform data centering
  *                     in a virtual way. Then we MUST adjust the intercept of both initial
  *                     coefficients and final solution in the caller.
@@ -77,17 +80,13 @@ private[ml] class AFTBlockAggregator (
     require(block.labels.forall(_ > 0.0), "The lifetime or label should be greater than 0.")
 
     val size = block.size
-    val intercept = coefficientsArray(dim - 2)
     // sigma is the scale parameter of the AFT model
     val sigma = math.exp(coefficientsArray(dim - 1))
 
     // vec/arr here represents margins
     val vec = new DenseVector(Array.ofDim[Double](size))
     val arr = vec.values
-    if (fitIntercept) {
-      val offset = if (fitIntercept) marginOffset else intercept
-      java.util.Arrays.fill(arr, offset)
-    }
+    if (fitIntercept) java.util.Arrays.fill(arr, marginOffset)
     BLAS.gemv(1.0, block.matrix, linear, 1.0, vec)
 
     // in-place convert margins to gradient scales
