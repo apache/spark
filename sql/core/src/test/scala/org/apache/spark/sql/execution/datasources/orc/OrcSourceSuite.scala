@@ -540,6 +540,16 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll with CommonFileDa
       }
     }
   }
+
+  test("SPARK-35612: Support LZ4 compression in ORC data source") {
+    withTempPath { dir =>
+      val path = dir.getAbsolutePath
+      spark.range(3).write.option("compression", "lz4").orc(path)
+      checkAnswer(spark.read.orc(path), Seq(Row(0), Row(1), Row(2)))
+      val files = OrcUtils.listOrcFiles(path, spark.sessionState.newHadoopConf())
+      assert(files.nonEmpty && files.forall(_.getName.contains("lz4")))
+    }
+  }
 }
 
 class OrcSourceSuite extends OrcSuite with SharedSparkSession {
@@ -647,16 +657,6 @@ class OrcSourceSuite extends OrcSuite with SharedSparkSession {
 
       spark.sql("INSERT INTO t1 values(1, '2', struct('a', 'b', 'c', 10L))")
       checkAnswer(spark.sql("SELECT _col0, _col2.c1 FROM t1"), Seq(Row(1, "a")))
-    }
-  }
-
-  test("SPARK-35612: Support LZ4 compression in ORC data source") {
-    withTempPath { dir =>
-      val path = dir.getAbsolutePath
-      spark.range(3).write.option("compression", "lz4").orc(path)
-      checkAnswer(spark.read.orc(path), Seq(Row(0), Row(1), Row(2)))
-      val files = OrcUtils.listOrcFiles(path, spark.sessionState.newHadoopConf())
-      assert(files.nonEmpty && files.forall(_.getName.contains("lz4")))
     }
   }
 }
