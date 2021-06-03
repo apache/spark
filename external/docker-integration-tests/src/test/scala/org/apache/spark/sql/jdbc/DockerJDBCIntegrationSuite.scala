@@ -25,7 +25,7 @@ import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
 
 import com.spotify.docker.client._
-import com.spotify.docker.client.DockerClient.ListContainersParam
+import com.spotify.docker.client.DockerClient.{ListContainersParam, LogsParam}
 import com.spotify.docker.client.exceptions.ImageNotFoundException
 import com.spotify.docker.client.messages.{ContainerConfig, HostConfig, PortBinding}
 import org.scalatest.concurrent.Eventually
@@ -219,11 +219,23 @@ abstract class DockerJDBCIntegrationSuite
             logWarning(s"Could not stop container $containerId", e)
           }
       } finally {
+        logContainerOutput()
         docker.removeContainer(containerId)
         if (removePulledImage && pulled) {
           docker.removeImage(db.imageName)
         }
       }
+    }
+  }
+
+  private def logContainerOutput(): Unit = {
+    val logStream = docker.logs(containerId, LogsParam.stdout(), LogsParam.stderr())
+    try {
+      logInfo("\n\n===== CONTAINER LOGS FOR container Id: " + containerId + " =====")
+      logInfo(logStream.readFully())
+      logInfo("\n\n===== END OF CONTAINER LOGS FOR container Id: " + containerId + " =====")
+    } finally {
+      logStream.close()
     }
   }
 }

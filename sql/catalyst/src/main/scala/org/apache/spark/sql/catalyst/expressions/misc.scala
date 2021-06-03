@@ -283,3 +283,21 @@ case class TypeOf(child: Expression) extends UnaryExpression {
 
   override protected def withNewChildInternal(newChild: Expression): TypeOf = copy(child = newChild)
 }
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """_FUNC_() - user name of current execution context.""",
+  examples = """
+    Examples:
+      > SELECT _FUNC_();
+       mockingjay
+  """,
+  since = "3.2.0",
+  group = "misc_funcs")
+// scalastyle:on line.size.limit
+case class CurrentUser() extends LeafExpression with Unevaluable {
+  override def nullable: Boolean = false
+  override def dataType: DataType = StringType
+  override def prettyName: String = "current_user"
+  final override val nodePatterns: Seq[TreePattern] = Seq(CURRENT_LIKE)
+}

@@ -4545,6 +4545,14 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             )
             return DataFrame(internal)
 
+    # Keep to_koalas for backward compatibility for now.
+    def to_koalas(self, index_col: Optional[Union[str, List[str]]] = None) -> "DataFrame":
+        warnings.warn(
+            "DataFrame.to_koalas is deprecated. Use DataFrame.to_pandas_on_spark instead.",
+            FutureWarning,
+        )
+        return self.to_pandas_on_spark(index_col)
+
     def to_table(
         self,
         name: str,

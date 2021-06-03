@@ -41,10 +41,10 @@ Spark SQL provides `spark.read().csv("file_name")` to read a file or directory o
 
 Data source options of CSV can be set via:
 * the `.option`/`.options` methods of
-  *  `DataFrameReader`
-  *  `DataFrameWriter`
-  *  `DataStreamReader`
-  *  `DataStreamWriter`
+  * `DataFrameReader`
+  * `DataFrameWriter`
+  * `DataStreamReader`
+  * `DataStreamWriter`
 * the built-in functions below
   * `from_csv`
   * `to_csv`

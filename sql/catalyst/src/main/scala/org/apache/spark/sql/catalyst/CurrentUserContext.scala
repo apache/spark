@@ -15,28 +15,10 @@
  * limitations under the License.
  */
 
-package org.apache.spark.ui.storage
+package org.apache.spark.sql.catalyst
 
-private[ui] object ToolTips {
-
-  val RDD_NAME =
-    "Name of the persisted RDD"
-
-  val STORAGE_LEVEL =
-    "StorageLevel displays where the persisted RDD is stored, " +
-      "format of the persisted RDD (serialized or de-serialized) and " +
-      "replication factor of the persisted RDD"
-
-  val CACHED_PARTITIONS =
-    "Number of partitions cached"
-
-  val FRACTION_CACHED =
-    "Fraction of total partitions cached"
-
-  val SIZE_IN_MEMORY =
-    "Total size of partitions in memory"
-
-  val SIZE_ON_DISK =
-    "Total size of partitions on the disk"
+object CurrentUserContext {
+  val CURRENT_USER: InheritableThreadLocal[String] = new InheritableThreadLocal[String] {
+    override protected def initialValue(): String = null
+  }
 }
-
