@@ -2173,12 +2173,29 @@ class Analyzer(override val catalogManager: CatalogManager)
                         unbound, arguments, unsupported)
                   }
 
+                  if (bound.inputTypes().length != arguments.length) {
+                    throw QueryCompilationErrors.v2FunctionInvalidInputTypeLengthError(
+                      bound, arguments)
+                  }
+
+                  val castedArguments = arguments.zip(bound.inputTypes()).map { case (arg, ty) =>
+                    if (arg.dataType != ty) {
+                      if (Cast.canCast(arg.dataType, ty)) {
+                        Cast(arg, ty)
+                      } else {
+                        throw QueryCompilationErrors.v2FunctionCastError(bound, arg, ty)
+                      }
+                    } else {
+                      arg
+                    }
+                  }
+
                   bound match {
                     case scalarFunc: ScalarFunction[_] =>
-                      processV2ScalarFunction(scalarFunc, inputType, arguments, isDistinct,
+                      processV2ScalarFunction(scalarFunc, inputType, castedArguments, isDistinct,
                         filter, ignoreNulls)
                     case aggFunc: V2AggregateFunction[_, _] =>
-                      processV2AggregateFunction(aggFunc, arguments, isDistinct, filter,
+                      processV2AggregateFunction(aggFunc, castedArguments, isDistinct, filter,
                         ignoreNulls)
                     case _ =>
                       failAnalysis(s"Function '${bound.name()}' does not implement ScalarFunction" +
@@ -2208,11 +2225,7 @@ class Analyzer(override val catalogManager: CatalogManager)
         throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
           scalarFunc.name(), "IGNORE NULLS")
       } else {
-        // TODO: implement type coercion by looking at input type from the UDF. We
-        //  may also want to check if the parameter types from the magic method
-        //  match the input type through `BoundFunction.inputTypes`.
-        val argClasses = inputType.fields.map(_.dataType)
-        findMethod(scalarFunc, MAGIC_METHOD_NAME, argClasses) match {
+        findMethod(scalarFunc, MAGIC_METHOD_NAME, scalarFunc.inputTypes()) match {
           case Some(m) if Modifier.isStatic(m.getModifiers) =>
             StaticInvoke(scalarFunc.getClass, scalarFunc.resultType(),
               MAGIC_METHOD_NAME, arguments, propagateNull = false,

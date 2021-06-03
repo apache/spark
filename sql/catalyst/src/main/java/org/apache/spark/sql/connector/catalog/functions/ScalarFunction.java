@@ -39,6 +39,9 @@ import org.apache.spark.sql.types.DataType;
  * provides better performance over the default {@link #produceResult}, due to optimizations such
  * as whole-stage codegen, elimination of Java boxing, etc.
  * <p>
+ * The type parameters for the magic method <b>must match</b> those returned from
+ * {@link BoundFunction#inputTypes()}. Otherwise Spark will not be able to find the magic method.
+ * <p>
  * In addition, for stateless Java functions, users can optionally define the
  * {@link #MAGIC_METHOD_NAME} as a static method, which further avoids certain runtime costs such
  * as Java dynamic dispatch.
@@ -117,6 +120,8 @@ import org.apache.spark.sql.types.DataType;
  *   <li>{@link org.apache.spark.sql.types.DateType}: {@code int}</li>
  *   <li>{@link org.apache.spark.sql.types.TimestampType}: {@code long}</li>
  *   <li>{@link org.apache.spark.sql.types.BinaryType}: {@code byte[]}</li>
+ *   <li>{@link org.apache.spark.sql.types.CalendarIntervalType}:
+ *       {@link org.apache.spark.unsafe.types.CalendarInterval}</li>
  *   <li>{@link org.apache.spark.sql.types.DayTimeIntervalType}: {@code long}</li>
  *   <li>{@link org.apache.spark.sql.types.YearMonthIntervalType}: {@code int}</li>
  *   <li>{@link org.apache.spark.sql.types.DecimalType}:
