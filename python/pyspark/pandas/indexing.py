@@ -81,7 +81,7 @@ class IndexerLike(object):
     @property
     def _psdf(self) -> "DataFrame":
         if self._is_df:
-            return self._psdf_or_psser  # type: ignore
+            return cast(DataFrame, self._psdf_or_psser)
         else:
             assert self._is_series
             return self._psdf_or_psser._psdf
@@ -170,7 +170,7 @@ class AtIndexer(IndexerLike):
         if len(pdf) < 1:
             raise KeyError(name_like_string(row_sel))
 
-        values = pdf.iloc[:, 0].values  # type: ignore
+        values = cast(pd.DataFrame, pdf).iloc[:, 0].values
         return (
             values if (len(row_sel) < self._internal.index_level or len(values) > 1) else values[0]
         )
@@ -465,7 +465,7 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
 
             if isinstance(rows_sel, Series) and not same_anchor(rows_sel, self._psdf_or_psser):
                 psdf = self._psdf_or_psser.copy()
-                temp_col = verify_temp_column_name(psdf, "__temp_col__")  # type: ignore
+                temp_col = verify_temp_column_name(cast(DataFrame, psdf), "__temp_col__")
 
                 psdf[temp_col] = rows_sel
                 return type(self)(psdf)[psdf[temp_col], cols_sel][list(self._psdf_or_psser.columns)]
@@ -711,7 +711,7 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
                 return
 
             cond, limit, remaining_index = self._select_rows(rows_sel)
-            missing_keys: Optional[List[Tuple]] = []
+            missing_keys = []  # type: Optional[List[Tuple]]
             _, data_spark_columns, _, _, _ = self._select_cols(cols_sel, missing_keys=missing_keys)
 
             if cond is None:
@@ -1295,8 +1295,7 @@ class LocIndexer(LocIndexerLike):
                     % (len(cast(Sized, cols_sel)), len(self._internal.column_labels))
                 )
             if isinstance(cols_sel, pd.Series):
-                if not cols_sel.index.sort_values().equals(
-                        self._psdf.columns.sort_values()):  # type: ignore
+                if not cols_sel.index.sort_values().equals(self._psdf.columns.sort_values()):
                     raise SparkPandasIndexingError(
                         "Unalignable boolean Series provided as indexer "
                         "(index of the boolean Series and of the indexed object do not match)"
