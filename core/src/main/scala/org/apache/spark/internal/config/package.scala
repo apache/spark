@@ -2023,6 +2023,22 @@ package object config {
       .stringConf
       .createWithDefaultString("PWR")
 
+  private[spark] val EXECUTOR_DECOMMISSION_BATCH_INTERVAL =
+    ConfigBuilder("spark.executor.decommission.batchInterval")
+      .doc("Executors are decommissioned in batched to avoid overloading network bandwidth in" +
+        " migrating rdd and shuffle data. This config sets the interval between batches.")
+      .version("3.2.0")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefault(30000)
+
+  private[spark] val EXECUTOR_DECOMMISSION_BATCH_SIZE =
+    ConfigBuilder("spark.executor.decommission.batchSize")
+      .doc("Executors are decommissioned in batched to avoid overloading network bandwidth in" +
+        " migrating rdd and shuffle data. This config sets the interval between batches.")
+      .version("3.2.0")
+      .intConf
+      .createWithDefault(3)
+
   private[spark] val STAGING_DIR = ConfigBuilder("spark.yarn.stagingDir")
     .doc("Staging directory used while submitting applications.")
     .version("2.0.0")

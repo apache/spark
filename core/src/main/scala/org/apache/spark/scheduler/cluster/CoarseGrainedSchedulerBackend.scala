@@ -17,7 +17,7 @@
 
 package org.apache.spark.scheduler.cluster
 
-import java.util.concurrent.{ScheduledExecutorService, TimeUnit}
+import java.util.concurrent.{ScheduledExecutorService, ScheduledFuture, TimeUnit}
 import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
 import javax.annotation.concurrent.GuardedBy
 
@@ -30,7 +30,7 @@ import org.apache.spark.{ExecutorAllocationClient, SparkEnv, SparkException, Tas
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.executor.ExecutorLogUrlHandler
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Network._
 import org.apache.spark.resource.ResourceProfile
@@ -478,6 +478,45 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
   protected def minRegisteredRatio: Double = _minRegisteredRatio
 
+  @GuardedBy("CoarseGrainedSchedulerBackend.this")
+  private val executorsToDecommissionInBatches = new HashSet[String]
+
+  private val executorDecommissionEnabled = conf.get(config.DECOMMISSION_ENABLED)
+  private var periodicBatchExecutorsDecommissionThread: Option[ScheduledExecutorService] = None
+  private var periodicBatchExecutorsDecommissionTask: Option[ScheduledFuture[_]] = None
+
+  if (executorDecommissionEnabled) {
+    /**
+     * Start a thread which runs a task periodically to decommission executors.
+     */
+    val periodicDecommissionIntervalMs = conf.get(config.EXECUTOR_DECOMMISSION_BATCH_INTERVAL)
+    val batchSize = conf.get(config.EXECUTOR_DECOMMISSION_BATCH_SIZE)
+    periodicBatchExecutorsDecommissionThread =
+      Some(ThreadUtils.newDaemonSingleThreadScheduledExecutor(
+        "periodic-batch-executor-decommission-thread"))
+    periodicBatchExecutorsDecommissionTask = {
+      val scheduledFuture =
+        periodicBatchExecutorsDecommissionThread.get.scheduleAtFixedRate(new Runnable {
+          override def run(): Unit = Utils.tryLogNonFatalError {
+            // check for executors decommissioning themelves.
+            val numExecutorInDecommissioning =
+              executorsPendingDecommission.size - executorsToDecommissionInBatches.size
+            val executorsBatchToDecommission = executorsToDecommissionInBatches
+              .take(Math.max(0, batchSize - numExecutorInDecommissioning))
+            executorsBatchToDecommission.foreach { executorId =>
+              logInfo(s"Notify executor $executorId to decommissioning.")
+              executorDataMap.get(executorId).foreach(_.executorEndpoint.send(DecommissionExecutor))
+              executorsToDecommissionInBatches.remove(executorId)
+            }
+          }
+        }, periodicDecommissionIntervalMs, periodicDecommissionIntervalMs, TimeUnit.MILLISECONDS)
+      Some(scheduledFuture)
+    }
+  }
+
+  // Visible for testing
+  def getExecutorsToDecommissionInBatchesSize: Int = executorsToDecommissionInBatches.size
+
   /**
    * Request that the cluster manager decommission the specified executors.
    *
@@ -519,10 +558,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     scheduler.sc.env.blockManager.master.decommissionBlockManagers(executorsToDecommission)
 
     if (!triggeredByExecutor) {
-      executorsToDecommission.foreach { executorId =>
-        logInfo(s"Notify executor $executorId to decommissioning.")
-        executorDataMap(executorId).executorEndpoint.send(DecommissionExecutor)
-      }
+      executorsToDecommission.foreach(executorsToDecommissionInBatches.add)
     }
 
     conf.get(EXECUTOR_DECOMMISSION_FORCE_KILL_TIMEOUT).map { cleanupInterval =>
