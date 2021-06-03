@@ -101,19 +101,19 @@ def lit(col):
 
 
 @since(1.3)
-def col(col):
+def col(col_like):
     """
     Returns a :class:`~pyspark.sql.Column` based on the given column name.'
+    Examples
+    --------
+    >>> df = spark.range(1, 10).toDF('x').withColumn('mod3', col('x') % 3)
+    >>> col('x')
+    >>> column('mod3')
     """
-    return _invoke_function("col", col)
+    return _invoke_function("col", col_like)
 
 
-@since(1.3)
-def column(col):
-    """
-    Returns a :class:`~pyspark.sql.Column` based on the given column name.'
-    """
-    return col(col)
+column = col
 
 
 @since(1.3)
