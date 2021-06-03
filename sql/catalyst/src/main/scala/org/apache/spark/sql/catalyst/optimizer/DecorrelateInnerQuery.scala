@@ -244,7 +244,16 @@ object DecorrelateInnerQuery extends PredicateHelper {
             case _ => Join(child, domain, Inner, None, JoinHint.NONE)
           }
         } else {
-          // The domain join does not belong to the current outer plan. Leave it unchanged.
+          // Leave it unchanged when the domain join does not belong to the current outer
+          // plan, i.e we cannot construct the domain attribute mapping from the join conditions.
+          // This can happen when the outer plan itself has another DomainJoin. E.g:
+          // LateralJoin lateral-subquery#263 [c1#262 && (c1#271 <=> c1#262)], Inner
+          // :  +- Project [c1#271 AS c1#265, c1#271]
+          // :     +- DomainJoin [c1#271]
+          // :        +- OneRowRelation
+          // +- Project [(c1#270 + 1) AS c1#262, c1#270]
+          //    +- DomainJoin [c1#270]
+          //       +- OneRowRelation
           d
         }
     }

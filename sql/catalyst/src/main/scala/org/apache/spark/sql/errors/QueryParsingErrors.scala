@@ -100,10 +100,6 @@ object QueryParsingErrors {
     new ParseException("LATERAL cannot be used together with PIVOT in FROM clause", ctx)
   }
 
-  def lateralJoinWithLateralViewNotAllowedError(ctx: FromClauseContext): Throwable = {
-    new ParseException("LATERAL join cannot be used together with LATERAL VIEW in FROM clause", ctx)
-  }
-
   def lateralJoinWithNaturalJoinUnsupportedError(ctx: ParserRuleContext): Throwable = {
     new ParseException("LATERAL join with NATURAL join is not supported", ctx)
   }

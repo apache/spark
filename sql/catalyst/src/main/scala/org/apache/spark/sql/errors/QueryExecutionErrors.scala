@@ -37,7 +37,7 @@ import org.apache.spark.sql.catalyst.analysis.UnresolvedGenerator
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogTable}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression, UnevaluableAggregate}
 import org.apache.spark.sql.catalyst.plans.JoinType
-import org.apache.spark.sql.catalyst.plans.logical.{DomainJoin, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.ValueInterval
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.catalyst.util.{sideBySide, BadRecordException, FailFastMode}
@@ -1137,12 +1137,6 @@ object QueryExecutionErrors {
          |Parse Mode: ${FailFastMode.name}. Reasons: Failed to infer a common schema.
          |Struct types are expected, but `${dataType.catalogString}` was found.
        """.stripMargin.replaceAll("\n", " "))
-  }
-
-  def cannotRewriteDomainJoinWithConditionsError(
-      conditions: Seq[Expression], d: DomainJoin): Throwable = {
-    new UnsupportedOperationException(
-      s"Unable to rewrite domain join with conditions: $conditions\n$d")
   }
 
   def decorrelateInnerQueryThroughPlanUnsupportedError(plan: LogicalPlan): Throwable = {

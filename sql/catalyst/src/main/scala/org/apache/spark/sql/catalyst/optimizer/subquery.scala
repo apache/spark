@@ -324,7 +324,7 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
    * Pull up the correlated predicates and rewrite all subqueries in an operator tree..
    */
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithPruning(
-    _.containsAnyPattern(SCALAR_SUBQUERY, EXISTS_SUBQUERY, LIST_SUBQUERY, LATERAL_JOIN)) {
+    _.containsPattern(PLAN_EXPRESSION)) {
     case f @ Filter(_, a: Aggregate) =>
       rewriteSubQueries(f, Seq(a, a.child))
     // Only a few unary nodes (Project/Filter/Aggregate/LateralJoin) can contain subqueries.
@@ -690,7 +690,6 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
  * This rule rewrites [[LateralSubquery]] expressions into joins.
  */
 object RewriteLateralSubquery extends Rule[LogicalPlan] {
-
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithPruning(
     _.containsPattern(LATERAL_JOIN)) {
     case LateralJoin(left, LateralSubquery(sub, _, _, joinCond), joinType, condition) =>

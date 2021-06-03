@@ -1573,7 +1573,7 @@ class Analyzer(override val catalogManager: CatalogManager)
     /**
      * Build a project list for Project/Aggregate and expand the star if possible
      */
-    def buildExpandedProjectList(
+    private def buildExpandedProjectList(
       exprs: Seq[NamedExpression],
       child: LogicalPlan): Seq[NamedExpression] = {
       exprs.flatMap {
