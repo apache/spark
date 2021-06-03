@@ -3615,7 +3615,11 @@ def from_json(col, schema, options=None):
         .. versionchanged:: 2.3
             the DDL-formatted string is also supported for ``schema``.
     options : dict, optional
-        options to control parsing. accepts the same options as the json datasource
+        options to control parsing. accepts the same options as the json datasource.
+        See `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option>`_
+        in the version you use.
+
+        .. # noqa
 
     Examples
     --------
@@ -3666,8 +3670,12 @@ def to_json(col, options=None):
         name of column containing a struct, an array or a map.
     options : dict, optional
         options to control converting. accepts the same options as the JSON datasource.
+        See `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option>`_
+        in the version you use.
         Additionally the function supports the `pretty` option which enables
         pretty JSON generation.
+
+        .. # noqa
 
     Examples
     --------
@@ -3752,7 +3760,11 @@ def schema_of_csv(csv, options=None):
     csv : :class:`~pyspark.sql.Column` or str
         a CSV string or a foldable string column containing a CSV string.
     options : dict, optional
-        options to control parsing. accepts the same options as the CSV datasource
+        options to control parsing. accepts the same options as the CSV datasource.
+        See `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-csv.html#data-source-option>`_
+        in the version you use.
+
+        .. # noqa
 
     Examples
     --------
@@ -3787,6 +3799,10 @@ def to_csv(col, options=None):
         name of column containing a struct.
     options: dict, optional
         options to control converting. accepts the same options as the CSV datasource.
+        See `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-csv.html#data-source-option>`_
+        in the version you use.
+
+        .. # noqa
 
     Examples
     --------
@@ -4199,7 +4215,11 @@ def from_csv(col, schema, options=None):
     schema :class:`~pyspark.sql.Column` or str
         a string with schema in DDL format to use when parsing the CSV column.
     options : dict, optional
-        options to control parsing. accepts the same options as the CSV datasource
+        options to control parsing. accepts the same options as the CSV datasource.
+        See `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-csv.html#data-source-option>`_
+        in the version you use.
+
+        .. # noqa
 
     Examples
     --------
