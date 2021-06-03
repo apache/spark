@@ -25,7 +25,7 @@ import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.Future
 import scala.concurrent.duration._
-import scala.language.implicitConversions
+import scala.language.{implicitConversions, postfixOps}
 import scala.reflect.ClassTag
 
 import org.apache.commons.lang3.RandomUtils
@@ -93,6 +93,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
       .set(MEMORY_STORAGE_FRACTION, 0.999)
       .set(Kryo.KRYO_SERIALIZER_BUFFER_SIZE.key, "1m")
       .set(STORAGE_UNROLL_MEMORY_THRESHOLD, 512L)
+      .set(STORAGE_BLOCKMANAGER_SLAVE_TIMEOUT.key, "5s")
   }
 
   private def makeBlockManager(
@@ -481,7 +482,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
       mc.eq(StorageLevel.NONE), mc.anyInt(), mc.anyInt())
   }
 
-  test("reregistration on heart beat") {
+  test("no reregistration on heart beat until executor timeout") {
     val store = makeBlockManager(2000)
     val a1 = new Array[Byte](400)
 
@@ -492,10 +493,15 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
 
     master.removeExecutor(store.blockManagerId.executorId)
     assert(master.getLocations("a1").size == 0, "a1 was not removed from master")
-
     val reregister = !master.driverHeartbeatEndPoint.askSync[Boolean](
       BlockManagerHeartbeat(store.blockManagerId))
-    assert(reregister)
+    assert(reregister == false, "master told to re-register")
+
+    eventually(timeout(10 seconds), interval(1 seconds)) {
+      val reregister = !master.driverHeartbeatEndPoint.askSync[Boolean](
+        BlockManagerHeartbeat(store.blockManagerId))
+      assert(reregister, "master did not tell to re-register")
+    }
   }
 
   test("reregistration on block update") {
@@ -508,6 +514,12 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
 
     master.removeExecutor(store.blockManagerId.executorId)
     assert(master.getLocations("a1").size == 0, "a1 was not removed from master")
+
+    eventually(timeout(10 seconds), interval(1 seconds)) {
+      val reregister = !master.driverHeartbeatEndPoint.askSync[Boolean](
+        BlockManagerHeartbeat(store.blockManagerId))
+      assert(reregister, "master did not tell to re-register")
+    }
 
     store.putSingle("a2", a2, StorageLevel.MEMORY_ONLY)
     store.waitForAsyncReregister()
