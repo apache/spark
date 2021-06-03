@@ -41,7 +41,7 @@ object RuleIdCollection {
   // invoked multiple times by Analyzer/Optimizer/Planner need a rule id to prune unnecessary
   // tree traversals in the transform function family. Note that those rules should not depend on
   // a changing, external state. Rules here are in alphabetical order.
-  private val rulesNeedingIds: Seq[String] = {
+  private var rulesNeedingIds: Seq[String] = {
       // Catalyst Analyzer rules
       "org.apache.spark.sql.catalyst.analysis.Analyzer$AddMetadataColumns" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ExtractGenerator" ::
@@ -154,7 +154,7 @@ object RuleIdCollection {
   }
 
   if(Utils.isTesting) {
-    rulesNeedingIds ++ {
+    rulesNeedingIds = rulesNeedingIds ++ {
       // In the production code path, the following rules are run in CombinedTypeCoercionRule, and
       // hence we only need to add them for unit testing.
       "org.apache.spark.sql.catalyst.analysis.AnsiTypeCoercion$PromoteStringLiterals" ::
