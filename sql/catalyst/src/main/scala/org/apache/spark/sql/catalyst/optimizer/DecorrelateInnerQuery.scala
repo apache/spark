@@ -471,7 +471,9 @@ object DecorrelateInnerQuery extends PredicateHelper {
           case u: UnaryNode =>
             val outerReferences = collectOuterReferences(u.expressions)
             assert(outerReferences.isEmpty, s"Correlated column is not allowed in $u")
-            decorrelate(u.child, parentOuterReferences, aggregated)
+            val (newChild, joinCond, outerReferenceMap) =
+              decorrelate(u.child, parentOuterReferences, aggregated)
+            (u.withNewChildren(newChild :: Nil), joinCond, outerReferenceMap)
 
           case o =>
             throw QueryExecutionErrors.decorrelateInnerQueryThroughPlanUnsupportedError(o)

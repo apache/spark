@@ -73,6 +73,8 @@ trait PlanTestBase extends PredicateHelper with SQLHelper with SQLConfHelper { s
     plan transformAllExpressions {
       case s: ScalarSubquery =>
         s.copy(plan = normalizeExprIds(s.plan), exprId = ExprId(0))
+      case s: LateralSubquery =>
+        s.copy(plan = normalizeExprIds(s.plan), exprId = ExprId(0))
       case e: Exists =>
         e.copy(exprId = ExprId(0))
       case l: ListQuery =>

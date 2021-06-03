@@ -107,11 +107,6 @@ case class UsingJoin(tpe: JoinType, usingColumns: Seq[String]) extends JoinType 
   override def sql: String = "USING " + tpe.sql
 }
 
-case class LateralJoin(tpe: JoinType) extends JoinType {
-  require(Seq(Inner, LeftOuter, Cross).contains(tpe), "Unsupported lateral join type " + tpe)
-  override def sql: String = "LATERAL " + tpe.sql
-}
-
 object LeftExistence {
   def unapply(joinType: JoinType): Option[JoinType] = joinType match {
     case LeftSemi | LeftAnti => Some(joinType)

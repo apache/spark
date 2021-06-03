@@ -112,6 +112,10 @@ object QueryParsingErrors {
     new ParseException("LATERAL join with USING join is not supported", ctx)
   }
 
+  def unsupportedLateralJoinTypeError(ctx: ParserRuleContext, joinType: String): Throwable = {
+    new ParseException(s"Unsupported LATERAL join type $joinType", ctx)
+  }
+
   def repetitiveWindowDefinitionError(name: String, ctx: WindowClauseContext): Throwable = {
     new ParseException(s"The definition of window '$name' is repetitive", ctx)
   }

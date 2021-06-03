@@ -407,8 +407,10 @@ case class UnresolvedStar(target: Option[Seq[String]]) extends Star with Unevalu
           throw QueryCompilationErrors.starExpandDataTypeNotSupportedError(target.get)
       }
     } else {
-      // Leave the star unchanged which might be resolved using a different input plan.
-      this :: Nil
+      val from = input.inputSet.map(_.name).mkString(", ")
+      val targetString = target.get.mkString(".")
+      throw QueryCompilationErrors.cannotResolveStarExpandGivenInputColumnsError(
+        targetString, from)
     }
   }
 

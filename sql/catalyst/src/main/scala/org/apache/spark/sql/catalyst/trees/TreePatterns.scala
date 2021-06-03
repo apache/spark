@@ -57,6 +57,7 @@ object TreePattern extends Enumeration  {
   val JSON_TO_STRUCT: Value = Value
   val LAMBDA_FUNCTION: Value = Value
   val LAMBDA_VARIABLE: Value = Value
+  val LATERAL_SUBQUERY: Value = Value
   val LIKE_FAMLIY: Value = Value
   val LIST_SUBQUERY: Value = Value
   val LITERAL: Value = Value

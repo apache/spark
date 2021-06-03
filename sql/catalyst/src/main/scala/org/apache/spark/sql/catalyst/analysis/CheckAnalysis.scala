@@ -174,20 +174,12 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
                 hof.failAnalysis(
                   s"cannot resolve '${hof.sql}' due to argument data type mismatch: $message")
             }
-          // Check if there are expressions with children containing star expressions.
-          case e if e.children.exists(_.isInstanceOf[Star]) =>
-            e.failAnalysis(s"Invalid usage of '*' in expression '${e.prettyName}'")
         }
 
         operator transformExpressionsUp {
           case a: Attribute if !a.resolved =>
             val from = operator.inputSet.toSeq.map(_.qualifiedName).mkString(", ")
             a.failAnalysis(s"cannot resolve '${a.sql}' given input columns: [$from]")
-
-          case s @ UnresolvedStar(Some(target)) =>
-            val from = operator.inputSet.map(_.name).mkString(", ")
-            val targetString = target.mkString(".")
-            s.failAnalysis(s"cannot resolve '$targetString.*' given input columns '$from'")
 
           case e: Expression if e.checkInputDataTypes().isFailure =>
             e.checkInputDataTypes() match {
@@ -261,27 +253,6 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
             failAnalysis(
               s"join condition '${condition.sql}' " +
                 s"of type ${condition.dataType.catalogString} is not a boolean.")
-
-          case Join(left, right, LateralJoin(_), _, _) =>
-            // Check all outer references in the right operand are a subset of output columns
-            // of the left operand.
-            def checkOuterReferences(plan: LogicalPlan, outer: LogicalPlan): Unit = {
-              plan match {
-                case Join(left, _, LateralJoin(_), _, _) =>
-                  checkOuterReferences(left, outer)
-                case p: LogicalPlan => p transformExpressions {
-                  case o @ OuterReference(e) if !outer.outputSet.contains(e) =>
-                    val column = outer.outputSet.toSeq.map(_.qualifiedName).mkString(", ")
-                    o.failAnalysis(
-                      s"Found an outer column reference '${e.sql}' in a lateral subquery " +
-                      s"that is not present in the preceding FROM items of its own query " +
-                      s"level: [$column], which is not supported yet.")
-                  }
-                  p.children.foreach(checkOuterReferences(_, outer))
-              }
-            }
-            checkOuterReferences(right, left)
-            checkCorrelationsInSubquery(right, isLateral = true)
 
           case a @ Aggregate(groupingExprs, aggregateExprs, child) =>
             def isAggregateExpression(expr: Expression): Boolean = {
@@ -769,15 +740,6 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
       expressions.exists(_.find(_.semanticEquals(expr)).isDefined)
     }
 
-    // Make sure the subquery plan does not contain lateral joins.
-    def checkLateralJoinInSubquery(p: LogicalPlan): Unit = {
-      p foreach {
-        case j @ Join(_, _, LateralJoin(_), _, _) =>
-          j.failAnalysis(s"Lateral join is not allowed in a subquery:\n$j")
-        case _ =>
-      }
-    }
-
     // Validate the subquery plan.
     checkAnalysis(expr.plan)
 
@@ -814,6 +776,13 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
                 s"Filter/Aggregate/Project and a few commands: $plan")
           }
         }
+        // Validate to make sure the correlations appearing in the query are valid and
+        // allowed by spark.
+        checkCorrelationsInSubquery(expr.plan)
+
+      case _: LateralSubquery =>
+        assert(plan.isInstanceOf[LateralJoin])
+        checkCorrelationsInSubquery(expr.plan, isLateral = true)
 
       case inSubqueryOrExistsSubquery =>
         plan match {
@@ -822,14 +791,10 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
             failAnalysis(s"IN/EXISTS predicate sub-queries can only be used in" +
                 s" Filter/Join and a few commands: $plan")
         }
+        // Validate to make sure the correlations appearing in the query are valid and
+        // allowed by spark.
+        checkCorrelationsInSubquery(expr.plan)
     }
-
-    // Validate no lateral join is in the subquery plan.
-    checkLateralJoinInSubquery(expr.plan)
-
-    // Validate to make sure the correlations appearing in the query are valid and
-    // allowed by spark.
-    checkCorrelationsInSubquery(expr.plan)
   }
 
   /**
@@ -865,8 +830,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
   }
 
   /**
-   * Validates to make sure the outer references appearing inside the subquery or right operand
-   * of the lateral join are allowed.
+   * Validates to make sure the outer references appearing inside the subquery
+   * are allowed.
    */
   private def checkCorrelationsInSubquery(sub: LogicalPlan, isLateral: Boolean = false): Unit = {
     // Validate that correlated aggregate expression do not contain a mixture
@@ -891,8 +856,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
     }
 
     // Check whether the logical plan node can host outer references.
-    // A `Project` can host outer references if it is inside a lateral join. Otherwise,
-    // only Filter can only outer references.
+    // A `Project` can host outer references if it is inside a lateral subquery.
+    // Otherwise, only Filter can only outer references.
     def canHostOuter(plan: LogicalPlan): Boolean = plan match {
       case _: Filter => true
       case _: Project => isLateral
@@ -1038,6 +1003,9 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
       case r: RepartitionByExpression =>
         failOnInvalidOuterReference(r)
 
+      case l: LateralJoin =>
+        failOnInvalidOuterReference(l)
+
       // Category 3:
       // Filter is one of the two operators allowed to host correlated expressions.
       // The other operator is Join. Filter can be anywhere in a correlated subquery.
@@ -1078,10 +1046,6 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
           case RightOuter =>
             failOnInvalidOuterReference(j)
             failOnOuterReferenceInSubTree(left)
-
-          // A lateral join can be on a correlation path if it is inside another lateral join.
-          case LateralJoin(_) if isLateral =>
-            failOnInvalidOuterReference(j)
 
           // Any other join types not explicitly listed above,
           // including Full outer join, are treated as Category 4.

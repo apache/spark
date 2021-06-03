@@ -81,26 +81,6 @@ struct<c1:int,c2:int,c1:int,c2:int>
 
 
 -- !query
-SELECT * FROM t1, LATERAL (SELECT t1.*)
--- !query schema
-struct<c1:int,c2:int,c1:int,c2:int>
--- !query output
-0	1	0	1
-1	2	1	2
-
-
--- !query
-SELECT * FROM t1, LATERAL (SELECT t1.*, t2.* FROM t2)
--- !query schema
-struct<c1:int,c2:int,c1:int,c2:int,c1:int,c2:int>
--- !query output
-0	1	0	1	0	2
-0	1	0	1	0	3
-1	2	1	2	0	2
-1	2	1	2	0	3
-
-
--- !query
 SELECT * FROM t1 JOIN LATERAL (SELECT c1 + c2 AS c3) ON c2 = c3
 -- !query schema
 struct<c1:int,c2:int,c3:int>
@@ -233,6 +213,17 @@ struct<c1:int,c2:int,c2:int>
 
 
 -- !query
+SELECT * FROM t1 JOIN t2 JOIN LATERAL (SELECT t1.c2 + t2.c2)
+-- !query schema
+struct<c1:int,c2:int,c1:int,c2:int,(outer(spark_catalog.default.t1.c2) + outer(spark_catalog.default.t2.c2)):int>
+-- !query output
+0	1	0	2	3
+0	1	0	3	4
+1	2	0	2	4
+1	2	0	3	5
+
+
+-- !query
 SELECT * FROM t1 JOIN LATERAL (SELECT t1.c1 AS a, t2.c1 AS b) s JOIN t2 ON s.b = t2.c1
 -- !query schema
 struct<>
@@ -302,7 +293,7 @@ SELECT * FROM t1, LATERAL (SELECT * FROM t2, LATERAL (SELECT t1.c1 + t2.c1))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Found an outer column reference 'spark_catalog.default.t1.c1' in a lateral subquery that is not present in the preceding FROM items of its own query level: [spark_catalog.default.t2.c1, spark_catalog.default.t2.c2], which is not supported yet.; line 1 pos 61
+cannot resolve 't1.c1' given input columns: []; line 1 pos 61
 
 
 -- !query
@@ -311,7 +302,7 @@ SELECT * FROM t1, LATERAL (SELECT * FROM (SELECT c1), LATERAL (SELECT c2))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Found an outer column reference 'spark_catalog.default.t1.c2' in a lateral subquery that is not present in the preceding FROM items of its own query level: [__auto_generated_subquery_name.c1], which is not supported yet.; line 1 pos 49
+cannot resolve 'c2' given input columns: []; line 1 pos 70
 
 
 -- !query
@@ -321,6 +312,15 @@ struct<c1:int,c2:int,c2:int,scalarsubquery():int>
 -- !query output
 0	1	1	2
 1	2	2	2
+
+
+-- !query
+SELECT * FROM t1, LATERAL (SELECT (SELECT SUM(c2) FROM t2 WHERE c1 = a) FROM (SELECT c1 AS a))
+-- !query schema
+struct<c1:int,c2:int,scalarsubquery(a):bigint>
+-- !query output
+0	1	5
+1	2	NULL
 
 
 -- !query
@@ -335,37 +335,17 @@ cannot resolve 't1.c1' given input columns: [spark_catalog.default.t2.c1, spark_
 -- !query
 SELECT * FROM t1 WHERE c1 = (SELECT MIN(a) FROM t2, LATERAL (SELECT c1 AS a))
 -- !query schema
-struct<>
+struct<c1:int,c2:int>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Lateral join is not allowed in a subquery:
-Join LateralJoin(Inner)
-:- SubqueryAlias spark_catalog.default.t2
-:  +- View (`default`.`t2`, [c1#x,c2#x])
-:     +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
-:        +- LocalRelation [col1#x, col2#x]
-+- SubqueryAlias __auto_generated_subquery_name
-   +- Project [outer(c1#x) AS a#x]
-      +- OneRowRelation
-; line 1 pos 43
+0	1
 
 
 -- !query
 SELECT * FROM t1 WHERE c1 = (SELECT MIN(a) FROM t2, LATERAL (SELECT c1 AS a) WHERE c1 = t1.c1)
 -- !query schema
-struct<>
+struct<c1:int,c2:int>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Lateral join is not allowed in a subquery:
-Join LateralJoin(Inner)
-:- SubqueryAlias spark_catalog.default.t2
-:  +- View (`default`.`t2`, [c1#x,c2#x])
-:     +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
-:        +- LocalRelation [col1#x, col2#x]
-+- SubqueryAlias __auto_generated_subquery_name
-   +- Project [outer(c1#x) AS a#x]
-      +- OneRowRelation
-; line 1 pos 43
+0	1
 
 
 -- !query

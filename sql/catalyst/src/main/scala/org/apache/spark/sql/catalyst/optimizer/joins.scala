@@ -187,21 +187,6 @@ object EliminateOuterJoin extends Rule[LogicalPlan] with PredicateHelper {
 }
 
 /**
- * Rewrite lateral joins by rewriting all dependent joins (if any) inside the right
- * sub-tree of the lateral join and converting the lateral join into a base join type.
- */
-object RewriteLateralJoin extends Rule[LogicalPlan] with PredicateHelper {
-
-  def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
-    case j @ Join(left, right, LateralJoin(joinType), condition, _) =>
-      val conditions = condition.map(splitConjunctivePredicates).getOrElse(Nil)
-      val newRight = DecorrelateInnerQuery.rewriteDomainJoins(left, right, conditions)
-      // TODO: handle the COUNT bug
-      j.copy(right = newRight, joinType = joinType)
-  }
-}
-
-/**
  * PythonUDF in join condition can't be evaluated if it refers to attributes from both join sides.
  * See `ExtractPythonUDFs` for details. This rule will detect un-evaluable PythonUDF and pull them
  * out from join condition.

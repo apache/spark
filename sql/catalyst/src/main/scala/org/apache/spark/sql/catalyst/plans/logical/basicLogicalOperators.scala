@@ -382,8 +382,8 @@ case class Join(
 
   override def maxRows: Option[Long] = {
     joinType match {
-      case Inner | Cross | FullOuter | LeftOuter | RightOuter | LateralJoin(_)
-          if left.maxRows.isDefined && right.maxRows.isDefined =>
+      case Inner | Cross | FullOuter | LeftOuter | RightOuter
+        if left.maxRows.isDefined && right.maxRows.isDefined =>
         val maxRows = BigInt(left.maxRows.get) * BigInt(right.maxRows.get)
         if (maxRows.isValidLong) {
           Some(maxRows.toLong)
@@ -405,7 +405,7 @@ case class Join(
         left.output :+ j.exists
       case LeftExistence(_) =>
         left.output
-      case LeftOuter | LateralJoin(LeftOuter) =>
+      case LeftOuter =>
         left.output ++ right.output.map(_.withNullability(true))
       case RightOuter =>
         left.output.map(_.withNullability(true)) ++ right.output
@@ -477,7 +477,6 @@ case class Join(
       case LeftOuter | FullOuter | RightOuter => patterns = patterns :+ OUTER_JOIN
       case LeftSemiOrAnti(_) => patterns = patterns :+ LEFT_SEMI_OR_ANTI_JOIN
       case NaturalJoin(_) | UsingJoin(_, _) => patterns = patterns :+ NATURAL_LIKE_JOIN
-      case LateralJoin(_) => patterns = patterns :+ LATERAL_JOIN
       case _ =>
     }
     patterns
@@ -1419,4 +1418,43 @@ case class DomainJoin(domainAttrs: Seq[Attribute], child: LogicalPlan) extends U
   override def producedAttributes: AttributeSet = AttributeSet(domainAttrs)
   override protected def withNewChildInternal(newChild: LogicalPlan): DomainJoin =
     copy(child = newChild)
+}
+
+/**
+ * A logical plan for lateral join.
+ */
+case class LateralJoin(
+    left: LogicalPlan,
+    right: LateralSubquery,
+    joinType: JoinType,
+    condition: Option[Expression]) extends UnaryNode {
+
+  require(Seq(Inner, LeftOuter, Cross).contains(joinType),
+    s"Unsupported lateral join type $joinType")
+
+  override def child: LogicalPlan = left
+
+  override def output: Seq[Attribute] = {
+    joinType match {
+      case LeftOuter => left.output ++ right.plan.output.map(_.withNullability(true))
+      case _ => left.output ++ right.plan.output
+    }
+  }
+
+  override lazy val resolved: Boolean = {
+    childrenResolved &&
+      expressions.forall(_.resolved) &&
+      duplicateResolved &&
+      condition.forall(_.dataType == BooleanType)
+  }
+
+  def duplicateResolved: Boolean = left.outputSet.intersect(right.plan.outputSet).isEmpty
+
+  override def producedAttributes: AttributeSet = AttributeSet(right.plan.output)
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(LATERAL_JOIN)
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): LateralJoin = {
+    copy(left = newChild)
+  }
 }

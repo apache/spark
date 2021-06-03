@@ -475,7 +475,10 @@ class PlanParserSuite extends AnalysisTest {
     val testLateralJoin = (sql: String, jt: JoinType) => {
       assertEqual(
         s"select * from t $sql lateral (select * from u) uu",
-        table("t").join(table("u").select(star()).as("uu"), LateralJoin(jt), None).select(star()))
+        LateralJoin(
+          table("t"),
+          LateralSubquery(table("u").select(star()).as("uu")),
+          jt, None).select(star()))
     }
     val testAllExceptLateral = Seq(testUnconditionalJoin, testConditionalJoin, testNaturalJoin,
       testUsingJoin)
@@ -551,16 +554,21 @@ class PlanParserSuite extends AnalysisTest {
     // Test lateral join with join conditions
     assertEqual(
       s"select * from t join lateral (select * from u) uu on true",
-      table("t").join(table("u").select(star()).as("uu"),
-        LateralJoin(Inner), Option(true)).select(star()))
+      LateralJoin(
+        table("t"),
+        LateralSubquery(table("u").select(star()).as("uu")),
+        Inner, Option(true)).select(star()))
 
     // Test multiple lateral joins
     assertEqual(
       "select * from a, lateral (select * from b) bb, lateral (select * from c) cc",
-      table("a")
-        .join(table("b").select(star()).as("bb"), LateralJoin(Inner), None)
-        .join(table("c").select(star()).as("cc"), LateralJoin(Inner), None)
-        .select(star())
+      LateralJoin(
+        LateralJoin(
+          table("a"),
+          LateralSubquery(table("b").select(star()).as("bb")),
+          Inner, None),
+        LateralSubquery(table("c").select(star()).as("cc")),
+        Inner, None).select(star())
     )
   }
 

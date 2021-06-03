@@ -41,11 +41,14 @@ case class ReferenceEqualPlanWrapper(plan: LogicalPlan) {
 object DeduplicateRelations extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = {
     renewDuplicatedRelations(mutable.HashSet.empty, plan)._1.resolveOperatorsUpWithPruning(
-      _.containsAnyPattern(JOIN, INTERSECT, EXCEPT, UNION, COMMAND), ruleId) {
+      _.containsAnyPattern(JOIN, LATERAL_JOIN, INTERSECT, EXCEPT, UNION, COMMAND), ruleId) {
       case p: LogicalPlan if !p.childrenResolved => p
       // To resolve duplicate expression IDs for Join.
       case j @ Join(left, right, _, _, _) if !j.duplicateResolved =>
         j.copy(right = dedupRight(left, right))
+      // Resolve duplicate output for LateralJoin.
+      case j @ LateralJoin(left, right, _, _) if right.resolved && !j.duplicateResolved =>
+        j.copy(right = right.withNewPlan(dedupRight(left, right.plan)))
       // intersect/except will be rewritten to join at the beginning of optimizer. Here we need to
       // deduplicate the right side plan, so that we won't produce an invalid self-join later.
       case i @ Intersect(left, right, _) if !i.duplicateResolved =>
