@@ -169,6 +169,17 @@ public class ParquetVectorUpdaterFactory {
     }
   }
 
+  boolean isTimestampTypeMatched(LogicalTypeAnnotation.TimeUnit unit) {
+    return logicalTypeAnnotation instanceof TimestampLogicalTypeAnnotation &&
+      ((TimestampLogicalTypeAnnotation) logicalTypeAnnotation).getUnit() == unit;
+  }
+
+  boolean isUnsignedIntTypeMatched(int bitWidth) {
+    return logicalTypeAnnotation instanceof IntLogicalTypeAnnotation &&
+      !((IntLogicalTypeAnnotation) logicalTypeAnnotation).isSigned() &&
+      ((IntLogicalTypeAnnotation) logicalTypeAnnotation).getBitWidth() == bitWidth;
+  }
+
   private static class BooleanUpdater implements ParquetVectorUpdater {
     @Override
     public void updateBatch(
@@ -386,7 +397,6 @@ public class ParquetVectorUpdaterFactory {
         WritableColumnVector values,
         WritableColumnVector dictionaryIds,
         Dictionary dictionary) {
-      // TODO: double check this - should we use `downCastLongToInt`?
       values.putLong(offset, dictionary.decodeToLong(dictionaryIds.getDictId(offset)));
     }
   }
@@ -889,7 +899,7 @@ public class ParquetVectorUpdaterFactory {
     }
   }
 
-  static int rebaseDays(int julianDays, final boolean failIfRebase) {
+  private static int rebaseDays(int julianDays, final boolean failIfRebase) {
     if (failIfRebase) {
       if (julianDays < RebaseDateTime.lastSwitchJulianDay()) {
         throw DataSourceUtils.newRebaseExceptionInRead("Parquet");
@@ -901,7 +911,7 @@ public class ParquetVectorUpdaterFactory {
     }
   }
 
-  static long rebaseTimestamp(
+  private static long rebaseTimestamp(
       long julianMicros,
       final boolean failIfRebase,
       final String format) {
@@ -916,11 +926,11 @@ public class ParquetVectorUpdaterFactory {
     }
   }
 
-  static long rebaseMicros(long julianMicros, final boolean failIfRebase) {
+  private static long rebaseMicros(long julianMicros, final boolean failIfRebase) {
     return rebaseTimestamp(julianMicros, failIfRebase, "Parquet");
   }
 
-  static long rebaseInt96(long julianMicros, final boolean failIfRebase) {
+  private static long rebaseInt96(long julianMicros, final boolean failIfRebase) {
     return rebaseTimestamp(julianMicros, failIfRebase, "Parquet INT96");
   }
 
@@ -966,15 +976,5 @@ public class ParquetVectorUpdaterFactory {
     }
     return false;
   }
-
-  private boolean isTimestampTypeMatched(LogicalTypeAnnotation.TimeUnit unit) {
-    return logicalTypeAnnotation instanceof TimestampLogicalTypeAnnotation &&
-        ((TimestampLogicalTypeAnnotation) logicalTypeAnnotation).getUnit() == unit;
-  }
-
-  private boolean isUnsignedIntTypeMatched(int bitWidth) {
-    return logicalTypeAnnotation instanceof IntLogicalTypeAnnotation &&
-        !((IntLogicalTypeAnnotation) logicalTypeAnnotation).isSigned() &&
-        ((IntLogicalTypeAnnotation) logicalTypeAnnotation).getBitWidth() == bitWidth;
-  }
 }
+

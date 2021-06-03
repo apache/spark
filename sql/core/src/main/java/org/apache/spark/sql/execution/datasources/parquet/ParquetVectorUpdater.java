@@ -25,10 +25,10 @@ public interface ParquetVectorUpdater {
   /**
    * Read a batch of `total` values from `valuesReader` into `values`, starting from `offset`.
    *
-   * @param total the total number of values to read
-   * @param offset the starting offset in `values`
-   * @param values the destination vector
-   * @param valuesReader the reader to read values from
+   * @param total total number of values to read
+   * @param offset starting offset in `values`
+   * @param values destination values vector
+   * @param valuesReader reader to read values from
    */
   void updateBatch(
       int total,
@@ -39,12 +39,22 @@ public interface ParquetVectorUpdater {
   /**
    * Read a single value from `valuesReader` into `values`, at `offset`.
    *
-   * @param offset the offset in `values` to put the new value
-   * @param values the destination vector
-   * @param valuesReader the reader to read values from
+   * @param offset offset in `values` to put the new value
+   * @param values destination value vector
+   * @param valuesReader reader to read values from
    */
   void update(int offset, WritableColumnVector values, VectorizedValuesReader valuesReader);
 
+  /**
+   * Decode a batch of `total` dictionary IDs from `dictionaryIds` into `values` starting at
+   * `offset`, using `dictionary`.
+   *
+   * @param total total number of dictionary IDs to decode
+   * @param offset starting offset in `values`
+   * @param values destination vector
+   * @param dictionaryIds vector storing the dictionary IDs
+   * @param dictionary Parquet dictionary used to decode dictionary ID to its value
+   */
   default void decodeDictionaryIds(
       int total,
       int offset,
@@ -58,10 +68,18 @@ public interface ParquetVectorUpdater {
     }
   }
 
+  /**
+   * Decode a single dictionary ID from `dictionaryIds` into `values` at `offset`, using
+   * `dictionary`.
+   *
+   * @param offset offset in `values` to put the decoded value
+   * @param values destination value vector
+   * @param dictionaryIds vector storing the dictionary IDs
+   * @param dictionary Parquet dictionary used to decode dictionary ID to its value
+   */
   void decodeSingleDictionaryId(
       int offset,
       WritableColumnVector values,
       WritableColumnVector dictionaryIds,
       Dictionary dictionary);
-
 }
