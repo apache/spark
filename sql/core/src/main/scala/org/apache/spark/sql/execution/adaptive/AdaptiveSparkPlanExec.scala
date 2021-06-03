@@ -312,8 +312,9 @@ case class AdaptiveSparkPlanExec(
   }
 
   override def doExecuteBroadcast[T](): broadcast.Broadcast[T] = {
-    assert(getFinalPhysicalPlan().isInstanceOf[BroadcastExchangeExec])
-    getFinalPhysicalPlan().doExecuteBroadcast()
+    val finalPlan = getFinalPhysicalPlan()
+    assert(finalPlan.isInstanceOf[BroadcastExchangeExec])
+    finalPlan.doExecuteBroadcast()
   }
 
   protected override def stringArgs: Iterator[Any] = Iterator(s"isFinalPlan=$isFinalPlan")
@@ -607,10 +608,10 @@ case class AdaptiveSparkPlanExec(
     // not through `EnsureRequirements` rule. Therefore, when the DPP subquery is complicated
     // and need to be re-optimized, AQE also need to manually insert the `BroadcastExchangeExec`
     // node to prevent the loss of the `BroadcastExchangeExec` node in DPP subquery.
-    val finalPlan = if (currentPhysicalPlan.isInstanceOf[BroadcastExchangeExec]) {
-      val currentBroadcastExchange = currentPhysicalPlan.asInstanceOf[BroadcastExchangeExec]
-      currentBroadcastExchange.copy(child = newPlan)
-    } else newPlan
+    val finalPlan = currentPhysicalPlan match {
+      case b: BroadcastExchangeExec => b.copy(child = newPlan)
+      case _ => newPlan
+    }
 
     (finalPlan, optimized)
   }
