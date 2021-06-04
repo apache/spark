@@ -256,10 +256,11 @@ REFRESH TABLE my_table;
 
 Data source options of Parquet can be set via:
 * the `.option`/`.options` methods of
-  *  `DataFrameReader`
-  *  `DataFrameWriter`
-  *  `DataStreamReader`
-  *  `DataStreamWriter`
+  * `DataFrameReader`
+  * `DataFrameWriter`
+  * `DataStreamReader`
+  * `DataStreamWriter`
+* `OPTIONS` clause at [CREATE TABLE USING DATA_SOURCE](sql-ref-syntax-ddl-create-table-datasource.html)
 
 <table class="table">
   <tr><th><b>Property Name</b></th><th><b>Default</b></th><th><b>Meaning</b></th><th><b>Scope</b></th></tr>

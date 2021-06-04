@@ -888,8 +888,8 @@ case class Aggregate(
   override protected def withNewChildInternal(newChild: LogicalPlan): Aggregate =
     copy(child = newChild)
 
-  // Whether this Aggregate operator is equally the Distinct operator.
-  private[sql] def isDistinct: Boolean = {
+  // Whether this Aggregate operator is group only. For example: SELECT a, a FROM t GROUP BY a
+  private[sql] def groupOnly: Boolean = {
     aggregateExpressions.forall(a => groupingExpressions.exists(g => a.semanticEquals(g)))
   }
 }

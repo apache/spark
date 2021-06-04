@@ -248,7 +248,9 @@ object SparkBuild extends PomBuild {
           "-Wconf:msg=^(?=.*?Widening conversion from)(?=.*?is deprecated because it loses precision).+$:s",
           "-Wconf:msg=Auto-application to \\`\\(\\)\\` is deprecated:s",
           "-Wconf:msg=method with a single empty parameter list overrides method without any parameter list:s",
-          "-Wconf:msg=method without a parameter list overrides a method with a single empty one:s"
+          "-Wconf:msg=method without a parameter list overrides a method with a single empty one:s",
+          // SPARK-35574 Prevent the recurrence of compilation warnings related to `procedure syntax is deprecated`
+          "-Wconf:cat=deprecation&msg=procedure syntax is deprecated:e"
         )
       }
     }

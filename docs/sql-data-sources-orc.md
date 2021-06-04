@@ -177,10 +177,11 @@ When reading from Hive metastore ORC tables and inserting to Hive metastore ORC 
 
 Data source options of ORC can be set via:
 * the `.option`/`.options` methods of
-  *  `DataFrameReader`
-  *  `DataFrameWriter`
-  *  `DataStreamReader`
-  *  `DataStreamWriter`
+  * `DataFrameReader`
+  * `DataFrameWriter`
+  * `DataStreamReader`
+  * `DataStreamWriter`
+* `OPTIONS` clause at [CREATE TABLE USING DATA_SOURCE](sql-ref-syntax-ddl-create-table-datasource.html)
 
 <table class="table">
   <tr><th><b>Property Name</b></th><th><b>Default</b></th><th><b>Meaning</b></th><th><b>Scope</b></th></tr>
@@ -193,7 +194,7 @@ Data source options of ORC can be set via:
   <tr>
     <td><code>compression</code></td>
     <td><code>snappy</code></td>
-    <td>compression codec to use when saving to file. This can be one of the known case-insensitive shorten names (none, snappy, zlib, lzo, and zstd). This will override <code>orc.compress</code> and <code>spark.sql.orc.compression.codec</code>.</td>
+    <td>compression codec to use when saving to file. This can be one of the known case-insensitive shorten names (none, snappy, zlib, lzo, zstd and lz4). This will override <code>orc.compress</code> and <code>spark.sql.orc.compression.codec</code>.</td>
     <td>write</td>
   </tr>
 </table>

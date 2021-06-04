@@ -1596,4 +1596,13 @@ private[spark] object QueryCompilationErrors {
     new AnalysisException(
       s"the pattern '$pattern' is invalid, $message")
   }
+
+  def tableIdentifierExistsError(tableIdentifier: TableIdentifier): Throwable = {
+    new AnalysisException(s"$tableIdentifier already exists.")
+  }
+
+  def tableIdentifierNotConvertedToHadoopFsRelationError(
+      tableIdentifier: TableIdentifier): Throwable = {
+    new AnalysisException(s"$tableIdentifier should be converted to HadoopFsRelation.")
+  }
 }
