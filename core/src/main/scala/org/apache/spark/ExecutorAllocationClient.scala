@@ -1,25 +1,10 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The ASF licenses this file to You under the Apache License, Version 2.0
- * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
 
 package org.apache.spark
 
 /**
  * A client that communicates with the cluster manager to request or kill executors.
  * This is currently supported only in YARN mode.
+ * 与集群管理器通信以请求或杀死Executor的客户端。目前仅在 YARN 模式下支持。
  */
 private[spark] trait ExecutorAllocationClient {
 
@@ -30,12 +15,15 @@ private[spark] trait ExecutorAllocationClient {
   /**
    * Update the cluster manager on our scheduling needs. Three bits of information are included
    * to help it make decisions.
+   * 根据我们的调度需求更新集群管理器。包含三个信息以帮助它做出决定。
    * @param numExecutors The total number of executors we'd like to have. The cluster manager
    *                     shouldn't kill any running executor to reach this number, but,
    *                     if all existing executors were to die, this is the number of executors
    *                     we'd want to be allocated.
+   *                     我们希望拥有的执行者总数。集群管理器不应该杀死任何正在运行的执行器来达到这个数量，但是，如果所有现有的执行器都死了，这就是我们想要分配的执行器数量。
    * @param localityAwareTasks The number of tasks in all active stages that have a locality
    *                           preferences. This includes running, pending, and completed tasks.
+   *                           具有位置偏好的所有活动阶段中的任务数量。这包括正在运行、挂起和已完成的任务。
    * @param hostToLocalTaskCount A map of hosts to the number of tasks from all active stages
    *                             that would like to like to run on that host.
    *                             This includes running, pending, and completed tasks.

@@ -481,7 +481,8 @@ object MockRDD extends AssertionsHelper with TripleEquals {
   }
 }
 
-/** Simple cluster manager that wires up our mock backend. */
+/** Simple cluster manager that wires up our mock backend.
+ * Simple cluster manager that wires up our mock backend.*/
 private class MockExternalClusterManager extends ExternalClusterManager {
 
   val MOCK_REGEX = """mock\[(.*)\]""".r

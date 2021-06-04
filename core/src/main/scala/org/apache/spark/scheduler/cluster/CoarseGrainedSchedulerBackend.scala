@@ -22,11 +22,14 @@ import org.apache.spark.util.{RpcUtils, SerializableBuffer, ThreadUtils, Utils}
 
 /**
  * A scheduler backend that waits for coarse-grained executors to connect.
+ * 等待粗粒度执行程序连接的调度程序后端。
  * This backend holds onto each executor for the duration of the Spark job rather than relinquishing
  * executors whenever a task is done and asking the scheduler to launch a new executor for
  * each new task. Executors may be launched in a variety of ways, such as Mesos tasks for the
  * coarse-grained Mesos mode or standalone processes for Spark's standalone deploy mode
  * (spark.deploy.*).
+ * 这个后端在 Spark 作业的持续时间内保留每个执行程序，而不是在任务完成时放弃执行程序并要求调度程序为每个新任务启动一个新的执行程序。
+Executor 可以通过多种方式启动，例如用于粗粒度 Mesos 模式的 Mesos 任务或用于 Spark 的独立部署模式的独立进程。
  */
 private[spark]
 class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: RpcEnv)

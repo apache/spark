@@ -70,8 +70,10 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
     loadFromSystemProperties(false)
   }
 
+  //从系统属性中加载配置信息
   private[spark] def loadFromSystemProperties(silent: Boolean): SparkConf = {
     // Load any spark.* system properties
+    //使用Scala守卫过滤出spark开头的属性
     for ((key, value) <- Utils.getSystemProperties if key.startsWith("spark.")) {
       set(key, value, silent)
     }
