@@ -26,7 +26,7 @@
   </parent>
   <groupId>org.apache.spark</groupId>
   <artifactId>spark-parent_2.12</artifactId>
-  <version>3.1.1-kylin-4.x-r23</version>
+  <version>3.1.1-kylin-4.x-r24</version>
   <packaging>pom</packaging>
   <name>Spark Project Parent POM</name>
   <url>https://spark.apache.org/</url>
@@ -3148,6 +3148,7 @@
             <configuration>
               <includeScope>runtime</includeScope>
               <outputDirectory>${jars.target.dir}</outputDirectory>
+              <excludeGroupIds>log4j</excludeGroupIds>
             </configuration>
           </execution>
         </executions>
