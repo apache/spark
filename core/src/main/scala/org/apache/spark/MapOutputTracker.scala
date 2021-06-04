@@ -174,6 +174,7 @@ private class ShuffleStatus(
             mapStatuses(index) = mapStatus
             _numAvailableMapOutputs += 1
             invalidateSerializedMapOutputStatusCache()
+            mapStatusesDeleted(index) = null
             logDebug(s"Recover ${mapStatus.mapId} ${mapStatus.location}")
           } else {
             logWarning(s"Asked to update map output ${mapId} for untracked map status.")
