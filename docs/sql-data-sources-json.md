@@ -258,7 +258,7 @@ Data source options of JSON can be set via:
   </tr>
   <tr>
     <td><code>ignoreNullFields</code></td>
-    <td><code>true</code></td>
+    <td>(value of <code>spark.sql.jsonGenerator.ignoreNullFields</code> configuration)</td>
     <td>Whether to ignore null fields when generating JSON objects.</td>
     <td>write</td>
   </tr>
