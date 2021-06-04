@@ -67,8 +67,8 @@ class InternalFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(internal.index_names, [None])
         self.assert_eq(internal.column_labels, [(0,), (1,)])
         self.assert_eq(internal.data_spark_column_names, ["0", "1"])
-        self.assertTrue(internal.spark_column_for((0,))._jc.equals(sdf["0"]._jc))
-        self.assertTrue(internal.spark_column_for((1,))._jc.equals(sdf["1"]._jc))
+        self.assertTrue(spark_column_equals(internal.spark_column_for((0,)), sdf["0"]))
+        self.assertTrue(spark_column_equals(internal.spark_column_for((1,)), sdf["1"]))
 
         self.assert_eq(internal.to_pandas_frame, pdf2)
 

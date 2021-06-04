@@ -45,6 +45,7 @@ from pyspark.pandas.typedef import Dtype
 if TYPE_CHECKING:
     from pyspark.pandas.indexes import Index  # noqa: F401 (SPARK-34943)
     from pyspark.pandas.series import Series  # noqa: F401 (SPARK-34943)
+    import pandas as pd
 
 
 def is_valid_operand_for_numeric_arithmetic(operand: Any, *, allow_bool: bool = True) -> bool:
@@ -173,10 +174,10 @@ class DataTypeOps(object, metaclass=ABCMeta):
     def rpow(self, left, right) -> Union["Series", "Index"]:
         raise TypeError("Exponentiation can not be applied to %s." % self.pretty_name)
 
-    def restore(self, col):
+    def restore(self, col: pd.Series) -> pd.Series:
         """Restore column when to_pandas."""
         return col
 
-    def prepare(self, col):
+    def prepare(self, col: pd.Series) -> pd.Series:
         """Prepare column when from_pandas."""
         return col.replace({np.nan: None})
