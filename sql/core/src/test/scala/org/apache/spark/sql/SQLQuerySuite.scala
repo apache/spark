@@ -4016,6 +4016,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       val table = spark.read.table("test_table")
 
       Seq(
+        (table, 2),
         (table.repartition($"group1"), 1),
         (table.repartitionByRange($"group1"), 1),
         (table.repartition($"group2"), 1),
