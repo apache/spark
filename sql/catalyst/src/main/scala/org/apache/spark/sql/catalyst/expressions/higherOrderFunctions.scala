@@ -84,6 +84,9 @@ case class NamedLambdaVariable(
     AttributeReference(name, dataType, nullable, Metadata.empty)(exprId, Seq.empty)
   }
 
+  // Check if this lambda variable is referenced outside the lambda function it is bound to
+  override def references: AttributeSet = AttributeSet(toAttribute)
+
   override def eval(input: InternalRow): Any = value.get
 
   override def toString: String = s"lambda $name#${exprId.id}$typeSuffix"
@@ -107,6 +110,13 @@ case class LambdaFunction(
   override def children: Seq[Expression] = function +: arguments
   override def dataType: DataType = function.dataType
   override def nullable: Boolean = function.nullable
+
+  // Check if lambda variables bound to this lambda function are referenced in the wrong scope
+  override def references: AttributeSet = if (resolved) {
+    function.references -- AttributeSet(arguments.flatMap(_.references))
+  } else {
+    super.references
+  }
 
   lazy val bound: Boolean = arguments.forall(_.resolved)
 
