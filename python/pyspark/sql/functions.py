@@ -108,7 +108,7 @@ def col(col):
     --------
     >>> col('x')
     Column<'x'>
-    >>> column('mod3')
+    >>> column('x')
     Column<'x'>
     """
     return _invoke_function("col", col)
