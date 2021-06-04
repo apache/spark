@@ -567,7 +567,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
    *               varying initial state for different invocations.
    */
   def transformUpWithBeforeAndAfterRuleOnChildren(
-    cond: BaseType => Boolean, ruleId: RuleId = UnknownRuleId)(
+      cond: BaseType => Boolean, ruleId: RuleId = UnknownRuleId)(
     rule: PartialFunction[(BaseType, BaseType), BaseType]): BaseType = {
     if (!cond.apply(this) || isRuleIneffective(ruleId)) {
       return this
