@@ -114,7 +114,7 @@ Data source options of JSON can be set via:
   <tr>
     <!-- TODO(SPARK-35433): Add timeZone to Data Source Option for CSV, too. -->
     <td><code>timeZone</code></td>
-    <td>The SQL config <code>spark.sql.session.timeZone</code></td>
+    <td>(value of <code>spark.sql.session.timeZone</code> configuration)</td>
     <td>Sets the string that indicates a time zone ID to be used to format timestamps in the JSON datasources or partition values. The following formats of <code>timeZone</code> are supported:<br>
     <ul>
       <li>Region-based zone ID: It should have the form 'area/city', such as 'America/Los_Angeles'.</li>
