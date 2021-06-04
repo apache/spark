@@ -94,7 +94,6 @@ class RocksDBSuite extends SparkFunSuite {
       val fileManager = new RocksDBFileManager(dfsRootDir, Utils.createTempDir(), hadoopConf)
       val cpFiles = Seq("sst-file1.sst" -> 10, "sst-file2.sst" -> 20, "other-file1" -> 100)
       CreateAtomicTestManager.shouldFailInCreateAtomic = true
-      CreateAtomicTestManager.cancelCalledInCreateAtomic = false
       intercept[IOException] {
         saveCheckpointFiles(fileManager, cpFiles, version = 1, numKeys = 101)
       }
