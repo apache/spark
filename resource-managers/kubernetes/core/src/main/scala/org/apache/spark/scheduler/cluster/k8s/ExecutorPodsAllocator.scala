@@ -390,8 +390,8 @@ private[spark] class ExecutorPodsAllocator(
   private def replacePVCsIfNeeded(
       pod: Pod,
       resources: Seq[HasMetadata],
-      reusablePVCs: mutable.Buffer[PersistentVolumeClaim]) = {
-    val replacedResources = mutable.ArrayBuffer[HasMetadata]()
+      reusablePVCs: mutable.Buffer[PersistentVolumeClaim]): Seq[HasMetadata] = {
+    val replacedResources = mutable.Set[HasMetadata]()
     resources.foreach {
       case pvc: PersistentVolumeClaim =>
         // Find one with the same storage class and size.
@@ -407,7 +407,7 @@ private[spark] class ExecutorPodsAllocator(
           }
           if (volume.nonEmpty) {
             val matchedPVC = reusablePVCs.remove(index)
-            replacedResources.append(pvc)
+            replacedResources.add(pvc)
             logInfo(s"Reuse PersistentVolumeClaim ${matchedPVC.getMetadata.getName}")
             volume.get.getPersistentVolumeClaim.setClaimName(matchedPVC.getMetadata.getName)
           }

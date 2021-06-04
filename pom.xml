@@ -3389,6 +3389,11 @@
                   <arg>-Wconf:msg=Auto-application to \`\(\)\` is deprecated:s</arg>
                   <arg>-Wconf:msg=method with a single empty parameter list overrides method without any parameter list:s</arg>
                   <arg>-Wconf:msg=method without a parameter list overrides a method with a single empty one:s</arg>
+                  <!--
+                    SPARK-35574 Prevent the recurrence of compilation warnings related to
+                    `procedure syntax is deprecated`
+                  -->
+                  <arg>-Wconf:cat=deprecation&amp;msg=procedure syntax is deprecated:e</arg>
                 </args>
                 <compilerPlugins combine.self="override">
                 </compilerPlugins>

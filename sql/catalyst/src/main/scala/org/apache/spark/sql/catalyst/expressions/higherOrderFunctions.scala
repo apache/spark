@@ -88,6 +88,9 @@ case class NamedLambdaVariable(
     AttributeReference(name, dataType, nullable, Metadata.empty)(exprId, Seq.empty)
   }
 
+  // Check if this lambda variable is referenced outside the lambda function it is bound to
+  override def references: AttributeSet = AttributeSet(toAttribute)
+
   override def eval(input: InternalRow): Any = value.get
 
   override def toString: String = s"lambda $name#${exprId.id}$typeSuffix"
@@ -112,6 +115,13 @@ case class LambdaFunction(
   override def dataType: DataType = function.dataType
   override def nullable: Boolean = function.nullable
   final override val nodePatterns: Seq[TreePattern] = Seq(LAMBDA_FUNCTION)
+
+  // Check if lambda variables bound to this lambda function are referenced in the wrong scope
+  override def references: AttributeSet = if (resolved) {
+    function.references -- AttributeSet(arguments.flatMap(_.references))
+  } else {
+    super.references
+  }
 
   lazy val bound: Boolean = arguments.forall(_.resolved)
 
@@ -196,6 +206,23 @@ trait HigherOrderFunction extends Expression with ExpectsInputTypes {
         case variable: NamedLambdaVariable if argumentMap.contains(variable.exprId) =>
           argumentMap(variable.exprId)
       }
+  }
+
+  override lazy val canonicalized: Expression = {
+    var currExprId = -1
+    val argumentMap = functions.flatMap(_.collect {
+      case l: NamedLambdaVariable =>
+        currExprId += 1
+        l.exprId -> currExprId
+    }).toMap
+
+    val cleaned = this.transformUp {
+      case l: NamedLambdaVariable if argumentMap.contains(l.exprId) =>
+        val newExprId = argumentMap(l.exprId)
+        NamedLambdaVariable("none", l.dataType, l.nullable, exprId = ExprId(newExprId), null)
+    }
+    val canonicalizedChildren = cleaned.children.map(_.canonicalized)
+    Canonicalize.execute(withNewChildren(canonicalizedChildren))
   }
 }
 
