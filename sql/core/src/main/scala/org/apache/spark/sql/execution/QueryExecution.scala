@@ -55,7 +55,7 @@ class QueryExecution(
     val sparkSession: SparkSession,
     val logical: LogicalPlan,
     val tracker: QueryPlanningTracker = new QueryPlanningTracker,
-    val isExecutingCommand: Boolean = false,
+    val mode: CommandExecutionMode.Value = CommandExecutionMode.COMMON,
     val name: Option[String] = Some("command")) extends Logging {
 
   val id: Long = QueryExecution.nextExecutionId
@@ -80,15 +80,15 @@ class QueryExecution(
   // table insertion immediately without a `.collect()`. We also need to eagerly execute non-root
   // commands, because many commands return `GenericInternalRow` and can't be put in a query plan
   // directly, otherwise the query engine may cast `GenericInternalRow` to `UnsafeRow` and fail.
-  lazy val commandExecuted: LogicalPlan = if (isExecutingCommand) {
-    analyzed.mapChildren(eagerlyExecuteCommands)
-  } else {
-    eagerlyExecuteCommands(analyzed)
+  lazy val commandExecuted: LogicalPlan = mode match {
+    case CommandExecutionMode.EAGERLY => analyzed.mapChildren(eagerlyExecuteCommands)
+    case CommandExecutionMode.COMMON => eagerlyExecuteCommands(analyzed)
+    case CommandExecutionMode.SKIP => analyzed
   }
 
   private def eagerlyExecuteCommands(p: LogicalPlan) = p transformDown {
     case c: Command =>
-      val qe = sparkSession.sessionState.executePlan(c, true)
+      val qe = sparkSession.sessionState.executePlan(c, CommandExecutionMode.EAGERLY)
       CommandResult(
         qe.analyzed.output,
         qe.commandExecuted,
@@ -105,15 +105,22 @@ class QueryExecution(
     sparkSession.sharedState.cacheManager.useCachedData(commandExecuted.clone())
   }
 
-  lazy val optimizedPlan: LogicalPlan = executePhase(QueryPlanningTracker.OPTIMIZATION) {
-    // clone the plan to avoid sharing the plan instance between different stages like analyzing,
-    // optimizing and planning.
-    val plan = sparkSession.sessionState.optimizer.executeAndTrack(withCachedData.clone(), tracker)
-    // We do not want optimized plans to be re-analyzed as literals that have been constant folded
-    // and such can cause issues during analysis. While `clone` should maintain the `analyzed` state
-    // of the LogicalPlan, we set the plan as analyzed here as well out of paranoia.
-    plan.setAnalyzed()
-    plan
+  private def assertCommandExecuted(): Unit = commandExecuted
+
+  lazy val optimizedPlan: LogicalPlan = {
+    // We need to materialize the commandExecuted here because sparkPlan is also tracked under
+    // the planning phase
+    assertCommandExecuted()
+    executePhase(QueryPlanningTracker.OPTIMIZATION) {
+      // clone the plan to avoid sharing the plan instance between different stages like analyzing,
+      // optimizing and planning.
+      val plan = sparkSession.sessionState.optimizer.executeAndTrack(withCachedData.clone(), tracker)
+      // We do not want optimized plans to be re-analyzed as literals that have been constant folded
+      // and such can cause issues during analysis. While `clone` should maintain the `analyzed`
+      // state of the LogicalPlan, we set the plan as analyzed here as well out of paranoia.
+      plan.setAnalyzed()
+      plan
+    }
   }
 
   private def assertOptimized(): Unit = optimizedPlan
@@ -355,6 +362,10 @@ class QueryExecution(
       }
     }
   }
+}
+
+object CommandExecutionMode extends Enumeration {
+  val COMMON, EAGERLY, SKIP = Value
 }
 
 object QueryExecution {

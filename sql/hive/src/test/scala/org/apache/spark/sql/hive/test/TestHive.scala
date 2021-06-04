@@ -42,7 +42,7 @@ import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, OneRowRelation}
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-import org.apache.spark.sql.execution.{QueryExecution, SQLExecution}
+import org.apache.spark.sql.execution.{CommandExecutionMode, QueryExecution, SQLExecution}
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.client.HiveClient
 import org.apache.spark.sql.internal.{SessionState, SharedState, SQLConf, WithTestConf}
@@ -585,10 +585,10 @@ private[hive] class TestHiveSparkSession(
 private[hive] class TestHiveQueryExecution(
     sparkSession: TestHiveSparkSession,
     logicalPlan: LogicalPlan,
-    isExecutingCommand: Boolean = false,
+    mode: CommandExecutionMode.Value = CommandExecutionMode.COMMON,
     name: Option[String] = None)
   extends QueryExecution(
-    sparkSession, logicalPlan, isExecutingCommand = isExecutingCommand, name = name) with Logging {
+    sparkSession, logicalPlan, mode = mode, name = name) with Logging {
 
   def this(sparkSession: TestHiveSparkSession, sql: String) = {
     this(sparkSession, sparkSession.sessionState.sqlParser.parsePlan(sql))
@@ -664,10 +664,10 @@ private[sql] class TestHiveSessionStateBuilder(
 
   override def overrideConfs: Map[String, String] = TestHiveContext.overrideConfs
 
-  override def createQueryExecution: (LogicalPlan, Boolean, Option[String]) => QueryExecution = {
-    (plan, isExecutingCommand, name) =>
-      new TestHiveQueryExecution(
-        session.asInstanceOf[TestHiveSparkSession], plan, isExecutingCommand, name)
+  override def createQueryExecution:
+  (LogicalPlan, CommandExecutionMode.Value, Option[String]) => QueryExecution = {
+    (plan, mode, name) =>
+      new TestHiveQueryExecution(session.asInstanceOf[TestHiveSparkSession], plan, mode, name)
   }
 
   override protected def newBuilder: NewBuilder = new TestHiveSessionStateBuilder(_, _)
