@@ -778,7 +778,7 @@ class PandasOnSparkSeriesMethods(object):
         See Also
         --------
         DataFrame.pandas_on_spark.apply_batch : Similar but it takes pandas DataFrame as its
-        internal batch.
+            internal batch.
 
         Examples
         --------
