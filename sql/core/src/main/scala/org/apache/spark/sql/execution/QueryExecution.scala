@@ -55,7 +55,7 @@ class QueryExecution(
     val sparkSession: SparkSession,
     val logical: LogicalPlan,
     val tracker: QueryPlanningTracker = new QueryPlanningTracker,
-    val mode: CommandExecutionMode.Value = CommandExecutionMode.COMMON,
+    val mode: CommandExecutionMode.Value = CommandExecutionMode.ALL,
     val name: Option[String] = Some("command")) extends Logging {
 
   val id: Long = QueryExecution.nextExecutionId
@@ -81,14 +81,14 @@ class QueryExecution(
   // commands, because many commands return `GenericInternalRow` and can't be put in a query plan
   // directly, otherwise the query engine may cast `GenericInternalRow` to `UnsafeRow` and fail.
   lazy val commandExecuted: LogicalPlan = mode match {
-    case CommandExecutionMode.EAGERLY => analyzed.mapChildren(eagerlyExecuteCommands)
-    case CommandExecutionMode.COMMON => eagerlyExecuteCommands(analyzed)
+    case CommandExecutionMode.NON_ROOT => analyzed.mapChildren(eagerlyExecuteCommands)
+    case CommandExecutionMode.ALL => eagerlyExecuteCommands(analyzed)
     case CommandExecutionMode.SKIP => analyzed
   }
 
   private def eagerlyExecuteCommands(p: LogicalPlan) = p transformDown {
     case c: Command =>
-      val qe = sparkSession.sessionState.executePlan(c, CommandExecutionMode.EAGERLY)
+      val qe = sparkSession.sessionState.executePlan(c, CommandExecutionMode.NON_ROOT)
       val result = SQLExecution.withNewExecutionId(qe, name)(qe.executedPlan.executeCollect())
       CommandResult(
         qe.analyzed.output,
@@ -368,7 +368,7 @@ class QueryExecution(
 }
 
 object CommandExecutionMode extends Enumeration {
-  val COMMON, EAGERLY, SKIP = Value
+  val SKIP, NON_ROOT, ALL = Value
 }
 
 object QueryExecution {

@@ -585,8 +585,8 @@ private[hive] class TestHiveSparkSession(
 private[hive] class TestHiveQueryExecution(
     sparkSession: TestHiveSparkSession,
     logicalPlan: LogicalPlan,
-    mode: CommandExecutionMode.Value = CommandExecutionMode.COMMON,
-    name: Option[String] = None)
+    mode: CommandExecutionMode.Value = CommandExecutionMode.ALL,
+    name: Option[String] = Some("command"))
   extends QueryExecution(
     sparkSession, logicalPlan, mode = mode, name = name) with Logging {
 

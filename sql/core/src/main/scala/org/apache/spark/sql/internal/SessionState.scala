@@ -122,8 +122,8 @@ private[sql] class SessionState(
 
   def executePlan(
       plan: LogicalPlan,
-      mode: CommandExecutionMode.Value = CommandExecutionMode.COMMON,
-      name: Option[String] = None): QueryExecution =
+      mode: CommandExecutionMode.Value = CommandExecutionMode.ALL,
+      name: Option[String] = Some("command")): QueryExecution =
     createQueryExecution(plan, mode, name)
 }
 
