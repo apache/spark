@@ -112,7 +112,7 @@ class DifferentiableLossAggregatorSuite extends SparkFunSuite {
     BLAS.scal(weight1, addedGradients)
     BLAS.axpy(weight2, grad2, addedGradients)
     BLAS.scal(1 / (weight1 + weight2), addedGradients)
-    assert(merged.gradient === addedGradients)
+    assert(merged.gradient ~== addedGradients relTol 10e-5)
   }
 
   test("loss, gradient, weight") {

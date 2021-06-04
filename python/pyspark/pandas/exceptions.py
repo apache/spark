@@ -18,6 +18,7 @@
 """
 Exceptions/Errors used in pandas-on-Spark.
 """
+from typing import Optional
 
 
 class DataError(Exception):
@@ -28,7 +29,7 @@ class SparkPandasIndexingError(Exception):
     pass
 
 
-def code_change_hint(pandas_function, spark_target_function):
+def code_change_hint(pandas_function: Optional[str], spark_target_function: Optional[str]) -> str:
     if pandas_function is not None and spark_target_function is not None:
         return "You are trying to use pandas function {}, use spark function {}".format(
             pandas_function, spark_target_function
@@ -45,7 +46,12 @@ def code_change_hint(pandas_function, spark_target_function):
 
 
 class SparkPandasNotImplementedError(NotImplementedError):
-    def __init__(self, pandas_function=None, spark_target_function=None, description=""):
+    def __init__(
+        self,
+        pandas_function: Optional[str] = None,
+        spark_target_function: Optional[str] = None,
+        description: str = "",
+    ):
         self.pandas_source = pandas_function
         self.spark_target = spark_target_function
         hint = code_change_hint(pandas_function, spark_target_function)
@@ -59,12 +65,12 @@ class SparkPandasNotImplementedError(NotImplementedError):
 class PandasNotImplementedError(NotImplementedError):
     def __init__(
         self,
-        class_name,
-        method_name=None,
-        arg_name=None,
-        property_name=None,
-        deprecated=False,
-        reason="",
+        class_name: str,
+        method_name: Optional[str] = None,
+        arg_name: Optional[str] = None,
+        property_name: Optional[str] = None,
+        deprecated: bool = False,
+        reason: str = "",
     ):
         assert (method_name is None) != (property_name is None)
         self.class_name = class_name
@@ -106,7 +112,7 @@ class PandasNotImplementedError(NotImplementedError):
         super().__init__(msg)
 
 
-def _test():
+def _test() -> None:
     import os
     import doctest
     import sys

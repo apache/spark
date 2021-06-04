@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.rules.RuleId
 import org.apache.spark.sql.catalyst.rules.UnknownRuleId
 import org.apache.spark.sql.catalyst.trees.{AlwaysProcess, CurrentOrigin, TreeNode, TreeNodeTag}
+import org.apache.spark.sql.catalyst.trees.TreePattern.OUTER_REFERENCE
 import org.apache.spark.sql.catalyst.trees.TreePatternBits
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructType}
@@ -539,7 +540,8 @@ object QueryPlan extends PredicateHelper {
     e.transformUp {
       case s: PlanExpression[QueryPlan[_] @unchecked] =>
         // Normalize the outer references in the subquery plan.
-        val normalizedPlan = s.plan.transformAllExpressions {
+        val normalizedPlan = s.plan.transformAllExpressionsWithPruning(
+          _.containsPattern(OUTER_REFERENCE)) {
           case OuterReference(r) => OuterReference(QueryPlan.normalizeExpressions(r, input))
         }
         s.withNewPlan(normalizedPlan)

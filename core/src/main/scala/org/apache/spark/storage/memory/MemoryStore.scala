@@ -21,9 +21,11 @@ import java.io.OutputStream
 import java.nio.ByteBuffer
 import java.util.LinkedHashMap
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
+import scala.util.control.NonFatal
 
 import com.google.common.io.ByteStreams
 
@@ -385,15 +387,28 @@ private[spark] class MemoryStore(
     }
   }
 
+  def freeMemoryEntry[T <: MemoryEntry[_]](entry: T): Unit = {
+    entry match {
+      case SerializedMemoryEntry(buffer, _, _) => buffer.dispose()
+      case e: DeserializedMemoryEntry[_] => e.value.foreach {
+        case o: AutoCloseable =>
+          try {
+            o.close()
+          } catch {
+            case NonFatal(e) =>
+              logWarning("Fail to close a memory entry", e)
+          }
+        case _ =>
+      }
+    }
+  }
+
   def remove(blockId: BlockId): Boolean = memoryManager.synchronized {
     val entry = entries.synchronized {
       entries.remove(blockId)
     }
     if (entry != null) {
-      entry match {
-        case SerializedMemoryEntry(buffer, _, _) => buffer.dispose()
-        case _ =>
-      }
+      freeMemoryEntry(entry)
       memoryManager.releaseStorageMemory(entry.size, entry.memoryMode)
       logDebug(s"Block $blockId of size ${entry.size} dropped " +
         s"from memory (free ${maxMemory - blocksMemoryUsed})")
@@ -405,6 +420,7 @@ private[spark] class MemoryStore(
 
   def clear(): Unit = memoryManager.synchronized {
     entries.synchronized {
+      entries.values.asScala.foreach(freeMemoryEntry)
       entries.clear()
     }
     onHeapUnrollMemoryMap.clear()

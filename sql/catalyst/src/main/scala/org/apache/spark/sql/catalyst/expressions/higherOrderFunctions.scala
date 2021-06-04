@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion, UnresolvedException}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, QuaternaryLike, TernaryLike}
+import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -48,6 +49,7 @@ case class UnresolvedNamedLambdaVariable(nameParts: Seq[String])
   override def toAttribute: Attribute = throw new UnresolvedException("toAttribute")
   override def newInstance(): NamedExpression = throw new UnresolvedException("newInstance")
   override lazy val resolved = false
+  final override val nodePatterns: Seq[TreePattern] = Seq(LAMBDA_VARIABLE)
 
   override def toString: String = s"lambda '$name"
 
@@ -86,6 +88,9 @@ case class NamedLambdaVariable(
     AttributeReference(name, dataType, nullable, Metadata.empty)(exprId, Seq.empty)
   }
 
+  // Check if this lambda variable is referenced outside the lambda function it is bound to
+  override def references: AttributeSet = AttributeSet(toAttribute)
+
   override def eval(input: InternalRow): Any = value.get
 
   override def toString: String = s"lambda $name#${exprId.id}$typeSuffix"
@@ -109,6 +114,14 @@ case class LambdaFunction(
   override def children: Seq[Expression] = function +: arguments
   override def dataType: DataType = function.dataType
   override def nullable: Boolean = function.nullable
+  final override val nodePatterns: Seq[TreePattern] = Seq(LAMBDA_FUNCTION)
+
+  // Check if lambda variables bound to this lambda function are referenced in the wrong scope
+  override def references: AttributeSet = if (resolved) {
+    function.references -- AttributeSet(arguments.flatMap(_.references))
+  } else {
+    super.references
+  }
 
   lazy val bound: Boolean = arguments.forall(_.resolved)
 
@@ -135,6 +148,8 @@ object LambdaFunction {
 trait HigherOrderFunction extends Expression with ExpectsInputTypes {
 
   override def nullable: Boolean = arguments.exists(_.nullable)
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(HIGH_ORDER_FUNCTION)
 
   /**
    * Arguments of the higher ordered function.
@@ -191,6 +206,23 @@ trait HigherOrderFunction extends Expression with ExpectsInputTypes {
         case variable: NamedLambdaVariable if argumentMap.contains(variable.exprId) =>
           argumentMap(variable.exprId)
       }
+  }
+
+  override lazy val canonicalized: Expression = {
+    var currExprId = -1
+    val argumentMap = functions.flatMap(_.collect {
+      case l: NamedLambdaVariable =>
+        currExprId += 1
+        l.exprId -> currExprId
+    }).toMap
+
+    val cleaned = this.transformUp {
+      case l: NamedLambdaVariable if argumentMap.contains(l.exprId) =>
+        val newExprId = argumentMap(l.exprId)
+        NamedLambdaVariable("none", l.dataType, l.nullable, exprId = ExprId(newExprId), null)
+    }
+    val canonicalizedChildren = cleaned.children.map(_.canonicalized)
+    Canonicalize.execute(withNewChildren(canonicalizedChildren))
   }
 }
 

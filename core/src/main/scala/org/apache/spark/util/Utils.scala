@@ -3061,6 +3061,13 @@ private[spark] object Utils extends Logging {
       0
     }
   }
+
+  def executorTimeoutMs(conf: SparkConf): Long = {
+    // "spark.network.timeout" uses "seconds", while `spark.storage.blockManagerSlaveTimeoutMs` uses
+    // "milliseconds"
+    conf.get(config.STORAGE_BLOCKMANAGER_HEARTBEAT_TIMEOUT)
+      .getOrElse(Utils.timeStringAsMs(s"${conf.get(Network.NETWORK_TIMEOUT)}s"))
+  }
 }
 
 private[util] object CallerContext extends Logging {

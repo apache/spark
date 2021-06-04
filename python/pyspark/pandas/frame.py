@@ -882,6 +882,9 @@ class DataFrame(Frame, Generic[T]):
     spark = CachedAccessor("spark", SparkFrameMethods)
 
     # create accessor for pandas-on-Spark specific methods.
+    pandas_on_spark = CachedAccessor("pandas_on_spark", PandasOnSparkFrameMethods)
+
+    # keep the name "koalas" for backward compatibility.
     koalas = CachedAccessor("koalas", PandasOnSparkFrameMethods)
 
     def hist(self, bins=10, **kwds):
@@ -2298,27 +2301,6 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
     T = property(transpose)
 
-    def apply_batch(self, func, args=(), **kwds) -> "DataFrame":
-        warnings.warn(
-            "DataFrame.apply_batch is deprecated as of DataFrame.koalas.apply_batch. "
-            "Please use the API instead.",
-            FutureWarning,
-        )
-        return self.koalas.apply_batch(func, args=args, **kwds)
-
-    apply_batch.__doc__ = PandasOnSparkFrameMethods.apply_batch.__doc__
-
-    # TODO: Remove this API.
-    def map_in_pandas(self, func) -> "DataFrame":
-        warnings.warn(
-            "DataFrame.map_in_pandas is deprecated as of DataFrame.koalas.apply_batch. "
-            "Please use the API instead.",
-            FutureWarning,
-        )
-        return self.koalas.apply_batch(func)
-
-    map_in_pandas.__doc__ = PandasOnSparkFrameMethods.apply_batch.__doc__
-
     def apply(self, func, axis=0, args=(), **kwds) -> Union["Series", "DataFrame", "Index"]:
         """
         Apply a function along an axis of the DataFrame.
@@ -2753,7 +2735,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                     as_nullable_spark_type(psdf._internal.spark_type_for(output_label))
                 )
                 applied.append(
-                    psser.koalas._transform_batch(
+                    psser.pandas_on_spark._transform_batch(
                         func=lambda c: func(c, *args, **kwargs),
                         return_type=SeriesType(dtype, return_schema),
                     )
@@ -2765,18 +2747,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             return DataFrame(internal)
         else:
             return self._apply_series_op(
-                lambda psser: psser.koalas.transform_batch(func, *args, **kwargs)
+                lambda psser: psser.pandas_on_spark.transform_batch(func, *args, **kwargs)
             )
-
-    def transform_batch(self, func, *args, **kwargs) -> "DataFrame":
-        warnings.warn(
-            "DataFrame.transform_batch is deprecated as of DataFrame.koalas.transform_batch. "
-            "Please use the API instead.",
-            FutureWarning,
-        )
-        return self.koalas.transform_batch(func, *args, **kwargs)
-
-    transform_batch.__doc__ = PandasOnSparkFrameMethods.transform_batch.__doc__
 
     def pop(self, item) -> "DataFrame":
         """
@@ -3073,7 +3045,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         # default index, which will never be used. So use "distributed" index as a dummy to
         # avoid overhead.
         with option_context("compute.default_index_type", "distributed"):
-            psdf = psdf.koalas.apply_batch(pandas_between_time)
+            psdf = psdf.pandas_on_spark.apply_batch(pandas_between_time)
 
         return DataFrame(
             self._internal.copy(
@@ -3155,7 +3127,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         # a default index, which will never be used. So use "distributed" index as a dummy
         # to avoid overhead.
         with option_context("compute.default_index_type", "distributed"):
-            psdf = psdf.koalas.apply_batch(pandas_at_time)
+            psdf = psdf.pandas_on_spark.apply_batch(pandas_at_time)
 
         return DataFrame(
             self._internal.copy(
@@ -4573,35 +4545,13 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             )
             return DataFrame(internal)
 
-    def cache(self) -> "CachedDataFrame":
+    # Keep to_koalas for backward compatibility for now.
+    def to_koalas(self, index_col: Optional[Union[str, List[str]]] = None) -> "DataFrame":
         warnings.warn(
-            "DataFrame.cache is deprecated as of DataFrame.spark.cache. "
-            "Please use the API instead.",
+            "DataFrame.to_koalas is deprecated. Use DataFrame.to_pandas_on_spark instead.",
             FutureWarning,
         )
-        return self.spark.cache()
-
-    cache.__doc__ = SparkFrameMethods.cache.__doc__
-
-    def persist(self, storage_level=StorageLevel.MEMORY_AND_DISK) -> "CachedDataFrame":
-        warnings.warn(
-            "DataFrame.persist is deprecated as of DataFrame.spark.persist. "
-            "Please use the API instead.",
-            FutureWarning,
-        )
-        return self.spark.persist(storage_level)
-
-    persist.__doc__ = SparkFrameMethods.persist.__doc__
-
-    def hint(self, name: str, *parameters) -> "DataFrame":
-        warnings.warn(
-            "DataFrame.hint is deprecated as of DataFrame.spark.hint. "
-            "Please use the API instead.",
-            FutureWarning,
-        )
-        return self.spark.hint(name, *parameters)
-
-    hint.__doc__ = SparkFrameMethods.hint.__doc__
+        return self.to_pandas_on_spark(index_col)
 
     def to_table(
         self,
@@ -4874,17 +4824,6 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         3   0.2   0.1
         """
         return self._internal.to_pandas_frame.copy()
-
-    # Alias to maintain backward compatibility with Spark
-    def toPandas(self) -> pd.DataFrame:
-        warnings.warn(
-            "DataFrame.toPandas is deprecated as of DataFrame.to_pandas. "
-            "Please use the API instead.",
-            FutureWarning,
-        )
-        return self.to_pandas()
-
-    toPandas.__doc__ = to_pandas.__doc__
 
     def assign(self, **kwargs) -> "DataFrame":
         """
@@ -6344,26 +6283,6 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 [label if len(label) > 1 else label[0] for label in self._internal.column_labels]
             ),
         )
-
-    def spark_schema(self, index_col: Optional[Union[str, List[str]]] = None) -> StructType:
-        warnings.warn(
-            "DataFrame.spark_schema is deprecated as of DataFrame.spark.schema. "
-            "Please use the API instead.",
-            FutureWarning,
-        )
-        return self.spark.schema(index_col)
-
-    spark_schema.__doc__ = SparkFrameMethods.schema.__doc__
-
-    def print_schema(self, index_col: Optional[Union[str, List[str]]] = None) -> None:
-        warnings.warn(
-            "DataFrame.print_schema is deprecated as of DataFrame.spark.print_schema. "
-            "Please use the API instead.",
-            FutureWarning,
-        )
-        return self.spark.print_schema(index_col)
-
-    print_schema.__doc__ = SparkFrameMethods.print_schema.__doc__
 
     def select_dtypes(self, include=None, exclude=None) -> "DataFrame":
         """
@@ -10831,7 +10750,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         .. note:: This API delegates to Spark SQL so the syntax follows Spark SQL. Therefore, the
             pandas specific syntax such as `@` is not supported. If you want the pandas syntax,
-            you can work around with :meth:`DataFrame.koalas.apply_batch`, but you should
+            you can work around with :meth:`DataFrame.pandas_on_spark.apply_batch`, but you should
             be aware that `query_func` will be executed at different nodes in a distributed manner.
             So, for example, to use `@` syntax, make sure the variable is serialized by, for
             example, putting it within the closure as below.
@@ -10840,7 +10759,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             >>> def query_func(pdf):
             ...     num = 1995
             ...     return pdf.query('A > @num')
-            >>> df.koalas.apply_batch(query_func)
+            >>> df.pandas_on_spark.apply_batch(query_func)
                      A     B
             1996  1996  1996
             1997  1997  1997
@@ -10925,16 +10844,6 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             return None
         else:
             return DataFrame(internal)
-
-    def explain(self, extended: Optional[bool] = None, mode: Optional[str] = None) -> None:
-        warnings.warn(
-            "DataFrame.explain is deprecated as of DataFrame.spark.explain. "
-            "Please use the API instead.",
-            FutureWarning,
-        )
-        return self.spark.explain(extended, mode)
-
-    explain.__doc__ = SparkFrameMethods.explain.__doc__
 
     def take(self, indices, axis=0, **kwargs) -> "DataFrame":
         """
@@ -11122,7 +11031,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 result_inner = pd.Series(result_inner).to_frame()
             return result_inner
 
-        result = self.koalas.apply_batch(eval_func)
+        result = self.pandas_on_spark.apply_batch(eval_func)
         if inplace:
             # Here, the result is always a frame because the error is thrown during schema inference
             # from pandas.
@@ -11928,27 +11837,6 @@ class CachedDataFrame(DataFrame):
 
     # create accessor for Spark related methods.
     spark = CachedAccessor("spark", CachedSparkFrameMethods)
-
-    @property
-    def storage_level(self) -> StorageLevel:
-        warnings.warn(
-            "DataFrame.storage_level is deprecated as of DataFrame.spark.storage_level. "
-            "Please use the API instead.",
-            FutureWarning,
-        )
-        return self.spark.storage_level
-
-    storage_level.__doc__ = CachedSparkFrameMethods.storage_level.__doc__
-
-    def unpersist(self) -> None:
-        warnings.warn(
-            "DataFrame.unpersist is deprecated as of DataFrame.spark.unpersist. "
-            "Please use the API instead.",
-            FutureWarning,
-        )
-        return self.spark.unpersist()
-
-    unpersist.__doc__ = CachedSparkFrameMethods.unpersist.__doc__
 
 
 def _test():

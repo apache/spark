@@ -525,41 +525,40 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
     val testDf = df1.join(df2, "k").groupBy("k").agg(count("v1"), sum("v1"), avg("v2"))
     // trigger the final plan for AQE
     testDf.collect()
-    //   == Physical Plan ==
-    //   AdaptiveSparkPlan (14)
-    //   +- * HashAggregate (13)
-    //      +- CustomShuffleReader (12)
-    //         +- ShuffleQueryStage (11)
-    //            +- Exchange (10)
-    //               +- * HashAggregate (9)
-    //                  +- * Project (8)
-    //                     +- * BroadcastHashJoin Inner BuildRight (7)
-    //                        :- * Project (2)
-    //                        :  +- * LocalTableScan (1)
-    //                        +- BroadcastQueryStage (6)
-    //                           +- BroadcastExchange (5)
-    //                              +- * Project (4)
-    //                                 +- * LocalTableScan (3)
+    // AdaptiveSparkPlan (13)
+    // +- == Final Plan ==
+    //    * HashAggregate (12)
+    //    +- CustomShuffleReader (11)
+    //       +- ShuffleQueryStage (10)
+    //          +- Exchange (9)
+    //             +- * HashAggregate (8)
+    //                +- * Project (7)
+    //                   +- * BroadcastHashJoin Inner BuildRight (6)
+    //                      :- * LocalTableScan (1)
+    //                      +- BroadcastQueryStage (5)
+    //                         +- BroadcastExchange (4)
+    //                            +- * Project (3)
+    //                               +- * LocalTableScan (2)
     checkKeywordsExistsInExplain(
       testDf,
       FormattedMode,
       s"""
-         |(6) BroadcastQueryStage
+         |(5) BroadcastQueryStage
          |Output [2]: [k#x, v2#x]
          |Arguments: 0
          |""".stripMargin,
       s"""
-         |(11) ShuffleQueryStage
+         |(10) ShuffleQueryStage
          |Output [5]: [k#x, count#xL, sum#xL, sum#x, count#xL]
          |Arguments: 1
          |""".stripMargin,
       s"""
-         |(12) CustomShuffleReader
+         |(11) CustomShuffleReader
          |Input [5]: [k#x, count#xL, sum#xL, sum#x, count#xL]
          |Arguments: coalesced
          |""".stripMargin,
       s"""
-         |(14) AdaptiveSparkPlan
+         |(13) AdaptiveSparkPlan
          |Output [4]: [k#x, count(v1)#xL, sum(v1)#xL, avg(v2)#x]
          |Arguments: isFinalPlan=true
          |""".stripMargin

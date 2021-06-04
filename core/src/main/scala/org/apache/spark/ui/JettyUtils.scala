@@ -243,10 +243,11 @@ private[spark] object JettyUtils extends Logging {
       port: Int,
       sslOptions: SSLOptions,
       conf: SparkConf,
-      serverName: String = ""): ServerInfo = {
+      serverName: String = "",
+      poolSize: Int = 200): ServerInfo = {
 
     // Start the server first, with no connectors.
-    val pool = new QueuedThreadPool
+    val pool = new QueuedThreadPool(poolSize)
     if (serverName.nonEmpty) {
       pool.setName(serverName)
     }

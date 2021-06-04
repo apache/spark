@@ -263,8 +263,9 @@ case class StateStoreRestoreExec(
           iter.flatMap { row =>
             val key = stateManager.getKey(row.asInstanceOf[UnsafeRow])
             val restoredRow = stateManager.get(store, key)
-            numOutputRows += 1
-            Option(restoredRow).toSeq :+ row
+            val outputRows = Option(restoredRow).toSeq :+ row
+            numOutputRows += outputRows.size
+            outputRows
           }
         }
     }

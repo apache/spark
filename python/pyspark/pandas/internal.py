@@ -54,6 +54,7 @@ from pyspark.pandas.utils import (
     lazy_property,
     name_like_string,
     scol_for,
+    spark_column_equals,
     verify_temp_column_name,
 )
 
@@ -389,7 +390,7 @@ class InternalFrame(object):
         data_spark_columns: Optional[List[spark.Column]] = None,
         data_dtypes: Optional[List[Dtype]] = None,
         column_label_names: Optional[List[Optional[Tuple]]] = None,
-    ) -> None:
+    ):
         """
         Create a new internal immutable DataFrame to manage Spark DataFrame, column fields and
         index fields and names.
@@ -547,7 +548,7 @@ class InternalFrame(object):
                 scol_for(spark_frame, col)
                 for col in spark_frame.columns
                 if all(
-                    not scol_for(spark_frame, col)._jc.equals(index_scol._jc)  # type: ignore
+                    not spark_column_equals(scol_for(spark_frame, col), index_scol)
                     for index_scol in index_spark_columns
                 )
                 and col not in HIDDEN_COLUMNS
@@ -622,7 +623,9 @@ class InternalFrame(object):
             self._column_label_names = column_label_names
 
     @staticmethod
-    def attach_default_index(sdf, default_index_type=None):
+    def attach_default_index(
+        sdf: spark.DataFrame, default_index_type: Optional[str] = None
+    ) -> spark.DataFrame:
         """
         This method attaches a default index to Spark DataFrame. Spark does not have the index
         notion so corresponding column should be generated.
@@ -667,7 +670,7 @@ class InternalFrame(object):
             )
 
     @staticmethod
-    def attach_sequence_column(sdf, column_name):
+    def attach_sequence_column(sdf: spark.DataFrame, column_name: str) -> spark.DataFrame:
         scols = [scol_for(sdf, column) for column in sdf.columns]
         sequential_index = (
             F.row_number().over(Window.orderBy(F.monotonically_increasing_id())).cast("long") - 1
@@ -675,12 +678,14 @@ class InternalFrame(object):
         return sdf.select(sequential_index.alias(column_name), *scols)
 
     @staticmethod
-    def attach_distributed_column(sdf, column_name):
+    def attach_distributed_column(sdf: spark.DataFrame, column_name: str) -> spark.DataFrame:
         scols = [scol_for(sdf, column) for column in sdf.columns]
         return sdf.select(F.monotonically_increasing_id().alias(column_name), *scols)
 
     @staticmethod
-    def attach_distributed_sequence_column(sdf, column_name):
+    def attach_distributed_sequence_column(
+        sdf: spark.DataFrame, column_name: str
+    ) -> spark.DataFrame:
         """
         This method attaches a Spark column that has a sequence in a distributed manner.
         This is equivalent to the column assigned when default index type 'distributed-sequence'.
@@ -698,16 +703,19 @@ class InternalFrame(object):
         """
         if len(sdf.columns) > 0:
             try:
-                jdf = sdf._jdf.toDF()
+                jdf = sdf._jdf.toDF()  # type: ignore
 
                 sql_ctx = sdf.sql_ctx
-                encoders = sql_ctx._jvm.org.apache.spark.sql.Encoders
+                encoders = sql_ctx._jvm.org.apache.spark.sql.Encoders  # type: ignore
                 encoder = encoders.tuple(jdf.exprEnc(), encoders.scalaLong())
 
                 jrdd = jdf.localCheckpoint(False).rdd().zipWithIndex()
 
                 df = spark.DataFrame(
-                    sql_ctx.sparkSession._jsparkSession.createDataset(jrdd, encoder).toDF(), sql_ctx
+                    sql_ctx.sparkSession._jsparkSession.createDataset(  # type: ignore
+                        jrdd, encoder
+                    ).toDF(),
+                    sql_ctx,
                 )
                 columns = df.columns
                 return df.selectExpr(
@@ -727,7 +735,9 @@ class InternalFrame(object):
                 )
 
     @staticmethod
-    def _attach_distributed_sequence_column(sdf, column_name):
+    def _attach_distributed_sequence_column(
+        sdf: spark.DataFrame, column_name: str
+    ) -> spark.DataFrame:
         """
         >>> sdf = ps.DataFrame(['a', 'b', 'c']).to_spark()
         >>> sdf = InternalFrame._attach_distributed_sequence_column(sdf, column_name="sequence")
@@ -776,7 +786,7 @@ class InternalFrame(object):
 
         # 3. Attach offset for each partition.
         @pandas_udf(LongType(), PandasUDFType.SCALAR)
-        def offset(id):
+        def offset(id: pd.Series) -> pd.Series:
             current_partition_offset = sums[id.iloc[0]]
             return pd.Series(current_partition_offset).repeat(len(id))
 
@@ -870,7 +880,7 @@ class InternalFrame(object):
             spark_column
             for spark_column in self.data_spark_columns
             if all(
-                not spark_column._jc.equals(scol._jc)  # type: ignore
+                not spark_column_equals(spark_column, scol)
                 for scol in index_spark_columns
             )
         ]
@@ -920,7 +930,7 @@ class InternalFrame(object):
         data_columns = []
         for spark_column in self.data_spark_columns:
             if all(
-                not spark_column._jc.equals(scol._jc)  # type: ignore
+                not spark_column_equals(spark_column, scol)
                 for scol in index_spark_columns
             ):
                 data_columns.append(spark_column)
@@ -958,7 +968,7 @@ class InternalFrame(object):
             for index_spark_column_name, index_spark_column in zip(
                 self.index_spark_column_names, self.index_spark_columns
             ):
-                if spark_column._jc.equals(index_spark_column._jc):  # type: ignore
+                if spark_column_equals(spark_column, index_spark_column):
                     column_names.append(index_spark_column_name)
                     break
             else:
@@ -1427,7 +1437,7 @@ class InternalFrame(object):
         return reset_index, index_columns, index_dtypes, data_columns, data_dtypes
 
 
-def _test():
+def _test() -> None:
     import os
     import doctest
     import sys
