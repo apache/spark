@@ -124,21 +124,21 @@ def determine_modules_to_test(changed_modules, deduplicated=True):
     ... # doctest: +NORMALIZE_WHITESPACE
     ['sql', 'avro', 'hive', 'mllib', 'sql-kafka-0-10', 'examples',
      'hive-thriftserver', 'pyspark-sql', 'repl', 'sparkr',
-     'pyspark-mllib', 'pyspark-pandas', 'pyspark-ml']
+     'pyspark-mllib', 'pyspark-pandas', 'pyspark-pandas-slow', 'pyspark-ml']
     >>> sorted([x.name for x in determine_modules_to_test(
     ...     [modules.sparkr, modules.sql], deduplicated=False)])
     ... # doctest: +NORMALIZE_WHITESPACE
     ['avro', 'examples', 'hive', 'hive-thriftserver', 'mllib',
-     'pyspark-ml', 'pyspark-mllib', 'pyspark-pandas', 'pyspark-sql',
+     'pyspark-ml', 'pyspark-mllib', 'pyspark-pandas', 'pyspark-pandas-slow', 'pyspark-sql',
      'repl', 'sparkr', 'sql', 'sql-kafka-0-10']
     >>> sorted([x.name for x in determine_modules_to_test(
     ...     [modules.sql, modules.core], deduplicated=False)])
     ... # doctest: +NORMALIZE_WHITESPACE
     ['avro', 'catalyst', 'core', 'examples', 'graphx', 'hive',
      'hive-thriftserver', 'mllib', 'mllib-local', 'pyspark-core', 'pyspark-ml', 'pyspark-mllib',
-     'pyspark-pandas', 'pyspark-resource', 'pyspark-sql', 'pyspark-streaming', 'repl', 'root',
-     'sparkr', 'sql', 'sql-kafka-0-10', 'streaming', 'streaming-kafka-0-10',
-     'streaming-kinesis-asl']
+     'pyspark-pandas', 'pyspark-pandas-slow', 'pyspark-resource', 'pyspark-sql',
+     'pyspark-streaming', 'repl', 'root', 'sparkr', 'sql', 'sql-kafka-0-10', 'streaming',
+     'streaming-kafka-0-10', 'streaming-kinesis-asl']
     """
     modules_to_test = set()
     for module in changed_modules:
