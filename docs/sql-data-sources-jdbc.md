@@ -203,7 +203,7 @@ logging into the data sources.
 
   <tr>
     <td><code>createTableOptions</code></td>
-    <td><code>""</code></td>
+    <td><code></code></td>
     <td>
       This is a JDBC writer related option. If specified, this option allows setting of database-specific table and partition options when creating a table (e.g., <code>CREATE TABLE t (name string) ENGINE=InnoDB.</code>).
     </td>
