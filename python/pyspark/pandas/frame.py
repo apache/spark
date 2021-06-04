@@ -101,7 +101,7 @@ from pyspark.pandas.utils import (
 )
 from pyspark.pandas.generic import Frame
 from pyspark.pandas.internal import (
-    Field,
+    InternalField,
     InternalFrame,
     HIDDEN_COLUMNS,
     NATURAL_ORDER_COLUMN_NAME,
@@ -2559,7 +2559,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 dtype = cast(SeriesType, return_type).dtype
                 spark_type = cast(SeriesType, return_type).spark_type
                 data_fields = [
-                    Field(dtype=dtype, struct_field=StructField(name=name, dataType=spark_type))
+                    InternalField(
+                        dtype=dtype, struct_field=StructField(name=name, dataType=spark_type)
+                    )
                     for name in self_applied.columns
                 ]
                 return_schema = StructType([field.struct_field for field in data_fields])
@@ -2578,7 +2580,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 spark_type = cast(ScalarType, return_type).spark_type
                 dtype = cast(ScalarType, return_type).dtype
                 data_fields = [
-                    Field(
+                    InternalField(
                         dtype=dtype,
                         struct_field=StructField(
                             name=SPARK_DEFAULT_SERIES_NAME, dataType=spark_type
@@ -7734,7 +7736,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         right: DataFrame, Series
         on: str, list of str, or array-like, optional
             Column or index level name(s) in the caller to join on the index in `right`, otherwise
-            joins index-on-index. If mult iple values given, the `right` DataFrame must have a
+            joins index-on-index. If multiple values given, the `right` DataFrame must have a
             MultiIndex. Can pass an array as the join key if it is not already contained in the
             calling DataFrame. Like an Excel VLOOKUP operation.
         how: {'left', 'right', 'outer', 'inner'}, default 'left'
@@ -8807,7 +8809,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             data_spark_columns=[
                 scol_for(sdf, col) for col in self._internal.data_spark_column_names
             ],
-            data_fields=[Field(dtype=field.dtype) for field in self._internal.data_fields],
+            data_fields=[InternalField(dtype=field.dtype) for field in self._internal.data_fields],
         )
         return DataFrame(internal)
 

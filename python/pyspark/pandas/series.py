@@ -57,7 +57,7 @@ from pyspark.pandas.exceptions import SparkPandasIndexingError
 from pyspark.pandas.frame import DataFrame
 from pyspark.pandas.generic import Frame
 from pyspark.pandas.internal import (
-    Field,
+    InternalField,
     InternalFrame,
     DEFAULT_SERIES_NAME,
     NATURAL_ORDER_COLUMN_NAME,
@@ -428,7 +428,9 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         self._anchor = psdf
         object.__setattr__(psdf, "_psseries", {self._column_label: self})
 
-    def _with_new_scol(self, scol: spark.Column, *, field: Optional[Field] = None) -> "Series":
+    def _with_new_scol(
+        self, scol: spark.Column, *, field: Optional[InternalField] = None
+    ) -> "Series":
         """
         Copy pandas-on-Spark Series with the new Spark Column.
 
@@ -5494,7 +5496,9 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         internal = self._internal.with_new_sdf(
             spark_frame=sdf,
             data_columns=[SPARK_DEFAULT_SERIES_NAME],
-            index_fields=[Field(dtype=field.dtype) for field in self._internal.index_fields],
+            index_fields=[
+                InternalField(dtype=field.dtype) for field in self._internal.index_fields
+            ],
             data_fields=[None],
         )
         psser = first_series(DataFrame(internal))

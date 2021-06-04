@@ -28,7 +28,7 @@ from pyspark.sql.functions import pandas_udf, PandasUDFType
 from pyspark.sql.types import LongType, StructField, StructType
 
 from pyspark.pandas.internal import (
-    Field,
+    InternalField,
     InternalFrame,
     SPARK_INDEX_NAME_FORMAT,
     SPARK_DEFAULT_SERIES_NAME,
@@ -192,7 +192,7 @@ class PandasOnSparkFrameMethods(object):
                         else internal.data_fields
                     )
                     + [
-                        Field.from_struct_field(
+                        InternalField.from_struct_field(
                             StructField(name_like_string(column), LongType(), nullable=False)
                         )
                     ]
@@ -667,7 +667,7 @@ class PandasOnSparkFrameMethods(object):
                     "hints; however, the return type was %s." % return_sig
                 )
             if is_return_series:
-                field = Field(
+                field = InternalField(
                     dtype=cast(SeriesType, return_type).dtype,
                     struct_field=StructField(
                         name=SPARK_DEFAULT_SERIES_NAME,
@@ -875,7 +875,7 @@ class PandasOnSparkSeriesMethods(object):
         else:
             spark_return_type = return_type.spark_type
             dtype = return_type.dtype
-            field = Field(
+            field = InternalField(
                 dtype=dtype,
                 struct_field=StructField(
                     name=self._psser._internal.data_spark_column_names[0],

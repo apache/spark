@@ -97,11 +97,11 @@ class DataFrameType(object):
     def __init__(
         self, dtypes: List[Dtype], spark_types: List[types.DataType], names: List[Optional[str]]
     ):
-        from pyspark.pandas.internal import Field
+        from pyspark.pandas.internal import InternalField
         from pyspark.pandas.utils import name_like_string
 
         self.fields = [
-            Field(
+            InternalField(
                 dtype=dtype,
                 struct_field=types.StructField(
                     name=(name_like_string(name) if name is not None else ("c%s" % i)),

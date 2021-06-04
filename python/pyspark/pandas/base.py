@@ -43,7 +43,7 @@ from pyspark import pandas as ps  # For running doctests and reference resolutio
 from pyspark.pandas import numpy_compat
 from pyspark.pandas.config import get_option, option_context
 from pyspark.pandas.internal import (
-    Field,
+    InternalField,
     InternalFrame,
     NATURAL_ORDER_COLUMN_NAME,
     SPARK_DEFAULT_INDEX_NAME,
@@ -230,7 +230,7 @@ def column_op(f):
             args = [arg.spark.column if isinstance(arg, IndexOpsMixin) else arg for arg in args]
             scol = f(self.spark.column, *args)
 
-            field = Field.from_struct_field(
+            field = InternalField.from_struct_field(
                 self._internal.spark_frame.select(scol).schema[0],
                 use_extension_dtypes=any(
                     isinstance(col.dtype, extension_dtypes) for col in [self] + cols
@@ -292,7 +292,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         pass
 
     @abstractmethod
-    def _with_new_scol(self, scol: spark.Column, *, field: Optional[Field] = None):
+    def _with_new_scol(self, scol: spark.Column, *, field: Optional[InternalField] = None):
         pass
 
     @property
@@ -941,7 +941,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         else:
             scol = self.spark.column.cast(spark_type)
         return self._with_new_scol(
-            scol.alias(self._internal.data_spark_column_names[0]), field=Field(dtype=dtype)
+            scol.alias(self._internal.data_spark_column_names[0]), field=InternalField(dtype=dtype)
         )
 
     def isin(self, values) -> Union["Series", "Index"]:

@@ -58,7 +58,7 @@ from pyspark.pandas.utils import (
     ERROR_MESSAGE_CANNOT_COMBINE,
 )
 from pyspark.pandas.internal import (
-    Field,
+    InternalField,
     InternalFrame,
     DEFAULT_SERIES_NAME,
     SPARK_DEFAULT_INDEX_NAME,
@@ -218,7 +218,9 @@ class Index(IndexOpsMixin):
     def _column_label(self) -> Optional[Tuple]:
         return self._psdf._internal.index_names[0]
 
-    def _with_new_scol(self, scol: spark.Column, *, field: Optional[Field] = None) -> "Index":
+    def _with_new_scol(
+        self, scol: spark.Column, *, field: Optional[InternalField] = None
+    ) -> "Index":
         """
         Copy pandas-on-Spark Index with the new Spark Column.
 

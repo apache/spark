@@ -33,7 +33,7 @@ import numpy as np
 
 from pyspark import pandas as ps  # noqa: F401
 from pyspark.pandas.internal import (
-    Field,
+    InternalField,
     InternalFrame,
     NATURAL_ORDER_COLUMN_NAME,
     SPARK_DEFAULT_SERIES_NAME,
@@ -278,7 +278,11 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
     def _select_cols(
         self, cols_sel: Any, missing_keys: Optional[List[Tuple]] = None
     ) -> Tuple[
-        List[Tuple], Optional[List[spark.Column]], Optional[List[Field]], bool, Optional[Tuple]
+        List[Tuple],
+        Optional[List[spark.Column]],
+        Optional[List[InternalField]],
+        bool,
+        Optional[Tuple],
     ]:
         """
         Dispatch the logic for select columns to more specific methods by `cols_sel` argument types.
@@ -366,7 +370,11 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
     def _select_cols_by_series(
         self, cols_sel: "Series", missing_keys: Optional[List[Tuple]]
     ) -> Tuple[
-        List[Tuple], Optional[List[spark.Column]], Optional[List[Field]], bool, Optional[Tuple]
+        List[Tuple],
+        Optional[List[spark.Column]],
+        Optional[List[InternalField]],
+        bool,
+        Optional[Tuple],
     ]:
         """ Select columns by `Series` type key. """
         pass
@@ -375,7 +383,11 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
     def _select_cols_by_spark_column(
         self, cols_sel: spark.Column, missing_keys: Optional[List[Tuple]]
     ) -> Tuple[
-        List[Tuple], Optional[List[spark.Column]], Optional[List[Field]], bool, Optional[Tuple]
+        List[Tuple],
+        Optional[List[spark.Column]],
+        Optional[List[InternalField]],
+        bool,
+        Optional[Tuple],
     ]:
         """ Select columns by Spark `Column` type key. """
         pass
@@ -384,7 +396,11 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
     def _select_cols_by_slice(
         self, cols_sel: slice, missing_keys: Optional[List[Tuple]]
     ) -> Tuple[
-        List[Tuple], Optional[List[spark.Column]], Optional[List[Field]], bool, Optional[Tuple]
+        List[Tuple],
+        Optional[List[spark.Column]],
+        Optional[List[InternalField]],
+        bool,
+        Optional[Tuple],
     ]:
         """ Select columns by `slice` type key. """
         pass
@@ -393,7 +409,11 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
     def _select_cols_by_iterable(
         self, cols_sel: Iterable, missing_keys: Optional[List[Tuple]]
     ) -> Tuple[
-        List[Tuple], Optional[List[spark.Column]], Optional[List[Field]], bool, Optional[Tuple]
+        List[Tuple],
+        Optional[List[spark.Column]],
+        Optional[List[InternalField]],
+        bool,
+        Optional[Tuple],
     ]:
         """ Select columns by `Iterable` type key. """
         pass
@@ -402,7 +422,11 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
     def _select_cols_else(
         self, cols_sel: Any, missing_keys: Optional[List[Tuple]]
     ) -> Tuple[
-        List[Tuple], Optional[List[spark.Column]], Optional[List[Field]], bool, Optional[Tuple]
+        List[Tuple],
+        Optional[List[spark.Column]],
+        Optional[List[InternalField]],
+        bool,
+        Optional[Tuple],
     ]:
         """ Select columns by other type key. """
         pass
@@ -709,7 +733,7 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
                 for scol in data_spark_columns:
                     if spark_column_equals(new_scol, scol):
                         new_scol = F.when(cond, value).otherwise(scol).alias(spark_column_name)
-                        new_field = Field.from_struct_field(
+                        new_field = InternalField.from_struct_field(
                             self._internal.spark_frame.select(new_scol).schema[0],
                             use_extension_dtypes=new_field.is_extension_dtype,
                         )
@@ -1135,8 +1159,10 @@ class LocIndexer(LocIndexerLike):
 
     def _get_from_multiindex_column(
         self, key, missing_keys, labels=None, recursed=0
-    ) -> Tuple[List[Tuple], Optional[List[spark.Column]], List[Field], bool, Optional[Tuple]]:
-        """ Select columns from multi-index columns. """
+    ) -> Tuple[
+        List[Tuple], Optional[List[spark.Column]], List[InternalField], bool, Optional[Tuple]
+    ]:
+        """Select columns from multi-index columns."""
         assert isinstance(key, tuple)
         if labels is None:
             labels = [(label, label) for label in self._internal.column_labels]
@@ -1185,7 +1211,11 @@ class LocIndexer(LocIndexerLike):
     def _select_cols_by_series(
         self, cols_sel: "Series", missing_keys: Optional[List[Tuple]]
     ) -> Tuple[
-        List[Tuple], Optional[List[spark.Column]], Optional[List[Field]], bool, Optional[Tuple]
+        List[Tuple],
+        Optional[List[spark.Column]],
+        Optional[List[InternalField]],
+        bool,
+        Optional[Tuple],
     ]:
         column_labels = cols_sel._internal.column_labels
         data_spark_columns = cols_sel._internal.data_spark_columns
@@ -1195,7 +1225,11 @@ class LocIndexer(LocIndexerLike):
     def _select_cols_by_spark_column(
         self, cols_sel: spark.Column, missing_keys: Optional[List[Tuple]]
     ) -> Tuple[
-        List[Tuple], Optional[List[spark.Column]], Optional[List[Field]], bool, Optional[Tuple]
+        List[Tuple],
+        Optional[List[spark.Column]],
+        Optional[List[InternalField]],
+        bool,
+        Optional[Tuple],
     ]:
         column_labels = [
             (self._internal.spark_frame.select(cols_sel).columns[0],)
@@ -1206,7 +1240,11 @@ class LocIndexer(LocIndexerLike):
     def _select_cols_by_slice(
         self, cols_sel: slice, missing_keys: Optional[List[Tuple]]
     ) -> Tuple[
-        List[Tuple], Optional[List[spark.Column]], Optional[List[Field]], bool, Optional[Tuple]
+        List[Tuple],
+        Optional[List[spark.Column]],
+        Optional[List[InternalField]],
+        bool,
+        Optional[Tuple],
     ]:
         start, stop = self._psdf_or_psser.columns.slice_locs(
             start=cols_sel.start, end=cols_sel.stop
@@ -1219,7 +1257,11 @@ class LocIndexer(LocIndexerLike):
     def _select_cols_by_iterable(
         self, cols_sel: Iterable, missing_keys: Optional[List[Tuple]]
     ) -> Tuple[
-        List[Tuple], Optional[List[spark.Column]], Optional[List[Field]], bool, Optional[Tuple]
+        List[Tuple],
+        Optional[List[spark.Column]],
+        Optional[List[InternalField]],
+        bool,
+        Optional[Tuple],
     ]:
         from pyspark.pandas.series import Series
 
@@ -1306,7 +1348,11 @@ class LocIndexer(LocIndexerLike):
     def _select_cols_else(
         self, cols_sel: Any, missing_keys: Optional[List[Tuple]]
     ) -> Tuple[
-        List[Tuple], Optional[List[spark.Column]], Optional[List[Field]], bool, Optional[Tuple]
+        List[Tuple],
+        Optional[List[spark.Column]],
+        Optional[List[InternalField]],
+        bool,
+        Optional[Tuple],
     ]:
         if not is_name_like_tuple(cols_sel):
             cols_sel = (cols_sel,)
@@ -1638,7 +1684,11 @@ class iLocIndexer(LocIndexerLike):
     def _select_cols_by_series(
         self, cols_sel: "Series", missing_keys: Optional[List[Tuple]]
     ) -> Tuple[
-        List[Tuple], Optional[List[spark.Column]], Optional[List[Field]], bool, Optional[Tuple]
+        List[Tuple],
+        Optional[List[spark.Column]],
+        Optional[List[InternalField]],
+        bool,
+        Optional[Tuple],
     ]:
         raise ValueError(
             "Location based indexing can only have [integer, integer slice, "
@@ -1648,7 +1698,11 @@ class iLocIndexer(LocIndexerLike):
     def _select_cols_by_spark_column(
         self, cols_sel: spark.Column, missing_keys: Optional[List[Tuple]]
     ) -> Tuple[
-        List[Tuple], Optional[List[spark.Column]], Optional[List[Field]], bool, Optional[Tuple]
+        List[Tuple],
+        Optional[List[spark.Column]],
+        Optional[List[InternalField]],
+        bool,
+        Optional[Tuple],
     ]:
         raise ValueError(
             "Location based indexing can only have [integer, integer slice, "
@@ -1658,7 +1712,11 @@ class iLocIndexer(LocIndexerLike):
     def _select_cols_by_slice(
         self, cols_sel: slice, missing_keys: Optional[List[Tuple]]
     ) -> Tuple[
-        List[Tuple], Optional[List[spark.Column]], Optional[List[Field]], bool, Optional[Tuple]
+        List[Tuple],
+        Optional[List[spark.Column]],
+        Optional[List[InternalField]],
+        bool,
+        Optional[Tuple],
     ]:
         if all(
             s is None or isinstance(s, int) for s in (cols_sel.start, cols_sel.stop, cols_sel.step)
@@ -1684,7 +1742,11 @@ class iLocIndexer(LocIndexerLike):
     def _select_cols_by_iterable(
         self, cols_sel: Iterable, missing_keys: Optional[List[Tuple]]
     ) -> Tuple[
-        List[Tuple], Optional[List[spark.Column]], Optional[List[Field]], bool, Optional[Tuple]
+        List[Tuple],
+        Optional[List[spark.Column]],
+        Optional[List[InternalField]],
+        bool,
+        Optional[Tuple],
     ]:
         if all(isinstance(s, bool) for s in cols_sel):
             cols_sel = [i for i, s in enumerate(cols_sel) if s]
@@ -1699,7 +1761,11 @@ class iLocIndexer(LocIndexerLike):
     def _select_cols_else(
         self, cols_sel: Any, missing_keys: Optional[List[Tuple]]
     ) -> Tuple[
-        List[Tuple], Optional[List[spark.Column]], Optional[List[Field]], bool, Optional[Tuple]
+        List[Tuple],
+        Optional[List[spark.Column]],
+        Optional[List[InternalField]],
+        bool,
+        Optional[Tuple],
     ]:
         if isinstance(cols_sel, int):
             if cols_sel > len(self._internal.column_labels):

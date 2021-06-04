@@ -120,7 +120,7 @@ def combine_frames(
     from pyspark.pandas.config import get_option
     from pyspark.pandas.frame import DataFrame
     from pyspark.pandas.internal import (
-        Field,
+        InternalField,
         InternalFrame,
         HIDDEN_COLUMNS,
         NATURAL_ORDER_COLUMN_NAME,
@@ -260,13 +260,15 @@ def combine_frames(
         schema = joined_df.select(*index_spark_columns, *new_data_columns).schema
 
         index_fields = [
-            Field.from_struct_field(struct_field, use_extension_dtypes=use_extension_dtypes)
+            InternalField.from_struct_field(struct_field, use_extension_dtypes=use_extension_dtypes)
             for struct_field, use_extension_dtypes in zip(
                 schema.fields[: len(index_spark_columns)], index_use_extension_dtypes
             )
         ]
         data_fields = [
-            Field.from_struct_field(struct_field, use_extension_dtypes=field.is_extension_dtype)
+            InternalField.from_struct_field(
+                struct_field, use_extension_dtypes=field.is_extension_dtype
+            )
             for struct_field, field in zip(
                 schema.fields[len(index_spark_columns):],
                 this_internal.data_fields + that_internal.data_fields,

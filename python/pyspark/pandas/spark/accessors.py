@@ -26,7 +26,7 @@ from pyspark import StorageLevel
 from pyspark.sql import Column, DataFrame as SparkDataFrame
 from pyspark.sql.types import DataType, StructType
 
-from pyspark.pandas.internal import Field
+from pyspark.pandas.internal import InternalField
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import OptionalPrimitiveType  # noqa: F401 (SPARK-34943)
@@ -124,7 +124,7 @@ class SparkIndexOpsMethods(metaclass=ABCMeta):
         # Trigger the resolution so it throws an exception if anything does wrong
         # within the function, for example,
         # `df1.a.spark.transform(lambda _: F.col("non-existent"))`.
-        field = Field.from_struct_field(
+        field = InternalField.from_struct_field(
             self._data._internal.spark_frame.select(output).schema.fields[0]
         )
         return cast(

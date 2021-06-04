@@ -42,7 +42,7 @@ from pyspark.pandas.utils import (
     verify_temp_column_name,
 )
 from pyspark.pandas.internal import (
-    Field,
+    InternalField,
     InternalFrame,
     NATURAL_ORDER_COLUMN_NAME,
     SPARK_INDEX_NAME_FORMAT,
@@ -152,7 +152,7 @@ class MultiIndex(Index):
     def __abs__(self) -> Index:
         raise TypeError("TypeError: cannot perform __abs__ with this index type: MultiIndex")
 
-    def _with_new_scol(self, scol: spark.Column, *, field: Optional[Field] = None) -> Index:
+    def _with_new_scol(self, scol: spark.Column, *, field: Optional[InternalField] = None) -> Index:
         raise NotImplementedError("Not supported for type MultiIndex")
 
     @no_type_check

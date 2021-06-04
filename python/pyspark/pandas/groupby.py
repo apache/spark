@@ -48,7 +48,7 @@ from pyspark import pandas as ps  # For running doctests and reference resolutio
 from pyspark.pandas.typedef import infer_return_type, DataFrameType, ScalarType, SeriesType
 from pyspark.pandas.frame import DataFrame
 from pyspark.pandas.internal import (
-    Field,
+    InternalField,
     InternalFrame,
     HIDDEN_COLUMNS,
     NATURAL_ORDER_COLUMN_NAME,
@@ -1195,11 +1195,13 @@ class GroupBy(object, metaclass=ABCMeta):
                 spark_type = cast(Union[SeriesType, ScalarType], return_type).spark_type
                 if is_series_groupby:
                     data_fields = [
-                        Field(dtype=dtype, struct_field=StructField(name=name, dataType=spark_type))
+                        InternalField(
+                            dtype=dtype, struct_field=StructField(name=name, dataType=spark_type)
+                        )
                     ]
                 else:
                     data_fields = [
-                        Field(
+                        InternalField(
                             dtype=dtype,
                             struct_field=StructField(
                                 name=SPARK_DEFAULT_SERIES_NAME, dataType=spark_type
@@ -2190,7 +2192,7 @@ class GroupBy(object, metaclass=ABCMeta):
             spark_type = cast(SeriesType, return_type).spark_type
 
             data_fields = [
-                Field(dtype=dtype, struct_field=StructField(name=c, dataType=spark_type))
+                InternalField(dtype=dtype, struct_field=StructField(name=c, dataType=spark_type))
                 for c in psdf._internal.data_spark_column_names
                 if c not in groupkey_names
             ]
