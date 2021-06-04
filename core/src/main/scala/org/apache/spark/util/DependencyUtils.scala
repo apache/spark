@@ -27,7 +27,7 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.deploy.SparkSubmitUtils
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config
+import org.apache.spark.internal.config._
 
 case class IvyProperties(
     packagesExclusions: String,
@@ -40,11 +40,11 @@ private[spark] object DependencyUtils extends Logging {
 
   def getIvyProperties(): IvyProperties = {
     val Seq(packagesExclusions, packages, repositories, ivyRepoPath, ivySettingsPath) = Seq(
-      config.JAR_PACKAGES_EXCLUSIONS.key,
-      config.JAR_PACKAGES.key,
-      config.JAR_REPOSITORIES.key,
-      config.JAR_IVY_REPO_PATH.key,
-      config.JAR_IVY_SETTING_PATH.key
+      JAR_PACKAGES_EXCLUSIONS.key,
+      JAR_PACKAGES.key,
+      JAR_REPOSITORIES.key,
+      JAR_IVY_REPO_PATH.key,
+      JAR_IVY_SETTING_PATH.key
     ).map(sys.props.get(_).orNull)
     IvyProperties(packagesExclusions, packages, repositories, ivyRepoPath, ivySettingsPath)
   }
