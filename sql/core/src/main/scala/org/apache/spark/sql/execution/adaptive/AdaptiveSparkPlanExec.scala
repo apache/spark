@@ -608,8 +608,9 @@ case class AdaptiveSparkPlanExec(
    */
   private def cleanupStats(logicalPlan: LogicalPlan): Unit = {
     logicalPlan.invalidateStatsCache()
-    // We must invalidate ineffective rules before re-optimize since AQE Optimizer may introduce
-    // LocalRelation that can affect result.
+    // Some AQE Optimizer rules only match the materialized logical plan and the materialized
+    // flag of logical plan will be changed during running so we cann't promise whether a rule
+    // is ineffective or not before plan materialized.
     logicalPlan.transform { case p =>
       p.invalidateIneffectiveRules()
       p
