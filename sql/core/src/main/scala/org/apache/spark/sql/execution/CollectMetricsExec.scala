@@ -16,6 +16,8 @@
  */
 package org.apache.spark.sql.execution
 
+import scala.collection.mutable
+
 import org.apache.spark.TaskContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.Row
@@ -60,6 +62,7 @@ case class CollectMetricsExec(
   override protected def doExecute(): RDD[InternalRow] = {
     val collector = accumulator
     collector.reset()
+    val updaterMap = mutable.Map[Long, AggregatingAccumulator]()
     child.execute().mapPartitions { rows =>
       // Only publish the value of the accumulator when the task has completed. This is done by
       // updating a task local accumulator ('updater') which will be merged with the actual
@@ -67,9 +70,14 @@ case class CollectMetricsExec(
       // heartbeat:
       // - Correctness issues due to partially completed/visible updates.
       // - Performance issues due to excessive serialization.
-      val updater = collector.copyAndReset()
-      TaskContext.get().addTaskCompletionListener[Unit] { _ =>
-        collector.setState(updater)
+      val taskCtx = TaskContext.get()
+      val attemptId = taskCtx.taskAttemptId()
+      val exists = updaterMap.contains(attemptId)
+      val updater = updaterMap.getOrElseUpdate(attemptId, collector.copyAndReset())
+      if (!exists) {
+        taskCtx.addTaskCompletionListener[Unit] { _ =>
+          collector.setState(updater)
+        }
       }
 
       rows.map { r =>
