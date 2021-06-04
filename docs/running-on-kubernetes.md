@@ -107,10 +107,10 @@ language binding docker images.
 Example usage is
 ```bash
 # To build additional PySpark docker image
-$ ./bin/docker-image-tool.sh -r <repo> -t my-tag -p ./kubernetes/dockerfiles/spark/bindings/python/Dockerfile build
+$ ./bin/docker-image-tool.sh -r <repo> -t my-tag -p ./resource-managers/kubernetes/docker/src/main/dockerfiles/spark/bindings/python/Dockerfile build
 
 # To build additional SparkR docker image
-$ ./bin/docker-image-tool.sh -r <repo> -t my-tag -R ./kubernetes/dockerfiles/spark/bindings/R/Dockerfile build
+$ ./bin/docker-image-tool.sh -r <repo> -t my-tag -R ./resource-managers/kubernetes/docker/src/main/dockerfiles/spark/bindings/R/Dockerfile build
 ```
 
 ## Cluster Mode
