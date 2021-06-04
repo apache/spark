@@ -188,7 +188,7 @@ Data source options of CSV can be set via:
   </tr>
   <tr>
     <td><code>columnNameOfCorruptRecord</code></td>
-    <td>The value specified in <code>spark.sql.columnNameOfCorruptRecord</code></td>
+    <td>(value of <code>spark.sql.columnNameOfCorruptRecord</code> configuration)</td>
     <td>Allows renaming the new field having malformed string created by <code>PERMISSIVE</code> mode. This overrides <code>spark.sql.columnNameOfCorruptRecord</code>.</td>
     <td>read</td>
   </tr>
