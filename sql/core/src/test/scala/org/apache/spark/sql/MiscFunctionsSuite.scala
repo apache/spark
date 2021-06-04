@@ -18,6 +18,8 @@
 package org.apache.spark.sql
 
 import org.apache.spark.{SPARK_REVISION, SPARK_VERSION_SHORT}
+import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
 class MiscFunctionsSuite extends QueryTest with SharedSparkSession {
@@ -42,8 +44,17 @@ class MiscFunctionsSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-21957: get current_user in normal spark apps") {
-    val df = sql("select current_user()")
-    checkAnswer(df, Row(spark.sparkContext.sparkUser))
+    val user = spark.sparkContext.sparkUser
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+      val df = sql("select current_user(), current_user")
+      checkAnswer(df, Row(user, user))
+    }
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      val df = sql("select current_user")
+      checkAnswer(df, Row(spark.sparkContext.sparkUser))
+      val e = intercept[ParseException](sql("select current_user()"))
+      assert(e.getMessage.contains("current_user"))
+    }
   }
 }
 
