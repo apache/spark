@@ -17,7 +17,7 @@
 
 import numbers
 from abc import ABCMeta
-from typing import Any, TYPE_CHECKING, Union
+from typing import Any, Optional, TYPE_CHECKING, Union
 
 import numpy as np
 import pandas as pd
@@ -52,33 +52,42 @@ if TYPE_CHECKING:
     from pyspark.pandas.series import Series  # noqa: F401 (SPARK-34943)
 
 
-def is_valid_operand_for_numeric_arithmetic(operand: Any, *, allow_bool: bool = True) -> bool:
-    """Check whether the operand is valid for arithmetic operations against numerics."""
+def is_valid_operand_for_numeric_arithmetic(
+    operand: Any, *, allow_bool_index_ops: bool = True
+) -> bool:
+    """Check whether the `operand` is valid for arithmetic operations against numerics."""
     from pyspark.pandas.base import IndexOpsMixin
 
-    if isinstance(operand, numbers.Number) and not isinstance(operand, bool):
+    if isinstance(operand, numbers.Number):
         return True
     elif isinstance(operand, IndexOpsMixin):
         if isinstance(operand.dtype, CategoricalDtype):
             return False
         else:
             return isinstance(operand.spark.data_type, NumericType) or (
-                allow_bool and isinstance(operand.spark.data_type, BooleanType)
+                allow_bool_index_ops and isinstance(operand.spark.data_type, BooleanType)
             )
     else:
         return False
 
 
-def transform_boolean_operand_to_numeric(operand: Any, spark_type: types.DataType) -> Any:
-    """Transform boolean operand to the given numeric spark_type.
+def transform_boolean_operand_to_numeric(
+    operand: Any, spark_type: Optional[types.DataType] = None
+) -> Any:
+    """Transform boolean operand to numeric.
 
-    Return the transformed operand if the operand is a boolean IndexOpsMixin,
-    otherwise return the original operand.
+    If the `operand` is:
+        - a boolean IndexOpsMixin, transform the `operand` to the `spark_type`.
+        - a boolean literal, transform to the int value.
+    Otherwise, return the operand as it is.
     """
     from pyspark.pandas.base import IndexOpsMixin
 
     if isinstance(operand, IndexOpsMixin) and isinstance(operand.spark.data_type, BooleanType):
+        assert spark_type, "spark_type must be provided if the operand is a boolean IndexOpsMixin"
         return operand.spark.transform(lambda scol: scol.cast(spark_type))
+    elif isinstance(operand, bool):
+        return int(operand)
     else:
         return operand
 
