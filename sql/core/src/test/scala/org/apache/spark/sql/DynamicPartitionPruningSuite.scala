@@ -1519,12 +1519,7 @@ abstract class DynamicPartitionPruningSuiteBase
         |WHERE s.country = 'DE' AND s.rn = 1
         |""".stripMargin)
 
-    checkAnswer(df,
-      Row(3, 2) ::
-      Row(3, 2) ::
-      Row(3, 2) ::
-      Row(3, 2) :: Nil
-    )
+    checkAnswer(df, Row(3, 2) :: Row(3, 2) :: Row(3, 2) :: Row(3, 2) :: Nil)
   }
 }
 
