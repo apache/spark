@@ -6,3 +6,4 @@ pydata_sphinx_theme
 ipython
 nbsphinx
 numpydoc
+black==19.10b0
