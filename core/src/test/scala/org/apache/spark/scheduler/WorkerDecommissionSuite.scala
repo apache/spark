@@ -86,7 +86,7 @@ class WorkerDecommissionSuite extends SparkFunSuite with LocalSparkContext {
     assert(asyncCountResult === 10)
   }
 
-  test("Verify executors are decommissioned in batches") {
+  test("SPARK-35627: Verify executors are decommissioned in batches") {
     val input = sc.parallelize(1 to 10)
     input.count()
     val sleepyRdd = input.mapPartitions{ x =>
