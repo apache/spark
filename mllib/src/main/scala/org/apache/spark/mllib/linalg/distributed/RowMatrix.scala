@@ -14,7 +14,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.spark.mllib.linalg.distributed
 
 import java.util.Arrays
@@ -439,13 +438,25 @@ class RowMatrix @Since("1.0.0") (
       "  Cannot compute the covariance of a RowMatrix with <= 1 row.")
     val mean = Vectors.fromML(summary.mean)
 
-    if (rows.first().isInstanceOf[DenseVector]) {
+    val sparsityThreshold = 0.5
+    val sparsity = calcSparsity()
+
+    if (sparsity<sparsityThreshold) {
       computeDenseVectorCovariance(mean, n, m)
     } else {
       computeSparseVectorCovariance(mean, n, m)
     }
   }
 
+  /**
+   * Calculate percent sparsity of the matrix as number-of-zero-elements
+   * divided by the total number of elements of the matrix
+   */
+  @Since("3.2.0")
+  def calcSparsity(): Double = rows.map{
+    v => (v.size - v.numNonzeros)
+  }.aggregate(0)((u1, u2) => u1 + u2, (u1, u2) => u1 + u2)/
+    (numRows() * numCols()).toDouble
 
 
   /**
