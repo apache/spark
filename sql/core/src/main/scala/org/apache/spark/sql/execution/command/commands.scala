@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan}
 import org.apache.spark.sql.catalyst.trees.LeafLike
 import org.apache.spark.sql.connector.ExternalCommandRunner
-import org.apache.spark.sql.execution._
+import org.apache.spark.sql.execution.{CommandExecutionMode, ExplainMode, LeafExecNode, SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.streaming.IncrementalExecution
 import org.apache.spark.sql.types._
