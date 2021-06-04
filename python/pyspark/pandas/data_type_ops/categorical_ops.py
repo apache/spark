@@ -15,7 +15,6 @@
 # limitations under the License.
 #
 
-import numpy as np
 import pandas as pd
 
 from pyspark.pandas.data_type_ops.base import DataTypeOps
