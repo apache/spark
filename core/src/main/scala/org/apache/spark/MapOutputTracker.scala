@@ -151,7 +151,6 @@ private class ShuffleStatus(
       _numAvailableMapOutputs += 1
       invalidateSerializedMapOutputStatusCache()
     }
-    mapStatusesDeleted(mapIndex) = mapStatuses(mapIndex)
     mapStatuses(mapIndex) = status
   }
 

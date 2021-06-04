@@ -71,7 +71,6 @@ object KubernetesLocalDiskShuffleExecutorComponents extends Logging {
       .filter(_ != null)
       .map(s => new File(new File(new File(s).getParent).getParent))
       .flatMap { dir =>
-        logError(dir.toString)
         val oldDirs = dir.listFiles().filter { f =>
           f.isDirectory && f.getName.startsWith("spark-")
         }
@@ -91,7 +90,6 @@ object KubernetesLocalDiskShuffleExecutorComponents extends Logging {
     val (indexFiles, dataFiles) = files.partition(_.getName.endsWith(".index"))
     (dataFiles ++ indexFiles).foreach { f =>
       try {
-        logError(f.getName)
         val id = BlockId(f.getName)
         val decryptedSize = f.length()
         bm.TempFileBasedBlockStoreUpdater(id, level, classTag, f, decryptedSize).save()
