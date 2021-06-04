@@ -20,6 +20,7 @@ from abc import ABCMeta
 from typing import Any, TYPE_CHECKING, Union
 
 import numpy as np
+import pandas as pd
 from pandas.api.types import CategoricalDtype
 
 from pyspark.sql.types import (
