@@ -163,6 +163,8 @@ jobs:
             pyspark-core, pyspark-streaming, pyspark-ml
           - >-
             pyspark-pandas
+          - >-
+            pyspark-pandas-slow
     env:
       MODULES_TO_TEST: ${{ matrix.modules }}
       HADOOP_PROFILE: hadoop3.2
