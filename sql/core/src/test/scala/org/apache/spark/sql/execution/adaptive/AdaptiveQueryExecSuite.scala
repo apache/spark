@@ -1782,4 +1782,36 @@ class AdaptiveQueryExecSuite
       }
     }
   }
+
+  test("Coalesce number of partitions to 1") {
+    val df = spark.table("testData").coalesceOutputFiles()
+    df.collect()
+
+    collect(df.queryExecution.executedPlan) {
+      case r: CustomShuffleReaderExec => r
+    } match {
+      case Seq(customShuffleReader) =>
+        assert(customShuffleReader.partitionSpecs.size === 1)
+        assert(!customShuffleReader.isLocalReader)
+      case _ =>
+        fail("There should be a CustomShuffleReaderExec")
+    }
+  }
+
+  test("Can not coalesce number of partitions. Use local shuffle reader") {
+    withSQLConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "2") {
+      val df = spark.table("testData").coalesceOutputFiles()
+      df.collect()
+
+      collect(df.queryExecution.executedPlan) {
+        case r: CustomShuffleReaderExec => r
+      } match {
+        case Seq(customShuffleReader) =>
+          assert(customShuffleReader.partitionSpecs.size === 4)
+          assert(customShuffleReader.isLocalReader)
+        case _ =>
+          fail("There should be a CustomShuffleReaderExec")
+      }
+    }
+  }
 }

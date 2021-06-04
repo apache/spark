@@ -1352,6 +1352,44 @@ object RepartitionByExpression {
 }
 
 /**
+ * TODO
+ */
+case class CoalesceOutputFilesExpression(
+    partitionExpressions: Seq[Expression],
+    child: LogicalPlan) extends RepartitionOperation {
+
+  override val numPartitions = conf.numShufflePartitions
+
+  override val partitioning: Partitioning = {
+    val (sortOrder, nonSortOrder) = partitionExpressions.partition(_.isInstanceOf[SortOrder])
+
+    require(sortOrder.isEmpty || nonSortOrder.isEmpty,
+      s"${getClass.getSimpleName} expects that either all its `partitionExpressions` are of type " +
+        "`SortOrder`, which means `RangePartitioning`, or none of them are `SortOrder`, which " +
+        "means `HashPartitioning`. In this case we have:" +
+        s"""
+           |SortOrder: $sortOrder
+           |NonSortOrder: $nonSortOrder
+       """.stripMargin)
+
+    if (numPartitions == 1) {
+      SinglePartition
+    } else if (sortOrder.nonEmpty) {
+      RangePartitioning(sortOrder.map(_.asInstanceOf[SortOrder]), numPartitions)
+    } else if (nonSortOrder.nonEmpty) {
+      HashPartitioning(nonSortOrder, numPartitions)
+    } else {
+      RoundRobinPartitioning(numPartitions)
+    }
+  }
+
+  override def shuffle: Boolean = true
+
+  override protected def withNewChildInternal(
+    newChild: LogicalPlan): CoalesceOutputFilesExpression = copy(child = newChild)
+}
+
+/**
  * A relation with one row. This is used in "SELECT ..." without a from clause.
  */
 case class OneRowRelation() extends LeafNode {

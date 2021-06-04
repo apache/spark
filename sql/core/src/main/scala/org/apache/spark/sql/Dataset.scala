@@ -3159,6 +3159,16 @@ class Dataset[T] private[sql](
   }
 
   /**
+   * // TODO move it to DataFrameWriter?
+   *
+   * @group typedrel
+   * @since 3.2.0
+   */
+  def coalesceOutputFiles(partitionExprs: Column*): Dataset[T] = withTypedPlan {
+    CoalesceOutputFilesExpression(partitionExprs.map(_.expr), logicalPlan)
+  }
+
+  /**
    * Returns a new Dataset that contains only the unique rows from this Dataset.
    * This is an alias for `dropDuplicates`.
    *
