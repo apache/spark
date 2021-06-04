@@ -1,8 +1,34 @@
-flake8==3.5.0
-jira==2.0.0
-PyGithub==1.26.0
-sphinx
+# PySpark dependencies (required)
+py4j
+
+# PySpark dependencies (optional)
+numpy
+pyarrow
+pandas
+scipy
+plotly
+mlflow
+matplotlib<3.3.0
+
+# PySpark test dependencies
+xmlrunner
+
+# Linter
+mypy
+flake8
+
+# Documentation (SQL)
+mkdocs
+
+# Documentation (Python)
 pydata_sphinx_theme
 ipython
 nbsphinx
 numpydoc
+jinja2<3.0.0
+sphinx<3.1.0
+sphinx-plotly-directive
+
+# Development scripts
+jira
+PyGithub

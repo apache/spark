@@ -733,18 +733,10 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * Don't create too many partitions in parallel on a large cluster; otherwise Spark might crash
    * your external database systems.
    *
-   * You can set the following JDBC-specific option(s) for storing JDBC:
-   * <ul>
-   * <li>`truncate` (default `false`): use `TRUNCATE TABLE` instead of `DROP TABLE`.</li>
-   * </ul>
+   * JDBC-specific option and parameter documentation for storing tables via JDBC in
+   * <a href="https://spark.apache.org/docs/latest/sql-data-sources-jdbc.html#data-source-option">
+   *   Data Source Option</a> in the version you use.
    *
-   * In case of failures, users should turn off `truncate` option to use `DROP TABLE` again. Also,
-   * due to the different behavior of `TRUNCATE TABLE` among DBMS, it's not always safe to use this.
-   * MySQLDialect, DB2Dialect, MsSqlServerDialect, DerbyDialect, and OracleDialect supports this
-   * while PostgresDialect and default JDBCDirect doesn't. For unknown and unsupported JDBCDirect,
-   * the user option `truncate` is ignored.
-   *
-   * @param url JDBC database url of the form `jdbc:subprotocol:subname`
    * @param table Name of the table in the external database.
    * @param connectionProperties JDBC database connection arguments, a list of arbitrary string
    *                             tag/value. Normally at least a "user" and "password" property

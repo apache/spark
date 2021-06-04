@@ -26,6 +26,7 @@ import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
 import scala.io.Source
 
 import org.eclipse.jetty.servlet.{ServletContextHandler, ServletHolder}
+import org.eclipse.jetty.util.thread.QueuedThreadPool
 import org.mockito.Mockito.{mock, when}
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.time.SpanSugar._
@@ -403,6 +404,23 @@ class UISuite extends SparkFunSuite {
       assert(TestUtils.httpResponseCode(new URL(urlStr)) === HttpServletResponse.SC_OK)
     } finally {
       stopServer(serverInfo)
+    }
+  }
+
+  test("SPARK-34449: default thread pool size of different jetty servers") {
+    val (conf, _, sslOptions) = sslDisabledConf()
+
+    Seq(10, 200, 500, 1000).foreach { poolSize =>
+      val serverInfo = JettyUtils.startJettyServer("0.0.0.0", 0, sslOptions, conf, "", poolSize)
+      try {
+
+        val pool = serverInfo.server.getThreadPool.asInstanceOf[QueuedThreadPool]
+        val leasedThreads = pool.getThreadPoolBudget.getLeasedThreads
+        assert(pool.getMaxThreads === math.max(leasedThreads + 1, poolSize),
+          "we shall meet the basic requirement for jetty to be responsive")
+      } finally {
+        stopServer(serverInfo)
+      }
     }
   }
 

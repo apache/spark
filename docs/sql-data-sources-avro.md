@@ -285,7 +285,7 @@ Data source options of Avro can be set via:
   </tr>
   <tr>
     <td><code>datetimeRebaseMode</code></td>
-    <td>The SQL config <code>spark.sql.avro</code> <code>.datetimeRebaseModeInRead</code> which is <code>EXCEPTION</code> by default</td>
+    <td>(value of <code>spark.sql.avro.datetimeRebaseModeInRead</code> configuration)</td>
     <td>The <code>datetimeRebaseMode</code> option allows to specify the rebasing mode for the values of the <code>date</code>, <code>timestamp-micros</code>, <code>timestamp-millis</code> logical types from the Julian to Proleptic Gregorian calendar.<br>
       Currently supported modes are:
       <ul>

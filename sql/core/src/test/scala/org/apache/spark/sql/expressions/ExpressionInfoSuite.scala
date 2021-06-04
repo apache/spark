@@ -190,7 +190,8 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
       "org.apache.spark.sql.catalyst.expressions.CallMethodViaReflection",
       "org.apache.spark.sql.catalyst.expressions.SparkVersion",
       // Throws an error
-      "org.apache.spark.sql.catalyst.expressions.RaiseError")
+      "org.apache.spark.sql.catalyst.expressions.RaiseError",
+      classOf[CurrentUser].getName)
 
     val parFuncs = new ParVector(spark.sessionState.functionRegistry.listFunction().toVector)
     parFuncs.foreach { funcId =>

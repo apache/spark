@@ -300,6 +300,17 @@ private[spark] object Config extends Logging {
       .checkValue(value => value > 0, "Allocation batch delay must be a positive time value.")
       .createWithDefaultString("1s")
 
+  val KUBERNETES_ALLOCATION_DRIVER_READINESS_TIMEOUT =
+    ConfigBuilder("spark.kubernetes.allocation.driver.readinessTimeout")
+      .doc("Time to wait for driver pod to get ready before creating executor pods. This wait " +
+        "only happens on application start. If timeout happens, executor pods will still be " +
+        "created.")
+      .version("3.1.3")
+      .timeConf(TimeUnit.SECONDS)
+      .checkValue(value => value > 0, "Allocation driver readiness timeout must be a positive "
+        + "time value.")
+      .createWithDefaultString("1s")
+
   val KUBERNETES_ALLOCATION_EXECUTOR_TIMEOUT =
     ConfigBuilder("spark.kubernetes.allocation.executor.timeout")
       .doc("Time to wait before a newly created executor POD request, which does not reached " +

@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.planning.ExtractFiltersAndInnerJoins
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
-import org.apache.spark.sql.catalyst.trees.TreePattern.{INNER_LIKE_JOIN, OUTER_JOIN}
+import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 
@@ -132,7 +132,7 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
  *
  * This rule should be executed before pushing down the Filter
  */
-object EliminateOuterJoin extends Rule[LogicalPlan] with PredicateHelper with JoinSelectionHelper {
+object EliminateOuterJoin extends Rule[LogicalPlan] with PredicateHelper {
 
   /**
    * Returns whether the expression returns null or false when all inputs are nulls.
@@ -171,21 +171,17 @@ object EliminateOuterJoin extends Rule[LogicalPlan] with PredicateHelper with Jo
       val newJoinType = buildNewJoinType(f, j)
       if (j.joinType == newJoinType) f else Filter(condition, j.copy(joinType = newJoinType))
 
-    case a @ Aggregate(_, _, join @ Join(left, _, LeftOuter, _, _))
-        if a.isDistinct && a.references.subsetOf(AttributeSet(left.output)) &&
-          !canPlanAsBroadcastHashJoin(join, conf) =>
+    case a @ Aggregate(_, _, Join(left, _, LeftOuter, _, _))
+        if a.groupOnly && a.references.subsetOf(AttributeSet(left.output)) =>
       a.copy(child = left)
-    case a @ Aggregate(_, _, join @ Join(_, right, RightOuter, _, _))
-        if a.isDistinct && a.references.subsetOf(AttributeSet(right.output)) &&
-          !canPlanAsBroadcastHashJoin(join, conf) =>
+    case a @ Aggregate(_, _, Join(_, right, RightOuter, _, _))
+        if a.groupOnly && a.references.subsetOf(AttributeSet(right.output)) =>
       a.copy(child = right)
-    case a @ Aggregate(_, _, p @ Project(_, join @ Join(left, _, LeftOuter, _, _)))
-        if a.isDistinct && a.references.subsetOf(AttributeSet(left.output)) &&
-          !canPlanAsBroadcastHashJoin(join, conf) =>
+    case a @ Aggregate(_, _, p @ Project(_, Join(left, _, LeftOuter, _, _)))
+        if a.groupOnly && a.references.subsetOf(AttributeSet(left.output)) =>
       a.copy(child = p.copy(child = left))
-    case a @ Aggregate(_, _, p @ Project(_, join @ Join(_, right, RightOuter, _, _)))
-        if a.isDistinct && a.references.subsetOf(AttributeSet(right.output)) &&
-          !canPlanAsBroadcastHashJoin(join, conf) =>
+    case a @ Aggregate(_, _, p @ Project(_, Join(_, right, RightOuter, _, _)))
+        if a.groupOnly && a.references.subsetOf(AttributeSet(right.output)) =>
       a.copy(child = p.copy(child = right))
   }
 }
@@ -203,7 +199,8 @@ object ExtractPythonUDFFromJoinCondition extends Rule[LogicalPlan] with Predicat
     }.isDefined
   }
 
-  override def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithPruning(
+    _.containsAllPatterns(PYTHON_UDF, JOIN)) {
     case j @ Join(_, _, joinType, Some(cond), _) if hasUnevaluablePythonUDF(cond, j) =>
       if (!joinType.isInstanceOf[InnerLike]) {
         // The current strategy supports only InnerLike join because for other types,
