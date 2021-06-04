@@ -55,8 +55,8 @@ object AQEPropagateEmptyRelation extends PropagateEmptyRelationBase {
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithPruning(
-    // LOCAL_RELATION and TRUE_OR_FALSE_LITERAL pattern matched at `PropagateEmptyRelationBase`
-    // LOGICAL_QUERY_STAGE pattern matched at `AQEPropagateEmptyRelation`
+    // LOCAL_RELATION and TRUE_OR_FALSE_LITERAL pattern are matched at `PropagateEmptyRelationBase`
+    // LOGICAL_QUERY_STAGE pattern is matched at `AQEPropagateEmptyRelation`
     _.containsAnyPattern(LOGICAL_QUERY_STAGE, LOCAL_RELATION, TRUE_OR_FALSE_LITERAL), ruleId) {
     eliminateSingleColumnNullAwareAntiJoin.orElse(commonApplyFunc)
   }
