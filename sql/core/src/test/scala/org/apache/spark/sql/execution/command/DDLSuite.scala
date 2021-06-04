@@ -2580,14 +2580,6 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       assert(spark.sessionState.catalog.isRegisteredFunction(rand))
     }
   }
-
-  test("SPARK-35629: Drop database should check if exists") {
-    val msg = intercept[NoSuchDatabaseException] {
-      sql("DROP DATABASE SPARK_35629")
-    }.getMessage
-    assert(msg.contains("Database 'spark_35629' not found"))
-    sql("DROP DATABASE IF EXISTS SPARK_35629")
-  }
 }
 
 object FakeLocalFsFileSystem {
