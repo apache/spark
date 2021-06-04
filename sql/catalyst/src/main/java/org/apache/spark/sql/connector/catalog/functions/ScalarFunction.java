@@ -120,8 +120,6 @@ import org.apache.spark.sql.types.DataType;
  *   <li>{@link org.apache.spark.sql.types.DateType}: {@code int}</li>
  *   <li>{@link org.apache.spark.sql.types.TimestampType}: {@code long}</li>
  *   <li>{@link org.apache.spark.sql.types.BinaryType}: {@code byte[]}</li>
- *   <li>{@link org.apache.spark.sql.types.CalendarIntervalType}:
- *       {@link org.apache.spark.unsafe.types.CalendarInterval}</li>
  *   <li>{@link org.apache.spark.sql.types.DayTimeIntervalType}: {@code long}</li>
  *   <li>{@link org.apache.spark.sql.types.YearMonthIntervalType}: {@code int}</li>
  *   <li>{@link org.apache.spark.sql.types.DecimalType}:

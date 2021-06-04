@@ -351,16 +351,16 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
       addFunction(Identifier.of(Array("ns"), "avg"), UnboundDecimalAverage)
 
       (1 to 100).toDF().write.saveAsTable("testcat.ns.t1")
-      checkAnswer(sql(s"SELECT testcat.ns.avg(value) from testcat.ns.t1"),
+      checkAnswer(sql("SELECT testcat.ns.avg(value) from testcat.ns.t1"),
         Row(BigDecimal(50.5)) :: Nil)
 
       (1 to 100).map(BigDecimal(_)).toDF().write.saveAsTable("testcat.ns.t2")
-      checkAnswer(sql(s"SELECT testcat.ns.avg(value) from testcat.ns.t2"),
+      checkAnswer(sql("SELECT testcat.ns.avg(value) from testcat.ns.t2"),
         Row(BigDecimal(50.5)) :: Nil)
 
       // can't cast interval to decimal
-      assert(intercept[AnalysisException](sql(s"SELECT testcat.ns.avg(*) from values" +
-          s" (date '2021-06-01' - date '2011-06-01'), (date '2000-01-01' - date '1900-01-01')"))
+      assert(intercept[AnalysisException](sql("SELECT testcat.ns.avg(*) from values" +
+          " (date '2021-06-01' - date '2011-06-01'), (date '2000-01-01' - date '1900-01-01')"))
           .getMessage.contains("cannot cast"))
     }
   }
@@ -527,7 +527,7 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
   }
 
   object UnboundDecimalAverage extends UnboundFunction {
-    override def name(): String = "favg"
+    override def name(): String = "decimal_avg"
 
     override def bind(inputType: StructType): BoundFunction = {
       if (inputType.fields.length > 1) {
@@ -543,19 +543,13 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
     }
 
     override def description(): String =
-      """iavg: produces an average using decimal division, ignoring nulls
-        |  iavg(integral) -> decimal
-        |  iavg(float) -> decimal
-        |  iavg(decimal) -> decimal""".stripMargin
+      "decimal_avg: produces an average using decimal division"
   }
 
   object DecimalAverage extends AggregateFunction[(Decimal, Int), Decimal] {
-    val PRECISION: Int = 15
-    val SCALE: Int = 5
-
-    override def name(): String = "davg"
-    override def inputTypes(): Array[DataType] = Array(DecimalType(PRECISION, SCALE))
-    override def resultType(): DataType = DecimalType(PRECISION, SCALE)
+    override def name(): String = "decimal_avg"
+    override def inputTypes(): Array[DataType] = Array(DecimalType.SYSTEM_DEFAULT)
+    override def resultType(): DataType = DecimalType.SYSTEM_DEFAULT
 
     override def newAggregationState(): (Decimal, Int) = (Decimal.ZERO, 0)
 
@@ -563,7 +557,8 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
       if (input.isNullAt(0)) {
         state
       } else {
-        val l = input.getDecimal(0, PRECISION, SCALE)
+        val l = input.getDecimal(0, DecimalType.SYSTEM_DEFAULT.precision,
+          DecimalType.SYSTEM_DEFAULT.scale)
         state match {
           case (_, d) if d == 0 =>
             (l, 1)
