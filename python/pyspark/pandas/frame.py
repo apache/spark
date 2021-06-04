@@ -512,7 +512,7 @@ class DataFrame(Frame, Generic[T]):
 
     @property
     def _pssers(self):
-        """ Return a dict of column label -> Series which anchors `self`. """
+        """Return a dict of column label -> Series which anchors `self`."""
         from pyspark.pandas.series import Series
 
         if not hasattr(self, "_psseries"):
@@ -5445,7 +5445,13 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             return psdf
 
     def replace(
-        self, to_replace=None, value=None, inplace=False, limit=None, regex=False, method="pad",
+        self,
+        to_replace=None,
+        value=None,
+        inplace=False,
+        limit=None,
+        regex=False,
+        method="pad",
     ) -> Optional["DataFrame"]:
         """
         Returns a new DataFrame replacing a value with another value.
@@ -7110,7 +7116,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 self._internal.index_dtypes,
             )
         )
-        index_map[i], index_map[j], = index_map[j], index_map[i]
+        index_map[i], index_map[j], = (
+            index_map[j],
+            index_map[i],
+        )
         index_spark_columns, index_names, index_dtypes = zip(*index_map)
         internal = self._internal.copy(
             index_spark_columns=list(index_spark_columns),

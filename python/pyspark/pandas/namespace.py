@@ -2212,11 +2212,19 @@ def concat(objs, axis=0, join="outer", ignore_index=False, sort=False) -> Union[
             for psdf in psdfs_not_same_anchor:
                 if join == "inner":
                     concat_psdf = align_diff_frames(
-                        resolve_func, concat_psdf, psdf, fillna=False, how="inner",
+                        resolve_func,
+                        concat_psdf,
+                        psdf,
+                        fillna=False,
+                        how="inner",
                     )
                 elif join == "outer":
                     concat_psdf = align_diff_frames(
-                        resolve_func, concat_psdf, psdf, fillna=False, how="full",
+                        resolve_func,
+                        concat_psdf,
+                        psdf,
+                        fillna=False,
+                        how="full",
                     )
 
             concat_psdf = concat_psdf[column_labels]

@@ -33,5 +33,5 @@ sphinx-plotly-directive
 jira
 PyGithub
 
-# pandas API on Spark Code formatter. Only support Python 3.6+
-black==19.10b0
+# pandas API on Spark Code formatter.
+black

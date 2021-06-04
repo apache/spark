@@ -1518,7 +1518,8 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
 
         # Assert approximate counts
         self.assert_eq(
-            ps.DataFrame({"A": range(100)}).nunique(approx=True), pd.Series([103], index=["A"]),
+            ps.DataFrame({"A": range(100)}).nunique(approx=True),
+            pd.Series([103], index=["A"]),
         )
         self.assert_eq(
             ps.DataFrame({"A": range(100)}).nunique(approx=True, rsd=0.01),
@@ -3354,7 +3355,8 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
 
         columns2 = pd.Index(["numbers", "2", "3"], name="cols2")
         self.assert_eq(
-            pdf.reindex(columns=columns2).sort_index(), psdf.reindex(columns=columns2).sort_index(),
+            pdf.reindex(columns=columns2).sort_index(),
+            psdf.reindex(columns=columns2).sort_index(),
         )
 
         columns = pd.Index(["numbers"], name="cols")
@@ -3398,12 +3400,14 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
 
         columns2 = pd.Index(["numbers", "2", "3"])
         self.assert_eq(
-            pdf.reindex(columns=columns2).sort_index(), psdf.reindex(columns=columns2).sort_index(),
+            pdf.reindex(columns=columns2).sort_index(),
+            psdf.reindex(columns=columns2).sort_index(),
         )
 
         columns2 = pd.Index(["numbers", "2", "3"], name="cols2")
         self.assert_eq(
-            pdf.reindex(columns=columns2).sort_index(), psdf.reindex(columns=columns2).sort_index(),
+            pdf.reindex(columns=columns2).sort_index(),
+            psdf.reindex(columns=columns2).sort_index(),
         )
 
         # Reindexing single Index on single Index
@@ -3506,7 +3510,8 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
             [("X", "numbers"), ("Y", "2"), ("Y", "3")], names=["cols3", "cols4"]
         )
         self.assert_eq(
-            pdf.reindex(columns=columns2).sort_index(), psdf.reindex(columns=columns2).sort_index(),
+            pdf.reindex(columns=columns2).sort_index(),
+            psdf.reindex(columns=columns2).sort_index(),
         )
 
         self.assertRaises(TypeError, lambda: psdf.reindex(columns=["X"]))
@@ -3527,7 +3532,8 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         psdf2 = ps.from_pandas(pdf2)
 
         self.assert_eq(
-            pdf.reindex_like(pdf2).sort_index(), psdf.reindex_like(psdf2).sort_index(),
+            pdf.reindex_like(pdf2).sort_index(),
+            psdf.reindex_like(psdf2).sort_index(),
         )
 
         pdf2 = pd.DataFrame({"index_level_1": ["A", "C", "I"]})
@@ -3546,7 +3552,8 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         psdf2 = ps.from_pandas(pdf2)
 
         self.assert_eq(
-            pdf.reindex_like(pdf2).sort_index(), psdf.reindex_like(psdf2).sort_index(),
+            pdf.reindex_like(pdf2).sort_index(),
+            psdf.reindex_like(psdf2).sort_index(),
         )
 
         self.assertRaises(TypeError, lambda: psdf.reindex_like(index2))
@@ -3569,7 +3576,8 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         psdf = ps.from_pandas(pdf)
 
         self.assert_eq(
-            pdf.reindex_like(pdf2).sort_index(), psdf.reindex_like(psdf2).sort_index(),
+            pdf.reindex_like(pdf2).sort_index(),
+            psdf.reindex_like(psdf2).sort_index(),
         )
 
     def test_melt(self):
@@ -3953,16 +3961,20 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
 
         self.assert_eq(pdf.duplicated().sort_index(), psdf.duplicated().sort_index())
         self.assert_eq(
-            pdf.duplicated(keep="last").sort_index(), psdf.duplicated(keep="last").sort_index(),
+            pdf.duplicated(keep="last").sort_index(),
+            psdf.duplicated(keep="last").sort_index(),
         )
         self.assert_eq(
-            pdf.duplicated(keep=False).sort_index(), psdf.duplicated(keep=False).sort_index(),
+            pdf.duplicated(keep=False).sort_index(),
+            psdf.duplicated(keep=False).sort_index(),
         )
         self.assert_eq(
-            pdf.duplicated(subset="b").sort_index(), psdf.duplicated(subset="b").sort_index(),
+            pdf.duplicated(subset="b").sort_index(),
+            psdf.duplicated(subset="b").sort_index(),
         )
         self.assert_eq(
-            pdf.duplicated(subset=["b"]).sort_index(), psdf.duplicated(subset=["b"]).sort_index(),
+            pdf.duplicated(subset=["b"]).sort_index(),
+            psdf.duplicated(subset=["b"]).sort_index(),
         )
         with self.assertRaisesRegex(ValueError, "'keep' only supports 'first', 'last' and False"):
             psdf.duplicated(keep="false")
@@ -4009,7 +4021,8 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
 
         self.assert_eq(pdf.duplicated().sort_index(), psdf.duplicated().sort_index())
         self.assert_eq(
-            pdf.duplicated(subset=10).sort_index(), psdf.duplicated(subset=10).sort_index(),
+            pdf.duplicated(subset=10).sort_index(),
+            psdf.duplicated(subset=10).sort_index(),
         )
 
     def test_ffill(self):
@@ -4651,17 +4664,20 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
             psdf.take([-1, -2], axis=1).sort_index(), pdf.take([-1, -2], axis=1).sort_index()
         )
         self.assert_eq(
-            psdf.take(range(1, 3), axis=1).sort_index(), pdf.take(range(1, 3), axis=1).sort_index(),
+            psdf.take(range(1, 3), axis=1).sort_index(),
+            pdf.take(range(1, 3), axis=1).sort_index(),
         )
         self.assert_eq(
             psdf.take(range(-1, -3), axis=1).sort_index(),
             pdf.take(range(-1, -3), axis=1).sort_index(),
         )
         self.assert_eq(
-            psdf.take([2, 1], axis=1).sort_index(), pdf.take([2, 1], axis=1).sort_index(),
+            psdf.take([2, 1], axis=1).sort_index(),
+            pdf.take([2, 1], axis=1).sort_index(),
         )
         self.assert_eq(
-            psdf.take([-1, -2], axis=1).sort_index(), pdf.take([-1, -2], axis=1).sort_index(),
+            psdf.take([-1, -2], axis=1).sort_index(),
+            pdf.take([-1, -2], axis=1).sort_index(),
         )
 
         # MultiIndex columns
@@ -4695,17 +4711,20 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
             psdf.take([-1, -2], axis=1).sort_index(), pdf.take([-1, -2], axis=1).sort_index()
         )
         self.assert_eq(
-            psdf.take(range(1, 3), axis=1).sort_index(), pdf.take(range(1, 3), axis=1).sort_index(),
+            psdf.take(range(1, 3), axis=1).sort_index(),
+            pdf.take(range(1, 3), axis=1).sort_index(),
         )
         self.assert_eq(
             psdf.take(range(-1, -3), axis=1).sort_index(),
             pdf.take(range(-1, -3), axis=1).sort_index(),
         )
         self.assert_eq(
-            psdf.take([2, 1], axis=1).sort_index(), pdf.take([2, 1], axis=1).sort_index(),
+            psdf.take([2, 1], axis=1).sort_index(),
+            pdf.take([2, 1], axis=1).sort_index(),
         )
         self.assert_eq(
-            psdf.take([-1, -2], axis=1).sort_index(), pdf.take([-1, -2], axis=1).sort_index(),
+            psdf.take([-1, -2], axis=1).sort_index(),
+            pdf.take([-1, -2], axis=1).sort_index(),
         )
 
         # Checking the type of indices.
@@ -5524,35 +5543,40 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         psdf = ps.from_pandas(pdf)
         psdf.at_time("0:20")
         self.assert_eq(
-            pdf.at_time("0:20").sort_index(), psdf.at_time("0:20").sort_index(),
+            pdf.at_time("0:20").sort_index(),
+            psdf.at_time("0:20").sort_index(),
         )
 
         # Index name is 'ts'
         pdf.index.name = "ts"
         psdf = ps.from_pandas(pdf)
         self.assert_eq(
-            pdf.at_time("0:20").sort_index(), psdf.at_time("0:20").sort_index(),
+            pdf.at_time("0:20").sort_index(),
+            psdf.at_time("0:20").sort_index(),
         )
 
         # Index name is 'ts', column label is 'index'
         pdf.columns = pd.Index(["index"])
         psdf = ps.from_pandas(pdf)
         self.assert_eq(
-            pdf.at_time("0:40").sort_index(), psdf.at_time("0:40").sort_index(),
+            pdf.at_time("0:40").sort_index(),
+            psdf.at_time("0:40").sort_index(),
         )
 
         # Both index name and column label are 'index'
         pdf.index.name = "index"
         psdf = ps.from_pandas(pdf)
         self.assert_eq(
-            pdf.at_time("0:40").sort_index(), psdf.at_time("0:40").sort_index(),
+            pdf.at_time("0:40").sort_index(),
+            psdf.at_time("0:40").sort_index(),
         )
 
         # Index name is 'index', column label is ('X', 'A')
         pdf.columns = pd.MultiIndex.from_arrays([["X"], ["A"]])
         psdf = ps.from_pandas(pdf)
         self.assert_eq(
-            pdf.at_time("0:40").sort_index(), psdf.at_time("0:40").sort_index(),
+            pdf.at_time("0:40").sort_index(),
+            psdf.at_time("0:40").sort_index(),
         )
 
         with self.assertRaisesRegex(NotImplementedError, "'asof' argument is not supported"):

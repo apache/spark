@@ -174,7 +174,8 @@ class IndexesTest(PandasOnSparkTestCase, TestUtils):
             # The `name` argument is added in pandas 0.24.
             self.assert_eq(psidx.to_frame(name="x"), pidx.to_frame(name="x"))
             self.assert_eq(
-                psidx.to_frame(index=False, name="x"), pidx.to_frame(index=False, name="x"),
+                psidx.to_frame(index=False, name="x"),
+                pidx.to_frame(index=False, name="x"),
             )
 
             self.assertRaises(TypeError, lambda: psidx.to_frame(name=["x"]))

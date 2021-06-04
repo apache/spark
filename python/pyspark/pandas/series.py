@@ -1592,7 +1592,11 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         else:
             return first_series(psdf)
 
-    def reindex(self, index: Optional[Any] = None, fill_value: Optional[Any] = None,) -> "Series":
+    def reindex(
+        self,
+        index: Optional[Any] = None,
+        fill_value: Optional[Any] = None,
+    ) -> "Series":
         """
         Conform Series to new index with optional filling logic, placing
         NA/NaN in locations having no value in the previous index. A new object
@@ -3485,7 +3489,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         if method == "first":
             window = (
                 Window.orderBy(
-                    asc_func(self.spark.column), asc_func(F.col(NATURAL_ORDER_COLUMN_NAME)),
+                    asc_func(self.spark.column),
+                    asc_func(F.col(NATURAL_ORDER_COLUMN_NAME)),
                 )
                 .partitionBy(*part_cols)
                 .rowsBetween(Window.unboundedPreceding, Window.currentRow)
