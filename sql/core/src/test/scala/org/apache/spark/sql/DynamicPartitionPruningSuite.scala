@@ -1521,9 +1521,9 @@ abstract class DynamicPartitionPruningSuiteBase
 
     checkAnswer(df,
       Row(3, 2) ::
-        Row(3, 2) ::
-        Row(3, 2) ::
-        Row(3, 2) :: Nil
+      Row(3, 2) ::
+      Row(3, 2) ::
+      Row(3, 2) :: Nil
     )
   }
 }
