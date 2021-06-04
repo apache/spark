@@ -879,10 +879,7 @@ class InternalFrame(object):
         return index_spark_columns + [
             spark_column
             for spark_column in self.data_spark_columns
-            if all(
-                not spark_column_equals(spark_column, scol)
-                for scol in index_spark_columns
-            )
+            if all(not spark_column_equals(spark_column, scol) for scol in index_spark_columns)
         ]
 
     @property
@@ -929,10 +926,7 @@ class InternalFrame(object):
         index_spark_columns = self.index_spark_columns
         data_columns = []
         for spark_column in self.data_spark_columns:
-            if all(
-                not spark_column_equals(spark_column, scol)
-                for scol in index_spark_columns
-            ):
+            if all(not spark_column_equals(spark_column, scol) for scol in index_spark_columns):
                 data_columns.append(spark_column)
         return self.spark_frame.select(index_spark_columns + data_columns)
 

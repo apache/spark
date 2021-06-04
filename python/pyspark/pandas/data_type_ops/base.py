@@ -45,11 +45,7 @@ if TYPE_CHECKING:
     from pyspark.pandas.series import Series  # noqa: F401 (SPARK-34943)
 
 
-def is_valid_operand_for_numeric_arithmetic(
-    operand: Any,
-    *,
-    allow_bool: bool = True
-) -> bool:
+def is_valid_operand_for_numeric_arithmetic(operand: Any, *, allow_bool: bool = True) -> bool:
     """Check whether the operand is valid for arithmetic operations against numerics."""
     if isinstance(operand, numbers.Number) and not isinstance(operand, bool):
         return True
@@ -58,7 +54,8 @@ def is_valid_operand_for_numeric_arithmetic(
             return False
         else:
             return isinstance(operand.spark.data_type, NumericType) or (
-                allow_bool and isinstance(operand.spark.data_type, BooleanType))
+                allow_bool and isinstance(operand.spark.data_type, BooleanType)
+            )
     else:
         return False
 

@@ -34,7 +34,7 @@ class BinaryOps(DataTypeOps):
 
     @property
     def pretty_name(self) -> str:
-        return 'binaries'
+        return "binaries"
 
     def add(self, left, right) -> Union["Series", "Index"]:
         if isinstance(right, IndexOpsMixin) and isinstance(right.spark.data_type, BinaryType):
@@ -43,11 +43,13 @@ class BinaryOps(DataTypeOps):
             return column_op(F.concat)(left, F.lit(right))
         else:
             raise TypeError(
-                "Concatenation can not be applied to %s and the given type." % self.pretty_name)
+                "Concatenation can not be applied to %s and the given type." % self.pretty_name
+            )
 
     def radd(self, left, right) -> Union["Series", "Index"]:
         if isinstance(right, bytes):
             return left._with_new_scol(F.concat(F.lit(right), left.spark.column))
         else:
             raise TypeError(
-                "Concatenation can not be applied to %s and the given type." % self.pretty_name)
+                "Concatenation can not be applied to %s and the given type." % self.pretty_name
+            )

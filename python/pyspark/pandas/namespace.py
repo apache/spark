@@ -1903,7 +1903,7 @@ def get_dummies(
                     raise KeyError(name_like_string(columns))
                 if prefix is None:
                     prefix = [
-                        str(label[len(columns):])
+                        str(label[len(columns) :])
                         if len(label) > len(columns) + 1
                         else label[len(columns)]
                         if len(label) == len(columns) + 1

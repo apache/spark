@@ -34,6 +34,7 @@ class NumOpsTest(PandasOnSparkTestCase, TestCasesUtils):
     returns float32.
     The underlying reason is the respective Spark operations return DoubleType always.
     """
+
     @property
     def float_pser(self):
         return pd.Series([1, 2, 3], dtype=float)
@@ -137,7 +138,8 @@ class NumOpsTest(PandasOnSparkTestCase, TestCasesUtils):
                 self.assertRaises(TypeError, lambda: psser // self.non_numeric_pssers["datetime"])
                 self.assertRaises(TypeError, lambda: psser // self.non_numeric_pssers["date"])
                 self.assertRaises(
-                    TypeError, lambda: psser // self.non_numeric_pssers["categorical"])
+                    TypeError, lambda: psser // self.non_numeric_pssers["categorical"]
+                )
             if LooseVersion(pd.__version__) >= LooseVersion("0.25.3"):
                 self.assert_eq(
                     (self.float_psser // self.non_numeric_pssers["bool"]).sort_index(),
@@ -146,7 +148,7 @@ class NumOpsTest(PandasOnSparkTestCase, TestCasesUtils):
             else:
                 self.assert_eq(
                     (self.float_pser // self.non_numeric_psers["bool"]).sort_index(),
-                    ps.Series([1.0, 2.0, np.inf])
+                    ps.Series([1.0, 2.0, np.inf]),
                 )
 
         self.assertRaises(TypeError, lambda: self.float_psser // True)
@@ -181,7 +183,8 @@ class NumOpsTest(PandasOnSparkTestCase, TestCasesUtils):
                 self.assertRaises(TypeError, lambda: psser ** self.non_numeric_pssers["datetime"])
                 self.assertRaises(TypeError, lambda: psser ** self.non_numeric_pssers["date"])
                 self.assertRaises(
-                    TypeError, lambda: psser ** self.non_numeric_pssers["categorical"])
+                    TypeError, lambda: psser ** self.non_numeric_pssers["categorical"]
+                )
             self.assert_eq(
                 (self.float_psser ** self.non_numeric_pssers["bool"]).sort_index(),
                 self.float_pser ** self.non_numeric_psers["bool"],
@@ -258,7 +261,8 @@ if __name__ == "__main__":
 
     try:
         import xmlrunner  # type: ignore[import]
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
+
+        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

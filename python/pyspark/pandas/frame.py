@@ -2945,10 +2945,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         else:
             index_spark_columns = (
                 internal.index_spark_columns[:level]
-                + internal.index_spark_columns[level + len(key):]
+                + internal.index_spark_columns[level + len(key) :]
             )
-            index_names = internal.index_names[:level] + internal.index_names[level + len(key):]
-            index_dtypes = internal.index_dtypes[:level] + internal.index_dtypes[level + len(key):]
+            index_names = internal.index_names[:level] + internal.index_names[level + len(key) :]
+            index_dtypes = internal.index_dtypes[:level] + internal.index_dtypes[level + len(key) :]
 
             internal = internal.copy(
                 index_spark_columns=index_spark_columns,
@@ -7620,7 +7620,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             column_labels.append(label)
         for label in right_internal.column_labels:
             # recover `right_prefix` here.
-            col = right_internal.spark_column_name_for(label)[len(right_prefix):]
+            col = right_internal.spark_column_name_for(label)[len(right_prefix) :]
             scol = right_scol_for(label).alias(col)
             if label in duplicate_columns:
                 spark_column_name = left_internal.spark_column_name_for(label)
