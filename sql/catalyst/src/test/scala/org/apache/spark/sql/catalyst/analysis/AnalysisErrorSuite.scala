@@ -807,4 +807,28 @@ class AnalysisErrorSuite extends AnalysisTest {
     // UnresolvedHint be removed by batch `Remove Unresolved Hints`
     assertAnalysisSuccess(plan, true)
   }
+
+  test("SPARK-35618: Resolve star expressions in subquery") {
+    val a = AttributeReference("a", IntegerType)()
+    val b = AttributeReference("b", IntegerType)()
+    val t0 = OneRowRelation()
+    val t1 = LocalRelation(a, b).as("t1")
+
+    // t1.* in the subquery should be resolved into outer(t1.a) and outer(t1.b).
+    assertAnalysisError(
+      Project(ScalarSubquery(t0.select(star("t1"))).as("sub") :: Nil, t1),
+      "Scalar subquery must return only one column, but got 2" :: Nil)
+
+    // array(t1.*) in the subquery should be resolved into array(outer(t1.a), outer(t1.b))
+    val array = CreateArray(Seq(star("t1")))
+    assertAnalysisError(
+      Project(ScalarSubquery(t0.select(array)).as("sub") :: Nil, t1),
+      "Expressions referencing the outer query are not supported" :: Nil)
+
+    // t2.* cannot be resolved and the error message should use the inner plan exception message.
+    assertAnalysisError(
+      Project(ScalarSubquery(t0.select(star("t2"))).as("sub") :: Nil, t1),
+      "cannot resolve 't2.*' given input columns ''" :: Nil
+    )
+  }
 }
