@@ -62,7 +62,7 @@ private[spark] class ExecutorPodsAllocator(
     podAllocationDelay * 5,
     conf.get(KUBERNETES_ALLOCATION_EXECUTOR_TIMEOUT))
 
-  private val driverPodReadinessTimeout = 5
+  private val driverPodReadinessTimeout = conf.get(KUBERNETES_ALLOCATION_DRIVER_READINESS_TIMEOUT)
 
   private val executorIdleTimeout = conf.get(DYN_ALLOCATION_EXECUTOR_IDLE_TIMEOUT) * 1000
 
@@ -104,14 +104,11 @@ private[spark] class ExecutorPodsAllocator(
   def start(applicationId: String, schedulerBackend: KubernetesClusterSchedulerBackend): Unit = {
     // Wait until the driver pod is ready before starting executors, as the headless service won't
     // be resolvable by DNS until the driver pod is ready.
-    try {
-      kubernetesClient.pods()
+    Utils.tryLogNonFatalError {
+      kubernetesClient
+        .pods()
         .withName(kubernetesDriverPodName.get)
-        .waitUntilReady(driverPodReadinessTimeout, TimeUnit.MINUTES)
-    } catch {
-      case e: InterruptedException =>
-        logWarning(s"Timeout waiting for driver pod ${kubernetesDriverPodName.get} get ready in " +
-          s"namespace $namespace")
+        .waitUntilReady(driverPodReadinessTimeout, TimeUnit.SECONDS)
     }
     snapshotsStore.addSubscriber(podAllocationDelay) {
       onNewSnapshots(applicationId, schedulerBackend, _)
