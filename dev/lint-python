@@ -207,7 +207,7 @@ function black_test {
     if [ "$BLACK_STATUS" -ne 0 ]; then
         echo "black checks failed:"
         echo "$BLACK_REPORT"
-        echo "Please run 'dev/reformat' script."
+        echo "Please run 'dev/reformat-python' script."
         echo "$BLACK_STATUS"
         exit "$BLACK_STATUS"
     else
