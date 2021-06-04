@@ -42,7 +42,6 @@ class KubernetesLocalDiskShuffleExecutorComponents(sparkConf: SparkConf)
     if (sparkConf.getBoolean("spark.kubernetes.driver.reusePersistentVolumeClaim", false)) {
       // Turn off the deletion of the shuffle data in order to reuse
       blockManager.diskBlockManager.deleteFilesOnStop = false
-      logError("Recover shuffle data")
       Utils.tryLogNonFatalError {
         KubernetesLocalDiskShuffleExecutorComponents.recoverDiskStore(sparkConf, blockManager)
       }
