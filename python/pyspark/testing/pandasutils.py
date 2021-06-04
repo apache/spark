@@ -82,7 +82,7 @@ class PandasOnSparkTestCase(unittest.TestCase, SQLTestUtils):
                 else:
                     kwargs = dict()
 
-                if LooseVersion(pd.__version__) <= LooseVersion("1.1"):
+                if LooseVersion(pd.__version__) < LooseVersion("1.1.1"):
                     # Due to https://github.com/pandas-dev/pandas/issues/35446
                     check_exact = check_exact \
                         and all([is_numeric_dtype(dtype) for dtype in left.dtypes]) \
@@ -109,7 +109,7 @@ class PandasOnSparkTestCase(unittest.TestCase, SQLTestUtils):
                     kwargs = dict(check_freq=False)
                 else:
                     kwargs = dict()
-                if LooseVersion(pd.__version__) <= LooseVersion("1.1"):
+                if LooseVersion(pd.__version__) < LooseVersion("1.1.1"):
                     # Due to https://github.com/pandas-dev/pandas/issues/35446
                     check_exact = check_exact \
                         and is_numeric_dtype(left.dtype) \
@@ -130,7 +130,7 @@ class PandasOnSparkTestCase(unittest.TestCase, SQLTestUtils):
                 raise AssertionError(msg) from e
         elif isinstance(left, pd.Index) and isinstance(right, pd.Index):
             try:
-                if LooseVersion(pd.__version__) <= LooseVersion("1.1"):
+                if LooseVersion(pd.__version__) < LooseVersion("1.1.1"):
                     # Due to https://github.com/pandas-dev/pandas/issues/35446
                     check_exact = check_exact \
                         and is_numeric_dtype(left.dtype) \
