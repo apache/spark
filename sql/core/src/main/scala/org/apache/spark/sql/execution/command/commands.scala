@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.command
 
 import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
+
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
