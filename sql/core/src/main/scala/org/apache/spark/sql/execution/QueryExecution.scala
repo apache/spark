@@ -89,11 +89,12 @@ class QueryExecution(
   private def eagerlyExecuteCommands(p: LogicalPlan) = p transformDown {
     case c: Command =>
       val qe = sparkSession.sessionState.executePlan(c, CommandExecutionMode.EAGERLY)
+      val result = SQLExecution.withNewExecutionId(qe, name)(qe.executedPlan.executeCollect())
       CommandResult(
         qe.analyzed.output,
         qe.commandExecuted,
         qe.executedPlan,
-        SQLExecution.withNewExecutionId(qe, name)(qe.executedPlan.executeCollect()))
+        result)
     case other => other
   }
 
@@ -114,10 +115,12 @@ class QueryExecution(
     executePhase(QueryPlanningTracker.OPTIMIZATION) {
       // clone the plan to avoid sharing the plan instance between different stages like analyzing,
       // optimizing and planning.
-      val plan = sparkSession.sessionState.optimizer.executeAndTrack(withCachedData.clone(), tracker)
-      // We do not want optimized plans to be re-analyzed as literals that have been constant folded
-      // and such can cause issues during analysis. While `clone` should maintain the `analyzed`
-      // state of the LogicalPlan, we set the plan as analyzed here as well out of paranoia.
+      val plan =
+      sparkSession.sessionState.optimizer.executeAndTrack(withCachedData.clone(), tracker)
+      // We do not want optimized plans to be re-analyzed as literals that have been constant
+      // folded and such can cause issues during analysis. While `clone` should maintain the
+      // `analyzed` state of the LogicalPlan, we set the plan as analyzed here as well out of
+      // paranoia.
       plan.setAnalyzed()
       plan
     }
