@@ -279,7 +279,7 @@ class BooleanOpsTest(PandasOnSparkTestCase, TestCasesUtils):
 @unittest.skipIf(
     not extension_dtypes_available, "pandas extension dtypes are not available"
 )
-class BooleanExtensionOpsTest(BooleanOpsTest, PandasOnSparkTestCase, TestCasesUtils):
+class BooleanExtensionOpsTest(PandasOnSparkTestCase, TestCasesUtils):
     @property
     def pser(self):
         return pd.Series([True, False, None], dtype='boolean')
@@ -295,6 +295,14 @@ class BooleanExtensionOpsTest(BooleanOpsTest, PandasOnSparkTestCase, TestCasesUt
     @property
     def other_psser(self):
         return ps.from_pandas(self.other_pser)
+
+    @property
+    def float_pser(self):
+        return pd.Series([1, 2, 3], dtype=float)
+
+    @property
+    def float_psser(self):
+        return ps.from_pandas(self.float_pser)
 
     def test_add(self):
         pser = self.pser
