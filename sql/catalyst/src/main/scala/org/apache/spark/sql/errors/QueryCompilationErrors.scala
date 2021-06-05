@@ -1610,11 +1610,11 @@ private[spark] object QueryCompilationErrors {
     new AnalysisException(s"Hive $version does not support altering database location")
   }
 
-  def hiveTableTypeNotSupportedError(tableType: String): Throwable = {
+  def hiveTableTypeUnsupportedError(tableType: String): Throwable = {
     new AnalysisException(s"Hive $tableType is not supported.")
   }
 
-  def hiveNotSupportCreatePermanentFunctionsError(): Throwable = {
+  def hiveCreatePermanentFunctionsUnsupportedError(): Throwable = {
     new AnalysisException("Hive 0.12 doesn't support creating permanent functions. " +
       "Please use Hive 0.13 or higher.")
   }

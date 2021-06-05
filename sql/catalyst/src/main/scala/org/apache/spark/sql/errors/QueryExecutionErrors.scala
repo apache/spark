@@ -1275,7 +1275,7 @@ object QueryExecutionErrors {
       s"Cannot recognize hive type string: $fieldType, column: $fieldName", e)
   }
 
-  def getTablesByTypeUnsupportedByLowerVersionHiveError(): Throwable = {
+  def getTablesByTypeUnsupportedByHiveVersionError(): Throwable = {
     new UnsupportedOperationException("Hive 2.2 and lower versions don't support " +
       "getTablesByType. Please use Hive 2.3 or higher version.")
   }
@@ -1293,7 +1293,7 @@ object QueryExecutionErrors {
       """Partition filter cannot have both `"` and `'` characters""")
   }
 
-  def getPartitionMetadataByFilterFromError(e: InvocationTargetException): Throwable = {
+  def getPartitionMetadataByFilterError(e: InvocationTargetException): Throwable = {
     new RuntimeException(
       s"""
          |Caught Hive MetaException attempting to get partition metadata by filter

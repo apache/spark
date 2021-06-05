@@ -379,7 +379,7 @@ private[client] class Shim_v0_12 extends Shim with Logging {
       dbName: String,
       pattern: String,
       tableType: TableType): Seq[String] = {
-    throw QueryExecutionErrors.getTablesByTypeUnsupportedByLowerVersionHiveError()
+    throw QueryExecutionErrors.getTablesByTypeUnsupportedByHiveVersionError()
   }
 
   override def loadPartition(
@@ -455,7 +455,7 @@ private[client] class Shim_v0_12 extends Shim with Logging {
   }
 
   override def createFunction(hive: Hive, db: String, func: CatalogFunction): Unit = {
-    throw QueryCompilationErrors.hiveNotSupportCreatePermanentFunctionsError()
+    throw QueryCompilationErrors.hiveCreatePermanentFunctionsUnsupportedError()
   }
 
   def dropFunction(hive: Hive, db: String, name: String): Unit = {
@@ -899,7 +899,7 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
             getAllPartitionsMethod.invoke(hive, table).asInstanceOf[JSet[Partition]]
           case ex: InvocationTargetException if ex.getCause.isInstanceOf[MetaException] &&
               tryDirectSql =>
-            throw QueryExecutionErrors.getPartitionMetadataByFilterFromError(ex)
+            throw QueryExecutionErrors.getPartitionMetadataByFilterError(ex)
         }
       }
 
