@@ -118,6 +118,45 @@ class EmptyDirectoryDataWriter(
   override def write(record: InternalRow): Unit = {}
 }
 
+/**
+ * FileFormatWriteTask for empty partitioned table (used for non-partial-dynamic-partition writes).
+ */
+class EmptyPartitionDataWriter(
+    description: WriteJobDescription,
+    taskAttemptContext: TaskAttemptContext,
+    committer: FileCommitProtocol,
+    staticPartitions: TablePartitionSpec
+) extends BaseDynamicPartitionDataWriter(description, taskAttemptContext, committer) {
+  newOutputWriter()
+
+  private def newOutputWriter(): Unit = {
+    val isPartialDynamicPartitions = staticPartitions.nonEmpty &&
+      description.partitionColumns.map(_.name).diff(staticPartitions.keys.toSeq).nonEmpty
+    if (!isPartialDynamicPartitions) {
+      val staticOrEmptyValues = description.allColumns.map {
+        case c: Attribute =>
+          val partValue = {
+            if (c.dataType == StringType) {
+              staticPartitions.getOrElse(c.name, ExternalCatalogUtils.DEFAULT_PARTITION_NAME)
+            } else {
+              staticPartitions.get(c.name).orNull
+            }
+          }
+          Cast(
+            Literal.create(partValue, StringType),
+            c.dataType,
+            Some(SQLConf.get.sessionLocalTimeZone)
+          ).eval()
+      }
+      val emptyRow = InternalRow.fromSeq(staticOrEmptyValues)
+      val partitionValue = getPartitionValues(emptyRow)
+      statsTrackers.foreach(_.newPartition(partitionValue))
+      renewCurrentWriter(Some(partitionValue), None, true)
+    }
+  }
+  override def write(record: InternalRow): Unit = {}
+}
+
 /** Writes data to a single directory (used for non-dynamic-partition writes). */
 class SingleDirectoryDataWriter(
     description: WriteJobDescription,

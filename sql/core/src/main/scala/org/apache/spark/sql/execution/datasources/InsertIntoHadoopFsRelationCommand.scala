@@ -180,8 +180,8 @@ case class InsertIntoHadoopFsRelationCommand(
           outputSpec = FileFormatWriter.OutputSpec(
             committerOutputPath.toString, customPartitionLocations, outputColumns),
           hadoopConf = hadoopConf,
-          partitionColumns = partitionColumns,
-          bucketSpec = bucketSpec,
+          columnSpec = FileFormatWriter.ColumnSpec(
+            partitionColumns, bucketSpec, Some(staticPartitions)),
           statsTrackers = Seq(basicWriteJobStatsTracker(hadoopConf)),
           options = options)
 

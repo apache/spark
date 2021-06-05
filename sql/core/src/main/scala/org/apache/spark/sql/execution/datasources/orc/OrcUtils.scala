@@ -249,7 +249,7 @@ object OrcUtils extends Logging {
     val resultSchemaString = if (canPruneCols) {
       OrcUtils.orcTypeDescriptionString(resultSchema)
     } else {
-      OrcUtils.orcTypeDescriptionString(StructType(dataSchema.fields ++ partitionSchema.fields))
+      OrcUtils.orcTypeDescriptionString(StructType(dataSchema.fields))
     }
     OrcConf.MAPRED_INPUT_SCHEMA.setString(conf, resultSchemaString)
     resultSchemaString

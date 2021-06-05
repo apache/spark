@@ -54,6 +54,11 @@ object FileFormatWriter extends Logging {
       customPartitionLocations: Map[TablePartitionSpec, String],
       outputColumns: Seq[Attribute])
 
+  case class ColumnSpec(
+      partitionColumns: Seq[Attribute],
+      bucketSpec: Option[BucketSpec],
+      staticPartitions: Option[TablePartitionSpec])
+
   /** A function that converts the empty string to null for partition values. */
   case class Empty2Null(child: Expression) extends UnaryExpression with String2StringExpression {
     override def convert(v: UTF8String): UTF8String = if (v.numBytes() == 0) null else v
@@ -99,12 +104,13 @@ object FileFormatWriter extends Logging {
       committer: FileCommitProtocol,
       outputSpec: OutputSpec,
       hadoopConf: Configuration,
-      partitionColumns: Seq[Attribute],
-      bucketSpec: Option[BucketSpec],
+      columnSpec: ColumnSpec,
       statsTrackers: Seq[WriteJobStatsTracker],
       options: Map[String, String])
     : Set[String] = {
 
+    val partitionColumns = columnSpec.partitionColumns
+    val bucketSpec = columnSpec.bucketSpec
     val job = Job.getInstance(hadoopConf)
     job.setOutputKeyClass(classOf[Void])
     job.setOutputValueClass(classOf[InternalRow])
@@ -226,7 +232,8 @@ object FileFormatWriter extends Logging {
             sparkAttemptNumber = taskContext.taskAttemptId().toInt & Integer.MAX_VALUE,
             committer,
             iterator = iter,
-            concurrentOutputWriterSpec = concurrentOutputWriterSpec)
+            concurrentOutputWriterSpec = concurrentOutputWriterSpec,
+            staticPartitions = columnSpec.staticPartitions)
         },
         rddWithNonEmptyPartitions.partitions.indices,
         (index, res: WriteTaskResult) => {
@@ -261,7 +268,8 @@ object FileFormatWriter extends Logging {
       sparkAttemptNumber: Int,
       committer: FileCommitProtocol,
       iterator: Iterator[InternalRow],
-      concurrentOutputWriterSpec: Option[ConcurrentOutputWriterSpec]): WriteTaskResult = {
+      concurrentOutputWriterSpec: Option[ConcurrentOutputWriterSpec],
+      staticPartitions: Option[TablePartitionSpec]): WriteTaskResult = {
 
     val jobId = SparkHadoopWriterUtils.createJobID(new Date(jobIdInstant), sparkStageId)
     val taskId = new TaskID(jobId, TaskType.MAP, sparkPartitionId)
@@ -288,6 +296,10 @@ object FileFormatWriter extends Logging {
         new EmptyDirectoryDataWriter(description, taskAttemptContext, committer)
       } else if (description.partitionColumns.isEmpty && description.bucketIdExpression.isEmpty) {
         new SingleDirectoryDataWriter(description, taskAttemptContext, committer)
+      } else if (sparkPartitionId == 0 && description.partitionColumns.nonEmpty &&
+          !iterator.hasNext && staticPartitions.isDefined) {
+        new EmptyPartitionDataWriter(description, taskAttemptContext, committer,
+          staticPartitions.get)
       } else {
         concurrentOutputWriterSpec match {
           case Some(spec) =>
