@@ -214,10 +214,10 @@ class DataFrameCallbackSuite extends QueryTest
     withTable("tab") {
       spark.range(10).select($"id", $"id" % 5 as "p").write.partitionBy("p").saveAsTable("tab")
       sparkContext.listenerBus.waitUntilEmpty()
-      assert(commands.length == 5)
-      assert(commands(4)._1 == "saveAsTable")
-      assert(commands(4)._2.isInstanceOf[CreateDataSourceTableAsSelectCommand])
-      assert(commands(4)._2.asInstanceOf[CreateDataSourceTableAsSelectCommand]
+      assert(commands.length == 6)
+      assert(commands(5)._1 == "saveAsTable")
+      assert(commands(5)._2.isInstanceOf[CreateDataSourceTableAsSelectCommand])
+      assert(commands(5)._2.asInstanceOf[CreateDataSourceTableAsSelectCommand]
         .table.partitionColumnNames == Seq("p"))
     }
 
