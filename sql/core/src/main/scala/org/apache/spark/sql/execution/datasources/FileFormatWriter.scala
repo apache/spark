@@ -288,6 +288,9 @@ object FileFormatWriter extends Logging {
         new EmptyDirectoryDataWriter(description, taskAttemptContext, committer)
       } else if (description.partitionColumns.isEmpty && description.bucketIdExpression.isEmpty) {
         new SingleDirectoryDataWriter(description, taskAttemptContext, committer)
+      } else if (sparkPartitionId == 0 && description.partitionColumns.nonEmpty &&
+          !iterator.hasNext) {
+        new EmptyPartitionDataWriter(description, taskAttemptContext, committer)
       } else {
         concurrentOutputWriterSpec match {
           case Some(spec) =>

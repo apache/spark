@@ -32,6 +32,7 @@ import org.apache.spark.sql.connector.write.{DataWriter, WriterCommitMessage}
 import org.apache.spark.sql.execution.datasources.FileFormatWriter.ConcurrentOutputWriterSpec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StringType
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.SerializableConfiguration
 
 /**
@@ -115,6 +116,28 @@ class EmptyDirectoryDataWriter(
     taskAttemptContext: TaskAttemptContext,
     committer: FileCommitProtocol
 ) extends FileFormatDataWriter(description, taskAttemptContext, committer) {
+  override def write(record: InternalRow): Unit = {}
+}
+
+/** FileFormatWriteTask for empty partitioned table */
+class EmptyPartitionDataWriter(
+    description: WriteJobDescription,
+    taskAttemptContext: TaskAttemptContext,
+    committer: FileCommitProtocol
+) extends BaseDynamicPartitionDataWriter(description, taskAttemptContext, committer) {
+  newOutputWriter()
+
+  private def newOutputWriter(): Unit = {
+    val emptyValues = description.allColumns.map {
+      case c if description.partitionColumns.contains(c.toAttribute) =>
+        UTF8String.fromString(ExternalCatalogUtils.DEFAULT_PARTITION_NAME)
+      case _ => null
+    }
+    val emptyRow = InternalRow.fromSeq(emptyValues)
+    val partitionValue = getPartitionValues(emptyRow)
+    statsTrackers.foreach(_.newPartition(partitionValue))
+    renewCurrentWriter(Some(partitionValue), None, true)
+  }
   override def write(record: InternalRow): Unit = {}
 }
 

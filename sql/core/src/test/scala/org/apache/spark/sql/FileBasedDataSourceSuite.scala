@@ -30,6 +30,7 @@ import org.apache.hadoop.fs.{LocalFileSystem, Path}
 import org.apache.spark.SparkException
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd}
 import org.apache.spark.sql.TestingUDT.{IntervalUDT, NullData, NullUDT}
+import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.expressions.IntegralLiteralTestUtils.{negativeInt, positiveInt}
 import org.apache.spark.sql.catalyst.plans.logical.Filter
@@ -123,6 +124,31 @@ class FileBasedDataSourceSuite extends QueryTest
         val df1 = spark.read.format(format).load(outputPath.toString)
         checkAnswer(df1, Seq.empty[Row])
         assert(df1.schema.equals(df.schema.asNullable))
+      }
+    }
+  }
+
+  test(s"SPARK-35592 empty partitioned table when saved should write a metadata only file") {
+    Seq("orc", "parquet").foreach { format =>
+      withTempPath { outputPath =>
+        val df = spark.emptyDataFrame.select(
+          lit("").as("part_id"),
+          lit("").as("some_column")
+        )
+        df.write.format(format).partitionBy("part_id").save(outputPath.toString)
+        val partFiles = new File(outputPath,
+          s"part_id=${ExternalCatalogUtils.DEFAULT_PARTITION_NAME}")
+          .listFiles()
+          .filter(f => f.isFile && !f.getName.startsWith(".") && !f.getName.startsWith("_"))
+        assert(partFiles.length === 1)
+
+        // Now read the file.
+        val df1 = spark.read.format(format).load(outputPath.toString)
+        checkAnswer(df1, Seq.empty[Row])
+        val expectedSchema = StructType(
+          Seq(StructField("some_column", StringType), StructField("part_id", NullType))
+        )
+        assert(df1.schema.equals(expectedSchema))
       }
     }
   }
