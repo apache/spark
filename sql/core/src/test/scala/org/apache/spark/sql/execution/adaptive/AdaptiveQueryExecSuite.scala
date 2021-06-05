@@ -1783,8 +1783,8 @@ class AdaptiveQueryExecSuite
     }
   }
 
-  test("Coalesce number of partitions to 1") {
-    val df = spark.table("testData").coalesceOutputFiles()
+  test("Coalesce number of partitions by AEQ") {
+    val df = spark.table("testData").coalescePartitions()
     df.collect()
 
     collect(df.queryExecution.executedPlan) {
@@ -1800,7 +1800,7 @@ class AdaptiveQueryExecSuite
 
   test("Can not coalesce number of partitions. Use local shuffle reader") {
     withSQLConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "2") {
-      val df = spark.table("testData").coalesceOutputFiles()
+      val df = spark.table("testData").coalescePartitions($"key")
       df.collect()
 
       collect(df.queryExecution.executedPlan) {

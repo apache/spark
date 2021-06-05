@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.adaptive
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.plans.physical.SinglePartition
 import org.apache.spark.sql.execution.{ShufflePartitionSpec, SparkPlan}
-import org.apache.spark.sql.execution.exchange.{COALESCE_OUTPUT_FILES, ENSURE_REQUIREMENTS, REPARTITION, ShuffleExchangeLike, ShuffleOrigin}
+import org.apache.spark.sql.execution.exchange.{COALESCE_PARTITIONS, ENSURE_REQUIREMENTS, REPARTITION, ShuffleExchangeLike, ShuffleOrigin}
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -30,7 +30,7 @@ import org.apache.spark.sql.internal.SQLConf
 case class CoalesceShufflePartitions(session: SparkSession) extends CustomShuffleReaderRule {
 
   override val supportedShuffleOrigins: Seq[ShuffleOrigin] =
-    Seq(ENSURE_REQUIREMENTS, REPARTITION, COALESCE_OUTPUT_FILES)
+    Seq(ENSURE_REQUIREMENTS, REPARTITION, COALESCE_PARTITIONS)
 
   override def apply(plan: SparkPlan): SparkPlan = {
     if (!conf.coalesceShufflePartitionsEnabled) {
@@ -57,7 +57,7 @@ case class CoalesceShufflePartitions(session: SparkSession) extends CustomShuffl
     } else {
       // We fall back to Spark default parallelism if the minimum number of coalesced partitions
       // is not set, so to avoid perf regressions compared to no coalescing.
-      val minPartitionNum = if (shuffles.forall(_.shuffleOrigin == COALESCE_OUTPUT_FILES)) {
+      val minPartitionNum = if (shuffles.forall(_.shuffleOrigin == COALESCE_PARTITIONS)) {
         1
       } else {
         conf.getConf(SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM)

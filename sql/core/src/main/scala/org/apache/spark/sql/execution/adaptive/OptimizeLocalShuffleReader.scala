@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.adaptive
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide}
 import org.apache.spark.sql.catalyst.plans.physical.SinglePartition
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.exchange.{COALESCE_OUTPUT_FILES, ENSURE_REQUIREMENTS, EnsureRequirements, ShuffleExchangeExec, ShuffleExchangeLike, ShuffleOrigin}
+import org.apache.spark.sql.execution.exchange.{COALESCE_PARTITIONS, ENSURE_REQUIREMENTS, EnsureRequirements, ShuffleExchangeExec, ShuffleExchangeLike, ShuffleOrigin}
 import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
 import org.apache.spark.sql.internal.SQLConf
 
@@ -36,7 +36,7 @@ import org.apache.spark.sql.internal.SQLConf
 object OptimizeLocalShuffleReader extends CustomShuffleReaderRule {
 
   override val supportedShuffleOrigins: Seq[ShuffleOrigin] =
-    Seq(ENSURE_REQUIREMENTS, COALESCE_OUTPUT_FILES)
+    Seq(ENSURE_REQUIREMENTS, COALESCE_PARTITIONS)
 
   private val ensureRequirements = EnsureRequirements
 
@@ -144,7 +144,7 @@ object OptimizeLocalShuffleReader extends CustomShuffleReaderRule {
       s.shuffle.shuffleOrigin match {
         case ENSURE_REQUIREMENTS =>
           s.mapStats.isDefined && partitionSpecs.nonEmpty && supportLocalReader(s.shuffle)
-        case COALESCE_OUTPUT_FILES =>
+        case COALESCE_PARTITIONS =>
           // Use LocalShuffleReader only when we can't CoalesceShufflePartitions
           s.mapStats.exists(_.bytesByPartitionId.length == partitionSpecs.size) &&
             partitionSpecs.nonEmpty && supportLocalReader(s.shuffle)

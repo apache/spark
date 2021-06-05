@@ -3159,13 +3159,13 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * // TODO move it to DataFrameWriter?
+   * Returns a new Dataset that coalesce the partitions by AQE. Usually used to merge small files.
    *
    * @group typedrel
    * @since 3.2.0
    */
-  def coalesceOutputFiles(partitionExprs: Column*): Dataset[T] = withTypedPlan {
-    CoalesceOutputFilesExpression(partitionExprs.map(_.expr), logicalPlan)
+  def coalescePartitions(partitionExprs: Column*): Dataset[T] = withTypedPlan {
+    CoalescePartitions(partitionExprs.map(_.expr), logicalPlan)
   }
 
   /**

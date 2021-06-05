@@ -1352,9 +1352,10 @@ object RepartitionByExpression {
 }
 
 /**
- * TODO
+ * This method repartitions data using [[Expression]]s into `numShufflePartitions` defined in
+ * `SQLConf`, and could be coalesced by AQE. Usually used to merge small files.
  */
-case class CoalesceOutputFilesExpression(
+case class CoalescePartitions(
     partitionExpressions: Seq[Expression],
     child: LogicalPlan) extends RepartitionOperation {
 
@@ -1385,8 +1386,8 @@ case class CoalesceOutputFilesExpression(
 
   override def shuffle: Boolean = true
 
-  override protected def withNewChildInternal(
-    newChild: LogicalPlan): CoalesceOutputFilesExpression = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: LogicalPlan): CoalescePartitions =
+    copy(child = newChild)
 }
 
 /**
