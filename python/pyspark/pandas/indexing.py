@@ -1172,7 +1172,7 @@ class LocIndexer(LocIndexerLike):
         labels: Optional[List[Tuple]] = None,
         recursed: int = 0
     ) -> Tuple[List[Tuple], Optional[List[spark.Column]], List[InternalField],
-               bool, Optional[Tuple]]:
+                bool, Optional[Tuple]]:
         """ Select columns from multi-index columns. """
         assert isinstance(key, tuple)
         if labels is None:
