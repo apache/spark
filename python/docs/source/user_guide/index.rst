@@ -32,7 +32,21 @@ at `the Spark documentation <https://spark.apache.org/docs/latest/index.html#whe
 PySpark specific user guide is as follows:
 
 .. toctree::
-    :maxdepth: 2
+   :maxdepth: 2
 
-    python_packaging
-    arrow_pandas
+   python_packaging
+   arrow_pandas
+
+For pandas APIs on Spark:
+
+.. toctree::
+   :maxdepth: 2
+
+   ps_options
+   ps_pandas_pyspark
+   ps_transform_apply
+   ps_types
+   ps_typehints
+   ps_from_to_dbms
+   ps_best_practices
+   ps_faq

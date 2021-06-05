@@ -266,7 +266,7 @@ Data source options of Parquet can be set via:
   <tr><th><b>Property Name</b></th><th><b>Default</b></th><th><b>Meaning</b></th><th><b>Scope</b></th></tr>
   <tr>
     <td><code>datetimeRebaseMode</code></td>
-    <td>The SQL config <code>spark.sql.parquet</code> <code>.datetimeRebaseModeInRead</code> which is <code>EXCEPTION</code> by default</td>
+    <td>(value of <code>spark.sql.parquet.datetimeRebaseModeInRead</code> configuration)</td>
     <td>The <code>datetimeRebaseMode</code> option allows to specify the rebasing mode for the values of the <code>DATE</code>, <code>TIMESTAMP_MILLIS</code>, <code>TIMESTAMP_MICROS</code> logical types from the Julian to Proleptic Gregorian calendar.<br>
       Currently supported modes are:
       <ul>
@@ -279,7 +279,7 @@ Data source options of Parquet can be set via:
   </tr>
   <tr>
     <td><code>int96RebaseMode</code></td>
-    <td>The SQL config <code>spark.sql.parquet</code> <code>.int96RebaseModeInRead</code> which is <code>EXCEPTION</code> by default</td>
+    <td>(value of <code>spark.sql.parquet.int96RebaseModeInRead</code> configuration)</td>
     <td>The <code>int96RebaseMode</code> option allows to specify the rebasing mode for INT96 timestamps from the Julian to Proleptic Gregorian calendar.<br>
       Currently supported modes are:
       <ul>
@@ -292,14 +292,14 @@ Data source options of Parquet can be set via:
   </tr>
   <tr>
     <td><code>mergeSchema</code></td>
-    <td>The SQL config <code>spark.sql.parquet.mergeSchema</code> which is <code>false</code> by default.</td>
+    <td>(value of <code>spark.sql.parquet.mergeSchema</code> configuration)</td>
     <td>Sets whether we should merge schemas collected from all Parquet part-files. This will override <code>spark.sql.parquet.mergeSchema</code>.</td>
     <td>read</td>
   </tr>
   <tr>
     <td><code>compression</code></td>
-    <td>None</td>
-    <td>Compression codec to use when saving to file. This can be one of the known case-insensitive shorten names (none, uncompressed, snappy, gzip, lzo, brotli, lz4, and zstd). This will override <code>spark.sql.parquet.compression.codec</code>. If None is set, it uses the value specified in <code>spark.sql.parquet.compression.codec</code>.</td>
+    <td><code>snappy</code></td>
+    <td>Compression codec to use when saving to file. This can be one of the known case-insensitive shorten names (none, uncompressed, snappy, gzip, lzo, brotli, lz4, and zstd). This will override <code>spark.sql.parquet.compression.codec</code>.</td>
     <td>write</td>
   </tr>
 </table>
