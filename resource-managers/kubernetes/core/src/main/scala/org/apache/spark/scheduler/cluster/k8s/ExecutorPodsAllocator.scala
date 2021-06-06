@@ -366,7 +366,7 @@ private[spark] class ExecutorPodsAllocator(
   }
 
   private def requestNewExecutors(
-      numExecutorsToAllocate: Int, 
+      numExecutorsToAllocate: Int,
       applicationId: String,
       resourceProfileId: Int,
       pvcsInUse: Seq[String]): Unit = {
