@@ -620,17 +620,20 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
 
     // Target 1 executor, make sure it's requested, even with an empty initial snapshot.
     podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 1))
+    assert(podsAllocatorUnderTest.numNewlyCreatedUnknownPods.get() == 1)
     verify(podOperations).create(podWithAttachedContainerForIdAndVolume(1))
 
     // Mark executor as running, verify that subsequent allocation cycle is a no-op.
     snapshotsStore.updatePod(runningExecutor(1))
     snapshotsStore.notifySubscribers()
+    assert(podsAllocatorUnderTest.numNewlyCreatedUnknownPods.get() == 0)
     verify(podOperations, times(1)).create(any())
     verify(podOperations, never()).delete()
 
     // Request a new executor, make sure it's using reused PVC
     podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 2))
     snapshotsStore.notifySubscribers()
+    assert(podsAllocatorUnderTest.numNewlyCreatedUnknownPods.get() == 1)
     verify(podOperations).create(podWithAttachedContainerForIdAndVolume(2))
     verify(persistentVolumeClaims, never()).create(any())
   }
