@@ -3499,7 +3499,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         if method == "first":
             window = (
                 Window.orderBy(
-                    asc_func(self.spark.column), asc_func(F.col(NATURAL_ORDER_COLUMN_NAME)),
+                    asc_func(self.spark.column),
+                    asc_func(F.col(NATURAL_ORDER_COLUMN_NAME)),
                 )
                 .partitionBy(*part_cols)
                 .rowsBetween(Window.unboundedPreceding, Window.currentRow)
@@ -3972,7 +3973,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             )
 
         internal = self._internal
-        scols = internal.index_spark_columns[len(item):] + [self.spark.column]
+        scols = internal.index_spark_columns[len(item) :] + [self.spark.column]
         rows = [internal.spark_columns[level] == index for level, index in enumerate(item)]
         sdf = internal.spark_frame.filter(reduce(lambda x, y: x & y, rows)).select(scols)
 
@@ -3999,10 +4000,10 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             internal = internal.copy(
                 spark_frame=sdf,
                 index_spark_columns=[
-                    scol_for(sdf, col) for col in internal.index_spark_column_names[len(item):]
+                    scol_for(sdf, col) for col in internal.index_spark_column_names[len(item) :]
                 ],
-                index_fields=internal.index_fields[len(item):],
-                index_names=self._internal.index_names[len(item):],
+                index_fields=internal.index_fields[len(item) :],
+                index_names=self._internal.index_names[len(item) :],
                 data_spark_columns=[scol_for(sdf, internal.data_spark_column_names[0])],
             )
             return first_series(DataFrame(internal))
@@ -4674,7 +4675,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         internal = self._internal
         scols = (
             internal.index_spark_columns[:level]
-            + internal.index_spark_columns[level + len(key):]
+            + internal.index_spark_columns[level + len(key) :]
             + [self.spark.column]
         )
         rows = [internal.spark_columns[lvl] == index for lvl, index in enumerate(key, level)]
@@ -4689,10 +4690,10 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         index_spark_column_names = (
             internal.index_spark_column_names[:level]
-            + internal.index_spark_column_names[level + len(key):]
+            + internal.index_spark_column_names[level + len(key) :]
         )
-        index_names = internal.index_names[:level] + internal.index_names[level + len(key):]
-        index_fields = internal.index_fields[:level] + internal.index_fields[level + len(key):]
+        index_names = internal.index_names[:level] + internal.index_names[level + len(key) :]
+        index_fields = internal.index_fields[:level] + internal.index_fields[level + len(key) :]
 
         internal = internal.copy(
             spark_frame=sdf,

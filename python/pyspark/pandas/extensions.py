@@ -124,7 +124,9 @@ def _register_accessor(
             )
 
             warnings.warn(
-                msg, UserWarning, stacklevel=2,
+                msg,
+                UserWarning,
+                stacklevel=2,
             )
         setattr(cls, name, CachedAccessor(name, accessor))
         return accessor

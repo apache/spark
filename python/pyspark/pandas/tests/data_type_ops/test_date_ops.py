@@ -55,7 +55,8 @@ class DateOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         self.assertRaises(TypeError, lambda: self.psser - "x")
         self.assertRaises(TypeError, lambda: self.psser - 1)
         self.assert_eq(
-            (self.pser - self.some_date).dt.days, self.psser - self.some_date,
+            (self.pser - self.some_date).dt.days,
+            self.psser - self.some_date,
         )
         with option_context("compute.ops_on_diff_frames", True):
             for pser, psser in self.pser_psser_pairs:
@@ -118,7 +119,8 @@ class DateOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         self.assertRaises(TypeError, lambda: "x" - self.psser)
         self.assertRaises(TypeError, lambda: 1 - self.psser)
         self.assert_eq(
-            (self.some_date - self.pser).dt.days, self.some_date - self.psser,
+            (self.some_date - self.pser).dt.days,
+            self.some_date - self.psser,
         )
 
     def test_rmul(self):
@@ -152,7 +154,8 @@ if __name__ == "__main__":
 
     try:
         import xmlrunner  # type: ignore[import]
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
+
+        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

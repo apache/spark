@@ -19,69 +19,75 @@
 package org.apache.spark.ml.optim.aggregator
 
 import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.ml.feature._
+import org.apache.spark.internal.Logging
+import org.apache.spark.ml.feature.InstanceBlock
 import org.apache.spark.ml.linalg._
 
 /**
- * AFTBlockAggregator computes the gradient and loss as used in AFT survival regression
+ * HuberBlockAggregator computes the gradient and loss used in Huber Regression
  * for blocks in sparse or dense matrix in an online fashion.
  *
- * Two AFTBlockAggregator can be merged together to have a summary of loss and gradient of
- * the corresponding joint dataset.
+ * Two HuberBlockAggregator can be merged together to have a summary of loss and
+ * gradient of the corresponding joint dataset.
  *
  * NOTE: The feature values are expected to already have be scaled (multiplied by bcInverseStd,
  * but NOT centered) before computation.
  *
- * @param bcCoefficients The coefficients corresponding to the features, it includes three parts:
- *                       1, regression coefficients corresponding to the features;
- *                       2, the intercept;
- *                       3, the log of scale parameter.
+ * @param bcCoefficients The coefficients corresponding to the features.
  * @param fitIntercept Whether to fit an intercept term. When true, will perform data centering
  *                     in a virtual way. Then we MUST adjust the intercept of both initial
  *                     coefficients and final solution in the caller.
  */
-private[ml] class AFTBlockAggregator (
+private[ml] class HuberBlockAggregator(
+    bcInverseStd: Broadcast[Array[Double]],
     bcScaledMean: Broadcast[Array[Double]],
-    fitIntercept: Boolean)(bcCoefficients: Broadcast[Vector])
-  extends DifferentiableLossAggregator[InstanceBlock,
-    AFTBlockAggregator] {
+    fitIntercept: Boolean,
+    epsilon: Double)(bcCoefficients: Broadcast[Vector])
+  extends DifferentiableLossAggregator[InstanceBlock, HuberBlockAggregator]
+  with Logging {
 
+  if (fitIntercept) {
+    require(bcScaledMean != null && bcScaledMean.value.length == bcInverseStd.value.length,
+      "scaled means is required when center the vectors")
+  }
+
+  private val numFeatures = bcInverseStd.value.length
   protected override val dim: Int = bcCoefficients.value.size
-  private val numFeatures = dim - 2
 
   @transient private lazy val coefficientsArray = bcCoefficients.value match {
     case DenseVector(values) => values
-    case _ => throw new IllegalArgumentException(s"coefficients only supports dense vector" +
-      s" but got type ${bcCoefficients.value.getClass}.")
+    case _ => throw new IllegalArgumentException(s"coefficients only supports dense vector but " +
+      s"got type ${bcCoefficients.value.getClass}.)")
   }
 
-  @transient private lazy val linear = Vectors.dense(coefficientsArray.take(numFeatures))
+  @transient private lazy val linear = new DenseVector(coefficientsArray.take(numFeatures))
 
   // pre-computed margin of an empty vector.
   // with this variable as an offset, for a sparse vector, we only need to
   // deal with non-zero values in prediction.
-  private val marginOffset = if (fitIntercept) {
+  private lazy val marginOffset = if (fitIntercept) {
     coefficientsArray(dim - 2) -
-      BLAS.getBLAS(numFeatures).ddot(numFeatures, coefficientsArray, 1, bcScaledMean.value, 1)
+      BLAS.javaBLAS.ddot(numFeatures, coefficientsArray, 1, bcScaledMean.value, 1)
   } else {
     Double.NaN
   }
 
   /**
-   * Add a new training instance block to this BlockAFTAggregator, and update the loss and
-   * gradient of the objective function.
+   * Add a new training instance block to this HuberBlockAggregator, and update the loss
+   * and gradient of the objective function.
    *
-   * @return This BlockAFTAggregator object.
+   * @param block The instance block of data point to be added.
+   * @return This HuberBlockAggregator object.
    */
   def add(block: InstanceBlock): this.type = {
     require(block.matrix.isTransposed)
     require(numFeatures == block.numFeatures, s"Dimensions mismatch when adding new " +
       s"instance. Expecting $numFeatures but got ${block.numFeatures}.")
-    require(block.labels.forall(_ > 0.0), "The lifetime or label should be greater than 0.")
+    require(block.weightIter.forall(_ >= 0),
+      s"instance weights ${block.weightIter.mkString("[", ",", "]")} has to be >= 0.0")
 
+    if (block.weightIter.forall(_ == 0)) return this
     val size = block.size
-    // sigma is the scale parameter of the AFT model
-    val sigma = math.exp(coefficientsArray(dim - 1))
 
     // vec/arr here represents margins
     val vec = new DenseVector(Array.ofDim[Double](size))
@@ -89,28 +95,43 @@ private[ml] class AFTBlockAggregator (
     if (fitIntercept) java.util.Arrays.fill(arr, marginOffset)
     BLAS.gemv(1.0, block.matrix, linear, 1.0, vec)
 
-    // in-place convert margins to gradient scales
-    // then, vec represents gradient scales
-    var localLossSum = 0.0
-    var i = 0
+    // in-place convert margins to multiplier
+    // then, vec/arr represents multiplier
+    val sigma = coefficientsArray.last
     var sigmaGradSum = 0.0
+    var localLossSum = 0.0
+    var localWeightSum = 0.0
     var multiplierSum = 0.0
+    var i = 0
     while (i < size) {
-      val ti = block.getLabel(i)
-      // here use Instance.weight to store censor for convenience
-      val delta = block.getWeight(i)
-      val margin = arr(i)
-      val epsilon = (math.log(ti) - margin) / sigma
-      val expEpsilon = math.exp(epsilon)
-      localLossSum += delta * math.log(sigma) - delta * epsilon + expEpsilon
-      val multiplier = (delta - expEpsilon) / sigma
-      arr(i) = multiplier
-      multiplierSum += multiplier
-      sigmaGradSum += delta + multiplier * sigma * epsilon
+      val weight = block.getWeight(i)
+      localWeightSum += weight
+      if (weight > 0) {
+        val label = block.getLabel(i)
+        val margin = arr(i)
+        val linearLoss = label - margin
+
+        if (math.abs(linearLoss) <= sigma * epsilon) {
+          localLossSum += 0.5 * weight * (sigma + math.pow(linearLoss, 2.0) / sigma)
+          val linearLossDivSigma = linearLoss / sigma
+          val multiplier = -1.0 * weight * linearLossDivSigma
+          arr(i) = multiplier
+          multiplierSum += multiplier
+          sigmaGradSum += 0.5 * weight * (1.0 - math.pow(linearLossDivSigma, 2.0))
+        } else {
+          localLossSum += 0.5 * weight *
+            (sigma + 2.0 * epsilon * math.abs(linearLoss) - sigma * epsilon * epsilon)
+          val sign = if (linearLoss >= 0) -1.0 else 1.0
+          val multiplier = weight * sign * epsilon
+          arr(i) = multiplier
+          multiplierSum += multiplier
+          sigmaGradSum += 0.5 * weight * (1.0 - epsilon * epsilon)
+        }
+      } else { arr(i) = 0.0 }
       i += 1
     }
     lossSum += localLossSum
-    weightSum += size
+    weightSum += localWeightSum
 
     block.matrix match {
       case dm: DenseMatrix =>
@@ -118,7 +139,7 @@ private[ml] class AFTBlockAggregator (
           arr, 1, 1.0, gradientSumArray, 1)
 
       case sm: SparseMatrix =>
-        val linearGradSumVec = new DenseVector(Array.ofDim[Double](numFeatures))
+        val linearGradSumVec = Vectors.zeros(numFeatures).toDense
         BLAS.gemv(1.0, sm.transpose, vec, 0.0, linearGradSumVec)
         BLAS.javaBLAS.daxpy(numFeatures, 1.0, linearGradSumVec.values, 1,
           gradientSumArray, 1)
@@ -130,6 +151,7 @@ private[ml] class AFTBlockAggregator (
       BLAS.javaBLAS.daxpy(numFeatures, -multiplierSum, bcScaledMean.value, 1,
         gradientSumArray, 1)
 
+      // update the intercept part of gradientSumArray
       gradientSumArray(dim - 2) += multiplierSum
     }
 

@@ -899,6 +899,11 @@ class JDBCSuite extends QueryTest
       Option(TimestampType))
   }
 
+  test("SPARK-35446: MySQLDialect type mapping of float") {
+    val mySqlDialect = JdbcDialects.get("jdbc:mysql://127.0.0.1/db")
+    assert(mySqlDialect.getJDBCType(FloatType).map(_.databaseTypeDefinition).get == "FLOAT")
+  }
+
   test("PostgresDialect type mapping") {
     val Postgres = JdbcDialects.get("jdbc:postgresql://127.0.0.1/db")
     val md = new MetadataBuilder().putLong("scale", 0)

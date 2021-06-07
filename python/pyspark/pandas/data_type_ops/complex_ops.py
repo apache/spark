@@ -34,22 +34,25 @@ class ArrayOps(DataTypeOps):
 
     @property
     def pretty_name(self) -> str:
-        return 'arrays'
+        return "arrays"
 
     def add(self, left, right) -> Union["Series", "Index"]:
         if not isinstance(right, IndexOpsMixin) or (
             isinstance(right, IndexOpsMixin) and not isinstance(right.spark.data_type, ArrayType)
         ):
             raise TypeError(
-                "Concatenation can not be applied to %s and the given type." % self.pretty_name)
+                "Concatenation can not be applied to %s and the given type." % self.pretty_name
+            )
 
         left_type = left.spark.data_type.elementType
         right_type = right.spark.data_type.elementType
 
         if left_type != right_type and not (
-                isinstance(left_type, NumericType) and isinstance(right_type, NumericType)):
+            isinstance(left_type, NumericType) and isinstance(right_type, NumericType)
+        ):
             raise TypeError(
-                "Concatenation can only be applied to %s of the same type" % self.pretty_name)
+                "Concatenation can only be applied to %s of the same type" % self.pretty_name
+            )
 
         return column_op(F.concat)(left, right)
 
@@ -61,7 +64,7 @@ class MapOps(DataTypeOps):
 
     @property
     def pretty_name(self) -> str:
-        return 'maps'
+        return "maps"
 
 
 class StructOps(DataTypeOps):
@@ -71,4 +74,4 @@ class StructOps(DataTypeOps):
 
     @property
     def pretty_name(self) -> str:
-        return 'structs'
+        return "structs"

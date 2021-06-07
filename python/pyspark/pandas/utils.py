@@ -270,7 +270,7 @@ def combine_frames(
                 struct_field, use_extension_dtypes=field.is_extension_dtype
             )
             for struct_field, field in zip(
-                schema.fields[len(index_spark_columns):],
+                schema.fields[len(index_spark_columns) :],
                 this_internal.data_fields + that_internal.data_fields,
             )
         ]
@@ -452,7 +452,7 @@ def align_diff_frames(
 
 
 def is_testing() -> bool:
-    """ Indicates whether Spark is currently running tests. """
+    """Indicates whether Spark is currently running tests."""
     return "SPARK_TESTING" in os.environ
 
 
@@ -586,12 +586,12 @@ def lazy_property(fn: Callable[[Any], Any]) -> property:
 
 
 def scol_for(sdf: spark.DataFrame, column_name: str) -> spark.Column:
-    """ Return Spark Column for the given column name. """
+    """Return Spark Column for the given column name."""
     return sdf["`{}`".format(column_name)]
 
 
 def column_labels_level(column_labels: List[Tuple]) -> int:
-    """ Return the level of the column index. """
+    """Return the level of the column index."""
     if len(column_labels) == 0:
         return 1
     else:
@@ -712,7 +712,7 @@ def is_name_like_value(
 
 
 def validate_axis(axis: Optional[Union[int, str]] = 0, none_axis: int = 0) -> int:
-    """ Check the given axis is valid. """
+    """Check the given axis is valid."""
     # convert to numeric axis
     axis = cast(
         Dict[Optional[Union[int, str]], int], {None: none_axis, "index": 0, "columns": 1}
@@ -724,7 +724,7 @@ def validate_axis(axis: Optional[Union[int, str]] = 0, none_axis: int = 0) -> in
 
 
 def validate_bool_kwarg(value: Any, arg_name: str) -> Optional[bool]:
-    """ Ensures that argument passed in arg_name is of type bool. """
+    """Ensures that argument passed in arg_name is of type bool."""
     if not (isinstance(value, bool) or value is None):
         raise TypeError(
             'For argument "{}" expected type bool, received '
@@ -734,7 +734,7 @@ def validate_bool_kwarg(value: Any, arg_name: str) -> Optional[bool]:
 
 
 def validate_how(how: str) -> str:
-    """ Check the given how for join is valid. """
+    """Check the given how for join is valid."""
     if how == "full":
         warnings.warn(
             "Warning: While pandas-on-Spark will accept 'full', you should use 'outer' "
