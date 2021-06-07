@@ -27,11 +27,11 @@ import org.apache.spark.annotation.Unstable
  * It does not store or represent a time-zone.
  * Its valid range is [0001-01-01T00:00:00.000000, 9999-12-31T23:59:59.999999].
  *
- * Please use the singleton `DataTypes.TimestampNTZType` to refer the type.
+ * Please use the singleton `DataTypes.TimestampWithoutTZType` to refer the type.
  * @since 3.2.0
  */
 @Unstable
-class TimestampWithoutTZType$ private() extends AtomicType {
+class TimestampWithoutTZType private() extends AtomicType {
   /**
    * Internally, a timestamp is stored as the number of microseconds from
    * the epoch of 1970-01-01T00:00:00.000000(Unix system time zero)
@@ -47,16 +47,16 @@ class TimestampWithoutTZType$ private() extends AtomicType {
    */
   override def defaultSize: Int = 8
 
-  private[spark] override def asNullable: TimestampWithoutTZType$ = this
+  private[spark] override def asNullable: TimestampWithoutTZType = this
 }
 
 /**
  * The companion case object and its class is separated so the companion object also subclasses
- * the TimestampNTZType class. Otherwise, the companion object would be of type "TimestampNTZType"
- * in byte code. Defined with a private constructor so the companion object is the only possible
- * instantiation.
+ * the TimestampWithoutTZType class. Otherwise, the companion object would be of type
+ * "TimestampWithoutTZType" in byte code. Defined with a private constructor so the companion
+ * object is the only possible instantiation.
  *
  * @since 3.2.0
  */
 @Unstable
-case object TimestampWithoutTZType$ extends TimestampWithoutTZType$
+case object TimestampWithoutTZType extends TimestampWithoutTZType
