@@ -499,8 +499,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         periodicBatchExecutorsDecommissionThread.get.scheduleAtFixedRate(new Runnable {
           override def run(): Unit = Utils.tryLogNonFatalError {
             // check for executors decommissioning themelves.
-            val numExecutorInDecommissioning =
+            val numExecutorInDecommissioning = CoarseGrainedSchedulerBackend.this.synchronized {
               executorsPendingDecommission.size - executorsToDecommissionInBatches.size
+            }
             val executorsBatchToDecommission = executorsToDecommissionInBatches
               .take(Math.max(0, batchSize - numExecutorInDecommissioning))
             executorsBatchToDecommission.foreach { executorId =>
