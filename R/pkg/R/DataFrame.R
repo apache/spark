@@ -890,7 +890,8 @@ setMethod("toJSON",
 #'             save mode (it is 'error' by default)
 #' @param ... additional argument(s) passed to the method.
 #'            You can find the JSON-specific options for writing JSON files in
-#'            \href{https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option}{
+#'            \href{
+#'            https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option}{
 #'            Data Source Option} in the version you use.
 #'
 #' @family SparkDataFrame functions
@@ -924,7 +925,8 @@ setMethod("write.json",
 #'             save mode (it is 'error' by default)
 #' @param ... additional argument(s) passed to the method.
 #'            You can find the ORC-specific options for writing ORC files in
-#'            \href{https://spark.apache.org/docs/latest/sql-data-sources-orc.html#data-source-option}{
+#'            \href{
+#'            https://spark.apache.org/docs/latest/sql-data-sources-orc.html#data-source-option}{
 #'            Data Source Option} in the version you use.
 #'
 #' @family SparkDataFrame functions
@@ -958,8 +960,9 @@ setMethod("write.orc",
 #'             save mode (it is 'error' by default)
 #' @param ... additional argument(s) passed to the method.
 #'            You can find the Parquet-specific options for writing Parquet files in
-#'            \href{https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#data-source-option}{
-#'            Data Source Option} in the version you use.
+#'            \href{
+#'            https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#data-source-option
+#'            }{Data Source Option} in the version you use.
 #'
 #' @family SparkDataFrame functions
 #' @rdname write.parquet
@@ -993,7 +996,8 @@ setMethod("write.parquet",
 #'             save mode (it is 'error' by default)
 #' @param ... additional argument(s) passed to the method.
 #'            You can find the text-specific options for writing text files in
-#'            \href{https://spark.apache.org/docs/latest/sql-data-sources-text.html#data-source-option}{
+#'            \href{
+#'            https://spark.apache.org/docs/latest/sql-data-sources-text.html#data-source-option}{
 #'            Data Source Option} in the version you use.
 #'
 #' @family SparkDataFrame functions
