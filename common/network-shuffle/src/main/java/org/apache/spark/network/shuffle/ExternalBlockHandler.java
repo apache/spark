@@ -17,6 +17,7 @@
 
 package org.apache.spark.network.shuffle;
 
+import com.google.common.base.Preconditions;
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -46,7 +47,6 @@ import org.apache.spark.network.protocol.MergedBlockMetaRequest;
 import org.apache.spark.network.server.OneForOneStreamManager;
 import org.apache.spark.network.server.RpcHandler;
 import org.apache.spark.network.server.StreamManager;
-import static org.apache.spark.network.shuffle.OneForOneBlockFetcher.*;
 import org.apache.spark.network.shuffle.protocol.*;
 import static org.apache.spark.network.util.NettyUtils.getRemoteAddress;
 import org.apache.spark.network.util.TransportConf;
@@ -347,15 +347,17 @@ public class ExternalBlockHandler extends RpcHandler
         blockId0Parts[0].equals(SHUFFLE_CHUNK_ID))) {
         final int shuffleId = Integer.parseInt(blockId0Parts[1]);
         requestForMergedBlockChunks = blockId0Parts[0].equals(SHUFFLE_CHUNK_ID);
-        final int[] mapIdAndReduceIds = shuffleMapIdAndReduceIds(blockIds, shuffleId);
-        size = mapIdAndReduceIds.length;
+        // For regular shuffle blocks, primaryId is mapId and secondaryIds are reduceIds.
+        // For shuffle chunks, primaryIds is reduceId and secondaryIds are chunkIds.
+        final int[] primaryIdAndSecondaryIds = shuffleMapIdAndReduceIds(blockIds, shuffleId);
+        size = primaryIdAndSecondaryIds.length;
         blockDataForIndexFn = index -> {
           if (requestForMergedBlockChunks) {
-            return mergeManager.getMergedBlockData(
-              msg.appId, shuffleId, mapIdAndReduceIds[index], mapIdAndReduceIds[index + 1]);
+            return mergeManager.getMergedBlockData(msg.appId, shuffleId,
+              primaryIdAndSecondaryIds[index], primaryIdAndSecondaryIds[index + 1]);
           } else {
             return blockManager.getBlockData(msg.appId, msg.execId, shuffleId,
-              mapIdAndReduceIds[index], mapIdAndReduceIds[index + 1]);
+              primaryIdAndSecondaryIds[index], primaryIdAndSecondaryIds[index + 1]);
           }
         };
       } else if (blockId0Parts.length == 3 && blockId0Parts[0].equals("rdd")) {
@@ -382,7 +384,9 @@ public class ExternalBlockHandler extends RpcHandler
     }
 
     private int[] shuffleMapIdAndReduceIds(String[] blockIds, int shuffleId) {
-      final int[] mapIdAndReduceIds = new int[2 * blockIds.length];
+      // For regular shuffle blocks, primaryId is mapId and secondaryIds are reduceIds.
+      // For shuffle chunks, primaryIds is reduceId and secondaryIds are chunkIds.
+      final int[] primaryIdAndSecondaryIds = new int[2 * blockIds.length];
       for (int i = 0; i < blockIds.length; i++) {
         String[] blockIdParts = blockIds[i].split("_");
         if (blockIdParts.length != 4
@@ -394,12 +398,12 @@ public class ExternalBlockHandler extends RpcHandler
           throw new IllegalArgumentException("Expected shuffleId=" + shuffleId +
             ", got:" + blockIds[i]);
         }
-        // For regular blocks this is mapId. For chunks this is reduceId.
-        mapIdAndReduceIds[2 * i] = Integer.parseInt(blockIdParts[2]);
-        // For regular blocks this is reduceId. For chunks this is chunkId.
-        mapIdAndReduceIds[2 * i + 1] = Integer.parseInt(blockIdParts[3]);
+        // For regular blocks, blockIdParts[2] is mapId. For chunks, it is reduceId.
+        primaryIdAndSecondaryIds[2 * i] = Integer.parseInt(blockIdParts[2]);
+        // For regular blocks, blockIdParts[3] is reduceId. For chunks, it is chunkId.
+        primaryIdAndSecondaryIds[2 * i + 1] = Integer.parseInt(blockIdParts[3]);
       }
-      return mapIdAndReduceIds;
+      return primaryIdAndSecondaryIds;
     }
 
     @Override
@@ -497,15 +501,15 @@ public class ExternalBlockHandler extends RpcHandler
 
     @Override
     public ManagedBuffer next() {
-      ManagedBuffer block = mergeManager.getMergedBlockData(
-        appId, shuffleId, reduceIds[reduceIdx], chunkIds[reduceIdx][chunkIdx]);
+      ManagedBuffer block = Preconditions.checkNotNull(mergeManager.getMergedBlockData(
+        appId, shuffleId, reduceIds[reduceIdx], chunkIds[reduceIdx][chunkIdx]));
       if (chunkIdx < chunkIds[reduceIdx].length - 1) {
         chunkIdx += 1;
       } else {
         chunkIdx = 0;
         reduceIdx += 1;
       }
-      metrics.blockTransferRateBytes.mark(block != null ? block.size() : 0);
+      metrics.blockTransferRateBytes.mark(block.size());
       return block;
     }
   }
