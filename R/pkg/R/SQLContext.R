@@ -624,7 +624,16 @@ loadDF <- function(path = NULL, source = NULL, schema = NULL, ...) {
 #' Don't create too many partitions in parallel on a large cluster; otherwise Spark might crash
 #' your external database systems.
 #'
+#' @param url JDBC database url of the form \code{jdbc:subprotocol:subname}
 #' @param tableName the name of the table in the external database
+#' @param partitionColumn the name of a column of numeric, date, or timestamp type
+#'                        that will be used for partitioning.
+#' @param lowerBound the minimum value of \code{partitionColumn} used to decide partition stride
+#' @param upperBound the maximum value of \code{partitionColumn} used to decide partition stride
+#' @param numPartitions the number of partitions, This, along with \code{lowerBound} (inclusive),
+#'                      \code{upperBound} (exclusive), form partition strides for generated WHERE
+#'                      clause expressions used to split the column \code{partitionColumn} evenly.
+#'                      This defaults to SparkContext.defaultParallelism when unset.
 #' @param predicates a list of conditions in the where clause; each one defines one partition
 #' @param ... additional JDBC database connection named properties.
 #' @return SparkDataFrame
