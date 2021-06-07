@@ -95,7 +95,7 @@ private[yarn] class YarnAllocator(
   private val numExecutorsStartingPerResourceProfileId = new HashMap[Int, AtomicInteger]
 
   @GuardedBy("this")
-  private val targetNumExecutorsPerResourceProfileId = new mutable.HashMap[Int, Int]
+  protected val targetNumExecutorsPerResourceProfileId = new mutable.HashMap[Int, Int]
 
   // Executor loss reason requests that are pending - maps from executor ID for inquiry to a
   // list of requesters that should be responded to once we find out why the given executor
@@ -131,7 +131,7 @@ private[yarn] class YarnAllocator(
   // A map of ResourceProfile id to a map of preferred hostname and possible
   // task numbers running on it.
   @GuardedBy("this")
-  private var hostToLocalTaskCountPerResourceProfileId: Map[Int, Map[String, Int]] =
+  protected var hostToLocalTaskCountPerResourceProfileId: Map[Int, Map[String, Int]] =
     Map(DEFAULT_RESOURCE_PROFILE_ID -> Map.empty)
 
   // ResourceProfile Id to number of tasks that have locality preferences in active stages
@@ -228,30 +228,30 @@ private[yarn] class YarnAllocator(
   // always finishes a stage before starting a later one and if we have 2 running in parallel
   // the priority doesn't matter.
   // We are using the ResourceProfile id as the priority.
-  private def getContainerPriority(rpId: Int): Priority = {
+  protected def getContainerPriority(rpId: Int): Priority = {
     Priority.newInstance(rpId)
   }
 
   // The ResourceProfile id is the priority
-  private def getResourceProfileIdFromPriority(priority: Priority): Int = {
+  protected def getResourceProfileIdFromPriority(priority: Priority): Int = {
     priority.getPriority()
   }
 
-  private def getOrUpdateAllocatedHostToContainersMapForRPId(
+  protected def getOrUpdateAllocatedHostToContainersMapForRPId(
       rpId: Int): HashMap[String, collection.mutable.Set[ContainerId]] = synchronized {
     allocatedHostToContainersMapPerRPId.getOrElseUpdate(rpId,
       new HashMap[String, mutable.Set[ContainerId]]())
   }
 
-  private def getOrUpdateRunningExecutorForRPId(rpId: Int): mutable.Set[String] = synchronized {
+  protected def getOrUpdateRunningExecutorForRPId(rpId: Int): mutable.Set[String] = synchronized {
     runningExecutorsPerResourceProfileId.getOrElseUpdate(rpId, mutable.HashSet[String]())
   }
 
-  private def getOrUpdateNumExecutorsStartingForRPId(rpId: Int): AtomicInteger = synchronized {
+  protected def getOrUpdateNumExecutorsStartingForRPId(rpId: Int): AtomicInteger = synchronized {
     numExecutorsStartingPerResourceProfileId.getOrElseUpdate(rpId, new AtomicInteger(0))
   }
 
-  private def getOrUpdateTargetNumExecutorsForRPId(rpId: Int): Int = synchronized {
+  protected def getOrUpdateTargetNumExecutorsForRPId(rpId: Int): Int = synchronized {
     targetNumExecutorsPerResourceProfileId.getOrElseUpdate(rpId,
       SchedulerBackendUtils.getInitialTargetExecutorNumber(sparkConf))
   }
@@ -643,7 +643,7 @@ private[yarn] class YarnAllocator(
    * @param containersToUse list of containers that will be used
    * @param remaining list of containers that will not be used
    */
-  private def matchContainerToRequest(
+  protected def matchContainerToRequest(
       allocatedContainer: Container,
       location: String,
       containersToUse: ArrayBuffer[Container],

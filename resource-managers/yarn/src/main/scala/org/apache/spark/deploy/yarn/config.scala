@@ -27,6 +27,18 @@ import org.apache.spark.network.util.ByteUnit
 package object config extends Logging {
 
   /* Common app configuration. */
+  private[spark] val SCHEDULING_REQUEST_ENABLED =
+    ConfigBuilder("spark.yarn.schedulingRequestEnabled")
+      .doc("If true, use YARN Placement Constraint when request container resources")
+      .booleanConf
+      .createWithDefault(false)
+
+  private[spark] val NODE_ATTRIBUTE =
+    ConfigBuilder("spark.yarn.executor.nodeAttributes")
+      .doc("Required node attributes when request container, if no container can fullfills" +
+        "node attributes we required, we can't allocate container.")
+      .stringConf
+      .createOptional
 
   private[spark] val APPLICATION_TAGS = ConfigBuilder("spark.yarn.tags")
     .doc("Comma-separated list of strings to pass through as YARN application tags appearing " +
