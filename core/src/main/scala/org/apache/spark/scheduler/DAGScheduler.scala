@@ -19,8 +19,8 @@ package org.apache.spark.scheduler
 
 import java.io.NotSerializableException
 import java.util.Properties
-import java.util.concurrent.{ConcurrentHashMap, TimeoutException, TimeUnit}
-import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger}
+import java.util.concurrent.{ConcurrentHashMap, TimeoutException, TimeUnit }
+import java.util.concurrent.atomic.AtomicInteger
 
 import scala.annotation.tailrec
 import scala.collection.Map
@@ -1302,8 +1302,8 @@ private[spark] class DAGScheduler(
    * locations for block push/merge by getting the historical locations of past executors.
    */
   private def prepareShuffleServicesForShuffleMapStage(stage: ShuffleMapStage): Unit = {
-    if (stage.shuffleDep.shuffleMergeEnabled && !stage.shuffleDep.shuffleMergeFinalized
-      && stage.shuffleDep.getMergerLocs.isEmpty) {
+    assert(stage.shuffleDep.shuffleMergeEnabled && !stage.shuffleDep.shuffleMergeFinalized)
+    if (stage.shuffleDep.getMergerLocs.isEmpty) {
       val mergerLocs = sc.schedulerBackend.getShufflePushMergerLocations(
         stage.shuffleDep.partitioner.numPartitions, stage.resourceProfileId)
       if (mergerLocs.nonEmpty) {
@@ -1329,10 +1329,7 @@ private[spark] class DAGScheduler(
     // `findMissingPartitions()` returns all partitions every time.
     stage match {
       case sms: ShuffleMapStage if stage.isIndeterminate && !sms.isAvailable =>
-        mapOutputTracker.unregisterAllMapOutput(sms.shuffleDep.shuffleId)
-        if (sms.shuffleDep.shuffleMergeEnabled) {
-          mapOutputTracker.unregisterAllMergeResult(sms.shuffleDep.shuffleId)
-        }
+        mapOutputTracker.unregisterAllMapAndMergeOutput(sms.shuffleDep.shuffleId)
       case _ =>
     }
 
@@ -1353,7 +1350,7 @@ private[spark] class DAGScheduler(
       case s: ShuffleMapStage =>
         outputCommitCoordinator.stageStart(stage = s.id, maxPartitionId = s.numPartitions - 1)
         // Only generate merger location for a given shuffle dependency once.
-        if (pushBasedShuffleEnabled) {
+        if (s.shuffleDep.shuffleMergeEnabled) {
           if (!s.isMergeFinalized) {
             prepareShuffleServicesForShuffleMapStage(s)
           } else {
@@ -1759,7 +1756,7 @@ private[spark] class DAGScheduler(
           if (mapStage.rdd.isBarrier()) {
             // Mark all the map as broken in the map stage, to ensure retry all the tasks on
             // resubmitted stage attempt.
-            mapOutputTracker.unregisterAllMapOutput(shuffleId)
+            mapOutputTracker.unregisterAllMapAndMergeOutput(shuffleId)
           } else if (mapIndex != -1) {
             // Mark the map whose fetch failed as broken in the map stage
             mapOutputTracker.unregisterMapOutput(shuffleId, mapIndex, bmAddress)
@@ -1776,7 +1773,7 @@ private[spark] class DAGScheduler(
               case failedMapStage: ShuffleMapStage =>
                 // Mark all the map as broken in the map stage, to ensure retry all the tasks on
                 // resubmitted stage attempt.
-                mapOutputTracker.unregisterAllMapOutput(failedMapStage.shuffleDep.shuffleId)
+                mapOutputTracker.unregisterAllMapAndMergeOutput(failedMapStage.shuffleDep.shuffleId)
 
               case failedResultStage: ResultStage =>
                 // Abort the failed result stage since we may have committed output for some
@@ -1985,7 +1982,7 @@ private[spark] class DAGScheduler(
               case failedMapStage: ShuffleMapStage =>
                 // Mark all the map as broken in the map stage, to ensure retry all the tasks on
                 // resubmitted stage attempt.
-                mapOutputTracker.unregisterAllMapOutput(failedMapStage.shuffleDep.shuffleId)
+                mapOutputTracker.unregisterAllMapAndMergeOutput(failedMapStage.shuffleDep.shuffleId)
 
               case failedResultStage: ResultStage =>
                 // Abort the failed result stage since we may have committed output for some
@@ -2054,18 +2051,6 @@ private[spark] class DAGScheduler(
       val numMergers = stage.shuffleDep.getMergerLocs.length
       val numResponses = new AtomicInteger()
       val results = (0 until numMergers).map(_ => SettableFuture.create[Boolean]())
-      val timedOut = new AtomicBoolean()
-
-      def increaseAndCheckResponseCount(): Unit = {
-        if (numResponses.incrementAndGet() == numMergers) {
-          logInfo("%s (%s) shuffle merge finalized".format(stage, stage.name))
-          // Since this runs in the netty client thread and is outside of DAGScheduler
-          // event loop, we only post ShuffleMergeFinalized event into the event queue.
-          // The processing of this event should be done inside the event loop, so it
-          // can safely modify scheduler's internal state.
-          eventProcessLoop.post(ShuffleMergeFinalized(stage))
-        }
-      }
 
       stage.shuffleDep.getMergerLocs.zipWithIndex.foreach {
         case (shuffleServiceLoc, index) =>
@@ -2077,24 +2062,20 @@ private[spark] class DAGScheduler(
             new MergeFinalizerListener {
               override def onShuffleMergeSuccess(statuses: MergeStatuses): Unit = {
                 assert(shuffleId == statuses.shuffleId)
-                if (!timedOut.get()) {
-                  eventProcessLoop.post(RegisterMergeStatuses(stage, MergeStatus.
-                        convertMergeStatusesToMergeStatusArr(statuses, shuffleServiceLoc)))
-                  increaseAndCheckResponseCount()
-                  results(index).set(true)
-                }
+                eventProcessLoop.post(RegisterMergeStatuses(stage, MergeStatus.
+                  convertMergeStatusesToMergeStatusArr(statuses, shuffleServiceLoc)))
+                numResponses.incrementAndGet()
+                results(index).set(true)
               }
 
               override def onShuffleMergeFailure(e: Throwable): Unit = {
-                if (!timedOut.get()) {
-                  logWarning(s"Exception encountered when trying to finalize shuffle " +
-                    s"merge on ${shuffleServiceLoc.host} for shuffle $shuffleId", e)
-                  increaseAndCheckResponseCount()
-                  // Do not fail the future as this would cause dag scheduler to prematurely
-                  // give up on waiting for merge results from the remaining shuffle services
-                  // if one fails
-                  results(index).set(false)
-                }
+                logWarning(s"Exception encountered when trying to finalize shuffle " +
+                  s"merge on ${shuffleServiceLoc.host} for shuffle $shuffleId", e)
+                numResponses.incrementAndGet()
+                // Do not fail the future as this would cause dag scheduler to prematurely
+                // give up on waiting for merge results from the remaining shuffle services
+                // if one fails
+                results(index).set(false)
               }
             })
       }
@@ -2109,8 +2090,8 @@ private[spark] class DAGScheduler(
         case _: TimeoutException =>
           logInfo(s"Timed out on waiting for merge results from all " +
             s"$numMergers mergers for shuffle $shuffleId")
-          timedOut.set(true)
-          eventProcessLoop.post(ShuffleMergeFinalized(stage))
+      } finally {
+        eventProcessLoop.post(ShuffleMergeFinalized(stage))
       }
     }
   }
@@ -2261,10 +2242,10 @@ private[spark] class DAGScheduler(
         hostToUnregisterOutputs match {
           case Some(host) =>
             logInfo(s"Shuffle files lost for host: $host (epoch $currentEpoch)")
-            mapOutputTracker.removeOutputsOnHost(host, pushBasedShuffleEnabled)
+            mapOutputTracker.removeOutputsOnHost(host)
           case None =>
             logInfo(s"Shuffle files lost for executor: $execId (epoch $currentEpoch)")
-            mapOutputTracker.removeOutputsOnExecutor(execId, pushBasedShuffleEnabled)
+            mapOutputTracker.removeOutputsOnExecutor(execId)
         }
       }
     }
@@ -2286,7 +2267,7 @@ private[spark] class DAGScheduler(
       host: String,
       message: String): Unit = {
     logInfo("Shuffle files lost for worker %s on host %s".format(workerId, host))
-    mapOutputTracker.removeOutputsOnHost(host, pushBasedShuffleEnabled)
+    mapOutputTracker.removeOutputsOnHost(host)
     clearCacheLocs()
   }
 

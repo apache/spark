@@ -616,11 +616,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     runEvent(ExecutorLost("hostA-exec", ExecutorExited(-100, false, "Container marked as failed")))
     // Executor is removed but shuffle files are not unregistered
     verify(blockManagerMaster, times(1)).removeExecutor("hostA-exec")
-    // Default value needs to be passed here given how scala compiles the code to java.
-    // For more details, refer here:
-    // https://stackoverflow.com/questions/25115329
-    // TODO: Check if moving to mockito-scala is feasible or not to fix these issues.
-    verify(mapOutputTracker, times(0)).removeOutputsOnExecutor("hostA-exec", false)
+    verify(mapOutputTracker, times(0)).removeOutputsOnExecutor("hostA-exec")
 
     // The MapOutputTracker has all the shuffle files
     val mapStatuses = mapOutputTracker.shuffleStatuses(shuffleId).mapStatuses
@@ -635,7 +631,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     // blockManagerMaster.removeExecutor is not called again
     // but shuffle files are unregistered
     verify(blockManagerMaster, times(1)).removeExecutor("hostA-exec")
-    verify(mapOutputTracker, times(1)).removeOutputsOnExecutor("hostA-exec", false)
+    verify(mapOutputTracker, times(1)).removeOutputsOnExecutor("hostA-exec")
 
     // Shuffle files for hostA-exec should be lost
     assert(mapStatuses.count(_ != null) === 1)
@@ -647,7 +643,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     complete(taskSets(1), Seq(
       (FetchFailed(makeBlockManagerId("hostA"), shuffleId, 0L, 1, 0, "ignored"), null)
     ))
-    verify(mapOutputTracker, times(1)).removeOutputsOnExecutor("hostA-exec", false)
+    verify(mapOutputTracker, times(1)).removeOutputsOnExecutor("hostA-exec")
   }
 
   test("zero split job") {
@@ -914,19 +910,15 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       verify(blockManagerMaster, times(1)).removeExecutor("hostA-exec")
       if (expectFileLoss) {
         if (expectHostFileLoss) {
-          // Default value needs to be passed here given how scala compiles the code to java.
-          // For more details, refer here:
-          // https://stackoverflow.com/questions/25115329
-          // TODO: Check if moving to mockito-scala is feasible or not.
-          verify(mapOutputTracker, times(1)).removeOutputsOnHost("hostA", false)
+          verify(mapOutputTracker, times(1)).removeOutputsOnHost("hostA")
         } else {
-          verify(mapOutputTracker, times(1)).removeOutputsOnExecutor("hostA-exec", false)
+          verify(mapOutputTracker, times(1)).removeOutputsOnExecutor("hostA-exec")
         }
         intercept[MetadataFetchFailedException] {
           mapOutputTracker.getMapSizesByExecutorId(shuffleId, 0)
         }
       } else {
-        verify(mapOutputTracker, times(0)).removeOutputsOnExecutor("hostA-exec", false)
+        verify(mapOutputTracker, times(0)).removeOutputsOnExecutor("hostA-exec")
         assert(mapOutputTracker.getMapSizesByExecutorId(shuffleId, 0).map(_._1).toSet ===
           HashSet(makeBlockManagerId("hostA"), makeBlockManagerId("hostB")))
       }
