@@ -53,13 +53,13 @@ if TYPE_CHECKING:
 
 
 def is_valid_operand_for_numeric_arithmetic(
-    operand: Any, *, allow_bool_index_ops: bool = True
+    operand: Any, *, allow_bool_index_ops: bool = True, allow_bool: bool = True
 ) -> bool:
     """Check whether the `operand` is valid for arithmetic operations against numerics."""
     from pyspark.pandas.base import IndexOpsMixin
 
     if isinstance(operand, numbers.Number):
-        return True
+        return not isinstance(operand, bool) or allow_bool
     elif isinstance(operand, IndexOpsMixin):
         if isinstance(operand.dtype, CategoricalDtype):
             return False
