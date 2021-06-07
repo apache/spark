@@ -205,6 +205,10 @@ class AggregatingAccumulator private(
     buffer = other.buffer
     joinedRow = other.joinedRow
   }
+
+  private[execution] def addState(v: InternalRow): Unit = {
+    add(v)
+  }
 }
 
 object AggregatingAccumulator {
