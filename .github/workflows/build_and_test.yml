@@ -152,7 +152,7 @@ jobs:
     name: "Build modules: ${{ matrix.modules }}"
     runs-on: ubuntu-20.04
     container:
-      image: dongjoon/apache-spark-github-action-image:20210530
+      image: dongjoon/apache-spark-github-action-image:20210602
     strategy:
       fail-fast: false
       matrix:
@@ -163,6 +163,8 @@ jobs:
             pyspark-core, pyspark-streaming, pyspark-ml
           - >-
             pyspark-pandas
+          - >-
+            pyspark-pandas-slow
     env:
       MODULES_TO_TEST: ${{ matrix.modules }}
       HADOOP_PROFILE: hadoop3.2
@@ -215,8 +217,11 @@ jobs:
     # Ubuntu 20.04. See also SPARK-33162.
     - name: Install Python packages (Python 3.6)
       run: |
-        python3.6 -m pip install numpy 'pyarrow<3.0.0' pandas scipy xmlrunner plotly>=4.8
+        python3.6 -m pip install numpy 'pyarrow<3.0.0' pandas scipy xmlrunner 'plotly>=4.8'
         python3.6 -m pip list
+    - name: List Python packages (Python 3.9)
+      run: |
+        python3.9 -m pip list
     - name: Install Conda for pip packaging test
       run: |
         curl -s https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh > miniconda.sh
@@ -244,7 +249,7 @@ jobs:
     name: "Build modules: sparkr"
     runs-on: ubuntu-20.04
     container:
-      image: dongjoon/apache-spark-github-action-image:20201025
+      image: dongjoon/apache-spark-github-action-image:20210602
     env:
       HADOOP_PROFILE: hadoop3.2
       HIVE_PROFILE: hive2.3
@@ -309,7 +314,7 @@ jobs:
       LC_ALL: C.UTF-8
       LANG: C.UTF-8
     container:
-      image: dongjoon/apache-spark-github-action-image:20210530
+      image: dongjoon/apache-spark-github-action-image:20210602
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v2
@@ -361,7 +366,7 @@ jobs:
         #   See also https://github.com/sphinx-doc/sphinx/issues/7551.
         # Jinja2 3.0.0+ causes error when building with Sphinx.
         #   See also https://issues.apache.org/jira/browse/SPARK-35375.
-        python3.6 -m pip install flake8 'sphinx<3.1.0' numpy pydata_sphinx_theme ipython nbsphinx mypy numpydoc 'jinja2<3.0.0'
+        python3.6 -m pip install flake8 pydata_sphinx_theme mypy numpydoc 'jinja2<3.0.0' 'black==21.5b2'
     - name: Install R linter dependencies and SparkR
       run: |
         apt-get install -y libcurl4-openssl-dev libgit2-dev libssl-dev libxml2-dev
@@ -381,6 +386,7 @@ jobs:
         # Jinja2 3.0.0+ causes error when building with Sphinx.
         #   See also https://issues.apache.org/jira/browse/SPARK-35375.
         python3.6 -m pip install 'sphinx<3.1.0' mkdocs numpy pydata_sphinx_theme ipython nbsphinx numpydoc 'jinja2<3.0.0'
+        python3.6 -m pip install sphinx_plotly_directive 'pyarrow<3.0.0' pandas 'plotly>=4.8'
         apt-get update -y
         apt-get install -y ruby ruby-dev
         Rscript -e "install.packages(c('devtools', 'testthat', 'knitr', 'rmarkdown', 'roxygen2'), repos='https://cloud.r-project.org/')"

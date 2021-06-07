@@ -447,7 +447,10 @@ class MultiIndex(Index):
                 self._internal.index_dtypes,
             )
         )
-        index_map[i], index_map[j], = index_map[j], index_map[i]
+        index_map[i], index_map[j], = (
+            index_map[j],
+            index_map[i],
+        )
         index_spark_columns, index_names, index_dtypes = zip(*index_map)
         internal = self._internal.copy(
             index_spark_columns=list(index_spark_columns),
@@ -684,9 +687,7 @@ class MultiIndex(Index):
         raise NotImplementedError("nunique is not defined for MultiIndex")
 
     # TODO: add 'name' parameter after pd.MultiIndex.name is implemented
-    def copy(  # type: ignore[override]
-        self, deep: Optional[bool] = None
-    ) -> "MultiIndex":
+    def copy(self, deep: Optional[bool] = None) -> "MultiIndex":  # type: ignore[override]
         """
         Make a copy of this object.
 

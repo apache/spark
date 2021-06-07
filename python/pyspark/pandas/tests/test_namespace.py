@@ -266,7 +266,10 @@ class NamespaceTest(PandasOnSparkTestCase, SQLTestUtils):
 
         objs = [
             ([psdf1.A, psdf1.A.rename("B")], [pdf1.A, pdf1.A.rename("B")]),
-            ([psdf3[("X", "A")], psdf3[("X", "B")]], [pdf3[("X", "A")], pdf3[("X", "B")]],),
+            (
+                [psdf3[("X", "A")], psdf3[("X", "B")]],
+                [pdf3[("X", "A")], pdf3[("X", "B")]],
+            ),
             (
                 [psdf3[("X", "A")], psdf3[("X", "B")].rename("ABC")],
                 [pdf3[("X", "A")], pdf3[("X", "B")].rename("ABC")],

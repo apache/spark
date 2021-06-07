@@ -38,7 +38,7 @@ class StringOps(DataTypeOps):
 
     @property
     def pretty_name(self) -> str:
-        return 'strings'
+        return "strings"
 
     def add(self, left, right) -> Union["Series", "Index"]:
         if isinstance(right, IndexOpsMixin) and isinstance(right.spark.data_type, StringType):

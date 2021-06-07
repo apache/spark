@@ -132,7 +132,7 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
  *
  * This rule should be executed before pushing down the Filter
  */
-object EliminateOuterJoin extends Rule[LogicalPlan] with PredicateHelper with JoinSelectionHelper {
+object EliminateOuterJoin extends Rule[LogicalPlan] with PredicateHelper {
 
   /**
    * Returns whether the expression returns null or false when all inputs are nulls.
@@ -171,21 +171,17 @@ object EliminateOuterJoin extends Rule[LogicalPlan] with PredicateHelper with Jo
       val newJoinType = buildNewJoinType(f, j)
       if (j.joinType == newJoinType) f else Filter(condition, j.copy(joinType = newJoinType))
 
-    case a @ Aggregate(_, _, join @ Join(left, _, LeftOuter, _, _))
-        if a.isDistinct && a.references.subsetOf(AttributeSet(left.output)) &&
-          !canPlanAsBroadcastHashJoin(join, conf) =>
+    case a @ Aggregate(_, _, Join(left, _, LeftOuter, _, _))
+        if a.groupOnly && a.references.subsetOf(AttributeSet(left.output)) =>
       a.copy(child = left)
-    case a @ Aggregate(_, _, join @ Join(_, right, RightOuter, _, _))
-        if a.isDistinct && a.references.subsetOf(AttributeSet(right.output)) &&
-          !canPlanAsBroadcastHashJoin(join, conf) =>
+    case a @ Aggregate(_, _, Join(_, right, RightOuter, _, _))
+        if a.groupOnly && a.references.subsetOf(AttributeSet(right.output)) =>
       a.copy(child = right)
-    case a @ Aggregate(_, _, p @ Project(_, join @ Join(left, _, LeftOuter, _, _)))
-        if a.isDistinct && a.references.subsetOf(AttributeSet(left.output)) &&
-          !canPlanAsBroadcastHashJoin(join, conf) =>
+    case a @ Aggregate(_, _, p @ Project(_, Join(left, _, LeftOuter, _, _)))
+        if a.groupOnly && a.references.subsetOf(AttributeSet(left.output)) =>
       a.copy(child = p.copy(child = left))
-    case a @ Aggregate(_, _, p @ Project(_, join @ Join(_, right, RightOuter, _, _)))
-        if a.isDistinct && a.references.subsetOf(AttributeSet(right.output)) &&
-          !canPlanAsBroadcastHashJoin(join, conf) =>
+    case a @ Aggregate(_, _, p @ Project(_, Join(_, right, RightOuter, _, _)))
+        if a.groupOnly && a.references.subsetOf(AttributeSet(right.output)) =>
       a.copy(child = p.copy(child = right))
   }
 }

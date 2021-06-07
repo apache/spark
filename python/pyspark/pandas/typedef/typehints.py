@@ -216,7 +216,7 @@ def as_spark_type(tpe: Union[str, type, Dtype], *, raise_error: bool = True) -> 
 def spark_type_to_pandas_dtype(
     spark_type: types.DataType, *, use_extension_dtypes: bool = False
 ) -> Dtype:
-    """ Return the given Spark DataType to pandas dtype. """
+    """Return the given Spark DataType to pandas dtype."""
 
     if use_extension_dtypes and extension_dtypes_available:
         # IntegralType

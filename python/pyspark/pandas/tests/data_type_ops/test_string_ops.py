@@ -45,7 +45,8 @@ class StringOpsTest(PandasOnSparkTestCase, TestCasesUtils):
             self.assertRaises(TypeError, lambda: self.psser + self.non_numeric_pssers["datetime"])
             self.assertRaises(TypeError, lambda: self.psser + self.non_numeric_pssers["date"])
             self.assertRaises(
-                TypeError, lambda: self.psser + self.non_numeric_pssers["categorical"])
+                TypeError, lambda: self.psser + self.non_numeric_pssers["categorical"]
+            )
             self.assertRaises(TypeError, lambda: self.psser + self.non_numeric_pssers["bool"])
             for psser in self.numeric_pssers:
                 self.assertRaises(TypeError, lambda: self.psser + psser)
@@ -135,7 +136,8 @@ if __name__ == "__main__":
 
     try:
         import xmlrunner  # type: ignore[import]
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
+
+        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)
