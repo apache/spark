@@ -3159,16 +3159,6 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Returns a new Dataset that coalesce the partitions by AQE. Usually used to merge small files.
-   *
-   * @group typedrel
-   * @since 3.2.0
-   */
-  def coalescePartitions(partitionExprs: Column*): Dataset[T] = withTypedPlan {
-    CoalescePartitions(partitionExprs.map(_.expr), logicalPlan)
-  }
-
-  /**
    * Returns a new Dataset that contains only the unique rows from this Dataset.
    * This is an alias for `dropDuplicates`.
    *

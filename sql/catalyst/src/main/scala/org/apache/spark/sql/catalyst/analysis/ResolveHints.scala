@@ -175,7 +175,8 @@ object ResolveHints {
    */
   object ResolveCoalesceHints extends Rule[LogicalPlan] {
 
-    val COALESCE_HINT_NAMES: Set[String] = Set("COALESCE", "REPARTITION", "REPARTITION_BY_RANGE")
+    val COALESCE_HINT_NAMES: Set[String] =
+      Set("COALESCE", "REPARTITION", "REPARTITION_BY_RANGE", "COALESCE_PARTITION")
 
     /**
      * This function handles hints for "COALESCE" and "REPARTITION".
@@ -257,6 +258,8 @@ object ResolveHints {
             createRepartition(shuffle = false, hint)
           case "REPARTITION_BY_RANGE" =>
             createRepartitionByRange(hint)
+          case "COALESCE_PARTITION" =>
+            CoalescePartitions(hint.child)
           case _ => hint
         }
     }

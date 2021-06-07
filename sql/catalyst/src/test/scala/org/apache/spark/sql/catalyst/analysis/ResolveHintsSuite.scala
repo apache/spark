@@ -140,6 +140,12 @@ class ResolveHintsSuite extends AnalysisTest {
     checkAnalysisWithoutViewWrapper(
       UnresolvedHint("RePARTITion", Seq(Literal(200)), table("TaBlE")),
       Repartition(numPartitions = 200, shuffle = true, child = testRelation))
+    checkAnalysisWithoutViewWrapper(
+      UnresolvedHint("COALESCE_PARTITION", Seq(), table("TaBlE")),
+      CoalescePartitions(child = testRelation))
+    checkAnalysisWithoutViewWrapper(
+      UnresolvedHint("coalesce_partition", Seq(), table("TaBlE")),
+      CoalescePartitions(child = testRelation))
 
     val errMsg = "COALESCE Hint expects a partition number as a parameter"
 
