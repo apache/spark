@@ -88,8 +88,7 @@ class DataTypeOps(object, metaclass=ABCMeta):
 
     def __new__(cls, dtype: Dtype, spark_type: DataType):
         from pyspark.pandas.data_type_ops.binary_ops import BinaryOps
-        from pyspark.pandas.data_type_ops.boolean_ops import BooleanOps
-        from pyspark.pandas.data_type_ops.boolean_ops import BooleanExtensionOps
+        from pyspark.pandas.data_type_ops.boolean_ops import BooleanOps, BooleanExtensionOps
         from pyspark.pandas.data_type_ops.categorical_ops import CategoricalOps
         from pyspark.pandas.data_type_ops.complex_ops import ArrayOps, MapOps, StructOps
         from pyspark.pandas.data_type_ops.date_ops import DateOps
