@@ -211,9 +211,9 @@ private class ShuffleStatus(
    * Removes all shuffle outputs associated with this host. Note that this will also remove
    * outputs which are served by an external shuffle server (if one exists).
    */
-  def removeOutputsOnHost(host: String): Unit = withWriteLock {
+  def removeOutputsOnHost(host: String, shufflePushEnabled: Boolean): Unit = withWriteLock {
     logDebug(s"Removing outputs for host ${host}")
-    removeOutputsByFilter(x => x.host == host)
+    removeOutputsByFilter(x => x.host == host, shufflePushEnabled)
   }
 
   /**
@@ -221,16 +221,18 @@ private class ShuffleStatus(
    * remove outputs which are served by an external shuffle server (if one exists), as they are
    * still registered with that execId.
    */
-  def removeOutputsOnExecutor(execId: String): Unit = withWriteLock {
+  def removeOutputsOnExecutor(execId: String, shufflePushEnabled: Boolean): Unit = withWriteLock {
     logDebug(s"Removing outputs for execId ${execId}")
-    removeOutputsByFilter(x => x.executorId == execId)
+    removeOutputsByFilter(x => x.executorId == execId, shufflePushEnabled)
   }
 
   /**
    * Removes all shuffle outputs which satisfies the filter. Note that this will also
    * remove outputs which are served by an external shuffle server (if one exists).
    */
-  def removeOutputsByFilter(f: BlockManagerId => Boolean): Unit = withWriteLock {
+  def removeOutputsByFilter(
+      f: (BlockManagerId) => Boolean,
+      shufflePushEnabled: Boolean = false): Unit = withWriteLock {
     for (mapIndex <- mapStatuses.indices) {
       if (mapStatuses(mapIndex) != null && f(mapStatuses(mapIndex).location)) {
         _numAvailableMapOutputs -= 1
@@ -238,17 +240,13 @@ private class ShuffleStatus(
         invalidateSerializedMapOutputStatusCache()
       }
     }
-  }
-
-  /**
-   * Removes all shuffle merge result which satisfies the filter.
-   */
-  def removeMergeResultsByFilter(f: BlockManagerId => Boolean): Unit = withWriteLock {
-    for (reduceId <- mergeStatuses.indices) {
-      if (mergeStatuses(reduceId) != null && f(mergeStatuses(reduceId).location)) {
-        _numAvailableMergeResults -= 1
-        mergeStatuses(reduceId) = null
-        invalidateSerializedMergeOutputStatusCache()
+    if (shufflePushEnabled) {
+      for (reduceId <- mergeStatuses.indices) {
+        if (mergeStatuses(reduceId) != null && f(mergeStatuses(reduceId).location)) {
+          _numAvailableMergeResults -= 1
+          mergeStatuses(reduceId) = null
+          invalidateSerializedMergeOutputStatusCache()
+        }
       }
     }
   }
@@ -768,7 +766,7 @@ private[spark] class MapOutputTrackerMaster(
   def unregisterAllMergeResult(shuffleId: Int): Unit = {
     shuffleStatuses.get(shuffleId) match {
       case Some(shuffleStatus) =>
-        shuffleStatus.removeMergeResultsByFilter(x => true)
+        shuffleStatus.removeOutputsByFilter(x => true, true)
         incrementEpoch()
       case None =>
         throw new SparkException(
@@ -788,8 +786,8 @@ private[spark] class MapOutputTrackerMaster(
    * Removes all shuffle outputs associated with this host. Note that this will also remove
    * outputs which are served by an external shuffle server (if one exists).
    */
-  def removeOutputsOnHost(host: String): Unit = {
-    shuffleStatuses.valuesIterator.foreach { _.removeOutputsOnHost(host) }
+  def removeOutputsOnHost(host: String, shufflePushEnabled: Boolean = false): Unit = {
+    shuffleStatuses.valuesIterator.foreach { _.removeOutputsOnHost(host, shufflePushEnabled) }
     incrementEpoch()
   }
 
@@ -798,8 +796,8 @@ private[spark] class MapOutputTrackerMaster(
    * outputs which are served by an external shuffle server (if one exists), as they are still
    * registered with this execId.
    */
-  def removeOutputsOnExecutor(execId: String): Unit = {
-    shuffleStatuses.valuesIterator.foreach { _.removeOutputsOnExecutor(execId) }
+  def removeOutputsOnExecutor(execId: String, shufflePushEnabled: Boolean = false): Unit = {
+    shuffleStatuses.valuesIterator.foreach { _.removeOutputsOnExecutor(execId, shufflePushEnabled) }
     incrementEpoch()
   }
 

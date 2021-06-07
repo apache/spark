@@ -1317,13 +1317,6 @@ private[spark] class DAGScheduler(
         stage.shuffleDep.setShuffleMergeEnabled(false)
         logInfo("Push-based shuffle disabled for $stage (${stage.name})")
       }
-    } else if (stage.shuffleDep.shuffleMergeFinalized) {
-      // Disable Shuffle merge for the retry/reuse of the same shuffle dependency if it has
-      // already been merge finalized. If the shuffle dependency was previously assigned merger
-      // locations but the corresponding shuffle map stage did not complete successfully, we
-      // would still enable push for its retry.
-      logInfo("Push-based shuffle disabled for $stage (${stage.name})")
-      stage.shuffleDep.setShuffleMergeEnabled(false)
     }
   }
 
@@ -1359,11 +1352,19 @@ private[spark] class DAGScheduler(
     stage match {
       case s: ShuffleMapStage =>
         outputCommitCoordinator.stageStart(stage = s.id, maxPartitionId = s.numPartitions - 1)
-        // Only generate merger location for a given shuffle dependency once. This way, even if
-        // this stage gets retried, it would still be merging blocks using the same set of
-        // shuffle services.
-        if (pushBasedShuffleEnabled && !s.isMergeFinalized) {
-          prepareShuffleServicesForShuffleMapStage(s)
+        // Only generate merger location for a given shuffle dependency once.
+        if (pushBasedShuffleEnabled) {
+          if (!s.isMergeFinalized) {
+            prepareShuffleServicesForShuffleMapStage(s)
+          } else {
+            // Disable Shuffle merge for the retry/reuse of the same shuffle dependency if it has
+            // already been merge finalized. If the shuffle dependency was previously assigned
+            // merger locations but the corresponding shuffle map stage did not complete
+            // successfully, we would still enable push for its retry.
+            s.shuffleDep.setShuffleMergeEnabled(false)
+            logInfo("Push-based shuffle disabled for $stage (${stage.name}) since it" +
+              " is already shuffle merge finalized")
+          }
         }
       case s: ResultStage =>
         outputCommitCoordinator.stageStart(
@@ -2260,10 +2261,10 @@ private[spark] class DAGScheduler(
         hostToUnregisterOutputs match {
           case Some(host) =>
             logInfo(s"Shuffle files lost for host: $host (epoch $currentEpoch)")
-            mapOutputTracker.removeOutputsOnHost(host)
+            mapOutputTracker.removeOutputsOnHost(host, pushBasedShuffleEnabled)
           case None =>
             logInfo(s"Shuffle files lost for executor: $execId (epoch $currentEpoch)")
-            mapOutputTracker.removeOutputsOnExecutor(execId)
+            mapOutputTracker.removeOutputsOnExecutor(execId, pushBasedShuffleEnabled)
         }
       }
     }
@@ -2285,7 +2286,7 @@ private[spark] class DAGScheduler(
       host: String,
       message: String): Unit = {
     logInfo("Shuffle files lost for worker %s on host %s".format(workerId, host))
-    mapOutputTracker.removeOutputsOnHost(host)
+    mapOutputTracker.removeOutputsOnHost(host, pushBasedShuffleEnabled)
     clearCacheLocs()
   }
 
