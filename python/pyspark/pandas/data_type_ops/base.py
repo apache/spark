@@ -94,10 +94,7 @@ class DataTypeOps(object, metaclass=ABCMeta):
         from pyspark.pandas.data_type_ops.date_ops import DateOps
         from pyspark.pandas.data_type_ops.datetime_ops import DatetimeOps
         from pyspark.pandas.data_type_ops.null_ops import NullOps
-        from pyspark.pandas.data_type_ops.num_ops import (
-            IntegralOps,
-            FractionalOps,
-        )
+        from pyspark.pandas.data_type_ops.num_ops import IntegralOps, FractionalOps
         from pyspark.pandas.data_type_ops.string_ops import StringOps
         from pyspark.pandas.data_type_ops.udt_ops import UDTOps
 
