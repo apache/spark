@@ -16,20 +16,21 @@
     under the License.
 
 
-=============
-API Reference
-=============
+====================
+Pandas APIs on Spark
+====================
 
-This page lists an overview of all public PySpark modules, classes, functions and methods.
+This page gives an overview of all public pandas APIs on Spark.
 
 .. toctree::
    :maxdepth: 2
 
-   pyspark.sql
-   pyspark.pandas
-   pyspark.ss
-   pyspark.ml
-   pyspark.streaming
-   pyspark.mllib
-   pyspark
-   pyspark.resource
+   ps_io
+   ps_general_functions
+   ps_series
+   ps_frame
+   ps_indexing
+   ps_window
+   ps_groupby
+   ps_ml
+   ps_extensions
