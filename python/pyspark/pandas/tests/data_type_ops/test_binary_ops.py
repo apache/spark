@@ -123,7 +123,7 @@ class BinaryOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         self.assertRaises(TypeError, lambda: 1 ** self.psser)
 
     def test_from_to_pandas(self):
-        data = [b'1', b'2', b'3']
+        data = [b"1", b"2", b"3"]
         pser = pd.Series(data)
         psser = ps.Series(data)
         self.assert_eq(pser, psser.to_pandas())

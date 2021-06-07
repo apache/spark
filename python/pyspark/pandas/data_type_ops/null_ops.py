@@ -25,4 +25,4 @@ class NullOps(DataTypeOps):
 
     @property
     def pretty_name(self) -> str:
-        return 'nulls'
+        return "nulls"

@@ -962,7 +962,8 @@ class InternalFrame(object):
         }
         dtypes = [dtype for dtype in self.index_dtypes]
         spark_types = [
-            self.spark_frame.select(scol).schema[0].dataType for scol in self.index_spark_columns]
+            self.spark_frame.select(scol).schema[0].dataType for scol in self.index_spark_columns
+        ]
 
         for spark_column, column_name, dtype in zip(
             self.data_spark_columns, self.data_spark_column_names, self.data_dtypes
@@ -1081,7 +1082,7 @@ class InternalFrame(object):
         *,
         index_dtypes: Optional[List[Dtype]] = None,
         data_columns: Optional[List[str]] = None,
-        data_dtypes: Optional[List[Dtype]] = None
+        data_dtypes: Optional[List[Dtype]] = None,
     ) -> "InternalFrame":
         """Copy the immutable InternalFrame with the updates by the specified Spark DataFrame.
 
@@ -1131,7 +1132,7 @@ class InternalFrame(object):
         column_labels: Optional[List[Tuple]] = None,
         data_dtypes: Optional[List[Dtype]] = None,
         column_label_names: Union[Optional[List[Optional[Tuple]]], _NoValueType] = _NoValue,
-        keep_order: bool = True
+        keep_order: bool = True,
     ) -> "InternalFrame":
         """
         Copy the immutable InternalFrame with the updates by the specified Spark Columns or Series.
@@ -1235,7 +1236,7 @@ class InternalFrame(object):
         scol: spark.Column,
         *,
         dtype: Optional[Dtype] = None,
-        keep_order: bool = True
+        keep_order: bool = True,
     ) -> "InternalFrame":
         """
         Copy the immutable InternalFrame with the updates by the specified Spark Column.
@@ -1283,7 +1284,7 @@ class InternalFrame(object):
         column_labels: Union[Optional[List[Tuple]], _NoValueType] = _NoValue,
         data_spark_columns: Union[Optional[List[spark.Column]], _NoValueType] = _NoValue,
         data_dtypes: Union[Optional[List[Dtype]], _NoValueType] = _NoValue,
-        column_label_names: Union[Optional[List[Optional[Tuple]]], _NoValueType] = _NoValue
+        column_label_names: Union[Optional[List[Optional[Tuple]]], _NoValueType] = _NoValue,
     ) -> "InternalFrame":
         """Copy the immutable InternalFrame.
 

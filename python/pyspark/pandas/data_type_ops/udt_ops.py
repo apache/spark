@@ -26,4 +26,4 @@ class UDTOps(DataTypeOps):
 
     @property
     def pretty_name(self) -> str:
-        return 'user defined types'
+        return "user defined types"
