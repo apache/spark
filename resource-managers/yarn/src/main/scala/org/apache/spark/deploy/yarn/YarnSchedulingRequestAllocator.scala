@@ -243,12 +243,8 @@ private[yarn] class YarnSchedulingRequestAllocator(
     }
 
     val schedulingRequestBuilder = SchedulingRequest.newBuilder()
-      // Use default and same as construct ContainerRequest.
       .executionType(ExecutionTypeRequest.newInstance)
-      // When constructing ContainerRequest use default 0L
       .allocationRequestId(allocationRequestId)
-      // priority same as rpId, use this to make which container belong to which rpId.
-      // and mark each container's status.
       .priority(getContainerPriority(rpId))
       .allocationTags(Set("SPARK").asJava)
       .resourceSizing(ResourceSizing.newInstance(resource))
