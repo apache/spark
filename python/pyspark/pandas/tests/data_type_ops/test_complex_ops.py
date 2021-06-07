@@ -190,6 +190,11 @@ class ComplexOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         self.assertRaises(TypeError, lambda: "x" ** self.psser)
         self.assertRaises(TypeError, lambda: 1 ** self.psser)
 
+    def test_from_to_pandas(self):
+        for pser, psser in zip(self.psers, self.pssers):
+            self.assert_eq(pser, psser.to_pandas())
+            self.assert_eq(ps.from_pandas(pser), psser)
+
 
 if __name__ == "__main__":
     import unittest

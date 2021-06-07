@@ -147,6 +147,13 @@ class DatetimeOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         self.assertRaises(TypeError, lambda: 1 ** self.psser)
         self.assertRaises(TypeError, lambda: self.some_datetime ** self.psser)
 
+    def test_from_to_pandas(self):
+        data = pd.date_range("1994-1-31 10:30:15", periods=3, freq="M")
+        pser = pd.Series(data)
+        psser = ps.Series(data)
+        self.assert_eq(pser, psser.to_pandas())
+        self.assert_eq(ps.from_pandas(pser), psser)
+
 
 if __name__ == "__main__":
     import unittest

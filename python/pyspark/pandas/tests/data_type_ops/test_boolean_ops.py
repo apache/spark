@@ -229,6 +229,13 @@ class BooleanOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         self.assertRaises(TypeError, lambda: datetime.date(1994, 1, 1) % self.psser)
         self.assertRaises(TypeError, lambda: True % self.psser)
 
+    def test_from_to_pandas(self):
+        data = [True, True, False]
+        pser = pd.Series(data)
+        psser = ps.Series(data)
+        self.assert_eq(pser, psser.to_pandas())
+        self.assert_eq(ps.from_pandas(pser), psser)
+
 
 if __name__ == "__main__":
     import unittest

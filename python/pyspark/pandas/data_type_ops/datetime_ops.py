@@ -74,3 +74,7 @@ class DatetimeOps(DataTypeOps):
             )
         else:
             raise TypeError("datetime subtraction can only be applied to datetime series.")
+
+    def prepare(self, col):
+        """Prepare column when from_pandas."""
+        return col
