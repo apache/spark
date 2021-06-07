@@ -374,11 +374,19 @@ class KdePlotBase:
         if ind is None:
             min_val, max_val = calc_min_max()
             sample_range = max_val - min_val
-            ind = np.linspace(min_val - 0.5 * sample_range, max_val + 0.5 * sample_range, 1000,)
+            ind = np.linspace(
+                min_val - 0.5 * sample_range,
+                max_val + 0.5 * sample_range,
+                1000,
+            )
         elif is_integer(ind):
             min_val, max_val = calc_min_max()
             sample_range = max_val - min_val
-            ind = np.linspace(min_val - 0.5 * sample_range, max_val + 0.5 * sample_range, ind,)
+            ind = np.linspace(
+                min_val - 0.5 * sample_range,
+                max_val + 0.5 * sample_range,
+                ind,
+            )
         return ind
 
     @staticmethod

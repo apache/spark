@@ -44,12 +44,12 @@ class SparkIndexOpsMethods(metaclass=ABCMeta):
 
     @property
     def data_type(self) -> DataType:
-        """ Returns the data type as defined by Spark, as a Spark DataType object."""
+        """Returns the data type as defined by Spark, as a Spark DataType object."""
         return self._data._internal.spark_type_for(self._data._column_label)
 
     @property
     def nullable(self) -> bool:
-        """ Returns the nullability as defined by Spark. """
+        """Returns the nullability as defined by Spark."""
         return self._data._internal.spark_column_nullable_for(self._data._column_label)
 
     @property

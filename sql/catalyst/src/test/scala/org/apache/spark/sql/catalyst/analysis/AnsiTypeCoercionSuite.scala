@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import java.sql.Timestamp
 
+import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.sql.catalyst.analysis.AnsiTypeCoercion._
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
@@ -27,9 +28,15 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.{Rule, RuleExecutor}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 class AnsiTypeCoercionSuite extends AnalysisTest {
   import TypeCoercionSuite._
+
+  // When Utils.isTesting is true, RuleIdCollection adds individual type coercion rules. Otherwise,
+  // RuleIdCollection doesn't add them because they are called in a train inside
+  // CombinedTypeCoercionRule.
+  assert(Utils.isTesting, s"${IS_TESTING.key} is not set to true")
 
   // scalastyle:off line.size.limit
   // The following table shows all implicit data type conversions that are not visible to the user.

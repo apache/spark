@@ -48,7 +48,7 @@ if TYPE_CHECKING:
 
 
 class PandasOnSparkFrameMethods(object):
-    """ pandas-on-Spark specific features for DataFrame. """
+    """pandas-on-Spark specific features for DataFrame."""
 
     def __init__(self, frame: "DataFrame"):
         self._psdf = frame
@@ -696,7 +696,7 @@ class PandasOnSparkFrameMethods(object):
 
 
 class PandasOnSparkSeriesMethods(object):
-    """ pandas-on-Spark specific features for Series. """
+    """pandas-on-Spark specific features for Series."""
 
     def __init__(self, series: "Series"):
         self._psser = series
