@@ -251,8 +251,7 @@ class DataFrameCallbackSuite extends QueryTest
           name = "my_event",
           min($"id").as("min_val"),
           max($"id").as("max_val"),
-          // Test unresolved alias
-          sum($"id"),
+          sum($"id").as("sum_val"),
           count(when($"id" % 2 === 0, 1)).as("num_even"))
         .observe(
           name = "other_event",
