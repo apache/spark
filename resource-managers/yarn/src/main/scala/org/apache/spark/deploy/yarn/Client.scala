@@ -668,6 +668,14 @@ private[spark] class Client(
     if (cachedSecondaryJarLinks.nonEmpty) {
       sparkConf.set(SECONDARY_JARS, cachedSecondaryJarLinks.toSeq)
     }
+    val userClassPath = Client.getUserClasspath(sparkConf).map { uri =>
+      if (Utils.isLocalUri(uri.toString)) {
+        Client.getClusterPath(sparkConf, uri.getPath)
+      } else {
+        uri.getPath
+      }
+    }.toSeq
+    sparkConf.set(EXECUTOR_USER_CLASS_PATH_ENTRIES, userClassPath)
 
     if (isClusterMode && args.primaryPyFile != null) {
       distribute(args.primaryPyFile, appMasterOnly = true)
