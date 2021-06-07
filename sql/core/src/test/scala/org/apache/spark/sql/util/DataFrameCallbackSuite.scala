@@ -20,7 +20,7 @@ package org.apache.spark.sql.util
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark._
-import org.apache.spark.sql.{functions, AnalysisException, Dataset, QueryTest, Row, SparkSession}
+import org.apache.spark.sql.{functions, Dataset, QueryTest, Row, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan, Project}
 import org.apache.spark.sql.execution.{QueryExecution, QueryExecutionException, WholeStageCodegenExec}
@@ -223,11 +223,14 @@ class DataFrameCallbackSuite extends QueryTest
 
     withTable("tab") {
       sql("CREATE TABLE tab(i long) using parquet")
-      val e = intercept[AnalysisException] {
-        spark.range(10).select($"id", $"id").write.insertInto("tab")
+      spark.udf.register("illegalUdf", udf((value: Long) => value / 0))
+      val e = intercept[SparkException] {
+        spark.range(10).selectExpr("illegalUdf(id)").write.insertInto("tab")
       }
       sparkContext.listenerBus.waitUntilEmpty()
-      assert(exceptions.length == 0)
+      assert(exceptions.length == 1)
+      assert(exceptions.head._1 == "command")
+      assert(exceptions.head._2 == e)
     }
   }
 

@@ -95,7 +95,7 @@ license: |
   
   - In Spark 3.2, `FloatType` is mapped to `FLOAT` in MySQL. Prior to this, it used to be mapped to `REAL`, which is by default a synonym to `DOUBLE PRECISION` in MySQL. 
 
-  - In Spark 3.2, Spark removes the `name` parameter of `DataFrameWriter.runCommand` and `ExecutionListenerManager` only watches SQL executions with default name `command`. In Spark 3.1 and earlier, `DataFrameWriter.runCommand` could specify the `name` parameter.
+  - In Spark 3.2, the query executions triggered by `DataFrameWriter` are always named `command` when being sent to `QueryExecutionListener`. In Spark 3.1 and earlier, the name is one of `save`, `insertInto`, `saveAsTable`.
 
 ## Upgrading from Spark SQL 3.0 to 3.1
 

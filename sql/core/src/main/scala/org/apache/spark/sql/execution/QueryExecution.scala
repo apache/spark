@@ -75,10 +75,6 @@ class QueryExecution(
     sparkSession.sessionState.analyzer.executeAndCheck(logical, tracker)
   }
 
-  // SPARK-35378: Commands should be executed eagerly so that `sql("INSERT ...")` can trigger the
-  // table insertion immediately without a `.collect()`. We also need to eagerly execute non-root
-  // commands, because many commands return `GenericInternalRow` and can't be put in a query plan
-  // directly, otherwise the query engine may cast `GenericInternalRow` to `UnsafeRow` and fail.
   lazy val commandExecuted: LogicalPlan = mode match {
     case CommandExecutionMode.NON_ROOT => analyzed.mapChildren(eagerlyExecuteCommands)
     case CommandExecutionMode.ALL => eagerlyExecuteCommands(analyzed)
@@ -109,14 +105,14 @@ class QueryExecution(
   private def assertCommandExecuted(): Unit = commandExecuted
 
   lazy val optimizedPlan: LogicalPlan = {
-    // We need to materialize the commandExecuted here because sparkPlan is also tracked under
-    // the planning phase
+    // We need to materialize the commandExecuted here because optimizedPlan is also tracked under
+    // the optimizing phase
     assertCommandExecuted()
     executePhase(QueryPlanningTracker.OPTIMIZATION) {
       // clone the plan to avoid sharing the plan instance between different stages like analyzing,
       // optimizing and planning.
       val plan =
-      sparkSession.sessionState.optimizer.executeAndTrack(withCachedData.clone(), tracker)
+        sparkSession.sessionState.optimizer.executeAndTrack(withCachedData.clone(), tracker)
       // We do not want optimized plans to be re-analyzed as literals that have been constant
       // folded and such can cause issues during analysis. While `clone` should maintain the
       // `analyzed` state of the LogicalPlan, we set the plan as analyzed here as well out of
@@ -367,6 +363,15 @@ class QueryExecution(
   }
 }
 
+/**
+ * SPARK-35378: Commands should be executed eagerly so that something like `sql("INSERT ...")`
+ * can trigger the table insertion immediately without a `.collect()`. To avoid end-less recursion
+ * we should use `NON_ROOT` when recursively executing commands. Note that we can't execute
+ * a query plan with leaf command nodes, because many commands return `GenericInternalRow`
+ * and can't be put in a query plan directly, otherwise the query engine may cast
+ * `GenericInternalRow` to `UnsafeRow` and fail. When running EXPLAIN, we should use `SKIP`
+ * to not trigger any execution.
+ */
 object CommandExecutionMode extends Enumeration {
   val SKIP, NON_ROOT, ALL = Value
 }
