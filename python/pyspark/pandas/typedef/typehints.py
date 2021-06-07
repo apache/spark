@@ -339,8 +339,11 @@ def infer_pd_series_spark_type(pser: pd.Series, dtype: Dtype) -> types.DataType:
         else:
             return from_arrow_type(pa.Array.from_pandas(pser).type)
     elif isinstance(dtype, CategoricalDtype):
-        # `pser` must already be converted to codes.
-        return as_spark_type(pser.dtype)
+        if isinstance(pser.dtype, CategoricalDtype):
+            return as_spark_type(pser.cat.codes.dtype)
+        else:
+            # `pser` must already be converted to codes.
+            return as_spark_type(pser.dtype)
     else:
         return as_spark_type(dtype)
 
