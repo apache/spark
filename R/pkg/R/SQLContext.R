@@ -378,6 +378,9 @@ setMethod("toDF", signature(x = "RDD"),
 #' ) is supported. For JSON (one record per file), set a named property \code{multiLine} to
 #' \code{TRUE}.
 #' It goes through the entire dataset once to determine the schema.
+#' You can find the JSON-specific options for reading JSON files in
+#' \href{https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option}{
+#' Data Source Option} in the version you use.
 #'
 #' @param path Path of file to read. A vector of multiple paths is allowed.
 #' @param ... additional external data source specific named properties.
@@ -406,6 +409,9 @@ read.json <- function(path, ...) {
 #' Create a SparkDataFrame from an ORC file.
 #'
 #' Loads an ORC file, returning the result as a SparkDataFrame.
+#' You can find the ORC-specific options for reading ORC files in
+#' \href{https://spark.apache.org/docs/latest/sql-data-sources-orc.html#data-source-option}{
+#' Data Source Option} in the version you use.
 #'
 #' @param path Path of file to read.
 #' @param ... additional external data source specific named properties.
@@ -427,6 +433,9 @@ read.orc <- function(path, ...) {
 #' Create a SparkDataFrame from a Parquet file.
 #'
 #' Loads a Parquet file, returning the result as a SparkDataFrame.
+#' You can find the Parquet-specific options for reading Parquet files in
+#' \href{https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#data-source-option}{
+#' Data Source Option} in the version you use.
 #'
 #' @param path path of file to read. A vector of multiple paths is allowed.
 #' @param ... additional data source specific named properties.
@@ -450,6 +459,9 @@ read.parquet <- function(path, ...) {
 #' Loads text files and returns a SparkDataFrame whose schema starts with
 #' a string column named "value", and followed by partitioned columns if
 #' there are any. The text files must be encoded as UTF-8.
+#' You can find the text-specific options for reading text files in
+#' \href{https://spark.apache.org/docs/latest/sql-data-sources-text.html#data-source-option}{
+#' Data Source Option} in the version you use.
 #'
 #' Each line in the text file is a new row in the resulting SparkDataFrame.
 #'
@@ -602,6 +614,9 @@ loadDF <- function(path = NULL, source = NULL, schema = NULL, ...) {
 #' Create a SparkDataFrame representing the database table accessible via JDBC URL
 #'
 #' Additional JDBC database connection properties can be set (...)
+#' You can find the JDBC-specific option and parameter documentation for reading tables via JDBC in
+#' \href{https://spark.apache.org/docs/latest/sql-data-sources-jdbc.html#data-source-option}{
+#' Data Source Option} in the version you use.
 #'
 #' Only one of partitionColumn or predicates should be set. Partitions of the table will be
 #' retrieved in parallel based on the \code{numPartitions} or by the predicates.
@@ -609,16 +624,7 @@ loadDF <- function(path = NULL, source = NULL, schema = NULL, ...) {
 #' Don't create too many partitions in parallel on a large cluster; otherwise Spark might crash
 #' your external database systems.
 #'
-#' @param url JDBC database url of the form \code{jdbc:subprotocol:subname}
 #' @param tableName the name of the table in the external database
-#' @param partitionColumn the name of a column of numeric, date, or timestamp type
-#'                        that will be used for partitioning.
-#' @param lowerBound the minimum value of \code{partitionColumn} used to decide partition stride
-#' @param upperBound the maximum value of \code{partitionColumn} used to decide partition stride
-#' @param numPartitions the number of partitions, This, along with \code{lowerBound} (inclusive),
-#'                      \code{upperBound} (exclusive), form partition strides for generated WHERE
-#'                      clause expressions used to split the column \code{partitionColumn} evenly.
-#'                      This defaults to SparkContext.defaultParallelism when unset.
 #' @param predicates a list of conditions in the where clause; each one defines one partition
 #' @param ... additional JDBC database connection named properties.
 #' @return SparkDataFrame

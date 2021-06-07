@@ -883,6 +883,9 @@ setMethod("toJSON",
 #' Save the contents of a SparkDataFrame as a JSON file (\href{https://jsonlines.org/}{
 #' JSON Lines text format or newline-delimited JSON}). Files written out
 #' with this method can be read back in as a SparkDataFrame using read.json().
+#' You can find the JSON-specific options for writing JSON files in
+#' \href{https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option}{
+#' Data Source Option} in the version you use.
 #'
 #' @param x A SparkDataFrame
 #' @param path The directory where the file is saved
@@ -914,6 +917,9 @@ setMethod("write.json",
 #'
 #' Save the contents of a SparkDataFrame as an ORC file, preserving the schema. Files written out
 #' with this method can be read back in as a SparkDataFrame using read.orc().
+#' You can find the ORC-specific options for writing ORC files in
+#' \href{https://spark.apache.org/docs/latest/sql-data-sources-orc.html#data-source-option}{
+#' Data Source Option} in the version you use.
 #'
 #' @param x A SparkDataFrame
 #' @param path The directory where the file is saved
@@ -945,6 +951,9 @@ setMethod("write.orc",
 #'
 #' Save the contents of a SparkDataFrame as a Parquet file, preserving the schema. Files written out
 #' with this method can be read back in as a SparkDataFrame using read.parquet().
+#' You can find the Parquet-specific options for writing Parquet files in
+#' \href{https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#data-source-option}{
+#' Data Source Option} in the version you use.
 #'
 #' @param x A SparkDataFrame
 #' @param path The directory where the file is saved
@@ -977,6 +986,9 @@ setMethod("write.parquet",
 #' Save the content of the SparkDataFrame in a text file at the specified path.
 #' The SparkDataFrame must have only one column of string type with the name "value".
 #' Each row becomes a new line in the output file. The text files will be encoded as UTF-8.
+#' You can find the text-specific options for writing text files in
+#' \href{https://spark.apache.org/docs/latest/sql-data-sources-text.html#data-source-option}{
+#' Data Source Option} in the version you use.
 #'
 #' @param x A SparkDataFrame
 #' @param path The directory where the file is saved
@@ -3731,6 +3743,9 @@ setMethod("histogram",
 #'
 #' Save the content of the SparkDataFrame to an external database table via JDBC. Additional JDBC
 #' database connection properties can be set (...)
+#' You can find the JDBC-specific option and parameter documentation for writing tables via JDBC in
+#' \href{https://spark.apache.org/docs/latest/sql-data-sources-jdbc.html#data-source-option}{
+#' Data Source Option} in the version you use.
 #'
 #' Also, mode is used to specify the behavior of the save operation when
 #' data already exists in the data source. There are four modes:
@@ -3744,7 +3759,6 @@ setMethod("histogram",
 #' }
 #'
 #' @param x a SparkDataFrame.
-#' @param url JDBC database url of the form \code{jdbc:subprotocol:subname}.
 #' @param tableName the name of the table in the external database.
 #' @param mode one of 'append', 'overwrite', 'error', 'errorifexists', 'ignore'
 #'             save mode (it is 'error' by default)

@@ -110,7 +110,7 @@ logging into the data sources.
 
   <tr>
     <td><code>partitionColumn, lowerBound, upperBound</code></td>
-    <td>(none)</td>
+    <td><code>SparkContext.defaultParallelism</code></td>
     <td>
       These options must all be specified if any of them is specified. In addition,
       <code>numPartitions</code> must be specified. They describe how to partition the table when

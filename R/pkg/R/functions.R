@@ -2123,6 +2123,9 @@ setMethod("to_date",
 #' \code{to_json}: Converts a column containing a \code{structType}, a \code{mapType}
 #' or an \code{arrayType} into a Column of JSON string.
 #' Resolving the Column can fail if an unsupported type is encountered.
+#' You can find the JSON-specific options for writing JSON files in
+#' \href{https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option}{
+#' Data Source Option} in the version you use.
 #'
 #' @rdname column_collection_functions
 #' @aliases to_json to_json,Column-method
@@ -2159,6 +2162,9 @@ setMethod("to_json", signature(x = "Column"),
 #' @details
 #' \code{to_csv}: Converts a column containing a \code{structType} into a Column of CSV string.
 #' Resolving the Column can fail if an unsupported type is encountered.
+#' You can find the CSV-specific options for writing CSV files in
+#' \href{https://spark.apache.org/docs/latest/sql-data-sources-csv.html#data-source-option}{
+#' Data Source Option} in the version you use.
 #'
 #' @rdname column_collection_functions
 #' @aliases to_csv to_csv,Column-method
@@ -2640,6 +2646,9 @@ setClassUnion("characterOrstructTypeOrColumn", c("character", "structType", "Col
 #' \code{from_json}: Parses a column containing a JSON string into a Column of \code{structType}
 #' with the specified \code{schema} or array of \code{structType} if \code{as.json.array} is set
 #' to \code{TRUE}. If the string is unparseable, the Column will contain the value NA.
+#' You can find the JSON-specific options for reading JSON files in
+#' \href{https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option}{
+#' Data Source Option} in the version you use.
 #'
 #' @rdname column_collection_functions
 #' @param as.json.array indicating if input string is JSON array of objects or a single object.
@@ -2692,6 +2701,9 @@ setMethod("from_json", signature(x = "Column", schema = "characterOrstructTypeOr
 
 #' @details
 #' \code{schema_of_json}: Parses a JSON string and infers its schema in DDL format.
+#' You can find the JSON-specific options for reading JSON files in
+#' \href{https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option}{
+#' Data Source Option} in the version you use.
 #'
 #' @rdname column_collection_functions
 #' @aliases schema_of_json schema_of_json,characterOrColumn-method
@@ -2720,6 +2732,9 @@ setMethod("schema_of_json", signature(x = "characterOrColumn"),
 #' \code{from_csv}: Parses a column containing a CSV string into a Column of \code{structType}
 #' with the specified \code{schema}.
 #' If the string is unparseable, the Column will contain the value NA.
+#' You can find the CSV-specific options for reading CSV files in
+#' \href{https://spark.apache.org/docs/latest/sql-data-sources-csv.html#data-source-option}{
+#' Data Source Option} in the version you use.
 #'
 #' @rdname column_collection_functions
 #' @aliases from_csv from_csv,Column,characterOrstructTypeOrColumn-method
@@ -2753,6 +2768,9 @@ setMethod("from_csv", signature(x = "Column", schema = "characterOrstructTypeOrC
 
 #' @details
 #' \code{schema_of_csv}: Parses a CSV string and infers its schema in DDL format.
+#' You can find the CSV-specific options for reading CSV files in
+#' \href{https://spark.apache.org/docs/latest/sql-data-sources-csv.html#data-source-option}{
+#' Data Source Option} in the version you use.
 #'
 #' @rdname column_collection_functions
 #' @aliases schema_of_csv schema_of_csv,characterOrColumn-method
