@@ -193,7 +193,7 @@ class DataFrameCallbackSuite extends QueryTest
       spark.range(10).write.format("json").save(path.getCanonicalPath)
       sparkContext.listenerBus.waitUntilEmpty()
       assert(commands.length == 1)
-      assert(commands.head._1 == "save")
+      assert(commands.head._1 == "command")
       assert(commands.head._2.isInstanceOf[InsertIntoHadoopFsRelationCommand])
       assert(commands.head._2.asInstanceOf[InsertIntoHadoopFsRelationCommand]
         .fileFormat.isInstanceOf[JsonFileFormat])
@@ -204,7 +204,7 @@ class DataFrameCallbackSuite extends QueryTest
       spark.range(10).write.insertInto("tab")
       sparkContext.listenerBus.waitUntilEmpty()
       assert(commands.length == 3)
-      assert(commands(2)._1 == "insertInto")
+      assert(commands(2)._1 == "command")
       assert(commands(2)._2.isInstanceOf[InsertIntoHadoopFsRelationCommand])
       assert(commands(2)._2.asInstanceOf[InsertIntoHadoopFsRelationCommand]
         .catalogTable.get.identifier.identifier == "tab")
@@ -215,7 +215,7 @@ class DataFrameCallbackSuite extends QueryTest
       spark.range(10).select($"id", $"id" % 5 as "p").write.partitionBy("p").saveAsTable("tab")
       sparkContext.listenerBus.waitUntilEmpty()
       assert(commands.length == 6)
-      assert(commands(5)._1 == "saveAsTable")
+      assert(commands(5)._1 == "command")
       assert(commands(5)._2.isInstanceOf[CreateDataSourceTableAsSelectCommand])
       assert(commands(5)._2.asInstanceOf[CreateDataSourceTableAsSelectCommand]
         .table.partitionColumnNames == Seq("p"))

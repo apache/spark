@@ -311,8 +311,8 @@ abstract class BaseSessionStateBuilder(
    * Create a query execution object.
    */
   protected def createQueryExecution:
-  (LogicalPlan, CommandExecutionMode.Value, Option[String]) => QueryExecution = {
-    (plan, mode, name) => new QueryExecution(session, plan, mode = mode, name = name)
+  (LogicalPlan, CommandExecutionMode.Value) => QueryExecution = {
+    (plan, mode) => new QueryExecution(session, plan, mode = mode)
   }
 
   /**

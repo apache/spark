@@ -55,8 +55,7 @@ class QueryExecution(
     val sparkSession: SparkSession,
     val logical: LogicalPlan,
     val tracker: QueryPlanningTracker = new QueryPlanningTracker,
-    val mode: CommandExecutionMode.Value = CommandExecutionMode.ALL,
-    val name: Option[String] = Some("command")) extends Logging {
+    val mode: CommandExecutionMode.Value = CommandExecutionMode.ALL) extends Logging {
 
   val id: Long = QueryExecution.nextExecutionId
 
@@ -89,7 +88,8 @@ class QueryExecution(
   private def eagerlyExecuteCommands(p: LogicalPlan) = p transformDown {
     case c: Command =>
       val qe = sparkSession.sessionState.executePlan(c, CommandExecutionMode.NON_ROOT)
-      val result = SQLExecution.withNewExecutionId(qe, name)(qe.executedPlan.executeCollect())
+      val result =
+        SQLExecution.withNewExecutionId(qe, Some("command"))(qe.executedPlan.executeCollect())
       CommandResult(
         qe.analyzed.output,
         qe.commandExecuted,
