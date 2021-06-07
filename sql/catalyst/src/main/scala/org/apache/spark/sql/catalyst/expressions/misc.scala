@@ -415,8 +415,8 @@ case class AesEncrypt(left: Expression, right: Expression) extends AesBase(left,
 
 /**
  * A function that decrypts input using AES. Key lengths of 128, 192 or 256 bits can be used.
- * 192 and 256 bits keys can be used if Java Cryptography Extension (JCE)
- * Unlimited Strength Jurisdiction Policy Files are installed.
+ * For versions prior to JDK 8u161, 192 and 256 bits keys can be used
+ * if Java Cryptography Extension (JCE) Unlimited Strength Jurisdiction Policy Files are installed.
  * If either argument is NULL or the key length is not one of the permitted values,
  * the return value is NULL.
  */
