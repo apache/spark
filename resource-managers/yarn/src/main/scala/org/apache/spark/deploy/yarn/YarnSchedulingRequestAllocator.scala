@@ -76,7 +76,7 @@ private[yarn] class YarnSchedulingRequestAllocator(
   private[yarn] val nodeAttributes = sparkConf.get(NODE_ATTRIBUTE)
     .map(PlacementConstraintParser.parseExpression)
 
-  private def outstandingSchedRequests: JMap[JSet[String], JList[SchedulingRequest]] = {
+  private[yarn] val outstandingSchedRequests: JMap[JSet[String], JList[SchedulingRequest]] = {
     val field = classOf[AMRMClientImpl[ContainerRequest]]
       .getDeclaredField("outstandingSchedRequests")
     field.setAccessible(true)
