@@ -45,7 +45,7 @@ private[spark] class DiskBlockManager(conf: SparkConf, var deleteFilesOnStop: Bo
   /* Create one local directory for each path mentioned in spark.local.dir; then, inside this
    * directory, create multiple subdirectories that we will hash files into, in order to avoid
    * having really large inodes at the top level. */
-  private[spark] val localDirs: Array[File] = createLocalDirs()
+  private[spark] val localDirs: Array[File] = createLocalDirs(conf)
   if (localDirs.isEmpty) {
     logError("Failed to create any local dir.")
     System.exit(ExecutorExitCode.DISK_STORE_FAILED_TO_CREATE_DIR)
@@ -58,7 +58,7 @@ private[spark] class DiskBlockManager(conf: SparkConf, var deleteFilesOnStop: Bo
   private val subDirs = Array.fill(localDirs.length)(new Array[File](subDirsPerLocalDir))
 
   // Create merge directories
-  createLocalDirsForMergedShuffleBlocks(conf)
+  createLocalDirsForMergedShuffleBlocks()
 
   private val shutdownHook = addShutdownHook()
 
@@ -98,7 +98,7 @@ private[spark] class DiskBlockManager(conf: SparkConf, var deleteFilesOnStop: Bo
    */
   def getMergedShuffleFile(blockId: BlockId, dirs: Option[Array[String]]): File = {
     blockId match {
-      case mergedBlockId: ShuffleMergedBlockId =>
+      case mergedBlockId: ShuffleMergedDataBlockId =>
         getMergedShuffleFile(mergedBlockId.name, dirs)
       case mergedIndexBlockId: ShuffleMergedIndexBlockId =>
         getMergedShuffleFile(mergedIndexBlockId.name, dirs)
@@ -111,7 +111,7 @@ private[spark] class DiskBlockManager(conf: SparkConf, var deleteFilesOnStop: Bo
   }
 
   private def getMergedShuffleFile(filename: String, dirs: Option[Array[String]]): File = {
-    if (dirs.isEmpty) {
+    if (!dirs.exists(_.nonEmpty)) {
       throw new IllegalArgumentException(
         s"Cannot read $filename because merged shuffle dirs is empty")
     }
@@ -174,7 +174,7 @@ private[spark] class DiskBlockManager(conf: SparkConf, var deleteFilesOnStop: Bo
    * located inside configured local directories and won't
    * be deleted on JVM exit when using the external shuffle service.
    */
-  private def createLocalDirs(): Array[File] = {
+  private def createLocalDirs(conf: SparkConf): Array[File] = {
     Utils.getConfiguredLocalDirs(conf).flatMap { rootDir =>
       try {
         val localDir = Utils.createDirectory(rootDir, "blockmgr")
@@ -192,28 +192,26 @@ private[spark] class DiskBlockManager(conf: SparkConf, var deleteFilesOnStop: Bo
    * Get the list of configured local dirs storing merged shuffle blocks created by executors
    * if push based shuffle is enabled. Note that the files in this directory will be created
    * by the external shuffle services. We only create the merge_manager directories and
-   * subdirectories here because currently the shuffle service doesn't have permission to
-   * create directories under application local directories.
+   * subdirectories here because currently the external shuffle service doesn't have
+   * permission to create directories under application local directories.
    */
-  private def createLocalDirsForMergedShuffleBlocks(conf: SparkConf): Unit = {
+  private def createLocalDirsForMergedShuffleBlocks(): Unit = {
     if (Utils.isPushBasedShuffleEnabled(conf)) {
-      // Will create the merge_manager directory only if it doesn't exist under any local dir.
+      // Will create the merge_manager directory only if it doesn't exist under the local dir.
       Utils.getConfiguredLocalDirs(conf).foreach { rootDir =>
         try {
           val mergeDir = new File(rootDir, MERGE_MANAGER_DIR)
-          // This executor does not find merge_manager directory, it will start creating them.
-          // It's possible that the other executors launched at the same time may also reach here
-          // but we are working on the assumption that the executors launched around the same time
-          // will have the same set of application local directories.
           if (!mergeDir.exists()) {
-            logDebug(
-              s"Try to create $mergeDir and its sub dirs since the merge dir does not exist")
+            // This executor does not find merge_manager directory, it will try to create
+            // the merge_manager directory and the sub directories.
+            logDebug(s"Try to create $mergeDir and its sub dirs since the " +
+              s"merge_manager dir does not exist")
             for (dirNum <- 0 until subDirsPerLocalDir) {
               val subDir = new File(mergeDir, "%02x".format(dirNum))
               if (!subDir.exists()) {
                 // Only one container will create this directory. The filesystem will handle
                 // any race conditions.
-                Utils.createDirWithCustomizedPermission(subDir, "770")
+                createDirWithCustomizedPermission(subDir, "770")
               }
             }
           }
@@ -223,6 +221,45 @@ private[spark] class DiskBlockManager(conf: SparkConf, var deleteFilesOnStop: Bo
             logError(
               s"Failed to create merge dir in $rootDir. Ignoring this directory.", e)
         }
+      }
+    }
+  }
+
+  /**
+   * Create a directory that is writable by the group.
+   * Grant the customized permission so the shuffle server can
+   * create subdirs/files within the merge folder.
+   * TODO: Find out why can't we create a dir using java api with permission 770
+   *  Files.createDirectories(mergeDir.toPath, PosixFilePermissions.asFileAttribute(
+   *  PosixFilePermissions.fromString("rwxrwx---")))
+   */
+  def createDirWithCustomizedPermission(dirToCreate: File, permission: String): Unit = {
+    var attempts = 0
+    val maxAttempts = Utils.MAX_DIR_CREATION_ATTEMPTS
+    var created: File = null
+    while (created == null) {
+      attempts += 1
+      if (attempts > maxAttempts) {
+        throw new IOException(
+          s"Failed to create directory ${dirToCreate.getAbsolutePath} with permission " +
+            s"$permission after $maxAttempts attempts!")
+      }
+      try {
+        val builder = new ProcessBuilder().command(
+          "mkdir", "-p", "-m" + permission, dirToCreate.getAbsolutePath)
+        val proc = builder.start()
+        val exitCode = proc.waitFor()
+        if (dirToCreate.exists()) {
+          created = dirToCreate
+        }
+        logDebug(
+          s"Created directory at ${dirToCreate.getAbsolutePath} with permission " +
+            s"$permission and exitCode $exitCode")
+      } catch {
+        case e: SecurityException =>
+          logWarning(s"Failed to create directory ${dirToCreate.getAbsolutePath} " +
+            s"with permission $permission", e)
+          created = null;
       }
     }
   }

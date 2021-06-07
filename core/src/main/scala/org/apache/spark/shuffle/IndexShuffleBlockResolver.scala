@@ -116,7 +116,7 @@ private[spark] class IndexShuffleBlockResolver(
       reduceId: Int,
       dirs: Option[Array[String]] = None): File = {
     blockManager.diskBlockManager.getMergedShuffleFile(
-      ShuffleMergedBlockId(appId, shuffleId, reduceId), dirs)
+      ShuffleMergedDataBlockId(appId, shuffleId, reduceId), dirs)
   }
 
   private def getMergedBlockIndexFile(
@@ -370,6 +370,11 @@ private[spark] class IndexShuffleBlockResolver(
     }
   }
 
+  /**
+   * This is only used for reading local merged block data. In such cases, all chunks in the
+   * merged shuffle file need to be identified at once, so the ShuffleBlockFetcherIterator
+   * knows how to consume local merged shuffle file as multiple chunks.
+   */
   override def getMergedBlockData(
       blockId: ShuffleBlockId,
       dirs: Option[Array[String]]): Seq[ManagedBuffer] = {
@@ -378,13 +383,12 @@ private[spark] class IndexShuffleBlockResolver(
     val dataFile = getMergedBlockDataFile(conf.getAppId, blockId.shuffleId, blockId.reduceId, dirs)
     // Load all the indexes in order to identify all chunks in the specified merged shuffle file.
     val size = indexFile.length.toInt
-    val buffer = ByteBuffer.allocate(size)
-    val offsets = buffer.asLongBuffer
-    val dis = new DataInputStream(Files.newInputStream(indexFile.toPath))
-    try {
+    val offsets = Utils.tryWithResource {
+      new DataInputStream(Files.newInputStream(indexFile.toPath))
+    } { dis =>
+      val buffer = ByteBuffer.allocate(size)
       dis.readFully(buffer.array)
-    } finally {
-      dis.close()
+      buffer.asLongBuffer
     }
     // Number of chunks is number of indexes - 1
     val numChunks = size / 8 - 1
@@ -410,11 +414,6 @@ private[spark] class IndexShuffleBlockResolver(
     new MergedBlockMeta(numChunks, chunkBitMaps)
   }
 
-  /**
-   * This is only used for reading local merged block data. In such cases, all chunks in the
-   * merged shuffle file need to be identified at once, so the ShuffleBlockFetcherIterator
-   * knows how to consume local merged shuffle file as multiple chunks.
-   */
   override def getBlockData(
       blockId: BlockId,
       dirs: Option[Array[String]]): ManagedBuffer = {

@@ -96,7 +96,7 @@ private[spark] object Utils extends Logging {
    */
   val DEFAULT_DRIVER_MEM_MB = JavaUtils.DEFAULT_DRIVER_MEM_MB.toInt
 
-  private val MAX_DIR_CREATION_ATTEMPTS: Int = 10
+  val MAX_DIR_CREATION_ATTEMPTS: Int = 10
   @volatile private var localRootDirs: Array[String] = null
 
   /** Scheme used for files that are locally available on worker nodes in the cluster. */
@@ -313,41 +313,6 @@ private[spark] object Utils extends Logging {
     }
 
     dir.getCanonicalFile
-  }
-
-  /**
-   * Create a directory that is writable by the group.
-   * Grant the customized permission so the shuffle server can
-   * create subdirs/files within the merge folder.
-   * TODO: Find out why can't we create a dir using java api with permission 770
-   *  Files.createDirectories(mergeDir.toPath, PosixFilePermissions.asFileAttribute(
-   *  PosixFilePermissions.fromString("rwxrwx---")))
-   */
-  def createDirWithCustomizedPermission(dirToCreate: File, permission: String): Unit = {
-    var attempts = 0
-    val maxAttempts = MAX_DIR_CREATION_ATTEMPTS
-    var created: File = null
-    while (created == null) {
-      attempts += 1
-      if (attempts > maxAttempts) {
-        throw new IOException(
-          s"Failed to create directory ${dirToCreate.getAbsolutePath} after " +
-            s"${maxAttempts} attempts!")
-      }
-      try {
-        val builder = new ProcessBuilder().command(
-          "mkdir", "-p", "-m" + permission, dirToCreate.getAbsolutePath)
-        val proc = builder.start()
-        val exitCode = proc.waitFor()
-        if (dirToCreate.exists()) {
-          created = dirToCreate
-        }
-        logDebug(
-          s"Created directory at ${dirToCreate.getAbsolutePath} and exitCode $exitCode")
-      } catch {
-        case e: SecurityException => created = null;
-      }
-    }
   }
 
   /**
@@ -2626,19 +2591,19 @@ private[spark] object Utils extends Logging {
     conf.get(PUSH_BASED_SHUFFLE_ENABLED) &&
       (conf.get(IS_TESTING).getOrElse(false) ||
         (conf.get(SHUFFLE_SERVICE_ENABLED) &&
-          conf.get(SparkLauncher.SPARK_MASTER, null) == "yarn") &&
-          getYarnMaxAttempts(conf) == 1)
+          conf.get(SparkLauncher.SPARK_MASTER, null) == "yarn" &&
+          getYarnMaxAttempts(conf) == 1))
   }
 
   /** Returns the maximum number of attempts to register the AM in YARN mode. */
   def getYarnMaxAttempts(conf: SparkConf): Int = {
-      val sparkMaxAttempts = conf.getOption("spark.yarn.maxAttempts").map(_.toInt)
-      val yarnMaxAttempts = getSparkOrYarnConfig(conf, YarnConfiguration.RM_AM_MAX_ATTEMPTS,
-        YarnConfiguration.DEFAULT_RM_AM_MAX_ATTEMPTS.toString).toInt
-      sparkMaxAttempts match {
-        case Some(x) => if (x <= yarnMaxAttempts) x else yarnMaxAttempts
-        case None => yarnMaxAttempts
-      }
+    val sparkMaxAttempts = conf.getOption("spark.yarn.maxAttempts").map(_.toInt)
+    val yarnMaxAttempts = getSparkOrYarnConfig(conf, YarnConfiguration.RM_AM_MAX_ATTEMPTS,
+      YarnConfiguration.DEFAULT_RM_AM_MAX_ATTEMPTS.toString).toInt
+    sparkMaxAttempts match {
+      case Some(x) => if (x <= yarnMaxAttempts) x else yarnMaxAttempts
+      case None => yarnMaxAttempts
+    }
   }
 
   /**
