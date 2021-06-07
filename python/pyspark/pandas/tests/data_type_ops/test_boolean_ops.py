@@ -232,28 +232,29 @@ class BooleanOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         self.assertRaises(TypeError, lambda: True % self.psser)
 
     def test_and(self):
-        pser = pd.Series([True, False, None], dtype='bool')
+        pser = pd.Series([True, False, None], dtype="bool")
         psser = ps.from_pandas(pser)
         self.assert_eq(pser & True, psser & True)
         self.assert_eq(pser & False, psser & False)
         self.assert_eq(pser & pser, psser & psser)
 
-        other_pser = pd.Series([False, None, True], dtype='bool')
+        other_pser = pd.Series([False, None, True], dtype="bool")
         other_psser = ps.from_pandas(other_pser)
         with option_context("compute.ops_on_diff_frames", True):
             self.assert_eq(pser & other_pser, psser & other_psser)
             self.check_extension(
-                pser & other_pser.astype('boolean'), psser & other_psser.astype('boolean'))
+                pser & other_pser.astype("boolean"), psser & other_psser.astype("boolean")
+            )
             self.assert_eq(other_pser & pser, other_psser & psser)
 
     def test_rand(self):
-        pser = pd.Series([True, False, None], dtype='bool')
+        pser = pd.Series([True, False, None], dtype="bool")
         psser = ps.from_pandas(pser)
         self.assert_eq(True & pser, True & psser)
         self.assert_eq(False & pser, False & psser)
 
     def test_or(self):
-        pser = pd.Series([True, False, None], dtype='bool')
+        pser = pd.Series([True, False, None], dtype="bool")
         psser = ps.from_pandas(pser)
         self.assert_eq(pser | True, psser | True)
         self.assert_eq(pser | False, psser | False)
@@ -261,28 +262,27 @@ class BooleanOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         self.assert_eq(True | pser, True | psser)
         self.assert_eq(False | pser, False | psser)
 
-        other_pser = pd.Series([False, None, True], dtype='bool')
+        other_pser = pd.Series([False, None, True], dtype="bool")
         other_psser = ps.from_pandas(other_pser)
         with option_context("compute.ops_on_diff_frames", True):
             self.assert_eq(pser | other_pser, psser | other_psser)
             self.check_extension(
-                pser | other_pser.astype('boolean'), psser | other_psser.astype('boolean'))
+                pser | other_pser.astype("boolean"), psser | other_psser.astype("boolean")
+            )
             self.assert_eq(other_pser | pser, other_psser | psser)
 
     def test_ror(self):
-        pser = pd.Series([True, False, None], dtype='bool')
+        pser = pd.Series([True, False, None], dtype="bool")
         psser = ps.from_pandas(pser)
         self.assert_eq(True | pser, True | psser)
         self.assert_eq(False | pser, False | psser)
 
 
-@unittest.skipIf(
-    not extension_dtypes_available, "pandas extension dtypes are not available"
-)
+@unittest.skipIf(not extension_dtypes_available, "pandas extension dtypes are not available")
 class BooleanExtensionOpsTest(PandasOnSparkTestCase, TestCasesUtils):
     @property
     def pser(self):
-        return pd.Series([True, False, None], dtype='boolean')
+        return pd.Series([True, False, None], dtype="boolean")
 
     @property
     def psser(self):
@@ -290,7 +290,7 @@ class BooleanExtensionOpsTest(PandasOnSparkTestCase, TestCasesUtils):
 
     @property
     def other_pser(self):
-        return pd.Series([False, None, True], dtype='boolean')
+        return pd.Series([False, None, True], dtype="boolean")
 
     @property
     def other_psser(self):
@@ -356,8 +356,9 @@ class BooleanExtensionOpsTest(PandasOnSparkTestCase, TestCasesUtils):
 
         with option_context("compute.ops_on_diff_frames", True):
             self.assert_eq(
-                self.pser / self.float_pser, (self.psser / self.float_psser).sort_index(),
-                almost=True
+                self.pser / self.float_pser,
+                (self.psser / self.float_psser).sort_index(),
+                almost=True,
             )
             for psser in self.non_numeric_pssers.values():
                 self.assertRaises(TypeError, lambda: self.psser / psser)
@@ -377,8 +378,9 @@ class BooleanExtensionOpsTest(PandasOnSparkTestCase, TestCasesUtils):
 
         with option_context("compute.ops_on_diff_frames", True):
             self.assert_eq(
-                self.pser // self.float_pser, (self.psser // self.float_psser).sort_index(),
-                almost=True
+                self.pser // self.float_pser,
+                (self.psser // self.float_psser).sort_index(),
+                almost=True,
             )
             for psser in self.non_numeric_pssers.values():
                 self.assertRaises(TypeError, lambda: self.psser // psser)
@@ -409,8 +411,9 @@ class BooleanExtensionOpsTest(PandasOnSparkTestCase, TestCasesUtils):
 
         with option_context("compute.ops_on_diff_frames", True):
             self.assert_eq(
-                self.pser ** self.float_pser, (self.psser ** self.float_psser).sort_index(),
-                almost=True
+                self.pser ** self.float_pser,
+                (self.psser ** self.float_psser).sort_index(),
+                almost=True,
             )
 
             for psser in self.non_numeric_pssers.values():

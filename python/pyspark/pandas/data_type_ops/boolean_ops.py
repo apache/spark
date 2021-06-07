@@ -204,6 +204,7 @@ class BooleanOps(DataTypeOps):
         if isinstance(right, IndexOpsMixin) and isinstance(right.dtype, extension_dtypes):
             return right.__and__(left)
         else:
+
             def and_func(left, right):
                 if not isinstance(right, spark.Column):
                     if pd.isna(right):
@@ -219,6 +220,7 @@ class BooleanOps(DataTypeOps):
         if isinstance(right, IndexOpsMixin) and isinstance(right.dtype, extension_dtypes):
             return right.__or__(left)
         else:
+
             def or_func(left, right):
                 if not isinstance(right, spark.Column) and pd.isna(right):
                     return F.lit(False)
