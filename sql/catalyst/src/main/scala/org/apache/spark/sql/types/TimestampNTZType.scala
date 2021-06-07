@@ -23,7 +23,7 @@ import scala.reflect.runtime.universe.typeTag
 import org.apache.spark.annotation.Unstable
 
 /**
- * The timestamp without time zone type represents a a local time in microsecond precision.
+ * The timestamp without time zone type represents a local time in microsecond precision.
  * It does not store or represent a time-zone.
  * Its valid range is [0001-01-01T00:00:00.000000, 9999-12-31T23:59:59.999999].
  *
