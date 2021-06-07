@@ -19,7 +19,6 @@ package org.apache.spark.executor
 
 import java.net.URL
 import java.nio.ByteBuffer
-import java.nio.file.Paths
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -53,7 +52,6 @@ private[spark] class CoarseGrainedExecutorBackend(
     bindAddress: String,
     hostname: String,
     cores: Int,
-    userClassPath: Seq[URL],
     env: SparkEnv,
     resourcesFileOpt: Option[String],
     resourceProfile: ResourceProfile)
@@ -125,7 +123,7 @@ private[spark] class CoarseGrainedExecutorBackend(
    */
   private def createClassLoader(): MutableURLClassLoader = {
     val currentLoader = Utils.getContextOrSparkClassLoader
-    val urls = userClassPath.toArray
+    val urls = getUserClassPath.toArray
     if (env.conf.get(EXECUTOR_USER_CLASS_PATH_FIRST)) {
       new ChildFirstURLClassLoader(urls, currentLoader)
     } else {
@@ -150,6 +148,8 @@ private[spark] class CoarseGrainedExecutorBackend(
     }
   }
 
+  def getUserClassPath: Seq[URL] = Nil
+
   def extractLogUrls: Map[String, String] = {
     val prefix = "SPARK_LOG_URL_"
     sys.env.filterKeys(_.startsWith(prefix))
@@ -166,7 +166,7 @@ private[spark] class CoarseGrainedExecutorBackend(
     case RegisteredExecutor =>
       logInfo("Successfully registered with driver")
       try {
-        executor = new Executor(executorId, hostname, env, userClassPath, isLocal = false,
+        executor = new Executor(executorId, hostname, env, getUserClassPath, isLocal = false,
           resources = _resources)
         driver.get.send(LaunchedExecutor(executorId))
       } catch {
@@ -390,12 +390,11 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
       resourceProfileId: Int)
 
   def main(args: Array[String]): Unit = {
-    val createFn: (RpcEnv, Arguments, SparkEnv, ResourceProfile, Seq[URL]) =>
-      CoarseGrainedExecutorBackend = {
-      case (rpcEnv, arguments, env, resourceProfile, userClassPath) =>
-        new CoarseGrainedExecutorBackend(rpcEnv, arguments.driverUrl, arguments.executorId,
-          arguments.bindAddress, arguments.hostname, arguments.cores, userClassPath,
-          env, arguments.resourcesFileOpt, resourceProfile)
+    val createFn: (RpcEnv, Arguments, SparkEnv, ResourceProfile) =>
+      CoarseGrainedExecutorBackend = { case (rpcEnv, arguments, env, resourceProfile) =>
+      new CoarseGrainedExecutorBackend(rpcEnv, arguments.driverUrl, arguments.executorId,
+        arguments.bindAddress, arguments.hostname, arguments.cores,
+        env, arguments.resourcesFileOpt, resourceProfile)
     }
     run(parseArguments(args, this.getClass.getCanonicalName.stripSuffix("$")), createFn)
     System.exit(0)
@@ -403,7 +402,7 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
 
   def run(
       arguments: Arguments,
-      backendCreateFn: (RpcEnv, Arguments, SparkEnv, ResourceProfile, Seq[URL]) =>
+      backendCreateFn: (RpcEnv, Arguments, SparkEnv, ResourceProfile) =>
         CoarseGrainedExecutorBackend): Unit = {
 
     Utils.initDaemon(log)
@@ -455,18 +454,12 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
         SparkHadoopUtil.get.addDelegationTokens(tokens, driverConf)
       }
 
-      // Fetch user classpath entries from conf and make absolute if necessary
-      val userClassPath = driverConf
-          .get(EXECUTOR_USER_CLASS_PATH_ENTRIES)
-          .map(Paths.get(_).toAbsolutePath.toUri.toURL)
-      logInfo(s"Starting executor with user classpath: ${userClassPath.mkString(":")}")
-
       driverConf.set(EXECUTOR_ID, arguments.executorId)
       val env = SparkEnv.createExecutorEnv(driverConf, arguments.executorId, arguments.bindAddress,
         arguments.hostname, arguments.cores, cfg.ioEncryptionKey, isLocal = false)
 
       env.rpcEnv.setupEndpoint("Executor",
-        backendCreateFn(env.rpcEnv, arguments, env, cfg.resourceProfile, userClassPath))
+        backendCreateFn(env.rpcEnv, arguments, env, cfg.resourceProfile))
       arguments.workerUrl.foreach { url =>
         env.rpcEnv.setupEndpoint("WorkerWatcher", new WorkerWatcher(env.rpcEnv, url))
       }

@@ -18,7 +18,7 @@
 package org.apache.spark.deploy.yarn
 
 import java.io.{FileSystem => _, _}
-import java.net.{InetAddress, UnknownHostException, URI}
+import java.net.{InetAddress, UnknownHostException, URI, URL}
 import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
@@ -668,14 +668,6 @@ private[spark] class Client(
     if (cachedSecondaryJarLinks.nonEmpty) {
       sparkConf.set(SECONDARY_JARS, cachedSecondaryJarLinks.toSeq)
     }
-    val userClassPath = Client.getUserClasspath(sparkConf).map { uri =>
-      if (Utils.isLocalUri(uri.toString)) {
-        Client.getClusterPath(sparkConf, uri.getPath)
-      } else {
-        uri.getPath
-      }
-    }.toSeq
-    sparkConf.set(EXECUTOR_USER_CLASS_PATH_ENTRIES, userClassPath)
 
     if (isClusterMode && args.primaryPyFile != null) {
       distribute(args.primaryPyFile, appMasterOnly = true)
@@ -1316,7 +1308,7 @@ private[spark] class Client(
 
 }
 
-private object Client extends Logging {
+private[spark] object Client extends Logging {
 
   // Alias for the user jar
   val APP_JAR_NAME: String = "__app__.jar"
@@ -1477,6 +1469,14 @@ private object Client extends Logging {
     val secondaryUris = getSecondaryJarUris(conf.get(SECONDARY_JARS))
     (mainUri ++ secondaryUris).toArray
   }
+
+  /**
+   * Returns a list of local, absolute URLs representing the user classpath.
+   *
+   * @param conf Spark configuration.
+   */
+  def getUserClasspathUrls(conf: SparkConf): Array[URL] =
+    getUserClasspath(conf).map(entry => new URL("file:" + new File(entry.getPath).getAbsolutePath))
 
   private def getMainJarUri(mainJar: Option[String]): Option[URI] = {
     mainJar.flatMap { path =>
