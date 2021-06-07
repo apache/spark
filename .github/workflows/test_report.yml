@@ -5,6 +5,10 @@ on:
     types:
       - completed
 
+concurrency:
+  group: ${{ github.repository }}-${{ github.ref }}-${{ github.workflow }}
+  cancel-in-progress: true
+
 jobs:
   test_report:
     runs-on: ubuntu-latest
