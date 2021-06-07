@@ -398,65 +398,21 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
     __ge__ = column_op(Column.__ge__)
     __gt__ = column_op(Column.__gt__)
 
+    __invert__ = column_op(Column.__invert__)
+
     # `and`, `or`, `not` cannot be overloaded in Python,
     # so use bitwise operators as boolean operators
     def __and__(self, other) -> Union["Series", "Index"]:
-        if isinstance(self.dtype, extension_dtypes) or (
-            isinstance(other, IndexOpsMixin) and isinstance(other.dtype, extension_dtypes)
-        ):
-
-            def and_func(left, right):
-                if not isinstance(right, spark.Column):
-                    if pd.isna(right):
-                        right = F.lit(None)
-                    else:
-                        right = F.lit(right)
-                return left & right
-
-        else:
-
-            def and_func(left, right):
-                if not isinstance(right, spark.Column):
-                    if pd.isna(right):
-                        right = F.lit(None)
-                    else:
-                        right = F.lit(right)
-                scol = left & right
-                return F.when(scol.isNull(), False).otherwise(scol)
-
-        return column_op(and_func)(self, other)
+        return self._dtype_op.__and__(self, other)
 
     def __or__(self, other) -> Union["Series", "Index"]:
-        if isinstance(self.dtype, extension_dtypes) or (
-            isinstance(other, IndexOpsMixin) and isinstance(other.dtype, extension_dtypes)
-        ):
-
-            def or_func(left, right):
-                if not isinstance(right, spark.Column):
-                    if pd.isna(right):
-                        right = F.lit(None)
-                    else:
-                        right = F.lit(right)
-                return left | right
-
-        else:
-
-            def or_func(left, right):
-                if not isinstance(right, spark.Column) and pd.isna(right):
-                    return F.lit(False)
-                else:
-                    scol = left | F.lit(right)
-                    return F.when(left.isNull() | scol.isNull(), False).otherwise(scol)
-
-        return column_op(or_func)(self, other)
-
-    __invert__ = column_op(Column.__invert__)
+        return self._dtype_op.__or__(self, other)
 
     def __rand__(self, other) -> Union["Series", "Index"]:
-        return self.__and__(other)
+        return self._dtype_op.rand(self, other)
 
     def __ror__(self, other) -> Union["Series", "Index"]:
-        return self.__or__(other)
+        return self._dtype_op.ror(self, other)
 
     def __len__(self):
         return len(self._psdf)
