@@ -22,7 +22,6 @@ import java.util.UUID
 import scala.util.Random
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.FSDataOutputStream
 
 import org.apache.spark.sql.execution.streaming.state.StateStoreTestsHelper.newDir
 import org.apache.spark.sql.test.SharedSparkSession
@@ -190,7 +189,8 @@ class StateSchemaCompatibilityCheckerSuite extends SharedSparkSession {
     val providerId = StateStoreProviderId(
       StateStoreId(dir, opId, partitionId), queryId)
     val checker = new StateSchemaCompatibilityChecker(providerId, hadoopConf)
-    checker.createSchemaFile(keySchema, valueSchema, new SchemaV1Writer)
+    checker.createSchemaFile(keySchema, valueSchema,
+      SchemaHelper.SchemaWriter.createSchemaWriter("v1"))
     val (resultKeySchema, resultValueSchema) = checker.readSchemaFile()
 
     assert((resultKeySchema, resultValueSchema) === (keySchema, valueSchema))
@@ -261,17 +261,5 @@ class StateSchemaCompatibilityCheckerSuite extends SharedSparkSession {
     val queryId = UUID.randomUUID()
     runSchemaChecker(dir, queryId, oldKeySchema, oldValueSchema)
     runSchemaChecker(dir, queryId, newKeySchema, newValueSchema)
-  }
-}
-
-class SchemaV1Writer extends SchemaWriter {
-  val version = 1
-
-  def writeSchema(
-      keySchema: StructType,
-      valueSchema: StructType,
-      outputStream: FSDataOutputStream): Unit = {
-    outputStream.writeUTF(keySchema.json)
-    outputStream.writeUTF(valueSchema.json)
   }
 }

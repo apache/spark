@@ -21,7 +21,8 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.execution.streaming.{CheckpointFileManager, MetadataVersionUtil}
+import org.apache.spark.sql.execution.streaming.CheckpointFileManager
+import org.apache.spark.sql.execution.streaming.state.SchemaHelper.{SchemaReader, SchemaWriter}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructType}
 
@@ -34,7 +35,7 @@ class StateSchemaCompatibilityChecker(
   private val storeCpLocation = providerId.storeId.storeCheckpointLocation()
   private val fm = CheckpointFileManager.create(storeCpLocation, hadoopConf)
   private val schemaFileLocation = schemaFile(storeCpLocation)
-  private val schemaWriter = new SchemaV2Writer
+  private val schemaWriter = SchemaWriter.createSchemaWriter("v2")
 
   fm.mkdirs(schemaFileLocation.getParent)
 
@@ -77,10 +78,7 @@ class StateSchemaCompatibilityChecker(
     val inStream = fm.open(schemaFileLocation)
     try {
       val versionStr = inStream.readUTF()
-      val version = MetadataVersionUtil.validateVersion(versionStr,
-        StateSchemaCompatibilityChecker.VERSION)
-      require(1 <= version && version <= StateSchemaCompatibilityChecker.VERSION)
-      val schemaReader = SchemaReaderFactory.createSchemaReader(version)
+      val schemaReader = SchemaReader.createSchemaReader(versionStr)
       schemaReader.read(inStream)
     } catch {
       case e: Throwable =>
