@@ -378,12 +378,12 @@ setMethod("toDF", signature(x = "RDD"),
 #' ) is supported. For JSON (one record per file), set a named property \code{multiLine} to
 #' \code{TRUE}.
 #' It goes through the entire dataset once to determine the schema.
-#' You can find the JSON-specific options for reading JSON files in
-#' \href{https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option}{
-#' Data Source Option} in the version you use.
 #'
 #' @param path Path of file to read. A vector of multiple paths is allowed.
 #' @param ... additional external data source specific named properties.
+#'            You can find the JSON-specific options for reading JSON files in
+#'            \href{https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option}{
+#'            Data Source Option} in the version you use.
 #' @return SparkDataFrame
 #' @rdname read.json
 #' @examples
@@ -409,12 +409,12 @@ read.json <- function(path, ...) {
 #' Create a SparkDataFrame from an ORC file.
 #'
 #' Loads an ORC file, returning the result as a SparkDataFrame.
-#' You can find the ORC-specific options for reading ORC files in
-#' \href{https://spark.apache.org/docs/latest/sql-data-sources-orc.html#data-source-option}{
-#' Data Source Option} in the version you use.
 #'
 #' @param path Path of file to read.
 #' @param ... additional external data source specific named properties.
+#'            You can find the ORC-specific options for reading ORC files in
+#'            \href{https://spark.apache.org/docs/latest/sql-data-sources-orc.html#data-source-option}{
+#'            Data Source Option} in the version you use.
 #' @return SparkDataFrame
 #' @rdname read.orc
 #' @name read.orc
@@ -433,12 +433,12 @@ read.orc <- function(path, ...) {
 #' Create a SparkDataFrame from a Parquet file.
 #'
 #' Loads a Parquet file, returning the result as a SparkDataFrame.
-#' You can find the Parquet-specific options for reading Parquet files in
-#' \href{https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#data-source-option}{
-#' Data Source Option} in the version you use.
 #'
 #' @param path path of file to read. A vector of multiple paths is allowed.
 #' @param ... additional data source specific named properties.
+#'            You can find the Parquet-specific options for reading Parquet files in
+#'            \href{https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#data-source-option}{
+#'            Data Source Option} in the version you use.
 #' @return SparkDataFrame
 #' @rdname read.parquet
 #' @name read.parquet
@@ -459,14 +459,14 @@ read.parquet <- function(path, ...) {
 #' Loads text files and returns a SparkDataFrame whose schema starts with
 #' a string column named "value", and followed by partitioned columns if
 #' there are any. The text files must be encoded as UTF-8.
-#' You can find the text-specific options for reading text files in
-#' \href{https://spark.apache.org/docs/latest/sql-data-sources-text.html#data-source-option}{
-#' Data Source Option} in the version you use.
 #'
 #' Each line in the text file is a new row in the resulting SparkDataFrame.
 #'
 #' @param path Path of file to read. A vector of multiple paths is allowed.
 #' @param ... additional external data source specific named properties.
+#'            You can find the text-specific options for reading text files in
+#'            \href{https://spark.apache.org/docs/latest/sql-data-sources-text.html#data-source-option}{
+#'            Data Source Option} in the version you use.
 #' @return SparkDataFrame
 #' @rdname read.text
 #' @examples
