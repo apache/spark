@@ -53,7 +53,7 @@ class ExecutorPodsWatchSnapshotSourceSuite extends SparkFunSuite with BeforeAndA
   private var watchSourceUnderTest: ExecutorPodsWatchSnapshotSource = _
 
   before {
-    MockitoAnnotations.initMocks(this)
+    MockitoAnnotations.openMocks(this).close()
     watch = ArgumentCaptor.forClass(classOf[Watcher[Pod]])
     when(kubernetesClient.pods()).thenReturn(podOperations)
     when(podOperations.withLabel(SPARK_APP_ID_LABEL, TEST_SPARK_APP_ID))

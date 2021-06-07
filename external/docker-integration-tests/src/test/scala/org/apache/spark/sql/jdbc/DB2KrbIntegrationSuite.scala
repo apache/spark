@@ -33,7 +33,7 @@ import org.apache.spark.tags.DockerTest
 /**
  * To run this test suite for a specific version (e.g., ibmcom/db2:11.5.4.0):
  * {{{
- *   DB2_DOCKER_IMAGE_NAME=ibmcom/db2:11.5.4.0
+ *   ENABLE_DOCKER_INTEGRATION_TESTS=1 DB2_DOCKER_IMAGE_NAME=ibmcom/db2:11.5.4.0
  *     ./build/sbt -Pdocker-integration-tests "testOnly *DB2KrbIntegrationSuite"
  * }}}
  */
@@ -81,7 +81,7 @@ class DB2KrbIntegrationSuite extends DockerKrbJDBCIntegrationSuite {
 
   override protected def setAuthentication(keytabFile: String, principal: String): Unit = {
     val config = new SecureConnectionProvider.JDBCConfiguration(
-      Configuration.getConfiguration, "JaasClient", keytabFile, principal)
+      Configuration.getConfiguration, "JaasClient", keytabFile, principal, true)
     Configuration.setConfiguration(config)
   }
 

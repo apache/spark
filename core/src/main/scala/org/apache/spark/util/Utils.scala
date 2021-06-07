@@ -1939,7 +1939,9 @@ private[spark] object Utils extends Logging {
    * Indicates whether Spark is currently running unit tests.
    */
   def isTesting: Boolean = {
-    sys.env.contains("SPARK_TESTING") || sys.props.contains(IS_TESTING.key)
+    // Scala's `sys.env` creates a ton of garbage by constructing Scala immutable maps, so
+    // we directly use the Java APIs instead.
+    System.getenv("SPARK_TESTING") != null || System.getProperty(IS_TESTING.key) != null
   }
 
   /**
@@ -2058,6 +2060,17 @@ private[spark] object Utils extends Logging {
       ""
     } else {
       paths.split(",").filter(_.trim.nonEmpty).map { p => Utils.resolveURI(p) }.mkString(",")
+    }
+  }
+
+  /** Check whether a path is an absolute URI. */
+  def isAbsoluteURI(path: String): Boolean = {
+    try {
+      val uri = new URI(path: String)
+      uri.isAbsolute
+    } catch {
+      case _: URISyntaxException =>
+        false
     }
   }
 
@@ -2857,6 +2870,34 @@ private[spark] object Utils extends Logging {
   }
 
   /**
+   * Returns true if and only if the underlying class is a member class.
+   *
+   * Note: jdk8u throws a "Malformed class name" error if a given class is a deeply-nested
+   * inner class (See SPARK-34607 for details). This issue has already been fixed in jdk9+, so
+   * we can remove this helper method safely if we drop the support of jdk8u.
+   */
+  def isMemberClass(cls: Class[_]): Boolean = {
+    try {
+      cls.isMemberClass
+    } catch {
+      case _: InternalError =>
+        // We emulate jdk8u `Class.isMemberClass` below:
+        //   public boolean isMemberClass() {
+        //     return getSimpleBinaryName() != null && !isLocalOrAnonymousClass();
+        //   }
+        // `getSimpleBinaryName()` returns null if a given class is a top-level class,
+        // so we replace it with `cls.getEnclosingClass != null`. The second condition checks
+        // if a given class is not a local or an anonymous class, so we replace it with
+        // `cls.getEnclosingMethod == null` because `cls.getEnclosingMethod()` return a value
+        // only in either case (JVM Spec 4.8.6).
+        //
+        // Note: The newer jdk evaluates `!isLocalOrAnonymousClass()` first,
+        // we reorder the conditions to follow it.
+        cls.getEnclosingMethod == null && cls.getEnclosingClass != null
+    }
+  }
+
+  /**
    * Safer than Class obj's getSimpleName which may throw Malformed class name error in scala.
    * This method mimics scalatest's getSimpleNameOfAnObjectsClass.
    */
@@ -2968,6 +3009,9 @@ private[spark] object Utils extends Logging {
 
   /** Create a new properties object with the same values as `props` */
   def cloneProperties(props: Properties): Properties = {
+    if (props == null) {
+      return props
+    }
     val resultProps = new Properties()
     props.forEach((k, v) => resultProps.put(k, v))
     resultProps
@@ -2978,7 +3022,7 @@ private[spark] object Utils extends Logging {
    * exceeds `stopAppendingThreshold`, stop appending paths for saving memory.
    */
   def buildLocationMetadata(paths: Seq[Path], stopAppendingThreshold: Int): String = {
-    val metadata = new StringBuilder("[")
+    val metadata = new StringBuilder(s"(${paths.length} paths)[")
     var index: Int = 0
     while (index < paths.length && metadata.length < stopAppendingThreshold) {
       if (index > 0) {
@@ -2986,6 +3030,12 @@ private[spark] object Utils extends Logging {
       }
       metadata.append(paths(index).toString)
       index += 1
+    }
+    if (paths.length > index) {
+      if (index > 0) {
+        metadata.append(", ")
+      }
+      metadata.append("...")
     }
     metadata.append("]")
     metadata.toString
@@ -3010,6 +3060,13 @@ private[spark] object Utils extends Logging {
     } else {
       0
     }
+  }
+
+  def executorTimeoutMs(conf: SparkConf): Long = {
+    // "spark.network.timeout" uses "seconds", while `spark.storage.blockManagerSlaveTimeoutMs` uses
+    // "milliseconds"
+    conf.get(config.STORAGE_BLOCKMANAGER_HEARTBEAT_TIMEOUT)
+      .getOrElse(Utils.timeStringAsMs(s"${conf.get(Network.NETWORK_TIMEOUT)}s"))
   }
 }
 

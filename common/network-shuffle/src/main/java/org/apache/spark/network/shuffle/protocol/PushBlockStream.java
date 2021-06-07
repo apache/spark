@@ -19,6 +19,8 @@ package org.apache.spark.network.shuffle.protocol;
 
 import com.google.common.base.Objects;
 import io.netty.buffer.ByteBuf;
+import org.apache.commons.lang3.builder.ToStringBuilder;
+import org.apache.commons.lang3.builder.ToStringStyle;
 
 import org.apache.spark.network.protocol.Encoders;
 
@@ -59,12 +61,12 @@ public class PushBlockStream extends BlockTransferMessage {
 
   @Override
   public String toString() {
-    return Objects.toStringHelper(this)
-      .add("appId", appId)
-      .add("shuffleId", shuffleId)
-      .add("mapIndex", mapIndex)
-      .add("reduceId", reduceId)
-      .add("index", index)
+    return new ToStringBuilder(this, ToStringStyle.SHORT_PREFIX_STYLE)
+      .append("appId", appId)
+      .append("shuffleId", shuffleId)
+      .append("mapIndex", mapIndex)
+      .append("reduceId", reduceId)
+      .append("index", index)
       .toString();
   }
 

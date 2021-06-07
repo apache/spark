@@ -189,9 +189,9 @@ private[ui] class WorkerPage(parent: WorkerWebUI) extends WebUIPage("") {
         </ul>
       </td>
       <td>
-        <a href={s"$workerUrlRef/logPage?appId=${executor
+        <a href={s"$workerUrlRef/logPage/?appId=${executor
           .appId}&executorId=${executor.execId}&logType=stdout"}>stdout</a>
-        <a href={s"$workerUrlRef/logPage?appId=${executor
+        <a href={s"$workerUrlRef/logPage/?appId=${executor
           .appId}&executorId=${executor.execId}&logType=stderr"}>stderr</a>
       </td>
     </tr>

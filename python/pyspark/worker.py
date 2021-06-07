@@ -21,7 +21,7 @@ Worker that receives input from Piped RDD.
 import os
 import sys
 import time
-from inspect import getfullargspec
+from inspect import currentframe, getframeinfo, getfullargspec
 import importlib
 # 'resource' is a Unix specific module.
 has_resource_module = True
@@ -30,6 +30,7 @@ try:
 except ImportError:
     has_resource_module = False
 import traceback
+import warnings
 
 from pyspark.accumulators import _accumulatorRegistry
 from pyspark.broadcast import Broadcast, _broadcastRegistry
@@ -470,11 +471,11 @@ def main(infile, outfile):
 
         version = utf8_deserializer.loads(infile)
         if version != "%d.%d" % sys.version_info[:2]:
-            raise Exception(("Python in worker has different version %s than that in " +
-                             "driver %s, PySpark cannot run with different minor versions. " +
-                             "Please check environment variables PYSPARK_PYTHON and " +
-                             "PYSPARK_DRIVER_PYTHON are correctly set.") %
-                            ("%d.%d" % sys.version_info[:2], version))
+            raise RuntimeError(("Python in worker has different version %s than that in " +
+                                "driver %s, PySpark cannot run with different minor versions. " +
+                                "Please check environment variables PYSPARK_PYTHON and " +
+                                "PYSPARK_DRIVER_PYTHON are correctly set.") %
+                               ("%d.%d" % sys.version_info[:2], version))
 
         # read inputs only for a barrier task
         isBarrier = read_bool(infile)
@@ -500,7 +501,14 @@ def main(infile, outfile):
 
             except (resource.error, OSError, ValueError) as e:
                 # not all systems support resource limits, so warn instead of failing
-                print("WARN: Failed to set memory limit: {0}\n".format(e), file=sys.stderr)
+                lineno = getframeinfo(
+                    currentframe()).lineno + 1 if currentframe() is not None else 0
+                print(warnings.formatwarning(
+                    "Failed to set memory limit: {0}".format(e),
+                    ResourceWarning,
+                    __file__,
+                    lineno
+                ), file=sys.stderr)
 
         # initialize global state
         taskContext = None

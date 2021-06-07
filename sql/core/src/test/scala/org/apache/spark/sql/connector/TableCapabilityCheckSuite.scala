@@ -22,7 +22,7 @@ import java.util
 import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.{AnalysisException, DataFrame, SQLContext}
-import org.apache.spark.sql.catalyst.analysis.{AnalysisSuite, NamedRelation}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, NamedRelation}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, EqualTo, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
@@ -36,7 +36,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{LongType, StringType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-class TableCapabilityCheckSuite extends AnalysisSuite with SharedSparkSession {
+class TableCapabilityCheckSuite extends AnalysisTest with SharedSparkSession {
 
   private val emptyMap = CaseInsensitiveStringMap.empty
   private def createStreamingRelation(table: Table, v1Relation: Option[StreamingRelation]) = {

@@ -31,7 +31,7 @@ import org.apache.spark.tags.DockerTest
 /**
  * To run this test suite for a specific version (e.g., ibmcom/db2:11.5.4.0):
  * {{{
- *   DB2_DOCKER_IMAGE_NAME=ibmcom/db2:11.5.4.0
+ *   ENABLE_DOCKER_INTEGRATION_TESTS=1 DB2_DOCKER_IMAGE_NAME=ibmcom/db2:11.5.4.0
  *     ./build/sbt -Pdocker-integration-tests "testOnly *v2.DB2IntegrationSuite"
  * }}}
  */
@@ -65,11 +65,11 @@ class DB2IntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest {
   override def testUpdateColumnType(tbl: String): Unit = {
     sql(s"CREATE TABLE $tbl (ID INTEGER)")
     var t = spark.table(tbl)
-    var expectedSchema = new StructType().add("ID", IntegerType)
+    var expectedSchema = new StructType().add("ID", IntegerType, true, defaultMetadata)
     assert(t.schema === expectedSchema)
     sql(s"ALTER TABLE $tbl ALTER COLUMN id TYPE DOUBLE")
     t = spark.table(tbl)
-    expectedSchema = new StructType().add("ID", DoubleType)
+    expectedSchema = new StructType().add("ID", DoubleType, true, defaultMetadata)
     assert(t.schema === expectedSchema)
     // Update column type from DOUBLE to STRING
     val msg1 = intercept[AnalysisException] {
@@ -81,8 +81,8 @@ class DB2IntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest {
   override def testCreateTableWithProperty(tbl: String): Unit = {
     sql(s"CREATE TABLE $tbl (ID INT)" +
       s" TBLPROPERTIES('CCSID'='UNICODE')")
-    var t = spark.table(tbl)
-    var expectedSchema = new StructType().add("ID", IntegerType)
+    val t = spark.table(tbl)
+    val expectedSchema = new StructType().add("ID", IntegerType, true, defaultMetadata)
     assert(t.schema === expectedSchema)
   }
 }

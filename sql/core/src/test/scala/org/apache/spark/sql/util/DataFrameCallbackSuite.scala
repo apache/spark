@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, InsertIntoStatement, LogicalPlan, Project}
 import org.apache.spark.sql.execution.{QueryExecution, QueryExecutionException, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
-import org.apache.spark.sql.execution.command.RunnableCommand
+import org.apache.spark.sql.execution.command.LeafRunnableCommand
 import org.apache.spark.sql.execution.datasources.{CreateTable, InsertIntoHadoopFsRelationCommand}
 import org.apache.spark.sql.execution.datasources.json.JsonFileFormat
 import org.apache.spark.sql.test.SharedSparkSession
@@ -251,7 +251,8 @@ class DataFrameCallbackSuite extends QueryTest
           name = "my_event",
           min($"id").as("min_val"),
           max($"id").as("max_val"),
-          sum($"id").as("sum_val"),
+          // Test unresolved alias
+          sum($"id"),
           count(when($"id" % 2 === 0, 1)).as("num_even"))
         .observe(
           name = "other_event",
@@ -302,7 +303,7 @@ class DataFrameCallbackSuite extends QueryTest
 }
 
 /** A test command that throws `java.lang.Error` during execution. */
-case class ErrorTestCommand(foo: String) extends RunnableCommand {
+case class ErrorTestCommand(foo: String) extends LeafRunnableCommand {
 
   override val output: Seq[Attribute] = Seq(AttributeReference("foo", StringType)())
 

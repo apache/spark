@@ -107,7 +107,7 @@ In the case of a ``spark-submit`` script, you can use it as follows:
 
 Note that ``PYSPARK_DRIVER_PYTHON`` above should not be set for cluster modes in YARN or Kubernetes.
 
-If you’re on a regular Python shell or notebook, you can try it as shown below:
+If you're on a regular Python shell or notebook, you can try it as shown below:
 
 .. code-block:: python
 
@@ -140,8 +140,9 @@ Python dependencies in their clusters by using `venv-pack <https://jcristharif.c
 in a similar way as conda-pack.
 
 A virtual environment to use on both driver and executor can be created as demonstrated below.
-It packs the current virtual environment to an archive file, and It self-contains both Python interpreter
-and the dependencies.
+It packs the current virtual environment to an archive file, and it contains both Python interpreter and the dependencies.
+However, it requires all nodes in a cluster to have the same Python interpreter installed because
+`venv-pack packs Python interpreter as a symbolic link <https://github.com/jcrist/venv-pack/issues/5>`_.
 
 
 .. code-block:: bash

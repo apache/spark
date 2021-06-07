@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.util
 
-import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 import java.time._
 import java.time.temporal.{ChronoField, ChronoUnit, IsoFields}
@@ -30,7 +29,8 @@ import sun.util.calendar.ZoneInfo
 
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.RebaseDateTime._
-import org.apache.spark.sql.types.Decimal
+import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.types.{DateType, Decimal, TimestampType}
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 /**
@@ -50,7 +50,10 @@ object DateTimeUtils {
 
   val TIMEZONE_OPTION = "timeZone"
 
-  def getZoneId(timeZoneId: String): ZoneId = ZoneId.of(timeZoneId, ZoneId.SHORT_IDS)
+  def getZoneId(timeZoneId: String): ZoneId = {
+    // To support the (+|-)h:mm format because it was supported before Spark 3.0.
+    ZoneId.of(timeZoneId.replaceFirst("(\\+|\\-)(\\d):", "$10$2:"), ZoneId.SHORT_IDS)
+  }
   def getTimeZone(timeZoneId: String): TimeZone = TimeZone.getTimeZone(getZoneId(timeZoneId))
 
   /**
@@ -242,8 +245,6 @@ object DateTimeUtils {
     var i = 0
     var currentSegmentValue = 0
     val bytes = s.trimAll().getBytes
-    val specialTimestamp = convertSpecialTimestamp(bytes, timeZoneId)
-    if (specialTimestamp.isDefined) return specialTimestamp
     var j = 0
     var digitsMilli = 0
     var justTime = false
@@ -366,7 +367,7 @@ object DateTimeUtils {
 
   def stringToTimestampAnsi(s: UTF8String, timeZoneId: ZoneId): Long = {
     stringToTimestamp(s, timeZoneId).getOrElse {
-      throw new DateTimeException(s"Cannot cast $s to TimestampType.")
+      throw QueryExecutionErrors.cannotCastUTF8StringToDataTypeError(s, TimestampType)
     }
   }
 
@@ -415,7 +416,7 @@ object DateTimeUtils {
    * `yyyy-[m]m-[d]d *`
    * `yyyy-[m]m-[d]dT*`
    */
-  def stringToDate(s: UTF8String, zoneId: ZoneId): Option[Int] = {
+  def stringToDate(s: UTF8String): Option[Int] = {
     if (s == null) {
       return None
     }
@@ -423,8 +424,6 @@ object DateTimeUtils {
     var i = 0
     var currentSegmentValue = 0
     val bytes = s.trimAll().getBytes
-    val specialDate = convertSpecialDate(bytes, zoneId)
-    if (specialDate.isDefined) return specialDate
     var j = 0
     while (j < bytes.length && (i < 3 && !(bytes(j) == ' ' || bytes(j) == 'T'))) {
       val b = bytes(j)
@@ -463,9 +462,9 @@ object DateTimeUtils {
     }
   }
 
-  def stringToDateAnsi(s: UTF8String, zoneId: ZoneId): Int = {
-    stringToDate(s, zoneId).getOrElse {
-      throw new DateTimeException(s"Cannot cast $s to DateType.")
+  def stringToDateAnsi(s: UTF8String): Int = {
+    stringToDate(s).getOrElse {
+      throw QueryExecutionErrors.cannotCastUTF8StringToDataTypeError(s, DateType)
     }
   }
 
@@ -572,6 +571,42 @@ object DateTimeUtils {
    */
   def dateAddMonths(days: Int, months: Int): Int = {
     localDateToDays(daysToLocalDate(days).plusMonths(months))
+  }
+
+  /**
+   * Adds months to a timestamp at the given time zone. It converts the input timestamp to a local
+   * timestamp at the given time zone, adds months, and converts the resulted local timestamp
+   * back to a timestamp, expressed in microseconds since 1970-01-01 00:00:00Z.
+   *
+   * @param micros The input timestamp value, expressed in microseconds since 1970-01-01 00:00:00Z
+   * @param months The amount of months to add. It can be positive or negative.
+   * @param zoneId The time zone ID at which the operation is performed.
+   * @return A timestamp value, expressed in microseconds since 1970-01-01 00:00:00Z.
+   */
+  def timestampAddMonths(micros: Long, months: Int, zoneId: ZoneId): Long = {
+    instantToMicros(microsToInstant(micros).atZone(zoneId).plusMonths(months).toInstant)
+  }
+
+  /**
+   * Adds a day-time interval expressed in microseconds to a timestamp at the given time zone.
+   * It converts the input timestamp to a local timestamp, and adds the interval by:
+   *   - Splitting the interval to days and microsecond adjustment in a day, and
+   *   - First of all, it adds days and then the time part.
+   * The resulted local timestamp is converted back to an instant at the given time zone.
+   *
+   * @param micros The input timestamp value, expressed in microseconds since 1970-01-01 00:00:00Z.
+   * @param dayTime The amount of microseconds to add. It can be positive or negative.
+   * @param zoneId The time zone ID at which the operation is performed.
+   * @return A timestamp value, expressed in microseconds since 1970-01-01 00:00:00Z.
+   */
+  def timestampAddDayTime(micros: Long, dayTime: Long, zoneId: ZoneId): Long = {
+    val days = dayTime / MICROS_PER_DAY
+    val microseconds = dayTime - days * MICROS_PER_DAY
+    val resultTimestamp = microsToInstant(micros)
+      .atZone(zoneId)
+      .plusDays(days)
+      .plus(microseconds, ChronoUnit.MICROS)
+    instantToMicros(resultTimestamp.toInstant)
   }
 
   /**
@@ -736,7 +771,7 @@ object DateTimeUtils {
       case TRUNC_TO_YEAR => days - getDayInYear(days) + 1
       case _ =>
         // caller make sure that this should never be reached
-        sys.error(s"Invalid trunc level: $level")
+        throw QueryExecutionErrors.unreachableError(s": Invalid trunc level: $level")
     }
   }
 
@@ -868,13 +903,13 @@ object DateTimeUtils {
   /**
    * Converts notational shorthands that are converted to ordinary timestamps.
    *
-   * @param input A trimmed string
+   * @param input A string to parse. It can contain trailing or leading whitespaces.
    * @param zoneId Zone identifier used to get the current date.
    * @return Some of microseconds since the epoch if the conversion completed
    *         successfully otherwise None.
    */
   def convertSpecialTimestamp(input: String, zoneId: ZoneId): Option[Long] = {
-    extractSpecialValue(input, zoneId).flatMap {
+    extractSpecialValue(input.trim, zoneId).flatMap {
       case "epoch" => Some(0)
       case "now" => Some(currentTimestamp())
       case "today" => Some(instantToMicros(today(zoneId).toInstant))
@@ -884,36 +919,20 @@ object DateTimeUtils {
     }
   }
 
-  private def convertSpecialTimestamp(bytes: Array[Byte], zoneId: ZoneId): Option[Long] = {
-    if (bytes.length > 0 && Character.isAlphabetic(bytes(0))) {
-      convertSpecialTimestamp(new String(bytes, StandardCharsets.UTF_8), zoneId)
-    } else {
-      None
-    }
-  }
-
   /**
    * Converts notational shorthands that are converted to ordinary dates.
    *
-   * @param input A trimmed string
+   * @param input A string to parse. It can contain trailing or leading whitespaces.
    * @param zoneId Zone identifier used to get the current date.
    * @return Some of days since the epoch if the conversion completed successfully otherwise None.
    */
   def convertSpecialDate(input: String, zoneId: ZoneId): Option[Int] = {
-    extractSpecialValue(input, zoneId).flatMap {
+    extractSpecialValue(input.trim, zoneId).flatMap {
       case "epoch" => Some(0)
       case "now" | "today" => Some(currentDate(zoneId))
       case "tomorrow" => Some(Math.addExact(currentDate(zoneId), 1))
       case "yesterday" => Some(Math.subtractExact(currentDate(zoneId), 1))
       case _ => None
-    }
-  }
-
-  private def convertSpecialDate(bytes: Array[Byte], zoneId: ZoneId): Option[Int] = {
-    if (bytes.length > 0 && Character.isAlphabetic(bytes(0))) {
-      convertSpecialDate(new String(bytes, StandardCharsets.UTF_8), zoneId)
-    } else {
-      None
     }
   }
 
@@ -930,5 +949,21 @@ object DateTimeUtils {
     val months = Math.toIntExact(period.toTotalMonths)
     val days = period.getDays
     new CalendarInterval(months, days, 0)
+  }
+
+  /**
+   * Subtracts two timestamps expressed as microseconds since 1970-01-01 00:00:00Z, and returns
+   * the difference in microseconds between local timestamps at the given time zone.
+   *
+   * @param endMicros The end timestamp as microseconds since the epoch, exclusive
+   * @param startMicros The end timestamp as microseconds since the epoch, inclusive
+   * @param zoneId The time zone ID in which the subtraction is performed
+   * @return The difference in microseconds between local timestamps corresponded to the input
+   *         instants `end` and `start`.
+   */
+  def subtractTimestamps(endMicros: Long, startMicros: Long, zoneId: ZoneId): Long = {
+    val localEndTs = getLocalDateTime(endMicros, zoneId)
+    val localStartTs = getLocalDateTime(startMicros, zoneId)
+    ChronoUnit.MICROS.between(localStartTs, localEndTs)
   }
 }

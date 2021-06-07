@@ -134,3 +134,4 @@ flights_tiny.txt.1
 over1k
 over10k
 exported_table/*
+node_modules

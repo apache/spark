@@ -25,9 +25,10 @@ from distutils.version import LooseVersion
 
 from pyspark import SparkContext, SparkConf
 from pyspark.sql import Row, SparkSession
-from pyspark.sql.functions import udf
+from pyspark.sql.functions import rand, udf
 from pyspark.sql.types import StructType, StringType, IntegerType, LongType, \
-    FloatType, DoubleType, DecimalType, DateType, TimestampType, BinaryType, StructField, ArrayType
+    FloatType, DoubleType, DecimalType, DateType, TimestampType, BinaryType, StructField, \
+    ArrayType, NullType
 from pyspark.testing.sqlutils import ReusedSQLTestCase, have_pandas, have_pyarrow, \
     pandas_requirement_message, pyarrow_requirement_message
 from pyspark.testing.utils import QuietTest
@@ -76,7 +77,7 @@ class ArrowTests(ReusedSQLTestCase):
         # Disable fallback by default to easily detect the failures.
         cls.spark.conf.set("spark.sql.execution.arrow.pyspark.fallback.enabled", "false")
 
-        cls.schema = StructType([
+        cls.schema_wo_null = StructType([
             StructField("1_str_t", StringType(), True),
             StructField("2_int_t", IntegerType(), True),
             StructField("3_long_t", LongType(), True),
@@ -86,14 +87,18 @@ class ArrowTests(ReusedSQLTestCase):
             StructField("7_date_t", DateType(), True),
             StructField("8_timestamp_t", TimestampType(), True),
             StructField("9_binary_t", BinaryType(), True)])
-        cls.data = [(u"a", 1, 10, 0.2, 2.0, Decimal("2.0"),
-                     date(1969, 1, 1), datetime(1969, 1, 1, 1, 1, 1), bytearray(b"a")),
-                    (u"b", 2, 20, 0.4, 4.0, Decimal("4.0"),
-                     date(2012, 2, 2), datetime(2012, 2, 2, 2, 2, 2), bytearray(b"bb")),
-                    (u"c", 3, 30, 0.8, 6.0, Decimal("6.0"),
-                     date(2100, 3, 3), datetime(2100, 3, 3, 3, 3, 3), bytearray(b"ccc")),
-                    (u"d", 4, 40, 1.0, 8.0, Decimal("8.0"),
-                     date(2262, 4, 12), datetime(2262, 3, 3, 3, 3, 3), bytearray(b"dddd"))]
+        cls.schema = cls.schema_wo_null.add("10_null_t", NullType(), True)
+        cls.data_wo_null = [
+            (u"a", 1, 10, 0.2, 2.0, Decimal("2.0"),
+             date(1969, 1, 1), datetime(1969, 1, 1, 1, 1, 1), bytearray(b"a")),
+            (u"b", 2, 20, 0.4, 4.0, Decimal("4.0"),
+             date(2012, 2, 2), datetime(2012, 2, 2, 2, 2, 2), bytearray(b"bb")),
+            (u"c", 3, 30, 0.8, 6.0, Decimal("6.0"),
+             date(2100, 3, 3), datetime(2100, 3, 3, 3, 3, 3), bytearray(b"ccc")),
+            (u"d", 4, 40, 1.0, 8.0, Decimal("8.0"),
+             date(2262, 4, 12), datetime(2262, 3, 3, 3, 3, 3), bytearray(b"dddd")),
+        ]
+        cls.data = [tuple(list(d) + [None]) for d in cls.data_wo_null]
 
     @classmethod
     def tearDownClass(cls):
@@ -141,8 +146,8 @@ class ArrowTests(ReusedSQLTestCase):
                     df.toPandas()
 
     def test_null_conversion(self):
-        df_null = self.spark.createDataFrame([tuple([None for _ in range(len(self.data[0]))])] +
-                                             self.data)
+        df_null = self.spark.createDataFrame(
+            [tuple([None for _ in range(len(self.data_wo_null[0]))])] + self.data_wo_null)
         pdf = df_null.toPandas()
         null_counts = pdf.isnull().sum().tolist()
         self.assertTrue(all([c == 1 for c in null_counts]))
@@ -191,6 +196,37 @@ class ArrowTests(ReusedSQLTestCase):
         pdf_arrow = df.toPandas()
         assert_frame_equal(pdf_arrow, pdf)
 
+    def test_pandas_self_destruct(self):
+        import pyarrow as pa
+        rows = 2 ** 10
+        cols = 4
+        expected_bytes = rows * cols * 8
+        df = self.spark.range(0, rows).select(*[rand() for _ in range(cols)])
+        # Test the self_destruct behavior by testing _collect_as_arrow directly
+        allocation_before = pa.total_allocated_bytes()
+        batches = df._collect_as_arrow(split_batches=True)
+        table = pa.Table.from_batches(batches)
+        del batches
+        pdf_split = table.to_pandas(self_destruct=True, split_blocks=True, use_threads=False)
+        allocation_after = pa.total_allocated_bytes()
+        difference = allocation_after - allocation_before
+        # Should be around 1x the data size (table should not hold on to any memory)
+        self.assertGreaterEqual(difference, 0.9 * expected_bytes)
+        self.assertLessEqual(difference, 1.1 * expected_bytes)
+
+        with self.sql_conf({"spark.sql.execution.arrow.pyspark.selfDestruct.enabled": False}):
+            no_self_destruct_pdf = df.toPandas()
+            # Note while memory usage is 2x data size here (both table and pdf hold on to
+            # memory), in this case Arrow still only tracks 1x worth of memory (since the
+            # batches are not allocated by Arrow in this case), so we can't make any
+            # assertions here
+
+        with self.sql_conf({"spark.sql.execution.arrow.pyspark.selfDestruct.enabled": True}):
+            self_destruct_pdf = df.toPandas()
+
+        assert_frame_equal(pdf_split, no_self_destruct_pdf)
+        assert_frame_equal(pdf_split, self_destruct_pdf)
+
     def test_filtered_frame(self):
         df = self.spark.range(3).toDF("i")
         pdf = df.filter("i < 0").toPandas()
@@ -210,7 +246,7 @@ class ArrowTests(ReusedSQLTestCase):
         df = self.spark.range(3).toDF("i")
 
         def raise_exception():
-            raise Exception("My error")
+            raise RuntimeError("My error")
         exception_udf = udf(raise_exception, IntegerType())
         df = df.withColumn("error", exception_udf())
         with QuietTest(self.sc):

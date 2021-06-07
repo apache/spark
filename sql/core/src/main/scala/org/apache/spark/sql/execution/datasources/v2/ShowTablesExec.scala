@@ -40,7 +40,7 @@ case class ShowTablesExec(
     val tables = catalog.listTables(namespace.toArray)
     tables.map { table =>
       if (pattern.map(StringUtils.filterPattern(Seq(table.name()), _).nonEmpty).getOrElse(true)) {
-        rows += toCatalystRow(table.namespace().quoted, table.name())
+        rows += toCatalystRow(table.namespace().quoted, table.name(), false)
       }
     }
 

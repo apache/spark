@@ -598,6 +598,39 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
     }
   }
 
+  test("SPARK-28551: CTAS Hive Table should be with non-existent or empty location") {
+    def executeCTASWithNonEmptyLocation(tempLocation: String): Unit = {
+      sql(s"CREATE TABLE ctas1(id string) stored as rcfile LOCATION '$tempLocation/ctas1'")
+      sql("INSERT INTO TABLE ctas1 SELECT 'A' ")
+      sql(s"""CREATE TABLE ctas_with_existing_location stored as rcfile LOCATION
+           |'$tempLocation' AS SELECT key k, value FROM src ORDER BY k, value""".stripMargin)
+    }
+
+    Seq(false, true).foreach { convertCTASFlag =>
+      Seq(false, true).foreach { allowNonEmptyDirFlag =>
+        withSQLConf(
+          SQLConf.CONVERT_CTAS.key -> convertCTASFlag.toString,
+          SQLConf.ALLOW_NON_EMPTY_LOCATION_IN_CTAS.key -> allowNonEmptyDirFlag.toString) {
+          withTempDir { dir =>
+            val tempLocation = dir.toURI.toString
+            withTable("ctas1", "ctas_with_existing_location") {
+              if (allowNonEmptyDirFlag == false) {
+                val m = intercept[AnalysisException] {
+                  // should not overwrite table location of table ctas1
+                  executeCTASWithNonEmptyLocation(tempLocation)
+                }.getMessage
+                assert(m.contains("CREATE-TABLE-AS-SELECT cannot create " +
+                  "table with location to a non-empty directory"))
+              } else {
+                executeCTASWithNonEmptyLocation(tempLocation)
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
   test("CTAS with serde") {
     withTable("ctas1", "ctas2", "ctas3", "ctas4", "ctas5") {
       sql("CREATE TABLE ctas1 AS SELECT key k, value FROM src ORDER BY k, value")
@@ -775,7 +808,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
   }
 
   test("test CTAS") {
-    withTable("test_ctas_1234") {
+    withTable("test_ctas_123") {
       sql("CREATE TABLE test_ctas_123 AS SELECT key, value FROM src")
       checkAnswer(
         sql("SELECT key, value FROM test_ctas_123 ORDER BY key"),
@@ -1969,7 +2002,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
       for (i <- 1 to 3) {
         Files.write(s"$i", new File(dirPath, s"part-r-0000$i"), StandardCharsets.UTF_8)
       }
-      withTable("load_t_folder_wildcard") {
+      withTable("load_t") {
         sql("CREATE TABLE load_t (a STRING) USING hive")
         sql(s"LOAD DATA LOCAL INPATH '${
           path.substring(0, path.length - 1)
@@ -2157,32 +2190,6 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
       checkAnswer(table.filter($"p" === "'").select($"a"), Row(2))
       checkAnswer(table.filter($"p" === "\"").select($"a"), Row(3))
       checkAnswer(table.filter($"p" === "p1\" and q=\"q1").select($"a"), Row(4))
-    }
-  }
-
-  test("SPARK-21101 UDTF should override initialize(ObjectInspector[] args)") {
-    withUserDefinedFunction("udtf_stack1" -> true, "udtf_stack2" -> true) {
-      sql(
-        s"""
-           |CREATE TEMPORARY FUNCTION udtf_stack1
-           |AS 'org.apache.spark.sql.hive.execution.UDTFStack'
-           |USING JAR '${hiveContext.getHiveFile("SPARK-21101-1.0.jar").toURI}'
-        """.stripMargin)
-      val cnt =
-        sql("SELECT udtf_stack1(2, 'A', 10, date '2015-01-01', 'B', 20, date '2016-01-01')").count()
-      assert(cnt === 2)
-
-      sql(
-        s"""
-           |CREATE TEMPORARY FUNCTION udtf_stack2
-           |AS 'org.apache.spark.sql.hive.execution.UDTFStack2'
-           |USING JAR '${hiveContext.getHiveFile("SPARK-21101-1.0.jar").toURI}'
-        """.stripMargin)
-      val e = intercept[org.apache.spark.sql.AnalysisException] {
-        sql("SELECT udtf_stack2(2, 'A', 10, date '2015-01-01', 'B', 20, date '2016-01-01')")
-      }
-      assert(
-        e.getMessage.contains("public StructObjectInspector initialize(ObjectInspector[] args)"))
     }
   }
 
@@ -2580,6 +2587,30 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
           sql("INSERT OVERWRITE TABLE t PARTITION(P1) VALUES(1, 'caseSensitive')")
           checkAnswer(sql("select * from t"), Row(1, "caseSensitive"))
         }
+      }
+    }
+  }
+
+  test("SPARK-32668: HiveGenericUDTF initialize UDTF should use StructObjectInspector method") {
+    withUserDefinedFunction("udtf_stack1" -> true, "udtf_stack2" -> true) {
+      sql(
+        s"""
+           |CREATE TEMPORARY FUNCTION udtf_stack1
+           |AS 'org.apache.spark.sql.hive.execution.UDTFStack'
+           |USING JAR '${hiveContext.getHiveFile("SPARK-21101-1.0.jar").toURI}'
+        """.stripMargin)
+      sql(
+        s"""
+           |CREATE TEMPORARY FUNCTION udtf_stack2
+           |AS 'org.apache.spark.sql.hive.execution.UDTFStack2'
+           |USING JAR '${hiveContext.getHiveFile("SPARK-21101-1.0.jar").toURI}'
+        """.stripMargin)
+
+      Seq("udtf_stack1", "udtf_stack2").foreach { udf =>
+        checkAnswer(
+          sql(s"SELECT $udf(2, 'A', 10, date '2015-01-01', 'B', 20, date '2016-01-01')"),
+          Seq(Row("A", 10, Date.valueOf("2015-01-01")),
+            Row("B", 20, Date.valueOf("2016-01-01"))))
       }
     }
   }

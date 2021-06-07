@@ -21,7 +21,9 @@ import re
 
 from py4j.protocol import Py4JJavaError
 from pyspark.sql import Row, Window
-from pyspark.sql.functions import udf, input_file_name, col, percentile_approx, lit
+from pyspark.sql.functions import udf, input_file_name, col, percentile_approx, \
+    lit, assert_true, sum_distinct, sumDistinct, shiftleft, shiftLeft, shiftRight, \
+    shiftright, shiftrightunsigned, shiftRightUnsigned
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
@@ -277,9 +279,9 @@ class FunctionsTests(ReusedSQLTestCase):
         self.assertTrue(isinstance(aqt[1], list))
         self.assertEqual(len(aqt[1]), 3)
         self.assertTrue(all(isinstance(q, float) for q in aqt[1]))
-        self.assertRaises(ValueError, lambda: df.stat.approxQuantile(123, [0.1, 0.9], 0.1))
-        self.assertRaises(ValueError, lambda: df.stat.approxQuantile(("a", 123), [0.1, 0.9], 0.1))
-        self.assertRaises(ValueError, lambda: df.stat.approxQuantile(["a", 123], [0.1, 0.9], 0.1))
+        self.assertRaises(TypeError, lambda: df.stat.approxQuantile(123, [0.1, 0.9], 0.1))
+        self.assertRaises(TypeError, lambda: df.stat.approxQuantile(("a", 123), [0.1, 0.9], 0.1))
+        self.assertRaises(TypeError, lambda: df.stat.approxQuantile(["a", 123], [0.1, 0.9], 0.1))
 
     def test_sorting_functions_with_column(self):
         from pyspark.sql import functions
@@ -350,13 +352,22 @@ class FunctionsTests(ReusedSQLTestCase):
             self.assertEqual(result[0], '')
 
     def test_slice(self):
-        from pyspark.sql.functions import slice, lit
+        from pyspark.sql.functions import lit, size, slice
 
         df = self.spark.createDataFrame([([1, 2, 3],), ([4, 5],)], ['x'])
 
         self.assertEqual(
             df.select(slice(df.x, 2, 2).alias("sliced")).collect(),
             df.select(slice(df.x, lit(2), lit(2)).alias("sliced")).collect(),
+        )
+
+        self.assertEqual(
+            df.select(slice(df.x, size(df.x) - 1, lit(1)).alias("sliced")).collect(),
+            [Row(sliced=[2]), Row(sliced=[4])]
+        )
+        self.assertEqual(
+            df.select(slice(df.x, lit(1), size(df.x) - 1).alias("sliced")).collect(),
+            [Row(sliced=[1, 2]), Row(sliced=[4])]
         )
 
     def test_array_repeat(self):
@@ -481,6 +492,28 @@ class FunctionsTests(ReusedSQLTestCase):
         # Should fail if function doesn't return Column
         with self.assertRaises(ValueError):
             transform(col("foo"), lambda x: 1)
+
+    def test_nested_higher_order_function(self):
+        # SPARK-35382: lambda vars must be resolved properly in nested higher order functions
+        from pyspark.sql.functions import flatten, struct, transform
+
+        df = self.spark.sql("SELECT array(1, 2, 3) as numbers, array('a', 'b', 'c') as letters")
+
+        actual = df.select(flatten(
+            transform(
+                "numbers",
+                lambda number: transform(
+                    "letters",
+                    lambda letter: struct(number.alias("n"), letter.alias("l"))
+                )
+            )
+        )).first()[0]
+
+        expected = [(1, "a"), (1, "b"), (1, "c"),
+                    (2, "a"), (2, "b"), (2, "c"),
+                    (3, "a"), (3, "b"), (3, "c")]
+
+        self.assertEquals(actual, expected)
 
     def test_window_functions(self):
         df = self.spark.createDataFrame([(1, "1"), (2, "2"), (1, "2"), (1, "2")], ["key", "value"])
@@ -630,6 +663,23 @@ class FunctionsTests(ReusedSQLTestCase):
             "errMsg should be a Column or a str, got <class 'NoneType'>",
             str(cm.exception)
         )
+
+    def test_sum_distinct(self):
+        self.spark.range(10).select(
+            assert_true(sum_distinct(col("id")) == sumDistinct(col("id")))).collect()
+
+    def test_shiftleft(self):
+        self.spark.range(10).select(
+            assert_true(shiftLeft(col("id"), 2) == shiftleft(col("id"), 2))).collect()
+
+    def test_shiftright(self):
+        self.spark.range(10).select(
+            assert_true(shiftRight(col("id"), 2) == shiftright(col("id"), 2))).collect()
+
+    def test_shiftrightunsigned(self):
+        self.spark.range(10).select(
+            assert_true(
+                shiftRightUnsigned(col("id"), 2) == shiftrightunsigned(col("id"), 2))).collect()
 
 
 if __name__ == "__main__":

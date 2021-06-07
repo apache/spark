@@ -22,9 +22,14 @@ import scala.collection.mutable
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, TreeNode, TreeNodeTag}
+import org.apache.spark.sql.catalyst.rules.RuleId
+import org.apache.spark.sql.catalyst.rules.UnknownRuleId
+import org.apache.spark.sql.catalyst.trees.{AlwaysProcess, CurrentOrigin, TreeNode, TreeNodeTag}
+import org.apache.spark.sql.catalyst.trees.TreePattern.OUTER_REFERENCE
+import org.apache.spark.sql.catalyst.trees.TreePatternBits
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.util.collection.BitSet
 
 /**
  * An abstraction of the Spark SQL query plan tree, which can be logical or physical. This class
@@ -47,6 +52,17 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
    */
   @transient
   lazy val outputSet: AttributeSet = AttributeSet(output)
+
+  // Override `treePatternBits` to propagate bits for its expressions.
+  override lazy val treePatternBits: BitSet = {
+    val bits: BitSet = getDefaultTreePatternBits
+    // Propagate expressions' pattern bits
+    val exprIterator = expressions.iterator
+    while (exprIterator.hasNext) {
+      bits.union(exprIterator.next.treePatternBits)
+    }
+    bits
+  }
 
   /**
    * The set of all attributes that are input to this operator by its children.
@@ -82,7 +98,29 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
    * @param rule the rule to be applied to every expression in this operator.
    */
   def transformExpressions(rule: PartialFunction[Expression, Expression]): this.type = {
-    transformExpressionsDown(rule)
+    transformExpressionsWithPruning(AlwaysProcess.fn, UnknownRuleId)(rule)
+  }
+
+  /**
+   * Runs [[transformExpressionsDownWithPruning]] with `rule` on all expressions present
+   * in this query operator.
+   * Users should not expect a specific directionality. If a specific directionality is needed,
+   * transformExpressionsDown or transformExpressionsUp should be used.
+   *
+   * @param rule the rule to be applied to every expression in this operator.
+   * @param cond   a Lambda expression to prune tree traversals. If `cond.apply` returns false
+   *               on an expression T, skips processing T and its subtree; otherwise, processes
+   *               T and its subtree recursively.
+   * @param ruleId is a unique Id for `rule` to prune unnecessary tree traversals. When it is
+   *               UnknownRuleId, no pruning happens. Otherwise, if `rule`(with id `ruleId`)
+   *               has been marked as in effective on an expression T, skips processing T and its
+   *               subtree. Do not pass it if the rule is not purely functional and reads a
+   *               varying initial state for different invocations.
+   */
+  def transformExpressionsWithPruning(cond: TreePatternBits => Boolean,
+    ruleId: RuleId = UnknownRuleId)(rule: PartialFunction[Expression, Expression])
+  : this.type = {
+    transformExpressionsDownWithPruning(cond, ruleId)(rule)
   }
 
   /**
@@ -91,17 +129,56 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
    * @param rule the rule to be applied to every expression in this operator.
    */
   def transformExpressionsDown(rule: PartialFunction[Expression, Expression]): this.type = {
-    mapExpressions(_.transformDown(rule))
+    transformExpressionsDownWithPruning(AlwaysProcess.fn, UnknownRuleId)(rule)
+  }
+
+  /**
+   * Runs [[transformDownWithPruning]] with `rule` on all expressions present in this query
+   * operator.
+   *
+   * @param rule   the rule to be applied to every expression in this operator.
+   * @param cond   a Lambda expression to prune tree traversals. If `cond.apply` returns false
+   *               on an expression T, skips processing T and its subtree; otherwise, processes
+   *               T and its subtree recursively.
+   * @param ruleId is a unique Id for `rule` to prune unnecessary tree traversals. When it is
+   *               UnknownRuleId, no pruning happens. Otherwise, if `rule` (with id `ruleId`)
+   *               has been marked as in effective on an expression T, skips processing T and its
+   *               subtree. Do not pass it if the rule is not purely functional and reads a
+   *               varying initial state for different invocations.
+   */
+  def transformExpressionsDownWithPruning(cond: TreePatternBits => Boolean,
+    ruleId: RuleId = UnknownRuleId)(rule: PartialFunction[Expression, Expression])
+  : this.type = {
+    mapExpressions(_.transformDownWithPruning(cond, ruleId)(rule))
   }
 
   /**
    * Runs [[transformUp]] with `rule` on all expressions present in this query operator.
    *
    * @param rule the rule to be applied to every expression in this operator.
-   * @return
    */
   def transformExpressionsUp(rule: PartialFunction[Expression, Expression]): this.type = {
-    mapExpressions(_.transformUp(rule))
+    transformExpressionsUpWithPruning(AlwaysProcess.fn, UnknownRuleId)(rule)
+  }
+
+  /**
+   * Runs [[transformExpressionsUpWithPruning]] with `rule` on all expressions present in this
+   * query operator.
+   *
+   * @param rule the rule to be applied to every expression in this operator.
+   * @param cond   a Lambda expression to prune tree traversals. If `cond.apply` returns false
+   *               on an expression T, skips processing T and its subtree; otherwise, processes
+   *               T and its subtree recursively.
+   * @param ruleId is a unique Id for `rule` to prune unnecessary tree traversals. When it is
+   *               UnknownRuleId, no pruning happens. Otherwise, if `rule` (with id `ruleId`)
+   *               has been marked as in effective on an expression T, skips processing T and its
+   *               subtree. Do not pass it if the rule is not purely functional and reads a
+   *               varying initial state for different invocations.
+   */
+  def transformExpressionsUpWithPruning(cond: TreePatternBits => Boolean,
+    ruleId: RuleId = UnknownRuleId)(rule: PartialFunction[Expression, Expression])
+  : this.type = {
+    mapExpressions(_.transformUpWithPruning(cond, ruleId)(rule))
   }
 
   /**
@@ -144,8 +221,19 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
    * and all its children. Note that this method skips expressions inside subqueries.
    */
   def transformAllExpressions(rule: PartialFunction[Expression, Expression]): this.type = {
-    transform {
-      case q: QueryPlan[_] => q.transformExpressions(rule).asInstanceOf[PlanType]
+    transformAllExpressionsWithPruning(AlwaysProcess.fn, UnknownRuleId)(rule)
+  }
+
+  /**
+   * Returns the result of running [[transformExpressionsWithPruning]] on this node
+   * and all its children. Note that this method skips expressions inside subqueries.
+   */
+  def transformAllExpressionsWithPruning(cond: TreePatternBits => Boolean,
+    ruleId: RuleId = UnknownRuleId)(rule: PartialFunction[Expression, Expression])
+  : this.type = {
+    transformWithPruning(cond, ruleId) {
+      case q: QueryPlan[_] =>
+        q.transformExpressionsWithPruning(cond, ruleId)(rule).asInstanceOf[PlanType]
     }.asInstanceOf[this.type]
   }
 
@@ -209,12 +297,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
           val attributeRewrites = AttributeMap(attrMappingForCurrentPlan.toSeq)
           // Using attrMapping from the children plans to rewrite their parent node.
           // Note that we shouldn't rewrite a node using attrMapping from its sibling nodes.
-          newPlan = newPlan.transformExpressions {
-            case a: AttributeReference =>
-              updateAttr(a, attributeRewrites)
-            case pe: PlanExpression[PlanType] =>
-              pe.withNewPlan(updateOuterReferencesInSubquery(pe.plan, attributeRewrites))
-          }
+          newPlan = newPlan.rewriteAttrs(attributeRewrites)
         }
 
         val (planAfterRule, newAttrMapping) = CurrentOrigin.withOrigin(origin) {
@@ -252,16 +335,28 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
     rewrite(this)._1
   }
 
-  private def updateAttr(attr: Attribute, attrMap: AttributeMap[Attribute]): Attribute = {
-    val exprId = attrMap.getOrElse(attr, attr).exprId
-    attr.withExprId(exprId)
+  def rewriteAttrs(attrMap: AttributeMap[Attribute]): PlanType = {
+    transformExpressions {
+      case a: AttributeReference =>
+        updateAttr(a, attrMap)
+      case pe: PlanExpression[PlanType] =>
+        pe.withNewPlan(updateOuterReferencesInSubquery(pe.plan, attrMap))
+    }.asInstanceOf[PlanType]
+  }
+
+  private def updateAttr(a: Attribute, attrMap: AttributeMap[Attribute]): Attribute = {
+    attrMap.get(a) match {
+      case Some(b) =>
+        AttributeReference(a.name, b.dataType, b.nullable, a.metadata)(b.exprId, a.qualifier)
+      case None => a
+    }
   }
 
   /**
    * The outer plan may have old references and the function below updates the
    * outer references to refer to the new attributes.
    */
-  private def updateOuterReferencesInSubquery(
+  protected def updateOuterReferencesInSubquery(
       plan: PlanType,
       attrMap: AttributeMap[Attribute]): PlanType = {
     plan.transformDown { case currentFragment =>
@@ -301,7 +396,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
   }
 
   def verboseStringWithOperatorId(): String = {
-    val argumentString = argString(SQLConf.get.maxToStringFields)
+    val argumentString = argString(conf.maxToStringFields)
 
     if (argumentString.nonEmpty) {
       s"""
@@ -445,7 +540,8 @@ object QueryPlan extends PredicateHelper {
     e.transformUp {
       case s: PlanExpression[QueryPlan[_] @unchecked] =>
         // Normalize the outer references in the subquery plan.
-        val normalizedPlan = s.plan.transformAllExpressions {
+        val normalizedPlan = s.plan.transformAllExpressionsWithPruning(
+          _.containsPattern(OUTER_REFERENCE)) {
           case OuterReference(r) => OuterReference(QueryPlan.normalizeExpressions(r, input))
         }
         s.withNewPlan(normalizedPlan)

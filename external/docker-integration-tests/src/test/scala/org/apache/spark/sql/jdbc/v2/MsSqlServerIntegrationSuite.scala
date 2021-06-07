@@ -31,7 +31,7 @@ import org.apache.spark.tags.DockerTest
 /**
  * To run this test suite for a specific version (e.g., 2019-GA-ubuntu-16.04):
  * {{{
- *   MSSQLSERVER_DOCKER_IMAGE_NAME=2019-GA-ubuntu-16.04
+ *   ENABLE_DOCKER_INTEGRATION_TESTS=1 MSSQLSERVER_DOCKER_IMAGE_NAME=2019-GA-ubuntu-16.04
  *     ./build/sbt -Pdocker-integration-tests "testOnly *v2*MsSqlServerIntegrationSuite"
  * }}}
  */
@@ -67,11 +67,11 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBC
   override def testUpdateColumnType(tbl: String): Unit = {
     sql(s"CREATE TABLE $tbl (ID INTEGER)")
     var t = spark.table(tbl)
-    var expectedSchema = new StructType().add("ID", IntegerType)
+    var expectedSchema = new StructType().add("ID", IntegerType, true, defaultMetadata)
     assert(t.schema === expectedSchema)
     sql(s"ALTER TABLE $tbl ALTER COLUMN id TYPE STRING")
     t = spark.table(tbl)
-    expectedSchema = new StructType().add("ID", StringType)
+    expectedSchema = new StructType().add("ID", StringType, true, defaultMetadata)
     assert(t.schema === expectedSchema)
     // Update column type from STRING to INTEGER
     val msg1 = intercept[AnalysisException] {

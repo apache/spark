@@ -34,7 +34,7 @@ import org.apache.spark.deploy.k8s.Fabric8Aliases._
 import org.apache.spark.resource.{ResourceProfile, ResourceProfileManager}
 import org.apache.spark.rpc.{RpcEndpoint, RpcEndpointRef, RpcEnv}
 import org.apache.spark.scheduler.{ExecutorKilled, LiveListenerBus, TaskSchedulerImpl}
-import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.RemoveExecutor
+import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.{RegisterExecutor, RemoveExecutor, StopDriver}
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 import org.apache.spark.scheduler.cluster.k8s.ExecutorLifecycleTestUtils.TEST_SPARK_APP_ID
 
@@ -98,7 +98,7 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
   private val defaultProfile = ResourceProfile.getOrCreateDefaultProfile(sparkConf)
 
   before {
-    MockitoAnnotations.initMocks(this)
+    MockitoAnnotations.openMocks(this).close()
     when(taskScheduler.sc).thenReturn(sc)
     when(sc.conf).thenReturn(sparkConf)
     when(sc.resourceProfileManager).thenReturn(resourceProfileManager)
@@ -112,6 +112,7 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
       .thenReturn(driverEndpointRef)
     when(kubernetesClient.pods()).thenReturn(podOperations)
     when(kubernetesClient.configMaps()).thenReturn(configMapsOperations)
+    when(podAllocator.driverPod).thenReturn(None)
     schedulerBackendUnderTest = new KubernetesClusterSchedulerBackend(
       taskScheduler,
       sc,
@@ -127,7 +128,7 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
   test("Start all components") {
     schedulerBackendUnderTest.start()
     verify(podAllocator).setTotalExpectedExecutors(Map(defaultProfile -> 3))
-    verify(podAllocator).start(TEST_SPARK_APP_ID)
+    verify(podAllocator).start(TEST_SPARK_APP_ID, schedulerBackendUnderTest)
     verify(lifecycleEventHandler).start(schedulerBackendUnderTest)
     verify(watchEvents).start(TEST_SPARK_APP_ID)
     verify(pollEvents).start(TEST_SPARK_APP_ID)
@@ -157,10 +158,10 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
 
     backend.start()
     backend.doRemoveExecutor("1", ExecutorKilled)
-    verify(driverEndpointRef, never()).send(RemoveExecutor("1", ExecutorKilled))
+    verify(driverEndpointRef).send(RemoveExecutor("1", ExecutorKilled))
 
     backend.doRemoveExecutor("2", ExecutorKilled)
-    verify(driverEndpointRef, never()).send(RemoveExecutor("1", ExecutorKilled))
+    verify(driverEndpointRef).send(RemoveExecutor("2", ExecutorKilled))
   }
 
   test("Kill executors") {
@@ -188,5 +189,22 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
     schedulerExecutorService.tick(sparkConf.get(KUBERNETES_DYN_ALLOC_KILL_GRACE_PERIOD) * 2,
       TimeUnit.MILLISECONDS)
     verify(labeledPods).delete()
+  }
+
+  test("SPARK-34407: CoarseGrainedSchedulerBackend.stop may throw SparkException") {
+    schedulerBackendUnderTest.start()
+
+    when(driverEndpointRef.askSync[Boolean](StopDriver)).thenThrow(new RuntimeException)
+    schedulerBackendUnderTest.stop()
+
+    // Verify the last operation of `schedulerBackendUnderTest.stop`.
+    verify(kubernetesClient).close()
+  }
+
+  test("SPARK-34469: Ignore RegisterExecutor when SparkContext is stopped") {
+    when(sc.isStopped).thenReturn(true)
+    val endpoint = schedulerBackendUnderTest.createDriverEndpoint()
+    endpoint.receiveAndReply(null).apply(
+      RegisterExecutor("1", null, "host1", 1, Map.empty, Map.empty, Map.empty, 0))
   }
 }

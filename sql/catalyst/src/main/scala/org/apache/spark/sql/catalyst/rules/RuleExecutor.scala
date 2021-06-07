@@ -19,10 +19,10 @@ package org.apache.spark.sql.catalyst.rules
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
-import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_SECOND
 import org.apache.spark.sql.catalyst.util.sideBySide
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
 
@@ -164,12 +164,8 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
   private def checkBatchIdempotence(batch: Batch, plan: TreeType): Unit = {
     val reOptimized = batch.rules.foldLeft(plan) { case (p, rule) => rule(p) }
     if (!plan.fastEquals(reOptimized)) {
-      val message =
-        s"""
-           |Once strategy's idempotence is broken for batch ${batch.name}
-           |${sideBySide(plan.treeString, reOptimized.treeString).mkString("\n")}
-          """.stripMargin
-      throw new TreeNodeException(reOptimized, message, null)
+      throw QueryExecutionErrors.onceStrategyIdempotenceIsBrokenForBatchError(
+        batch.name, plan, reOptimized)
     }
   }
 
@@ -197,9 +193,8 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
 
     // Run the structural integrity checker against the initial input
     if (!isPlanIntegral(plan)) {
-      val message = "The structural integrity of the input plan is broken in " +
-        s"${this.getClass.getName.stripSuffix("$")}."
-      throw new TreeNodeException(plan, message, null)
+      throw QueryExecutionErrors.structuralIntegrityOfInputPlanIsBrokenInClassError(
+        this.getClass.getName.stripSuffix("$"))
     }
 
     batches.foreach { batch =>
@@ -230,9 +225,8 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
 
             // Run the structural integrity checker against the plan after each rule.
             if (effective && !isPlanIntegral(result)) {
-              val message = s"After applying rule ${rule.ruleName} in batch ${batch.name}, " +
-                "the structural integrity of the plan is broken."
-              throw new TreeNodeException(result, message, null)
+              throw QueryExecutionErrors.structuralIntegrityIsBrokenAfterApplyingRuleError(
+                rule.ruleName, batch.name)
             }
 
             result
@@ -249,7 +243,7 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
             val message = s"Max iterations (${iteration - 1}) reached for batch ${batch.name}" +
               s"$endingMsg"
             if (Utils.isTesting || batch.strategy.errorOnExceed) {
-              throw new TreeNodeException(curPlan, message, null)
+              throw new RuntimeException(message)
             } else {
               logWarning(message)
             }

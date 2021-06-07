@@ -20,28 +20,31 @@ package org.apache.spark.sql.jdbc.v2
 import org.apache.log4j.Level
 
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.jdbc.DockerIntegrationFunSuite
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.DockerTest
 
 @DockerTest
-private[v2] trait V2JDBCTest extends SharedSparkSession {
+private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFunSuite {
   val catalogName: String
   // dialect specific update column type test
   def testUpdateColumnType(tbl: String): Unit
 
   def notSupportsTableComment: Boolean = false
 
+  val defaultMetadata = new MetadataBuilder().putLong("scale", 0).build()
+
   def testUpdateColumnNullability(tbl: String): Unit = {
     sql(s"CREATE TABLE $catalogName.alt_table (ID STRING NOT NULL)")
     var t = spark.table(s"$catalogName.alt_table")
     // nullable is true in the expectedSchema because Spark always sets nullable to true
     // regardless of the JDBC metadata https://github.com/apache/spark/pull/18445
-    var expectedSchema = new StructType().add("ID", StringType, nullable = true)
+    var expectedSchema = new StructType().add("ID", StringType, true, defaultMetadata)
     assert(t.schema === expectedSchema)
     sql(s"ALTER TABLE $catalogName.alt_table ALTER COLUMN ID DROP NOT NULL")
     t = spark.table(s"$catalogName.alt_table")
-    expectedSchema = new StructType().add("ID", StringType, nullable = true)
+    expectedSchema = new StructType().add("ID", StringType, true, defaultMetadata)
     assert(t.schema === expectedSchema)
     // Update nullability of not existing column
     val msg = intercept[AnalysisException] {
@@ -53,8 +56,8 @@ private[v2] trait V2JDBCTest extends SharedSparkSession {
   def testRenameColumn(tbl: String): Unit = {
     sql(s"ALTER TABLE $tbl RENAME COLUMN ID TO RENAMED")
     val t = spark.table(s"$tbl")
-    val expectedSchema = new StructType().add("RENAMED", StringType, nullable = true)
-      .add("ID1", StringType, nullable = true).add("ID2", StringType, nullable = true)
+    val expectedSchema = new StructType().add("RENAMED", StringType, true, defaultMetadata)
+      .add("ID1", StringType, true, defaultMetadata).add("ID2", StringType, true, defaultMetadata)
     assert(t.schema === expectedSchema)
   }
 
@@ -64,15 +67,16 @@ private[v2] trait V2JDBCTest extends SharedSparkSession {
     withTable(s"$catalogName.alt_table") {
       sql(s"CREATE TABLE $catalogName.alt_table (ID STRING)")
       var t = spark.table(s"$catalogName.alt_table")
-      var expectedSchema = new StructType().add("ID", StringType)
+      var expectedSchema = new StructType().add("ID", StringType, true, defaultMetadata)
       assert(t.schema === expectedSchema)
       sql(s"ALTER TABLE $catalogName.alt_table ADD COLUMNS (C1 STRING, C2 STRING)")
       t = spark.table(s"$catalogName.alt_table")
-      expectedSchema = expectedSchema.add("C1", StringType).add("C2", StringType)
+      expectedSchema = expectedSchema.add("C1", StringType, true, defaultMetadata)
+        .add("C2", StringType, true, defaultMetadata)
       assert(t.schema === expectedSchema)
       sql(s"ALTER TABLE $catalogName.alt_table ADD COLUMNS (C3 STRING)")
       t = spark.table(s"$catalogName.alt_table")
-      expectedSchema = expectedSchema.add("C3", StringType)
+      expectedSchema = expectedSchema.add("C3", StringType, true, defaultMetadata)
       assert(t.schema === expectedSchema)
       // Add already existing column
       val msg = intercept[AnalysisException] {
@@ -93,7 +97,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession {
       sql(s"ALTER TABLE $catalogName.alt_table DROP COLUMN C1")
       sql(s"ALTER TABLE $catalogName.alt_table DROP COLUMN c3")
       val t = spark.table(s"$catalogName.alt_table")
-      val expectedSchema = new StructType().add("C2", StringType)
+      val expectedSchema = new StructType().add("C2", StringType, true, defaultMetadata)
       assert(t.schema === expectedSchema)
       // Drop not existing column
       val msg = intercept[AnalysisException] {

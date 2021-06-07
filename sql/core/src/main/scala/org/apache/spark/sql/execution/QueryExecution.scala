@@ -213,11 +213,13 @@ class QueryExecution(
     QueryPlan.append(logical, append, verbose, addSuffix, maxFields)
     append("\n== Analyzed Logical Plan ==\n")
     try {
-      append(
-        truncatedString(
-          analyzed.output.map(o => s"${o.name}: ${o.dataType.simpleString}"), ", ", maxFields)
-      )
-      append("\n")
+      if (analyzed.output.nonEmpty) {
+        append(
+          truncatedString(
+            analyzed.output.map(o => s"${o.name}: ${o.dataType.simpleString}"), ", ", maxFields)
+        )
+        append("\n")
+      }
       QueryPlan.append(analyzed, append, verbose, addSuffix, maxFields)
       append("\n== Optimized Logical Plan ==\n")
       QueryPlan.append(optimizedPlan, append, verbose, addSuffix, maxFields)
@@ -253,7 +255,12 @@ class QueryExecution(
 
     // trigger to compute stats for logical plans
     try {
-      optimizedPlan.stats
+      // This will trigger to compute stats for all the nodes in the plan, including subqueries,
+      // if the stats doesn't exist in the statsCache and update the statsCache corresponding
+      // to the node.
+      optimizedPlan.collectWithSubqueries {
+        case plan => plan.stats
+      }
     } catch {
       case e: AnalysisException => append(e.toString + "\n")
     }

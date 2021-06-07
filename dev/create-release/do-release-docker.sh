@@ -91,6 +91,11 @@ for f in "$SELF"/*; do
   fi
 done
 
+# Add the fallback version of Gemfile, Gemfile.lock and .bundle/config to the local directory.
+cp "$SELF/../../docs/Gemfile" "$WORKDIR"
+cp "$SELF/../../docs/Gemfile.lock" "$WORKDIR"
+cp -r "$SELF/../../docs/.bundle" "$WORKDIR"
+
 GPG_KEY_FILE="$WORKDIR/gpg.key"
 fcreate_secure "$GPG_KEY_FILE"
 $GPG --export-secret-key --armor --pinentry-mode loopback --passphrase "$GPG_PASSPHRASE" "$GPG_KEY" > "$GPG_KEY_FILE"
@@ -128,7 +133,6 @@ ASF_PASSWORD=$ASF_PASSWORD
 GPG_PASSPHRASE=$GPG_PASSPHRASE
 RELEASE_STEP=$RELEASE_STEP
 USER=$USER
-ZINC_OPTS=${RELEASE_ZINC_OPTS:-"-Xmx4g -XX:ReservedCodeCacheSize=2g"}
 EOF
 
 JAVA_VOL=

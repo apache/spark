@@ -125,7 +125,7 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
   private var podOperations: PODS = _
 
   @Mock
-  private var namedPods: PodResource[Pod, DoneablePod] = _
+  private var namedPods: PodResource[Pod] = _
 
   @Mock
   private var loggingPodStatusWatcher: LoggingPodStatusWatcher = _
@@ -141,7 +141,7 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
   private var createdResourcesArgumentCaptor: ArgumentCaptor[HasMetadata] = _
 
   before {
-    MockitoAnnotations.initMocks(this)
+    MockitoAnnotations.openMocks(this).close()
     kconf = KubernetesTestConf.createDriverConf(
       resourceNamePrefix = Some(KUBERNETES_RESOURCE_PREFIX))
     when(driverBuilder.buildFromFeatures(kconf, kubernetesClient)).thenReturn(BUILT_KUBERNETES_SPEC)
@@ -186,6 +186,7 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
     val configMap = configMaps.head
     assert(configMap.getMetadata.getName ===
       KubernetesClientUtils.configMapNameDriver)
+    assert(configMap.getImmutable())
     assert(configMap.getData.containsKey(SPARK_CONF_FILE_NAME))
     assert(configMap.getData.get(SPARK_CONF_FILE_NAME).contains("conf1key=conf1value"))
     assert(configMap.getData.get(SPARK_CONF_FILE_NAME).contains("conf2key=conf2value"))

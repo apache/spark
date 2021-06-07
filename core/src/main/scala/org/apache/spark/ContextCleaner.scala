@@ -27,6 +27,7 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.rdd.{RDD, ReliableRDDCheckpointData}
+import org.apache.spark.scheduler.SparkListener
 import org.apache.spark.shuffle.api.ShuffleDriverComponents
 import org.apache.spark.util.{AccumulatorContext, AccumulatorV2, ThreadUtils, Utils}
 
@@ -39,6 +40,7 @@ private case class CleanShuffle(shuffleId: Int) extends CleanupTask
 private case class CleanBroadcast(broadcastId: Long) extends CleanupTask
 private case class CleanAccum(accId: Long) extends CleanupTask
 private case class CleanCheckpoint(rddId: Int) extends CleanupTask
+private case class CleanSparkListener(listener: SparkListener) extends CleanupTask
 
 /**
  * A WeakReference associated with a CleanupTask.
@@ -170,6 +172,13 @@ private[spark] class ContextCleaner(
     registerForCleanup(rdd, CleanCheckpoint(parentId))
   }
 
+  /** Register a SparkListener to be cleaned up when its owner is garbage collected. */
+  def registerSparkListenerForCleanup(
+      listenerOwner: AnyRef,
+      listener: SparkListener): Unit = {
+    registerForCleanup(listenerOwner, CleanSparkListener(listener))
+  }
+
   /** Register an object for cleanup. */
   private def registerForCleanup(objectForCleanup: AnyRef, task: CleanupTask): Unit = {
     referenceBuffer.add(new CleanupTaskWeakReference(task, objectForCleanup, referenceQueue))
@@ -197,6 +206,8 @@ private[spark] class ContextCleaner(
                 doCleanupAccum(accId, blocking = blockOnCleanupTasks)
               case CleanCheckpoint(rddId) =>
                 doCleanCheckpoint(rddId)
+              case CleanSparkListener(listener) =>
+                doCleanSparkListener(listener)
             }
           }
         }
@@ -273,6 +284,16 @@ private[spark] class ContextCleaner(
     }
     catch {
       case e: Exception => logError("Error cleaning rdd checkpoint data " + rddId, e)
+    }
+  }
+
+  def doCleanSparkListener(listener: SparkListener): Unit = {
+    try {
+      logDebug(s"Cleaning Spark listener $listener")
+      sc.listenerBus.removeListener(listener)
+      logDebug(s"Cleaned Spark listener $listener")
+    } catch {
+      case e: Exception => logError(s"Error cleaning Spark listener $listener", e)
     }
   }
 

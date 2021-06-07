@@ -40,7 +40,7 @@ import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
+import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.{PartitioningUtils, SourceOptions}
 import org.apache.spark.sql.hive.client.HiveClient
@@ -1073,7 +1073,11 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
         // scalastyle:on caselocale
         val actualPartitionPath = new Path(currentFullPath, actualPartitionString)
         try {
-          fs.rename(actualPartitionPath, expectedPartitionPath)
+          fs.mkdirs(expectedPartitionPath)
+          if(!fs.rename(actualPartitionPath, expectedPartitionPath)) {
+            throw new IOException(s"Renaming partition path from $actualPartitionPath to " +
+              s"$expectedPartitionPath returned false")
+          }
         } catch {
           case e: IOException =>
             throw new SparkException("Unable to rename partition path from " +
@@ -1144,9 +1148,6 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       table: String,
       newParts: Seq[CatalogTablePartition]): Unit = withClient {
     val metaStoreParts = newParts.map(p => p.copy(spec = toMetaStorePartitionSpec(p.spec)))
-
-    val rawTable = getRawTable(db, table)
-
     // convert partition statistics to properties so that we can persist them through hive api
     val withStatsProps = metaStoreParts.map { p =>
       if (p.stats.isDefined) {
@@ -1259,13 +1260,9 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       defaultTimeZoneId: String): Seq[CatalogTablePartition] = withClient {
     val rawTable = getRawTable(db, table)
     val catalogTable = restoreTableMetadata(rawTable)
-    val timeZoneId = CaseInsensitiveMap(catalogTable.storage.properties).getOrElse(
-      DateTimeUtils.TIMEZONE_OPTION, defaultTimeZoneId)
-
     val partColNameMap = buildLowerCasePartColNameMap(catalogTable)
-
     val clientPrunedPartitions =
-      client.getPartitionsByFilter(rawTable, predicates, timeZoneId).map { part =>
+      client.getPartitionsByFilter(rawTable, predicates).map { part =>
         part.copy(spec = restorePartitionSpec(part.spec, partColNameMap))
       }
     prunePartitionsByFilter(catalogTable, clientPrunedPartitions, predicates, defaultTimeZoneId)

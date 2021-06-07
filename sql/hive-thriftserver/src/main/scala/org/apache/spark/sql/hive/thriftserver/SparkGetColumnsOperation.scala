@@ -105,16 +105,16 @@ private[hive] class SparkGetColumnsOperation(
       val databasePattern = Pattern.compile(CLIServiceUtils.patternToRegex(schemaName))
       if (databasePattern.matcher(globalTempViewDb).matches()) {
         catalog.globalTempViewManager.listViewNames(tablePattern).foreach { globalTempView =>
-          catalog.getGlobalTempView(globalTempView).foreach { plan =>
-            addToRowSet(columnPattern, globalTempViewDb, globalTempView, plan.schema)
+          catalog.getRawGlobalTempView(globalTempView).map(_.tableMeta.schema).foreach {
+            schema => addToRowSet(columnPattern, globalTempViewDb, globalTempView, schema)
           }
         }
       }
 
       // Temporary views
       catalog.listLocalTempViews(tablePattern).foreach { localTempView =>
-        catalog.getTempView(localTempView.table).foreach { plan =>
-          addToRowSet(columnPattern, null, localTempView.table, plan.schema)
+        catalog.getRawTempView(localTempView.table).map(_.tableMeta.schema).foreach {
+          schema => addToRowSet(columnPattern, null, localTempView.table, schema)
         }
       }
       setState(OperationState.FINISHED)
@@ -131,7 +131,7 @@ private[hive] class SparkGetColumnsOperation(
    */
   private def getColumnSize(typ: DataType): Option[Int] = typ match {
     case dt @ (BooleanType | _: NumericType | DateType | TimestampType |
-               CalendarIntervalType | NullType) =>
+               CalendarIntervalType | NullType | YearMonthIntervalType | DayTimeIntervalType) =>
       Some(dt.defaultSize)
     case CharType(n) => Some(n)
     case StructType(fields) =>
@@ -186,7 +186,8 @@ private[hive] class SparkGetColumnsOperation(
     case _: MapType => java.sql.Types.JAVA_OBJECT
     case _: StructType => java.sql.Types.STRUCT
     // Hive's year-month and day-time intervals are mapping to java.sql.Types.OTHER
-    case _: CalendarIntervalType => java.sql.Types.OTHER
+    case _: CalendarIntervalType | YearMonthIntervalType | DayTimeIntervalType =>
+      java.sql.Types.OTHER
     case _ => throw new IllegalArgumentException(s"Unrecognized type name: ${typ.sql}")
   }
 

@@ -28,6 +28,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.concurrent.Semaphore;
+import java.util.concurrent.ThreadLocalRandom;
 
 import com.google.common.base.Throwables;
 import com.google.common.collect.ImmutableMap;
@@ -292,18 +293,32 @@ public class RemoteBlockPushResolverSuite {
   @Test
   public void testIncompleteStreamsAreOverwritten() throws IOException {
     registerExecutor(TEST_APP, prepareLocalDirs(localDirs));
+    byte[] expectedBytes = new byte[4];
+    ThreadLocalRandom.current().nextBytes(expectedBytes);
+
     StreamCallbackWithID stream1 =
       pushResolver.receiveBlockDataAsStream(new PushBlockStream(TEST_APP, 0, 0, 0, 0));
-    stream1.onData(stream1.getID(), ByteBuffer.wrap(new byte[4]));
+    byte[] data = new byte[10];
+    ThreadLocalRandom.current().nextBytes(data);
+    stream1.onData(stream1.getID(), ByteBuffer.wrap(data));
     // There is a failure
     stream1.onFailure(stream1.getID(), new RuntimeException("forced error"));
     StreamCallbackWithID stream2 =
       pushResolver.receiveBlockDataAsStream(new PushBlockStream(TEST_APP, 0, 1, 0, 0));
-    stream2.onData(stream2.getID(), ByteBuffer.wrap(new byte[5]));
+    ByteBuffer nextBuf= ByteBuffer.wrap(expectedBytes, 0, 2);
+    stream2.onData(stream2.getID(), nextBuf);
     stream2.onComplete(stream2.getID());
+    StreamCallbackWithID stream3 =
+      pushResolver.receiveBlockDataAsStream(new PushBlockStream(TEST_APP, 0, 2, 0, 0));
+    nextBuf =  ByteBuffer.wrap(expectedBytes, 2, 2);
+    stream3.onData(stream3.getID(), nextBuf);
+    stream3.onComplete(stream3.getID());
     pushResolver.finalizeShuffleMerge(new FinalizeShuffleMerge(TEST_APP, 0));
     MergedBlockMeta blockMeta = pushResolver.getMergedBlockMeta(TEST_APP, 0, 0);
-    validateChunks(TEST_APP, 0, 0, blockMeta, new int[]{5}, new int[][]{{1}});
+    validateChunks(TEST_APP, 0, 0, blockMeta, new int[]{4}, new int[][]{{1, 2}});
+    FileSegmentManagedBuffer mb =
+      (FileSegmentManagedBuffer) pushResolver.getMergedBlockData(TEST_APP, 0, 0, 0);
+    assertArrayEquals(expectedBytes, mb.nioByteBuffer().array());
   }
 
   @Test (expected = RuntimeException.class)
@@ -738,6 +753,72 @@ public class RemoteBlockPushResolverSuite {
     validateMergeStatuses(statuses, new int[] {1}, new long[] {8});
     MergedBlockMeta meta = pushResolver.getMergedBlockMeta(TEST_APP, 0, 1);
     validateChunks(TEST_APP, 0, 1, meta, new int[]{5, 3}, new int[][]{{0},{1}});
+  }
+
+  @Test
+  public void testOnFailureInvokedMoreThanOncePerBlock() throws IOException {
+    StreamCallbackWithID stream1 =
+      pushResolver.receiveBlockDataAsStream(new PushBlockStream(TEST_APP, 0, 0, 0, 0));
+    stream1.onData(stream1.getID(), ByteBuffer.wrap(new byte[2]));
+    stream1.onFailure(stream1.getID(), new RuntimeException("forced error"));
+    StreamCallbackWithID stream2 =
+      pushResolver.receiveBlockDataAsStream(new PushBlockStream(TEST_APP, 0, 1, 0, 0));
+    stream2.onData(stream2.getID(), ByteBuffer.wrap(new byte[5]));
+    // On failure on stream1 gets invoked again and should cause no interference
+    stream1.onFailure(stream1.getID(), new RuntimeException("2nd forced error"));
+    StreamCallbackWithID stream3 =
+      pushResolver.receiveBlockDataAsStream(new PushBlockStream(TEST_APP, 0, 3, 0, 0));
+    // This should be deferred as stream 2 is still the active stream
+    stream3.onData(stream3.getID(), ByteBuffer.wrap(new byte[2]));
+    // Stream 2 writes more and completes
+    stream2.onData(stream2.getID(), ByteBuffer.wrap(new byte[4]));
+    stream2.onComplete(stream2.getID());
+    stream3.onComplete(stream3.getID());
+    pushResolver.finalizeShuffleMerge(new FinalizeShuffleMerge(TEST_APP, 0));
+    MergedBlockMeta blockMeta = pushResolver.getMergedBlockMeta(TEST_APP, 0, 0);
+    validateChunks(TEST_APP, 0, 0, blockMeta, new int[] {9, 2}, new int[][] {{1},{3}});
+    removeApplication(TEST_APP);
+  }
+
+  @Test (expected = RuntimeException.class)
+  public void testFailureAfterDuplicateBlockDoesNotInterfereActiveStream() throws IOException {
+    StreamCallbackWithID stream1 =
+      pushResolver.receiveBlockDataAsStream(new PushBlockStream(TEST_APP, 0, 0, 0, 0));
+    StreamCallbackWithID stream1Duplicate =
+      pushResolver.receiveBlockDataAsStream(new PushBlockStream(TEST_APP, 0, 0, 0, 0));
+    stream1.onData(stream1.getID(), ByteBuffer.wrap(new byte[2]));
+    stream1.onComplete(stream1.getID());
+    stream1Duplicate.onData(stream1.getID(), ByteBuffer.wrap(new byte[2]));
+
+    StreamCallbackWithID stream2 =
+      pushResolver.receiveBlockDataAsStream(new PushBlockStream(TEST_APP, 0, 1, 0, 0));
+    stream2.onData(stream2.getID(), ByteBuffer.wrap(new byte[5]));
+    // Should not change the current map id of the reduce partition
+    stream1Duplicate.onFailure(stream2.getID(), new RuntimeException("forced error"));
+
+    StreamCallbackWithID stream3 =
+      pushResolver.receiveBlockDataAsStream(new PushBlockStream(TEST_APP, 0, 2, 0, 0));
+    // This should be deferred as stream 2 is still the active stream
+    stream3.onData(stream3.getID(), ByteBuffer.wrap(new byte[2]));
+    RuntimeException failedEx = null;
+    try {
+      stream3.onComplete(stream3.getID());
+    } catch (RuntimeException re) {
+      assertEquals(
+        "Couldn't find an opportunity to write block shufflePush_0_2_0 to merged shuffle",
+        re.getMessage());
+      failedEx = re;
+    }
+    // Stream 2 writes more and completes
+    stream2.onData(stream2.getID(), ByteBuffer.wrap(new byte[4]));
+    stream2.onComplete(stream2.getID());
+    pushResolver.finalizeShuffleMerge(new FinalizeShuffleMerge(TEST_APP, 0));
+    MergedBlockMeta blockMeta = pushResolver.getMergedBlockMeta(TEST_APP, 0, 0);
+    validateChunks(TEST_APP, 0, 0, blockMeta, new int[] {11}, new int[][] {{0, 1}});
+    removeApplication(TEST_APP);
+    if (failedEx != null) {
+      throw failedEx;
+    }
   }
 
   private void useTestFiles(boolean useTestIndexFile, boolean useTestMetaFile) throws IOException {

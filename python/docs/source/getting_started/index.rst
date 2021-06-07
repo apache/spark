@@ -22,11 +22,21 @@ Getting Started
 
 This page summarizes the basic steps required to setup and get started with PySpark.
 There are more guides shared with other languages such as
-`Quick Start <http://spark.apache.org/docs/latest/quick-start.html>`_ in Programming Guides
-at `the Spark documentation <http://spark.apache.org/docs/latest/index.html#where-to-go-from-here>`_.
+`Quick Start <https://spark.apache.org/docs/latest/quick-start.html>`_ in Programming Guides
+at `the Spark documentation <https://spark.apache.org/docs/latest/index.html#where-to-go-from-here>`_.
 
 .. toctree::
-    :maxdepth: 2
+   :maxdepth: 2
 
-    install
-    quickstart
+   install
+   quickstart
+
+For pandas APIs on Spark:
+
+.. toctree::
+   :maxdepth: 2
+
+   ps_install
+   ps_10mins
+   ps_videos_blogs
+

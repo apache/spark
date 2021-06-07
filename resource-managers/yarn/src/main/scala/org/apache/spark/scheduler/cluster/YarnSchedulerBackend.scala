@@ -333,6 +333,12 @@ private[spark] abstract class YarnSchedulerBackend(
           logWarning(s"Requesting driver to remove executor $executorId for reason $reason")
           driverEndpoint.send(r)
         }
+
+      // In case of yarn Miscellaneous Process is Spark AM Container
+      // Launched for the deploy mode client
+      case processInfo @ MiscellaneousProcessAdded(_, _, _) =>
+        logDebug(s"Sending the Spark AM info for yarn client mode")
+        driverEndpoint.send(processInfo)
     }
 
     override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {

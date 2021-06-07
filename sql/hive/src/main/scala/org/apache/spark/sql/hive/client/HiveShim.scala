@@ -45,7 +45,7 @@ import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.NoSuchPermanentFunctionException
 import org.apache.spark.sql.catalyst.catalog.{CatalogFunction, CatalogTablePartition, CatalogUtils, FunctionResource, FunctionResourceType}
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, TypeUtils}
+import org.apache.spark.sql.catalyst.util.{DateFormatter, TypeUtils}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{AtomicType, DateType, IntegralType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
@@ -82,8 +82,7 @@ private[client] sealed abstract class Shim {
   def getPartitionsByFilter(
       hive: Hive,
       table: Table,
-      predicates: Seq[Expression],
-      timeZoneId: String): Seq[Partition]
+      predicates: Seq[Expression]): Seq[Partition]
 
   def getCommandProcessor(token: String, conf: HiveConf): CommandProcessor
 
@@ -353,8 +352,7 @@ private[client] class Shim_v0_12 extends Shim with Logging {
   override def getPartitionsByFilter(
       hive: Hive,
       table: Table,
-      predicates: Seq[Expression],
-      timeZoneId: String): Seq[Partition] = {
+      predicates: Seq[Expression]): Seq[Partition] = {
     // getPartitionsByFilter() doesn't support binary comparison ops in Hive 0.12.
     // See HIVE-4888.
     logDebug("Hive 0.12 doesn't support predicate pushdown to metastore. " +
@@ -637,8 +635,8 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
    *
    * Unsupported predicates are skipped.
    */
-  def convertFilters(table: Table, filters: Seq[Expression], timeZoneId: String): String = {
-    lazy val dateFormatter = DateFormatter(DateTimeUtils.getZoneId(timeZoneId))
+  def convertFilters(table: Table, filters: Seq[Expression]): String = {
+    lazy val dateFormatter = DateFormatter()
 
     /**
      * An extractor that matches all binary comparison operators except null-safe equality.
@@ -700,7 +698,7 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
       }
 
       def unapply(values: Set[Any]): Option[Seq[String]] = {
-        val extractables = values.toSeq.map(valueToLiteralString.lift)
+        val extractables = values.filter(_ != null).toSeq.map(valueToLiteralString.lift)
         if (extractables.nonEmpty && extractables.forall(_.isDefined)) {
           Some(extractables.map(_.get))
         } else {
@@ -715,7 +713,7 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
       }
 
       def unapply(values: Set[Any]): Option[Seq[String]] = {
-        val extractables = values.toSeq.map(valueToLiteralString.lift)
+        val extractables = values.filter(_ != null).toSeq.map(valueToLiteralString.lift)
         if (extractables.nonEmpty && extractables.forall(_.isDefined)) {
           Some(extractables.map(_.get))
         } else {
@@ -748,6 +746,15 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
       values.map(value => s"$name = $value").mkString("(", " or ", ")")
     }
 
+    def convertNotInToAnd(name: String, values: Seq[String]): String = {
+      values.map(value => s"$name != $value").mkString("(", " and ", ")")
+    }
+
+    def hasNullLiteral(list: Seq[Expression]): Boolean = list.exists {
+      case Literal(null, _) => true
+      case _ => false
+    }
+
     val useAdvanced = SQLConf.get.advancedPartitionPredicatePushdownEnabled
     val inSetThreshold = SQLConf.get.metastorePartitionPruningInSetThreshold
 
@@ -763,13 +770,25 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
     }
 
     def convert(expr: Expression): Option[String] = expr match {
+      case Not(InSet(_, values)) if values.size > inSetThreshold =>
+        None
+
+      case Not(In(_, list)) if hasNullLiteral(list) => None
+      case Not(InSet(_, list)) if list.contains(null) => None
+
       case In(ExtractAttribute(SupportedAttribute(name)), ExtractableLiterals(values))
           if useAdvanced =>
         Some(convertInToOr(name, values))
 
+      case Not(In(ExtractAttribute(SupportedAttribute(name)), ExtractableLiterals(values)))
+        if useAdvanced =>
+        Some(convertNotInToAnd(name, values))
+
       case InSet(child, values) if useAdvanced && values.size > inSetThreshold =>
         val dataType = child.dataType
-        val sortedValues = values.toSeq.sorted(TypeUtils.getInterpretedOrdering(dataType))
+        // Skip null here is safe, more details could see at ExtractableLiterals.
+        val sortedValues = values.filter(_ != null).toSeq
+          .sorted(TypeUtils.getInterpretedOrdering(dataType))
         convert(And(GreaterThanOrEqual(child, Literal(sortedValues.head, dataType)),
           LessThanOrEqual(child, Literal(sortedValues.last, dataType))))
 
@@ -777,9 +796,17 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
           if useAdvanced && child.dataType == DateType =>
         Some(convertInToOr(name, values))
 
+      case Not(InSet(child @ ExtractAttribute(SupportedAttribute(name)),
+        ExtractableDateValues(values))) if useAdvanced && child.dataType == DateType =>
+        Some(convertNotInToAnd(name, values))
+
       case InSet(ExtractAttribute(SupportedAttribute(name)), ExtractableValues(values))
           if useAdvanced =>
         Some(convertInToOr(name, values))
+
+      case Not(InSet(ExtractAttribute(SupportedAttribute(name)), ExtractableValues(values)))
+        if useAdvanced =>
+        Some(convertNotInToAnd(name, values))
 
       case op @ SpecialBinaryComparison(
           ExtractAttribute(SupportedAttribute(name)), ExtractableLiteral(value)) =>
@@ -840,12 +867,11 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
   override def getPartitionsByFilter(
       hive: Hive,
       table: Table,
-      predicates: Seq[Expression],
-      timeZoneId: String): Seq[Partition] = {
+      predicates: Seq[Expression]): Seq[Partition] = {
 
     // Hive getPartitionsByFilter() takes a string that represents partition
     // predicates like "str_key=\"value\" and int_key=1 ..."
-    val filter = convertFilters(table, predicates, timeZoneId)
+    val filter = convertFilters(table, predicates)
 
     val partitions =
       if (filter.isEmpty) {

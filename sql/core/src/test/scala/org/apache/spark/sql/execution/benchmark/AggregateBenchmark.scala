@@ -36,7 +36,8 @@ import org.apache.spark.unsafe.map.BytesToBytesMap
  * Benchmark to measure performance for aggregate primitives.
  * To run this benchmark:
  * {{{
- *   1. without sbt: bin/spark-submit --class <this class> <spark sql test jar>
+ *   1. without sbt: bin/spark-submit --class <this class>
+ *      --jars <spark core test jar>,<spark catalyst test jar> <spark sql test jar>
  *   2. build/sbt "sql/test:runMain <this class>"
  *   3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/test:runMain <this class>"
  *      Results will be written to "benchmarks/AggregateBenchmark-results.txt".
@@ -79,7 +80,7 @@ object AggregateBenchmark extends SqlBasedBenchmark {
         }
       }
 
-      benchmark.addCase("codegen = T hashmap = F", numIters = 3) { _ =>
+      benchmark.addCase("codegen = T, hashmap = F", numIters = 3) { _ =>
         withSQLConf(
           SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
           SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> "false",
@@ -88,7 +89,16 @@ object AggregateBenchmark extends SqlBasedBenchmark {
         }
       }
 
-      benchmark.addCase("codegen = T hashmap = T", numIters = 5) { _ =>
+      benchmark.addCase("codegen = T, row-based hashmap = T", numIters = 5) { _ =>
+        withSQLConf(
+          SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
+          SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> "true",
+          SQLConf.ENABLE_VECTORIZED_HASH_MAP.key -> "false") {
+          f()
+        }
+      }
+
+      benchmark.addCase("codegen = T, vectorized hashmap = T", numIters = 5) { _ =>
         withSQLConf(
           SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
           SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> "true",
@@ -115,7 +125,7 @@ object AggregateBenchmark extends SqlBasedBenchmark {
         }
       }
 
-      benchmark.addCase("codegen = T hashmap = F", numIters = 3) { _ =>
+      benchmark.addCase("codegen = T, hashmap = F", numIters = 3) { _ =>
         withSQLConf(
           SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
           SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> "false",
@@ -124,7 +134,16 @@ object AggregateBenchmark extends SqlBasedBenchmark {
         }
       }
 
-      benchmark.addCase("codegen = T hashmap = T", numIters = 5) { _ =>
+      benchmark.addCase("codegen = T, row-based hashmap = T", numIters = 5) { _ =>
+        withSQLConf(
+          SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
+          SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> "true",
+          SQLConf.ENABLE_VECTORIZED_HASH_MAP.key -> "false") {
+          f()
+        }
+      }
+
+      benchmark.addCase("codegen = T, vectorized hashmap = T", numIters = 5) { _ =>
         withSQLConf(
           SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
           SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> "true",
@@ -150,7 +169,7 @@ object AggregateBenchmark extends SqlBasedBenchmark {
         }
       }
 
-      benchmark.addCase("codegen = T hashmap = F", numIters = 3) { _ =>
+      benchmark.addCase("codegen = T, hashmap = F", numIters = 3) { _ =>
         withSQLConf(
           SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
           SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> "false",
@@ -159,7 +178,16 @@ object AggregateBenchmark extends SqlBasedBenchmark {
         }
       }
 
-      benchmark.addCase("codegen = T hashmap = T", numIters = 5) { _ =>
+      benchmark.addCase("codegen = T, row-based hashmap = T", numIters = 5) { _ =>
+        withSQLConf(
+          SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
+          SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> "true",
+          SQLConf.ENABLE_VECTORIZED_HASH_MAP.key -> "false") {
+          f()
+        }
+      }
+
+      benchmark.addCase("codegen = T, vectorized hashmap = T", numIters = 5) { _ =>
         withSQLConf(
           SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
           SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> "true",
@@ -185,7 +213,7 @@ object AggregateBenchmark extends SqlBasedBenchmark {
         }
       }
 
-      benchmark.addCase("codegen = T hashmap = F") { _ =>
+      benchmark.addCase("codegen = T, hashmap = F") { _ =>
         withSQLConf(
           SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
           SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> "false",
@@ -194,7 +222,16 @@ object AggregateBenchmark extends SqlBasedBenchmark {
         }
       }
 
-      benchmark.addCase("codegen = T hashmap = T") { _ =>
+      benchmark.addCase("codegen = T, row-based hashmap = T") { _ =>
+        withSQLConf(
+          SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
+          SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> "true",
+          SQLConf.ENABLE_VECTORIZED_HASH_MAP.key -> "false") {
+          f()
+        }
+      }
+
+      benchmark.addCase("codegen = T, vectorized hashmap = T") { _ =>
         withSQLConf(
           SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
           SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> "true",
@@ -230,7 +267,7 @@ object AggregateBenchmark extends SqlBasedBenchmark {
         }
       }
 
-      benchmark.addCase("codegen = T hashmap = F") { _ =>
+      benchmark.addCase("codegen = T, hashmap = F") { _ =>
         withSQLConf(
           SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
           SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> "false",
@@ -239,7 +276,16 @@ object AggregateBenchmark extends SqlBasedBenchmark {
         }
       }
 
-      benchmark.addCase("codegen = T hashmap = T") { _ =>
+      benchmark.addCase("codegen = T, row-based hashmap = T") { _ =>
+        withSQLConf(
+          SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
+          SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> "true",
+          SQLConf.ENABLE_VECTORIZED_HASH_MAP.key -> "false") {
+          f()
+        }
+      }
+
+      benchmark.addCase("codegen = T, vectorized hashmap = T") { _ =>
         withSQLConf(
           SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
           SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> "true",
@@ -290,7 +336,7 @@ object AggregateBenchmark extends SqlBasedBenchmark {
         }
       }
 
-      benchmark.addCase("codegen = T hugeMethodLimit = 10000") { _ =>
+      benchmark.addCase("codegen = T, hugeMethodLimit = 10000") { _ =>
         withSQLConf(
           SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
           SQLConf.WHOLESTAGE_HUGE_METHOD_LIMIT.key -> "10000") {
@@ -298,7 +344,7 @@ object AggregateBenchmark extends SqlBasedBenchmark {
         }
       }
 
-      benchmark.addCase("codegen = T hugeMethodLimit = 1500") { _ =>
+      benchmark.addCase("codegen = T, hugeMethodLimit = 1500") { _ =>
         withSQLConf(
           SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
           SQLConf.WHOLESTAGE_HUGE_METHOD_LIMIT.key -> "1500") {

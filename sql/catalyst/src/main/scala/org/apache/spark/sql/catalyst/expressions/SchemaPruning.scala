@@ -17,26 +17,30 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.types._
 
-object SchemaPruning {
+object SchemaPruning extends SQLConfHelper {
   /**
-   * Filters the schema by the requested fields. For example, if the schema is struct<a:int, b:int>,
-   * and given requested field are "a", the field "b" is pruned in the returned schema.
-   * Note that schema field ordering at original schema is still preserved in pruned schema.
+   * Prunes the nested schema by the requested fields. For example, if the schema is:
+   * `id int, s struct<a:int, b:int>`, and given requested field "s.a", the inner field "b"
+   * is pruned in the returned schema: `id int, s struct<a:int>`.
+   * Note that:
+   *   1. The schema field ordering at original schema is still preserved in pruned schema.
+   *   2. The top-level fields are not pruned here.
    */
   def pruneDataSchema(
       dataSchema: StructType,
       requestedRootFields: Seq[RootField]): StructType = {
+    val resolver = conf.resolver
     // Merge the requested root fields into a single schema. Note the ordering of the fields
     // in the resulting schema may differ from their ordering in the logical relation's
     // original schema
     val mergedSchema = requestedRootFields
-      .map { case root: RootField => StructType(Array(root.field)) }
+      .map { root: RootField => StructType(Array(root.field)) }
       .reduceLeft(_ merge _)
-    val dataSchemaFieldNames = dataSchema.fieldNames.toSet
     val mergedDataSchema =
-      StructType(mergedSchema.filter(f => dataSchemaFieldNames.contains(f.name)))
+      StructType(dataSchema.map(d => mergedSchema.find(m => resolver(m.name, d.name)).getOrElse(d)))
     // Sort the fields of mergedDataSchema according to their order in dataSchema,
     // recursively. This makes mergedDataSchema a pruned schema of dataSchema
     sortLeftFieldsByRight(mergedDataSchema, dataSchema).asInstanceOf[StructType]
@@ -61,12 +65,16 @@ object SchemaPruning {
           sortLeftFieldsByRight(leftValueType, rightValueType),
           containsNull)
       case (leftStruct: StructType, rightStruct: StructType) =>
-        val filteredRightFieldNames = rightStruct.fieldNames.filter(leftStruct.fieldNames.contains)
+        val resolver = conf.resolver
+        val filteredRightFieldNames = rightStruct.fieldNames
+          .filter(name => leftStruct.fieldNames.exists(resolver(_, name)))
         val sortedLeftFields = filteredRightFieldNames.map { fieldName =>
-          val leftFieldType = leftStruct(fieldName).dataType
+          val resolvedLeftStruct = leftStruct.find(p => resolver(p.name, fieldName)).get
+          val leftFieldType = resolvedLeftStruct.dataType
           val rightFieldType = rightStruct(fieldName).dataType
           val sortedLeftFieldType = sortLeftFieldsByRight(leftFieldType, rightFieldType)
-          StructField(fieldName, sortedLeftFieldType, nullable = leftStruct(fieldName).nullable)
+          StructField(fieldName, sortedLeftFieldType, nullable = resolvedLeftStruct.nullable,
+            metadata = resolvedLeftStruct.metadata)
         }
         StructType(sortedLeftFields)
       case _ => left
@@ -117,10 +125,11 @@ object SchemaPruning {
    * When expr is an [[Attribute]], construct a field around it and indicate that that
    * field was derived from an attribute.
    */
-  private def getRootFields(expr: Expression): Seq[RootField] = {
+  private[catalyst] def getRootFields(expr: Expression): Seq[RootField] = {
     expr match {
       case att: Attribute =>
-        RootField(StructField(att.name, att.dataType, att.nullable), derivedFromAtt = true) :: Nil
+        RootField(StructField(att.name, att.dataType, att.nullable, att.metadata),
+          derivedFromAtt = true) :: Nil
       case SelectedField(field) => RootField(field, derivedFromAtt = false) :: Nil
       // Root field accesses by `IsNotNull` and `IsNull` are special cases as the expressions
       // don't actually use any nested fields. These root field accesses might be excluded later

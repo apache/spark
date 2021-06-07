@@ -21,7 +21,6 @@ import java.util.concurrent.TimeUnit._
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.util.truncatedString
@@ -74,12 +73,16 @@ case class ObjectHashAggregateExec(
 
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
-    "aggTime" -> SQLMetrics.createTimingMetric(sparkContext, "time in aggregation build")
+    "aggTime" -> SQLMetrics.createTimingMetric(sparkContext, "time in aggregation build"),
+    "spillSize" -> SQLMetrics.createSizeMetric(sparkContext, "spill size"),
+    "numTasksFallBacked" -> SQLMetrics.createMetric(sparkContext, "number of sort fallback tasks")
   )
 
-  protected override def doExecute(): RDD[InternalRow] = attachTree(this, "execute") {
+  protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
     val aggTime = longMetric("aggTime")
+    val spillSize = longMetric("spillSize")
+    val numTasksFallBacked = longMetric("numTasksFallBacked")
     val fallbackCountThreshold = sqlContext.conf.objectAggSortBasedFallbackThreshold
 
     child.execute().mapPartitionsWithIndexInternal { (partIndex, iter) =>
@@ -104,7 +107,9 @@ case class ObjectHashAggregateExec(
             inputAttributes,
             iter,
             fallbackCountThreshold,
-            numOutputRows)
+            numOutputRows,
+            spillSize,
+            numTasksFallBacked)
         if (!hasInput && groupingExpressions.isEmpty) {
           numOutputRows += 1
           Iterator.single[UnsafeRow](aggregationIterator.outputForEmptyGroupingKeyWithoutInput())
@@ -132,6 +137,9 @@ case class ObjectHashAggregateExec(
       s"ObjectHashAggregate(keys=$keyString, functions=$functionString)"
     }
   }
+
+  override protected def withNewChildInternal(newChild: SparkPlan): ObjectHashAggregateExec =
+    copy(child = newChild)
 }
 
 object ObjectHashAggregateExec {

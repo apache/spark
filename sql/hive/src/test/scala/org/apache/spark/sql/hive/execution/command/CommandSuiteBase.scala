@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.hive.execution.command
 
+import org.apache.spark.metrics.source.HiveCatalogMetrics
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.hive.test.TestHiveSingleton
@@ -46,5 +47,12 @@ trait CommandSuiteBase extends TestHiveSingleton {
         .first().getString(0)
     val location = information.split("\\r?\\n").filter(_.startsWith("Location:")).head
     assert(location.endsWith(expected))
+  }
+
+  def checkHiveClientCalls[T](expected: Int)(f: => T): Unit = {
+    HiveCatalogMetrics.reset()
+    assert(HiveCatalogMetrics.METRIC_HIVE_CLIENT_CALLS.getCount === 0)
+    f
+    assert(HiveCatalogMetrics.METRIC_HIVE_CLIENT_CALLS.getCount === expected)
   }
 }

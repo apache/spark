@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.hive.client
 
-import java.io.{File, PrintStream}
+import java.io.PrintStream
 import java.lang.{Iterable => JIterable}
 import java.lang.reflect.InvocationTargetException
 import java.nio.charset.StandardCharsets.UTF_8
@@ -54,13 +54,14 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces._
 import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.sql.hive.HiveExternalCatalog
 import org.apache.spark.sql.hive.HiveExternalCatalog.DATASOURCE_SCHEMA
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.util.{CircularBuffer, Utils}
+import org.apache.spark.util.{CircularBuffer, ShutdownHookManager, Utils}
 
 /**
  * A class that wraps the HiveClient and converts its responses to externally visible classes.
@@ -154,6 +155,25 @@ private[hive] class HiveClientImpl(
     }
   }
 
+  private def closeState(): Unit = withHiveState {
+    // These temp files are registered in o.a.h.u.ShutdownHookManager too during state start.
+    // The state.close() will delete them if they are not null and try remove them from the
+    // o.a.h.u.ShutdownHookManager which causes undesirable IllegalStateException.
+    // We delete them ahead with a high priority hook here and set them to null to bypass the
+    // deletion in state.close().
+    if (state.getTmpOutputFile != null) {
+      state.getTmpOutputFile.delete()
+      state.setTmpOutputFile(null)
+    }
+    if (state.getTmpErrOutputFile != null) {
+      state.getTmpErrOutputFile.delete()
+      state.setTmpErrOutputFile(null)
+    }
+    state.close()
+  }
+
+  ShutdownHookManager.addShutdownHook(() => closeState())
+
   // Log the default warehouse location.
   logInfo(
     s"Warehouse location for Hive client " +
@@ -166,11 +186,11 @@ private[hive] class HiveClientImpl(
       Hive.set(clientLoader.cachedHive.asInstanceOf[Hive])
     }
     // Hive 2.3 will set UDFClassLoader to hiveConf when initializing SessionState
-    // since HIVE-11878, and ADDJarCommand will add jars to clientLoader.classLoader.
-    // For this reason we cannot load the jars added by ADDJarCommand because of class loader
+    // since HIVE-11878, and ADDJarsCommand will add jars to clientLoader.classLoader.
+    // For this reason we cannot load the jars added by ADDJarsCommand because of class loader
     // got changed. We reset it to clientLoader.ClassLoader here.
     state.getConf.setClassLoader(clientLoader.classLoader)
-    SessionState.start(state)
+    shim.setCurrentSessionState(state)
     state.out = new PrintStream(outputBuffer, true, UTF_8.name())
     state.err = new PrintStream(outputBuffer, true, UTF_8.name())
     state
@@ -272,15 +292,17 @@ private[hive] class HiveClientImpl(
   def withHiveState[A](f: => A): A = retryLocked {
     val original = Thread.currentThread().getContextClassLoader
     val originalConfLoader = state.getConf.getClassLoader
-    // The classloader in clientLoader could be changed after addJar, always use the latest
-    // classloader. We explicitly set the context class loader since "conf.setClassLoader" does
+    // We explicitly set the context class loader since "conf.setClassLoader" does
     // not do that, and the Hive client libraries may need to load classes defined by the client's
-    // class loader.
+    // class loader. See SPARK-19804 for more details.
     Thread.currentThread().setContextClassLoader(clientLoader.classLoader)
     state.getConf.setClassLoader(clientLoader.classLoader)
     // Set the thread local metastore client to the client associated with this HiveClientImpl.
     Hive.set(client)
     // Replace conf in the thread local Hive with current conf
+    // with the side-effect of Hive.get(conf) to avoid using out-of-date HiveConf.
+    // See discussion in https://github.com/apache/spark/pull/16826/files#r104606859
+    // for more details.
     Hive.get(conf)
     // setCurrentSessionState will use the classLoader associated
     // with the HiveConf in `state` to override the context class loader of the current
@@ -743,10 +765,9 @@ private[hive] class HiveClientImpl(
 
   override def getPartitionsByFilter(
       table: CatalogTable,
-      predicates: Seq[Expression],
-      timeZoneId: String): Seq[CatalogTablePartition] = withHiveState {
+      predicates: Seq[Expression]): Seq[CatalogTablePartition] = withHiveState {
     val hiveTable = toHiveTable(table, Some(userName))
-    val parts = shim.getPartitionsByFilter(client, hiveTable, predicates, timeZoneId)
+    val parts = shim.getPartitionsByFilter(client, hiveTable, predicates)
       .map(fromHivePartition)
     HiveCatalogMetrics.incrementFetchedPartitions(parts.length)
     parts
@@ -806,6 +827,8 @@ private[hive] class HiveClientImpl(
       }
     }
 
+    // Hive query needs to start SessionState.
+    SessionState.start(state)
     logDebug(s"Running hiveql '$cmd'")
     if (cmd.toLowerCase(Locale.ROOT).startsWith("set")) { logDebug(s"Changing config: $cmd") }
     try {
@@ -934,16 +957,8 @@ private[hive] class HiveClientImpl(
   }
 
   def addJar(path: String): Unit = {
-    val uri = new Path(path).toUri
-    val jarURL = if (uri.getScheme == null) {
-      // `path` is a local file path without a URL scheme
-      new File(path).toURI.toURL
-    } else {
-      // `path` is a URL with a scheme
-      uri.toURL
-    }
-    clientLoader.addJar(jarURL)
-    runSqlHive(s"ADD JAR $path")
+    val jarURI = Utils.resolveURI(path)
+    clientLoader.addJar(jarURI.toURL)
   }
 
   def newSession(): HiveClientImpl = {
@@ -988,7 +1003,11 @@ private[hive] class HiveClientImpl(
 private[hive] object HiveClientImpl extends Logging {
   /** Converts the native StructField to Hive's FieldSchema. */
   def toHiveColumn(c: StructField): FieldSchema = {
-    val typeString = HiveVoidType.replaceVoidType(c.dataType).catalogString
+    // For Hive Serde, we still need to to restore the raw type for char and varchar type.
+    // When reading data in parquet, orc, or avro file format with string type for char,
+    // the tailing spaces may lost if we are not going to pad it.
+    val typeString = CharVarcharUtils.getRawTypeString(c.metadata)
+      .getOrElse(HiveVoidType.replaceVoidType(c.dataType).catalogString)
     new FieldSchema(c.name, typeString, c.getComment().orNull)
   }
 
@@ -1268,7 +1287,7 @@ private[hive] object HiveClientImpl extends Logging {
   }
 }
 
-case object HiveVoidType extends DataType {
+private[hive] case object HiveVoidType extends DataType {
   override def defaultSize: Int = 1
   override def asNullable: DataType = HiveVoidType
   override def simpleString: String = "void"

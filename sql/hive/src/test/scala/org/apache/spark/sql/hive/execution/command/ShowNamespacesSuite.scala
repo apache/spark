@@ -40,4 +40,15 @@ class ShowNamespacesSuite extends v1.ShowNamespacesSuiteBase with CommandSuiteBa
       }
     }
   }
+
+  test("hive client calls") {
+    withNamespace(s"$catalog.ns1", s"$catalog.ns2") {
+      sql(s"CREATE NAMESPACE $catalog.ns1")
+      sql(s"CREATE NAMESPACE $catalog.ns2")
+
+      checkHiveClientCalls(expected = 1) {
+        sql(s"SHOW NAMESPACES IN $catalog")
+      }
+    }
+  }
 }

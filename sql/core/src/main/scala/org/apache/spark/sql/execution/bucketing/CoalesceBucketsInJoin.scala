@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{FileSourceScanExec, FilterExec, ProjectExec, SparkPlan}
-import org.apache.spark.sql.execution.joins.{BaseJoinExec, ShuffledHashJoinExec, SortMergeJoinExec}
+import org.apache.spark.sql.execution.joins.{ShuffledHashJoinExec, ShuffledJoin, SortMergeJoinExec}
 
 /**
  * This rule coalesces one side of the `SortMergeJoin` and `ShuffledHashJoin`
@@ -48,10 +48,9 @@ object CoalesceBucketsInJoin extends Rule[SparkPlan] {
   }
 
   private def updateNumCoalescedBuckets(
-      join: BaseJoinExec,
+      join: ShuffledJoin,
       numLeftBuckets: Int,
-      numRightBucket: Int,
-      numCoalescedBuckets: Int): BaseJoinExec = {
+      numCoalescedBuckets: Int): ShuffledJoin = {
     if (numCoalescedBuckets != numLeftBuckets) {
       val leftCoalescedChild =
         updateNumCoalescedBucketsInScan(join.left, numCoalescedBuckets)
@@ -72,7 +71,6 @@ object CoalesceBucketsInJoin extends Rule[SparkPlan] {
   private def isCoalesceSHJStreamSide(
       join: ShuffledHashJoinExec,
       numLeftBuckets: Int,
-      numRightBucket: Int,
       numCoalescedBuckets: Int): Boolean = {
     if (numCoalescedBuckets == numLeftBuckets) {
       join.buildSide != BuildRight
@@ -93,12 +91,12 @@ object CoalesceBucketsInJoin extends Rule[SparkPlan] {
         val numCoalescedBuckets = math.min(numLeftBuckets, numRightBuckets)
         join match {
           case j: SortMergeJoinExec =>
-            updateNumCoalescedBuckets(j, numLeftBuckets, numRightBuckets, numCoalescedBuckets)
+            updateNumCoalescedBuckets(j, numLeftBuckets, numCoalescedBuckets)
           case j: ShuffledHashJoinExec
             // Only coalesce the buckets for shuffled hash join stream side,
             // to avoid OOM for build side.
-            if isCoalesceSHJStreamSide(j, numLeftBuckets, numRightBuckets, numCoalescedBuckets) =>
-            updateNumCoalescedBuckets(j, numLeftBuckets, numRightBuckets, numCoalescedBuckets)
+            if isCoalesceSHJStreamSide(j, numLeftBuckets, numCoalescedBuckets) =>
+            updateNumCoalescedBuckets(j, numLeftBuckets, numCoalescedBuckets)
           case other => other
         }
       case other => other
@@ -143,7 +141,7 @@ object ExtractJoinWithBuckets {
     }
   }
 
-  private def isApplicable(j: BaseJoinExec): Boolean = {
+  private def isApplicable(j: ShuffledJoin): Boolean = {
     (j.isInstanceOf[SortMergeJoinExec] ||
       j.isInstanceOf[ShuffledHashJoinExec]) &&
       hasScanOperation(j.left) &&
@@ -159,9 +157,9 @@ object ExtractJoinWithBuckets {
     numBuckets1 != numBuckets2 && large % small == 0
   }
 
-  def unapply(plan: SparkPlan): Option[(BaseJoinExec, Int, Int)] = {
+  def unapply(plan: SparkPlan): Option[(ShuffledJoin, Int, Int)] = {
     plan match {
-      case j: BaseJoinExec if isApplicable(j) =>
+      case j: ShuffledJoin if isApplicable(j) =>
         val leftBucket = getBucketSpec(j.left)
         val rightBucket = getBucketSpec(j.right)
         if (leftBucket.isDefined && rightBucket.isDefined &&

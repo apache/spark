@@ -290,7 +290,7 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     ereq.cores(4).memory("2g").memoryOverhead("1g").pysparkMemory("3g")
     treq.cpus(2)
     rpb.require(ereq).require(treq)
-    val rp = rpb.build
+    val rp = rpb.build()
     val step = new BasicExecutorFeatureStep(newExecutorConf(), new SecurityManager(baseConf), rp)
     val executor = step.configurePod(SparkPod.initialPod())
 
@@ -307,7 +307,7 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     ereq.cores(2).resource("gpu", 2, "/path/getGpusResources.sh", "nvidia.com")
     treq.cpus(1)
     rpb.require(ereq).require(treq)
-    val rp = rpb.build
+    val rp = rpb.build()
     val step = new BasicExecutorFeatureStep(newExecutorConf(), new SecurityManager(baseConf), rp)
     val executor = step.configurePod(SparkPod.initialPod())
 
@@ -325,9 +325,49 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     val step = new BasicExecutorFeatureStep(newExecutorConf(), new SecurityManager(baseConf),
       defaultProfile)
     val podConfigured = step.configurePod(baseDriverPod)
-    SecretVolumeUtils.containerHasVolume(podConfigured.container,
-      SPARK_CONF_VOLUME_EXEC, SPARK_CONF_DIR_INTERNAL)
-    SecretVolumeUtils.podHasVolume(podConfigured.pod, SPARK_CONF_VOLUME_EXEC)
+    assert(SecretVolumeUtils.containerHasVolume(podConfigured.container,
+      SPARK_CONF_VOLUME_EXEC, SPARK_CONF_DIR_INTERNAL))
+    assert(SecretVolumeUtils.podHasVolume(podConfigured.pod, SPARK_CONF_VOLUME_EXEC))
+  }
+
+  test("SPARK-34316 Disable configmap volume on executor pod's container") {
+    baseConf.set(KUBERNETES_EXECUTOR_DISABLE_CONFIGMAP, true)
+    val baseDriverPod = SparkPod.initialPod()
+    val step = new BasicExecutorFeatureStep(newExecutorConf(), new SecurityManager(baseConf),
+      defaultProfile)
+    val podConfigured = step.configurePod(baseDriverPod)
+    assert(!SecretVolumeUtils.containerHasVolume(podConfigured.container,
+      SPARK_CONF_VOLUME_EXEC, SPARK_CONF_DIR_INTERNAL))
+    assert(!SecretVolumeUtils.podHasVolume(podConfigured.pod, SPARK_CONF_VOLUME_EXEC))
+  }
+
+  test("SPARK-35482: user correct block manager port for executor pods") {
+    try {
+      val initPod = SparkPod.initialPod()
+      val sm = new SecurityManager(baseConf)
+      val step1 =
+        new BasicExecutorFeatureStep(newExecutorConf(), sm, defaultProfile)
+      val containerPort1 = step1.configurePod(initPod).container.getPorts.get(0)
+      assert(containerPort1.getContainerPort === DEFAULT_BLOCKMANAGER_PORT,
+        s"should use port no. $DEFAULT_BLOCKMANAGER_PORT as default")
+
+      baseConf.set(BLOCK_MANAGER_PORT, 12345)
+      val step2 = new BasicExecutorFeatureStep(newExecutorConf(), sm, defaultProfile)
+      val containerPort2 = step2.configurePod(initPod).container.getPorts.get(0)
+      assert(containerPort2.getContainerPort === 12345)
+
+      baseConf.set(BLOCK_MANAGER_PORT, 1000)
+      val e = intercept[IllegalArgumentException] {
+        new BasicExecutorFeatureStep(newExecutorConf(), sm, defaultProfile)
+      }
+      assert(e.getMessage.contains("port number must be 0 or in [1024, 65535]"))
+
+      baseConf.set(BLOCK_MANAGER_PORT, 0)
+      val step3 = new BasicExecutorFeatureStep(newExecutorConf(), sm, defaultProfile)
+      assert(step3.configurePod(initPod).container.getPorts.isEmpty, "random port")
+    } finally {
+      baseConf.remove(BLOCK_MANAGER_PORT)
+    }
   }
 
   // There is always exactly one controller reference, and it points to the driver pod.

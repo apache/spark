@@ -771,7 +771,12 @@ Apart from these, the following properties are also available, and may be useful
     option <code>--repositories</code> or <code>spark.jars.repositories</code> will also be included.
     Useful for allowing Spark to resolve artifacts from behind a firewall e.g. via an in-house
     artifact server like Artifactory. Details on the settings file format can be
-    found at <a href="http://ant.apache.org/ivy/history/latest-milestone/settings.html">Settings Files</a>
+    found at <a href="http://ant.apache.org/ivy/history/latest-milestone/settings.html">Settings Files</a>.
+    Only paths with <code>file://</code> scheme are supported. Paths without a scheme are assumed to have
+    a <code>file://</code> scheme.
+    <p/>
+    When running in YARN cluster mode, this file will also be localized to the remote driver for dependency
+    resolution within <code>SparkContext#addJar</code>
   </td>
   <td>2.2.0</td>
 </tr>
@@ -924,12 +929,22 @@ Apart from these, the following properties are also available, and may be useful
   <td>1.1.1</td>
 </tr>
 <tr>
+  <td><code>spark.shuffle.io.connectionTimeout</code></td>
+  <td>value of <code>spark.network.timeout</code></td>
+  <td>
+    Timeout for the established connections between shuffle servers and clients to be marked
+    as idled and closed if there are still outstanding fetch requests but no traffic no the channel
+    for at least `connectionTimeout`.
+  </td>
+  <td>1.2.0</td>
+</tr>
+<tr>
   <td><code>spark.shuffle.service.enabled</code></td>
   <td>false</td>
   <td>
     Enables the external shuffle service. This service preserves the shuffle files written by
-    executors so the executors can be safely removed. The external shuffle service
-    must be set up in order to enable it. See
+    executors e.g. so that executors can be safely removed, or so that shuffle fetches can continue in 
+    the event of executor failure. The external shuffle service must be set up in order to enable it. See
     <a href="job-scheduling.html#configuration-and-setup">dynamic allocation
     configuration and setup documentation</a> for more information.
   </td>
@@ -1007,6 +1022,16 @@ Apart from these, the following properties are also available, and may be useful
   </td>
   <td>2.3.0</td>
 </tr>
+<tr>
+  <td><code>spark.files.io.connectionTimeout</code></td>
+  <td>value of <code>spark.network.timeout</code></td>
+  <td>
+    Timeout for the established connections for fetching files in Spark RPC environments to be marked
+    as idled and closed if there are still outstanding files being downloaded but no traffic no the channel
+    for at least `connectionTimeout`.
+  </td>
+  <td>1.6.0</td>
+</tr>
 </table>
 
 ### Spark UI
@@ -1040,10 +1065,15 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.eventLog.compression.codec</code></td>
-  <td></td>
+  <td>zstd</td>
   <td>
-    The codec to compress logged events. If this is not given,
-    <code>spark.io.compression.codec</code> will be used.
+    The codec to compress logged events. By default, Spark provides four codecs:
+    <code>lz4</code>, <code>lzf</code>, <code>snappy</code>, and <code>zstd</code>.
+    You can also use fully qualified class names to specify the codec, e.g.
+    <code>org.apache.spark.io.LZ4CompressionCodec</code>,
+    <code>org.apache.spark.io.LZFCompressionCodec</code>,
+    <code>org.apache.spark.io.SnappyCompressionCodec</code>,
+    and <code>org.apache.spark.io.ZStdCompressionCodec</code>.
   </td>
   <td>3.0.0</td>
 </tr>
@@ -1334,6 +1364,38 @@ Apart from these, the following properties are also available, and may be useful
     This setting applies for the Spark History Server too.
   </td>
   <td>2.2.3</td>
+</tr>
+<tr>
+  <td><code>spark.ui.timeline.executors.maximum</code></td>
+  <td>250</td>
+  <td>
+    The maximum number of executors shown in the event timeline.
+  </td>
+  <td>3.2.0</td>
+</tr>
+<tr>
+  <td><code>spark.ui.timeline.jobs.maximum</code></td>
+  <td>500</td>
+  <td>
+    The maximum number of jobs shown in the event timeline.
+  </td>
+  <td>3.2.0</td>
+</tr>
+<tr>
+  <td><code>spark.ui.timeline.stages.maximum</code></td>
+  <td>500</td>
+  <td>
+    The maximum number of stages shown in the event timeline.
+  </td>
+  <td>3.2.0</td>
+</tr>
+<tr>
+  <td><code>spark.ui.timeline.tasks.maximum</code></td>
+  <td>1000</td>
+  <td>
+    The maximum number of tasks shown in the event timeline.
+  </td>
+  <td>1.4.0</td>
 </tr>
 </table>
 
@@ -1992,6 +2054,16 @@ Apart from these, the following properties are also available, and may be useful
   </td>
   <td>3.0.0</td>
 </tr>
+<tr>
+  <td><code>spark.rpc.io.connectionTimeout</code></td>
+  <td>value of <code>spark.network.timeout</code></td>
+  <td>
+    Timeout for the established connections between RPC peers to be marked as idled and closed
+    if there are outstanding RPC requests but no traffic on the channel for at least
+    `connectionTimeout`.
+  </td>
+  <td>1.2.0</td>
+</tr>
 </table>
 
 ### Scheduling
@@ -2307,6 +2379,15 @@ Apart from these, the following properties are also available, and may be useful
     Fraction of tasks which must be complete before speculation is enabled for a particular stage.
   </td>
   <td>0.6.0</td>
+</tr>
+<tr>
+  <td><code>spark.speculation.min.threshold</code></td>
+  <td>100ms</td>
+  <td>
+    Minimum amount of time a task runs before being considered for speculation.
+    This can be used to avoid launching speculative copies of tasks that are very short.
+  </td>
+  <td>3.2.0</td>
 </tr>
 <tr>
   <td><code>spark.speculation.task.duration.threshold</code></td>

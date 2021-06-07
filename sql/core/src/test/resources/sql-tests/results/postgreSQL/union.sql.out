@@ -526,7 +526,7 @@ SELECT q1 FROM int8_tbl EXCEPT SELECT q2 FROM int8_tbl ORDER BY q2 LIMIT 1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '`q2`' given input columns: [int8_tbl.q1]; line 1 pos 64
+cannot resolve 'q2' given input columns: [int8_tbl.q1]; line 1 pos 64
 
 
 -- !query
@@ -682,10 +682,10 @@ struct<id:bigint>
 -- !query
 SELECT cast('3.4' as decimal(38, 18)) UNION SELECT 'foo'
 -- !query schema
-struct<CAST(3.4 AS DECIMAL(38,18)):string>
+struct<>
 -- !query output
-3.400000000000000000
-foo
+org.apache.spark.SparkException
+Failed to merge incompatible data types decimal(38,18) and string
 
 
 -- !query

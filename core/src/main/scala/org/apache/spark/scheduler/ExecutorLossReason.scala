@@ -40,6 +40,10 @@ private[spark] object ExecutorExited {
   }
 }
 
+private[spark] object ExecutorLossMessage {
+  val decommissionFinished = "Finished decommissioning"
+}
+
 private[spark] object ExecutorKilled extends ExecutorLossReason("Executor killed by driver.")
 
 /**

@@ -29,8 +29,6 @@
   <name>Spark Project Kubernetes</name>
   <properties>
     <sbt.project.name>kubernetes</sbt.project.name>
-    <!-- Note: Please update the kubernetes client version in kubernetes/integration-tests/pom.xml -->
-    <kubernetes.client.version>4.12.0</kubernetes.client.version>
   </properties>
 
   <dependencies>
@@ -57,15 +55,11 @@
     <dependency>
       <groupId>io.fabric8</groupId>
       <artifactId>kubernetes-client</artifactId>
-      <version>${kubernetes.client.version}</version>
+      <version>${kubernetes-client.version}</version>
       <exclusions>
         <exclusion>
           <groupId>com.fasterxml.jackson.core</groupId>
           <artifactId>*</artifactId>
-        </exclusion>
-        <exclusion>
-          <groupId>com.fasterxml.jackson.module</groupId>
-          <artifactId>jackson-module-jaxb-annotations</artifactId>
         </exclusion>
         <exclusion>
           <groupId>com.fasterxml.jackson.dataformat</groupId>
@@ -83,11 +77,6 @@
     <dependency>
       <groupId>com.fasterxml.jackson.dataformat</groupId>
       <artifactId>jackson-dataformat-yaml</artifactId>
-      <version>${fasterxml.jackson.version}</version>
-    </dependency>
-    <dependency>
-      <groupId>com.fasterxml.jackson.module</groupId>
-      <artifactId>jackson-module-jaxb-annotations</artifactId>
       <version>${fasterxml.jackson.version}</version>
     </dependency>
 

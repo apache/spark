@@ -44,7 +44,10 @@ private[spark] class BasicExecutorFeatureStep(
     .getOrElse(throw new SparkException("Must specify the executor container image"))
   private val blockManagerPort = kubernetesConf
     .sparkConf
-    .getInt("spark.blockmanager.port", DEFAULT_BLOCKMANAGER_PORT)
+    .getInt(BLOCK_MANAGER_PORT.key, DEFAULT_BLOCKMANAGER_PORT)
+
+  require(blockManagerPort == 0 || (1024 <= blockManagerPort && blockManagerPort < 65536),
+    "port number must be 0 or in [1024, 65535]")
 
   private val executorPodNamePrefix = kubernetesConf.resourceNamePrefix
 
@@ -55,6 +58,7 @@ private[spark] class BasicExecutorFeatureStep(
 
   private val isDefaultProfile = resourceProfile.id == ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
   private val isPythonApp = kubernetesConf.get(APP_RESOURCE_TYPE) == Some(APP_RESOURCE_TYPE_PYTHON)
+  private val disableConfigMap = kubernetesConf.get(KUBERNETES_EXECUTOR_DISABLE_CONFIGMAP)
 
   val execResources = ResourceProfile.getResourcesForClusterManager(
     resourceProfile.id,
@@ -171,14 +175,17 @@ private[spark] class BasicExecutorFeatureStep(
         .replaceAll(ENV_EXECUTOR_ID, kubernetesConf.executorId))
     }
 
-    val requiredPorts = Seq(
-      (BLOCK_MANAGER_PORT_NAME, blockManagerPort))
-      .map { case (name, port) =>
-        new ContainerPortBuilder()
-          .withName(name)
-          .withContainerPort(port)
-          .build()
-      }
+    // 0 is invalid as kubernetes containerPort request, we shall leave it unmounted
+    val requiredPorts = if (blockManagerPort != 0) {
+      Seq(
+        (BLOCK_MANAGER_PORT_NAME, blockManagerPort))
+        .map { case (name, port) =>
+          new ContainerPortBuilder()
+            .withName(name)
+            .withContainerPort(port)
+            .build()
+        }
+    } else Nil
 
     if (!isDefaultProfile) {
       if (pod.container != null && pod.container.getResources() != null) {
@@ -197,10 +204,6 @@ private[spark] class BasicExecutorFeatureStep(
         .addToRequests("cpu", executorCpuQuantity)
         .addToLimits(executorResourceQuantities.asJava)
         .endResources()
-      .addNewVolumeMount()
-        .withName(SPARK_CONF_VOLUME_EXEC)
-        .withMountPath(SPARK_CONF_DIR_INTERNAL)
-        .endVolumeMount()
       .addNewEnv()
         .withName(ENV_SPARK_USER)
         .withValue(Utils.getCurrentUserName())
@@ -209,15 +212,25 @@ private[spark] class BasicExecutorFeatureStep(
       .withPorts(requiredPorts.asJava)
       .addToArgs("executor")
       .build()
+    val executorContainerWithConfVolume = if (disableConfigMap) {
+      executorContainer
+    } else {
+      new ContainerBuilder(executorContainer)
+        .addNewVolumeMount()
+          .withName(SPARK_CONF_VOLUME_EXEC)
+          .withMountPath(SPARK_CONF_DIR_INTERNAL)
+          .endVolumeMount()
+        .build()
+    }
     val containerWithLimitCores = if (isDefaultProfile) {
       executorLimitCores.map { limitCores =>
         val executorCpuLimitQuantity = new Quantity(limitCores)
-        new ContainerBuilder(executorContainer)
+        new ContainerBuilder(executorContainerWithConfVolume)
           .editResources()
           .addToLimits("cpu", executorCpuLimitQuantity)
           .endResources()
           .build()
-      }.getOrElse(executorContainer)
+      }.getOrElse(executorContainerWithConfVolume)
     } else {
       executorContainer
     }
@@ -245,7 +258,7 @@ private[spark] class BasicExecutorFeatureStep(
         .withUid(pod.getMetadata.getUid)
         .build()
     }
-    val executorPod = new PodBuilder(pod.pod)
+    val executorPodBuilder = new PodBuilder(pod.pod)
       .editOrNewMetadata()
         .withName(name)
         .addToLabels(kubernetesConf.labels.asJava)
@@ -257,6 +270,10 @@ private[spark] class BasicExecutorFeatureStep(
         .withRestartPolicy("Never")
         .addToNodeSelector(kubernetesConf.nodeSelector.asJava)
         .addToImagePullSecrets(kubernetesConf.imagePullSecrets: _*)
+    val executorPod = if (disableConfigMap) {
+      executorPodBuilder.endSpec().build()
+    } else {
+      executorPodBuilder
         .addNewVolume()
           .withName(SPARK_CONF_VOLUME_EXEC)
           .withNewConfigMap()
@@ -266,7 +283,7 @@ private[spark] class BasicExecutorFeatureStep(
           .endVolume()
         .endSpec()
       .build()
-
+    }
     kubernetesConf.get(KUBERNETES_EXECUTOR_SCHEDULER_NAME)
       .foreach(executorPod.getSpec.setSchedulerName)
 

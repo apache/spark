@@ -175,7 +175,7 @@ object EvaluatePython {
       }
 
     case StructType(fields) =>
-      val fieldsFromJava = fields.map(f => makeFromJava(f.dataType)).toArray
+      val fieldsFromJava = fields.map(f => makeFromJava(f.dataType))
 
       (obj: Any) => nullSafeConvert(obj) {
         case c if c.getClass.isArray =>

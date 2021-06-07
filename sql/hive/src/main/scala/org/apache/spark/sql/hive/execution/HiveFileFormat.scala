@@ -33,6 +33,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.SPECULATION_ENABLED
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.{FileFormat, OutputWriter, OutputWriterFactory}
 import org.apache.spark.sql.hive.{HiveInspectors, HiveTableUtil}
 import org.apache.spark.sql.hive.HiveShim.{ShimFileSinkDesc => FileSinkDesc}
@@ -56,7 +57,7 @@ class HiveFileFormat(fileSinkConf: FileSinkDesc)
       sparkSession: SparkSession,
       options: Map[String, String],
       files: Seq[FileStatus]): Option[StructType] = {
-    throw new UnsupportedOperationException(s"inferSchema is not supported for hive data source.")
+    throw QueryExecutionErrors.inferSchemaUnsupportedForHiveError()
   }
 
   override def prepareWrite(
@@ -108,7 +109,7 @@ class HiveFileFormat(fileSinkConf: FileSinkDesc)
 }
 
 class HiveOutputWriter(
-    path: String,
+    val path: String,
     fileSinkConf: FileSinkDesc,
     jobConf: JobConf,
     dataSchema: StructType) extends OutputWriter with HiveInspectors {

@@ -3,15 +3,8 @@ name: Build and test
 on:
   push:
     branches:
-    - master
-  pull_request:
-    branches:
-    - master
-  workflow_dispatch:
-    inputs:
-      target:
-        description: 'Target branch to run'
-        required: true
+    - '**'
+    - '!branch-*.*'
 
 jobs:
   # Build: build Spark and run the tests for specified modules.
@@ -79,26 +72,31 @@ jobs:
       INCLUDED_TAGS: ${{ matrix.included-tags }}
       HADOOP_PROFILE: ${{ matrix.hadoop }}
       HIVE_PROFILE: ${{ matrix.hive }}
-      # GitHub Actions' default miniconda to use in pip packaging test.
-      CONDA_PREFIX: /usr/share/miniconda
       GITHUB_PREV_SHA: ${{ github.event.before }}
-      GITHUB_INPUT_BRANCH: ${{ github.event.inputs.target }}
+      SPARK_LOCAL_IP: localhost
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v2
       # In order to fetch changed files
       with:
         fetch-depth: 0
-    - name: Merge dispatched input branch
-      if: ${{ github.event.inputs.target != '' }}
-      run: git merge --progress --ff-only origin/${{ github.event.inputs.target }}
+        repository: apache/spark
+        ref: master
+    - name: Sync the current branch with the latest in Apache Spark
+      if: github.repository != 'apache/spark'
+      id: sync-branch
+      run: |
+        apache_spark_ref=`git rev-parse HEAD`
+        git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
+        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
+        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit"
+        echo "::set-output name=APACHE_SPARK_REF::$apache_spark_ref"
     # Cache local repositories. Note that GitHub Actions cache has a 2G limit.
-    - name: Cache Scala, SBT, Maven and Zinc
+    - name: Cache Scala, SBT and Maven
       uses: actions/cache@v2
       with:
         path: |
           build/apache-maven-*
-          build/zinc-*
           build/scala-*
           build/*.jar
           ~/.sbt
@@ -133,6 +131,7 @@ jobs:
     # Run the tests.
     - name: Run tests
       run: |
+        export APACHE_SPARK_REF=${{ steps.sync-branch.outputs.APACHE_SPARK_REF }}
         # Hive and SQL tests become flaky when running in parallel as it's too intensive.
         if [[ "$MODULES_TO_TEST" == "hive" ]] || [[ "$MODULES_TO_TEST" == "sql" ]]; then export SERIAL_SBT_TESTS=1; fi
         ./dev/run-tests --parallelism 2 --modules "$MODULES_TO_TEST" --included-tags "$INCLUDED_TAGS" --excluded-tags "$EXCLUDED_TAGS"
@@ -153,7 +152,7 @@ jobs:
     name: "Build modules: ${{ matrix.modules }}"
     runs-on: ubuntu-20.04
     container:
-      image: dongjoon/apache-spark-github-action-image:20201025
+      image: dongjoon/apache-spark-github-action-image:20210602
     strategy:
       fail-fast: false
       matrix:
@@ -162,30 +161,39 @@ jobs:
             pyspark-sql, pyspark-mllib, pyspark-resource
           - >-
             pyspark-core, pyspark-streaming, pyspark-ml
+          - >-
+            pyspark-pandas
+          - >-
+            pyspark-pandas-slow
     env:
       MODULES_TO_TEST: ${{ matrix.modules }}
       HADOOP_PROFILE: hadoop3.2
       HIVE_PROFILE: hive2.3
-      # GitHub Actions' default miniconda to use in pip packaging test.
-      CONDA_PREFIX: /usr/share/miniconda
       GITHUB_PREV_SHA: ${{ github.event.before }}
-      GITHUB_INPUT_BRANCH: ${{ github.event.inputs.target }}
+      SPARK_LOCAL_IP: localhost
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v2
       # In order to fetch changed files
       with:
         fetch-depth: 0
-    - name: Merge dispatched input branch
-      if: ${{ github.event.inputs.target != '' }}
-      run: git merge --progress --ff-only origin/${{ github.event.inputs.target }}
+        repository: apache/spark
+        ref: master
+    - name: Sync the current branch with the latest in Apache Spark
+      if: github.repository != 'apache/spark'
+      id: sync-branch
+      run: |
+        apache_spark_ref=`git rev-parse HEAD`
+        git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
+        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
+        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit"
+        echo "::set-output name=APACHE_SPARK_REF::$apache_spark_ref"
     # Cache local repositories. Note that GitHub Actions cache has a 2G limit.
-    - name: Cache Scala, SBT, Maven and Zinc
+    - name: Cache Scala, SBT and Maven
       uses: actions/cache@v2
       with:
         path: |
           build/apache-maven-*
-          build/zinc-*
           build/scala-*
           build/*.jar
           ~/.sbt
@@ -209,11 +217,20 @@ jobs:
     # Ubuntu 20.04. See also SPARK-33162.
     - name: Install Python packages (Python 3.6)
       run: |
-        python3.6 -m pip install numpy 'pyarrow<3.0.0' pandas scipy xmlrunner
+        python3.6 -m pip install numpy 'pyarrow<3.0.0' pandas scipy xmlrunner 'plotly>=4.8'
         python3.6 -m pip list
+    - name: List Python packages (Python 3.9)
+      run: |
+        python3.9 -m pip list
+    - name: Install Conda for pip packaging test
+      run: |
+        curl -s https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh > miniconda.sh
+        bash miniconda.sh -b -p $HOME/miniconda
     # Run the tests.
     - name: Run tests
       run: |
+        export APACHE_SPARK_REF=${{ steps.sync-branch.outputs.APACHE_SPARK_REF }}
+        export PATH=$PATH:$HOME/miniconda/bin
         ./dev/run-tests --parallelism 2 --modules "$MODULES_TO_TEST"
     - name: Upload test results to report
       if: always()
@@ -232,28 +249,35 @@ jobs:
     name: "Build modules: sparkr"
     runs-on: ubuntu-20.04
     container:
-      image: dongjoon/apache-spark-github-action-image:20201025
+      image: dongjoon/apache-spark-github-action-image:20210602
     env:
       HADOOP_PROFILE: hadoop3.2
       HIVE_PROFILE: hive2.3
       GITHUB_PREV_SHA: ${{ github.event.before }}
-      GITHUB_INPUT_BRANCH: ${{ github.event.inputs.target }}
+      SPARK_LOCAL_IP: localhost
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v2
       # In order to fetch changed files
       with:
         fetch-depth: 0
-    - name: Merge dispatched input branch
-      if: ${{ github.event.inputs.target != '' }}
-      run: git merge --progress --ff-only origin/${{ github.event.inputs.target }}
+        repository: apache/spark
+        ref: master
+    - name: Sync the current branch with the latest in Apache Spark
+      if: github.repository != 'apache/spark'
+      id: sync-branch
+      run: |
+        apache_spark_ref=`git rev-parse HEAD`
+        git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
+        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
+        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit"
+        echo "::set-output name=APACHE_SPARK_REF::$apache_spark_ref"
     # Cache local repositories. Note that GitHub Actions cache has a 2G limit.
-    - name: Cache Scala, SBT, Maven and Zinc
+    - name: Cache Scala, SBT and Maven
       uses: actions/cache@v2
       with:
         path: |
           build/apache-maven-*
-          build/zinc-*
           build/scala-*
           build/*.jar
           ~/.sbt
@@ -273,6 +297,7 @@ jobs:
         # R issues at docker environment
         export TZ=UTC
         export _R_CHECK_SYSTEM_CLOCK_=FALSE
+        export APACHE_SPARK_REF=${{ steps.sync-branch.outputs.APACHE_SPARK_REF }}
         ./dev/run-tests --parallelism 2 --modules sparkr
     - name: Upload test results to report
       if: always()
@@ -285,18 +310,31 @@ jobs:
   lint:
     name: Linters, licenses, dependencies and documentation generation
     runs-on: ubuntu-20.04
+    env:
+      LC_ALL: C.UTF-8
+      LANG: C.UTF-8
     container:
-      image: dongjoon/apache-spark-github-action-image:20201025
+      image: dongjoon/apache-spark-github-action-image:20210602
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v2
+      with:
+        fetch-depth: 0
+        repository: apache/spark
+        ref: master
+    - name: Sync the current branch with the latest in Apache Spark
+      if: github.repository != 'apache/spark'
+      id: sync-branch
+      run: |
+        git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
+        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
+        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit"
     # Cache local repositories. Note that GitHub Actions cache has a 2G limit.
-    - name: Cache Scala, SBT, Maven and Zinc
+    - name: Cache Scala, SBT and Maven
       uses: actions/cache@v2
       with:
         path: |
           build/apache-maven-*
-          build/zinc-*
           build/scala-*
           build/*.jar
           ~/.sbt
@@ -326,24 +364,35 @@ jobs:
       run: |
         # TODO(SPARK-32407): Sphinx 3.1+ does not correctly index nested classes.
         #   See also https://github.com/sphinx-doc/sphinx/issues/7551.
-        python3.6 -m pip install flake8 'sphinx<3.1.0' numpy pydata_sphinx_theme ipython nbsphinx mypy numpydoc
+        # Jinja2 3.0.0+ causes error when building with Sphinx.
+        #   See also https://issues.apache.org/jira/browse/SPARK-35375.
+        python3.6 -m pip install flake8 pydata_sphinx_theme mypy numpydoc 'jinja2<3.0.0' 'black==21.5b2'
     - name: Install R linter dependencies and SparkR
       run: |
         apt-get install -y libcurl4-openssl-dev libgit2-dev libssl-dev libxml2-dev
         Rscript -e "install.packages(c('devtools'), repos='https://cloud.r-project.org/')"
-        Rscript -e "devtools::install_github('jimhester/lintr@v2.0.0')"
+        Rscript -e "devtools::install_github('jimhester/lintr@v2.0.1')"
         ./R/install-dev.sh
+    - name: Instll JavaScript linter dependencies
+      run: |
+        apt update
+        apt-get install -y nodejs npm
     - name: Install dependencies for documentation generation
       run: |
         # pandoc is required to generate PySpark APIs as well in nbsphinx.
         apt-get install -y libcurl4-openssl-dev pandoc
         # TODO(SPARK-32407): Sphinx 3.1+ does not correctly index nested classes.
         #   See also https://github.com/sphinx-doc/sphinx/issues/7551.
-        python3.6 -m pip install 'sphinx<3.1.0' mkdocs numpy pydata_sphinx_theme ipython nbsphinx numpydoc
+        # Jinja2 3.0.0+ causes error when building with Sphinx.
+        #   See also https://issues.apache.org/jira/browse/SPARK-35375.
+        python3.6 -m pip install 'sphinx<3.1.0' mkdocs numpy pydata_sphinx_theme ipython nbsphinx numpydoc 'jinja2<3.0.0'
+        python3.6 -m pip install sphinx_plotly_directive 'pyarrow<3.0.0' pandas 'plotly>=4.8'
         apt-get update -y
         apt-get install -y ruby ruby-dev
-        gem install jekyll jekyll-redirect-from rouge
         Rscript -e "install.packages(c('devtools', 'testthat', 'knitr', 'rmarkdown', 'roxygen2'), repos='https://cloud.r-project.org/')"
+        gem install bundler
+        cd docs
+        bundle install
     - name: Scala linter
       run: ./dev/lint-scala
     - name: Java linter
@@ -352,6 +401,8 @@ jobs:
       run: ./dev/lint-python
     - name: R linter
       run: ./dev/lint-r
+    - name: JS linter
+      run: ./dev/lint-js
     - name: License test
       run: ./dev/check-license
     - name: Dependencies test
@@ -359,9 +410,7 @@ jobs:
     - name: Run documentation build
       run: |
         cd docs
-        export LC_ALL=C.UTF-8
-        export LANG=C.UTF-8
-        jekyll build
+        bundle exec jekyll build
 
   java-11:
     name: Java 11 build with Maven
@@ -369,6 +418,28 @@ jobs:
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v2
+      with:
+        fetch-depth: 0
+        repository: apache/spark
+        ref: master
+    - name: Sync the current branch with the latest in Apache Spark
+      if: github.repository != 'apache/spark'
+      id: sync-branch
+      run: |
+        git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
+        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
+        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit"
+    - name: Cache Scala, SBT and Maven
+      uses: actions/cache@v2
+      with:
+        path: |
+          build/apache-maven-*
+          build/scala-*
+          build/*.jar
+          ~/.sbt
+        key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
+        restore-keys: |
+          build-
     - name: Cache Maven local repository
       uses: actions/cache@v2
       with:
@@ -382,7 +453,7 @@ jobs:
         java-version: 11
     - name: Build with Maven
       run: |
-        export MAVEN_OPTS="-Xmx2g -XX:ReservedCodeCacheSize=1g -Dorg.slf4j.simpleLogger.defaultLogLevel=WARN"
+        export MAVEN_OPTS="-Xss256m -Xmx2g -XX:ReservedCodeCacheSize=1g -Dorg.slf4j.simpleLogger.defaultLogLevel=WARN"
         export MAVEN_CLI_OPTS="--no-transfer-progress"
         # It uses Maven's 'install' intentionally, see https://github.com/apache/spark/pull/26414.
         ./build/mvn $MAVEN_CLI_OPTS -DskipTests -Pyarn -Pmesos -Pkubernetes -Phive -Phive-thriftserver -Phadoop-cloud -Djava.version=11 install
@@ -394,6 +465,28 @@ jobs:
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v2
+      with:
+        fetch-depth: 0
+        repository: apache/spark
+        ref: master
+    - name: Sync the current branch with the latest in Apache Spark
+      if: github.repository != 'apache/spark'
+      id: sync-branch
+      run: |
+        git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
+        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
+        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit"
+    - name: Cache Scala, SBT and Maven
+      uses: actions/cache@v2
+      with:
+        path: |
+          build/apache-maven-*
+          build/scala-*
+          build/*.jar
+          ~/.sbt
+        key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
+        restore-keys: |
+          build-
     - name: Cache Coursier local repository
       uses: actions/cache@v2
       with:
@@ -416,6 +509,28 @@ jobs:
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v2
+      with:
+        fetch-depth: 0
+        repository: apache/spark
+        ref: master
+    - name: Sync the current branch with the latest in Apache Spark
+      if: github.repository != 'apache/spark'
+      id: sync-branch
+      run: |
+        git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
+        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
+        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit"
+    - name: Cache Scala, SBT and Maven
+      uses: actions/cache@v2
+      with:
+        path: |
+          build/apache-maven-*
+          build/scala-*
+          build/*.jar
+          ~/.sbt
+        key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
+        restore-keys: |
+          build-
     - name: Cache Coursier local repository
       uses: actions/cache@v2
       with:
@@ -430,3 +545,161 @@ jobs:
     - name: Build with SBT
       run: |
         ./build/sbt -Pyarn -Pmesos -Pkubernetes -Phive -Phive-thriftserver -Phadoop-cloud -Pkinesis-asl -Phadoop-2.7 compile test:compile
+
+  tpcds-1g:
+    name: Run TPC-DS queries with SF=1
+    runs-on: ubuntu-20.04
+    env:
+      SPARK_LOCAL_IP: localhost
+    steps:
+    - name: Checkout Spark repository
+      uses: actions/checkout@v2
+      with:
+        fetch-depth: 0
+        repository: apache/spark
+        ref: master
+    - name: Sync the current branch with the latest in Apache Spark
+      if: github.repository != 'apache/spark'
+      id: sync-branch
+      run: |
+        git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
+        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
+        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit"
+    - name: Cache Scala, SBT and Maven
+      uses: actions/cache@v2
+      with:
+        path: |
+          build/apache-maven-*
+          build/scala-*
+          build/*.jar
+          ~/.sbt
+        key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
+        restore-keys: |
+          build-
+    - name: Cache Coursier local repository
+      uses: actions/cache@v2
+      with:
+        path: ~/.cache/coursier
+        key: tpcds-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+        restore-keys: |
+          tpcds-coursier-
+    - name: Install Java 8
+      uses: actions/setup-java@v1
+      with:
+        java-version: 8
+    - name: Cache TPC-DS generated data
+      id: cache-tpcds-sf-1
+      uses: actions/cache@v2
+      with:
+        path: ./tpcds-sf-1
+        key: tpcds-${{ hashFiles('.github/workflows/build_and_test.yml', 'sql/core/src/test/scala/org/apache/spark/sql/TPCDSSchema.scala') }}
+    - name: Checkout tpcds-kit repository
+      if: steps.cache-tpcds-sf-1.outputs.cache-hit != 'true'
+      uses: actions/checkout@v2
+      with:
+        repository: databricks/tpcds-kit
+        ref: 2a5078a782192ddb6efbcead8de9973d6ab4f069
+        path: ./tpcds-kit
+    - name: Build tpcds-kit
+      if: steps.cache-tpcds-sf-1.outputs.cache-hit != 'true'
+      run: cd tpcds-kit/tools && make OS=LINUX
+    - name: Generate TPC-DS (SF=1) table data
+      if: steps.cache-tpcds-sf-1.outputs.cache-hit != 'true'
+      run: build/sbt "sql/test:runMain org.apache.spark.sql.GenTPCDSData --dsdgenDir `pwd`/tpcds-kit/tools --location `pwd`/tpcds-sf-1 --scaleFactor 1 --numPartitions 1 --overwrite"
+    - name: Run TPC-DS queries
+      run: |
+        SPARK_TPCDS_DATA=`pwd`/tpcds-sf-1 build/sbt "sql/testOnly org.apache.spark.sql.TPCDSQueryTestSuite"
+    - name: Upload test results to report
+      if: always()
+      uses: actions/upload-artifact@v2
+      with:
+        name: test-results-tpcds--8-hadoop3.2-hive2.3
+        path: "**/target/test-reports/*.xml"
+    - name: Upload unit tests log files
+      if: failure()
+      uses: actions/upload-artifact@v2
+      with:
+        name: unit-tests-log-tpcds--8-hadoop3.2-hive2.3
+        path: "**/target/unit-tests.log"
+
+  docker-integration-tests:
+    name: Run docker integration tests
+    runs-on: ubuntu-20.04
+    env:
+      HADOOP_PROFILE: hadoop3.2
+      HIVE_PROFILE: hive2.3
+      GITHUB_PREV_SHA: ${{ github.event.before }}
+      SPARK_LOCAL_IP: localhost
+      ORACLE_DOCKER_IMAGE_NAME: oracle/database:18.4.0-xe
+    steps:
+    - name: Checkout Spark repository
+      uses: actions/checkout@v2
+      with:
+        fetch-depth: 0
+        repository: apache/spark
+        ref: master
+    - name: Sync the current branch with the latest in Apache Spark
+      if: github.repository != 'apache/spark'
+      id: sync-branch
+      run: |
+        apache_spark_ref=`git rev-parse HEAD`
+        git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
+        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
+        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit"
+        echo "::set-output name=APACHE_SPARK_REF::$apache_spark_ref"
+    - name: Cache Scala, SBT and Maven
+      uses: actions/cache@v2
+      with:
+        path: |
+          build/apache-maven-*
+          build/scala-*
+          build/*.jar
+          ~/.sbt
+        key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
+        restore-keys: |
+          build-
+    - name: Cache Coursier local repository
+      uses: actions/cache@v2
+      with:
+        path: ~/.cache/coursier
+        key: docker-integration-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+        restore-keys: |
+          docker-integration-coursier-
+    - name: Install Java 8
+      uses: actions/setup-java@v1
+      with:
+        java-version: 8
+    - name: Cache Oracle docker-images repository
+      id: cache-oracle-docker-images
+      uses: actions/cache@v2
+      with:
+        path: ./oracle/docker-images
+        # key should contains the commit hash of the Oracle docker images to be checkout.
+        key: oracle-docker-images-3f422c4a35b423dfcdbcc57a84f01db6c82eb6c1
+    - name: Checkout Oracle docker-images repository
+      uses: actions/checkout@v2
+      with:
+        fetch-depth: 0
+        repository: oracle/docker-images
+        ref: 3f422c4a35b423dfcdbcc57a84f01db6c82eb6c1
+        path: ./oracle/docker-images
+    - name: Install Oracle Docker image
+      run: |
+        cd oracle/docker-images/OracleDatabase/SingleInstance/dockerfiles
+        ./buildContainerImage.sh -v 18.4.0 -x
+    - name: Run tests
+      run: |
+        export APACHE_SPARK_REF=${{ steps.sync-branch.outputs.APACHE_SPARK_REF }}
+        ./dev/run-tests --parallelism 2 --modules docker-integration-tests --included-tags org.apache.spark.tags.DockerTest
+    - name: Upload test results to report
+      if: always()
+      uses: actions/upload-artifact@v2
+      with:
+        name: test-results-docker-integration--8-hadoop3.2-hive2.3
+        path: "**/target/test-reports/*.xml"
+    - name: Upload unit tests log files
+      if: failure()
+      uses: actions/upload-artifact@v2
+      with:
+        name: unit-tests-log-docker-integration--8-hadoop3.2-hive2.3
+        path: "**/target/unit-tests.log"

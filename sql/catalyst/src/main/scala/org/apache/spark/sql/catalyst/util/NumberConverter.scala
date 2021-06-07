@@ -24,34 +24,41 @@ object NumberConverter {
   /**
    * Decode v into value[].
    *
-   * @param v is treated as an BigInt
+   * @param v is treated as an unsigned 64-bit integer
    * @param radix must be between MIN_RADIX and MAX_RADIX
    */
-  private def decode(v: BigInt, radix: Int, value: Array[Byte]): Unit = {
+  private def decode(v: Long, radix: Int, value: Array[Byte]): Unit = {
     var tmpV = v
     java.util.Arrays.fill(value, 0.asInstanceOf[Byte])
     var i = value.length - 1
     while (tmpV != 0) {
-      val q = tmpV / radix
-      value(i) = (tmpV - q * radix).byteValue
+      val q = java.lang.Long.divideUnsigned(tmpV, radix)
+      value(i) = (tmpV - q * radix).asInstanceOf[Byte]
       tmpV = q
       i -= 1
     }
   }
 
   /**
-   * Convert value[] into a BigInt. If a negative digit is found,
-   * ignore the suffix starting there.
+   * Convert value[] into a long. On overflow, return -1 (as mySQL does). If a
+   * negative digit is found, ignore the suffix starting there.
    *
    * @param radix  must be between MIN_RADIX and MAX_RADIX
    * @param fromPos is the first element that should be considered
    * @return the result should be treated as an unsigned 64-bit integer.
    */
-  private def encode(radix: Int, fromPos: Int, value: Array[Byte]): BigInt = {
-    var v: BigInt = BigInt(0)
+  private def encode(radix: Int, fromPos: Int, value: Array[Byte]): Long = {
+    var v: Long = 0L
+    val bound = java.lang.Long.divideUnsigned(-1 - radix, radix) // Possible overflow once
     var i = fromPos
     while (i < value.length && value(i) >= 0) {
-      v = (v * radix) + BigInt(value(i))
+      if (v >= bound) {
+        // Check for overflow
+        if (java.lang.Long.divideUnsigned(-1 - value(i), radix) < v) {
+          return -1
+        }
+      }
+      v = v * radix + value(i)
       i += 1
     }
     v
@@ -102,19 +109,33 @@ object NumberConverter {
       return null
     }
 
-    val (negative, first) = if (n(0) == '-') (true, 1) else (false, 0)
+    var (negative, first) = if (n(0) == '-') (true, 1) else (false, 0)
 
     // Copy the digits in the right side of the array
     val temp = new Array[Byte](64)
-    var i = 1
-    while (i <= n.length - first) {
-      temp(temp.length - i) = n(n.length - i)
-      i += 1
-    }
-    char2byte(fromBase, temp.length - n.length + first, temp)
+    var v: Long = -1
+    if ((n.length == 65 && negative) || n.length <= 64) {
+      var i = 1
+      while (i <= n.length - first) {
+        temp(temp.length - i) = n(n.length - i)
+        i += 1
+      }
+      char2byte(fromBase, temp.length - n.length + first, temp)
 
-    // Do the conversion by going through a BigInt
-    val v: BigInt = encode(fromBase, temp.length - n.length + first, temp)
+      // Do the conversion by going through a 64 bit integer
+      v = encode(fromBase, temp.length - n.length + first, temp)
+    }
+    if (negative && toBase > 0) {
+      if (v < 0) {
+        v = -1
+      } else {
+        v = -v
+      }
+    }
+    if (toBase < 0 && v < 0) {
+      v = -v
+      negative = true
+    }
     decode(v, Math.abs(toBase), temp)
 
     // Find the first non-zero digit or the last digits if all are zero.
@@ -125,7 +146,7 @@ object NumberConverter {
     byte2char(Math.abs(toBase), firstNonZeroPos, temp)
 
     var resultStartPos = firstNonZeroPos
-    if (negative) {
+    if (negative && toBase < 0) {
       resultStartPos = firstNonZeroPos - 1
       temp(resultStartPos) = '-'
     }

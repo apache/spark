@@ -315,22 +315,35 @@ class PlanParserSuite extends AnalysisTest {
 
   test("aggregation") {
     val sql = "select a, b, sum(c) as c from d group by a, b"
+    val sqlWithoutGroupBy = "select a, b, sum(c) as c from d"
 
     // Normal
     assertEqual(sql, table("d").groupBy('a, 'b)('a, 'b, 'sum.function('c).as("c")))
 
     // Cube
     assertEqual(s"$sql with cube",
-      table("d").groupBy(Cube(Seq('a, 'b)))('a, 'b, 'sum.function('c).as("c")))
+      table("d").groupBy(Cube(Seq(Seq('a), Seq('b))))('a, 'b, 'sum.function('c).as("c")))
+    assertEqual(s"$sqlWithoutGroupBy group by cube(a, b)",
+      table("d").groupBy(Cube(Seq(Seq('a), Seq('b))))('a, 'b, 'sum.function('c).as("c")))
+    assertEqual(s"$sqlWithoutGroupBy group by cube (a, b)",
+      table("d").groupBy(Cube(Seq(Seq('a), Seq('b))))('a, 'b, 'sum.function('c).as("c")))
 
     // Rollup
     assertEqual(s"$sql with rollup",
-      table("d").groupBy(Rollup(Seq('a, 'b)))('a, 'b, 'sum.function('c).as("c")))
+      table("d").groupBy(Rollup(Seq(Seq('a), Seq('b))))('a, 'b, 'sum.function('c).as("c")))
+    assertEqual(s"$sqlWithoutGroupBy group by rollup(a, b)",
+      table("d").groupBy(Rollup(Seq(Seq('a), Seq('b))))('a, 'b, 'sum.function('c).as("c")))
+    assertEqual(s"$sqlWithoutGroupBy group by rollup (a, b)",
+      table("d").groupBy(Rollup(Seq(Seq('a), Seq('b))))('a, 'b, 'sum.function('c).as("c")))
 
     // Grouping Sets
     assertEqual(s"$sql grouping sets((a, b), (a), ())",
-      GroupingSets(Seq(Seq('a, 'b), Seq('a), Seq()), Seq('a, 'b), table("d"),
-        Seq('a, 'b, 'sum.function('c).as("c"))))
+      Aggregate(Seq(GroupingSets(Seq(Seq('a, 'b), Seq('a), Seq()), Seq('a, 'b))),
+        Seq('a, 'b, 'sum.function('c).as("c")), table("d")))
+
+    assertEqual(s"$sqlWithoutGroupBy group by grouping sets((a, b), (a), ())",
+      Aggregate(Seq(GroupingSets(Seq(Seq('a, 'b), Seq('a), Seq()))),
+        Seq('a, 'b, 'sum.function('c).as("c")), table("d")))
 
     val m = intercept[ParseException] {
       parsePlan("SELECT a, b, count(distinct a, distinct b) as c FROM d GROUP BY a, b")
@@ -591,6 +604,9 @@ class PlanParserSuite extends AnalysisTest {
     assertEqual(
       "select * from range(2)",
       UnresolvedTableValuedFunction("range", Literal(2) :: Nil, Seq.empty).select(star()))
+    // SPARK-34627
+    intercept("select * from default.range(2)",
+      "table valued function cannot specify database name: default.range")
   }
 
   test("SPARK-20311 range(N) as alias") {
@@ -607,20 +623,24 @@ class PlanParserSuite extends AnalysisTest {
   test("SPARK-20841 Support table column aliases in FROM clause") {
     assertEqual(
       "SELECT * FROM testData AS t(col1, col2)",
-      UnresolvedSubqueryColumnAliases(
-        Seq("col1", "col2"),
-        SubqueryAlias("t", UnresolvedRelation(TableIdentifier("testData")))
+      SubqueryAlias(
+        "t",
+        UnresolvedSubqueryColumnAliases(
+          Seq("col1", "col2"),
+          UnresolvedRelation(TableIdentifier("testData"))
+        )
       ).select(star()))
   }
 
   test("SPARK-20962 Support subquery column aliases in FROM clause") {
     assertEqual(
       "SELECT * FROM (SELECT a AS x, b AS y FROM t) t(col1, col2)",
-      UnresolvedSubqueryColumnAliases(
-        Seq("col1", "col2"),
-        SubqueryAlias(
-          "t",
-          UnresolvedRelation(TableIdentifier("t")).select('a.as("x"), 'b.as("y")))
+      SubqueryAlias(
+        "t",
+        UnresolvedSubqueryColumnAliases(
+          Seq("col1", "col2"),
+          UnresolvedRelation(TableIdentifier("t")).select('a.as("x"), 'b.as("y"))
+        )
       ).select(star()))
   }
 
@@ -629,12 +649,25 @@ class PlanParserSuite extends AnalysisTest {
     val src2 = UnresolvedRelation(TableIdentifier("src2")).as("s2")
     assertEqual(
       "SELECT * FROM (src1 s1 INNER JOIN src2 s2 ON s1.id = s2.id) dst(a, b, c, d)",
-      UnresolvedSubqueryColumnAliases(
-        Seq("a", "b", "c", "d"),
-        SubqueryAlias(
-          "dst",
-          src1.join(src2, Inner, Option(Symbol("s1.id") === Symbol("s2.id"))))
+      SubqueryAlias(
+        "dst",
+        UnresolvedSubqueryColumnAliases(
+          Seq("a", "b", "c", "d"),
+          src1.join(src2, Inner, Option(Symbol("s1.id") === Symbol("s2.id")))
+        )
       ).select(star()))
+  }
+
+  test("SPARK-34335 Support referencing subquery with column aliases by table alias") {
+    assertEqual(
+      "SELECT t.col1, t.col2 FROM (SELECT a AS x, b AS y FROM t) t(col1, col2)",
+      SubqueryAlias(
+        "t",
+        UnresolvedSubqueryColumnAliases(
+          Seq("col1", "col2"),
+          UnresolvedRelation(TableIdentifier("t")).select('a.as("x"), 'b.as("y")))
+      ).select($"t.col1", $"t.col2")
+    )
   }
 
   test("inline table") {
@@ -1041,11 +1074,10 @@ class PlanParserSuite extends AnalysisTest {
         |FROM testData
       """.stripMargin,
       ScriptTransformation(
-        Seq('a, 'b, 'c),
         "cat",
         Seq(AttributeReference("key", StringType)(),
           AttributeReference("value", StringType)()),
-        UnresolvedRelation(TableIdentifier("testData")),
+        Project(Seq('a, 'b, 'c), UnresolvedRelation(TableIdentifier("testData"))),
         ScriptInputOutputSchema(List.empty, List.empty, None, None,
           List.empty, List.empty, None, None, true))
     )
@@ -1058,12 +1090,11 @@ class PlanParserSuite extends AnalysisTest {
         |FROM testData
       """.stripMargin,
       ScriptTransformation(
-        Seq('a, 'b, 'c),
         "cat",
         Seq(AttributeReference("a", StringType)(),
           AttributeReference("b", StringType)(),
           AttributeReference("c", StringType)()),
-        UnresolvedRelation(TableIdentifier("testData")),
+        Project(Seq('a, 'b, 'c), UnresolvedRelation(TableIdentifier("testData"))),
         ScriptInputOutputSchema(List.empty, List.empty, None, None,
           List.empty, List.empty, None, None, false)))
 
@@ -1075,12 +1106,11 @@ class PlanParserSuite extends AnalysisTest {
         |FROM testData
       """.stripMargin,
       ScriptTransformation(
-        Seq('a, 'b, 'c),
         "cat",
         Seq(AttributeReference("a", IntegerType)(),
           AttributeReference("b", StringType)(),
           AttributeReference("c", LongType)()),
-        UnresolvedRelation(TableIdentifier("testData")),
+        Project(Seq('a, 'b, 'c), UnresolvedRelation(TableIdentifier("testData"))),
         ScriptInputOutputSchema(List.empty, List.empty, None, None,
           List.empty, List.empty, None, None, false)))
 
@@ -1104,12 +1134,11 @@ class PlanParserSuite extends AnalysisTest {
         |FROM testData
       """.stripMargin,
       ScriptTransformation(
-        Seq('a, 'b, 'c),
         "cat",
         Seq(AttributeReference("a", StringType)(),
           AttributeReference("b", StringType)(),
           AttributeReference("c", StringType)()),
-        UnresolvedRelation(TableIdentifier("testData")),
+        Project(Seq('a, 'b, 'c), UnresolvedRelation(TableIdentifier("testData"))),
         ScriptInputOutputSchema(
           Seq(("TOK_TABLEROWFORMATFIELD", "\t"),
             ("TOK_TABLEROWFORMATCOLLITEMS", "\u0002"),
