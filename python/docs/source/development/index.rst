@@ -20,9 +20,17 @@ Development
 ===========
 
 .. toctree::
-    :maxdepth: 2
+   :maxdepth: 2
 
-    contributing
-    testing
-    debugging
-    setting_ide
+   contributing
+   testing
+   debugging
+   setting_ide
+
+For pandas APIs on Spark:
+
+.. toctree::
+   :maxdepth: 2
+
+   ps_contributing
+   ps_design

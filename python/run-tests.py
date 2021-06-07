@@ -61,7 +61,7 @@ for scala in ["2.12"]:
         SPARK_DIST_CLASSPATH = os.path.join(build_dir, "jars", "*")
         break
 else:
-    raise Exception("Cannot find assembly build directory, please build Spark first.")
+    raise RuntimeError("Cannot find assembly build directory, please build Spark first.")
 
 
 def run_individual_python_test(target_dir, test_name, pyspark_python):
@@ -83,12 +83,17 @@ def run_individual_python_test(target_dir, test_name, pyspark_python):
         tmp_dir = os.path.join(target_dir, str(uuid.uuid4()))
     os.mkdir(tmp_dir)
     env["TMPDIR"] = tmp_dir
+    metastore_dir = os.path.join(tmp_dir, str(uuid.uuid4()))
+    while os.path.isdir(metastore_dir):
+        metastore_dir = os.path.join(metastore_dir, str(uuid.uuid4()))
+    os.mkdir(metastore_dir)
 
     # Also override the JVM's temp directory by setting driver and executor options.
     java_options = "-Djava.io.tmpdir={0} -Dio.netty.tryReflectionSetAccessible=true".format(tmp_dir)
     spark_args = [
         "--conf", "spark.driver.extraJavaOptions='{0}'".format(java_options),
         "--conf", "spark.executor.extraJavaOptions='{0}'".format(java_options),
+        "--conf", "spark.sql.warehouse.dir='{0}'".format(metastore_dir),
         "pyspark-shell"
     ]
     env["PYSPARK_SUBMIT_ARGS"] = " ".join(spark_args)
@@ -274,7 +279,8 @@ def main():
                 if python_implementation not in module.excluded_python_implementations:
                     for test_goal in module.python_test_goals:
                         heavy_tests = ['pyspark.streaming.tests', 'pyspark.mllib.tests',
-                                       'pyspark.tests', 'pyspark.sql.tests', 'pyspark.ml.tests']
+                                       'pyspark.tests', 'pyspark.sql.tests', 'pyspark.ml.tests',
+                                       'pyspark.pandas.tests']
                         if any(map(lambda prefix: test_goal.startswith(prefix), heavy_tests)):
                             priority = 0
                         else:

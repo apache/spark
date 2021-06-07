@@ -43,37 +43,60 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
   test("group info in ExpressionInfo") {
     val info = spark.sessionState.catalog.lookupFunctionInfo(FunctionIdentifier("sum"))
     assert(info.getGroup === "agg_funcs")
+    Seq("agg_funcs", "array_funcs", "binary_funcs", "bitwise_funcs", "collection_funcs",
+      "predicate_funcs", "conditional_funcs", "conversion_funcs", "csv_funcs", "datetime_funcs",
+      "generator_funcs", "hash_funcs", "json_funcs", "lambda_funcs", "map_funcs", "math_funcs",
+      "misc_funcs", "string_funcs", "struct_funcs", "window_funcs", "xml_funcs")
 
     Seq("agg_funcs", "array_funcs", "datetime_funcs", "json_funcs", "map_funcs", "window_funcs")
         .foreach { groupName =>
       val info = new ExpressionInfo(
-        "testClass", null, "testName", null, "", "", "", groupName, "", "")
+        "testClass", null, "testName", null, "", "", "", groupName, "", "", "")
       assert(info.getGroup === groupName)
     }
 
     val errMsg = intercept[IllegalArgumentException] {
       val invalidGroupName = "invalid_group_funcs"
-      new ExpressionInfo("testClass", null, "testName", null, "", "", "", invalidGroupName, "", "")
+      new ExpressionInfo(
+        "testClass", null, "testName", null, "", "", "", invalidGroupName, "", "", "")
     }.getMessage
     assert(errMsg.contains("'group' is malformed in the expression [testName]."))
+  }
+
+  test("source in ExpressionInfo") {
+    val info = spark.sessionState.catalog.lookupFunctionInfo(FunctionIdentifier("sum"))
+    assert(info.getSource === "built-in")
+
+    Seq("python_udf", "java_udf", "scala_udf", "built-in", "hive").foreach { source =>
+      val info = new ExpressionInfo(
+        "testClass", null, "testName", null, "", "", "", "", "", "", source)
+      assert(info.getSource === source)
+    }
+    val errMsg = intercept[IllegalArgumentException] {
+      val invalidSource = "invalid_source"
+      new ExpressionInfo(
+        "testClass", null, "testName", null, "", "", "", "", "", "", invalidSource)
+    }.getMessage
+    assert(errMsg.contains("'source' is malformed in the expression [testName]."))
   }
 
   test("error handling in ExpressionInfo") {
     val errMsg1 = intercept[IllegalArgumentException] {
       val invalidNote = "  invalid note"
-      new ExpressionInfo("testClass", null, "testName", null, "", "", invalidNote, "", "", "")
+      new ExpressionInfo("testClass", null, "testName", null, "", "", invalidNote, "", "", "", "")
     }.getMessage
     assert(errMsg1.contains("'note' is malformed in the expression [testName]."))
 
     val errMsg2 = intercept[IllegalArgumentException] {
       val invalidSince = "-3.0.0"
-      new ExpressionInfo("testClass", null, "testName", null, "", "", "", "", invalidSince, "")
+      new ExpressionInfo("testClass", null, "testName", null, "", "", "", "", invalidSince, "", "")
     }.getMessage
     assert(errMsg2.contains("'since' is malformed in the expression [testName]."))
 
     val errMsg3 = intercept[IllegalArgumentException] {
       val invalidDeprecated = "  invalid deprecated"
-      new ExpressionInfo("testClass", null, "testName", null, "", "", "", "", "", invalidDeprecated)
+      new ExpressionInfo(
+        "testClass", null, "testName", null, "", "", "", "", "", invalidDeprecated, "")
     }.getMessage
     assert(errMsg3.contains("'deprecated' is malformed in the expression [testName]."))
   }
@@ -106,7 +129,7 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
   }
 
   test("SPARK-32870: Default expressions in FunctionRegistry should have their " +
-    "usage, examples and since filled") {
+    "usage, examples, since, and group filled") {
     val ignoreSet = Set(
       // Explicitly inherits NonSQLExpression, and has no ExpressionDescription
       "org.apache.spark.sql.catalyst.expressions.TimeWindow",
@@ -121,6 +144,7 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
           assert(info.getExamples.startsWith("\n    Examples:\n"))
           assert(info.getExamples.endsWith("\n  "))
           assert(info.getSince.matches("[0-9]+\\.[0-9]+\\.[0-9]+"))
+          assert(info.getGroup.nonEmpty)
 
           if (info.getArguments.nonEmpty) {
             assert(info.getArguments.startsWith("\n    Arguments:\n"))
@@ -166,7 +190,8 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
       "org.apache.spark.sql.catalyst.expressions.CallMethodViaReflection",
       "org.apache.spark.sql.catalyst.expressions.SparkVersion",
       // Throws an error
-      "org.apache.spark.sql.catalyst.expressions.RaiseError")
+      "org.apache.spark.sql.catalyst.expressions.RaiseError",
+      classOf[CurrentUser].getName)
 
     val parFuncs = new ParVector(spark.sessionState.functionRegistry.listFunction().toVector)
     parFuncs.foreach { funcId =>
@@ -233,5 +258,21 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
         }
       }
     }
+  }
+
+  test("Check source for different kind of UDFs") {
+    import org.apache.spark.sql.IntegratedUDFTestUtils
+    val catalog = spark.sessionState.catalog
+    assert(catalog.lookupFunctionInfo(FunctionIdentifier("sum")).getSource === "built-in")
+
+    val scalaUDF = IntegratedUDFTestUtils.TestScalaUDF("scalaUDF")
+    IntegratedUDFTestUtils.registerTestUDF(scalaUDF, spark)
+    val scalaInfo = catalog.lookupFunctionInfo(FunctionIdentifier(scalaUDF.name))
+    assert(scalaInfo.getSource === "scala_udf")
+
+    val pythonUDF = IntegratedUDFTestUtils.TestPythonUDF("pythonUDF")
+    IntegratedUDFTestUtils.registerTestUDF(pythonUDF, spark)
+    val pythonInfo = catalog.lookupFunctionInfo(FunctionIdentifier(pythonUDF.name))
+    assert(pythonInfo.getSource === "python_udf")
   }
 }

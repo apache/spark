@@ -22,6 +22,7 @@ import java.net.URI
 import java.util.{Arrays, Locale, Properties, ServiceLoader, UUID}
 import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap}
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicReference}
+import javax.ws.rs.core.UriBuilder
 
 import scala.collection.JavaConverters._
 import scala.collection.Map
@@ -39,7 +40,7 @@ import org.apache.hadoop.mapred.{FileInputFormat, InputFormat, JobConf, Sequence
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat, Job => NewHadoopJob}
 import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat => NewFileInputFormat}
 
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.{LocalSparkCluster, SparkHadoopUtil}
 import org.apache.spark.executor.{Executor, ExecutorMetrics, ExecutorMetricsSource}
@@ -221,6 +222,7 @@ class SparkContext(config: SparkConf) extends Logging {
   private var _listenerBusStarted: Boolean = false
   private var _jars: Seq[String] = _
   private var _files: Seq[String] = _
+  private var _archives: Seq[String] = _
   private var _shutdownHookRef: AnyRef = _
   private var _statusStore: AppStatusStore = _
   private var _heartbeater: Heartbeater = _
@@ -246,6 +248,7 @@ class SparkContext(config: SparkConf) extends Logging {
 
   def jars: Seq[String] = _jars
   def files: Seq[String] = _files
+  def archives: Seq[String] = _archives
   def master: String = _conf.get("spark.master")
   def deployMode: String = _conf.get(SUBMIT_DEPLOY_MODE)
   def appName: String = _conf.get("spark.app.name")
@@ -278,6 +281,7 @@ class SparkContext(config: SparkConf) extends Logging {
 
   // Used to store a URL for each static file/jar together with the file's local timestamp
   private[spark] val addedFiles = new ConcurrentHashMap[String, Long]().asScala
+  private[spark] val addedArchives = new ConcurrentHashMap[String, Long]().asScala
   private[spark] val addedJars = new ConcurrentHashMap[String, Long]().asScala
 
   // Keeps track of all persisted RDDs
@@ -392,6 +396,8 @@ class SparkContext(config: SparkConf) extends Logging {
     if (!_conf.contains("spark.app.name")) {
       throw new SparkException("An application name must be set in your configuration")
     }
+    // This should be set as early as possible.
+    SparkContext.fillMissingMagicCommitterConfsIfNeeded(_conf)
 
     _driverLogger = DriverLogger(_conf)
 
@@ -422,6 +428,7 @@ class SparkContext(config: SparkConf) extends Logging {
     _jars = Utils.getUserJars(_conf)
     _files = _conf.getOption(FILES.key).map(_.split(",")).map(_.filter(_.nonEmpty))
       .toSeq.flatten
+    _archives = _conf.getOption(ARCHIVES.key).map(Utils.stringToSeq).toSeq.flatten
 
     _eventLogDir =
       if (isEventLogEnabled) {
@@ -506,6 +513,13 @@ class SparkContext(config: SparkConf) extends Logging {
       }
     }
 
+    if (archives != null) {
+      archives.foreach(file => addFile(file, false, true, isArchive = true))
+      if (addedArchives.nonEmpty) {
+        _conf.set("spark.app.initial.archive.urls", addedArchives.keys.toSeq.mkString(","))
+      }
+    }
+
     _executorMemory = _conf.getOption(EXECUTOR_MEMORY.key)
       .orElse(Option(System.getenv("SPARK_EXECUTOR_MEMORY")))
       .orElse(Option(System.getenv("SPARK_MEM"))
@@ -576,6 +590,7 @@ class SparkContext(config: SparkConf) extends Logging {
     }
     _ui.foreach(_.setAppId(_applicationId))
     _env.blockManager.initialize(_applicationId)
+    FallbackStorage.registerBlockManagerIfNeeded(_env.blockManager.master, _conf)
 
     // The metrics system for Driver need to be set spark.app.id to app ID.
     // So it should start after we get app ID from the task scheduler and set spark.app.id.
@@ -1521,6 +1536,36 @@ class SparkContext(config: SparkConf) extends Logging {
   def listFiles(): Seq[String] = addedFiles.keySet.toSeq
 
   /**
+   * :: Experimental ::
+   * Add an archive to be downloaded and unpacked with this Spark job on every node.
+   *
+   * If an archive is added during execution, it will not be available until the next TaskSet
+   * starts.
+   *
+   * @param path can be either a local file, a file in HDFS (or other Hadoop-supported
+   * filesystems), or an HTTP, HTTPS or FTP URI. To access the file in Spark jobs,
+   * use `SparkFiles.get(paths-to-files)` to find its download/unpacked location.
+   * The given path should be one of .zip, .tar, .tar.gz, .tgz and .jar.
+   *
+   * @note A path can be added only once. Subsequent additions of the same path are ignored.
+   *
+   * @since 3.1.0
+   */
+  @Experimental
+  def addArchive(path: String): Unit = {
+    addFile(path, false, false, isArchive = true)
+  }
+
+  /**
+   * :: Experimental ::
+   * Returns a list of archive paths that are added to resources.
+   *
+   * @since 3.1.0
+   */
+  @Experimental
+  def listArchives(): Seq[String] = addedArchives.keySet.toSeq
+
+  /**
    * Add a file to be downloaded with this Spark job on every node.
    *
    * If a file is added during execution, it will not be available until the next TaskSet starts.
@@ -1537,8 +1582,10 @@ class SparkContext(config: SparkConf) extends Logging {
     addFile(path, recursive, false)
   }
 
-  private def addFile(path: String, recursive: Boolean, addedOnSubmit: Boolean): Unit = {
-    val uri = new Path(path).toUri
+  private def addFile(
+      path: String, recursive: Boolean, addedOnSubmit: Boolean, isArchive: Boolean = false
+    ): Unit = {
+    val uri = Utils.resolveURI(path)
     val schemeCorrectedURI = uri.getScheme match {
       case null => new File(path).getCanonicalFile.toURI
       case "local" =>
@@ -1550,7 +1597,7 @@ class SparkContext(config: SparkConf) extends Logging {
 
     val hadoopPath = new Path(schemeCorrectedURI)
     val scheme = schemeCorrectedURI.getScheme
-    if (!Array("http", "https", "ftp").contains(scheme)) {
+    if (!Array("http", "https", "ftp").contains(scheme) && !isArchive) {
       val fs = hadoopPath.getFileSystem(hadoopConfiguration)
       val isDir = fs.getFileStatus(hadoopPath).isDirectory
       if (!isLocal && scheme == "file" && isDir) {
@@ -1568,20 +1615,38 @@ class SparkContext(config: SparkConf) extends Logging {
 
     val key = if (!isLocal && scheme == "file") {
       env.rpcEnv.fileServer.addFile(new File(uri.getPath))
+    } else if (uri.getScheme == null) {
+      schemeCorrectedURI.toString
     } else {
-        if (uri.getScheme == null) {
-          schemeCorrectedURI.toString
-        } else {
-          path
-        }
+      uri.toString
     }
+
     val timestamp = if (addedOnSubmit) startTime else System.currentTimeMillis
-    if (addedFiles.putIfAbsent(key, timestamp).isEmpty) {
+    if (!isArchive && addedFiles.putIfAbsent(key, timestamp).isEmpty) {
       logInfo(s"Added file $path at $key with timestamp $timestamp")
       // Fetch the file locally so that closures which are run on the driver can still use the
       // SparkFiles API to access files.
       Utils.fetchFile(uri.toString, new File(SparkFiles.getRootDirectory()), conf,
-        env.securityManager, hadoopConfiguration, timestamp, useCache = false)
+        hadoopConfiguration, timestamp, useCache = false)
+      postEnvironmentUpdate()
+    } else if (
+      isArchive &&
+        addedArchives.putIfAbsent(
+          UriBuilder.fromUri(new URI(key)).fragment(uri.getFragment).build().toString,
+          timestamp).isEmpty) {
+      logInfo(s"Added archive $path at $key with timestamp $timestamp")
+      // If the scheme is file, use URI to simply copy instead of downloading.
+      val uriToUse = if (!isLocal && scheme == "file") uri else new URI(key)
+      val uriToDownload = UriBuilder.fromUri(uriToUse).fragment(null).build()
+      val source = Utils.fetchFile(uriToDownload.toString, Utils.createTempDir(), conf,
+        hadoopConfiguration, timestamp, useCache = false, shouldUntar = false)
+      val dest = new File(
+        SparkFiles.getRootDirectory(),
+        if (uri.getFragment != null) uri.getFragment else source.getName)
+      logInfo(
+        s"Unpacking an archive $path from ${source.getAbsolutePath} to ${dest.getAbsolutePath}")
+      Utils.deleteRecursively(dest)
+      Utils.unpack(source, dest)
       postEnvironmentUpdate()
     } else {
       logWarning(s"The path $path has been added already. Overwriting of added paths " +
@@ -1860,7 +1925,7 @@ class SparkContext(config: SparkConf) extends Logging {
   }
 
   private def addJar(path: String, addedOnSubmit: Boolean): Unit = {
-    def addLocalJarFile(file: File): String = {
+    def addLocalJarFile(file: File): Seq[String] = {
       try {
         if (!file.exists()) {
           throw new FileNotFoundException(s"Jar ${file.getAbsolutePath} not found")
@@ -1869,15 +1934,15 @@ class SparkContext(config: SparkConf) extends Logging {
           throw new IllegalArgumentException(
             s"Directory ${file.getAbsoluteFile} is not allowed for addJar")
         }
-        env.rpcEnv.fileServer.addJar(file)
+        Seq(env.rpcEnv.fileServer.addJar(file))
       } catch {
         case NonFatal(e) =>
           logError(s"Failed to add $path to Spark environment", e)
-          null
+          Nil
       }
     }
 
-    def checkRemoteJarFile(path: String): String = {
+    def checkRemoteJarFile(path: String): Seq[String] = {
       val hadoopPath = new Path(path)
       val scheme = hadoopPath.toUri.getScheme
       if (!Array("http", "https", "ftp").contains(scheme)) {
@@ -1890,28 +1955,29 @@ class SparkContext(config: SparkConf) extends Logging {
             throw new IllegalArgumentException(
               s"Directory ${path} is not allowed for addJar")
           }
-          path
+          Seq(path)
         } catch {
           case NonFatal(e) =>
             logError(s"Failed to add $path to Spark environment", e)
-            null
+            Nil
         }
       } else {
-        path
+        Seq(path)
       }
     }
 
     if (path == null || path.isEmpty) {
       logWarning("null or empty path specified as parameter to addJar")
     } else {
-      val key = if (path.contains("\\") && Utils.isWindows) {
+      val (keys, scheme) = if (path.contains("\\") && Utils.isWindows) {
         // For local paths with backslashes on Windows, URI throws an exception
-        addLocalJarFile(new File(path))
+        (addLocalJarFile(new File(path)), "local")
       } else {
-        val uri = new Path(path).toUri
+        val uri = Utils.resolveURI(path)
         // SPARK-17650: Make sure this is a valid URL before adding it to the list of dependencies
         Utils.validateURL(uri)
-        uri.getScheme match {
+        val uriScheme = uri.getScheme
+        val jarPaths = uriScheme match {
           // A JAR file which exists only on the driver node
           case null =>
             // SPARK-22585 path without schema is not url encoded
@@ -1919,18 +1985,28 @@ class SparkContext(config: SparkConf) extends Logging {
           // A JAR file which exists only on the driver node
           case "file" => addLocalJarFile(new File(uri.getPath))
           // A JAR file which exists locally on every worker node
-          case "local" => "file:" + uri.getPath
+          case "local" => Seq("file:" + uri.getPath)
+          case "ivy" =>
+            // Since `new Path(path).toUri` will lose query information,
+            // so here we use `URI.create(path)`
+            DependencyUtils.resolveMavenDependencies(URI.create(path))
+              .flatMap(jar => addLocalJarFile(new File(jar)))
           case _ => checkRemoteJarFile(path)
         }
+        (jarPaths, uriScheme)
       }
-      if (key != null) {
+      if (keys.nonEmpty) {
         val timestamp = if (addedOnSubmit) startTime else System.currentTimeMillis
-        if (addedJars.putIfAbsent(key, timestamp).isEmpty) {
-          logInfo(s"Added JAR $path at $key with timestamp $timestamp")
+        val (added, existed) = keys.partition(addedJars.putIfAbsent(_, timestamp).isEmpty)
+        if (added.nonEmpty) {
+          val jarMessage = if (scheme != "ivy") "JAR" else "dependency jars of Ivy URI"
+          logInfo(s"Added $jarMessage $path at ${added.mkString(",")} with timestamp $timestamp")
           postEnvironmentUpdate()
-        } else {
-          logWarning(s"The jar $path has been added already. Overwriting of added jars " +
-            "is not supported in the current version.")
+        }
+        if (existed.nonEmpty) {
+          val jarMessage = if (scheme != "ivy") "JAR" else "dependency jars of Ivy URI"
+          logInfo(s"The $jarMessage $path at ${existed.mkString(",")} has been added already." +
+            " Overwriting of added jar is not supported in the current version.")
         }
       }
     }
@@ -2016,6 +2092,7 @@ class SparkContext(config: SparkConf) extends Logging {
     Utils.tryLogNonFatalError {
       _plugins.foreach(_.shutdown())
     }
+    FallbackStorage.cleanUp(_conf, _hadoopConfiguration)
     Utils.tryLogNonFatalError {
       _eventLogger.foreach(_.stop())
     }
@@ -2494,8 +2571,9 @@ class SparkContext(config: SparkConf) extends Logging {
       val schedulingMode = getSchedulingMode.toString
       val addedJarPaths = addedJars.keys.toSeq
       val addedFilePaths = addedFiles.keys.toSeq
+      val addedArchivePaths = addedArchives.keys.toSeq
       val environmentDetails = SparkEnv.environmentDetails(conf, hadoopConfiguration,
-        schedulingMode, addedJarPaths, addedFilePaths)
+        schedulingMode, addedJarPaths, addedFilePaths, addedArchivePaths)
       val environmentUpdate = SparkListenerEnvironmentUpdate(environmentDetails)
       listenerBus.post(environmentUpdate)
     }
@@ -2908,6 +2986,30 @@ object SparkContext extends Logging {
         s"Multiple external cluster managers registered for the url $url: $serviceLoaders")
     }
     serviceLoaders.headOption
+  }
+
+  /**
+   * This is a helper function to complete the missing S3A magic committer configurations
+   * based on a single conf: `spark.hadoop.fs.s3a.bucket.<bucket>.committer.magic.enabled`
+   */
+  private def fillMissingMagicCommitterConfsIfNeeded(conf: SparkConf): Unit = {
+    val magicCommitterConfs = conf
+      .getAllWithPrefix("spark.hadoop.fs.s3a.bucket.")
+      .filter(_._1.endsWith(".committer.magic.enabled"))
+      .filter(_._2.equalsIgnoreCase("true"))
+    if (magicCommitterConfs.nonEmpty) {
+      // Try to enable S3 magic committer if missing
+      conf.setIfMissing("spark.hadoop.fs.s3a.committer.magic.enabled", "true")
+      if (conf.get("spark.hadoop.fs.s3a.committer.magic.enabled").equals("true")) {
+        conf.setIfMissing("spark.hadoop.fs.s3a.committer.name", "magic")
+        conf.setIfMissing("spark.hadoop.mapreduce.outputcommitter.factory.scheme.s3a",
+          "org.apache.hadoop.fs.s3a.commit.S3ACommitterFactory")
+        conf.setIfMissing("spark.sql.parquet.output.committer.class",
+          "org.apache.spark.internal.io.cloud.BindingParquetOutputCommitter")
+        conf.setIfMissing("spark.sql.sources.commitProtocolClass",
+          "org.apache.spark.internal.io.cloud.PathOutputCommitProtocol")
+      }
+    }
   }
 }
 

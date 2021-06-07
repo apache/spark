@@ -16,11 +16,11 @@
     under the License.
 
 
-ML
-==
+MLlib (DataFrame-based)
+=======================
 
-ML Pipeline APIs
-----------------
+Pipeline APIs
+-------------
 
 .. currentmodule:: pyspark.ml
 
@@ -61,8 +61,6 @@ Feature
     :template: autosummary/class_with_docs.rst
     :toctree: api/
 
-    ANOVASelector
-    ANOVASelectorModel
     Binarizer
     BucketedRandomProjectionLSH
     BucketedRandomProjectionLSHModel
@@ -74,8 +72,6 @@ Feature
     DCT
     ElementwiseProduct
     FeatureHasher
-    FValueSelector
-    FValueSelectorModel
     HashingTF
     IDF
     IDFModel
@@ -109,6 +105,8 @@ Feature
     StringIndexer
     StringIndexerModel
     Tokenizer
+    UnivariateFeatureSelector
+    UnivariateFeatureSelectorModel
     VarianceThresholdSelector
     VarianceThresholdSelectorModel
     VectorAssembler
@@ -188,14 +186,15 @@ Clustering
     PowerIterationClustering
 
 
-ML Functions
-----------------------------
+Functions
+---------
 
 .. currentmodule:: pyspark.ml.functions
 
 .. autosummary::
     :toctree: api/
 
+    array_to_vector
     vector_to_array
 
 
@@ -271,10 +270,8 @@ Statistics
     :template: autosummary/class_with_docs.rst
     :toctree: api/
 
-    ANOVATest
     ChiSquareTest
     Correlation
-    FValueTest
     KolmogorovSmirnovTest
     MultivariateGaussian
     Summarizer
@@ -291,6 +288,7 @@ Tuning
     :toctree: api/
 
     ParamGridBuilder
+    ParamRandomBuilder
     CrossValidator
     CrossValidatorModel
     TrainValidationSplit

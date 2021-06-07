@@ -17,14 +17,18 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.time.{Duration, Period}
+import java.time.temporal.ChronoUnit
+
 import scala.language.implicitConversions
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, IntervalUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
-import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
 import org.apache.spark.sql.catalyst.util.IntervalUtils.{safeStringToInterval, stringToInterval}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.Decimal
+import org.apache.spark.sql.types.{DayTimeIntervalType, Decimal, DecimalType, YearMonthIntervalType}
+import org.apache.spark.sql.types.DataTypeTestUtils.numericTypes
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
@@ -72,17 +76,17 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("hours") {
-    checkEvaluation(ExtractIntervalHours("0 hours"), 0L)
-    checkEvaluation(ExtractIntervalHours("1 hour"), 1L)
-    checkEvaluation(ExtractIntervalHours("-1 hour"), -1L)
-    checkEvaluation(ExtractIntervalHours("23 hours"), 23L)
-    checkEvaluation(ExtractIntervalHours("-23 hours"), -23L)
+    checkEvaluation(ExtractIntervalHours("0 hours"), 0.toByte)
+    checkEvaluation(ExtractIntervalHours("1 hour"), 1.toByte)
+    checkEvaluation(ExtractIntervalHours("-1 hour"), -1.toByte)
+    checkEvaluation(ExtractIntervalHours("23 hours"), 23.toByte)
+    checkEvaluation(ExtractIntervalHours("-23 hours"), -23.toByte)
     // Years, months and days must not be taken into account
-    checkEvaluation(ExtractIntervalHours("100 year 10 months 10 days 10 hours"), 10L)
+    checkEvaluation(ExtractIntervalHours("100 year 10 months 10 days 10 hours"), 10.toByte)
     // Minutes should be taken into account
-    checkEvaluation(ExtractIntervalHours("10 hours 100 minutes"), 11L)
-    checkEvaluation(ExtractIntervalHours(largeInterval), 11L)
-    checkEvaluation(ExtractIntervalHours("25 hours"), 1L)
+    checkEvaluation(ExtractIntervalHours("10 hours 100 minutes"), 11.toByte)
+    checkEvaluation(ExtractIntervalHours(largeInterval), 11.toByte)
+    checkEvaluation(ExtractIntervalHours("25 hours"), 1.toByte)
 
   }
 
@@ -213,5 +217,233 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       seconds = Int.MaxValue,
       millis = Int.MaxValue,
       micros = Int.MaxValue)
+  }
+
+  test("ANSI mode: make interval") {
+    def check(
+        years: Int = 0,
+        months: Int = 0,
+        weeks: Int = 0,
+        days: Int = 0,
+        hours: Int = 0,
+        minutes: Int = 0,
+        seconds: Int = 0,
+        millis: Int = 0,
+        micros: Int = 0): Unit = {
+      val secFrac = DateTimeTestUtils.secFrac(seconds, millis, micros)
+      val intervalExpr = MakeInterval(Literal(years), Literal(months), Literal(weeks),
+        Literal(days), Literal(hours), Literal(minutes),
+        Literal(Decimal(secFrac, Decimal.MAX_LONG_DIGITS, 6)))
+      val totalMonths = years * MONTHS_PER_YEAR + months
+      val totalDays = weeks * DAYS_PER_WEEK + days
+      val totalMicros = secFrac + minutes * MICROS_PER_MINUTE + hours * MICROS_PER_HOUR
+      val expected = new CalendarInterval(totalMonths, totalDays, totalMicros)
+      checkEvaluation(intervalExpr, expected)
+    }
+
+    def checkException(
+        years: Int = 0,
+        months: Int = 0,
+        weeks: Int = 0,
+        days: Int = 0,
+        hours: Int = 0,
+        minutes: Int = 0,
+        seconds: Int = 0,
+        millis: Int = 0,
+        micros: Int = 0): Unit = {
+      val secFrac = DateTimeTestUtils.secFrac(seconds, millis, micros)
+      val intervalExpr = MakeInterval(Literal(years), Literal(months), Literal(weeks),
+        Literal(days), Literal(hours), Literal(minutes),
+        Literal(Decimal(secFrac, Decimal.MAX_LONG_DIGITS, 6)))
+      checkExceptionInExpression[ArithmeticException](intervalExpr, EmptyRow, "")
+    }
+
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      check(months = 0, days = 0, micros = 0)
+      check(years = -123)
+      check(weeks = 123)
+      check(millis = -123)
+      check(9999, 11, 0, 31, 23, 59, 59, 999, 999)
+      check(years = 10000, micros = -1)
+      check(-9999, -11, 0, -31, -23, -59, -59, -999, -999)
+      check(years = -10000, micros = 1)
+      check(
+        hours = Int.MaxValue,
+        minutes = Int.MaxValue,
+        seconds = Int.MaxValue,
+        millis = Int.MaxValue,
+        micros = Int.MaxValue)
+
+      checkException(years = Int.MaxValue)
+      checkException(weeks = Int.MaxValue)
+    }
+  }
+
+  test("SPARK-34824: multiply year-month interval by numeric") {
+    Seq(
+      (Period.ofYears(-123), Literal(null, DecimalType.USER_DEFAULT)) -> null,
+      (Period.ofMonths(0), 10) -> Period.ofMonths(0),
+      (Period.ofMonths(10), 0L) -> Period.ofMonths(0),
+      (Period.ofYears(100), -1.toByte) -> Period.ofYears(-100),
+      (Period.ofMonths(12), 0.3f) -> Period.ofMonths(4),
+      (Period.ofYears(-1000), 0.3d) -> Period.ofYears(-300),
+      (Period.ofYears(9999), 0.0001d) -> Period.ofYears(1),
+      (Period.ofYears(9999), BigDecimal(0.0001)) -> Period.ofYears(1)
+    ).foreach { case ((period, num), expected) =>
+      checkEvaluation(MultiplyYMInterval(Literal(period), Literal(num)), expected)
+    }
+
+    Seq(
+      (Period.ofMonths(2), Int.MaxValue) -> "overflow",
+      (Period.ofMonths(Int.MinValue), 10d) -> "not in range",
+      (Period.ofMonths(-100), Float.NaN) -> "input is infinite or NaN",
+      (Period.ofMonths(200), Double.PositiveInfinity) -> "input is infinite or NaN",
+      (Period.ofMonths(-200), Float.NegativeInfinity) -> "input is infinite or NaN"
+    ).foreach { case ((period, num), expectedErrMsg) =>
+      checkExceptionInExpression[ArithmeticException](
+        MultiplyYMInterval(Literal(period), Literal(num)),
+        expectedErrMsg)
+    }
+
+    numericTypes.foreach { numType =>
+      checkConsistencyBetweenInterpretedAndCodegenAllowingException(
+        (interval: Expression, num: Expression) => MultiplyYMInterval(interval, num),
+        YearMonthIntervalType, numType)
+    }
+  }
+
+  test("SPARK-34850: multiply day-time interval by numeric") {
+    Seq(
+      (Duration.ofHours(-123), Literal(null, DecimalType.USER_DEFAULT)) -> null,
+      (Duration.ofMinutes(0), 10) -> Duration.ofMinutes(0),
+      (Duration.ofSeconds(10), 0L) -> Duration.ofSeconds(0),
+      (Duration.ofMillis(100), -1.toByte) -> Duration.ofMillis(-100),
+      (Duration.ofDays(12), 0.3d) -> Duration.ofDays(12).multipliedBy(3).dividedBy(10),
+      (Duration.of(-1000, ChronoUnit.MICROS), 0.3f) -> Duration.of(-300, ChronoUnit.MICROS),
+      (Duration.ofDays(9999), 0.0001d) -> Duration.ofDays(9999).dividedBy(10000),
+      (Duration.ofDays(9999), BigDecimal(0.0001)) -> Duration.ofDays(9999).dividedBy(10000)
+    ).foreach { case ((duration, num), expected) =>
+      checkEvaluation(MultiplyDTInterval(Literal(duration), Literal(num)), expected)
+    }
+
+    Seq(
+      (Duration.ofDays(-100), Float.NaN) -> "input is infinite or NaN",
+      (Duration.ofDays(2), Int.MaxValue) -> "overflow",
+      (Duration.ofHours(Int.MinValue), Short.MinValue) -> "overflow",
+      (Duration.ofDays(10), BigDecimal(Long.MinValue)) -> "Overflow",
+      (Duration.ofDays(200), Double.PositiveInfinity) -> "input is infinite or NaN",
+      (Duration.ofDays(-200), Float.NegativeInfinity) -> "input is infinite or NaN"
+    ).foreach { case ((duration, num), expectedErrMsg) =>
+      checkExceptionInExpression[ArithmeticException](
+        MultiplyDTInterval(Literal(duration), Literal(num)), expectedErrMsg)
+    }
+
+    numericTypes.foreach { numType =>
+      checkConsistencyBetweenInterpretedAndCodegenAllowingException(
+        (interval: Expression, num: Expression) => MultiplyDTInterval(interval, num),
+        DayTimeIntervalType, numType)
+    }
+  }
+
+  test("SPARK-34868: divide year-month interval by numeric") {
+    Seq(
+      (Period.ofYears(-123), Literal(null, DecimalType.USER_DEFAULT)) -> null,
+      (Period.ofMonths(0), 10) -> Period.ofMonths(0),
+      (Period.ofMonths(200), Double.PositiveInfinity) -> Period.ofMonths(0),
+      (Period.ofMonths(-200), Float.NegativeInfinity) -> Period.ofMonths(0),
+      (Period.ofYears(100), -1.toByte) -> Period.ofYears(-100),
+      (Period.ofYears(1), 2.toShort) -> Period.ofMonths(6),
+      (Period.ofYears(-1), -3) -> Period.ofMonths(4),
+      (Period.ofMonths(-1000), 0.5f) -> Period.ofMonths(-2000),
+      (Period.ofYears(1000), 100d) -> Period.ofYears(10),
+      (Period.ofMonths(2), BigDecimal(0.1)) -> Period.ofMonths(20)
+    ).foreach { case ((period, num), expected) =>
+      checkEvaluation(DivideYMInterval(Literal(period), Literal(num)), expected)
+    }
+
+    Seq(
+      (Period.ofMonths(1), 0) -> "/ by zero",
+      (Period.ofMonths(Int.MinValue), 0d) -> "input is infinite or NaN",
+      (Period.ofMonths(-100), Float.NaN) -> "input is infinite or NaN"
+    ).foreach { case ((period, num), expectedErrMsg) =>
+      checkExceptionInExpression[ArithmeticException](
+        DivideYMInterval(Literal(period), Literal(num)),
+        expectedErrMsg)
+    }
+
+    numericTypes.foreach { numType =>
+      checkConsistencyBetweenInterpretedAndCodegenAllowingException(
+        (interval: Expression, num: Expression) => DivideYMInterval(interval, num),
+        YearMonthIntervalType, numType)
+    }
+  }
+
+  test("SPARK-34875: divide day-time interval by numeric") {
+    Seq(
+      (Duration.ofDays(-123), Literal(null, DecimalType.USER_DEFAULT)) -> null,
+      (Duration.ZERO, 10) -> Duration.ZERO,
+      (Duration.ofMillis(200), Double.PositiveInfinity) -> Duration.ZERO,
+      (Duration.ofSeconds(-200), Float.NegativeInfinity) -> Duration.ZERO,
+      (Duration.ofMinutes(100), -1.toByte) -> Duration.ofMinutes(-100),
+      (Duration.ofHours(1), 2.toShort) -> Duration.ofMinutes(30),
+      (Duration.ofDays(-1), -3) -> Duration.ofHours(8),
+      (Duration.of(-1000, ChronoUnit.MICROS), 0.5f) ->Duration.of(-2000, ChronoUnit.MICROS),
+      (Duration.ofDays(10080), 100d) -> Duration.ofDays(10080).dividedBy(100),
+      (Duration.ofMillis(2), BigDecimal(-0.1)) -> Duration.ofMillis(-20)
+    ).foreach { case ((period, num), expected) =>
+      checkEvaluation(DivideDTInterval(Literal(period), Literal(num)), expected)
+    }
+
+    Seq(
+      (Duration.ofDays(1), 0) -> "/ by zero",
+      (Duration.ofMillis(Int.MinValue), 0d) -> "input is infinite or NaN",
+      (Duration.ofSeconds(-100), Float.NaN) -> "input is infinite or NaN"
+    ).foreach { case ((period, num), expectedErrMsg) =>
+      checkExceptionInExpression[ArithmeticException](
+        DivideDTInterval(Literal(period), Literal(num)),
+        expectedErrMsg)
+    }
+
+    numericTypes.foreach { numType =>
+      checkConsistencyBetweenInterpretedAndCodegenAllowingException(
+        (interval: Expression, num: Expression) => DivideDTInterval(interval, num),
+        DayTimeIntervalType, numType)
+    }
+  }
+
+  test("ANSI: extract years and months") {
+    Seq(Period.ZERO,
+      Period.ofMonths(100),
+      Period.ofMonths(-100),
+      Period.ofYears(100),
+      Period.ofYears(-100)).foreach { p =>
+      checkEvaluation(ExtractANSIIntervalYears(Literal(p)),
+        IntervalUtils.getYears(p.toTotalMonths.toInt))
+      checkEvaluation(ExtractANSIIntervalMonths(Literal(p)),
+        IntervalUtils.getMonths(p.toTotalMonths.toInt))
+    }
+    checkEvaluation(ExtractANSIIntervalYears(Literal(null, YearMonthIntervalType)), null)
+    checkEvaluation(ExtractANSIIntervalMonths(Literal(null, YearMonthIntervalType)), null)
+  }
+
+  test("ANSI: extract days, hours, minutes and seconds") {
+    Seq(Duration.ZERO,
+      Duration.ofMillis(1L * MILLIS_PER_DAY + 2 * MILLIS_PER_SECOND),
+      Duration.ofMillis(-1L * MILLIS_PER_DAY + 2 * MILLIS_PER_SECOND),
+      Duration.ofDays(100),
+      Duration.ofDays(-100),
+      Duration.ofHours(-100)).foreach { d =>
+
+      checkEvaluation(ExtractANSIIntervalDays(Literal(d)), d.toDays.toInt)
+      checkEvaluation(ExtractANSIIntervalHours(Literal(d)), (d.toHours % HOURS_PER_DAY).toByte)
+      checkEvaluation(ExtractANSIIntervalMinutes(Literal(d)),
+        (d.toMinutes % MINUTES_PER_HOUR).toByte)
+      checkEvaluation(ExtractANSIIntervalSeconds(Literal(d)),
+        IntervalUtils.getSeconds(IntervalUtils.durationToMicros(d)))
+    }
+    checkEvaluation(ExtractANSIIntervalDays(Literal(null, DayTimeIntervalType)), null)
+    checkEvaluation(ExtractANSIIntervalHours(Literal(null, DayTimeIntervalType)), null)
+    checkEvaluation(ExtractANSIIntervalMinutes(Literal(null, DayTimeIntervalType)), null)
+    checkEvaluation(ExtractANSIIntervalSeconds(Literal(null, DayTimeIntervalType)), null)
   }
 }

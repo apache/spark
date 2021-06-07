@@ -46,8 +46,8 @@ import org.apache.spark.unsafe.types.UTF8String
  * Test cases for the [[SparkSessionExtensions]].
  */
 class SparkSessionExtensionSuite extends SparkFunSuite {
-  type ExtensionsBuilder = SparkSessionExtensions => Unit
-  private def create(builder: ExtensionsBuilder): Seq[ExtensionsBuilder] = Seq(builder)
+  private def create(
+      builder: SparkSessionExtensionsProvider): Seq[SparkSessionExtensionsProvider] = Seq(builder)
 
   private def stop(spark: SparkSession): Unit = {
     spark.stop()
@@ -55,7 +55,8 @@ class SparkSessionExtensionSuite extends SparkFunSuite {
     SparkSession.clearDefaultSession()
   }
 
-  private def withSession(builders: Seq[ExtensionsBuilder])(f: SparkSession => Unit): Unit = {
+  private def withSession(
+      builders: Seq[SparkSessionExtensionsProvider])(f: SparkSession => Unit): Unit = {
     val builder = SparkSession.builder().master("local[1]")
     builders.foreach(builder.withExtensions)
     val spark = builder.getOrCreate()
@@ -85,6 +86,12 @@ class SparkSessionExtensionSuite extends SparkFunSuite {
   test("inject optimizer rule") {
     withSession(Seq(_.injectOptimizerRule(MyRule))) { session =>
       assert(session.sessionState.optimizer.batches.flatMap(_.rules).contains(MyRule(session)))
+    }
+  }
+
+  test("SPARK-33621: inject a pre CBO rule") {
+    withSession(Seq(_.injectPreCBORule(MyRule))) { session =>
+      assert(session.sessionState.optimizer.preCBORules.contains(MyRule(session)))
     }
   }
 
@@ -160,13 +167,13 @@ class SparkSessionExtensionSuite extends SparkFunSuite {
       // inject rule that will run during AQE query stage optimization and will verify that the
       // custom tags were written in the preparation phase
       extensions.injectColumnar(session =>
-        MyColumarRule(MyNewQueryStageRule(), MyNewQueryStageRule()))
+        MyColumnarRule(MyNewQueryStageRule(), MyNewQueryStageRule()))
     }
     withSession(extensions) { session =>
       session.sessionState.conf.setConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED, true)
       assert(session.sessionState.queryStagePrepRules.contains(MyQueryStagePrepRule()))
       assert(session.sessionState.columnarRules.contains(
-        MyColumarRule(MyNewQueryStageRule(), MyNewQueryStageRule())))
+        MyColumnarRule(MyNewQueryStageRule(), MyNewQueryStageRule())))
       import session.sqlContext.implicits._
       val data = Seq((100L), (200L), (300L)).toDF("vals").repartition(1)
       val df = data.selectExpr("vals + 1")
@@ -199,12 +206,12 @@ class SparkSessionExtensionSuite extends SparkFunSuite {
 
     val extensions = create { extensions =>
       extensions.injectColumnar(session =>
-        MyColumarRule(PreRuleReplaceAddWithBrokenVersion(), MyPostRule()))
+        MyColumnarRule(PreRuleReplaceAddWithBrokenVersion(), MyPostRule()))
     }
     withSession(extensions) { session =>
       session.sessionState.conf.setConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED, enableAQE)
       assert(session.sessionState.columnarRules.contains(
-        MyColumarRule(PreRuleReplaceAddWithBrokenVersion(), MyPostRule())))
+        MyColumnarRule(PreRuleReplaceAddWithBrokenVersion(), MyPostRule())))
       import session.sqlContext.implicits._
       // perform a join to inject a broadcast exchange
       val left = Seq((1, 50L), (2, 100L), (3, 150L)).toDF("l1", "l2")
@@ -238,12 +245,12 @@ class SparkSessionExtensionSuite extends SparkFunSuite {
       .config(COLUMN_BATCH_SIZE.key, 2)
       .withExtensions { extensions =>
         extensions.injectColumnar(session =>
-          MyColumarRule(PreRuleReplaceAddWithBrokenVersion(), MyPostRule())) }
+          MyColumnarRule(PreRuleReplaceAddWithBrokenVersion(), MyPostRule())) }
       .getOrCreate()
 
     try {
       assert(session.sessionState.columnarRules.contains(
-        MyColumarRule(PreRuleReplaceAddWithBrokenVersion(), MyPostRule())))
+        MyColumnarRule(PreRuleReplaceAddWithBrokenVersion(), MyPostRule())))
       import session.sqlContext.implicits._
 
       val input = Seq((100L), (200L), (300L))
@@ -271,7 +278,7 @@ class SparkSessionExtensionSuite extends SparkFunSuite {
       assert(session.sessionState.functionRegistry
         .lookupFunction(MyExtensions.myFunction._1).isDefined)
       assert(session.sessionState.columnarRules.contains(
-        MyColumarRule(PreRuleReplaceAddWithBrokenVersion(), MyPostRule())))
+        MyColumnarRule(PreRuleReplaceAddWithBrokenVersion(), MyPostRule())))
     } finally {
       stop(session)
     }
@@ -349,6 +356,20 @@ class SparkSessionExtensionSuite extends SparkFunSuite {
       stop(session)
     }
   }
+
+  test("SPARK-35380: Loading extensions from ServiceLoader") {
+    val builder = SparkSession.builder().master("local[1]")
+
+    Seq(None, Some(classOf[YourExtensions].getName)).foreach { ext =>
+      ext.foreach(builder.config(SPARK_SESSION_EXTENSIONS.key, _))
+      val session = builder.getOrCreate()
+      try {
+        assert(session.sql("select get_fake_app_name()").head().getString(0) === "Fake App Name")
+      } finally {
+        stop(session)
+      }
+    }
+  }
 }
 
 case class MyRule(spark: SparkSession) extends Rule[LogicalPlan] {
@@ -384,9 +405,6 @@ case class MyParser(spark: SparkSession, delegate: ParserInterface) extends Pars
 
   override def parseDataType(sqlText: String): DataType =
     delegate.parseDataType(sqlText)
-
-  override def parseRawDataType(sqlText: String): DataType =
-    delegate.parseRawDataType(sqlText)
 }
 
 object MyExtensions {
@@ -406,7 +424,8 @@ object MyExtensions {
       "3.0.0",
       """
        deprecated
-      """),
+      """,
+      ""),
     (_: Seq[Expression]) => Literal(5, IntegerType))
 }
 
@@ -573,11 +592,16 @@ class ColumnarBoundReference(ordinal: Int, dataType: DataType, nullable: Boolean
 class ColumnarAlias(child: ColumnarExpression, name: String)(
     override val exprId: ExprId = NamedExpression.newExprId,
     override val qualifier: Seq[String] = Seq.empty,
-    override val explicitMetadata: Option[Metadata] = None)
-  extends Alias(child, name)(exprId, qualifier, explicitMetadata)
+    override val explicitMetadata: Option[Metadata] = None,
+    override val nonInheritableMetadataKeys: Seq[String] = Seq.empty)
+  extends Alias(child, name)(exprId, qualifier, explicitMetadata, nonInheritableMetadataKeys)
   with ColumnarExpression {
 
   override def columnarEval(batch: ColumnarBatch): Any = child.columnarEval(batch)
+
+  override protected def withNewChildInternal(newChild: Expression): ColumnarAlias =
+    new ColumnarAlias(newChild.asInstanceOf[ColumnarExpression], name)(exprId, qualifier,
+      explicitMetadata, nonInheritableMetadataKeys)
 }
 
 class ColumnarAttributeReference(
@@ -637,6 +661,9 @@ class ColumnarProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
   }
 
   override def hashCode(): Int = super.hashCode()
+
+  override def withNewChildInternal(newChild: SparkPlan): ColumnarProjectExec =
+    new ColumnarProjectExec(projectList, newChild)
 }
 
 /**
@@ -701,6 +728,12 @@ class BrokenColumnarAdd(
     }
     ret
   }
+
+  override def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): BrokenColumnarAdd =
+    new BrokenColumnarAdd(
+      left = newLeft.asInstanceOf[ColumnarExpression],
+      right = newRight.asInstanceOf[ColumnarExpression], failOnError)
 }
 
 class CannotReplaceException(str: String) extends RuntimeException(str) {
@@ -711,7 +744,7 @@ case class PreRuleReplaceAddWithBrokenVersion() extends Rule[SparkPlan] {
   def replaceWithColumnarExpression(exp: Expression): ColumnarExpression = exp match {
     case a: Alias =>
       new ColumnarAlias(replaceWithColumnarExpression(a.child),
-        a.name)(a.exprId, a.qualifier, a.explicitMetadata)
+        a.name)(a.exprId, a.qualifier, a.explicitMetadata, a.nonInheritableMetadataKeys)
     case att: AttributeReference =>
       new ColumnarAttributeReference(att.name, att.dataType, att.nullable,
         att.metadata)(att.exprId, att.qualifier)
@@ -777,6 +810,8 @@ case class MyShuffleExchangeExec(delegate: ShuffleExchangeExec) extends ShuffleE
   override def child: SparkPlan = delegate.child
   override protected def doExecute(): RDD[InternalRow] = delegate.execute()
   override def outputPartitioning: Partitioning = delegate.outputPartitioning
+  override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan =
+    super.legacyWithNewChildren(Seq(newChild))
 }
 
 /**
@@ -794,6 +829,9 @@ case class MyBroadcastExchangeExec(delegate: BroadcastExchangeExec) extends Broa
   override protected def doExecute(): RDD[InternalRow] = delegate.execute()
   override def doExecuteBroadcast[T](): Broadcast[T] = delegate.executeBroadcast()
   override def outputPartitioning: Partitioning = delegate.outputPartitioning
+
+  override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan =
+    super.legacyWithNewChildren(Seq(newChild))
 }
 
 class ReplacedRowToColumnarExec(override val child: SparkPlan)
@@ -811,6 +849,9 @@ class ReplacedRowToColumnarExec(override val child: SparkPlan)
   }
 
   override def hashCode(): Int = super.hashCode()
+
+  override def withNewChildInternal(newChild: SparkPlan): ReplacedRowToColumnarExec =
+    new ReplacedRowToColumnarExec(newChild)
 }
 
 case class MyPostRule() extends Rule[SparkPlan] {
@@ -820,7 +861,7 @@ case class MyPostRule() extends Rule[SparkPlan] {
   }
 }
 
-case class MyColumarRule(pre: Rule[SparkPlan], post: Rule[SparkPlan]) extends ColumnarRule {
+case class MyColumnarRule(pre: Rule[SparkPlan], post: Rule[SparkPlan]) extends ColumnarRule {
   override def preColumnarTransitions: Rule[SparkPlan] = pre
   override def postColumnarTransitions: Rule[SparkPlan] = post
 }
@@ -834,7 +875,7 @@ class MyExtensions extends (SparkSessionExtensions => Unit) {
     e.injectOptimizerRule(MyRule)
     e.injectParser(MyParser)
     e.injectFunction(MyExtensions.myFunction)
-    e.injectColumnar(session => MyColumarRule(PreRuleReplaceAddWithBrokenVersion(), MyPostRule()))
+    e.injectColumnar(session => MyColumnarRule(PreRuleReplaceAddWithBrokenVersion(), MyPostRule()))
   }
 }
 
@@ -892,7 +933,8 @@ object MyExtensions2 {
       "3.0.0",
       """
        deprecated
-      """),
+      """,
+      ""),
     (_: Seq[Expression]) => Literal(5, IntegerType))
 }
 
@@ -925,12 +967,26 @@ object MyExtensions2Duplicate {
       "3.0.0",
       """
        deprecated
-      """),
+      """,
+      ""),
     (_: Seq[Expression]) => Literal(5, IntegerType))
 }
 
 class MyExtensions2Duplicate extends (SparkSessionExtensions => Unit) {
   def apply(e: SparkSessionExtensions): Unit = {
     e.injectFunction(MyExtensions2Duplicate.myFunction)
+  }
+}
+
+class YourExtensions extends SparkSessionExtensionsProvider {
+  val getAppName = (FunctionIdentifier("get_fake_app_name"),
+    new ExpressionInfo(
+      "zzz.zzz.zzz",
+      "",
+      "get_fake_app_name"),
+    (_: Seq[Expression]) => Literal("Fake App Name"))
+
+  override def apply(v1: SparkSessionExtensions): Unit = {
+    v1.injectFunction(getAppName)
   }
 }

@@ -20,9 +20,33 @@
 User Guide
 ==========
 
+There are basic guides shared with other languages in Programming Guides
+at `the Spark documentation <https://spark.apache.org/docs/latest/index.html#where-to-go-from-here>`_ as below:
+
+- `RDD Programming Guide <https://spark.apache.org/docs/latest/rdd-programming-guide.html>`_
+- `Spark SQL, DataFrames and Datasets Guide <https://spark.apache.org/docs/latest/sql-programming-guide.html>`_
+- `Structured Streaming Programming Guide <https://spark.apache.org/docs/latest/structured-streaming-programming-guide.html>`_
+- `Spark Streaming Programming Guide <https://spark.apache.org/docs/latest/streaming-programming-guide.html>`_
+- `Machine Learning Library (MLlib) Guide <https://spark.apache.org/docs/latest/ml-guide.html>`_
+
+PySpark specific user guide is as follows:
+
 .. toctree::
-    :maxdepth: 2
+   :maxdepth: 2
 
-    arrow_pandas
-    python_packaging
+   python_packaging
+   arrow_pandas
 
+For pandas APIs on Spark:
+
+.. toctree::
+   :maxdepth: 2
+
+   ps_options
+   ps_pandas_pyspark
+   ps_transform_apply
+   ps_types
+   ps_typehints
+   ps_from_to_dbms
+   ps_best_practices
+   ps_faq

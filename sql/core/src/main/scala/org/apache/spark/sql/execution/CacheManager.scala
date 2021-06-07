@@ -27,6 +27,7 @@ import org.apache.spark.sql.{Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, SubqueryExpression}
 import org.apache.spark.sql.catalyst.optimizer.EliminateResolvedHint
 import org.apache.spark.sql.catalyst.plans.logical.{IgnoreCachedData, LogicalPlan, ResolvedHint}
+import org.apache.spark.sql.catalyst.trees.TreePattern.PLAN_EXPRESSION
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.command.CommandUtils
@@ -88,12 +89,33 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       query: Dataset[_],
       tableName: Option[String] = None,
       storageLevel: StorageLevel = MEMORY_AND_DISK): Unit = {
-    val planToCache = query.logicalPlan
+    cacheQuery(query.sparkSession, query.logicalPlan, tableName, storageLevel)
+  }
+
+  /**
+   * Caches the data produced by the given [[LogicalPlan]].
+   * Unlike `RDD.cache()`, the default storage level is set to be `MEMORY_AND_DISK` because
+   * recomputing the in-memory columnar representation of the underlying table is expensive.
+   */
+  def cacheQuery(
+      spark: SparkSession,
+      planToCache: LogicalPlan,
+      tableName: Option[String]): Unit = {
+    cacheQuery(spark, planToCache, tableName, MEMORY_AND_DISK)
+  }
+
+  /**
+   * Caches the data produced by the given [[LogicalPlan]].
+   */
+  def cacheQuery(
+      spark: SparkSession,
+      planToCache: LogicalPlan,
+      tableName: Option[String],
+      storageLevel: StorageLevel): Unit = {
     if (lookupCachedData(planToCache).nonEmpty) {
       logWarning("Asked to cache already cached data.")
     } else {
-      val sessionWithConfigsOff = SparkSession.getOrCloneSessionWithConfigsOff(
-        query.sparkSession, forceDisableConfigs)
+      val sessionWithConfigsOff = getOrCloneSessionWithConfigsOff(spark)
       val inMemoryRelation = sessionWithConfigsOff.withActive {
         val qe = sessionWithConfigsOff.sessionState.executePlan(planToCache)
         InMemoryRelation(
@@ -199,10 +221,9 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       // Remove the cache entry before creating a new ones.
       cachedData = cachedData.filterNot(cd => needToRecache.exists(_ eq cd))
     }
-    needToRecache.map { cd =>
+    needToRecache.foreach { cd =>
       cd.cachedRepresentation.cacheBuilder.clearCache()
-      val sessionWithConfigsOff = SparkSession.getOrCloneSessionWithConfigsOff(
-        spark, forceDisableConfigs)
+      val sessionWithConfigsOff = getOrCloneSessionWithConfigsOff(spark)
       val newCache = sessionWithConfigsOff.withActive {
         val qe = sessionWithConfigsOff.sessionState.executePlan(cd.plan)
         InMemoryRelation(cd.cachedRepresentation.cacheBuilder, qe)
@@ -246,7 +267,7 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
         }.getOrElse(currentFragment)
     }
 
-    newPlan transformAllExpressions {
+    newPlan.transformAllExpressionsWithPruning(_.containsPattern(PLAN_EXPRESSION)) {
       case s: SubqueryExpression => s.withNewPlan(useCachedData(s.plan))
     }
   }
@@ -305,5 +326,16 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       .exists(_.startsWith(prefixToInvalidate))
     if (needToRefresh) fileIndex.refresh()
     needToRefresh
+  }
+
+  /**
+   * If CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING is enabled, just return original session.
+   */
+  private def getOrCloneSessionWithConfigsOff(session: SparkSession): SparkSession = {
+    if (session.sessionState.conf.getConf(SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING)) {
+      session
+    } else {
+      SparkSession.getOrCloneSessionWithConfigsOff(session, forceDisableConfigs)
+    }
   }
 }

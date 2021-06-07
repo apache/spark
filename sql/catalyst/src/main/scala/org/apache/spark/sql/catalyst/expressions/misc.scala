@@ -19,8 +19,10 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.{SPARK_REVISION, SPARK_VERSION_SHORT}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.UnresolvedSeed
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.trees.TreePattern.{CURRENT_LIKE, TreePattern}
 import org.apache.spark.sql.catalyst.util.RandomUUIDGenerator
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -50,6 +52,9 @@ case class PrintToStderr(child: Expression) extends UnaryExpression {
          | ${ev.value} = $c;
        """.stripMargin)
   }
+
+  override protected def withNewChildInternal(newChild: Expression): PrintToStderr =
+    copy(child = newChild)
 }
 
 /**
@@ -63,12 +68,15 @@ case class PrintToStderr(child: Expression) extends UnaryExpression {
        java.lang.RuntimeException
        custom error message
   """,
-  since = "3.1.0")
-case class RaiseError(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+  since = "3.1.0",
+  group = "misc_funcs")
+case class RaiseError(child: Expression, dataType: DataType)
+  extends UnaryExpression with ImplicitCastInputTypes {
+
+  def this(child: Expression) = this(child, NullType)
 
   override def foldable: Boolean = false
   override def nullable: Boolean = true
-  override def dataType: DataType = NullType
   override def inputTypes: Seq[AbstractDataType] = Seq(StringType)
 
   override def prettyName: String = "raise_error"
@@ -96,6 +104,13 @@ case class RaiseError(child: Expression) extends UnaryExpression with ImplicitCa
       value = JavaCode.defaultLiteral(dataType)
     )
   }
+
+  override protected def withNewChildInternal(newChild: Expression): RaiseError =
+    copy(child = newChild)
+}
+
+object RaiseError {
+  def apply(child: Expression): RaiseError = new RaiseError(child)
 }
 
 /**
@@ -108,7 +123,8 @@ case class RaiseError(child: Expression) extends UnaryExpression with ImplicitCa
       > SELECT _FUNC_(0 < 1);
        NULL
   """,
-  since = "2.0.0")
+  since = "2.0.0",
+  group = "misc_funcs")
 case class AssertTrue(left: Expression, right: Expression, child: Expression)
   extends RuntimeReplaceable {
 
@@ -124,6 +140,9 @@ case class AssertTrue(left: Expression, right: Expression, child: Expression)
 
   override def flatArguments: Iterator[Any] = Iterator(left, right)
   override def exprsReplaced: Seq[Expression] = Seq(left, right)
+
+  override protected def withNewChildInternal(newChild: Expression): AssertTrue =
+    copy(child = newChild)
 }
 
 object AssertTrue {
@@ -140,11 +159,13 @@ object AssertTrue {
       > SELECT _FUNC_();
        default
   """,
-  since = "1.6.0")
+  since = "1.6.0",
+  group = "misc_funcs")
 case class CurrentDatabase() extends LeafExpression with Unevaluable {
   override def dataType: DataType = StringType
   override def nullable: Boolean = false
   override def prettyName: String = "current_database"
+  final override val nodePatterns: Seq[TreePattern] = Seq(CURRENT_LIKE)
 }
 
 /**
@@ -157,11 +178,13 @@ case class CurrentDatabase() extends LeafExpression with Unevaluable {
       > SELECT _FUNC_();
        spark_catalog
   """,
-  since = "3.1.0")
+  since = "3.1.0",
+  group = "misc_funcs")
 case class CurrentCatalog() extends LeafExpression with Unevaluable {
   override def dataType: DataType = StringType
   override def nullable: Boolean = false
   override def prettyName: String = "current_catalog"
+  final override val nodePatterns: Seq[TreePattern] = Seq(CURRENT_LIKE)
 }
 
 // scalastyle:off line.size.limit
@@ -175,12 +198,15 @@ case class CurrentCatalog() extends LeafExpression with Unevaluable {
   note = """
     The function is non-deterministic.
   """,
-  since = "2.3.0")
+  since = "2.3.0",
+  group = "misc_funcs")
 // scalastyle:on line.size.limit
 case class Uuid(randomSeed: Option[Long] = None) extends LeafExpression with Stateful
     with ExpressionWithRandomSeed {
 
   def this() = this(None)
+
+  override def seedExpression: Expression = randomSeed.map(Literal.apply).getOrElse(UnresolvedSeed)
 
   override def withNewSeed(seed: Long): Uuid = Uuid(Some(seed))
 
@@ -221,7 +247,8 @@ case class Uuid(randomSeed: Option[Long] = None) extends LeafExpression with Sta
       > SELECT _FUNC_();
        3.1.0 a6d6ea3efedbad14d99c24143834cd4e2e52fb40
   """,
-  since = "3.0.0")
+  since = "3.0.0",
+  group = "misc_funcs")
 // scalastyle:on line.size.limit
 case class SparkVersion() extends LeafExpression with CodegenFallback {
   override def nullable: Boolean = false
@@ -242,7 +269,8 @@ case class SparkVersion() extends LeafExpression with CodegenFallback {
       > SELECT _FUNC_(array(1));
        array<int>
   """,
-  since = "3.0.0")
+  since = "3.0.0",
+  group = "misc_funcs")
 case class TypeOf(child: Expression) extends UnaryExpression {
   override def nullable: Boolean = false
   override def foldable: Boolean = true
@@ -252,4 +280,24 @@ case class TypeOf(child: Expression) extends UnaryExpression {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, _ => s"""UTF8String.fromString(${child.dataType.catalogString})""")
   }
+
+  override protected def withNewChildInternal(newChild: Expression): TypeOf = copy(child = newChild)
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """_FUNC_() - user name of current execution context.""",
+  examples = """
+    Examples:
+      > SELECT _FUNC_();
+       mockingjay
+  """,
+  since = "3.2.0",
+  group = "misc_funcs")
+// scalastyle:on line.size.limit
+case class CurrentUser() extends LeafExpression with Unevaluable {
+  override def nullable: Boolean = false
+  override def dataType: DataType = StringType
+  override def prettyName: String = "current_user"
+  final override val nodePatterns: Seq[TreePattern] = Seq(CURRENT_LIKE)
 }

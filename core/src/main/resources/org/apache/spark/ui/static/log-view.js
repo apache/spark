@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+/* global $ */
+
 var baseParams;
 
 var curLogLength;
@@ -59,11 +61,12 @@ function getRESTEndPoint() {
   var words = document.baseURI.split('/');
   var ind = words.indexOf("proxy");
   if (ind > 0) {
-      return words.slice(0, ind + 2).join('/') + "/log";
+    return words.slice(0, ind + 2).join('/') + "/log";
   }
   return "/log"
 }
 
+/* eslint-disable no-unused-vars */
 function loadMore() {
   var offset = Math.max(startByte - byteLength, 0);
   var moreByteLength = Math.min(byteLength, startByte);
@@ -140,3 +143,4 @@ function initLogPage(params, logLen, start, end, totLogLen, defaultLen) {
     disableMoreButton();
   }
 }
+/* eslint-enable no-unused-vars */

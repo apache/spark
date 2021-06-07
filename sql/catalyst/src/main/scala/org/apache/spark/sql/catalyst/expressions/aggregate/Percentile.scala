@@ -20,12 +20,13 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream}
 import java.util
 
-import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.trees.TernaryLike
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
 import org.apache.spark.util.collection.OpenHashMap
 
@@ -70,7 +71,8 @@ case class Percentile(
     frequencyExpression : Expression,
     mutableAggBufferOffset: Int = 0,
     inputAggBufferOffset: Int = 0)
-  extends TypedImperativeAggregate[OpenHashMap[AnyRef, Long]] with ImplicitCastInputTypes {
+  extends TypedImperativeAggregate[OpenHashMap[AnyRef, Long]] with ImplicitCastInputTypes
+  with TernaryLike[Expression] {
 
   def this(child: Expression, percentageExpression: Expression) = {
     this(child, percentageExpression, Literal(1L), 0, 0)
@@ -99,9 +101,9 @@ case class Percentile(
     case arrayData: ArrayData => arrayData.toDoubleArray()
   }
 
-  override def children: Seq[Expression] = {
-    child :: percentageExpression :: frequencyExpression :: Nil
-  }
+  override def first: Expression = child
+  override def second: Expression = percentageExpression
+  override def third: Expression = frequencyExpression
 
   // Returns null for empty inputs
   override def nullable: Boolean = true
@@ -165,7 +167,7 @@ case class Percentile(
       if (frqLong > 0) {
         buffer.changeValue(key, frqLong, _ + frqLong)
       } else if (frqLong < 0) {
-        throw new SparkException(s"Negative values found in ${frequencyExpression.sql}")
+        throw QueryExecutionErrors.negativeValueUnexpectedError(frequencyExpression)
       }
     }
     buffer
@@ -191,13 +193,13 @@ case class Percentile(
 
     val sortedCounts = buffer.toSeq.sortBy(_._1)(
       child.dataType.asInstanceOf[NumericType].ordering.asInstanceOf[Ordering[AnyRef]])
-    val accumlatedCounts = sortedCounts.scanLeft((sortedCounts.head._1, 0L)) {
+    val accumulatedCounts = sortedCounts.scanLeft((sortedCounts.head._1, 0L)) {
       case ((key1, count1), (key2, count2)) => (key2, count1 + count2)
     }.tail
-    val maxPosition = accumlatedCounts.last._2 - 1
+    val maxPosition = accumulatedCounts.last._2 - 1
 
     percentages.map { percentile =>
-      getPercentile(accumlatedCounts, maxPosition * percentile)
+      getPercentile(accumulatedCounts, maxPosition * percentile)
     }
   }
 
@@ -302,4 +304,11 @@ case class Percentile(
       bis.close()
     }
   }
+
+  override protected def withNewChildrenInternal(
+      newFirst: Expression, newSecond: Expression, newThird: Expression): Percentile = copy(
+    child = newFirst,
+    percentageExpression = newSecond,
+    frequencyExpression = newThird
+  )
 }

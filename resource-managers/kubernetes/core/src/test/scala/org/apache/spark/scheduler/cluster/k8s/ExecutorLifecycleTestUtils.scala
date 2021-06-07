@@ -18,7 +18,9 @@ package org.apache.spark.scheduler.cluster.k8s
 
 import java.time.Instant
 
-import io.fabric8.kubernetes.api.model.{ContainerBuilder, Pod, PodBuilder}
+import scala.collection.JavaConverters._
+
+import io.fabric8.kubernetes.api.model._
 
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.SparkPod
@@ -106,6 +108,34 @@ object ExecutorLifecycleTestUtils {
       .build()
   }
 
+  /**
+   * This creates a pod with a finished executor and running sidecar
+   */
+  def finishedExecutorWithRunningSidecar(
+      executorId: Long, exitCode: Int): Pod = {
+    new PodBuilder(podWithAttachedContainerForId(executorId, DEFAULT_RESOURCE_PROFILE_ID))
+      .editOrNewStatus()
+        .withPhase("running")
+        .addNewContainerStatus()
+          .withName(DEFAULT_EXECUTOR_CONTAINER_NAME)
+          .withNewState()
+            .withNewTerminated()
+              .withMessage("message")
+              .withExitCode(exitCode)
+            .endTerminated()
+          .endState()
+        .endContainerStatus()
+        .addNewContainerStatus()
+          .withName("SIDECARFRIEND")
+          .withNewState()
+            .withNewRunning()
+            .endRunning()
+          .endState()
+        .endContainerStatus()
+      .endStatus()
+      .build()
+  }
+
   def succeededExecutor(executorId: Long, rpId: Int = DEFAULT_RESOURCE_PROFILE_ID): Pod = {
     new PodBuilder(podWithAttachedContainerForId(executorId, rpId))
       .editOrNewStatus()
@@ -142,6 +172,18 @@ object ExecutorLifecycleTestUtils {
     podWithAttachedContainer
   }
 
+  def podWithAttachedContainerForIdAndVolume(
+      executorId: Long,
+      rpId: Int = DEFAULT_RESOURCE_PROFILE_ID): Pod = {
+    val sparkPod = executorPodWithIdAndVolume(executorId, rpId)
+    val podWithAttachedContainer = new PodBuilder(sparkPod.pod)
+      .editOrNewSpec()
+      .addToContainers(sparkPod.container)
+      .endSpec()
+      .build()
+    podWithAttachedContainer
+  }
+
   def executorPodWithId(executorId: Long, rpId: Int = DEFAULT_RESOURCE_PROFILE_ID): SparkPod = {
     val pod = new PodBuilder()
       .withNewMetadata()
@@ -160,5 +202,33 @@ object ExecutorLifecycleTestUtils {
       .withImage("k8s-spark")
       .build()
     SparkPod(pod, container)
+  }
+
+  def executorPodWithIdAndVolume(executorId: Long, rpId: Int = DEFAULT_RESOURCE_PROFILE_ID)
+      : SparkPod = {
+    val sparkPod = executorPodWithId(executorId, rpId)
+    sparkPod.pod.getSpec.getVolumes.add(new VolumeBuilder()
+      .withName("spark-volume")
+      .withPersistentVolumeClaim(new PersistentVolumeClaimVolumeSource("pvc-0", false))
+      .build())
+    sparkPod
+  }
+
+  def persistentVolumeClaim(claimName: String, storageClass: String, size: String)
+      : PersistentVolumeClaim = {
+    new PersistentVolumeClaimBuilder()
+      .withKind("PersistentVolumeClaim")
+      .withApiVersion("v1")
+      .withNewMetadata()
+        .withName(claimName)
+        .addToLabels(SPARK_APP_ID_LABEL, TEST_SPARK_APP_ID)
+        .endMetadata()
+      .withNewSpec()
+        .withStorageClassName(storageClass)
+        .withAccessModes("ReadWriteOnce")
+        .withResources(new ResourceRequirementsBuilder()
+          .withRequests(Map("storage" -> new Quantity(size)).asJava).build())
+        .endSpec()
+      .build()
   }
 }

@@ -53,6 +53,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, FileUtil, Path}
 import org.apache.hadoop.io.compress.{CompressionCodecFactory, SplittableCompressionCodec}
 import org.apache.hadoop.security.UserGroupInformation
+import org.apache.hadoop.util.{RunJar, StringUtils}
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.eclipse.jetty.util.MultiException
 import org.slf4j.Logger
@@ -486,15 +487,19 @@ private[spark] object Utils extends Logging {
    *
    * Throws SparkException if the target file already exists and has different contents than
    * the requested file.
+   *
+   * If `shouldUntar` is true, it untars the given url if it is a tar.gz or tgz into `targetDir`.
+   * This is a legacy behavior, and users should better use `spark.archives` configuration or
+   * `SparkContext.addArchive`
    */
   def fetchFile(
       url: String,
       targetDir: File,
       conf: SparkConf,
-      securityMgr: SecurityManager,
       hadoopConf: Configuration,
       timestamp: Long,
-      useCache: Boolean): File = {
+      useCache: Boolean,
+      shouldUntar: Boolean = true): File = {
     val fileName = decodeFileNameInURI(new URI(url))
     val targetFile = new File(targetDir, fileName)
     val fetchCacheEnabled = conf.getBoolean("spark.files.useFetchCache", defaultValue = true)
@@ -519,7 +524,7 @@ private[spark] object Utils extends Logging {
       val cachedFile = new File(localDir, cachedFileName)
       try {
         if (!cachedFile.exists()) {
-          doFetchFile(url, localDir, cachedFileName, conf, securityMgr, hadoopConf)
+          doFetchFile(url, localDir, cachedFileName, conf, hadoopConf)
         }
       } finally {
         lock.release()
@@ -532,16 +537,26 @@ private[spark] object Utils extends Logging {
         conf.getBoolean("spark.files.overwrite", false)
       )
     } else {
-      doFetchFile(url, targetDir, fileName, conf, securityMgr, hadoopConf)
+      doFetchFile(url, targetDir, fileName, conf, hadoopConf)
     }
 
-    // Decompress the file if it's a .tar or .tar.gz
-    if (fileName.endsWith(".tar.gz") || fileName.endsWith(".tgz")) {
-      logInfo("Untarring " + fileName)
-      executeAndGetOutput(Seq("tar", "-xzf", fileName), targetDir)
-    } else if (fileName.endsWith(".tar")) {
-      logInfo("Untarring " + fileName)
-      executeAndGetOutput(Seq("tar", "-xf", fileName), targetDir)
+    if (shouldUntar) {
+      // Decompress the file if it's a .tar or .tar.gz
+      if (fileName.endsWith(".tar.gz") || fileName.endsWith(".tgz")) {
+        logWarning(
+          "Untarring behavior will be deprecated at spark.files and " +
+            "SparkContext.addFile. Consider using spark.archives or SparkContext.addArchive " +
+            "instead.")
+        logInfo("Untarring " + fileName)
+        executeAndGetOutput(Seq("tar", "-xzf", fileName), targetDir)
+      } else if (fileName.endsWith(".tar")) {
+        logWarning(
+          "Untarring behavior will be deprecated at spark.files and " +
+            "SparkContext.addFile. Consider using spark.archives or SparkContext.addArchive " +
+            "instead.")
+        logInfo("Untarring " + fileName)
+        executeAndGetOutput(Seq("tar", "-xf", fileName), targetDir)
+      }
     }
     // Make the file executable - That's necessary for scripts
     FileUtil.chmod(targetFile.getAbsolutePath, "a+x")
@@ -553,6 +568,26 @@ private[spark] object Utils extends Logging {
     }
 
     targetFile
+  }
+
+  /**
+   * Unpacks an archive file into the specified directory. It expects .jar, .zip, .tar.gz, .tgz
+   * and .tar files. This behaves same as Hadoop's archive in distributed cache. This method is
+   * basically copied from `org.apache.hadoop.yarn.util.FSDownload.unpack`.
+   */
+  def unpack(source: File, dest: File): Unit = {
+    val lowerSrc = StringUtils.toLowerCase(source.getName)
+    if (lowerSrc.endsWith(".jar")) {
+      RunJar.unJar(source, dest, RunJar.MATCH_ANY)
+    } else if (lowerSrc.endsWith(".zip")) {
+      FileUtil.unZip(source, dest)
+    } else if (
+      lowerSrc.endsWith(".tar.gz") || lowerSrc.endsWith(".tgz") || lowerSrc.endsWith(".tar")) {
+      FileUtil.unTar(source, dest)
+    } else {
+      logWarning(s"Cannot unpack $source, just copying it to $dest.")
+      copyRecursive(source, dest)
+    }
   }
 
   /** Records the duration of running `body`. */
@@ -705,7 +740,6 @@ private[spark] object Utils extends Logging {
       targetDir: File,
       filename: String,
       conf: SparkConf,
-      securityMgr: SecurityManager,
       hadoopConf: Configuration): File = {
     val targetFile = new File(targetDir, filename)
     val uri = new URI(url)
@@ -1905,7 +1939,9 @@ private[spark] object Utils extends Logging {
    * Indicates whether Spark is currently running unit tests.
    */
   def isTesting: Boolean = {
-    sys.env.contains("SPARK_TESTING") || sys.props.contains(IS_TESTING.key)
+    // Scala's `sys.env` creates a ton of garbage by constructing Scala immutable maps, so
+    // we directly use the Java APIs instead.
+    System.getenv("SPARK_TESTING") != null || System.getProperty(IS_TESTING.key) != null
   }
 
   /**
@@ -2024,6 +2060,17 @@ private[spark] object Utils extends Logging {
       ""
     } else {
       paths.split(",").filter(_.trim.nonEmpty).map { p => Utils.resolveURI(p) }.mkString(",")
+    }
+  }
+
+  /** Check whether a path is an absolute URI. */
+  def isAbsoluteURI(path: String): Boolean = {
+    try {
+      val uri = new URI(path: String)
+      uri.isAbsolute
+    } catch {
+      case _: URISyntaxException =>
+        false
     }
   }
 
@@ -2823,6 +2870,34 @@ private[spark] object Utils extends Logging {
   }
 
   /**
+   * Returns true if and only if the underlying class is a member class.
+   *
+   * Note: jdk8u throws a "Malformed class name" error if a given class is a deeply-nested
+   * inner class (See SPARK-34607 for details). This issue has already been fixed in jdk9+, so
+   * we can remove this helper method safely if we drop the support of jdk8u.
+   */
+  def isMemberClass(cls: Class[_]): Boolean = {
+    try {
+      cls.isMemberClass
+    } catch {
+      case _: InternalError =>
+        // We emulate jdk8u `Class.isMemberClass` below:
+        //   public boolean isMemberClass() {
+        //     return getSimpleBinaryName() != null && !isLocalOrAnonymousClass();
+        //   }
+        // `getSimpleBinaryName()` returns null if a given class is a top-level class,
+        // so we replace it with `cls.getEnclosingClass != null`. The second condition checks
+        // if a given class is not a local or an anonymous class, so we replace it with
+        // `cls.getEnclosingMethod == null` because `cls.getEnclosingMethod()` return a value
+        // only in either case (JVM Spec 4.8.6).
+        //
+        // Note: The newer jdk evaluates `!isLocalOrAnonymousClass()` first,
+        // we reorder the conditions to follow it.
+        cls.getEnclosingMethod == null && cls.getEnclosingClass != null
+    }
+  }
+
+  /**
    * Safer than Class obj's getSimpleName which may throw Malformed class name error in scala.
    * This method mimics scalatest's getSimpleNameOfAnObjectsClass.
    */
@@ -2891,14 +2966,14 @@ private[spark] object Utils extends Logging {
    */
   private val fullWidthRegex = ("""[""" +
     // scalastyle:off nonascii
-    """\u1100-\u115F""" +
-    """\u2E80-\uA4CF""" +
-    """\uAC00-\uD7A3""" +
-    """\uF900-\uFAFF""" +
-    """\uFE10-\uFE19""" +
-    """\uFE30-\uFE6F""" +
-    """\uFF00-\uFF60""" +
-    """\uFFE0-\uFFE6""" +
+    "\u1100-\u115F" +
+    "\u2E80-\uA4CF" +
+    "\uAC00-\uD7A3" +
+    "\uF900-\uFAFF" +
+    "\uFE10-\uFE19" +
+    "\uFE30-\uFE6F" +
+    "\uFF00-\uFF60" +
+    "\uFFE0-\uFFE6" +
     // scalastyle:on nonascii
     """]""").r
 
@@ -2934,6 +3009,9 @@ private[spark] object Utils extends Logging {
 
   /** Create a new properties object with the same values as `props` */
   def cloneProperties(props: Properties): Properties = {
+    if (props == null) {
+      return props
+    }
     val resultProps = new Properties()
     props.forEach((k, v) => resultProps.put(k, v))
     resultProps
@@ -2944,7 +3022,7 @@ private[spark] object Utils extends Logging {
    * exceeds `stopAppendingThreshold`, stop appending paths for saving memory.
    */
   def buildLocationMetadata(paths: Seq[Path], stopAppendingThreshold: Int): String = {
-    val metadata = new StringBuilder("[")
+    val metadata = new StringBuilder(s"(${paths.length} paths)[")
     var index: Int = 0
     while (index < paths.length && metadata.length < stopAppendingThreshold) {
       if (index > 0) {
@@ -2952,6 +3030,12 @@ private[spark] object Utils extends Logging {
       }
       metadata.append(paths(index).toString)
       index += 1
+    }
+    if (paths.length > index) {
+      if (index > 0) {
+        metadata.append(", ")
+      }
+      metadata.append("...")
     }
     metadata.append("]")
     metadata.toString
@@ -2976,6 +3060,13 @@ private[spark] object Utils extends Logging {
     } else {
       0
     }
+  }
+
+  def executorTimeoutMs(conf: SparkConf): Long = {
+    // "spark.network.timeout" uses "seconds", while `spark.storage.blockManagerSlaveTimeoutMs` uses
+    // "milliseconds"
+    conf.get(config.STORAGE_BLOCKMANAGER_HEARTBEAT_TIMEOUT)
+      .getOrElse(Utils.timeStringAsMs(s"${conf.get(Network.NETWORK_TIMEOUT)}s"))
   }
 }
 

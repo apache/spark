@@ -42,12 +42,12 @@ import org.apache.spark.util.{CircularBuffer, Utils}
 /**
  * Transforms the input by forking and running the specified script.
  *
- * @param input the set of expression that should be passed to the script.
  * @param script the command that should be executed.
  * @param output the attributes that are produced by the script.
+ * @param child logical plan whose output is transformed.
+ * @param ioschema the class set that defines how to handle input/output data.
  */
-case class HiveScriptTransformationExec(
-    input: Seq[Expression],
+private[hive] case class HiveScriptTransformationExec(
     script: String,
     output: Seq[Attribute],
     child: SparkPlan,
@@ -92,7 +92,7 @@ case class HiveScriptTransformationExec(
                 scriptOutputWritable.readFields(scriptOutputStream)
               } catch {
                 case _: EOFException =>
-                  // This means that the stdout of `proc` (ie. TRANSFORM process) has exhausted.
+                  // This means that the stdout of `proc` (i.e. TRANSFORM process) has exhausted.
                   // Ideally the proc should *not* be alive at this point but
                   // there can be a lag between EOF being written out and the process
                   // being terminated. So explicitly waiting for the process to be done.
@@ -140,14 +140,14 @@ case class HiveScriptTransformationExec(
 
     val (outputStream, proc, inputStream, stderrBuffer) = initProc
 
-    val (inputSerde, inputSoi) = initInputSerDe(ioschema, input).getOrElse((null, null))
+    val (inputSerde, inputSoi) = initInputSerDe(ioschema, child.output).getOrElse((null, null))
 
     // For HiveScriptTransformationExec, if inputSerde == null, but outputSerde != null
     // We will use StringBuffer to pass data, in this case, we should cast data as string too.
     val finalInput = if (inputSerde == null) {
       inputExpressionsWithoutSerde
     } else {
-      input
+      child.output
     }
 
     val outputProjection = new InterpretedProjection(finalInput, child.output)
@@ -182,9 +182,12 @@ case class HiveScriptTransformationExec(
 
     outputIterator
   }
+
+  override protected def withNewChildInternal(newChild: SparkPlan): HiveScriptTransformationExec =
+    copy(child = newChild)
 }
 
-case class HiveScriptTransformationWriterThread(
+private[hive] case class HiveScriptTransformationWriterThread(
     iter: Iterator[InternalRow],
     inputSchema: Seq[DataType],
     inputSerde: AbstractSerDe,

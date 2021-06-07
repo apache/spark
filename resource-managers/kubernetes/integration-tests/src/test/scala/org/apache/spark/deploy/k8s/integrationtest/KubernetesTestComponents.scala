@@ -22,6 +22,7 @@ import java.util.UUID
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
+import io.fabric8.kubernetes.api.model.NamespaceBuilder
 import io.fabric8.kubernetes.client.DefaultKubernetesClient
 import org.scalatest.concurrent.Eventually
 
@@ -44,11 +45,11 @@ private[spark] class KubernetesTestComponents(defaultClient: DefaultKubernetesCl
   val clientConfig = kubernetesClient.getConfiguration
 
   def createNamespace(): Unit = {
-    defaultClient.namespaces.createNew()
+    defaultClient.namespaces.create(new NamespaceBuilder()
       .withNewMetadata()
       .withName(namespace)
       .endMetadata()
-      .done()
+      .build())
   }
 
   def deleteNamespace(): Unit = {
@@ -109,7 +110,8 @@ private[spark] object SparkAppLauncher extends Logging {
       timeoutSecs: Int,
       sparkHomeDir: Path,
       isJVM: Boolean,
-      pyFiles: Option[String] = None): Unit = {
+      pyFiles: Option[String] = None,
+      env: Map[String, String] = Map.empty[String, String]): Unit = {
     val sparkSubmitExecutable = sparkHomeDir.resolve(Paths.get("bin", "spark-submit"))
     logInfo(s"Launching a spark app with arguments $appArguments and conf $appConf")
     val preCommandLine = if (isJVM) {
@@ -130,6 +132,6 @@ private[spark] object SparkAppLauncher extends Logging {
       commandLine ++= appArguments.appArgs
     }
     logInfo(s"Launching a spark app with command line: ${commandLine.mkString(" ")}")
-    ProcessUtils.executeProcess(commandLine.toArray, timeoutSecs)
+    ProcessUtils.executeProcess(commandLine.toArray, timeoutSecs, env = env)
   }
 }

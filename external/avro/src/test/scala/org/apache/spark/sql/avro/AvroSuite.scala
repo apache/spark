@@ -18,28 +18,25 @@
 package org.apache.spark.sql.avro
 
 import java.io._
-import java.net.{URI, URL}
+import java.net.URL
 import java.nio.file.{Files, Paths, StandardCopyOption}
 import java.sql.{Date, Timestamp}
 import java.util.{Locale, UUID}
 
 import scala.collection.JavaConverters._
 
-import org.apache.avro.Schema
+import org.apache.avro.{AvroTypeException, Schema}
 import org.apache.avro.Schema.{Field, Type}
 import org.apache.avro.Schema.Type._
 import org.apache.avro.file.{DataFileReader, DataFileWriter}
 import org.apache.avro.generic.{GenericData, GenericDatumReader, GenericDatumWriter, GenericRecord}
 import org.apache.avro.generic.GenericData.{EnumSymbol, Fixed}
-import org.apache.avro.mapred.FsInput
 import org.apache.commons.io.FileUtils
-import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.Path
 
 import org.apache.spark.{SPARK_VERSION_SHORT, SparkConf, SparkException, SparkUpgradeException}
+import org.apache.spark.TestUtils.assertExceptionMsg
 import org.apache.spark.sql._
 import org.apache.spark.sql.TestingUDT.IntervalData
-import org.apache.spark.sql.catalyst.{InternalRow, NoopFilters}
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.logical.Filter
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{withDefaultTimeZone, LA, UTC}
@@ -48,6 +45,7 @@ import org.apache.spark.sql.execution.datasources.{CommonFileDataSourceSuite, Da
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy._
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -391,11 +389,11 @@ abstract class AvroSuite
         }.getMessage
         assert(message.contains("No Avro files found."))
 
-        val srcFile = new File("src/test/resources/episodes.avro")
-        val destFile = new File(dir, "episodes.avro")
-        FileUtils.copyFile(srcFile, destFile)
+        Files.copy(
+          Paths.get(new URL(episodesAvro).toURI),
+          Paths.get(dir.getCanonicalPath, "episodes.avro"))
 
-        val result = spark.read.format("avro").load(srcFile.getAbsolutePath).collect()
+        val result = spark.read.format("avro").load(episodesAvro).collect()
         checkAnswer(spark.read.format("avro").load(dir.getAbsolutePath), result)
       }
     }
@@ -477,6 +475,7 @@ abstract class AvroSuite
       val xzDir = s"$dir/xz"
       val deflateDir = s"$dir/deflate"
       val snappyDir = s"$dir/snappy"
+      val zstandardDir = s"$dir/zstandard"
 
       val df = spark.read.format("avro").load(testAvro)
       spark.conf.set(SQLConf.AVRO_COMPRESSION_CODEC.key, "uncompressed")
@@ -490,17 +489,21 @@ abstract class AvroSuite
       df.write.format("avro").save(deflateDir)
       spark.conf.set(SQLConf.AVRO_COMPRESSION_CODEC.key, "snappy")
       df.write.format("avro").save(snappyDir)
+      spark.conf.set(SQLConf.AVRO_COMPRESSION_CODEC.key, "zstandard")
+      df.write.format("avro").save(zstandardDir)
 
       val uncompressSize = FileUtils.sizeOfDirectory(new File(uncompressDir))
       val bzip2Size = FileUtils.sizeOfDirectory(new File(bzip2Dir))
       val xzSize = FileUtils.sizeOfDirectory(new File(xzDir))
       val deflateSize = FileUtils.sizeOfDirectory(new File(deflateDir))
       val snappySize = FileUtils.sizeOfDirectory(new File(snappyDir))
+      val zstandardSize = FileUtils.sizeOfDirectory(new File(zstandardDir))
 
       assert(uncompressSize > deflateSize)
       assert(snappySize > deflateSize)
       assert(snappySize > bzip2Size)
       assert(bzip2Size > xzSize)
+      assert(uncompressSize > zstandardSize)
     }
   }
 
@@ -599,6 +602,14 @@ abstract class AvroSuite
       val schema = rawSaved.collect().mkString("")
       assert(schema.contains(name))
       assert(schema.contains(namespace))
+    }
+  }
+
+  test("SPARK-34229: Avro should read decimal values with the file schema") {
+    withTempPath { path =>
+      sql("SELECT 3.14 a").write.format("avro").save(path.toString)
+      val data = spark.read.schema("a DECIMAL(4, 3)").format("avro").load(path.toString).collect()
+      assert(data.map(_ (0)).contains(new java.math.BigDecimal("3.140")))
     }
   }
 
@@ -715,6 +726,52 @@ abstract class AvroSuite
     assert(result.sameElements(expected))
   }
 
+  test("SPARK-34416: support user provided avro schema url") {
+    val avroSchemaUrl = testFile("test_sub.avsc")
+    val result = spark.read.option("avroSchemaUrl", avroSchemaUrl)
+      .format("avro")
+      .load(testAvro)
+      .collect()
+    val expected = spark.read.format("avro").load(testAvro).select("string").collect()
+    assert(result.sameElements(expected))
+  }
+
+  test("SPARK-34416: support user provided both avro schema and avro schema url") {
+    val avroSchemaUrl = testFile("test_sub.avsc")
+    val avroSchema =
+      """
+        |{
+        |  "type" : "record",
+        |  "name" : "test_schema",
+        |  "fields" : [{
+        |    "name" : "union_int_long_null",
+        |    "type" : ["int", "long", "null"]
+        |  }]
+        |}
+      """.stripMargin
+
+    val result = spark.read
+      .option("avroSchema", avroSchema)
+      .option("avroSchemaUrl", avroSchemaUrl)
+      .format("avro")
+      .load(testAvro)
+      .collect()
+    val expected = spark.read.format("avro").load(testAvro).select("union_int_long_null").collect()
+    assert(result.sameElements(expected))
+  }
+
+  test("SPARK-34416: support user provided wrong avro schema url") {
+    val e = intercept[FileNotFoundException] {
+      spark.read
+        .option("avroSchemaUrl", "not_exists.avsc")
+        .format("avro")
+        .load(testAvro)
+        .collect()
+    }
+
+    assertExceptionMsg[FileNotFoundException](e, "File not_exists.avsc does not exist")
+  }
+
   test("support user provided avro schema with defaults for missing fields") {
     val avroSchema =
       """
@@ -765,15 +822,15 @@ abstract class AvroSuite
       checkAvroSchemaEquals(avroSchema, getAvroSchemaStringFromFiles(tempSaveDir))
 
       // Writing df containing data not in the enum will throw an exception
-      val message = intercept[SparkException] {
+      val e = intercept[SparkException] {
         spark.createDataFrame(spark.sparkContext.parallelize(Seq(
           Row("SPADES"), Row("NOT-IN-ENUM"), Row("HEARTS"), Row("DIAMONDS"))),
           StructType(Seq(StructField("Suit", StringType, true))))
           .write.format("avro").option("avroSchema", avroSchema)
           .save(s"$tempDir/${UUID.randomUUID()}")
-      }.getCause.getMessage
-      assert(message.contains("org.apache.spark.sql.avro.IncompatibleSchemaException: " +
-        "Cannot write \"NOT-IN-ENUM\" since it's not defined in enum"))
+      }
+      assertExceptionMsg[IncompatibleSchemaException](e,
+        """"NOT-IN-ENUM" cannot be written since it's not defined in enum""")
     }
   }
 
@@ -811,22 +868,22 @@ abstract class AvroSuite
 
       // Writing df containing nulls without using avro union type will
       // throw an exception as avro uses union type to handle null.
-      val message1 = intercept[SparkException] {
+      val e1 = intercept[SparkException] {
         dfWithNull.write.format("avro")
           .option("avroSchema", avroSchema).save(s"$tempDir/${UUID.randomUUID()}")
-      }.getCause.getMessage
-      assert(message1.contains("org.apache.avro.AvroTypeException: Not an enum: null"))
+      }
+      assertExceptionMsg[AvroTypeException](e1, "Not an enum: null")
 
       // Writing df containing data not in the enum will throw an exception
-      val message2 = intercept[SparkException] {
+      val e2 = intercept[SparkException] {
         spark.createDataFrame(spark.sparkContext.parallelize(Seq(
           Row("SPADES"), Row("NOT-IN-ENUM"), Row("HEARTS"), Row("DIAMONDS"))),
           StructType(Seq(StructField("Suit", StringType, false))))
           .write.format("avro").option("avroSchema", avroSchema)
           .save(s"$tempDir/${UUID.randomUUID()}")
-      }.getCause.getMessage
-      assert(message2.contains("org.apache.spark.sql.avro.IncompatibleSchemaException: " +
-        "Cannot write \"NOT-IN-ENUM\" since it's not defined in enum"))
+      }
+      assertExceptionMsg[IncompatibleSchemaException](e2,
+        """"NOT-IN-ENUM" cannot be written since it's not defined in enum""")
     }
   }
 
@@ -859,26 +916,26 @@ abstract class AvroSuite
       checkAvroSchemaEquals(avroSchema, getAvroSchemaStringFromFiles(tempSaveDir))
 
       // Writing df containing binary data that doesn't fit FIXED size will throw an exception
-      val message1 = intercept[SparkException] {
+      val e1 = intercept[SparkException] {
         spark.createDataFrame(spark.sparkContext.parallelize(Seq(
           Row(Array(192, 168, 1).map(_.toByte)))),
           StructType(Seq(StructField("fixed2", BinaryType, true))))
           .write.format("avro").option("avroSchema", avroSchema)
           .save(s"$tempDir/${UUID.randomUUID()}")
-      }.getCause.getMessage
-      assert(message1.contains("org.apache.spark.sql.avro.IncompatibleSchemaException: " +
-        "Cannot write 3 bytes of binary data into FIXED Type with size of 2 bytes"))
+      }
+      assertExceptionMsg[IncompatibleSchemaException](e1,
+        "3 bytes of binary data cannot be written into FIXED type with size of 2 bytes")
 
       // Writing df containing binary data that doesn't fit FIXED size will throw an exception
-      val message2 = intercept[SparkException] {
+      val e2 = intercept[SparkException] {
         spark.createDataFrame(spark.sparkContext.parallelize(Seq(
           Row(Array(192).map(_.toByte)))),
           StructType(Seq(StructField("fixed2", BinaryType, true))))
           .write.format("avro").option("avroSchema", avroSchema)
           .save(s"$tempDir/${UUID.randomUUID()}")
-      }.getCause.getMessage
-      assert(message2.contains("org.apache.spark.sql.avro.IncompatibleSchemaException: " +
-        "Cannot write 1 byte of binary data into FIXED Type with size of 2 bytes"))
+      }
+      assertExceptionMsg[IncompatibleSchemaException](e2,
+        "1 byte of binary data cannot be written into FIXED type with size of 2 bytes")
     }
   }
 
@@ -911,26 +968,26 @@ abstract class AvroSuite
       checkAvroSchemaEquals(avroSchema, getAvroSchemaStringFromFiles(tempSaveDir))
 
       // Writing df containing binary data that doesn't fit FIXED size will throw an exception
-      val message1 = intercept[SparkException] {
+      val e1 = intercept[SparkException] {
         spark.createDataFrame(spark.sparkContext.parallelize(Seq(
           Row(Array(192, 168, 1).map(_.toByte)))),
           StructType(Seq(StructField("fixed2", BinaryType, false))))
           .write.format("avro").option("avroSchema", avroSchema)
           .save(s"$tempDir/${UUID.randomUUID()}")
-      }.getCause.getMessage
-      assert(message1.contains("org.apache.spark.sql.avro.IncompatibleSchemaException: " +
-        "Cannot write 3 bytes of binary data into FIXED Type with size of 2 bytes"))
+      }
+      assertExceptionMsg[IncompatibleSchemaException](e1,
+        "3 bytes of binary data cannot be written into FIXED type with size of 2 bytes")
 
       // Writing df containing binary data that doesn't fit FIXED size will throw an exception
-      val message2 = intercept[SparkException] {
+      val e2 = intercept[SparkException] {
         spark.createDataFrame(spark.sparkContext.parallelize(Seq(
           Row(Array(192).map(_.toByte)))),
           StructType(Seq(StructField("fixed2", BinaryType, false))))
           .write.format("avro").option("avroSchema", avroSchema)
           .save(s"$tempDir/${UUID.randomUUID()}")
-      }.getCause.getMessage
-      assert(message2.contains("org.apache.spark.sql.avro.IncompatibleSchemaException: " +
-        "Cannot write 1 byte of binary data into FIXED Type with size of 2 bytes"))
+      }
+      assertExceptionMsg[IncompatibleSchemaException](e2,
+        "1 byte of binary data cannot be written into FIXED type with size of 2 bytes")
     }
   }
 
@@ -1015,7 +1072,7 @@ abstract class AvroSuite
           .save(s"$tempDir/${UUID.randomUUID()}")
       }.getCause.getMessage
       assert(message.contains("Caused by: java.lang.NullPointerException: " +
-        "in test_schema in string null of string in field Name"))
+        "null of string in string in field Name of test_schema in test_schema"))
     }
   }
 
@@ -1122,7 +1179,7 @@ abstract class AvroSuite
       val message = intercept[org.apache.spark.sql.avro.IncompatibleSchemaException] {
         f()
       }.getMessage
-      assert(message.contains("Cannot convert Catalyst type"))
+      assert(message.contains("Cannot convert SQL type"))
     }
 
     def resolveNullable(schema: Schema, nullable: Boolean): Schema = {
@@ -1258,6 +1315,96 @@ abstract class AvroSuite
         val newDf = spark.read.format("avro").load(tempSaveDir)
         assert(newDf.count() == 8)
       }
+    }
+  }
+
+  test("SPARK-34133: Reading user provided schema respects case sensitivity for field matching") {
+    val wrongCaseSchema = new StructType()
+        .add("STRING", StringType, nullable = false)
+        .add("UNION_STRING_NULL", StringType, nullable = true)
+    val withSchema = spark.read
+        .schema(wrongCaseSchema)
+        .format("avro").load(testAvro).collect()
+
+    val withOutSchema = spark.read.format("avro").load(testAvro)
+        .select("STRING", "UNION_STRING_NULL")
+        .collect()
+    assert(withSchema.sameElements(withOutSchema))
+
+    withSQLConf((SQLConf.CASE_SENSITIVE.key, "true")) {
+      val  out = spark.read.format("avro").schema(wrongCaseSchema).load(testAvro).collect()
+      assert(out.forall(_.isNullAt(0)))
+      assert(out.forall(_.isNullAt(1)))
+    }
+  }
+
+  test("SPARK-34133: Writing user provided schema respects case sensitivity for field matching") {
+    withTempDir { tempDir =>
+      val avroSchema =
+        """
+          |{
+          |  "type" : "record",
+          |  "name" : "test_schema",
+          |  "fields" : [
+          |    {"name": "foo", "type": "int"},
+          |    {"name": "BAR", "type": "int"}
+          |  ]
+          |}
+      """.stripMargin
+      val df = Seq((1, 3), (2, 4)).toDF("FOO", "bar")
+
+      val savePath = s"$tempDir/save"
+      df.write.option("avroSchema", avroSchema).format("avro").save(savePath)
+
+      val loaded = spark.read.format("avro").load(savePath)
+      assert(loaded.schema === new StructType().add("foo", IntegerType).add("BAR", IntegerType))
+      assert(loaded.collect().map(_.getInt(0)).toSet === Set(1, 2))
+      assert(loaded.collect().map(_.getInt(1)).toSet === Set(3, 4))
+
+      withSQLConf((SQLConf.CASE_SENSITIVE.key, "true")) {
+        val e = intercept[SparkException] {
+          df.write.option("avroSchema", avroSchema).format("avro").save(s"$tempDir/save2")
+        }
+        assertExceptionMsg[IncompatibleSchemaException](e,
+          "Cannot find field 'FOO' in Avro schema at top-level record")
+      }
+    }
+  }
+
+  test("SPARK-34133: Writing user provided schema with multiple matching Avro fields fails") {
+    withTempDir { tempDir =>
+      val avroSchema =
+        """
+          |{
+          |  "type" : "record",
+          |  "name" : "test_schema",
+          |  "fields" : [
+          |    {"name": "foo", "type": "int"},
+          |    {"name": "FOO", "type": "string"}
+          |  ]
+          |}
+      """.stripMargin
+
+      val errorMsg = "Searching for 'foo' in Avro schema at top-level record gave 2 matches. " +
+          "Candidates: [foo, FOO]"
+      assertExceptionMsg(intercept[SparkException] {
+        val fooBarDf = Seq((1, "3"), (2, "4")).toDF("foo", "bar")
+        fooBarDf.write.option("avroSchema", avroSchema).format("avro").save(s"$tempDir/save-fail")
+      }, errorMsg)
+
+      val savePath = s"$tempDir/save"
+      withSQLConf((SQLConf.CASE_SENSITIVE.key, "true")) {
+        val fooFooDf = Seq((1, "3"), (2, "4")).toDF("foo", "FOO")
+        fooFooDf.write.option("avroSchema", avroSchema).format("avro").save(savePath)
+
+        val loadedDf = spark.read.format("avro").schema(fooFooDf.schema).load(savePath)
+        assert(loadedDf.collect().toSet === fooFooDf.collect().toSet)
+      }
+
+      assertExceptionMsg(intercept[SparkException] {
+        val fooSchema = new StructType().add("foo", IntegerType)
+        spark.read.format("avro").schema(fooSchema).load(savePath).collect()
+      }, errorMsg)
     }
   }
 
@@ -1656,6 +1803,20 @@ abstract class AvroSuite
     }
   }
 
+  private def runInMode(
+      modes: Seq[LegacyBehaviorPolicy.Value])(f: Map[String, String] => Unit): Unit = {
+    modes.foreach { mode =>
+      withSQLConf(SQLConf.AVRO_REBASE_MODE_IN_READ.key -> mode.toString) {
+        f(Map.empty)
+      }
+    }
+    withSQLConf(SQLConf.AVRO_REBASE_MODE_IN_READ.key -> EXCEPTION.toString) {
+      modes.foreach { mode =>
+        f(Map(AvroOptions.DATETIME_REBASE_MODE -> mode.toString))
+      }
+    }
+  }
+
   test("SPARK-31183: compatibility with Spark 2.4 in reading dates/timestamps") {
     // test reading the existing 2.4 files and new 3.0 files (with rebase on/off) together.
     def checkReadMixedFiles(
@@ -1671,23 +1832,20 @@ abstract class AvroSuite
         if (dt == "date") {
           val df = Seq(dataStr).toDF("str").select($"str".cast("date").as("dt"))
 
-          // By default we should fail to write ancient datetime values.
-          val e = intercept[SparkException](df.write.format("avro").save(path3_0))
-          assert(e.getCause.getCause.getCause.isInstanceOf[SparkUpgradeException])
           checkDefaultLegacyRead(path2_4)
 
-          withSQLConf(SQLConf.LEGACY_AVRO_REBASE_MODE_IN_WRITE.key -> CORRECTED.toString) {
+          withSQLConf(SQLConf.AVRO_REBASE_MODE_IN_WRITE.key -> CORRECTED.toString) {
             df.write.format("avro").mode("overwrite").save(path3_0)
           }
-          withSQLConf(SQLConf.LEGACY_AVRO_REBASE_MODE_IN_WRITE.key -> LEGACY.toString) {
+          withSQLConf(SQLConf.AVRO_REBASE_MODE_IN_WRITE.key -> LEGACY.toString) {
             df.write.format("avro").save(path3_0_rebase)
           }
 
           // For Avro files written by Spark 3.0, we know the writer info and don't need the config
           // to guide the rebase behavior.
-          withSQLConf(SQLConf.LEGACY_AVRO_REBASE_MODE_IN_READ.key -> LEGACY.toString) {
+          runInMode(Seq(LEGACY)) { options =>
             checkAnswer(
-              spark.read.format("avro").load(path2_4, path3_0, path3_0_rebase),
+              spark.read.options(options).format("avro").load(path2_4, path3_0, path3_0_rebase),
               1.to(3).map(_ => Row(java.sql.Date.valueOf(dataStr))))
           }
         } else {
@@ -1709,18 +1867,18 @@ abstract class AvroSuite
           assert(e.getCause.getCause.getCause.isInstanceOf[SparkUpgradeException])
           checkDefaultLegacyRead(path2_4)
 
-          withSQLConf(SQLConf.LEGACY_AVRO_REBASE_MODE_IN_WRITE.key -> CORRECTED.toString) {
+          withSQLConf(SQLConf.AVRO_REBASE_MODE_IN_WRITE.key -> CORRECTED.toString) {
             df.write.format("avro").option("avroSchema", avroSchema).mode("overwrite").save(path3_0)
           }
-          withSQLConf(SQLConf.LEGACY_AVRO_REBASE_MODE_IN_WRITE.key -> LEGACY.toString) {
+          withSQLConf(SQLConf.AVRO_REBASE_MODE_IN_WRITE.key -> LEGACY.toString) {
             df.write.format("avro").option("avroSchema", avroSchema).save(path3_0_rebase)
           }
 
           // For Avro files written by Spark 3.0, we know the writer info and don't need the config
           // to guide the rebase behavior.
-          withSQLConf(SQLConf.LEGACY_AVRO_REBASE_MODE_IN_READ.key -> LEGACY.toString) {
+          runInMode(Seq(LEGACY)) { options =>
             checkAnswer(
-              spark.read.format("avro").load(path2_4, path3_0, path3_0_rebase),
+              spark.read.options(options).format("avro").load(path2_4, path3_0, path3_0_rebase),
               1.to(3).map(_ => Row(java.sql.Timestamp.valueOf(dataStr))))
           }
         }
@@ -1761,7 +1919,7 @@ abstract class AvroSuite
     val nonRebased = "1001-01-07 01:09:05.123456"
     withTempPath { dir =>
       val path = dir.getAbsolutePath
-      withSQLConf(SQLConf.LEGACY_AVRO_REBASE_MODE_IN_WRITE.key -> LEGACY.toString) {
+      withSQLConf(SQLConf.AVRO_REBASE_MODE_IN_WRITE.key -> LEGACY.toString) {
         Seq(tsStr).toDF("tsS")
           .select($"tsS".cast("timestamp").as("ts"))
           .write.format("avro")
@@ -1770,10 +1928,10 @@ abstract class AvroSuite
 
       // The file metadata indicates if it needs rebase or not, so we can always get the correct
       // result regardless of the "rebase mode" config.
-      Seq(LEGACY, CORRECTED, EXCEPTION).foreach { mode =>
-        withSQLConf(SQLConf.LEGACY_AVRO_REBASE_MODE_IN_READ.key -> mode.toString) {
-          checkAnswer(spark.read.format("avro").load(path), Row(Timestamp.valueOf(tsStr)))
-        }
+      runInMode(Seq(LEGACY, CORRECTED, EXCEPTION)) { options =>
+        checkAnswer(
+          spark.read.options(options).format("avro").load(path),
+          Row(Timestamp.valueOf(tsStr)))
       }
 
       // Force to not rebase to prove the written datetime values are rebased and we will get
@@ -1802,7 +1960,7 @@ abstract class AvroSuite
         |}""".stripMargin
       withTempPath { dir =>
         val path = dir.getAbsolutePath
-        withSQLConf(SQLConf.LEGACY_AVRO_REBASE_MODE_IN_WRITE.key -> LEGACY.toString) {
+        withSQLConf(SQLConf.AVRO_REBASE_MODE_IN_WRITE.key -> LEGACY.toString) {
           Seq(tsStr).toDF("tsS")
             .select($"tsS".cast("timestamp").as("ts"))
             .write
@@ -1813,12 +1971,10 @@ abstract class AvroSuite
 
         // The file metadata indicates if it needs rebase or not, so we can always get the correct
         // result regardless of the "rebase mode" config.
-        Seq(LEGACY, CORRECTED, EXCEPTION).foreach { mode =>
-          withSQLConf(SQLConf.LEGACY_AVRO_REBASE_MODE_IN_READ.key -> mode.toString) {
-            checkAnswer(
-              spark.read.schema("ts timestamp").format("avro").load(path),
-              Row(Timestamp.valueOf(rebased)))
-          }
+        runInMode(Seq(LEGACY, CORRECTED, EXCEPTION)) { options =>
+          checkAnswer(
+            spark.read.options(options).schema("ts timestamp").format("avro").load(path),
+            Row(Timestamp.valueOf(rebased)))
         }
 
         // Force to not rebase to prove the written datetime values are rebased and we will get
@@ -1835,7 +1991,7 @@ abstract class AvroSuite
   test("SPARK-31183: rebasing dates in write") {
     withTempPath { dir =>
       val path = dir.getAbsolutePath
-      withSQLConf(SQLConf.LEGACY_AVRO_REBASE_MODE_IN_WRITE.key -> LEGACY.toString) {
+      withSQLConf(SQLConf.AVRO_REBASE_MODE_IN_WRITE.key -> LEGACY.toString) {
         Seq("1001-01-01").toDF("dateS")
           .select($"dateS".cast("date").as("date"))
           .write.format("avro")
@@ -1844,10 +2000,10 @@ abstract class AvroSuite
 
       // The file metadata indicates if it needs rebase or not, so we can always get the correct
       // result regardless of the "rebase mode" config.
-      Seq(LEGACY, CORRECTED, EXCEPTION).foreach { mode =>
-        withSQLConf(SQLConf.LEGACY_AVRO_REBASE_MODE_IN_READ.key -> mode.toString) {
-          checkAnswer(spark.read.format("avro").load(path), Row(Date.valueOf("1001-01-01")))
-        }
+      runInMode(Seq(LEGACY, CORRECTED, EXCEPTION)) { options =>
+        checkAnswer(
+          spark.read.options(options).format("avro").load(path),
+          Row(Date.valueOf("1001-01-01")))
       }
 
       // Force to not rebase to prove the written datetime values are rebased and we will get
@@ -1882,14 +2038,14 @@ abstract class AvroSuite
         .format("avro")
         .save(dir.getAbsolutePath)
     }
-    withSQLConf(SQLConf.LEGACY_AVRO_REBASE_MODE_IN_WRITE.key -> LEGACY.toString) {
+    withSQLConf(SQLConf.AVRO_REBASE_MODE_IN_WRITE.key -> LEGACY.toString) {
       withTempPath { dir =>
         saveTs(dir)
         checkMetaData(dir, SPARK_LEGACY_DATETIME, "")
       }
     }
     Seq(CORRECTED, EXCEPTION).foreach { mode =>
-      withSQLConf(SQLConf.LEGACY_AVRO_REBASE_MODE_IN_WRITE.key -> mode.toString) {
+      withSQLConf(SQLConf.AVRO_REBASE_MODE_IN_WRITE.key -> mode.toString) {
         withTempPath { dir =>
           saveTs(dir)
           checkMetaData(dir, SPARK_LEGACY_DATETIME, null)
@@ -1913,6 +2069,56 @@ abstract class AvroSuite
 
       checkAnswer(df,
         Seq(Row(1), Row(2), Row(3)))
+    }
+  }
+
+  test("SPARK-35427: datetime rebasing in the EXCEPTION mode") {
+    withSQLConf(SQLConf.AVRO_REBASE_MODE_IN_WRITE.key -> EXCEPTION.toString) {
+      Seq("timestamp-millis", "timestamp-micros").foreach { dt =>
+        withTempPath { dir =>
+          val df = Seq("1001-01-01 01:02:03.123456")
+            .toDF("str")
+            .select($"str".cast("timestamp").as("dt"))
+          val avroSchema =
+            s"""
+              |{
+              |  "type" : "record",
+              |  "name" : "test_schema",
+              |  "fields" : [
+              |    {"name": "dt", "type": {"type": "long", "logicalType": "$dt"}}
+              |  ]
+              |}""".stripMargin
+
+          val e = intercept[SparkException] {
+            df.write.format("avro").option("avroSchema", avroSchema).save(dir.getCanonicalPath)
+          }
+          val errMsg = e.getCause.getCause.getCause.asInstanceOf[SparkUpgradeException].getMessage
+          assert(errMsg.contains("You may get a different result due to the upgrading"))
+        }
+      }
+
+      withTempPath { dir =>
+        val df = Seq(java.sql.Date.valueOf("1001-01-01")).toDF("dt")
+        val e = intercept[SparkException] {
+          df.write.format("avro").save(dir.getCanonicalPath)
+        }
+        val errMsg = e.getCause.getCause.getCause.asInstanceOf[SparkUpgradeException].getMessage
+        assert(errMsg.contains("You may get a different result due to the upgrading"))
+      }
+    }
+
+    withSQLConf(SQLConf.AVRO_REBASE_MODE_IN_READ.key -> EXCEPTION.toString) {
+      Seq(
+        "before_1582_date_v2_4_5.avro",
+        "before_1582_timestamp_micros_v2_4_5.avro",
+        "before_1582_timestamp_millis_v2_4_5.avro"
+      ).foreach { fileName =>
+        val e = intercept[SparkException] {
+          spark.read.format("avro").load(getResourceAvroFilePath(fileName)).collect()
+        }
+        val errMsg = e.getCause.asInstanceOf[SparkUpgradeException].getMessage
+        assert(errMsg.contains("You may get a different result due to the upgrading"))
+      }
     }
   }
 }
@@ -2033,9 +2239,9 @@ class AvroV2Suite extends AvroSuite with ExplainSuiteHelper {
            |Output \\[2\\]: \\[value#xL, id#x\\]
            |DataFilters: \\[isnotnull\\(value#xL\\), \\(value#xL > 2\\)\\]
            |Format: avro
-           |Location: InMemoryFileIndex\\[.*\\]
+           |Location: InMemoryFileIndex\\([0-9]+ paths\\)\\[.*\\]
            |PartitionFilters: \\[isnotnull\\(id#x\\), \\(id#x > 1\\)\\]
-           |PushedFilers: \\[IsNotNull\\(value\\), GreaterThan\\(value,2\\)\\]
+           |PushedFilters: \\[IsNotNull\\(value\\), GreaterThan\\(value,2\\)\\]
            |ReadSchema: struct\\<value:bigint\\>
            |""".stripMargin.trim
       spark.range(10)
@@ -2080,64 +2286,6 @@ class AvroV2Suite extends AvroSuite with ExplainSuiteHelper {
           }
           checkAnswer(df, Row("a", 1, 2))
         }
-      }
-    }
-  }
-}
-
-class AvroRowReaderSuite
-  extends QueryTest
-  with SharedSparkSession {
-
-  import testImplicits._
-
-  override protected def sparkConf: SparkConf =
-    super
-      .sparkConf
-      .set(SQLConf.USE_V1_SOURCE_LIST, "") // need this for BatchScanExec
-
-  test("SPARK-33314: hasNextRow and nextRow properly handle consecutive calls") {
-    withTempPath { dir =>
-      Seq((1), (2), (3))
-        .toDF("value")
-        .coalesce(1)
-        .write
-        .format("avro")
-        .save(dir.getCanonicalPath)
-
-      val df = spark.read.format("avro").load(dir.getCanonicalPath)
-      val fileScan = df.queryExecution.executedPlan collectFirst {
-        case BatchScanExec(_, f: AvroScan) => f
-      }
-      val filePath = fileScan.get.fileIndex.inputFiles(0)
-      val fileSize = new File(new URI(filePath)).length
-      val in = new FsInput(new Path(new URI(filePath)), new Configuration())
-      val reader = DataFileReader.openReader(in, new GenericDatumReader[GenericRecord]())
-
-      val it = new Iterator[InternalRow] with AvroUtils.RowReader {
-        override val fileReader = reader
-        override val deserializer = new AvroDeserializer(
-          reader.getSchema,
-          StructType(new StructField("value", IntegerType, true) :: Nil),
-          CORRECTED,
-          new NoopFilters)
-        override val stopPosition = fileSize
-
-        override def hasNext: Boolean = hasNextRow
-
-        override def next: InternalRow = nextRow
-      }
-      assert(it.hasNext == true)
-      assert(it.next.getInt(0) == 1)
-      // test no intervening next
-      assert(it.hasNext == true)
-      assert(it.hasNext == true)
-      // test no intervening hasNext
-      assert(it.next.getInt(0) == 2)
-      assert(it.next.getInt(0) == 3)
-      assert(it.hasNext == false)
-      assertThrows[NoSuchElementException] {
-        it.next
       }
     }
   }

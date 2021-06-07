@@ -106,6 +106,7 @@ class MLWriter(BaseReadWrite):
     def __init__(self):
         super(MLWriter, self).__init__()
         self.shouldOverwrite = False
+        self.optionMap = {}
 
     def _handleOverwrite(self, path):
         from pyspark.ml.wrapper import JavaWrapper
@@ -132,6 +133,14 @@ class MLWriter(BaseReadWrite):
         self.shouldOverwrite = True
         return self
 
+    def option(self, key, value):
+        """
+        Adds an option to the underlying MLWriter. See the documentation for the specific model's
+        writer for possible options. The option name (key) is case-insensitive.
+        """
+        self.optionMap[key.lower()] = str(value)
+        return self
+
 
 @inherit_doc
 class GeneralMLWriter(MLWriter):
@@ -143,7 +152,7 @@ class GeneralMLWriter(MLWriter):
 
     def format(self, source):
         """
-        Specifies the format of ML export (e.g. "pmml", "internal", or the fully qualified class
+        Specifies the format of ML export ("pmml", "internal", or the fully qualified class
         name for export).
         """
         self.source = source
@@ -193,7 +202,7 @@ class GeneralJavaMLWriter(JavaMLWriter):
 
     def format(self, source):
         """
-        Specifies the format of ML export (e.g. "pmml", "internal", or the fully qualified class
+        Specifies the format of ML export ("pmml", "internal", or the fully qualified class
         name for export).
         """
         self._jwrite.format(source)
@@ -376,6 +385,13 @@ class DefaultParamsWriter(MLWriter):
         DefaultParamsWriter.saveMetadata(self.instance, path, self.sc)
 
     @staticmethod
+    def extractJsonParams(instance, skipParams):
+        paramMap = instance.extractParamMap()
+        jsonParams = {param.name: value for param, value in paramMap.items()
+                      if param.name not in skipParams}
+        return jsonParams
+
+    @staticmethod
     def saveMetadata(instance, path, sc, extraMetadata=None, paramMap=None):
         """
         Saves metadata + Params to: path + "/metadata"
@@ -530,15 +546,16 @@ class DefaultParamsReader(MLReader):
         return metadata
 
     @staticmethod
-    def getAndSetParams(instance, metadata):
+    def getAndSetParams(instance, metadata, skipParams=None):
         """
         Extract Params from metadata, and set them in the instance.
         """
         # Set user-supplied param values
         for paramName in metadata['paramMap']:
             param = instance.getParam(paramName)
-            paramValue = metadata['paramMap'][paramName]
-            instance.set(param, paramValue)
+            if skipParams is None or paramName not in skipParams:
+                paramValue = metadata['paramMap'][paramName]
+                instance.set(param, paramValue)
 
         # Set default param values
         majorAndMinorVersions = VersionUtils.majorMinorVersion(metadata['sparkVersion'])
@@ -555,13 +572,20 @@ class DefaultParamsReader(MLReader):
                 instance._setDefault(**{paramName: paramValue})
 
     @staticmethod
+    def isPythonParamsInstance(metadata):
+        return metadata['class'].startswith('pyspark.ml.')
+
+    @staticmethod
     def loadParamsInstance(path, sc):
         """
         Load a :py:class:`Params` instance from the given path, and return it.
         This assumes the instance inherits from :py:class:`MLReadable`.
         """
         metadata = DefaultParamsReader.loadMetadata(path, sc)
-        pythonClassName = metadata['class'].replace("org.apache.spark", "pyspark")
+        if DefaultParamsReader.isPythonParamsInstance(metadata):
+            pythonClassName = metadata['class']
+        else:
+            pythonClassName = metadata['class'].replace("org.apache.spark", "pyspark")
         py_type = DefaultParamsReader.__get_class(pythonClassName)
         instance = py_type.load(path)
         return instance
@@ -592,3 +616,51 @@ class HasTrainingSummary(object):
         no summary exists.
         """
         return (self._call_java("summary"))
+
+
+class MetaAlgorithmReadWrite:
+
+    @staticmethod
+    def isMetaEstimator(pyInstance):
+        from pyspark.ml import Estimator, Pipeline
+        from pyspark.ml.tuning import _ValidatorParams
+        from pyspark.ml.classification import OneVsRest
+        return isinstance(pyInstance, Pipeline) or isinstance(pyInstance, OneVsRest) or \
+            (isinstance(pyInstance, Estimator) and isinstance(pyInstance, _ValidatorParams))
+
+    @staticmethod
+    def getAllNestedStages(pyInstance):
+        from pyspark.ml import Pipeline, PipelineModel
+        from pyspark.ml.tuning import _ValidatorParams
+        from pyspark.ml.classification import OneVsRest, OneVsRestModel
+
+        # TODO: We need to handle `RFormulaModel.pipelineModel` here after Pyspark RFormulaModel
+        #  support pipelineModel property.
+        if isinstance(pyInstance, Pipeline):
+            pySubStages = pyInstance.getStages()
+        elif isinstance(pyInstance, PipelineModel):
+            pySubStages = pyInstance.stages
+        elif isinstance(pyInstance, _ValidatorParams):
+            raise ValueError('PySpark does not support nested validator.')
+        elif isinstance(pyInstance, OneVsRest):
+            pySubStages = [pyInstance.getClassifier()]
+        elif isinstance(pyInstance, OneVsRestModel):
+            pySubStages = [pyInstance.getClassifier()] + pyInstance.models
+        else:
+            pySubStages = []
+
+        nestedStages = []
+        for pySubStage in pySubStages:
+            nestedStages.extend(MetaAlgorithmReadWrite.getAllNestedStages(pySubStage))
+
+        return [pyInstance] + nestedStages
+
+    @staticmethod
+    def getUidMap(instance):
+        nestedStages = MetaAlgorithmReadWrite.getAllNestedStages(instance)
+        uidMap = {stage.uid: stage for stage in nestedStages}
+        if len(nestedStages) != len(uidMap):
+            raise RuntimeError(f'{instance.__class__.__module__}.{instance.__class__.__name__}'
+                               f'.load found a compound estimator with stages with duplicate '
+                               f'UIDs. List of UIDs: {list(uidMap.keys())}.')
+        return uidMap

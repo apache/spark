@@ -36,6 +36,7 @@ class FileStreamSourceLog(
   extends CompactibleFileStreamLog[FileEntry](metadataLogVersion, sparkSession, path) {
 
   import CompactibleFileStreamLog._
+  import FileStreamSourceLog._
 
   // Configurations about metadata compaction
   protected override val defaultCompactInterval: Int =
@@ -118,8 +119,34 @@ class FileStreamSourceLog(
     }
     batches
   }
+
+  def restore(): Array[FileEntry] = {
+    val files = allFiles()
+
+    // When restarting the query, there is a case which the query starts from compaction batch,
+    // and the batch has source metadata file to read. One case is that the previous query
+    // succeeded to read from inputs, but not finalized the batch for various reasons.
+    // The below code finds the latest compaction batch, and put entries for the batch into the
+    // file entry cache which would avoid reading compact batch file twice.
+    // It doesn't know about offset / commit metadata in checkpoint so doesn't know which exactly
+    // batch to start from, but in practice, only couple of latest batches are candidates to
+    // be started. We leverage the fact to skip calculation if possible.
+    files.lastOption.foreach { lastEntry =>
+      val latestBatchId = lastEntry.batchId
+      val latestCompactedBatchId = getAllValidBatches(latestBatchId, compactInterval)(0)
+      if ((latestBatchId - latestCompactedBatchId) < PREV_NUM_BATCHES_TO_READ_IN_RESTORE) {
+        val logsForLatestCompactedBatch = files.filter { entry =>
+          entry.batchId == latestCompactedBatchId
+        }
+        fileEntryCache.put(latestCompactedBatchId, logsForLatestCompactedBatch)
+      }
+    }
+
+    files
+  }
 }
 
 object FileStreamSourceLog {
   val VERSION = 1
+  val PREV_NUM_BATCHES_TO_READ_IN_RESTORE = 2
 }

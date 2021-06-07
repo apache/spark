@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{BROADCAST, Filter, HintInfo,
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.execution.FileSourceScanExec
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
+import org.apache.spark.sql.execution.analysis.DetectAmbiguousSelfJoin.LogicalPlanWithDatasetId
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.exchange.BroadcastExchangeExec
 import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
@@ -120,6 +121,16 @@ class DataFrameJoinSuite extends QueryTest
 
     checkAnswer(
       df2.crossJoin(df1),
+      Row(2, "2", 1, "1") :: Row(2, "2", 3, "3") ::
+        Row(4, "4", 1, "1") :: Row(4, "4", 3, "3") :: Nil)
+
+    checkAnswer(
+      df1.join(df2, Nil, "cross"),
+      Row(1, "1", 2, "2") :: Row(1, "1", 4, "4") ::
+        Row(3, "3", 2, "2") :: Row(3, "3", 4, "4") :: Nil)
+
+    checkAnswer(
+      df2.join(df1, Nil, "cross"),
       Row(2, "2", 1, "1") :: Row(2, "2", 3, "3") ::
         Row(4, "4", 1, "1") :: Row(4, "4", 3, "3") :: Nil)
   }
@@ -264,7 +275,16 @@ class DataFrameJoinSuite extends QueryTest
     withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "false") {
       val df = spark.range(2)
       // this throws an exception before the fix
-      df.join(df, df("id") <=> df("id")).queryExecution.optimizedPlan
+      val plan = df.join(df, df("id") <=> df("id")).queryExecution.optimizedPlan
+
+      plan match {
+        // SPARK-34178: we can't match the plan before the fix due to
+        // the right side plan doesn't contains dataset id.
+        case Join(
+          LogicalPlanWithDatasetId(_, leftId),
+          LogicalPlanWithDatasetId(_, rightId), _, _, _) =>
+          assert(leftId === rightId)
+      }
     }
   }
 
@@ -341,7 +361,7 @@ class DataFrameJoinSuite extends QueryTest
 
           def checkIfHintApplied(df: DataFrame): Unit = {
             val sparkPlan = df.queryExecution.executedPlan
-            val broadcastHashJoins = sparkPlan.collect { case p: BroadcastHashJoinExec => p }
+            val broadcastHashJoins = collect(sparkPlan) { case p: BroadcastHashJoinExec => p }
             assert(broadcastHashJoins.size == 1)
             val broadcastExchanges = broadcastHashJoins.head.collect {
               case p: BroadcastExchangeExec => p
@@ -356,7 +376,7 @@ class DataFrameJoinSuite extends QueryTest
 
           def checkIfHintNotApplied(df: DataFrame): Unit = {
             val sparkPlan = df.queryExecution.executedPlan
-            val broadcastHashJoins = sparkPlan.collect { case p: BroadcastHashJoinExec => p }
+            val broadcastHashJoins = collect(sparkPlan) { case p: BroadcastHashJoinExec => p }
             assert(broadcastHashJoins.isEmpty)
           }
 
@@ -456,5 +476,27 @@ class DataFrameJoinSuite extends QueryTest
     val df4 = spark.createDataFrame(rowSeq4.asJava, schema4)
 
     checkAnswer(df3.except(df4), Row(10, 50, 2, Row(10, 50, 2)))
+  }
+
+  test("SPARK-34527: Resolve common columns from USING JOIN") {
+    val joinDf = testData2.as("testData2").join(
+      testData3.as("testData3"), usingColumns = Seq("a"), joinType = "fullouter")
+    val dfQuery = joinDf.select(
+      $"a", $"testData2.a", $"testData2.b", $"testData3.a", $"testData3.b")
+    val dfQuery2 = joinDf.select(
+      $"a", testData2.col("a"), testData2.col("b"), testData3.col("a"), testData3.col("b"))
+
+    Seq(dfQuery, dfQuery2).map { query =>
+      checkAnswer(query,
+        Seq(
+          Row(1, 1, 1, 1, null),
+          Row(1, 1, 2, 1, null),
+          Row(2, 2, 1, 2, 2),
+          Row(2, 2, 2, 2, 2),
+          Row(3, 3, 1, null, null),
+          Row(3, 3, 2, null, null)
+        )
+      )
+    }
   }
 }

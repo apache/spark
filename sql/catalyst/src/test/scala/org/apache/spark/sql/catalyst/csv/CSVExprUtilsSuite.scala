@@ -29,7 +29,7 @@ class CSVExprUtilsSuite extends SparkFunSuite {
     assert(CSVExprUtils.toChar("""\f""") === '\f')
     assert(CSVExprUtils.toChar("""\"""") === '\"')
     assert(CSVExprUtils.toChar("""\'""") === '\'')
-    assert(CSVExprUtils.toChar("""\u0000""") === '\u0000')
+    assert(CSVExprUtils.toChar("\u0000") === '\u0000')
     assert(CSVExprUtils.toChar("""\\""") === '\\')
   }
 
@@ -76,7 +76,7 @@ class CSVExprUtilsSuite extends SparkFunSuite {
     // tab in the middle of some other letters
     ("""ba\tr""", Some("ba\tr"), None),
     // null character, expressed in Unicode literal syntax
-    ("""\u0000""", Some("\u0000"), None),
+    ("\u0000", Some("\u0000"), None),
     // and specified directly
     ("\u0000", Some("\u0000"), None)
   )

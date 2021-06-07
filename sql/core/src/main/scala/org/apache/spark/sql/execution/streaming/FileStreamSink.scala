@@ -29,7 +29,7 @@ import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.datasources.{BasicWriteJobStatsTracker, FileFormat, FileFormatWriter}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.util.SerializableConfiguration
+import org.apache.spark.util.{SerializableConfiguration, Utils}
 
 object FileStreamSink extends Logging {
   // The name of the subdirectory that is used to store metadata about which files are valid.
@@ -43,12 +43,20 @@ object FileStreamSink extends Logging {
     path match {
       case Seq(singlePath) =>
         val hdfsPath = new Path(singlePath)
-        val fs = hdfsPath.getFileSystem(hadoopConf)
-        if (fs.isDirectory(hdfsPath)) {
-          val metadataPath = getMetadataLogPath(fs, hdfsPath, sqlConf)
-          fs.exists(metadataPath)
-        } else {
-          false
+        try {
+          val fs = hdfsPath.getFileSystem(hadoopConf)
+          if (fs.isDirectory(hdfsPath)) {
+            val metadataPath = getMetadataLogPath(fs, hdfsPath, sqlConf)
+            fs.exists(metadataPath)
+          } else {
+            false
+          }
+        } catch {
+          case e: SparkException => throw e
+          case NonFatal(e) =>
+            logWarning(s"Assume no metadata directory. Error while looking for " +
+              s"metadata directory in the path: $singlePath.", e)
+            false
         }
       case _ => false
     }
@@ -136,8 +144,9 @@ class FileStreamSink(
   private val basePath = new Path(path)
   private val logPath = getMetadataLogPath(basePath.getFileSystem(hadoopConf), basePath,
     sparkSession.sessionState.conf)
-  private val fileLog =
-    new FileStreamSinkLog(FileStreamSinkLog.VERSION, sparkSession, logPath.toString)
+  private val retention = options.get("retention").map(Utils.timeStringAsMs)
+  private val fileLog = new FileStreamSinkLog(FileStreamSinkLog.VERSION, sparkSession,
+    logPath.toString, retention)
 
   private def basicWriteJobStatsTracker: BasicWriteJobStatsTracker = {
     val serializableHadoopConf = new SerializableConfiguration(hadoopConf)

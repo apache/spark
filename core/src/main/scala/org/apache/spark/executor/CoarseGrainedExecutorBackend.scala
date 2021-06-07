@@ -26,6 +26,7 @@ import scala.collection.mutable
 import scala.util.{Failure, Success}
 import scala.util.control.NonFatal
 
+import io.netty.util.internal.PlatformDependent
 import org.json4s.DefaultFormats
 
 import org.apache.spark._
@@ -39,7 +40,7 @@ import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.resource.ResourceProfile._
 import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.rpc._
-import org.apache.spark.scheduler.{ExecutorLossReason, TaskDescription}
+import org.apache.spark.scheduler.{ExecutorLossMessage, ExecutorLossReason, TaskDescription}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 import org.apache.spark.serializer.SerializerInstance
 import org.apache.spark.util.{ChildFirstURLClassLoader, MutableURLClassLoader, SignalUtils, ThreadUtils, Utils}
@@ -82,13 +83,22 @@ private[spark] class CoarseGrainedExecutorBackend(
 
   override def onStart(): Unit = {
     if (env.conf.get(DECOMMISSION_ENABLED)) {
-      logInfo("Registering PWR handler to trigger decommissioning.")
-      SignalUtils.register("PWR", "Failed to register SIGPWR handler - " +
-        "disabling executor decommission feature.") (self.askSync[Boolean](ExecutorSigPWRReceived))
+      val signal = env.conf.get(EXECUTOR_DECOMMISSION_SIGNAL)
+      logInfo(s"Registering SIG$signal handler to trigger decommissioning.")
+      SignalUtils.register(signal, s"Failed to register SIG$signal handler - disabling" +
+        s" executor decommission feature.") (self.askSync[Boolean](ExecutorDecommissionSigReceived))
     }
 
     logInfo("Connecting to driver: " + driverUrl)
     try {
+      if (PlatformDependent.directBufferPreferred() &&
+          PlatformDependent.maxDirectMemory() < env.conf.get(MAX_REMOTE_BLOCK_SIZE_FETCH_TO_MEM)) {
+        throw new SparkException(s"Netty direct memory should at least be bigger than " +
+          s"'${MAX_REMOTE_BLOCK_SIZE_FETCH_TO_MEM.key}', but got " +
+          s"${PlatformDependent.maxDirectMemory()} bytes < " +
+          s"${env.conf.get(MAX_REMOTE_BLOCK_SIZE_FETCH_TO_MEM)}")
+      }
+
       _resources = parseOrFindResources(resourcesFileOpt)
     } catch {
       case NonFatal(e) =>
@@ -208,7 +218,7 @@ private[spark] class CoarseGrainedExecutorBackend(
   }
 
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
-    case ExecutorSigPWRReceived =>
+    case ExecutorDecommissionSigReceived =>
       var driverNotified = false
       try {
         driver.foreach { driverRef =>
@@ -321,13 +331,13 @@ private[spark] class CoarseGrainedExecutorBackend(
                 // since the start of computing it.
                 if (allBlocksMigrated && (migrationTime > lastTaskRunningTime)) {
                   logInfo("No running tasks, all blocks migrated, stopping.")
-                  exitExecutor(0, "Finished decommissioning", notifyDriver = true)
+                  exitExecutor(0, ExecutorLossMessage.decommissionFinished, notifyDriver = true)
                 } else {
                   logInfo("All blocks not yet migrated.")
                 }
               } else {
                 logInfo("No running tasks, no block migration configured, stopping.")
-                exitExecutor(0, "Finished decommissioning", notifyDriver = true)
+                exitExecutor(0, ExecutorLossMessage.decommissionFinished, notifyDriver = true)
               }
             } else {
               logInfo("Blocked from shutdown by running ${executor.numRunningtasks} tasks")

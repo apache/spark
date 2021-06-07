@@ -35,7 +35,7 @@ import org.apache.spark.util.Utils
 
 case class TestData(key: Int, value: String)
 
-case class ThreeCloumntable(key: Int, value: String, key1: String)
+case class ThreeColumnTable(key: Int, value: String, key1: String)
 
 class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
     with SQLTestUtils  with PrivateMethodTester  {
@@ -277,7 +277,8 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
   test("Test partition mode = strict") {
     withSQLConf(("hive.exec.dynamic.partition.mode", "strict")) {
       withTable("partitioned") {
-        sql("CREATE TABLE partitioned (id bigint, data string) PARTITIONED BY (part string)")
+        sql("CREATE TABLE partitioned (id bigint, data string) USING hive " +
+          "PARTITIONED BY (part string)")
         val data = (1 to 10).map(i => (i, s"data-$i", if ((i % 2) == 0) "even" else "odd"))
           .toDF("id", "data", "part")
 
@@ -763,7 +764,7 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
       val path = dir.toURI.getPath
 
       val e = intercept[AnalysisException] {
-        sql(s"INSERT OVERWRITE LOCAL DIRECTORY '${path}' TABLE notexists")
+        sql(s"INSERT OVERWRITE LOCAL DIRECTORY '${path}' TABLE nonexistent")
       }.getMessage
       assert(e.contains("Table or view not found"))
     }

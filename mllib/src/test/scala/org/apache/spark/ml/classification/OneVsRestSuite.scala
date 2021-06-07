@@ -210,6 +210,26 @@ class OneVsRestSuite extends MLTest with DefaultReadWriteTest {
     assert(ova2.fit(dataset2) !== null)
   }
 
+  test("SPARK-34045: OneVsRestModel.transform should not call setter of submodels") {
+    val logReg = new LogisticRegression().setMaxIter(1)
+    val ovr = new OneVsRest().setClassifier(logReg)
+    val ovrm = ovr.fit(dataset)
+    val dataset2 = dataset.withColumnRenamed("features", "features2")
+    ovrm.setFeaturesCol("features2")
+
+    val oldCols = ovrm.models.map(_.getFeaturesCol)
+    ovrm.transform(dataset2)
+    val newCols = ovrm.models.map(_.getFeaturesCol)
+    assert(oldCols === newCols)
+  }
+
+  test("SPARK-34356: OneVsRestModel.transform should avoid potential column conflict") {
+    val logReg = new LogisticRegression().setMaxIter(1)
+    val ovr = new OneVsRest().setClassifier(logReg)
+    val ovrm = ovr.fit(dataset)
+    assert(ovrm.transform(dataset.withColumn("probability", lit(0.0))).count() === dataset.count())
+  }
+
   test("OneVsRest.copy and OneVsRestModel.copy") {
     val lr = new LogisticRegression()
       .setMaxIter(1)

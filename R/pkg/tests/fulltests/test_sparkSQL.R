@@ -1397,7 +1397,8 @@ test_that("column operators", {
 test_that("column functions", {
   c <- column("a")
   c1 <- abs(c) + acos(c) + approx_count_distinct(c) + ascii(c) + asin(c) + atan(c)
-  c2 <- avg(c) + base64(c) + bin(c) + bitwiseNOT(c) + cbrt(c) + ceil(c) + cos(c)
+  c2 <- avg(c) + base64(c) + bin(c) + suppressWarnings(bitwiseNOT(c)) +
+    bitwise_not(c) + cbrt(c) + ceil(c) + cos(c)
   c3 <- cosh(c) + count(c) + crc32(c) + hash(c) + exp(c)
   c4 <- explode(c) + expm1(c) + factorial(c) + first(c) + floor(c) + hex(c)
   c5 <- hour(c) + initcap(c) + last(c) + last_day(c) + length(c)
@@ -1405,7 +1406,8 @@ test_that("column functions", {
   c7 <- mean(c) + min(c) + month(c) + negate(c) + posexplode(c) + quarter(c)
   c8 <- reverse(c) + rint(c) + round(c) + rtrim(c) + sha1(c) + monotonically_increasing_id()
   c9 <- signum(c) + sin(c) + sinh(c) + size(c) + stddev(c) + soundex(c) + sqrt(c) + sum(c)
-  c10 <- sumDistinct(c) + tan(c) + tanh(c) + degrees(c) + radians(c)
+  c10 <- suppressWarnings(sumDistinct(c)) + sum_distinct(c) + tan(c) + tanh(c) +
+    degrees(c) + radians(c)
   c11 <- to_date(c) + trim(c) + unbase64(c) + unhex(c) + upper(c)
   c12 <- variance(c) + xxhash64(c) + ltrim(c, "a") + rtrim(c, "b") + trim(c, "c")
   c13 <- lead("col", 1) + lead(c, 1) + lag("col", 1) + lag(c, 1)
@@ -1425,12 +1427,14 @@ test_that("column functions", {
   c25 <- overlay(c1, c2, c3, c3) + overlay(c1, c2, c3) + overlay(c1, c2, 1) +
     overlay(c1, c2, 3, 4)
   c26 <- timestamp_seconds(c1) + vector_to_array(c) +
-    vector_to_array(c, "float32") + vector_to_array(c, "float64")
+    vector_to_array(c, "float32") + vector_to_array(c, "float64") +
+    array_to_vector(c)
   c27 <- nth_value("x", 1L) + nth_value("y", 2, TRUE) +
     nth_value(column("v"), 3) + nth_value(column("z"), 4L, FALSE)
   c28 <- asc_nulls_first(c1) + asc_nulls_last(c1) +
     desc_nulls_first(c1) + desc_nulls_last(c1)
   c29 <- acosh(c1) + asinh(c1) + atanh(c1)
+  c30 <- product(c1) + product(c1 * 0.5)
 
   # Test if base::is.nan() is exposed
   expect_equal(is.nan(c("a", "b")), c(FALSE, FALSE))
@@ -1447,7 +1451,7 @@ test_that("column functions", {
   expect_equal(collect(df2)[[3, 2]], TRUE)
 
   # Test that input_file_name()
-  actual_names <- sort(collect(distinct(select(df, input_file_name()))))
+  actual_names <- collect(distinct(select(df, input_file_name())))
   expect_equal(length(actual_names), 1)
   expect_equal(basename(actual_names[1, 1]), basename(jsonPath))
 
@@ -1456,6 +1460,8 @@ test_that("column functions", {
   expect_equal(collect(df3)[[2, 1]], FALSE)
   expect_equal(collect(df3)[[3, 1]], TRUE)
 
+  df4 <- select(df, count_distinct(df$age, df$name))
+  expect_equal(collect(df4)[[1, 1]], 2)
   df4 <- select(df, countDistinct(df$age, df$name))
   expect_equal(collect(df4)[[1, 1]], 2)
 
@@ -1886,9 +1892,12 @@ test_that("column binary mathfunctions", {
   expect_equal(collect(select(df, hypot(df$a, df$b)))[3, "HYPOT(a, b)"], sqrt(3^2 + 7^2))
   expect_equal(collect(select(df, hypot(df$a, df$b)))[4, "HYPOT(a, b)"], sqrt(4^2 + 8^2))
   ## nolint end
-  expect_equal(collect(select(df, shiftLeft(df$b, 1)))[4, 1], 16)
-  expect_equal(collect(select(df, shiftRight(df$b, 1)))[4, 1], 4)
-  expect_equal(collect(select(df, shiftRightUnsigned(df$b, 1)))[4, 1], 4)
+  expect_equal(collect(select(df, shiftleft(df$b, 1)))[4, 1], 16)
+  expect_equal(collect(select(df, shiftright(df$b, 1)))[4, 1], 4)
+  expect_equal(collect(select(df, shiftrightunsigned(df$b, 1)))[4, 1], 4)
+  expect_equal(collect(select(df, suppressWarnings(shiftLeft(df$b, 1))))[4, 1], 16)
+  expect_equal(collect(select(df, suppressWarnings(shiftRight(df$b, 1))))[4, 1], 4)
+  expect_equal(collect(select(df, suppressWarnings(shiftRightUnsigned(df$b, 1))))[4, 1], 4)
   expect_equal(class(collect(select(df, rand()))[2, 1]), "numeric")
   expect_equal(collect(select(df, rand(1)))[1, 1], 0.636, tolerance = 0.01)
   expect_equal(class(collect(select(df, randn()))[2, 1]), "numeric")
@@ -2150,6 +2159,20 @@ test_that("higher order functions", {
   expect_true(all(unlist(result)))
 
   expect_error(array_transform("xs", function(...) 42))
+})
+
+test_that("SPARK-34794: lambda vars must be resolved properly in nested higher order functions", {
+  df <- sql("SELECT array(1, 2, 3) as numbers, array('a', 'b', 'c') as letters")
+  ret <- first(select(
+    df,
+    array_transform("numbers", function(number) {
+      array_transform("letters", function(latter) {
+        struct(alias(number, "n"), alias(latter, "l"))
+      })
+    })
+  ))
+
+  expect_equal(1, ret[[1]][[1]][[1]][[1]]$n)
 })
 
 test_that("group by, agg functions", {
@@ -2883,6 +2906,15 @@ test_that("mutate(), transform(), rename() and names()", {
   expect_equal(nrow(result), 153)
   expect_equal(ncol(result), 2)
   detach(airquality)
+
+  # ensure long inferred names are handled without error (SPARK-26199)
+  #   test implicitly assumes eval(formals(deparse)$width.cutoff) = 60
+  #   (which has always been true as of 2020-11-15)
+  newDF <- mutate(
+    df,
+    df$age + 12345678901234567890 + 12345678901234567890 + 12345678901234
+  )
+  expect_match(tail(columns(newDF), 1L), "234567890", fixed = TRUE)
 })
 
 test_that("read/write ORC files", {
@@ -3272,6 +3304,12 @@ test_that("attach() on a DataFrame", {
   stat3 <- summary(df[, "age", drop = F])
   expect_equal(collect(stat3)[8, "age"], "30")
   expect_error(age)
+
+  # attach method uses deparse(); ensure no errors from a very long input
+  abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnop <- df # nolint
+  attach(abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnop)
+  expect_true(any(grepl("abcdefghijklmnopqrstuvwxyz", search())))
+  detach("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnop")
 })
 
 test_that("with() on a DataFrame", {
@@ -3967,7 +4005,8 @@ test_that("catalog APIs, listTables, listColumns, listFunctions", {
 
   # recoverPartitions does not work with temporary view
   expect_error(recoverPartitions("cars"),
-               "no such table - Table or view 'cars' not found in database 'default'")
+               paste("Error in recoverPartitions : analysis error - cars is a temp view.",
+                     "'recoverPartitions()' expects a table"), fixed = TRUE)
   expect_error(refreshTable("cars"), NA)
   expect_error(refreshByPath("/"), NA)
 

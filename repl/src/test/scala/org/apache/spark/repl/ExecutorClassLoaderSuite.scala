@@ -231,6 +231,7 @@ class ExecutorClassLoaderSuite
       .setMaster("local")
       .setAppName("executor-class-loader-test")
       .set("spark.network.timeout", "11s")
+      .set("spark.network.timeoutInterval", "11s")
       .set("spark.repl.class.outputDir", tempDir1.getAbsolutePath)
     val sc = new SparkContext(conf)
     try {

@@ -1,3 +1,5 @@
+-- test cases for like any
+
 CREATE OR REPLACE TEMPORARY VIEW like_any_table AS SELECT * FROM (VALUES
   ('google', '%oo%'),
   ('facebook', '%oo%'),

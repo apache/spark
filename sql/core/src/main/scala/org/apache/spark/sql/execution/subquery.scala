@@ -26,6 +26,8 @@ import org.apache.spark.sql.catalyst.{expressions, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.{CreateNamedStruct, Expression, ExprId, InSet, ListQuery, Literal, PlanExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.trees.{LeafLike, UnaryLike}
+import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BooleanType, DataType, StructType}
 
@@ -62,10 +64,9 @@ object ExecSubqueryExpression {
 case class ScalarSubquery(
     plan: BaseSubqueryExec,
     exprId: ExprId)
-  extends ExecSubqueryExpression {
+  extends ExecSubqueryExpression with LeafLike[Expression] {
 
   override def dataType: DataType = plan.schema.fields.head.dataType
-  override def children: Seq[Expression] = Nil
   override def nullable: Boolean = true
   override def toString: String = plan.simpleString(SQLConf.get.maxToStringFields)
   override def withNewPlan(query: BaseSubqueryExec): ScalarSubquery = copy(plan = query)
@@ -80,8 +81,7 @@ case class ScalarSubquery(
   @volatile private var updated: Boolean = false
 
   def updateResult(): Unit = {
-    // Only return the first two rows as an array to avoid Driver OOM.
-    val rows = plan.executeTake(2)
+    val rows = plan.executeCollect()
     if (rows.length > 1) {
       sys.error(s"more than one row returned by a subquery used as an expression:\n$plan")
     }
@@ -115,16 +115,17 @@ case class InSubqueryExec(
     child: Expression,
     plan: BaseSubqueryExec,
     exprId: ExprId,
-    private var resultBroadcast: Broadcast[Array[Any]] = null) extends ExecSubqueryExpression {
+    private var resultBroadcast: Broadcast[Array[Any]] = null)
+  extends ExecSubqueryExpression with UnaryLike[Expression] {
 
   @transient private var result: Array[Any] = _
   @transient private lazy val inSet = InSet(child, result.toSet)
 
   override def dataType: DataType = BooleanType
-  override def children: Seq[Expression] = child :: Nil
   override def nullable: Boolean = child.nullable
   override def toString: String = s"$child IN ${plan.name}"
   override def withNewPlan(plan: BaseSubqueryExec): InSubqueryExec = copy(plan = plan)
+  final override def nodePatternsInternal: Seq[TreePattern] = Seq(IN_SUBQUERY_EXEC)
 
   override def semanticEquals(other: Expression): Boolean = other match {
     case in: InSubqueryExec => child.semanticEquals(in.child) && plan.sameResult(in.plan)
@@ -167,6 +168,9 @@ case class InSubqueryExec(
       exprId = ExprId(0),
       resultBroadcast = null)
   }
+
+  override protected def withNewChildInternal(newChild: Expression): InSubqueryExec =
+    copy(child = newChild)
 }
 
 /**
@@ -174,13 +178,14 @@ case class InSubqueryExec(
  */
 case class PlanSubqueries(sparkSession: SparkSession) extends Rule[SparkPlan] {
   def apply(plan: SparkPlan): SparkPlan = {
-    plan.transformAllExpressions {
+    plan.transformAllExpressionsWithPruning(_.containsAnyPattern(SCALAR_SUBQUERY, IN_SUBQUERY)) {
       case subquery: expressions.ScalarSubquery =>
         val executedPlan = QueryExecution.prepareExecutedPlan(sparkSession, subquery.plan)
         ScalarSubquery(
-          SubqueryExec(s"scalar-subquery#${subquery.exprId.id}", executedPlan),
+          SubqueryExec.createForScalarSubquery(
+            s"scalar-subquery#${subquery.exprId.id}", executedPlan),
           subquery.exprId)
-      case expressions.InSubquery(values, ListQuery(query, _, exprId, _)) =>
+      case expressions.InSubquery(values, ListQuery(query, _, exprId, _, _)) =>
         val expr = if (values.length == 1) {
           values.head
         } else {
@@ -208,7 +213,7 @@ object ReuseSubquery extends Rule[SparkPlan] {
     }
     // Build a hash map using schema of subqueries to avoid O(N*N) sameResult calls.
     val subqueries = mutable.HashMap[StructType, ArrayBuffer[BaseSubqueryExec]]()
-    plan transformAllExpressions {
+    plan.transformAllExpressionsWithPruning(_.containsPattern(PLAN_EXPRESSION)) {
       case sub: ExecSubqueryExpression =>
         val sameSchema =
           subqueries.getOrElseUpdate(sub.plan.schema, ArrayBuffer[BaseSubqueryExec]())

@@ -183,6 +183,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
     name = Option(name).orElse(sparkProperties.get("spark.app.name")).orNull
     jars = Option(jars).orElse(sparkProperties.get(config.JARS.key)).orNull
     files = Option(files).orElse(sparkProperties.get(config.FILES.key)).orNull
+    archives = Option(archives).orElse(sparkProperties.get(config.ARCHIVES.key)).orNull
     pyFiles = Option(pyFiles).orElse(sparkProperties.get(config.SUBMIT_PYTHON_FILES.key)).orNull
     ivyRepoPath = sparkProperties.get("spark.jars.ivy").orNull
     ivySettingsPath = sparkProperties.get("spark.jars.ivySettings")
@@ -251,6 +252,9 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
     if (executorMemory != null
         && Try(JavaUtils.byteStringAsBytes(executorMemory)).getOrElse(-1L) <= 0) {
       error("Executor memory must be a positive number")
+    }
+    if (driverCores != null && Try(driverCores.toInt).getOrElse(-1) <= 0) {
+      error("Driver cores must be a positive number")
     }
     if (executorCores != null && Try(executorCores.toInt).getOrElse(-1) <= 0) {
       error("Executor cores must be a positive number")
@@ -512,6 +516,8 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
         |  --files FILES               Comma-separated list of files to be placed in the working
         |                              directory of each executor. File paths of these files
         |                              in executors can be accessed via SparkFiles.get(fileName).
+        |  --archives ARCHIVES         Comma-separated list of archives to be extracted into the
+        |                              working directory of each executor.
         |
         |  --conf, -c PROP=VALUE       Arbitrary Spark configuration property.
         |  --properties-file FILE      Path to a file from which to load extra properties. If not
@@ -562,8 +568,6 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
         |
         | Spark on YARN only:
         |  --queue QUEUE_NAME          The YARN queue to submit to (Default: "default").
-        |  --archives ARCHIVES         Comma separated list of archives to be extracted into the
-        |                              working directory of each executor.
       """.stripMargin
     )
 

@@ -87,6 +87,14 @@ sealed trait BufferSetterGetterUtils {
           (row: InternalRow, ordinal: Int) =>
             if (row.isNullAt(ordinal)) null else row.getLong(ordinal)
 
+        case YearMonthIntervalType =>
+          (row: InternalRow, ordinal: Int) =>
+            if (row.isNullAt(ordinal)) null else row.getInt(ordinal)
+
+        case DayTimeIntervalType =>
+          (row: InternalRow, ordinal: Int) =>
+            if (row.isNullAt(ordinal)) null else row.getLong(ordinal)
+
         case other =>
           (row: InternalRow, ordinal: Int) =>
             if (row.isNullAt(ordinal)) null else row.get(ordinal, other)
@@ -180,6 +188,22 @@ sealed trait BufferSetterGetterUtils {
             }
 
         case TimestampType =>
+          (row: InternalRow, ordinal: Int, value: Any) =>
+            if (value != null) {
+              row.setLong(ordinal, value.asInstanceOf[Long])
+            } else {
+              row.setNullAt(ordinal)
+            }
+
+        case YearMonthIntervalType =>
+          (row: InternalRow, ordinal: Int, value: Any) =>
+            if (value != null) {
+              row.setInt(ordinal, value.asInstanceOf[Int])
+            } else {
+              row.setNullAt(ordinal)
+            }
+
+        case DayTimeIntervalType =>
           (row: InternalRow, ordinal: Int, value: Any) =>
             if (value != null) {
               row.setLong(ordinal, value.asInstanceOf[Long])
@@ -325,7 +349,8 @@ case class ScalaUDAF(
     children: Seq[Expression],
     udaf: UserDefinedAggregateFunction,
     mutableAggBufferOffset: Int = 0,
-    inputAggBufferOffset: Int = 0)
+    inputAggBufferOffset: Int = 0,
+    udafName: Option[String] = None)
   extends ImperativeAggregate
   with NonSQLExpression
   with Logging
@@ -447,10 +472,15 @@ case class ScalaUDAF(
   }
 
   override def toString: String = {
-    s"""${udaf.getClass.getSimpleName}(${children.mkString(",")})"""
+    s"""$nodeName(${children.mkString(",")})"""
   }
 
-  override def nodeName: String = udaf.getClass.getSimpleName
+  override def nodeName: String = name
+
+  override def name: String = udafName.getOrElse(udaf.getClass.getSimpleName)
+
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): ScalaUDAF =
+    copy(children = newChildren)
 }
 
 case class ScalaAggregator[IN, BUF, OUT](
@@ -461,7 +491,8 @@ case class ScalaAggregator[IN, BUF, OUT](
     nullable: Boolean = true,
     isDeterministic: Boolean = true,
     mutableAggBufferOffset: Int = 0,
-    inputAggBufferOffset: Int = 0)
+    inputAggBufferOffset: Int = 0,
+    aggregatorName: Option[String] = None)
   extends TypedImperativeAggregate[BUF]
   with NonSQLExpression
   with UserDefinedExpression
@@ -513,7 +544,13 @@ case class ScalaAggregator[IN, BUF, OUT](
 
   override def toString: String = s"""${nodeName}(${children.mkString(",")})"""
 
-  override def nodeName: String = agg.getClass.getSimpleName
+  override def nodeName: String = name
+
+  override def name: String = aggregatorName.getOrElse(agg.getClass.getSimpleName)
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): ScalaAggregator[IN, BUF, OUT] =
+    copy(children = newChildren)
 }
 
 /**

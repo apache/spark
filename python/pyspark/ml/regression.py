@@ -180,10 +180,8 @@ class LinearRegression(_JavaRegressor, _LinearRegressionParams, JavaMLWritable, 
     >>> test1 = spark.createDataFrame([(Vectors.sparse(1, [0], [1.0]),)], ["features"])
     >>> abs(model.transform(test1).head().newPrediction - 1.0) < 0.001
     True
-    >>> lr.setParams("vector")
-    Traceback (most recent call last):
-        ...
-    TypeError: Method setParams forces keyword arguments.
+    >>> lr.setParams(featuresCol="vector")
+    LinearRegression...
     >>> lr_path = temp_path + "/lr"
     >>> lr.save(lr_path)
     >>> lr2 = LinearRegression.load(lr_path)
@@ -350,7 +348,7 @@ class LinearRegressionModel(_JavaRegressionModel, _LinearRegressionParams, Gener
     @since("2.0.0")
     def summary(self):
         """
-        Gets summary (e.g. residuals, mse, r-squared ) of model on
+        Gets summary (residuals, MSE, r-squared ) of model on
         training set. An exception is thrown if
         `trainingSummary is None`.
         """
@@ -373,7 +371,7 @@ class LinearRegressionModel(_JavaRegressionModel, _LinearRegressionParams, Gener
             instance of :py:class:`pyspark.sql.DataFrame`
         """
         if not isinstance(dataset, DataFrame):
-            raise ValueError("dataset must be a DataFrame but got %s." % type(dataset))
+            raise TypeError("dataset must be a DataFrame but got %s." % type(dataset))
         java_lr_summary = self._call_java("evaluate", dataset)
         return LinearRegressionSummary(java_lr_summary)
 
@@ -1801,7 +1799,7 @@ class AFTSurvivalRegression(_JavaRegressor, _AFTSurvivalRegressionParams,
     @keyword_only
     def __init__(self, *, featuresCol="features", labelCol="label", predictionCol="prediction",
                  fitIntercept=True, maxIter=100, tol=1E-6, censorCol="censor",
-                 quantileProbabilities=list([0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99]),
+                 quantileProbabilities=list([0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99]),  # noqa: B005
                  quantilesCol=None, aggregationDepth=2, maxBlockSizeInMB=0.0):
         """
         __init__(self, \\*, featuresCol="features", labelCol="label", predictionCol="prediction", \
@@ -1819,7 +1817,7 @@ class AFTSurvivalRegression(_JavaRegressor, _AFTSurvivalRegressionParams,
     @since("1.6.0")
     def setParams(self, *, featuresCol="features", labelCol="label", predictionCol="prediction",
                   fitIntercept=True, maxIter=100, tol=1E-6, censorCol="censor",
-                  quantileProbabilities=list([0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99]),
+                  quantileProbabilities=list([0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99]),  # noqa: B005
                   quantilesCol=None, aggregationDepth=2, maxBlockSizeInMB=0.0):
         """
         setParams(self, \\*, featuresCol="features", labelCol="label", predictionCol="prediction", \
@@ -2272,7 +2270,7 @@ class GeneralizedLinearRegressionModel(_JavaRegressionModel, _GeneralizedLinearR
     @since("2.0.0")
     def summary(self):
         """
-        Gets summary (e.g. residuals, deviance, pValues) of model on
+        Gets summary (residuals, deviance, p-values) of model on
         training set. An exception is thrown if
         `trainingSummary is None`.
         """
@@ -2296,7 +2294,7 @@ class GeneralizedLinearRegressionModel(_JavaRegressionModel, _GeneralizedLinearR
             instance of :py:class:`pyspark.sql.DataFrame`
         """
         if not isinstance(dataset, DataFrame):
-            raise ValueError("dataset must be a DataFrame but got %s." % type(dataset))
+            raise TypeError("dataset must be a DataFrame but got %s." % type(dataset))
         java_glr_summary = self._call_java("evaluate", dataset)
         return GeneralizedLinearRegressionSummary(java_glr_summary)
 

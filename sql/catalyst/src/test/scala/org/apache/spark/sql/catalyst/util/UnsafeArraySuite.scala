@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.util
 
-import java.time.{ZoneId, ZoneOffset}
+import java.time.ZoneId
 
 import scala.reflect.runtime.universe.TypeTag
 
@@ -40,8 +40,8 @@ class UnsafeArraySuite extends SparkFunSuite {
   val doubleArray = Array(1.1, 2.2, 3.3)
   val stringArray = Array("1", "10", "100")
   val dateArray = Array(
-    DateTimeUtils.stringToDate(UTF8String.fromString("1970-1-1"), ZoneOffset.UTC).get,
-    DateTimeUtils.stringToDate(UTF8String.fromString("2016-7-26"), ZoneOffset.UTC).get)
+    DateTimeUtils.stringToDate(UTF8String.fromString("1970-1-1")).get,
+    DateTimeUtils.stringToDate(UTF8String.fromString("2016-7-26")).get)
   private def defaultZoneId = ZoneId.systemDefault()
   val timestampArray = Array(
     DateTimeUtils.stringToTimestamp(
@@ -55,7 +55,7 @@ class UnsafeArraySuite extends SparkFunSuite {
     BigDecimal("1.2345678901234567890123456").setScale(21, BigDecimal.RoundingMode.FLOOR),
     BigDecimal("2.3456789012345678901234567").setScale(21, BigDecimal.RoundingMode.FLOOR))
 
-  val calenderintervalArray = Array(
+  val calendarintervalArray = Array(
     new CalendarInterval(3, 2, 321), new CalendarInterval(1, 2, 123))
 
   val intMultiDimArray = Array(Array(1), Array(2, 20), Array(3, 30, 300))
@@ -142,12 +142,12 @@ class UnsafeArraySuite extends SparkFunSuite {
 
     val schema = new StructType().add("array", ArrayType(CalendarIntervalType))
     val encoder = RowEncoder(schema).resolveAndBind()
-    val externalRow = Row(calenderintervalArray)
+    val externalRow = Row(calendarintervalArray)
     val ir = encoder.createSerializer().apply(externalRow)
     val unsafeCalendar = ir.getArray(0)
     assert(unsafeCalendar.isInstanceOf[UnsafeArrayData])
-    assert(unsafeCalendar.numElements == calenderintervalArray.length)
-    calenderintervalArray.zipWithIndex.map { case (e, i) =>
+    assert(unsafeCalendar.numElements == calendarintervalArray.length)
+    calendarintervalArray.zipWithIndex.map { case (e, i) =>
       assert(unsafeCalendar.getInterval(i) == e)
     }
 

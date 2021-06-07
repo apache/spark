@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.command.CommandUtils
 import org.apache.spark.sql.hive.HiveExternalCatalog
@@ -133,6 +134,7 @@ case class InsertIntoHiveTable(
     val numDynamicPartitions = partition.values.count(_.isEmpty)
     val numStaticPartitions = partition.values.count(_.nonEmpty)
     val partitionSpec = partition.map {
+      case (key, Some(null)) => key -> ExternalCatalogUtils.DEFAULT_PARTITION_NAME
       case (key, Some(value)) => key -> value
       case (key, None) => key -> ""
     }
@@ -143,10 +145,7 @@ case class InsertIntoHiveTable(
 
     // By this time, the partition map must match the table's partition columns
     if (partitionColumnNames.toSet != partition.keySet) {
-      throw new SparkException(
-        s"""Requested partitioning does not match the ${table.identifier.table} table:
-           |Requested partitions: ${partition.keys.mkString(",")}
-           |Table partitions: ${table.partitionColumnNames.mkString(",")}""".stripMargin)
+      throw QueryExecutionErrors.requestedPartitionsMismatchTablePartitionsError(table, partition)
     }
 
     // Validate partition spec if there exist any dynamic partitions
@@ -172,7 +171,7 @@ case class InsertIntoHiveTable(
     table.bucketSpec match {
       case Some(bucketSpec) =>
         // Writes to bucketed hive tables are allowed only if user does not care about maintaining
-        // table's bucketing ie. both "hive.enforce.bucketing" and "hive.enforce.sorting" are
+        // table's bucketing i.e. both "hive.enforce.bucketing" and "hive.enforce.sorting" are
         // set to false
         val enforceBucketingConfig = "hive.enforce.bucketing"
         val enforceSortingConfig = "hive.enforce.sorting"
@@ -192,8 +191,8 @@ case class InsertIntoHiveTable(
 
     val partitionAttributes = partitionColumnNames.takeRight(numDynamicPartitions).map { name =>
       val attr = query.resolve(name :: Nil, sparkSession.sessionState.analyzer.resolver).getOrElse {
-        throw new AnalysisException(
-          s"Unable to resolve $name given [${query.output.map(_.name).mkString(", ")}]")
+        throw QueryCompilationErrors.cannotResolveAttributeError(
+          name, query.output.map(_.name).mkString(", "))
       }.asInstanceOf[Attribute]
       // SPARK-28054: Hive metastore is not case preserving and keeps partition columns
       // with lower cased names. Hive will validate the column names in the partition directories
@@ -229,12 +228,13 @@ case class InsertIntoHiveTable(
             val caseInsensitiveDpMap = CaseInsensitiveMap(dpMap)
 
             val updatedPartitionSpec = partition.map {
+              case (key, Some(null)) => key -> ExternalCatalogUtils.DEFAULT_PARTITION_NAME
               case (key, Some(value)) => key -> value
               case (key, None) if caseInsensitiveDpMap.contains(key) =>
                 key -> caseInsensitiveDpMap(key)
               case (key, _) =>
-                throw new SparkException(s"Dynamic partition key $key is not among " +
-                  "written partition paths.")
+                throw QueryExecutionErrors.dynamicPartitionKeyNotAmongWrittenPartitionPathsError(
+                  key)
             }
             val partitionColumnNames = table.partitionColumnNames
             val tablePath = new Path(table.location)
@@ -244,8 +244,7 @@ case class InsertIntoHiveTable(
             val fs = partitionPath.getFileSystem(hadoopConf)
             if (fs.exists(partitionPath)) {
               if (!fs.delete(partitionPath, true)) {
-                throw new RuntimeException(
-                  s"Cannot remove partition directory '$partitionPath'")
+                throw QueryExecutionErrors.cannotRemovePartitionDirError(partitionPath)
               }
             }
           }
@@ -310,8 +309,7 @@ case class InsertIntoHiveTable(
               val fs = path.getFileSystem(hadoopConf)
               if (fs.exists(path)) {
                 if (!fs.delete(path, true)) {
-                  throw new RuntimeException(
-                    s"Cannot remove partition directory '$path'")
+                  throw QueryExecutionErrors.cannotRemovePartitionDirError(path)
                 }
                 // Don't let Hive do overwrite operation since it is slower.
                 doHiveOverwrite = false
@@ -341,4 +339,7 @@ case class InsertIntoHiveTable(
         isSrcLocal = false)
     }
   }
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): InsertIntoHiveTable =
+    copy(query = newChild)
 }

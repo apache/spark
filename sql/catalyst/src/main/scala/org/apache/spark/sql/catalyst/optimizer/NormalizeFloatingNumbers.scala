@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCo
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Window}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.types._
 
 /**
@@ -56,7 +57,7 @@ import org.apache.spark.sql.types._
 object NormalizeFloatingNumbers extends Rule[LogicalPlan] {
 
   def apply(plan: LogicalPlan): LogicalPlan = plan match {
-    case _ => plan transform {
+    case _ => plan.transformWithPruning( _.containsAnyPattern(WINDOW, JOIN)) {
       case w: Window if w.partitionSpec.exists(p => needNormalize(p)) =>
         // Although the `windowExpressions` may refer to `partitionSpec` expressions, we don't need
         // to normalize the `windowExpressions`, as they are executed per input row and should take
@@ -143,6 +144,28 @@ object NormalizeFloatingNumbers extends Rule[LogicalPlan] {
 
     case _ => throw new IllegalStateException(s"fail to normalize $expr")
   }
+
+  val FLOAT_NORMALIZER: Any => Any = (input: Any) => {
+    val f = input.asInstanceOf[Float]
+    if (f.isNaN) {
+      Float.NaN
+    } else if (f == -0.0f) {
+      0.0f
+    } else {
+      f
+    }
+  }
+
+  val DOUBLE_NORMALIZER: Any => Any = (input: Any) => {
+    val d = input.asInstanceOf[Double]
+    if (d.isNaN) {
+      Double.NaN
+    } else if (d == -0.0d) {
+      0.0d
+    } else {
+      d
+    }
+  }
 }
 
 case class NormalizeNaNAndZero(child: Expression) extends UnaryExpression with ExpectsInputTypes {
@@ -152,27 +175,8 @@ case class NormalizeNaNAndZero(child: Expression) extends UnaryExpression with E
   override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(FloatType, DoubleType))
 
   private lazy val normalizer: Any => Any = child.dataType match {
-    case FloatType => (input: Any) => {
-      val f = input.asInstanceOf[Float]
-      if (f.isNaN) {
-        Float.NaN
-      } else if (f == -0.0f) {
-        0.0f
-      } else {
-        f
-      }
-    }
-
-    case DoubleType => (input: Any) => {
-      val d = input.asInstanceOf[Double]
-      if (d.isNaN) {
-        Double.NaN
-      } else if (d == -0.0d) {
-        0.0d
-      } else {
-        d
-      }
-    }
+    case FloatType => NormalizeFloatingNumbers.FLOAT_NORMALIZER
+    case DoubleType => NormalizeFloatingNumbers.DOUBLE_NORMALIZER
   }
 
   override def nullSafeEval(input: Any): Any = {
@@ -208,4 +212,7 @@ case class NormalizeNaNAndZero(child: Expression) extends UnaryExpression with E
 
     nullSafeCodeGen(ctx, ev, codeToNormalize)
   }
+
+  override protected def withNewChildInternal(newChild: Expression): NormalizeNaNAndZero =
+    copy(child = newChild)
 }

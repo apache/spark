@@ -84,7 +84,12 @@ class QueryExecution(
   lazy val optimizedPlan: LogicalPlan = executePhase(QueryPlanningTracker.OPTIMIZATION) {
     // clone the plan to avoid sharing the plan instance between different stages like analyzing,
     // optimizing and planning.
-    sparkSession.sessionState.optimizer.executeAndTrack(withCachedData.clone(), tracker)
+    val plan = sparkSession.sessionState.optimizer.executeAndTrack(withCachedData.clone(), tracker)
+    // We do not want optimized plans to be re-analyzed as literals that have been constant folded
+    // and such can cause issues during analysis. While `clone` should maintain the `analyzed` state
+    // of the LogicalPlan, we set the plan as analyzed here as well out of paranoia.
+    plan.setAnalyzed()
+    plan
   }
 
   private def assertOptimized(): Unit = optimizedPlan
@@ -208,11 +213,13 @@ class QueryExecution(
     QueryPlan.append(logical, append, verbose, addSuffix, maxFields)
     append("\n== Analyzed Logical Plan ==\n")
     try {
-      append(
-        truncatedString(
-          analyzed.output.map(o => s"${o.name}: ${o.dataType.simpleString}"), ", ", maxFields)
-      )
-      append("\n")
+      if (analyzed.output.nonEmpty) {
+        append(
+          truncatedString(
+            analyzed.output.map(o => s"${o.name}: ${o.dataType.simpleString}"), ", ", maxFields)
+        )
+        append("\n")
+      }
       QueryPlan.append(analyzed, append, verbose, addSuffix, maxFields)
       append("\n== Optimized Logical Plan ==\n")
       QueryPlan.append(optimizedPlan, append, verbose, addSuffix, maxFields)
@@ -248,7 +255,12 @@ class QueryExecution(
 
     // trigger to compute stats for logical plans
     try {
-      optimizedPlan.stats
+      // This will trigger to compute stats for all the nodes in the plan, including subqueries,
+      // if the stats doesn't exist in the statsCache and update the statsCache corresponding
+      // to the node.
+      optimizedPlan.collectWithSubqueries {
+        case plan => plan.stats
+      }
     } catch {
       case e: AnalysisException => append(e.toString + "\n")
     }
@@ -344,7 +356,7 @@ object QueryExecution {
       PlanSubqueries(sparkSession),
       RemoveRedundantProjects,
       EnsureRequirements,
-      // `RemoveRedundantSorts` needs to be added before `EnsureRequirements` to guarantee the same
+      // `RemoveRedundantSorts` needs to be added after `EnsureRequirements` to guarantee the same
       // number of partitions when instantiating PartitioningCollection.
       RemoveRedundantSorts,
       DisableUnnecessaryBucketedScan,

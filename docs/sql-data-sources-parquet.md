@@ -22,7 +22,7 @@ license: |
 * Table of contents
 {:toc}
 
-[Parquet](http://parquet.io) is a columnar format that is supported by many other data processing systems.
+[Parquet](https://parquet.apache.org) is a columnar format that is supported by many other data processing systems.
 Spark SQL provides support for both reading and writing Parquet files that automatically preserves the schema
 of the original data. When reading Parquet files, all columns are automatically converted to be nullable for
 compatibility reasons.
@@ -252,6 +252,59 @@ REFRESH TABLE my_table;
 
 </div>
 
+## Data Source Option
+
+Data source options of Parquet can be set via:
+* the `.option`/`.options` methods of
+  * `DataFrameReader`
+  * `DataFrameWriter`
+  * `DataStreamReader`
+  * `DataStreamWriter`
+* `OPTIONS` clause at [CREATE TABLE USING DATA_SOURCE](sql-ref-syntax-ddl-create-table-datasource.html)
+
+<table class="table">
+  <tr><th><b>Property Name</b></th><th><b>Default</b></th><th><b>Meaning</b></th><th><b>Scope</b></th></tr>
+  <tr>
+    <td><code>datetimeRebaseMode</code></td>
+    <td>(value of <code>spark.sql.parquet.datetimeRebaseModeInRead</code> configuration)</td>
+    <td>The <code>datetimeRebaseMode</code> option allows to specify the rebasing mode for the values of the <code>DATE</code>, <code>TIMESTAMP_MILLIS</code>, <code>TIMESTAMP_MICROS</code> logical types from the Julian to Proleptic Gregorian calendar.<br>
+      Currently supported modes are:
+      <ul>
+        <li><code>EXCEPTION</code>: fails in reads of ancient dates/timestamps that are ambiguous between the two calendars.</li>
+        <li><code>CORRECTED</code>: loads dates/timestamps without rebasing.</li>
+        <li><code>LEGACY</code>: performs rebasing of ancient dates/timestamps from the Julian to Proleptic Gregorian calendar.</li>
+      </ul>
+    </td>
+    <td>read</td>
+  </tr>
+  <tr>
+    <td><code>int96RebaseMode</code></td>
+    <td>(value of <code>spark.sql.parquet.int96RebaseModeInRead</code> configuration)</td>
+    <td>The <code>int96RebaseMode</code> option allows to specify the rebasing mode for INT96 timestamps from the Julian to Proleptic Gregorian calendar.<br>
+      Currently supported modes are:
+      <ul>
+        <li><code>EXCEPTION</code>: fails in reads of ancient INT96 timestamps that are ambiguous between the two calendars.</li>
+        <li><code>CORRECTED</code>: loads INT96 timestamps without rebasing.</li>
+        <li><code>LEGACY</code>: performs rebasing of ancient timestamps from the Julian to Proleptic Gregorian calendar.</li>
+      </ul>
+    </td>
+    <td>read</td>
+  </tr>
+  <tr>
+    <td><code>mergeSchema</code></td>
+    <td>(value of <code>spark.sql.parquet.mergeSchema</code> configuration)</td>
+    <td>Sets whether we should merge schemas collected from all Parquet part-files. This will override <code>spark.sql.parquet.mergeSchema</code>.</td>
+    <td>read</td>
+  </tr>
+  <tr>
+    <td><code>compression</code></td>
+    <td><code>snappy</code></td>
+    <td>Compression codec to use when saving to file. This can be one of the known case-insensitive shorten names (none, uncompressed, snappy, gzip, lzo, brotli, lz4, and zstd). This will override <code>spark.sql.parquet.compression.codec</code>.</td>
+    <td>write</td>
+  </tr>
+</table>
+Other generic options can be found in <a href="https://spark.apache.org/docs/latest/sql-data-sources-generic-options.html"> Generic Files Source Options</a>
+
 ### Configuration
 
 Configuration of Parquet can be done using the `setConf` method on `SparkSession` or by running
@@ -328,5 +381,55 @@ Configuration of Parquet can be done using the `setConf` method on `SparkSession
     with systems that do not support this newer format, set to true.
   </td>
   <td>1.6.0</td>
+</tr>
+<tr>
+<td>spark.sql.parquet.datetimeRebaseModeInRead</td>
+  <td><code>EXCEPTION</code></td>
+  <td>The rebasing mode for the values of the <code>DATE</code>, <code>TIMESTAMP_MILLIS</code>, <code>TIMESTAMP_MICROS</code> logical types from the Julian to Proleptic Gregorian calendar:<br>
+    <ul>
+      <li><code>EXCEPTION</code>: Spark will fail the reading if it sees ancient dates/timestamps that are ambiguous between the two calendars.</li>
+      <li><code>CORRECTED</code>: Spark will not do rebase and read the dates/timestamps as it is.</li>
+      <li><code>LEGACY</code>: Spark will rebase dates/timestamps from the legacy hybrid (Julian + Gregorian) calendar to Proleptic Gregorian calendar when reading Parquet files.</li>
+    </ul>
+    This config is only effective if the writer info (like Spark, Hive) of the Parquet files is unknown.
+  </td>
+  <td>3.0.0</td>
+</tr>
+<tr>
+  <td>spark.sql.parquet.datetimeRebaseModeInWrite</td>
+  <td><code>EXCEPTION</code></td>
+  <td>The rebasing mode for the values of the <code>DATE</code>, <code>TIMESTAMP_MILLIS</code>, <code>TIMESTAMP_MICROS</code> logical types from the Proleptic Gregorian to Julian calendar:<br>
+    <ul>
+      <li><code>EXCEPTION</code>: Spark will fail the writing if it sees ancient dates/timestamps that are ambiguous between the two calendars.</li>
+      <li><code>CORRECTED</code>: Spark will not do rebase and write the dates/timestamps as it is.</li>
+      <li><code>LEGACY</code>: Spark will rebase dates/timestamps from Proleptic Gregorian calendar to the legacy hybrid (Julian + Gregorian) calendar when writing Parquet files.</li>
+    </ul>
+  </td>
+  <td>3.0.0</td>
+</tr>
+<tr>
+  <td>spark.sql.parquet.int96RebaseModeInRead</td>
+  <td><code>EXCEPTION</code></td>
+  <td>The rebasing mode for the values of the <code>INT96</code> timestamp type from the Julian to Proleptic Gregorian calendar:<br>
+    <ul>
+      <li><code>EXCEPTION</code>: Spark will fail the reading if it sees ancient INT96 timestamps that are ambiguous between the two calendars.</li>
+      <li><code>CORRECTED</code>: Spark will not do rebase and read the dates/timestamps as it is.</li>
+      <li><code>LEGACY</code>: Spark will rebase INT96 timestamps from the legacy hybrid (Julian + Gregorian) calendar to Proleptic Gregorian calendar when reading Parquet files.</li>
+    </ul>
+    This config is only effective if the writer info (like Spark, Hive) of the Parquet files is unknown.
+  </td>
+  <td>3.1.0</td>
+</tr>
+<tr>
+  <td>spark.sql.parquet.int96RebaseModeInWrite</td>
+  <td><code>EXCEPTION</code></td>
+  <td>The rebasing mode for the values of the <code>INT96</code> timestamp type from the Proleptic Gregorian to Julian calendar:<br>
+    <ul>
+      <li><code>EXCEPTION</code>: Spark will fail the writing if it sees ancient timestamps that are ambiguous between the two calendars.</li>
+      <li><code>CORRECTED</code>: Spark will not do rebase and write the dates/timestamps as it is.</li>
+      <li><code>LEGACY</code>: Spark will rebase INT96 timestamps from Proleptic Gregorian calendar to the legacy hybrid (Julian + Gregorian) calendar when writing Parquet files.</li>
+    </ul>
+  </td>
+  <td>3.1.0</td>
 </tr>
 </table>

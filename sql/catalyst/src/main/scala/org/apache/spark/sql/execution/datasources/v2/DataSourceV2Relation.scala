@@ -24,7 +24,6 @@ import org.apache.spark.sql.catalyst.util.{truncatedString, CharVarcharUtils}
 import org.apache.spark.sql.connector.catalog.{CatalogPlugin, Identifier, MetadataColumn, SupportsMetadataColumns, Table, TableCapability}
 import org.apache.spark.sql.connector.read.{Scan, Statistics => V2Statistics, SupportsReportStatistics}
 import org.apache.spark.sql.connector.read.streaming.{Offset, SparkDataStream}
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.Utils
 
@@ -51,7 +50,7 @@ case class DataSourceV2Relation(
 
   override lazy val metadataOutput: Seq[AttributeReference] = table match {
     case hasMeta: SupportsMetadataColumns =>
-      val resolve = SQLConf.get.resolver
+      val resolve = conf.resolver
       val outputNames = outputSet.map(_.name)
       def isOutputColumn(col: MetadataColumn): Boolean = {
         outputNames.exists(name => resolve(col.name, name))
@@ -111,16 +110,16 @@ case class DataSourceV2Relation(
  * plan. This ensures that the stats that are used by the optimizer account for the filters and
  * projection that will be pushed down.
  *
- * @param table a DSv2 [[Table]]
+ * @param relation a [[DataSourceV2Relation]]
  * @param scan a DSv2 [[Scan]]
  * @param output the output attributes of this relation
  */
 case class DataSourceV2ScanRelation(
-    table: Table,
+    relation: DataSourceV2Relation,
     scan: Scan,
     output: Seq[AttributeReference]) extends LeafNode with NamedRelation {
 
-  override def name: String = table.name()
+  override def name: String = relation.table.name()
 
   override def simpleString(maxFields: Int): String = {
     s"RelationV2${truncatedString(output, "[", ", ", "]", maxFields)} $name"

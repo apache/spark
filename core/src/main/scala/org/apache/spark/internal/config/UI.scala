@@ -129,6 +129,21 @@ private[spark] object UI {
     .intConf
     .createWithDefault(1000)
 
+  val UI_TIMELINE_JOBS_MAXIMUM = ConfigBuilder("spark.ui.timeline.jobs.maximum")
+    .version("3.2.0")
+    .intConf
+    .createWithDefault(500)
+
+  val UI_TIMELINE_STAGES_MAXIMUM = ConfigBuilder("spark.ui.timeline.stages.maximum")
+    .version("3.2.0")
+    .intConf
+    .createWithDefault(500)
+
+  val UI_TIMELINE_EXECUTORS_MAXIMUM = ConfigBuilder("spark.ui.timeline.executors.maximum")
+    .version("3.2.0")
+    .intConf
+    .createWithDefault(250)
+
   val ACLS_ENABLE = ConfigBuilder("spark.acls.enable")
     .version("1.1.0")
     .booleanConf

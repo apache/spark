@@ -19,10 +19,12 @@ package org.apache.spark.sql.execution
 
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
-import java.time.{Instant, LocalDate, ZoneOffset}
+import java.time.{Duration, Instant, LocalDate, Period}
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.IntervalStringStyles.HIVE_STYLE
+import org.apache.spark.sql.catalyst.util.IntervalUtils.{durationToMicros, periodToMonths, toDayTimeIntervalString, toYearMonthIntervalString}
 import org.apache.spark.sql.execution.command.{DescribeCommandBase, ExecutedCommandExec, ShowTablesCommand, ShowViewsCommand}
 import org.apache.spark.sql.execution.datasources.v2.{DescribeTableExec, ShowTablesExec}
 import org.apache.spark.sql.internal.SQLConf
@@ -36,15 +38,7 @@ object HiveResult {
   case class TimeFormatters(date: DateFormatter, timestamp: TimestampFormatter)
 
   def getTimeFormatters: TimeFormatters = {
-    // The date formatter does not depend on Spark's session time zone controlled by
-    // the SQL config `spark.sql.session.timeZone`. The `zoneId` parameter is used only in
-    // parsing of special date values like `now`, `yesterday` and etc. but not in date formatting.
-    // While formatting of:
-    // - `java.time.LocalDate`, zone id is not used by `DateTimeFormatter` at all.
-    // - `java.sql.Date`, the date formatter delegates formatting to the legacy formatter
-    //   which uses the default system time zone `TimeZone.getDefault`. This works correctly
-    //   due to `DateTimeUtils.toJavaDate` which is based on the system time zone too.
-    val dateFormatter = DateFormatter(ZoneOffset.UTC)
+    val dateFormatter = DateFormatter()
     val timestampFormatter = TimestampFormatter.getFractionFormatter(
       DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone))
     TimeFormatters(dateFormatter, timestampFormatter)
@@ -117,6 +111,10 @@ object HiveResult {
       struct.toSeq.zip(fields).map { case (v, t) =>
         s""""${t.name}":${toHiveString((v, t.dataType), true, formatters)}"""
       }.mkString("{", ",", "}")
+    case (period: Period, YearMonthIntervalType) =>
+      toYearMonthIntervalString(periodToMonths(period), HIVE_STYLE)
+    case (duration: Duration, DayTimeIntervalType) =>
+      toDayTimeIntervalString(durationToMicros(duration), HIVE_STYLE)
     case (other, _: UserDefinedType[_]) => other.toString
   }
 }

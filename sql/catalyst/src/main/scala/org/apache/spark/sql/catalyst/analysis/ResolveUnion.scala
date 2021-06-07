@@ -19,12 +19,12 @@ package org.apache.spark.sql.catalyst.analysis
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.optimizer.{CombineUnions, OptimizeUpdateFields}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, Union}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.catalyst.trees.TreePattern.UNION
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.unsafe.types.UTF8String
@@ -98,7 +98,7 @@ object ResolveUnion extends Rule[LogicalPlan] {
   private def addFields(col: NamedExpression, target: StructType): Expression = {
     assert(col.dataType.isInstanceOf[StructType], "Only support StructType.")
 
-    val resolver = SQLConf.get.resolver
+    val resolver = conf.resolver
     val missingFieldsOpt =
       StructType.findMissingFields(col.dataType.asInstanceOf[StructType], target, resolver)
 
@@ -135,7 +135,7 @@ object ResolveUnion extends Rule[LogicalPlan] {
     fields.foldLeft(col) { case (currCol, field) =>
       field.dataType match {
         case st: StructType =>
-          val resolver = SQLConf.get.resolver
+          val resolver = conf.resolver
           val colField = currCol.dataType.asInstanceOf[StructType]
             .find(f => resolver(f.name, field.name))
           if (colField.isEmpty) {
@@ -161,7 +161,7 @@ object ResolveUnion extends Rule[LogicalPlan] {
       left: LogicalPlan,
       right: LogicalPlan,
       allowMissingCol: Boolean): (Seq[NamedExpression], Seq[NamedExpression]) = {
-    val resolver = SQLConf.get.resolver
+    val resolver = conf.resolver
     val leftOutputAttrs = left.output
     val rightOutputAttrs = right.output
 
@@ -195,9 +195,8 @@ object ResolveUnion extends Rule[LogicalPlan] {
         if (allowMissingCol) {
           Alias(Literal(null, lattr.dataType), lattr.name)()
         } else {
-          throw new AnalysisException(
-            s"""Cannot resolve column name "${lattr.name}" among """ +
-              s"""(${rightOutputAttrs.map(_.name).mkString(", ")})""")
+          throw QueryCompilationErrors.cannotResolveColumnNameAmongAttributesError(
+            lattr, rightOutputAttrs)
         }
       }
     }
@@ -236,7 +235,7 @@ object ResolveUnion extends Rule[LogicalPlan] {
 
   // Check column name duplication
   private def checkColumnNames(left: LogicalPlan, right: LogicalPlan): Unit = {
-    val caseSensitiveAnalysis = SQLConf.get.caseSensitiveAnalysis
+    val caseSensitiveAnalysis = conf.caseSensitiveAnalysis
     val leftOutputAttrs = left.output
     val rightOutputAttrs = right.output
 
@@ -250,7 +249,8 @@ object ResolveUnion extends Rule[LogicalPlan] {
       caseSensitiveAnalysis)
   }
 
-  def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperatorsUp {
+  def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
+    _.containsPattern(UNION), ruleId) {
     case e if !e.childrenResolved => e
 
     case Union(children, byName, allowMissingCol) if byName =>

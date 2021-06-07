@@ -258,6 +258,15 @@ private[spark] class BlockManager(
   @inline final private def isDecommissioning() = {
     decommissioner.isDefined
   }
+
+  @inline final private def checkShouldStore(blockId: BlockId) = {
+    // Don't reject broadcast blocks since they may be stored during task exec and
+    // don't need to be migrated.
+    if (isDecommissioning() && !blockId.isBroadcast) {
+        throw new BlockSavedOnDecommissionedBlockManagerException(blockId)
+    }
+  }
+
   // This is a lazy val so someone can migrating RDDs even if they don't have a MigratableResolver
   // for shuffles. Used in BlockManagerDecommissioner & block puts.
   private[storage] lazy val migratableResolver: MigratableResolver = {
@@ -627,7 +636,16 @@ private[spark] class BlockManager(
   override def getLocalBlockData(blockId: BlockId): ManagedBuffer = {
     if (blockId.isShuffle) {
       logDebug(s"Getting local shuffle block ${blockId}")
-      shuffleManager.shuffleBlockResolver.getBlockData(blockId)
+      try {
+        shuffleManager.shuffleBlockResolver.getBlockData(blockId)
+      } catch {
+        case e: IOException =>
+          if (conf.get(config.STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH).isDefined) {
+            FallbackStorage.read(conf, blockId)
+          } else {
+            throw e
+          }
+      }
     } else {
       getLocalBytes(blockId) match {
         case Some(blockData) =>
@@ -661,9 +679,7 @@ private[spark] class BlockManager(
       level: StorageLevel,
       classTag: ClassTag[_]): StreamCallbackWithID = {
 
-    if (isDecommissioning()) {
-       throw new BlockSavedOnDecommissionedBlockManagerException(blockId)
-    }
+    checkShouldStore(blockId)
 
     if (blockId.isShuffle) {
       logDebug(s"Putting shuffle block ${blockId}")
@@ -1312,9 +1328,7 @@ private[spark] class BlockManager(
 
     require(blockId != null, "BlockId is null")
     require(level != null && level.isValid, "StorageLevel is null or invalid")
-    if (isDecommissioning()) {
-      throw new BlockSavedOnDecommissionedBlockManagerException(blockId)
-    }
+    checkShouldStore(blockId)
 
     val putBlockInfo = {
       val newInfo = new BlockInfo(level, classTag, tellMaster)
@@ -1580,7 +1594,12 @@ private[spark] class BlockManager(
         lastPeerFetchTimeNs = System.nanoTime()
         logDebug("Fetched peers from master: " + cachedPeers.mkString("[", ",", "]"))
       }
-      cachedPeers
+      if (cachedPeers.isEmpty &&
+          conf.get(config.STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH).isDefined) {
+        Seq(FallbackStorage.FALLBACK_BLOCK_MANAGER_ID)
+      } else {
+        cachedPeers
+      }
     }
   }
 

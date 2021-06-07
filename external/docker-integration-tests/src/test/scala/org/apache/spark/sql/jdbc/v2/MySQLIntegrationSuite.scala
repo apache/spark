@@ -32,8 +32,8 @@ import org.apache.spark.tags.DockerTest
  *
  * To run this test suite for a specific version (e.g., mysql:5.7.31):
  * {{{
- * MYSQL_DOCKER_IMAGE_NAME=mysql:5.7.31
- *         ./build/sbt -Pdocker-integration-tests "testOnly *v2*MySQLIntegrationSuite"
+ *   ENABLE_DOCKER_INTEGRATION_TESTS=1 MYSQL_DOCKER_IMAGE_NAME=mysql:5.7.31
+ *     ./build/sbt -Pdocker-integration-tests "testOnly *v2*MySQLIntegrationSuite"
  *
  * }}}
  *
@@ -67,13 +67,13 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest {
   }
 
   override def testUpdateColumnType(tbl: String): Unit = {
-    sql(s"CREATE TABLE $tbl (ID INTEGER) USING _")
+    sql(s"CREATE TABLE $tbl (ID INTEGER)")
     var t = spark.table(tbl)
-    var expectedSchema = new StructType().add("ID", IntegerType)
+    var expectedSchema = new StructType().add("ID", IntegerType, true, defaultMetadata)
     assert(t.schema === expectedSchema)
     sql(s"ALTER TABLE $tbl ALTER COLUMN id TYPE STRING")
     t = spark.table(tbl)
-    expectedSchema = new StructType().add("ID", StringType)
+    expectedSchema = new StructType().add("ID", StringType, true, defaultMetadata)
     assert(t.schema === expectedSchema)
     // Update column type from STRING to INTEGER
     val msg1 = intercept[AnalysisException] {
@@ -98,7 +98,7 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest {
   }
 
   override def testUpdateColumnNullability(tbl: String): Unit = {
-    sql(s"CREATE TABLE $tbl (ID STRING NOT NULL) USING _")
+    sql(s"CREATE TABLE $tbl (ID STRING NOT NULL)")
     // Update nullability is unsupported for mysql db.
     val msg = intercept[AnalysisException] {
       sql(s"ALTER TABLE $tbl ALTER COLUMN ID DROP NOT NULL")
@@ -108,10 +108,10 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest {
   }
 
   override def testCreateTableWithProperty(tbl: String): Unit = {
-    sql(s"CREATE TABLE $tbl (ID INT) USING _" +
+    sql(s"CREATE TABLE $tbl (ID INT)" +
       s" TBLPROPERTIES('ENGINE'='InnoDB', 'DEFAULT CHARACTER SET'='utf8')")
-    var t = spark.table(tbl)
-    var expectedSchema = new StructType().add("ID", IntegerType)
+    val t = spark.table(tbl)
+    val expectedSchema = new StructType().add("ID", IntegerType, true, defaultMetadata)
     assert(t.schema === expectedSchema)
   }
 }

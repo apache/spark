@@ -64,7 +64,7 @@ trait AliasHelper {
 
   /**
    * Replace all attributes, that reference an alias, with the aliased expression,
-   * but keep the name of the outmost attribute.
+   * but keep the name of the outermost attribute.
    */
   protected def replaceAliasButKeepName(
      expr: NamedExpression,
@@ -89,7 +89,8 @@ trait AliasHelper {
         a.copy(child = trimAliases(a.child))(
           exprId = a.exprId,
           qualifier = a.qualifier,
-          explicitMetadata = Some(a.metadata))
+          explicitMetadata = Some(a.metadata),
+          nonInheritableMetadataKeys = a.nonInheritableMetadataKeys)
       case a: MultiAlias =>
         a.copy(child = trimAliases(a.child))
       case other => trimAliases(other)

@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.{Attribute, CurrentDate, CurrentTimestamp, MonotonicallyIncreasingID, Now}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, CurrentDate, CurrentTimestamp, GroupingSets, MonotonicallyIncreasingID, Now}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -203,14 +203,21 @@ object UnsupportedOperationChecker extends Logging {
       // Operations that cannot exists anywhere in a streaming plan
       subPlan match {
 
-        case Aggregate(_, aggregateExpressions, child) =>
+        case Aggregate(groupingExpressions, aggregateExpressions, child) =>
           val distinctAggExprs = aggregateExpressions.flatMap { expr =>
             expr.collect { case ae: AggregateExpression if ae.isDistinct => ae }
           }
+          val haveGroupingSets = groupingExpressions.exists(_.isInstanceOf[GroupingSets])
+
           throwErrorIf(
             child.isStreaming && distinctAggExprs.nonEmpty,
             "Distinct aggregations are not supported on streaming DataFrames/Datasets. Consider " +
               "using approx_count_distinct() instead.")
+
+          throwErrorIf(
+            child.isStreaming && haveGroupingSets,
+            "Grouping Sets is not supported on streaming DataFrames/Datasets"
+          )
 
         case _: Command =>
           throwError("Commands like CreateTable*, AlterTable*, Show* are not supported with " +
@@ -287,7 +294,7 @@ object UnsupportedOperationChecker extends Logging {
           throwError("dropDuplicates is not supported after aggregation on a " +
             "streaming DataFrame/Dataset")
 
-        case Join(left, right, joinType, condition, _) =>
+        case j @ Join(left, right, joinType, condition, _) =>
           if (left.isStreaming && right.isStreaming && outputMode != InternalOutputModes.Append) {
             throwError("Join between two streaming DataFrames/Datasets is not supported" +
               s" in ${outputMode} output mode, only in Append output mode")
@@ -298,8 +305,14 @@ object UnsupportedOperationChecker extends Logging {
               // no further validations needed
 
             case FullOuter =>
-              if (left.isStreaming || right.isStreaming) {
-                throwError("Full outer joins with streaming DataFrames/Datasets are not supported")
+              if (left.isStreaming && !right.isStreaming) {
+                throwError("FullOuter joins with streaming DataFrames/Datasets on the left " +
+                  "and a static DataFrame/Dataset on the right is not supported")
+              } else if (!left.isStreaming && right.isStreaming) {
+                throwError("FullOuter joins with streaming DataFrames/Datasets on the right " +
+                  "and a static DataFrame/Dataset on the left is not supported")
+              } else if (left.isStreaming && right.isStreaming) {
+                checkForStreamStreamJoinWatermark(j)
               }
 
             case LeftAnti =>
@@ -315,40 +328,17 @@ object UnsupportedOperationChecker extends Logging {
                 throwError(s"$joinType join with a streaming DataFrame/Dataset " +
                   "on the right and a static DataFrame/Dataset on the left is not supported")
               } else if (left.isStreaming && right.isStreaming) {
-                val watermarkInJoinKeys = StreamingJoinHelper.isWatermarkInJoinKeys(subPlan)
-
-                val hasValidWatermarkRange =
-                  StreamingJoinHelper.getStateValueWatermark(
-                    left.outputSet, right.outputSet, condition, Some(1000000)).isDefined
-
-                if (!watermarkInJoinKeys && !hasValidWatermarkRange) {
-                  throwError(
-                    s"Stream-stream $joinType join between two streaming DataFrame/Datasets " +
-                    "is not supported without a watermark in the join keys, or a watermark on " +
-                    "the nullable side and an appropriate range condition")
-                }
+                checkForStreamStreamJoinWatermark(j)
               }
 
             // We support streaming right outer joins with static on the left always, and with
             // stream on both sides under the appropriate conditions.
             case RightOuter =>
               if (left.isStreaming && !right.isStreaming) {
-                throwError("Right outer join with a streaming DataFrame/Dataset on the left and " +
+                throwError("RightOuter join with a streaming DataFrame/Dataset on the left and " +
                     "a static DataFrame/DataSet on the right not supported")
               } else if (left.isStreaming && right.isStreaming) {
-                val isWatermarkInJoinKeys = StreamingJoinHelper.isWatermarkInJoinKeys(subPlan)
-
-                // Check if the nullable side has a watermark, and there's a range condition which
-                // implies a state value watermark on the first side.
-                val hasValidWatermarkRange =
-                    StreamingJoinHelper.getStateValueWatermark(
-                      right.outputSet, left.outputSet, condition, Some(1000000)).isDefined
-
-                if (!isWatermarkInJoinKeys && !hasValidWatermarkRange) {
-                  throwError("Stream-stream outer join between two streaming DataFrame/Datasets " +
-                    "is not supported without a watermark in the join keys, or a watermark on " +
-                    "the nullable side and an appropriate range condition")
-                }
+                checkForStreamStreamJoinWatermark(j)
               }
 
             case NaturalJoin(_) | UsingJoin(_, _) =>
@@ -367,11 +357,8 @@ object UnsupportedOperationChecker extends Logging {
         case Except(left, right, _) if right.isStreaming =>
           throwError("Except on a streaming DataFrame/Dataset on the right is not supported")
 
-        case Intersect(left, right, _) if left.isStreaming && right.isStreaming =>
-          throwError("Intersect between two streaming DataFrames/Datasets is not supported")
-
-        case GroupingSets(_, _, child, _) if child.isStreaming =>
-          throwError("GroupingSets is not supported on streaming DataFrames/Datasets")
+        case Intersect(left, right, _) if left.isStreaming || right.isStreaming =>
+          throwError("Intersect of streaming DataFrames/Datasets is not supported")
 
         case GlobalLimit(_, _) | LocalLimit(_, _)
             if subPlan.children.forall(_.isStreaming) && outputMode == InternalOutputModes.Update =>
@@ -410,6 +397,7 @@ object UnsupportedOperationChecker extends Logging {
         case (_: Project | _: Filter | _: MapElements | _: MapPartitions |
               _: DeserializeToObject | _: SerializeFromObject | _: SubqueryAlias |
               _: TypedFilter) =>
+        case v: View if v.isTempViewStoringAnalyzedPlan =>
         case node if node.nodeName == "StreamingRelationV2" =>
         case node =>
           throwError(s"Continuous processing does not support ${node.nodeName} operations.")
@@ -437,5 +425,35 @@ object UnsupportedOperationChecker extends Logging {
   private def throwError(msg: String)(implicit operator: LogicalPlan): Nothing = {
     throw new AnalysisException(
       msg, operator.origin.line, operator.origin.startPosition, Some(operator))
+  }
+
+  private def checkForStreamStreamJoinWatermark(join: Join): Unit = {
+    val watermarkInJoinKeys = StreamingJoinHelper.isWatermarkInJoinKeys(join)
+
+    // Check if the nullable side has a watermark, and there's a range condition which
+    // implies a state value watermark on the first side.
+    val hasValidWatermarkRange = join.joinType match {
+      case LeftOuter | LeftSemi => StreamingJoinHelper.getStateValueWatermark(
+        join.left.outputSet, join.right.outputSet, join.condition, Some(1000000)).isDefined
+      case RightOuter => StreamingJoinHelper.getStateValueWatermark(
+        join.right.outputSet, join.left.outputSet, join.condition, Some(1000000)).isDefined
+      case FullOuter =>
+        Seq((join.left.outputSet, join.right.outputSet),
+          (join.right.outputSet, join.left.outputSet)).exists {
+          case (attributesToFindStateWatermarkFor, attributesWithEventWatermark) =>
+            StreamingJoinHelper.getStateValueWatermark(attributesToFindStateWatermarkFor,
+              attributesWithEventWatermark, join.condition, Some(1000000)).isDefined
+        }
+      case _ =>
+        throwError(
+          s"Join type ${join.joinType} is not supported with streaming DataFrame/Dataset")(join)
+    }
+
+    if (!watermarkInJoinKeys && !hasValidWatermarkRange) {
+      throwError(
+        s"Stream-stream ${join.joinType} join between two streaming DataFrame/Datasets " +
+          "is not supported without a watermark in the join keys, or a watermark on " +
+          "the nullable side and an appropriate range condition")(join)
+    }
   }
 }

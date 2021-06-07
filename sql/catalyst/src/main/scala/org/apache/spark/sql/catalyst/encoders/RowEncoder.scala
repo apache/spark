@@ -20,7 +20,6 @@ package org.apache.spark.sql.catalyst.encoders
 import scala.collection.Map
 import scala.reflect.ClassTag
 
-import org.apache.spark.SparkException
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.{ScalaReflection, WalkedTypePath}
 import org.apache.spark.sql.catalyst.DeserializerBuildHelper._
@@ -29,6 +28,7 @@ import org.apache.spark.sql.catalyst.analysis.GetColumnByOrdinal
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.objects._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -52,6 +52,9 @@ import org.apache.spark.sql.types._
  *
  *   TimestampType -> java.sql.Timestamp if spark.sql.datetime.java8API.enabled is false
  *   TimestampType -> java.time.Instant if spark.sql.datetime.java8API.enabled is true
+ *
+ *   DayTimeIntervalType -> java.time.Duration
+ *   YearMonthIntervalType -> java.time.Period
  *
  *   BinaryType -> byte array
  *   ArrayType -> scala.collection.Seq or Array
@@ -84,8 +87,7 @@ object RowEncoder {
         annotation.udt()
       } else {
         UDTRegistration.getUDTFor(udt.userClass.getName).getOrElse {
-          throw new SparkException(s"${udt.userClass.getName} is not annotated with " +
-            "SQLUserDefinedType nor registered with UDTRegistration.}")
+          throw QueryExecutionErrors.userDefinedTypeNotAnnotatedAndRegisteredError(udt)
         }
       }
       val obj = NewInstance(
@@ -107,6 +109,10 @@ object RowEncoder {
       } else {
         createSerializerForSqlDate(inputObject)
       }
+
+    case DayTimeIntervalType => createSerializerForJavaDuration(inputObject)
+
+    case YearMonthIntervalType => createSerializerForJavaPeriod(inputObject)
 
     case d: DecimalType =>
       CheckOverflow(StaticInvoke(
@@ -226,6 +232,8 @@ object RowEncoder {
       } else {
         ObjectType(classOf[java.sql.Date])
       }
+    case DayTimeIntervalType => ObjectType(classOf[java.time.Duration])
+    case YearMonthIntervalType => ObjectType(classOf[java.time.Period])
     case _: DecimalType => ObjectType(classOf[java.math.BigDecimal])
     case StringType => ObjectType(classOf[java.lang.String])
     case _: ArrayType => ObjectType(classOf[scala.collection.Seq[_]])
@@ -257,8 +265,7 @@ object RowEncoder {
         annotation.udt()
       } else {
         UDTRegistration.getUDTFor(udt.userClass.getName).getOrElse {
-          throw new SparkException(s"${udt.userClass.getName} is not annotated with " +
-            "SQLUserDefinedType nor registered with UDTRegistration.}")
+          throw QueryExecutionErrors.userDefinedTypeNotAnnotatedAndRegisteredError(udt)
         }
       }
       val obj = NewInstance(
@@ -280,6 +287,10 @@ object RowEncoder {
       } else {
         createDeserializerForSqlDate(input)
       }
+
+    case DayTimeIntervalType => createDeserializerForDuration(input)
+
+    case YearMonthIntervalType => createDeserializerForPeriod(input)
 
     case _: DecimalType => createDeserializerForJavaBigDecimal(input, returnNullable = false)
 

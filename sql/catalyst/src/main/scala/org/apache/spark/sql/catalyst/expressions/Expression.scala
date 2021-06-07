@@ -24,8 +24,10 @@ import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.aggregate.DeclarativeAggregate
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.trees.TreeNode
+import org.apache.spark.sql.catalyst.trees.{BinaryLike, LeafLike, QuaternaryLike, TernaryLike, TreeNode, UnaryLike}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{RUNTIME_REPLACEABLE, TreePattern}
 import org.apache.spark.sql.catalyst.util.truncatedString
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -285,7 +287,7 @@ abstract class Expression extends TreeNode[Expression] {
   }
 
   override def simpleStringWithNodeId(): String = {
-    throw new UnsupportedOperationException(s"$nodeName does not implement simpleStringWithNodeId")
+    throw QueryExecutionErrors.simpleStringWithNodeIdUnsupportedError(nodeName)
   }
 }
 
@@ -301,10 +303,10 @@ trait Unevaluable extends Expression {
   final override def foldable: Boolean = false
 
   final override def eval(input: InternalRow = null): Any =
-    throw new UnsupportedOperationException(s"Cannot evaluate expression: $this")
+    throw QueryExecutionErrors.cannotEvaluateExpressionError(this)
 
   final override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
-    throw new UnsupportedOperationException(s"Cannot generate code for expression: $this")
+    throw QueryExecutionErrors.cannotGenerateCodeForExpressionError(this)
 }
 
 
@@ -335,6 +337,8 @@ trait RuntimeReplaceable extends UnaryExpression with Unevaluable {
 
   override def sql: String = mkString(exprsReplaced.map(_.sql))
 
+  final override val nodePatterns: Seq[TreePattern] = Seq(RUNTIME_REPLACEABLE)
+
   def mkString(childrenString: Seq[String]): String = {
     prettyName + childrenString.mkString("(", ", ", ")")
   }
@@ -351,19 +355,24 @@ trait UnevaluableAggregate extends DeclarativeAggregate {
   override def nullable: Boolean = true
 
   override lazy val aggBufferAttributes =
-    throw new UnsupportedOperationException(s"Cannot evaluate aggBufferAttributes: $this")
+    throw QueryExecutionErrors.evaluateUnevaluableAggregateUnsupportedError(
+      "aggBufferAttributes", this)
 
   override lazy val initialValues: Seq[Expression] =
-    throw new UnsupportedOperationException(s"Cannot evaluate initialValues: $this")
+    throw QueryExecutionErrors.evaluateUnevaluableAggregateUnsupportedError(
+      "initialValues", this)
 
   override lazy val updateExpressions: Seq[Expression] =
-    throw new UnsupportedOperationException(s"Cannot evaluate updateExpressions: $this")
+    throw QueryExecutionErrors.evaluateUnevaluableAggregateUnsupportedError(
+      "updateExpressions", this)
 
   override lazy val mergeExpressions: Seq[Expression] =
-    throw new UnsupportedOperationException(s"Cannot evaluate mergeExpressions: $this")
+    throw QueryExecutionErrors.evaluateUnevaluableAggregateUnsupportedError(
+      "mergeExpressions", this)
 
   override lazy val evaluateExpression: Expression =
-    throw new UnsupportedOperationException(s"Cannot evaluate evaluateExpression: $this")
+    throw QueryExecutionErrors.evaluateUnevaluableAggregateUnsupportedError(
+      "evaluateExpression", this)
 }
 
 /**
@@ -445,21 +454,14 @@ trait Stateful extends Nondeterministic {
 /**
  * A leaf expression, i.e. one without any child expressions.
  */
-abstract class LeafExpression extends Expression {
-
-  override final def children: Seq[Expression] = Nil
-}
+abstract class LeafExpression extends Expression with LeafLike[Expression]
 
 
 /**
  * An expression with one input and one output. The output is by default evaluated to null
  * if the input is evaluated to null.
  */
-abstract class UnaryExpression extends Expression {
-
-  def child: Expression
-
-  override final def children: Seq[Expression] = child :: Nil
+abstract class UnaryExpression extends Expression with UnaryLike[Expression] {
 
   override def foldable: Boolean = child.foldable
   override def nullable: Boolean = child.nullable
@@ -483,7 +485,8 @@ abstract class UnaryExpression extends Expression {
    * of evaluation process, we should override [[eval]].
    */
   protected def nullSafeEval(input: Any): Any =
-    sys.error(s"UnaryExpressions must override either eval or nullSafeEval")
+    throw QueryExecutionErrors.notOverrideExpectedMethodsError("UnaryExpressions",
+      "eval", "nullSafeEval")
 
   /**
    * Called by unary expressions to generate a code block that returns null if its parent returns
@@ -536,16 +539,17 @@ abstract class UnaryExpression extends Expression {
   }
 }
 
+
+object UnaryExpression {
+  def unapply(e: UnaryExpression): Option[Expression] = Some(e.child)
+}
+
+
 /**
  * An expression with two inputs and one output. The output is by default evaluated to null
  * if any input is evaluated to null.
  */
-abstract class BinaryExpression extends Expression {
-
-  def left: Expression
-  def right: Expression
-
-  override final def children: Seq[Expression] = Seq(left, right)
+abstract class BinaryExpression extends Expression with BinaryLike[Expression] {
 
   override def foldable: Boolean = left.foldable && right.foldable
 
@@ -575,7 +579,8 @@ abstract class BinaryExpression extends Expression {
    * of evaluation process, we should override [[eval]].
    */
   protected def nullSafeEval(input1: Any, input2: Any): Any =
-    sys.error(s"BinaryExpressions must override either eval or nullSafeEval")
+    throw QueryExecutionErrors.notOverrideExpectedMethodsError("BinaryExpressions",
+      "eval", "nullSafeEval")
 
   /**
    * Short hand for generating binary evaluation code.
@@ -636,6 +641,11 @@ abstract class BinaryExpression extends Expression {
 }
 
 
+object BinaryExpression {
+  def unapply(e: BinaryExpression): Option[(Expression, Expression)] = Some((e.left, e.right))
+}
+
+
 /**
  * A [[BinaryExpression]] that is an operator, with two properties:
  *
@@ -684,7 +694,7 @@ object BinaryOperator {
  * An expression with three inputs and one output. The output is by default evaluated to null
  * if any input is evaluated to null.
  */
-abstract class TernaryExpression extends Expression {
+abstract class TernaryExpression extends Expression with TernaryLike[Expression] {
 
   override def foldable: Boolean = children.forall(_.foldable)
 
@@ -695,12 +705,11 @@ abstract class TernaryExpression extends Expression {
    * If subclass of TernaryExpression override nullable, probably should also override this.
    */
   override def eval(input: InternalRow): Any = {
-    val exprs = children
-    val value1 = exprs(0).eval(input)
+    val value1 = first.eval(input)
     if (value1 != null) {
-      val value2 = exprs(1).eval(input)
+      val value2 = second.eval(input)
       if (value2 != null) {
-        val value3 = exprs(2).eval(input)
+        val value3 = third.eval(input)
         if (value3 != null) {
           return nullSafeEval(value1, value2, value3)
         }
@@ -715,7 +724,8 @@ abstract class TernaryExpression extends Expression {
    * of evaluation process, we should override [[eval]].
    */
   protected def nullSafeEval(input1: Any, input2: Any, input3: Any): Any =
-    sys.error(s"TernaryExpressions must override either eval or nullSafeEval")
+    throw QueryExecutionErrors.notOverrideExpectedMethodsError("TernaryExpressions",
+      "eval", "nullSafeEval")
 
   /**
    * Short hand for generating ternary evaluation code.
@@ -782,7 +792,7 @@ abstract class TernaryExpression extends Expression {
  * An expression with four inputs and one output. The output is by default evaluated to null
  * if any input is evaluated to null.
  */
-abstract class QuaternaryExpression extends Expression {
+abstract class QuaternaryExpression extends Expression with QuaternaryLike[Expression] {
 
   override def foldable: Boolean = children.forall(_.foldable)
 
@@ -793,14 +803,13 @@ abstract class QuaternaryExpression extends Expression {
    * If subclass of QuaternaryExpression override nullable, probably should also override this.
    */
   override def eval(input: InternalRow): Any = {
-    val exprs = children
-    val value1 = exprs(0).eval(input)
+    val value1 = first.eval(input)
     if (value1 != null) {
-      val value2 = exprs(1).eval(input)
+      val value2 = second.eval(input)
       if (value2 != null) {
-        val value3 = exprs(2).eval(input)
+        val value3 = third.eval(input)
         if (value3 != null) {
-          val value4 = exprs(3).eval(input)
+          val value4 = fourth.eval(input)
           if (value4 != null) {
             return nullSafeEval(value1, value2, value3, value4)
           }
@@ -816,7 +825,8 @@ abstract class QuaternaryExpression extends Expression {
    *  full control of evaluation process, we should override [[eval]].
    */
   protected def nullSafeEval(input1: Any, input2: Any, input3: Any, input4: Any): Any =
-    sys.error(s"QuaternaryExpressions must override either eval or nullSafeEval")
+    throw QueryExecutionErrors.notOverrideExpectedMethodsError("QuaternaryExpressions",
+      "eval", "nullSafeEval")
 
   /**
    * Short hand for generating quaternary evaluation code.
@@ -941,7 +951,8 @@ abstract class SeptenaryExpression extends Expression {
       input5: Any,
       input6: Any,
       input7: Option[Any]): Any = {
-    sys.error("SeptenaryExpression must override either eval or nullSafeEval")
+    throw QueryExecutionErrors.notOverrideExpectedMethodsError("SeptenaryExpression",
+      "eval", "nullSafeEval")
   }
 
   /**
@@ -1071,4 +1082,6 @@ trait ComplexTypeMergingExpression extends Expression {
  * Common base trait for user-defined functions, including UDF/UDAF/UDTF of different languages
  * and Hive function wrappers.
  */
-trait UserDefinedExpression
+trait UserDefinedExpression {
+  def name: String
+}

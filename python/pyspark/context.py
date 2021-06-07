@@ -188,9 +188,9 @@ class SparkContext(object):
 
         # Check that we have at least the required parameters
         if not self._conf.contains("spark.master"):
-            raise Exception("A master URL must be set in your configuration")
+            raise RuntimeError("A master URL must be set in your configuration")
         if not self._conf.contains("spark.app.name"):
-            raise Exception("An application name must be set in your configuration")
+            raise RuntimeError("An application name must be set in your configuration")
 
         # Read back our properties from the conf in case we loaded some of them from
         # the classpath or an external config file
@@ -224,8 +224,10 @@ class SparkContext(object):
         self._encryption_enabled = self._jvm.PythonUtils.isEncryptionEnabled(self._jsc)
         os.environ["SPARK_AUTH_SOCKET_TIMEOUT"] = \
             str(self._jvm.PythonUtils.getPythonAuthSocketTimeout(self._jsc))
+        os.environ["SPARK_BUFFER_SIZE"] = \
+            str(self._jvm.PythonUtils.getSparkBufferSize(self._jsc))
 
-        self.pythonExec = os.environ.get("PYSPARK_PYTHON", 'python')
+        self.pythonExec = os.environ.get("PYSPARK_PYTHON", 'python3')
         self.pythonVer = "%d.%d" % sys.version_info[:2]
 
         # Broadcast's __reduce__ method stores Broadcast instances here.
@@ -348,7 +350,7 @@ class SparkContext(object):
 
     def __getnewargs__(self):
         # This method is called when attempting to pickle SparkContext, which is always an error:
-        raise Exception(
+        raise RuntimeError(
             "It appears that you are attempting to reference SparkContext from a broadcast "
             "variable, action, or transformation. SparkContext can only be used on the driver, "
             "not in code that it run on workers. For more information, see SPARK-5063."
@@ -1074,7 +1076,7 @@ class SparkContext(object):
         Returns a Java StorageLevel based on a pyspark.StorageLevel.
         """
         if not isinstance(storageLevel, StorageLevel):
-            raise Exception("storageLevel must be of type pyspark.StorageLevel")
+            raise TypeError("storageLevel must be of type pyspark.StorageLevel")
 
         newStorageLevel = self._jvm.org.apache.spark.storage.StorageLevel
         return newStorageLevel(storageLevel.useDisk,
@@ -1118,7 +1120,7 @@ class SparkContext(object):
         >>> lock = threading.Lock()
         >>> def map_func(x):
         ...     sleep(100)
-        ...     raise Exception("Task should have been cancelled")
+        ...     raise RuntimeError("Task should have been cancelled")
         >>> def start_job(x):
         ...     global result
         ...     try:
@@ -1272,7 +1274,7 @@ class SparkContext(object):
         Throws an exception if a SparkContext is about to be created in executors.
         """
         if TaskContext.get() is not None:
-            raise Exception("SparkContext should only be created and accessed on the driver.")
+            raise RuntimeError("SparkContext should only be created and accessed on the driver.")
 
 
 def _test():

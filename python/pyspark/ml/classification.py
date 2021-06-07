@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+import os
 import operator
 import sys
 import uuid
@@ -33,11 +34,13 @@ from pyspark.ml.tree import _DecisionTreeModel, _DecisionTreeParams, \
     _HasVarianceImpurity, _TreeClassifierParams
 from pyspark.ml.regression import _FactorizationMachinesParams, DecisionTreeRegressionModel
 from pyspark.ml.base import _PredictorParams
-from pyspark.ml.util import JavaMLWritable, JavaMLReadable, HasTrainingSummary
+from pyspark.ml.util import DefaultParamsReader, DefaultParamsWriter, \
+    JavaMLReadable, JavaMLReader, JavaMLWritable, JavaMLWriter, \
+    MLReader, MLReadable, MLWriter, MLWritable, HasTrainingSummary
 from pyspark.ml.wrapper import JavaParams, \
     JavaPredictor, JavaPredictionModel, JavaWrapper
-from pyspark.ml.common import inherit_doc, _java2py, _py2java
-from pyspark.ml.linalg import Vectors
+from pyspark.ml.common import inherit_doc
+from pyspark.ml.linalg import Vectors, VectorUDT
 from pyspark.sql import DataFrame
 from pyspark.sql.functions import udf, when
 from pyspark.sql.types import ArrayType, DoubleType
@@ -568,9 +571,9 @@ class LinearSVC(_JavaClassifier, _LinearSVCParams, JavaMLWritable, JavaMLReadabl
     >>> model.getMaxBlockSizeInMB()
     0.0
     >>> model.coefficients
-    DenseVector([0.0, -0.2792, -0.1833])
+    DenseVector([0.0, -1.0319, -0.5159])
     >>> model.intercept
-    1.0206118982229047
+    2.579645978780695
     >>> model.numClasses
     2
     >>> model.numFeatures
@@ -579,12 +582,12 @@ class LinearSVC(_JavaClassifier, _LinearSVCParams, JavaMLWritable, JavaMLReadabl
     >>> model.predict(test0.head().features)
     1.0
     >>> model.predictRaw(test0.head().features)
-    DenseVector([-1.4831, 1.4831])
+    DenseVector([-4.1274, 4.1274])
     >>> result = model.transform(test0).head()
     >>> result.newPrediction
     1.0
     >>> result.rawPrediction
-    DenseVector([-1.4831, 1.4831])
+    DenseVector([-4.1274, 4.1274])
     >>> svm_path = temp_path + "/svm"
     >>> svm.save(svm_path)
     >>> svm2 = LinearSVC.load(svm_path)
@@ -735,7 +738,7 @@ class LinearSVCModel(_JavaClassificationModel, _LinearSVCParams, JavaMLWritable,
     @since("3.1.0")
     def summary(self):
         """
-        Gets summary (e.g. accuracy/precision/recall, objective history, total iterations) of model
+        Gets summary (accuracy/precision/recall, objective history, total iterations) of model
         trained on the training set. An exception is thrown if `trainingSummary is None`.
         """
         if self.hasSummary:
@@ -756,7 +759,7 @@ class LinearSVCModel(_JavaClassificationModel, _LinearSVCParams, JavaMLWritable,
             Test dataset to evaluate model on.
         """
         if not isinstance(dataset, DataFrame):
-            raise ValueError("dataset must be a DataFrame but got %s." % type(dataset))
+            raise TypeError("dataset must be a DataFrame but got %s." % type(dataset))
         java_lsvc_summary = self._call_java("evaluate", dataset)
         return LinearSVCSummary(java_lsvc_summary)
 
@@ -1234,7 +1237,7 @@ class LogisticRegressionModel(_JavaProbabilisticClassificationModel, _LogisticRe
     @since("2.0.0")
     def summary(self):
         """
-        Gets summary (e.g. accuracy/precision/recall, objective history, total iterations) of model
+        Gets summary (accuracy/precision/recall, objective history, total iterations) of model
         trained on the training set. An exception is thrown if `trainingSummary is None`.
         """
         if self.hasSummary:
@@ -1260,7 +1263,7 @@ class LogisticRegressionModel(_JavaProbabilisticClassificationModel, _LogisticRe
             Test dataset to evaluate model on.
         """
         if not isinstance(dataset, DataFrame):
-            raise ValueError("dataset must be a DataFrame but got %s." % type(dataset))
+            raise TypeError("dataset must be a DataFrame but got %s." % type(dataset))
         java_blr_summary = self._call_java("evaluate", dataset)
         if self.numClasses <= 2:
             return BinaryLogisticRegressionSummary(java_blr_summary)
@@ -1840,7 +1843,7 @@ class RandomForestClassificationModel(_TreeEnsembleModel, _JavaProbabilisticClas
     @since("3.1.0")
     def summary(self):
         """
-        Gets summary (e.g. accuracy/precision/recall, objective history, total iterations) of model
+        Gets summary (accuracy/precision/recall, objective history, total iterations) of model
         trained on the training set. An exception is thrown if `trainingSummary is None`.
         """
         if self.hasSummary:
@@ -1866,7 +1869,7 @@ class RandomForestClassificationModel(_TreeEnsembleModel, _JavaProbabilisticClas
             Test dataset to evaluate model on.
         """
         if not isinstance(dataset, DataFrame):
-            raise ValueError("dataset must be a DataFrame but got %s." % type(dataset))
+            raise TypeError("dataset must be a DataFrame but got %s." % type(dataset))
         java_rf_summary = self._call_java("evaluate", dataset)
         if self.numClasses <= 2:
             return BinaryRandomForestClassificationSummary(java_rf_summary)
@@ -2697,7 +2700,7 @@ class MultilayerPerceptronClassificationModel(_JavaProbabilisticClassificationMo
     @since("3.1.0")
     def summary(self):
         """
-        Gets summary (e.g. accuracy/precision/recall, objective history, total iterations) of model
+        Gets summary (accuracy/precision/recall, objective history, total iterations) of model
         trained on the training set. An exception is thrown if `trainingSummary is None`.
         """
         if self.hasSummary:
@@ -2719,7 +2722,7 @@ class MultilayerPerceptronClassificationModel(_JavaProbabilisticClassificationMo
             Test dataset to evaluate model on.
         """
         if not isinstance(dataset, DataFrame):
-            raise ValueError("dataset must be a DataFrame but got %s." % type(dataset))
+            raise TypeError("dataset must be a DataFrame but got %s." % type(dataset))
         java_mlp_summary = self._call_java("evaluate", dataset)
         return MultilayerPerceptronClassificationSummary(java_mlp_summary)
 
@@ -2760,7 +2763,7 @@ class _OneVsRestParams(_ClassifierParams, HasWeightCol):
 
 
 @inherit_doc
-class OneVsRest(Estimator, _OneVsRestParams, HasParallelism, JavaMLReadable, JavaMLWritable):
+class OneVsRest(Estimator, _OneVsRestParams, HasParallelism, MLReadable, MLWritable):
     """
     Reduction of Multiclass Classification to Binary Classification.
     Performs reduction using one against all strategy.
@@ -2991,52 +2994,73 @@ class OneVsRest(Estimator, _OneVsRestParams, HasParallelism, JavaMLReadable, Jav
         _java_obj.setRawPredictionCol(self.getRawPredictionCol())
         return _java_obj
 
-    def _make_java_param_pair(self, param, value):
-        """
-        Makes a Java param pair.
-        """
-        sc = SparkContext._active_spark_context
-        param = self._resolveParam(param)
-        _java_obj = JavaParams._new_java_obj("org.apache.spark.ml.classification.OneVsRest",
-                                             self.uid)
-        java_param = _java_obj.getParam(param.name)
-        if isinstance(value, JavaParams):
-            # used in the case of an estimator having another estimator as a parameter
-            # the reason why this is not in _py2java in common.py is that importing
-            # Estimator and Model in common.py results in a circular import with inherit_doc
-            java_value = value._to_java()
+    @classmethod
+    def read(cls):
+        return OneVsRestReader(cls)
+
+    def write(self):
+        if isinstance(self.getClassifier(), JavaMLWritable):
+            return JavaMLWriter(self)
         else:
-            java_value = _py2java(sc, value)
-        return java_param.w(java_value)
-
-    def _transfer_param_map_to_java(self, pyParamMap):
-        """
-        Transforms a Python ParamMap into a Java ParamMap.
-        """
-        paramMap = JavaWrapper._new_java_obj("org.apache.spark.ml.param.ParamMap")
-        for param in self.params:
-            if param in pyParamMap:
-                pair = self._make_java_param_pair(param, pyParamMap[param])
-                paramMap.put([pair])
-        return paramMap
-
-    def _transfer_param_map_from_java(self, javaParamMap):
-        """
-        Transforms a Java ParamMap into a Python ParamMap.
-        """
-        sc = SparkContext._active_spark_context
-        paramMap = dict()
-        for pair in javaParamMap.toList():
-            param = pair.param()
-            if self.hasParam(str(param.name())):
-                if param.name() == "classifier":
-                    paramMap[self.getParam(param.name())] = JavaParams._from_java(pair.value())
-                else:
-                    paramMap[self.getParam(param.name())] = _java2py(sc, pair.value())
-        return paramMap
+            return OneVsRestWriter(self)
 
 
-class OneVsRestModel(Model, _OneVsRestParams, JavaMLReadable, JavaMLWritable):
+class _OneVsRestSharedReadWrite:
+    @staticmethod
+    def saveImpl(instance, sc, path, extraMetadata=None):
+        skipParams = ['classifier']
+        jsonParams = DefaultParamsWriter.extractJsonParams(instance, skipParams)
+        DefaultParamsWriter.saveMetadata(instance, path, sc, paramMap=jsonParams,
+                                         extraMetadata=extraMetadata)
+        classifierPath = os.path.join(path, 'classifier')
+        instance.getClassifier().save(classifierPath)
+
+    @staticmethod
+    def loadClassifier(path, sc):
+        classifierPath = os.path.join(path, 'classifier')
+        return DefaultParamsReader.loadParamsInstance(classifierPath, sc)
+
+    @staticmethod
+    def validateParams(instance):
+        elems_to_check = [instance.getClassifier()]
+        if isinstance(instance, OneVsRestModel):
+            elems_to_check.extend(instance.models)
+
+        for elem in elems_to_check:
+            if not isinstance(elem, MLWritable):
+                raise ValueError(f'OneVsRest write will fail because it contains {elem.uid} '
+                                 f'which is not writable.')
+
+
+@inherit_doc
+class OneVsRestReader(MLReader):
+    def __init__(self, cls):
+        super(OneVsRestReader, self).__init__()
+        self.cls = cls
+
+    def load(self, path):
+        metadata = DefaultParamsReader.loadMetadata(path, self.sc)
+        if not DefaultParamsReader.isPythonParamsInstance(metadata):
+            return JavaMLReader(self.cls).load(path)
+        else:
+            classifier = _OneVsRestSharedReadWrite.loadClassifier(path, self.sc)
+            ova = OneVsRest(classifier=classifier)._resetUid(metadata['uid'])
+            DefaultParamsReader.getAndSetParams(ova, metadata, skipParams=['classifier'])
+            return ova
+
+
+@inherit_doc
+class OneVsRestWriter(MLWriter):
+    def __init__(self, instance):
+        super(OneVsRestWriter, self).__init__()
+        self.instance = instance
+
+    def saveImpl(self, path):
+        _OneVsRestSharedReadWrite.validateParams(self.instance)
+        _OneVsRestSharedReadWrite.saveImpl(self.instance, self.sc, path)
+
+
+class OneVsRestModel(Model, _OneVsRestParams, MLReadable, MLWritable):
     """
     Model fitted by OneVsRest.
     This stores the models resulting from training k binary classifiers: one for each class.
@@ -3067,6 +3091,9 @@ class OneVsRestModel(Model, _OneVsRestParams, JavaMLReadable, JavaMLWritable):
     def __init__(self, models):
         super(OneVsRestModel, self).__init__()
         self.models = models
+        if not isinstance(models[0], JavaMLWritable):
+            return
+        # set java instance
         java_models = [model._to_java() for model in self.models]
         sc = SparkContext._active_spark_context
         java_models_array = JavaWrapper._new_java_array(java_models,
@@ -3124,7 +3151,7 @@ class OneVsRestModel(Model, _OneVsRestParams, JavaMLReadable, JavaMLWritable):
                     predArray.append(x)
                 return Vectors.dense(predArray)
 
-            rawPredictionUDF = udf(func)
+            rawPredictionUDF = udf(func, VectorUDT())
             aggregatedDataset = aggregatedDataset.withColumn(
                 self.getRawPredictionCol(), rawPredictionUDF(aggregatedDataset[accColName]))
 
@@ -3203,6 +3230,57 @@ class OneVsRestModel(Model, _OneVsRestParams, JavaMLReadable, JavaMLWritable):
         if (self.isDefined(self.weightCol) and self.getWeightCol()):
             _java_obj.set("weightCol", self.getWeightCol())
         return _java_obj
+
+    @classmethod
+    def read(cls):
+        return OneVsRestModelReader(cls)
+
+    def write(self):
+        if all(map(lambda elem: isinstance(elem, JavaMLWritable),
+                   [self.getClassifier()] + self.models)):
+            return JavaMLWriter(self)
+        else:
+            return OneVsRestModelWriter(self)
+
+
+@inherit_doc
+class OneVsRestModelReader(MLReader):
+    def __init__(self, cls):
+        super(OneVsRestModelReader, self).__init__()
+        self.cls = cls
+
+    def load(self, path):
+        metadata = DefaultParamsReader.loadMetadata(path, self.sc)
+        if not DefaultParamsReader.isPythonParamsInstance(metadata):
+            return JavaMLReader(self.cls).load(path)
+        else:
+            classifier = _OneVsRestSharedReadWrite.loadClassifier(path, self.sc)
+            numClasses = metadata['numClasses']
+            subModels = [None] * numClasses
+            for idx in range(numClasses):
+                subModelPath = os.path.join(path, f'model_{idx}')
+                subModels[idx] = DefaultParamsReader.loadParamsInstance(subModelPath, self.sc)
+            ovaModel = OneVsRestModel(subModels)._resetUid(metadata['uid'])
+            ovaModel.set(ovaModel.classifier, classifier)
+            DefaultParamsReader.getAndSetParams(ovaModel, metadata, skipParams=['classifier'])
+            return ovaModel
+
+
+@inherit_doc
+class OneVsRestModelWriter(MLWriter):
+    def __init__(self, instance):
+        super(OneVsRestModelWriter, self).__init__()
+        self.instance = instance
+
+    def saveImpl(self, path):
+        _OneVsRestSharedReadWrite.validateParams(self.instance)
+        instance = self.instance
+        numClasses = len(instance.models)
+        extraMetadata = {'numClasses': numClasses}
+        _OneVsRestSharedReadWrite.saveImpl(instance, self.sc, path, extraMetadata=extraMetadata)
+        for idx in range(numClasses):
+            subModelPath = os.path.join(path, f'model_{idx}')
+            instance.models[idx].save(subModelPath)
 
 
 @inherit_doc
@@ -3422,7 +3500,7 @@ class FMClassificationModel(_JavaProbabilisticClassificationModel, _Factorizatio
     @since("3.1.0")
     def summary(self):
         """
-        Gets summary (e.g. accuracy/precision/recall, objective history, total iterations) of model
+        Gets summary (accuracy/precision/recall, objective history, total iterations) of model
         trained on the training set. An exception is thrown if `trainingSummary is None`.
         """
         if self.hasSummary:
@@ -3443,7 +3521,7 @@ class FMClassificationModel(_JavaProbabilisticClassificationModel, _Factorizatio
             Test dataset to evaluate model on.
         """
         if not isinstance(dataset, DataFrame):
-            raise ValueError("dataset must be a DataFrame but got %s." % type(dataset))
+            raise TypeError("dataset must be a DataFrame but got %s." % type(dataset))
         java_fm_summary = self._call_java("evaluate", dataset)
         return FMClassificationSummary(java_fm_summary)
 

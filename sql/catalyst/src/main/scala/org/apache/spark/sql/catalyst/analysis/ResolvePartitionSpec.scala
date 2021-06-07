@@ -20,56 +20,59 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Cast, Literal}
-import org.apache.spark.sql.catalyst.plans.logical.{AlterTableAddPartition, AlterTableDropPartition, LogicalPlan, ShowPartitions}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, V2PartitionCommand}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.trees.TreePattern.COMMAND
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog.SupportsPartitionManagement
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.util.PartitioningUtils.normalizePartitionSpec
+import org.apache.spark.sql.util.PartitioningUtils.{normalizePartitionSpec, requireExactMatchedPartitionSpec}
 
 /**
  * Resolve [[UnresolvedPartitionSpec]] to [[ResolvedPartitionSpec]] in partition related commands.
  */
 object ResolvePartitionSpec extends Rule[LogicalPlan] {
 
-  def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-    case r @ AlterTableAddPartition(
-        ResolvedTable(_, _, table: SupportsPartitionManagement), partSpecs, _) =>
-      r.copy(parts = resolvePartitionSpecs(table.name, partSpecs, table.partitionSchema()))
-
-    case r @ AlterTableDropPartition(
-        ResolvedTable(_, _, table: SupportsPartitionManagement), partSpecs, _, _, _) =>
-      r.copy(parts = resolvePartitionSpecs(table.name, partSpecs, table.partitionSchema()))
-
-    case r @ ShowPartitions(ResolvedTable(_, _, table: SupportsPartitionManagement), partSpecs) =>
-      r.copy(pattern = resolvePartitionSpecs(
-        table.name,
-        partSpecs.toSeq,
-        table.partitionSchema()).headOption)
+  def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
+    _.containsPattern(COMMAND)) {
+    case command: V2PartitionCommand if command.childrenResolved && !command.resolved =>
+      command.table match {
+        case r @ ResolvedTable(_, _, table: SupportsPartitionManagement, _) =>
+          command.transformExpressions {
+            case partSpecs: UnresolvedPartitionSpec =>
+              val partitionSchema = table.partitionSchema()
+              resolvePartitionSpec(
+                r.name,
+                partSpecs,
+                partitionSchema,
+                command.allowPartialPartitionSpec)
+          }
+        case _ => command
+      }
   }
 
-  private def resolvePartitionSpecs(
+  private def resolvePartitionSpec(
       tableName: String,
-      partSpecs: Seq[PartitionSpec],
-      partSchema: StructType): Seq[ResolvedPartitionSpec] =
-    partSpecs.map {
-      case unresolvedPartSpec: UnresolvedPartitionSpec =>
-        val normalizedSpec = normalizePartitionSpec(
-          unresolvedPartSpec.spec,
-          partSchema.map(_.name),
-          tableName,
-          conf.resolver)
-        val partitionNames = normalizedSpec.keySet
-        val requestedFields = partSchema.filter(field => partitionNames.contains(field.name))
-        ResolvedPartitionSpec(
-          requestedFields.map(_.name),
-          convertToPartIdent(normalizedSpec, requestedFields),
-          unresolvedPartSpec.location)
-      case resolvedPartitionSpec: ResolvedPartitionSpec =>
-        resolvedPartitionSpec
+      partSpec: UnresolvedPartitionSpec,
+      partSchema: StructType,
+      allowPartitionSpec: Boolean): ResolvedPartitionSpec = {
+    val normalizedSpec = normalizePartitionSpec(
+      partSpec.spec,
+      partSchema,
+      tableName,
+      conf.resolver)
+    if (!allowPartitionSpec) {
+      requireExactMatchedPartitionSpec(tableName, normalizedSpec, partSchema.fieldNames)
     }
+    val partitionNames = normalizedSpec.keySet
+    val requestedFields = partSchema.filter(field => partitionNames.contains(field.name))
+    ResolvedPartitionSpec(
+      requestedFields.map(_.name),
+      convertToPartIdent(normalizedSpec, requestedFields),
+      partSpec.location)
+  }
 
-  private def convertToPartIdent(
+  private[sql] def convertToPartIdent(
       partitionSpec: TablePartitionSpec,
       schema: Seq[StructField]): InternalRow = {
     val partValues = schema.map { part =>

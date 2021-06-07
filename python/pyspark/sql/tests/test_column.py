@@ -47,7 +47,7 @@ class ColumnTests(ReusedSQLTestCase):
         self.assertTrue("Column" in _to_java_column(u"a").getClass().toString())
         self.assertTrue("Column" in _to_java_column(self.spark.range(1).id).getClass().toString())
 
-        self.assertRaisesRegexp(
+        self.assertRaisesRegex(
             TypeError,
             "Invalid argument, not a string or column",
             lambda: _to_java_column(1))
@@ -58,7 +58,7 @@ class ColumnTests(ReusedSQLTestCase):
         self.assertRaises(TypeError, lambda: _to_java_column(A()))
         self.assertRaises(TypeError, lambda: _to_java_column([]))
 
-        self.assertRaisesRegexp(
+        self.assertRaisesRegex(
             TypeError,
             "Invalid argument, not a string or column",
             lambda: udf(lambda x: x)(None))
@@ -79,9 +79,9 @@ class ColumnTests(ReusedSQLTestCase):
             cs.startswith('a'), cs.endswith('a'), ci.eqNullSafe(cs)
         self.assertTrue(all(isinstance(c, Column) for c in css))
         self.assertTrue(isinstance(ci.cast(LongType()), Column))
-        self.assertRaisesRegexp(ValueError,
-                                "Cannot apply 'in' operator against a column",
-                                lambda: 1 in cs)
+        self.assertRaisesRegex(ValueError,
+                               "Cannot apply 'in' operator against a column",
+                               lambda: 1 in cs)
 
     def test_column_accessor(self):
         from pyspark.sql.functions import col
@@ -138,6 +138,8 @@ class ColumnTests(ReusedSQLTestCase):
         result = df.select(df.a.bitwiseXOR(df.b)).collect()[0].asDict()
         self.assertEqual(170 ^ 75, result['(a ^ b)'])
         result = df.select(functions.bitwiseNOT(df.b)).collect()[0].asDict()
+        self.assertEqual(~75, result['~b'])
+        result = df.select(functions.bitwise_not(df.b)).collect()[0].asDict()
         self.assertEqual(~75, result['~b'])
 
     def test_with_field(self):

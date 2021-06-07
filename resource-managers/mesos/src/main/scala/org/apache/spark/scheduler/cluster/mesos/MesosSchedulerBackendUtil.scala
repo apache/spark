@@ -138,7 +138,7 @@ private[spark] object MesosSchedulerBackendUtil extends Logging {
     val containerInfo = ContainerInfo.newBuilder()
       .setType(containerType)
 
-    conf.get(EXECUTOR_DOCKER_IMAGE).map { image =>
+    conf.get(EXECUTOR_DOCKER_IMAGE).foreach { image =>
       val forcePullImage = conf
         .get(EXECUTOR_DOCKER_FORCE_PULL_IMAGE).contains(true)
 

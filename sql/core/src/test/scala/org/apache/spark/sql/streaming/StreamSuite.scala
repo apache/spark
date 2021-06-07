@@ -34,7 +34,7 @@ import org.scalatest.time.SpanSugar._
 import org.apache.spark.{SparkConf, SparkContext, TaskContext, TestUtils}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.plans.logical.Range
+import org.apache.spark.sql.catalyst.plans.logical.{Range, RepartitionByExpression}
 import org.apache.spark.sql.catalyst.streaming.{InternalOutputModes, StreamingRelationV2}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.{LocalLimitExec, SimpleMode, SparkPlan}
@@ -214,7 +214,9 @@ class StreamSuite extends StreamTest {
             .start(outputDir.getAbsolutePath)
           try {
             query.processAllAvailable()
-            val outputDf = spark.read.parquet(outputDir.getAbsolutePath).as[Long]
+            // Parquet write page-level CRC checksums will change the file size and
+            // affect the data order when reading these files. Please see PARQUET-1746 for details.
+            val outputDf = spark.read.parquet(outputDir.getAbsolutePath).sort('a).as[Long]
             checkDataset[Long](outputDf, (0L to 10L).toArray: _*)
           } finally {
             query.stop()
@@ -1064,13 +1066,13 @@ class StreamSuite extends StreamTest {
   }
 
   test("SPARK-30657: streaming limit should not apply on limits on state subplans") {
-    val streanData = MemoryStream[Int]
-    val streamingDF = streanData.toDF().toDF("value")
+    val streamData = MemoryStream[Int]
+    val streamingDF = streamData.toDF().toDF("value")
     val staticDF = spark.createDataset(Seq(1)).toDF("value").orderBy("value")
     testStream(streamingDF.join(staticDF.limit(1), "value"))(
-      AddData(streanData, 1, 2, 3),
+      AddData(streamData, 1, 2, 3),
       CheckAnswer(Row(1)),
-      AddData(streanData, 1, 3, 5),
+      AddData(streamData, 1, 3, 5),
       CheckAnswer(Row(1), Row(1)))
   }
 
@@ -1130,7 +1132,7 @@ class StreamSuite extends StreamTest {
     verifyLocalLimit(inputDF.dropDuplicates().repartition(1).limit(1), expectStreamingLimit = false)
 
     // Should be LocalLimitExec in the first place, not from optimization of StreamingLocalLimitExec
-    val staticDF = spark.range(1).toDF("value").limit(1)
+    val staticDF = spark.range(2).toDF("value").limit(1)
     verifyLocalLimit(inputDF.toDF("value").join(staticDF, "value"), expectStreamingLimit = false)
 
     verifyLocalLimit(
@@ -1260,6 +1262,37 @@ class StreamSuite extends StreamTest {
         BlockOnStopSourceProvider.disableBlocking()
         withSQLConf(SQLConf.STREAMING_STOP_TIMEOUT.key -> "0") {
           sq.stop()
+        }
+      }
+    }
+  }
+
+  test("SPARK-34482: correct active SparkSession for logicalPlan") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.COALESCE_PARTITIONS_INITIAL_PARTITION_NUM.key -> "10") {
+      val df = spark.readStream.format(classOf[FakeDefaultSource].getName).load()
+      var query: StreamExecution = null
+      try {
+        query =
+          df.repartition($"a")
+            .writeStream
+            .format("memory")
+            .queryName("memory")
+            .start()
+            .asInstanceOf[StreamingQueryWrapper]
+            .streamingQuery
+        query.awaitInitialization(streamingTimeout.toMillis)
+        val plan = query.logicalPlan
+        val numPartition = plan
+          .find { _.isInstanceOf[RepartitionByExpression] }
+          .map(_.asInstanceOf[RepartitionByExpression].numPartitions)
+        // Before the fix of SPARK-34482, the numPartition is the value of
+        // `COALESCE_PARTITIONS_INITIAL_PARTITION_NUM`.
+        assert(numPartition.get === spark.sqlContext.conf.getConf(SQLConf.SHUFFLE_PARTITIONS))
+      } finally {
+        if (query != null) {
+          query.stop()
         }
       }
     }

@@ -24,13 +24,12 @@ import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog}
 case class RefreshTableExec(
     catalog: TableCatalog,
     ident: Identifier,
-    invalidateCache: () => Unit) extends V2CommandExec {
+    refreshCache: () => Unit) extends LeafV2CommandExec {
   override protected def run(): Seq[InternalRow] = {
     catalog.invalidateTable(ident)
 
-    // invalidate all caches referencing the given table
-    // TODO(SPARK-33437): re-cache the table itself once we support caching a DSv2 table
-    invalidateCache()
+    // Refresh all caches referencing the given table
+    refreshCache()
 
     Seq.empty
   }

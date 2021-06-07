@@ -83,6 +83,12 @@ public final class SpecializedGettersReader {
     if (handleUserDefinedType && dataType instanceof UserDefinedType) {
       return obj.get(ordinal, ((UserDefinedType)dataType).sqlType());
     }
+    if (dataType instanceof DayTimeIntervalType) {
+      return obj.getLong(ordinal);
+    }
+    if (dataType instanceof YearMonthIntervalType) {
+      return obj.getInt(ordinal);
+    }
 
     throw new UnsupportedOperationException("Unsupported data type " + dataType.simpleString());
   }
