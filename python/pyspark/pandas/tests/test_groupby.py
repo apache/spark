@@ -934,7 +934,8 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
             expected = ps.DataFrame({"b": [2, 2]}, index=pd.Index([0, 1], name="a"))
             self.assert_eq(psdf.groupby("a").nunique().sort_index(), expected)
             self.assert_eq(
-                psdf.groupby("a").nunique(dropna=False).sort_index(), expected,
+                psdf.groupby("a").nunique(dropna=False).sort_index(),
+                expected,
             )
         else:
             self.assert_eq(
@@ -968,10 +969,12 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
         if LooseVersion(pd.__version__) < LooseVersion("1.1.0"):
             expected = ps.DataFrame({("y", "b"): [2, 2]}, index=pd.Index([0, 1], name=("x", "a")))
             self.assert_eq(
-                psdf.groupby(("x", "a")).nunique().sort_index(), expected,
+                psdf.groupby(("x", "a")).nunique().sort_index(),
+                expected,
             )
             self.assert_eq(
-                psdf.groupby(("x", "a")).nunique(dropna=False).sort_index(), expected,
+                psdf.groupby(("x", "a")).nunique(dropna=False).sort_index(),
+                expected,
             )
         else:
             self.assert_eq(
@@ -1785,7 +1788,8 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
                 pdf.groupby("A")[["B"]].bfill().sort_index(),
             )
         self.assert_eq(
-            psdf.groupby("A")["B"].bfill().sort_index(), pdf.groupby("A")["B"].bfill().sort_index(),
+            psdf.groupby("A")["B"].bfill().sort_index(),
+            pdf.groupby("A")["B"].bfill().sort_index(),
         )
         self.assert_eq(
             psdf.groupby("A")["B"].bfill()[idx[6]], pdf.groupby("A")["B"].bfill()[idx[6]]
@@ -1893,7 +1897,8 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
             pdf.groupby("b").apply(lambda x: x + x.min()).sort_index(),
         )
         self.assert_eq(
-            psdf.groupby("b").apply(len).sort_index(), pdf.groupby("b").apply(len).sort_index(),
+            psdf.groupby("b").apply(len).sort_index(),
+            pdf.groupby("b").apply(len).sort_index(),
         )
         self.assert_eq(
             psdf.groupby("b")["a"]
@@ -2556,7 +2561,8 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
         psdf = ps.from_pandas(pdf)
 
         self.assert_eq(
-            psdf.groupby("class").get_group("bird"), pdf.groupby("class").get_group("bird"),
+            psdf.groupby("class").get_group("bird"),
+            pdf.groupby("class").get_group("bird"),
         )
         self.assert_eq(
             psdf.groupby("class")["name"].get_group("mammal"),
@@ -2583,7 +2589,8 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
             (pdf.max_speed + 1).groupby(pdf["class"]).get_group("mammal"),
         )
         self.assert_eq(
-            psdf.groupby("max_speed").get_group(80.5), pdf.groupby("max_speed").get_group(80.5),
+            psdf.groupby("max_speed").get_group(80.5),
+            pdf.groupby("max_speed").get_group(80.5),
         )
 
         self.assertRaises(KeyError, lambda: psdf.groupby("class").get_group("fish"))
@@ -2646,7 +2653,8 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
             lambda: psdf.groupby([("B", "class"), ("A", "name")]).get_group(("lion", "mammal")),
         )
         self.assertRaises(
-            ValueError, lambda: psdf.groupby([("B", "class"), ("A", "name")]).get_group(("lion",)),
+            ValueError,
+            lambda: psdf.groupby([("B", "class"), ("A", "name")]).get_group(("lion",)),
         )
         self.assertRaises(
             ValueError, lambda: psdf.groupby([("B", "class"), ("A", "name")]).get_group(("mammal",))

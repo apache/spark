@@ -803,7 +803,7 @@ class InternalFrame(object):
         )
 
     def spark_column_for(self, label: Tuple) -> spark.Column:
-        """ Return Spark Column for the given column label. """
+        """Return Spark Column for the given column label."""
         column_labels_to_scol = dict(zip(self.column_labels, self.data_spark_columns))
         if label in column_labels_to_scol:
             return column_labels_to_scol[label]
@@ -811,7 +811,7 @@ class InternalFrame(object):
             raise KeyError(name_like_string(label))
 
     def spark_column_name_for(self, label_or_scol: Union[Tuple, spark.Column]) -> str:
-        """ Return the actual Spark column name for the given column label. """
+        """Return the actual Spark column name for the given column label."""
         if isinstance(label_or_scol, spark.Column):
             scol = label_or_scol
         else:
@@ -819,7 +819,7 @@ class InternalFrame(object):
         return self.spark_frame.select(scol).columns[0]
 
     def spark_type_for(self, label_or_scol: Union[Tuple, spark.Column]) -> DataType:
-        """ Return DataType for the given column label. """
+        """Return DataType for the given column label."""
         if isinstance(label_or_scol, spark.Column):
             scol = label_or_scol
         else:
@@ -827,7 +827,7 @@ class InternalFrame(object):
         return self.spark_frame.select(scol).schema[0].dataType
 
     def spark_column_nullable_for(self, label_or_scol: Union[Tuple, spark.Column]) -> bool:
-        """ Return nullability for the given column label. """
+        """Return nullability for the given column label."""
         if isinstance(label_or_scol, spark.Column):
             scol = label_or_scol
         else:
@@ -835,7 +835,7 @@ class InternalFrame(object):
         return self.spark_frame.select(scol).schema[0].nullable
 
     def dtype_for(self, label: Tuple) -> Dtype:
-        """ Return dtype for the given column label. """
+        """Return dtype for the given column label."""
         column_labels_to_dtype = dict(zip(self.column_labels, self.data_dtypes))
         if label in column_labels_to_dtype:
             return column_labels_to_dtype[label]
@@ -844,80 +844,77 @@ class InternalFrame(object):
 
     @property
     def spark_frame(self) -> spark.DataFrame:
-        """ Return the managed Spark DataFrame. """
+        """Return the managed Spark DataFrame."""
         return self._sdf
 
     @lazy_property
     def data_spark_column_names(self) -> List[str]:
-        """ Return the managed column field names. """
+        """Return the managed column field names."""
         return self.spark_frame.select(self.data_spark_columns).columns
 
     @property
     def data_spark_columns(self) -> List[spark.Column]:
-        """ Return Spark Columns for the managed data columns. """
+        """Return Spark Columns for the managed data columns."""
         return self._data_spark_columns
 
     @property
     def index_spark_column_names(self) -> List[str]:
-        """ Return the managed index field names. """
+        """Return the managed index field names."""
         return self.spark_frame.select(self.index_spark_columns).columns
 
     @property
     def index_spark_columns(self) -> List[spark.Column]:
-        """ Return Spark Columns for the managed index columns. """
+        """Return Spark Columns for the managed index columns."""
         return self._index_spark_columns
 
     @lazy_property
     def spark_column_names(self) -> List[str]:
-        """ Return all the field names including index field names. """
+        """Return all the field names including index field names."""
         return self.spark_frame.select(self.spark_columns).columns
 
     @lazy_property
     def spark_columns(self) -> List[spark.Column]:
-        """ Return Spark Columns for the managed columns including index columns. """
+        """Return Spark Columns for the managed columns including index columns."""
         index_spark_columns = self.index_spark_columns
         return index_spark_columns + [
             spark_column
             for spark_column in self.data_spark_columns
-            if all(
-                not spark_column_equals(spark_column, scol)
-                for scol in index_spark_columns
-            )
+            if all(not spark_column_equals(spark_column, scol) for scol in index_spark_columns)
         ]
 
     @property
     def index_names(self) -> List[Optional[Tuple]]:
-        """ Return the managed index names. """
+        """Return the managed index names."""
         return self._index_names
 
     @lazy_property
     def index_level(self) -> int:
-        """ Return the level of the index. """
+        """Return the level of the index."""
         return len(self._index_names)
 
     @property
     def column_labels(self) -> List[Tuple]:
-        """ Return the managed column index. """
+        """Return the managed column index."""
         return self._column_labels
 
     @lazy_property
     def column_labels_level(self) -> int:
-        """ Return the level of the column index. """
+        """Return the level of the column index."""
         return len(self._column_label_names)
 
     @property
     def column_label_names(self) -> List[Optional[Tuple]]:
-        """ Return names of the index levels. """
+        """Return names of the index levels."""
         return self._column_label_names
 
     @property
     def index_dtypes(self) -> List[Dtype]:
-        """ Return dtypes for the managed index columns. """
+        """Return dtypes for the managed index columns."""
         return self._index_dtypes
 
     @property
     def data_dtypes(self) -> List[Dtype]:
-        """ Return dtypes for the managed columns. """
+        """Return dtypes for the managed columns."""
         return self._data_dtypes
 
     @lazy_property
@@ -929,16 +926,13 @@ class InternalFrame(object):
         index_spark_columns = self.index_spark_columns
         data_columns = []
         for spark_column in self.data_spark_columns:
-            if all(
-                not spark_column_equals(spark_column, scol)
-                for scol in index_spark_columns
-            ):
+            if all(not spark_column_equals(spark_column, scol) for scol in index_spark_columns):
                 data_columns.append(spark_column)
         return self.spark_frame.select(index_spark_columns + data_columns)
 
     @lazy_property
     def to_pandas_frame(self) -> pd.DataFrame:
-        """ Return as pandas DataFrame. """
+        """Return as pandas DataFrame."""
         sdf = self.to_internal_spark_frame
         pdf = sdf.toPandas()
         if len(pdf) == 0 and len(sdf.schema) > 0:
@@ -950,7 +944,7 @@ class InternalFrame(object):
 
     @lazy_property
     def arguments_for_restore_index(self) -> Dict:
-        """ Create arguments for `restore_index`. """
+        """Create arguments for `restore_index`."""
         column_names = []
         ext_dtypes = {
             col: dtype
@@ -1055,14 +1049,15 @@ class InternalFrame(object):
             pdf.columns = pd.MultiIndex.from_tuples(column_labels, names=names)
         else:
             pdf.columns = pd.Index(
-                [None if label is None else label[0] for label in column_labels], name=names[0],
+                [None if label is None else label[0] for label in column_labels],
+                name=names[0],
             )
 
         return pdf
 
     @lazy_property
     def resolved_copy(self) -> "InternalFrame":
-        """ Copy the immutable InternalFrame with the updates resolved. """
+        """Copy the immutable InternalFrame with the updates resolved."""
         sdf = self.spark_frame.select(self.spark_columns + list(HIDDEN_COLUMNS))
         return self.copy(
             spark_frame=sdf,
@@ -1078,7 +1073,7 @@ class InternalFrame(object):
         data_columns: Optional[List[str]] = None,
         data_dtypes: Optional[List[Dtype]] = None
     ) -> "InternalFrame":
-        """ Copy the immutable InternalFrame with the updates by the specified Spark DataFrame.
+        """Copy the immutable InternalFrame with the updates by the specified Spark DataFrame.
 
         :param spark_frame: the new Spark DataFrame
         :param index_dtypes: the index dtypes. If None, the original dtyeps are used.
@@ -1207,7 +1202,7 @@ class InternalFrame(object):
         )
 
     def with_filter(self, pred: Union[spark.Column, "Series"]) -> "InternalFrame":
-        """ Copy the immutable InternalFrame with the updates by the predicate.
+        """Copy the immutable InternalFrame with the updates by the predicate.
 
         :param pred: the predicate to filter.
         :return: the copied InternalFrame.
@@ -1280,7 +1275,7 @@ class InternalFrame(object):
         data_dtypes: Union[Optional[List[Dtype]], _NoValueType] = _NoValue,
         column_label_names: Union[Optional[List[Optional[Tuple]]], _NoValueType] = _NoValue
     ) -> "InternalFrame":
-        """ Copy the immutable InternalFrame.
+        """Copy the immutable InternalFrame.
 
         :param spark_frame: the new Spark DataFrame. If not specified, the original one is used.
         :param index_spark_columns: the list of Spark Column.
@@ -1324,7 +1319,7 @@ class InternalFrame(object):
 
     @staticmethod
     def from_pandas(pdf: pd.DataFrame) -> "InternalFrame":
-        """ Create an immutable DataFrame from pandas DataFrame.
+        """Create an immutable DataFrame from pandas DataFrame.
 
         :param pdf: :class:`pd.DataFrame`
         :return: the created immutable DataFrame
@@ -1354,7 +1349,9 @@ class InternalFrame(object):
         schema = StructType(
             [
                 StructField(
-                    name, infer_pd_series_spark_type(col, dtype), nullable=bool(col.isnull().any()),
+                    name,
+                    infer_pd_series_spark_type(col, dtype),
+                    nullable=bool(col.isnull().any()),
                 )
                 for (name, col), dtype in zip(pdf.iteritems(), index_dtypes + data_dtypes)
             ]

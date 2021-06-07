@@ -1,3 +1,5 @@
+#!/usr/bin/env bash
+#
 # Licensed to the Apache Software Foundation (ASF) under one or more
 # contributor license agreements.  See the NOTICE file distributed with
 # this work for additional information regarding copyright ownership.
@@ -5,7 +7,7 @@
 # (the "License"); you may not use this file except in compliance with
 # the License.  You may obtain a copy of the License at
 #
-# http://www.apache.org/licenses/LICENSE-2.0
+#    http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -13,14 +15,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-[pycodestyle]
-ignore=E203,E226,E241,E305,E402,E722,E731,E741,W503,W504
-max-line-length=100
-exclude=*/target/*,python/pyspark/cloudpickle/*.py,shared.py,python/docs/source/conf.py,work/*/*.py,python/.eggs/*,dist/*,.git/*
+# The current directory of the script.
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+FWDIR="$( cd "$DIR"/.. && pwd )"
+cd "$FWDIR"
 
-[flake8]
-select = E901,E999,F821,F822,F823,F401,F405,B006
-# Ignore F821 for plot documents in pandas API on Spark.
-ignore = F821
-exclude = python/docs/build/html/*,*/target/*,python/pyspark/cloudpickle/*.py,shared.py*,python/docs/source/conf.py,work/*/*.py,python/.eggs/*,dist/*,.git/*,python/out,python/pyspark/sql/pandas/functions.pyi,python/pyspark/sql/column.pyi,python/pyspark/worker.pyi,python/pyspark/java_gateway.pyi
-max-line-length = 100
+BLACK_BUILD="python -m black"
+BLACK_VERSION="21.5b2"
+$BLACK_BUILD 2> /dev/null
+if [ $? -ne 0 ]; then
+    echo "The '$BLACK_BUILD' command was not found. Please install Black, for example, via 'pip install black==$BLACK_VERSION'."
+    exit 1
+fi
+
+# This script is only applied for pandas API on Spark for now.
+$BLACK_BUILD python/pyspark/pandas --line-length 100

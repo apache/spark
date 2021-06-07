@@ -264,7 +264,8 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         psser = ps.from_pandas(pser)
 
         self.assert_eq(
-            pser.rename_axis("index2").sort_index(), psser.rename_axis("index2").sort_index(),
+            pser.rename_axis("index2").sort_index(),
+            psser.rename_axis("index2").sort_index(),
         )
 
         self.assert_eq(
@@ -463,7 +464,8 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(pser, psser)
 
         self.assert_eq(
-            pser.reindex(["A", "B"]).sort_index(), psser.reindex(["A", "B"]).sort_index(),
+            pser.reindex(["A", "B"]).sort_index(),
+            psser.reindex(["A", "B"]).sort_index(),
         )
 
         self.assert_eq(
@@ -491,7 +493,8 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         psser2 = ps.from_pandas(pser2)
 
         self.assert_eq(
-            pser.reindex_like(pser2).sort_index(), psser.reindex_like(psser2).sort_index(),
+            pser.reindex_like(pser2).sort_index(),
+            psser.reindex_like(psser2).sort_index(),
         )
 
         self.assert_eq(
@@ -507,7 +510,8 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         psser2 = ps.from_pandas(pser2)
 
         self.assert_eq(
-            pser.reindex_like(pser2).sort_index(), psser.reindex_like(psser2).sort_index(),
+            pser.reindex_like(pser2).sort_index(),
+            psser.reindex_like(psser2).sort_index(),
         )
 
         self.assertRaises(TypeError, lambda: psser.reindex_like(index2))
@@ -521,7 +525,8 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         psser = ps.from_pandas(pser)
 
         self.assert_eq(
-            pser.reindex_like(pser2).sort_index(), psser.reindex_like(psser2).sort_index(),
+            pser.reindex_like(pser2).sort_index(),
+            psser.reindex_like(psser2).sort_index(),
         )
 
         # Reindexing with DataFrame
@@ -532,7 +537,8 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         psdf = ps.from_pandas(pdf)
 
         self.assert_eq(
-            pser.reindex_like(pdf).sort_index(), psser.reindex_like(psdf).sort_index(),
+            pser.reindex_like(pdf).sort_index(),
+            psser.reindex_like(psdf).sort_index(),
         )
 
     def test_fillna(self):
@@ -2897,19 +2903,22 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         pser = pd.Series([1, 2, 3, 4], index=idx)
         psser = ps.from_pandas(pser)
         self.assert_eq(
-            pser.at_time("0:20").sort_index(), psser.at_time("0:20").sort_index(),
+            pser.at_time("0:20").sort_index(),
+            psser.at_time("0:20").sort_index(),
         )
 
         pser.index.name = "ts"
         psser = ps.from_pandas(pser)
         self.assert_eq(
-            pser.at_time("0:20").sort_index(), psser.at_time("0:20").sort_index(),
+            pser.at_time("0:20").sort_index(),
+            psser.at_time("0:20").sort_index(),
         )
 
         pser.index.name = "index"
         psser = ps.from_pandas(pser)
         self.assert_eq(
-            pser.at_time("0:20").sort_index(), psser.at_time("0:20").sort_index(),
+            pser.at_time("0:20").sort_index(),
+            psser.at_time("0:20").sort_index(),
         )
 
 

@@ -1806,7 +1806,9 @@ class GroupBy(object, metaclass=ABCMeta):
             ]
 
         psdf, groupkey_labels, _ = GroupBy._prepare_group_map_apply(
-            psdf, self._groupkeys, agg_columns,
+            psdf,
+            self._groupkeys,
+            agg_columns,
         )
 
         groupkey_scols = [psdf._internal.spark_column_for(label) for label in groupkey_labels]
