@@ -278,6 +278,8 @@ class BlockManagerMasterEndpoint(
           blockIdsToDel += blockId
           blockStatusByShuffleService.get(bmIdForShuffleService).foreach { blockStatusForId =>
             blockStatusForId.remove(blockId)
+            // when all blocks are removed from the block statuses then for this BM Id the whole
+            // blockStatusByShuffleService entry can be removed to avoid leaking memory
             if (blockStatusForId.isEmpty) {
               blockStatusByShuffleService.remove(bmIdForShuffleService)
             }
