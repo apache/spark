@@ -17,6 +17,10 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.security.{GeneralSecurityException, NoSuchAlgorithmException}
+import javax.crypto.{Cipher, NoSuchPaddingException}
+import javax.crypto.spec.SecretKeySpec
+
 import org.apache.spark.{SPARK_REVISION, SPARK_VERSION_SHORT}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnresolvedSeed
@@ -300,4 +304,138 @@ case class CurrentUser() extends LeafExpression with Unevaluable {
   override def dataType: DataType = StringType
   override def prettyName: String = "current_user"
   final override val nodePatterns: Seq[TreePattern] = Seq(CURRENT_LIKE)
+}
+
+/**
+ * The base implementation for AES encryption and decryption.
+ */
+abstract class AesBase(left: Expression, right: Expression)
+  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant with Serializable {
+
+  override def dataType: DataType = BinaryType
+  override def nullable: Boolean = true
+  override def inputTypes: Seq[DataType] = Seq(BinaryType, BinaryType)
+  protected val cipherMode: Int
+
+  @transient lazy protected val cipher: Cipher = try {
+    Cipher.getInstance("AES")
+  } catch {
+    case e @ (_: NoSuchPaddingException | _: NoSuchAlgorithmException) =>
+      throw new RuntimeException(e)
+  }
+
+  protected override def nullSafeEval(input1: Any, input2: Any): Any = {
+    val input = input1.asInstanceOf[Array[Byte]]
+    val key = input2.asInstanceOf[Array[Byte]]
+    val inputLength = input.length
+    val keyLength = key.length
+    val secretKey = keyLength match {
+      case 16 | 24 | 32 => new SecretKeySpec(key, 0, keyLength, "AES")
+      case _ => null
+    }
+
+    if (secretKey == null) {
+      return null
+    }
+
+    try {
+      cipher.init(cipherMode, secretKey)
+      cipher.doFinal(input, 0, inputLength)
+    } catch {
+      case _: GeneralSecurityException =>
+        null
+    }
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val inputLength = ctx.freshName("inputLength")
+    val keyLength = ctx.freshName("keyLength")
+    val secretKey = ctx.freshName("secretKey")
+    val cipher = ctx.addMutableState("javax.crypto.Cipher", "cihper", v =>
+      s"""
+        try {
+          $v = javax.crypto.Cipher.getInstance("AES");
+        } catch (javax.crypto.NoSuchPaddingException e) {
+          throw new RuntimeException(e);
+        } catch (java.security.NoSuchAlgorithmException e) {
+          throw new RuntimeException(e);
+        }""")
+
+    nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
+      s"""
+        int $inputLength = $eval1.length;
+        int $keyLength = $eval2.length;
+        javax.crypto.SecretKey $secretKey = null;
+        if ($keyLength == 16 || $keyLength == 24 || $keyLength == 32) {
+          $secretKey = new javax.crypto.spec.SecretKeySpec($eval2, 0, $keyLength, "AES");
+        } else {
+          ${ev.isNull} = true;
+        }
+        if ($secretKey == null) {
+          ${ev.isNull} = true;
+        } else {
+          try {
+            $cipher.init($cipherMode, $secretKey);
+            ${ev.value} = $cipher.doFinal($eval1, 0, $inputLength);
+          } catch (java.security.GeneralSecurityException e) {
+            ${ev.isNull} = true;
+          }
+        }
+       """
+    })
+  }
+}
+
+/**
+ * A function that encrypts input using AES. Key lengths of 128, 192 or 256 bits can be used.
+ * For versions prior to JDK 8u161, 192 and 256 bits keys can be used
+ * if Java Cryptography Extension (JCE) Unlimited Strength Jurisdiction Policy Files are installed.
+ * If either argument is NULL or the key length is not one of the permitted values,
+ * the return value is NULL.
+ */
+@ExpressionDescription(
+  usage = """
+    _FUNC_(expr, key) - Returns a encrypted value of `expr` using AES.
+      Key lengths of 16, 24 and 32 bits are supported.
+  """,
+  examples = """
+    Examples:
+      > SELECT base64(_FUNC_('Spark', 'abcdefghijklmnop'));
+       4Hv0UKCx6nfUeAoPZo1z+w==
+  """,
+  since = "3.2.0",
+  group = "misc_funcs")
+case class AesEncrypt(left: Expression, right: Expression) extends AesBase(left, right) {
+  override protected val cipherMode: Int = Cipher.ENCRYPT_MODE
+  override protected def withNewChildrenInternal(
+      newLeft: Expression,
+      newRight: Expression): AesEncrypt =
+    copy(left = newLeft, right = newRight)
+}
+
+/**
+ * A function that decrypts input using AES. Key lengths of 128, 192 or 256 bits can be used.
+ * 192 and 256 bits keys can be used if Java Cryptography Extension (JCE)
+ * Unlimited Strength Jurisdiction Policy Files are installed.
+ * If either argument is NULL or the key length is not one of the permitted values,
+ * the return value is NULL.
+ */
+@ExpressionDescription(
+  usage = """
+    _FUNC_(expr, key) - Returns a decrepted value of `expr` using AES.
+      Key lengths of 16, 24 and 32 bits are supported.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(unbase64('4Hv0UKCx6nfUeAoPZo1z+w=='), 'abcdefghijklmnop');
+       Spark
+  """,
+  since = "3.2.0",
+  group = "misc_funcs")
+case class AesDecrypt(left: Expression, right: Expression) extends AesBase(left, right) {
+  override protected val cipherMode: Int = Cipher.DECRYPT_MODE
+  override protected def withNewChildrenInternal(
+      newLeft: Expression,
+      newRight: Expression): AesDecrypt =
+    copy(left = newLeft, right = newRight)
 }

@@ -245,6 +245,92 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       Row(2743272264L, 2180413220L))
   }
 
+  test("misc aes function") {
+    val df1 = Seq("ABC", "").toDF
+
+    // Successful encryption
+    checkAnswer(
+      df1.selectExpr("base64(aes_encrypt(value, '1234567890123456'))"),
+      Seq(Row("y6Ss+zCYObpCbgfWfyNWTw=="), Row("BQGHoM3lqYcsurCRq3PlUw==")))
+    checkAnswer(
+      df1.selectExpr("base64(aes_encrypt(binary(value), '1234567890123456'))"),
+      Seq(Row("y6Ss+zCYObpCbgfWfyNWTw=="), Row("BQGHoM3lqYcsurCRq3PlUw==")))
+
+    // Encryption failure - input or key is null
+    checkAnswer(
+      df1.selectExpr("aes_encrypt(cast(null as string), '1234567890123456')"),
+      Seq(Row(null), Row(null)))
+    checkAnswer(
+      df1.selectExpr("aes_encrypt(cast(null as binary), '1234567890123456')"),
+      Seq(Row(null), Row(null)))
+    checkAnswer(
+      df1.selectExpr("aes_encrypt(cast(null as string), binary('1234567890123456'))"),
+      Seq(Row(null), Row(null)))
+    checkAnswer(
+      df1.selectExpr("aes_encrypt(cast(null as binary), binary('1234567890123456'))"),
+      Seq(Row(null), Row(null)))
+    checkAnswer(
+      df1.selectExpr("aes_encrypt(value, cast(null as string))"),
+      Seq(Row(null), Row(null)))
+    checkAnswer(
+      df1.selectExpr("aes_encrypt(value, cast(null as binary))"),
+      Seq(Row(null), Row(null)))
+
+    // Encryption failure - invalid key length
+    checkAnswer(
+      df1.selectExpr("aes_encrypt(value, '12345678901234567')"),
+      Seq(Row(null), Row(null)))
+    checkAnswer(
+      df1.selectExpr("aes_encrypt(value, binary('123456789012345'))"),
+      Seq(Row(null), Row(null)))
+    checkAnswer(
+      df1.selectExpr("aes_encrypt(value, binary(''))"),
+      Seq(Row(null), Row(null)))
+
+   val df2 = Seq("y6Ss+zCYObpCbgfWfyNWTw==", "BQGHoM3lqYcsurCRq3PlUw==").toDF
+
+    // Successful decryption
+    checkAnswer(
+      df2.selectExpr("cast(aes_decrypt(unbase64(value), '1234567890123456') as string)"),
+      Seq(Row("ABC"), Row("")))
+    checkAnswer(
+      df2.selectExpr("cast(aes_decrypt(unbase64(value), binary('1234567890123456')) as string)"),
+      Seq(Row("ABC"), Row("")))
+
+    // Decryption failure - input or key is null
+    checkAnswer(
+      df2.selectExpr("aes_decrypt(cast(null as binary), '1234567890123456')"),
+      Seq(Row(null), Row(null)))
+    checkAnswer(
+      df2.selectExpr("aes_decrypt(cast(null as binary), binary('1234567890123456'))"),
+      Seq(Row(null), Row(null)))
+    checkAnswer(
+      df2.selectExpr("aes_decrypt(value, cast(null as string))"),
+      Seq(Row(null), Row(null)))
+    checkAnswer(
+      df2.selectExpr("aes_decrypt(value, cast(null as binary))"),
+      Seq(Row(null), Row(null)))
+
+    // Decryption failure - invalid key length
+    checkAnswer(
+      df2.selectExpr("aes_decrypt(unbase64(value), '12345678901234567')"),
+      Seq(Row(null), Row(null)))
+    checkAnswer(
+      df2.selectExpr("aes_decrypt(unbase64(value), binary('123456789012345'))"),
+      Seq(Row(null), Row(null)))
+    checkAnswer(
+      df2.selectExpr("aes_decrypt(unbase64(value), '')"),
+      Seq(Row(null), Row(null)))
+    checkAnswer(
+      df2.selectExpr("aes_decrypt(unbase64(value), binary(''))"),
+      Seq(Row(null), Row(null)))
+
+    // Decryption failure - key mismatch
+    checkAnswer(
+      df2.selectExpr("aes_decrypt(unbase64(value), binary('abcdefghijklmnop'))"),
+      Seq(Row(null), Row(null)))
+  }
+
   test("string function find_in_set") {
     val df = Seq(("abc,b,ab,c,def", "abc,b,ab,c,def")).toDF("a", "b")
 
