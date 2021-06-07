@@ -1692,10 +1692,9 @@ class AdaptiveQueryExecSuite
       assert(collect(df.queryExecution.executedPlan) {
         case u: UnionExec => u
       }.size == unionNumber)
-      assert(
-        collect(df.queryExecution.executedPlan) {
-          case s: CustomShuffleReaderExec => s
-        }.size === shuffleReaderNumber)
+      assert(collect(df.queryExecution.executedPlan) {
+        case c: CustomShuffleReaderExec => c
+      }.size === shuffleReaderNumber)
       assert(df.rdd.partitions.length === partitionNumber)
     }
 
@@ -1713,7 +1712,7 @@ class AdaptiveQueryExecSuite
         SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM.key -> "1",
         SQLConf.SHUFFLE_PARTITIONS.key -> "10",
         combineUnionConfig) {
-        withView("t1", "t2") {
+        withTempView("t1", "t2") {
           spark.sparkContext.parallelize((1 to 10).map(i => TestData(i, i.toString)), 2)
             .toDF().createOrReplaceTempView("t1")
           spark.sparkContext.parallelize((1 to 10).map(i => TestData(i, i.toString)), 4)

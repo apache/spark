@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.adaptive
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.plans.physical.SinglePartition
-import org.apache.spark.sql.execution.{ShufflePartitionSpec, SparkPlan}
+import org.apache.spark.sql.execution.{ShufflePartitionSpec, SparkPlan, UnionExec}
 import org.apache.spark.sql.execution.exchange.{ENSURE_REQUIREMENTS, REPARTITION, ShuffleExchangeLike, ShuffleOrigin}
 import org.apache.spark.sql.internal.SQLConf
 
@@ -27,8 +27,7 @@ import org.apache.spark.sql.internal.SQLConf
  * A rule to coalesce the shuffle partitions based on the map output statistics, which can
  * avoid many small reduce tasks that hurt performance.
  */
-case class CoalesceShufflePartitions(session: SparkSession)
-  extends CustomShuffleReaderRule with UnionAwareOptimizerRule {
+case class CoalesceShufflePartitions(session: SparkSession) extends CustomShuffleReaderRule {
 
   override val supportedShuffleOrigins: Seq[ShuffleOrigin] = Seq(ENSURE_REQUIREMENTS, REPARTITION)
 
@@ -37,7 +36,30 @@ case class CoalesceShufflePartitions(session: SparkSession)
       return plan
     }
 
-    optimizeWithUnion(plan, coalescePartitions)
+    val groups = splitIntoGroups(plan)
+    if (groups.isEmpty) {
+      coalescePartitions(plan)
+    } else {
+      val optimizedGroups = groups.map(group => (group, coalescePartitions(group)))
+      def updateOptimizedGroups(plan: SparkPlan): SparkPlan = plan match {
+        case p if optimizedGroups.exists(_._1.eq(p)) =>
+          optimizedGroups.find(_._1.eq(p)).get._2
+        case other =>
+          other.mapChildren(updateOptimizedGroups)
+      }
+
+      updateOptimizedGroups(plan)
+    }
+  }
+
+  private def splitIntoGroups(plan: SparkPlan): Seq[SparkPlan] = {
+    // Union is the special case that it's children are independent in query stage which means
+    // they are not required all leaf node are query stages and had same partition number.
+    // Then we can optimize Union's children one by one.
+    plan.collect {
+      case u: UnionExec =>
+        u.children.filter(_.find(_.isInstanceOf[UnionExec]).isEmpty)
+    }.flatten
   }
 
   private def coalescePartitions(plan: SparkPlan): SparkPlan = {
