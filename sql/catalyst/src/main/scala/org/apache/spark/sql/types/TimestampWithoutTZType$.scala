@@ -31,7 +31,7 @@ import org.apache.spark.annotation.Unstable
  * @since 3.2.0
  */
 @Unstable
-class TimestampNTZType private() extends AtomicType {
+class TimestampWithoutTZType$ private() extends AtomicType {
   /**
    * Internally, a timestamp is stored as the number of microseconds from
    * the epoch of 1970-01-01T00:00:00.000000(Unix system time zero)
@@ -47,7 +47,7 @@ class TimestampNTZType private() extends AtomicType {
    */
   override def defaultSize: Int = 8
 
-  private[spark] override def asNullable: TimestampNTZType = this
+  private[spark] override def asNullable: TimestampWithoutTZType$ = this
 }
 
 /**
@@ -59,4 +59,4 @@ class TimestampNTZType private() extends AtomicType {
  * @since 3.2.0
  */
 @Unstable
-case object TimestampNTZType extends TimestampNTZType
+case object TimestampWithoutTZType$ extends TimestampWithoutTZType$

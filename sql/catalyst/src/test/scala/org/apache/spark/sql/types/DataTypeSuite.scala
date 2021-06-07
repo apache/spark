@@ -325,7 +325,7 @@ class DataTypeSuite extends SparkFunSuite {
   checkDefaultSize(VarcharType(10), 10)
   checkDefaultSize(YearMonthIntervalType, 4)
   checkDefaultSize(DayTimeIntervalType, 8)
-  checkDefaultSize(TimestampNTZType, 8)
+  checkDefaultSize(TimestampWithoutTZType$, 8)
 
   def checkEqualsIgnoreCompatibleNullability(
       from: DataType,
