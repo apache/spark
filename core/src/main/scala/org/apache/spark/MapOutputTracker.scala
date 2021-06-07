@@ -167,15 +167,14 @@ private class ShuffleStatus(
           invalidateSerializedMapOutputStatusCache()
         case None =>
           val index = mapStatusesDeleted.indexWhere(x => x != null && x.mapId == mapId)
-          if (index >= 0) {
+          if (index >= 0 && mapStatuses(index) == null) {
             val mapStatus = mapStatusesDeleted(index)
             mapStatus.updateLocation(bmAddress)
-            assert(mapStatuses(index) == null)
             mapStatuses(index) = mapStatus
             _numAvailableMapOutputs += 1
             invalidateSerializedMapOutputStatusCache()
             mapStatusesDeleted(index) = null
-            logDebug(s"Recover ${mapStatus.mapId} ${mapStatus.location}")
+            logInfo(s"Recover ${mapStatus.mapId} ${mapStatus.location}")
           } else {
             logWarning(s"Asked to update map output ${mapId} for untracked map status.")
           }
