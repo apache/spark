@@ -1209,7 +1209,7 @@ class InternalFrame(object):
         data_columns: List[str],
         column_labels: List[Tuple],
         column_label_names: List[Tuple],
-        fields: Dict[str, InternalField] = None,
+        fields: List[InternalField] = None,
         ext_fields: Dict[str, InternalField] = None,
     ) -> pd.DataFrame:
         """
