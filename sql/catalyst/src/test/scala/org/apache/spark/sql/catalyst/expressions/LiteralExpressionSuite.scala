@@ -50,7 +50,7 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Literal.create(null, DateType), null)
     checkEvaluation(Literal.create(null, TimestampType), null)
     checkEvaluation(Literal.create(null, CalendarIntervalType), null)
-    checkEvaluation(Literal.create(null, YearMonthIntervalType.defaultConcreteType), null)
+    checkEvaluation(Literal.create(null, YearMonthIntervalType()), null)
     checkEvaluation(Literal.create(null, DayTimeIntervalType), null)
     checkEvaluation(Literal.create(null, ArrayType(ByteType, true)), null)
     checkEvaluation(Literal.create(null, ArrayType(StringType, true)), null)

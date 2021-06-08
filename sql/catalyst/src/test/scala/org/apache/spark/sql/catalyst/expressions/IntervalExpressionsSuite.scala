@@ -423,9 +423,9 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         IntervalUtils.getMonths(p.toTotalMonths.toInt))
     }
     checkEvaluation(
-      ExtractANSIIntervalYears(Literal(null, YearMonthIntervalType.defaultConcreteType)), null)
+      ExtractANSIIntervalYears(Literal(null, YearMonthIntervalType())), null)
     checkEvaluation(
-      ExtractANSIIntervalMonths(Literal(null, YearMonthIntervalType.defaultConcreteType)), null)
+      ExtractANSIIntervalMonths(Literal(null, YearMonthIntervalType())), null)
   }
 
   test("ANSI: extract days, hours, minutes and seconds") {

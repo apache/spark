@@ -86,7 +86,7 @@ private[sql] object TypeCollection {
     NumericType,
     CalendarIntervalType,
     DayTimeIntervalType,
-    YearMonthIntervalType)
+    YearMonthIntervalType())
 
   def apply(types: AbstractDataType*): TypeCollection = new TypeCollection(types)
 

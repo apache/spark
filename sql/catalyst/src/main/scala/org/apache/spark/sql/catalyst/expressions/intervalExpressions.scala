@@ -353,7 +353,7 @@ case class MultiplyYMInterval(
   override def left: Expression = interval
   override def right: Expression = num
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(YearMonthIntervalType, NumericType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(YearMonthIntervalType(), NumericType)
   override def dataType: DataType = YearMonthIntervalType()
 
   @transient
@@ -463,7 +463,7 @@ case class DivideYMInterval(
   override def left: Expression = interval
   override def right: Expression = num
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(YearMonthIntervalType, NumericType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(YearMonthIntervalType(), NumericType)
   override def dataType: DataType = YearMonthIntervalType()
 
   @transient

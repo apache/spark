@@ -42,7 +42,7 @@ case class Average(child: Expression) extends DeclarativeAggregate with Implicit
   override def prettyName: String = getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("avg")
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(TypeCollection(NumericType, YearMonthIntervalType, DayTimeIntervalType))
+    Seq(TypeCollection(NumericType, YearMonthIntervalType(), DayTimeIntervalType))
 
   override def checkInputDataTypes(): TypeCheckResult =
     TypeUtils.checkForAnsiIntervalOrNumericType(child.dataType, "average")

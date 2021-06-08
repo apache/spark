@@ -2545,11 +2545,11 @@ case class Sequence(
         (startType match {
           case TimestampType =>
             stepOpt.isEmpty || CalendarIntervalType.acceptsType(stepType) ||
-              YearMonthIntervalType.acceptsType(stepType) ||
+              YearMonthIntervalType().acceptsType(stepType) ||
               DayTimeIntervalType.acceptsType(stepType)
           case DateType =>
             stepOpt.isEmpty || CalendarIntervalType.acceptsType(stepType) ||
-              YearMonthIntervalType.acceptsType(stepType)
+              YearMonthIntervalType().acceptsType(stepType)
           case _: IntegralType =>
             stepOpt.isEmpty || stepType.sameType(startType)
           case _ => false
@@ -2592,7 +2592,7 @@ case class Sequence(
     case TimestampType =>
       if (stepOpt.isEmpty || CalendarIntervalType.acceptsType(stepOpt.get.dataType)) {
         new TemporalSequenceImpl[Long](LongType, 1, identity, zoneId)
-      } else if (YearMonthIntervalType.acceptsType(stepOpt.get.dataType)) {
+      } else if (YearMonthIntervalType().acceptsType(stepOpt.get.dataType)) {
         new PeriodSequenceImpl[Long](LongType, 1, identity, zoneId)
       } else {
         new DurationSequenceImpl[Long](LongType, 1, identity, zoneId)

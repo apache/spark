@@ -1595,13 +1595,13 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(
         TimestampAddYMInterval(
           Literal(new Timestamp(sdf.parse("2016-01-29 10:00:00.000").getTime)),
-          Literal.create(null, YearMonthIntervalType.defaultConcreteType),
+          Literal.create(null, YearMonthIntervalType()),
           timeZoneId),
         null)
       checkEvaluation(
         TimestampAddYMInterval(
           Literal.create(null, TimestampType),
-          Literal.create(null, YearMonthIntervalType.defaultConcreteType),
+          Literal.create(null, YearMonthIntervalType()),
           timeZoneId),
         null)
       checkConsistencyBetweenInterpretedAndCodegen(

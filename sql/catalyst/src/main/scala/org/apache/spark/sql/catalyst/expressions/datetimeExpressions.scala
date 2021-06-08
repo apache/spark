@@ -1633,7 +1633,7 @@ case class DateAddYMInterval(date: Expression, interval: Expression) extends Add
   override def left: Expression = date
   override def right: Expression = interval
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(DateType, YearMonthIntervalType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(DateType, YearMonthIntervalType())
 
   override def toString: String = s"$left + $right"
   override def sql: String = s"${left.sql} + ${right.sql}"
@@ -1657,7 +1657,7 @@ case class TimestampAddYMInterval(
 
   override def toString: String = s"$left + $right"
   override def sql: String = s"${left.sql} + ${right.sql}"
-  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType, YearMonthIntervalType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType, YearMonthIntervalType())
 
   override def dataType: DataType = TimestampType
 

@@ -48,7 +48,7 @@ case class Sum(child: Expression) extends DeclarativeAggregate with ImplicitCast
   override def dataType: DataType = resultType
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(TypeCollection(NumericType, YearMonthIntervalType, DayTimeIntervalType))
+    Seq(TypeCollection(NumericType, YearMonthIntervalType(), DayTimeIntervalType))
 
   override def checkInputDataTypes(): TypeCheckResult =
     TypeUtils.checkForAnsiIntervalOrNumericType(child.dataType, "sum")

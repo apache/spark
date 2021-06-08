@@ -84,17 +84,9 @@ case class YearMonthIntervalType(start: Byte, end: Byte) extends AtomicType {
  * @since 3.2.0
  */
 @Unstable
-object YearMonthIntervalType extends AbstractDataType {
+object YearMonthIntervalType {
   val YEAR: Byte = 0
   val MONTH: Byte = 1
 
   def apply(): YearMonthIntervalType = new YearMonthIntervalType()
-
-  override private[sql] def defaultConcreteType: DataType = new YearMonthIntervalType()
-
-  override private[sql] def acceptsType(other: DataType): Boolean = {
-    other.isInstanceOf[YearMonthIntervalType]
-  }
-
-  override private[sql] def simpleString: String = defaultConcreteType.simpleString
 }
