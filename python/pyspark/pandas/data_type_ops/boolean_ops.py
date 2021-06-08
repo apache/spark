@@ -152,7 +152,9 @@ class BooleanOps(DataTypeOps):
             return left ** right
 
     def radd(self, left, right) -> Union["Series", "Index"]:
-        if isinstance(right, numbers.Number) and not isinstance(right, bool):
+        if isinstance(right, bool):
+            return left.__or__(right)
+        elif isinstance(right, numbers.Number):
             left = left.spark.transform(lambda scol: scol.cast(as_spark_type(type(right))))
             return right + left
         else:
@@ -170,7 +172,9 @@ class BooleanOps(DataTypeOps):
             )
 
     def rmul(self, left, right) -> Union["Series", "Index"]:
-        if isinstance(right, numbers.Number) and not isinstance(right, bool):
+        if isinstance(right, bool):
+            return left.__and__(right)
+        elif isinstance(right, numbers.Number):
             left = left.spark.transform(lambda scol: scol.cast(as_spark_type(type(right))))
             return right * left
         else:

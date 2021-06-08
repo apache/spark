@@ -172,8 +172,8 @@ class BooleanOpsTest(PandasOnSparkTestCase, TestCasesUtils):
     def test_radd(self):
         self.assert_eq(1 + self.pser, 1 + self.psser)
         self.assert_eq(0.1 + self.pser, 0.1 + self.psser)
-        self.assertRaises(TypeError, lambda: "x" + self.psser)
-        self.assertRaises(TypeError, lambda: True + self.psser)
+        self.assert_eq(True + self.pser, True + self.psser)
+        self.assert_eq(False + self.pser, False + self.psser)
         self.assertRaises(TypeError, lambda: datetime.date(1994, 1, 1) + self.psser)
         self.assertRaises(TypeError, lambda: datetime.datetime(1994, 1, 1) + self.psser)
 
@@ -189,7 +189,8 @@ class BooleanOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         self.assert_eq(1 * self.pser, 1 * self.psser)
         self.assert_eq(0.1 * self.pser, 0.1 * self.psser)
         self.assertRaises(TypeError, lambda: "x" * self.psser)
-        self.assertRaises(TypeError, lambda: True * self.psser)
+        self.assert_eq(True * self.pser, True * self.psser)
+        self.assert_eq(False * self.pser, False * self.psser)
         self.assertRaises(TypeError, lambda: datetime.date(1994, 1, 1) * self.psser)
         self.assertRaises(TypeError, lambda: datetime.datetime(1994, 1, 1) * self.psser)
 
@@ -208,8 +209,8 @@ class BooleanOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         else:
             self.assert_eq(1 // self.psser, ps.Series([1.0, 1.0, np.inf]))
             self.assert_eq(0.1 // self.psser, ps.Series([0.0, 0.0, np.inf]))
-        self.assertRaises(TypeError, lambda: "x" + self.psser)
-        self.assertRaises(TypeError, lambda: True + self.psser)
+        self.assertRaises(TypeError, lambda: "x" // self.psser)
+        self.assertRaises(TypeError, lambda: True // self.psser)
         self.assertRaises(TypeError, lambda: datetime.date(1994, 1, 1) // self.psser)
         self.assertRaises(TypeError, lambda: datetime.datetime(1994, 1, 1) // self.psser)
 
@@ -439,7 +440,15 @@ class BooleanExtensionOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         self.assert_eq((1 + self.pser).astype(float), 1 + self.psser)
         self.assert_eq((0.1 + self.pser).astype(float), 0.1 + self.psser)
         self.assertRaises(TypeError, lambda: "x" + self.psser)
-        self.assertRaises(TypeError, lambda: True + self.psser)
+
+        # In pandas, NA | True is NA, whereas NA | True is True in pandas-on-Spark
+        if LooseVersion(pd.__version__) >= LooseVersion("1.2.2"):
+            self.assert_eq(ps.Series([True, True, True], dtype="boolean"), True + self.psser)
+            self.assert_eq(False + self.pser, False + self.psser)
+        else:
+            # Due to https://github.com/pandas-dev/pandas/issues/39410
+            self.assert_eq(ps.Series([True, True, True]), (True + self.psser).astype(bool))
+
         self.assertRaises(TypeError, lambda: datetime.date(1994, 1, 1) + self.psser)
         self.assertRaises(TypeError, lambda: datetime.datetime(1994, 1, 1) + self.psser)
 
@@ -455,7 +464,15 @@ class BooleanExtensionOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         self.assert_eq((1 * self.pser).astype(float), 1 * self.psser)
         self.assert_eq((0.1 * self.pser).astype(float), 0.1 * self.psser)
         self.assertRaises(TypeError, lambda: "x" * self.psser)
-        self.assertRaises(TypeError, lambda: True * self.psser)
+
+        # In pandas, NA & False is NA, whereas NA & False is False in pandas-on-Spark
+        if LooseVersion(pd.__version__) >= LooseVersion("1.2.2"):
+            self.assert_eq(True * self.pser, True * self.psser)
+            self.assert_eq(ps.Series([False, False, False], dtype="boolean"), False * self.psser)
+        else:
+            # Due to https://github.com/pandas-dev/pandas/issues/39410
+            self.assert_eq(ps.Series([False, False, False]), (False * self.psser).astype(bool))
+
         self.assertRaises(TypeError, lambda: datetime.date(1994, 1, 1) * self.psser)
         self.assertRaises(TypeError, lambda: datetime.datetime(1994, 1, 1) * self.psser)
 
@@ -470,8 +487,8 @@ class BooleanExtensionOpsTest(PandasOnSparkTestCase, TestCasesUtils):
     def test_rfloordiv(self):
         self.assert_eq((1 // self.psser).astype(float), ps.Series([1.0, np.inf, np.nan]))
         self.assert_eq((0.1 // self.psser).astype(float), ps.Series([0.0, np.inf, np.nan]))
-        self.assertRaises(TypeError, lambda: "x" + self.psser)
-        self.assertRaises(TypeError, lambda: True + self.psser)
+        self.assertRaises(TypeError, lambda: "x" // self.psser)
+        self.assertRaises(TypeError, lambda: True // self.psser)
         self.assertRaises(TypeError, lambda: datetime.date(1994, 1, 1) // self.psser)
         self.assertRaises(TypeError, lambda: datetime.datetime(1994, 1, 1) // self.psser)
 
