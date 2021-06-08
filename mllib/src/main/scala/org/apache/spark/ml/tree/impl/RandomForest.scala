@@ -117,7 +117,7 @@ private[spark] object RandomForest extends Logging with Serializable {
       featureSubsetStrategy: String,
       seed: Long,
       instr: Option[Instrumentation],
-      prune: Boolean = true, // exposed for testing only, real trees are always pruned
+      prune: Boolean = false, // exposed for testing only, real trees are always not pruned
       parentUID: Option[String] = None): Array[DecisionTreeModel] = {
     val timer = new TimeTracker()
     timer.start("total")
@@ -265,7 +265,7 @@ private[spark] object RandomForest extends Logging with Serializable {
       featureSubsetStrategy: String,
       seed: Long,
       instr: Option[Instrumentation],
-      prune: Boolean = true, // exposed for testing only, real trees are always pruned
+      prune: Boolean = false, // exposed for testing only, real trees are always not pruned
       parentUID: Option[String] = None): Array[DecisionTreeModel] = {
     val timer = new TimeTracker()
 
