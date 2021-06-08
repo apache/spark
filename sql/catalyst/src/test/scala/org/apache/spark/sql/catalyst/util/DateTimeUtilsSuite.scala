@@ -657,10 +657,14 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       100000000000L)
     assert(DateTimeUtils.localDateTimeToMicros(LocalDateTime.parse("9999-12-31T23:59:59.999999"))
       == 253402300799999999L)
-    assert(DateTimeUtils.localDateTimeToMicros(LocalDateTime.parse("-290308-12-21T19:59:05.224192"))
-      == Long.MinValue)
-    assert(DateTimeUtils.localDateTimeToMicros(LocalDateTime.parse("+294247-01-10T04:00:54.775807"))
-      == Long.MaxValue)
+    assert(DateTimeUtils.localDateTimeToMicros(LocalDateTime.parse("-1000-12-31T23:59:59.999999"))
+      == -93692592000000001L)
+    Seq(LocalDateTime.MIN, LocalDateTime.MAX).foreach { dt =>
+      val msg = intercept[ArithmeticException] {
+        DateTimeUtils.localDateTimeToMicros(dt)
+      }.getMessage
+      assert(msg == "long overflow")
+    }
   }
 
   test("daysToMicros and microsToDays") {

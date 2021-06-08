@@ -76,8 +76,7 @@ object DateTimeUtils {
   }
 
   def localDateTimeToMicros(localDateTime: LocalDateTime): Long = {
-    localDateTime.toEpochSecond(ZoneOffset.UTC) * MICROS_PER_SECOND +
-      localDateTime.getNano / NANOS_PER_MICROS
+    instantToMicros(localDateTime.toInstant(ZoneOffset.UTC))
   }
 
   /**
