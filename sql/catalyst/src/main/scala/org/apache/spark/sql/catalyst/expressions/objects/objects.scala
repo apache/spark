@@ -1176,25 +1176,24 @@ case class CatalystToExternalMap private(
     newMapBuilderMethod.invoke(moduleField).asInstanceOf[Builder[AnyRef, AnyRef]]
   }
 
-  private def keyValueIterator(md: MapData): Iterator[AnyRef] = {
-    val keyArray = md.keyArray()
-    val valueArray = md.valueArray()
-    val row = new GenericInternalRow(1)
-    0.until(md.numElements()).iterator.map { i =>
-      row.update(0, keyArray.get(i, inputMapType.keyType))
-      val key = keyLambdaFunction.eval(row)
-      row.update(0, valueArray.get(i, inputMapType.valueType))
-      val value = valueLambdaFunction.eval(row)
-      Tuple2(key, value)
-    }
-  }
-
   override def eval(input: InternalRow): Any = {
     val result = inputData.eval(input).asInstanceOf[MapData]
     if (result != null) {
       val builder = newMapBuilder()
       builder.sizeHint(result.numElements())
-      keyValueIterator(result).foldLeft(builder)(_ += _).result
+      val keyArray = result.keyArray()
+      val valueArray = result.valueArray()
+      val row = new GenericInternalRow(1)
+      var i = 0
+      while (i < result.numElements()) {
+        row.update(0, keyArray.get(i, inputMapType.keyType))
+        val key = keyLambdaFunction.eval(row)
+        row.update(0, valueArray.get(i, inputMapType.valueType))
+        val value = valueLambdaFunction.eval(row)
+        builder += Tuple2(key, value)
+        i += 1
+      }
+      builder.result()
     } else {
       null
     }
