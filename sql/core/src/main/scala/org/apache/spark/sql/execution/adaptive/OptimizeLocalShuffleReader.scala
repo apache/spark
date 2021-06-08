@@ -152,5 +152,4 @@ object OptimizeLocalShuffleReader extends CustomShuffleReaderRule {
   private def supportLocalReader(s: ShuffleExchangeLike): Boolean = {
     s.outputPartitioning != SinglePartition && supportedShuffleOrigins.contains(s.shuffleOrigin)
   }
-
 }
