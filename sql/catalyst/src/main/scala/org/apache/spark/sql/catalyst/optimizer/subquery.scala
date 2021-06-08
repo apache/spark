@@ -332,7 +332,7 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
       // Since a lateral join's output depends on its left child output and its lateral subquery's
       // plan output, we need to trim the domain attributes added to the subquery's plan output
       // to preserve the original output of the join.
-      if (newPlan.output != j.output) {
+      if (!j.sameOutput(newPlan)) {
         Project(j.output, newPlan)
       } else {
         newPlan

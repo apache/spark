@@ -240,7 +240,13 @@ object DecorrelateInnerQuery extends PredicateHelper {
           // Join Inner
           // :- Inner Query
           // +- Domain
-          case _ => Join(child, domain, Inner, None, JoinHint.NONE)
+          case _ =>
+            // The decorrelation framework adds domain joins by traversing down the plan tree
+            // recursively until it reaches a node that is not correlated with the outer query.
+            // So the child node of a domain join shouldn't contain another domain join.
+            assert(child.find(_.isInstanceOf[DomainJoin]).isEmpty,
+              s"Child of a domain join shouldn't contain another domain join.\n$child")
+            Join(child, domain, Inner, None, JoinHint.NONE)
         }
       } else {
         throw QueryExecutionErrors.cannotRewriteDomainJoinWithConditionsError(conditions, d)

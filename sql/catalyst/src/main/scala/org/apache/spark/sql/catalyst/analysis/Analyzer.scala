@@ -2274,6 +2274,14 @@ class Analyzer(override val catalogManager: CatalogManager)
    * Note: CTEs are handled in CTESubstitution.
    */
   object ResolveSubquery extends Rule[LogicalPlan] with PredicateHelper {
+
+    /**
+     * Wrap attributes in the expression with [[OuterReference]]s.
+     */
+    private def wrapOuterReference[E <: Expression](e: E): E = {
+      e.transform { case a: Attribute => OuterReference(a) }.asInstanceOf[E]
+    }
+
     /**
      * Resolve the correlated expressions in a subquery by using the an outer plans' references. All
      * resolved outer references are wrapped in an [[OuterReference]]
@@ -2286,7 +2294,7 @@ class Analyzer(override val catalogManager: CatalogManager)
               withPosition(u) {
                 try {
                   outer.resolve(nameParts, resolver) match {
-                    case Some(outerAttr) => OuterReference(outerAttr)
+                    case Some(outerAttr) => wrapOuterReference(outerAttr)
                     case None => u
                   }
                 } catch {
@@ -2370,7 +2378,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       // its child for resolution.
       case f @ Filter(_, a: Aggregate) if f.childrenResolved =>
         resolveSubQueries(f, Seq(a, a.child))
-      case j @ LateralJoin(left, right, _, _) if left.resolved && !right.resolved =>
+      case j @ LateralJoin(left, right, _, _) if left.resolved =>
         resolveSubQueries(j, j.children)
       // Only a few unary nodes (Project/Filter/Aggregate) can contain subqueries.
       case q: UnaryNode if q.childrenResolved =>

@@ -776,13 +776,9 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
                 s"Filter/Aggregate/Project and a few commands: $plan")
           }
         }
-        // Validate to make sure the correlations appearing in the query are valid and
-        // allowed by spark.
-        checkCorrelationsInSubquery(expr.plan)
 
       case _: LateralSubquery =>
         assert(plan.isInstanceOf[LateralJoin])
-        checkCorrelationsInSubquery(expr.plan, isLateral = true)
 
       case inSubqueryOrExistsSubquery =>
         plan match {
@@ -791,10 +787,11 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
             failAnalysis(s"IN/EXISTS predicate sub-queries can only be used in" +
                 s" Filter/Join and a few commands: $plan")
         }
-        // Validate to make sure the correlations appearing in the query are valid and
-        // allowed by spark.
-        checkCorrelationsInSubquery(expr.plan)
     }
+
+    // Validate to make sure the correlations appearing in the query are valid and
+    // allowed by spark.
+    checkCorrelationsInSubquery(expr.plan, isLateral = plan.isInstanceOf[LateralJoin])
   }
 
   /**

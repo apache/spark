@@ -1441,6 +1441,11 @@ case class LateralJoin(
     }
   }
 
+  private[this] lazy val childAttributes = AttributeSeq(left.output ++ right.plan.output)
+
+  private[this] lazy val childMetadataAttributes =
+    AttributeSeq(left.metadataOutput ++ right.plan.metadataOutput)
+
   /**
    * Optionally resolves the given strings to a [[NamedExpression]] using the input from
    * both the left plan and the lateral subquery's plan.
@@ -1448,9 +1453,6 @@ case class LateralJoin(
   override def resolveChildren(
       nameParts: Seq[String],
       resolver: Resolver): Option[NamedExpression] = {
-    val children = left :: right.plan :: Nil
-    val childAttributes = AttributeSeq(children.flatMap(_.output))
-    val childMetadataAttributes = AttributeSeq(children.flatMap(_.metadataOutput))
     childAttributes.resolve(nameParts, resolver)
       .orElse(childMetadataAttributes.resolve(nameParts, resolver))
   }
