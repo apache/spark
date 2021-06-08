@@ -57,7 +57,7 @@ if TYPE_CHECKING:
 
 
 class IndexerLike(object):
-    def __init__(self, psdf_or_psser: Union["Series", "DataFrame"]) -> None:
+    def __init__(self, psdf_or_psser: Union["Series", "DataFrame"]):
         from pyspark.pandas.frame import DataFrame
         from pyspark.pandas.series import Series
 
@@ -628,15 +628,15 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
             if cond is None:
                 cond = F.lit(True)
             if limit is not None:
-                cond = cond & (
-                    self._internal.
-                    spark_frame[self._sequence_col] < F.lit(limit))  # type: ignore
+                cond = cond & (self._internal.spark_frame[cast(
+                    iLocIndexer, self)._sequence_col] < F.lit(limit))
 
             if isinstance(value, (Series, spark.Column)):
                 if remaining_index is not None and remaining_index == 0:
                     raise ValueError(
-                        "No axis named {} for object type {}".format(key, type(value).__name__)
-                    )
+                        "No axis named {} for object type {}".format(
+                            key,
+                            type(value).__name__))
                 if isinstance(value, Series):
                     value = value.spark.column
             else:
@@ -677,13 +677,13 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
                 isinstance(value, Series)
                 and (isinstance(self, iLocIndexer) or not same_anchor(value, self._psdf_or_psser))
             ):
-                psdf = self._psdf_or_psser.copy()
+                psdf = cast(DataFrame, self._psdf_or_psser.copy())
                 temp_natural_order = verify_temp_column_name(
-                    psdf, "__temp_natural_order__")  # type: ignore
+                    psdf, "__temp_natural_order__")
                 temp_key_col = verify_temp_column_name(
-                    psdf, "__temp_key_col__")  # type: ignore
+                    psdf, "__temp_key_col__")
                 temp_value_col = verify_temp_column_name(
-                    psdf, "__temp_value_col__")  # type: ignore
+                    psdf, "__temp_value_col__")
 
                 psdf[temp_natural_order] = F.monotonically_increasing_id()
                 if isinstance(rows_sel, Series):
@@ -717,9 +717,8 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
             if cond is None:
                 cond = F.lit(True)
             if limit is not None:
-                cond = cond & (
-                    self._internal.
-                    spark_frame[self._sequence_col] < F.lit(limit))  # type: ignore
+                cond = cond & (self._internal.spark_frame[cast(
+                    iLocIndexer, self)._sequence_col] < F.lit(limit))
 
             if isinstance(value, (Series, spark.Column)):
                 if remaining_index is not None and remaining_index == 0:
@@ -1172,7 +1171,7 @@ class LocIndexer(LocIndexerLike):
         labels: Optional[List[Tuple]] = None,
         recursed: int = 0
     ) -> Tuple[List[Tuple], Optional[List[spark.Column]], List[InternalField],
-                bool, Optional[Tuple]]:
+               bool, Optional[Tuple]]:
         """ Select columns from multi-index columns. """
         assert isinstance(key, tuple)
         if labels is None:
