@@ -77,7 +77,7 @@ private[sql] object ArrowUtils {
     case ts: ArrowType.Timestamp if ts.getUnit == TimeUnit.MICROSECOND => TimestampType
     case ArrowType.Null.INSTANCE => NullType
     case yi: ArrowType.Interval if yi.getUnit == IntervalUnit.YEAR_MONTH =>
-      YearMonthIntervalType.DEFAULT
+      YearMonthIntervalType()
     case di: ArrowType.Interval if di.getUnit == IntervalUnit.DAY_TIME => DayTimeIntervalType
     case _ => throw new UnsupportedOperationException(s"Unsupported data type: $dt")
   }

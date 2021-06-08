@@ -753,7 +753,7 @@ object ScalaReflection extends ScalaReflection {
       case t if isSubtype(t, localTypeOf[java.time.Duration]) =>
         Schema(DayTimeIntervalType, nullable = true)
       case t if isSubtype(t, localTypeOf[java.time.Period]) =>
-        Schema(YearMonthIntervalType.DEFAULT, nullable = true)
+        Schema(YearMonthIntervalType(), nullable = true)
       case t if isSubtype(t, localTypeOf[BigDecimal]) =>
         Schema(DecimalType.SYSTEM_DEFAULT, nullable = true)
       case t if isSubtype(t, localTypeOf[java.math.BigDecimal]) =>
@@ -870,7 +870,7 @@ object ScalaReflection extends ScalaReflection {
   def dataTypeJavaClass(dt: DataType): Class[_] = {
     dt match {
       case _: DecimalType => classOf[Decimal]
-      case _: YearMonthIntervalType => classOf[YearMonthIntervalType.DEFAULT.InternalType]
+      case it: YearMonthIntervalType => classOf[it.InternalType]
       case _: StructType => classOf[InternalRow]
       case _: ArrayType => classOf[ArrayData]
       case _: MapType => classOf[MapData]

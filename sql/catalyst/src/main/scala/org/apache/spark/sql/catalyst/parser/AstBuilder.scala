@@ -2335,7 +2335,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       val toUnit = ctx.errorCapturingUnitToUnitInterval.body.to.getText.toLowerCase(Locale.ROOT)
       if (toUnit == "month") {
         assert(calendarInterval.days == 0 && calendarInterval.microseconds == 0)
-        Literal(calendarInterval.months, YearMonthIntervalType.DEFAULT)
+        Literal(calendarInterval.months, YearMonthIntervalType())
       } else {
         assert(calendarInterval.months == 0)
         val micros = IntervalUtils.getDuration(calendarInterval, TimeUnit.MICROSECONDS)
@@ -2490,7 +2490,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   override def visitYearMonthIntervalDataType(ctx: YearMonthIntervalDataTypeContext): DataType = {
-    YearMonthIntervalType.DEFAULT
+    YearMonthIntervalType()
   }
 
   override def visitDayTimeIntervalDataType(ctx: DayTimeIntervalDataTypeContext): DataType = {

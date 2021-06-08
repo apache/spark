@@ -291,7 +291,7 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
         val period = IntervalUtils.monthsToPeriod(months)
         assert(
           CatalystTypeConverters.createToScalaConverter(
-            YearMonthIntervalType.DEFAULT)(months) === period)
+            YearMonthIntervalType())(months) === period)
       }
     }
   }

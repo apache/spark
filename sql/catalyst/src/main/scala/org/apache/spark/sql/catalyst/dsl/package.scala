@@ -304,7 +304,7 @@ package object dsl {
 
       /** Creates a new AttributeReference of the year-month interval type */
       def yearMonthInterval: AttributeReference = {
-        AttributeReference(s, YearMonthIntervalType.DEFAULT, nullable = true)()
+        AttributeReference(s, YearMonthIntervalType(), nullable = true)()
       }
 
       def yearMonthInterval(start: Byte, end: Byte): AttributeReference = {

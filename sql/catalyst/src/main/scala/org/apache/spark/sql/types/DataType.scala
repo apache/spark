@@ -179,7 +179,7 @@ object DataType {
   private def nameToType(name: String): DataType = {
     name match {
       case "decimal" => DecimalType.USER_DEFAULT
-      case "interval year to month" => YearMonthIntervalType.DEFAULT
+      case "interval year to month" => YearMonthIntervalType()
       case FIXED_DECIMAL(precision, scale) => DecimalType(precision.toInt, scale.toInt)
       case CHAR_TYPE(length) => CharType(length.toInt)
       case VARCHAR_TYPE(length) => VarcharType(length.toInt)

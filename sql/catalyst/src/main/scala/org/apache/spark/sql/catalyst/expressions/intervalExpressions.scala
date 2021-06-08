@@ -354,7 +354,7 @@ case class MultiplyYMInterval(
   override def right: Expression = num
 
   override def inputTypes: Seq[AbstractDataType] = Seq(YearMonthIntervalType, NumericType)
-  override def dataType: DataType = YearMonthIntervalType.DEFAULT
+  override def dataType: DataType = YearMonthIntervalType()
 
   @transient
   private lazy val evalFunc: (Int, Any) => Any = right.dataType match {
@@ -464,7 +464,7 @@ case class DivideYMInterval(
   override def right: Expression = num
 
   override def inputTypes: Seq[AbstractDataType] = Seq(YearMonthIntervalType, NumericType)
-  override def dataType: DataType = YearMonthIntervalType.DEFAULT
+  override def dataType: DataType = YearMonthIntervalType()
 
   @transient
   private lazy val evalFunc: (Int, Any) => Any = right.dataType match {

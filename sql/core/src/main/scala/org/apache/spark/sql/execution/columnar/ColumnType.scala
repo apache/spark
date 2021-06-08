@@ -258,7 +258,7 @@ private[columnar] object LONG extends NativeColumnType(LongType, 8) {
 }
 
 private[columnar] object YEAR_MONTH_INTERVAL
-  extends NativeColumnType(YearMonthIntervalType.DEFAULT, 4) {
+  extends NativeColumnType(YearMonthIntervalType(), 4) {
   override def append(v: Int, buffer: ByteBuffer): Unit = {
     buffer.putInt(v)
   }

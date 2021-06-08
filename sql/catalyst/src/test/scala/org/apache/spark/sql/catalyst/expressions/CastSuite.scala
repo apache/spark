@@ -816,7 +816,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     }
 
     checkConsistencyBetweenInterpretedAndCodegen(
-      (child: Expression) => Cast(child, StringType), YearMonthIntervalType.DEFAULT)
+      (child: Expression) => Cast(child, StringType), YearMonthIntervalType())
   }
 
   test("SPARK-34668: cast day-time interval to string") {

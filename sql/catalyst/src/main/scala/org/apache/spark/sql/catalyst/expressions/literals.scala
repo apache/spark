@@ -83,7 +83,7 @@ object Literal {
     case ld: LocalDate => Literal(ld.toEpochDay.toInt, DateType)
     case d: Date => Literal(DateTimeUtils.fromJavaDate(d), DateType)
     case d: Duration => Literal(durationToMicros(d), DayTimeIntervalType)
-    case p: Period => Literal(periodToMonths(p), YearMonthIntervalType.DEFAULT)
+    case p: Period => Literal(periodToMonths(p), YearMonthIntervalType())
     case a: Array[Byte] => Literal(a, BinaryType)
     case a: collection.mutable.WrappedArray[_] => apply(a.array)
     case a: Array[_] =>
@@ -120,7 +120,7 @@ object Literal {
     case _ if clz == classOf[Instant] => TimestampType
     case _ if clz == classOf[Timestamp] => TimestampType
     case _ if clz == classOf[Duration] => DayTimeIntervalType
-    case _ if clz == classOf[Period] => YearMonthIntervalType.DEFAULT
+    case _ if clz == classOf[Period] => YearMonthIntervalType()
     case _ if clz == classOf[JavaBigDecimal] => DecimalType.SYSTEM_DEFAULT
     case _ if clz == classOf[Array[Byte]] => BinaryType
     case _ if clz == classOf[Array[Char]] => StringType

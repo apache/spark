@@ -971,8 +971,8 @@ private[hive] trait HiveInspectors {
     case _: JavaTimestampObjectInspector => TimestampType
     case _: WritableHiveIntervalDayTimeObjectInspector => DayTimeIntervalType
     case _: JavaHiveIntervalDayTimeObjectInspector => DayTimeIntervalType
-    case _: WritableHiveIntervalYearMonthObjectInspector => YearMonthIntervalType.DEFAULT
-    case _: JavaHiveIntervalYearMonthObjectInspector => YearMonthIntervalType.DEFAULT
+    case _: WritableHiveIntervalYearMonthObjectInspector => YearMonthIntervalType()
+    case _: JavaHiveIntervalYearMonthObjectInspector => YearMonthIntervalType()
     case _: WritableVoidObjectInspector => NullType
     case _: JavaVoidObjectInspector => NullType
   }
