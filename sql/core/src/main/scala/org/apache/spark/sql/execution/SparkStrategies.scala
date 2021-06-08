@@ -32,7 +32,7 @@ import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors
 import org.apache.spark.sql.execution.aggregate.AggUtils
 import org.apache.spark.sql.execution.columnar.{InMemoryRelation, InMemoryTableScanExec}
 import org.apache.spark.sql.execution.command._
-import org.apache.spark.sql.execution.exchange.{COALESCE_PARTITIONS, REPARTITION, REPARTITION_WITH_NUM, ShuffleExchangeExec}
+import org.apache.spark.sql.execution.exchange.{ENSURE_REQUIREMENTS, REPARTITION, REPARTITION_WITH_NUM, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.python._
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.sources.MemoryPlan
@@ -712,14 +712,14 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case r: logical.Range =>
         execution.RangeExec(r) :: Nil
       case r: logical.RepartitionByExpression =>
-        val shuffleOrigin = if (r.optNumPartitions.isEmpty) {
+        val shuffleOrigin = if (r.isUsedToCoalescePartitions) {
+          ENSURE_REQUIREMENTS
+        } else if (r.optNumPartitions.isEmpty) {
           REPARTITION
         } else {
           REPARTITION_WITH_NUM
         }
         exchange.ShuffleExchangeExec(r.partitioning, planLater(r.child), shuffleOrigin) :: Nil
-      case c: logical.CoalescePartitions =>
-        exchange.ShuffleExchangeExec(c.partitioning, planLater(c.child), COALESCE_PARTITIONS) :: Nil
       case ExternalRDD(outputObjAttr, rdd) => ExternalRDDScanExec(outputObjAttr, rdd) :: Nil
       case r: LogicalRDD =>
         RDDScanExec(r.output, r.rdd, "ExistingRDD", r.outputPartitioning, r.outputOrdering) :: Nil

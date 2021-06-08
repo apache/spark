@@ -1313,6 +1313,10 @@ case class RepartitionByExpression(
   val numPartitions = optNumPartitions.getOrElse(conf.numShufflePartitions)
   require(numPartitions > 0, s"Number of partitions ($numPartitions) must be positive.")
 
+  // Whether it is used to coalesce partitions through AQE. Spark first tries to coalesce
+  // partitions, if it cannot be coalesced, then try to use the local shuffle reader.
+  val isUsedToCoalescePartitions = partitionExpressions.isEmpty && optNumPartitions.isEmpty
+
   override val partitioning: Partitioning = {
     val (sortOrder, nonSortOrder) = partitionExpressions.partition(_.isInstanceOf[SortOrder])
 
@@ -1349,29 +1353,6 @@ object RepartitionByExpression {
       numPartitions: Int): RepartitionByExpression = {
     RepartitionByExpression(partitionExpressions, child, Some(numPartitions))
   }
-}
-
-/**
- * This method repartitions data using [[RoundRobinPartitioning]] into `numShufflePartitions`
- * defined in `SQLConf`, and could be coalesced partitions by AQE.
- * Usually used to merge small files.
- */
-case class CoalescePartitions(child: LogicalPlan) extends RepartitionOperation {
-
-  override val numPartitions = conf.numShufflePartitions
-
-  override val partitioning: Partitioning = {
-    if (numPartitions == 1) {
-      SinglePartition
-    } else {
-      RoundRobinPartitioning(numPartitions)
-    }
-  }
-
-  override def shuffle: Boolean = true
-
-  override protected def withNewChildInternal(newChild: LogicalPlan): CoalescePartitions =
-    copy(child = newChild)
 }
 
 /**

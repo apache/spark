@@ -1676,7 +1676,7 @@ class AdaptiveQueryExecSuite
         (1 to 100).map(i => TestData(i, i.toString)), 10).toDF()
 
       // partition size [1420, 1420]
-      checkNoCoalescePartitions(df.repartition(), REPARTITION)
+      checkNoCoalescePartitions(df.repartition($"key"), REPARTITION)
       // partition size [1140, 1119]
       checkNoCoalescePartitions(df.sort($"key"), ENSURE_REQUIREMENTS)
     }
@@ -1784,7 +1784,7 @@ class AdaptiveQueryExecSuite
   }
 
   test("Coalesce number of partitions by AEQ") {
-    val df = sql("SELECT /*+ COALESCE_PARTITION */ * FROM testData")
+    val df = sql("SELECT /*+ REPARTITION */ * FROM testData")
     df.collect()
 
     collect(df.queryExecution.executedPlan) {
@@ -1800,7 +1800,7 @@ class AdaptiveQueryExecSuite
 
   test("Use local shuffle reader if can not coalesce number of partitions") {
     withSQLConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "2") {
-      val df = sql("SELECT /*+ COALESCE_PARTITION */ * FROM testData")
+      val df = sql("SELECT /*+ REPARTITION */ * FROM testData")
       df.collect()
 
       collect(df.queryExecution.executedPlan) {
