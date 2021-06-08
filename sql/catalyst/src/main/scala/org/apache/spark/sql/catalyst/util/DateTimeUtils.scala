@@ -76,8 +76,8 @@ object DateTimeUtils {
   }
 
   def localDateTimeToMicros(localDateTime: LocalDateTime): Long = {
-    val instant = localDateTime.atZone(ZoneId.of("UTC")).toInstant
-    instantToMicros(instant)
+    localDateTime.toEpochSecond(ZoneOffset.UTC) * MICROS_PER_SECOND +
+      localDateTime.getNano / NANOS_PER_MICROS
   }
 
   /**

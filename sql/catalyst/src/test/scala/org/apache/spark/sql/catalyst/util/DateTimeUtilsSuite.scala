@@ -641,6 +641,10 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     assert(microsToLocalDateTime(100000000000L) ==  LocalDateTime.parse("1970-01-02T03:46:40"))
     assert(microsToLocalDateTime(253402300799999999L) ==
       LocalDateTime.parse("9999-12-31T23:59:59.999999"))
+    assert(microsToLocalDateTime(Long.MinValue) ==
+      LocalDateTime.parse("-290308-12-21T19:59:05.224192"))
+    assert(microsToLocalDateTime(Long.MaxValue) ==
+      LocalDateTime.parse("+294247-01-10T04:00:54.775807"))
   }
 
   test("SPARK-35099: LocalDateTime to microseconds") {
@@ -653,6 +657,10 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       100000000000L)
     assert(DateTimeUtils.localDateTimeToMicros(LocalDateTime.parse("9999-12-31T23:59:59.999999"))
       == 253402300799999999L)
+    assert(DateTimeUtils.localDateTimeToMicros(LocalDateTime.parse("-290308-12-21T19:59:05.224192"))
+      == Long.MinValue)
+    assert(DateTimeUtils.localDateTimeToMicros(LocalDateTime.parse("+294247-01-10T04:00:54.775807"))
+      == Long.MaxValue)
   }
 
   test("daysToMicros and microsToDays") {
