@@ -277,7 +277,7 @@ class MemoryStoreSuite
     // Size the values so the sequence of block drops matches the one in the on-heap test. The
     // values are different since the sizes here are exact, vs. being estimated for on-heap.
     testPutIteratorAsValues(() => OffHeapValue(110), () => OffHeapValue(1500),
-      StorageLevel.OFF_HEAP_ONLY_DESER)
+      StorageLevel(false, true, useOffHeap = true, deserialized = true, 1))
   }
 
   test("safely unroll blocks through putIteratorAsBytes") {
