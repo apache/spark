@@ -20,4 +20,4 @@
 # This file is used for Binder integration to install PySpark available in
 # Jupyter notebook.
 
-python python/setup.py build install
+cd python && python setup.py build install
