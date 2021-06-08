@@ -35,8 +35,8 @@ object SchemaHelper {
   }
 
   object SchemaReader {
-    def createSchemaReader(schemaVersion: String): SchemaReader = {
-      val version = MetadataVersionUtil.validateVersion(schemaVersion,
+    def createSchemaReader(versionStr: String): SchemaReader = {
+      val version = MetadataVersionUtil.validateVersion(versionStr,
         StateSchemaCompatibilityChecker.VERSION)
       version match {
         case 1 => new SchemaV1Reader
@@ -69,7 +69,7 @@ object SchemaHelper {
   }
 
   trait SchemaWriter {
-    val version: String
+    val version: Int
 
     final def write(
         keySchema: StructType,
@@ -80,7 +80,7 @@ object SchemaHelper {
     }
 
     private def writeVersion(outputStream: FSDataOutputStream): Unit = {
-      outputStream.writeUTF(version)
+      outputStream.writeUTF(s"${version}")
     }
 
     protected def writeSchema(
@@ -90,9 +90,7 @@ object SchemaHelper {
   }
 
   object SchemaWriter {
-    def createSchemaWriter(schemaVersion: String): SchemaWriter = {
-      val version = MetadataVersionUtil.validateVersion(schemaVersion,
-        StateSchemaCompatibilityChecker.VERSION)
+    def createSchemaWriter(version: Int): SchemaWriter = {
       version match {
         case 1 if Utils.isTesting => new SchemaV1Writer
         case 2 => new SchemaV2Writer
@@ -101,7 +99,7 @@ object SchemaHelper {
   }
 
   class SchemaV1Writer extends SchemaWriter {
-    val version: String = "v1"
+    val version: Int = 1
 
     def writeSchema(
         keySchema: StructType,
@@ -113,7 +111,7 @@ object SchemaHelper {
   }
 
   class SchemaV2Writer extends SchemaWriter {
-    val version: String = "v2"
+    val version: Int = 2
 
     // 2^16 - 1 bytes
     final val MAX_UTF_CHUNK_SIZE = 65535

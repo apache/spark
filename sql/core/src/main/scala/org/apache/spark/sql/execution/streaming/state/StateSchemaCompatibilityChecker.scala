@@ -35,7 +35,8 @@ class StateSchemaCompatibilityChecker(
   private val storeCpLocation = providerId.storeId.storeCheckpointLocation()
   private val fm = CheckpointFileManager.create(storeCpLocation, hadoopConf)
   private val schemaFileLocation = schemaFile(storeCpLocation)
-  private val schemaWriter = SchemaWriter.createSchemaWriter("v2")
+  private val schemaWriter =
+    SchemaWriter.createSchemaWriter(StateSchemaCompatibilityChecker.VERSION)
 
   fm.mkdirs(schemaFileLocation.getParent)
 

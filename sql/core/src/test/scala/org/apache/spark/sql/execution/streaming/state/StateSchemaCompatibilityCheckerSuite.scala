@@ -190,7 +190,7 @@ class StateSchemaCompatibilityCheckerSuite extends SharedSparkSession {
       StateStoreId(dir, opId, partitionId), queryId)
     val checker = new StateSchemaCompatibilityChecker(providerId, hadoopConf)
     checker.createSchemaFile(keySchema, valueSchema,
-      SchemaHelper.SchemaWriter.createSchemaWriter("v1"))
+      SchemaHelper.SchemaWriter.createSchemaWriter(1))
     val (resultKeySchema, resultValueSchema) = checker.readSchemaFile()
 
     assert((resultKeySchema, resultValueSchema) === (keySchema, valueSchema))
