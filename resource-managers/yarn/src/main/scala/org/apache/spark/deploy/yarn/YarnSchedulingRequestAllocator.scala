@@ -76,7 +76,7 @@ private[yarn] class YarnSchedulingRequestAllocator(
     new LocalityPreferredSchedulingRequestContainerPlacementStrategy(sparkConf, conf, resolver)
   private[yarn] val nodeAttributes = sparkConf.get(NODE_ATTRIBUTE)
     .map(PlacementConstraintParser.parseExpression)
-  private[yarn] val delayedOrIntervalMiliseconds = sparkConf.get(DELAYED_OR_INTERVAL)
+  private[yarn] val delayedOrIntervalMilliseconds = sparkConf.get(DELAYED_OR_INTERVAL)
 
   private[yarn] val outstandingSchedRequests: JMap[JSet[String], JList[SchedulingRequest]] = {
     val field = classOf[AMRMClientImpl[ContainerRequest]]
@@ -232,8 +232,8 @@ private[yarn] class YarnSchedulingRequestAllocator(
 
     val locality = (nodesLocality, racksLocality) match {
       case (Some(nodes), Some(racks)) => Some(delayedOr(
-        timedClockConstraint(nodes, delayedOrIntervalMiliseconds, TimeUnit.MILLISECONDS),
-        timedClockConstraint(racks, delayedOrIntervalMiliseconds * 2, TimeUnit.MILLISECONDS)))
+        timedClockConstraint(nodes, delayedOrIntervalMilliseconds, TimeUnit.MILLISECONDS),
+        timedClockConstraint(racks, delayedOrIntervalMilliseconds * 2, TimeUnit.MILLISECONDS)))
       case (Some(nodes), None) => Some(nodes)
       case (None, Some(racks)) => Some(racks)
       case _ => None
