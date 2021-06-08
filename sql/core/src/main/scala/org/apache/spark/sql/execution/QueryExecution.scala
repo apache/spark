@@ -369,8 +369,8 @@ class QueryExecution(
  * we should use `NON_ROOT` when recursively executing commands. Note that we can't execute
  * a query plan with leaf command nodes, because many commands return `GenericInternalRow`
  * and can't be put in a query plan directly, otherwise the query engine may cast
- * `GenericInternalRow` to `UnsafeRow` and fail. When running EXPLAIN, we should use `SKIP`
- * to not trigger any execution.
+ * `GenericInternalRow` to `UnsafeRow` and fail. When running EXPLAIN, or commands inside other
+ * command, we should use `SKIP` to not eagerly trigger the command execution.
  */
 object CommandExecutionMode extends Enumeration {
   val SKIP, NON_ROOT, ALL = Value
