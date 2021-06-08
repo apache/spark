@@ -80,7 +80,7 @@ object SchemaHelper {
     }
 
     private def writeVersion(outputStream: FSDataOutputStream): Unit = {
-      outputStream.writeUTF(s"${version}")
+      outputStream.writeUTF(s"v${version}")
     }
 
     protected def writeSchema(
