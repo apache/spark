@@ -641,7 +641,7 @@ case class AdaptiveSparkPlanExec(
     logicalPlan.invalidateStatsCache()
     val optimized = optimizer.execute(logicalPlan)
     val sparkPlan = context.session.sessionState.planner.plan(ReturnAnswer(optimized)).next()
-    val rules = if (isFinalStage(sparkPlan)) {
+    val rules = if (isFinalStage(EnsureRequirements.apply(sparkPlan))) {
       finalPreparationStageRules
     } else {
       preprocessingRules ++ queryStagePreparationRules
