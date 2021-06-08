@@ -25,12 +25,12 @@ This page gives an overview of all public pandas APIs on Spark.
 .. toctree::
    :maxdepth: 2
 
-   ps_io
-   ps_general_functions
-   ps_series
-   ps_frame
-   ps_indexing
-   ps_window
-   ps_groupby
-   ps_ml
-   ps_extensions
+   io
+   general_functions
+   series
+   frame
+   indexing
+   window
+   groupby
+   ml
+   extensions

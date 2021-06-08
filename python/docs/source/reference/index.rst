@@ -26,7 +26,7 @@ This page lists an overview of all public PySpark modules, classes, functions an
    :maxdepth: 2
 
    pyspark.sql
-   pyspark.pandas
+   pyspark.pandas/index
    pyspark.ss
    pyspark.ml
    pyspark.streaming
