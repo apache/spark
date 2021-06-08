@@ -582,6 +582,7 @@ package object config {
     ConfigBuilder("spark.dynamicAllocation.minExecutors")
       .version("1.2.0")
       .intConf
+      .checkValue(_ >= 0, "Lowest executor number must >= 0")
       .createWithDefault(0)
 
   private[spark] val DYN_ALLOCATION_INITIAL_EXECUTORS =
@@ -593,12 +594,14 @@ package object config {
     ConfigBuilder("spark.dynamicAllocation.maxExecutors")
       .version("1.2.0")
       .intConf
+      .checkValue(_ > 0, "Lowest executor number must > 0 ")
       .createWithDefault(Int.MaxValue)
 
   private[spark] val DYN_ALLOCATION_EXECUTOR_ALLOCATION_RATIO =
     ConfigBuilder("spark.dynamicAllocation.executorAllocationRatio")
       .version("2.4.0")
       .doubleConf
+      .checkValue(r => r > 0 && r <= 1.0, "The ratio must be > 0 and <= 1.0")
       .createWithDefault(1.0)
 
   private[spark] val DYN_ALLOCATION_CACHED_EXECUTOR_IDLE_TIMEOUT =
@@ -631,7 +634,9 @@ package object config {
   private[spark] val DYN_ALLOCATION_SCHEDULER_BACKLOG_TIMEOUT =
     ConfigBuilder("spark.dynamicAllocation.schedulerBacklogTimeout")
       .version("1.2.0")
-      .timeConf(TimeUnit.SECONDS).createWithDefault(1)
+      .timeConf(TimeUnit.SECONDS)
+      .checkValue(_ > 0, "Timeout must be > 0!")
+      .createWithDefault(1)
 
   private[spark] val DYN_ALLOCATION_SUSTAINED_SCHEDULER_BACKLOG_TIMEOUT =
     ConfigBuilder("spark.dynamicAllocation.sustainedSchedulerBacklogTimeout")

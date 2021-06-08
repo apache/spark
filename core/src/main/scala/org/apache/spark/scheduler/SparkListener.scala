@@ -286,6 +286,11 @@ case class SparkListenerLogStart(sparkVersion: String) extends SparkListenerEven
 case class SparkListenerResourceProfileAdded(resourceProfile: ResourceProfile)
   extends SparkListenerEvent
 
+@DeveloperApi
+@Since("3.2.0")
+case class SparkListenerExecutorAllocatorRangeUpdate(
+    lower: Option[Int] = None, upper: Option[Int] = None) extends SparkListenerEvent
+
 /**
  * Interface for listening to events from the Spark scheduler. Most applications should probably
  * extend SparkListener or SparkFirehoseListener directly, rather than implementing this class.
@@ -483,6 +488,8 @@ private[spark] trait SparkListenerInterface {
    * Called when a Resource Profile is added to the manager.
    */
   def onResourceProfileAdded(event: SparkListenerResourceProfileAdded): Unit
+
+  def onExecutorAllocatorRangeUpdate(event: SparkListenerExecutorAllocatorRangeUpdate): Unit
 }
 
 
@@ -576,4 +583,7 @@ abstract class SparkListener extends SparkListenerInterface {
   override def onOtherEvent(event: SparkListenerEvent): Unit = { }
 
   override def onResourceProfileAdded(event: SparkListenerResourceProfileAdded): Unit = { }
+
+  override def onExecutorAllocatorRangeUpdate(
+      event: SparkListenerExecutorAllocatorRangeUpdate): Unit = { }
 }

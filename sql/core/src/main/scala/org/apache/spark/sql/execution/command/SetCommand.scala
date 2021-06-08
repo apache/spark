@@ -18,6 +18,8 @@
 package org.apache.spark.sql.execution.command
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.{DYN_ALLOCATION_MAX_EXECUTORS, DYN_ALLOCATION_MIN_EXECUTORS}
+import org.apache.spark.scheduler.SparkListenerExecutorAllocatorRangeUpdate
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.IgnoreCachedData
@@ -77,6 +79,22 @@ case class SetCommand(kv: Option[(String, Option[String])])
           sparkSession.conf.set(SQLConf.SHUFFLE_PARTITIONS.key, value)
           Seq(Row(SQLConf.SHUFFLE_PARTITIONS.key, value))
         }
+      }
+      (keyValueOutput, runFunc)
+
+    case Some((DYN_ALLOCATION_MIN_EXECUTORS.key, Some(value))) =>
+      val runFunc = (sparkSession: SparkSession) => {
+        sparkSession.sparkContext.listenerBus
+          .post(SparkListenerExecutorAllocatorRangeUpdate(Some(value.toInt)))
+        Seq(Row(DYN_ALLOCATION_MIN_EXECUTORS.key, value))
+      }
+      (keyValueOutput, runFunc)
+
+    case Some((DYN_ALLOCATION_MAX_EXECUTORS.key, Some(value))) =>
+      val runFunc = (sparkSession: SparkSession) => {
+        sparkSession.sparkContext.listenerBus
+          .post(SparkListenerExecutorAllocatorRangeUpdate(upper = Some(value.toInt)))
+        Seq(Row(DYN_ALLOCATION_MIN_EXECUTORS.key, value))
       }
       (keyValueOutput, runFunc)
 

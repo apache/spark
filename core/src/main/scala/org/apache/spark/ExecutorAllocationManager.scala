@@ -111,8 +111,8 @@ private[spark] class ExecutorAllocationManager(
   import ExecutorAllocationManager._
 
   // Lower and upper bounds on the number of executors.
-  private val minNumExecutors = conf.get(DYN_ALLOCATION_MIN_EXECUTORS)
-  private val maxNumExecutors = conf.get(DYN_ALLOCATION_MAX_EXECUTORS)
+  @volatile private var _minNumExecutors = conf.get(DYN_ALLOCATION_MIN_EXECUTORS)
+  @volatile private var _maxNumExecutors = conf.get(DYN_ALLOCATION_MAX_EXECUTORS)
   private val initialNumExecutors = Utils.getDynamicAllocationInitialExecutors(conf)
 
   // How long there must be backlogged tasks for before an addition is triggered (seconds)
@@ -183,7 +183,9 @@ private[spark] class ExecutorAllocationManager(
    * Verify that the settings specified through the config are valid.
    * If not, throw an appropriate exception.
    */
-  private def validateSettings(): Unit = {
+  private def validateSettings(
+      minNumExecutors: Int = _minNumExecutors,
+      maxNumExecutors: Int = _maxNumExecutors): Unit = {
     if (minNumExecutors < 0 || maxNumExecutors < 0) {
       throw new SparkException(
         s"${DYN_ALLOCATION_MIN_EXECUTORS.key} and ${DYN_ALLOCATION_MAX_EXECUTORS.key} must be " +
@@ -192,17 +194,12 @@ private[spark] class ExecutorAllocationManager(
     if (maxNumExecutors == 0) {
       throw new SparkException(s"${DYN_ALLOCATION_MAX_EXECUTORS.key} cannot be 0!")
     }
+
     if (minNumExecutors > maxNumExecutors) {
       throw new SparkException(s"${DYN_ALLOCATION_MIN_EXECUTORS.key} ($minNumExecutors) must " +
         s"be less than or equal to ${DYN_ALLOCATION_MAX_EXECUTORS.key} ($maxNumExecutors)!")
     }
-    if (schedulerBacklogTimeoutS <= 0) {
-      throw new SparkException(s"${DYN_ALLOCATION_SCHEDULER_BACKLOG_TIMEOUT.key} must be > 0!")
-    }
-    if (sustainedSchedulerBacklogTimeoutS <= 0) {
-      throw new SparkException(
-        s"s${DYN_ALLOCATION_SUSTAINED_SCHEDULER_BACKLOG_TIMEOUT.key} must be > 0!")
-    }
+
     if (!conf.get(config.SHUFFLE_SERVICE_ENABLED)) {
       // If dynamic allocation shuffle tracking or worker decommissioning along with
       // storage shuffle decommissioning is enabled we have *experimental* support for
@@ -215,11 +212,6 @@ private[spark] class ExecutorAllocationManager(
         throw new SparkException("Dynamic allocation of executors requires the external " +
           "shuffle service. You may enable this through spark.shuffle.service.enabled.")
       }
-    }
-
-    if (executorAllocationRatio > 1.0 || executorAllocationRatio <= 0.0) {
-      throw new SparkException(
-        s"${DYN_ALLOCATION_EXECUTOR_ALLOCATION_RATIO.key} must be > 0 and <= 1.0")
     }
   }
 
@@ -485,7 +477,7 @@ private[spark] class ExecutorAllocationManager(
 
   private def decrementExecutors(maxNeeded: Int, rpId: Int): Int = {
     val oldNumExecutorsTarget = numExecutorsTargetPerResourceProfileId(rpId)
-    numExecutorsTargetPerResourceProfileId(rpId) = math.max(maxNeeded, minNumExecutors)
+    numExecutorsTargetPerResourceProfileId(rpId) = math.max(maxNeeded, _minNumExecutors)
     numExecutorsToAddPerResourceProfileId(rpId) = 1
     numExecutorsTargetPerResourceProfileId(rpId) - oldNumExecutorsTarget
   }
@@ -504,9 +496,9 @@ private[spark] class ExecutorAllocationManager(
     val oldNumExecutorsTarget = numExecutorsTargetPerResourceProfileId(rpId)
     // Do not request more executors if it would put our target over the upper bound
     // this is doing a max check per ResourceProfile
-    if (oldNumExecutorsTarget >= maxNumExecutors) {
+    if (oldNumExecutorsTarget >= _maxNumExecutors) {
       logDebug("Not adding executors because our current target total " +
-        s"is already ${oldNumExecutorsTarget} (limit $maxNumExecutors)")
+        s"is already ${oldNumExecutorsTarget} (limit ${_maxNumExecutors})")
       numExecutorsToAddPerResourceProfileId(rpId) = 1
       return 0
     }
@@ -519,7 +511,7 @@ private[spark] class ExecutorAllocationManager(
     // Ensure that our target doesn't exceed what we need at the present moment:
     numExecutorsTarget = math.min(numExecutorsTarget, maxNumExecutorsNeeded)
     // Ensure that our target fits within configured bounds:
-    numExecutorsTarget = math.max(math.min(numExecutorsTarget, maxNumExecutors), minNumExecutors)
+    numExecutorsTarget = math.max(math.min(numExecutorsTarget, _maxNumExecutors), _minNumExecutors)
     val delta = numExecutorsTarget - oldNumExecutorsTarget
     numExecutorsTargetPerResourceProfileId(rpId) = numExecutorsTarget
 
@@ -553,10 +545,10 @@ private[spark] class ExecutorAllocationManager(
             executorMonitor.pendingRemovalCountPerResourceProfileId(rpId) -
             executorMonitor.decommissioningPerResourceProfileId(rpId)
           ))
-        if (newExecutorTotal - 1 < minNumExecutors) {
+        if (newExecutorTotal - 1 < _minNumExecutors) {
           logDebug(s"Not removing idle executor $executorIdToBeRemoved because there " +
             s"are only $newExecutorTotal executor(s) left (minimum number of executor limit " +
-            s"$minNumExecutors)")
+            s"${_minNumExecutors})")
         } else if (newExecutorTotal - 1 < numExecutorsTargetPerResourceProfileId(rpId)) {
           logDebug(s"Not removing idle executor $executorIdToBeRemoved because there " +
             s"are only $newExecutorTotal executor(s) left (number of executor " +
@@ -860,6 +852,15 @@ private[spark] class ExecutorAllocationManager(
         // Clear unschedulableTaskSets since atleast one task becomes schedulable now
         unschedulableTaskSets.remove(stageAttempt)
       }
+    }
+
+    override def onExecutorAllocatorRangeUpdate(
+        event: SparkListenerExecutorAllocatorRangeUpdate): Unit = {
+      val newLower = event.lower.getOrElse(_minNumExecutors)
+      val newUpper = event.upper.getOrElse(_maxNumExecutors)
+      validateSettings(newLower, newUpper)
+      _minNumExecutors = newLower
+      _maxNumExecutors = newUpper
     }
 
     /**

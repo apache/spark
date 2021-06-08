@@ -216,6 +216,11 @@ public class SparkFirehoseListener implements SparkListenerInterface {
   }
 
   @Override
+  public void onExecutorAllocatorRangeUpdate(SparkListenerExecutorAllocatorRangeUpdate event) {
+    onEvent(event);
+  }
+
+  @Override
   public void onOtherEvent(SparkListenerEvent event) {
     onEvent(event);
   }

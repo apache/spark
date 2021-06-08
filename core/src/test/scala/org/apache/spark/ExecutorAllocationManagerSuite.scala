@@ -1693,6 +1693,21 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     assert(numExecutorsTargetForDefaultProfileId(manager) === 1)
   }
 
+  test("update ") {
+    val manager = createManager(createConf(2, 5, 3), clock = clock)
+    assert(getExecutorRange(manager) === (2, 5))
+    onChangeExecutorRange() // unchanged
+    assert(getExecutorRange(manager) === (2, 5))
+    onChangeExecutorRange(lower = Some(6)) // invalid min no.
+    assert(getExecutorRange(manager) === (2, 5))
+    onChangeExecutorRange(upper = Some(1)) // invalid max no.
+    assert(getExecutorRange(manager) === (2, 5))
+    onChangeExecutorRange(lower = Some(1))
+    assert(getExecutorRange(manager) === (1, 5))
+    onChangeExecutorRange(upper = Some(6))
+    assert(getExecutorRange(manager) === (1, 6))
+  }
+
   private def createConf(
       minExecutors: Int = 1,
       maxExecutors: Int = 5,
@@ -1788,6 +1803,13 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
   private def executorsDecommissioning(manager: ExecutorAllocationManager): Set[String] = {
     manager.executorMonitor.executorsDecommissioning()
   }
+
+  private def onChangeExecutorRange(
+      lower: Option[Int] = None,
+      upper: Option[Int] = None): Unit = {
+    post(SparkListenerExecutorAllocatorRangeUpdate(lower, upper))
+  }
+
 }
 
 /**
@@ -1847,6 +1869,9 @@ private object ExecutorAllocationManagerSuite extends PrivateMethodTester {
     PrivateMethod[Unit](Symbol("onSpeculativeTaskSubmitted"))
   private val _totalRunningTasksPerResourceProfile =
     PrivateMethod[Int](Symbol("totalRunningTasksPerResourceProfile"))
+
+  private val _minNumExecutors = PrivateMethod[Int](Symbol("_minNumExecutors"))
+  private val _maxNumExecutors = PrivateMethod[Int](Symbol("_maxNumExecutors"))
 
   private val defaultProfile = ResourceProfile.getOrCreateDefaultProfile(new SparkConf)
 
@@ -1965,5 +1990,9 @@ private object ExecutorAllocationManagerSuite extends PrivateMethodTester {
 
   private def getResourceProfileIdOfExecutor(manager: ExecutorAllocationManager): Int = {
     defaultProfile.id
+  }
+
+  private def getExecutorRange(manager: ExecutorAllocationManager): (Int, Int) = {
+    (manager.invokePrivate(_minNumExecutors()), manager.invokePrivate(_maxNumExecutors()))
   }
 }
