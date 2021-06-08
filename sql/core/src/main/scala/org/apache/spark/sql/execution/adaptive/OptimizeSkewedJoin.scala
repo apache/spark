@@ -23,7 +23,7 @@ import org.apache.commons.io.FileUtils
 
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.exchange.{ENSURE_REQUIREMENTS, EnsureRequirements, ShuffleExchangeExec, ShuffleOrigin}
+import org.apache.spark.sql.execution.exchange.{ENSURE_REQUIREMENTS, ShuffleOrigin}
 import org.apache.spark.sql.execution.joins.{ShuffledHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.internal.SQLConf
 
@@ -51,8 +51,6 @@ import org.apache.spark.sql.internal.SQLConf
 object OptimizeSkewedJoin extends CustomShuffleReaderRule {
 
   override val supportedShuffleOrigins: Seq[ShuffleOrigin] = Seq(ENSURE_REQUIREMENTS)
-
-  private val ensureRequirements = EnsureRequirements
 
   /**
    * A partition is considered as a skewed partition if its size is larger than the median
@@ -248,18 +246,7 @@ object OptimizeSkewedJoin extends CustomShuffleReaderRule {
       //     Shuffle
       //   Sort
       //     Shuffle
-      val optimizePlan = optimizeSkewJoin(plan)
-      val numShuffles = ensureRequirements.apply(optimizePlan).collect {
-        case e: ShuffleExchangeExec => e
-      }.length
-
-      if (numShuffles > 0) {
-        logDebug("OptimizeSkewedJoin rule is not applied due" +
-          " to additional shuffles will be introduced.")
-        plan
-      } else {
-        optimizePlan
-      }
+      optimizeSkewJoin(plan)
     } else {
       plan
     }
@@ -268,7 +255,7 @@ object OptimizeSkewedJoin extends CustomShuffleReaderRule {
 
 private object ShuffleStage {
   def unapply(plan: SparkPlan): Option[ShuffleQueryStageExec] = plan match {
-    case s: ShuffleQueryStageExec if s.mapStats.isDefined &&
+    case s: ShuffleQueryStageExec if s.isMaterialized && s.mapStats.isDefined &&
         OptimizeSkewedJoin.supportedShuffleOrigins.contains(s.shuffle.shuffleOrigin) =>
       Some(s)
     case _ => None

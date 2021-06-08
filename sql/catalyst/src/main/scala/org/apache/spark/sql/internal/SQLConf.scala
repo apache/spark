@@ -653,6 +653,12 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val ADAPTIVE_FORCE_ENABLE_SKEW_JOIN = buildConf("spark.sql.adaptive.forceEnableSkewJoin")
+    .doc("When true, force enable OptimizeSkewJoin even if it introduces extra shuffle.")
+    .version("3.2.0")
+    .booleanConf
+    .createWithDefault(false)
+
   val SUBEXPRESSION_ELIMINATION_ENABLED =
     buildConf("spark.sql.subexpressionElimination.enabled")
       .internal()

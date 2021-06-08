@@ -1786,6 +1786,7 @@ class AdaptiveQueryExecSuite
     }
   }
 
+<<<<<<< HEAD
   test("SPARK-35650: Coalesce number of partitions by AEQ") {
     withSQLConf(SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM.key -> "1") {
       Seq("REPARTITION", "REBALANCE(key)")
@@ -1882,6 +1883,40 @@ class AdaptiveQueryExecSuite
           assert(stats.sizeInBytes >= 0)
           assert(stats.rowCount.get >= 0)
         }
+      }
+    }
+  }
+
+  test("SPARK-33832: Support optimize skew join even if introduce extra shuffle") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+      SQLConf.SKEW_JOIN_SKEWED_PARTITION_THRESHOLD.key -> "100",
+      SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "100",
+      SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM.key -> "1",
+      SQLConf.SHUFFLE_PARTITIONS.key -> "10",
+      SQLConf.ADAPTIVE_FORCE_ENABLE_SKEW_JOIN.key -> "true") {
+      withTempView("skewData1", "skewData2") {
+        spark
+          .range(0, 1000, 1, 10)
+          .selectExpr("id % 3 as key1", "id as value1")
+          .createOrReplaceTempView("skewData1")
+        spark
+          .range(0, 1000, 1, 10)
+          .selectExpr("id % 1 as key2", "id as value2")
+          .createOrReplaceTempView("skewData2")
+
+        val (_, adaptive) = runAdaptiveAndVerifyResult(
+          "SELECT key1 FROM skewData1 JOIN skewData2 ON key1 = key2 GROUP BY key1")
+        val smj = findTopLevelSortMergeJoin(adaptive)
+        assert(smj.size == 1 && smj.forall(_.isSkewJoin))
+        checkNumLocalShuffleReaders(adaptive, 3)
+
+        val (_, adaptive2) = runAdaptiveAndVerifyResult(
+          "SELECT /*+ repartition */ key1 FROM skewData1 JOIN skewData2 ON key1 = key2")
+        val smj2 = findTopLevelSortMergeJoin(adaptive2)
+        assert(smj2.size == 1 && smj2.forall(_.isSkewJoin))
+        checkNumLocalShuffleReaders(adaptive2, 3)
       }
     }
   }

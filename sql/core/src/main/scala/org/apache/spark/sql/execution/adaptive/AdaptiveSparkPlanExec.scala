@@ -88,6 +88,12 @@ case class AdaptiveSparkPlanExec(
   private def queryStagePreparationRules: Seq[Rule[SparkPlan]] = Seq(
     RemoveRedundantProjects,
     EnsureRequirements,
+    // Apply OptimizeSkewedJoin rule at preparation side so that we can compare the cost of
+    // skew join and extra shuffle nodes.
+    OptimizeSkewedJoin,
+    // Add the EnsureRequirements rule here since OptimizeSkewedJoin may change the
+    // output partitioning
+    EnsureRequirements,
     RemoveRedundantSorts,
     DisableUnnecessaryBucketedScan
   ) ++ context.session.sessionState.queryStagePrepRules
@@ -97,8 +103,6 @@ case class AdaptiveSparkPlanExec(
   @transient private val queryStageOptimizerRules: Seq[Rule[SparkPlan]] = Seq(
     PlanAdaptiveDynamicPruningFilters(this),
     ReuseAdaptiveSubquery(context.subqueryCache),
-    // Skew join does not handle `CustomShuffleReader` so needs to be applied first.
-    OptimizeSkewedJoin,
     OptimizeSkewInRebalancePartitions,
     CoalesceShufflePartitions(context.session),
     // `OptimizeLocalShuffleReader` needs to make use of 'CustomShuffleReaderExec.partitionSpecs'
@@ -112,6 +116,19 @@ case class AdaptiveSparkPlanExec(
     ApplyColumnarRulesAndInsertTransitions(context.session.sessionState.columnarRules),
     CollapseCodegenStages()
   )
+
+  // OptimizeSkewedJoin has moved into preparation rules, so we should make
+  // finalPreparationStageRules same as finalStageOptimizerRules
+  private def finalPreparationStageRules: Seq[Rule[SparkPlan]] = {
+    val origins = inputPlan.collect {
+      case s: ShuffleExchangeLike => s.shuffleOrigin
+    }
+    (preprocessingRules ++ queryStagePreparationRules).filter {
+      case c: CustomShuffleReaderRule =>
+        origins.forall(c.supportedShuffleOrigins.contains)
+      case _ => true
+    }
+  }
 
   // The partitioning of the query output depends on the shuffle(s) in the final stage. If the
   // original plan contains a repartition operator, we need to preserve the specified partitioning,
@@ -130,7 +147,12 @@ case class AdaptiveSparkPlanExec(
     }
   }
 
-  @transient private val costEvaluator = SimpleCostEvaluator
+  @transient private val costEvaluator =
+    if (conf.getConf(SQLConf.ADAPTIVE_FORCE_ENABLE_SKEW_JOIN)) {
+      SkewJoinAwareCostEvaluator
+    } else {
+      SimpleCostEvaluator
+    }
 
   @transient val initialPlan = context.session.withActive {
     applyPhysicalRules(
@@ -593,6 +615,25 @@ case class AdaptiveSparkPlanExec(
     logicalPlan
   }
 
+  private def isFinalStage(sparkPlan: SparkPlan): Boolean = {
+    sparkPlan match {
+      // avoid top level node is Exchange
+      case _: Exchange => false
+      case plan =>
+        // Plan is regarded as a final plan iff all shuffle nodes are wrapped inside query stage
+        // and all query stages are materialized.
+        plan.find {
+          case p if p.children.exists(
+            child => child.isInstanceOf[Exchange] || child.isInstanceOf[ReusedExchangeExec]) =>
+            p match {
+              case stage: QueryStageExec if stage.isMaterialized => false
+              case _ => true
+            }
+          case _ => false
+        }.isEmpty
+    }
+  }
+
   /**
    * Re-optimize and run physical planning on the current logical plan based on the latest stats.
    */
@@ -600,9 +641,15 @@ case class AdaptiveSparkPlanExec(
     logicalPlan.invalidateStatsCache()
     val optimized = optimizer.execute(logicalPlan)
     val sparkPlan = context.session.sessionState.planner.plan(ReturnAnswer(optimized)).next()
+    val rules = if (isFinalStage(sparkPlan)) {
+      finalPreparationStageRules
+    } else {
+      preprocessingRules ++ queryStagePreparationRules
+    }
+
     val newPlan = applyPhysicalRules(
       sparkPlan,
-      preprocessingRules ++ queryStagePreparationRules,
+      rules,
       Some((planChangeLogger, "AQE Replanning")))
 
     // When both enabling AQE and DPP, `PlanAdaptiveDynamicPruningFilters` rule will
