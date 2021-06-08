@@ -3375,6 +3375,11 @@ object SQLConf {
     .intConf
     .createWithDefault(0)
 
+  val DEFAULT_DATABASE_NAME =
+    buildConf("spark.sql.default.database")
+      .stringConf
+      .createWithDefault(null)
+
   /**
    * Holds information about keys that have been deprecated.
    *
@@ -4083,6 +4088,8 @@ class SQLConf extends Serializable with Logging {
   def disabledJdbcConnectionProviders: String = getConf(SQLConf.DISABLED_JDBC_CONN_PROVIDER_LIST)
 
   def charVarcharAsString: Boolean = getConf(SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING)
+
+  def defaultDataBase: String = getConf(SQLConf.DEFAULT_DATABASE_NAME)
 
   def cliPrintHeader: Boolean = getConf(SQLConf.CLI_PRINT_HEADER)
 
