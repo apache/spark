@@ -1784,17 +1784,19 @@ class AdaptiveQueryExecSuite
   }
 
   test("Coalesce number of partitions by AEQ") {
-    val df = sql("SELECT /*+ REPARTITION */ * FROM testData")
-    df.collect()
+    withSQLConf(SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM.key -> "1") {
+      val df = sql("SELECT /*+ REPARTITION */ * FROM testData")
+      df.collect()
 
-    collect(df.queryExecution.executedPlan) {
-      case r: CustomShuffleReaderExec => r
-    } match {
-      case Seq(customShuffleReader) =>
-        assert(customShuffleReader.partitionSpecs.size === 1)
-        assert(!customShuffleReader.isLocalReader)
-      case _ =>
-        fail("There should be a CustomShuffleReaderExec")
+      collect(df.queryExecution.executedPlan) {
+        case r: CustomShuffleReaderExec => r
+      } match {
+        case Seq(customShuffleReader) =>
+          assert(customShuffleReader.partitionSpecs.size === 1)
+          assert(!customShuffleReader.isLocalReader)
+        case _ =>
+          fail("There should be a CustomShuffleReaderExec")
+      }
     }
   }
 

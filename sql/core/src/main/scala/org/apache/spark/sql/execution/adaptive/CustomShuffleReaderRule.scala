@@ -17,10 +17,9 @@
 
 package org.apache.spark.sql.execution.adaptive
 
-import org.apache.spark.sql.catalyst.plans.physical.RoundRobinPartitioning
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.execution.exchange.{ENSURE_REQUIREMENTS, ShuffleExchangeLike, ShuffleOrigin}
+import org.apache.spark.sql.execution.exchange.ShuffleOrigin
 
 /**
  * Adaptive Query Execution rule that may create [[CustomShuffleReaderExec]] on top of query stages.
@@ -31,12 +30,4 @@ trait CustomShuffleReaderRule extends Rule[SparkPlan] {
    * Returns the list of [[ShuffleOrigin]]s supported by this rule.
    */
   def supportedShuffleOrigins: Seq[ShuffleOrigin]
-
-  /**
-   * Whether it is used to coalesce partitions through AQE.
-   */
-  def isUsedToCoalescePartitions(s: ShuffleExchangeLike): Boolean = {
-    s.shuffleOrigin == ENSURE_REQUIREMENTS &&
-      s.outputPartitioning == RoundRobinPartitioning(s.conf.numShufflePartitions)
-  }
 }

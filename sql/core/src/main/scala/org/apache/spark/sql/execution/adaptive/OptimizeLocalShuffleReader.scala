@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.adaptive
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide}
 import org.apache.spark.sql.catalyst.plans.physical.SinglePartition
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.exchange.{ENSURE_REQUIREMENTS, EnsureRequirements, ShuffleExchangeExec, ShuffleExchangeLike, ShuffleOrigin}
+import org.apache.spark.sql.execution.exchange.{ENSURE_REQUIREMENTS, EnsureRequirements, REPARTITION_WITHOUT_COL_AND_NUM, ShuffleExchangeExec, ShuffleExchangeLike, ShuffleOrigin}
 import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
 import org.apache.spark.sql.internal.SQLConf
 
@@ -35,7 +35,8 @@ import org.apache.spark.sql.internal.SQLConf
  */
 object OptimizeLocalShuffleReader extends CustomShuffleReaderRule {
 
-  override val supportedShuffleOrigins: Seq[ShuffleOrigin] = Seq(ENSURE_REQUIREMENTS)
+  override val supportedShuffleOrigins: Seq[ShuffleOrigin] =
+    Seq(ENSURE_REQUIREMENTS, REPARTITION_WITHOUT_COL_AND_NUM)
 
   private val ensureRequirements = EnsureRequirements
 
@@ -139,13 +140,16 @@ object OptimizeLocalShuffleReader extends CustomShuffleReaderRule {
   def canUseLocalShuffleReader(plan: SparkPlan): Boolean = plan match {
     case s: ShuffleQueryStageExec =>
       s.mapStats.isDefined && supportLocalReader(s.shuffle)
-    case CustomShuffleReaderExec(s: ShuffleQueryStageExec, partitionSpecs)
-        if isUsedToCoalescePartitions(s.shuffle) =>
-      // Use LocalShuffleReader only when we can't CoalesceShufflePartitions
-      s.mapStats.exists(_.bytesByPartitionId.length == partitionSpecs.size) &&
-        partitionSpecs.nonEmpty && supportLocalReader(s.shuffle)
     case CustomShuffleReaderExec(s: ShuffleQueryStageExec, partitionSpecs) =>
-      s.mapStats.isDefined && partitionSpecs.nonEmpty && supportLocalReader(s.shuffle)
+      s.shuffle.shuffleOrigin match {
+        case ENSURE_REQUIREMENTS =>
+          s.mapStats.isDefined && partitionSpecs.nonEmpty && supportLocalReader(s.shuffle)
+        case REPARTITION_WITHOUT_COL_AND_NUM =>
+          // Use LocalShuffleReader only when we can't CoalesceShufflePartitions
+          s.mapStats.exists(_.bytesByPartitionId.length == partitionSpecs.size) &&
+            partitionSpecs.nonEmpty && supportLocalReader(s.shuffle)
+        case _ => false
+      }
     case _ => false
   }
 

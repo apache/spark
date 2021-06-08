@@ -1313,9 +1313,7 @@ case class RepartitionByExpression(
   val numPartitions = optNumPartitions.getOrElse(conf.numShufflePartitions)
   require(numPartitions > 0, s"Number of partitions ($numPartitions) must be positive.")
 
-  // Whether it is used to coalesce partitions through AQE. Spark first tries to coalesce
-  // partitions, if it cannot be coalesced, then try to use the local shuffle reader.
-  val isUsedToCoalescePartitions = partitionExpressions.isEmpty && optNumPartitions.isEmpty
+  val repartitionWithoutColAndNum = partitionExpressions.isEmpty && optNumPartitions.isEmpty
 
   override val partitioning: Partitioning = {
     val (sortOrder, nonSortOrder) = partitionExpressions.partition(_.isInstanceOf[SortOrder])

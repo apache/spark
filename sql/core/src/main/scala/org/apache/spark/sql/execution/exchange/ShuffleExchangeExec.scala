@@ -92,6 +92,11 @@ case object REPARTITION extends ShuffleOrigin
 // a certain partition number. Spark can't optimize it.
 case object REPARTITION_WITH_NUM extends ShuffleOrigin
 
+// Indicates that the shuffle operator was added by the user-specified repartition operator.
+// Spark first tries to coalesce partitions, if it cannot be coalesced, then try to use the
+// local shuffle reader.
+case object REPARTITION_WITHOUT_COL_AND_NUM extends ShuffleOrigin
+
 /**
  * Performs a shuffle that will result in the desired partitioning.
  */

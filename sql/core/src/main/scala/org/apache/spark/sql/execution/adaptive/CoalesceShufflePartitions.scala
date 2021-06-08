@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.adaptive
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.plans.physical.SinglePartition
 import org.apache.spark.sql.execution.{ShufflePartitionSpec, SparkPlan}
-import org.apache.spark.sql.execution.exchange.{ENSURE_REQUIREMENTS, REPARTITION, ShuffleExchangeLike, ShuffleOrigin}
+import org.apache.spark.sql.execution.exchange.{ENSURE_REQUIREMENTS, REPARTITION, REPARTITION_WITHOUT_COL_AND_NUM, ShuffleExchangeLike, ShuffleOrigin}
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -29,7 +29,8 @@ import org.apache.spark.sql.internal.SQLConf
  */
 case class CoalesceShufflePartitions(session: SparkSession) extends CustomShuffleReaderRule {
 
-  override val supportedShuffleOrigins: Seq[ShuffleOrigin] = Seq(ENSURE_REQUIREMENTS, REPARTITION)
+  override val supportedShuffleOrigins: Seq[ShuffleOrigin] =
+    Seq(ENSURE_REQUIREMENTS, REPARTITION, REPARTITION_WITHOUT_COL_AND_NUM)
 
   override def apply(plan: SparkPlan): SparkPlan = {
     if (!conf.coalesceShufflePartitionsEnabled) {
@@ -48,20 +49,15 @@ case class CoalesceShufflePartitions(session: SparkSession) extends CustomShuffl
     }
 
     val shuffleStageInfos = collectShuffleStageInfos(plan)
-    val shuffles = shuffleStageInfos.map(_.shuffleStage.shuffle)
     // ShuffleExchanges introduced by repartition do not support changing the number of partitions.
     // We change the number of partitions in the stage only if all the ShuffleExchanges support it.
-    if (!shuffles.forall(supportCoalesce)) {
+    if (!shuffleStageInfos.forall(s => supportCoalesce(s.shuffleStage.shuffle))) {
       plan
     } else {
       // We fall back to Spark default parallelism if the minimum number of coalesced partitions
       // is not set, so to avoid perf regressions compared to no coalescing.
-      val minPartitionNum = if (shuffles.forall(isUsedToCoalescePartitions)) {
-        1
-      } else {
-        conf.getConf(SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM)
-          .getOrElse(session.sparkContext.defaultParallelism)
-      }
+      val minPartitionNum = conf.getConf(SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM)
+        .getOrElse(session.sparkContext.defaultParallelism)
       val newPartitionSpecs = ShufflePartitionsUtil.coalescePartitions(
         shuffleStageInfos.map(_.shuffleStage.mapStats),
         shuffleStageInfos.map(_.partitionSpecs),
