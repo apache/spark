@@ -159,7 +159,6 @@ object StorageLevel {
   val MEMORY_AND_DISK_SER = new StorageLevel(true, true, false, false)
   val MEMORY_AND_DISK_SER_2 = new StorageLevel(true, true, false, false, 2)
   val OFF_HEAP = new StorageLevel(true, true, true, false, 1)
-  val OFF_HEAP_ONLY_DESER = new StorageLevel(false, true, true, true, 1)
 
   /**
    * :: DeveloperApi ::
@@ -180,7 +179,6 @@ object StorageLevel {
     case "MEMORY_AND_DISK_SER" => MEMORY_AND_DISK_SER
     case "MEMORY_AND_DISK_SER_2" => MEMORY_AND_DISK_SER_2
     case "OFF_HEAP" => OFF_HEAP
-    case "OFF_HEAP_ONLY_DESER" => OFF_HEAP_ONLY_DESER
     case _ => throw new IllegalArgumentException(s"Invalid StorageLevel: $s")
   }
 
