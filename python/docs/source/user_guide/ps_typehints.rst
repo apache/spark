@@ -1,51 +1,51 @@
 ====================
-Type Hints In Koalas
+Type Hints In Pandas on Spark
 ====================
 
 .. currentmodule:: pyspark.pandas
 
-Koalas, by default, infers the schema by taking some top records from the output,
-in particular, when you use APIs that allow users to apply a function against Koalas DataFrame
-such as :func:`DataFrame.transform`, :func:`DataFrame.apply`, :func:`DataFrame.koalas.apply_batch`,
-:func:`DataFrame.koalas.apply_batch`, :func:`Series.koalas.apply_batch`, etc.
+Pandas on Spark, by default, infers the schema by taking some top records from the output,
+in particular, when you use APIs that allow users to apply a function against pandas on Spark DataFrame
+such as :func:`DataFrame.transform`, :func:`DataFrame.apply`, :func:`DataFrame.pandas_on_spark.apply_batch`,
+:func:`DataFrame.pandas_on_spark.apply_batch`, :func:`Series.pandas_on_spark.apply_batch`, etc.
 
 However, this is potentially expensive. If there are several expensive operations such as a shuffle
-in the upstream of the execution plan, Koalas will end up with executing the Spark job twice, once
+in the upstream of the execution plan, pandas on Spark will end up with executing the Spark job twice, once
 for schema inference, and once for processing actual data with the schema.
 
-To avoid the consequences, Koalas has its own type hinting style to specify the schema to avoid
-schema inference. Koalas understands the type hints specified in the return type and converts it
+To avoid the consequences, pandas on Spark has its own type hinting style to specify the schema to avoid
+schema inference. Pandas on Spark understands the type hints specified in the return type and converts it
 as a Spark schema for pandas UDFs used internally. The way of type hinting has been evolved over
 the time.
 
 In this chapter, it covers the recommended way and the supported ways in details.
 
 .. note::
-    The variadic generics support is experimental and unstable in Koalas.
+    The variadic generics support is experimental and unstable in pandas on Spark.
     The way of typing can change between minor releases without a warning.
     See also `PEP 646 <https://www.python.org/dev/peps/pep-0646/>`_ for variadic generics in Python.
 
 
-Koalas DataFrame and Pandas DataFrame
+Pandas on Spark DataFrame and Pandas DataFrame
 -------------------------------------
 
-In the early Koalas version, it was introduced to specify a type hint in the function in order to use
-it as a Spark schema. As an example, you can specify the return type hint as below by using Koalas
+In the early pandas on Spark version, it was introduced to specify a type hint in the function in order to use
+it as a Spark schema. As an example, you can specify the return type hint as below by using pandas on Spark
 :class:`DataFrame`.
 
 .. code-block:: python
 
-    >>> def pandas_div(pdf) -> ks.DataFrame[float, float]:
+    >>> def pandas_div(pdf) -> ps.DataFrame[float, float]:
     ...    # pdf is a pandas DataFrame.
     ...    return pdf[['B', 'C']] / pdf[['B', 'C']]
     ...
-    >>> df = ks.DataFrame({'A': ['a', 'a', 'b'], 'B': [1, 2, 3], 'C': [4, 6, 5]})
+    >>> df = ps.DataFrame({'A': ['a', 'a', 'b'], 'B': [1, 2, 3], 'C': [4, 6, 5]})
     >>> df.groupby('A').apply(pandas_div)
 
-The function ``pandas_div`` actually takes and outputs a pandas DataFrame instead of Koalas :class:`DataFrame`.
-However, Koalas has to force to set the mismatched type hints.
+The function ``pandas_div`` actually takes and outputs a pandas DataFrame instead of pandas on Spark :class:`DataFrame`.
+However, pandas on Spark has to force to set the mismatched type hints.
 
-From Koalas 1.0 with Python 3.7+, now you can specify the type hints by using pandas instances.
+In pandas on Spark, now you can specify the type hints by using pandas instances.
 
 .. code-block:: python
 
@@ -53,7 +53,7 @@ From Koalas 1.0 with Python 3.7+, now you can specify the type hints by using pa
     ...    # pdf is a pandas DataFrame.
     ...    return pdf[['B', 'C']] / pdf[['B', 'C']]
     ...
-    >>> df = ks.DataFrame({'A': ['a', 'a', 'b'], 'B': [1, 2, 3], 'C': [4, 6, 5]})
+    >>> df = ps.DataFrame({'A': ['a', 'a', 'b'], 'B': [1, 2, 3], 'C': [4, 6, 5]})
     >>> df.groupby('A').apply(pandas_div)
 
 Likewise, pandas Series can be also used as a type hints:
@@ -63,19 +63,19 @@ Likewise, pandas Series can be also used as a type hints:
     >>> def sqrt(x) -> pd.Series[float]:
     ...     return np.sqrt(x)
     ...
-    >>> df = ks.DataFrame([[4, 9]] * 3, columns=['A', 'B'])
+    >>> df = ps.DataFrame([[4, 9]] * 3, columns=['A', 'B'])
     >>> df.apply(sqrt, axis=0)
 
-Currently, both Koalas and pandas instances can be used to specify the type hints; however, Koalas
+Currently, both pandas on Spark and pandas instances can be used to specify the type hints; however, pandas on Spark
 plans to move gradually towards using pandas instances only as the stability becomes proven.
 
 
 Type Hinting with Names
 -----------------------
 
-In Koalas 1.0, the new style of type hinting was introduced to overcome the limitations in the existing type
+In pandas on Spark, the new style of type hinting was introduced to overcome the limitations in the existing type
 hinting especially for DataFrame. When you use a DataFrame as the return type hint, for example,
-``DataFrame[int, int]``, there is no way to specify the names of each Series. In the old way, Koalas just generates
+``DataFrame[int, int]``, there is no way to specify the names of each Series. In the old way, pandas on Spark just generates
 the column names as ``c#`` and this easily leads users to lose or forgot the Series mappings. See the example below:
 
 .. code-block:: python
@@ -84,7 +84,7 @@ the column names as ``c#`` and this easily leads users to lose or forgot the Ser
     ...     pdf['A'] = pdf.id + 1
     ...     return pdf
     ...
-    >>> ks.range(5).koalas.apply_batch(transform)
+    >>> ps.range(5).pandas_on_spark.apply_batch(transform)
 
 .. code-block:: bash
 
@@ -95,7 +95,7 @@ the column names as ``c#`` and this easily leads users to lose or forgot the Ser
     3   3   4
     4   4   5
 
-The new style of type hinting in Koalas is similar with the regular Python type hints in variables. The Series name
+The new style of type hinting in pandas_on_spark is similar with the regular Python type hints in variables. The Series name
 is specified as a string, and the type is specified after a colon. The following example shows a simple case with
 the Series names, ``id`` and ``A``, and ``int`` types respectively.
 
@@ -105,7 +105,7 @@ the Series names, ``id`` and ``A``, and ``int`` types respectively.
     ...     pdf['A'] = pdf.id + 1
     ...     return pdf
     ...
-    >>> ks.range(5).koalas.apply_batch(transform)
+    >>> ps.range(5).pandas_on_spark.apply_batch(transform)
 
 .. code-block:: bash
 
@@ -116,7 +116,7 @@ the Series names, ``id`` and ``A``, and ``int`` types respectively.
     3   3   4
     4   4   5
 
-In addition, Koalas also dynamically supports ``dtype`` instance and the column index in pandas so that users can
+In addition, pandas on Spark also dynamically supports ``dtype`` instance and the column index in pandas so that users can
 programmatically generate the return type and schema.
 
 .. code-block:: python
@@ -124,14 +124,14 @@ programmatically generate the return type and schema.
     >>> def transform(pdf) -> pd.DataFrame[zip(pdf.columns, pdf.dtypes)]:
     ...    return pdf + 1
     ...
-    >>> kdf.koalas.apply_batch(transform)
+    >>> pdf.pandas_on_spark.apply_batch(transform)
 
-Likewise, ``dtype`` instances from pandas DataFrame can be used alone and let Koalas generate column names.
+Likewise, ``dtype`` instances from pandas DataFrame can be used alone and let pandas on Spark generate column names.
 
 .. code-block:: python
 
     >>> def transform(pdf) -> pd.DataFrame[pdf.dtypes]:
     ...     return pdf + 1
     ...
-    >>> kdf.koalas.apply_batch(transform)
+    >>> pdf.pandas_on_spark.apply_batch(transform)
 

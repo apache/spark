@@ -3,7 +3,7 @@ Options and settings
 ====================
 .. currentmodule:: pyspark.pandas
 
-Koalas has an options system that lets you customize some aspects of its behaviour,
+Pandas on Spark has an options system that lets you customize some aspects of its behaviour,
 display-related options being those the user is most likely to adjust.
 
 Options have a full "dotted-style", case-insensitive name (e.g. ``display.max_rows``).
@@ -12,28 +12,28 @@ You can get/set options directly as attributes of the top-level ``options`` attr
 
 .. code-block:: python
 
-   >>> import pyspark.pandas as ks
-   >>> ks.options.display.max_rows
+   >>> import pyspark.pandas as ps
+   >>> ps.options.display.max_rows
    1000
-   >>> ks.options.display.max_rows = 10
-   >>> ks.options.display.max_rows
+   >>> ps.options.display.max_rows = 10
+   >>> ps.options.display.max_rows
    10
 
-The API is composed of 3 relevant functions, available directly from the ``koalas``
+The API is composed of 3 relevant functions, available directly from the ``pyspark.pandas``
 namespace:
 
 * :func:`get_option` / :func:`set_option` - get/set the value of a single option.
 * :func:`reset_option` - reset one or more options to their default value.
 
-**Note:** Developers can check out `pyspark.pandas/config.py <https://github.com/databricks/koalas/blob/master/databricks/koalas/config.py>`_ for more information.
+**Note:** Developers can check out `pyspark.pandas/config.py <https://github.com/apache/spark/blob/master/python/pyspark/pandas/config.py>`_ for more information.
 
 .. code-block:: python
 
-   >>> import pyspark.pandas as ks
-   >>> ks.get_option("display.max_rows")
+   >>> import pyspark.pandas as ps
+   >>> ps.get_option("display.max_rows")
    1000
-   >>> ks.set_option("display.max_rows", 101)
-   >>> ks.get_option("display.max_rows")
+   >>> ps.set_option("display.max_rows", 101)
+   >>> ps.get_option("display.max_rows")
    101
 
 
@@ -46,30 +46,30 @@ are available from the koalas namespace.  To change an option, call
 
 .. code-block:: python
 
-   >>> import pyspark.pandas as ks
-   >>> ks.get_option('compute.max_rows')
+   >>> import pyspark.pandas as ps
+   >>> ps.get_option('compute.max_rows')
    1000
-   >>> ks.set_option('compute.max_rows', 2000)
-   >>> ks.get_option('compute.max_rows')
+   >>> ps.set_option('compute.max_rows', 2000)
+   >>> ps.get_option('compute.max_rows')
    2000
 
 All options also have a default value, and you can use ``reset_option`` to do just that:
 
 .. code-block:: python
 
-   >>> import pyspark.pandas as ks
-   >>> ks.reset_option("display.max_rows")
+   >>> import pyspark.pandas as ps
+   >>> ps.reset_option("display.max_rows")
 
 .. code-block:: python
 
-   >>> import pyspark.pandas as ks
-   >>> ks.get_option("display.max_rows")
+   >>> import pyspark.pandas as ps
+   >>> ps.get_option("display.max_rows")
    1000
-   >>> ks.set_option("display.max_rows", 999)
-   >>> ks.get_option("display.max_rows")
+   >>> ps.set_option("display.max_rows", 999)
+   >>> ps.get_option("display.max_rows")
    999
-   >>> ks.reset_option("display.max_rows")
-   >>> ks.get_option("display.max_rows")
+   >>> ps.reset_option("display.max_rows")
+   >>> ps.get_option("display.max_rows")
    1000
 
 ``option_context`` context manager has been exposed through
@@ -78,13 +78,13 @@ are restored automatically when you exit the `with` block:
 
 .. code-block:: python
 
-   >>> with ks.option_context("display.max_rows", 10, "compute.max_rows", 5):
+   >>> with ps.option_context("display.max_rows", 10, "compute.max_rows", 5):
    ...    print(ks.get_option("display.max_rows"))
    ...    print(ks.get_option("compute.max_rows"))
    10
    5
-   >>> print(ks.get_option("display.max_rows"))
-   >>> print(ks.get_option("compute.max_rows"))
+   >>> print(ps.get_option("display.max_rows"))
+   >>> print(ps.get_option("compute.max_rows"))
    1000
    1000
 
@@ -92,7 +92,7 @@ are restored automatically when you exit the `with` block:
 Operations on different DataFrames
 ----------------------------------
 
-Koalas disallows the operations on different DataFrames (or Series) by default to prevent expensive
+Pandas on Spark disallows the operations on different DataFrames (or Series) by default to prevent expensive
 operations. It internally performs a join operation which can be expensive in general.
 
 This can be enabled by setting `compute.ops_on_diff_frames` to `True` to allow such cases.
@@ -100,43 +100,43 @@ See the examples below.
 
 .. code-block:: python
 
-    >>> import pyspark.pandas as ks
-    >>> ks.set_option('compute.ops_on_diff_frames', True)
-    >>> kdf1 = ks.range(5)
-    >>> kdf2 = ks.DataFrame({'id': [5, 4, 3]})
-    >>> (kdf1 - kdf2).sort_index()
+    >>> import pyspark.pandas as ps
+    >>> ps.set_option('compute.ops_on_diff_frames', True)
+    >>> pdf1 = ps.range(5)
+    >>> pdf2 = ps.DataFrame({'id': [5, 4, 3]})
+    >>> (pdf1 - pdf2).sort_index()
         id
     0 -5.0
     1 -3.0
     2 -1.0
     3  NaN
     4  NaN
-    >>> ks.reset_option('compute.ops_on_diff_frames')
+    >>> ps.reset_option('compute.ops_on_diff_frames')
 
 .. code-block:: python
 
-    >>> import pyspark.pandas as ks
-    >>> ks.set_option('compute.ops_on_diff_frames', True)
-    >>> kdf = ks.range(5)
-    >>> kser_a = ks.Series([1, 2, 3, 4])
-    >>> # 'kser_a' is not from 'kdf' DataFrame. So it is considered as a Series not from 'kdf'.
-    >>> kdf['new_col'] = kser_a
-    >>> kdf
+    >>> import pyspark.pandas as ps
+    >>> ps.set_option('compute.ops_on_diff_frames', True)
+    >>> pdf = ps.range(5)
+    >>> pser_a = ps.Series([1, 2, 3, 4])
+    >>> # 'pser_a' is not from 'pdf' DataFrame. So it is considered as a Series not from 'pdf'.
+    >>> pdf['new_col'] = pser_a
+    >>> pdf
        id  new_col
     0   0      1.0
     1   1      2.0
     3   3      4.0
     2   2      3.0
     4   4      NaN
-    >>> ks.reset_option('compute.ops_on_diff_frames')
+    >>> ps.reset_option('compute.ops_on_diff_frames')
 
 
 Default Index type
 ------------------
 
-In Koalas, the default index is used in several cases, for instance,
-when Spark DataFrame is converted into Koalas DataFrame. In this case, internally Koalas attaches a
-default index into Koalas DataFrame.
+In pandas on Spark, the default index is used in several cases, for instance,
+when Spark DataFrame is converted into pandas on Spark DataFrame. In this case, internally pandas on Spark attaches a
+default index into pandas on Spark DataFrame.
 
 There are several types of the default index that can be configured by `compute.default_index_type` as below:
 
@@ -146,11 +146,11 @@ This index type should be avoided when the data is large. This is default. See t
 
 .. code-block:: python
 
-    >>> import pyspark.pandas as ks
-    >>> ks.set_option('compute.default_index_type', 'sequence')
-    >>> kdf = ks.range(3)
-    >>> ks.reset_option('compute.default_index_type')
-    >>> kdf.index
+    >>> import pyspark.pandas as ps
+    >>> ps.set_option('compute.default_index_type', 'sequence')
+    >>> pdf = ps.range(3)
+    >>> ps.reset_option('compute.default_index_type')
+    >>> pdf.index
     Int64Index([0, 1, 2], dtype='int64')
 
 This is conceptually equivalent to the PySpark example as below:
@@ -158,8 +158,8 @@ This is conceptually equivalent to the PySpark example as below:
 .. code-block:: python
 
     >>> from pyspark.sql import functions as F, Window
-    >>> import pyspark.pandas as ks
-    >>> spark_df = ks.range(3).to_spark()
+    >>> import pyspark.pandas as ps
+    >>> spark_df = ps.range(3).to_spark()
     >>> sequential_index = F.row_number().over(
     ...    Window.orderBy(F.monotonically_increasing_id().asc())) - 1
     >>> spark_df.select(sequential_index).rdd.map(lambda r: r[0]).collect()
@@ -174,19 +174,19 @@ then it does not guarantee the sequential index. See the example below:
 
 .. code-block:: python
 
-    >>> import pyspark.pandas as ks
-    >>> ks.set_option('compute.default_index_type', 'distributed-sequence')
-    >>> kdf = ks.range(3)
-    >>> ks.reset_option('compute.default_index_type')
-    >>> kdf.index
+    >>> import pyspark.pandas as ps
+    >>> ps.set_option('compute.default_index_type', 'distributed-sequence')
+    >>> pdf = ps.range(3)
+    >>> ps.reset_option('compute.default_index_type')
+    >>> pdf.index
     Int64Index([0, 1, 2], dtype='int64')
 
 This is conceptually equivalent to the PySpark example as below:
 
 .. code-block:: python
 
-    >>> import pyspark.pandas as ks
-    >>> spark_df = ks.range(3).to_spark()
+    >>> import pyspark.pandas as ps
+    >>> spark_df = ps.range(3).to_spark()
     >>> spark_df.rdd.zipWithIndex().map(lambda p: p[1]).collect()
     [0, 1, 2]
 
@@ -198,11 +198,11 @@ have any penalty comparing to other index types. See the example below:
 
 .. code-block:: python
 
-    >>> import pyspark.pandas as ks
-    >>> ks.set_option('compute.default_index_type', 'distributed')
-    >>> kdf = ks.range(3)
-    >>> ks.reset_option('compute.default_index_type')
-    >>> kdf.index
+    >>> import pyspark.pandas as ps
+    >>> ps.set_option('compute.default_index_type', 'distributed')
+    >>> pdf = ps.range(3)
+    >>> ps.reset_option('compute.default_index_type')
+    >>> pdf.index
     Int64Index([25769803776, 60129542144, 94489280512], dtype='int64')
 
 This is conceptually equivalent to the PySpark example as below:
@@ -210,8 +210,8 @@ This is conceptually equivalent to the PySpark example as below:
 .. code-block:: python
 
     >>> from pyspark.sql import functions as F
-    >>> import pyspark.pandas as ks
-    >>> spark_df = ks.range(3).to_spark()
+    >>> import pyspark.pandas as ps
+    >>> spark_df = ps.range(3).to_spark()
     >>> spark_df.select(F.monotonically_increasing_id()) \
     ...     .rdd.map(lambda r: r[0]).collect()
     [25769803776, 60129542144, 94489280512]
@@ -230,13 +230,13 @@ Available options
 =============================== ============== =====================================================
 Option                          Default        Description
 =============================== ============== =====================================================
-display.max_rows                1000           This sets the maximum number of rows Koalas should
+display.max_rows                1000           This sets the maximum number of rows pandas on Spark should
                                                output when printing out various output. For example,
                                                this value determines the number of rows to be shown
                                                at the repr() in a dataframe. Set `None` to unlimit
                                                the input length. Default is 1000.
 compute.max_rows                1000           'compute.max_rows' sets the limit of the current
-                                               Koalas DataFrame. Set `None` to unlimit the input
+                                               pandas on Spark DataFrame. Set `None` to unlimit the input
                                                length. When the limit is set, it is executed by the
                                                shortcut by collecting the data into the driver, and
                                                then using the pandas API. If the limit is unset, the
@@ -244,7 +244,7 @@ compute.max_rows                1000           'compute.max_rows' sets the limit
 compute.shortcut_limit          1000           'compute.shortcut_limit' sets the limit for a
                                                shortcut. It computes specified number of rows and
                                                use its schema. When the dataframe length is larger
-                                               than this limit, Koalas uses PySpark to compute.
+                                               than this limit, pandas on Spark uses PySpark to compute.
 compute.ops_on_diff_frames      False          This determines whether or not to operate between two
                                                different dataframes. For example, 'combine_frames'
                                                function internally performs a join operation which
@@ -254,10 +254,10 @@ compute.ops_on_diff_frames      False          This determines whether or not to
 compute.default_index_type      'sequence'     This sets the default index type: sequence,
                                                distributed and distributed-sequence.
 compute.ordered_head            False          'compute.ordered_head' sets whether or not to operate
-                                               head with natural ordering. Koalas does not guarantee
+                                               head with natural ordering. Pandas on Spark does not guarantee
                                                the row ordering so `head` could return some rows
                                                from distributed partitions. If
-                                               'compute.ordered_head' is set to True, Koalas
+                                               'compute.ordered_head' is set to True, pandas on Spark
                                                performs natural ordering beforehand, but it will
                                                cause a performance overhead.
 plotting.max_rows               1000           'plotting.max_rows' sets the visual limit on top-n-
