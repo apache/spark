@@ -17,20 +17,20 @@
 
 package org.apache.spark.shuffle.sort
 
-import java.io.{DataInputStream, File, FileInputStream, FileOutputStream}
+import java.io.{BufferedOutputStream, DataInputStream, DataOutputStream, File, FileInputStream, FileOutputStream}
 
 import org.mockito.{Mock, MockitoAnnotations}
 import org.mockito.Answers.RETURNS_SMART_NULLS
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
+import org.roaringbitmap.RoaringBitmap
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.shuffle.{IndexShuffleBlockResolver, ShuffleBlockInfo}
 import org.apache.spark.storage._
 import org.apache.spark.util.Utils
-
 
 class IndexShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterEach {
 
@@ -39,6 +39,7 @@ class IndexShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterEa
 
   private var tempDir: File = _
   private val conf: SparkConf = new SparkConf(loadDefaults = false)
+  private val appId = "TESTAPP"
 
   override def beforeEach(): Unit = {
     super.beforeEach()
@@ -48,7 +49,11 @@ class IndexShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterEa
     when(blockManager.diskBlockManager).thenReturn(diskBlockManager)
     when(diskBlockManager.getFile(any[BlockId])).thenAnswer(
       (invocation: InvocationOnMock) => new File(tempDir, invocation.getArguments.head.toString))
+    when(diskBlockManager.getMergedShuffleFile(
+      any[BlockId], any[Option[Array[String]]])).thenAnswer(
+      (invocation: InvocationOnMock) => new File(tempDir, invocation.getArguments.head.toString))
     when(diskBlockManager.localDirs).thenReturn(Array(tempDir))
+    conf.set("spark.app.id", appId)
   }
 
   override def afterEach(): Unit = {
@@ -160,5 +165,68 @@ class IndexShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterEa
   test("SPARK-33198 getMigrationBlocks should not fail at missing files") {
     val resolver = new IndexShuffleBlockResolver(conf, blockManager)
     assert(resolver.getMigrationBlocks(ShuffleBlockInfo(Int.MaxValue, Long.MaxValue)).isEmpty)
+  }
+
+  test("getMergedBlockData should return expected FileSegmentManagedBuffer list") {
+    val shuffleId = 1
+    val reduceId = 1
+    val dataFileName = s"shuffleMerged_${appId}_${shuffleId}_$reduceId.data"
+    val dataFile = new File(tempDir.getAbsolutePath, dataFileName)
+    val out = new FileOutputStream(dataFile)
+    Utils.tryWithSafeFinally {
+      out.write(new Array[Byte](30))
+    } {
+      out.close()
+    }
+    val indexFileName = s"shuffleMerged_${appId}_${shuffleId}_$reduceId.index"
+    prepareMergedShuffleIndexFile(indexFileName)
+    val resolver = new IndexShuffleBlockResolver(conf, blockManager)
+    val dirs = Some(Array[String](tempDir.getAbsolutePath))
+    val managedBufferList =
+      resolver.getMergedBlockData(ShuffleBlockId(shuffleId, -1, reduceId), dirs)
+    assert(managedBufferList.size === 3)
+    assert(managedBufferList(0).size === 10)
+    assert(managedBufferList(1).size === 0)
+    assert(managedBufferList(2).size === 20)
+  }
+
+  test("getMergedBlockMeta should return expected MergedBlockMeta") {
+    val shuffleId = 1
+    val reduceId = 1
+    val metaFileName = s"shuffleMerged_${appId}_${shuffleId}_$reduceId.meta"
+    val metaFile = new File(tempDir.getAbsolutePath, metaFileName)
+    val chunkTracker = new RoaringBitmap()
+    chunkTracker.add(1)
+    chunkTracker.add(2)
+    val outMeta = new DataOutputStream(new BufferedOutputStream(new FileOutputStream(metaFile)))
+    Utils.tryWithSafeFinally {
+      chunkTracker.serialize(outMeta)
+    }{
+      outMeta.close()
+    }
+    val indexFileName = s"shuffleMerged_${appId}_${shuffleId}_$reduceId.index"
+    prepareMergedShuffleIndexFile(indexFileName)
+    val resolver = new IndexShuffleBlockResolver(conf, blockManager)
+    val dirs = Some(Array[String](tempDir.getAbsolutePath))
+    val mergedBlockMeta =
+      resolver.getMergedBlockMeta(ShuffleBlockId(shuffleId, -1, reduceId), dirs)
+    assert(mergedBlockMeta.getNumChunks === 3)
+    assert(mergedBlockMeta.readChunkBitmaps().size === 1)
+  }
+
+  private def prepareMergedShuffleIndexFile(indexFileName: String): Unit = {
+    val lengths = Array[Long](10, 0, 20)
+    val indexFile = new File(tempDir.getAbsolutePath, indexFileName)
+    val outIndex = new DataOutputStream(new BufferedOutputStream(new FileOutputStream(indexFile)))
+    Utils.tryWithSafeFinally {
+      var offset = 0L
+      outIndex.writeLong(offset)
+      for (length <- lengths) {
+        offset += length
+        outIndex.writeLong(offset)
+      }
+    } {
+      outIndex.close()
+    }
   }
 }
