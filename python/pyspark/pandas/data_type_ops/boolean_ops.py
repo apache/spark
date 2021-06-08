@@ -77,13 +77,13 @@ class BooleanOps(DataTypeOps):
             return left - right
 
     def mul(self, left, right) -> Union["Series", "Index"]:
-        if not is_valid_operand_for_numeric_arithmetic(
-            right, allow_bool_index_ops=False, allow_bool=False
-        ):
+        if not is_valid_operand_for_numeric_arithmetic(right, allow_bool_index_ops=False):
             raise TypeError(
                 "Multiplication can not be applied to %s and the given type." % self.pretty_name
             )
-        if isinstance(right, numbers.Number) and not isinstance(right, bool):
+        if isinstance(right, bool):
+            return left.__and__(right)
+        elif isinstance(right, numbers.Number):
             left = left.spark.transform(lambda scol: scol.cast(as_spark_type(type(right))))
             return left * right
         else:

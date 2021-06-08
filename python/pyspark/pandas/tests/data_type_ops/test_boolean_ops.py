@@ -86,7 +86,8 @@ class BooleanOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         self.assert_eq(pser * 0.1, psser * 0.1)
         self.assert_eq(pser * pser.astype(int), psser * psser.astype(int))
         self.assertRaises(TypeError, lambda: psser * psser)
-        self.assertRaises(TypeError, lambda: psser * True)
+        self.assert_eq(pser * True, psser * True)
+        self.assert_eq(pser * False, psser * False)
 
         with option_context("compute.ops_on_diff_frames", True):
             for pser, psser in self.numeric_pser_psser_pairs:
@@ -346,7 +347,14 @@ class BooleanExtensionOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         self.assert_eq((pser * 1).astype(float), psser * 1)
         self.assert_eq((pser * 0.1).astype(float), psser * 0.1)
         self.assertRaises(TypeError, lambda: psser * psser)
-        self.assertRaises(TypeError, lambda: psser * True)
+
+        # In pandas, NA & False is NA, whereas NA & False is False in pandas-on-Spark
+        if LooseVersion(pd.__version__) >= LooseVersion("1.2.2"):
+            self.assert_eq(pser * True, psser * True)
+            self.assert_eq(ps.Series([False, False, False], dtype="boolean"), psser * False)
+        else:
+            # Due to https://github.com/pandas-dev/pandas/issues/39410
+            self.assert_eq(ps.Series([False, False, False]), (psser * False).astype(bool))
 
         with option_context("compute.ops_on_diff_frames", True):
             for pser, psser in self.numeric_pser_psser_pairs:
