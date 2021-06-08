@@ -634,6 +634,27 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     }
   }
 
+  test("SPARK-35099: microseconds to LocalDateTime") {
+    assert(microsToLocalDateTime(0) ==  LocalDateTime.parse("1970-01-01T00:00:00"))
+    assert(microsToLocalDateTime(100) ==  LocalDateTime.parse("1970-01-01T00:00:00.0001"))
+    assert(microsToLocalDateTime(100000000) ==  LocalDateTime.parse("1970-01-01T00:01:40"))
+    assert(microsToLocalDateTime(100000000000L) ==  LocalDateTime.parse("1970-01-02T03:46:40"))
+    assert(microsToLocalDateTime(253402300799999999L) ==
+      LocalDateTime.parse("9999-12-31T23:59:59.999999"))
+  }
+
+  test("SPARK-35099: LocalDateTime to microseconds") {
+    assert(DateTimeUtils.localDateTimeToMicros(LocalDateTime.parse("1970-01-01T00:00:00")) == 0)
+    assert(
+      DateTimeUtils.localDateTimeToMicros(LocalDateTime.parse("1970-01-01T00:00:00.0001")) == 100)
+    assert(
+      DateTimeUtils.localDateTimeToMicros(LocalDateTime.parse("1970-01-01T00:01:40")) == 100000000)
+    assert(DateTimeUtils.localDateTimeToMicros(LocalDateTime.parse("1970-01-02T03:46:40")) ==
+      100000000000L)
+    assert(DateTimeUtils.localDateTimeToMicros(LocalDateTime.parse("9999-12-31T23:59:59.999999"))
+      == 253402300799999999L)
+  }
+
   test("daysToMicros and microsToDays") {
     val input = date(2015, 12, 31, 16, zid = LA)
     assert(microsToDays(input, LA) === 16800)
@@ -780,8 +801,8 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
         (LocalDateTime.of(2021, 3, 14, 1, 0, 0), LocalDateTime.of(2021, 3, 14, 3, 0, 0)) ->
           TimeUnit.HOURS.toMicros(2)
       ).foreach { case ((start, end), expected) =>
-        val startMicros = localDateTimeToMicros(start, zid)
-        val endMicros = localDateTimeToMicros(end, zid)
+        val startMicros = DateTimeTestUtils.localDateTimeToMicros(start, zid)
+        val endMicros = DateTimeTestUtils.localDateTimeToMicros(end, zid)
         val result = subtractTimestamps(endMicros, startMicros, zid)
         assert(result === expected)
       }
