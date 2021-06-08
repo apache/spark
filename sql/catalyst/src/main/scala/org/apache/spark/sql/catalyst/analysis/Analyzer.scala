@@ -2178,24 +2178,12 @@ class Analyzer(override val catalogManager: CatalogManager)
                       bound, arguments)
                   }
 
-                  val castedArguments = arguments.zip(bound.inputTypes()).map { case (arg, ty) =>
-                    if (arg.dataType != ty) {
-                      if (Cast.canCast(arg.dataType, ty)) {
-                        Cast(arg, ty)
-                      } else {
-                        throw QueryCompilationErrors.v2FunctionCastError(bound, arg, ty)
-                      }
-                    } else {
-                      arg
-                    }
-                  }
-
                   bound match {
                     case scalarFunc: ScalarFunction[_] =>
-                      processV2ScalarFunction(scalarFunc, inputType, castedArguments, isDistinct,
+                      processV2ScalarFunction(scalarFunc, inputType, arguments, isDistinct,
                         filter, ignoreNulls)
                     case aggFunc: V2AggregateFunction[_, _] =>
-                      processV2AggregateFunction(aggFunc, castedArguments, isDistinct, filter,
+                      processV2AggregateFunction(aggFunc, arguments, isDistinct, filter,
                         ignoreNulls)
                     case _ =>
                       failAnalysis(s"Function '${bound.name()}' does not implement ScalarFunction" +
@@ -2210,7 +2198,7 @@ class Analyzer(override val catalogManager: CatalogManager)
 
     private def processV2ScalarFunction(
         scalarFunc: ScalarFunction[_],
-        inputType: StructType,
+        argumentTypes: StructType,
         arguments: Seq[Expression],
         isDistinct: Boolean,
         filter: Option[Expression],
@@ -2225,15 +2213,17 @@ class Analyzer(override val catalogManager: CatalogManager)
         throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
           scalarFunc.name(), "IGNORE NULLS")
       } else {
-        findMethod(scalarFunc, MAGIC_METHOD_NAME, scalarFunc.inputTypes()) match {
+        val declaredInputTypes = scalarFunc.inputTypes().toSeq
+        findMethod(scalarFunc, MAGIC_METHOD_NAME, declaredInputTypes) match {
           case Some(m) if Modifier.isStatic(m.getModifiers) =>
             StaticInvoke(scalarFunc.getClass, scalarFunc.resultType(),
-              MAGIC_METHOD_NAME, arguments, propagateNull = false,
-              returnNullable = scalarFunc.isResultNullable)
+              MAGIC_METHOD_NAME, arguments, methodInputTypes = Some(declaredInputTypes),
+                propagateNull = false, returnNullable = scalarFunc.isResultNullable)
           case Some(_) =>
             val caller = Literal.create(scalarFunc, ObjectType(scalarFunc.getClass))
             Invoke(caller, MAGIC_METHOD_NAME, scalarFunc.resultType(),
-              arguments, propagateNull = false, returnNullable = scalarFunc.isResultNullable)
+              arguments, methodInputTypes = Some(declaredInputTypes), propagateNull = false,
+              returnNullable = scalarFunc.isResultNullable)
           case _ =>
             // TODO: handle functions defined in Scala too - in Scala, even if a
             //  subclass do not override the default method in parent interface
@@ -2241,7 +2231,7 @@ class Analyzer(override val catalogManager: CatalogManager)
             //  `getDeclaredMethod`.
             // since `inputType` is a `StructType`, it is mapped to a `InternalRow`
             // which we can use to lookup the `produceResult` method.
-            findMethod(scalarFunc, "produceResult", Seq(inputType)) match {
+            findMethod(scalarFunc, "produceResult", Seq(argumentTypes)) match {
               case Some(_) =>
                 ApplyFunctionExpression(scalarFunc, arguments)
               case None =>

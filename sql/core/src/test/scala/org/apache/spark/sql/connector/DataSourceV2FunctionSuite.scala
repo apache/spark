@@ -243,7 +243,7 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
       // can't cast date time interval to long
       assert(intercept[AnalysisException](
         sql(s"SELECT testcat.ns.$name(date '2021-06-01' - date '2011-06-01', 93)").collect())
-          .getMessage.contains("cannot cast"))
+          .getMessage.contains("due to data type mismatch"))
     }
   }
 
@@ -361,7 +361,7 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
       // can't cast interval to decimal
       assert(intercept[AnalysisException](sql("SELECT testcat.ns.avg(*) from values" +
           " (date '2021-06-01' - date '2011-06-01'), (date '2000-01-01' - date '1900-01-01')"))
-          .getMessage.contains("cannot cast"))
+          .getMessage.contains("due to data type mismatch"))
     }
   }
 
