@@ -40,6 +40,12 @@ package object config extends Logging {
       .stringConf
       .createOptional
 
+  private[spark] val DELAYED_OR_INTERVAL =
+    ConfigBuilder("spark.yarn.executor.localityDelayedOrInterval")
+      .doc("Interval between YARN allocate container to fullfill delayed_or constraint.")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefault(3000)
+
   private[spark] val APPLICATION_TAGS = ConfigBuilder("spark.yarn.tags")
     .doc("Comma-separated list of strings to pass through as YARN application tags appearing " +
       "in YARN Application Reports, which can be used for filtering when querying YARN.")
