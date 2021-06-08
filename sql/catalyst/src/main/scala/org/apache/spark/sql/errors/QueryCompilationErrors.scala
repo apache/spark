@@ -938,10 +938,6 @@ private[spark] object QueryCompilationErrors {
     notSupportedForV2TablesError("SHOW CREATE TABLE")
   }
 
-  def truncateTableNotSupportedForV2TablesError(): Throwable = {
-    notSupportedForV2TablesError("TRUNCATE TABLE")
-  }
-
   def showColumnsNotSupportedForV2TablesError(): Throwable = {
     notSupportedForV2TablesError("SHOW COLUMNS")
   }
