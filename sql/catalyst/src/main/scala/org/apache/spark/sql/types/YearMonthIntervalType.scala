@@ -21,6 +21,8 @@ import scala.math.Ordering
 import scala.reflect.runtime.universe.typeTag
 
 import org.apache.spark.annotation.Unstable
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.types.YearMonthIntervalType.{MONTH, YEAR}
 
 /**
  * The type represents year-month intervals of the SQL standard. A year-month interval is made up
@@ -30,12 +32,17 @@ import org.apache.spark.annotation.Unstable
  *
  * `YearMonthIntervalType` represents positive as well as negative year-month intervals.
  *
- * Please use the singleton `DataTypes.YearMonthIntervalType` to refer the type.
+ * Please use `DataTypes.createYearMonthIntervalType()` to create a specific instance.
+ *
+ * @param start The start unit which the year-month interval type comprises from.
+ *              Valid values: 0 (YEAR) and 1 (MONTH).
+ * @param end The end unit of the interval type.
+ *            Valid values: 0 (YEAR) and 1 (MONTH).
  *
  * @since 3.2.0
  */
 @Unstable
-class YearMonthIntervalType private() extends AtomicType {
+case class YearMonthIntervalType(start: Byte, end: Byte) extends AtomicType {
   /**
    * Internally, values of year-month intervals are stored in `Int` values as amount of months
    * that are calculated by the formula:
@@ -55,7 +62,17 @@ class YearMonthIntervalType private() extends AtomicType {
 
   private[spark] override def asNullable: YearMonthIntervalType = this
 
-  override def typeName: String = "interval year to month"
+  override val typeName: String = (start, end) match {
+    case (YEAR, MONTH) => "interval year to month"
+    case (YEAR, YEAR) => "interval year"
+    case (MONTH, MONTH) => "interval month"
+    case _ => throw new AnalysisException(
+      s"""Invalid interval units: ($start, $end). Supported units:
+         | (0, 0) - interval year
+         | (0, 1) - interval year to month
+         | (1, 1) - interval month
+         |""".stripMargin)
+  }
 }
 
 /**
@@ -67,4 +84,8 @@ class YearMonthIntervalType private() extends AtomicType {
  * @since 3.2.0
  */
 @Unstable
-case object YearMonthIntervalType extends YearMonthIntervalType
+object YearMonthIntervalType {
+  val YEAR: Byte = 0
+  val MONTH: Byte = 1
+  val DEFAULT: YearMonthIntervalType = YearMonthIntervalType(YEAR, MONTH)
+}
