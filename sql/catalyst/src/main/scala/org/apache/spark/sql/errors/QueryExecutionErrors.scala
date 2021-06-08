@@ -1321,4 +1321,12 @@ object QueryExecutionErrors {
          |paths passed to $key.
        """.stripMargin.replaceAll("\n", " "), e)
   }
+
+  def cannotFetchTablesOfDatabaseError(dbName: String, e: Exception): Throwable = {
+    new SparkException(s"Unable to fetch tables of db $dbName", e)
+  }
+
+  def illegalLocationClauseForViewPartitionError(): Throwable = {
+    new SparkException("LOCATION clause illegal for view partition")
+  }
 }

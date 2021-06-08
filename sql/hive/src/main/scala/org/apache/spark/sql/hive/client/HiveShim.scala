@@ -46,7 +46,6 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogFunction, CatalogTableParti
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.{DateFormatter, TypeUtils}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
-import org.apache.spark.sql.hive.HiveExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{AtomicType, DateType, IntegralType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
@@ -326,7 +325,7 @@ private[client] class Shim_v0_12 extends Shim with Logging {
         // Ignore this partition since it already exists and ignoreIfExists == true
       } else {
         if (location == null && table.isView()) {
-          throw HiveExecutionErrors.illegalLocationClauseForViewPartitionError()
+          throw QueryExecutionErrors.illegalLocationClauseForViewPartitionError()
         }
 
         createPartitionMethod.invoke(
