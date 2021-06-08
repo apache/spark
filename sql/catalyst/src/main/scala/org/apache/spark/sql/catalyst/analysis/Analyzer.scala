@@ -1587,8 +1587,8 @@ class Analyzer(override val catalogManager: CatalogManager)
           s.expand(plan, resolver)
         } catch {
           case e: AnalysisException =>
-            // Try resolve the star expression using outer query plans. If not plan can resolve
-            // the star expression, throw the original analysis exception.
+            // Try resolve the star expression using the outer query plans and wrap the resolved
+            // attributes in outer references. Otherwise throw the original exception.
             AnalysisContext.get.outerPlans
               .find(p => Try(s.expand(p, resolver)).isSuccess)
               .map(s.expand(_, resolver).map(OuterReference))

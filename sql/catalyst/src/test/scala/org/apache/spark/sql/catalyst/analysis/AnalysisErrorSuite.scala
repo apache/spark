@@ -825,7 +825,7 @@ class AnalysisErrorSuite extends AnalysisTest {
       Project(ScalarSubquery(t0.select(array)).as("sub") :: Nil, t1),
       "Expressions referencing the outer query are not supported" :: Nil)
 
-    // t2.* cannot be resolved and the error message should use the inner plan exception message.
+    // t2.* cannot be resolved and the error should be the initial analysis exception.
     assertAnalysisError(
       Project(ScalarSubquery(t0.select(star("t2"))).as("sub") :: Nil, t1),
       "cannot resolve 't2.*' given input columns ''" :: Nil
