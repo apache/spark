@@ -68,12 +68,11 @@ public class ParquetVectorUpdaterFactory {
         if (sparkType == DataTypes.BooleanType) {
           return new BooleanUpdater();
         }
-        throw constructConvertNotSupportedException(descriptor, sparkType);
-
+        break;
       case INT32:
         if (sparkType == DataTypes.IntegerType || canReadAsIntDecimal(descriptor, sparkType)) {
           return new IntegerUpdater();
-        } else if (sparkType == DataTypes.LongType) {
+        } else if (sparkType == DataTypes.LongType && isUnsignedIntTypeMatched(32)) {
           // In `ParquetToSparkSchemaConverter`, we map parquet UINT32 to our LongType.
           // For unsigned int32, it stores as plain signed int32 in Parquet when dictionary
           // fallbacks. We read them as long values.
@@ -90,8 +89,7 @@ public class ParquetVectorUpdaterFactory {
             return new IntegerWithRebaseUpdater(failIfRebase);
           }
         }
-        throw constructConvertNotSupportedException(descriptor, sparkType);
-
+        break;
       case INT64:
         // This is where we implement support for the valid type conversions.
         if (sparkType == DataTypes.LongType || canReadAsLongDecimal(descriptor, sparkType)) {
@@ -116,26 +114,19 @@ public class ParquetVectorUpdaterFactory {
             return new LongAsMicrosRebaseUpdater(failIfRebase);
           }
         }
-        throw constructConvertNotSupportedException(descriptor, sparkType);
-
+        break;
       case FLOAT:
         if (sparkType == DataTypes.FloatType) {
           return new FloatUpdater();
         }
-        throw constructConvertNotSupportedException(descriptor, sparkType);
-
+        break;
       case DOUBLE:
         if (sparkType == DataTypes.DoubleType) {
           return new DoubleUpdater();
         }
-        throw constructConvertNotSupportedException(descriptor, sparkType);
-
+        break;
       case INT96:
-      case BINARY:
-        if (sparkType == DataTypes.StringType || sparkType == DataTypes.BinaryType ||
-          canReadAsBinaryDecimal(descriptor, sparkType)) {
-          return new BinaryUpdater();
-        } else if (sparkType == DataTypes.TimestampType) {
+        if (sparkType == DataTypes.TimestampType) {
           final boolean failIfRebase = "EXCEPTION".equals(int96RebaseMode);
           if (!shouldConvertTimestamps()) {
             if ("CORRECTED".equals(int96RebaseMode)) {
@@ -151,8 +142,13 @@ public class ParquetVectorUpdaterFactory {
             }
           }
         }
-        throw constructConvertNotSupportedException(descriptor, sparkType);
-
+        break;
+      case BINARY:
+        if (sparkType == DataTypes.StringType || sparkType == DataTypes.BinaryType ||
+          canReadAsBinaryDecimal(descriptor, sparkType)) {
+          return new BinaryUpdater();
+        }
+        break;
       case FIXED_LEN_BYTE_ARRAY:
         int arrayLen = descriptor.getPrimitiveType().getTypeLength();
         if (canReadAsIntDecimal(descriptor, sparkType)) {
@@ -162,11 +158,14 @@ public class ParquetVectorUpdaterFactory {
         } else if (canReadAsBinaryDecimal(descriptor, sparkType)) {
           return new FixedLenByteArrayUpdater(arrayLen);
         }
-        throw constructConvertNotSupportedException(descriptor, sparkType);
-
+        break;
       default:
-        throw constructConvertNotSupportedException(descriptor, sparkType);
+        break;
     }
+
+    // If we get here, it means the combination of Spark and Parquet type is invalid or not
+    // supported.
+    throw constructConvertNotSupportedException(descriptor, sparkType);
   }
 
   boolean isTimestampTypeMatched(LogicalTypeAnnotation.TimeUnit unit) {
