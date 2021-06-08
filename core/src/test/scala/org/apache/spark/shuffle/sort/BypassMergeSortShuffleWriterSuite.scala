@@ -17,8 +17,9 @@
 
 package org.apache.spark.shuffle.sort
 
-import java.io.File
+import java.io.{DataInputStream, File, FileInputStream}
 import java.util.UUID
+import java.util.zip.{Adler32, CheckedInputStream}
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
@@ -32,6 +33,7 @@ import org.scalatest.BeforeAndAfterEach
 import org.apache.spark._
 import org.apache.spark.executor.{ShuffleWriteMetrics, TaskMetrics}
 import org.apache.spark.memory.{TaskMemoryManager, TestMemoryManager}
+import org.apache.spark.network.util.LimitedInputStream
 import org.apache.spark.serializer.{JavaSerializer, SerializerInstance, SerializerManager}
 import org.apache.spark.shuffle.IndexShuffleBlockResolver
 import org.apache.spark.shuffle.api.ShuffleExecutorComponents
@@ -76,6 +78,7 @@ class BypassMergeSortShuffleWriterSuite extends SparkFunSuite with BeforeAndAfte
     when(blockManager.diskBlockManager).thenReturn(diskBlockManager)
     when(taskContext.taskMemoryManager()).thenReturn(taskMemoryManager)
 
+    IndexShuffleBlockResolver.set(blockResolver)
     when(blockResolver.writeIndexFileAndCommit(
       anyInt, anyLong, any(classOf[Array[Long]]), any(classOf[File])))
       .thenAnswer { invocationOnMock =>
@@ -86,6 +89,7 @@ class BypassMergeSortShuffleWriterSuite extends SparkFunSuite with BeforeAndAfte
         }
         null
       }
+    doNothing().when(blockResolver).writeChecksumFile(any(), any(), any(classOf[Array[Long]]))
 
     when(blockManager.getDiskWriter(
       any[BlockId],
@@ -235,5 +239,69 @@ class BypassMergeSortShuffleWriterSuite extends SparkFunSuite with BeforeAndAfte
     assert(temporaryFilesCreated.nonEmpty)
     writer.stop( /* success = */ false)
     assert(temporaryFilesCreated.count(_.exists()) === 0)
+  }
+
+  test("write checksum file") {
+    val blockResolver = new IndexShuffleBlockResolver(conf, blockManager)
+    IndexShuffleBlockResolver.set(blockResolver)
+    val shuffleId = shuffleHandle.shuffleId
+    val mapId = 0
+    val checksumBlockId = ShuffleChecksumBlockId(shuffleId, mapId, 0)
+    val dataBlockId = ShuffleDataBlockId(shuffleId, mapId, 0)
+    val indexBlockId = ShuffleIndexBlockId(shuffleId, mapId, 0)
+    val checksumFile = new File(tempDir, checksumBlockId.name)
+    val dataFile = new File(tempDir, dataBlockId.name)
+    val indexFile = new File(tempDir, indexBlockId.name)
+    reset(diskBlockManager)
+    when(diskBlockManager.getFile(checksumBlockId)).thenAnswer(_ => checksumFile)
+    when(diskBlockManager.getFile(dataBlockId)).thenAnswer(_ => dataFile)
+    when(diskBlockManager.getFile(indexBlockId)).thenAnswer(_ => indexFile)
+    when(diskBlockManager.createTempShuffleBlock())
+      .thenAnswer { _ =>
+        val blockId = new TempShuffleBlockId(UUID.randomUUID)
+        val file = new File(tempDir, blockId.name)
+        temporaryFilesCreated += file
+        (blockId, file)
+      }
+
+    val numPartition = shuffleHandle.dependency.partitioner.numPartitions
+    val writer = new BypassMergeSortShuffleWriter[Int, Int](
+      blockManager,
+      shuffleHandle,
+      mapId,
+      conf,
+      taskContext.taskMetrics().shuffleWriteMetrics,
+      new LocalDiskShuffleExecutorComponents(conf, blockManager, blockResolver))
+
+    writer.write(Iterator((0, 0), (1, 1), (2, 2), (3, 3), (4, 4), (5, 5), (6, 6)))
+    writer.stop( /* success = */ true)
+    assert(checksumFile.exists())
+    assert(checksumFile.length() === 8 * numPartition)
+
+    val in = new DataInputStream(new FileInputStream(checksumFile))
+    val expectChecksums = Array.ofDim[Long](numPartition)
+    (0 until numPartition).foreach(i => expectChecksums(i) = in.readLong())
+    in.close()
+
+    assert(dataFile.exists)
+    val dataIn = new FileInputStream(dataFile)
+    assert(indexFile.exists)
+    val indexIn = new DataInputStream(new FileInputStream(indexFile))
+    var checkedIn: CheckedInputStream = null
+    var prevOffset = indexIn.readLong
+    (0 until numPartition).foreach { i =>
+      val curOffset = indexIn.readLong
+      val limit = (curOffset - prevOffset).toInt
+      val bytes = new Array[Byte](limit)
+      checkedIn = new CheckedInputStream(
+        new LimitedInputStream(dataIn, curOffset - prevOffset), new Adler32)
+      checkedIn.read(bytes, 0, limit)
+      prevOffset = curOffset
+      // checksum must be consistent at both write and read sides
+      assert(checkedIn.getChecksum.getValue === expectChecksums(i))
+    }
+    dataIn.close()
+    indexIn.close()
+    checkedIn.close()
   }
 }

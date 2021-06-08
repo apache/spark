@@ -23,8 +23,11 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.channels.FileChannel;
 import java.util.Optional;
+import java.util.zip.Adler32;
+import java.util.zip.Checksum;
 import javax.annotation.Nullable;
 
+import org.apache.spark.shuffle.IndexShuffleBlockResolver;
 import scala.None$;
 import scala.Option;
 import scala.Product2;
@@ -93,6 +96,8 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
   private FileSegment[] partitionWriterSegments;
   @Nullable private MapStatus mapStatus;
   private long[] partitionLengths;
+  private Checksum[] partitionChecksums;
+  private boolean checksumEnabled;
 
   /**
    * Are we in the process of stopping? Because map tasks can call stop() with success = true
@@ -120,6 +125,13 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     this.writeMetrics = writeMetrics;
     this.serializer = dep.serializer();
     this.shuffleExecutorComponents = shuffleExecutorComponents;
+    if ((boolean) conf.get(package$.MODULE$.SHUFFLE_CHECKSUM())) {
+      this.checksumEnabled = true;
+      this.partitionChecksums = new Adler32[numPartitions];
+      for (int i = 0; i < numPartitions; i ++) {
+        this.partitionChecksums[i] = new Adler32();
+      }
+    }
   }
 
   @Override
@@ -143,8 +155,12 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
             blockManager.diskBlockManager().createTempShuffleBlock();
         final File file = tempShuffleBlockIdPlusFile._2();
         final BlockId blockId = tempShuffleBlockIdPlusFile._1();
-        partitionWriters[i] =
-            blockManager.getDiskWriter(blockId, file, serInstance, fileBufferSize, writeMetrics);
+        DiskBlockObjectWriter writer =
+          blockManager.getDiskWriter(blockId, file, serInstance, fileBufferSize, writeMetrics);
+        if (checksumEnabled) {
+          writer.setChecksum(partitionChecksums[i]);
+        }
+        partitionWriters[i] = writer;
       }
       // Creating the file to write to and creating a disk writer both involve interacting with
       // the disk, and can take a long time in aggregate when we open many files, so should be
@@ -164,6 +180,13 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       }
 
       partitionLengths = writePartitionedData(mapOutputWriter);
+      if (checksumEnabled) {
+        long[] checksums = new long[numPartitions];
+        for (int i = 0; i < numPartitions; i ++) {
+          checksums[i] = partitionChecksums[i].getValue();
+        }
+        IndexShuffleBlockResolver.get().writeChecksumFile(shuffleId, mapId, checksums);
+      }
       mapStatus = MapStatus$.MODULE$.apply(
         blockManager.shuffleServerId(), partitionLengths, mapId);
     } catch (Exception e) {

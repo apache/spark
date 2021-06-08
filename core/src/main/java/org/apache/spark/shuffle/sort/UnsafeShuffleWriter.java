@@ -205,6 +205,8 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       blockManager,
       taskContext,
       initialSortBufferSize,
+      shuffleId,
+      mapId,
       partitioner.numPartitions(),
       sparkConf,
       writeMetrics);
@@ -219,9 +221,10 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     serBuffer = null;
     serOutputStream = null;
     final SpillInfo[] spills = sorter.closeAndGetSpills();
-    sorter = null;
     try {
       partitionLengths = mergeSpills(spills);
+      sorter.writeChecksumFile();
+      sorter = null;
     } finally {
       for (SpillInfo spill : spills) {
         if (spill.file.exists() && !spill.file.delete()) {

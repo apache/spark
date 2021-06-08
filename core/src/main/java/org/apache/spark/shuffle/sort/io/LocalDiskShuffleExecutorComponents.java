@@ -57,6 +57,7 @@ public class LocalDiskShuffleExecutorComponents implements ShuffleExecutorCompon
       throw new IllegalStateException("No blockManager available from the SparkEnv.");
     }
     blockResolver = new IndexShuffleBlockResolver(sparkConf, blockManager);
+    IndexShuffleBlockResolver.set(blockResolver);
   }
 
   @Override

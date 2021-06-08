@@ -21,12 +21,11 @@ import java.io.*;
 import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.util.*;
+import java.util.zip.Adler32;
+import java.util.zip.CheckedInputStream;
 
 import org.mockito.stubbing.Answer;
-import scala.Option;
-import scala.Product2;
-import scala.Tuple2;
-import scala.Tuple2$;
+import scala.*;
 import scala.collection.Iterator;
 
 import com.google.common.collect.HashMultiset;
@@ -134,6 +133,9 @@ public class UnsafeShuffleWriterSuite {
         );
       });
 
+    IndexShuffleBlockResolver.set(shuffleBlockResolver);
+    doNothing().when(shuffleBlockResolver)
+      .writeChecksumFile(anyInt(), anyLong(), any(long[].class));
     when(shuffleBlockResolver.getDataFile(anyInt(), anyLong())).thenReturn(mergedOutputFile);
 
     Answer<?> renameTempAnswer = invocationOnMock -> {
@@ -172,6 +174,12 @@ public class UnsafeShuffleWriterSuite {
   }
 
   private UnsafeShuffleWriter<Object, Object> createWriter(boolean transferToEnabled) {
+    return createWriter(transferToEnabled, shuffleBlockResolver);
+  }
+
+  private UnsafeShuffleWriter<Object, Object> createWriter(
+    boolean transferToEnabled,
+    IndexShuffleBlockResolver blockResolver) {
     conf.set("spark.file.transferTo", String.valueOf(transferToEnabled));
     return new UnsafeShuffleWriter<>(
       blockManager,
@@ -181,7 +189,7 @@ public class UnsafeShuffleWriterSuite {
       taskContext,
       conf,
       taskContext.taskMetrics().shuffleWriteMetrics(),
-      new LocalDiskShuffleExecutorComponents(conf, blockManager, shuffleBlockResolver));
+      new LocalDiskShuffleExecutorComponents(conf, blockManager, blockResolver));
   }
 
   private void assertSpillFilesWereCleanedUp() {
@@ -289,6 +297,117 @@ public class UnsafeShuffleWriterSuite {
     assertEquals(0, taskMetrics.diskBytesSpilled());
     assertEquals(0, taskMetrics.memoryBytesSpilled());
     assertEquals(mergedOutputFile.length(), shuffleWriteMetrics.bytesWritten());
+  }
+
+  @Test
+  public void writeChecksumFileWithoutSpill() throws Exception {
+    IndexShuffleBlockResolver blockResolver = new IndexShuffleBlockResolver(conf, blockManager);
+    IndexShuffleBlockResolver.set(blockResolver);
+    File checksumFile = new File(tempDir, "checksum");
+    File dataFile = new File(tempDir, "data");
+    File indexFile = new File(tempDir, "index");
+    when(diskBlockManager.getFile(new ShuffleChecksumBlockId(shuffleDep.shuffleId(), 0, 0)))
+      .thenReturn(checksumFile);
+    when(diskBlockManager.getFile(new ShuffleDataBlockId(shuffleDep.shuffleId(), 0, 0)))
+      .thenReturn(dataFile);
+    when(diskBlockManager.getFile(new ShuffleIndexBlockId(shuffleDep.shuffleId(), 0, 0)))
+      .thenReturn(indexFile);
+
+    // In this example, each partition should have exactly one record:
+    final ArrayList<Product2<Object, Object>> dataToWrite = new ArrayList<>();
+    for (int i = 0; i < NUM_PARTITIONS; i ++) {
+      dataToWrite.add(new Tuple2<>(i, i));
+    }
+    final UnsafeShuffleWriter<Object, Object> writer1 = createWriter(true, blockResolver);
+    writer1.write(dataToWrite.iterator());
+    writer1.stop(true);
+    assertTrue(checksumFile.exists());
+    assertEquals(checksumFile.length(), 8 * NUM_PARTITIONS);
+    long[] expectChecksums = new long[NUM_PARTITIONS];
+    DataInputStream in1 = new DataInputStream(new FileInputStream(checksumFile));
+    for (int i = 0; i < NUM_PARTITIONS; i ++) {
+      expectChecksums[i] = in1.readLong();
+    }
+    in1.close();
+    checksumFile.delete();
+
+    assertTrue(dataFile.exists());
+    FileInputStream dataIn = new FileInputStream(dataFile);
+    assertTrue(indexFile.exists());
+    DataInputStream indexIn = new DataInputStream(new FileInputStream(indexFile));
+    CheckedInputStream checkedIn = null;
+    long prevOffset = indexIn.readLong();
+    for (int i = 0; i < NUM_PARTITIONS; i ++) {
+      long curOffset = indexIn.readLong();
+      int limit = (int) (curOffset - prevOffset);
+      byte[] bytes = new byte[limit];
+      checkedIn = new CheckedInputStream(
+        new LimitedInputStream(dataIn, curOffset - prevOffset), new Adler32());
+      checkedIn.read(bytes, 0, limit);
+      prevOffset = curOffset;
+      // checksum must be consistent at both write and read sides
+      assertEquals(checkedIn.getChecksum().getValue(), expectChecksums[i]);
+    }
+    dataIn.close();
+    indexIn.close();
+    checkedIn.close();
+  }
+
+  @Test
+  public void writeChecksumFileWithSpill() throws Exception {
+    IndexShuffleBlockResolver blockResolver = new IndexShuffleBlockResolver(conf, blockManager);
+    IndexShuffleBlockResolver.set(blockResolver);
+    File checksumFile = new File(tempDir, "checksum");
+    File dataFile = new File(tempDir, "data");
+    File indexFile = new File(tempDir, "index");
+    when(diskBlockManager.getFile((BlockId) any())).thenReturn(checksumFile);
+    when(diskBlockManager.getFile(new ShuffleDataBlockId(shuffleDep.shuffleId(), 0, 0)))
+      .thenReturn(dataFile);
+    when(diskBlockManager.getFile(new ShuffleIndexBlockId(shuffleDep.shuffleId(), 0, 0)))
+      .thenReturn(indexFile);
+
+    final UnsafeShuffleWriter<Object, Object> writer1 = createWriter(true, blockResolver);
+    writer1.insertRecordIntoSorter(new Tuple2<>(0, 0));
+    writer1.forceSorterToSpill();
+    writer1.insertRecordIntoSorter(new Tuple2<>(1, 0));
+    writer1.insertRecordIntoSorter(new Tuple2<>(2, 0));
+    writer1.forceSorterToSpill();
+    writer1.insertRecordIntoSorter(new Tuple2<>(0, 1));
+    writer1.insertRecordIntoSorter(new Tuple2<>(3, 0));
+    writer1.forceSorterToSpill();
+    writer1.insertRecordIntoSorter(new Tuple2<>(1, 1));
+    writer1.forceSorterToSpill();
+    writer1.insertRecordIntoSorter(new Tuple2<>(0, 2));
+    writer1.forceSorterToSpill();
+    writer1.closeAndWriteOutput();
+    assertTrue(checksumFile.exists());
+    assertEquals(checksumFile.length(), 8 * NUM_PARTITIONS);
+    DataInputStream in1 = new DataInputStream(new FileInputStream(checksumFile));
+    long[] expectChecksums = new long[NUM_PARTITIONS];
+    for (int i = 0; i < NUM_PARTITIONS; i ++) {
+      expectChecksums[i] = in1.readLong();
+    }
+    in1.close();
+    assertTrue(dataFile.exists());
+    FileInputStream dataIn = new FileInputStream(dataFile);
+    assertTrue(indexFile.exists());
+    DataInputStream indexIn = new DataInputStream(new FileInputStream(indexFile));
+    CheckedInputStream checkedIn = null;
+    long prevOffset = indexIn.readLong();
+    for (int i = 0; i < NUM_PARTITIONS; i ++) {
+      long curOffset = indexIn.readLong();
+      int limit = (int) (curOffset - prevOffset);
+      byte[] bytes = new byte[limit];
+      checkedIn = new CheckedInputStream(
+        new LimitedInputStream(dataIn, curOffset - prevOffset), new Adler32());
+      checkedIn.read(bytes, 0, limit);
+      prevOffset = curOffset;
+      // checksum must be consistent at both write and read sides
+      assertEquals(checkedIn.getChecksum().getValue(), expectChecksums[i]);
+    }
+    dataIn.close();
+    indexIn.close();
+    checkedIn.close();
   }
 
   private void testMergingSpills(

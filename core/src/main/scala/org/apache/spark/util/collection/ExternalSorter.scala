@@ -19,6 +19,8 @@ package org.apache.spark.util.collection
 
 import java.io._
 import java.util.Comparator
+import java.util.zip.Adler32
+import java.util.zip.Checksum
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
@@ -29,7 +31,7 @@ import org.apache.spark._
 import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.serializer._
-import org.apache.spark.shuffle.ShufflePartitionPairsWriter
+import org.apache.spark.shuffle.{IndexShuffleBlockResolver, ShufflePartitionPairsWriter}
 import org.apache.spark.shuffle.api.{ShuffleMapOutputWriter, ShufflePartitionWriter}
 import org.apache.spark.storage.{BlockId, DiskBlockObjectWriter, ShuffleBlockId}
 import org.apache.spark.util.{CompletionIterator, Utils => TryUtils}
@@ -140,6 +142,13 @@ private[spark] class ExternalSorter[K, V, C](
   @volatile private var isShuffleSort: Boolean = true
   private val forceSpillFiles = new ArrayBuffer[SpilledFile]
   @volatile private var readingIterator: SpillableIterator = null
+
+  private val checksumEnabled = conf.get(config.SHUFFLE_CHECKSUM)
+  private val partitionChecksums = if (checksumEnabled) {
+    Array.fill[Checksum](numPartitions)(new Adler32())
+  } else {
+    Array.empty
+  }
 
   // A comparator for keys K that orders them within a partition to allow aggregation or sorting.
   // Can be a partial ordering by hash code if a total ordering is not provided through by the
@@ -763,6 +772,7 @@ private[spark] class ExternalSorter[K, V, C](
             serInstance,
             blockId,
             context.taskMetrics().shuffleWriteMetrics)
+          partitionPairsWriter.setChecksum(partitionChecksums(partitionId))
           while (it.hasNext && it.nextPartition() == partitionId) {
             it.writeNext(partitionPairsWriter)
           }
@@ -787,6 +797,7 @@ private[spark] class ExternalSorter[K, V, C](
             serInstance,
             blockId,
             context.taskMetrics().shuffleWriteMetrics)
+          partitionPairsWriter.setChecksum(partitionChecksums(id))
           if (elements.hasNext) {
             for (elem <- elements) {
               partitionPairsWriter.write(elem._1, elem._2)
@@ -799,6 +810,11 @@ private[spark] class ExternalSorter[K, V, C](
         }
         nextPartitionId = id + 1
       }
+    }
+
+    if (checksumEnabled) {
+      IndexShuffleBlockResolver.get.writeChecksumFile(
+        shuffleId, mapId, partitionChecksums.map(_.getValue))
     }
 
     context.taskMetrics().incMemoryBytesSpilled(memoryBytesSpilled)

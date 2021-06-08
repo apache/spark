@@ -22,6 +22,8 @@ import java.nio.ByteBuffer
 import java.nio.channels.Channels
 import java.nio.file.Files
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.{SparkConf, SparkEnv, SparkException}
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.io.NioBufferedFileInputStream
@@ -414,6 +416,75 @@ private[spark] class IndexShuffleBlockResolver(
     new MergedBlockMeta(numChunks, chunkBitMaps)
   }
 
+  private[shuffle] def getChecksums(checksumFile: File, blockNum: Int): Array[Long] = {
+    if (!checksumFile.exists()) return null
+    val checksums = new ArrayBuffer[Long]
+    // Read the checksums of blocks
+    var in: DataInputStream = null
+    try {
+      in = new DataInputStream(new NioBufferedFileInputStream(checksumFile))
+      while (checksums.size < blockNum) {
+        checksums += in.readLong()
+      }
+    } catch {
+      case _: IOException | _: EOFException =>
+        return null
+    } finally {
+      in.close()
+    }
+
+    checksums.toArray
+  }
+
+  /**
+   * Get the shuffle checksum file.
+   *
+   * When the dirs parameter is None then use the disk manager's local directories. Otherwise,
+   * read from the specified directories.
+   */
+  def getChecksumFile(
+      shuffleId: Int,
+      mapId: Long,
+      dirs: Option[Array[String]] = None): File = {
+    val blockId = ShuffleChecksumBlockId(shuffleId, mapId, NOOP_REDUCE_ID)
+    dirs
+      .map(ExecutorDiskUtils.getFile(_, blockManager.subDirsPerLocalDir, blockId.name))
+      .getOrElse {
+        blockManager.diskBlockManager.getFile(blockId)
+      }
+  }
+
+  def writeChecksumFile(shuffleId: Int, mapId: Long, checksums: Array[Long]): Unit = synchronized {
+    val checksumFile = getChecksumFile(shuffleId, mapId)
+    val checksumTmp = Utils.tempFileWith(checksumFile)
+    val existingChecksums = getChecksums(checksumFile, checksums.length)
+    if (existingChecksums != null) {
+      // Another attempt for the same task has already written our checksum file successfully,
+      // so just use the existing checksums.
+      System.arraycopy(existingChecksums, 0, checksums, 0, checksums.length)
+    } else {
+      val out = new DataOutputStream(
+        new BufferedOutputStream(
+          new FileOutputStream(checksumTmp)
+        )
+      )
+      Utils.tryWithSafeFinally {
+        checksums.foreach(out.writeLong)
+      } {
+        out.close()
+      }
+
+      if (checksumFile.exists()) {
+        checksumFile.delete()
+      }
+      if (!checksumTmp.renameTo(checksumFile)) {
+        // It's not worthwhile to fail here after index file and data file are already
+        // successfully stored due to checksum is only used for the corner error case.
+        logWarning("fail to rename file " + checksumTmp + " to " + checksumFile)
+      }
+    }
+  }
+
   override def getBlockData(
       blockId: BlockId,
       dirs: Option[Array[String]]): ManagedBuffer = {
@@ -466,4 +537,10 @@ private[spark] object IndexShuffleBlockResolver {
   // The disk store currently expects puts to relate to a (map, reduce) pair, but in the sort
   // shuffle outputs for several reduces are glommed into a single file.
   val NOOP_REDUCE_ID = 0
+
+  @volatile private var _blockResolver: IndexShuffleBlockResolver = _
+
+  def set(resolver: IndexShuffleBlockResolver): Unit = _blockResolver = resolver
+
+  def get: IndexShuffleBlockResolver = _blockResolver
 }

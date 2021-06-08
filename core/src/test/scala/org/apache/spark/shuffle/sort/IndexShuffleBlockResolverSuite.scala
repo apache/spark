@@ -248,4 +248,14 @@ class IndexShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterEa
       outIndex.close()
     }
   }
+
+  test("write checksum file") {
+    val resolver = new IndexShuffleBlockResolver(conf, blockManager)
+    val checksumsInMemory = Array[Long](0, 1, 2, 3, 4, 5, 6, 7, 8, 9)
+    resolver.writeChecksumFile(0, 0, checksumsInMemory)
+    val checksumFile = resolver.getChecksumFile(0, 0)
+    assert(checksumFile.exists())
+    val checksumsFromFile = resolver.getChecksums(checksumFile, 10)
+    assert(checksumsInMemory === checksumsFromFile)
+  }
 }

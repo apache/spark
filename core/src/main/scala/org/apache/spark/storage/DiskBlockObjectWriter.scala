@@ -19,8 +19,10 @@ package org.apache.spark.storage
 
 import java.io.{BufferedOutputStream, File, FileOutputStream, OutputStream}
 import java.nio.channels.{ClosedByInterruptException, FileChannel}
+import java.util.zip.Checksum
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.io.MutableCheckedOutputStream
 import org.apache.spark.serializer.{SerializationStream, SerializerInstance, SerializerManager}
 import org.apache.spark.shuffle.ShuffleWriteMetricsReporter
 import org.apache.spark.util.Utils
@@ -77,6 +79,11 @@ private[spark] class DiskBlockObjectWriter(
   private var streamOpen = false
   private var hasBeenClosed = false
 
+  // checksum related
+  private var checksumEnabled = false
+  private var checksumOutputStream: MutableCheckedOutputStream = _
+  private var checksum: Checksum = _
+
   /**
    * Cursors used to represent positions in the file.
    *
@@ -101,12 +108,30 @@ private[spark] class DiskBlockObjectWriter(
    */
   private var numRecordsWritten = 0
 
+  /**
+   * Set the checksum that the checksumOutputStream should use
+   */
+  def setChecksum(checksum: Checksum): Unit = {
+    if (checksumOutputStream == null) {
+      this.checksumEnabled = true
+      this.checksum = checksum
+    } else {
+      checksumOutputStream.setChecksum(checksum)
+    }
+  }
+
   private def initialize(): Unit = {
     fos = new FileOutputStream(file, true)
     channel = fos.getChannel()
     ts = new TimeTrackingOutputStream(writeMetrics, fos)
+    if (checksumEnabled) {
+      assert(this.checksum != null, "Checksum is not set")
+      checksumOutputStream = new MutableCheckedOutputStream(ts)
+      checksumOutputStream.setChecksum(checksum)
+    }
     class ManualCloseBufferedOutputStream
-      extends BufferedOutputStream(ts, bufferSize) with ManualCloseOutputStream
+      extends BufferedOutputStream(if (checksumEnabled) checksumOutputStream else ts, bufferSize)
+        with ManualCloseOutputStream
     mcs = new ManualCloseBufferedOutputStream
   }
 

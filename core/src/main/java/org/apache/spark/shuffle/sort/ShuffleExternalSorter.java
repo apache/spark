@@ -21,7 +21,10 @@ import javax.annotation.Nullable;
 import java.io.File;
 import java.io.IOException;
 import java.util.LinkedList;
+import java.util.zip.Adler32;
+import java.util.zip.Checksum;
 
+import org.apache.spark.shuffle.IndexShuffleBlockResolver;
 import scala.Tuple2;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -72,6 +75,8 @@ final class ShuffleExternalSorter extends MemoryConsumer {
   @VisibleForTesting
   static final int DISK_WRITE_BUFFER_SIZE = 1024 * 1024;
 
+  private final int shuffleId;
+  private final long mapId;
   private final int numPartitions;
   private final TaskMemoryManager taskMemoryManager;
   private final BlockManager blockManager;
@@ -107,11 +112,16 @@ final class ShuffleExternalSorter extends MemoryConsumer {
   @Nullable private MemoryBlock currentPage = null;
   private long pageCursor = -1;
 
+  private boolean checksumEnabled;
+  private Checksum[] partitionChecksums;
+
   ShuffleExternalSorter(
       TaskMemoryManager memoryManager,
       BlockManager blockManager,
       TaskContext taskContext,
       int initialSize,
+      int shuffleId,
+      long mapId,
       int numPartitions,
       SparkConf conf,
       ShuffleWriteMetricsReporter writeMetrics) {
@@ -121,6 +131,8 @@ final class ShuffleExternalSorter extends MemoryConsumer {
     this.taskMemoryManager = memoryManager;
     this.blockManager = blockManager;
     this.taskContext = taskContext;
+    this.shuffleId = shuffleId;
+    this.mapId = mapId;
     this.numPartitions = numPartitions;
     // Use getSizeAsKb (not bytes) to maintain backwards compatibility if no units are provided
     this.fileBufferSizeBytes =
@@ -133,6 +145,21 @@ final class ShuffleExternalSorter extends MemoryConsumer {
     this.peakMemoryUsedBytes = getMemoryUsage();
     this.diskWriteBufferSize =
         (int) (long) conf.get(package$.MODULE$.SHUFFLE_DISK_WRITE_BUFFER_SIZE());
+    if ((boolean) conf.get(package$.MODULE$.SHUFFLE_CHECKSUM())) {
+      this.checksumEnabled = true;
+      this.partitionChecksums = new Adler32[numPartitions];
+      for (int i = 0; i < numPartitions; i ++) {
+        this.partitionChecksums[i] = new Adler32();
+      }
+    }
+  }
+
+  public void writeChecksumFile() {
+    long[] checksums = new long[numPartitions];
+    for (int i = 0; i < numPartitions; i ++) {
+      checksums[i] = partitionChecksums[i].getValue();
+    }
+    IndexShuffleBlockResolver.get().writeChecksumFile(shuffleId, mapId, checksums);
   }
 
   /**
@@ -204,6 +231,9 @@ final class ShuffleExternalSorter extends MemoryConsumer {
             spillInfo.partitionLengths[currentPartition] = fileSegment.length();
           }
           currentPartition = partition;
+          if (checksumEnabled) {
+            writer.setChecksum(partitionChecksums[currentPartition]);
+          }
         }
 
         final long recordPointer = sortedRecords.packedRecordPointer.getRecordPointer();
