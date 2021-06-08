@@ -274,6 +274,9 @@ class SymmetricHashJoinStateManager(
           if (valuePairAtMaxIndex != null) {
             keyWithIndexToValue.put(currentKey, index, valuePairAtMaxIndex.value,
               valuePairAtMaxIndex.matched)
+          } else {
+            logWarning(s"`keyWithIndexToValue` returns a null value for index ${numValues - 1} " +
+              "at current key.")
           }
         }
         keyWithIndexToValue.remove(currentKey, numValues - 1)
