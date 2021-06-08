@@ -126,9 +126,7 @@ trait InvokeLike extends Expression with NonSQLExpression {
    *
    * @param obj the object for the method to be called. If null, perform s static method call
    * @param method the method object to be called
-   * @param arguments the arguments used for the method call
    * @param input the row used for evaluating arguments
-   * @param dataType the data type of the return object
    * @return the return object of a method call
    */
   def invoke(obj: Any, method: Method, input: InternalRow): Any = {
