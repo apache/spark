@@ -108,7 +108,11 @@ private[sql] trait LookupCatalog extends Logging {
     def unapply(nameParts: Seq[String]): Option[(CatalogPlugin, Identifier)] = {
       assert(nameParts.nonEmpty)
       if (nameParts.length == 1) {
-        Some((currentCatalog, Identifier.of(catalogManager.currentNamespace, nameParts.head)))
+        val defaultDB = SQLConf.get.defaultDataBase
+        val namespace = if (defaultDB != null && defaultDB.nonEmpty) Array(defaultDB)
+        else catalogManager.currentNamespace
+
+        Some((currentCatalog, Identifier.of(namespace, nameParts.head)))
       } else if (nameParts.head.equalsIgnoreCase(globalTempDB)) {
         // Conceptually global temp views are in a special reserved catalog. However, the v2 catalog
         // API does not support view yet, and we have to use v1 commands to deal with global temp
