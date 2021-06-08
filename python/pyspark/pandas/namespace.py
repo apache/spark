@@ -2339,7 +2339,7 @@ def concat(objs, axis=0, join="outer", ignore_index=False, sort=False) -> Union[
                         ],
                         column_labels=(psdf._internal.column_labels + columns_to_add),
                         data_spark_columns=[scol_for(sdf, col) for col in data_columns],
-                        data_dtypes=(psdf._internal.data_dtypes + ([None] * len(columns_to_add))),
+                        data_fields=(psdf._internal.data_fields + ([None] * len(columns_to_add))),
                     )
                 )
 
@@ -2361,22 +2361,22 @@ def concat(objs, axis=0, join="outer", ignore_index=False, sort=False) -> Union[
     if ignore_index:
         index_spark_column_names = []
         index_names = []
-        index_dtypes = []
+        index_fields = []
     else:
         index_spark_column_names = psdfs[0]._internal.index_spark_column_names
         index_names = psdfs[0]._internal.index_names
-        index_dtypes = psdfs[0]._internal.index_dtypes
+        index_fields = psdfs[0]._internal.index_fields
 
     result_psdf = DataFrame(
         psdfs[0]._internal.copy(
             spark_frame=concatenated,
             index_spark_columns=[scol_for(concatenated, col) for col in index_spark_column_names],
             index_names=index_names,
-            index_dtypes=index_dtypes,
+            index_fields=index_fields,
             data_spark_columns=[
                 scol_for(concatenated, col) for col in psdfs[0]._internal.data_spark_column_names
             ],
-            data_dtypes=None,  # TODO: dtypes?
+            data_fields=None,  # TODO: dtypes?
         )
     )  # type: DataFrame
 

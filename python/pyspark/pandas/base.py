@@ -43,6 +43,7 @@ from pyspark import pandas as ps  # For running doctests and reference resolutio
 from pyspark.pandas import numpy_compat
 from pyspark.pandas.config import get_option, option_context
 from pyspark.pandas.internal import (
+    InternalField,
     InternalFrame,
     NATURAL_ORDER_COLUMN_NAME,
     SPARK_DEFAULT_INDEX_NAME,
@@ -52,7 +53,6 @@ from pyspark.pandas.typedef import (
     Dtype,
     extension_dtypes,
     pandas_on_spark_type,
-    spark_type_to_pandas_dtype,
 )
 from pyspark.pandas.utils import (
     combine_frames,
@@ -230,22 +230,21 @@ def column_op(f):
             args = [arg.spark.column if isinstance(arg, IndexOpsMixin) else arg for arg in args]
             scol = f(self.spark.column, *args)
 
-            spark_type = self._internal.spark_frame.select(scol).schema[0].dataType
-            use_extension_dtypes = any(
-                isinstance(col.dtype, extension_dtypes) for col in [self] + cols
-            )
-            dtype = spark_type_to_pandas_dtype(
-                spark_type, use_extension_dtypes=use_extension_dtypes
+            field = InternalField.from_struct_field(
+                self._internal.spark_frame.select(scol).schema[0],
+                use_extension_dtypes=any(
+                    isinstance(col.dtype, extension_dtypes) for col in [self] + cols
+                ),
             )
 
-            if not isinstance(dtype, extension_dtypes):
-                scol = booleanize_null(scol, f)
+            if not field.is_extension_dtype:
+                scol = booleanize_null(scol, f).alias(field.name)
 
             if isinstance(self, Series) or not any(isinstance(col, Series) for col in cols):
-                index_ops = self._with_new_scol(scol, dtype=dtype)
+                index_ops = self._with_new_scol(scol, field=field)
             else:
                 psser = next(col for col in cols if isinstance(col, Series))
-                index_ops = psser._with_new_scol(scol, dtype=dtype)
+                index_ops = psser._with_new_scol(scol, field=field)
         elif get_option("compute.ops_on_diff_frames"):
             index_ops = align_diff_index_ops(f, self, *args)
         else:
@@ -293,7 +292,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         pass
 
     @abstractmethod
-    def _with_new_scol(self, scol: spark.Column, *, dtype=None):
+    def _with_new_scol(self, scol: spark.Column, *, field: Optional[InternalField] = None):
         pass
 
     @property
@@ -460,7 +459,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         >>> s.rename("a").to_frame().set_index("a").index.dtype
         dtype('<M8[ns]')
         """
-        return self._internal.data_dtypes[0]
+        return self._internal.data_fields[0].dtype
 
     @property
     def empty(self) -> bool:
@@ -827,7 +826,10 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
             if dtype.categories is None:
                 codes, uniques = self.factorize()
                 return codes._with_new_scol(
-                    codes.spark.column, dtype=CategoricalDtype(categories=uniques)
+                    codes.spark.column,
+                    field=codes._internal.data_fields[0].copy(
+                        dtype=CategoricalDtype(categories=uniques)
+                    ),
                 )
             else:
                 categories = dtype.categories
@@ -844,7 +846,10 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
 
                     scol = F.coalesce(map_scol.getItem(self.spark.column), F.lit(-1))
                 return self._with_new_scol(
-                    scol.alias(self._internal.data_spark_column_names[0]), dtype=dtype
+                    scol.cast(spark_type).alias(self._internal.data_fields[0].name),
+                    field=self._internal.data_fields[0].copy(
+                        dtype=dtype, spark_type=spark_type, nullable=False
+                    ),
                 )
 
         if isinstance(spark_type, BooleanType):
@@ -892,7 +897,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         else:
             scol = self.spark.column.cast(spark_type)
         return self._with_new_scol(
-            scol.alias(self._internal.data_spark_column_names[0]), dtype=dtype
+            scol.alias(self._internal.data_spark_column_names[0]), field=InternalField(dtype=dtype)
         )
 
     def isin(self, values) -> Union["Series", "Index"]:
@@ -1216,7 +1221,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         )
         lag_col = F.lag(col, periods).over(window)
         col = F.when(lag_col.isNull() | F.isnan(lag_col), fill_value).otherwise(lag_col)
-        return self._with_new_scol(col, dtype=self.dtype)
+        return self._with_new_scol(col, field=self._internal.data_fields[0].copy(nullable=True))
 
     # TODO: Update Documentation for Bins Parameter when its supported
     def value_counts(
