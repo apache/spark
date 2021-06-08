@@ -614,20 +614,20 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     Seq(true, false).foreach { failOnError =>
       checkExceptionInExpression[ArithmeticException](
         UnaryMinus(
-          Literal.create(Period.ofMonths(Int.MinValue), YearMonthIntervalType),
+          Literal.create(Period.ofMonths(Int.MinValue), YearMonthIntervalType.DEFAULT),
           failOnError),
         "overflow")
       checkExceptionInExpression[ArithmeticException](
         Subtract(
-          Literal.create(Period.ofMonths(Int.MinValue), YearMonthIntervalType),
-          Literal.create(Period.ofMonths(10), YearMonthIntervalType),
+          Literal.create(Period.ofMonths(Int.MinValue), YearMonthIntervalType.DEFAULT),
+          Literal.create(Period.ofMonths(10), YearMonthIntervalType.DEFAULT),
           failOnError
         ),
         "overflow")
       checkExceptionInExpression[ArithmeticException](
         Add(
-          Literal.create(Period.ofMonths(Int.MaxValue), YearMonthIntervalType),
-          Literal.create(Period.ofMonths(10), YearMonthIntervalType),
+          Literal.create(Period.ofMonths(Int.MaxValue), YearMonthIntervalType.DEFAULT),
+          Literal.create(Period.ofMonths(10), YearMonthIntervalType.DEFAULT),
           failOnError
         ),
         "overflow")

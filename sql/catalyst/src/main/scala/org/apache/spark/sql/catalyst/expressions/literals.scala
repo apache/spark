@@ -83,7 +83,7 @@ object Literal {
     case ld: LocalDate => Literal(ld.toEpochDay.toInt, DateType)
     case d: Date => Literal(DateTimeUtils.fromJavaDate(d), DateType)
     case d: Duration => Literal(durationToMicros(d), DayTimeIntervalType)
-    case p: Period => Literal(periodToMonths(p), YearMonthIntervalType)
+    case p: Period => Literal(periodToMonths(p), YearMonthIntervalType.DEFAULT)
     case a: Array[Byte] => Literal(a, BinaryType)
     case a: collection.mutable.WrappedArray[_] => apply(a.array)
     case a: Array[_] =>
@@ -120,7 +120,7 @@ object Literal {
     case _ if clz == classOf[Instant] => TimestampType
     case _ if clz == classOf[Timestamp] => TimestampType
     case _ if clz == classOf[Duration] => DayTimeIntervalType
-    case _ if clz == classOf[Period] => YearMonthIntervalType
+    case _ if clz == classOf[Period] => YearMonthIntervalType.DEFAULT
     case _ if clz == classOf[JavaBigDecimal] => DecimalType.SYSTEM_DEFAULT
     case _ if clz == classOf[Array[Byte]] => BinaryType
     case _ if clz == classOf[Array[Char]] => StringType
@@ -178,7 +178,7 @@ object Literal {
     case DateType => create(0, DateType)
     case TimestampType => create(0L, TimestampType)
     case DayTimeIntervalType => create(0L, DayTimeIntervalType)
-    case YearMonthIntervalType => create(0, YearMonthIntervalType)
+    case it: YearMonthIntervalType => create(0, it)
     case StringType => Literal("")
     case BinaryType => Literal("".getBytes(StandardCharsets.UTF_8))
     case CalendarIntervalType => Literal(new CalendarInterval(0, 0, 0))
@@ -197,7 +197,7 @@ object Literal {
       case BooleanType => v.isInstanceOf[Boolean]
       case ByteType => v.isInstanceOf[Byte]
       case ShortType => v.isInstanceOf[Short]
-      case IntegerType | DateType | YearMonthIntervalType => v.isInstanceOf[Int]
+      case IntegerType | DateType | _: YearMonthIntervalType => v.isInstanceOf[Int]
       case LongType | TimestampType | DayTimeIntervalType => v.isInstanceOf[Long]
       case FloatType => v.isInstanceOf[Float]
       case DoubleType => v.isInstanceOf[Double]
@@ -343,7 +343,8 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
         case TimestampType =>
           TimestampFormatter.getFractionFormatter(timeZoneId).format(value.asInstanceOf[Long])
         case DayTimeIntervalType => toDayTimeIntervalString(value.asInstanceOf[Long], ANSI_STYLE)
-        case YearMonthIntervalType => toYearMonthIntervalString(value.asInstanceOf[Int], ANSI_STYLE)
+        case _: YearMonthIntervalType =>
+          toYearMonthIntervalString(value.asInstanceOf[Int], ANSI_STYLE)
         case _ =>
           other.toString
       }
@@ -396,7 +397,7 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
         ExprCode.forNonNullValue(JavaCode.literal(code, dataType))
       }
       dataType match {
-        case BooleanType | IntegerType | DateType | YearMonthIntervalType =>
+        case BooleanType | IntegerType | DateType | _: YearMonthIntervalType =>
           toExprCode(value.toString)
         case FloatType =>
           value.asInstanceOf[Float] match {
@@ -465,7 +466,7 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
       s"INTERVAL '${i.toString}'"
     case (v: Array[Byte], BinaryType) => s"X'${DatatypeConverter.printHexBinary(v)}'"
     case (i: Long, DayTimeIntervalType) => toDayTimeIntervalString(i, ANSI_STYLE)
-    case (i: Int, YearMonthIntervalType) => toYearMonthIntervalString(i, ANSI_STYLE)
+    case (i: Int, _: YearMonthIntervalType) => toYearMonthIntervalString(i, ANSI_STYLE)
     case _ => value.toString
   }
 }

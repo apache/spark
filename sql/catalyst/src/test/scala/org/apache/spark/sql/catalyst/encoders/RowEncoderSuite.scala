@@ -353,7 +353,7 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
   }
 
   test("SPARK-34615: encoding/decoding YearMonthIntervalType to/from java.time.Period") {
-    val schema = new StructType().add("p", YearMonthIntervalType)
+    val schema = new StructType().add("p", YearMonthIntervalType.DEFAULT)
     val encoder = RowEncoder(schema).resolveAndBind()
     val period = java.time.Period.ofMonths(1)
     val row = toRow(encoder, Row(period))

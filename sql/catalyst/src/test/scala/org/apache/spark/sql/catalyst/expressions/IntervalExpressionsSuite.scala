@@ -308,7 +308,7 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     numericTypes.foreach { numType =>
       checkConsistencyBetweenInterpretedAndCodegenAllowingException(
         (interval: Expression, num: Expression) => MultiplyYMInterval(interval, num),
-        YearMonthIntervalType, numType)
+        YearMonthIntervalType(), numType)
     }
   }
 
@@ -374,7 +374,7 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     numericTypes.foreach { numType =>
       checkConsistencyBetweenInterpretedAndCodegenAllowingException(
         (interval: Expression, num: Expression) => DivideYMInterval(interval, num),
-        YearMonthIntervalType, numType)
+        YearMonthIntervalType(), numType)
     }
   }
 
@@ -422,8 +422,10 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(ExtractANSIIntervalMonths(Literal(p)),
         IntervalUtils.getMonths(p.toTotalMonths.toInt))
     }
-    checkEvaluation(ExtractANSIIntervalYears(Literal(null, YearMonthIntervalType)), null)
-    checkEvaluation(ExtractANSIIntervalMonths(Literal(null, YearMonthIntervalType)), null)
+    checkEvaluation(
+      ExtractANSIIntervalYears(Literal(null, YearMonthIntervalType.defaultConcreteType)), null)
+    checkEvaluation(
+      ExtractANSIIntervalMonths(Literal(null, YearMonthIntervalType.defaultConcreteType)), null)
   }
 
   test("ANSI: extract days, hours, minutes and seconds") {

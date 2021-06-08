@@ -525,7 +525,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   private def testAddMonths(dataType: DataType): Unit = {
     def addMonths(date: Literal, months: Any): AddMonthsBase = dataType match {
       case IntegerType => AddMonths(date, Literal.create(months, dataType))
-      case YearMonthIntervalType =>
+      case _: YearMonthIntervalType =>
         val period = if (months == null) null else Period.ofMonths(months.asInstanceOf[Int])
         DateAddYMInterval(date, Literal.create(period, dataType))
     }
@@ -560,7 +560,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("SPARK-34721: add a year-month interval to a date") {
-    testAddMonths(YearMonthIntervalType)
+    testAddMonths(YearMonthIntervalType())
     // Test evaluation results between Interpreted mode and Codegen mode
     forAll (
       LiteralGenerator.randomGen(DateType),
@@ -1595,18 +1595,18 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(
         TimestampAddYMInterval(
           Literal(new Timestamp(sdf.parse("2016-01-29 10:00:00.000").getTime)),
-          Literal.create(null, YearMonthIntervalType),
+          Literal.create(null, YearMonthIntervalType.defaultConcreteType),
           timeZoneId),
         null)
       checkEvaluation(
         TimestampAddYMInterval(
           Literal.create(null, TimestampType),
-          Literal.create(null, YearMonthIntervalType),
+          Literal.create(null, YearMonthIntervalType.defaultConcreteType),
           timeZoneId),
         null)
       checkConsistencyBetweenInterpretedAndCodegen(
         (ts: Expression, interval: Expression) => TimestampAddYMInterval(ts, interval, timeZoneId),
-        TimestampType, YearMonthIntervalType)
+        TimestampType, YearMonthIntervalType())
     }
   }
 

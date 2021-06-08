@@ -116,7 +116,7 @@ object SerializerBuildHelper {
   def createSerializerForJavaPeriod(inputObject: Expression): Expression = {
     StaticInvoke(
       IntervalUtils.getClass,
-      YearMonthIntervalType,
+      YearMonthIntervalType.DEFAULT,
       "periodToMonths",
       inputObject :: Nil,
       returnNullable = false)

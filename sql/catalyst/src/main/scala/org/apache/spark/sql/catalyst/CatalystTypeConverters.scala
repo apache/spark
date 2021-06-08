@@ -75,7 +75,7 @@ object CatalystTypeConverters {
       case FloatType => FloatConverter
       case DoubleType => DoubleConverter
       case DayTimeIntervalType => DurationConverter
-      case YearMonthIntervalType => PeriodConverter
+      case _: YearMonthIntervalType => PeriodConverter
       case dataType: DataType => IdentityConverter(dataType)
     }
     converter.asInstanceOf[CatalystTypeConverter[Any, Any, Any]]

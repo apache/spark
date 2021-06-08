@@ -55,7 +55,7 @@ object DataTypeTestUtils {
   val numericAndInterval: Set[DataType] = numericTypeWithoutDecimal ++ Set(
     CalendarIntervalType,
     DayTimeIntervalType,
-    YearMonthIntervalType)
+    YearMonthIntervalType())
 
   /**
    * All the types that support ordering
@@ -67,7 +67,7 @@ object DataTypeTestUtils {
     StringType,
     BinaryType,
     DayTimeIntervalType,
-    YearMonthIntervalType)
+    YearMonthIntervalType())
 
   /**
    * All the types that we can use in a property check
@@ -84,7 +84,7 @@ object DataTypeTestUtils {
     StringType,
     TimestampType,
     DayTimeIntervalType,
-    YearMonthIntervalType
+    YearMonthIntervalType()
   )
 
   /**

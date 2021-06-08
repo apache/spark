@@ -1129,7 +1129,7 @@ class DataFrameAggregateSuite extends QueryTest
     val sumDF = df.select(sum($"year-month"), sum($"day-time"))
     checkAnswer(sumDF, Row(Period.of(2, 5, 0), Duration.ofDays(0)))
     assert(find(sumDF.queryExecution.executedPlan)(_.isInstanceOf[HashAggregateExec]).isDefined)
-    assert(sumDF.schema == StructType(Seq(StructField("sum(year-month)", YearMonthIntervalType),
+    assert(sumDF.schema == StructType(Seq(StructField("sum(year-month)", YearMonthIntervalType()),
       StructField("sum(day-time)", DayTimeIntervalType))))
 
     val sumDF2 = df.groupBy($"class").agg(sum($"year-month"), sum($"day-time"))
@@ -1138,7 +1138,7 @@ class DataFrameAggregateSuite extends QueryTest
       Row(3, Period.of(1, 6, 0), Duration.ofDays(-11)) :: Nil)
     assert(find(sumDF2.queryExecution.executedPlan)(_.isInstanceOf[HashAggregateExec]).isDefined)
     assert(sumDF2.schema == StructType(Seq(StructField("class", IntegerType, false),
-      StructField("sum(year-month)", YearMonthIntervalType),
+      StructField("sum(year-month)", YearMonthIntervalType()),
       StructField("sum(day-time)", DayTimeIntervalType))))
 
     val error = intercept[SparkException] {
@@ -1167,7 +1167,7 @@ class DataFrameAggregateSuite extends QueryTest
     val avgDF = df.select(avg($"year-month"), avg($"day-time"))
     checkAnswer(avgDF, Row(Period.ofMonths(7), Duration.ofDays(0)))
     assert(find(avgDF.queryExecution.executedPlan)(_.isInstanceOf[HashAggregateExec]).isDefined)
-    assert(avgDF.schema == StructType(Seq(StructField("avg(year-month)", YearMonthIntervalType),
+    assert(avgDF.schema == StructType(Seq(StructField("avg(year-month)", YearMonthIntervalType()),
       StructField("avg(day-time)", DayTimeIntervalType))))
 
     val avgDF2 = df.groupBy($"class").agg(avg($"year-month"), avg($"day-time"))
@@ -1176,7 +1176,7 @@ class DataFrameAggregateSuite extends QueryTest
       Row(3, Period.ofMonths(9), Duration.ofDays(-5).plusHours(-12)) :: Nil)
     assert(find(avgDF2.queryExecution.executedPlan)(_.isInstanceOf[HashAggregateExec]).isDefined)
     assert(avgDF2.schema == StructType(Seq(StructField("class", IntegerType, false),
-      StructField("avg(year-month)", YearMonthIntervalType),
+      StructField("avg(year-month)", YearMonthIntervalType()),
       StructField("avg(day-time)", DayTimeIntervalType))))
 
     val error = intercept[SparkException] {

@@ -2396,7 +2396,7 @@ object DatePart {
         throw QueryCompilationErrors.literalTypeUnsupportedForSourceTypeError(fieldStr, source)
 
       source.dataType match {
-        case YearMonthIntervalType | DayTimeIntervalType | CalendarIntervalType =>
+        case _: YearMonthIntervalType | DayTimeIntervalType | CalendarIntervalType =>
           ExtractIntervalPart.parseExtractField(fieldStr, source, analysisException)
         case _ =>
           DatePart.parseExtractField(fieldStr, source, analysisException)

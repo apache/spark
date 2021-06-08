@@ -74,7 +74,7 @@ object Cast {
 
     case (StringType, CalendarIntervalType) => true
     case (StringType, DayTimeIntervalType) => true
-    case (StringType, YearMonthIntervalType) => true
+    case (StringType, _: YearMonthIntervalType) => true
 
     case (StringType, _: NumericType) => true
     case (BooleanType, _: NumericType) => true
@@ -410,7 +410,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
     case pudt: PythonUserDefinedType => castToString(pudt.sqlType)
     case udt: UserDefinedType[_] =>
       buildCast[Any](_, o => UTF8String.fromString(udt.deserialize(o).toString))
-    case YearMonthIntervalType =>
+    case _: YearMonthIntervalType =>
       buildCast[Int](_, i => UTF8String.fromString(
         IntervalUtils.toYearMonthIntervalString(i, ANSI_STYLE)))
     case DayTimeIntervalType =>
@@ -849,7 +849,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
         case TimestampType => castToTimestamp(from)
         case CalendarIntervalType => castToInterval(from)
         case DayTimeIntervalType => castToDayTimeInterval(from)
-        case YearMonthIntervalType => castToYearMonthInterval(from)
+        case _: YearMonthIntervalType => castToYearMonthInterval(from)
         case BooleanType => castToBoolean(from)
         case ByteType => castToByte(from)
         case ShortType => castToShort(from)
@@ -909,7 +909,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
     case TimestampType => castToTimestampCode(from, ctx)
     case CalendarIntervalType => castToIntervalCode(from)
     case DayTimeIntervalType => castToDayTimeIntervalCode(from)
-    case YearMonthIntervalType => castToYearMonthIntervalCode(from)
+    case _: YearMonthIntervalType => castToYearMonthIntervalCode(from)
     case BooleanType => castToBooleanCode(from)
     case ByteType => castToByteCode(from, ctx)
     case ShortType => castToShortCode(from, ctx)
@@ -1143,7 +1143,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
         (c, evPrim, evNull) => {
           code"$evPrim = UTF8String.fromString($udtRef.deserialize($c).toString());"
         }
-      case i @ (YearMonthIntervalType | DayTimeIntervalType) =>
+      case i @ (_: YearMonthIntervalType | DayTimeIntervalType) =>
         val iu = IntervalUtils.getClass.getName.stripSuffix("$")
         val iss = IntervalStringStyles.getClass.getName.stripSuffix("$")
         val subType = if (i.isInstanceOf[YearMonthIntervalType]) "YearMonth" else "DayTime"
@@ -1935,7 +1935,7 @@ object AnsiCast {
 
     case (StringType, _: CalendarIntervalType) => true
     case (StringType, DayTimeIntervalType) => true
-    case (StringType, YearMonthIntervalType) => true
+    case (StringType, _: YearMonthIntervalType) => true
 
     case (StringType, DateType) => true
     case (TimestampType, DateType) => true

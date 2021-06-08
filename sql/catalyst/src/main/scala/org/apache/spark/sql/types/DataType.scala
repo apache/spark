@@ -171,7 +171,7 @@ object DataType {
   private val otherTypes = {
     Seq(NullType, DateType, TimestampType, BinaryType, IntegerType, BooleanType, LongType,
       DoubleType, FloatType, ShortType, ByteType, StringType, CalendarIntervalType,
-      DayTimeIntervalType, YearMonthIntervalType)
+      DayTimeIntervalType)
       .map(t => t.typeName -> t).toMap
   }
 
@@ -179,6 +179,7 @@ object DataType {
   private def nameToType(name: String): DataType = {
     name match {
       case "decimal" => DecimalType.USER_DEFAULT
+      case "interval year to month" => YearMonthIntervalType.DEFAULT
       case FIXED_DECIMAL(precision, scale) => DecimalType(precision.toInt, scale.toInt)
       case CHAR_TYPE(length) => CharType(length.toInt)
       case VARCHAR_TYPE(length) => VarcharType(length.toInt)

@@ -43,6 +43,9 @@ import org.apache.spark.sql.types.YearMonthIntervalType.{MONTH, YEAR}
  */
 @Unstable
 case class YearMonthIntervalType(start: Byte, end: Byte) extends AtomicType {
+  // default constructor for Java
+  def this() = this(YEAR, MONTH)
+
   /**
    * Internally, values of year-month intervals are stored in `Int` values as amount of months
    * that are calculated by the formula:
@@ -76,16 +79,23 @@ case class YearMonthIntervalType(start: Byte, end: Byte) extends AtomicType {
 }
 
 /**
- * The companion case object and its class is separated so the companion object also subclasses
- * the YearMonthIntervalType class. Otherwise, the companion object would be of type
- * "YearMonthIntervalType$" in byte code. Defined with a private constructor so the companion object
- * is the only possible instantiation.
+ * Extra factory methods and pattern matchers for the year-month interval type.
  *
  * @since 3.2.0
  */
 @Unstable
-object YearMonthIntervalType {
+object YearMonthIntervalType extends AbstractDataType {
   val YEAR: Byte = 0
   val MONTH: Byte = 1
-  val DEFAULT: YearMonthIntervalType = YearMonthIntervalType(YEAR, MONTH)
+  val DEFAULT: YearMonthIntervalType = new YearMonthIntervalType()
+
+  def apply(): YearMonthIntervalType = new YearMonthIntervalType()
+
+  override private[sql] def defaultConcreteType: DataType = DEFAULT
+
+  override private[sql] def acceptsType(other: DataType): Boolean = {
+    other.isInstanceOf[YearMonthIntervalType]
+  }
+
+  override private[sql] def simpleString: String = defaultConcreteType.simpleString
 }
