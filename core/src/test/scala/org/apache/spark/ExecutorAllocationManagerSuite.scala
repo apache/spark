@@ -90,12 +90,12 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
 
   test("verify min/max executors") {
     // Min < 0
-    intercept[SparkException] {
+    intercept[IllegalArgumentException] {
       createManager(createConf().set(config.DYN_ALLOCATION_MIN_EXECUTORS, -1))
     }
 
     // Max < 0
-    intercept[SparkException] {
+    intercept[IllegalArgumentException] {
       createManager(createConf().set(config.DYN_ALLOCATION_MAX_EXECUTORS, -1))
     }
 
