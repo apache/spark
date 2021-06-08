@@ -634,9 +634,8 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
             if isinstance(value, (Series, spark.Column)):
                 if remaining_index is not None and remaining_index == 0:
                     raise ValueError(
-                        "No axis named {} for object type {}".format(
-                            key,
-                            type(value).__name__))
+                        "No axis named {} for object type {}".format(key, type(value).__name__)
+                    )
                 if isinstance(value, Series):
                     value = value.spark.column
             else:
@@ -678,12 +677,9 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
                 and (isinstance(self, iLocIndexer) or not same_anchor(value, self._psdf_or_psser))
             ):
                 psdf = cast(DataFrame, self._psdf_or_psser.copy())
-                temp_natural_order = verify_temp_column_name(
-                    psdf, "__temp_natural_order__")
-                temp_key_col = verify_temp_column_name(
-                    psdf, "__temp_key_col__")
-                temp_value_col = verify_temp_column_name(
-                    psdf, "__temp_value_col__")
+                temp_natural_order = verify_temp_column_name(psdf, "__temp_natural_order__")
+                temp_key_col = verify_temp_column_name(psdf, "__temp_key_col__")
+                temp_value_col = verify_temp_column_name(psdf, "__temp_value_col__")
 
                 psdf[temp_natural_order] = F.monotonically_increasing_id()
                 if isinstance(rows_sel, Series):
