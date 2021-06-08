@@ -42,8 +42,7 @@ class YarnShuffleServiceMetricsSuite extends SparkFunSuite with Matchers {
       "openBlockRequestLatencyMillis", "registerExecutorRequestLatencyMillis",
       "blockTransferRate", "blockTransferMessageRate", "blockTransferAvgSize_1min",
       "blockTransferRateBytes", "registeredExecutorsSize", "numActiveConnections",
-      "numCaughtExceptions", "finalizeShuffleMergeLatencyMillis",
-      "fetchMergedBlocksMetaLatencyMillis")
+      "numCaughtExceptions", "finalizeShuffleMergeLatencyMillis")
 
     // Use sorted Seq instead of Set for easier comparison when there is a mismatch
     metrics.getMetrics.keySet().asScala.toSeq.sorted should be (allMetrics.sorted)
