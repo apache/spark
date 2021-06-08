@@ -36,7 +36,6 @@ public class StorageLevels {
   public static final StorageLevel MEMORY_AND_DISK_SER = create(true, true, false, false, 1);
   public static final StorageLevel MEMORY_AND_DISK_SER_2 = create(true, true, false, false, 2);
   public static final StorageLevel OFF_HEAP = create(true, true, true, false, 1);
-  public static final StorageLevel OFF_HEAP_ONLY_DESER = create(false, true, true, true, 1);
 
   /**
    * Create a new StorageLevel object.
