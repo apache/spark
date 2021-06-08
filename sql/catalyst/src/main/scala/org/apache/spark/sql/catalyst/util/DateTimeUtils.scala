@@ -72,7 +72,7 @@ object DateTimeUtils {
   }
 
   def microsToLocalDateTime(micros: Long): LocalDateTime = {
-    getLocalDateTime(micros, ZoneId.of("UTC"))
+    getLocalDateTime(micros, ZoneOffset.UTC)
   }
 
   def localDateTimeToMicros(localDateTime: LocalDateTime): Long = {
