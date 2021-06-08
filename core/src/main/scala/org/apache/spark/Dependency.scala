@@ -134,7 +134,18 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
     _shuffleMergedFinalized = true
   }
 
-  def shuffleMergeFinalized : Boolean = _shuffleMergedFinalized
+  /**
+   * Returns true if push based shuffle is disabled for this stage, or if the shuffle merge for
+   * this stage is finalized, i.e. the shuffle merge results for all partitions are available.
+   */
+  def shuffleMergeFinalized : Boolean = {
+    // Empty RDD won't be computed therefore shuffle merge finalized should be true by default.
+    if (shuffleMergeEnabled && rdd.getNumPartitions > 0) {
+      _shuffleMergedFinalized
+    } else {
+      true
+    }
+  }
 
   _rdd.sparkContext.cleaner.foreach(_.registerShuffleForCleanup(this))
   _rdd.sparkContext.shuffleDriverComponents.registerShuffle(shuffleId)
