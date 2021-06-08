@@ -2345,8 +2345,7 @@ class Analyzer(override val catalogManager: CatalogManager)
      *     outer plan to get evaluated.
      */
     private def resolveSubQueries(plan: LogicalPlan, plans: Seq[LogicalPlan]): LogicalPlan = {
-      plan.transformAllExpressionsWithPruning(_.containsAnyPattern(SCALAR_SUBQUERY,
-        EXISTS_SUBQUERY, IN_SUBQUERY), ruleId) {
+      plan.transformAllExpressionsWithPruning(_.containsPattern(PLAN_EXPRESSION), ruleId) {
         case s @ ScalarSubquery(sub, _, exprId, _) if !sub.resolved =>
           resolveSubQuery(s, plans)(ScalarSubquery(_, _, exprId))
         case e @ Exists(sub, _, exprId, _) if !sub.resolved =>
@@ -2357,6 +2356,8 @@ class Analyzer(override val catalogManager: CatalogManager)
             ListQuery(plan, exprs, exprId, plan.output)
           })
           InSubquery(values, expr.asInstanceOf[ListQuery])
+        case s @ LateralSubquery(sub, _, exprId, _) if !sub.resolved =>
+          resolveSubQuery(s, plans)(LateralSubquery(_, _, exprId))
       }
     }
 
@@ -2369,15 +2370,8 @@ class Analyzer(override val catalogManager: CatalogManager)
       // its child for resolution.
       case f @ Filter(_, a: Aggregate) if f.childrenResolved =>
         resolveSubQueries(f, Seq(a, a.child))
-      case j @ LateralJoin(left, right, _, condition) if left.resolved && !right.resolved =>
-        val newRight = resolveSubQuery(right, j.children)(LateralSubquery(_, _, right.exprId))
-          .asInstanceOf[LateralSubquery]
-        val newCond = if (newRight.resolved && condition.exists(!_.resolved)) {
-          condition.map(resolveExpressionByPlanOutput(_, newRight.plan))
-        } else {
-          condition
-        }
-        j.copy(right = newRight, condition = newCond)
+      case j @ LateralJoin(left, right, _, _) if left.resolved && !right.resolved =>
+        resolveSubQueries(j, j.children)
       // Only a few unary nodes (Project/Filter/Aggregate) can contain subqueries.
       case q: UnaryNode if q.childrenResolved =>
         resolveSubQueries(q, q.children)

@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.AliasIdentifier
-import org.apache.spark.sql.catalyst.analysis.{AnsiTypeCoercion, MultiInstanceRelation, TypeCoercion, TypeCoercionBase}
+import org.apache.spark.sql.catalyst.analysis.{AnsiTypeCoercion, MultiInstanceRelation, Resolver, TypeCoercion, TypeCoercionBase}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable.VIEW_STORING_ANALYZED_PLAN
 import org.apache.spark.sql.catalyst.expressions._
@@ -1441,14 +1441,30 @@ case class LateralJoin(
     }
   }
 
+  /**
+   * Optionally resolves the given strings to a [[NamedExpression]] using the input from
+   * both the left plan and the lateral subquery's plan.
+   */
+  override def resolveChildren(
+      nameParts: Seq[String],
+      resolver: Resolver): Option[NamedExpression] = {
+    val children = left :: right.plan :: Nil
+    val childAttributes = AttributeSeq(children.flatMap(_.output))
+    val childMetadataAttributes = AttributeSeq(children.flatMap(_.metadataOutput))
+    childAttributes.resolve(nameParts, resolver)
+      .orElse(childMetadataAttributes.resolve(nameParts, resolver))
+  }
+
+  override def childrenResolved: Boolean = left.resolved && right.resolved
+
+  def duplicateResolved: Boolean = left.outputSet.intersect(right.plan.outputSet).isEmpty
+
   override lazy val resolved: Boolean = {
     childrenResolved &&
       expressions.forall(_.resolved) &&
       duplicateResolved &&
       condition.forall(_.dataType == BooleanType)
   }
-
-  def duplicateResolved: Boolean = left.outputSet.intersect(right.plan.outputSet).isEmpty
 
   override def producedAttributes: AttributeSet = AttributeSet(right.plan.output)
 

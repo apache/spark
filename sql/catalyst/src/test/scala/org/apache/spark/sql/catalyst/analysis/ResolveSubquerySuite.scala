@@ -71,6 +71,11 @@ class ResolveSubquerySuite extends AnalysisTest {
     checkAnalysis(plan, expected)
   }
 
+  test("lateral join with ambiguous join conditions") {
+    val plan = LateralJoin(t1, LateralSubquery(t0.select('b)), Inner, Some('b ===  1))
+    assertAnalysisError(plan, "Reference 'b' is ambiguous, could be: b, b." :: Nil)
+  }
+
   test("prefer resolving lateral subquery attributes from the inner query") {
     val plan = LateralJoin(t1, LateralSubquery(t2.select('a, 'b, 'c)), Inner, None)
     val expected = LateralJoin(

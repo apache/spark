@@ -327,15 +327,19 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
     _.containsPattern(PLAN_EXPRESSION)) {
     case f @ Filter(_, a: Aggregate) =>
       rewriteSubQueries(f, Seq(a, a.child))
-    // Only a few unary nodes (Project/Filter/Aggregate/LateralJoin) can contain subqueries.
-    case q: UnaryNode =>
-      val newPlan = rewriteSubQueries(q, q.children)
-      // Preserve the original output of the node.
-      if (newPlan.output != q.output) {
-        Project(q.output, newPlan)
+    case j: LateralJoin =>
+      val newPlan = rewriteSubQueries(j, j.children)
+      // Since a lateral join's output depends on its left child output and its lateral subquery's
+      // plan output, we need to trim the domain attributes added to the subquery's plan output
+      // to preserve the original output of the join.
+      if (newPlan.output != j.output) {
+        Project(j.output, newPlan)
       } else {
         newPlan
       }
+    // Only a few unary nodes (Project/Filter/Aggregate) can contain subqueries.
+    case q: UnaryNode =>
+      rewriteSubQueries(q, q.children)
     case s: SupportsSubquery =>
       rewriteSubQueries(s, s.children)
   }

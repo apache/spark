@@ -217,46 +217,36 @@ object DecorrelateInnerQuery extends PredicateHelper {
   def rewriteDomainJoins(
       outerPlan: LogicalPlan,
       innerPlan: LogicalPlan,
-      conditions: Seq[Expression]): LogicalPlan = {
-    innerPlan transform {
-      case d @ DomainJoin(domainAttrs, child) =>
-        val domainAttrMap = buildDomainAttrMap(conditions, domainAttrs)
-        // We should only rewrite a domain join when all corresponding outer plan attributes
-        // can be found from the join condition.
-        if (domainAttrMap.size == domainAttrs.size) {
-          val groupingExprs = domainAttrs.map(domainAttrMap)
-          val aggregateExprs = groupingExprs.zip(domainAttrs).map {
-            // Rebuild the aliases.
-            case (inputAttr, outputAttr) => Alias(inputAttr, outputAttr.name)(outputAttr.exprId)
-          }
-          // Construct a domain with the outer query plan.
-          // DomainJoin [a', b']  =>  Aggregate [a, b] [a AS a', b AS b']
-          //                          +- Relation [a, b]
-          val domain = Aggregate(groupingExprs, aggregateExprs, outerPlan)
-          child match {
-            // A special optimization for OneRowRelation.
-            // TODO: add a more general rule to optimize join with OneRowRelation.
-            case _: OneRowRelation => domain
-            // Construct a domain join.
-            // Join Inner
-            // :- Inner Query
-            // +- Domain
-            case _ => Join(child, domain, Inner, None, JoinHint.NONE)
-          }
-        } else {
-          // Leave it unchanged when the domain join does not belong to the current outer
-          // plan, i.e we cannot construct the domain attribute mapping from the join conditions.
-          // This can happen when the outer plan itself has another DomainJoin. E.g:
-          // LateralJoin lateral-subquery#263 [c1#262 && (c1#271 <=> c1#262)], Inner
-          // :  +- Project [c1#271 AS c1#265, c1#271]
-          // :     +- DomainJoin [c1#271]
-          // :        +- OneRowRelation
-          // +- Project [(c1#270 + 1) AS c1#262, c1#270]
-          //    +- DomainJoin [c1#270]
-          //       +- OneRowRelation
-          d
+      conditions: Seq[Expression]): LogicalPlan = innerPlan match {
+    case d @ DomainJoin(domainAttrs, child) =>
+      val domainAttrMap = buildDomainAttrMap(conditions, domainAttrs)
+      // We should only rewrite a domain join when all corresponding outer plan attributes
+      // can be found from the join condition.
+      if (domainAttrMap.size == domainAttrs.size) {
+        val groupingExprs = domainAttrs.map(domainAttrMap)
+        val aggregateExprs = groupingExprs.zip(domainAttrs).map {
+          // Rebuild the aliases.
+          case (inputAttr, outputAttr) => Alias(inputAttr, outputAttr.name)(outputAttr.exprId)
         }
-    }
+        // Construct a domain with the outer query plan.
+        // DomainJoin [a', b']  =>  Aggregate [a, b] [a AS a', b AS b']
+        //                          +- Relation [a, b]
+        val domain = Aggregate(groupingExprs, aggregateExprs, outerPlan)
+        child match {
+          // A special optimization for OneRowRelation.
+          // TODO: add a more general rule to optimize join with OneRowRelation.
+          case _: OneRowRelation => domain
+          // Construct a domain join.
+          // Join Inner
+          // :- Inner Query
+          // +- Domain
+          case _ => Join(child, domain, Inner, None, JoinHint.NONE)
+        }
+      } else {
+        throw QueryExecutionErrors.cannotRewriteDomainJoinWithConditionsError(conditions, d)
+      }
+    case p: LogicalPlan =>
+      p.mapChildren(rewriteDomainJoins(outerPlan, _, conditions))
   }
 
   def apply(
