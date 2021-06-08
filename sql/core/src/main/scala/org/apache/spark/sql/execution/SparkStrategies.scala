@@ -712,7 +712,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case r: logical.Range =>
         execution.RangeExec(r) :: Nil
       case r: logical.RepartitionByExpression =>
-        val shuffleOrigin = if (r.repartitionWithoutColAndNum) {
+        val shuffleOrigin = if (r.partitionExpressions.isEmpty && r.optNumPartitions.isEmpty) {
           REPARTITION_WITHOUT_COL_AND_NUM
         } else if (r.optNumPartitions.isEmpty) {
           REPARTITION

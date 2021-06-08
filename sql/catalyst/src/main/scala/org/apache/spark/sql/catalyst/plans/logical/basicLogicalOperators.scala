@@ -1313,8 +1313,6 @@ case class RepartitionByExpression(
   val numPartitions = optNumPartitions.getOrElse(conf.numShufflePartitions)
   require(numPartitions > 0, s"Number of partitions ($numPartitions) must be positive.")
 
-  val repartitionWithoutColAndNum = partitionExpressions.isEmpty && optNumPartitions.isEmpty
-
   override val partitioning: Partitioning = {
     val (sortOrder, nonSortOrder) = partitionExpressions.partition(_.isInstanceOf[SortOrder])
 

@@ -1785,10 +1785,9 @@ class AdaptiveQueryExecSuite
 
   test("Coalesce number of partitions by AEQ") {
     withSQLConf(SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM.key -> "1") {
-      val df = sql("SELECT /*+ REPARTITION */ * FROM testData")
-      df.collect()
-
-      collect(df.queryExecution.executedPlan) {
+      val query = "SELECT /*+ REPARTITION */ * FROM testData"
+      val (_, adaptivePlan) = runAdaptiveAndVerifyResult(query)
+      collect(adaptivePlan) {
         case r: CustomShuffleReaderExec => r
       } match {
         case Seq(customShuffleReader) =>
@@ -1802,10 +1801,9 @@ class AdaptiveQueryExecSuite
 
   test("Use local shuffle reader if can not coalesce number of partitions") {
     withSQLConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "2") {
-      val df = sql("SELECT /*+ REPARTITION */ * FROM testData")
-      df.collect()
-
-      collect(df.queryExecution.executedPlan) {
+      val query = "SELECT /*+ REPARTITION */ * FROM testData"
+      val (_, adaptivePlan) = runAdaptiveAndVerifyResult(query)
+      collect(adaptivePlan) {
         case r: CustomShuffleReaderExec => r
       } match {
         case Seq(customShuffleReader) =>
