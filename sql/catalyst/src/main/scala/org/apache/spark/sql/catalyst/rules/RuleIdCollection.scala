@@ -149,9 +149,7 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.optimizer.SimplifyConditionalsInPredicate" ::
       "org.apache.spark.sql.catalyst.optimizer.SimplifyExtractValueOps" ::
       "org.apache.spark.sql.catalyst.optimizer.TransposeWindow" ::
-      "org.apache.spark.sql.catalyst.optimizer.UnwrapCastInBinaryComparison" ::
-      // AQE Optimizer rules
-      "org.apache.spark.sql.execution.adaptive.AQEPropagateEmptyRelation" ::  Nil
+      "org.apache.spark.sql.catalyst.optimizer.UnwrapCastInBinaryComparison" ::  Nil
   }
 
   // Maps rule names to ids. Rule ids are continuous natural numbers starting from 0.

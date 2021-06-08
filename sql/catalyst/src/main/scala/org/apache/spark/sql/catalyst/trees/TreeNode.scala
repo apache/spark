@@ -171,9 +171,6 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
     ineffectiveRules.get(ruleId.id)
   }
 
-  private[sql] def invalidateIneffectiveRules(): Unit =
-    ineffectiveRules.clear()
-
   def copyTagsFrom(other: BaseType): Unit = {
     // SPARK-32753: it only makes sense to copy tags to a new node
     // but it's too expensive to detect other cases likes node removal

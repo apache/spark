@@ -593,7 +593,7 @@ case class AdaptiveSparkPlanExec(
    * Re-optimize and run physical planning on the current logical plan based on the latest stats.
    */
   private def reOptimize(logicalPlan: LogicalPlan): (SparkPlan, LogicalPlan) = {
-    cleanupStats(logicalPlan)
+    logicalPlan.invalidateStatsCache()
     val optimized = optimizer.execute(logicalPlan)
     val sparkPlan = context.session.sessionState.planner.plan(ReturnAnswer(optimized)).next()
     val newPlan = applyPhysicalRules(
@@ -601,20 +601,6 @@ case class AdaptiveSparkPlanExec(
       preprocessingRules ++ queryStagePreparationRules,
       Some((planChangeLogger, "AQE Replanning")))
     (newPlan, optimized)
-  }
-
-  /**
-   * Clean up logical plan stats before re-optimize
-   */
-  private def cleanupStats(logicalPlan: LogicalPlan): Unit = {
-    logicalPlan.invalidateStatsCache()
-    // Some AQE Optimizer rules only match the materialized logical plan and the materialized
-    // flag of logical plan will be changed during running so we cann't promise whether a rule
-    // is ineffective or not before plan materialized.
-    logicalPlan.transform { case p =>
-      p.invalidateIneffectiveRules()
-      p
-    }
   }
 
   /**
