@@ -128,7 +128,7 @@ trait GeneratePredicateHelper extends PredicateHelper {
     val outputAttrs = outputWithNullability(inputAttrs, nonNullAttrExprIds)
     generatePredicateCode(
       ctx, inputAttrs, inputExprCode, outputAttrs, notNullPreds, otherPreds,
-      nonNullAttrExprIds)
+      nonNullAttrExprIds)._3
   }
 
   protected def generatePredicateCode(
@@ -138,16 +138,23 @@ trait GeneratePredicateHelper extends PredicateHelper {
       outputAttrs: Seq[Attribute],
       notNullPreds: Seq[Expression],
       otherPreds: Seq[Expression],
-      nonNullAttrExprIds: Seq[ExprId]): String = {
+      nonNullAttrExprIds: Seq[ExprId],
+      subexpressionEliminationEnabled: Boolean = false): (String, String, String) = {
     /**
      * Generates code for `c`, using `in` for input attributes and `attrs` for nullability.
      */
-    def genPredicate(c: Expression, in: Seq[ExprCode], attrs: Seq[Attribute]): String = {
+    def genPredicate(
+        c: Expression,
+        in: Seq[ExprCode],
+        attrs: Seq[Attribute],
+        states: Map[Expression, SubExprEliminationState] = Map.empty): String = {
       val bound = BindReferences.bindReference(c, attrs)
       val evaluated = evaluateRequiredVariables(inputAttrs, in, c.references)
 
       // Generate the code for the predicate.
-      val ev = ExpressionCanonicalizer.execute(bound).genCode(ctx)
+      val ev = ctx.withSubExprEliminationExprs(states) {
+        Seq(ExpressionCanonicalizer.execute(bound).genCode(ctx))
+      }.head
       val nullCheck = if (bound.nullable) {
         s"${ev.isNull} || "
       } else {
@@ -172,7 +179,7 @@ trait GeneratePredicateHelper extends PredicateHelper {
     // TODO: revisit this. We can consider reordering predicates as well.
     val generatedIsNotNullChecks = new Array[Boolean](notNullPreds.length)
     val extraIsNotNullAttrs = mutable.Set[Attribute]()
-    val generated = otherPreds.map { c =>
+    val (generatedNullChecks, predsToGen) = otherPreds.map { c =>
       val nullChecks = c.references.map { r =>
         val idx = notNullPreds.indexWhere { n => n.asInstanceOf[IsNotNull].child.semanticEquals(r)}
         if (idx != -1 && !generatedIsNotNullChecks(idx)) {
@@ -187,11 +194,30 @@ trait GeneratePredicateHelper extends PredicateHelper {
         }
       }.mkString("\n").trim
 
+      (nullChecks, c)
+    }.unzip
+
+    val (subExprsCode, generatedPreds, localValInputs) = if (subexpressionEliminationEnabled) {
+      // To do subexpression elimination, we need to use bound expressions. Although `genPredicate`
+      // will bind expressions too, for simplicity we don't skip binding in `genPredicate` for this
+      // case.
+      val boundPredsToGen = bindReferences[Expression](predsToGen, output)
+      val subExprs = ctx.subexpressionEliminationForWholeStageCodegen(boundPredsToGen)
       // Here we use *this* operator's output with this output's nullability since we already
       // enforced them with the IsNotNull checks above.
+      (subExprs.codes.mkString("\n"),
+        boundPredsToGen.map(genPredicate(_, inputExprCode, outputAttrs, subExprs.states)),
+        subExprs.exprCodesNeedEvaluate)
+    } else {
+      // Here we use *this* operator's output with this output's nullability since we already
+      // enforced them with the IsNotNull checks above.
+      ("", predsToGen.map(genPredicate(_, inputExprCode, outputAttrs)), Seq.empty)
+    }
+
+    val generated = generatedNullChecks.zip(generatedPreds).map { case (nullChecks, genPred) =>
       s"""
          |$nullChecks
-         |${genPredicate(c, inputExprCode, outputAttrs)}
+         |$genPred
        """.stripMargin.trim
     }.mkString("\n")
 
@@ -203,10 +229,13 @@ trait GeneratePredicateHelper extends PredicateHelper {
       }
     }.mkString("\n")
 
-    s"""
+    val localInputs = evaluateVariables(localValInputs)
+    val predicateCode = s"""
        |$generated
        |$nullChecks
      """.stripMargin
+
+    (localInputs, subExprsCode, predicateCode)
   }
 }
 
@@ -243,8 +272,9 @@ case class FilterExec(condition: Expression, child: SparkPlan)
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
     val numOutput = metricTerm(ctx, "numOutputRows")
 
-    val predicateCode = generatePredicateCode(
-      ctx, child.output, input, output, notNullPreds, otherPreds, notNullAttributes)
+    val (localValInputs, subExprsCode, predicateCode) = generatePredicateCode(
+      ctx, child.output, input, output, notNullPreds, otherPreds, notNullAttributes,
+      false)
 
     // Reset the isNull to false for the not-null columns, then the followed operators could
     // generate better code (remove dead branches).
@@ -257,6 +287,9 @@ case class FilterExec(condition: Expression, child: SparkPlan)
 
     // Note: wrap in "do { } while(false);", so the generated checks can jump out with "continue;"
     s"""
+       |// common sub-expressions 123
+       |$localValInputs
+       |$subExprsCode
        |do {
        |  $predicateCode
        |  $numOutput.add(1);
