@@ -19,29 +19,41 @@ package org.apache.spark.sql.connector.read.streaming;
 
 import org.apache.spark.annotation.Evolving;
 
+import java.util.Arrays;
+
 /**
- * Interface representing limits on how much to read from a {@link MicroBatchStream} when it
- * implements {@link SupportsAdmissionControl}. There are several child interfaces representing
- * various kinds of limits.
+ /**
+ * Represents a {@link ReadLimit} where the {@link MicroBatchStream} should scan approximately
+ * given maximum number of rows with at least the given minimum number of rows.
  *
  * @see SupportsAdmissionControl#latestOffset(Offset, ReadLimit)
- * @see ReadAllAvailable
- * @see ReadMaxRows
- * @since 3.0.0
+ * @since 3.2.0
  */
 @Evolving
-public interface ReadLimit {
-  static ReadLimit minRows(long rows, long maxTriggerDelayMs) {
-    return new ReadMinRows(rows, maxTriggerDelayMs);
+public final class CompositeReadLimit implements ReadLimit {
+  private ReadLimit[] readLimits;
+
+  CompositeReadLimit(ReadLimit[] readLimits) {
+    this.readLimits = readLimits;
   }
 
-  static ReadLimit maxRows(long rows) { return new ReadMaxRows(rows); }
+  public ReadLimit[] getReadLimits() { return readLimits; }
 
-  static ReadLimit maxFiles(int files) { return new ReadMaxFiles(files); }
+  @Override
+  public String toString() {
+    return "CompositeReadLimit{" + "readLimits=" + Arrays.toString(readLimits) + '}';
+  }
 
-  static ReadLimit allAvailable() { return ReadAllAvailable.INSTANCE; }
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) return true;
+    if (o == null || getClass() != o.getClass()) return false;
+    CompositeReadLimit that = (CompositeReadLimit) o;
+    return Arrays.equals(getReadLimits(), that.getReadLimits());
+  }
 
-  static ReadLimit compositeLimit(ReadLimit[] readLimits) {
-    return new CompositeReadLimit(readLimits);
+  @Override
+  public int hashCode() {
+    return Arrays.hashCode(getReadLimits());
   }
 }
