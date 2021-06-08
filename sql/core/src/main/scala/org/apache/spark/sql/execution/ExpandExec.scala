@@ -21,7 +21,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
-import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, RangePartitioning, UnknownPartitioning}
+import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, PartitioningCollection, RangePartitioning, UnknownPartitioning}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.internal.SQLConf
 
@@ -43,25 +43,31 @@ case class ExpandExec(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
   /**
-   * The Expand is commonly introduced by the RewriteDistinctAggregates optimizer rule.
-   * In that case there can be several attributes that are kept as they are by the Expand.
+   * It is common for Expand to keep some of its inputs unchanged in all projections.
    * If the child's output is partitioned by those attributes, then so will be
    * the output of the Expand.
    * In general case the Expand can output data with arbitrary partitioning, so set it
    * as UNKNOWN partitioning.
    */
   override def outputPartitioning: Partitioning = {
-    val stableAttrs = ExpressionSet(output.zipWithIndex.filter {
+    lazy val passThroughAttrs = ExpressionSet(output.zipWithIndex.filter {
       case (attr, i) => projections.forall(_(i).semanticEquals(attr))
     }.map(_._1))
 
-    child.outputPartitioning match {
-      case HashPartitioning(exprs, _) if exprs.forall(stableAttrs.contains) =>
-        child.outputPartitioning
-      case RangePartitioning(ordering, _) if ordering.map(_.child).forall(stableAttrs.contains) =>
-        child.outputPartitioning
-      case _ => UnknownPartitioning(0)
+    def getOutputPartitioning(partitioning: Partitioning): Partitioning = {
+      partitioning match {
+        case HashPartitioning(exprs, _) if exprs.forall(passThroughAttrs.contains) =>
+          partitioning
+        case RangePartitioning(ordering, _)
+          if ordering.map(_.child).forall(passThroughAttrs.contains) =>
+          partitioning
+        case PartitioningCollection(partitionings) =>
+          PartitioningCollection(partitionings.map(getOutputPartitioning))
+        case _ => UnknownPartitioning(0)
+      }
     }
+
+    getOutputPartitioning(child.outputPartitioning)
   }
 
   @transient

@@ -4005,52 +4005,47 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
   }
 
   test("SPARK-35630: ExpandExec should not introduce unnecessary exchanges") {
-    withTable("test_table") {
-      spark.range(11)
-        .withColumn("group1", $"id" % 2)
-        .withColumn("group2", $"id" % 4)
-        .withColumn("a", $"id" % 3)
-        .withColumn("b", $"id" % 6)
-        .write.saveAsTable("test_table")
+    val table = spark.range(11)
+      .withColumn("group1", $"id" % 2)
+      .withColumn("group2", $"id" % 4)
+      .withColumn("a", $"id" % 3)
+      .withColumn("b", $"id" % 6)
 
-      val table = spark.read.table("test_table")
+    Seq(
+      (table, 2),
+      (table.repartition($"group1"), 1),
+      (table.repartitionByRange($"group1"), 1),
+      (table.repartition($"group2"), 1),
+      (table.repartitionByRange($"group2"), 1),
+      (table.repartition($"group1", $"group2"), 1),
+      (table.repartitionByRange($"group1", $"group2"), 1),
+      (table.repartition($"group1", $"id"), 3),
+      (table.repartitionByRange($"group1", $"id"), 3),
+      (table.repartition($"group2", $"id"), 3),
+      (table.repartitionByRange($"group2", $"id"), 3)
+    ).foreach {
+      case (df, expectedExchanges) =>
+        val res = df
+          .groupBy("group1", "group2")
+          .agg(expr("count(distinct a)"), expr("count(distinct b)"))
 
-      Seq(
-        (table, 2),
-        (table.repartition($"group1"), 1),
-        (table.repartitionByRange($"group1"), 1),
-        (table.repartition($"group2"), 1),
-        (table.repartitionByRange($"group2"), 1),
-        (table.repartition($"group1", $"group2"), 1),
-        (table.repartitionByRange($"group1", $"group2"), 1),
-        (table.repartition($"group1", $"id"), 3),
-        (table.repartitionByRange($"group1", $"id"), 3),
-        (table.repartition($"group2", $"id"), 3),
-        (table.repartitionByRange($"group2", $"id"), 3)
-      ).foreach {
-        case (df, expectedExchanges) =>
-          val res = df
-            .groupBy("group1", "group2")
-            .agg(expr("count(distinct a)"), expr("count(distinct b)"))
+        val expands = collect(res.queryExecution.executedPlan) {
+          case e: ExpandExec => e
+        }
+        assert(expands.length == 1)
 
-          val expands = collect(res.queryExecution.executedPlan) {
-            case e: ExpandExec => e
-          }
-          assert(expands.length == 1)
+        val exchanges = collect(res.queryExecution.executedPlan) {
+          case e: Exchange => e
+        }
+        assert(exchanges.length == expectedExchanges)
 
-          val exchanges = collect(res.queryExecution.executedPlan) {
-            case e: Exchange => e
-          }
-          assert(exchanges.length == expectedExchanges)
-
-          val expectedAnswer = Seq(
-            Row(0, 0, 3, 3),
-            Row(0, 2, 3, 3),
-            Row(1, 1, 3, 3),
-            Row(1, 3, 2, 2)
-          )
-          checkAnswer(res, expectedAnswer)
-      }
+        val expectedAnswer = Seq(
+          Row(0, 0, 3, 3),
+          Row(0, 2, 3, 3),
+          Row(1, 1, 3, 3),
+          Row(1, 3, 2, 2)
+        )
+        checkAnswer(res, expectedAnswer)
     }
   }
 }
