@@ -1693,7 +1693,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     assert(numExecutorsTargetForDefaultProfileId(manager) === 1)
   }
 
-  test("update ") {
+  test("SPARK-35677: update range for dynamic allocation") {
     val manager = createManager(createConf(2, 5, 3), clock = clock)
     assert(getExecutorRange(manager) === (2, 5))
     onChangeExecutorRange() // unchanged
