@@ -1290,10 +1290,12 @@ private[spark] object QueryCompilationErrors {
       viewName: String,
       colName: String,
       expectedNum: Int,
-      actualCols: Seq[Attribute]): Throwable = {
+      actualCols: Seq[Attribute],
+      viewDDL: String): Throwable = {
     new AnalysisException(s"The SQL query of view $viewName has an incompatible schema change " +
       s"and column $colName cannot be resolved. Expected $expectedNum columns named $colName but " +
-      s"got ${actualCols.map(_.name).mkString("[", ",", "]")}")
+      s"got ${actualCols.map(_.name).mkString("[", ",", "]")}\nPlease try to recreate the view " +
+      s"to fix this by running: ${viewDDL}")
   }
 
   def numberOfPartitionsNotAllowedWithUnspecifiedDistributionError(): Throwable = {

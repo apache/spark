@@ -846,6 +846,12 @@ class SessionCatalog(
     case None => fromCatalogTable(viewInfo.tableMeta, isTempView = true)
   }
 
+  private def buildViewDDL(metadata: CatalogTable): String = {
+    val viewName = metadata.identifier.toString
+    val viewText = metadata.viewText.get
+    s"ALTER VIEW $viewName AS $viewText"
+  }
+
   private def fromCatalogTable(metadata: CatalogTable, isTempView: Boolean): View = {
     val viewText = metadata.viewText.getOrElse {
       throw new IllegalStateException("Invalid view without text.")
@@ -880,17 +886,15 @@ class SessionCatalog(
     }
     val nameToCounts = viewColumnNames.groupBy(normalizeColName).mapValues(_.length)
     val nameToCurrentOrdinal = scala.collection.mutable.HashMap.empty[String, Int]
+    val viewDDL = buildViewDDL(metadata)
 
     val projectList = viewColumnNames.zip(metadata.schema).map { case (name, field) =>
       val normalizedName = normalizeColName(name)
       val count = nameToCounts(normalizedName)
-      val col = if (count > 1) {
-        val ordinal = nameToCurrentOrdinal.getOrElse(normalizedName, 0)
-        nameToCurrentOrdinal(normalizedName) = ordinal + 1
-        GetViewColumnByNameAndOrdinal(metadata.identifier.toString, name, ordinal, count)
-      } else {
-        UnresolvedAttribute.quoted(name)
-      }
+      val ordinal = nameToCurrentOrdinal.getOrElse(normalizedName, 0)
+      nameToCurrentOrdinal(normalizedName) = ordinal + 1
+      val col = GetViewColumnByNameAndOrdinal(
+        metadata.identifier.toString, name, ordinal, count, viewDDL)
       Alias(UpCast(col, field.dataType), field.name)(explicitMetadata = Some(field.metadata))
     }
     View(desc = metadata, isTempView = isTempView, child = Project(projectList, parsedPlan))
