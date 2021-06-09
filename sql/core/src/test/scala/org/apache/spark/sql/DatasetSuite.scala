@@ -2008,6 +2008,11 @@ class DatasetSuite extends QueryTest
     checkAnswer(withUDF, Row(Row(1), null, null) :: Row(Row(1), null, null) :: Nil)
   }
 
+  test("SPARK-35664: implicit encoder for java.time.LocalDateTime") {
+    val localDateTime = java.time.LocalDateTime.parse("2021-06-08T12:31:58.999999")
+    assert(Seq(localDateTime).toDS().head() === localDateTime)
+  }
+
   test("SPARK-34605: implicit encoder for java.time.Duration") {
     val duration = java.time.Duration.ofMinutes(10)
     assert(spark.range(1).map { _ => duration }.head === duration)
