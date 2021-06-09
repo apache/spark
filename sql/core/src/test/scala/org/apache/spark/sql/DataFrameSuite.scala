@@ -2385,22 +2385,23 @@ class DataFrameSuite extends QueryTest
   }
 
   test("SPARK-34806: observation on datasets") {
-    val namedObservation = spark.observation(
-      "named",
-      min($"id").as("min_val"),
-      max($"id").as("max_val"),
-      sum($"id").as("sum_val"),
-      count(when($"id" % 2 === 0, 1)).as("num_even")
-    )
-    val unnamedObservation = spark.observation(
-      name = "other_event",
-      avg($"id").cast("int").as("avg_val")
-    )
+    val namedObservation = Observation("named")
+    val unnamedObservation = Observation()
 
     try {
-      val df = spark.range(100)
-        .transform(namedObservation.on)
-        .transform(unnamedObservation.on)
+      val df = spark
+        .range(100)
+        .observe(
+          namedObservation,
+          min($"id").as("min_val"),
+          max($"id").as("max_val"),
+          sum($"id").as("sum_val"),
+          count(when($"id" % 2 === 0, 1)).as("num_even")
+        )
+        .observe(
+          unnamedObservation,
+          avg($"id").cast("int").as("avg_val")
+        )
 
       def checkMetrics(namedMetric: Row, unnamedMetric: Row): Unit = {
         assert(namedMetric === Row(0L, 99L, 4950L, 50L))
@@ -2441,8 +2442,10 @@ class DataFrameSuite extends QueryTest
 
     // streaming datasets are not supported
     val streamDf = new MemoryStream[Int](0, sqlContext).toDF()
-    val streamObservation = spark.observation(avg($"value").cast("int").as("avg_val"))
-    assertThrows[IllegalArgumentException] { streamObservation.on(streamDf) }
+    val streamObservation = Observation("stream")
+    assertThrows[IllegalArgumentException] {
+      streamDf.observe(streamObservation, avg($"value").cast("int").as("avg_val"))
+    }
   }
 
   test("SPARK-25159: json schema inference should only trigger one job") {

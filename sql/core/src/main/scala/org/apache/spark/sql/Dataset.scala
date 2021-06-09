@@ -1947,6 +1947,10 @@ class Dataset[T] private[sql](
     CollectMetrics(name, (expr +: exprs).map(_.named), logicalPlan)
   }
 
+  def observe(observation: Observation, expr: Column, exprs: Column*): Dataset[T] = {
+    observation.on(this)(expr, exprs: _*)
+  }
+
   /**
    * Returns a new Dataset by taking the first `n` rows. The difference between this function
    * and `head` is that `head` is an action and returns an array (by triggering query execution)

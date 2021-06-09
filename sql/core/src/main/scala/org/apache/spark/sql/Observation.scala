@@ -27,12 +27,9 @@ import org.apache.spark.sql.util.QueryExecutionListener
 /**
  * Not thread-safe.
  * @param name
- * @param expr
- * @param exprs
  * @param sparkSession
  */
-case class Observation(name: String, expr: Column, exprs: Column*)
-                      (implicit sparkSession: SparkSession) {
+case class Observation(name: String)(implicit sparkSession: SparkSession) {
 
   val lock: Lock = new ReentrantLock()
   val completed: Condition = lock.newCondition()
@@ -49,7 +46,7 @@ case class Observation(name: String, expr: Column, exprs: Column*)
    * @tparam T dataset type
    * @return observed dataset
    */
-  def on[T](ds: Dataset[T]): Dataset[T] = {
+  def on[T](ds: Dataset[T])(expr: Column, exprs: Column*): Dataset[T] = {
     if (ds.isStreaming) {
       throw new IllegalArgumentException("Observation does not support streaming Datasets")
     }
@@ -168,14 +165,10 @@ private[sql] case class ObservationListener(observation: Observation)
 object Observation {
 
   /**
-   * Observation helper class to simplify calling Dataset.observe().
-   *
-   * This class is not thread-safe. Use it in a single thread or guard access via a lock.
-   *
-   * @param expr metric expression
-   * @param exprs metric expressions
+   * Observation constructor for creating an anonymous observation.
    */
-  def apply(expr: Column, exprs: Column*)(implicit sparkSession: SparkSession): Observation =
-    new Observation(UUID.randomUUID().toString, expr, exprs: _*)
+  def apply()(implicit sparkSession: SparkSession): Observation = {
+    new Observation(UUID.randomUUID().toString)
+  }
 
 }
