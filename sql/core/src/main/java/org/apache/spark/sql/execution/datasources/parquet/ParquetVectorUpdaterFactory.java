@@ -93,15 +93,19 @@ public class ParquetVectorUpdaterFactory {
       case INT64:
         // This is where we implement support for the valid type conversions.
         if (sparkType == DataTypes.LongType || canReadAsLongDecimal(descriptor, sparkType)) {
-          return new LongUpdater(DecimalType.is32BitDecimalType(sparkType));
-        } else if (isUnsignedIntTypeMatched(64)) {
+          if (DecimalType.is32BitDecimalType(sparkType)) {
+            return new DowncastLongUpdater();
+          } else {
+            return new LongUpdater();
+          }
+        } else if (isLongDecimal(sparkType) && isUnsignedIntTypeMatched(64)) {
           // In `ParquetToSparkSchemaConverter`, we map parquet UINT64 to our Decimal(20, 0).
           // For unsigned int64, it stores as plain signed int64 in Parquet when dictionary
           // fallbacks. We read them as decimal values.
           return new UnsignedLongUpdater();
         } else if (isTimestampTypeMatched(LogicalTypeAnnotation.TimeUnit.MICROS)) {
           if ("CORRECTED".equals(datetimeRebaseMode)) {
-            return new LongUpdater(false);
+            return new LongUpdater();
           } else {
             boolean failIfRebase = "EXCEPTION".equals(datetimeRebaseMode);
             return new LongWithRebaseUpdater(failIfRebase);
@@ -357,24 +361,42 @@ public class ParquetVectorUpdaterFactory {
   }
 
   private static class LongUpdater implements ParquetVectorUpdater {
-    private final boolean downCastLongToInt;
-
-    LongUpdater(boolean downCastLongToInt) {
-      this.downCastLongToInt = downCastLongToInt;
-    }
-
     @Override
     public void updateBatch(
         int total,
         int offset,
         WritableColumnVector values,
         VectorizedValuesReader valuesReader) {
-      if (downCastLongToInt) {
-        for (int i = 0; i < total; ++i) {
-          values.putInt(offset + i, (int) valuesReader.readLong());
-        }
-      } else {
-        valuesReader.readLongs(total, values, offset);
+      valuesReader.readLongs(total, values, offset);
+    }
+
+    @Override
+    public void update(
+        int offset,
+        WritableColumnVector values,
+        VectorizedValuesReader valuesReader) {
+      values.putLong(offset, valuesReader.readLong());
+    }
+
+    @Override
+    public void decodeSingleDictionaryId(
+        int offset,
+        WritableColumnVector values,
+        WritableColumnVector dictionaryIds,
+        Dictionary dictionary) {
+      values.putLong(offset, dictionary.decodeToLong(dictionaryIds.getDictId(offset)));
+    }
+  }
+
+  private static class DowncastLongUpdater implements ParquetVectorUpdater {
+    @Override
+    public void updateBatch(
+        int total,
+        int offset,
+        WritableColumnVector values,
+        VectorizedValuesReader valuesReader) {
+      for (int i = 0; i < total; ++i) {
+        values.putInt(offset + i, (int) valuesReader.readLong());
       }
     }
 
@@ -383,11 +405,7 @@ public class ParquetVectorUpdaterFactory {
         int offset,
         WritableColumnVector values,
         VectorizedValuesReader valuesReader) {
-      if (downCastLongToInt) {
-        values.putInt(offset, (int) valuesReader.readLong());
-      } else {
-        values.putLong(offset, valuesReader.readLong());
-      }
+      values.putInt(offset, (int) valuesReader.readLong());
     }
 
     @Override
@@ -962,6 +980,14 @@ public class ParquetVectorUpdaterFactory {
   private static boolean canReadAsBinaryDecimal(ColumnDescriptor descriptor, DataType dt) {
     if (!DecimalType.isByteArrayDecimalType(dt)) return false;
     return isDecimalTypeMatched(descriptor, dt);
+  }
+
+  private static boolean isLongDecimal(DataType dt) {
+    if (dt instanceof DecimalType) {
+      DecimalType d = (DecimalType) dt;
+      return d.precision() == 20 && d.scale() == 0;
+    }
+    return false;
   }
 
   private static boolean isDecimalTypeMatched(ColumnDescriptor descriptor, DataType dt) {

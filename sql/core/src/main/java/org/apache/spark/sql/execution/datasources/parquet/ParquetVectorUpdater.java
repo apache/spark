@@ -46,14 +46,15 @@ public interface ParquetVectorUpdater {
   void update(int offset, WritableColumnVector values, VectorizedValuesReader valuesReader);
 
   /**
-   * Decode a batch of `total` dictionary IDs from `dictionaryIds` into `values` starting at
-   * `offset`, using `dictionary`.
+   * Process a batch of `total` values starting from `offset` in `values`, whose null slots
+   * should have already been filled, and fills the non-null slots using dictionary IDs from
+   * `dictionaryIds`, together with Parquet `dictionary`.
    *
-   * @param total total number of dictionary IDs to decode
+   * @param total total number slots to process in `values`
    * @param offset starting offset in `values`
-   * @param values destination vector
+   * @param values destination value vector
    * @param dictionaryIds vector storing the dictionary IDs
-   * @param dictionary Parquet dictionary used to decode dictionary ID to its value
+   * @param dictionary Parquet dictionary used to decode a dictionary ID to its value
    */
   default void decodeDictionaryIds(
       int total,
@@ -75,7 +76,7 @@ public interface ParquetVectorUpdater {
    * @param offset offset in `values` to put the decoded value
    * @param values destination value vector
    * @param dictionaryIds vector storing the dictionary IDs
-   * @param dictionary Parquet dictionary used to decode dictionary ID to its value
+   * @param dictionary Parquet dictionary used to decode a dictionary ID to its value
    */
   void decodeSingleDictionaryId(
       int offset,
