@@ -30,6 +30,7 @@ from pyspark.pandas.data_type_ops.base import (
 from pyspark.pandas.typedef import extension_dtypes
 from pyspark.pandas.typedef.typehints import as_spark_type
 from pyspark.sql import functions as F
+from pyspark.sql.types import BooleanType
 
 if TYPE_CHECKING:
     from pyspark.pandas.indexes import Index  # noqa: F401 (SPARK-34943)
@@ -46,7 +47,7 @@ class BooleanOps(DataTypeOps):
         return "booleans"
 
     def add(self, left, right) -> Union["Series", "Index"]:
-        if not is_valid_operand_for_numeric_arithmetic(right, allow_bool_index_ops=False):
+        if not is_valid_operand_for_numeric_arithmetic(right):
             raise TypeError(
                 "Addition can not be applied to %s and the given type." % self.pretty_name
             )
@@ -58,8 +59,11 @@ class BooleanOps(DataTypeOps):
             return left + right
         else:
             assert isinstance(right, IndexOpsMixin)
-            left = transform_boolean_operand_to_numeric(left, right.spark.data_type)
-            return left + right
+            if isinstance(right, IndexOpsMixin) and isinstance(right.spark.data_type, BooleanType):
+                return left.__or__(right)
+            else:
+                left = transform_boolean_operand_to_numeric(left, right.spark.data_type)
+                return left + right
 
     def sub(self, left, right) -> Union["Series", "Index"]:
         if not is_valid_operand_for_numeric_arithmetic(
@@ -77,7 +81,7 @@ class BooleanOps(DataTypeOps):
             return left - right
 
     def mul(self, left, right) -> Union["Series", "Index"]:
-        if not is_valid_operand_for_numeric_arithmetic(right, allow_bool_index_ops=False):
+        if not is_valid_operand_for_numeric_arithmetic(right):
             raise TypeError(
                 "Multiplication can not be applied to %s and the given type." % self.pretty_name
             )
@@ -88,8 +92,11 @@ class BooleanOps(DataTypeOps):
             return left * right
         else:
             assert isinstance(right, IndexOpsMixin)
-            left = transform_boolean_operand_to_numeric(left, right.spark.data_type)
-            return left * right
+            if isinstance(right, IndexOpsMixin) and isinstance(right.spark.data_type, BooleanType):
+                return left.__and__(right)
+            else:
+                left = transform_boolean_operand_to_numeric(left, right.spark.data_type)
+                return left * right
 
     def truediv(self, left, right) -> Union["Series", "Index"]:
         if not is_valid_operand_for_numeric_arithmetic(
