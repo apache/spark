@@ -387,7 +387,7 @@ object DateTimeUtils {
   def instantToMicros(instant: Instant): Long = {
     if (instant.getEpochSecond < 0) {
       val us = Math.multiplyExact(instant.getEpochSecond + 1, MICROS_PER_SECOND)
-      val result = Math.addExact(us, NANOSECONDS.toMicros(instant.getNano - NANOS_PER_SECOND))
+      val result = Math.addExact(us, NANOSECONDS.toMicros(instant.getNano) - MICROS_PER_SECOND)
       result
     } else {
       val us = Math.multiplyExact(instant.getEpochSecond, MICROS_PER_SECOND)
