@@ -121,10 +121,15 @@ class ResolveSubquerySuite extends AnalysisTest {
         ), Inner, None)
       ), Inner, None)
     )
-    // SELECT * FROM t1, LATERAL (SELECT * FROM t2, LATERAL (SELECT a, b, c))
-    assertAnalysisError(
-      lateralJoin(t1, lateralJoin(t2, t0.select('a, 'b, 'c))),
-      Seq("cannot resolve 'a' given input columns: []")
+    // SELECT * FROM t1, LATERAL (SELECT * FROM (SELECT a, b, c FROM t2), LATERAL (SELECT a))
+    checkAnalysis(
+      lateralJoin(t1, lateralJoin(t2.select('a, 'b, 'c), t0.select('a))),
+      LateralJoin(t1, LateralSubquery(
+        LateralJoin(
+          Project(Seq(OuterReference(a).as(a.name), b, c), t2),
+          LateralSubquery(Project(Seq(OuterReference(a).as(a.name)), t0), Seq(a)),
+          Inner, None), Seq(a)
+      ), Inner, None)
     )
   }
 
