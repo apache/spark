@@ -1591,7 +1591,7 @@ class Analyzer(override val catalogManager: CatalogManager)
             // attributes in outer references. Otherwise throw the original exception.
             AnalysisContext.get.outerPlans
               .find(p => Try(s.expand(p, resolver)).isSuccess)
-              .map(s.expand(_, resolver).map(OuterReference))
+              .map(s.expand(_, resolver).map(wrapOuterReference))
               .getOrElse { throw e }
         }
       }
@@ -2302,14 +2302,6 @@ class Analyzer(override val catalogManager: CatalogManager)
    * Note: CTEs are handled in CTESubstitution.
    */
   object ResolveSubquery extends Rule[LogicalPlan] with PredicateHelper {
-
-    /**
-     * Wrap attributes in the expression with [[OuterReference]]s.
-     */
-    private def wrapOuterReference[E <: Expression](e: E): E = {
-      e.transform { case a: Attribute => OuterReference(a) }.asInstanceOf[E]
-    }
-
     /**
      * Resolve the correlated expressions in a subquery, as if the expressions live in the outer
      * plan. All resolved outer references are wrapped in an [[OuterReference]]
