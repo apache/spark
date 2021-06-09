@@ -93,7 +93,8 @@ case object REPARTITION_BY_COL extends ShuffleOrigin
 case object REPARTITION_BY_NUM extends ShuffleOrigin
 
 // Indicates that the shuffle operator was added by the user-specified repartition operator. Spark
-// first tries to coalesce partitions, if it cannot be coalesced, then use the local shuffle reader.
+// firstly tries to coalesce partitions, if it cannot be coalesced, then use the local shuffle
+// reader.
 case object REPARTITION_BY_NONE extends ShuffleOrigin
 
 /**

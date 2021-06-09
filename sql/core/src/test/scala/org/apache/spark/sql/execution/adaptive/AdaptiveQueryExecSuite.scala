@@ -1783,7 +1783,7 @@ class AdaptiveQueryExecSuite
     }
   }
 
-  test("Coalesce number of partitions by AEQ") {
+  test("SPARK-35650: Coalesce number of partitions by AEQ") {
     withSQLConf(SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM.key -> "1") {
       val query = "SELECT /*+ REPARTITION */ * FROM testData"
       val (_, adaptivePlan) = runAdaptiveAndVerifyResult(query)
@@ -1799,7 +1799,7 @@ class AdaptiveQueryExecSuite
     }
   }
 
-  test("Use local shuffle reader if can not coalesce number of partitions") {
+  test("SPARK-35650: Use local shuffle reader if can not coalesce number of partitions") {
     withSQLConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "2") {
       val query = "SELECT /*+ REPARTITION */ * FROM testData"
       val (_, adaptivePlan) = runAdaptiveAndVerifyResult(query)
