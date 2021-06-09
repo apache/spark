@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils.millisToMicros
 import org.apache.spark.sql.catalyst.util.IntervalStringStyles.{ANSI_STYLE, HIVE_STYLE, IntervalStyle}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.Decimal
+import org.apache.spark.sql.types.{DayTimeIntervalType, Decimal}
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 // The style of textual representation of intervals
@@ -158,7 +158,10 @@ object IntervalUtils {
   private val daySecondLiteralRegex =
     (s"(?i)^INTERVAL\\s+([+|-])?\\'$daySecondPatternString\\'\\s+DAY\\s+TO\\s+SECOND$$").r
 
-  def castStringToDTInterval(input: UTF8String): Long = {
+  def castStringToDTInterval(
+      input: UTF8String,
+      // TODO(SPARK-XXXXX): Take into account day-time interval fields in cast
+      it: DayTimeIntervalType): Long = {
     def secondAndMicro(second: String, micro: String): String = {
       if (micro != null) {
         s"$second$micro"
@@ -953,7 +956,11 @@ object IntervalUtils {
    * @param style The style of textual representation of the interval
    * @return Day-time interval string
    */
-  def toDayTimeIntervalString(micros: Long, style: IntervalStyle): String = {
+  def toDayTimeIntervalString(
+      micros: Long,
+      style: IntervalStyle,
+      // TODO(SPARK-XXXXX): Format day-time intervals using type fields
+      it: DayTimeIntervalType): String = {
     var sign = ""
     var rest = micros
     if (micros < 0) {

@@ -343,13 +343,15 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
   }
 
   test("SPARK-34605: encoding/decoding DayTimeIntervalType to/from java.time.Duration") {
-    val schema = new StructType().add("d", DayTimeIntervalType)
-    val encoder = RowEncoder(schema).resolveAndBind()
-    val duration = java.time.Duration.ofDays(1)
-    val row = toRow(encoder, Row(duration))
-    assert(row.getLong(0) === IntervalUtils.durationToMicros(duration))
-    val readback = fromRow(encoder, row)
-    assert(readback.get(0).equals(duration))
+    DayTimeIntervalType.dayTimeIntervalTypes().foreach { dayTimeIntervalType =>
+      val schema = new StructType().add("d", dayTimeIntervalType)
+      val encoder = RowEncoder(schema).resolveAndBind()
+      val duration = java.time.Duration.ofDays(1)
+      val row = toRow(encoder, Row(duration))
+      assert(row.getLong(0) === IntervalUtils.durationToMicros(duration))
+      val readback = fromRow(encoder, row)
+      assert(readback.get(0).equals(duration))
+    }
   }
 
   test("SPARK-34615: encoding/decoding YearMonthIntervalType to/from java.time.Period") {

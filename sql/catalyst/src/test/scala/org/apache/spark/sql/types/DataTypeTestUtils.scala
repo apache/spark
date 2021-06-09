@@ -54,8 +54,7 @@ object DataTypeTestUtils {
    */
   val numericAndInterval: Set[DataType] = numericTypeWithoutDecimal ++ Set(
     CalendarIntervalType,
-    DayTimeIntervalType,
-    YearMonthIntervalType)
+    YearMonthIntervalType) ++ DayTimeIntervalType.dayTimeIntervalTypes()
 
   /**
    * All the types that support ordering
@@ -66,8 +65,7 @@ object DataTypeTestUtils {
     DateType,
     StringType,
     BinaryType,
-    DayTimeIntervalType,
-    YearMonthIntervalType)
+    YearMonthIntervalType) ++ DayTimeIntervalType.dayTimeIntervalTypes()
 
   /**
    * All the types that we can use in a property check
@@ -83,9 +81,8 @@ object DataTypeTestUtils {
     DateType,
     StringType,
     TimestampType,
-    DayTimeIntervalType,
     YearMonthIntervalType
-  )
+  ) ++ DayTimeIntervalType.dayTimeIntervalTypes()
 
   /**
    * Instances of [[ArrayType]] for all [[AtomicType]]s. Arrays of these types may contain null.

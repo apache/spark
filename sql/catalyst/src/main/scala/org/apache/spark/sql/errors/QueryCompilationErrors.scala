@@ -1601,4 +1601,15 @@ private[spark] object QueryCompilationErrors {
       tableIdentifier: TableIdentifier): Throwable = {
     new AnalysisException(s"$tableIdentifier should be converted to HadoopFsRelation.")
   }
+
+  def invalidDayTimeField(field: Byte): Throwable = {
+    val supportedIds = DayTimeIntervalType.dayTimeFields
+      .map(i => s"$i (${DayTimeIntervalType.fieldToString(i)})")
+    new AnalysisException(s"Invalid field id '$field' in day-time interval. " +
+      s"Supported interval fields: ${supportedIds.mkString(", ")}.")
+  }
+
+  def invalidDayTimeIntervalType(startFieldName: String, endFieldName: String): Throwable = {
+    new AnalysisException(s"'interval $startFieldName to $endFieldName' is invalid.")
+  }
 }

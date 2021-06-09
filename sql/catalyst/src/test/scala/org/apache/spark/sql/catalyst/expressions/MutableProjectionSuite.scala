@@ -30,7 +30,7 @@ class MutableProjectionSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   val fixedLengthTypes = Array[DataType](
     BooleanType, ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType,
-    DateType, TimestampType, YearMonthIntervalType, DayTimeIntervalType)
+    DateType, TimestampType, YearMonthIntervalType) ++ DayTimeIntervalType.dayTimeIntervalTypes()
 
   val variableLengthTypes = Array(
     StringType, DecimalType.defaultConcreteType, CalendarIntervalType, BinaryType,

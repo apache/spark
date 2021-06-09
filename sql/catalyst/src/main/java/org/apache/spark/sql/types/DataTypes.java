@@ -100,11 +100,6 @@ public class DataTypes {
   public static final DataType NullType = NullType$.MODULE$;
 
   /**
-   * Gets the DayTimeIntervalType object.
-   */
-  public static final DataType DayTimeIntervalType = DayTimeIntervalType$.MODULE$;
-
-  /**
    * Gets the YearMonthIntervalType object.
    */
   public static final DataType YearMonthIntervalType = YearMonthIntervalType$.MODULE$;
@@ -143,6 +138,20 @@ public class DataTypes {
    */
   public static DecimalType createDecimalType() {
     return DecimalType$.MODULE$.USER_DEFAULT();
+  }
+
+  /**
+   * Creates a DayTimeIntervalType by specifying the start and end fields.
+   */
+  public static DayTimeIntervalType createDayTimeIntervalType(byte startField, byte endField) {
+    return DayTimeIntervalType$.MODULE$.apply(startField, endField);
+  }
+
+  /**
+   * Creates a DayTimeIntervalType with default start and end fields: interval day to second.
+   */
+  public static DayTimeIntervalType createDayTimeIntervalType() {
+    return DayTimeIntervalType$.MODULE$.DEFAULT();
   }
 
   /**

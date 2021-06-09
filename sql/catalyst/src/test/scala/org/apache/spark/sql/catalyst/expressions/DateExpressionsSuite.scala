@@ -1650,18 +1650,19 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(
         TimeAdd(
           Literal(new Timestamp(sdf.parse("2021-01-01 00:00:00.123").getTime)),
-          Literal.create(null, DayTimeIntervalType),
+          Literal.create(null, DayTimeIntervalType.defaultConcreteType),
           timeZoneId),
         null)
       checkEvaluation(
         TimeAdd(
           Literal.create(null, TimestampType),
-          Literal.create(null, DayTimeIntervalType),
+          Literal.create(null, DayTimeIntervalType.defaultConcreteType),
           timeZoneId),
         null)
-      checkConsistencyBetweenInterpretedAndCodegen(
-        (ts: Expression, interval: Expression) => TimeAdd(ts, interval, timeZoneId),
-        TimestampType, DayTimeIntervalType)
+      DayTimeIntervalType.dayTimeIntervalTypes().foreach { it =>
+        checkConsistencyBetweenInterpretedAndCodegen((ts: Expression, interval: Expression) =>
+          TimeAdd(ts, interval, timeZoneId), TimestampType, it)
+      }
     }
   }
 }

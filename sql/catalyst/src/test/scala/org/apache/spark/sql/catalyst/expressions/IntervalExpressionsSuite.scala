@@ -339,9 +339,11 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
 
     numericTypes.foreach { numType =>
-      checkConsistencyBetweenInterpretedAndCodegenAllowingException(
-        (interval: Expression, num: Expression) => MultiplyDTInterval(interval, num),
-        DayTimeIntervalType, numType)
+      DayTimeIntervalType.dayTimeIntervalTypes().foreach { it =>
+        checkConsistencyBetweenInterpretedAndCodegenAllowingException(
+          (interval: Expression, num: Expression) => MultiplyDTInterval(interval, num),
+          it, numType)
+      }
     }
   }
 
@@ -405,9 +407,11 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
 
     numericTypes.foreach { numType =>
-      checkConsistencyBetweenInterpretedAndCodegenAllowingException(
-        (interval: Expression, num: Expression) => DivideDTInterval(interval, num),
-        DayTimeIntervalType, numType)
+      DayTimeIntervalType.dayTimeIntervalTypes().foreach { it =>
+        checkConsistencyBetweenInterpretedAndCodegenAllowingException(
+          (interval: Expression, num: Expression) => DivideDTInterval(interval, num),
+          it, numType)
+      }
     }
   }
 
@@ -441,9 +445,13 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(ExtractANSIIntervalSeconds(Literal(d)),
         IntervalUtils.getSeconds(IntervalUtils.durationToMicros(d)))
     }
-    checkEvaluation(ExtractANSIIntervalDays(Literal(null, DayTimeIntervalType)), null)
-    checkEvaluation(ExtractANSIIntervalHours(Literal(null, DayTimeIntervalType)), null)
-    checkEvaluation(ExtractANSIIntervalMinutes(Literal(null, DayTimeIntervalType)), null)
-    checkEvaluation(ExtractANSIIntervalSeconds(Literal(null, DayTimeIntervalType)), null)
+    checkEvaluation(ExtractANSIIntervalDays(
+      Literal(null, DayTimeIntervalType.defaultConcreteType)), null)
+    checkEvaluation(ExtractANSIIntervalHours(
+      Literal(null, DayTimeIntervalType.defaultConcreteType)), null)
+    checkEvaluation(ExtractANSIIntervalMinutes(
+      Literal(null, DayTimeIntervalType.defaultConcreteType)), null)
+    checkEvaluation(ExtractANSIIntervalSeconds(
+      Literal(null, DayTimeIntervalType.defaultConcreteType)), null)
   }
 }

@@ -21,10 +21,7 @@ import java.io.*;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.Set;
+import java.util.*;
 
 import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.KryoSerializable;
@@ -91,8 +88,7 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
           DoubleType,
           DateType,
           TimestampType,
-          YearMonthIntervalType,
-          DayTimeIntervalType
+          YearMonthIntervalType
         })));
   }
 
@@ -104,7 +100,7 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
     if (dt instanceof DecimalType) {
       return ((DecimalType) dt).precision() <= Decimal.MAX_LONG_DIGITS();
     } else {
-      return mutableFieldTypes.contains(dt);
+      return dt instanceof DayTimeIntervalType || mutableFieldTypes.contains(dt);
     }
   }
 
@@ -114,7 +110,7 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
     }
 
     return mutableFieldTypes.contains(dt) || dt instanceof DecimalType ||
-      dt instanceof CalendarIntervalType;
+      dt instanceof CalendarIntervalType || dt instanceof DayTimeIntervalType;
   }
 
   //////////////////////////////////////////////////////////////////////////////

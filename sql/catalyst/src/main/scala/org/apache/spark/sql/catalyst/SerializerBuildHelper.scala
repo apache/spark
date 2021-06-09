@@ -107,7 +107,7 @@ object SerializerBuildHelper {
   def createSerializerForJavaDuration(inputObject: Expression): Expression = {
     StaticInvoke(
       IntervalUtils.getClass,
-      DayTimeIntervalType,
+      DayTimeIntervalType(),
       "durationToMicros",
       inputObject :: Nil,
       returnNullable = false)

@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.util.IntervalStringStyles.{ANSI_STYLE, HIVE
 import org.apache.spark.sql.catalyst.util.IntervalUtils._
 import org.apache.spark.sql.catalyst.util.IntervalUtils.IntervalUnit._
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.DayTimeIntervalType
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
@@ -528,8 +529,8 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
       Long.MinValue -> ("-106751991 04:00:54.775808000",
         "INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND")
     ).foreach { case (micros, (hiveIntervalStr, ansiIntervalStr)) =>
-      assert(toDayTimeIntervalString(micros, ANSI_STYLE) === ansiIntervalStr)
-      assert(toDayTimeIntervalString(micros, HIVE_STYLE) === hiveIntervalStr)
+      assert(toDayTimeIntervalString(micros, ANSI_STYLE, DayTimeIntervalType()) === ansiIntervalStr)
+      assert(toDayTimeIntervalString(micros, HIVE_STYLE, DayTimeIntervalType()) === hiveIntervalStr)
     }
   }
 }
