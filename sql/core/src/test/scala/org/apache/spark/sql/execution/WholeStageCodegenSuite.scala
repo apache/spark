@@ -18,9 +18,10 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.{Dataset, QueryTest, Row, SaveMode}
+import org.apache.spark.sql.catalyst.expressions.aggregate.Partial
 import org.apache.spark.sql.catalyst.expressions.codegen.{ByteCodeStats, CodeAndComment, CodeGenerator}
 import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecutionSuite
-import org.apache.spark.sql.execution.aggregate.HashAggregateExec
+import org.apache.spark.sql.execution.aggregate.{AggUtils, HashAggregateExec}
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, ShuffledHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.functions._
@@ -278,7 +279,7 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
         val twoJoinsDF = df1.join(df2, $"k1" < $"k2").crossJoin(df3)
         hasJoinInCodegen = twoJoinsDF.queryExecution.executedPlan.collect {
           case WholeStageCodegenExec(BroadcastNestedLoopJoinExec(
-            _: BroadcastNestedLoopJoinExec, _, _, _, _)) => true
+          _: BroadcastNestedLoopJoinExec, _, _, _, _)) => true
         }.size === 1
         assert(hasJoinInCodegen == codegenEnabled)
         checkAnswer(twoJoinsDF,
@@ -317,7 +318,7 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
           .join(df3, $"k1" <= $"k3", "left_outer")
         hasJoinInCodegen = twoJoinsDF.queryExecution.executedPlan.collect {
           case WholeStageCodegenExec(BroadcastNestedLoopJoinExec(
-            _: BroadcastNestedLoopJoinExec, _, _, _, _)) => true
+          _: BroadcastNestedLoopJoinExec, _, _, _, _)) => true
         }.size === 1
         assert(hasJoinInCodegen == codegenEnabled)
         checkAnswer(twoJoinsDF,
@@ -386,7 +387,7 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
     val plan = ds.queryExecution.executedPlan
     assert(plan.find(p =>
       p.isInstanceOf[WholeStageCodegenExec] &&
-      p.asInstanceOf[WholeStageCodegenExec].child.isInstanceOf[SerializeFromObjectExec]).isDefined)
+        p.asInstanceOf[WholeStageCodegenExec].child.isInstanceOf[SerializeFromObjectExec]).isDefined)
     assert(ds.collect() === 0.until(10).map(_.toString).toArray)
   }
 
@@ -404,7 +405,7 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
     val plan = ds.queryExecution.executedPlan
     assert(plan.find(p =>
       p.isInstanceOf[WholeStageCodegenExec] &&
-      p.asInstanceOf[WholeStageCodegenExec].child.isInstanceOf[FilterExec]).isDefined)
+        p.asInstanceOf[WholeStageCodegenExec].child.isInstanceOf[FilterExec]).isDefined)
     assert(ds.collect() === Array(0, 6))
   }
 
@@ -417,7 +418,7 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
     val planInt = dsIntFilter.queryExecution.executedPlan
     assert(planInt.collect {
       case WholeStageCodegenExec(FilterExec(_,
-          ColumnarToRowExec(InputAdapter(_: InMemoryTableScanExec)))) => ()
+      ColumnarToRowExec(InputAdapter(_: InMemoryTableScanExec)))) => ()
     }.length == 1)
     assert(dsIntFilter.collect() === Array(1, 2))
 
@@ -555,7 +556,7 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
           .write.mode(SaveMode.Overwrite).parquet(path)
 
         withSQLConf(SQLConf.WHOLESTAGE_MAX_NUM_FIELDS.key -> "255",
-            SQLConf.WHOLESTAGE_SPLIT_CONSUME_FUNC_BY_OPERATOR.key -> "true") {
+          SQLConf.WHOLESTAGE_SPLIT_CONSUME_FUNC_BY_OPERATOR.key -> "true") {
           val projection = Seq.tabulate(columnNum)(i => s"c$i + c$i as newC$i")
           val df = spark.read.parquet(path).selectExpr(projection: _*)
 
@@ -641,18 +642,18 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
         .join(baseTable, "idx")
       assert(distinctWithId.queryExecution.executedPlan.collectFirst {
         case WholeStageCodegenExec(
-          ProjectExec(_, BroadcastHashJoinExec(_, _, _, _, _, _: HashAggregateExec, _, _))) => true
+        ProjectExec(_, BroadcastHashJoinExec(_, _, _, _, _, _: HashAggregateExec, _, _))) => true
       }.isDefined)
       checkAnswer(distinctWithId, Seq(Row(1, 0), Row(1, 0)))
 
       // BroadcastHashJoinExec with a HashAggregateExec child containing a Final mode aggregate
       // expression
       val groupByWithId =
-        baseTable.groupBy("idx").sum().withColumn("id", monotonically_increasing_id())
+      baseTable.groupBy("idx").sum().withColumn("id", monotonically_increasing_id())
         .join(baseTable, "idx")
       assert(groupByWithId.queryExecution.executedPlan.collectFirst {
         case WholeStageCodegenExec(
-          ProjectExec(_, BroadcastHashJoinExec(_, _, _, _, _, _: HashAggregateExec, _, _))) => true
+        ProjectExec(_, BroadcastHashJoinExec(_, _, _, _, _, _: HashAggregateExec, _, _))) => true
       }.isDefined)
       checkAnswer(groupByWithId, Seq(Row(1, 2, 0), Row(1, 2, 0)))
     }
@@ -681,7 +682,7 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
     assert(
       executedPlan.find {
         case WholeStageCodegenExec(
-          HashAggregateExec(_, _, _, _, _, _, _: LocalTableScanExec)) => true
+        HashAggregateExec(_, _, _, _, _, _, _: LocalTableScanExec)) => true
         case _ => false
       }.isDefined,
       "LocalTableScanExec should be within a WholeStageCodegen domain.")
@@ -689,9 +690,9 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
 
   test("Give up splitting aggregate code if a parameter length goes over the limit") {
     withSQLConf(
-        SQLConf.CODEGEN_SPLIT_AGGREGATE_FUNC.key -> "true",
-        SQLConf.CODEGEN_METHOD_SPLIT_THRESHOLD.key -> "1",
-        "spark.sql.CodeGenerator.validParamLength" -> "0") {
+      SQLConf.CODEGEN_SPLIT_AGGREGATE_FUNC.key -> "true",
+      SQLConf.CODEGEN_METHOD_SPLIT_THRESHOLD.key -> "1",
+      "spark.sql.CodeGenerator.validParamLength" -> "0") {
       withTable("t") {
         val expectedErrMsg = "Failed to split aggregate code into small functions"
         Seq(
@@ -710,9 +711,9 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
 
   test("Give up splitting subexpression code if a parameter length goes over the limit") {
     withSQLConf(
-        SQLConf.CODEGEN_SPLIT_AGGREGATE_FUNC.key -> "false",
-        SQLConf.CODEGEN_METHOD_SPLIT_THRESHOLD.key -> "1",
-        "spark.sql.CodeGenerator.validParamLength" -> "0") {
+      SQLConf.CODEGEN_SPLIT_AGGREGATE_FUNC.key -> "false",
+      SQLConf.CODEGEN_METHOD_SPLIT_THRESHOLD.key -> "1",
+      "spark.sql.CodeGenerator.validParamLength" -> "0") {
       withTable("t") {
         val expectedErrMsg = "Failed to split subexpression code into small functions"
         Seq(
@@ -728,6 +729,42 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
           assert(e.getMessage.contains(expectedErrMsg))
         }
       }
+    }
+  }
+
+  test("Avoid spill in partial aggregation" ) {
+    withSQLConf((SQLConf.SKIP_PARTIAL_AGGREGATE_ENABLED.key -> "true"),
+      (SQLConf.SKIP_PARTIAL_AGGREGATE_MINROWS.key -> "2")) {
+      // Create Dataframes
+      val data = Seq(("James", 1), ("James", 1), ("Phil", 1))
+      val aggDF = data.toDF("name", "values").groupBy("name").sum("values")
+      val partAggNode = aggDF.queryExecution.executedPlan.find {
+        case h: HashAggregateExec =>
+          val modes = h.aggregateExpressions.map(_.mode)
+          modes.nonEmpty && modes.forall(_ == Partial)
+        case _ => false
+      }
+
+      checkAnswer(aggDF, Seq(Row("James", 2), Row("Phil", 1)))
+      assert(partAggNode.isDefined,
+        "No HashAggregate node with partial aggregate expression found")
+      assert(partAggNode.get.metrics("partialAggSkipped").value == data.size,
+        "Partial aggregation got triggered in partial hash aggregate node")
+    }
+  }
+
+  test(s"Distinct: Partial aggregation should happen for " +
+    "HashAggregate nodes performing partial Aggregate operations " ) {
+    withSQLConf((SQLConf.SKIP_PARTIAL_AGGREGATE_ENABLED.key -> "true")) {
+      val aggDF = testData2.select(sumDistinct($"a"), sum($"b"))
+      val aggNodes = aggDF.queryExecution.executedPlan.collect {
+        case h: HashAggregateExec => h
+      }
+      val (baseNodes, other) = aggNodes.partition(_.child.isInstanceOf[SerializeFromObjectExec])
+      checkAnswer(aggDF, Row(6, 9))
+      assert(baseNodes.size == 1 )
+      assert(baseNodes.head.metrics("partialAggSkipped").value == testData2.count())
+      assert(other.forall(!_.metrics.contains("partialAggSkipped")))
     }
   }
 }
