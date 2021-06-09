@@ -72,19 +72,16 @@ class Iso8601TimestampFormatter(
     pattern, zoneId, locale, legacyFormat)
 
   override def parse(s: String): Long = {
-    val specialDate = convertSpecialTimestamp(s.trim, zoneId)
-    specialDate.getOrElse {
-      try {
-        val parsed = formatter.parse(s)
-        val parsedZoneId = parsed.query(TemporalQueries.zone())
-        val timeZoneId = if (parsedZoneId == null) zoneId else parsedZoneId
-        val zonedDateTime = toZonedDateTime(parsed, timeZoneId)
-        val epochSeconds = zonedDateTime.toEpochSecond
-        val microsOfSecond = zonedDateTime.get(MICRO_OF_SECOND)
+    try {
+      val parsed = formatter.parse(s)
+      val parsedZoneId = parsed.query(TemporalQueries.zone())
+      val timeZoneId = if (parsedZoneId == null) zoneId else parsedZoneId
+      val zonedDateTime = toZonedDateTime(parsed, timeZoneId)
+      val epochSeconds = zonedDateTime.toEpochSecond
+      val microsOfSecond = zonedDateTime.get(MICRO_OF_SECOND)
 
-        Math.addExact(Math.multiplyExact(epochSeconds, MICROS_PER_SECOND), microsOfSecond)
-      } catch checkParsedDiff(s, legacyFormatter.parse)
-    }
+      Math.addExact(Math.multiplyExact(epochSeconds, MICROS_PER_SECOND), microsOfSecond)
+    } catch checkParsedDiff(s, legacyFormatter.parse)
   }
 
   override def format(instant: Instant): String = {

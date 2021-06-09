@@ -17,6 +17,7 @@
 
 from functools import total_ordering
 import itertools
+import os
 import re
 
 all_modules = []
@@ -588,8 +589,6 @@ pyspark_pandas = Module(
         "pyspark.pandas.datetimes",
         "pyspark.pandas.exceptions",
         "pyspark.pandas.extensions",
-        "pyspark.pandas.frame",
-        "pyspark.pandas.generic",
         "pyspark.pandas.groupby",
         "pyspark.pandas.indexing",
         "pyspark.pandas.internal",
@@ -597,7 +596,6 @@ pyspark_pandas = Module(
         "pyspark.pandas.mlflow",
         "pyspark.pandas.namespace",
         "pyspark.pandas.numpy_compat",
-        "pyspark.pandas.series",
         "pyspark.pandas.sql_processor",
         "pyspark.pandas.strings",
         "pyspark.pandas.utils",
@@ -617,11 +615,11 @@ pyspark_pandas = Module(
         "pyspark.pandas.tests.data_type_ops.test_complex_ops",
         "pyspark.pandas.tests.data_type_ops.test_date_ops",
         "pyspark.pandas.tests.data_type_ops.test_datetime_ops",
+        "pyspark.pandas.tests.data_type_ops.test_null_ops",
         "pyspark.pandas.tests.data_type_ops.test_num_ops",
         "pyspark.pandas.tests.data_type_ops.test_string_ops",
-        "pyspark.pandas.tests.indexes.test_base",
+        "pyspark.pandas.tests.data_type_ops.test_udt_ops",
         "pyspark.pandas.tests.indexes.test_category",
-        "pyspark.pandas.tests.indexes.test_datetime",
         "pyspark.pandas.tests.plot.test_frame_plot",
         "pyspark.pandas.tests.plot.test_frame_plot_matplotlib",
         "pyspark.pandas.tests.plot.test_frame_plot_plotly",
@@ -631,32 +629,25 @@ pyspark_pandas = Module(
         "pyspark.pandas.tests.test_categorical",
         "pyspark.pandas.tests.test_config",
         "pyspark.pandas.tests.test_csv",
-        "pyspark.pandas.tests.test_dataframe",
         "pyspark.pandas.tests.test_dataframe_conversion",
         "pyspark.pandas.tests.test_dataframe_spark_io",
         "pyspark.pandas.tests.test_default_index",
         "pyspark.pandas.tests.test_expanding",
         "pyspark.pandas.tests.test_extension",
         "pyspark.pandas.tests.test_frame_spark",
-        "pyspark.pandas.tests.test_groupby",
-        "pyspark.pandas.tests.test_indexing",
         "pyspark.pandas.tests.test_indexops_spark",
         "pyspark.pandas.tests.test_internal",
         "pyspark.pandas.tests.test_namespace",
         "pyspark.pandas.tests.test_numpy_compat",
-        "pyspark.pandas.tests.test_ops_on_diff_frames",
-        "pyspark.pandas.tests.test_ops_on_diff_frames_groupby",
         "pyspark.pandas.tests.test_ops_on_diff_frames_groupby_expanding",
         "pyspark.pandas.tests.test_ops_on_diff_frames_groupby_rolling",
         "pyspark.pandas.tests.test_repr",
         "pyspark.pandas.tests.test_reshape",
         "pyspark.pandas.tests.test_rolling",
-        "pyspark.pandas.tests.test_series",
         "pyspark.pandas.tests.test_series_conversion",
         "pyspark.pandas.tests.test_series_datetime",
         "pyspark.pandas.tests.test_series_string",
         "pyspark.pandas.tests.test_sql",
-        "pyspark.pandas.tests.test_stats",
         "pyspark.pandas.tests.test_typedef",
         "pyspark.pandas.tests.test_utils",
         "pyspark.pandas.tests.test_window",
@@ -664,6 +655,34 @@ pyspark_pandas = Module(
     excluded_python_implementations=[
         "PyPy"  # Skip these tests under PyPy since they require numpy, pandas, and pyarrow and
                 # they aren't available there
+    ]
+)
+
+pyspark_pandas_slow = Module(
+    name="pyspark-pandas-slow",
+    dependencies=[pyspark_core, pyspark_sql],
+    source_file_regexes=[
+        "python/pyspark/pandas/"
+    ],
+    python_test_goals=[
+        # doctests
+        "pyspark.pandas.frame",
+        "pyspark.pandas.generic",
+        "pyspark.pandas.series",
+        # unittests
+        "pyspark.pandas.tests.indexes.test_base",
+        "pyspark.pandas.tests.indexes.test_datetime",
+        "pyspark.pandas.tests.test_dataframe",
+        "pyspark.pandas.tests.test_groupby",
+        "pyspark.pandas.tests.test_indexing",
+        "pyspark.pandas.tests.test_ops_on_diff_frames",
+        "pyspark.pandas.tests.test_ops_on_diff_frames_groupby",
+        "pyspark.pandas.tests.test_series",
+        "pyspark.pandas.tests.test_stats",
+    ],
+    excluded_python_implementations=[
+        "PyPy"  # Skip these tests under PyPy since they require numpy, pandas, and pyarrow and
+        # they aren't available there
     ]
 )
 
@@ -742,6 +761,20 @@ spark_ganglia_lgpl = Module(
     build_profile_flags=["-Pspark-ganglia-lgpl"],
     source_file_regexes=[
         "external/spark-ganglia-lgpl",
+    ]
+)
+
+docker_integration_tests = Module(
+    name="docker-integration-tests",
+    dependencies=[],
+    build_profile_flags=["-Pdocker-integration-tests"],
+    source_file_regexes=["external/docker-integration-tests"],
+    sbt_test_goals=["docker-integration-tests/test"],
+    environ=None if "GITHUB_ACTIONS" not in os.environ else {
+        "ENABLE_DOCKER_INTEGRATION_TESTS": "1"
+    },
+    test_tags=[
+        "org.apache.spark.tags.DockerTest"
     ]
 )
 

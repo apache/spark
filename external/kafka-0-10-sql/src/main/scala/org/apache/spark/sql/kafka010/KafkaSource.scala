@@ -29,10 +29,11 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.connector.read.streaming
-import org.apache.spark.sql.connector.read.streaming.{ReadAllAvailable, ReadLimit, ReadMaxRows, SupportsAdmissionControl}
+import org.apache.spark.sql.connector.read.streaming.{Offset => _, _}
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.kafka010.KafkaSourceProvider._
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 /**
  * A [[Source]] that reads data from Kafka using the following design.
@@ -87,8 +88,16 @@ private[kafka010] class KafkaSource(
   private val maxOffsetsPerTrigger =
     sourceOptions.get(MAX_OFFSET_PER_TRIGGER).map(_.toLong)
 
+  private[kafka010] val minOffsetPerTrigger =
+    sourceOptions.get(MIN_OFFSET_PER_TRIGGER).map(_.toLong)
+
+  private[kafka010] val maxTriggerDelayMs =
+    Utils.timeStringAsMs(sourceOptions.get(MAX_TRIGGER_DELAY).getOrElse(DEFAULT_MAX_TRIGGER_DELAY))
+
   private val includeHeaders =
     sourceOptions.getOrElse(INCLUDE_HEADERS, "false").toBoolean
+
+  private var lastTriggerMillis = 0L
 
   /**
    * Lazily initialize `initialPartitionOffsets` to make sure that `KafkaConsumer.poll` is only
@@ -114,7 +123,15 @@ private[kafka010] class KafkaSource(
   }
 
   override def getDefaultReadLimit: ReadLimit = {
-    maxOffsetsPerTrigger.map(ReadLimit.maxRows).getOrElse(super.getDefaultReadLimit)
+    if (minOffsetPerTrigger.isDefined && maxOffsetsPerTrigger.isDefined) {
+      ReadLimit.compositeLimit(Array(
+        ReadLimit.minRows(minOffsetPerTrigger.get, maxTriggerDelayMs),
+        ReadLimit.maxRows(maxOffsetsPerTrigger.get)))
+    } else if (minOffsetPerTrigger.isDefined) {
+      ReadLimit.minRows(minOffsetPerTrigger.get, maxTriggerDelayMs)
+    } else {
+      maxOffsetsPerTrigger.map(ReadLimit.maxRows).getOrElse(super.getDefaultReadLimit)
+    }
   }
 
   // The offsets for each topic-partition currently read to process. Note this maybe not necessarily
@@ -141,24 +158,68 @@ private[kafka010] class KafkaSource(
   override def latestOffset(startOffset: streaming.Offset, limit: ReadLimit): streaming.Offset = {
     // Make sure initialPartitionOffsets is initialized
     initialPartitionOffsets
+    val currentOffsets = currentPartitionOffsets.orElse(Some(initialPartitionOffsets))
+    val latest = kafkaReader.fetchLatestOffsets(currentOffsets)
+    latestPartitionOffsets = Some(latest)
 
-    val latest = kafkaReader.fetchLatestOffsets(
-      currentPartitionOffsets.orElse(Some(initialPartitionOffsets)))
-    val offsets = limit match {
-      case rows: ReadMaxRows =>
-        if (currentPartitionOffsets.isEmpty) {
-          rateLimit(rows.maxRows(), initialPartitionOffsets, latest)
-        } else {
-          rateLimit(rows.maxRows(), currentPartitionOffsets.get, latest)
-        }
-      case _: ReadAllAvailable =>
-        latest
+    val limits: Seq[ReadLimit] = limit match {
+      case rows: CompositeReadLimit => rows.getReadLimits
+      case rows => Seq(rows)
     }
 
+    val offsets = if (limits.exists(_.isInstanceOf[ReadAllAvailable])) {
+      // ReadAllAvailable has the highest priority
+      latest
+    } else {
+      val lowerLimit = limits.find(_.isInstanceOf[ReadMinRows]).map(_.asInstanceOf[ReadMinRows])
+      val upperLimit = limits.find(_.isInstanceOf[ReadMaxRows]).map(_.asInstanceOf[ReadMaxRows])
+
+      lowerLimit.flatMap { limit =>
+        // checking if we need to skip batch based on minOffsetPerTrigger criteria
+        val skipBatch = delayBatch(
+          limit.minRows, latest, currentOffsets.get, limit.maxTriggerDelayMs)
+        if (skipBatch) {
+          logDebug(
+            s"Delaying batch as number of records available is less than minOffsetsPerTrigger")
+          // Pass same current offsets as output to skip trigger
+          Some(currentOffsets.get)
+        } else {
+          None
+        }
+      }.orElse {
+        // checking if we need to adjust a range of offsets based on maxOffsetPerTrigger criteria
+        upperLimit.map { limit =>
+          rateLimit(limit.maxRows, currentPartitionOffsets.getOrElse(initialPartitionOffsets),
+            latest)
+        }
+      }.getOrElse(latest)
+    }
     currentPartitionOffsets = Some(offsets)
-    latestPartitionOffsets = Some(latest)
     logDebug(s"GetOffset: ${offsets.toSeq.map(_.toString).sorted}")
     KafkaSourceOffset(offsets)
+  }
+
+  /** Checks if we need to skip this trigger based on minOffsetsPerTrigger & maxTriggerDelay */
+  private def delayBatch(
+      minLimit: Long,
+      latestOffsets: Map[TopicPartition, Long],
+      currentOffsets: Map[TopicPartition, Long],
+      maxTriggerDelayMs: Long): Boolean = {
+    // Checking first if the maxbatchDelay time has passed
+    if ((System.currentTimeMillis() - lastTriggerMillis) >= maxTriggerDelayMs) {
+      logDebug("Maximum wait time is passed, triggering batch")
+      lastTriggerMillis = System.currentTimeMillis()
+      false
+    } else {
+      val newRecords = latestOffsets.flatMap {
+        case (topic, offset) =>
+          Some(topic -> (offset - currentOffsets.getOrElse(topic, 0L)))
+      }.values.sum.toDouble
+      if (newRecords < minLimit) true else {
+        lastTriggerMillis = System.currentTimeMillis()
+        false
+      }
+    }
   }
 
   /** Proportionally distribute limit number of offsets among topicpartitions */

@@ -15,9 +15,12 @@
 # limitations under the License.
 #
 
-from abc import ABCMeta, abstractmethod
-from typing import TYPE_CHECKING, Union
+import numbers
+from abc import ABCMeta
+from typing import Any, TYPE_CHECKING, Union
 
+import numpy as np
+import pandas as pd
 from pandas.api.types import CategoricalDtype
 
 from pyspark.sql.types import (
@@ -29,16 +32,55 @@ from pyspark.sql.types import (
     FractionalType,
     IntegralType,
     MapType,
+    NullType,
+    NumericType,
     StringType,
     StructType,
     TimestampType,
+    UserDefinedType,
 )
 
+import pyspark.sql.types as types
 from pyspark.pandas.typedef import Dtype
+from pyspark.pandas.typedef.typehints import extension_object_dtypes_available
+
+if extension_object_dtypes_available:
+    from pandas import BooleanDtype
 
 if TYPE_CHECKING:
     from pyspark.pandas.indexes import Index  # noqa: F401 (SPARK-34943)
     from pyspark.pandas.series import Series  # noqa: F401 (SPARK-34943)
+
+
+def is_valid_operand_for_numeric_arithmetic(operand: Any, *, allow_bool: bool = True) -> bool:
+    """Check whether the operand is valid for arithmetic operations against numerics."""
+    from pyspark.pandas.base import IndexOpsMixin
+
+    if isinstance(operand, numbers.Number) and not isinstance(operand, bool):
+        return True
+    elif isinstance(operand, IndexOpsMixin):
+        if isinstance(operand.dtype, CategoricalDtype):
+            return False
+        else:
+            return isinstance(operand.spark.data_type, NumericType) or (
+                allow_bool and isinstance(operand.spark.data_type, BooleanType)
+            )
+    else:
+        return False
+
+
+def transform_boolean_operand_to_numeric(operand: Any, spark_type: types.DataType) -> Any:
+    """Transform boolean operand to the given numeric spark_type.
+
+    Return the transformed operand if the operand is a boolean IndexOpsMixin,
+    otherwise return the original operand.
+    """
+    from pyspark.pandas.base import IndexOpsMixin
+
+    if isinstance(operand, IndexOpsMixin) and isinstance(operand.spark.data_type, BooleanType):
+        return operand.spark.transform(lambda scol: scol.cast(spark_type))
+    else:
+        return operand
 
 
 class DataTypeOps(object, metaclass=ABCMeta):
@@ -46,16 +88,15 @@ class DataTypeOps(object, metaclass=ABCMeta):
 
     def __new__(cls, dtype: Dtype, spark_type: DataType):
         from pyspark.pandas.data_type_ops.binary_ops import BinaryOps
-        from pyspark.pandas.data_type_ops.boolean_ops import BooleanOps
+        from pyspark.pandas.data_type_ops.boolean_ops import BooleanOps, BooleanExtensionOps
         from pyspark.pandas.data_type_ops.categorical_ops import CategoricalOps
         from pyspark.pandas.data_type_ops.complex_ops import ArrayOps, MapOps, StructOps
         from pyspark.pandas.data_type_ops.date_ops import DateOps
         from pyspark.pandas.data_type_ops.datetime_ops import DatetimeOps
-        from pyspark.pandas.data_type_ops.num_ops import (
-            IntegralOps,
-            FractionalOps,
-        )
+        from pyspark.pandas.data_type_ops.null_ops import NullOps
+        from pyspark.pandas.data_type_ops.num_ops import IntegralOps, FractionalOps
         from pyspark.pandas.data_type_ops.string_ops import StringOps
+        from pyspark.pandas.data_type_ops.udt_ops import UDTOps
 
         if isinstance(dtype, CategoricalDtype):
             return object.__new__(CategoricalOps)
@@ -66,7 +107,10 @@ class DataTypeOps(object, metaclass=ABCMeta):
         elif isinstance(spark_type, StringType):
             return object.__new__(StringOps)
         elif isinstance(spark_type, BooleanType):
-            return object.__new__(BooleanOps)
+            if extension_object_dtypes_available and isinstance(dtype, BooleanDtype):
+                return object.__new__(BooleanExtensionOps)
+            else:
+                return object.__new__(BooleanOps)
         elif isinstance(spark_type, TimestampType):
             return object.__new__(DatetimeOps)
         elif isinstance(spark_type, DateType):
@@ -79,6 +123,10 @@ class DataTypeOps(object, metaclass=ABCMeta):
             return object.__new__(MapOps)
         elif isinstance(spark_type, StructType):
             return object.__new__(StructOps)
+        elif isinstance(spark_type, NullType):
+            return object.__new__(NullOps)
+        elif isinstance(spark_type, UserDefinedType):
+            return object.__new__(UDTOps)
         else:
             raise TypeError("Type %s was not understood." % dtype)
 
@@ -87,7 +135,6 @@ class DataTypeOps(object, metaclass=ABCMeta):
         self.spark_type = spark_type
 
     @property
-    @abstractmethod
     def pretty_name(self) -> str:
         raise NotImplementedError()
 
@@ -132,3 +179,23 @@ class DataTypeOps(object, metaclass=ABCMeta):
 
     def rpow(self, left, right) -> Union["Series", "Index"]:
         raise TypeError("Exponentiation can not be applied to %s." % self.pretty_name)
+
+    def __and__(self, left, right) -> Union["Series", "Index"]:
+        raise TypeError("Bitwise and can not be applied to %s." % self.pretty_name)
+
+    def __or__(self, left, right) -> Union["Series", "Index"]:
+        raise TypeError("Bitwise or can not be applied to %s." % self.pretty_name)
+
+    def rand(self, left, right) -> Union["Series", "Index"]:
+        return left.__and__(right)
+
+    def ror(self, left, right) -> Union["Series", "Index"]:
+        return left.__or__(right)
+
+    def restore(self, col: pd.Series) -> pd.Series:
+        """Restore column when to_pandas."""
+        return col
+
+    def prepare(self, col: pd.Series) -> pd.Series:
+        """Prepare column when from_pandas."""
+        return col.replace({np.nan: None})

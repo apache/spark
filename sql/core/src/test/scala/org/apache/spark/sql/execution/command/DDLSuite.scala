@@ -823,12 +823,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       var message = intercept[AnalysisException] {
         sql(s"DROP DATABASE $dbName")
       }.getMessage
-      // TODO: Unify the exception.
-      if (isUsingHiveMetastore) {
-        assert(message.contains(s"NoSuchObjectException: $dbNameWithoutBackTicks"))
-      } else {
-        assert(message.contains(s"Database '$dbNameWithoutBackTicks' not found"))
-      }
+      assert(message.contains(s"Database '$dbNameWithoutBackTicks' not found"))
 
       message = intercept[AnalysisException] {
         sql(s"ALTER DATABASE $dbName SET DBPROPERTIES ('d'='d')")

@@ -15,6 +15,8 @@
 # limitations under the License.
 #
 
+import pandas as pd
+
 from pyspark.pandas.data_type_ops.base import DataTypeOps
 
 
@@ -25,4 +27,14 @@ class CategoricalOps(DataTypeOps):
 
     @property
     def pretty_name(self) -> str:
-        return 'categoricals'
+        return "categoricals"
+
+    def restore(self, col: pd.Series) -> pd.Series:
+        """Restore column when to_pandas."""
+        return pd.Categorical.from_codes(
+            col, categories=self.dtype.categories, ordered=self.dtype.ordered
+        )
+
+    def prepare(self, col: pd.Series) -> pd.Series:
+        """Prepare column when from_pandas."""
+        return col.cat.codes

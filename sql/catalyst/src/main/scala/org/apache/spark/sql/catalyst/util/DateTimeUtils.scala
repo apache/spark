@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.util
 
-import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 import java.time._
 import java.time.temporal.{ChronoField, ChronoUnit, IsoFields}
@@ -70,6 +69,14 @@ object DateTimeUtils {
   def daysToMicros(days: Int, zoneId: ZoneId): Long = {
     val instant = daysToLocalDate(days).atStartOfDay(zoneId).toInstant
     instantToMicros(instant)
+  }
+
+  def microsToLocalDateTime(micros: Long): LocalDateTime = {
+    getLocalDateTime(micros, ZoneOffset.UTC)
+  }
+
+  def localDateTimeToMicros(localDateTime: LocalDateTime): Long = {
+    instantToMicros(localDateTime.toInstant(ZoneOffset.UTC))
   }
 
   /**
@@ -246,8 +253,6 @@ object DateTimeUtils {
     var i = 0
     var currentSegmentValue = 0
     val bytes = s.trimAll().getBytes
-    val specialTimestamp = convertSpecialTimestamp(bytes, timeZoneId)
-    if (specialTimestamp.isDefined) return specialTimestamp
     var j = 0
     var digitsMilli = 0
     var justTime = false
@@ -419,7 +424,7 @@ object DateTimeUtils {
    * `yyyy-[m]m-[d]d *`
    * `yyyy-[m]m-[d]dT*`
    */
-  def stringToDate(s: UTF8String, zoneId: ZoneId): Option[Int] = {
+  def stringToDate(s: UTF8String): Option[Int] = {
     if (s == null) {
       return None
     }
@@ -427,8 +432,6 @@ object DateTimeUtils {
     var i = 0
     var currentSegmentValue = 0
     val bytes = s.trimAll().getBytes
-    val specialDate = convertSpecialDate(bytes, zoneId)
-    if (specialDate.isDefined) return specialDate
     var j = 0
     while (j < bytes.length && (i < 3 && !(bytes(j) == ' ' || bytes(j) == 'T'))) {
       val b = bytes(j)
@@ -467,8 +470,8 @@ object DateTimeUtils {
     }
   }
 
-  def stringToDateAnsi(s: UTF8String, zoneId: ZoneId): Int = {
-    stringToDate(s, zoneId).getOrElse {
+  def stringToDateAnsi(s: UTF8String): Int = {
+    stringToDate(s).getOrElse {
       throw QueryExecutionErrors.cannotCastUTF8StringToDataTypeError(s, DateType)
     }
   }
@@ -908,13 +911,13 @@ object DateTimeUtils {
   /**
    * Converts notational shorthands that are converted to ordinary timestamps.
    *
-   * @param input A trimmed string
+   * @param input A string to parse. It can contain trailing or leading whitespaces.
    * @param zoneId Zone identifier used to get the current date.
    * @return Some of microseconds since the epoch if the conversion completed
    *         successfully otherwise None.
    */
   def convertSpecialTimestamp(input: String, zoneId: ZoneId): Option[Long] = {
-    extractSpecialValue(input, zoneId).flatMap {
+    extractSpecialValue(input.trim, zoneId).flatMap {
       case "epoch" => Some(0)
       case "now" => Some(currentTimestamp())
       case "today" => Some(instantToMicros(today(zoneId).toInstant))
@@ -924,36 +927,20 @@ object DateTimeUtils {
     }
   }
 
-  private def convertSpecialTimestamp(bytes: Array[Byte], zoneId: ZoneId): Option[Long] = {
-    if (bytes.length > 0 && Character.isAlphabetic(bytes(0))) {
-      convertSpecialTimestamp(new String(bytes, StandardCharsets.UTF_8), zoneId)
-    } else {
-      None
-    }
-  }
-
   /**
    * Converts notational shorthands that are converted to ordinary dates.
    *
-   * @param input A trimmed string
+   * @param input A string to parse. It can contain trailing or leading whitespaces.
    * @param zoneId Zone identifier used to get the current date.
    * @return Some of days since the epoch if the conversion completed successfully otherwise None.
    */
   def convertSpecialDate(input: String, zoneId: ZoneId): Option[Int] = {
-    extractSpecialValue(input, zoneId).flatMap {
+    extractSpecialValue(input.trim, zoneId).flatMap {
       case "epoch" => Some(0)
       case "now" | "today" => Some(currentDate(zoneId))
       case "tomorrow" => Some(Math.addExact(currentDate(zoneId), 1))
       case "yesterday" => Some(Math.subtractExact(currentDate(zoneId), 1))
       case _ => None
-    }
-  }
-
-  private def convertSpecialDate(bytes: Array[Byte], zoneId: ZoneId): Option[Int] = {
-    if (bytes.length > 0 && Character.isAlphabetic(bytes(0))) {
-      convertSpecialDate(new String(bytes, StandardCharsets.UTF_8), zoneId)
-    } else {
-      None
     }
   }
 

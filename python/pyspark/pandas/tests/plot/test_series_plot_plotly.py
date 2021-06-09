@@ -118,7 +118,8 @@ class SeriesPlotPlotlyTest(PandasOnSparkTestCase, TestUtils):
         psdf = self.psdf1
         pdf = psdf.to_pandas()
         self.assertEqual(
-            psdf["a"].plot(kind="pie"), express.pie(pdf, values=pdf.columns[0], names=pdf.index),
+            psdf["a"].plot(kind="pie"),
+            express.pie(pdf, values=pdf.columns[0], names=pdf.index),
         )
 
         # TODO: support multi-index columns

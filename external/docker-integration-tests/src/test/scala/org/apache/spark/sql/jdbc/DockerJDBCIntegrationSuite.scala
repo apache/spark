@@ -25,7 +25,7 @@ import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
 
 import com.spotify.docker.client._
-import com.spotify.docker.client.DockerClient.ListContainersParam
+import com.spotify.docker.client.DockerClient.{ListContainersParam, LogsParam}
 import com.spotify.docker.client.exceptions.ImageNotFoundException
 import com.spotify.docker.client.messages.{ContainerConfig, HostConfig, PortBinding}
 import org.scalatest.concurrent.Eventually
@@ -92,7 +92,8 @@ abstract class DatabaseOnDocker {
       containerConfigBuilder: ContainerConfig.Builder): Unit = {}
 }
 
-abstract class DockerJDBCIntegrationSuite extends SharedSparkSession with Eventually {
+abstract class DockerJDBCIntegrationSuite
+  extends SharedSparkSession with Eventually with DockerIntegrationFunSuite {
 
   protected val dockerIp = DockerUtils.getDockerIp()
   val db: DatabaseOnDocker
@@ -114,7 +115,7 @@ abstract class DockerJDBCIntegrationSuite extends SharedSparkSession with Eventu
   private var pulled: Boolean = false
   protected var jdbcUrl: String = _
 
-  override def beforeAll(): Unit = {
+  override def beforeAll(): Unit = runIfTestsEnabled(s"Prepare for ${this.getClass.getName}") {
     super.beforeAll()
     try {
       docker = DefaultDockerClient.fromEnv.build()
@@ -218,11 +219,23 @@ abstract class DockerJDBCIntegrationSuite extends SharedSparkSession with Eventu
             logWarning(s"Could not stop container $containerId", e)
           }
       } finally {
+        logContainerOutput()
         docker.removeContainer(containerId)
         if (removePulledImage && pulled) {
           docker.removeImage(db.imageName)
         }
       }
+    }
+  }
+
+  private def logContainerOutput(): Unit = {
+    val logStream = docker.logs(containerId, LogsParam.stdout(), LogsParam.stderr())
+    try {
+      logInfo("\n\n===== CONTAINER LOGS FOR container Id: " + containerId + " =====")
+      logInfo(logStream.readFully())
+      logInfo("\n\n===== END OF CONTAINER LOGS FOR container Id: " + containerId + " =====")
+    } finally {
+      logStream.close()
     }
   }
 }

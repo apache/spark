@@ -25,7 +25,7 @@ import scala.util.Random
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{Final, Partial}
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
-import org.apache.spark.sql.execution.{FilterExec, RangeExec, SparkPlan, WholeStageCodegenExec}
+import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecutionSuite
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
@@ -791,9 +791,10 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
   test("SPARK-34567: Add metrics for CTAS operator") {
     withTable("t") {
       val df = sql("CREATE TABLE t USING PARQUET AS SELECT 1 as a")
+      assert(df.queryExecution.executedPlan.isInstanceOf[CommandResultExec])
+      val commandResultExec = df.queryExecution.executedPlan.asInstanceOf[CommandResultExec]
       val dataWritingCommandExec =
-        df.queryExecution.executedPlan.asInstanceOf[DataWritingCommandExec]
-      dataWritingCommandExec.executeCollect()
+        commandResultExec.commandPhysicalPlan.asInstanceOf[DataWritingCommandExec]
       val createTableAsSelect = dataWritingCommandExec.cmd
       assert(createTableAsSelect.metrics.contains("numFiles"))
       assert(createTableAsSelect.metrics("numFiles").value == 1)

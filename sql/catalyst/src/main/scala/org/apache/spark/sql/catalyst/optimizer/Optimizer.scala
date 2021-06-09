@@ -112,6 +112,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         SimplifyCasts,
         SimplifyCaseConversionExpressions,
         RewriteCorrelatedScalarSubquery,
+        RewriteLateralSubquery,
         EliminateSerialization,
         RemoveRedundantAliases,
         RemoveRedundantAggregates,
@@ -151,7 +152,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       RewriteNonCorrelatedExists,
       PullOutGroupingExpressions,
       ComputeCurrentTime,
-      GetCurrentDatabaseAndCatalog(catalogManager)) ::
+      ReplaceCurrentLike(catalogManager)) ::
     //////////////////////////////////////////////////////////////////////////////////////////
     // Optimizer rules start here
     //////////////////////////////////////////////////////////////////////////////////////////
@@ -256,7 +257,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       EliminateView.ruleName ::
       ReplaceExpressions.ruleName ::
       ComputeCurrentTime.ruleName ::
-      GetCurrentDatabaseAndCatalog(catalogManager).ruleName ::
+      ReplaceCurrentLike(catalogManager).ruleName ::
       RewriteDistinctAggregates.ruleName ::
       ReplaceDeduplicateWithAggregate.ruleName ::
       ReplaceIntersectWithSemiJoin.ruleName ::
@@ -277,6 +278,9 @@ abstract class Optimizer(catalogManager: CatalogManager)
    */
   object OptimizeSubqueries extends Rule[LogicalPlan] {
     private def removeTopLevelSort(plan: LogicalPlan): LogicalPlan = {
+      if (!plan.containsPattern(SORT)) {
+        return plan
+      }
       plan match {
         case Sort(_, _, child) => child
         case Project(fields, child) => Project(fields, removeTopLevelSort(child))
@@ -683,7 +687,8 @@ object PushProjectionThroughUnion extends Rule[LogicalPlan] with PredicateHelper
     result.asInstanceOf[A]
   }
 
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+  def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
+    _.containsAllPatterns(UNION, PROJECT)) {
 
     // Push down deterministic projection through UNION ALL
     case p @ Project(projectList, u: Union) =>
@@ -752,7 +757,7 @@ object ColumnPruning extends Rule[LogicalPlan] {
       p.copy(child = g.copy(child = newChild, unrequiredChildIndex = unrequiredIndices))
 
     // prune unrequired nested fields from `Generate`.
-    case GeneratorNestedColumnAliasing(p) => p
+    case GeneratorNestedColumnAliasing(rewrittenPlan) => rewrittenPlan
 
     // Eliminate unneeded attributes from right side of a Left Existence Join.
     case j @ Join(_, right, LeftExistence(_), _, _) =>
@@ -786,7 +791,7 @@ object ColumnPruning extends Rule[LogicalPlan] {
     // Can't prune the columns on LeafNode
     case p @ Project(_, _: LeafNode) => p
 
-    case NestedColumnAliasing(p) => p
+    case NestedColumnAliasing(rewrittenPlan) => rewrittenPlan
 
     // for all other logical plans that inherits the output from it's children
     // Project over project is handled by the first case, skip it here.
@@ -1283,7 +1288,8 @@ object PruneFilters extends Rule[LogicalPlan] with PredicateHelper {
  *  Filter-Join-Join-Join. Most predicates can be pushed down in a single pass.
  */
 object PushDownPredicates extends Rule[LogicalPlan] with PredicateHelper {
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+  def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
+    _.containsAnyPattern(FILTER, JOIN)) {
     CombineFilters.applyLocally
       .orElse(PushPredicateThroughNonJoin.applyLocally)
       .orElse(PushPredicateThroughJoin.applyLocally)

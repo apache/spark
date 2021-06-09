@@ -32,16 +32,17 @@ class ComplexOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         return [
             pd.Series([[1, 2, 3]]),
             pd.Series([[0.1, 0.2, 0.3]]),
-            pd.Series([[decimal.Decimal(1), decimal.Decimal(2), decimal.Decimal(3)]])
+            pd.Series([[decimal.Decimal(1), decimal.Decimal(2), decimal.Decimal(3)]]),
         ]
 
     @property
     def non_numeric_array_psers(self):
         return {
-            "string": pd.Series([['x', 'y', 'z']]),
-            "date": pd.Series([
-                [datetime.date(1994, 1, 1), datetime.date(1994, 1, 2), datetime.date(1994, 1, 3)]]),
-            "bool": pd.Series([[True, True, False]])
+            "string": pd.Series([["x", "y", "z"]]),
+            "date": pd.Series(
+                [[datetime.date(1994, 1, 1), datetime.date(1994, 1, 2), datetime.date(1994, 1, 3)]]
+            ),
+            "bool": pd.Series([[True, True, False]]),
         }
 
     @property
@@ -80,16 +81,19 @@ class ComplexOpsTest(PandasOnSparkTestCase, TestCasesUtils):
 
             # Non-numeric array + Non-numeric array
             self.assertRaises(
-                TypeError, lambda:
-                self.non_numeric_array_pssers['string'] + self.non_numeric_array_pssers['bool']
+                TypeError,
+                lambda: self.non_numeric_array_pssers["string"]
+                + self.non_numeric_array_pssers["bool"],
             )
             self.assertRaises(
-                TypeError, lambda:
-                self.non_numeric_array_pssers['string'] + self.non_numeric_array_pssers['date']
+                TypeError,
+                lambda: self.non_numeric_array_pssers["string"]
+                + self.non_numeric_array_pssers["date"],
             )
             self.assertRaises(
-                TypeError, lambda:
-                self.non_numeric_array_pssers['bool'] + self.non_numeric_array_pssers['date']
+                TypeError,
+                lambda: self.non_numeric_array_pssers["bool"]
+                + self.non_numeric_array_pssers["date"],
             )
 
             for data_type in self.non_numeric_array_psers.keys():
@@ -97,7 +101,7 @@ class ComplexOpsTest(PandasOnSparkTestCase, TestCasesUtils):
                     self.non_numeric_array_psers.get(data_type)
                     + self.non_numeric_array_psers.get(data_type),
                     self.non_numeric_array_pssers.get(data_type)
-                    + self.non_numeric_array_pssers.get(data_type)
+                    + self.non_numeric_array_pssers.get(data_type),
                 )
 
             # Numeric array + Non-numeric array
@@ -186,6 +190,29 @@ class ComplexOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         self.assertRaises(TypeError, lambda: "x" ** self.psser)
         self.assertRaises(TypeError, lambda: 1 ** self.psser)
 
+    def test_and(self):
+        self.assertRaises(TypeError, lambda: self.psser & True)
+        self.assertRaises(TypeError, lambda: self.psser & False)
+        self.assertRaises(TypeError, lambda: self.psser & self.psser)
+
+    def test_rand(self):
+        self.assertRaises(TypeError, lambda: True & self.psser)
+        self.assertRaises(TypeError, lambda: False & self.psser)
+
+    def test_or(self):
+        self.assertRaises(TypeError, lambda: self.psser | True)
+        self.assertRaises(TypeError, lambda: self.psser | False)
+        self.assertRaises(TypeError, lambda: self.psser | self.psser)
+
+    def test_ror(self):
+        self.assertRaises(TypeError, lambda: True | self.psser)
+        self.assertRaises(TypeError, lambda: False | self.psser)
+
+    def test_from_to_pandas(self):
+        for pser, psser in zip(self.psers, self.pssers):
+            self.assert_eq(pser, psser.to_pandas())
+            self.assert_eq(ps.from_pandas(pser), psser)
+
 
 if __name__ == "__main__":
     import unittest
@@ -193,7 +220,8 @@ if __name__ == "__main__":
 
     try:
         import xmlrunner  # type: ignore[import]
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
+
+        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

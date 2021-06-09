@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.planning.ExtractFiltersAndInnerJoins
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
-import org.apache.spark.sql.catalyst.trees.TreePattern.{INNER_LIKE_JOIN, OUTER_JOIN}
+import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 
@@ -116,7 +116,7 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
 }
 
 /**
- * Elimination of outer joins, if the predicates can restrict the result sets so that
+ * 1. Elimination of outer joins, if the predicates can restrict the result sets so that
  * all null-supplying rows are eliminated
  *
  * - full outer -> inner if both sides have such predicates
@@ -124,6 +124,11 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
  * - right outer -> inner if the left side has such predicates
  * - full outer -> left outer if only the left side has such predicates
  * - full outer -> right outer if only the right side has such predicates
+ *
+ * 2. Removes outer join if it only has distinct on streamed side
+ * {{{
+ *   SELECT DISTINCT f1 FROM t1 LEFT JOIN t2 ON t1.id = t2.id  ==>  SELECT DISTINCT f1 FROM t1
+ * }}}
  *
  * This rule should be executed before pushing down the Filter
  */
@@ -165,6 +170,19 @@ object EliminateOuterJoin extends Rule[LogicalPlan] with PredicateHelper {
     case f @ Filter(condition, j @ Join(_, _, RightOuter | LeftOuter | FullOuter, _, _)) =>
       val newJoinType = buildNewJoinType(f, j)
       if (j.joinType == newJoinType) f else Filter(condition, j.copy(joinType = newJoinType))
+
+    case a @ Aggregate(_, _, Join(left, _, LeftOuter, _, _))
+        if a.groupOnly && a.references.subsetOf(AttributeSet(left.output)) =>
+      a.copy(child = left)
+    case a @ Aggregate(_, _, Join(_, right, RightOuter, _, _))
+        if a.groupOnly && a.references.subsetOf(AttributeSet(right.output)) =>
+      a.copy(child = right)
+    case a @ Aggregate(_, _, p @ Project(_, Join(left, _, LeftOuter, _, _)))
+        if a.groupOnly && a.references.subsetOf(AttributeSet(left.output)) =>
+      a.copy(child = p.copy(child = left))
+    case a @ Aggregate(_, _, p @ Project(_, Join(_, right, RightOuter, _, _)))
+        if a.groupOnly && a.references.subsetOf(AttributeSet(right.output)) =>
+      a.copy(child = p.copy(child = right))
   }
 }
 
@@ -181,7 +199,8 @@ object ExtractPythonUDFFromJoinCondition extends Rule[LogicalPlan] with Predicat
     }.isDefined
   }
 
-  override def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithPruning(
+    _.containsAllPatterns(PYTHON_UDF, JOIN)) {
     case j @ Join(_, _, joinType, Some(cond), _) if hasUnevaluablePythonUDF(cond, j) =>
       if (!joinType.isInstanceOf[InnerLike]) {
         // The current strategy supports only InnerLike join because for other types,

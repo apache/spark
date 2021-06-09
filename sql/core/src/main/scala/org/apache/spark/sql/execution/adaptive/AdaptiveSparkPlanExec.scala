@@ -312,7 +312,9 @@ case class AdaptiveSparkPlanExec(
   }
 
   override def doExecuteBroadcast[T](): broadcast.Broadcast[T] = {
-    getFinalPhysicalPlan().doExecuteBroadcast()
+    val finalPlan = getFinalPhysicalPlan()
+    assert(finalPlan.isInstanceOf[BroadcastQueryStageExec])
+    finalPlan.doExecuteBroadcast()
   }
 
   protected override def stringArgs: Iterator[Any] = Iterator(s"isFinalPlan=$isFinalPlan")
@@ -420,7 +422,7 @@ case class AdaptiveSparkPlanExec(
       context.stageCache.get(e.canonicalized) match {
         case Some(existingStage) if conf.exchangeReuseEnabled =>
           val stage = reuseQueryStage(existingStage, e)
-          val isMaterialized = stage.resultOption.get().isDefined
+          val isMaterialized = stage.isMaterialized
           CreateStageResult(
             newPlan = stage,
             allChildStagesMaterialized = isMaterialized,
@@ -442,7 +444,7 @@ case class AdaptiveSparkPlanExec(
                 newStage = reuseQueryStage(queryStage, e)
               }
             }
-            val isMaterialized = newStage.resultOption.get().isDefined
+            val isMaterialized = newStage.isMaterialized
             CreateStageResult(
               newPlan = newStage,
               allChildStagesMaterialized = isMaterialized,
@@ -455,7 +457,7 @@ case class AdaptiveSparkPlanExec(
 
     case q: QueryStageExec =>
       CreateStageResult(newPlan = q,
-        allChildStagesMaterialized = q.resultOption.get().isDefined, newStages = Seq.empty)
+        allChildStagesMaterialized = q.isMaterialized, newStages = Seq.empty)
 
     case _ =>
       if (plan.children.isEmpty) {
@@ -600,7 +602,21 @@ case class AdaptiveSparkPlanExec(
       sparkPlan,
       preprocessingRules ++ queryStagePreparationRules,
       Some((planChangeLogger, "AQE Replanning")))
-    (newPlan, optimized)
+
+    // When both enabling AQE and DPP, `PlanAdaptiveDynamicPruningFilters` rule will
+    // add the `BroadcastExchangeExec` node manually in the DPP subquery,
+    // not through `EnsureRequirements` rule. Therefore, when the DPP subquery is complicated
+    // and need to be re-optimized, AQE also need to manually insert the `BroadcastExchangeExec`
+    // node to prevent the loss of the `BroadcastExchangeExec` node in DPP subquery.
+    // Here, we also need to avoid to insert the `BroadcastExchangeExec` node when the newPlan
+    // is already the `BroadcastExchangeExec` plan after apply the `LogicalQueryStageStrategy` rule.
+    val finalPlan = currentPhysicalPlan match {
+      case b: BroadcastExchangeLike
+        if (!newPlan.isInstanceOf[BroadcastExchangeLike]) => b.withNewChildren(Seq(newPlan))
+      case _ => newPlan
+    }
+
+    (finalPlan, optimized)
   }
 
   /**

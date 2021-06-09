@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.time.ZoneId
+import java.time.{ZoneId, ZoneOffset}
 import java.util.Locale
 import java.util.concurrent.TimeUnit._
 
@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.Cast.{forceNullable, resolvable
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
-import org.apache.spark.sql.catalyst.trees.TreePattern.{CAST, TreePattern}
+import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
@@ -304,8 +304,10 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
   // [[func]] assumes the input is no longer null because eval already does the null check.
   @inline protected[this] def buildCast[T](a: Any, func: T => Any): Any = func(a.asInstanceOf[T])
 
-  private lazy val dateFormatter = DateFormatter(zoneId)
+  private lazy val dateFormatter = DateFormatter()
   private lazy val timestampFormatter = TimestampFormatter.getFractionFormatter(zoneId)
+  private lazy val timestampWithoutTZFormatter =
+    TimestampFormatter.getFractionFormatter(ZoneOffset.UTC)
 
   private val legacyCastToStr = SQLConf.get.getConf(SQLConf.LEGACY_COMPLEX_TYPES_TO_STRING)
   // The brackets that are used in casting structs and maps to strings
@@ -319,6 +321,8 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
     case DateType => buildCast[Int](_, d => UTF8String.fromString(dateFormatter.format(d)))
     case TimestampType => buildCast[Long](_,
       t => UTF8String.fromString(timestampFormatter.format(t)))
+    case TimestampWithoutTZType => buildCast[Long](_,
+      t => UTF8String.fromString(timestampWithoutTZFormatter.format(t)))
     case ArrayType(et, _) =>
       buildCast[ArrayData](_, array => {
         val builder = new UTF8StringBuilder
@@ -520,9 +524,9 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
   private[this] def castToDate(from: DataType): Any => Any = from match {
     case StringType =>
       if (ansiEnabled) {
-        buildCast[UTF8String](_, s => DateTimeUtils.stringToDateAnsi(s, zoneId))
+        buildCast[UTF8String](_, s => DateTimeUtils.stringToDateAnsi(s))
       } else {
-        buildCast[UTF8String](_, s => DateTimeUtils.stringToDate(s, zoneId).orNull)
+        buildCast[UTF8String](_, s => DateTimeUtils.stringToDate(s).orNull)
       }
     case TimestampType =>
       // throw valid precision more than seconds, according to Hive.
@@ -1100,6 +1104,11 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
           ctx.addReferenceObj("timestampFormatter", timestampFormatter),
           timestampFormatter.getClass)
         (c, evPrim, evNull) => code"""$evPrim = UTF8String.fromString($tf.format($c));"""
+      case TimestampWithoutTZType =>
+        val tf = JavaCode.global(
+          ctx.addReferenceObj("timestampWithoutTZFormatter", timestampWithoutTZFormatter),
+          timestampWithoutTZFormatter.getClass)
+        (c, evPrim, evNull) => code"""$evPrim = UTF8String.fromString($tf.format($c));"""
       case CalendarIntervalType =>
         (c, evPrim, _) => code"""$evPrim = UTF8String.fromString($c.toString());"""
       case ArrayType(et, _) =>
@@ -1167,25 +1176,18 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
   private[this] def castToDateCode(
       from: DataType,
       ctx: CodegenContext): CastFunction = {
-    def getZoneId() = {
-      val zoneIdClass = classOf[ZoneId]
-      JavaCode.global(
-        ctx.addReferenceObj("zoneId", zoneId, zoneIdClass.getName),
-        zoneIdClass)
-    }
     from match {
       case StringType =>
         val intOpt = ctx.freshVariable("intOpt", classOf[Option[Integer]])
-        val zid = getZoneId()
         (c, evPrim, evNull) =>
           if (ansiEnabled) {
             code"""
-              $evPrim = org.apache.spark.sql.catalyst.util.DateTimeUtils.stringToDateAnsi($c, $zid);
+              $evPrim = org.apache.spark.sql.catalyst.util.DateTimeUtils.stringToDateAnsi($c);
             """
           } else {
             code"""
               scala.Option<Integer> $intOpt =
-                org.apache.spark.sql.catalyst.util.DateTimeUtils.stringToDate($c, $zid);
+                org.apache.spark.sql.catalyst.util.DateTimeUtils.stringToDate($c);
               if ($intOpt.isDefined()) {
                 $evPrim = ((Integer) $intOpt.get()).intValue();
               } else {
@@ -1195,7 +1197,8 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
           }
 
       case TimestampType =>
-        val zid = getZoneId()
+        val zidClass = classOf[ZoneId]
+        val zid = JavaCode.global(ctx.addReferenceObj("zoneId", zoneId, zidClass.getName), zidClass)
         (c, evPrim, evNull) =>
           code"""$evPrim =
             org.apache.spark.sql.catalyst.util.DateTimeUtils.microsToDays($c, $zid);"""
@@ -1826,7 +1829,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
 
-  final override val nodePatterns: Seq[TreePattern] = Seq(CAST)
+  final override def nodePatternsInternal(): Seq[TreePattern] = Seq(CAST)
 
   override protected val ansiEnabled: Boolean = SQLConf.get.ansiEnabled
 
@@ -2029,6 +2032,8 @@ object AnsiCast {
 case class UpCast(child: Expression, target: AbstractDataType, walkedTypePath: Seq[String] = Nil)
   extends UnaryExpression with Unevaluable {
   override lazy val resolved = false
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(UP_CAST)
 
   def dataType: DataType = target match {
     case DecimalType => DecimalType.SYSTEM_DEFAULT
