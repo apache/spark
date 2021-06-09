@@ -670,24 +670,24 @@ class RollingGroupby(Rolling):
         new_index_scols = []
         new_index_spark_column_names = []
         new_index_names = []
-        new_index_dtypes = []
+        new_index_fields = []
         for groupkey in groupby._groupkeys:
             index_column_name = SPARK_INDEX_NAME_FORMAT(len(new_index_scols))
             new_index_scols.append(groupkey.spark.column.alias(index_column_name))
             new_index_spark_column_names.append(index_column_name)
             new_index_names.append(groupkey._column_label)
-            new_index_dtypes.append(groupkey.dtype)
+            new_index_fields.append(groupkey._internal.data_fields[0].copy(name=index_column_name))
 
-        for new_index_scol, index_name, index_dtype in zip(
+        for new_index_scol, index_name, index_field in zip(
             psdf._internal.index_spark_columns,
             psdf._internal.index_names,
-            psdf._internal.index_dtypes,
+            psdf._internal.index_fields,
         ):
             index_column_name = SPARK_INDEX_NAME_FORMAT(len(new_index_scols))
             new_index_scols.append(new_index_scol.alias(index_column_name))
             new_index_spark_column_names.append(index_column_name)
             new_index_names.append(index_name)
-            new_index_dtypes.append(index_dtype)
+            new_index_fields.append(index_field.copy(name=index_column_name))
 
         if groupby._agg_columns_selected:
             agg_columns = groupby._agg_columns
@@ -715,12 +715,12 @@ class RollingGroupby(Rolling):
             spark_frame=sdf,
             index_spark_columns=[scol_for(sdf, col) for col in new_index_spark_column_names],
             index_names=new_index_names,
-            index_dtypes=new_index_dtypes,
+            index_fields=new_index_fields,
             column_labels=[c._column_label for c in applied],
             data_spark_columns=[
                 scol_for(sdf, c._internal.data_spark_column_names[0]) for c in applied
             ],
-            data_dtypes=[c.dtype for c in applied],
+            data_fields=[c._internal.data_fields[0] for c in applied],
         )
 
         ret = DataFrame(internal)

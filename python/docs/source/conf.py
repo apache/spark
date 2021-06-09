@@ -26,8 +26,17 @@ sys.path.insert(0, os.path.abspath('.'))
 # generating whole docs.
 shutil.rmtree(
     "%s/reference/api" % os.path.dirname(os.path.abspath(__file__)), ignore_errors=True)
+shutil.rmtree(
+    "%s/reference/pyspark.pandas/api" % os.path.dirname(os.path.abspath(__file__)),
+    ignore_errors=True)
 try:
     os.mkdir("%s/reference/api" % os.path.dirname(os.path.abspath(__file__)))
+except OSError as e:
+    if e.errno != errno.EEXIST:
+        raise
+try:
+    os.mkdir("%s/reference/pyspark.pandas/api" % os.path.dirname(
+        os.path.abspath(__file__)))
 except OSError as e:
     if e.errno != errno.EEXIST:
         raise

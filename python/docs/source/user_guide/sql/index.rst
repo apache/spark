@@ -16,21 +16,12 @@
     under the License.
 
 
-====================
-Pandas APIs on Spark
-====================
-
-This page gives an overview of all public pandas APIs on Spark.
+=========
+Spark SQL
+=========
 
 .. toctree::
    :maxdepth: 2
 
-   ps_io
-   ps_general_functions
-   ps_series
-   ps_frame
-   ps_indexing
-   ps_window
-   ps_groupby
-   ps_ml
-   ps_extensions
+   arrow_pandas
+

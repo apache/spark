@@ -938,10 +938,6 @@ private[spark] object QueryCompilationErrors {
     notSupportedForV2TablesError("SHOW CREATE TABLE")
   }
 
-  def truncateTableNotSupportedForV2TablesError(): Throwable = {
-    notSupportedForV2TablesError("TRUNCATE TABLE")
-  }
-
   def showColumnsNotSupportedForV2TablesError(): Throwable = {
     notSupportedForV2TablesError("SHOW COLUMNS")
   }
@@ -1604,5 +1600,22 @@ private[spark] object QueryCompilationErrors {
   def tableIdentifierNotConvertedToHadoopFsRelationError(
       tableIdentifier: TableIdentifier): Throwable = {
     new AnalysisException(s"$tableIdentifier should be converted to HadoopFsRelation.")
+  }
+
+  def alterDatabaseLocationUnsupportedError(version: String): Throwable = {
+    new AnalysisException(s"Hive $version does not support altering database location")
+  }
+
+  def hiveTableTypeUnsupportedError(tableType: String): Throwable = {
+    new AnalysisException(s"Hive $tableType is not supported.")
+  }
+
+  def hiveCreatePermanentFunctionsUnsupportedError(): Throwable = {
+    new AnalysisException("Hive 0.12 doesn't support creating permanent functions. " +
+      "Please use Hive 0.13 or higher.")
+  }
+
+  def unknownHiveResourceTypeError(resourceType: String): Throwable = {
+    new AnalysisException(s"Unknown resource type: $resourceType")
   }
 }

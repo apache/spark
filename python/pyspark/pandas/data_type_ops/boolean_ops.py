@@ -18,13 +18,18 @@
 import numbers
 from typing import TYPE_CHECKING, Union
 
-from pyspark.pandas.base import IndexOpsMixin
+import pandas as pd
+
+from pyspark import sql as spark
+from pyspark.pandas.base import column_op, IndexOpsMixin
 from pyspark.pandas.data_type_ops.base import (
     is_valid_operand_for_numeric_arithmetic,
     DataTypeOps,
     transform_boolean_operand_to_numeric,
 )
+from pyspark.pandas.typedef import extension_dtypes
 from pyspark.pandas.typedef.typehints import as_spark_type
+from pyspark.sql import functions as F
 
 if TYPE_CHECKING:
     from pyspark.pandas.indexes import Index  # noqa: F401 (SPARK-34943)
@@ -194,3 +199,62 @@ class BooleanOps(DataTypeOps):
             raise TypeError(
                 "Modulo can not be applied to %s and the given type." % self.pretty_name
             )
+
+    def __and__(self, left, right) -> Union["Series", "Index"]:
+        if isinstance(right, IndexOpsMixin) and isinstance(right.dtype, extension_dtypes):
+            return right.__and__(left)
+        else:
+
+            def and_func(left, right):
+                if not isinstance(right, spark.Column):
+                    if pd.isna(right):
+                        right = F.lit(None)
+                    else:
+                        right = F.lit(right)
+                scol = left & right
+                return F.when(scol.isNull(), False).otherwise(scol)
+
+            return column_op(and_func)(left, right)
+
+    def __or__(self, left, right) -> Union["Series", "Index"]:
+        if isinstance(right, IndexOpsMixin) and isinstance(right.dtype, extension_dtypes):
+            return right.__or__(left)
+        else:
+
+            def or_func(left, right):
+                if not isinstance(right, spark.Column) and pd.isna(right):
+                    return F.lit(False)
+                else:
+                    scol = left | F.lit(right)
+                    return F.when(left.isNull() | scol.isNull(), False).otherwise(scol)
+
+            return column_op(or_func)(left, right)
+
+
+class BooleanExtensionOps(BooleanOps):
+    """
+    The class for binary operations of pandas-on-Spark objects with spark type BooleanType,
+    and dtype BooleanDtype.
+    """
+
+    def __and__(self, left, right) -> Union["Series", "Index"]:
+        def and_func(left, right):
+            if not isinstance(right, spark.Column):
+                if pd.isna(right):
+                    right = F.lit(None)
+                else:
+                    right = F.lit(right)
+            return left & right
+
+        return column_op(and_func)(left, right)
+
+    def __or__(self, left, right) -> Union["Series", "Index"]:
+        def or_func(left, right):
+            if not isinstance(right, spark.Column):
+                if pd.isna(right):
+                    right = F.lit(None)
+                else:
+                    right = F.lit(right)
+            return left | right
+
+        return column_op(or_func)(left, right)

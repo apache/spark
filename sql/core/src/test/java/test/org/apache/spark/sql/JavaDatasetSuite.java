@@ -21,10 +21,7 @@ import java.io.Serializable;
 import java.math.BigDecimal;
 import java.sql.Date;
 import java.sql.Timestamp;
-import java.time.Duration;
-import java.time.Instant;
-import java.time.LocalDate;
-import java.time.Period;
+import java.time.*;
 import java.util.*;
 import javax.annotation.Nonnull;
 
@@ -410,6 +407,14 @@ public class JavaDatasetSuite implements Serializable {
     List<Tuple2<LocalDate, Instant>> data =
       Arrays.asList(new Tuple2<>(LocalDate.ofEpochDay(0), Instant.ofEpochSecond(0)));
     Dataset<Tuple2<LocalDate, Instant>> ds = spark.createDataset(data, encoder);
+    Assert.assertEquals(data, ds.collectAsList());
+  }
+
+  @Test
+  public void testLocalDateTimeEncoder() {
+    Encoder<LocalDateTime> encoder = Encoders.LOCALDATETIME();
+    List<LocalDateTime> data = Arrays.asList(LocalDateTime.of(1, 1, 1, 1, 1));
+    Dataset<LocalDateTime> ds = spark.createDataset(data, encoder);
     Assert.assertEquals(data, ds.collectAsList());
   }
 

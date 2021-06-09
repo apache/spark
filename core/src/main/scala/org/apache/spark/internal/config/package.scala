@@ -2148,4 +2148,60 @@ package object config {
       // batch of block will be loaded in memory with memory mapping, which has higher overhead
       // with small MB sized chunk of data.
       .createWithDefaultString("3m")
+
+  private[spark] val JAR_IVY_REPO_PATH =
+    ConfigBuilder("spark.jars.ivy")
+      .doc("Path to specify the Ivy user directory, used for the local Ivy cache and " +
+        "package files from spark.jars.packages. " +
+        "This will override the Ivy property ivy.default.ivy.user.dir " +
+        "which defaults to ~/.ivy2.")
+      .version("1.3.0")
+      .stringConf
+      .createOptional
+
+  private[spark] val JAR_IVY_SETTING_PATH =
+    ConfigBuilder("spark.jars.ivySettings")
+      .doc("Path to an Ivy settings file to customize resolution of jars specified " +
+        "using spark.jars.packages instead of the built-in defaults, such as maven central. " +
+        "Additional repositories given by the command-line option --repositories " +
+        "or spark.jars.repositories will also be included. " +
+        "Useful for allowing Spark to resolve artifacts from behind a firewall " +
+        "e.g. via an in-house artifact server like Artifactory. " +
+        "Details on the settings file format can be found at Settings Files")
+      .version("2.2.0")
+      .stringConf
+      .createOptional
+
+  private[spark] val JAR_PACKAGES =
+    ConfigBuilder("spark.jars.packages")
+      .doc("Comma-separated list of Maven coordinates of jars to include " +
+        "on the driver and executor classpaths. The coordinates should be " +
+        "groupId:artifactId:version. If spark.jars.ivySettings is given artifacts " +
+        "will be resolved according to the configuration in the file, otherwise artifacts " +
+        "will be searched for in the local maven repo, then maven central and finally " +
+        "any additional remote repositories given by the command-line option --repositories. " +
+        "For more details, see Advanced Dependency Management.")
+      .version("1.5.0")
+      .stringConf
+      .toSequence
+      .createWithDefault(Nil)
+
+  private[spark] val JAR_PACKAGES_EXCLUSIONS =
+    ConfigBuilder("spark.jars.excludes")
+      .doc("Comma-separated list of groupId:artifactId, " +
+        "to exclude while resolving the dependencies provided in spark.jars.packages " +
+        "to avoid dependency conflicts.")
+      .version("1.5.0")
+      .stringConf
+      .toSequence
+      .createWithDefault(Nil)
+
+  private[spark] val JAR_REPOSITORIES =
+    ConfigBuilder("spark.jars.repositories")
+      .doc("Comma-separated list of additional remote repositories to search " +
+        "for the maven coordinates given with --packages or spark.jars.packages.")
+      .version("2.3.0")
+      .stringConf
+      .toSequence
+      .createWithDefault(Nil)
 }
