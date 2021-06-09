@@ -628,8 +628,9 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
             if cond is None:
                 cond = F.lit(True)
             if limit is not None:
-                cond = cond & (self._internal.spark_frame[cast(
-                    iLocIndexer, self)._sequence_col] < F.lit(limit))
+                cond = cond & (
+                    self._internal.spark_frame[cast(iLocIndexer, self)._sequence_col] < F.lit(limit)
+                )
 
             if isinstance(value, (Series, spark.Column)):
                 if remaining_index is not None and remaining_index == 0:
@@ -686,8 +687,7 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
                     psdf[temp_key_col] = rows_sel
                 if isinstance(value, Series):
                     psdf[temp_value_col] = value
-                psdf = psdf.sort_values(
-                    temp_natural_order).drop(temp_natural_order)  # type: ignore
+                psdf = psdf.sort_values(temp_natural_order).drop(temp_natural_order)  # type: ignore
 
                 if isinstance(rows_sel, Series):
                     rows_sel = F.col(
@@ -713,8 +713,9 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
             if cond is None:
                 cond = F.lit(True)
             if limit is not None:
-                cond = cond & (self._internal.spark_frame[cast(
-                    iLocIndexer, self)._sequence_col] < F.lit(limit))
+                cond = cond & (
+                    self._internal.spark_frame[cast(iLocIndexer, self)._sequence_col] < F.lit(limit)
+                )
 
             if isinstance(value, (Series, spark.Column)):
                 if remaining_index is not None and remaining_index == 0:
@@ -1165,10 +1166,11 @@ class LocIndexer(LocIndexerLike):
         key: Optional[Tuple],
         missing_keys: Optional[List[Tuple]],
         labels: Optional[List[Tuple]] = None,
-        recursed: int = 0
-    ) -> Tuple[List[Tuple], Optional[List[spark.Column]], List[InternalField],
-               bool, Optional[Tuple]]:
-        """ Select columns from multi-index columns. """
+        recursed: int = 0,
+    ) -> Tuple[
+        List[Tuple], Optional[List[spark.Column]], List[InternalField], bool, Optional[Tuple]
+    ]:
+        """Select columns from multi-index columns."""
         assert isinstance(key, tuple)
         if labels is None:
             labels = [(label, label) for label in self._internal.column_labels]
