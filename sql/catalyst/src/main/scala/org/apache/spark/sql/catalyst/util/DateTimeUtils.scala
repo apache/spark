@@ -385,7 +385,7 @@ object DateTimeUtils {
    * microseconds where microsecond 0 is 1970-01-01 00:00:00Z.
    */
   def instantToMicros(instant: Instant): Long = {
-    if (Math.floorDiv(Long.MinValue, MICROS_PER_SECOND) == instant.getEpochSecond) {
+    if (instant.getEpochSecond < 0) {
       val us = Math.multiplyExact(instant.getEpochSecond + 1, MICROS_PER_SECOND)
       val result = Math.addExact(us, NANOSECONDS.toMicros(instant.getNano - NANOS_PER_SECOND))
       result
