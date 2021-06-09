@@ -69,7 +69,7 @@ object SparkError {
  * - For backwards compatibility, existing exception types can be thrown with an arbitrary error
  *   message with no error class. See [[SparkException]].
  * - To promote standardization, exceptions should be thrown with an error class and message
- *   parameters to construct an error message with [[SparkError.getMessage()]]. New exception types
+ *   parameters to construct an error message with SparkError.getMessage(). New exception types
  *   should not accept arbitrary error messages. See [[SparkArithmeticException]].
  */
 trait SparkError extends Throwable {
