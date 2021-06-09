@@ -123,7 +123,7 @@ class ResolveSubquerySuite extends AnalysisTest {
         ), Inner, None)
       ), Inner, None)
     )
-    
+
     // SELECT * FROM t1, LATERAL (SELECT * FROM t2, LATERAL (SELECT a, b, c))
     // TODO: support accessing columns from outer outer query.
     assertAnalysisError(
