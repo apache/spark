@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
-import org.apache.spark.sql.catalyst.trees.TreePattern.{EXISTS_SUBQUERY, FILTER, IN_SUBQUERY, LIST_SUBQUERY, SCALAR_SUBQUERY}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{EXISTS_SUBQUERY, FILTER, IN_SUBQUERY, LATERAL_JOIN, LIST_SUBQUERY, PLAN_EXPRESSION, SCALAR_SUBQUERY}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -304,8 +304,7 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
       }
     }
 
-    plan.transformExpressionsWithPruning(_.containsAnyPattern(
-      SCALAR_SUBQUERY, EXISTS_SUBQUERY, LIST_SUBQUERY)) {
+    plan.transformExpressionsWithPruning(_.containsPattern(PLAN_EXPRESSION)) {
       case ScalarSubquery(sub, children, exprId, conditions) if children.nonEmpty =>
         val (newPlan, newCond) = decorrelate(sub, outerPlans)
         ScalarSubquery(newPlan, children, exprId, getJoinCondition(newCond, conditions))
@@ -315,6 +314,9 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
       case ListQuery(sub, children, exprId, childOutputs, conditions) if children.nonEmpty =>
         val (newPlan, newCond) = pullOutCorrelatedPredicates(sub, outerPlans)
         ListQuery(newPlan, children, exprId, childOutputs, getJoinCondition(newCond, conditions))
+      case LateralSubquery(sub, children, exprId, conditions) if children.nonEmpty =>
+        val (newPlan, newCond) = decorrelate(sub, outerPlans)
+        LateralSubquery(newPlan, children, exprId, getJoinCondition(newCond, conditions))
     }
   }
 
@@ -322,9 +324,19 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
    * Pull up the correlated predicates and rewrite all subqueries in an operator tree..
    */
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithPruning(
-    _.containsAnyPattern(SCALAR_SUBQUERY, EXISTS_SUBQUERY, LIST_SUBQUERY)) {
+    _.containsPattern(PLAN_EXPRESSION)) {
     case f @ Filter(_, a: Aggregate) =>
       rewriteSubQueries(f, Seq(a, a.child))
+    case j: LateralJoin =>
+      val newPlan = rewriteSubQueries(j, j.children)
+      // Since a lateral join's output depends on its left child output and its lateral subquery's
+      // plan output, we need to trim the domain attributes added to the subquery's plan output
+      // to preserve the original output of the join.
+      if (!j.sameOutput(newPlan)) {
+        Project(j.output, newPlan)
+      } else {
+        newPlan
+      }
     // Only a few unary nodes (Project/Filter/Aggregate) can contain subqueries.
     case q: UnaryNode =>
       rewriteSubQueries(q, q.children)
@@ -675,5 +687,19 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
       } else {
         f -> Nil
       }
+  }
+}
+
+/**
+ * This rule rewrites [[LateralSubquery]] expressions into joins.
+ */
+object RewriteLateralSubquery extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithPruning(
+    _.containsPattern(LATERAL_JOIN)) {
+    case LateralJoin(left, LateralSubquery(sub, _, _, joinCond), joinType, condition) =>
+      // TODO(SPARK-35551): handle the COUNT bug
+      val newRight = DecorrelateInnerQuery.rewriteDomainJoins(left, sub, joinCond)
+      val newCond = (condition ++ joinCond).reduceOption(And)
+      Join(left, newRight, joinType, newCond, JoinHint.NONE)
   }
 }

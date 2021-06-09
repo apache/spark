@@ -777,6 +777,9 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
           }
         }
 
+      case _: LateralSubquery =>
+        assert(plan.isInstanceOf[LateralJoin])
+
       case inSubqueryOrExistsSubquery =>
         plan match {
           case _: Filter | _: SupportsSubquery | _: Join => // Ok
@@ -788,7 +791,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
 
     // Validate to make sure the correlations appearing in the query are valid and
     // allowed by spark.
-    checkCorrelationsInSubquery(expr.plan)
+    checkCorrelationsInSubquery(expr.plan, isLateral = plan.isInstanceOf[LateralJoin])
   }
 
   /**
@@ -827,7 +830,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
    * Validates to make sure the outer references appearing inside the subquery
    * are allowed.
    */
-  private def checkCorrelationsInSubquery(sub: LogicalPlan): Unit = {
+  private def checkCorrelationsInSubquery(sub: LogicalPlan, isLateral: Boolean = false): Unit = {
     // Validate that correlated aggregate expression do not contain a mixture
     // of outer and local references.
     def checkMixedReferencesInsideAggregateExpr(expr: Expression): Unit = {
@@ -849,12 +852,21 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
       }
     }
 
+    // Check whether the logical plan node can host outer references.
+    // A `Project` can host outer references if it is inside a lateral subquery.
+    // Otherwise, only Filter can only outer references.
+    def canHostOuter(plan: LogicalPlan): Boolean = plan match {
+      case _: Filter => true
+      case _: Project => isLateral
+      case _ => false
+    }
+
     // Make sure a plan's expressions do not contain :
     // 1. Aggregate expressions that have mixture of outer and local references.
-    // 2. Expressions containing outer references on plan nodes other than Filter.
+    // 2. Expressions containing outer references on plan nodes other than allowed operators.
     def failOnInvalidOuterReference(p: LogicalPlan): Unit = {
       p.expressions.foreach(checkMixedReferencesInsideAggregateExpr)
-      if (!p.isInstanceOf[Filter] && p.expressions.exists(containsOuter)) {
+      if (!canHostOuter(p) && p.expressions.exists(containsOuter)) {
         failAnalysis(
           "Expressions referencing the outer query are not supported outside of WHERE/HAVING " +
             s"clauses:\n$p")
@@ -987,6 +999,9 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
 
       case r: RepartitionByExpression =>
         failOnInvalidOuterReference(r)
+
+      case l: LateralJoin =>
+        failOnInvalidOuterReference(l)
 
       // Category 3:
       // Filter is one of the two operators allowed to host correlated expressions.

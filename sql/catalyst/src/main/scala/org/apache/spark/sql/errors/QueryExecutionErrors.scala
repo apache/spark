@@ -1143,7 +1143,7 @@ object QueryExecutionErrors {
 
   def cannotRewriteDomainJoinWithConditionsError(
       conditions: Seq[Expression], d: DomainJoin): Throwable = {
-    new UnsupportedOperationException(
+    new IllegalStateException(
       s"Unable to rewrite domain join with conditions: $conditions\n$d")
   }
 
