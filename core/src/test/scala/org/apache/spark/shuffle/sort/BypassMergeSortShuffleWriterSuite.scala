@@ -17,9 +17,8 @@
 
 package org.apache.spark.shuffle.sort
 
-import java.io.{DataInputStream, File, FileInputStream}
+import java.io.File
 import java.util.UUID
-import java.util.zip.{Adler32, CheckedInputStream}
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
@@ -33,15 +32,17 @@ import org.scalatest.BeforeAndAfterEach
 import org.apache.spark._
 import org.apache.spark.executor.{ShuffleWriteMetrics, TaskMetrics}
 import org.apache.spark.memory.{TaskMemoryManager, TestMemoryManager}
-import org.apache.spark.network.util.LimitedInputStream
 import org.apache.spark.serializer.{JavaSerializer, SerializerInstance, SerializerManager}
-import org.apache.spark.shuffle.IndexShuffleBlockResolver
+import org.apache.spark.shuffle.{IndexShuffleBlockResolver, ShuffleChecksumTester}
 import org.apache.spark.shuffle.api.ShuffleExecutorComponents
 import org.apache.spark.shuffle.sort.io.LocalDiskShuffleExecutorComponents
 import org.apache.spark.storage._
 import org.apache.spark.util.Utils
 
-class BypassMergeSortShuffleWriterSuite extends SparkFunSuite with BeforeAndAfterEach {
+class BypassMergeSortShuffleWriterSuite
+  extends SparkFunSuite
+    with BeforeAndAfterEach
+    with ShuffleChecksumTester {
 
   @Mock(answer = RETURNS_SMART_NULLS) private var blockManager: BlockManager = _
   @Mock(answer = RETURNS_SMART_NULLS) private var diskBlockManager: DiskBlockManager = _
@@ -277,31 +278,6 @@ class BypassMergeSortShuffleWriterSuite extends SparkFunSuite with BeforeAndAfte
     writer.stop( /* success = */ true)
     assert(checksumFile.exists())
     assert(checksumFile.length() === 8 * numPartition)
-
-    val in = new DataInputStream(new FileInputStream(checksumFile))
-    val expectChecksums = Array.ofDim[Long](numPartition)
-    (0 until numPartition).foreach(i => expectChecksums(i) = in.readLong())
-    in.close()
-
-    assert(dataFile.exists)
-    val dataIn = new FileInputStream(dataFile)
-    assert(indexFile.exists)
-    val indexIn = new DataInputStream(new FileInputStream(indexFile))
-    var checkedIn: CheckedInputStream = null
-    var prevOffset = indexIn.readLong
-    (0 until numPartition).foreach { i =>
-      val curOffset = indexIn.readLong
-      val limit = (curOffset - prevOffset).toInt
-      val bytes = new Array[Byte](limit)
-      checkedIn = new CheckedInputStream(
-        new LimitedInputStream(dataIn, curOffset - prevOffset), new Adler32)
-      checkedIn.read(bytes, 0, limit)
-      prevOffset = curOffset
-      // checksum must be consistent at both write and read sides
-      assert(checkedIn.getChecksum.getValue === expectChecksums(i))
-    }
-    dataIn.close()
-    indexIn.close()
-    checkedIn.close()
+    compareChecksums(numPartition, checksumFile, dataFile, indexFile)
   }
 }

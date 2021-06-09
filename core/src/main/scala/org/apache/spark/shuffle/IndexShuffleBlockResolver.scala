@@ -156,6 +156,13 @@ private[spark] class IndexShuffleBlockResolver(
         logWarning(s"Error deleting index ${file.getPath()}")
       }
     }
+
+    file = getChecksumFile(shuffleId, mapId)
+    if (file.exists()) {
+      if (!file.delete()) {
+        logWarning(s"Error deleting checksum ${file.getPath()}")
+      }
+    }
   }
 
   /**

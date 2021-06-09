@@ -21,9 +21,8 @@ import java.io.*;
 import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.util.*;
-import java.util.zip.Adler32;
-import java.util.zip.CheckedInputStream;
 
+import org.apache.spark.shuffle.ShuffleChecksumTester;
 import org.mockito.stubbing.Answer;
 import scala.*;
 import scala.collection.Iterator;
@@ -64,7 +63,7 @@ import static org.junit.Assert.*;
 import static org.mockito.Answers.RETURNS_SMART_NULLS;
 import static org.mockito.Mockito.*;
 
-public class UnsafeShuffleWriterSuite {
+public class UnsafeShuffleWriterSuite implements ShuffleChecksumTester {
 
   static final int DEFAULT_INITIAL_SORT_BUFFER_SIZE = 4096;
   static final int NUM_PARTITIONS = 4;
@@ -323,34 +322,7 @@ public class UnsafeShuffleWriterSuite {
     writer1.stop(true);
     assertTrue(checksumFile.exists());
     assertEquals(checksumFile.length(), 8 * NUM_PARTITIONS);
-    long[] expectChecksums = new long[NUM_PARTITIONS];
-    DataInputStream in1 = new DataInputStream(new FileInputStream(checksumFile));
-    for (int i = 0; i < NUM_PARTITIONS; i ++) {
-      expectChecksums[i] = in1.readLong();
-    }
-    in1.close();
-    checksumFile.delete();
-
-    assertTrue(dataFile.exists());
-    FileInputStream dataIn = new FileInputStream(dataFile);
-    assertTrue(indexFile.exists());
-    DataInputStream indexIn = new DataInputStream(new FileInputStream(indexFile));
-    CheckedInputStream checkedIn = null;
-    long prevOffset = indexIn.readLong();
-    for (int i = 0; i < NUM_PARTITIONS; i ++) {
-      long curOffset = indexIn.readLong();
-      int limit = (int) (curOffset - prevOffset);
-      byte[] bytes = new byte[limit];
-      checkedIn = new CheckedInputStream(
-        new LimitedInputStream(dataIn, curOffset - prevOffset), new Adler32());
-      checkedIn.read(bytes, 0, limit);
-      prevOffset = curOffset;
-      // checksum must be consistent at both write and read sides
-      assertEquals(checkedIn.getChecksum().getValue(), expectChecksums[i]);
-    }
-    dataIn.close();
-    indexIn.close();
-    checkedIn.close();
+    compareChecksums(NUM_PARTITIONS, checksumFile, dataFile, indexFile);
   }
 
   @Test
@@ -382,32 +354,7 @@ public class UnsafeShuffleWriterSuite {
     writer1.closeAndWriteOutput();
     assertTrue(checksumFile.exists());
     assertEquals(checksumFile.length(), 8 * NUM_PARTITIONS);
-    DataInputStream in1 = new DataInputStream(new FileInputStream(checksumFile));
-    long[] expectChecksums = new long[NUM_PARTITIONS];
-    for (int i = 0; i < NUM_PARTITIONS; i ++) {
-      expectChecksums[i] = in1.readLong();
-    }
-    in1.close();
-    assertTrue(dataFile.exists());
-    FileInputStream dataIn = new FileInputStream(dataFile);
-    assertTrue(indexFile.exists());
-    DataInputStream indexIn = new DataInputStream(new FileInputStream(indexFile));
-    CheckedInputStream checkedIn = null;
-    long prevOffset = indexIn.readLong();
-    for (int i = 0; i < NUM_PARTITIONS; i ++) {
-      long curOffset = indexIn.readLong();
-      int limit = (int) (curOffset - prevOffset);
-      byte[] bytes = new byte[limit];
-      checkedIn = new CheckedInputStream(
-        new LimitedInputStream(dataIn, curOffset - prevOffset), new Adler32());
-      checkedIn.read(bytes, 0, limit);
-      prevOffset = curOffset;
-      // checksum must be consistent at both write and read sides
-      assertEquals(checkedIn.getChecksum().getValue(), expectChecksums[i]);
-    }
-    dataIn.close();
-    indexIn.close();
-    checkedIn.close();
+    compareChecksums(NUM_PARTITIONS, checksumFile, dataFile, indexFile);
   }
 
   private void testMergingSpills(
