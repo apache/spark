@@ -21,7 +21,6 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
-import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, PartitioningCollection, RangePartitioning, UnknownPartitioning}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.internal.SQLConf
 
@@ -37,37 +36,23 @@ case class ExpandExec(
     projections: Seq[Seq[Expression]],
     output: Seq[Attribute],
     child: SparkPlan)
-  extends UnaryExecNode with CodegenSupport {
+  extends UnaryExecNode
+    with CodegenSupport
+    with AliasAwareOutputPartitioning {
 
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
   /**
+   * Used by `AliasAwareOutputPartitioning`
    * It is common for Expand to keep some of its inputs unchanged in all projections.
    * If the child's output is partitioned by those attributes, then so will be
    * the output of the Expand.
-   * In general case the Expand can output data with arbitrary partitioning, so set it
-   * as UNKNOWN partitioning.
    */
-  override def outputPartitioning: Partitioning = {
-    lazy val passThroughAttrs = ExpressionSet(output.zipWithIndex.filter {
-      case (attr, i) => projections.forall(_(i).semanticEquals(attr))
-    }.map(_._1))
-
-    def getOutputPartitioning(partitioning: Partitioning): Partitioning = {
-      partitioning match {
-        case HashPartitioning(exprs, _) if exprs.forall(passThroughAttrs.contains) =>
-          partitioning
-        case RangePartitioning(ordering, _)
-          if ordering.map(_.child).forall(passThroughAttrs.contains) =>
-          partitioning
-        case PartitioningCollection(partitionings) =>
-          PartitioningCollection(partitionings.map(getOutputPartitioning))
-        case _ => UnknownPartitioning(0)
-      }
-    }
-
-    getOutputPartitioning(child.outputPartitioning)
+  override protected def outputExpressions: Seq[NamedExpression] = {
+    output.zipWithIndex.filter {
+      case (attr, i) => projections.forall(_ (i).semanticEquals(attr))
+    }.map(_._1)
   }
 
   @transient
