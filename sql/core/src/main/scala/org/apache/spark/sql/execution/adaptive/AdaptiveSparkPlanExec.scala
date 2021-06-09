@@ -88,15 +88,20 @@ case class AdaptiveSparkPlanExec(
   private def queryStagePreparationRules: Seq[Rule[SparkPlan]] = Seq(
     RemoveRedundantProjects,
     EnsureRequirements,
+    RemoveRedundantSorts,
+    DisableUnnecessaryBucketedScan
+  ) ++ context.session.sessionState.queryStagePrepRules
+
+  // This list rules are applied between queryStagePreparationRules and estimate physical plan cost
+  // so that we can support introduce extra shuffle
+  @transient private val queryStagePreparationWithExtraShuffleRules: Seq[Rule[SparkPlan]] = Seq(
     // Apply OptimizeSkewedJoin rule at preparation side so that we can compare the cost of
     // skew join and extra shuffle nodes.
     OptimizeSkewedJoin,
     // Add the EnsureRequirements rule here since OptimizeSkewedJoin may change the
     // output partitioning
-    EnsureRequirements,
-    RemoveRedundantSorts,
-    DisableUnnecessaryBucketedScan
-  ) ++ context.session.sessionState.queryStagePrepRules
+    EnsureRequirements
+  )
 
   // A list of physical optimizer rules to be applied to a new stage before its execution. These
   // optimizations should be stage-independent.
@@ -117,13 +122,13 @@ case class AdaptiveSparkPlanExec(
     CollapseCodegenStages()
   )
 
-  // OptimizeSkewedJoin has moved into preparation rules, so we should make
-  // finalPreparationStageRules same as finalStageOptimizerRules
-  private def finalPreparationStageRules: Seq[Rule[SparkPlan]] = {
+  // OptimizeSkewedJoin has moved into this rules, so we should follow the finalStageOptimizerRules
+  // for the final stage.
+  private def finalStagePreparationWithExtraShuffleRules: Seq[Rule[SparkPlan]] = {
     val origins = inputPlan.collect {
       case s: ShuffleExchangeLike => s.shuffleOrigin
     }
-    (preprocessingRules ++ queryStagePreparationRules).filter {
+    queryStagePreparationWithExtraShuffleRules.filter {
       case c: CustomShuffleReaderRule =>
         origins.forall(c.supportedShuffleOrigins.contains)
       case _ => true
@@ -641,15 +646,19 @@ case class AdaptiveSparkPlanExec(
     logicalPlan.invalidateStatsCache()
     val optimized = optimizer.execute(logicalPlan)
     val sparkPlan = context.session.sessionState.planner.plan(ReturnAnswer(optimized)).next()
-    val rules = if (isFinalStage(EnsureRequirements.apply(sparkPlan))) {
-      finalPreparationStageRules
-    } else {
-      preprocessingRules ++ queryStagePreparationRules
-    }
-
     val newPlan = applyPhysicalRules(
       sparkPlan,
-      rules,
+      preprocessingRules ++ queryStagePreparationRules,
+      Some((planChangeLogger, "AQE Replanning")))
+
+    val preparationWithExtraShuffleRules = if (isFinalStage(newPlan)) {
+      finalStagePreparationWithExtraShuffleRules
+    } else {
+      queryStagePreparationWithExtraShuffleRules
+    }
+    val newPlanWithExtraShuffle = applyPhysicalRules(
+      newPlan,
+      preparationWithExtraShuffleRules,
       Some((planChangeLogger, "AQE Replanning")))
 
     // When both enabling AQE and DPP, `PlanAdaptiveDynamicPruningFilters` rule will
@@ -661,8 +670,9 @@ case class AdaptiveSparkPlanExec(
     // is already the `BroadcastExchangeExec` plan after apply the `LogicalQueryStageStrategy` rule.
     val finalPlan = currentPhysicalPlan match {
       case b: BroadcastExchangeLike
-        if (!newPlan.isInstanceOf[BroadcastExchangeLike]) => b.withNewChildren(Seq(newPlan))
-      case _ => newPlan
+        if (!newPlanWithExtraShuffle.isInstanceOf[BroadcastExchangeLike]) =>
+        b.withNewChildren(Seq(newPlanWithExtraShuffle))
+      case _ => newPlanWithExtraShuffle
     }
 
     (finalPlan, optimized)
