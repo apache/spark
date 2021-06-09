@@ -651,7 +651,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     val msg = "None.get"
     val logAppender = new LogAppender(msg)
     withLogAppender(logAppender) {
-      val conf = new SparkConf().remove(KUBERNETES_DRIVER_POD_NAME)
+      val conf = new SparkConf(false)
       new ExecutorPodsAllocator(
         conf, secMgr, executorBuilder, kubernetesClient, snapshotsStore, waitForExecutorPodsClock)
         .driverPod
