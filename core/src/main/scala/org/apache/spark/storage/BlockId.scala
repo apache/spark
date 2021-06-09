@@ -155,7 +155,7 @@ object BlockId {
   val SHUFFLE_DATA = "shuffle_([0-9]+)_([0-9]+)_([0-9]+).data".r
   val SHUFFLE_INDEX = "shuffle_([0-9]+)_([0-9]+)_([0-9]+).index".r
   val SHUFFLE_PUSH = "shufflePush_([0-9]+)_([0-9]+)_([0-9]+)".r
-  val SHUFFLE_MERGED = "shuffleMerged_([_A-Za-z0-9]*)_([0-9]+)_([0-9]+).data".r
+  val SHUFFLE_MERGED_DATA = "shuffleMerged_([_A-Za-z0-9]*)_([0-9]+)_([0-9]+).data".r
   val SHUFFLE_MERGED_INDEX = "shuffleMerged_([_A-Za-z0-9]*)_([0-9]+)_([0-9]+).index".r
   val SHUFFLE_MERGED_META = "shuffleMerged_([_A-Za-z0-9]*)_([0-9]+)_([0-9]+).meta".r
   val BROADCAST = "broadcast_([0-9]+)([_A-Za-z0-9]*)".r
@@ -178,7 +178,7 @@ object BlockId {
       ShuffleIndexBlockId(shuffleId.toInt, mapId.toLong, reduceId.toInt)
     case SHUFFLE_PUSH(shuffleId, mapIndex, reduceId) =>
       ShufflePushBlockId(shuffleId.toInt, mapIndex.toInt, reduceId.toInt)
-    case SHUFFLE_MERGED(appId, shuffleId, reduceId) =>
+    case SHUFFLE_MERGED_DATA(appId, shuffleId, reduceId) =>
       ShuffleMergedDataBlockId(appId, shuffleId.toInt, reduceId.toInt)
     case SHUFFLE_MERGED_INDEX(appId, shuffleId, reduceId) =>
       ShuffleMergedIndexBlockId(appId, shuffleId.toInt, reduceId.toInt)

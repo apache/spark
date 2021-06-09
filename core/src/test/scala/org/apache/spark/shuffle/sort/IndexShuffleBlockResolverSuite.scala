@@ -198,8 +198,17 @@ class IndexShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterEa
     val chunkTracker = new RoaringBitmap()
     chunkTracker.add(1)
     chunkTracker.add(2)
-    val outMeta = new DataOutputStream(new BufferedOutputStream(new FileOutputStream(metaFile)))
+    val metaFileOutputStream = new FileOutputStream(metaFile)
+    val outMeta = new DataOutputStream(metaFileOutputStream)
     Utils.tryWithSafeFinally {
+      chunkTracker.serialize(outMeta)
+      chunkTracker.clear()
+      chunkTracker.add(3)
+      chunkTracker.add(4)
+      chunkTracker.serialize(outMeta)
+      chunkTracker.clear()
+      chunkTracker.add(5)
+      chunkTracker.add(6)
       chunkTracker.serialize(outMeta)
     }{
       outMeta.close()
@@ -211,7 +220,9 @@ class IndexShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterEa
     val mergedBlockMeta =
       resolver.getMergedBlockMeta(ShuffleBlockId(shuffleId, -1, reduceId), dirs)
     assert(mergedBlockMeta.getNumChunks === 3)
-    assert(mergedBlockMeta.readChunkBitmaps().size === 1)
+    assert(mergedBlockMeta.readChunkBitmaps().size === 3)
+    assert(mergedBlockMeta.readChunkBitmaps()(0).contains(1))
+    assert(mergedBlockMeta.readChunkBitmaps()(0).contains(2))
   }
 
   private def prepareMergedShuffleIndexFile(indexFileName: String): Unit = {
