@@ -97,11 +97,12 @@ class AggregatingAccumulator private(
    * Driver side operations like `merge` and `value` are executed in the DAGScheduler thread. This
    * thread does not have a SQL configuration so we attach our own here.
    */
-  private[this] def withSQLConf[T](default: => T)(body: => T): T = {
+  private[this] def withSQLConf[T](canRunOnExecutor: Boolean, default: => T)(body: => T): T = {
     if (conf != null) {
+      // When we can reach here, we are on the driver side.
       SQLConf.withExistingConf(conf)(body)
-    } else if (TaskContext.get != null) {
-      SQLConf.withExistingConf(SQLConf.get)(body)
+    } else if (canRunOnExecutor) {
+      body
     } else {
       default
     }
@@ -147,7 +148,8 @@ class AggregatingAccumulator private(
     }
   }
 
-  override def merge(other: AccumulatorV2[InternalRow, InternalRow]): Unit = withSQLConf(()) {
+  override def merge(
+      other: AccumulatorV2[InternalRow, InternalRow]): Unit = withSQLConf(true, ()) {
     if (!other.isZero) {
       other match {
         case agg: AggregatingAccumulator =>
@@ -171,7 +173,7 @@ class AggregatingAccumulator private(
     }
   }
 
-  override def value: InternalRow = withSQLConf(InternalRow.empty) {
+  override def value: InternalRow = withSQLConf(false, InternalRow.empty) {
     // Either use the existing buffer or create a temporary one.
     val input = if (!isZero) {
       buffer
