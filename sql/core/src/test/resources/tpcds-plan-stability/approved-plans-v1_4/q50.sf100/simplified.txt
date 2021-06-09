@@ -19,7 +19,7 @@ TakeOrderedAndProject [s_store_name,s_company_id,s_street_number,s_street_name,s
                                     WholeStageCodegen (2)
                                       Project [sr_item_sk,sr_customer_sk,sr_ticket_number,sr_returned_date_sk]
                                         BroadcastHashJoin [sr_returned_date_sk,d_date_sk]
-                                          Filter [sr_ticket_number,sr_item_sk,sr_customer_sk]
+                                          Filter [sr_customer_sk,sr_ticket_number,sr_item_sk]
                                             ColumnarToRow
                                               InputAdapter
                                                 Scan parquet default.store_returns [sr_item_sk,sr_customer_sk,sr_ticket_number,sr_returned_date_sk]
@@ -39,7 +39,7 @@ TakeOrderedAndProject [s_store_name,s_company_id,s_street_number,s_street_name,s
                                 InputAdapter
                                   Exchange [ss_ticket_number,ss_item_sk,ss_customer_sk] #4
                                     WholeStageCodegen (4)
-                                      Filter [ss_ticket_number,ss_item_sk,ss_customer_sk,ss_store_sk]
+                                      Filter [ss_customer_sk,ss_store_sk,ss_ticket_number,ss_item_sk]
                                         ColumnarToRow
                                           InputAdapter
                                             Scan parquet default.store_sales [ss_item_sk,ss_customer_sk,ss_store_sk,ss_ticket_number,ss_sold_date_sk]

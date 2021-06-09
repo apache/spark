@@ -29,7 +29,7 @@ TakeOrderedAndProject (24)
 Output [5]: [sr_item_sk#1, sr_reason_sk#2, sr_ticket_number#3, sr_return_quantity#4, sr_returned_date_sk#5]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_returns]
-PushedFilters: [IsNotNull(sr_item_sk), IsNotNull(sr_ticket_number), IsNotNull(sr_reason_sk)]
+PushedFilters: [IsNotNull(sr_reason_sk), IsNotNull(sr_item_sk), IsNotNull(sr_ticket_number)]
 ReadSchema: struct<sr_item_sk:int,sr_reason_sk:int,sr_ticket_number:int,sr_return_quantity:int>
 
 (2) ColumnarToRow [codegen id : 2]
@@ -37,7 +37,7 @@ Input [5]: [sr_item_sk#1, sr_reason_sk#2, sr_ticket_number#3, sr_return_quantity
 
 (3) Filter [codegen id : 2]
 Input [5]: [sr_item_sk#1, sr_reason_sk#2, sr_ticket_number#3, sr_return_quantity#4, sr_returned_date_sk#5]
-Condition : ((isnotnull(sr_item_sk#1) AND isnotnull(sr_ticket_number#3)) AND isnotnull(sr_reason_sk#2))
+Condition : ((isnotnull(sr_reason_sk#2) AND isnotnull(sr_item_sk#1)) AND isnotnull(sr_ticket_number#3))
 
 (4) Project [codegen id : 2]
 Output [4]: [sr_item_sk#1, sr_reason_sk#2, sr_ticket_number#3, sr_return_quantity#4]
@@ -47,7 +47,7 @@ Input [5]: [sr_item_sk#1, sr_reason_sk#2, sr_ticket_number#3, sr_return_quantity
 Output [2]: [r_reason_sk#6, r_reason_desc#7]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/reason]
-PushedFilters: [IsNotNull(r_reason_desc), EqualTo(r_reason_desc,reason 28                                                                                           ), IsNotNull(r_reason_sk)]
+PushedFilters: [EqualTo(r_reason_desc,reason 28                                                                                           ), IsNotNull(r_reason_desc), IsNotNull(r_reason_sk)]
 ReadSchema: struct<r_reason_sk:int,r_reason_desc:string>
 
 (6) ColumnarToRow [codegen id : 1]
@@ -55,7 +55,7 @@ Input [2]: [r_reason_sk#6, r_reason_desc#7]
 
 (7) Filter [codegen id : 1]
 Input [2]: [r_reason_sk#6, r_reason_desc#7]
-Condition : ((isnotnull(r_reason_desc#7) AND (r_reason_desc#7 = reason 28                                                                                           )) AND isnotnull(r_reason_sk#6))
+Condition : (((r_reason_desc#7 = reason 28                                                                                           ) AND isnotnull(r_reason_desc#7)) AND isnotnull(r_reason_sk#6))
 
 (8) Project [codegen id : 1]
 Output [1]: [r_reason_sk#6]

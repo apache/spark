@@ -55,7 +55,7 @@
 Output [6]: [ss_item_sk#1, ss_customer_sk#2, ss_store_sk#3, ss_ticket_number#4, ss_net_paid#5, ss_sold_date_sk#6]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_sales]
-PushedFilters: [IsNotNull(ss_ticket_number), IsNotNull(ss_item_sk), IsNotNull(ss_store_sk), IsNotNull(ss_customer_sk)]
+PushedFilters: [IsNotNull(ss_customer_sk), IsNotNull(ss_store_sk), IsNotNull(ss_ticket_number), IsNotNull(ss_item_sk)]
 ReadSchema: struct<ss_item_sk:int,ss_customer_sk:int,ss_store_sk:int,ss_ticket_number:int,ss_net_paid:decimal(7,2)>
 
 (2) ColumnarToRow [codegen id : 2]
@@ -63,7 +63,7 @@ Input [6]: [ss_item_sk#1, ss_customer_sk#2, ss_store_sk#3, ss_ticket_number#4, s
 
 (3) Filter [codegen id : 2]
 Input [6]: [ss_item_sk#1, ss_customer_sk#2, ss_store_sk#3, ss_ticket_number#4, ss_net_paid#5, ss_sold_date_sk#6]
-Condition : (((isnotnull(ss_ticket_number#4) AND isnotnull(ss_item_sk#1)) AND isnotnull(ss_store_sk#3)) AND isnotnull(ss_customer_sk#2))
+Condition : (((isnotnull(ss_customer_sk#2) AND isnotnull(ss_store_sk#3)) AND isnotnull(ss_ticket_number#4)) AND isnotnull(ss_item_sk#1))
 
 (4) Project [codegen id : 2]
 Output [5]: [ss_item_sk#1, ss_customer_sk#2, ss_store_sk#3, ss_ticket_number#4, ss_net_paid#5]
@@ -73,7 +73,7 @@ Input [6]: [ss_item_sk#1, ss_customer_sk#2, ss_store_sk#3, ss_ticket_number#4, s
 Output [6]: [i_item_sk#7, i_current_price#8, i_size#9, i_color#10, i_units#11, i_manager_id#12]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/item]
-PushedFilters: [IsNotNull(i_color), EqualTo(i_color,pale                ), IsNotNull(i_item_sk)]
+PushedFilters: [EqualTo(i_color,pale                ), IsNotNull(i_color), IsNotNull(i_item_sk)]
 ReadSchema: struct<i_item_sk:int,i_current_price:decimal(7,2),i_size:string,i_color:string,i_units:string,i_manager_id:int>
 
 (6) ColumnarToRow [codegen id : 1]
@@ -81,7 +81,7 @@ Input [6]: [i_item_sk#7, i_current_price#8, i_size#9, i_color#10, i_units#11, i_
 
 (7) Filter [codegen id : 1]
 Input [6]: [i_item_sk#7, i_current_price#8, i_size#9, i_color#10, i_units#11, i_manager_id#12]
-Condition : ((isnotnull(i_color#10) AND (i_color#10 = pale                )) AND isnotnull(i_item_sk#7))
+Condition : (((i_color#10 = pale                ) AND isnotnull(i_color#10)) AND isnotnull(i_item_sk#7))
 
 (8) BroadcastExchange
 Input [6]: [i_item_sk#7, i_current_price#8, i_size#9, i_color#10, i_units#11, i_manager_id#12]
@@ -108,7 +108,7 @@ Arguments: [ss_customer_sk#2 ASC NULLS FIRST], false, 0
 Output [4]: [c_customer_sk#15, c_first_name#16, c_last_name#17, c_birth_country#18]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer]
-PushedFilters: [IsNotNull(c_customer_sk), IsNotNull(c_birth_country)]
+PushedFilters: [IsNotNull(c_birth_country), IsNotNull(c_customer_sk)]
 ReadSchema: struct<c_customer_sk:int,c_first_name:string,c_last_name:string,c_birth_country:string>
 
 (14) ColumnarToRow [codegen id : 4]
@@ -116,7 +116,7 @@ Input [4]: [c_customer_sk#15, c_first_name#16, c_last_name#17, c_birth_country#1
 
 (15) Filter [codegen id : 4]
 Input [4]: [c_customer_sk#15, c_first_name#16, c_last_name#17, c_birth_country#18]
-Condition : (isnotnull(c_customer_sk#15) AND isnotnull(c_birth_country#18))
+Condition : (isnotnull(c_birth_country#18) AND isnotnull(c_customer_sk#15))
 
 (16) Exchange
 Input [4]: [c_customer_sk#15, c_first_name#16, c_last_name#17, c_birth_country#18]
@@ -182,7 +182,7 @@ Input [14]: [ss_item_sk#1, ss_store_sk#3, ss_ticket_number#4, ss_net_paid#5, i_c
 Output [5]: [s_store_sk#25, s_store_name#26, s_market_id#27, s_state#28, s_zip#29]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store]
-PushedFilters: [IsNotNull(s_market_id), EqualTo(s_market_id,8), IsNotNull(s_store_sk), IsNotNull(s_zip)]
+PushedFilters: [EqualTo(s_market_id,8), IsNotNull(s_market_id), IsNotNull(s_zip), IsNotNull(s_store_sk)]
 ReadSchema: struct<s_store_sk:int,s_store_name:string,s_market_id:int,s_state:string,s_zip:string>
 
 (31) ColumnarToRow [codegen id : 10]
@@ -190,7 +190,7 @@ Input [5]: [s_store_sk#25, s_store_name#26, s_market_id#27, s_state#28, s_zip#29
 
 (32) Filter [codegen id : 10]
 Input [5]: [s_store_sk#25, s_store_name#26, s_market_id#27, s_state#28, s_zip#29]
-Condition : (((isnotnull(s_market_id#27) AND (s_market_id#27 = 8)) AND isnotnull(s_store_sk#25)) AND isnotnull(s_zip#29))
+Condition : ((((s_market_id#27 = 8) AND isnotnull(s_market_id#27)) AND isnotnull(s_zip#29)) AND isnotnull(s_store_sk#25))
 
 (33) Project [codegen id : 10]
 Output [4]: [s_store_sk#25, s_store_name#26, s_state#28, s_zip#29]
@@ -204,7 +204,7 @@ Arguments: HashedRelationBroadcastMode(List(input[3, string, true]),false), [id=
 Output [3]: [ca_state#31, ca_zip#32, ca_country#33]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer_address]
-PushedFilters: [IsNotNull(ca_country), IsNotNull(ca_zip)]
+PushedFilters: [IsNotNull(ca_zip), IsNotNull(ca_country)]
 ReadSchema: struct<ca_state:string,ca_zip:string,ca_country:string>
 
 (36) ColumnarToRow
@@ -212,7 +212,7 @@ Input [3]: [ca_state#31, ca_zip#32, ca_country#33]
 
 (37) Filter
 Input [3]: [ca_state#31, ca_zip#32, ca_country#33]
-Condition : (isnotnull(ca_country#33) AND isnotnull(ca_zip#32))
+Condition : (isnotnull(ca_zip#32) AND isnotnull(ca_country#33))
 
 (38) BroadcastHashJoin [codegen id : 11]
 Left keys [1]: [s_zip#29]
@@ -343,7 +343,7 @@ Subquery:1 Hosting operator id = 49 Hosting Expression = Subquery scalar-subquer
 Output [6]: [ss_item_sk#50, ss_customer_sk#51, ss_store_sk#52, ss_ticket_number#53, ss_net_paid#54, ss_sold_date_sk#55]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_sales]
-PushedFilters: [IsNotNull(ss_ticket_number), IsNotNull(ss_item_sk), IsNotNull(ss_store_sk), IsNotNull(ss_customer_sk)]
+PushedFilters: [IsNotNull(ss_customer_sk), IsNotNull(ss_store_sk), IsNotNull(ss_ticket_number), IsNotNull(ss_item_sk)]
 ReadSchema: struct<ss_item_sk:int,ss_customer_sk:int,ss_store_sk:int,ss_ticket_number:int,ss_net_paid:decimal(7,2)>
 
 (52) ColumnarToRow [codegen id : 2]
@@ -351,7 +351,7 @@ Input [6]: [ss_item_sk#50, ss_customer_sk#51, ss_store_sk#52, ss_ticket_number#5
 
 (53) Filter [codegen id : 2]
 Input [6]: [ss_item_sk#50, ss_customer_sk#51, ss_store_sk#52, ss_ticket_number#53, ss_net_paid#54, ss_sold_date_sk#55]
-Condition : (((isnotnull(ss_ticket_number#53) AND isnotnull(ss_item_sk#50)) AND isnotnull(ss_store_sk#52)) AND isnotnull(ss_customer_sk#51))
+Condition : (((isnotnull(ss_customer_sk#51) AND isnotnull(ss_store_sk#52)) AND isnotnull(ss_ticket_number#53)) AND isnotnull(ss_item_sk#50))
 
 (54) Project [codegen id : 2]
 Output [5]: [ss_item_sk#50, ss_customer_sk#51, ss_store_sk#52, ss_ticket_number#53, ss_net_paid#54]
@@ -361,7 +361,7 @@ Input [6]: [ss_item_sk#50, ss_customer_sk#51, ss_store_sk#52, ss_ticket_number#5
 Output [5]: [s_store_sk#56, s_store_name#57, s_market_id#58, s_state#59, s_zip#60]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store]
-PushedFilters: [IsNotNull(s_market_id), EqualTo(s_market_id,8), IsNotNull(s_store_sk), IsNotNull(s_zip)]
+PushedFilters: [EqualTo(s_market_id,8), IsNotNull(s_market_id), IsNotNull(s_zip), IsNotNull(s_store_sk)]
 ReadSchema: struct<s_store_sk:int,s_store_name:string,s_market_id:int,s_state:string,s_zip:string>
 
 (56) ColumnarToRow [codegen id : 1]
@@ -369,7 +369,7 @@ Input [5]: [s_store_sk#56, s_store_name#57, s_market_id#58, s_state#59, s_zip#60
 
 (57) Filter [codegen id : 1]
 Input [5]: [s_store_sk#56, s_store_name#57, s_market_id#58, s_state#59, s_zip#60]
-Condition : (((isnotnull(s_market_id#58) AND (s_market_id#58 = 8)) AND isnotnull(s_store_sk#56)) AND isnotnull(s_zip#60))
+Condition : ((((s_market_id#58 = 8) AND isnotnull(s_market_id#58)) AND isnotnull(s_zip#60)) AND isnotnull(s_store_sk#56))
 
 (58) Project [codegen id : 1]
 Output [4]: [s_store_sk#56, s_store_name#57, s_state#59, s_zip#60]
@@ -439,7 +439,7 @@ Arguments: [ss_customer_sk#51 ASC NULLS FIRST], false, 0
 Output [4]: [c_customer_sk#71, c_first_name#72, c_last_name#73, c_birth_country#74]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer]
-PushedFilters: [IsNotNull(c_customer_sk), IsNotNull(c_birth_country)]
+PushedFilters: [IsNotNull(c_birth_country), IsNotNull(c_customer_sk)]
 ReadSchema: struct<c_customer_sk:int,c_first_name:string,c_last_name:string,c_birth_country:string>
 
 (74) ColumnarToRow [codegen id : 8]
@@ -447,7 +447,7 @@ Input [4]: [c_customer_sk#71, c_first_name#72, c_last_name#73, c_birth_country#7
 
 (75) Filter [codegen id : 8]
 Input [4]: [c_customer_sk#71, c_first_name#72, c_last_name#73, c_birth_country#74]
-Condition : (isnotnull(c_customer_sk#71) AND isnotnull(c_birth_country#74))
+Condition : (isnotnull(c_birth_country#74) AND isnotnull(c_customer_sk#71))
 
 (76) Exchange
 Input [4]: [c_customer_sk#71, c_first_name#72, c_last_name#73, c_birth_country#74]
@@ -521,7 +521,7 @@ Arguments: [c_birth_country#74 ASC NULLS FIRST, s_zip#60 ASC NULLS FIRST], false
 Output [3]: [ca_state#82, ca_zip#83, ca_country#84]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer_address]
-PushedFilters: [IsNotNull(ca_country), IsNotNull(ca_zip)]
+PushedFilters: [IsNotNull(ca_zip), IsNotNull(ca_country)]
 ReadSchema: struct<ca_state:string,ca_zip:string,ca_country:string>
 
 (93) ColumnarToRow [codegen id : 16]
@@ -529,7 +529,7 @@ Input [3]: [ca_state#82, ca_zip#83, ca_country#84]
 
 (94) Filter [codegen id : 16]
 Input [3]: [ca_state#82, ca_zip#83, ca_country#84]
-Condition : (isnotnull(ca_country#84) AND isnotnull(ca_zip#83))
+Condition : (isnotnull(ca_zip#83) AND isnotnull(ca_country#84))
 
 (95) Exchange
 Input [3]: [ca_state#82, ca_zip#83, ca_country#84]

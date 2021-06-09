@@ -31,7 +31,7 @@ TakeOrderedAndProject [substr(r_reason_desc, 1, 20),avg(ws_quantity),avg(wr_refu
                                                             WholeStageCodegen (2)
                                                               Project [ws_item_sk,ws_order_number,ws_quantity,ws_sales_price,ws_net_profit,ws_sold_date_sk]
                                                                 BroadcastHashJoin [ws_web_page_sk,wp_web_page_sk]
-                                                                  Filter [ws_item_sk,ws_order_number,ws_web_page_sk,ws_sales_price,ws_net_profit]
+                                                                  Filter [ws_web_page_sk,ws_item_sk,ws_order_number,ws_net_profit,ws_sales_price]
                                                                     ColumnarToRow
                                                                       InputAdapter
                                                                         Scan parquet default.web_sales [ws_item_sk,ws_web_page_sk,ws_order_number,ws_quantity,ws_sales_price,ws_net_profit,ws_sold_date_sk]
@@ -51,14 +51,14 @@ TakeOrderedAndProject [substr(r_reason_desc, 1, 20),avg(ws_quantity),avg(wr_refu
                                                           Exchange [wr_item_sk,wr_order_number] #6
                                                             WholeStageCodegen (4)
                                                               Project [wr_item_sk,wr_refunded_cdemo_sk,wr_refunded_addr_sk,wr_returning_cdemo_sk,wr_reason_sk,wr_order_number,wr_fee,wr_refunded_cash]
-                                                                Filter [wr_item_sk,wr_order_number,wr_refunded_cdemo_sk,wr_returning_cdemo_sk,wr_refunded_addr_sk,wr_reason_sk]
+                                                                Filter [wr_refunded_addr_sk,wr_returning_cdemo_sk,wr_refunded_cdemo_sk,wr_reason_sk,wr_item_sk,wr_order_number]
                                                                   ColumnarToRow
                                                                     InputAdapter
                                                                       Scan parquet default.web_returns [wr_item_sk,wr_refunded_cdemo_sk,wr_refunded_addr_sk,wr_returning_cdemo_sk,wr_reason_sk,wr_order_number,wr_fee,wr_refunded_cash,wr_returned_date_sk]
                                               InputAdapter
                                                 BroadcastExchange #7
                                                   WholeStageCodegen (6)
-                                                    Filter [cd_demo_sk,cd_marital_status,cd_education_status]
+                                                    Filter [cd_marital_status,cd_education_status,cd_demo_sk]
                                                       ColumnarToRow
                                                         InputAdapter
                                                           Scan parquet default.customer_demographics [cd_demo_sk,cd_marital_status,cd_education_status]
@@ -76,7 +76,7 @@ TakeOrderedAndProject [substr(r_reason_desc, 1, 20),avg(ws_quantity),avg(wr_refu
                             BroadcastExchange #9
                               WholeStageCodegen (11)
                                 Project [ca_address_sk,ca_state]
-                                  Filter [ca_country,ca_address_sk,ca_state]
+                                  Filter [ca_state,ca_country,ca_address_sk]
                                     ColumnarToRow
                                       InputAdapter
                                         Scan parquet default.customer_address [ca_address_sk,ca_state,ca_country]

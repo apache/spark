@@ -45,7 +45,7 @@ TakeOrderedAndProject [sum_sales,avg_monthly_sales,d_year,i_category,i_brand,d_m
                                                                                         BroadcastHashJoin [cs_call_center_sk,cc_call_center_sk]
                                                                                           Project [cs_call_center_sk,cs_item_sk,cs_sales_price,d_year,d_moy]
                                                                                             BroadcastHashJoin [cs_sold_date_sk,d_date_sk]
-                                                                                              Filter [cs_item_sk,cs_call_center_sk]
+                                                                                              Filter [cs_call_center_sk,cs_item_sk]
                                                                                                 ColumnarToRow
                                                                                                   InputAdapter
                                                                                                     Scan parquet default.catalog_sales [cs_call_center_sk,cs_item_sk,cs_sales_price,cs_sold_date_sk]
@@ -71,7 +71,7 @@ TakeOrderedAndProject [sum_sales,avg_monthly_sales,d_year,i_category,i_brand,d_m
                                                                                 InputAdapter
                                                                                   Exchange [i_item_sk] #8
                                                                                     WholeStageCodegen (5)
-                                                                                      Filter [i_item_sk,i_category,i_brand]
+                                                                                      Filter [i_brand,i_category,i_item_sk]
                                                                                         ColumnarToRow
                                                                                           InputAdapter
                                                                                             Scan parquet default.item [i_item_sk,i_brand,i_category]

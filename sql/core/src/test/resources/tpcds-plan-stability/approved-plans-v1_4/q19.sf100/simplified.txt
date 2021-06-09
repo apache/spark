@@ -19,7 +19,7 @@ TakeOrderedAndProject [ext_price,brand,brand_id,i_manufact_id,i_manufact]
                                     BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
                                       Project [ss_customer_sk,ss_store_sk,ss_ext_sales_price,ss_sold_date_sk,i_brand_id,i_brand,i_manufact_id,i_manufact]
                                         BroadcastHashJoin [ss_item_sk,i_item_sk]
-                                          Filter [ss_item_sk,ss_customer_sk,ss_store_sk]
+                                          Filter [ss_customer_sk,ss_store_sk,ss_item_sk]
                                             ColumnarToRow
                                               InputAdapter
                                                 Scan parquet default.store_sales [ss_item_sk,ss_customer_sk,ss_store_sk,ss_ext_sales_price,ss_sold_date_sk]
@@ -37,7 +37,7 @@ TakeOrderedAndProject [ext_price,brand,brand_id,i_manufact_id,i_manufact]
                                         BroadcastExchange #3
                                           WholeStageCodegen (2)
                                             Project [d_date_sk]
-                                              Filter [d_moy,d_year,d_date_sk]
+                                              Filter [d_year,d_moy,d_date_sk]
                                                 ColumnarToRow
                                                   InputAdapter
                                                     Scan parquet default.date_dim [d_date_sk,d_year,d_moy]
@@ -72,7 +72,7 @@ TakeOrderedAndProject [ext_price,brand,brand_id,i_manufact_id,i_manufact]
                                         InputAdapter
                                           Exchange [ca_address_sk] #8
                                             WholeStageCodegen (8)
-                                              Filter [ca_address_sk,ca_zip]
+                                              Filter [ca_zip,ca_address_sk]
                                                 ColumnarToRow
                                                   InputAdapter
                                                     Scan parquet default.customer_address [ca_address_sk,ca_zip]

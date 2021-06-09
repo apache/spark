@@ -86,7 +86,7 @@ Output [8]: [cs_ship_date_sk#1, cs_bill_cdemo_sk#2, cs_bill_hdemo_sk#3, cs_item_
 Batched: true
 Location: InMemoryFileIndex []
 PartitionFilters: [isnotnull(cs_sold_date_sk#8), dynamicpruningexpression(cs_sold_date_sk#8 IN dynamicpruning#9)]
-PushedFilters: [IsNotNull(cs_quantity), IsNotNull(cs_item_sk), IsNotNull(cs_bill_cdemo_sk), IsNotNull(cs_bill_hdemo_sk), IsNotNull(cs_ship_date_sk)]
+PushedFilters: [IsNotNull(cs_bill_cdemo_sk), IsNotNull(cs_quantity), IsNotNull(cs_bill_hdemo_sk), IsNotNull(cs_ship_date_sk), IsNotNull(cs_item_sk)]
 ReadSchema: struct<cs_ship_date_sk:int,cs_bill_cdemo_sk:int,cs_bill_hdemo_sk:int,cs_item_sk:int,cs_promo_sk:int,cs_order_number:int,cs_quantity:int>
 
 (2) ColumnarToRow [codegen id : 4]
@@ -94,13 +94,13 @@ Input [8]: [cs_ship_date_sk#1, cs_bill_cdemo_sk#2, cs_bill_hdemo_sk#3, cs_item_s
 
 (3) Filter [codegen id : 4]
 Input [8]: [cs_ship_date_sk#1, cs_bill_cdemo_sk#2, cs_bill_hdemo_sk#3, cs_item_sk#4, cs_promo_sk#5, cs_order_number#6, cs_quantity#7, cs_sold_date_sk#8]
-Condition : ((((isnotnull(cs_quantity#7) AND isnotnull(cs_item_sk#4)) AND isnotnull(cs_bill_cdemo_sk#2)) AND isnotnull(cs_bill_hdemo_sk#3)) AND isnotnull(cs_ship_date_sk#1))
+Condition : ((((isnotnull(cs_bill_cdemo_sk#2) AND isnotnull(cs_quantity#7)) AND isnotnull(cs_bill_hdemo_sk#3)) AND isnotnull(cs_ship_date_sk#1)) AND isnotnull(cs_item_sk#4))
 
 (4) Scan parquet default.household_demographics
 Output [2]: [hd_demo_sk#10, hd_buy_potential#11]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/household_demographics]
-PushedFilters: [IsNotNull(hd_buy_potential), EqualTo(hd_buy_potential,1001-5000      ), IsNotNull(hd_demo_sk)]
+PushedFilters: [EqualTo(hd_buy_potential,1001-5000      ), IsNotNull(hd_buy_potential), IsNotNull(hd_demo_sk)]
 ReadSchema: struct<hd_demo_sk:int,hd_buy_potential:string>
 
 (5) ColumnarToRow [codegen id : 1]
@@ -108,7 +108,7 @@ Input [2]: [hd_demo_sk#10, hd_buy_potential#11]
 
 (6) Filter [codegen id : 1]
 Input [2]: [hd_demo_sk#10, hd_buy_potential#11]
-Condition : ((isnotnull(hd_buy_potential#11) AND (hd_buy_potential#11 = 1001-5000      )) AND isnotnull(hd_demo_sk#10))
+Condition : (((hd_buy_potential#11 = 1001-5000      ) AND isnotnull(hd_buy_potential#11)) AND isnotnull(hd_demo_sk#10))
 
 (7) Project [codegen id : 1]
 Output [1]: [hd_demo_sk#10]
@@ -131,7 +131,7 @@ Input [9]: [cs_ship_date_sk#1, cs_bill_cdemo_sk#2, cs_bill_hdemo_sk#3, cs_item_s
 Output [2]: [cd_demo_sk#13, cd_marital_status#14]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer_demographics]
-PushedFilters: [IsNotNull(cd_marital_status), EqualTo(cd_marital_status,M), IsNotNull(cd_demo_sk)]
+PushedFilters: [EqualTo(cd_marital_status,M), IsNotNull(cd_marital_status), IsNotNull(cd_demo_sk)]
 ReadSchema: struct<cd_demo_sk:int,cd_marital_status:string>
 
 (12) ColumnarToRow [codegen id : 2]
@@ -139,7 +139,7 @@ Input [2]: [cd_demo_sk#13, cd_marital_status#14]
 
 (13) Filter [codegen id : 2]
 Input [2]: [cd_demo_sk#13, cd_marital_status#14]
-Condition : ((isnotnull(cd_marital_status#14) AND (cd_marital_status#14 = M)) AND isnotnull(cd_demo_sk#13))
+Condition : (((cd_marital_status#14 = M) AND isnotnull(cd_marital_status#14)) AND isnotnull(cd_demo_sk#13))
 
 (14) Project [codegen id : 2]
 Output [1]: [cd_demo_sk#13]
@@ -228,7 +228,7 @@ Input [8]: [cs_item_sk#4, cs_promo_sk#5, cs_order_number#6, cs_quantity#7, cs_so
 Output [4]: [d_date_sk#23, d_date#24, d_week_seq#25, d_year#26]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
-PushedFilters: [IsNotNull(d_year), EqualTo(d_year,2001), IsNotNull(d_date_sk), IsNotNull(d_week_seq), IsNotNull(d_date)]
+PushedFilters: [EqualTo(d_year,2001), IsNotNull(d_year), IsNotNull(d_date_sk), IsNotNull(d_week_seq), IsNotNull(d_date)]
 ReadSchema: struct<d_date_sk:int,d_date:date,d_week_seq:int,d_year:int>
 
 (34) ColumnarToRow [codegen id : 8]
@@ -236,7 +236,7 @@ Input [4]: [d_date_sk#23, d_date#24, d_week_seq#25, d_year#26]
 
 (35) Filter [codegen id : 8]
 Input [4]: [d_date_sk#23, d_date#24, d_week_seq#25, d_year#26]
-Condition : ((((isnotnull(d_year#26) AND (d_year#26 = 2001)) AND isnotnull(d_date_sk#23)) AND isnotnull(d_week_seq#25)) AND isnotnull(d_date#24))
+Condition : (((((d_year#26 = 2001) AND isnotnull(d_year#26)) AND isnotnull(d_date_sk#23)) AND isnotnull(d_week_seq#25)) AND isnotnull(d_date#24))
 
 (36) Project [codegen id : 8]
 Output [3]: [d_date_sk#23, d_date#24, d_week_seq#25]

@@ -132,7 +132,7 @@ Condition : (((isnotnull(ss_hdemo_sk#11) AND isnotnull(ss_addr_sk#12)) AND isnot
 Output [3]: [d_date_sk#19, d_year#20, d_dow#21]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
-PushedFilters: [In(d_dow, [0,6]), In(d_year, [1999,2000,2001]), IsNotNull(d_date_sk)]
+PushedFilters: [In(d_year, [1999,2000,2001]), In(d_dow, [0,6]), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_year:int,d_dow:int>
 
 (19) ColumnarToRow [codegen id : 7]
@@ -140,7 +140,7 @@ Input [3]: [d_date_sk#19, d_year#20, d_dow#21]
 
 (20) Filter [codegen id : 7]
 Input [3]: [d_date_sk#19, d_year#20, d_dow#21]
-Condition : ((d_dow#21 IN (6,0) AND d_year#20 IN (1999,2000,2001)) AND isnotnull(d_date_sk#19))
+Condition : ((d_year#20 IN (1999,2000,2001) AND d_dow#21 IN (6,0)) AND isnotnull(d_date_sk#19))
 
 (21) Project [codegen id : 7]
 Output [1]: [d_date_sk#19]

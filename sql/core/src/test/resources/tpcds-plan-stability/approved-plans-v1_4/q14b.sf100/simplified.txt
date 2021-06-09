@@ -76,7 +76,7 @@ TakeOrderedAndProject [i_brand_id,i_class_id,i_category_id,channel,sales,number_
                                         WholeStageCodegen (20)
                                           Project [i_item_sk]
                                             BroadcastHashJoin [i_brand_id,i_class_id,i_category_id,brand_id,class_id,category_id]
-                                              Filter [i_brand_id,i_class_id,i_category_id]
+                                              Filter [i_brand_id,i_category_id,i_class_id]
                                                 ColumnarToRow
                                                   InputAdapter
                                                     Scan parquet default.item [i_item_sk,i_brand_id,i_class_id,i_category_id]
@@ -128,7 +128,7 @@ TakeOrderedAndProject [i_brand_id,i_class_id,i_category_id,channel,sales,number_
                                                                                                         InputAdapter
                                                                                                           Exchange [i_brand_id,i_class_id,i_category_id] #11
                                                                                                             WholeStageCodegen (4)
-                                                                                                              Filter [i_item_sk,i_brand_id,i_class_id,i_category_id]
+                                                                                                              Filter [i_brand_id,i_category_id,i_class_id,i_item_sk]
                                                                                                                 ColumnarToRow
                                                                                                                   InputAdapter
                                                                                                                     Scan parquet default.item [i_item_sk,i_brand_id,i_class_id,i_category_id]
@@ -183,7 +183,7 @@ TakeOrderedAndProject [i_brand_id,i_class_id,i_category_id,channel,sales,number_
                                       Subquery #3
                                         WholeStageCodegen (1)
                                           Project [d_week_seq]
-                                            Filter [d_year,d_moy,d_dom]
+                                            Filter [d_year,d_dom,d_moy]
                                               ColumnarToRow
                                                 InputAdapter
                                                   Scan parquet default.date_dim [d_week_seq,d_year,d_moy,d_dom]
@@ -200,7 +200,7 @@ TakeOrderedAndProject [i_brand_id,i_class_id,i_category_id,channel,sales,number_
                                       InputAdapter
                                         Exchange [i_item_sk] #16
                                           WholeStageCodegen (23)
-                                            Filter [i_item_sk,i_brand_id,i_class_id,i_category_id]
+                                            Filter [i_brand_id,i_category_id,i_class_id,i_item_sk]
                                               ColumnarToRow
                                                 InputAdapter
                                                   Scan parquet default.item [i_item_sk,i_brand_id,i_class_id,i_category_id]
@@ -250,7 +250,7 @@ TakeOrderedAndProject [i_brand_id,i_class_id,i_category_id,channel,sales,number_
                                             Subquery #7
                                               WholeStageCodegen (1)
                                                 Project [d_week_seq]
-                                                  Filter [d_year,d_moy,d_dom]
+                                                  Filter [d_year,d_dom,d_moy]
                                                     ColumnarToRow
                                                       InputAdapter
                                                         Scan parquet default.date_dim [d_week_seq,d_year,d_moy,d_dom]

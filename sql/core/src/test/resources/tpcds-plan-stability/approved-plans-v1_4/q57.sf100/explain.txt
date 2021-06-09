@@ -62,7 +62,7 @@ Output [4]: [cs_call_center_sk#1, cs_item_sk#2, cs_sales_price#3, cs_sold_date_s
 Batched: true
 Location: InMemoryFileIndex []
 PartitionFilters: [isnotnull(cs_sold_date_sk#4), dynamicpruningexpression(cs_sold_date_sk#4 IN dynamicpruning#5)]
-PushedFilters: [IsNotNull(cs_item_sk), IsNotNull(cs_call_center_sk)]
+PushedFilters: [IsNotNull(cs_call_center_sk), IsNotNull(cs_item_sk)]
 ReadSchema: struct<cs_call_center_sk:int,cs_item_sk:int,cs_sales_price:decimal(7,2)>
 
 (2) ColumnarToRow [codegen id : 3]
@@ -70,7 +70,7 @@ Input [4]: [cs_call_center_sk#1, cs_item_sk#2, cs_sales_price#3, cs_sold_date_sk
 
 (3) Filter [codegen id : 3]
 Input [4]: [cs_call_center_sk#1, cs_item_sk#2, cs_sales_price#3, cs_sold_date_sk#4]
-Condition : (isnotnull(cs_item_sk#2) AND isnotnull(cs_call_center_sk#1))
+Condition : (isnotnull(cs_call_center_sk#1) AND isnotnull(cs_item_sk#2))
 
 (4) Scan parquet default.date_dim
 Output [3]: [d_date_sk#6, d_year#7, d_moy#8]
@@ -138,7 +138,7 @@ Arguments: [cs_item_sk#2 ASC NULLS FIRST], false, 0
 Output [3]: [i_item_sk#14, i_brand#15, i_category#16]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/item]
-PushedFilters: [IsNotNull(i_item_sk), IsNotNull(i_category), IsNotNull(i_brand)]
+PushedFilters: [IsNotNull(i_brand), IsNotNull(i_category), IsNotNull(i_item_sk)]
 ReadSchema: struct<i_item_sk:int,i_brand:string,i_category:string>
 
 (19) ColumnarToRow [codegen id : 5]
@@ -146,7 +146,7 @@ Input [3]: [i_item_sk#14, i_brand#15, i_category#16]
 
 (20) Filter [codegen id : 5]
 Input [3]: [i_item_sk#14, i_brand#15, i_category#16]
-Condition : ((isnotnull(i_item_sk#14) AND isnotnull(i_category#16)) AND isnotnull(i_brand#15))
+Condition : ((isnotnull(i_brand#15) AND isnotnull(i_category#16)) AND isnotnull(i_item_sk#14))
 
 (21) Exchange
 Input [3]: [i_item_sk#14, i_brand#15, i_category#16]

@@ -29,12 +29,12 @@ WholeStageCodegen (7)
                                                         InputAdapter
                                                           BroadcastExchange #6
                                                             WholeStageCodegen (1)
-                                                              Filter [ss_store_sk,ss_hdemo_sk,ss_customer_sk]
+                                                              Filter [ss_hdemo_sk,ss_customer_sk,ss_store_sk]
                                                                 ColumnarToRow
                                                                   InputAdapter
                                                                     Scan parquet default.store_sales [ss_customer_sk,ss_hdemo_sk,ss_store_sk,ss_ticket_number,ss_sold_date_sk]
                                                         Project [d_date_sk]
-                                                          Filter [d_dom,d_year,d_date_sk]
+                                                          Filter [d_year,d_dom,d_date_sk]
                                                             ColumnarToRow
                                                               InputAdapter
                                                                 Scan parquet default.date_dim [d_date_sk,d_year,d_dom]

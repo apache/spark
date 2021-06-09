@@ -41,7 +41,7 @@ TakeOrderedAndProject [channel,return_rank,currency_rank,item,return_ratio]
                                                                                 SubqueryBroadcast [d_date_sk] #1
                                                                                   ReusedExchange [d_date_sk] #5
                                                                 Project [wr_item_sk,wr_order_number,wr_return_quantity,wr_return_amt]
-                                                                  Filter [wr_return_amt,wr_order_number,wr_item_sk]
+                                                                  Filter [wr_order_number,wr_item_sk,wr_return_amt]
                                                                     ColumnarToRow
                                                                       InputAdapter
                                                                         Scan parquet default.web_returns [wr_item_sk,wr_order_number,wr_return_quantity,wr_return_amt,wr_returned_date_sk]
@@ -125,7 +125,7 @@ TakeOrderedAndProject [channel,return_rank,currency_rank,item,return_ratio]
                                                                               Scan parquet default.store_sales [ss_item_sk,ss_ticket_number,ss_quantity,ss_net_paid,ss_net_profit,ss_sold_date_sk]
                                                                                 ReusedSubquery [d_date_sk] #1
                                                                 Project [sr_item_sk,sr_ticket_number,sr_return_quantity,sr_return_amt]
-                                                                  Filter [sr_return_amt,sr_ticket_number,sr_item_sk]
+                                                                  Filter [sr_ticket_number,sr_item_sk,sr_return_amt]
                                                                     ColumnarToRow
                                                                       InputAdapter
                                                                         Scan parquet default.store_returns [sr_item_sk,sr_ticket_number,sr_return_quantity,sr_return_amt,sr_returned_date_sk]

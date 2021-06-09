@@ -62,7 +62,7 @@ Output [4]: [ss_item_sk#1, ss_store_sk#2, ss_sales_price#3, ss_sold_date_sk#4]
 Batched: true
 Location: InMemoryFileIndex []
 PartitionFilters: [isnotnull(ss_sold_date_sk#4), dynamicpruningexpression(ss_sold_date_sk#4 IN dynamicpruning#5)]
-PushedFilters: [IsNotNull(ss_item_sk), IsNotNull(ss_store_sk)]
+PushedFilters: [IsNotNull(ss_store_sk), IsNotNull(ss_item_sk)]
 ReadSchema: struct<ss_item_sk:int,ss_store_sk:int,ss_sales_price:decimal(7,2)>
 
 (2) ColumnarToRow [codegen id : 3]
@@ -70,7 +70,7 @@ Input [4]: [ss_item_sk#1, ss_store_sk#2, ss_sales_price#3, ss_sold_date_sk#4]
 
 (3) Filter [codegen id : 3]
 Input [4]: [ss_item_sk#1, ss_store_sk#2, ss_sales_price#3, ss_sold_date_sk#4]
-Condition : (isnotnull(ss_item_sk#1) AND isnotnull(ss_store_sk#2))
+Condition : (isnotnull(ss_store_sk#2) AND isnotnull(ss_item_sk#1))
 
 (4) Scan parquet default.date_dim
 Output [3]: [d_date_sk#6, d_year#7, d_moy#8]
@@ -103,7 +103,7 @@ Input [7]: [ss_item_sk#1, ss_store_sk#2, ss_sales_price#3, ss_sold_date_sk#4, d_
 Output [3]: [s_store_sk#10, s_store_name#11, s_company_name#12]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store]
-PushedFilters: [IsNotNull(s_store_sk), IsNotNull(s_store_name), IsNotNull(s_company_name)]
+PushedFilters: [IsNotNull(s_company_name), IsNotNull(s_store_name), IsNotNull(s_store_sk)]
 ReadSchema: struct<s_store_sk:int,s_store_name:string,s_company_name:string>
 
 (11) ColumnarToRow [codegen id : 2]
@@ -111,7 +111,7 @@ Input [3]: [s_store_sk#10, s_store_name#11, s_company_name#12]
 
 (12) Filter [codegen id : 2]
 Input [3]: [s_store_sk#10, s_store_name#11, s_company_name#12]
-Condition : ((isnotnull(s_store_sk#10) AND isnotnull(s_store_name#11)) AND isnotnull(s_company_name#12))
+Condition : ((isnotnull(s_company_name#12) AND isnotnull(s_store_name#11)) AND isnotnull(s_store_sk#10))
 
 (13) BroadcastExchange
 Input [3]: [s_store_sk#10, s_store_name#11, s_company_name#12]
@@ -138,7 +138,7 @@ Arguments: [ss_item_sk#1 ASC NULLS FIRST], false, 0
 Output [3]: [i_item_sk#15, i_brand#16, i_category#17]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/item]
-PushedFilters: [IsNotNull(i_item_sk), IsNotNull(i_category), IsNotNull(i_brand)]
+PushedFilters: [IsNotNull(i_brand), IsNotNull(i_category), IsNotNull(i_item_sk)]
 ReadSchema: struct<i_item_sk:int,i_brand:string,i_category:string>
 
 (19) ColumnarToRow [codegen id : 5]
@@ -146,7 +146,7 @@ Input [3]: [i_item_sk#15, i_brand#16, i_category#17]
 
 (20) Filter [codegen id : 5]
 Input [3]: [i_item_sk#15, i_brand#16, i_category#17]
-Condition : ((isnotnull(i_item_sk#15) AND isnotnull(i_category#17)) AND isnotnull(i_brand#16))
+Condition : ((isnotnull(i_brand#16) AND isnotnull(i_category#17)) AND isnotnull(i_item_sk#15))
 
 (21) Exchange
 Input [3]: [i_item_sk#15, i_brand#16, i_category#17]

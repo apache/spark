@@ -37,7 +37,7 @@ TakeOrderedAndProject [c_customer_id,c_salutation,c_first_name,c_last_name,c_pre
                                       WholeStageCodegen (4)
                                         Project [wr_returning_customer_sk,wr_returning_addr_sk,wr_return_amt]
                                           BroadcastHashJoin [wr_returned_date_sk,d_date_sk]
-                                            Filter [wr_returning_addr_sk,wr_returning_customer_sk]
+                                            Filter [wr_returning_customer_sk,wr_returning_addr_sk]
                                               ColumnarToRow
                                                 InputAdapter
                                                   Scan parquet default.web_returns [wr_returning_customer_sk,wr_returning_addr_sk,wr_return_amt,wr_returned_date_sk]
@@ -57,7 +57,7 @@ TakeOrderedAndProject [c_customer_id,c_salutation,c_first_name,c_last_name,c_pre
                                   InputAdapter
                                     Exchange [ca_address_sk] #6
                                       WholeStageCodegen (6)
-                                        Filter [ca_address_sk,ca_state]
+                                        Filter [ca_state,ca_address_sk]
                                           ColumnarToRow
                                             InputAdapter
                                               Scan parquet default.customer_address [ca_address_sk,ca_state]

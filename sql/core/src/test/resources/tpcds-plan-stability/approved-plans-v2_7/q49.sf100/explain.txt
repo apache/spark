@@ -96,7 +96,7 @@ Output [6]: [ws_item_sk#1, ws_order_number#2, ws_quantity#3, ws_net_paid#4, ws_n
 Batched: true
 Location: InMemoryFileIndex []
 PartitionFilters: [isnotnull(ws_sold_date_sk#6), dynamicpruningexpression(ws_sold_date_sk#6 IN dynamicpruning#7)]
-PushedFilters: [IsNotNull(ws_net_profit), IsNotNull(ws_net_paid), IsNotNull(ws_quantity), GreaterThan(ws_net_profit,1.00), GreaterThan(ws_net_paid,0.00), GreaterThan(ws_quantity,0), IsNotNull(ws_order_number), IsNotNull(ws_item_sk)]
+PushedFilters: [GreaterThan(ws_net_profit,1.00), IsNotNull(ws_quantity), IsNotNull(ws_net_paid), GreaterThan(ws_net_paid,0.00), IsNotNull(ws_net_profit), GreaterThan(ws_quantity,0), IsNotNull(ws_order_number), IsNotNull(ws_item_sk)]
 ReadSchema: struct<ws_item_sk:int,ws_order_number:int,ws_quantity:int,ws_net_paid:decimal(7,2),ws_net_profit:decimal(7,2)>
 
 (2) ColumnarToRow [codegen id : 2]
@@ -104,7 +104,7 @@ Input [6]: [ws_item_sk#1, ws_order_number#2, ws_quantity#3, ws_net_paid#4, ws_ne
 
 (3) Filter [codegen id : 2]
 Input [6]: [ws_item_sk#1, ws_order_number#2, ws_quantity#3, ws_net_paid#4, ws_net_profit#5, ws_sold_date_sk#6]
-Condition : (((((((isnotnull(ws_net_profit#5) AND isnotnull(ws_net_paid#4)) AND isnotnull(ws_quantity#3)) AND (ws_net_profit#5 > 1.00)) AND (ws_net_paid#4 > 0.00)) AND (ws_quantity#3 > 0)) AND isnotnull(ws_order_number#2)) AND isnotnull(ws_item_sk#1))
+Condition : ((((((((ws_net_profit#5 > 1.00) AND isnotnull(ws_quantity#3)) AND isnotnull(ws_net_paid#4)) AND (ws_net_paid#4 > 0.00)) AND isnotnull(ws_net_profit#5)) AND (ws_quantity#3 > 0)) AND isnotnull(ws_order_number#2)) AND isnotnull(ws_item_sk#1))
 
 (4) Project [codegen id : 2]
 Output [5]: [ws_item_sk#1, ws_order_number#2, ws_quantity#3, ws_net_paid#4, ws_sold_date_sk#6]
@@ -114,7 +114,7 @@ Input [6]: [ws_item_sk#1, ws_order_number#2, ws_quantity#3, ws_net_paid#4, ws_ne
 Output [3]: [d_date_sk#8, d_year#9, d_moy#10]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
-PushedFilters: [IsNotNull(d_year), IsNotNull(d_moy), EqualTo(d_year,2001), EqualTo(d_moy,12), IsNotNull(d_date_sk)]
+PushedFilters: [EqualTo(d_year,2001), EqualTo(d_moy,12), IsNotNull(d_year), IsNotNull(d_moy), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_year:int,d_moy:int>
 
 (6) ColumnarToRow [codegen id : 1]
@@ -122,7 +122,7 @@ Input [3]: [d_date_sk#8, d_year#9, d_moy#10]
 
 (7) Filter [codegen id : 1]
 Input [3]: [d_date_sk#8, d_year#9, d_moy#10]
-Condition : ((((isnotnull(d_year#9) AND isnotnull(d_moy#10)) AND (d_year#9 = 2001)) AND (d_moy#10 = 12)) AND isnotnull(d_date_sk#8))
+Condition : (((((d_year#9 = 2001) AND (d_moy#10 = 12)) AND isnotnull(d_year#9)) AND isnotnull(d_moy#10)) AND isnotnull(d_date_sk#8))
 
 (8) Project [codegen id : 1]
 Output [1]: [d_date_sk#8]
@@ -153,7 +153,7 @@ Arguments: [ws_order_number#2 ASC NULLS FIRST, ws_item_sk#1 ASC NULLS FIRST], fa
 Output [5]: [wr_item_sk#13, wr_order_number#14, wr_return_quantity#15, wr_return_amt#16, wr_returned_date_sk#17]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/web_returns]
-PushedFilters: [IsNotNull(wr_return_amt), GreaterThan(wr_return_amt,10000.00), IsNotNull(wr_order_number), IsNotNull(wr_item_sk)]
+PushedFilters: [GreaterThan(wr_return_amt,10000.00), IsNotNull(wr_return_amt), IsNotNull(wr_order_number), IsNotNull(wr_item_sk)]
 ReadSchema: struct<wr_item_sk:int,wr_order_number:int,wr_return_quantity:int,wr_return_amt:decimal(7,2)>
 
 (15) ColumnarToRow [codegen id : 4]
@@ -161,7 +161,7 @@ Input [5]: [wr_item_sk#13, wr_order_number#14, wr_return_quantity#15, wr_return_
 
 (16) Filter [codegen id : 4]
 Input [5]: [wr_item_sk#13, wr_order_number#14, wr_return_quantity#15, wr_return_amt#16, wr_returned_date_sk#17]
-Condition : (((isnotnull(wr_return_amt#16) AND (wr_return_amt#16 > 10000.00)) AND isnotnull(wr_order_number#14)) AND isnotnull(wr_item_sk#13))
+Condition : ((((wr_return_amt#16 > 10000.00) AND isnotnull(wr_return_amt#16)) AND isnotnull(wr_order_number#14)) AND isnotnull(wr_item_sk#13))
 
 (17) Project [codegen id : 4]
 Output [4]: [wr_item_sk#13, wr_order_number#14, wr_return_quantity#15, wr_return_amt#16]
@@ -235,7 +235,7 @@ Output [6]: [cs_item_sk#43, cs_order_number#44, cs_quantity#45, cs_net_paid#46, 
 Batched: true
 Location: InMemoryFileIndex []
 PartitionFilters: [isnotnull(cs_sold_date_sk#48), dynamicpruningexpression(cs_sold_date_sk#48 IN dynamicpruning#7)]
-PushedFilters: [IsNotNull(cs_net_profit), IsNotNull(cs_net_paid), IsNotNull(cs_quantity), GreaterThan(cs_net_profit,1.00), GreaterThan(cs_net_paid,0.00), GreaterThan(cs_quantity,0), IsNotNull(cs_order_number), IsNotNull(cs_item_sk)]
+PushedFilters: [GreaterThan(cs_net_profit,1.00), IsNotNull(cs_quantity), IsNotNull(cs_net_paid), GreaterThan(cs_net_paid,0.00), IsNotNull(cs_net_profit), GreaterThan(cs_quantity,0), IsNotNull(cs_order_number), IsNotNull(cs_item_sk)]
 ReadSchema: struct<cs_item_sk:int,cs_order_number:int,cs_quantity:int,cs_net_paid:decimal(7,2),cs_net_profit:decimal(7,2)>
 
 (33) ColumnarToRow [codegen id : 12]
@@ -243,7 +243,7 @@ Input [6]: [cs_item_sk#43, cs_order_number#44, cs_quantity#45, cs_net_paid#46, c
 
 (34) Filter [codegen id : 12]
 Input [6]: [cs_item_sk#43, cs_order_number#44, cs_quantity#45, cs_net_paid#46, cs_net_profit#47, cs_sold_date_sk#48]
-Condition : (((((((isnotnull(cs_net_profit#47) AND isnotnull(cs_net_paid#46)) AND isnotnull(cs_quantity#45)) AND (cs_net_profit#47 > 1.00)) AND (cs_net_paid#46 > 0.00)) AND (cs_quantity#45 > 0)) AND isnotnull(cs_order_number#44)) AND isnotnull(cs_item_sk#43))
+Condition : ((((((((cs_net_profit#47 > 1.00) AND isnotnull(cs_quantity#45)) AND isnotnull(cs_net_paid#46)) AND (cs_net_paid#46 > 0.00)) AND isnotnull(cs_net_profit#47)) AND (cs_quantity#45 > 0)) AND isnotnull(cs_order_number#44)) AND isnotnull(cs_item_sk#43))
 
 (35) Project [codegen id : 12]
 Output [5]: [cs_item_sk#43, cs_order_number#44, cs_quantity#45, cs_net_paid#46, cs_sold_date_sk#48]
@@ -273,7 +273,7 @@ Arguments: [cs_order_number#44 ASC NULLS FIRST, cs_item_sk#43 ASC NULLS FIRST], 
 Output [5]: [cr_item_sk#51, cr_order_number#52, cr_return_quantity#53, cr_return_amount#54, cr_returned_date_sk#55]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/catalog_returns]
-PushedFilters: [IsNotNull(cr_return_amount), GreaterThan(cr_return_amount,10000.00), IsNotNull(cr_order_number), IsNotNull(cr_item_sk)]
+PushedFilters: [GreaterThan(cr_return_amount,10000.00), IsNotNull(cr_return_amount), IsNotNull(cr_order_number), IsNotNull(cr_item_sk)]
 ReadSchema: struct<cr_item_sk:int,cr_order_number:int,cr_return_quantity:int,cr_return_amount:decimal(7,2)>
 
 (42) ColumnarToRow [codegen id : 14]
@@ -281,7 +281,7 @@ Input [5]: [cr_item_sk#51, cr_order_number#52, cr_return_quantity#53, cr_return_
 
 (43) Filter [codegen id : 14]
 Input [5]: [cr_item_sk#51, cr_order_number#52, cr_return_quantity#53, cr_return_amount#54, cr_returned_date_sk#55]
-Condition : (((isnotnull(cr_return_amount#54) AND (cr_return_amount#54 > 10000.00)) AND isnotnull(cr_order_number#52)) AND isnotnull(cr_item_sk#51))
+Condition : ((((cr_return_amount#54 > 10000.00) AND isnotnull(cr_return_amount#54)) AND isnotnull(cr_order_number#52)) AND isnotnull(cr_item_sk#51))
 
 (44) Project [codegen id : 14]
 Output [4]: [cr_item_sk#51, cr_order_number#52, cr_return_quantity#53, cr_return_amount#54]
@@ -355,7 +355,7 @@ Output [6]: [ss_item_sk#81, ss_ticket_number#82, ss_quantity#83, ss_net_paid#84,
 Batched: true
 Location: InMemoryFileIndex []
 PartitionFilters: [isnotnull(ss_sold_date_sk#86), dynamicpruningexpression(ss_sold_date_sk#86 IN dynamicpruning#7)]
-PushedFilters: [IsNotNull(ss_net_profit), IsNotNull(ss_net_paid), IsNotNull(ss_quantity), GreaterThan(ss_net_profit,1.00), GreaterThan(ss_net_paid,0.00), GreaterThan(ss_quantity,0), IsNotNull(ss_ticket_number), IsNotNull(ss_item_sk)]
+PushedFilters: [GreaterThan(ss_net_profit,1.00), IsNotNull(ss_quantity), IsNotNull(ss_net_profit), IsNotNull(ss_net_paid), GreaterThan(ss_net_paid,0.00), GreaterThan(ss_quantity,0), IsNotNull(ss_ticket_number), IsNotNull(ss_item_sk)]
 ReadSchema: struct<ss_item_sk:int,ss_ticket_number:int,ss_quantity:int,ss_net_paid:decimal(7,2),ss_net_profit:decimal(7,2)>
 
 (60) ColumnarToRow [codegen id : 22]
@@ -363,7 +363,7 @@ Input [6]: [ss_item_sk#81, ss_ticket_number#82, ss_quantity#83, ss_net_paid#84, 
 
 (61) Filter [codegen id : 22]
 Input [6]: [ss_item_sk#81, ss_ticket_number#82, ss_quantity#83, ss_net_paid#84, ss_net_profit#85, ss_sold_date_sk#86]
-Condition : (((((((isnotnull(ss_net_profit#85) AND isnotnull(ss_net_paid#84)) AND isnotnull(ss_quantity#83)) AND (ss_net_profit#85 > 1.00)) AND (ss_net_paid#84 > 0.00)) AND (ss_quantity#83 > 0)) AND isnotnull(ss_ticket_number#82)) AND isnotnull(ss_item_sk#81))
+Condition : ((((((((ss_net_profit#85 > 1.00) AND isnotnull(ss_quantity#83)) AND isnotnull(ss_net_profit#85)) AND isnotnull(ss_net_paid#84)) AND (ss_net_paid#84 > 0.00)) AND (ss_quantity#83 > 0)) AND isnotnull(ss_ticket_number#82)) AND isnotnull(ss_item_sk#81))
 
 (62) Project [codegen id : 22]
 Output [5]: [ss_item_sk#81, ss_ticket_number#82, ss_quantity#83, ss_net_paid#84, ss_sold_date_sk#86]
@@ -393,7 +393,7 @@ Arguments: [ss_ticket_number#82 ASC NULLS FIRST, ss_item_sk#81 ASC NULLS FIRST],
 Output [5]: [sr_item_sk#89, sr_ticket_number#90, sr_return_quantity#91, sr_return_amt#92, sr_returned_date_sk#93]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_returns]
-PushedFilters: [IsNotNull(sr_return_amt), GreaterThan(sr_return_amt,10000.00), IsNotNull(sr_ticket_number), IsNotNull(sr_item_sk)]
+PushedFilters: [GreaterThan(sr_return_amt,10000.00), IsNotNull(sr_return_amt), IsNotNull(sr_ticket_number), IsNotNull(sr_item_sk)]
 ReadSchema: struct<sr_item_sk:int,sr_ticket_number:int,sr_return_quantity:int,sr_return_amt:decimal(7,2)>
 
 (69) ColumnarToRow [codegen id : 24]
@@ -401,7 +401,7 @@ Input [5]: [sr_item_sk#89, sr_ticket_number#90, sr_return_quantity#91, sr_return
 
 (70) Filter [codegen id : 24]
 Input [5]: [sr_item_sk#89, sr_ticket_number#90, sr_return_quantity#91, sr_return_amt#92, sr_returned_date_sk#93]
-Condition : (((isnotnull(sr_return_amt#92) AND (sr_return_amt#92 > 10000.00)) AND isnotnull(sr_ticket_number#90)) AND isnotnull(sr_item_sk#89))
+Condition : ((((sr_return_amt#92 > 10000.00) AND isnotnull(sr_return_amt#92)) AND isnotnull(sr_ticket_number#90)) AND isnotnull(sr_item_sk#89))
 
 (71) Project [codegen id : 24]
 Output [4]: [sr_item_sk#89, sr_ticket_number#90, sr_return_quantity#91, sr_return_amt#92]
