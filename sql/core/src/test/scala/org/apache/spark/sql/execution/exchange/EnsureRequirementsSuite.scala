@@ -122,8 +122,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
   }
 
   test("SPARK-35675: EnsureRequirements remove shuffle should respect PartitioningCollection") {
-    val local = spark
-    import local.implicits._
+    import testImplicits._
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
       val df1 = Seq((1, 2)).toDF("c1", "c2")
