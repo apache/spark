@@ -28,6 +28,7 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.sql.{DataFrame, Row, SparkSession}
+import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.streaming.{MemoryStream, StatefulOperatorStateInfo, StreamingSymmetricHashJoinExec, StreamingSymmetricHashJoinHelper}
 import org.apache.spark.sql.execution.streaming.state.{StateStore, StateStoreProviderId}
 import org.apache.spark.sql.functions._
@@ -575,6 +576,34 @@ class StreamingInnerJoinSuite extends StreamingJoinSuite {
       AddData(input1, 1.to(1000): _*),
       AddData(input2, 1.to(1000): _*),
       CheckAnswer(1.to(1000): _*))
+  }
+
+  test("SPARK-35690: stream-stream join keys should be reordered properly") {
+    val input1 = MemoryStream[Int]
+    val input2 = MemoryStream[Int]
+    val input3 = MemoryStream[Int]
+
+    val df1 = input1.toDF.select('value as "key", ('value * 2) as "value")
+    val df2 = input2.toDF.select('value as "key", ('value * 2) as "value")
+    val df3 = input3.toDF.select('value as "key", ('value * 2) as "value")
+
+    val joined = df1.join(df2, df1("key") === df2("key") && df1("value") === df2("value"))
+      .join(df3, df1("value") === df3("value") && df1("key") === df3("key"))
+
+    testStream(joined)(
+      AddData(input1, 1, 5),
+      AddData(input2, 1, 5, 10),
+      AddData(input3, 5, 10),
+      CheckNewAnswer((5, 10, 5, 10, 5, 10)),
+      Execute { query =>
+        // Verify no extra unnecessary shuffle
+        assert(query.lastExecution.executedPlan.collect {
+          case f: StreamingSymmetricHashJoinExec => f
+        }.size == 2)
+        assert(query.lastExecution.executedPlan.collect {
+          case s: ShuffleExchangeExec => s
+        }.size == 3)
+      })
   }
 
   test("SPARK-26187 restore the stream-stream inner join query from Spark 2.4") {

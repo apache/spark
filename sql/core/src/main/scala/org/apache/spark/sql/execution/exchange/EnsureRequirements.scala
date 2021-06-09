@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.joins.{ShuffledHashJoinExec, SortMergeJoinExec}
+import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinExec
 
 /**
  * Ensures that the [[org.apache.spark.sql.catalyst.plans.physical.Partitioning Partitioning]]
@@ -243,6 +244,13 @@ object EnsureRequirements extends Rule[SparkPlan] {
           reorderJoinKeys(leftKeys, rightKeys, left.outputPartitioning, right.outputPartitioning)
         SortMergeJoinExec(reorderedLeftKeys, reorderedRightKeys, joinType, condition,
           left, right, isSkew)
+
+      case StreamingSymmetricHashJoinExec(leftKeys, rightKeys, joinType, condition, stateInfo,
+        eventTimeWatermark, stateWatermarkPredicates, stateFormatVersion, left, right) =>
+        val (reorderedLeftKeys, reorderedRightKeys) =
+          reorderJoinKeys(leftKeys, rightKeys, left.outputPartitioning, right.outputPartitioning)
+        StreamingSymmetricHashJoinExec(reorderedLeftKeys, reorderedRightKeys, joinType, condition,
+          stateInfo, eventTimeWatermark, stateWatermarkPredicates, stateFormatVersion, left, right)
 
       case other => other
     }
