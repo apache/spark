@@ -709,7 +709,6 @@ private class SerializedValuesHolder[T](
     classTag: ClassTag[T],
     memoryMode: MemoryMode,
     serializerManager: SerializerManager) extends ValuesHolder[T] {
-
   val allocator = memoryMode match {
     case MemoryMode.ON_HEAP => ByteBuffer.allocate _
     case MemoryMode.OFF_HEAP => Platform.allocateDirectBuffer _
