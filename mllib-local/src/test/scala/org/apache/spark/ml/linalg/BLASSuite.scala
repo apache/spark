@@ -302,6 +302,32 @@ class BLASSuite extends SparkMLFunSuite {
 
   }
 
+  test("sparse gemm") {
+    val rng = new scala.util.Random(0)
+    val m = 1e3.toInt
+    val n = 1e3.toInt
+    val k = 1e3.toInt
+    val alpha = rng.nextDouble
+    val beta = rng.nextDouble
+
+    val a = Array.tabulate(m * k) { _ =>
+      if (rng.nextDouble < 0.9) 0.0 else rng.nextDouble
+    }
+    val A = Matrices.dense(m, k, a).toSparse
+
+    val B = Matrices.dense(k, n, Array.fill(k * n)(rng.nextDouble)).toDense
+
+    val C = Matrices.dense(m, n, Array.fill(k * n)(rng.nextDouble)).toDense
+
+    val tic1 = System.nanoTime
+    Iterator.range(0, 1000).foreach { i => BLAS.gemm(alpha, A, B, beta, C) }
+    val toc1 = System.nanoTime
+
+    // scalastyle:off println
+    println(f"new sparse gemm duration: ${(toc1 - tic1) * 1e-9}%.3f")
+    // scalastyle:on println
+  }
+
   test("gemv") {
 
     val dA =
