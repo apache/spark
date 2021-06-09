@@ -16,15 +16,11 @@
 #
 
 import numbers
+from itertools import chain
 from typing import TYPE_CHECKING, Union
 
 import numpy as np
-
-from pyspark.sql import functions as F
-from pyspark.sql.types import (
-    StringType,
-    TimestampType,
-)
+from pandas.api.types import CategoricalDtype
 
 from pyspark.pandas.base import column_op, IndexOpsMixin, numpy_column_op
 from pyspark.pandas.data_type_ops.base import (
@@ -32,9 +28,18 @@ from pyspark.pandas.data_type_ops.base import (
     DataTypeOps,
     transform_boolean_operand_to_numeric,
 )
+from pyspark.pandas.internal import InternalField
 from pyspark.pandas.spark import functions as SF
+from pyspark.pandas.typedef import Dtype, extension_dtypes, pandas_on_spark_type
+from pyspark.sql import functions as F
 from pyspark.sql.column import Column
-
+from pyspark.sql.types import (
+    BooleanType,
+    DoubleType,
+    FloatType,
+    StringType,
+    TimestampType,
+)
 
 if TYPE_CHECKING:
     from pyspark.pandas.indexes import Index  # noqa: F401 (SPARK-34943)
@@ -248,6 +253,64 @@ class IntegralOps(NumericOps):
         right = transform_boolean_operand_to_numeric(right, left.spark.data_type)
         return numpy_column_op(rfloordiv)(left, right)
 
+    def astype(
+        self, index_ops: Union["Index", "Series"], dtype: Union[str, type, Dtype]
+    ) -> Union["Index", "Series"]:
+        dtype, spark_type = pandas_on_spark_type(dtype)
+        if not spark_type:
+            raise ValueError("Type {} not understood".format(dtype))
+
+        if isinstance(dtype, CategoricalDtype):
+            if dtype.categories is None:
+                codes, uniques = index_ops.factorize()
+                return codes._with_new_scol(
+                    codes.spark.column,
+                    field=codes._internal.data_fields[0].copy(
+                        dtype=CategoricalDtype(categories=uniques)
+                    ),
+                )
+            else:
+                categories = dtype.categories
+                if len(categories) == 0:
+                    scol = F.lit(-1)
+                else:
+                    kvs = chain(
+                        *[
+                            (F.lit(category), F.lit(code))
+                            for code, category in enumerate(categories)
+                        ]
+                    )
+                    map_scol = F.create_map(*kvs)
+
+                    scol = F.coalesce(map_scol.getItem(index_ops.spark.column), F.lit(-1))
+                return index_ops._with_new_scol(
+                    scol.cast(spark_type).alias(index_ops._internal.data_fields[0].name),
+                    field=index_ops._internal.data_fields[0].copy(
+                        dtype=dtype, spark_type=spark_type, nullable=False
+                    ),
+                )
+
+        if isinstance(spark_type, BooleanType):
+            if isinstance(dtype, extension_dtypes):
+                scol = index_ops.spark.column.cast(spark_type)
+            else:
+                scol = F.when(index_ops.spark.column.isNull(), F.lit(False)).otherwise(
+                    index_ops.spark.column.cast(spark_type)
+                )
+        elif isinstance(spark_type, StringType):
+            if isinstance(dtype, extension_dtypes):
+                scol = index_ops.spark.column.cast(spark_type)
+            else:
+                null_str = str(np.nan)
+                casted = index_ops.spark.column.cast(spark_type)
+                scol = F.when(index_ops.spark.column.isNull(), null_str).otherwise(casted)
+        else:
+            scol = index_ops.spark.column.cast(spark_type)
+        return index_ops._with_new_scol(
+            scol.alias(index_ops._internal.data_spark_column_names[0]),
+            field=InternalField(dtype=dtype),
+        )
+
 
 class FractionalOps(NumericOps):
     """
@@ -344,3 +407,67 @@ class FractionalOps(NumericOps):
 
         right = transform_boolean_operand_to_numeric(right, left.spark.data_type)
         return numpy_column_op(rfloordiv)(left, right)
+
+    def astype(
+        self, index_ops: Union["Index", "Series"], dtype: Union[str, type, Dtype]
+    ) -> Union["Index", "Series"]:
+        dtype, spark_type = pandas_on_spark_type(dtype)
+        if not spark_type:
+            raise ValueError("Type {} not understood".format(dtype))
+
+        if isinstance(dtype, CategoricalDtype):
+            if dtype.categories is None:
+                codes, uniques = index_ops.factorize()
+                return codes._with_new_scol(
+                    codes.spark.column,
+                    field=codes._internal.data_fields[0].copy(
+                        dtype=CategoricalDtype(categories=uniques)
+                    ),
+                )
+            else:
+                categories = dtype.categories
+                if len(categories) == 0:
+                    scol = F.lit(-1)
+                else:
+                    kvs = chain(
+                        *[
+                            (F.lit(category), F.lit(code))
+                            for code, category in enumerate(categories)
+                        ]
+                    )
+                    map_scol = F.create_map(*kvs)
+
+                    scol = F.coalesce(map_scol.getItem(index_ops.spark.column), F.lit(-1))
+                return index_ops._with_new_scol(
+                    scol.cast(spark_type).alias(index_ops._internal.data_fields[0].name),
+                    field=index_ops._internal.data_fields[0].copy(
+                        dtype=dtype, spark_type=spark_type, nullable=False
+                    ),
+                )
+
+        if isinstance(spark_type, BooleanType):
+            if isinstance(dtype, extension_dtypes):
+                scol = index_ops.spark.column.cast(spark_type)
+            else:
+                if isinstance(index_ops.spark.data_type, (FloatType, DoubleType)):
+                    scol = F.when(
+                        index_ops.spark.column.isNull() | F.isnan(index_ops.spark.column),
+                        F.lit(True),
+                    ).otherwise(index_ops.spark.column.cast(spark_type))
+                else:  # DecimalType
+                    scol = F.when(index_ops.spark.column.isNull(), F.lit(False)).otherwise(
+                        index_ops.spark.column.cast(spark_type)
+                    )
+        elif isinstance(spark_type, StringType):
+            if isinstance(dtype, extension_dtypes):
+                scol = index_ops.spark.column.cast(spark_type)
+            else:
+                null_str = str(np.nan)
+                casted = index_ops.spark.column.cast(spark_type)
+                scol = F.when(index_ops.spark.column.isNull(), null_str).otherwise(casted)
+        else:
+            scol = index_ops.spark.column.cast(spark_type)
+        return index_ops._with_new_scol(
+            scol.alias(index_ops._internal.data_spark_column_names[0]),
+            field=InternalField(dtype=dtype),
+        )

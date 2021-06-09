@@ -206,3 +206,8 @@ class DataTypeOps(object, metaclass=ABCMeta):
     def prepare(self, col: pd.Series) -> pd.Series:
         """Prepare column when from_pandas."""
         return col.replace({np.nan: None})
+
+    def astype(
+        self, index_ops: Union["Index", "Series"], dtype: Union[str, type, Dtype]
+    ) -> Union["Index", "Series"]:
+        raise TypeError("astype can not be applied to %s." % self.pretty_name)
