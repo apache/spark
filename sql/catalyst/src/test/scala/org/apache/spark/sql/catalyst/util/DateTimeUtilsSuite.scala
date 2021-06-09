@@ -634,7 +634,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     }
   }
 
-  test("SPARK-35099: microseconds to LocalDateTime") {
+  test("SPARK-35664: microseconds to LocalDateTime") {
     assert(microsToLocalDateTime(0) ==  LocalDateTime.parse("1970-01-01T00:00:00"))
     assert(microsToLocalDateTime(100) ==  LocalDateTime.parse("1970-01-01T00:00:00.0001"))
     assert(microsToLocalDateTime(100000000) ==  LocalDateTime.parse("1970-01-01T00:01:40"))
@@ -647,7 +647,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       LocalDateTime.parse("+294247-01-10T04:00:54.775807"))
   }
 
-  test("SPARK-35099: LocalDateTime to microseconds") {
+  test("SPARK-35664: LocalDateTime to microseconds") {
     assert(DateTimeUtils.localDateTimeToMicros(LocalDateTime.parse("1970-01-01T00:00:00")) == 0)
     assert(
       DateTimeUtils.localDateTimeToMicros(LocalDateTime.parse("1970-01-01T00:00:00.0001")) == 100)
