@@ -2378,7 +2378,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       // its child for resolution.
       case f @ Filter(_, a: Aggregate) if f.childrenResolved =>
         resolveSubQueries(f, Seq(a, a.child))
-      case j @ LateralJoin(left, right, _, _) if left.resolved =>
+      case j: LateralJoin if j.left.resolved =>
         resolveSubQueries(j, j.children)
       // Only a few unary nodes (Project/Filter/Aggregate) can contain subqueries.
       case q: UnaryNode if q.childrenResolved =>
