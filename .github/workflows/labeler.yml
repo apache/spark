@@ -26,6 +26,10 @@
 name: "On pull requests"
 on: pull_request_target
 
+concurrency:
+  group: ${{ github.repository }}-${{ github.ref }}-${{ github.workflow }}
+  cancel-in-progress: true
+
 jobs:
   label:
     name: Label pull requests

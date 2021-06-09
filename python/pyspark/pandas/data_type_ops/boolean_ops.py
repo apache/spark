@@ -18,13 +18,18 @@
 import numbers
 from typing import TYPE_CHECKING, Union
 
-from pyspark.pandas.base import IndexOpsMixin
+import pandas as pd
+
+from pyspark import sql as spark
+from pyspark.pandas.base import column_op, IndexOpsMixin
 from pyspark.pandas.data_type_ops.base import (
     is_valid_operand_for_numeric_arithmetic,
     DataTypeOps,
     transform_boolean_operand_to_numeric,
 )
+from pyspark.pandas.typedef import extension_dtypes
 from pyspark.pandas.typedef.typehints import as_spark_type
+from pyspark.sql import functions as F
 
 if TYPE_CHECKING:
     from pyspark.pandas.indexes import Index  # noqa: F401 (SPARK-34943)
@@ -38,12 +43,13 @@ class BooleanOps(DataTypeOps):
 
     @property
     def pretty_name(self) -> str:
-        return 'booleans'
+        return "booleans"
 
     def add(self, left, right) -> Union["Series", "Index"]:
         if not is_valid_operand_for_numeric_arithmetic(right, allow_bool=False):
             raise TypeError(
-                "Addition can not be applied to %s and the given type." % self.pretty_name)
+                "Addition can not be applied to %s and the given type." % self.pretty_name
+            )
 
         if isinstance(right, numbers.Number) and not isinstance(right, bool):
             left = left.spark.transform(lambda scol: scol.cast(as_spark_type(type(right))))
@@ -56,7 +62,8 @@ class BooleanOps(DataTypeOps):
     def sub(self, left, right) -> Union["Series", "Index"]:
         if not is_valid_operand_for_numeric_arithmetic(right, allow_bool=False):
             raise TypeError(
-                "Subtraction can not be applied to %s and the given type." % self.pretty_name)
+                "Subtraction can not be applied to %s and the given type." % self.pretty_name
+            )
         if isinstance(right, numbers.Number) and not isinstance(right, bool):
             left = left.spark.transform(lambda scol: scol.cast(as_spark_type(type(right))))
             return left - right
@@ -68,7 +75,8 @@ class BooleanOps(DataTypeOps):
     def mul(self, left, right) -> Union["Series", "Index"]:
         if not is_valid_operand_for_numeric_arithmetic(right, allow_bool=False):
             raise TypeError(
-                "Multiplication can not be applied to %s and the given type." % self.pretty_name)
+                "Multiplication can not be applied to %s and the given type." % self.pretty_name
+            )
         if isinstance(right, numbers.Number) and not isinstance(right, bool):
             left = left.spark.transform(lambda scol: scol.cast(as_spark_type(type(right))))
             return left * right
@@ -80,7 +88,8 @@ class BooleanOps(DataTypeOps):
     def truediv(self, left, right) -> Union["Series", "Index"]:
         if not is_valid_operand_for_numeric_arithmetic(right, allow_bool=False):
             raise TypeError(
-                "True division can not be applied to %s and the given type." % self.pretty_name)
+                "True division can not be applied to %s and the given type." % self.pretty_name
+            )
         if isinstance(right, numbers.Number) and not isinstance(right, bool):
             left = left.spark.transform(lambda scol: scol.cast(as_spark_type(type(right))))
             return left / right
@@ -92,7 +101,8 @@ class BooleanOps(DataTypeOps):
     def floordiv(self, left, right) -> Union["Series", "Index"]:
         if not is_valid_operand_for_numeric_arithmetic(right, allow_bool=False):
             raise TypeError(
-                "Floor division can not be applied to %s and the given type." % self.pretty_name)
+                "Floor division can not be applied to %s and the given type." % self.pretty_name
+            )
         if isinstance(right, numbers.Number) and not isinstance(right, bool):
             left = left.spark.transform(lambda scol: scol.cast(as_spark_type(type(right))))
             return left // right
@@ -104,7 +114,8 @@ class BooleanOps(DataTypeOps):
     def mod(self, left, right) -> Union["Series", "Index"]:
         if not is_valid_operand_for_numeric_arithmetic(right, allow_bool=False):
             raise TypeError(
-                "Modulo can not be applied to %s and the given type." % self.pretty_name)
+                "Modulo can not be applied to %s and the given type." % self.pretty_name
+            )
         if isinstance(right, numbers.Number) and not isinstance(right, bool):
             left = left.spark.transform(lambda scol: scol.cast(as_spark_type(type(right))))
             return left % right
@@ -116,7 +127,8 @@ class BooleanOps(DataTypeOps):
     def pow(self, left, right) -> Union["Series", "Index"]:
         if not is_valid_operand_for_numeric_arithmetic(right, allow_bool=False):
             raise TypeError(
-                "Exponentiation can not be applied to %s and the given type." % self.pretty_name)
+                "Exponentiation can not be applied to %s and the given type." % self.pretty_name
+            )
         if isinstance(right, numbers.Number) and not isinstance(right, bool):
             left = left.spark.transform(lambda scol: scol.cast(as_spark_type(type(right))))
             return left ** right
@@ -131,7 +143,8 @@ class BooleanOps(DataTypeOps):
             return right + left
         else:
             raise TypeError(
-                "Addition can not be applied to %s and the given type." % self.pretty_name)
+                "Addition can not be applied to %s and the given type." % self.pretty_name
+            )
 
     def rsub(self, left, right) -> Union["Series", "Index"]:
         if isinstance(right, numbers.Number) and not isinstance(right, bool):
@@ -139,7 +152,8 @@ class BooleanOps(DataTypeOps):
             return right - left
         else:
             raise TypeError(
-                "Subtraction can not be applied to %s and the given type." % self.pretty_name)
+                "Subtraction can not be applied to %s and the given type." % self.pretty_name
+            )
 
     def rmul(self, left, right) -> Union["Series", "Index"]:
         if isinstance(right, numbers.Number) and not isinstance(right, bool):
@@ -147,7 +161,8 @@ class BooleanOps(DataTypeOps):
             return right * left
         else:
             raise TypeError(
-                "Multiplication can not be applied to %s and the given type." % self.pretty_name)
+                "Multiplication can not be applied to %s and the given type." % self.pretty_name
+            )
 
     def rtruediv(self, left, right) -> Union["Series", "Index"]:
         if isinstance(right, numbers.Number) and not isinstance(right, bool):
@@ -155,7 +170,8 @@ class BooleanOps(DataTypeOps):
             return right / left
         else:
             raise TypeError(
-                "True division can not be applied to %s and the given type." % self.pretty_name)
+                "True division can not be applied to %s and the given type." % self.pretty_name
+            )
 
     def rfloordiv(self, left, right) -> Union["Series", "Index"]:
         if isinstance(right, numbers.Number) and not isinstance(right, bool):
@@ -163,7 +179,8 @@ class BooleanOps(DataTypeOps):
             return right // left
         else:
             raise TypeError(
-                "Floor division can not be applied to %s and the given type." % self.pretty_name)
+                "Floor division can not be applied to %s and the given type." % self.pretty_name
+            )
 
     def rpow(self, left, right) -> Union["Series", "Index"]:
         if isinstance(right, numbers.Number) and not isinstance(right, bool):
@@ -171,7 +188,8 @@ class BooleanOps(DataTypeOps):
             return right ** left
         else:
             raise TypeError(
-                "Exponentiation can not be applied to %s and the given type." % self.pretty_name)
+                "Exponentiation can not be applied to %s and the given type." % self.pretty_name
+            )
 
     def rmod(self, left, right) -> Union["Series", "Index"]:
         if isinstance(right, numbers.Number) and not isinstance(right, bool):
@@ -179,4 +197,64 @@ class BooleanOps(DataTypeOps):
             return right % left
         else:
             raise TypeError(
-                "Modulo can not be applied to %s and the given type." % self.pretty_name)
+                "Modulo can not be applied to %s and the given type." % self.pretty_name
+            )
+
+    def __and__(self, left, right) -> Union["Series", "Index"]:
+        if isinstance(right, IndexOpsMixin) and isinstance(right.dtype, extension_dtypes):
+            return right.__and__(left)
+        else:
+
+            def and_func(left, right):
+                if not isinstance(right, spark.Column):
+                    if pd.isna(right):
+                        right = F.lit(None)
+                    else:
+                        right = F.lit(right)
+                scol = left & right
+                return F.when(scol.isNull(), False).otherwise(scol)
+
+            return column_op(and_func)(left, right)
+
+    def __or__(self, left, right) -> Union["Series", "Index"]:
+        if isinstance(right, IndexOpsMixin) and isinstance(right.dtype, extension_dtypes):
+            return right.__or__(left)
+        else:
+
+            def or_func(left, right):
+                if not isinstance(right, spark.Column) and pd.isna(right):
+                    return F.lit(False)
+                else:
+                    scol = left | F.lit(right)
+                    return F.when(left.isNull() | scol.isNull(), False).otherwise(scol)
+
+            return column_op(or_func)(left, right)
+
+
+class BooleanExtensionOps(BooleanOps):
+    """
+    The class for binary operations of pandas-on-Spark objects with spark type BooleanType,
+    and dtype BooleanDtype.
+    """
+
+    def __and__(self, left, right) -> Union["Series", "Index"]:
+        def and_func(left, right):
+            if not isinstance(right, spark.Column):
+                if pd.isna(right):
+                    right = F.lit(None)
+                else:
+                    right = F.lit(right)
+            return left & right
+
+        return column_op(and_func)(left, right)
+
+    def __or__(self, left, right) -> Union["Series", "Index"]:
+        def or_func(left, right):
+            if not isinstance(right, spark.Column):
+                if pd.isna(right):
+                    right = F.lit(None)
+                else:
+                    right = F.lit(right)
+            return left | right
+
+        return column_op(or_func)(left, right)

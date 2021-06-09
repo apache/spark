@@ -46,7 +46,7 @@ class NumericOps(DataTypeOps):
 
     @property
     def pretty_name(self) -> str:
-        return 'numerics'
+        return "numerics"
 
     def add(self, left, right) -> Union["Series", "Index"]:
         if (
@@ -159,7 +159,7 @@ class IntegralOps(NumericOps):
 
     @property
     def pretty_name(self) -> str:
-        return 'integrals'
+        return "integrals"
 
     def mul(self, left, right) -> Union["Series", "Index"]:
         if isinstance(right, str):
@@ -211,9 +211,7 @@ class IntegralOps(NumericOps):
             return F.when(F.lit(right is np.nan), np.nan).otherwise(
                 F.when(
                     F.lit(right != 0) | F.lit(right).isNull(), F.floor(left.__div__(right))
-                ).otherwise(
-                    F.lit(np.inf).__div__(left)
-                )
+                ).otherwise(F.lit(np.inf).__div__(left))
             )
 
         return numpy_column_op(floordiv)(left, right)
@@ -253,7 +251,7 @@ class FractionalOps(NumericOps):
 
     @property
     def pretty_name(self) -> str:
-        return 'fractions'
+        return "fractions"
 
     def mul(self, left, right) -> Union["Series", "Index"]:
         if isinstance(right, str):

@@ -455,6 +455,9 @@ class Analyzer(override val catalogManager: CatalogManager)
 
       case Project(projectList, child) if child.resolved && hasUnresolvedAlias(projectList) =>
         Project(assignAliases(projectList), child)
+
+      case c: CollectMetrics if c.child.resolved && hasUnresolvedAlias(c.metrics) =>
+        c.copy(metrics = assignAliases(c.metrics))
     }
   }
 
@@ -1652,6 +1655,7 @@ class Analyzer(override val catalogManager: CatalogManager)
   private val literalFunctions: Seq[(String, () => Expression, Expression => String)] = Seq(
     (CurrentDate().prettyName, () => CurrentDate(), toPrettySQL(_)),
     (CurrentTimestamp().prettyName, () => CurrentTimestamp(), toPrettySQL(_)),
+    (CurrentUser().prettyName, () => CurrentUser(), toPrettySQL),
     (VirtualColumn.hiveGroupingIdName, () => GroupingID(Nil), _ => VirtualColumn.hiveGroupingIdName)
   )
 

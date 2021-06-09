@@ -27,6 +27,10 @@ on:
   pull_request_target:
     types: [opened, reopened, synchronize]
 
+concurrency:
+  group: ${{ github.repository }}-${{ github.ref }}-${{ github.workflow }}
+  cancel-in-progress: true
+
 jobs:
   notify:
     name: Notify test workflow
