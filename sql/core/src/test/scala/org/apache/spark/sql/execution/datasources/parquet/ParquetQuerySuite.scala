@@ -928,18 +928,26 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
       withSQLConf(
         SQLConf.PARQUET_AGGREGATE_PUSHDOWN_ENABLED.key -> "true") {
 
+        val selectAgg1 = sql("SELECT min(_3) FROM t WHERE _1 > 0")
+        selectAgg1.queryExecution.optimizedPlan.collect {
+          case _: DataSourceV2ScanRelation =>
+            val expected_plan_fragment =
+              "PushedFilters: [IsNotNull(_1), GreaterThan(_1,0)], PushedAggregation: []"
+            checkKeywordsExistsInExplain(selectAgg1, expected_plan_fragment)
+        }
+
         // This is not pushed down since aggregates have arithmetic operation
-        val selectAgg1 = sql("SELECT min(_3 + _1), max(_3 + _1) FROM t")
-        checkAnswer(selectAgg1, Seq(Row(0, 19)))
+        val selectAgg2 = sql("SELECT min(_3 + _1), max(_3 + _1) FROM t")
+        checkAnswer(selectAgg2, Seq(Row(0, 19)))
 
         // sum is not pushed down
-        val selectAgg2 = sql("SELECT sum(_3) FROM t")
-        checkAnswer(selectAgg2, Seq(Row(40)))
+        val selectAgg3 = sql("SELECT sum(_3) FROM t")
+        checkAnswer(selectAgg3, Seq(Row(40)))
 
-        val selectAgg3 = sql("SELECT min(_3), min(_3), max(_3), min(_1), max(_1), max(_1)," +
+        val selectAgg4 = sql("SELECT min(_3), min(_3), max(_3), min(_1), max(_1), max(_1)," +
           " count(*), count(_1), count(_2), count(_3) FROM t")
 
-        selectAgg3.queryExecution.optimizedPlan.collect {
+        selectAgg4.queryExecution.optimizedPlan.collect {
           case _: DataSourceV2ScanRelation =>
             val expected_plan_fragment =
               "PushedAggregation: [Min(_3,IntegerType), " +
@@ -952,10 +960,10 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
                 "Count(_1,LongType,false), " +
                 "Count(_2,LongType,false), " +
                 "Count(_3,LongType,false)]"
-            checkKeywordsExistsInExplain(selectAgg3, expected_plan_fragment)
+            checkKeywordsExistsInExplain(selectAgg4, expected_plan_fragment)
         }
 
-        checkAnswer(selectAgg3, Seq(Row(2, 2, 19, -2, 9, 9, 6, 6, 4, 6)))
+        checkAnswer(selectAgg4, Seq(Row(2, 2, 19, -2, 9, 9, 6, 6, 4, 6)))
       }
     }
     spark.sessionState.catalog.dropTable(

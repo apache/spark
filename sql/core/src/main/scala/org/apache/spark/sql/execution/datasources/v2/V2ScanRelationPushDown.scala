@@ -58,44 +58,97 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with AliasHelper
       val (pushedFilters, postScanFiltersWithoutSubquery) = PushDownUtils.pushFilters(
         sHolder.builder, normalizedFiltersWithoutSubquery)
       val postScanFilters = postScanFiltersWithoutSubquery ++ normalizedFiltersWithSubquery
-      val output = sHolder.output
 
       logInfo(
         s"""
-           |Pushing operators to ${sHolder.relation.asInstanceOf[DataSourceV2Relation].name}
+           |Pushing operators to ${sHolder.relation.name}
            |Pushed Filters: ${pushedFilters.mkString(", ")}
            |Post-Scan Filters: ${postScanFilters.mkString(",")}
          """.stripMargin)
 
-      val projectionOverSchema = ProjectionOverSchema(output.toStructType)
-      val projectionFunc = (expr: Expression) => expr transformDown {
-        case projectionOverSchema(newExpr) => newExpr
-      }
-
       val filterCondition = postScanFilters.reduceLeftOption(And)
-      val newFilterCondition = filterCondition.map(projectionFunc)
-      newFilterCondition.map(Filter(_, sHolder)).getOrElse(sHolder)
+      filterCondition.map(Filter(_, sHolder)).getOrElse(sHolder)
   }
 
   def pushdownAggregate(plan: LogicalPlan): LogicalPlan = plan.transform {
     // update the scan builder with agg pushdown and return a new plan with agg pushed
     case aggNode @ Aggregate(groupingExpressions, resultExpressions, child) =>
       child match {
-        case ScanOperation(project, filters, sHolder: ScanBuilderHolder) =>
+        case ScanOperation(project, _, sHolder: ScanBuilderHolder) =>
           sHolder.builder match {
             case r: SupportsPushDownAggregates =>
-              if (filters.isEmpty || r.supportsPushDownAggregateWithFilter()) {
+              if (sHolder.builder.asInstanceOf[SupportsPushDownFilters].pushedFilters().length <= 0
+                || r.supportsPushDownAggregateWithFilter()) {
                 if (r.supportsGlobalAggregatePushDownOnly() && groupingExpressions.nonEmpty) {
                   aggNode // return original plan node
                 } else {
                   val aggregates = getAggregateExpression(resultExpressions, project, sHolder)
                   val pushedAggregates = PushDownUtils
                     .pushAggregates(sHolder.builder, aggregates, groupingExpressions)
-                  logInfo(
-                    s"""
-                       |Pushed Aggregates: ${pushedAggregates.aggregateExpressions.mkString(", ")}
-                    """.stripMargin)
-                  aggNode
+                  if (pushedAggregates.aggregateExpressions.isEmpty) {
+                    aggNode // return original plan node
+                  } else {
+                    // use the aggregate columns as the output columns
+                    // e.g. TABLE t (c1 INT, c2 INT, c3 INT)
+                    // SELECT min(c1), max(c1) FROM t;
+                    // Use min(c1), max(c1) as output for DataSourceV2ScanRelation
+                    // We want to have the following logical plan:
+                    // == Optimized Logical Plan ==
+                    // Aggregate [min(min(c1)#21) AS min(c1)#17, max(max(c1)#22) AS max(c1)#18]
+                    // +- RelationV2[min(c1)#21, max(c1)#22] parquet file ...
+                    val output = aggregates.map {
+                      case agg: AggregateExpression =>
+                        AttributeReference(toPrettySQL(agg), agg.dataType)()
+                    }
+
+                    // No need to do column pruning because only the aggregate columns are used as
+                    // DataSourceV2ScanRelation output columns. All the other columns are not
+                    // included in the output. Since PushDownUtils.pruneColumns is not called,
+                    // ScanBuilder.requiredSchema is not pruned, but ScanBuilder.requiredSchema is
+                    // not used anyways. The schema for aggregate columns will be built in Scan.
+                    val scan = sHolder.builder.build()
+
+                    logInfo(
+                      s"""
+                         |Pushing operators to ${sHolder.relation.name}
+                         |Pushed Aggregate Functions: ${pushedAggregates.aggregateExpressions.mkString(", ")}
+                         |Output: ${output.mkString(", ")}
+                      """.stripMargin)
+
+                    val scanRelation = DataSourceV2ScanRelation(sHolder.relation, scan, output)
+                    val plan = Aggregate(groupingExpressions, resultExpressions, scanRelation)
+
+                    // Change the optimized logical plan to reflect the pushed down aggregate
+                    // e.g. TABLE t (c1 INT, c2 INT, c3 INT)
+                    // SELECT min(c1), max(c1) FROM t;
+                    // The original logical plan is
+                    // Aggregate [min(c1#9) AS min(c1)#17, max(c1#9) AS max(c1)#18]
+                    // +- RelationV2[c1#9] parquet ...
+                    //
+                    // After change the V2ScanRelation output to [min(_1)#21, max(_1)#22]
+                    // we have the following
+                    // !Aggregate [min(_1#9) AS min(_1)#17, max(_1#9) AS max(_1)#18]
+                    // +- RelationV2[min(_1)#21, max(_1)#22] parquet ...
+                    //
+                    // We want to change it to
+                    // == Optimized Logical Plan ==
+                    // Aggregate [min(min(c1)#21) AS min(c1)#17, max(max(c1)#22) AS max(c1)#18]
+                    // +- RelationV2[min(c1)#21, max(c1)#22] parquet file ...
+                    var i = 0
+                    plan.transformExpressions {
+                      case agg: AggregateExpression =>
+                        i += 1
+                        val aggFunction: aggregate.AggregateFunction =
+                          agg.aggregateFunction match {
+                            case _: aggregate.Max => aggregate.Max(output(i - 1))
+                            case _: aggregate.Min => aggregate.Min(output(i - 1))
+                            case _: aggregate.Sum => aggregate.Sum(output(i - 1))
+                            case _: aggregate.Count => aggregate.Sum(output(i - 1))
+                            case _ => agg.aggregateFunction
+                          }
+                        agg.copy(aggregateFunction = aggFunction, filter = None)
+                    }
+                  }
                 }
               } else {
                 aggNode
@@ -107,80 +160,6 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with AliasHelper
   }
 
   def applyColumnPruning(plan: LogicalPlan): LogicalPlan = plan.transform {
-    case aggNode @ Aggregate(groupingExpressions, resultExpressions, child) =>
-      child match {
-        case ScanOperation(project, _, sHolder: ScanBuilderHolder) =>
-          sHolder.builder match {
-            case _: SupportsPushDownAggregates =>
-              if (sHolder.builder.asInstanceOf[SupportsPushDownAggregates]
-                .pushedAggregation().aggregateExpressions.nonEmpty) {
-                val aggregates = getAggregateExpression(resultExpressions, project, sHolder)
-                // use the aggregate columns as the output columns
-                // e.g. TABLE t (c1 INT, c2 INT, c3 INT)
-                // SELECT min(c1), max(c1) FROM t;
-                // Use min(c1), max(c1) as output for DataSourceV2ScanRelation
-                // We want to have the following logical plan:
-                // == Optimized Logical Plan ==
-                // Aggregate [min(min(c1)#21) AS min(c1)#17, max(max(c1)#22) AS max(c1)#18]
-                // +- RelationV2[min(c1)#21, max(c1)#22] parquet file ...
-                val output = aggregates.map {
-                  case agg: AggregateExpression =>
-                    AttributeReference(toPrettySQL(agg), agg.dataType)()
-                }
-
-                // No need to do column pruning because only the aggregate columns are used as
-                // DataSourceV2ScanRelation output columns. All the other columns are not
-                // included in the output. Since PushDownUtils.pruneColumns is not called,
-                // ScanBuilder.requiredSchema is not pruned, but ScanBuilder.requiredSchema is
-                // not used anyways. The schema for aggregate columns will be built in Scan.
-                val scan = sHolder.builder.build()
-
-                logInfo(
-                  s"""
-                     |Output: ${output.mkString(", ")}
-                  """.stripMargin)
-
-                val scanRelation = DataSourceV2ScanRelation(sHolder.relation, scan, output)
-                val plan = Aggregate(groupingExpressions, resultExpressions, scanRelation)
-
-                // Change the optimized logical plan to reflect the pushed down aggregate
-                // e.g. TABLE t (c1 INT, c2 INT, c3 INT)
-                // SELECT min(c1), max(c1) FROM t;
-                // The original logical plan is
-                // Aggregate [min(c1#9) AS min(c1)#17, max(c1#9) AS max(c1)#18]
-                // +- RelationV2[c1#9] parquet ...
-                //
-                // After change the V2ScanRelation output to [min(_1)#21, max(_1)#22]
-                // we have the following
-                // !Aggregate [min(_1#9) AS min(_1)#17, max(_1#9) AS max(_1)#18]
-                // +- RelationV2[min(_1)#21, max(_1)#22] parquet ...
-                //
-                // We want to change it to
-                // == Optimized Logical Plan ==
-                // Aggregate [min(min(c1)#21) AS min(c1)#17, max(max(c1)#22) AS max(c1)#18]
-                // +- RelationV2[min(c1)#21, max(c1)#22] parquet file ...
-                var i = 0
-                plan.transformExpressions {
-                  case agg: AggregateExpression =>
-                    i += 1
-                    val aggFunction: aggregate.AggregateFunction =
-                      agg.aggregateFunction match {
-                        case _: aggregate.Max => aggregate.Max(output(i - 1))
-                        case _: aggregate.Min => aggregate.Min(output(i - 1))
-                        case _: aggregate.Sum => aggregate.Sum(output(i - 1))
-                        case _: aggregate.Count => aggregate.Sum(output(i - 1))
-                        case _ => agg.aggregateFunction
-                      }
-                    agg.copy(aggregateFunction = aggFunction, filter = None)
-                }
-              } else {
-                aggNode
-              }
-            case _ => aggNode
-          }
-
-        case _ => aggNode
-      }
     case ScanOperation(project, filters, sHolder: ScanBuilderHolder) =>
       // column pruning
       val normalizedProjects = DataSourceStrategy
@@ -225,7 +204,6 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with AliasHelper
       } else {
         withFilter
       }
-
       withProjection
   }
 

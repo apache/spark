@@ -93,11 +93,11 @@ object PushDownUtils extends PredicateHelper {
           .translateAggregate(_, PushableColumn(false)))
         val translatedGroupBys = groupBy.map(columnAsString)
 
-        if (translatedAggregates.exists(_.isEmpty) || translatedGroupBys.exists(_.isEmpty)) {
-          Aggregation.empty
+        val agg = Aggregation(translatedAggregates.flatten, translatedGroupBys.flatten)
+        if (r.pushAggregation(agg)) {
+          agg
         } else {
-          r.pushAggregation(Aggregation(translatedAggregates.flatten, translatedGroupBys.flatten))
-          r.pushedAggregation
+          Aggregation.empty
         }
       case _ => Aggregation.empty
     }

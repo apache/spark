@@ -74,10 +74,10 @@ case class ParquetScanBuilder(
 
   private var pushedAggregations = Aggregation.empty
 
-  override def pushAggregation(aggregation: Aggregation): Unit = {
+  override def pushAggregation(aggregation: Aggregation): Boolean = {
     if (!sparkSession.sessionState.conf.parquetAggregatePushDown ||
       aggregation.groupByColumns.nonEmpty) {
-      return
+      return false
     }
 
     aggregation.aggregateExpressions.foreach {
@@ -85,24 +85,23 @@ case class ParquetScanBuilder(
         dataSchema.fields(dataSchema.fieldNames.toList.indexOf(col.fieldNames.head))
           .dataType match {
           // not push down nested column
-          case StructType(_) | ArrayType(_, _) | MapType(_, _, _) => return
+          case StructType(_) | ArrayType(_, _) | MapType(_, _, _) => return false
           case _ =>
         }
       case Min(col, _) =>
         dataSchema.fields(dataSchema.fieldNames.toList.indexOf(col.fieldNames.head))
           .dataType match {
           // not push down nested column
-          case StructType(_) | ArrayType(_, _) | MapType(_, _, _) => return
+          case StructType(_) | ArrayType(_, _) | MapType(_, _, _) => return false
           case _ =>
         }
       // not push down distinct count
       case Count(_, _, false) =>
-      case _ => return
+      case _ => return false
     }
     this.pushedAggregations = aggregation
+    true
   }
-
-  override def pushedAggregation(): Aggregation = pushedAggregations
 
   override def supportsGlobalAggregatePushDownOnly(): Boolean = true
 

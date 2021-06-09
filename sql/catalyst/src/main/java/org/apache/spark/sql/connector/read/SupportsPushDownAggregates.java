@@ -35,13 +35,7 @@ public interface SupportsPushDownAggregates extends ScanBuilder {
    * The Aggregation can be pushed down only if all the Aggregate Functions can
    * be pushed down.
    */
-  void pushAggregation(Aggregation aggregation);
-
-  /**
-   * Returns the aggregation that are pushed to the data source via
-   * {@link #pushAggregation(Aggregation aggregation)}.
-   */
-  Aggregation pushedAggregation();
+  boolean pushAggregation(Aggregation aggregation);
 
   /**
    * Returns the schema of the pushed down aggregates
