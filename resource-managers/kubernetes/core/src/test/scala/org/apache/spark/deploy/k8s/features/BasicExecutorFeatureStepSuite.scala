@@ -200,12 +200,12 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
 
   test("SPARK-35460: invalid PodNamePrefixes") {
     withPodNamePrefix {
-      Seq("_123", "spark_exec", "spark@", "a" * 39).foreach { invalid =>
+      Seq("_123", "spark_exec", "spark@", "a" * 48).foreach { invalid =>
         baseConf.set(KUBERNETES_EXECUTOR_POD_NAME_PREFIX, invalid)
         val e = intercept[IllegalArgumentException](newExecutorConf())
         assert(e.getMessage === s"'$invalid' in spark.kubernetes.executor.podNamePrefix is" +
           s" invalid. must conform https://kubernetes.io/docs/concepts/overview/" +
-          "working-with-objects/names/#dns-label-names and the value length <= 38")
+          "working-with-objects/names/#dns-label-names and the value length <= 47")
       }
     }
   }
