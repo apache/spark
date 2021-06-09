@@ -73,4 +73,4 @@ class CategoricalOps(DataTypeOps):
         return index_ops._with_new_scol(
             scol.alias(index_ops._internal.data_spark_column_names[0]),
             field=InternalField(dtype=dtype),
-        )
+        ).astype(dtype)
