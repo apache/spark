@@ -66,6 +66,10 @@ class TestCasesUtils(object):
         return pssers
 
     @property
+    def non_numeric_pser_psser_pairs(self):
+        return zip(self.non_numeric_psers.values(), self.non_numeric_pssers.values())
+
+    @property
     def pssers(self):
         return self.numeric_pssers + list(self.non_numeric_pssers.values())
 
