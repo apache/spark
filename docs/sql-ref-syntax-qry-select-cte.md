@@ -31,7 +31,7 @@ WITH common_table_expression [ , ... ]
 
 While `common_table_expression` is defined as
 ```sql
-expression_name [ ( column_name [ , ... ] ) ] [ AS ] ( query )
+expression_name [ ( column_name [ , ... ] ) ] [ AS ] ( query | information_query )
 ```
 
 ### Parameters
@@ -43,6 +43,19 @@ expression_name [ ( column_name [ , ... ] ) ] [ AS ] ( query )
 * **query**
 
     A [SELECT statement](sql-ref-syntax-qry-select.html).
+
+* **information_query**
+
+    Show Commands that can be used for information query. The currently supported Show Commands are as follows:
+
+    * [SHOW COLUMNS](sql-ref-syntax-aux-show-columns.html)
+    * [SHOW DATABASES](sql-ref-syntax-aux-show-databases.html)
+    * [SHOW FUNCTIONS](sql-ref-syntax-aux-show-functions.html)
+    * [SHOW PARTITIONS](sql-ref-syntax-aux-show-partitions.html)
+    * [SHOW TABLE EXTENDED](sql-ref-syntax-aux-show-table.html)
+    * [SHOW TABLES](sql-ref-syntax-aux-show-tables.html)
+    * [SHOW TBLPROPERTIES](sql-ref-syntax-aux-show-tblproperties.html)
+    * [SHOW VIEWS](sql-ref-syntax-aux-show-views.html)
 
 ### Examples
 
@@ -117,8 +130,37 @@ SELECT * FROM t2;
 +---+
 |  2|
 +---+
+
+-- Query SHOW NAMESPACES with CTE
+WITH
+    s AS (SHOW NAMESPACES)
+SELECT * FROM s;
++---------------------+
+|            namespace|
++---------------------+
+|              default|
++---------------------+
+|  query_ddl_namespace|
++---------------------+
+-- Query SHOW TABLES with CTE with multiple column aliases
+WITH
+    s(ns, tn, t) AS (SHOW TABLES)
+SELECT * FROM s WHERE tn = 'test_show_tables';
++---------------------+---------------------+---------------------+
+|                   ns|                   tn|                    t|
++---------------------+---------------------+---------------------+
+|  query_ddl_namespace|     test_show_tables|                false|
++---------------------+---------------------+---------------------+
 ```
 
 ### Related Statements
 
 * [SELECT](sql-ref-syntax-qry-select.html)
+* [SHOW COLUMNS](sql-ref-syntax-aux-show-columns.html)
+* [SHOW DATABASES](sql-ref-syntax-aux-show-databases.html)
+* [SHOW FUNCTIONS](sql-ref-syntax-aux-show-functions.html)
+* [SHOW PARTITIONS](sql-ref-syntax-aux-show-partitions.html)
+* [SHOW TABLE EXTENDED](sql-ref-syntax-aux-show-table.html)
+* [SHOW TABLES](sql-ref-syntax-aux-show-tables.html)
+* [SHOW TBLPROPERTIES](sql-ref-syntax-aux-show-tblproperties.html)
+* [SHOW VIEWS](sql-ref-syntax-aux-show-views.html)
