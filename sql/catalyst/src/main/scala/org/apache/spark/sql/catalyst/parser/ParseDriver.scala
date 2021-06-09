@@ -240,15 +240,6 @@ class ParseException(
       Some(errorClass),
       messageParameters)
 
-  def copy(
-      command: Option[String] = command,
-      message: String = message,
-      start: Origin = start,
-      stop: Origin = stop,
-      errorClass: Option[String] = errorClass,
-      messageParameters: Seq[String] = messageParameters): ParseException =
-    new ParseException(command, message, start, stop, errorClass, messageParameters)
-
   override def getMessage: String = {
     val builder = new StringBuilder
     builder ++= "\n" ++= message
@@ -271,7 +262,7 @@ class ParseException(
   }
 
   def withCommand(cmd: String): ParseException = {
-    this.copy(command = Option(cmd))
+    new ParseException(Option(cmd), message, start, stop, errorClass, messageParameters)
   }
 }
 

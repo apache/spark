@@ -58,7 +58,7 @@ class SparkErrorSuite extends SparkFunSuite {
     mapper.readValue(errorClassesUrl, new TypeReference[Map[String, ErrorInfo]]() {})
   }
 
-  test("Error classes are alphabetically ordered") {
+  test("Error classes are correctly formatted") {
     val errorClassFileContents = IOUtils.toString(errorClassesUrl.openStream())
     val rewrittenString = mapper.configure(SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS, true)
       .writeValueAsString(errorClassToInfoMap)
@@ -102,18 +102,13 @@ class SparkErrorSuite extends SparkFunSuite {
       getMessage("MISSING_COLUMN_ERROR", Seq.empty)
     }
 
-    // Requires 2 args
-    intercept[IllegalFormatException] {
-      getMessage("PARAMETER_TYPE_ERROR", Seq("foo"))
-    }
-
     // Does not fail with too many args (expects 0 args)
     assert(getMessage("DIVIDE_BY_ZERO_ERROR", Seq("foo", "bar")) == "divide by zero")
   }
 
   test("Error message is formatted") {
-    assert(getMessage("PARAMETER_TYPE_ERROR", Seq("foo", "bar")) ==
-      "foo should be a bar")
+    assert(getMessage("MISSING_COLUMN_ERROR", Seq("foo", "bar")) ==
+      "cannot resolve 'foo' given input columns: [bar]")
   }
 
   test("Try catching SparkError") {
