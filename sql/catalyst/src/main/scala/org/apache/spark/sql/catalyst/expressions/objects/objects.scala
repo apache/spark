@@ -44,7 +44,7 @@ import org.apache.spark.util.Utils
 /**
  * Common base class for [[StaticInvoke]], [[Invoke]], and [[NewInstance]].
  */
-trait InvokeLike extends Expression with NonSQLExpression {
+trait InvokeLike extends Expression with NonSQLExpression with ImplicitCastInputTypes {
 
   def arguments: Seq[Expression]
 
@@ -229,6 +229,11 @@ object SerializerSupport {
  * @param dataType The expected return type of the function call
  * @param functionName The name of the method to call.
  * @param arguments An optional list of expressions to pass as arguments to the function.
+ * @param inputTypes A list of data types specifying the input types for the method to be invoked.
+ *                   If enabled, it must have the same length as [[arguments]]. In case an input
+ *                   type differs from the actual argument type, Spark will try to perform
+ *                   type coercion and insert cast whenever necessary before invoking the method.
+ *                   The above is disabled if this is empty.
  * @param propagateNull When true, and any of the arguments is null, null will be returned instead
  *                      of calling the function. Also note: when this is false but any of the
  *                      arguments is of primitive type and is null, null also will be returned
@@ -241,6 +246,7 @@ case class StaticInvoke(
     dataType: DataType,
     functionName: String,
     arguments: Seq[Expression] = Nil,
+    inputTypes: Seq[AbstractDataType] = Nil,
     propagateNull: Boolean = true,
     returnNullable: Boolean = true) extends InvokeLike {
 
@@ -322,7 +328,12 @@ case class StaticInvoke(
  * @param functionName The name of the method to call.
  * @param dataType The expected return type of the function.
  * @param arguments An optional list of expressions, whose evaluation will be passed to the
-  *                 function.
+ *                 function.
+ * @param methodInputTypes A list of data types specifying the input types for the method to be
+ *                         invoked. If enabled, it must have the same length as [[arguments]]. In
+ *                         case an input type differs from the actual argument type, Spark will
+ *                         try to perform type coercion and insert cast whenever necessary before
+ *                         invoking the method. The type coercion is disabled if this is empty.
  * @param propagateNull When true, and any of the arguments is null, null will be returned instead
  *                      of calling the function. Also note: when this is false but any of the
  *                      arguments is of primitive type and is null, null also will be returned
@@ -335,6 +346,7 @@ case class Invoke(
     functionName: String,
     dataType: DataType,
     arguments: Seq[Expression] = Nil,
+    methodInputTypes: Seq[AbstractDataType] = Nil,
     propagateNull: Boolean = true,
     returnNullable : Boolean = true) extends InvokeLike {
 
@@ -342,6 +354,12 @@ case class Invoke(
 
   override def nullable: Boolean = targetObject.nullable || needNullCheck || returnNullable
   override def children: Seq[Expression] = targetObject +: arguments
+  override def inputTypes: Seq[AbstractDataType] =
+    if (methodInputTypes.nonEmpty) {
+      Seq(targetObject.dataType) ++ methodInputTypes
+    } else {
+      Nil
+    }
 
   private lazy val encodedFunctionName = ScalaReflection.encodeFieldNameToIdentifier(functionName)
 
@@ -450,7 +468,7 @@ object NewInstance {
       arguments: Seq[Expression],
       dataType: DataType,
       propagateNull: Boolean = true): NewInstance =
-    new NewInstance(cls, arguments, propagateNull, dataType, None)
+    new NewInstance(cls, arguments, inputTypes = Nil, propagateNull, dataType, None)
 }
 
 /**
@@ -459,6 +477,11 @@ object NewInstance {
  *
  * @param cls The class to construct.
  * @param arguments A list of expression to use as arguments to the constructor.
+ * @param inputTypes A list of data types specifying the input types for the method to be invoked.
+ *                   If enabled, it must have the same length as [[arguments]]. In case an input
+ *                   type differs from the actual argument type, Spark will try to perform
+ *                   type coercion and insert cast whenever necessary before invoking the method.
+ *                   The above is disabled if this is empty.
  * @param propagateNull When true, if any of the arguments is null, then null will be returned
  *                      instead of trying to construct the object. Also note: when this is false
  *                      but any of the arguments is of primitive type and is null, null also will
@@ -474,6 +497,7 @@ object NewInstance {
 case class NewInstance(
     cls: Class[_],
     arguments: Seq[Expression],
+    inputTypes: Seq[AbstractDataType],
     propagateNull: Boolean,
     dataType: DataType,
     outerPointer: Option[() => AnyRef]) extends InvokeLike {

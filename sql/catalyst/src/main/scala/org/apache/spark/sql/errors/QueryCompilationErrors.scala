@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.catalyst.util.{toPrettySQL, FailFastMode, ParseMode, PermissiveMode}
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
+import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, UnboundFunction}
 import org.apache.spark.sql.connector.expressions.{NamedReference, Transform}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LEGACY_CTE_PRECEDENCE_POLICY
@@ -1464,6 +1464,13 @@ private[spark] object QueryCompilationErrors {
     new AnalysisException(s"Function '${unbound.name}' cannot process " +
       s"input: (${arguments.map(_.dataType.simpleString).mkString(", ")}): " +
       unsupported.getMessage, cause = Some(unsupported))
+  }
+
+  def v2FunctionInvalidInputTypeLengthError(
+      bound: BoundFunction,
+      args: Seq[Expression]): Throwable = {
+    new AnalysisException(s"Invalid bound function '${bound.name()}: there are ${args.length} " +
+        s"arguments but ${bound.inputTypes().length} parameters returned from 'inputTypes()'")
   }
 
   def ambiguousRelationAliasNameInNestedCTEError(name: String): Throwable = {

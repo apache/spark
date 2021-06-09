@@ -2173,9 +2173,14 @@ class Analyzer(override val catalogManager: CatalogManager)
                         unbound, arguments, unsupported)
                   }
 
+                  if (bound.inputTypes().length != arguments.length) {
+                    throw QueryCompilationErrors.v2FunctionInvalidInputTypeLengthError(
+                      bound, arguments)
+                  }
+
                   bound match {
                     case scalarFunc: ScalarFunction[_] =>
-                      processV2ScalarFunction(scalarFunc, inputType, arguments, isDistinct,
+                      processV2ScalarFunction(scalarFunc, arguments, isDistinct,
                         filter, ignoreNulls)
                     case aggFunc: V2AggregateFunction[_, _] =>
                       processV2AggregateFunction(aggFunc, arguments, isDistinct, filter,
@@ -2193,7 +2198,6 @@ class Analyzer(override val catalogManager: CatalogManager)
 
     private def processV2ScalarFunction(
         scalarFunc: ScalarFunction[_],
-        inputType: StructType,
         arguments: Seq[Expression],
         isDistinct: Boolean,
         filter: Option[Expression],
@@ -2208,30 +2212,27 @@ class Analyzer(override val catalogManager: CatalogManager)
         throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
           scalarFunc.name(), "IGNORE NULLS")
       } else {
-        // TODO: implement type coercion by looking at input type from the UDF. We
-        //  may also want to check if the parameter types from the magic method
-        //  match the input type through `BoundFunction.inputTypes`.
-        val argClasses = inputType.fields.map(_.dataType)
+        val declaredInputTypes = scalarFunc.inputTypes().toSeq
+        val argClasses = declaredInputTypes.map(ScalaReflection.dataTypeJavaClass)
         findMethod(scalarFunc, MAGIC_METHOD_NAME, argClasses) match {
           case Some(m) if Modifier.isStatic(m.getModifiers) =>
             StaticInvoke(scalarFunc.getClass, scalarFunc.resultType(),
-              MAGIC_METHOD_NAME, arguments, propagateNull = false,
-              returnNullable = scalarFunc.isResultNullable)
+              MAGIC_METHOD_NAME, arguments, inputTypes = declaredInputTypes,
+                propagateNull = false, returnNullable = scalarFunc.isResultNullable)
           case Some(_) =>
             val caller = Literal.create(scalarFunc, ObjectType(scalarFunc.getClass))
             Invoke(caller, MAGIC_METHOD_NAME, scalarFunc.resultType(),
-              arguments, propagateNull = false, returnNullable = scalarFunc.isResultNullable)
+              arguments, methodInputTypes = declaredInputTypes, propagateNull = false,
+              returnNullable = scalarFunc.isResultNullable)
           case _ =>
             // TODO: handle functions defined in Scala too - in Scala, even if a
             //  subclass do not override the default method in parent interface
             //  defined in Java, the method can still be found from
             //  `getDeclaredMethod`.
-            // since `inputType` is a `StructType`, it is mapped to a `InternalRow`
-            // which we can use to lookup the `produceResult` method.
-            findMethod(scalarFunc, "produceResult", Seq(inputType)) match {
+            findMethod(scalarFunc, "produceResult", Seq(classOf[InternalRow])) match {
               case Some(_) =>
                 ApplyFunctionExpression(scalarFunc, arguments)
-              case None =>
+              case _ =>
                 failAnalysis(s"ScalarFunction '${scalarFunc.name()}' neither implement" +
                   s" magic method nor override 'produceResult'")
             }
@@ -2255,15 +2256,14 @@ class Analyzer(override val catalogManager: CatalogManager)
 
     /**
      * Check if the input `fn` implements the given `methodName` with parameter types specified
-     * via `inputType`.
+     * via `argClasses`.
      */
     private def findMethod(
         fn: BoundFunction,
         methodName: String,
-        inputType: Seq[DataType]): Option[Method] = {
+        argClasses: Seq[Class[_]]): Option[Method] = {
       val cls = fn.getClass
       try {
-        val argClasses = inputType.map(ScalaReflection.dataTypeJavaClass)
         Some(cls.getDeclaredMethod(methodName, argClasses: _*))
       } catch {
         case _: NoSuchMethodException =>
