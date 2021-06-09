@@ -18,7 +18,6 @@
 package org.apache.spark.deploy.yarn
 
 import java.util.{List => JList, Map => JMap, Set => JSet}
-import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.JavaConverters._
@@ -26,7 +25,9 @@ import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.hadoop.yarn.api.records._
+import org.apache.hadoop.yarn.api.records.NodeAttributeOpCode._
 import org.apache.hadoop.yarn.api.resource.PlacementConstraints._
+import org.apache.hadoop.yarn.api.resource.PlacementConstraints.PlacementTargets._
 import org.apache.hadoop.yarn.client.api.AMRMClient
 import org.apache.hadoop.yarn.client.api.AMRMClient.ContainerRequest
 import org.apache.hadoop.yarn.client.api.impl.AMRMClientImpl
@@ -74,9 +75,8 @@ private[yarn] class YarnSchedulingRequestAllocator(
   // A container placement strategy based on pending tasks' locality preference
   private[yarn] val schedulingRequestContainerPlacementStrategy =
     new LocalityPreferredSchedulingRequestContainerPlacementStrategy(sparkConf, conf, resolver)
-  private[yarn] val nodeAttributes = sparkConf.get(NODE_ATTRIBUTE)
-    .map(PlacementConstraintParser.parseExpression)
-  private[yarn] val delayedOrIntervalMilliseconds = sparkConf.get(DELAYED_OR_INTERVAL)
+  private[yarn] val nodeAttributes =
+    sparkConf.get(NODE_ATTRIBUTE).map(PlacementConstraintParser.parseExpression)
 
   private[yarn] val outstandingSchedRequests: JMap[JSet[String], JList[SchedulingRequest]] = {
     val field = classOf[AMRMClientImpl[ContainerRequest]]
@@ -219,31 +219,43 @@ private[yarn] class YarnSchedulingRequestAllocator(
     val allocationRequestId = nextAllocationRequestId.getAndIncrement()
     val nodesLocality = if (nodes.nonEmpty) {
       allocationRequestIdToNodes.put(allocationRequestId, nodes)
-      Some(targetIn(NODE, PlacementTargets.nodeAttribute("host", nodes: _*)))
+      val nodesConstraints = nodes.map { node =>
+        targetNodeAttribute(NODE, EQ, nodeAttribute("host", node))
+      }
+      if (nodesConstraints.size > 1) {
+        Some(or(nodesConstraints: _*))
+      } else {
+        Some(nodesConstraints.head)
+      }
     } else {
       None
     }
+
     val racksLocality = if (racks.nonEmpty) {
       allocationRequestIdToRacks.put(allocationRequestId, racks)
-      Some(targetIn(RACK, PlacementTargets.nodeAttribute("rack", racks: _*)))
+      val rackConstraints = racks.map { rack =>
+        targetNodeAttribute(NODE, EQ, nodeAttribute("rack", rack))
+      }
+      if (rackConstraints.size > 1) {
+        Some(or(rackConstraints: _*))
+      } else {
+        Some(rackConstraints.head)
+      }
     } else {
       None
     }
 
     val locality = (nodesLocality, racksLocality) match {
-      case (Some(nodes), Some(racks)) => Some(delayedOr(
-        timedClockConstraint(nodes, delayedOrIntervalMilliseconds, TimeUnit.MILLISECONDS),
-        timedClockConstraint(racks, delayedOrIntervalMilliseconds * 2, TimeUnit.MILLISECONDS)))
+      case (Some(nodes), Some(racks)) => Some(or(nodes, racks))
       case (Some(nodes), None) => Some(nodes)
       case (None, Some(racks)) => Some(racks)
       case _ => None
     }
 
-    val expression = (nodeAttributes, locality) match {
-      case (Some(attributes), Some(locality)) => Some(and(attributes, locality))
-      case (Some(attribute), None) => Some(attribute)
-      case (None, Some(locality)) => Some(locality)
-      case _ => None
+    val expression = (nodeAttributes.isDefined, locality.isDefined) match {
+      case (true, true) => Some(or(and(nodeAttributes.get, locality.get), nodeAttributes.get))
+      case (false, true) => locality
+      case (_, false) => nodeAttributes
     }
 
     val schedulingRequestBuilder = SchedulingRequest.newBuilder()
@@ -257,6 +269,7 @@ private[yarn] class YarnSchedulingRequestAllocator(
       schedulingRequestBuilder.placementConstraintExpression(placementConstraint.build())
     }
 
+    logWarning(s"Create SchedulingRequest: ${schedulingRequestBuilder.build()}")
     schedulingRequestBuilder.build()
   }
 
@@ -286,31 +299,11 @@ private[yarn] class YarnSchedulingRequestAllocator(
       s"priority: ${allocatedContainer.getPriority}, " +
       s"location: $location, resource: $resourceForRP")
 
-    if (matchContainerToRequestLocality(allocatedContainer.getAllocationRequestId, location)) {
-      // Add this method for test, since outstanding request has been removed
-      // when container allocated to AMRMClient.
-      removeFromOutstandingSchedulingRequests(allocatedContainer)
-      containersToUse += allocatedContainer
-    } else {
-      remaining += allocatedContainer
-    }
-  }
-
-  def matchContainerToRequestLocality(requestId: Long, location: String): Boolean = {
-    if (allocationRequestIdToNodes.contains(requestId) ||
-      allocationRequestIdToRacks.contains(requestId)) {
-      val requestNodes = allocationRequestIdToNodes.getOrElse(requestId, Array.empty)
-      val requestRacks = allocationRequestIdToRacks.getOrElse(requestId, Array.empty)
-      if (requestNodes.contains(location) || requestRacks.contains(location)) {
-        allocationRequestIdToNodes.remove(requestId)
-        allocationRequestIdToRacks.remove(requestId)
-        true
-      } else {
-        false
-      }
-    } else {
-      true
-    }
+    // Add this method for test, since outstanding request has been removed
+    removeFromOutstandingSchedulingRequests(allocatedContainer)
+    allocationRequestIdToNodes.remove(allocatedContainer.getAllocationRequestId)
+    allocationRequestIdToRacks.remove(allocatedContainer.getAllocationRequestId)
+    containersToUse += allocatedContainer
   }
 
   private def splitPendingSchedulingRequestAllocationsByLocality(
@@ -386,5 +379,3 @@ private[yarn] class YarnSchedulingRequestAllocator(
     }
   }
 }
-
-
