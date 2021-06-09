@@ -153,6 +153,13 @@ object RandomDataGenerator {
     milliseconds * MICROS_PER_MILLIS
   }
 
+  private val specialTs = Seq(
+    "0001-01-01 00:00:00", // the fist timestamp of Common Era
+    "1582-10-15 23:59:59", // the cutover date from Julian to Gregorian calendar
+    "1970-01-01 00:00:00", // the epoch timestamp
+    "9999-12-31 23:59:59"  // the last supported timestamp according to SQL standard
+  )
+
   /**
    * Returns a function which generates random values for the given `DataType`, or `None` if no
    * random data generator is defined for that data type. The generated values will use an external
@@ -229,12 +236,6 @@ object RandomDataGenerator {
             specialDates.map(java.sql.Date.valueOf))
         }
       case TimestampType =>
-        val specialTs = Seq(
-          "0001-01-01 00:00:00", // the fist timestamp of Common Era
-          "1582-10-15 23:59:59", // the cutover date from Julian to Gregorian calendar
-          "1970-01-01 00:00:00", // the epoch timestamp
-          "9999-12-31 23:59:59"  // the last supported timestamp according to SQL standard
-        )
         def getRandomTimestamp(rand: Random): java.sql.Timestamp = {
           // DateTimeUtils.toJavaTimestamp takes microsecond.
           val ts = DateTimeUtils.toJavaTimestamp(uniformMicrosRand(rand))
@@ -269,6 +270,13 @@ object RandomDataGenerator {
             specialTs.map(java.sql.Timestamp.valueOf))
         }
       case TimestampWithoutTZType =>
+        randomNumeric[LocalDateTime](
+          rand,
+          (rand: Random) => {
+            DateTimeUtils.microsToLocalDateTime(uniformMicrosRand(rand))
+          },
+          specialTs.map { s => LocalDateTime.parse(s.replace(" ", "T")) }
+        )
       case CalendarIntervalType => Some(() => {
         val months = rand.nextInt(1000)
         val days = rand.nextInt(10000)

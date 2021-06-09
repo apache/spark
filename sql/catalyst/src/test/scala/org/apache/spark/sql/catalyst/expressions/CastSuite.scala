@@ -63,7 +63,10 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       checkNullCast(from, to)
     }
 
-    atomicTypes.foreach(dt => checkNullCast(NullType, dt))
+    (atomicTypes -- Set(
+      // TODO(SPARK-35698): Support casting timestamp without time zone to strings.
+      TimestampWithoutTZType
+    )).foreach(dt => checkNullCast(NullType, dt))
     atomicTypes.foreach(dt => checkNullCast(dt, StringType))
     checkNullCast(StringType, BinaryType)
     checkNullCast(StringType, BooleanType)
