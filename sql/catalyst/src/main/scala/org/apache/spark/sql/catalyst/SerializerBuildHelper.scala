@@ -86,6 +86,15 @@ object SerializerBuildHelper {
       returnNullable = false)
   }
 
+  def createSerializerForLocalDateTime(inputObject: Expression): Expression = {
+    StaticInvoke(
+      DateTimeUtils.getClass,
+      TimestampWithoutTZType,
+      "localDateTimeToMicros",
+      inputObject :: Nil,
+      returnNullable = false)
+  }
+
   def createSerializerForJavaLocalDate(inputObject: Expression): Expression = {
     StaticInvoke(
       DateTimeUtils.getClass,

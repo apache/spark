@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeMap, AttributeSet, NamedExpression, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeMap, AttributeSet, NamedExpression, OuterReference, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern._
@@ -41,11 +41,14 @@ case class ReferenceEqualPlanWrapper(plan: LogicalPlan) {
 object DeduplicateRelations extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = {
     renewDuplicatedRelations(mutable.HashSet.empty, plan)._1.resolveOperatorsUpWithPruning(
-      _.containsAnyPattern(JOIN, INTERSECT, EXCEPT, UNION, COMMAND), ruleId) {
+      _.containsAnyPattern(JOIN, LATERAL_JOIN, INTERSECT, EXCEPT, UNION, COMMAND), ruleId) {
       case p: LogicalPlan if !p.childrenResolved => p
       // To resolve duplicate expression IDs for Join.
       case j @ Join(left, right, _, _, _) if !j.duplicateResolved =>
         j.copy(right = dedupRight(left, right))
+      // Resolve duplicate output for LateralJoin.
+      case j @ LateralJoin(left, right, _, _) if right.resolved && !j.duplicateResolved =>
+        j.copy(right = right.withNewPlan(dedupRight(left, right.plan)))
       // intersect/except will be rewritten to join at the beginning of optimizer. Here we need to
       // deduplicate the right side plan, so that we won't produce an invalid self-join later.
       case i @ Intersect(left, right, _) if !i.duplicateResolved =>
@@ -182,6 +185,16 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
           if findAliases(projectList).intersect(conflictingAttributes).nonEmpty =>
         Seq((oldVersion, oldVersion.copy(projectList = newAliases(projectList))))
 
+      // Handle projects that create conflicting outer references.
+      case oldVersion @ Project(projectList, _)
+          if findOuterReferences(projectList).intersect(conflictingAttributes).nonEmpty =>
+        // Add alias to conflicting outer references.
+        val aliasedProjectList = projectList.map {
+          case o @ OuterReference(a) if conflictingAttributes.contains(a) => Alias(o, a.name)()
+          case other => other
+        }
+        Seq((oldVersion, oldVersion.copy(projectList = aliasedProjectList)))
+
       // We don't need to search child plan recursively if the projectList of a Project
       // is only composed of Alias and doesn't contain any conflicting attributes.
       // Because, even if the child plan has some conflicting attributes, the attributes
@@ -272,5 +285,9 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
 
   private def findAliases(projectList: Seq[NamedExpression]): AttributeSet = {
     AttributeSet(projectList.collect { case a: Alias => a.toAttribute })
+  }
+
+  private def findOuterReferences(projectList: Seq[NamedExpression]): AttributeSet = {
+    AttributeSet(projectList.collect { case o: OuterReference => o.toAttribute })
   }
 }

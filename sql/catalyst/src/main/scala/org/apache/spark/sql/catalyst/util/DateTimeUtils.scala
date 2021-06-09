@@ -71,6 +71,14 @@ object DateTimeUtils {
     instantToMicros(instant)
   }
 
+  def microsToLocalDateTime(micros: Long): LocalDateTime = {
+    getLocalDateTime(micros, ZoneOffset.UTC)
+  }
+
+  def localDateTimeToMicros(localDateTime: LocalDateTime): Long = {
+    instantToMicros(localDateTime.toInstant(ZoneOffset.UTC))
+  }
+
   /**
    * Converts a local date at the default JVM time zone to the number of days since 1970-01-01
    * in the hybrid calendar (Julian + Gregorian) by discarding the time part. The resulted days are

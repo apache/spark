@@ -871,7 +871,13 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   override def visitFromClause(ctx: FromClauseContext): LogicalPlan = withOrigin(ctx) {
     val from = ctx.relation.asScala.foldLeft(null: LogicalPlan) { (left, relation) =>
       val right = plan(relation.relationPrimary)
-      val join = right.optionalMap(left)(Join(_, _, Inner, None, JoinHint.NONE))
+      val join = right.optionalMap(left) { (left, right) =>
+        if (relation.LATERAL != null) {
+          LateralJoin(left, LateralSubquery(right), Inner, None)
+        } else {
+          Join(left, right, Inner, None, JoinHint.NONE)
+        }
+      }
       withJoinRelations(join, relation)
     }
     if (ctx.pivotClause() != null) {
@@ -1127,12 +1133,18 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
         // Resolve the join type and join condition
         val (joinType, condition) = Option(join.joinCriteria) match {
           case Some(c) if c.USING != null =>
+            if (join.LATERAL != null) {
+              throw QueryParsingErrors.lateralJoinWithUsingJoinUnsupportedError(ctx)
+            }
             (UsingJoin(baseJoinType, visitIdentifierList(c.identifierList)), None)
           case Some(c) if c.booleanExpression != null =>
             (baseJoinType, Option(expression(c.booleanExpression)))
           case Some(c) =>
             throw QueryParsingErrors.joinCriteriaUnimplementedError(c, ctx)
           case None if join.NATURAL != null =>
+            if (join.LATERAL != null) {
+              throw QueryParsingErrors.lateralJoinWithNaturalJoinUnsupportedError(ctx)
+            }
             if (baseJoinType == Cross) {
               throw QueryParsingErrors.naturalCrossJoinUnsupportedError(ctx)
             }
@@ -1140,7 +1152,14 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
           case None =>
             (baseJoinType, None)
         }
-        Join(left, plan(join.right), joinType, condition, JoinHint.NONE)
+        if (join.LATERAL != null) {
+          if (!Seq(Inner, Cross, LeftOuter).contains(joinType)) {
+            throw QueryParsingErrors.unsupportedLateralJoinTypeError(ctx, joinType.toString)
+          }
+          LateralJoin(left, LateralSubquery(plan(join.right)), joinType, condition)
+        } else {
+          Join(left, plan(join.right), joinType, condition, JoinHint.NONE)
+        }
       }
     }
   }

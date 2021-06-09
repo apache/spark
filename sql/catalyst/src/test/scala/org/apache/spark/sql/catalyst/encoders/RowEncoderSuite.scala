@@ -330,6 +330,16 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
     }
   }
 
+  test("SPARK-35664: encoding/decoding TimestampWithoutTZType to/from java.time.LocalDateTime") {
+    val schema = new StructType().add("t", TimestampWithoutTZType)
+    val encoder = RowEncoder(schema).resolveAndBind()
+    val localDateTime = java.time.LocalDateTime.parse("2019-02-26T16:56:00")
+    val row = toRow(encoder, Row(localDateTime))
+    assert(row.getLong(0) === DateTimeUtils.localDateTimeToMicros(localDateTime))
+    val readback = fromRow(encoder, row)
+    assert(readback.get(0) === localDateTime)
+  }
+
   test("encoding/decoding DateType to/from java.time.LocalDate") {
     withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> "true") {
       val schema = new StructType().add("d", DateType)

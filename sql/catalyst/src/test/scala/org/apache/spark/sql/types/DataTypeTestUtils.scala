@@ -62,6 +62,7 @@ object DataTypeTestUtils {
   val ordered: Set[DataType] = numericTypeWithoutDecimal ++ Set(
     BooleanType,
     TimestampType,
+    TimestampWithoutTZType,
     DateType,
     StringType,
     BinaryType,
@@ -81,6 +82,7 @@ object DataTypeTestUtils {
     DateType,
     StringType,
     TimestampType,
+    TimestampWithoutTZType,
     YearMonthIntervalType
   ) ++ DayTimeIntervalType.dayTimeIntervalTypes()
 

@@ -360,6 +360,17 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("SPARK-35664: construct literals from java.time.LocalDateTime") {
+    Seq(
+      LocalDateTime.of(1, 1, 1, 0, 0, 0, 0),
+      LocalDateTime.of(2021, 5, 31, 23, 59, 59, 100),
+      LocalDateTime.of(2020, 2, 29, 23, 50, 57, 9999),
+      LocalDateTime.parse("9999-12-31T23:59:59.999999")
+    ).foreach { dateTime =>
+      checkEvaluation(Literal(dateTime), dateTime)
+    }
+  }
+
   test("SPARK-34605: construct literals from java.time.Duration") {
     Seq(
       Duration.ofNanos(0),

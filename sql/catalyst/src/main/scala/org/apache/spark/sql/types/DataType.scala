@@ -171,7 +171,7 @@ object DataType {
   private val otherTypes = {
     (Seq(NullType, DateType, TimestampType, BinaryType, IntegerType, BooleanType, LongType,
       DoubleType, FloatType, ShortType, ByteType, StringType, CalendarIntervalType,
-      YearMonthIntervalType) ++ DayTimeIntervalType.dayTimeIntervalTypes())
+      YearMonthIntervalType, TimestampWithoutTZType) ++ DayTimeIntervalType.dayTimeIntervalTypes())
       .map(t => t.typeName -> t).toMap
   }
 

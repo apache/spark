@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst
 
-import java.time.{Duration, Instant, LocalDate, Period}
+import java.time.{Duration, Instant, LocalDate, LocalDateTime, Period}
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.Row
@@ -186,6 +186,35 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
         val instant = DateTimeUtils.microsToInstant(us)
         assert(CatalystTypeConverters.createToScalaConverter(TimestampType)(us) === instant)
       }
+    }
+  }
+
+  test("SPARK-35664: converting java.time.LocalDateTime to TimestampWithoutTZType") {
+    Seq(
+      "0101-02-16T10:11:32",
+      "1582-10-02T01:02:03.04",
+      "1582-12-31T23:59:59.999999",
+      "1970-01-01T00:00:01.123",
+      "1972-12-31T23:59:59.123456",
+      "2019-02-16T18:12:30",
+      "2119-03-16T19:13:31").foreach { text =>
+      val input = LocalDateTime.parse(text)
+      val result = CatalystTypeConverters.convertToCatalyst(input)
+      val expected = DateTimeUtils.localDateTimeToMicros(input)
+      assert(result === expected)
+    }
+  }
+
+  test("SPARK-35664: converting TimestampWithoutTZType to java.time.LocalDateTime") {
+    Seq(
+      -9463427405253013L,
+      -244000001L,
+      0L,
+      99628200102030L,
+      1543749753123456L).foreach { us =>
+      val localDateTime = DateTimeUtils.microsToLocalDateTime(us)
+      assert(CatalystTypeConverters.createToScalaConverter(TimestampWithoutTZType)(us) ===
+        localDateTime)
     }
   }
 
