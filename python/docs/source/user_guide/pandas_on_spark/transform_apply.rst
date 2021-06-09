@@ -2,7 +2,7 @@
 Transform and apply a function
 ==============================
 
-.. NOTE: the images are stored at https://github.com/pyspark.pandas/issues/1443. Feel free to edit and/or add.
+.. NOTE: the images are stored at https://github.com/koalas/issues/1443. Feel free to edit and/or add.
 
 .. currentmodule:: pyspark.pandas
 

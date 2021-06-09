@@ -15,10 +15,13 @@
     specific language governing permissions and limitations
     under the License.
 
-:orphan:
 
-=======================
-Apache Arrow in PySpark
-=======================
+=========
+Spark SQL
+=========
 
-This page has been moved to `Apache Arrow in PySpark <../sql/arrow_pandas.rst>`_.
+.. toctree::
+   :maxdepth: 2
+
+   arrow_pandas
+

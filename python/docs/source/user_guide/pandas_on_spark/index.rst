@@ -15,10 +15,19 @@
     specific language governing permissions and limitations
     under the License.
 
-:orphan:
 
-=======================
-Apache Arrow in PySpark
-=======================
+====================
+Pandas APIs on Spark
+====================
 
-This page has been moved to `Apache Arrow in PySpark <../sql/arrow_pandas.rst>`_.
+.. toctree::
+   :maxdepth: 2
+
+   options
+   pandas_pyspark
+   transform_apply
+   types
+   typehints
+   from_to_dbms
+   best_practices
+   faq
