@@ -507,11 +507,9 @@ final class ShuffleBlockFetcherIterator(
             curRequestSize = curBlocks.map(_.size).sum
           }
         case ShuffleBlockId(_, SHUFFLE_PUSH_MAP_ID, _) =>
-          if (curRequestSize >= targetRemoteRequestSize ||
-            curBlocks.size >= maxBlocksInFlightPerAddress) {
+          if (curBlocks.size >= maxBlocksInFlightPerAddress) {
             curBlocks = createFetchRequests(curBlocks, address, isLast = false,
               collectedRemoteRequests, enableBatchFetch = false, forMergedMetas = true)
-            curRequestSize = curBlocks.map(_.size).sum
           }
         case _ =>
           // For batch fetch, the actual block in flight should count for merged block.
@@ -906,6 +904,12 @@ final class ShuffleBlockFetcherIterator(
           result = null
 
         case IgnoreFetchResult(blockId, address, size, isNetworkReqDone) =>
+          // We get this result in 3 cases:
+          // 1. Failure to fetch the data of a remote merged shuffle chunk. In this case, the
+          //    blockId is a ShuffleBlockChunkId.
+          // 2. Failure to read the local merged data. In this case, the blockId is ShuffleBlockId.
+          // 3. Failure to get the local merged directories from the ESS. In this case, the blockId
+          //    is ShuffleBlockId.
           if (pushBasedFetchHelper.isNotExecutorOrMergedLocal(address)) {
             numBlocksInFlightPerAddress(address) = numBlocksInFlightPerAddress(address) - 1
             bytesInFlight -= size
@@ -922,9 +926,10 @@ final class ShuffleBlockFetcherIterator(
 
         case MergedBlocksMetaFetchResult(shuffleId, reduceId, blockSize, numChunks, bitmaps,
           address, _) =>
-          // The original meta request is processed so we decrease numBlocksToFetch by 1. We will
-          // collect new chunks request and the count of this is added to numBlocksToFetch in
-          // collectFetchReqsFromMergedBlocks.
+          // The original meta request is processed so we decrease numBlocksToFetch and
+          // numBlocksInFlightPerAddress by 1. We will collect new chunks request and the count of
+          // this is added to numBlocksToFetch in collectFetchReqsFromMergedBlocks.
+          numBlocksInFlightPerAddress(address) = numBlocksInFlightPerAddress(address) - 1
           numBlocksToFetch -= 1
           val blocksToRequest = pushBasedFetchHelper.createChunkBlockInfosFromMetaResponse(
             shuffleId, reduceId, blockSize, numChunks, bitmaps)
@@ -935,6 +940,10 @@ final class ShuffleBlockFetcherIterator(
           result = null
 
         case MergedBlocksMetaFailedFetchResult(shuffleId, reduceId, address, _) =>
+          // The original meta request failed so we decrease numBlocksInFlightPerAddress by 1.
+          // However, instead of decreasing numBlocksToFetch by 1, we increment numBlocksProcessed
+          // which has the same effect.
+          numBlocksInFlightPerAddress(address) = numBlocksInFlightPerAddress(address) - 1
           // If we fail to fetch the merged status of a merged block, we fall back to fetching the
           // unmerged blocks.
           numBlocksProcessed += pushBasedFetchHelper.initiateFallbackBlockFetchForMergedBlock(
@@ -1012,9 +1021,9 @@ final class ShuffleBlockFetcherIterator(
         pushBasedFetchHelper.sendFetchMergedStatusRequest(request)
       } else {
         sendRequest(request)
-        numBlocksInFlightPerAddress(remoteAddress) =
-          numBlocksInFlightPerAddress.getOrElse(remoteAddress, 0) + request.blocks.size
       }
+      numBlocksInFlightPerAddress(remoteAddress) =
+        numBlocksInFlightPerAddress.getOrElse(remoteAddress, 0) + request.blocks.size
     }
 
     def isRemoteBlockFetchable(fetchReqQueue: Queue[FetchRequest]): Boolean = {
@@ -1391,7 +1400,10 @@ object ShuffleBlockFetcherIterator {
   case class DeferFetchRequestResult(fetchRequest: FetchRequest) extends FetchResult
 
   /**
-   * Result of a fetch from a remote merged block unsuccessfully.
+   * Result of an un-successful fetch of either of these:
+   * 1) Remote shuffle block chunk.
+   * 2) Local merged block data.
+   *
    * Instead of treating this as a FailureFetchResult, we ignore this failure
    * and fallback to fetch the original unmerged blocks.
    * @param blockId block id
