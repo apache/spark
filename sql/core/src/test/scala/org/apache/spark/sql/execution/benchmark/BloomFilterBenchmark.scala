@@ -45,7 +45,7 @@ object BloomFilterBenchmark extends SqlBasedBenchmark {
   private val N = scaleFactor * 1000 * 1000
   private val df1 = spark.range(N).map(_ => Random.nextInt)
 
-  private val df2 = Seq.fill(N) {UUID.randomUUID().toString.replace("-", "")}.toDF
+  private val df2 = Seq.fill(1000 * 1000) {UUID.randomUUID().toString.replace("-", "")}.toDF
 
   private def writeORCBenchmark(): Unit = {
     withTempPath { dir =>
@@ -88,7 +88,7 @@ object BloomFilterBenchmark extends SqlBasedBenchmark {
   private def readORCBenchmarkForInSet(): Unit = {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
-      val samples = df2.sample(0.0000003, 128).select("value").as[String].collect()
+      val samples = df2.sample(0.000003, 128).select("value").as[String].collect()
       val filter = "value IN (" + samples.map ( x => s"'$x'").mkString(", ") + ")"
 
       df2.repartition(col("value")).sort(col("value")).write.orc(path + "/withoutBF")
@@ -96,7 +96,7 @@ object BloomFilterBenchmark extends SqlBasedBenchmark {
         .write.option("orc.bloom.filter.columns", "value").orc(path + "/withBF")
 
       runBenchmark(s"ORC Read for IN set") {
-        val benchmark = new Benchmark(s"Read a row from ${scaleFactor}M rows", N, output = output)
+        val benchmark = new Benchmark(s"Read a row from 1M rows", 1000 * 1000, output = output)
         benchmark.addCase("Without bloom filter") { _ =>
           spark.read.orc(path + "/withoutBF").where(filter).noop()
         }
@@ -161,7 +161,7 @@ object BloomFilterBenchmark extends SqlBasedBenchmark {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
 
-      val samples = df2.sample(0.0000003, 128).select("value").as[String].collect()
+      val samples = df2.sample(0.000003, 128).select("value").as[String].collect()
       val filter = "value IN (" + samples.map ( x => s"'$x'").mkString(", ") + ")"
 
       df2.repartition(col("value")).sort(col("value")).write.parquet(path + "/withoutBF")
@@ -171,7 +171,7 @@ object BloomFilterBenchmark extends SqlBasedBenchmark {
         .parquet(path + "/withBF")
 
       runBenchmark(s"Parquet Read for IN set") {
-        val benchmark = new Benchmark(s"Read a row from ${scaleFactor}M rows", N, output = output)
+        val benchmark = new Benchmark(s"Read a row from 1M rows", 1000 * 1000, output = output)
         benchmark.addCase("Without bloom filter") { _ =>
           spark.read.option("spark.sql.parquet.pushdown.inFilterThreshold", 50)
             .parquet(path + "/withoutBF").where(filter).noop()
