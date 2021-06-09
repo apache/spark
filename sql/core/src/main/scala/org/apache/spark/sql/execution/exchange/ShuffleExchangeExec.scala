@@ -86,11 +86,11 @@ case object ENSURE_REQUIREMENTS extends ShuffleOrigin
 
 // Indicates that the shuffle operator was added by the user-specified repartition operator. Spark
 // can still optimize it via changing shuffle partition number, as data partitioning won't change.
-case object REPARTITION extends ShuffleOrigin
+case object REPARTITION_BY_COL extends ShuffleOrigin
 
 // Indicates that the shuffle operator was added by the user-specified repartition operator with
 // a certain partition number. Spark can't optimize it.
-case object REPARTITION_WITH_NUM extends ShuffleOrigin
+case object REPARTITION_BY_NUM extends ShuffleOrigin
 
 // Indicates that the shuffle operator was added by the user-specified repartition operator. Spark
 // first tries to coalesce partitions, if it cannot be coalesced, then use the local shuffle reader.
