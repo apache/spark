@@ -2180,7 +2180,7 @@ class Analyzer(override val catalogManager: CatalogManager)
 
                   bound match {
                     case scalarFunc: ScalarFunction[_] =>
-                      processV2ScalarFunction(scalarFunc, inputType, arguments, isDistinct,
+                      processV2ScalarFunction(scalarFunc, arguments, isDistinct,
                         filter, ignoreNulls)
                     case aggFunc: V2AggregateFunction[_, _] =>
                       processV2AggregateFunction(aggFunc, arguments, isDistinct, filter,
@@ -2198,7 +2198,6 @@ class Analyzer(override val catalogManager: CatalogManager)
 
     private def processV2ScalarFunction(
         scalarFunc: ScalarFunction[_],
-        argumentTypes: StructType,
         arguments: Seq[Expression],
         isDistinct: Boolean,
         filter: Option[Expression],
@@ -2214,27 +2213,26 @@ class Analyzer(override val catalogManager: CatalogManager)
           scalarFunc.name(), "IGNORE NULLS")
       } else {
         val declaredInputTypes = scalarFunc.inputTypes().toSeq
-        findMethod(scalarFunc, MAGIC_METHOD_NAME, declaredInputTypes) match {
+        val argClasses = declaredInputTypes.map(ScalaReflection.dataTypeJavaClass)
+        findMethod(scalarFunc, MAGIC_METHOD_NAME, argClasses) match {
           case Some(m) if Modifier.isStatic(m.getModifiers) =>
             StaticInvoke(scalarFunc.getClass, scalarFunc.resultType(),
-              MAGIC_METHOD_NAME, arguments, methodInputTypes = Some(declaredInputTypes),
+              MAGIC_METHOD_NAME, arguments, inputTypes = declaredInputTypes,
                 propagateNull = false, returnNullable = scalarFunc.isResultNullable)
           case Some(_) =>
             val caller = Literal.create(scalarFunc, ObjectType(scalarFunc.getClass))
             Invoke(caller, MAGIC_METHOD_NAME, scalarFunc.resultType(),
-              arguments, methodInputTypes = Some(declaredInputTypes), propagateNull = false,
+              arguments, methodInputTypes = declaredInputTypes, propagateNull = false,
               returnNullable = scalarFunc.isResultNullable)
           case _ =>
             // TODO: handle functions defined in Scala too - in Scala, even if a
             //  subclass do not override the default method in parent interface
             //  defined in Java, the method can still be found from
             //  `getDeclaredMethod`.
-            // since `inputType` is a `StructType`, it is mapped to a `InternalRow`
-            // which we can use to lookup the `produceResult` method.
-            findMethod(scalarFunc, "produceResult", Seq(argumentTypes)) match {
+            findMethod(scalarFunc, "produceResult", Seq(classOf[InternalRow])) match {
               case Some(_) =>
                 ApplyFunctionExpression(scalarFunc, arguments)
-              case None =>
+              case _ =>
                 failAnalysis(s"ScalarFunction '${scalarFunc.name()}' neither implement" +
                   s" magic method nor override 'produceResult'")
             }
@@ -2258,15 +2256,14 @@ class Analyzer(override val catalogManager: CatalogManager)
 
     /**
      * Check if the input `fn` implements the given `methodName` with parameter types specified
-     * via `inputType`.
+     * via `argClasses`.
      */
     private def findMethod(
         fn: BoundFunction,
         methodName: String,
-        inputType: Seq[DataType]): Option[Method] = {
+        argClasses: Seq[Class[_]]): Option[Method] = {
       val cls = fn.getClass
       try {
-        val argClasses = inputType.map(ScalaReflection.dataTypeJavaClass)
         Some(cls.getDeclaredMethod(methodName, argClasses: _*))
       } catch {
         case _: NoSuchMethodException =>

@@ -1473,11 +1473,6 @@ private[spark] object QueryCompilationErrors {
         s"arguments but ${bound.inputTypes().length} parameters returned from 'inputTypes()'")
   }
 
-  def v2FunctionCastError(bound: BoundFunction, arg: Expression, ty: DataType): Throwable = {
-    new AnalysisException(s"Invalid bound function '${bound.name()}': cannot cast " +
-        s"actual argument type '${arg.dataType}' to expected type '$ty'")
-  }
-
   def ambiguousRelationAliasNameInNestedCTEError(name: String): Throwable = {
     new AnalysisException(s"Name $name is ambiguous in nested CTE. " +
       s"Please set ${LEGACY_CTE_PRECEDENCE_POLICY.key} to CORRECTED so that name " +
