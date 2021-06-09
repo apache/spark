@@ -19,9 +19,12 @@ package org.apache.spark.sql.execution
 import scala.io.Source
 
 import org.apache.spark.sql.{AnalysisException, FastOperator}
+import org.apache.spark.sql.catalyst.analysis.UnresolvedNamespace
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, OneRowRelation}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, OneRowRelation, Project, ShowTables, SubqueryAlias}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
+import org.apache.spark.sql.execution.command.{ExecutedCommandExec, ShowTablesCommand}
+import org.apache.spark.sql.expressions.CommandResult
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.Utils
@@ -235,5 +238,31 @@ class QueryExecutionSuite extends SharedSparkSession {
       val df = spark.table("spark_34129")
       assert(df.queryExecution.optimizedPlan.toString.startsWith("Relation default.spark_34129["))
     }
+  }
+
+  test("SPARK-35378: Eagerly execute non-root Command") {
+    def qe(logicalPlan: LogicalPlan): QueryExecution = new QueryExecution(spark, logicalPlan)
+
+    val showTables = ShowTables(UnresolvedNamespace(Seq.empty[String]), None)
+    val showTablesQe = qe(showTables)
+    assert(showTablesQe.commandExecuted.isInstanceOf[CommandResult])
+    assert(showTablesQe.executedPlan.isInstanceOf[CommandResultExec])
+    val showTablesResultExec = showTablesQe.executedPlan.asInstanceOf[CommandResultExec]
+    assert(showTablesResultExec.commandPhysicalPlan.isInstanceOf[ExecutedCommandExec])
+    assert(showTablesResultExec.commandPhysicalPlan.asInstanceOf[ExecutedCommandExec]
+      .cmd.isInstanceOf[ShowTablesCommand])
+
+    val project = Project(showTables.output, SubqueryAlias("s", showTables))
+    val projectQe = qe(project)
+    assert(projectQe.commandExecuted.isInstanceOf[Project])
+    assert(projectQe.commandExecuted.children.length == 1)
+    assert(projectQe.commandExecuted.children(0).isInstanceOf[SubqueryAlias])
+    assert(projectQe.commandExecuted.children(0).children.length == 1)
+    assert(projectQe.commandExecuted.children(0).children(0).isInstanceOf[CommandResult])
+    assert(projectQe.executedPlan.isInstanceOf[CommandResultExec])
+    val cmdResultExec = projectQe.executedPlan.asInstanceOf[CommandResultExec]
+    assert(cmdResultExec.commandPhysicalPlan.isInstanceOf[ExecutedCommandExec])
+    assert(cmdResultExec.commandPhysicalPlan.asInstanceOf[ExecutedCommandExec]
+      .cmd.isInstanceOf[ShowTablesCommand])
   }
 }
