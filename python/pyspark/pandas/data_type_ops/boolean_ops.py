@@ -66,9 +66,7 @@ class BooleanOps(DataTypeOps):
                 return left + right
 
     def sub(self, left, right) -> Union["Series", "Index"]:
-        if not is_valid_operand_for_numeric_arithmetic(
-            right, allow_bool_index_ops=False, allow_bool=False
-        ):
+        if not is_valid_operand_for_numeric_arithmetic(right, allow_bool=False):
             raise TypeError(
                 "Subtraction can not be applied to %s and the given type." % self.pretty_name
             )
@@ -99,9 +97,7 @@ class BooleanOps(DataTypeOps):
                 return left * right
 
     def truediv(self, left, right) -> Union["Series", "Index"]:
-        if not is_valid_operand_for_numeric_arithmetic(
-            right, allow_bool_index_ops=False, allow_bool=False
-        ):
+        if not is_valid_operand_for_numeric_arithmetic(right, allow_bool=False):
             raise TypeError(
                 "True division can not be applied to %s and the given type." % self.pretty_name
             )
@@ -114,9 +110,7 @@ class BooleanOps(DataTypeOps):
             return left / right
 
     def floordiv(self, left, right) -> Union["Series", "Index"]:
-        if not is_valid_operand_for_numeric_arithmetic(
-            right, allow_bool_index_ops=False, allow_bool=False
-        ):
+        if not is_valid_operand_for_numeric_arithmetic(right, allow_bool=False):
             raise TypeError(
                 "Floor division can not be applied to %s and the given type." % self.pretty_name
             )
@@ -129,9 +123,7 @@ class BooleanOps(DataTypeOps):
             return left // right
 
     def mod(self, left, right) -> Union["Series", "Index"]:
-        if not is_valid_operand_for_numeric_arithmetic(
-            right, allow_bool_index_ops=False, allow_bool=False
-        ):
+        if not is_valid_operand_for_numeric_arithmetic(right, allow_bool=False):
             raise TypeError(
                 "Modulo can not be applied to %s and the given type." % self.pretty_name
             )
@@ -144,9 +136,7 @@ class BooleanOps(DataTypeOps):
             return left % right
 
     def pow(self, left, right) -> Union["Series", "Index"]:
-        if not is_valid_operand_for_numeric_arithmetic(
-            right, allow_bool_index_ops=False, allow_bool=False
-        ):
+        if not is_valid_operand_for_numeric_arithmetic(right, allow_bool=False):
             raise TypeError(
                 "Exponentiation can not be applied to %s and the given type." % self.pretty_name
             )
