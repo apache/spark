@@ -7,9 +7,9 @@ rather than an arbitrary error message.
 
 To throw an exception, do the following.
 
-1. Check if an appropriate error class already exists in `error-classes.json`.
+1. Check if an appropriate error class already exists in `error-class.json`.
    If true, skip to step 3. Otherwise, continue to step 2.
-2. Add a new class to `error-classes.json`; keep in mind the invariants below.
+2. Add a new class to `error-class.json`; keep in mind the invariants below.
 3. Check if the exception type already extends `SparkError`.
    If true, skip to step 5. Otherwise, continue to step 4.
 4. Mix `SparkError` into the exception.
@@ -24,11 +24,11 @@ Throw exception:
 
 ### After
 
-`error-classes.json`
+`error-class.json`
 
     "PROBLEM_BECAUSE": {
-      "sqlState": "XXXXX",
-      "messageFormatLines": ["Problem {0} because {1}"]
+      "sqlState": "XXXXX", 
+      "messageFormatLines": ["Problem %s because %s"]
     }
 
 `SparkException.scala`
@@ -45,10 +45,6 @@ Throw exception:
 
 ## Access fields
 
-To add error fields to error messages, set the Spark configuration:
-
-    spark.showSparkErrorFields = true
-
 To access error fields, catch exceptions that extend `org.apache.spark.SparkError` and access
   - Error class with `errorClass`
   - SQLSTATE with `sqlState`
@@ -57,8 +53,8 @@ To access error fields, catch exceptions that extend `org.apache.spark.SparkErro
     try {
         ...
     } catch {
-        case e: SparkError =>
-            warn(s"Saw error with SQLSTATE ${e.sqlState}")
+        case e: SparkError if e.sqlState.forall(_.startsWith("42")) =>
+            warn("Syntax error")
     }
 
 ## Fields
@@ -67,7 +63,8 @@ All fields, excluding error messages, should be consistent across releases.
 
 ### Error class
 
-Error classes are a succinct representation of the error category.
+Error classes are a succinct, unique representation of the error category.
+They should be sorted in alphabetical order.
 
 ### SQLSTATE
 
@@ -77,6 +74,6 @@ Spark does not define its own classes or subclasses.
 
 ### Message format
 
-Error messages should be unique to avoid duplication.
+Error messages should be unique.
 The error message format should be written to accept parameters via the C-style printf syntax.
 The parameters are Strings for simplicity.

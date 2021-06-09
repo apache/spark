@@ -126,7 +126,8 @@ abstract class AbstractSqlParser extends ParserInterface with SQLConfHelper with
         throw e.withCommand(command)
       case e: AnalysisException =>
         val position = Origin(e.line, e.startPosition)
-        throw new ParseException(Option(command), e.message, position, position)
+        throw new ParseException(
+          Option(command), e.message, position, position, e.errorClass, e.messageParameters)
     }
   }
 }
@@ -239,6 +240,15 @@ class ParseException(
       Some(errorClass),
       messageParameters)
 
+  def copy(
+      command: Option[String] = command,
+      message: String = message,
+      start: Origin = start,
+      stop: Origin = stop,
+      errorClass: Option[String] = errorClass,
+      messageParameters: Seq[String] = messageParameters): ParseException =
+    new ParseException(command, message, start, stop, errorClass, messageParameters)
+
   override def getMessage: String = {
     val builder = new StringBuilder
     builder ++= "\n" ++= message
@@ -261,7 +271,7 @@ class ParseException(
   }
 
   def withCommand(cmd: String): ParseException = {
-    new ParseException(Option(cmd), message, start, stop)
+    this.copy(command = Option(cmd))
   }
 }
 

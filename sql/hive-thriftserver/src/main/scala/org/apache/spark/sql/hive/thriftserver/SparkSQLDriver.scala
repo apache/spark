@@ -59,7 +59,6 @@ private[hive] class SparkSQLDriver(val context: SQLContext = SparkSQLEnv.sqlCont
   }
 
   override def run(command: String): CommandProcessorResponse = {
-    // TODO unify the error code
     try {
       val substitutorCommand = SQLConf.withExistingConf(context.conf) {
         new VariableSubstitution().substitute(command)

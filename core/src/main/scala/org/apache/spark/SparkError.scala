@@ -19,12 +19,14 @@ package org.apache.spark
 
 import java.net.URL
 
+import scala.collection.immutable.SortedMap
+
 import com.fasterxml.jackson.annotation.JsonIgnore
 import com.fasterxml.jackson.core.`type`.TypeReference
+import com.fasterxml.jackson.databind.SerializationFeature
 import com.fasterxml.jackson.databind.json.JsonMapper
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
 
-import org.apache.spark.internal.config.SHOW_SPARK_ERROR_FIELDS
 import org.apache.spark.util.Utils
 
 /**
@@ -36,6 +38,7 @@ import org.apache.spark.util.Utils
  *                           linebreaks.
  */
 case class ErrorInfo(sqlState: Option[String], messageFormatLines: Seq[String]) {
+  // For compatibility with multi-line error messages
   @JsonIgnore
   val messageFormat: String = messageFormatLines.mkString("\n")
 }
@@ -45,28 +48,19 @@ case class ErrorInfo(sqlState: Option[String], messageFormatLines: Seq[String]) 
  * construct error messages.
  */
 object SparkError {
-  val errorClassesPath: String = "org/apache/spark/error/error-classes.json"
-  val errorClassesUrl: URL = Utils.getSparkClassLoader.getResource(errorClassesPath)
+  val errorClassesUrl: URL =
+    Utils.getSparkClassLoader.getResource("error/error-classes.json")
   val mapper: JsonMapper = JsonMapper.builder()
     .addModule(DefaultScalaModule)
+    .enable(SerializationFeature.INDENT_OUTPUT)
     .build()
-  val errorClassToInfoMap: Map[String, ErrorInfo] =
-    mapper.readValue(errorClassesUrl, new TypeReference[Map[String, ErrorInfo]]() {})
+  val errorClassToInfoMap: SortedMap[String, ErrorInfo] =
+    mapper.readValue(errorClassesUrl, new TypeReference[SortedMap[String, ErrorInfo]]() {})
 
   def getMessage(errorClass: String, messageParameters: Seq[String]): String = {
     val errorInfo = errorClassToInfoMap.getOrElse(errorClass,
       throw new IllegalArgumentException(s"Cannot find error class '$errorClass'"))
-    val errorMessage = String.format(errorInfo.messageFormat, messageParameters: _*)
-    if (new SparkConf().get(SHOW_SPARK_ERROR_FIELDS)) {
-      val sqlStateStr = if (errorInfo.sqlState.isDefined) {
-        s" (SQLSTATE ${errorInfo.sqlState.get})"
-      } else {
-        ""
-      }
-      s"$errorClass: $errorMessage$sqlStateStr"
-    } else {
-      errorMessage
-    }
+    String.format(errorInfo.messageFormat, messageParameters: _*)
   }
 }
 

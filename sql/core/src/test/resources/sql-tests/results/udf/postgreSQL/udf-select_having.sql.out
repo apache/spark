@@ -176,7 +176,7 @@ SELECT 1 AS one FROM test_having WHERE 1/udf(a) = 1 HAVING 1 < 2
 -- !query schema
 struct<>
 -- !query output
-java.lang.ArithmeticException
+org.apache.spark.SparkArithmeticException
 divide by zero
 
 

@@ -50,7 +50,9 @@ package object analysis {
     def failAnalysis(errorClass: String, messageParameters: Seq[String]): Nothing = {
       throw new AnalysisException(
         errorClass = errorClass,
-        messageParameters = messageParameters).withPosition(t.origin.line, t.origin.startPosition)
+        messageParameters = messageParameters,
+        line = t.origin.line,
+        startPosition = t.origin.startPosition)
     }
   }
 

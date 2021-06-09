@@ -178,7 +178,7 @@ SELECT CASE WHEN udf(1=0) THEN 1/0 WHEN 1=1 THEN 1 ELSE 2/0 END
 -- !query schema
 struct<>
 -- !query output
-java.lang.ArithmeticException
+org.apache.spark.SparkArithmeticException
 divide by zero
 
 
@@ -187,7 +187,7 @@ SELECT CASE 1 WHEN 0 THEN 1/udf(0) WHEN 1 THEN 1 ELSE 2/0 END
 -- !query schema
 struct<>
 -- !query output
-java.lang.ArithmeticException
+org.apache.spark.SparkArithmeticException
 divide by zero
 
 
@@ -196,7 +196,7 @@ SELECT CASE WHEN i > 100 THEN udf(1/0) ELSE udf(0) END FROM case_tbl
 -- !query schema
 struct<>
 -- !query output
-java.lang.ArithmeticException
+org.apache.spark.SparkArithmeticException
 divide by zero
 
 

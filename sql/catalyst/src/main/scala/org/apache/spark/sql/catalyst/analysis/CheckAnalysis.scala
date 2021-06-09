@@ -179,6 +179,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
         operator transformExpressionsUp {
           case a: Attribute if !a.resolved =>
             val from = operator.inputSet.toSeq.map(_.qualifiedName).mkString(", ")
+            // cannot resolve '${a.sql}' given input columns: [$from]
             a.failAnalysis(
               errorClass = "MISSING_COLUMN_ERROR",
               messageParameters = Seq(a.sql, from))

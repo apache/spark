@@ -22,20 +22,23 @@ import java.util.IllegalFormatException
 
 import com.fasterxml.jackson.core.JsonParser.Feature.STRICT_DUPLICATE_DETECTION
 import com.fasterxml.jackson.core.`type`.TypeReference
+import com.fasterxml.jackson.databind.SerializationFeature
 import com.fasterxml.jackson.databind.json.JsonMapper
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
+import org.apache.commons.io.IOUtils
 
 import org.apache.spark.SparkError._
-import org.apache.spark.internal.config.SHOW_SPARK_ERROR_FIELDS
 
+/**
+ * Test suite for Spark errors.
+ */
 class SparkErrorSuite extends SparkFunSuite {
-  def withShowSparkErrorFieldsSet(enabled: Boolean)(fx: => Unit): Unit = {
-    System.setProperty(SHOW_SPARK_ERROR_FIELDS.key, enabled.toString)
-    fx
-    System.clearProperty(SHOW_SPARK_ERROR_FIELDS.key)
+
+  override def beforeAll(): Unit = {
+    super.beforeAll()
   }
 
-  def checkIfUnique(ss: Seq[String]): Unit = {
+  def checkIfUnique(ss: Seq[Any]): Unit = {
     val dups = ss.groupBy(identity).mapValues(_.size).filter(_._2 > 1).keys.toSeq
     assert(dups.isEmpty)
   }
@@ -55,21 +58,22 @@ class SparkErrorSuite extends SparkFunSuite {
     mapper.readValue(errorClassesUrl, new TypeReference[Map[String, ErrorInfo]]() {})
   }
 
-  test("SQLSTATE have length 5") {
+  test("Error classes are alphabetically ordered") {
+    val errorClassFileContents = IOUtils.toString(errorClassesUrl.openStream())
+    val rewrittenString = mapper.configure(SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS, true)
+      .writeValueAsString(errorClassToInfoMap)
+    assert(rewrittenString == errorClassFileContents)
+  }
+
+  test("SQLSTATE invariants") {
     val sqlStates = errorClassToInfoMap.values.toSeq.flatMap(_.sqlState)
     checkCondition(sqlStates, s => s.length == 5)
   }
 
-  test("Message formats are non-null and unique") {
+  test("Message format invariants") {
     val messageFormats = errorClassToInfoMap.values.toSeq.map(_.messageFormat)
     checkCondition(messageFormats, s => s != null)
     checkIfUnique(messageFormats)
-  }
-
-  test("Ingested map's contents match error info file") {
-    val expectedErrorClassToInfoMap =
-      mapper.readValue(errorClassesUrl, new TypeReference[Map[String, ErrorInfo]]() {})
-    assert(expectedErrorClassToInfoMap == errorClassToInfoMap)
   }
 
   test("Round trip") {
@@ -100,23 +104,16 @@ class SparkErrorSuite extends SparkFunSuite {
 
     // Requires 2 args
     intercept[IllegalFormatException] {
-      getMessage("MISSING_COLUMN_ERROR", Seq("foo"))
+      getMessage("PARAMETER_TYPE_ERROR", Seq("foo"))
     }
 
     // Does not fail with too many args (expects 0 args)
     assert(getMessage("DIVIDE_BY_ZERO_ERROR", Seq("foo", "bar")) == "divide by zero")
   }
 
-  test("Error fields are only added if requested") {
-    withShowSparkErrorFieldsSet(enabled = false) {
-      assert(getMessage("MISSING_COLUMN_ERROR", Seq("foo", "bar")) ==
-        "cannot resolve 'foo' given input columns: [bar]")
-    }
-
-    withShowSparkErrorFieldsSet(enabled = true) {
-      assert(getMessage("MISSING_COLUMN_ERROR", Seq("foo", "bar")) ==
-        "MISSING_COLUMN_ERROR: cannot resolve 'foo' given input columns: [bar] (SQLSTATE 42000)")
-    }
+  test("Error message is formatted") {
+    assert(getMessage("PARAMETER_TYPE_ERROR", Seq("foo", "bar")) ==
+      "foo should be a bar")
   }
 
   test("Try catching SparkError") {
