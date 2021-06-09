@@ -32,7 +32,7 @@ import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors
 import org.apache.spark.sql.execution.aggregate.AggUtils
 import org.apache.spark.sql.execution.columnar.{InMemoryRelation, InMemoryTableScanExec}
 import org.apache.spark.sql.execution.command._
-import org.apache.spark.sql.execution.exchange.{REPARTITION, REPARTITION_WITH_NUM, REPARTITION_WITHOUT_COL_AND_NUM, ShuffleExchangeExec}
+import org.apache.spark.sql.execution.exchange.{REPARTITION, REPARTITION_BY_NONE, REPARTITION_WITH_NUM, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.python._
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.sources.MemoryPlan
@@ -713,7 +713,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.RangeExec(r) :: Nil
       case r: logical.RepartitionByExpression =>
         val shuffleOrigin = if (r.partitionExpressions.isEmpty && r.optNumPartitions.isEmpty) {
-          REPARTITION_WITHOUT_COL_AND_NUM
+          REPARTITION_BY_NONE
         } else if (r.optNumPartitions.isEmpty) {
           REPARTITION
         } else {
