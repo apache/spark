@@ -115,13 +115,17 @@ class ResolveSubquerySuite extends AnalysisTest {
     // SELECT * FROM t1, LATERAL (SELECT * FROM (SELECT a, b, c FROM t2), LATERAL (SELECT b, c))
     checkAnalysis(
       lateralJoin(t1, lateralJoin(t2.select('a, 'b, 'c), t0.select('b, 'c))),
-      LateralJoin(t1, LateralSubquery(
-        LateralJoin(
-          Project(Seq(OuterReference(a).as(a.name), b, c), t2),
-          LateralSubquery(
-            Project(Seq(OuterReference(b).as(b.name), OuterReference(c).as(c.name)), t0), Seq(b, c)
-        ), Inner, None)
-      ), Inner, None)
+      LateralJoin(
+        t1,
+        LateralSubquery(
+          LateralJoin(
+            Project(Seq(OuterReference(a).as(a.name), b, c), t2),
+            LateralSubquery(
+              Project(Seq(OuterReference(b).as(b.name), OuterReference(c).as(c.name)), t0),
+              Seq(b, c)),
+            Inner, None),
+          Seq(a)),
+        Inner, None)
     )
 
     // SELECT * FROM t1, LATERAL (SELECT * FROM t2, LATERAL (SELECT a, b, c))
