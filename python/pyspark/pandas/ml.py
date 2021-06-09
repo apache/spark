@@ -91,7 +91,7 @@ def to_numeric_df(psdf: "ps.DataFrame") -> Tuple[pyspark.sql.DataFrame, List[Tup
     return v, numeric_column_labels
 
 
-def _test():
+def _test() -> None:
     import os
     import doctest
     import sys

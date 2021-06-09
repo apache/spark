@@ -598,6 +598,17 @@ object SQLConf {
       .bytesConf(ByteUnit.BYTE)
       .createOptional
 
+  val ADAPTIVE_MAX_SHUFFLE_HASH_JOIN_LOCAL_MAP_THRESHOLD =
+    buildConf("spark.sql.adaptive.maxShuffledHashJoinLocalMapThreshold")
+      .doc("Configures the maximum size in bytes per partition that can be allowed to build " +
+        "local hash map. If this value is not smaller than " +
+        s"${ADVISORY_PARTITION_SIZE_IN_BYTES.key} and all the partition size are not larger " +
+        "than this config, join selection prefer to use shuffled hash join instead of " +
+        s"sort merge join regardless of the value of ${PREFER_SORTMERGEJOIN.key}.")
+      .version("3.2.0")
+      .bytesConf(ByteUnit.BYTE)
+      .createWithDefault(0L)
+
   val SUBEXPRESSION_ELIMINATION_ENABLED =
     buildConf("spark.sql.subexpressionElimination.enabled")
       .internal()
@@ -831,11 +842,11 @@ object SQLConf {
     .doc("Sets the compression codec used when writing ORC files. If either `compression` or " +
       "`orc.compress` is specified in the table-specific options/properties, the precedence " +
       "would be `compression`, `orc.compress`, `spark.sql.orc.compression.codec`." +
-      "Acceptable values include: none, uncompressed, snappy, zlib, lzo, zstd.")
+      "Acceptable values include: none, uncompressed, snappy, zlib, lzo, zstd, lz4.")
     .version("2.3.0")
     .stringConf
     .transform(_.toLowerCase(Locale.ROOT))
-    .checkValues(Set("none", "uncompressed", "snappy", "zlib", "lzo", "zstd"))
+    .checkValues(Set("none", "uncompressed", "snappy", "zlib", "lzo", "zstd", "lz4"))
     .createWithDefault("snappy")
 
   val ORC_IMPLEMENTATION = buildConf("spark.sql.orc.impl")
@@ -4040,11 +4051,18 @@ class SQLConf extends Serializable with Logging {
    * Redacts the given option map according to the description of SQL_OPTIONS_REDACTION_PATTERN.
    */
   def redactOptions[K, V](options: Map[K, V]): Map[K, V] = {
+    redactOptions(options.toSeq).toMap
+  }
+
+  /**
+   * Redacts the given option map according to the description of SQL_OPTIONS_REDACTION_PATTERN.
+   */
+  def redactOptions[K, V](options: Seq[(K, V)]): Seq[(K, V)] = {
     val regexes = Seq(
       getConf(SQL_OPTIONS_REDACTION_PATTERN),
       SECRET_REDACTION_PATTERN.readFrom(reader))
 
-    regexes.foldLeft(options.toSeq) { case (opts, r) => Utils.redact(Some(r), opts) }.toMap
+    regexes.foldLeft(options) { case (opts, r) => Utils.redact(Some(r), opts) }
   }
 
   /**

@@ -55,6 +55,11 @@ public class DataTypes {
   public static final DataType TimestampType = TimestampType$.MODULE$;
 
   /**
+   * Gets the TimestampWithoutTZType object.
+   */
+  public static final DataType TimestampWithoutTZType = TimestampWithoutTZType$.MODULE$;
+
+  /**
    * Gets the CalendarIntervalType object.
    */
   public static final DataType CalendarIntervalType = CalendarIntervalType$.MODULE$;

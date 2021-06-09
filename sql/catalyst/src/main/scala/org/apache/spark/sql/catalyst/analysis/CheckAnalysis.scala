@@ -744,17 +744,17 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
     checkAnalysis(expr.plan)
 
     expr match {
-      case ScalarSubquery(query, conditions, _) =>
+      case ScalarSubquery(query, outerAttrs, _, _) =>
         // Scalar subquery must return one column as output.
         if (query.output.size != 1) {
           failAnalysis(
             s"Scalar subquery must return only one column, but got ${query.output.size}")
         }
 
-        if (conditions.nonEmpty) {
+        if (outerAttrs.nonEmpty) {
           cleanQueryInScalarSubquery(query) match {
-            case a: Aggregate => checkAggregateInScalarSubquery(conditions, query, a)
-            case Filter(_, a: Aggregate) => checkAggregateInScalarSubquery(conditions, query, a)
+            case a: Aggregate => checkAggregateInScalarSubquery(outerAttrs, query, a)
+            case Filter(_, a: Aggregate) => checkAggregateInScalarSubquery(outerAttrs, query, a)
             case p: LogicalPlan if p.maxRows.exists(_ <= 1) => // Ok
             case fail => failAnalysis(s"Correlated scalar subqueries must be aggregated: $fail")
           }

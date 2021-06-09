@@ -20,6 +20,10 @@ on:
         required: true
         default: '1'
 
+concurrency:
+  group: ${{ github.repository }}-${{ github.ref }}-${{ github.workflow }}
+  cancel-in-progress: true
+
 jobs:
   matrix-gen:
     name: Generate matrix for job splits

@@ -18,7 +18,17 @@
 """
 Wrappers around spark that correspond to common pandas functions.
 """
-from typing import Any, Optional, Union, List, Tuple, Type, Sized, cast
+from typing import (  # noqa: F401 (SPARK-34943)
+    Any,
+    Dict,
+    List,
+    Optional,
+    Sized,
+    Tuple,
+    Type,
+    Union,
+    cast,
+)
 from collections import OrderedDict
 from collections.abc import Iterable
 from distutils.version import LooseVersion
@@ -307,7 +317,7 @@ def read_csv(
 
         if isinstance(names, str):
             sdf = reader.schema(names).csv(path)
-            column_labels = OrderedDict((col, col) for col in sdf.columns)
+            column_labels = OrderedDict((col, col) for col in sdf.columns)  # type: Dict[Any, str]
         else:
             sdf = reader.csv(path)
             if is_list_like(names):
@@ -1582,10 +1592,10 @@ def to_datetime(
         )
 
     if isinstance(arg, Series):
-        return arg.koalas.transform_batch(pandas_to_datetime)
+        return arg.pandas_on_spark.transform_batch(pandas_to_datetime)
     if isinstance(arg, DataFrame):
         psdf = arg[["year", "month", "day"]]
-        return psdf.koalas.transform_batch(pandas_to_datetime)
+        return psdf.pandas_on_spark.transform_batch(pandas_to_datetime)
     return pd.to_datetime(
         arg,
         errors=errors,
@@ -1893,7 +1903,7 @@ def get_dummies(
                     raise KeyError(name_like_string(columns))
                 if prefix is None:
                     prefix = [
-                        str(label[len(columns):])
+                        str(label[len(columns) :])
                         if len(label) > len(columns) + 1
                         else label[len(columns)]
                         if len(label) == len(columns) + 1
@@ -2202,11 +2212,19 @@ def concat(objs, axis=0, join="outer", ignore_index=False, sort=False) -> Union[
             for psdf in psdfs_not_same_anchor:
                 if join == "inner":
                     concat_psdf = align_diff_frames(
-                        resolve_func, concat_psdf, psdf, fillna=False, how="inner",
+                        resolve_func,
+                        concat_psdf,
+                        psdf,
+                        fillna=False,
+                        how="inner",
                     )
                 elif join == "outer":
                     concat_psdf = align_diff_frames(
-                        resolve_func, concat_psdf, psdf, fillna=False, how="full",
+                        resolve_func,
+                        concat_psdf,
+                        psdf,
+                        fillna=False,
+                        how="full",
                     )
 
             concat_psdf = concat_psdf[column_labels]
@@ -2321,7 +2339,7 @@ def concat(objs, axis=0, join="outer", ignore_index=False, sort=False) -> Union[
                         ],
                         column_labels=(psdf._internal.column_labels + columns_to_add),
                         data_spark_columns=[scol_for(sdf, col) for col in data_columns],
-                        data_dtypes=(psdf._internal.data_dtypes + ([None] * len(columns_to_add))),
+                        data_fields=(psdf._internal.data_fields + ([None] * len(columns_to_add))),
                     )
                 )
 
@@ -2343,22 +2361,22 @@ def concat(objs, axis=0, join="outer", ignore_index=False, sort=False) -> Union[
     if ignore_index:
         index_spark_column_names = []
         index_names = []
-        index_dtypes = []
+        index_fields = []
     else:
         index_spark_column_names = psdfs[0]._internal.index_spark_column_names
         index_names = psdfs[0]._internal.index_names
-        index_dtypes = psdfs[0]._internal.index_dtypes
+        index_fields = psdfs[0]._internal.index_fields
 
     result_psdf = DataFrame(
         psdfs[0]._internal.copy(
             spark_frame=concatenated,
             index_spark_columns=[scol_for(concatenated, col) for col in index_spark_column_names],
             index_names=index_names,
-            index_dtypes=index_dtypes,
+            index_fields=index_fields,
             data_spark_columns=[
                 scol_for(concatenated, col) for col in psdfs[0]._internal.data_spark_column_names
             ],
-            data_dtypes=None,  # TODO: dtypes?
+            data_fields=None,  # TODO: dtypes?
         )
     )  # type: DataFrame
 

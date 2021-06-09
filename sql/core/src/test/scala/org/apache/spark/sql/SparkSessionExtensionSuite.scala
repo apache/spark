@@ -424,7 +424,8 @@ object MyExtensions {
       "3.0.0",
       """
        deprecated
-      """),
+      """,
+      ""),
     (_: Seq[Expression]) => Literal(5, IntegerType))
 }
 
@@ -932,7 +933,8 @@ object MyExtensions2 {
       "3.0.0",
       """
        deprecated
-      """),
+      """,
+      ""),
     (_: Seq[Expression]) => Literal(5, IntegerType))
 }
 
@@ -965,7 +967,8 @@ object MyExtensions2Duplicate {
       "3.0.0",
       """
        deprecated
-      """),
+      """,
+      ""),
     (_: Seq[Expression]) => Literal(5, IntegerType))
 }
 

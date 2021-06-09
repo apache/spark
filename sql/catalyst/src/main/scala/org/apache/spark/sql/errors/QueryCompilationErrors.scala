@@ -938,10 +938,6 @@ private[spark] object QueryCompilationErrors {
     notSupportedForV2TablesError("SHOW CREATE TABLE")
   }
 
-  def truncateTableNotSupportedForV2TablesError(): Throwable = {
-    notSupportedForV2TablesError("TRUNCATE TABLE")
-  }
-
   def showColumnsNotSupportedForV2TablesError(): Throwable = {
     notSupportedForV2TablesError("SHOW COLUMNS")
   }
@@ -1595,5 +1591,14 @@ private[spark] object QueryCompilationErrors {
   def invalidPatternError(pattern: String, message: String): Throwable = {
     new AnalysisException(
       s"the pattern '$pattern' is invalid, $message")
+  }
+
+  def tableIdentifierExistsError(tableIdentifier: TableIdentifier): Throwable = {
+    new AnalysisException(s"$tableIdentifier already exists.")
+  }
+
+  def tableIdentifierNotConvertedToHadoopFsRelationError(
+      tableIdentifier: TableIdentifier): Throwable = {
+    new AnalysisException(s"$tableIdentifier should be converted to HadoopFsRelation.")
   }
 }

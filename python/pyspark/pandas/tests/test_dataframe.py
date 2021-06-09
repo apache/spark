@@ -27,7 +27,7 @@ import pandas as pd
 from pandas.tseries.offsets import DateOffset
 from pyspark import StorageLevel
 from pyspark.ml.linalg import SparseVector
-from pyspark.sql import functions as F
+from pyspark.sql.types import StructType
 
 from pyspark import pandas as ps
 from pyspark.pandas.config import option_context
@@ -120,7 +120,6 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         psdf = ps.from_pandas(pdf)
 
         self._check_extension(psdf, pdf)
-        self._check_extension(psdf + F.lit(1).cast("byte"), pdf + 1)
         self._check_extension(psdf + psdf, pdf + pdf)
 
     @unittest.skipIf(not extension_dtypes_available, "pandas extension dtypes are not available")
@@ -1519,7 +1518,8 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
 
         # Assert approximate counts
         self.assert_eq(
-            ps.DataFrame({"A": range(100)}).nunique(approx=True), pd.Series([103], index=["A"]),
+            ps.DataFrame({"A": range(100)}).nunique(approx=True),
+            pd.Series([103], index=["A"]),
         )
         self.assert_eq(
             ps.DataFrame({"A": range(100)}).nunique(approx=True, rsd=0.01),
@@ -1849,7 +1849,6 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
 
     def test_to_pandas(self):
         pdf, psdf = self.df_pair
-        self.assert_eq(psdf.toPandas(), pdf)
         self.assert_eq(psdf.to_pandas(), pdf)
 
     def test_isin(self):
@@ -3356,7 +3355,8 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
 
         columns2 = pd.Index(["numbers", "2", "3"], name="cols2")
         self.assert_eq(
-            pdf.reindex(columns=columns2).sort_index(), psdf.reindex(columns=columns2).sort_index(),
+            pdf.reindex(columns=columns2).sort_index(),
+            psdf.reindex(columns=columns2).sort_index(),
         )
 
         columns = pd.Index(["numbers"], name="cols")
@@ -3400,12 +3400,14 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
 
         columns2 = pd.Index(["numbers", "2", "3"])
         self.assert_eq(
-            pdf.reindex(columns=columns2).sort_index(), psdf.reindex(columns=columns2).sort_index(),
+            pdf.reindex(columns=columns2).sort_index(),
+            psdf.reindex(columns=columns2).sort_index(),
         )
 
         columns2 = pd.Index(["numbers", "2", "3"], name="cols2")
         self.assert_eq(
-            pdf.reindex(columns=columns2).sort_index(), psdf.reindex(columns=columns2).sort_index(),
+            pdf.reindex(columns=columns2).sort_index(),
+            psdf.reindex(columns=columns2).sort_index(),
         )
 
         # Reindexing single Index on single Index
@@ -3508,7 +3510,8 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
             [("X", "numbers"), ("Y", "2"), ("Y", "3")], names=["cols3", "cols4"]
         )
         self.assert_eq(
-            pdf.reindex(columns=columns2).sort_index(), psdf.reindex(columns=columns2).sort_index(),
+            pdf.reindex(columns=columns2).sort_index(),
+            psdf.reindex(columns=columns2).sort_index(),
         )
 
         self.assertRaises(TypeError, lambda: psdf.reindex(columns=["X"]))
@@ -3529,7 +3532,8 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         psdf2 = ps.from_pandas(pdf2)
 
         self.assert_eq(
-            pdf.reindex_like(pdf2).sort_index(), psdf.reindex_like(psdf2).sort_index(),
+            pdf.reindex_like(pdf2).sort_index(),
+            psdf.reindex_like(psdf2).sort_index(),
         )
 
         pdf2 = pd.DataFrame({"index_level_1": ["A", "C", "I"]})
@@ -3548,7 +3552,8 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         psdf2 = ps.from_pandas(pdf2)
 
         self.assert_eq(
-            pdf.reindex_like(pdf2).sort_index(), psdf.reindex_like(psdf2).sort_index(),
+            pdf.reindex_like(pdf2).sort_index(),
+            psdf.reindex_like(psdf2).sort_index(),
         )
 
         self.assertRaises(TypeError, lambda: psdf.reindex_like(index2))
@@ -3571,7 +3576,8 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         psdf = ps.from_pandas(pdf)
 
         self.assert_eq(
-            pdf.reindex_like(pdf2).sort_index(), psdf.reindex_like(psdf2).sort_index(),
+            pdf.reindex_like(pdf2).sort_index(),
+            psdf.reindex_like(psdf2).sort_index(),
         )
 
     def test_melt(self):
@@ -3955,16 +3961,20 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
 
         self.assert_eq(pdf.duplicated().sort_index(), psdf.duplicated().sort_index())
         self.assert_eq(
-            pdf.duplicated(keep="last").sort_index(), psdf.duplicated(keep="last").sort_index(),
+            pdf.duplicated(keep="last").sort_index(),
+            psdf.duplicated(keep="last").sort_index(),
         )
         self.assert_eq(
-            pdf.duplicated(keep=False).sort_index(), psdf.duplicated(keep=False).sort_index(),
+            pdf.duplicated(keep=False).sort_index(),
+            psdf.duplicated(keep=False).sort_index(),
         )
         self.assert_eq(
-            pdf.duplicated(subset="b").sort_index(), psdf.duplicated(subset="b").sort_index(),
+            pdf.duplicated(subset="b").sort_index(),
+            psdf.duplicated(subset="b").sort_index(),
         )
         self.assert_eq(
-            pdf.duplicated(subset=["b"]).sort_index(), psdf.duplicated(subset=["b"]).sort_index(),
+            pdf.duplicated(subset=["b"]).sort_index(),
+            psdf.duplicated(subset=["b"]).sort_index(),
         )
         with self.assertRaisesRegex(ValueError, "'keep' only supports 'first', 'last' and False"):
             psdf.duplicated(keep="false")
@@ -4011,7 +4021,8 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
 
         self.assert_eq(pdf.duplicated().sort_index(), psdf.duplicated().sort_index())
         self.assert_eq(
-            pdf.duplicated(subset=10).sort_index(), psdf.duplicated(subset=10).sort_index(),
+            pdf.duplicated(subset=10).sort_index(),
+            psdf.duplicated(subset=10).sort_index(),
         )
 
     def test_ffill(self):
@@ -4324,33 +4335,32 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         )
         psdf = ps.DataFrame(pdf)
 
-        # One to test alias.
-        self.assert_eq(psdf.apply_batch(lambda pdf: pdf + 1).sort_index(), (pdf + 1).sort_index())
         self.assert_eq(
-            psdf.koalas.apply_batch(lambda pdf, a: pdf + a, args=(1,)).sort_index(),
+            psdf.pandas_on_spark.apply_batch(lambda pdf, a: pdf + a, args=(1,)).sort_index(),
             (pdf + 1).sort_index(),
         )
         with option_context("compute.shortcut_limit", 500):
             self.assert_eq(
-                psdf.koalas.apply_batch(lambda pdf: pdf + 1).sort_index(), (pdf + 1).sort_index()
+                psdf.pandas_on_spark.apply_batch(lambda pdf: pdf + 1).sort_index(),
+                (pdf + 1).sort_index(),
             )
             self.assert_eq(
-                psdf.koalas.apply_batch(lambda pdf, b: pdf + b, b=1).sort_index(),
+                psdf.pandas_on_spark.apply_batch(lambda pdf, b: pdf + b, b=1).sort_index(),
                 (pdf + 1).sort_index(),
             )
 
         with self.assertRaisesRegex(AssertionError, "the first argument should be a callable"):
-            psdf.koalas.apply_batch(1)
+            psdf.pandas_on_spark.apply_batch(1)
 
         with self.assertRaisesRegex(TypeError, "The given function.*frame as its type hints"):
 
             def f2(_) -> ps.Series[int]:
                 pass
 
-            psdf.koalas.apply_batch(f2)
+            psdf.pandas_on_spark.apply_batch(f2)
 
         with self.assertRaisesRegex(ValueError, "The given function should return a frame"):
-            psdf.koalas.apply_batch(lambda pdf: 1)
+            psdf.pandas_on_spark.apply_batch(lambda pdf: 1)
 
         # multi-index columns
         columns = pd.MultiIndex.from_tuples([("x", "a"), ("x", "b"), ("y", "c")])
@@ -4358,11 +4368,12 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         psdf.columns = columns
 
         self.assert_eq(
-            psdf.koalas.apply_batch(lambda x: x + 1).sort_index(), (pdf + 1).sort_index()
+            psdf.pandas_on_spark.apply_batch(lambda x: x + 1).sort_index(), (pdf + 1).sort_index()
         )
         with option_context("compute.shortcut_limit", 500):
             self.assert_eq(
-                psdf.koalas.apply_batch(lambda x: x + 1).sort_index(), (pdf + 1).sort_index()
+                psdf.pandas_on_spark.apply_batch(lambda x: x + 1).sort_index(),
+                (pdf + 1).sort_index(),
             )
 
     def test_transform_batch(self):
@@ -4377,51 +4388,47 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         )
         psdf = ps.DataFrame(pdf)
 
-        # One to test alias.
         self.assert_eq(
-            psdf.transform_batch(lambda pdf: pdf + 1).sort_index(), (pdf + 1).sort_index()
-        )
-        self.assert_eq(
-            psdf.koalas.transform_batch(lambda pdf: pdf.c + 1).sort_index(),
+            psdf.pandas_on_spark.transform_batch(lambda pdf: pdf.c + 1).sort_index(),
             (pdf.c + 1).sort_index(),
         )
         self.assert_eq(
-            psdf.koalas.transform_batch(lambda pdf, a: pdf + a, 1).sort_index(),
+            psdf.pandas_on_spark.transform_batch(lambda pdf, a: pdf + a, 1).sort_index(),
             (pdf + 1).sort_index(),
         )
         self.assert_eq(
-            psdf.koalas.transform_batch(lambda pdf, a: pdf.c + a, a=1).sort_index(),
+            psdf.pandas_on_spark.transform_batch(lambda pdf, a: pdf.c + a, a=1).sort_index(),
             (pdf.c + 1).sort_index(),
         )
 
         with option_context("compute.shortcut_limit", 500):
             self.assert_eq(
-                psdf.koalas.transform_batch(lambda pdf: pdf + 1).sort_index(),
+                psdf.pandas_on_spark.transform_batch(lambda pdf: pdf + 1).sort_index(),
                 (pdf + 1).sort_index(),
             )
             self.assert_eq(
-                psdf.koalas.transform_batch(lambda pdf: pdf.b + 1).sort_index(),
+                psdf.pandas_on_spark.transform_batch(lambda pdf: pdf.b + 1).sort_index(),
                 (pdf.b + 1).sort_index(),
             )
             self.assert_eq(
-                psdf.koalas.transform_batch(lambda pdf, a: pdf + a, 1).sort_index(),
+                psdf.pandas_on_spark.transform_batch(lambda pdf, a: pdf + a, 1).sort_index(),
                 (pdf + 1).sort_index(),
             )
             self.assert_eq(
-                psdf.koalas.transform_batch(lambda pdf, a: pdf.c + a, a=1).sort_index(),
+                psdf.pandas_on_spark.transform_batch(lambda pdf, a: pdf.c + a, a=1).sort_index(),
                 (pdf.c + 1).sort_index(),
             )
 
         with self.assertRaisesRegex(AssertionError, "the first argument should be a callable"):
-            psdf.koalas.transform_batch(1)
+            psdf.pandas_on_spark.transform_batch(1)
 
         with self.assertRaisesRegex(ValueError, "The given function should return a frame"):
-            psdf.koalas.transform_batch(lambda pdf: 1)
+            psdf.pandas_on_spark.transform_batch(lambda pdf: 1)
 
         with self.assertRaisesRegex(
             ValueError, "transform_batch cannot produce aggregated results"
         ):
-            psdf.koalas.transform_batch(lambda pdf: pd.Series(1))
+            psdf.pandas_on_spark.transform_batch(lambda pdf: pd.Series(1))
 
         # multi-index columns
         columns = pd.MultiIndex.from_tuples([("x", "a"), ("x", "b"), ("y", "c")])
@@ -4429,24 +4436,18 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         psdf.columns = columns
 
         self.assert_eq(
-            psdf.koalas.transform_batch(lambda x: x + 1).sort_index(), (pdf + 1).sort_index()
+            psdf.pandas_on_spark.transform_batch(lambda x: x + 1).sort_index(),
+            (pdf + 1).sort_index(),
         )
         with option_context("compute.shortcut_limit", 500):
             self.assert_eq(
-                psdf.koalas.transform_batch(lambda x: x + 1).sort_index(), (pdf + 1).sort_index()
+                psdf.pandas_on_spark.transform_batch(lambda x: x + 1).sort_index(),
+                (pdf + 1).sort_index(),
             )
 
     def test_transform_batch_same_anchor(self):
         psdf = ps.range(10)
-        psdf["d"] = psdf.koalas.transform_batch(lambda pdf: pdf.id + 1)
-        self.assert_eq(
-            psdf,
-            pd.DataFrame({"id": list(range(10)), "d": list(range(1, 11))}, columns=["id", "d"]),
-        )
-
-        psdf = ps.range(10)
-        # One to test alias.
-        psdf["d"] = psdf.id.transform_batch(lambda ser: ser + 1)
+        psdf["d"] = psdf.pandas_on_spark.transform_batch(lambda pdf: pdf.id + 1)
         self.assert_eq(
             psdf,
             pd.DataFrame({"id": list(range(10)), "d": list(range(1, 11))}, columns=["id", "d"]),
@@ -4457,7 +4458,7 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         def plus_one(pdf) -> ps.Series[np.int64]:
             return pdf.id + 1
 
-        psdf["d"] = psdf.koalas.transform_batch(plus_one)
+        psdf["d"] = psdf.pandas_on_spark.transform_batch(plus_one)
         self.assert_eq(
             psdf,
             pd.DataFrame({"id": list(range(10)), "d": list(range(1, 11))}, columns=["id", "d"]),
@@ -4468,7 +4469,7 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         def plus_one(ser) -> ps.Series[np.int64]:
             return ser + 1
 
-        psdf["d"] = psdf.id.koalas.transform_batch(plus_one)
+        psdf["d"] = psdf.id.pandas_on_spark.transform_batch(plus_one)
         self.assert_eq(
             psdf,
             pd.DataFrame({"id": list(range(10)), "d": list(range(1, 11))}, columns=["id", "d"]),
@@ -4663,17 +4664,20 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
             psdf.take([-1, -2], axis=1).sort_index(), pdf.take([-1, -2], axis=1).sort_index()
         )
         self.assert_eq(
-            psdf.take(range(1, 3), axis=1).sort_index(), pdf.take(range(1, 3), axis=1).sort_index(),
+            psdf.take(range(1, 3), axis=1).sort_index(),
+            pdf.take(range(1, 3), axis=1).sort_index(),
         )
         self.assert_eq(
             psdf.take(range(-1, -3), axis=1).sort_index(),
             pdf.take(range(-1, -3), axis=1).sort_index(),
         )
         self.assert_eq(
-            psdf.take([2, 1], axis=1).sort_index(), pdf.take([2, 1], axis=1).sort_index(),
+            psdf.take([2, 1], axis=1).sort_index(),
+            pdf.take([2, 1], axis=1).sort_index(),
         )
         self.assert_eq(
-            psdf.take([-1, -2], axis=1).sort_index(), pdf.take([-1, -2], axis=1).sort_index(),
+            psdf.take([-1, -2], axis=1).sort_index(),
+            pdf.take([-1, -2], axis=1).sort_index(),
         )
 
         # MultiIndex columns
@@ -4707,17 +4711,20 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
             psdf.take([-1, -2], axis=1).sort_index(), pdf.take([-1, -2], axis=1).sort_index()
         )
         self.assert_eq(
-            psdf.take(range(1, 3), axis=1).sort_index(), pdf.take(range(1, 3), axis=1).sort_index(),
+            psdf.take(range(1, 3), axis=1).sort_index(),
+            pdf.take(range(1, 3), axis=1).sort_index(),
         )
         self.assert_eq(
             psdf.take(range(-1, -3), axis=1).sort_index(),
             pdf.take(range(-1, -3), axis=1).sort_index(),
         )
         self.assert_eq(
-            psdf.take([2, 1], axis=1).sort_index(), pdf.take([2, 1], axis=1).sort_index(),
+            psdf.take([2, 1], axis=1).sort_index(),
+            pdf.take([2, 1], axis=1).sort_index(),
         )
         self.assert_eq(
-            psdf.take([-1, -2], axis=1).sort_index(), pdf.take([-1, -2], axis=1).sort_index(),
+            psdf.take([-1, -2], axis=1).sort_index(),
+            pdf.take([-1, -2], axis=1).sort_index(),
         )
 
         # Checking the type of indices.
@@ -4796,10 +4803,10 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         )
         psdf = ps.from_pandas(pdf)
 
-        with psdf.cache() as cached_df:
+        with psdf.spark.cache() as cached_df:
             self.assert_eq(isinstance(cached_df, CachedDataFrame), True)
             self.assert_eq(
-                repr(cached_df.storage_level), repr(StorageLevel(True, True, False, True))
+                repr(cached_df.spark.storage_level), repr(StorageLevel(True, True, False, True))
             )
 
     def test_persist(self):
@@ -4815,11 +4822,11 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         ]
 
         for storage_level in storage_levels:
-            with psdf.persist(storage_level) as cached_df:
+            with psdf.spark.persist(storage_level) as cached_df:
                 self.assert_eq(isinstance(cached_df, CachedDataFrame), True)
-                self.assert_eq(repr(cached_df.storage_level), repr(storage_level))
+                self.assert_eq(repr(cached_df.spark.storage_level), repr(storage_level))
 
-        self.assertRaises(TypeError, lambda: psdf.persist("DISK_ONLY"))
+        self.assertRaises(TypeError, lambda: psdf.spark.persist("DISK_ONLY"))
 
     def test_squeeze(self):
         axises = [None, 0, 1, "rows", "index", "columns"]
@@ -5075,8 +5082,31 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
             },
             columns=["a", "b", "c", "d", "e", "f"],
         )
-        self.assertEqual(psdf.spark_schema(), psdf.spark.schema())
-        self.assertEqual(psdf.spark_schema("index"), psdf.spark.schema("index"))
+
+        actual = psdf.spark.schema()
+        expected = (
+            StructType()
+            .add("a", "string", False)
+            .add("b", "long", False)
+            .add("c", "byte", False)
+            .add("d", "double", False)
+            .add("e", "boolean", False)
+            .add("f", "timestamp", False)
+        )
+        self.assertEqual(actual, expected)
+
+        actual = psdf.spark.schema("index")
+        expected = (
+            StructType()
+            .add("index", "long", False)
+            .add("a", "string", False)
+            .add("b", "long", False)
+            .add("c", "byte", False)
+            .add("d", "double", False)
+            .add("e", "boolean", False)
+            .add("f", "timestamp", False)
+        )
+        self.assertEqual(actual, expected)
 
     def test_print_schema(self):
         psdf = ps.DataFrame(
@@ -5088,15 +5118,22 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         try:
             out = StringIO()
             sys.stdout = out
-            psdf.print_schema()
+            psdf.spark.print_schema()
             actual = out.getvalue().strip()
+
+            self.assertTrue("a: string" in actual, actual)
+            self.assertTrue("b: long" in actual, actual)
+            self.assertTrue("c: byte" in actual, actual)
 
             out = StringIO()
             sys.stdout = out
-            psdf.spark.print_schema()
-            expected = out.getvalue().strip()
+            psdf.spark.print_schema(index_col="index")
+            actual = out.getvalue().strip()
 
-            self.assertEqual(actual, expected)
+            self.assertTrue("index: long" in actual, actual)
+            self.assertTrue("a: string" in actual, actual)
+            self.assertTrue("b: long" in actual, actual)
+            self.assertTrue("c: byte" in actual, actual)
         finally:
             sys.stdout = prev
 
@@ -5107,20 +5144,15 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         psdf2 = ps.DataFrame(
             {"rkey": ["foo", "bar", "baz", "foo"], "value": [5, 6, 7, 8]}, columns=["rkey", "value"]
         )
-        merged = psdf1.merge(psdf2.hint("broadcast"), left_on="lkey", right_on="rkey")
+        merged = psdf1.merge(psdf2.spark.hint("broadcast"), left_on="lkey", right_on="rkey")
         prev = sys.stdout
         try:
             out = StringIO()
             sys.stdout = out
-            merged.explain()
+            merged.spark.explain()
             actual = out.getvalue().strip()
 
-            out = StringIO()
-            sys.stdout = out
-            merged.spark.explain()
-            expected = out.getvalue().strip()
-
-            self.assertEqual(actual, expected)
+            self.assertTrue("Broadcast" in actual, actual)
         finally:
             sys.stdout = prev
 
@@ -5511,35 +5543,40 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         psdf = ps.from_pandas(pdf)
         psdf.at_time("0:20")
         self.assert_eq(
-            pdf.at_time("0:20").sort_index(), psdf.at_time("0:20").sort_index(),
+            pdf.at_time("0:20").sort_index(),
+            psdf.at_time("0:20").sort_index(),
         )
 
         # Index name is 'ts'
         pdf.index.name = "ts"
         psdf = ps.from_pandas(pdf)
         self.assert_eq(
-            pdf.at_time("0:20").sort_index(), psdf.at_time("0:20").sort_index(),
+            pdf.at_time("0:20").sort_index(),
+            psdf.at_time("0:20").sort_index(),
         )
 
         # Index name is 'ts', column label is 'index'
         pdf.columns = pd.Index(["index"])
         psdf = ps.from_pandas(pdf)
         self.assert_eq(
-            pdf.at_time("0:40").sort_index(), psdf.at_time("0:40").sort_index(),
+            pdf.at_time("0:40").sort_index(),
+            psdf.at_time("0:40").sort_index(),
         )
 
         # Both index name and column label are 'index'
         pdf.index.name = "index"
         psdf = ps.from_pandas(pdf)
         self.assert_eq(
-            pdf.at_time("0:40").sort_index(), psdf.at_time("0:40").sort_index(),
+            pdf.at_time("0:40").sort_index(),
+            psdf.at_time("0:40").sort_index(),
         )
 
         # Index name is 'index', column label is ('X', 'A')
         pdf.columns = pd.MultiIndex.from_arrays([["X"], ["A"]])
         psdf = ps.from_pandas(pdf)
         self.assert_eq(
-            pdf.at_time("0:40").sort_index(), psdf.at_time("0:40").sort_index(),
+            pdf.at_time("0:40").sort_index(),
+            psdf.at_time("0:40").sort_index(),
         )
 
         with self.assertRaisesRegex(NotImplementedError, "'asof' argument is not supported"):
