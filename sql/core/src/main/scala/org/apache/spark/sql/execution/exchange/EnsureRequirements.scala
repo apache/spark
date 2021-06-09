@@ -73,6 +73,36 @@ case class EnsureRequirements(
       case _ => true
     }.map(_._2)
 
+    // Assuming equivalence relation in partitioning compatibility check
+    val allCompatible = childrenIndexes
+        .map(i => (children(i).outputPartitioning, requiredChildDistributions(i)))
+        .sliding(2).map {
+      case Seq(_) => true
+      case Seq((ap, ad), (bp, bd)) => ap.isCompatibleWith(ad, bp, bd)
+    }.forall(_ == true)
+
+    if (!allCompatible) {
+      // insert shuffle for all children that are not compatible
+      children = children.zip(requiredChildDistributions).zipWithIndex.map {
+        case ((child, _), idx) if !childrenIndexes.contains(idx) =>
+          child
+        case ((child, dist), _) =>
+          val numPartitions = dist.requiredNumPartitions.getOrElse(conf.numShufflePartitions)
+          val defaultPartitioning = dist.createPartitioning(numPartitions)
+          // check if the child's partitioning is already the same as default partitioning, and
+          // skip the shuffle if so.
+          // TODO: we should find the "least common" partitioning for all children and use that
+          if (!child.outputPartitioning.isCompatibleWith(dist, defaultPartitioning, dist)) {
+            child match {
+              case ShuffleExchangeExec(_, c, so) => ShuffleExchangeExec(defaultPartitioning, c, so)
+              case _ => ShuffleExchangeExec(defaultPartitioning, child)
+            }
+          } else {
+            child
+          }
+      }
+    }
+
     val childrenNumPartitions =
       childrenIndexes.map(children(_).outputPartitioning.numPartitions).toSet
 

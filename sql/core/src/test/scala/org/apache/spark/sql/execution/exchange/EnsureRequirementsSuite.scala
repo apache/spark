@@ -135,4 +135,33 @@ class EnsureRequirementsSuite extends SharedSparkSession {
       }.size == 2)
     }
   }
+
+  test("should have no shuffle when clustering keys are subset of join keys") {
+    val plan1 = DummySparkPlan(
+      outputPartitioning = HashPartitioning(exprA :: Nil, 5))
+    val plan2 = DummySparkPlan(
+      outputPartitioning = HashPartitioning(exprB :: Nil, 5))
+
+    val smjExec1 = SortMergeJoinExec(
+      exprA :: exprB :: Nil, exprB :: exprC :: Nil, Inner, None, plan1, plan2)
+    EnsureRequirements.apply(smjExec1) match {
+      case SortMergeJoinExec(leftKeys, rightKeys, _, _,
+        SortExec(_, _, DummySparkPlan(_, _, _: HashPartitioning, _, _), _),
+        SortExec(_, _, DummySparkPlan(_, _, _: HashPartitioning, _, _), _), _) =>
+        assert(leftKeys === Seq(exprA, exprB))
+        assert(rightKeys === Seq(exprB, exprC))
+      case other => fail(other.toString)
+    }
+
+    val smjExec2 = SortMergeJoinExec(
+      exprB :: exprA :: Nil, exprC :: exprB :: Nil, Inner, None, plan1, plan2)
+    EnsureRequirements.apply(smjExec2) match {
+      case SortMergeJoinExec(leftKeys, rightKeys, _, _,
+        SortExec(_, _, DummySparkPlan(_, _, _: HashPartitioning, _, _), _),
+        SortExec(_, _, DummySparkPlan(_, _, _: HashPartitioning, _, _), _), _) =>
+        assert(leftKeys === Seq(exprB, exprA))
+        assert(rightKeys === Seq(exprC, exprB))
+      case other => fail(other.toString)
+    }
+  }
 }
