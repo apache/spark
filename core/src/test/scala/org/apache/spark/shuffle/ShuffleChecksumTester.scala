@@ -23,6 +23,10 @@ import java.util.zip.{Adler32, CheckedInputStream}
 import org.apache.spark.network.util.LimitedInputStream
 
 trait ShuffleChecksumTester {
+
+  /**
+   * Ensure that the checksum values are consistent between write and read side.
+   */
   def compareChecksums(numPartition: Int, checksum: File, data: File, index: File): Unit = {
     assert(checksum.exists(), "Checksum file doesn't exist")
     assert(data.exists(), "Data file doesn't exist")
