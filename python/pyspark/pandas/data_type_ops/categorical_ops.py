@@ -59,7 +59,7 @@ class CategoricalOps(DataTypeOps):
             raise ValueError("Type {} not understood".format(dtype))
 
         if isinstance(dtype, CategoricalDtype) and dtype.categories is None:
-            return cast(Union[ps.Index, ps.Series], self).copy()
+            return cast(Union[ps.Index, ps.Series], index_ops).copy()
 
         categories = index_ops.dtype.categories
         if len(categories) == 0:
