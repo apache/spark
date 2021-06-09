@@ -172,6 +172,9 @@ class DateOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         self.assert_eq(pser, psser.to_pandas())
         self.assert_eq(ps.from_pandas(pser), psser)
 
+    def test_astype(self):
+        self.assert_eq(self.pser.astype(str), self.psser.astype(str))
+
 
 if __name__ == "__main__":
     import unittest
