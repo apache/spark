@@ -111,7 +111,8 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with AliasHelper
                     logInfo(
                       s"""
                          |Pushing operators to ${sHolder.relation.name}
-                         |Pushed Aggregate Functions: ${pushedAggregates.aggregateExpressions.mkString(", ")}
+                         |Pushed Aggregate Functions:
+                         | ${pushedAggregates.aggregateExpressions.mkString(", ")}
                          |Output: ${output.mkString(", ")}
                       """.stripMargin)
 
