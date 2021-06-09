@@ -372,7 +372,7 @@ class BooleanExtensionOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         if LooseVersion(pd.__version__) >= LooseVersion("1.2.2"):
             self.assert_eq(pser * True, psser * True)
             self.assert_eq(ps.Series([False, False, False], dtype="boolean"), psser * False)
-            self.asser_eq(pser * pser, psser * psser)
+            self.assert_eq(pser * pser, psser * psser)
         else:
             # Due to https://github.com/pandas-dev/pandas/issues/39410
             self.assert_eq([True, False, pd._libs.missing.NAType()], (psser * True).tolist())
