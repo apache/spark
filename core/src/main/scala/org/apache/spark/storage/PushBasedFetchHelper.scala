@@ -38,10 +38,10 @@ import org.apache.spark.storage.ShuffleBlockFetcherIterator._
  * functionality to fetch merged block meta and merged shuffle block chunks.
  */
 private class PushBasedFetchHelper(
-  private val iterator: ShuffleBlockFetcherIterator,
-  private val shuffleClient: BlockStoreClient,
-  private val blockManager: BlockManager,
-  private val mapOutputTracker: MapOutputTracker) extends Logging {
+   private val iterator: ShuffleBlockFetcherIterator,
+   private val shuffleClient: BlockStoreClient,
+   private val blockManager: BlockManager,
+   private val mapOutputTracker: MapOutputTracker) extends Logging {
 
   private[this] val startTimeNs = System.nanoTime()
 
