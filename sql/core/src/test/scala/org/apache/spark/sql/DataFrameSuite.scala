@@ -2440,6 +2440,14 @@ class DataFrameSuite extends QueryTest
       unnamedObservation.close()
     }
 
+    // an unused observation can be closed
+    Observation().close()
+
+    // an observation can be used only once
+    assertThrows[IllegalStateException] {
+      spark.range(100).observe(namedObservation, sum($"id").as("sum_val"))
+    }
+
     // streaming datasets are not supported
     val streamDf = new MemoryStream[Int](0, sqlContext).toDF()
     val streamObservation = Observation("stream")

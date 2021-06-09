@@ -29,12 +29,13 @@ import org.apache.spark.sql.util.QueryExecutionListener
  * @param name
  * @param sparkSession
  */
-case class Observation(name: String)(implicit sparkSession: SparkSession) {
+case class Observation(name: String) {
 
   val lock: Lock = new ReentrantLock()
   val completed: Condition = lock.newCondition()
   val listener: ObservationListener = ObservationListener(this)
-  register()
+
+  var sparkSession: Option[SparkSession] = None
 
   @transient var row: Option[Row] = None
 
@@ -50,6 +51,7 @@ case class Observation(name: String)(implicit sparkSession: SparkSession) {
     if (ds.isStreaming) {
       throw new IllegalArgumentException("Observation does not support streaming Datasets")
     }
+    register(ds.sparkSession)
     ds.observe(name, expr, exprs: _*)
   }
 
@@ -145,9 +147,17 @@ case class Observation(name: String)(implicit sparkSession: SparkSession) {
       .find { case (metricName, _) => metricName.equals(name) }
       .map { case (_, row) => row }
 
-  private def register(): Unit = sparkSession.listenerManager.register(listener)
+  private def register(sparkSession: SparkSession): Unit = {
+    if (this.sparkSession.isDefined) {
+      throw new IllegalStateException("An Observation can be used with a Dataset only once")
+    }
+    this.sparkSession = Some(sparkSession)
+    sparkSession.listenerManager.register(listener)
+  }
 
-  private def unregister(): Unit = sparkSession.listenerManager.unregister(listener)
+  private def unregister(): Unit = {
+    this.sparkSession.foreach(_.listenerManager.unregister(listener))
+  }
 
 }
 
