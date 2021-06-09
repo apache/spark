@@ -1,18 +1,18 @@
-======================
-Type Support In Koalas
-======================
+====================================
+Type Support in Pandas APIs on Spark
+====================================
 
 .. currentmodule:: pyspark.pandas
 
-In this chapter, we will briefly show you how data types change when converting Koalas DataFrame from/to PySpark DataFrame or pandas DataFrame.
+In this chapter, we will briefly show you how data types change when converting pandas-on-Spark DataFrame from/to PySpark DataFrame or pandas DataFrame.
 
 
-Type casting between PySpark and Koalas
----------------------------------------
+Type casting between PySpark and pandas APIs on Spark
+-----------------------------------------------------
 
-When converting a Koalas DataFrame from/to PySpark DataFrame, the data types are automatically casted to the appropriate type.
+When converting a pandas-on-Spark DataFrame from/to PySpark DataFrame, the data types are automatically casted to the appropriate type.
 
-The example below shows how data types are casted from PySpark DataFrame to Koalas DataFrame.
+The example below shows how data types are casted from PySpark DataFrame to pandas-on-Spark DataFrame.
 
 .. code-block:: python
 
@@ -25,10 +25,10 @@ The example below shows how data types are casted from PySpark DataFrame to Koal
     >>> sdf
     DataFrame[tinyint: tinyint, decimal: decimal(10,0), float: float, double: double, integer: int, long: bigint, short: smallint, timestamp: timestamp, string: string, boolean: boolean, date: date]
 
-    # 3. Convert PySpark DataFrame to Koalas DataFrame
+    # 3. Convert PySpark DataFrame to pandas-on-Spark DataFrame
     >>> kdf = sdf.to_koalas()
 
-    # 4. Check the Koalas data types
+    # 4. Check the pandas-on-Spark data types
     >>> kdf.dtypes
     tinyint                int8
     decimal              object
@@ -44,11 +44,11 @@ The example below shows how data types are casted from PySpark DataFrame to Koal
     dtype: object
 
 
-The example below shows how data types are casted from Koalas DataFrame to PySpark DataFrame.
+The example below shows how data types are casted from pandas-on-Spark DataFrame to PySpark DataFrame.
 
 .. code-block:: python
 
-    # 1. Create a Koalas DataFrame
+    # 1. Create a pandas-on-Spark DataFrame
     >>> kdf = ks.DataFrame({"int8": [1], "bool": [True], "float32": [1.0], "float64": [1.0], "int32": [1], "int64": [1], "int16": [1], "datetime": [datetime.datetime(2020, 10, 27)], "object_string": ["1"], "object_decimal": [decimal.Decimal("1.1")], "object_date": [datetime.date(2020, 10, 27)]})
 
     # 2. Type casting by using `astype`
@@ -57,7 +57,7 @@ The example below shows how data types are casted from Koalas DataFrame to PySpa
     >>> kdf['int32'] = kdf['int32'].astype('int32')
     >>> kdf['float32'] = kdf['float32'].astype('float32')
 
-    # 3. Check the Koalas data types
+    # 3. Check the pandas-on-Spark data types
     >>> kdf.dtypes
     int8                        int8
     bool                        bool
@@ -72,7 +72,7 @@ The example below shows how data types are casted from Koalas DataFrame to PySpa
     object_date               object
     dtype: object
 
-    # 4. Convert Koalas DataFrame to PySpark DataFrame
+    # 4. Convert pandas-on-Spark DataFrame to PySpark DataFrame
     >>> sdf = kdf.to_spark()
 
     # 5. Check the PySpark data types
@@ -80,14 +80,14 @@ The example below shows how data types are casted from Koalas DataFrame to PySpa
     DataFrame[int8: tinyint, bool: boolean, float32: float, float64: double, int32: int, int64: bigint, int16: smallint, datetime: timestamp, object_string: string, object_decimal: decimal(2,1), object_date: date]
 
 
-Type casting between pandas and Koalas
---------------------------------------
+Type casting between pandas and pandas APIs on Spark
+----------------------------------------------------
 
-When converting Koalas DataFrame to pandas DataFrame, and the data types are basically same as pandas.
+When converting pandas-on-Spark DataFrame to pandas DataFrame, and the data types are basically same as pandas.
 
 .. code-block:: python
 
-    # Convert Koalas DataFrame to pandas DataFrame
+    # Convert pandas-on-Spark DataFrame to pandas DataFrame
     >>> pdf = kdf.to_pandas()
 
     # Check the pandas data types
@@ -110,7 +110,7 @@ However, there are several data types only provided by pandas.
 
 .. code-block:: python
 
-    # pd.Catrgorical type is not supported in Koalas yet.
+    # pd.Catrgorical type is not supported in pandas APIs on Spark yet.
     >>> ks.Series([pd.Categorical([1, 2, 3])])
     Traceback (most recent call last):
     ...
@@ -118,14 +118,14 @@ However, there are several data types only provided by pandas.
     Categories (3, int64): [1, 2, 3] with type Categorical: did not recognize Python value type when inferring an Arrow data type
 
 
-These kind of pandas specific data types below are not currently supported in Koalas but planned to be supported.
+These kind of pandas specific data types below are not currently supported in pandas APIs on Spark but planned to be supported.
 
 * pd.Timedelta
 * pd.Categorical
 * pd.CategoricalDtype
 
 
-The pandas specific data types below are not planned to be supported in Koalas yet.
+The pandas specific data types below are not planned to be supported in pandas APIs on Spark yet.
 
 * pd.SparseDtype
 * pd.DatetimeTZDtype
@@ -137,7 +137,7 @@ The pandas specific data types below are not planned to be supported in Koalas y
 Internal type mapping
 ---------------------
 
-The table below shows which NumPy data types are matched to which PySpark data types internally in Koalas.
+The table below shows which NumPy data types are matched to which PySpark data types internally in pandas APIs on Spark.
 
 ============= =======================
 NumPy         PySpark
@@ -162,7 +162,7 @@ np.ndarray    ArrayType(StringType())
 ============= =======================
 
 
-The table below shows which Python data types are matched to which PySpark data types internally in Koalas.
+The table below shows which Python data types are matched to which PySpark data types internally in pandas APIs on Spark.
 
 ================= ===================
 Python            PySpark
@@ -177,7 +177,7 @@ datetime.date     DateType
 decimal.Decimal   DecimalType(38, 18)
 ================= ===================
 
-For decimal type, Koalas uses Spark's system default precision and scale.
+For decimal type, pandas APIs on Spark use Spark's system default precision and scale.
 
 You can check this mapping by using `as_spark_type` function.
 
@@ -204,13 +204,13 @@ You can also check the underlying PySpark data type of `Series` or schema of `Da
     >>> ks.Series([0.3, 0.1, 0.8]).spark.data_type
     DoubleType
 
-    >>> ks.Series(["welcome", "to", "Koalas"]).spark.data_type
+    >>> ks.Series(["welcome", "to", "pandas-on-Spark"]).spark.data_type
     StringType
 
     >>> ks.Series([[False, True, False]]).spark.data_type
     ArrayType(BooleanType,true)
 
-    >>> ks.DataFrame({"d": [0.3, 0.1, 0.8], "s": ["welcome", "to", "Koalas"], "b": [False, True, False]}).spark.print_schema()
+    >>> ks.DataFrame({"d": [0.3, 0.1, 0.8], "s": ["welcome", "to", "pandas-on-Spark"], "b": [False, True, False]}).spark.print_schema()
     root
      |-- d: double (nullable = false)
      |-- s: string (nullable = false)
@@ -218,7 +218,7 @@ You can also check the underlying PySpark data type of `Series` or schema of `Da
 
 .. note::
 
-    Koalas currently does not support multiple types of data in single column.
+    Pandas APIs on Spark currently do not support multiple types of data in single column.
 
     .. code-block:: python
     
