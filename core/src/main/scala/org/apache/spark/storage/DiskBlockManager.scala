@@ -205,7 +205,7 @@ private[spark] class DiskBlockManager(conf: SparkConf, var deleteFilesOnStop: Bo
             // This executor does not find merge_manager directory, it will try to create
             // the merge_manager directory and the sub directories.
             logDebug(s"Try to create $mergeDir and its sub dirs since the " +
-              s"merge_manager dir does not exist")
+              s"$MERGE_MANAGER_DIR dir does not exist")
             for (dirNum <- 0 until subDirsPerLocalDir) {
               val subDir = new File(mergeDir, "%02x".format(dirNum))
               if (!subDir.exists()) {
@@ -219,7 +219,7 @@ private[spark] class DiskBlockManager(conf: SparkConf, var deleteFilesOnStop: Bo
         } catch {
           case e: IOException =>
             logError(
-              s"Failed to create merge dir in $rootDir. Ignoring this directory.", e)
+              s"Failed to create $MERGE_MANAGER_DIR dir in $rootDir. Ignoring this directory.", e)
         }
       }
     }

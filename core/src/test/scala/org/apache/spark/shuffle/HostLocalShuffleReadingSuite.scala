@@ -134,7 +134,7 @@ class HostLocalShuffleReadingSuite extends SparkFunSuite with Matchers with Loca
     }
   }
 
-  test("Enable host local shuffle reading when Push based shuffle is enabled") {
+  test("Enable host local shuffle reading when push based shuffle is enabled") {
     val conf = new SparkConf()
       .set(SHUFFLE_SERVICE_ENABLED, true)
       .set("spark.yarn.maxAttempts", "1")

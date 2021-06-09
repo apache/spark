@@ -21,6 +21,7 @@ import java.util.UUID
 
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.{DeveloperApi, Since}
+import org.apache.spark.network.shuffle.RemoteBlockPushResolver
 
 /**
  * :: DeveloperApi ::
@@ -90,7 +91,8 @@ case class ShufflePushBlockId(shuffleId: Int, mapIndex: Int, reduceId: Int) exte
 @Since("3.2.0")
 @DeveloperApi
 case class ShuffleMergedDataBlockId(appId: String, shuffleId: Int, reduceId: Int) extends BlockId {
-  override def name: String = "shuffleMerged_" + appId + "_" + shuffleId + "_" + reduceId + ".data"
+  override def name: String = RemoteBlockPushResolver.MERGED_SHUFFLE_FILE_NAME_PREFIX + "_" +
+    appId + "_" + shuffleId + "_" + reduceId + ".data"
 }
 
 @Since("3.2.0")
@@ -99,8 +101,8 @@ case class ShuffleMergedIndexBlockId(
     appId: String,
     shuffleId: Int,
     reduceId: Int) extends BlockId {
-  override def name: String =
-    "shuffleMerged_" + appId + "_" + shuffleId + "_" + reduceId + ".index"
+  override def name: String = RemoteBlockPushResolver.MERGED_SHUFFLE_FILE_NAME_PREFIX + "_" +
+    appId + "_" + shuffleId + "_" + reduceId + ".index"
 }
 
 @Since("3.2.0")
@@ -109,8 +111,8 @@ case class ShuffleMergedMetaBlockId(
     appId: String,
     shuffleId: Int,
     reduceId: Int) extends BlockId {
-  override def name: String =
-    "shuffleMerged_" + appId + "_" + shuffleId + "_" + reduceId + ".meta"
+  override def name: String = RemoteBlockPushResolver.MERGED_SHUFFLE_FILE_NAME_PREFIX + "_" +
+    appId + "_" + shuffleId + "_" + reduceId + ".meta"
 }
 
 @DeveloperApi
