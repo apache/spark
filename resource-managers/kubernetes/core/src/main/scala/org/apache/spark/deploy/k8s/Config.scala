@@ -255,10 +255,10 @@ private[spark] object Config extends Logging {
 
   private val podConfValidator = (s"^$dns1123LabelFmt(\\.$dns1123LabelFmt)*$$").r.pattern
 
-  // The possible longest executor name would be "$prefix-exec-${Long.MaxValue}"
+  // The possible longest executor name would be "$prefix-exec-${Int.MaxValue}"
   private def isValidExecutorPodNamePrefix(prefix: String): Boolean = {
     // 6 is length of '-exec-'
-    val reservedLen = Long.MaxValue.toString.length + 6
+    val reservedLen = Int.MaxValue.toString.length + 6
     val validLength = prefix.length + reservedLen <= KUBERNETES_LABEL_MAX_LENGTH
     validLength && podConfValidator.matcher(prefix).matches()
   }
@@ -269,13 +269,13 @@ private[spark] object Config extends Logging {
         "by the Kubernetes <a href=\"https://kubernetes.io/docs/concepts/overview/" +
         "working-with-objects/names/#dns-label-names\">DNS Label Names</a>. Besides, the " +
         "executor pod names will be generated in the form of " +
-        "<code>$podNamePrefix-exec-$id</code>, where the `id` is a positive long value, " +
-        "so the length of the `podNamePrefix` need to be <= 38(= 63 - 19 - 6).")
+        "<code>$podNamePrefix-exec-$id</code>, where the `id` is a positive int value, " +
+        "so the length of the `podNamePrefix` need to be <= 47(= 63 - 10 - 6).")
       .version("2.3.0")
       .stringConf
       .checkValue(isValidExecutorPodNamePrefix,
         "must conform https://kubernetes.io/docs/concepts/overview/working-with-objects" +
-          "/names/#dns-label-names and the value length <= 38")
+          "/names/#dns-label-names and the value length <= 47")
       .createOptional
 
   val KUBERNETES_EXECUTOR_DISABLE_CONFIGMAP =
