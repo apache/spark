@@ -66,7 +66,7 @@ private[netty] class NettyStreamManager(rpcEnv: NettyRpcEnv)
   }
 
   override def addFile(file: File): String = {
-    val existingPath = files.putIfAbsent(file.getName, file)
+    val existingPath = files.putIfAbsent(file.getName, file.getCanonicalFile)
     require(existingPath == null || existingPath == file,
       s"File ${file.getName} was already registered with a different path " +
         s"(old path = $existingPath, new path = $file")
@@ -74,7 +74,7 @@ private[netty] class NettyStreamManager(rpcEnv: NettyRpcEnv)
   }
 
   override def addJar(file: File): String = {
-    val existingPath = jars.putIfAbsent(file.getName, file)
+    val existingPath = jars.putIfAbsent(file.getName, file.getCanonicalFile)
     require(existingPath == null || existingPath == file,
       s"File ${file.getName} was already registered with a different path " +
         s"(old path = $existingPath, new path = $file")
@@ -83,7 +83,7 @@ private[netty] class NettyStreamManager(rpcEnv: NettyRpcEnv)
 
   override def addDirectory(baseUri: String, path: File): String = {
     val fixedBaseUri = validateDirectoryUri(baseUri)
-    require(dirs.putIfAbsent(fixedBaseUri.stripPrefix("/"), path) == null,
+    require(dirs.putIfAbsent(fixedBaseUri.stripPrefix("/"), path.getCanonicalFile) == null,
       s"URI '$fixedBaseUri' already registered.")
     s"${rpcEnv.address.toSparkURL}$fixedBaseUri"
   }
