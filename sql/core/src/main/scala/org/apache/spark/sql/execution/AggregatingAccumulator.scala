@@ -33,7 +33,7 @@ class AggregatingAccumulator private(
     bufferSchema: Seq[DataType],
     initialValues: Seq[Expression],
     updateExpressions: Seq[Expression],
-    @transient private val mergeExpressions: Seq[Expression],
+    mergeExpressions: Seq[Expression],
     @transient private val resultExpressions: Seq[Expression],
     imperatives: Array[ImperativeAggregate],
     typedImperatives: Array[TypedImperativeAggregate[_]],
@@ -95,13 +95,13 @@ class AggregatingAccumulator private(
 
   /**
    * Driver side operations like `merge` and `value` are executed in the DAGScheduler thread. This
-   * thread does not have a SQL configuration so we attach our own here. Note that we can't (and
-   * shouldn't) call `merge` or `value` on an accumulator originating from an executor so we just
-   * return a default value here.
+   * thread does not have a SQL configuration so we attach our own here.
    */
   private[this] def withSQLConf[T](default: => T)(body: => T): T = {
     if (conf != null) {
       SQLConf.withExistingConf(conf)(body)
+    } else if (TaskContext.get != null) {
+      SQLConf.withExistingConf(SQLConf.get)(body)
     } else {
       default
     }
@@ -204,10 +204,6 @@ class AggregatingAccumulator private(
     assert(buffer == null || (buffer eq other.buffer))
     buffer = other.buffer
     joinedRow = other.joinedRow
-  }
-
-  private[execution] def addState(v: InternalRow): Unit = {
-    add(v)
   }
 }
 
