@@ -24,7 +24,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, JoinedRow, Literal, SpecificInternalRow, UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, JoinedRow, Literal, SafeProjection, SpecificInternalRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.execution.streaming.StatefulOperatorStateInfo
 import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper._
 import org.apache.spark.sql.types.{BooleanType, LongType, StructField, StructType}
@@ -205,6 +205,9 @@ class SymmetricHashJoinStateManager(
       private var index: Long = 0L
       private var valueRemoved: Boolean = false
 
+      // Unsafe row to internal row projection for key of `keyWithIndexToValue`.
+      lazy private val keyProjection = SafeProjection.create(keySchema.add("index", LongType))
+
       // Push the data for the current key to the numValues store, and reset the tracking variables
       // to their empty state.
       private def updateNumValueForCurrentKey(): Unit = {
@@ -275,8 +278,9 @@ class SymmetricHashJoinStateManager(
             keyWithIndexToValue.put(currentKey, index, valuePairAtMaxIndex.value,
               valuePairAtMaxIndex.matched)
           } else {
+            val projectedKey = keyProjection(currentKey)
             logWarning(s"`keyWithIndexToValue` returns a null value for index ${numValues - 1} " +
-              "at current key.")
+              s"at current key $projectedKey.")
           }
         }
         keyWithIndexToValue.remove(currentKey, numValues - 1)
