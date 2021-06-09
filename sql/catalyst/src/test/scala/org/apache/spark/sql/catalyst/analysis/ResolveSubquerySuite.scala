@@ -128,7 +128,7 @@ class ResolveSubquerySuite extends AnalysisTest {
     // TODO: support accessing columns from outer outer query.
     assertAnalysisError(
       lateralJoin(t1, lateralJoin(t2, t0.select('a, 'b, 'c))),
-      Seq("cannot resolve 'a' given input columns: []")
+      Seq("cannot resolve 'a' given input columns: []"))
   }
 
   test("lateral subquery with unresolvable attributes") {
