@@ -73,18 +73,13 @@ private[spark] class ExecutorPodsAllocator(
 
   private val shouldDeleteExecutors = conf.get(KUBERNETES_DELETE_EXECUTORS)
 
-  val driverPod: Option[Pod] = kubernetesDriverPodName
-    .map(name => {
-      val namedPod = kubernetesClient.pods().withName(name)
-      // Wait until the driver pod is ready before starting executors, as the headless service won't
-      // be resolvable by DNS until the driver pod is ready.
-      Utils.tryLogNonFatalError {
-        namedPod.waitUntilReady(driverPodReadinessTimeout, TimeUnit.SECONDS)
-      }
-      Option(namedPod.get()).getOrElse(throw new SparkException(s"No pod was found named " +
-        s"$kubernetesDriverPodName in the cluster in the namespace $namespace (this was supposed" +
-        s" to be the driver pod.)."))
-    })
+  val driverPod = kubernetesDriverPodName
+    .map(name => Option(kubernetesClient.pods()
+      .withName(name)
+      .get())
+      .getOrElse(throw new SparkException(
+        s"No pod was found named $kubernetesDriverPodName in the cluster in the " +
+          s"namespace $namespace (this was supposed to be the driver pod.).")))
 
   // Executor IDs that have been requested from Kubernetes but have not been detected in any
   // snapshot yet. Mapped to the (ResourceProfile id, timestamp) when they were created.
@@ -107,6 +102,16 @@ private[spark] class ExecutorPodsAllocator(
   @volatile private var deletedExecutorIds = Set.empty[Long]
 
   def start(applicationId: String, schedulerBackend: KubernetesClusterSchedulerBackend): Unit = {
+    driverPod.foreach { pod =>
+      // Wait until the driver pod is ready before starting executors, as the headless service won't
+      // be resolvable by DNS until the driver pod is ready.
+      Utils.tryLogNonFatalError {
+        kubernetesClient
+          .pods()
+          .withName(pod.getMetadata.getName)
+          .waitUntilReady(driverPodReadinessTimeout, TimeUnit.SECONDS)
+      }
+    }
     snapshotsStore.addSubscriber(podAllocationDelay) {
       onNewSnapshots(applicationId, schedulerBackend, _)
     }

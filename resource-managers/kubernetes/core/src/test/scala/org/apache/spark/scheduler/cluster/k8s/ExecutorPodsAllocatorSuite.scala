@@ -654,7 +654,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
       val conf = new SparkConf()
       new ExecutorPodsAllocator(
         conf, secMgr, executorBuilder, kubernetesClient, snapshotsStore, waitForExecutorPodsClock)
-        .driverPod
+        .start(TEST_SPARK_APP_ID, schedulerBackend)
     }
 
     assert(!logAppender.loggingEvents.exists(_.getRenderedMessage.contains(msg)))
