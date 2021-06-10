@@ -35,6 +35,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.catalyst.util.IntervalUtils.microsToDuration
 import org.apache.spark.sql.internal.SQLConf
@@ -1239,6 +1240,26 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
     checkExceptionInExpression[ArithmeticException](
       cast(cast(Literal("2147483648"), FloatType), IntegerType), "overflow")
   }
+
+  private val specialTs = Seq(
+    "0001-01-01T00:00:00", // the fist timestamp of Common Era
+    "1582-10-15T23:59:59", // the cutover date from Julian to Gregorian calendar
+    "1970-01-01T00:00:00", // the epoch timestamp
+    "9999-12-31T23:59:59"  // the last supported timestamp according to SQL standard
+  )
+
+  test("SPARK-35698: cast timestamp without time zone to string") {
+    specialTs.foreach { s =>
+      checkEvaluation(cast(LocalDateTime.parse(s), StringType), s.replace("T", " "))
+    }
+  }
+
+  test("SPARK-35711: cast timestamp without time zone to timestamp with local time zone") {
+    specialTs.foreach { s =>
+      val dt = LocalDateTime.parse(s.replace(" ", "T"))
+      checkEvaluation(cast(dt, TimestampType), DateTimeUtils.localDateTimeToMicros(dt))
+    }
+  }
 }
 
 /**
@@ -1705,17 +1726,6 @@ class CastSuite extends CastSuiteBase {
       checkEvaluation(cast(negativeTs, ShortType), expectedSecs.toShort)
       checkEvaluation(cast(negativeTs, IntegerType), expectedSecs.toInt)
       checkEvaluation(cast(negativeTs, LongType), expectedSecs)
-    }
-  }
-
-  test("SPARK-35698: cast timestamp without time zone to string") {
-    Seq(
-      "0001-01-01 00:00:00", // the fist timestamp of Common Era
-      "1582-10-15 23:59:59", // the cutover date from Julian to Gregorian calendar
-      "1970-01-01 00:00:00", // the epoch timestamp
-      "9999-12-31 23:59:59"  // the last supported timestamp according to SQL standard
-    ).foreach { s =>
-      checkEvaluation(cast(LocalDateTime.parse(s.replace(" ", "T")), StringType), s)
     }
   }
 

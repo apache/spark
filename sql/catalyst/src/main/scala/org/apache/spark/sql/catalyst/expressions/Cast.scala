@@ -68,6 +68,7 @@ object Cast {
     case (BooleanType, TimestampType) => true
     case (DateType, TimestampType) => true
     case (_: NumericType, TimestampType) => true
+    case (TimestampWithoutTZType, TimestampType) => true
 
     case (StringType, DateType) => true
     case (TimestampType, DateType) => true
@@ -1944,6 +1945,7 @@ object AnsiCast {
 
     case (StringType, TimestampType) => true
     case (DateType, TimestampType) => true
+    case (TimestampWithoutTZType, TimestampType) => true
 
     case (StringType, _: CalendarIntervalType) => true
     case (StringType, DayTimeIntervalType) => true
