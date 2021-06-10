@@ -868,14 +868,18 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
       withTempDir { destDir =>
         val conf = new SparkConf()
 
-        val file = new File(tempDir, "file")
-        Files.write(UUID.randomUUID().toString(), file, UTF_8)
+        val file1 = new File(tempDir, "file")
+        Files.write(UUID.randomUUID().toString(), file1, UTF_8)
+        val file2 = new File(tempDir, "/./././file")
+        Files.write(UUID.randomUUID().toString(), file2, UTF_8)
         val fileWithSpecialChars = new File(tempDir, "file name")
         Files.write(UUID.randomUUID().toString(), fileWithSpecialChars, UTF_8)
         val empty = new File(tempDir, "empty")
         Files.write("", empty, UTF_8);
-        val jar = new File(tempDir, "jar")
-        Files.write(UUID.randomUUID().toString(), jar, UTF_8)
+        val jar1 = new File(tempDir, "jar1")
+        Files.write(UUID.randomUUID().toString(), jar1, UTF_8)
+        val jar2 = new File(tempDir, "/./././jar1")
+        Files.write(UUID.randomUUID().toString(), jar2, UTF_8)
 
         val dir1 = new File(tempDir, "dir1")
         assert(dir1.mkdir())
@@ -887,13 +891,16 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
         val subFile2 = new File(dir2, "file2")
         Files.write(UUID.randomUUID().toString(), subFile2, UTF_8)
 
-        val fileUri = env.fileServer.addFile(file)
+        val file1Uri = env.fileServer.addFile(file1)
+        val file2Uri = env.fileServer.addFile(file2)
+        assert(file1Uri == file2Uri)
         val fileWithSpecialCharsUri = env.fileServer.addFile(fileWithSpecialChars)
         val emptyUri = env.fileServer.addFile(empty)
-        val jarUri = env.fileServer.addJar(jar)
+        val jar1Uri = env.fileServer.addJar(jar1)
+        val jar2Uri = env.fileServer.addJar(jar2)
+        assert(jar1Uri == jar2Uri)
         val dir1Uri = env.fileServer.addDirectory("/dir1", dir1)
         val dir2Uri = env.fileServer.addDirectory("/dir2", dir2)
-
         // Try registering directories with invalid names.
         Seq("/files", "/jars").foreach { uri =>
           intercept[IllegalArgumentException] {
@@ -913,10 +920,10 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
         val hc = SparkHadoopUtil.get.conf
 
         val files = Seq(
-          (file, fileUri),
+          (file1, file1Uri),
           (fileWithSpecialChars, fileWithSpecialCharsUri),
           (empty, emptyUri),
-          (jar, jarUri),
+          (jar1, jar1Uri),
           (subFile1, dir1Uri + "/file1"),
           (subFile2, dir2Uri + "/file2"))
         files.foreach { case (f, uri) =>

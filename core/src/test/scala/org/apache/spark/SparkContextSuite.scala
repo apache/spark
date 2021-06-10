@@ -21,10 +21,8 @@ import java.io.File
 import java.net.{MalformedURLException, URI}
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.{CountDownLatch, Semaphore, TimeUnit}
-
 import scala.concurrent.duration._
 import scala.io.Source
-
 import com.google.common.io.Files
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
@@ -35,7 +33,6 @@ import org.json4s.{DefaultFormats, Extraction}
 import org.junit.Assert.{assertEquals, assertFalse}
 import org.scalatest.concurrent.Eventually
 import org.scalatest.matchers.must.Matchers._
-
 import org.apache.spark.TestUtils._
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Tests._
@@ -1290,9 +1287,13 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     withTempDir { dir =>
       try {
         val sep = File.separator
-        val tmpDir = Utils.createTempDir(dir.getAbsolutePath + sep + "." + sep + ".")
-        val tmpJar = File.createTempFile("test", ".jar", tmpDir)
-        val tmpFile = File.createTempFile("test", ".txt", tmpDir)
+        val tmpCanonicalDir = Utils.createTempDir(dir.getAbsolutePath + sep + "test space")
+        val tmpAbsoluteDir = new File(tmpCanonicalDir.getAbsolutePath + sep + '.' + sep)
+        val tmpJar = File.createTempFile("test", ".jar", tmpAbsoluteDir)
+        val tmpFile = File.createTempFile("test", ".txt", tmpAbsoluteDir)
+
+        assert(tmpJar.getAbsolutePath == tmpJar.getCanonicalPath)
+        assert(tmpFile.getAbsolutePath == tmpFile.getCanonicalPath)
 
         sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
         sc.addJar(tmpJar.getAbsolutePath)
@@ -1302,8 +1303,8 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
         assert(sc.listFiles().size == 1)
         assert(sc.listJars().head.contains(tmpJar.getName))
         assert(sc.listFiles().head.contains(tmpFile.getName))
-        assert(!sc.listJars().head.contains("./"))
-        assert(!sc.listFiles().head.contains("./"))
+        assert(!sc.listJars().head.contains("." + sep))
+        assert(!sc.listFiles().head.contains("." + sep))
       } finally {
         sc.stop()
       }
