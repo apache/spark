@@ -379,10 +379,8 @@ object DateTimeUtils {
     }
   }
   // See issue SPARK-35679
-  // LongMinValueDividedByMicroPerSecond is equal to
-  // Math.floorDiv(Long.MinValue, MICROS_PER_SECOND)
-  // which is -9223372036855L
-  private final val LongMinValueDividedByMicroPerSecond = -9223372036855L
+  // min second cause overflow in instant to micro
+  private val MIN_SECONDS = Math.floorDiv(Long.MinValue, MICROS_PER_SECOND)
 
   /**
    * Gets the number of microseconds since the epoch of 1970-01-01 00:00:00Z from the given
@@ -391,7 +389,7 @@ object DateTimeUtils {
    */
   def instantToMicros(instant: Instant): Long = {
     val secs = instant.getEpochSecond
-    if (secs == LongMinValueDividedByMicroPerSecond) {
+    if (secs == MIN_SECONDS) {
       val us = Math.multiplyExact(secs + 1, MICROS_PER_SECOND)
       Math.addExact(us, NANOSECONDS.toMicros(instant.getNano) - MICROS_PER_SECOND)
     } else {
