@@ -22,7 +22,6 @@ import scala.reflect.ClassTag
 import org.apache.spark.TaskContext
 import org.apache.spark.network.buffer.ManagedBuffer
 import org.apache.spark.network.client.StreamCallbackWithID
-import org.apache.spark.network.shuffle.MergedBlockMeta
 import org.apache.spark.storage.{BlockId, StorageLevel}
 
 private[spark]
@@ -72,18 +71,4 @@ trait BlockDataManager {
    * Release locks acquired by [[putBlockData()]] and [[getLocalBlockData()]].
    */
   def releaseLock(blockId: BlockId, taskContext: Option[TaskContext]): Unit
-
-  /**
-   * Interface to get merged shuffle block data. Throws an exception if the block cannot be found
-   * or cannot be read successfully.
-   */
-  // PART OF SPARK-33350
-  def getMergedBlockData(blockId: BlockId, dirs: Array[String]): Seq[ManagedBuffer]
-
-  /**
-   * Interface to get merged shuffle block meta. Throws an exception if the meta cannot be found
-   * or cannot be read successfully.
-   */
-  // PART OF SPARK-33350
-  def getMergedBlockMeta(blockId: BlockId, dirs: Array[String]): MergedBlockMeta
 }

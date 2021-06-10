@@ -51,10 +51,5 @@ trait ShuffleBlockResolver {
    */
   def getMergedBlockMeta(blockId: ShuffleBlockId, dirs: Option[Array[String]]): MergedBlockMeta
 
-  /**
-   * Retrieve the meta data for the specified merged shuffle block.
-   */
-  def getMergedBlockMeta(blockId: ShuffleBlockId): MergedBlockMeta
-
   def stop(): Unit
 }
