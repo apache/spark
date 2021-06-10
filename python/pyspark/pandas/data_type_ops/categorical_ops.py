@@ -71,6 +71,5 @@ class CategoricalOps(DataTypeOps):
             map_scol = F.create_map(*kvs)
             scol = map_scol.getItem(index_ops.spark.column)
         return index_ops._with_new_scol(
-            scol.alias(index_ops._internal.data_spark_column_names[0]),
-            field=InternalField(dtype=dtype),
+            scol.alias(index_ops._internal.data_spark_column_names[0])
         ).astype(dtype)
