@@ -198,12 +198,23 @@ trait SimpleFunctionRegistryBase[T] extends FunctionRegistryBase[T] with Logging
   override def registerFunction(
       name: FunctionIdentifier,
       info: ExpressionInfo,
-      builder: FunctionBuilder): Unit = synchronized {
+      builder: FunctionBuilder): Unit = {
     val normalizedName = normalizeFuncName(name)
+    internalRegisterFunction(normalizedName, info, builder)
+  }
+
+  /**
+   * Perform function registry without any preprocessing.
+   * This is used when registering built-in functions and doing `FunctionRegistry.clone()`
+   */
+  def internalRegisterFunction(
+      name: FunctionIdentifier,
+      info: ExpressionInfo,
+      builder: FunctionBuilder): Unit = synchronized {
     val newFunction = (info, builder)
-    functionBuilders.put(normalizedName, newFunction) match {
+    functionBuilders.put(name, newFunction) match {
       case Some(previousFunction) if previousFunction != newFunction =>
-        logWarning(s"The function $normalizedName replaced a previously registered function.")
+        logWarning(s"The function $name replaced a previously registered function.")
       case _ =>
     }
   }
@@ -287,7 +298,7 @@ class SimpleFunctionRegistry
   override def clone(): SimpleFunctionRegistry = synchronized {
     val registry = new SimpleFunctionRegistry
     functionBuilders.iterator.foreach { case (name, (info, builder)) =>
-      registry.registerFunction(name, info, builder)
+      registry.internalRegisterFunction(name, info, builder)
     }
     registry
   }
@@ -698,7 +709,8 @@ object FunctionRegistry {
   val builtin: SimpleFunctionRegistry = {
     val fr = new SimpleFunctionRegistry
     expressions.foreach {
-      case (name, (info, builder)) => fr.registerFunction(FunctionIdentifier(name), info, builder)
+      case (name, (info, builder)) =>
+        fr.internalRegisterFunction(FunctionIdentifier(name), info, builder)
     }
     fr
   }
@@ -765,7 +777,7 @@ class SimpleTableFunctionRegistry extends SimpleFunctionRegistryBase[LogicalPlan
   override def clone(): SimpleTableFunctionRegistry = synchronized {
     val registry = new SimpleTableFunctionRegistry
     functionBuilders.iterator.foreach { case (name, (info, builder)) =>
-      registry.registerFunction(name, info, builder)
+      registry.internalRegisterFunction(name, info, builder)
     }
     registry
   }
@@ -805,7 +817,7 @@ object TableFunctionRegistry {
     val fr = new SimpleTableFunctionRegistry
     logicalPlans.foreach {
       case (name, (info, builder)) =>
-        fr.registerFunction(FunctionIdentifier(name), info, builder)
+        fr.internalRegisterFunction(FunctionIdentifier(name), info, builder)
     }
     fr
   }
