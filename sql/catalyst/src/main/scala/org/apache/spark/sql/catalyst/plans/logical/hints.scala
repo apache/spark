@@ -29,7 +29,10 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 case class UnresolvedHint(name: String, parameters: Seq[Any], child: LogicalPlan)
   extends UnaryNode {
 
-  override lazy val resolved: Boolean = false
+  // we need it to be resolved so that the analyzer can continue to analyze the rest of the query
+  // plan.
+  override lazy val resolved: Boolean = child.resolved
+
   override def output: Seq[Attribute] = child.output
 }
 
