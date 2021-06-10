@@ -39,6 +39,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.catalyst.util.IntervalUtils.microsToDuration
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.DataTypeTestUtils.dayTimeIntervalTypes
 import org.apache.spark.unsafe.types.UTF8String
 
 abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
@@ -840,7 +841,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
         s"INTERVAL '$intervalPayload' DAY TO SECOND")
     }
 
-    DayTimeIntervalType.dayTimeIntervalTypes().foreach { it =>
+    dayTimeIntervalTypes.foreach { it =>
       checkConsistencyBetweenInterpretedAndCodegen((child: Expression) =>
         Cast(child, StringType), it)
     }

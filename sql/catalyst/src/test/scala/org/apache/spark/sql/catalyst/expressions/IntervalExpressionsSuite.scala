@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.IntervalUtils.{safeStringToInterval, stringToInterval}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DayTimeIntervalType, Decimal, DecimalType, YearMonthIntervalType}
-import org.apache.spark.sql.types.DataTypeTestUtils.numericTypes
+import org.apache.spark.sql.types.DataTypeTestUtils.{dayTimeIntervalTypes, numericTypes}
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
@@ -339,7 +339,7 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
 
     numericTypes.foreach { numType =>
-      DayTimeIntervalType.dayTimeIntervalTypes().foreach { it =>
+      dayTimeIntervalTypes.foreach { it =>
         checkConsistencyBetweenInterpretedAndCodegenAllowingException(
           (interval: Expression, num: Expression) => MultiplyDTInterval(interval, num),
           it, numType)
@@ -407,7 +407,7 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
 
     numericTypes.foreach { numType =>
-      DayTimeIntervalType.dayTimeIntervalTypes().foreach { it =>
+      dayTimeIntervalTypes.foreach { it =>
         checkConsistencyBetweenInterpretedAndCodegenAllowingException(
           (interval: Expression, num: Expression) => DivideDTInterval(interval, num),
           it, numType)

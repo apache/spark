@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.plans.CodegenInterpretedPlanTest
 import org.apache.spark.sql.catalyst.util.{ArrayData, DateTimeUtils, GenericArrayData, IntervalUtils}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.DataTypeTestUtils.dayTimeIntervalTypes
 
 @SQLUserDefinedType(udt = classOf[ExamplePointUDT])
 class ExamplePoint(val x: Double, val y: Double) extends Serializable {
@@ -353,7 +354,7 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
   }
 
   test("SPARK-34605: encoding/decoding DayTimeIntervalType to/from java.time.Duration") {
-    DayTimeIntervalType.dayTimeIntervalTypes().foreach { dayTimeIntervalType =>
+    dayTimeIntervalTypes.foreach { dayTimeIntervalType =>
       val schema = new StructType().add("d", dayTimeIntervalType)
       val encoder = RowEncoder(schema).resolveAndBind()
       val duration = java.time.Duration.ofDays(1)
