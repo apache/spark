@@ -277,8 +277,7 @@ abstract class DynamicPartitionPruningSuiteBase
   /**
    * Test the result of a simple join on mock-up tables
    */
-  test("simple inner join triggers DPP with mock-up tables",
-    DisableAdaptiveExecution("DPP in AQE must reuse broadcast")) {
+  test("simple inner join triggers DPP with mock-up tables") {
     withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
       SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
       SQLConf.EXCHANGE_REUSE_ENABLED.key -> "false") {
@@ -325,7 +324,7 @@ abstract class DynamicPartitionPruningSuiteBase
       }
     }
   }
-
+  
   test("DPP should not be rewritten as an existential join") {
     withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
       SQLConf.DYNAMIC_PARTITION_PRUNING_FALLBACK_FILTER_RATIO.key -> "1.5",
@@ -353,8 +352,7 @@ abstract class DynamicPartitionPruningSuiteBase
    * (2) DPP should be triggered only for certain join types
    * (3) DPP should trigger only when we have attributes on both sides of the join condition
    */
-  test("DPP triggers only for certain types of query",
-    DisableAdaptiveExecution("DPP in AQE must reuse broadcast")) {
+  test("DPP triggers only for certain types of query") {
     withSQLConf(
       SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
       SQLConf.DYNAMIC_PARTITION_PRUNING_PRUNING_SIDE_EXTRA_FILTER_RATIO.key -> "1") {
@@ -450,7 +448,8 @@ abstract class DynamicPartitionPruningSuiteBase
    * The filtering policy has a fallback when the stats are unavailable
    */
   test("filtering ratio policy fallback",
-    DisableAdaptiveExecution("DPP in AQE must reuse broadcast")) {
+    DisableAdaptiveExecution("AQEPropagateEmptyRelation rule " +
+    " convert the plan to empty LocalRelation")) {
     withSQLConf(
       SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
       SQLConf.EXCHANGE_REUSE_ENABLED.key -> "false") {
@@ -520,8 +519,7 @@ abstract class DynamicPartitionPruningSuiteBase
   /**
    *  The filtering ratio policy performs best when it uses cardinality estimates
    */
-  test("filtering ratio policy with stats when the broadcast pruning is disabled",
-    DisableAdaptiveExecution("DPP in AQE must reuse broadcast")) {
+  test("filtering ratio policy with stats when the broadcast pruning is disabled") {
     withSQLConf(
       SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
       SQLConf.EXCHANGE_REUSE_ENABLED.key -> "false") {
@@ -714,8 +712,7 @@ abstract class DynamicPartitionPruningSuiteBase
     }
   }
 
-  test("partition pruning in broadcast hash joins",
-    DisableAdaptiveExecution("DPP in AQE must reuse broadcast")) {
+  test("partition pruning in broadcast hash joins") {
     Given("disable broadcast pruning and disable subquery duplication")
     withSQLConf(
       SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "true",
@@ -1022,8 +1019,7 @@ abstract class DynamicPartitionPruningSuiteBase
     }
   }
 
-  test("avoid reordering broadcast join keys to match input hash partitioning",
-    DisableAdaptiveExecution("DPP in AQE must reuse broadcast")) {
+  test("avoid reordering broadcast join keys to match input hash partitioning") {
     withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
       withTable("large", "dimTwo", "dimThree") {
@@ -1147,8 +1143,9 @@ abstract class DynamicPartitionPruningSuiteBase
     }
   }
 
-  test("join key with multiple references on the filtering plan",
-    DisableAdaptiveExecution("DPP in AQE must reuse broadcast")) {
+  test("join key with multiple references on the filtering plan"
+    , DisableAdaptiveExecution("AQEPropagateEmptyRelation rule " +
+      " convert the plan to empty LocalRelation")) {
     withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "true") {
       // when enable AQE, the reusedExchange is inserted when executed.
       withTable("fact", "dim") {
@@ -1209,8 +1206,7 @@ abstract class DynamicPartitionPruningSuiteBase
   }
 
   test("SPARK-32509: Unused Dynamic Pruning filter shouldn't affect " +
-    "canonicalization and exchange reuse",
-    DisableAdaptiveExecution("DPP in AQE must reuse broadcast")) {
+    "canonicalization and exchange reuse") {
     withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "true") {
       withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
         val df = sql(
@@ -1222,7 +1218,7 @@ abstract class DynamicPartitionPruningSuiteBase
           """.stripMargin)
 
         checkPartitionPruningPredicate(df, false, false)
-        val reuseExchangeNodes = df.queryExecution.executedPlan.collect {
+        val reuseExchangeNodes = collect(df.queryExecution.executedPlan) {
           case se: ReusedExchangeExec => se
         }
         assert(reuseExchangeNodes.size == 1, "Expected plan to contain 1 ReusedExchangeExec " +
@@ -1418,8 +1414,7 @@ abstract class DynamicPartitionPruningSuiteBase
     }
   }
 
-  test("SPARK-32855: Filtering side can not broadcast by join type",
-    DisableAdaptiveExecution("DPP in AQE must reuse broadcast")) {
+  test("SPARK-32855: Filtering side can not broadcast by join type") {
     withSQLConf(
       SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
       SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "false",
