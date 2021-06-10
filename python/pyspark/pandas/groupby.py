@@ -48,6 +48,7 @@ from pyspark import pandas as ps  # For running doctests and reference resolutio
 from pyspark.pandas.typedef import infer_return_type, DataFrameType, ScalarType, SeriesType
 from pyspark.pandas.frame import DataFrame
 from pyspark.pandas.internal import (
+    InternalField,
     InternalFrame,
     HIDDEN_COLUMNS,
     NATURAL_ORDER_COLUMN_NAME,
@@ -317,20 +318,15 @@ class GroupBy(object, metaclass=ABCMeta):
 
         sdf = psdf._internal.spark_frame.select(groupkey_scols + psdf._internal.data_spark_columns)
         sdf = sdf.groupby(*groupkey_names).agg(*reordered)
-        if len(groupkeys) > 0:
-            index_spark_column_names = groupkey_names
-            index_names = [psser._column_label for psser in groupkeys]
-            index_dtypes = [psser.dtype for psser in groupkeys]
-        else:
-            index_spark_column_names = []
-            index_names = []
-            index_dtypes = []
 
         return InternalFrame(
             spark_frame=sdf,
-            index_spark_columns=[scol_for(sdf, col) for col in index_spark_column_names],
-            index_names=index_names,
-            index_dtypes=index_dtypes,
+            index_spark_columns=[scol_for(sdf, col) for col in groupkey_names],
+            index_names=[psser._column_label for psser in groupkeys],
+            index_fields=[
+                psser._internal.data_fields[0].copy(name=name)
+                for psser, name in zip(groupkeys, groupkey_names)
+            ],
             column_labels=column_labels,
             data_spark_columns=[scol_for(sdf, col) for col in data_columns],
         )
@@ -641,7 +637,10 @@ class GroupBy(object, metaclass=ABCMeta):
             spark_frame=sdf,
             index_spark_columns=[scol_for(sdf, col) for col in groupkey_names],
             index_names=[psser._column_label for psser in groupkeys],
-            index_dtypes=[psser.dtype for psser in groupkeys],
+            index_fields=[
+                psser._internal.data_fields[0].copy(name=name)
+                for psser, name in zip(groupkeys, groupkey_names)
+            ],
             column_labels=[None],
             data_spark_columns=[scol_for(sdf, "count")],
         )
@@ -1170,10 +1169,14 @@ class GroupBy(object, metaclass=ABCMeta):
             else:
                 psdf_from_pandas = cast(DataFrame, psser_or_psdf)
 
-            return_schema = force_decimal_precision_scale(
-                as_nullable_spark_type(
-                    psdf_from_pandas._internal.spark_frame.drop(*HIDDEN_COLUMNS).schema
-                )
+            index_fields = [
+                field.normalize_spark_type() for field in psdf_from_pandas._internal.index_fields
+            ]
+            data_fields = [
+                field.normalize_spark_type() for field in psdf_from_pandas._internal.data_fields
+            ]
+            return_schema = StructType(
+                [field.struct_field for field in index_fields + data_fields]
             )  # type: DataType
         else:
             return_type = infer_return_type(func)
@@ -1184,18 +1187,28 @@ class GroupBy(object, metaclass=ABCMeta):
                 )
 
             if isinstance(return_type, DataFrameType):
+                data_fields = cast(DataFrameType, return_type).fields
                 return_schema = cast(DataFrameType, return_type).spark_type
-                data_dtypes = cast(DataFrameType, return_type).dtypes
             else:
                 should_return_series = True
-                return_schema = cast(Union[SeriesType, ScalarType], return_type).spark_type
+                dtype = cast(Union[SeriesType, ScalarType], return_type).dtype
+                spark_type = cast(Union[SeriesType, ScalarType], return_type).spark_type
                 if is_series_groupby:
-                    return_schema = StructType([StructField(name, return_schema)])
+                    data_fields = [
+                        InternalField(
+                            dtype=dtype, struct_field=StructField(name=name, dataType=spark_type)
+                        )
+                    ]
                 else:
-                    return_schema = StructType(
-                        [StructField(SPARK_DEFAULT_SERIES_NAME, return_schema)]
-                    )
-                data_dtypes = [cast(Union[SeriesType, ScalarType], return_type).dtype]
+                    data_fields = [
+                        InternalField(
+                            dtype=dtype,
+                            struct_field=StructField(
+                                name=SPARK_DEFAULT_SERIES_NAME, dataType=spark_type
+                            ),
+                        )
+                    ]
+                return_schema = StructType([field.struct_field for field in data_fields])
 
         def pandas_groupby_apply(pdf):
 
@@ -1239,11 +1252,13 @@ class GroupBy(object, metaclass=ABCMeta):
 
         if should_infer_schema:
             # If schema is inferred, we can restore indexes too.
-            internal = psdf_from_pandas._internal.with_new_sdf(sdf)
+            internal = psdf_from_pandas._internal.with_new_sdf(
+                spark_frame=sdf, index_fields=index_fields, data_fields=data_fields
+            )
         else:
             # Otherwise, it loses index.
             internal = InternalFrame(
-                spark_frame=sdf, index_spark_columns=None, data_dtypes=data_dtypes
+                spark_frame=sdf, index_spark_columns=None, data_fields=data_fields
             )
 
         if should_return_series:
@@ -1531,7 +1546,10 @@ class GroupBy(object, metaclass=ABCMeta):
             spark_frame=sdf,
             index_spark_columns=[scol_for(sdf, col) for col in groupkey_names],
             index_names=[psser._column_label for psser in self._groupkeys],
-            index_dtypes=[psser.dtype for psser in self._groupkeys],
+            index_fields=[
+                psser._internal.data_fields[0].copy(name=name)
+                for psser, name in zip(self._groupkeys, groupkey_names)
+            ],
             column_labels=[psser._column_label for psser in self._agg_columns],
             data_spark_columns=[
                 scol_for(sdf, psser._internal.data_spark_column_names[0])
@@ -1610,6 +1628,10 @@ class GroupBy(object, metaclass=ABCMeta):
             spark_frame=sdf,
             index_spark_columns=[scol_for(sdf, col) for col in groupkey_names],
             index_names=[psser._column_label for psser in self._groupkeys],
+            index_fields=[
+                psser._internal.data_fields[0].copy(name=name)
+                for psser, name in zip(self._groupkeys, groupkey_names)
+            ],
             column_labels=[psser._column_label for psser in self._agg_columns],
             data_spark_columns=[
                 scol_for(sdf, psser._internal.data_spark_column_names[0])
@@ -1806,7 +1828,9 @@ class GroupBy(object, metaclass=ABCMeta):
             ]
 
         psdf, groupkey_labels, _ = GroupBy._prepare_group_map_apply(
-            psdf, self._groupkeys, agg_columns,
+            psdf,
+            self._groupkeys,
+            agg_columns,
         )
 
         groupkey_scols = [psdf._internal.spark_column_for(label) for label in groupkey_labels]
@@ -2149,7 +2173,15 @@ class GroupBy(object, metaclass=ABCMeta):
                 retain_index=True,
             )
             # If schema is inferred, we can restore indexes too.
-            internal = psdf_from_pandas._internal.with_new_sdf(sdf)
+            internal = psdf_from_pandas._internal.with_new_sdf(
+                sdf,
+                index_fields=[
+                    field.copy(nullable=True) for field in psdf_from_pandas._internal.index_fields
+                ],
+                data_fields=[
+                    field.copy(nullable=True) for field in psdf_from_pandas._internal.data_fields
+                ],
+            )
         else:
             return_type = infer_return_type(func)
             if not isinstance(return_type, SeriesType):
@@ -2158,14 +2190,15 @@ class GroupBy(object, metaclass=ABCMeta):
                     "but found type {}".format(return_type)
                 )
 
-            return_schema = cast(SeriesType, return_type).spark_type
-            data_columns = psdf._internal.data_spark_column_names
-            return_schema = StructType(
-                [StructField(c, return_schema) for c in data_columns if c not in groupkey_names]
-            )
-            data_dtypes = [
-                cast(SeriesType, return_type).dtype for c in data_columns if c not in groupkey_names
+            dtype = cast(SeriesType, return_type).dtype
+            spark_type = cast(SeriesType, return_type).spark_type
+
+            data_fields = [
+                InternalField(dtype=dtype, struct_field=StructField(name=c, dataType=spark_type))
+                for c in psdf._internal.data_spark_column_names
+                if c not in groupkey_names
             ]
+            return_schema = StructType([field.struct_field for field in data_fields])
 
             sdf = GroupBy._spark_group_map_apply(
                 psdf,
@@ -2176,7 +2209,7 @@ class GroupBy(object, metaclass=ABCMeta):
             )
             # Otherwise, it loses index.
             internal = InternalFrame(
-                spark_frame=sdf, index_spark_columns=None, data_dtypes=data_dtypes
+                spark_frame=sdf, index_spark_columns=None, data_fields=data_fields
             )
 
         return DataFrame(internal)
@@ -2353,7 +2386,7 @@ class GroupBy(object, metaclass=ABCMeta):
                     scol_for(spark_frame, s._internal.data_spark_column_names[0])
                     for s in self._agg_columns
                 ],
-                data_dtypes=[s.dtype for s in self._agg_columns],
+                data_fields=[s._internal.data_fields[0] for s in self._agg_columns],
             )
         else:
             internal = self._psdf._internal.with_filter(cond)
@@ -2467,7 +2500,10 @@ class GroupBy(object, metaclass=ABCMeta):
             spark_frame=sdf,
             index_spark_columns=[scol_for(sdf, col) for col in groupkey_names],
             index_names=[psser._column_label for psser in self._groupkeys],
-            index_dtypes=[psser.dtype for psser in self._groupkeys],
+            index_fields=[
+                psser._internal.data_fields[0].copy(name=name)
+                for psser, name in zip(self._groupkeys, groupkey_names)
+            ],
             column_labels=column_labels,
             data_spark_columns=[scol_for(sdf, col) for col in data_columns],
             column_label_names=self._psdf._internal.column_label_names,
@@ -2773,7 +2809,7 @@ class DataFrameGroupBy(GroupBy):
             spark_frame=sdf,
             column_labels=column_labels,
             data_spark_columns=[scol_for(sdf, col) for col in data_columns],
-            data_dtypes=None,
+            data_fields=None,
         )
 
         # Cast columns to ``"float64"`` to match `pandas.DataFrame.groupby`.
@@ -2947,12 +2983,19 @@ class SeriesGroupBy(GroupBy):
                 [psser._column_label for psser in self._groupkeys]
                 + self._psdf._internal.index_names
             ),
-            index_dtypes=(
-                [psser.dtype for psser in self._groupkeys] + self._psdf._internal.index_dtypes
+            index_fields=(
+                [
+                    psser._internal.data_fields[0].copy(name=name)
+                    for psser, name in zip(self._groupkeys, groupkey_col_names)
+                ]
+                + [
+                    field.copy(name=SPARK_INDEX_NAME_FORMAT(i + len(self._groupkeys)))
+                    for i, field in enumerate(self._psdf._internal.index_fields)
+                ]
             ),
             column_labels=[self._psser._column_label],
             data_spark_columns=[scol_for(sdf, self._psser._internal.data_spark_column_names[0])],
-            data_dtypes=[self._psser.dtype],
+            data_fields=[self._psser._internal.data_fields[0]],
         )
         return first_series(DataFrame(internal))
 
@@ -3025,12 +3068,19 @@ class SeriesGroupBy(GroupBy):
                 [psser._column_label for psser in self._groupkeys]
                 + self._psdf._internal.index_names
             ),
-            index_dtypes=(
-                [psser.dtype for psser in self._groupkeys] + self._psdf._internal.index_dtypes
+            index_fields=(
+                [
+                    psser._internal.data_fields[0].copy(name=name)
+                    for psser, name in zip(self._groupkeys, groupkey_col_names)
+                ]
+                + [
+                    field.copy(name=SPARK_INDEX_NAME_FORMAT(i + len(self._groupkeys)))
+                    for i, field in enumerate(self._psdf._internal.index_fields)
+                ]
             ),
             column_labels=[self._psser._column_label],
             data_spark_columns=[scol_for(sdf, self._psser._internal.data_spark_column_names[0])],
-            data_dtypes=[self._psser.dtype],
+            data_fields=[self._psser._internal.data_fields[0]],
         )
         return first_series(DataFrame(internal))
 
@@ -3093,7 +3143,10 @@ class SeriesGroupBy(GroupBy):
             spark_frame=sdf,
             index_spark_columns=[scol_for(sdf, col) for col in groupkey_names],
             index_names=[psser._column_label for psser in groupkeys],
-            index_dtypes=[psser.dtype for psser in groupkeys],
+            index_fields=[
+                psser._internal.data_fields[0].copy(name=name)
+                for psser, name in zip(groupkeys, groupkey_names)
+            ],
             column_labels=[self._agg_columns[0]._column_label],
             data_spark_columns=[scol_for(sdf, agg_column)],
         )

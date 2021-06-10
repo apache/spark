@@ -20,11 +20,86 @@ package org.apache.spark.sql.execution.streaming.state
 import java.io._
 import java.nio.charset.Charset
 
+import scala.language.implicitConversions
+
 import org.apache.commons.io.FileUtils
+import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark._
+import org.apache.spark.sql.catalyst.util.quietly
+import org.apache.spark.sql.execution.streaming.CreateAtomicTestManager
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.util.Utils
 
 class RocksDBSuite extends SparkFunSuite {
+
+  test("RocksDBFileManager: upload only new immutable files") {
+    withTempDir { dir =>
+      val dfsRootDir = dir.getAbsolutePath
+      val fileManager = new RocksDBFileManager(
+        dfsRootDir, Utils.createTempDir(), new Configuration)
+      val sstDir = s"$dfsRootDir/SSTs"
+      def numRemoteSSTFiles: Int = listFiles(sstDir).length
+      val logDir = s"$dfsRootDir/logs"
+      def numRemoteLogFiles: Int = listFiles(logDir).length
+
+      // Save a version of checkpoint files
+      val cpFiles1 = Seq(
+        "sst-file1.sst" -> 10,
+        "sst-file2.sst" -> 20,
+        "other-file1" -> 100,
+        "other-file2" -> 200,
+        "archive/00001.log" -> 1000,
+        "archive/00002.log" -> 2000
+      )
+      saveCheckpointFiles(fileManager, cpFiles1, version = 1, numKeys = 101)
+      assert(numRemoteSSTFiles == 2) // 2 sst files copied
+      assert(numRemoteLogFiles == 2) // 2 log files copied
+
+      // Save SAME version again with different checkpoint files and verify
+      val cpFiles1_ = Seq(
+        "sst-file1.sst" -> 10, // same SST file as before, should not get copied
+        "sst-file2.sst" -> 25, // new SST file with same name as before, but different length
+        "sst-file3.sst" -> 30, // new SST file
+        "other-file1" -> 100, // same non-SST file as before, should not get copied
+        "other-file2" -> 210, // new non-SST file with same name as before, but different length
+        "other-file3" -> 300, // new non-SST file
+        "archive/00001.log" -> 1000, // same log file as before, should not get copied
+        "archive/00002.log" -> 2500, // new log file with same name as before, but different length
+        "archive/00003.log" -> 3000 // new log file
+      )
+      saveCheckpointFiles(fileManager, cpFiles1_, version = 1, numKeys = 1001)
+      assert(numRemoteSSTFiles === 4, "shouldn't copy same files again") // 2 old + 2 new SST files
+      assert(numRemoteLogFiles === 4, "shouldn't copy same files again") // 2 old + 2 new log files
+
+      // Save another version and verify
+      val cpFiles2 = Seq(
+        "sst-file4.sst" -> 40,
+        "other-file4" -> 400,
+        "archive/00004.log" -> 4000
+      )
+      saveCheckpointFiles(fileManager, cpFiles2, version = 2, numKeys = 1501)
+      assert(numRemoteSSTFiles === 5) // 1 new file over earlier 4 files
+      assert(numRemoteLogFiles === 5) // 1 new file over earlier 4 files
+    }
+  }
+
+  test("RocksDBFileManager: error writing [version].zip cancels the output stream") {
+    quietly {
+      val hadoopConf = new Configuration()
+      hadoopConf.set(
+        SQLConf.STREAMING_CHECKPOINT_FILE_MANAGER_CLASS.parent.key,
+        classOf[CreateAtomicTestManager].getName)
+      val dfsRootDir = Utils.createTempDir().getAbsolutePath
+      val fileManager = new RocksDBFileManager(dfsRootDir, Utils.createTempDir(), hadoopConf)
+      val cpFiles = Seq("sst-file1.sst" -> 10, "sst-file2.sst" -> 20, "other-file1" -> 100)
+      CreateAtomicTestManager.shouldFailInCreateAtomic = true
+      intercept[IOException] {
+        saveCheckpointFiles(fileManager, cpFiles, version = 1, numKeys = 101)
+      }
+      assert(CreateAtomicTestManager.cancelCalledInCreateAtomic)
+    }
+  }
 
   test("checkpoint metadata serde roundtrip") {
     def checkJsonRoundtrip(metadata: RocksDBCheckpointMetadata, json: String): Unit = {
@@ -54,4 +129,30 @@ class RocksDBSuite extends SparkFunSuite {
       """{"sstFiles":[{"localFileName":"00001.sst","dfsSstFileName":"00001-uuid.sst","sizeBytes":12345678901234}],"logFiles":[{"localFileName":"00001.log","dfsLogFileName":"00001-uuid.log","sizeBytes":12345678901234}],"numKeys":12345678901234}""")
     // scalastyle:on line.size.limit
   }
+
+  def generateFiles(dir: String, fileToLengths: Seq[(String, Int)]): Unit = {
+    fileToLengths.foreach { case (fileName, length) =>
+      val file = new File(dir, fileName)
+      FileUtils.write(file, "a" * length)
+    }
+  }
+
+  def saveCheckpointFiles(
+      fileManager: RocksDBFileManager,
+      fileToLengths: Seq[(String, Int)],
+      version: Int,
+      numKeys: Int): Unit = {
+    val checkpointDir = Utils.createTempDir().getAbsolutePath // local dir to create checkpoints
+    generateFiles(checkpointDir, fileToLengths)
+    fileManager.saveCheckpointToDfs(checkpointDir, version, numKeys)
+  }
+
+  implicit def toFile(path: String): File = new File(path)
+
+  def listFiles(file: File): Seq[File] = {
+    if (!file.exists()) return Seq.empty
+    file.listFiles.filter(file => !file.getName.endsWith("crc") && !file.isDirectory)
+  }
+
+  def listFiles(file: String): Seq[File] = listFiles(new File(file))
 }

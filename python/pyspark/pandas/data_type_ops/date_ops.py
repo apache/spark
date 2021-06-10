@@ -37,7 +37,7 @@ class DateOps(DataTypeOps):
 
     @property
     def pretty_name(self) -> str:
-        return 'dates'
+        return "dates"
 
     def sub(self, left, right) -> Union["Series", "Index"]:
         # Note that date subtraction casts arguments to integer. This is to mimic pandas's

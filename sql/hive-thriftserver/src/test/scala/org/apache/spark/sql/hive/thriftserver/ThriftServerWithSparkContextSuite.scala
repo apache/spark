@@ -20,7 +20,7 @@ package org.apache.spark.sql.hive.thriftserver
 import java.sql.SQLException
 import java.util.concurrent.atomic.AtomicBoolean
 
-import org.apache.hive.service.cli.HiveSQLException
+import org.apache.hive.service.cli.{HiveSQLException, OperationHandle}
 
 import org.apache.spark.TaskKilled
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd}
@@ -125,9 +125,23 @@ trait ThriftServerWithSparkContextSuite extends SharedThriftServer {
     withCLIServiceClient(clientUser) { client =>
       val sessionHandle = client.openSession(clientUser, "")
       val confOverlay = new java.util.HashMap[java.lang.String, java.lang.String]
-      val opHandle = client.executeStatement(sessionHandle, sql, confOverlay)
-      val rowSet = client.fetchResults(opHandle)
-      assert(rowSet.toTRowSet.getColumns.get(0).getStringVal.getValues.get(0) === clientUser)
+      val exec: String => OperationHandle = client.executeStatement(sessionHandle, _, confOverlay)
+
+      exec(s"set ${SQLConf.ANSI_ENABLED.key}=false")
+
+      val opHandle1 = exec("select current_user(), current_user")
+      val rowSet1 = client.fetchResults(opHandle1)
+      rowSet1.toTRowSet.getColumns.forEach { col =>
+        assert(col.getStringVal.getValues.get(0) === clientUser)
+      }
+
+      exec(s"set ${SQLConf.ANSI_ENABLED.key}=true")
+      val opHandle2 = exec("select current_user")
+      assert(client.fetchResults(opHandle2).toTRowSet.getColumns.get(0)
+        .getStringVal.getValues.get(0) === clientUser)
+
+      val e = intercept[HiveSQLException](exec("select current_user()"))
+      assert(e.getMessage.contains("current_user"))
     }
   }
 }

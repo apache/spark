@@ -1,6 +1,6 @@
-===============================
-Working with pandas and PySpark
-===============================
+=====================================
+From/to pandas and PySpark DataFrames
+=====================================
 
 .. currentmodule:: pyspark.pandas
 

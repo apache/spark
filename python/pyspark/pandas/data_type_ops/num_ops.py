@@ -46,7 +46,7 @@ class NumericOps(DataTypeOps):
 
     @property
     def pretty_name(self) -> str:
-        return 'numerics'
+        return "numerics"
 
     def add(self, left, right) -> Union["Series", "Index"]:
         if (
@@ -109,45 +109,49 @@ class NumericOps(DataTypeOps):
     def radd(self, left, right) -> Union["Series", "Index"]:
         if isinstance(right, str):
             raise TypeError("string addition can only be applied to string series or literals.")
-        if not isinstance(right, numbers.Number) or isinstance(right, bool):
+        if not isinstance(right, numbers.Number):
             raise TypeError("addition can not be applied to given types.")
-
+        right = transform_boolean_operand_to_numeric(right)
         return column_op(Column.__radd__)(left, right)
 
     def rsub(self, left, right) -> Union["Series", "Index"]:
         if isinstance(right, str):
             raise TypeError("subtraction can not be applied to string series or literals.")
-        if not isinstance(right, numbers.Number) or isinstance(right, bool):
+        if not isinstance(right, numbers.Number):
             raise TypeError("subtraction can not be applied to given types.")
+        right = transform_boolean_operand_to_numeric(right)
         return column_op(Column.__rsub__)(left, right)
 
     def rmul(self, left, right) -> Union["Series", "Index"]:
         if isinstance(right, str):
             raise TypeError("multiplication can not be applied to a string literal.")
-        if not isinstance(right, numbers.Number) or isinstance(right, bool):
+        if not isinstance(right, numbers.Number):
             raise TypeError("multiplication can not be applied to given types.")
+        right = transform_boolean_operand_to_numeric(right)
         return column_op(Column.__rmul__)(left, right)
 
     def rpow(self, left, right) -> Union["Series", "Index"]:
         if isinstance(right, str):
             raise TypeError("exponentiation can not be applied on string series or literals.")
-        if not isinstance(right, numbers.Number) or isinstance(right, bool):
+        if not isinstance(right, numbers.Number):
             raise TypeError("exponentiation can not be applied to given types.")
 
         def rpow_func(left, right):
             return F.when(F.lit(right == 1), right).otherwise(Column.__rpow__(left, right))
 
+        right = transform_boolean_operand_to_numeric(right)
         return column_op(rpow_func)(left, right)
 
     def rmod(self, left, right) -> Union["Series", "Index"]:
         if isinstance(right, str):
             raise TypeError("modulo can not be applied on string series or literals.")
-        if not isinstance(right, numbers.Number) or isinstance(right, bool):
+        if not isinstance(right, numbers.Number):
             raise TypeError("modulo can not be applied to given types.")
 
         def rmod(left, right):
             return ((right % left) + left) % left
 
+        right = transform_boolean_operand_to_numeric(right)
         return column_op(rmod)(left, right)
 
 
@@ -159,7 +163,7 @@ class IntegralOps(NumericOps):
 
     @property
     def pretty_name(self) -> str:
-        return 'integrals'
+        return "integrals"
 
     def mul(self, left, right) -> Union["Series", "Index"]:
         if isinstance(right, str):
@@ -211,9 +215,7 @@ class IntegralOps(NumericOps):
             return F.when(F.lit(right is np.nan), np.nan).otherwise(
                 F.when(
                     F.lit(right != 0) | F.lit(right).isNull(), F.floor(left.__div__(right))
-                ).otherwise(
-                    F.lit(np.inf).__div__(left)
-                )
+                ).otherwise(F.lit(np.inf).__div__(left))
             )
 
         return numpy_column_op(floordiv)(left, right)
@@ -221,7 +223,7 @@ class IntegralOps(NumericOps):
     def rtruediv(self, left, right) -> Union["Series", "Index"]:
         if isinstance(right, str):
             raise TypeError("division can not be applied on string series or literals.")
-        if not isinstance(right, numbers.Number) or isinstance(right, bool):
+        if not isinstance(right, numbers.Number):
             raise TypeError("division can not be applied to given types.")
 
         def rtruediv(left, right):
@@ -229,12 +231,13 @@ class IntegralOps(NumericOps):
                 F.lit(right).__truediv__(left)
             )
 
+        right = transform_boolean_operand_to_numeric(right, left.spark.data_type)
         return numpy_column_op(rtruediv)(left, right)
 
     def rfloordiv(self, left, right) -> Union["Series", "Index"]:
         if isinstance(right, str):
             raise TypeError("division can not be applied on string series or literals.")
-        if not isinstance(right, numbers.Number) or isinstance(right, bool):
+        if not isinstance(right, numbers.Number):
             raise TypeError("division can not be applied to given types.")
 
         def rfloordiv(left, right):
@@ -242,6 +245,7 @@ class IntegralOps(NumericOps):
                 F.floor(F.lit(right).__div__(left))
             )
 
+        right = transform_boolean_operand_to_numeric(right, left.spark.data_type)
         return numpy_column_op(rfloordiv)(left, right)
 
 
@@ -253,7 +257,7 @@ class FractionalOps(NumericOps):
 
     @property
     def pretty_name(self) -> str:
-        return 'fractions'
+        return "fractions"
 
     def mul(self, left, right) -> Union["Series", "Index"]:
         if isinstance(right, str):
@@ -316,7 +320,7 @@ class FractionalOps(NumericOps):
     def rtruediv(self, left, right) -> Union["Series", "Index"]:
         if isinstance(right, str):
             raise TypeError("division can not be applied on string series or literals.")
-        if not isinstance(right, numbers.Number) or isinstance(right, bool):
+        if not isinstance(right, numbers.Number):
             raise TypeError("division can not be applied to given types.")
 
         def rtruediv(left, right):
@@ -324,12 +328,13 @@ class FractionalOps(NumericOps):
                 F.lit(right).__truediv__(left)
             )
 
+        right = transform_boolean_operand_to_numeric(right, left.spark.data_type)
         return numpy_column_op(rtruediv)(left, right)
 
     def rfloordiv(self, left, right) -> Union["Series", "Index"]:
         if isinstance(right, str):
             raise TypeError("division can not be applied on string series or literals.")
-        if not isinstance(right, numbers.Number) or isinstance(right, bool):
+        if not isinstance(right, numbers.Number):
             raise TypeError("division can not be applied to given types.")
 
         def rfloordiv(left, right):
@@ -337,4 +342,5 @@ class FractionalOps(NumericOps):
                 F.when(F.lit(left) == np.nan, np.nan).otherwise(F.floor(F.lit(right).__div__(left)))
             )
 
+        right = transform_boolean_operand_to_numeric(right, left.spark.data_type)
         return numpy_column_op(rfloordiv)(left, right)
