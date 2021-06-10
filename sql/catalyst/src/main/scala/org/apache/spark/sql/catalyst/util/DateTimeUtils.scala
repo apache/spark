@@ -378,6 +378,11 @@ object DateTimeUtils {
       throw QueryExecutionErrors.cannotCastUTF8StringToDataTypeError(s, TimestampType)
     }
   }
+  // See issue SPARK-35679
+  // LongMinValueDividedByMicroPerSecond is equal to
+  // Math.floorDiv(Long.MinValue, MICROS_PER_SECOND)
+  // which is -9223372036855L
+  private final val LongMinValueDividedByMicroPerSecond = -9223372036855L
 
   /**
    * Gets the number of microseconds since the epoch of 1970-01-01 00:00:00Z from the given
@@ -386,9 +391,7 @@ object DateTimeUtils {
    */
   def instantToMicros(instant: Instant): Long = {
     val secs = instant.getEpochSecond
-    // See issue SPARK-35679
-    // Math.floorDiv(Long.MinValue, MICROS_PER_SECOND) is equal to -9223372036855L
-    if (secs == -9223372036855L) {
+    if (secs == LongMinValueDividedByMicroPerSecond) {
       val us = Math.multiplyExact(secs + 1, MICROS_PER_SECOND)
       Math.addExact(us, NANOSECONDS.toMicros(instant.getNano) - MICROS_PER_SECOND)
     } else {
