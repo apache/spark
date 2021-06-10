@@ -802,7 +802,7 @@ class AnalysisErrorSuite extends AnalysisTest {
     val error = intercept[AnalysisException] {
       SimpleAnalyzer.checkAnalysis(plan)
     }
-    assert(error.message.contains("Hint not found: some_random_hint_that_does_not_exist"))
+    assert(error.message.contains(s"Hint not found: ${hintName}"))
 
     // UnresolvedHint be removed by batch `Remove Unresolved Hints`
     assertAnalysisSuccess(plan, true)
