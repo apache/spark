@@ -23,7 +23,6 @@ from pandas.api.types import CategoricalDtype
 
 import pyspark.pandas as ps
 from pyspark.pandas.data_type_ops.base import DataTypeOps
-from pyspark.pandas.internal import InternalField
 from pyspark.pandas.typedef import Dtype, pandas_on_spark_type
 from pyspark.sql import functions as F
 
