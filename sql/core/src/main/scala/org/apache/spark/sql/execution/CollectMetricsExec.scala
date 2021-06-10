@@ -94,6 +94,6 @@ object CollectMetricsExec {
       case tableScan: InMemoryTableScanExec =>
         CollectMetricsExec.collect(tableScan.relation.cachedPlan)
     }
-    metrics reduce (_ ++ _)
+    metrics.reduceOption(_ ++ _).getOrElse(Map.empty)
   }
 }
