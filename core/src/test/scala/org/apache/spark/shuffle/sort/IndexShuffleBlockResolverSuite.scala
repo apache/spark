@@ -77,7 +77,7 @@ class IndexShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterEa
     } {
       out.close()
     }
-    resolver.writeIndexFileAndCommit(shuffleId, mapId, lengths, dataTmp)
+    resolver.writeMetadataFileAndCommit(shuffleId, mapId, lengths, Array.empty, dataTmp)
 
     val indexFile = new File(tempDir.getAbsolutePath, idxName)
     val dataFile = resolver.getDataFile(shuffleId, mapId)
@@ -97,7 +97,7 @@ class IndexShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterEa
     } {
       out2.close()
     }
-    resolver.writeIndexFileAndCommit(shuffleId, mapId, lengths2, dataTmp2)
+    resolver.writeMetadataFileAndCommit(shuffleId, mapId, lengths2, Array.empty, dataTmp2)
 
     assert(indexFile.length() === (lengths.length + 1) * 8)
     assert(lengths2.toSeq === lengths.toSeq)
@@ -136,7 +136,7 @@ class IndexShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterEa
     } {
       out3.close()
     }
-    resolver.writeIndexFileAndCommit(shuffleId, mapId, lengths3, dataTmp3)
+    resolver.writeMetadataFileAndCommit(shuffleId, mapId, lengths3, Array.empty, dataTmp3)
     assert(indexFile.length() === (lengths3.length + 1) * 8)
     assert(lengths3.toSeq != lengths.toSeq)
     assert(dataFile.exists())
@@ -251,8 +251,10 @@ class IndexShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterEa
 
   test("write checksum file") {
     val resolver = new IndexShuffleBlockResolver(conf, blockManager)
+    val dataTmp = File.createTempFile("shuffle", null, tempDir)
+    val indexInMemory = Array[Long](0, 1, 2, 3, 4, 5, 6, 7, 8, 9)
     val checksumsInMemory = Array[Long](0, 1, 2, 3, 4, 5, 6, 7, 8, 9)
-    resolver.writeChecksumFile(0, 0, checksumsInMemory)
+    resolver.writeMetadataFileAndCommit(0, 0, indexInMemory, checksumsInMemory, dataTmp)
     val checksumFile = resolver.getChecksumFile(0, 0)
     assert(checksumFile.exists())
     val checksumsFromFile = resolver.getChecksums(checksumFile, 10)

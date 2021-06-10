@@ -312,32 +312,54 @@ private[spark] class IndexShuffleBlockResolver(
 
 
   /**
-   * Write an index file with the offsets of each block, plus a final offset at the end for the
-   * end of the output file. This will be used by getBlockData to figure out where each block
-   * begins and ends.
+   * Commit the data and metadata files as an atomic operation, use the existing ones, or
+   * replace them with new ones. Note that the metadata parameters (`lengths`, `checksums`)
+   * will be updated to match the existing ones if use the existing ones.
    *
-   * It will commit the data and index file as an atomic operation, use the existing ones, or
-   * replace them with new ones.
+   * There're two kinds of metadata files:
    *
-   * Note: the `lengths` will be updated to match the existing index file if use the existing ones.
+   * - index file
+   * An index file contains the offsets of each block, plus a final offset at the end
+   * for the end of the output file. It will be used by [[getBlockData]] to figure out
+   * where each block begins and ends.
+   *
+   * - checksum file (optional)
+   * An checksum file contains the checksum of each block. It will be used to diagnose
+   * the cause when a block is corrupted. Note that empty `checksums` indicate that
+   * checksum is disabled.
    */
-  def writeIndexFileAndCommit(
+  def writeMetadataFileAndCommit(
       shuffleId: Int,
       mapId: Long,
       lengths: Array[Long],
+      checksums: Array[Long],
       dataTmp: File): Unit = {
     val indexFile = getIndexFile(shuffleId, mapId)
     val indexTmp = Utils.tempFileWith(indexFile)
+
+    val checksumEnabled = checksums.nonEmpty
+    val (checksumFileOpt, checksumTmpOpt) = if (checksumEnabled) {
+      assert(lengths.length == checksums.length,
+        "The size of partition lengths and checksums should be equal")
+      val checksumFile = getChecksumFile(shuffleId, mapId)
+      (Some(checksumFile), Some(Utils.tempFileWith(checksumFile)))
+    } else {
+      (None, None)
+    }
+
     try {
       val dataFile = getDataFile(shuffleId, mapId)
       // There is only one IndexShuffleBlockResolver per executor, this synchronization make sure
       // the following check and rename are atomic.
       this.synchronized {
         val existingLengths = checkIndexAndDataFile(indexFile, dataFile, lengths.length)
-        if (existingLengths != null) {
+        val existingChecksums =
+          checksumFileOpt.map(getChecksums(_, checksums.length)).getOrElse(checksums)
+        if (existingLengths != null && existingChecksums != null) {
           // Another attempt for the same task has already written our map outputs successfully,
           // so just use the existing partition lengths and delete our temporary map outputs.
           System.arraycopy(existingLengths, 0, lengths, 0, lengths.length)
+          System.arraycopy(existingChecksums, 0, checksums, 0, lengths.length)
           if (dataTmp != null && dataTmp.exists()) {
             dataTmp.delete()
           }
@@ -369,12 +391,40 @@ private[spark] class IndexShuffleBlockResolver(
           if (dataTmp != null && dataTmp.exists() && !dataTmp.renameTo(dataFile)) {
             throw new IOException("fail to rename file " + dataTmp + " to " + dataFile)
           }
+
+          // write the checksum file
+          checksumTmpOpt.zip(checksumFileOpt).foreach { case (checksumTmp, checksumFile) =>
+            val out = new DataOutputStream(
+              new BufferedOutputStream(
+                new FileOutputStream(checksumTmp)
+              )
+            )
+            Utils.tryWithSafeFinally {
+              checksums.foreach(out.writeLong)
+            } {
+              out.close()
+            }
+
+            if (checksumFile.exists()) {
+              checksumFile.delete()
+            }
+            if (!checksumTmp.renameTo(checksumFile)) {
+              // It's not worthwhile to fail here after index file and data file are already
+              // successfully stored due to checksum is only used for the corner error case.
+              logWarning("fail to rename file " + checksumTmp + " to " + checksumFile)
+            }
+          }
         }
       }
     } finally {
       logDebug(s"Shuffle index for mapId $mapId: ${lengths.mkString("[", ",", "]")}")
       if (indexTmp.exists() && !indexTmp.delete()) {
         logError(s"Failed to delete temporary index file at ${indexTmp.getAbsolutePath}")
+      }
+      checksumTmpOpt.foreach { checksumTmp =>
+        if (checksumTmp.exists() && !checksumTmp.delete()) {
+          logError(s"Failed to delete temporary checksum file at ${checksumTmp.getAbsolutePath}")
+        }
       }
     }
   }
@@ -461,37 +511,6 @@ private[spark] class IndexShuffleBlockResolver(
       }
   }
 
-  def writeChecksumFile(shuffleId: Int, mapId: Long, checksums: Array[Long]): Unit = synchronized {
-    val checksumFile = getChecksumFile(shuffleId, mapId)
-    val checksumTmp = Utils.tempFileWith(checksumFile)
-    val existingChecksums = getChecksums(checksumFile, checksums.length)
-    if (existingChecksums != null) {
-      // Another attempt for the same task has already written our checksum file successfully,
-      // so just use the existing checksums.
-      System.arraycopy(existingChecksums, 0, checksums, 0, checksums.length)
-    } else {
-      val out = new DataOutputStream(
-        new BufferedOutputStream(
-          new FileOutputStream(checksumTmp)
-        )
-      )
-      Utils.tryWithSafeFinally {
-        checksums.foreach(out.writeLong)
-      } {
-        out.close()
-      }
-
-      if (checksumFile.exists()) {
-        checksumFile.delete()
-      }
-      if (!checksumTmp.renameTo(checksumFile)) {
-        // It's not worthwhile to fail here after index file and data file are already
-        // successfully stored due to checksum is only used for the corner error case.
-        logWarning("fail to rename file " + checksumTmp + " to " + checksumFile)
-      }
-    }
-  }
-
   override def getBlockData(
       blockId: BlockId,
       dirs: Option[Array[String]]): ManagedBuffer = {
@@ -544,10 +563,4 @@ private[spark] object IndexShuffleBlockResolver {
   // The disk store currently expects puts to relate to a (map, reduce) pair, but in the sort
   // shuffle outputs for several reduces are glommed into a single file.
   val NOOP_REDUCE_ID = 0
-
-  @volatile private var _blockResolver: IndexShuffleBlockResolver = _
-
-  def set(resolver: IndexShuffleBlockResolver): Unit = _blockResolver = resolver
-
-  def get: IndexShuffleBlockResolver = _blockResolver
 }

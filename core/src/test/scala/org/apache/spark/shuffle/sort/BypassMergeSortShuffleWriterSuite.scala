@@ -79,18 +79,16 @@ class BypassMergeSortShuffleWriterSuite
     when(blockManager.diskBlockManager).thenReturn(diskBlockManager)
     when(taskContext.taskMemoryManager()).thenReturn(taskMemoryManager)
 
-    IndexShuffleBlockResolver.set(blockResolver)
-    when(blockResolver.writeIndexFileAndCommit(
-      anyInt, anyLong, any(classOf[Array[Long]]), any(classOf[File])))
+    when(blockResolver.writeMetadataFileAndCommit(
+      anyInt, anyLong, any(classOf[Array[Long]]), any(classOf[Array[Long]]), any(classOf[File])))
       .thenAnswer { invocationOnMock =>
-        val tmp = invocationOnMock.getArguments()(3).asInstanceOf[File]
+        val tmp = invocationOnMock.getArguments()(4).asInstanceOf[File]
         if (tmp != null) {
           outputFile.delete
           tmp.renameTo(outputFile)
         }
         null
       }
-    doNothing().when(blockResolver).writeChecksumFile(any(), any(), any(classOf[Array[Long]]))
 
     when(blockManager.getDiskWriter(
       any[BlockId],
@@ -244,7 +242,6 @@ class BypassMergeSortShuffleWriterSuite
 
   test("write checksum file") {
     val blockResolver = new IndexShuffleBlockResolver(conf, blockManager)
-    IndexShuffleBlockResolver.set(blockResolver)
     val shuffleId = shuffleHandle.shuffleId
     val mapId = 0
     val checksumBlockId = ShuffleChecksumBlockId(shuffleId, mapId, 0)

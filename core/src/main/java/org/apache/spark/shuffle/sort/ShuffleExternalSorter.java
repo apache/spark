@@ -24,7 +24,6 @@ import java.util.LinkedList;
 import java.util.zip.Adler32;
 import java.util.zip.Checksum;
 
-import org.apache.spark.shuffle.IndexShuffleBlockResolver;
 import scala.Tuple2;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -154,12 +153,17 @@ final class ShuffleExternalSorter extends MemoryConsumer {
     }
   }
 
-  public void writeChecksumFile() {
-    long[] checksums = new long[numPartitions];
-    for (int i = 0; i < numPartitions; i ++) {
-      checksums[i] = partitionChecksums[i].getValue();
+  public long[] getChecksums() {
+    long[] checksums;
+    if (checksumEnabled) {
+      checksums = new long[numPartitions];
+      for (int i = 0; i < numPartitions; i ++) {
+        checksums[i] = partitionChecksums[i].getValue();
+      }
+    } else {
+      checksums = new long[0];
     }
-    IndexShuffleBlockResolver.get().writeChecksumFile(shuffleId, mapId, checksums);
+    return checksums;
   }
 
   /**

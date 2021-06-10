@@ -27,7 +27,6 @@ import java.util.zip.Adler32;
 import java.util.zip.Checksum;
 import javax.annotation.Nullable;
 
-import org.apache.spark.shuffle.IndexShuffleBlockResolver;
 import scala.None$;
 import scala.Option;
 import scala.Product2;
@@ -141,7 +140,7 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
         .createMapOutputWriter(shuffleId, mapId, numPartitions);
     try {
       if (!records.hasNext()) {
-        partitionLengths = mapOutputWriter.commitAllPartitions().getPartitionLengths();
+        partitionLengths = mapOutputWriter.commitAllPartitions(new long[0]).getPartitionLengths();
         mapStatus = MapStatus$.MODULE$.apply(
           blockManager.shuffleServerId(), partitionLengths, mapId);
         return;
@@ -180,13 +179,6 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       }
 
       partitionLengths = writePartitionedData(mapOutputWriter);
-      if (checksumEnabled) {
-        long[] checksums = new long[numPartitions];
-        for (int i = 0; i < numPartitions; i ++) {
-          checksums[i] = partitionChecksums[i].getValue();
-        }
-        IndexShuffleBlockResolver.get().writeChecksumFile(shuffleId, mapId, checksums);
-      }
       mapStatus = MapStatus$.MODULE$.apply(
         blockManager.shuffleServerId(), partitionLengths, mapId);
     } catch (Exception e) {
@@ -241,7 +233,16 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       }
       partitionWriters = null;
     }
-    return mapOutputWriter.commitAllPartitions().getPartitionLengths();
+    long[] checksums;
+    if (checksumEnabled) {
+      checksums = new long[numPartitions];
+      for (int i = 0; i < numPartitions; i ++) {
+        checksums[i] = partitionChecksums[i].getValue();
+      }
+    } else {
+      checksums = new long[0];
+    }
+    return mapOutputWriter.commitAllPartitions(checksums).getPartitionLengths();
   }
 
   private void writePartitionedDataWithChannel(

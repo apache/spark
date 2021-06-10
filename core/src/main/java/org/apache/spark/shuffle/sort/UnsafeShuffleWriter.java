@@ -223,7 +223,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     final SpillInfo[] spills = sorter.closeAndGetSpills();
     try {
       partitionLengths = mergeSpills(spills);
-      sorter.writeChecksumFile();
+      sorter.getChecksums();
       sorter = null;
     } finally {
       for (SpillInfo spill : spills) {
@@ -270,7 +270,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     if (spills.length == 0) {
       final ShuffleMapOutputWriter mapWriter = shuffleExecutorComponents
           .createMapOutputWriter(shuffleId, mapId, partitioner.numPartitions());
-      return mapWriter.commitAllPartitions().getPartitionLengths();
+      return mapWriter.commitAllPartitions(new long[0]).getPartitionLengths();
     } else if (spills.length == 1) {
       Optional<SingleSpillShuffleMapOutputWriter> maybeSingleFileWriter =
           shuffleExecutorComponents.createSingleFileMapOutputWriter(shuffleId, mapId);
@@ -280,7 +280,8 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
         partitionLengths = spills[0].partitionLengths;
         logger.debug("Merge shuffle spills for mapId {} with length {}", mapId,
             partitionLengths.length);
-        maybeSingleFileWriter.get().transferMapSpillFile(spills[0].file, partitionLengths);
+        maybeSingleFileWriter.get()
+          .transferMapSpillFile(spills[0].file, partitionLengths, sorter.getChecksums());
       } else {
         partitionLengths = mergeSpillsUsingStandardWriter(spills);
       }
@@ -333,7 +334,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       // to be counted as shuffle write, but this will lead to double-counting of the final
       // SpillInfo's bytes.
       writeMetrics.decBytesWritten(spills[spills.length - 1].file.length());
-      partitionLengths = mapWriter.commitAllPartitions().getPartitionLengths();
+      partitionLengths = mapWriter.commitAllPartitions(sorter.getChecksums()).getPartitionLengths();
     } catch (Exception e) {
       try {
         mapWriter.abort(e);

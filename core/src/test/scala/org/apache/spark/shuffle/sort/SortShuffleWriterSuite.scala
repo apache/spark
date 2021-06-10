@@ -33,8 +33,6 @@ import org.apache.spark.storage.BlockManager
 import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.ExternalSorter
 
-
-
 class SortShuffleWriterSuite
   extends SparkFunSuite
     with SharedSparkContext
@@ -70,7 +68,6 @@ class SortShuffleWriterSuite
     }
     shuffleExecutorComponents = new LocalDiskShuffleExecutorComponents(
       conf, blockManager, shuffleBlockResolver)
-    IndexShuffleBlockResolver.set(shuffleBlockResolver)
   }
 
   override def afterAll(): Unit = {
@@ -152,7 +149,6 @@ class SortShuffleWriterSuite
       conf.set("spark.hadoop.fs.file.impl", classOf[DebugFilesystem].getName)
       val localSC = new SparkContext("local[4]", "test", conf)
       val shuffleBlockResolver = new IndexShuffleBlockResolver(conf)
-      IndexShuffleBlockResolver.set(shuffleBlockResolver)
       val context = MemoryTestingUtils.fakeTaskContext(localSC.env)
       val records = List[(Int, Int)](
         (0, 1), (1, 2), (0, 2), (1, 3), (2, 3), (3, 4), (4, 5), (3, 5), (4, 6))

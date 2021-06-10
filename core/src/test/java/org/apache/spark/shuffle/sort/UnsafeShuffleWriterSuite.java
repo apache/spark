@@ -132,14 +132,11 @@ public class UnsafeShuffleWriterSuite implements ShuffleChecksumTester {
         );
       });
 
-    IndexShuffleBlockResolver.set(shuffleBlockResolver);
-    doNothing().when(shuffleBlockResolver)
-      .writeChecksumFile(anyInt(), anyLong(), any(long[].class));
     when(shuffleBlockResolver.getDataFile(anyInt(), anyLong())).thenReturn(mergedOutputFile);
 
     Answer<?> renameTempAnswer = invocationOnMock -> {
       partitionSizesInMergedFile = (long[]) invocationOnMock.getArguments()[2];
-      File tmp = (File) invocationOnMock.getArguments()[3];
+      File tmp = (File) invocationOnMock.getArguments()[4];
       if (!mergedOutputFile.delete()) {
         throw new RuntimeException("Failed to delete old merged output file.");
       }
@@ -153,11 +150,13 @@ public class UnsafeShuffleWriterSuite implements ShuffleChecksumTester {
 
     doAnswer(renameTempAnswer)
         .when(shuffleBlockResolver)
-        .writeIndexFileAndCommit(anyInt(), anyLong(), any(long[].class), any(File.class));
+        .writeMetadataFileAndCommit(
+          anyInt(), anyLong(), any(long[].class), any(long[].class), any(File.class));
 
     doAnswer(renameTempAnswer)
         .when(shuffleBlockResolver)
-        .writeIndexFileAndCommit(anyInt(), anyLong(), any(long[].class), eq(null));
+        .writeMetadataFileAndCommit(
+          anyInt(), anyLong(), any(long[].class), any(long[].class), eq(null));
 
     when(diskBlockManager.createTempShuffleBlock()).thenAnswer(invocationOnMock -> {
       TempShuffleBlockId blockId = new TempShuffleBlockId(UUID.randomUUID());
@@ -301,7 +300,6 @@ public class UnsafeShuffleWriterSuite implements ShuffleChecksumTester {
   @Test
   public void writeChecksumFileWithoutSpill() throws Exception {
     IndexShuffleBlockResolver blockResolver = new IndexShuffleBlockResolver(conf, blockManager);
-    IndexShuffleBlockResolver.set(blockResolver);
     File checksumFile = new File(tempDir, "checksum");
     File dataFile = new File(tempDir, "data");
     File indexFile = new File(tempDir, "index");
@@ -328,7 +326,6 @@ public class UnsafeShuffleWriterSuite implements ShuffleChecksumTester {
   @Test
   public void writeChecksumFileWithSpill() throws Exception {
     IndexShuffleBlockResolver blockResolver = new IndexShuffleBlockResolver(conf, blockManager);
-    IndexShuffleBlockResolver.set(blockResolver);
     File checksumFile = new File(tempDir, "checksum");
     File dataFile = new File(tempDir, "data");
     File indexFile = new File(tempDir, "index");

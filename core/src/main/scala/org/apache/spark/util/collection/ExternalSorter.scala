@@ -31,7 +31,7 @@ import org.apache.spark._
 import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.serializer._
-import org.apache.spark.shuffle.{IndexShuffleBlockResolver, ShufflePartitionPairsWriter}
+import org.apache.spark.shuffle.{ShufflePartitionPairsWriter}
 import org.apache.spark.shuffle.api.{ShuffleMapOutputWriter, ShufflePartitionWriter}
 import org.apache.spark.storage.{BlockId, DiskBlockObjectWriter, ShuffleBlockId}
 import org.apache.spark.util.{CompletionIterator, Utils => TryUtils}
@@ -148,6 +148,14 @@ private[spark] class ExternalSorter[K, V, C](
     Array.fill[Checksum](numPartitions)(new Adler32())
   } else {
     Array.empty
+  }
+
+  def getChecksums: Array[Long] = {
+    if (checksumEnabled) {
+      partitionChecksums.map(_.getValue)
+    } else {
+      Array.empty
+    }
   }
 
   // A comparator for keys K that orders them within a partition to allow aggregation or sorting.
@@ -810,11 +818,6 @@ private[spark] class ExternalSorter[K, V, C](
         }
         nextPartitionId = id + 1
       }
-    }
-
-    if (checksumEnabled) {
-      IndexShuffleBlockResolver.get.writeChecksumFile(
-        shuffleId, mapId, partitionChecksums.map(_.getValue))
     }
 
     context.taskMetrics().incMemoryBytesSpilled(memoryBytesSpilled)
