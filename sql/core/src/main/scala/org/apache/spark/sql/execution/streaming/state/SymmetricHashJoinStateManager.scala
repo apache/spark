@@ -205,9 +205,6 @@ class SymmetricHashJoinStateManager(
       private var index: Long = 0L
       private var valueRemoved: Boolean = false
 
-      // Unsafe row to internal row projection for key of `keyWithIndexToValue`.
-      lazy private val keyProjection = SafeProjection.create(keySchema.add("index", LongType))
-
       // Push the data for the current key to the numValues store, and reset the tracking variables
       // to their empty state.
       private def updateNumValueForCurrentKey(): Unit = {
@@ -278,7 +275,7 @@ class SymmetricHashJoinStateManager(
             keyWithIndexToValue.put(currentKey, index, valuePairAtMaxIndex.value,
               valuePairAtMaxIndex.matched)
           } else {
-            val projectedKey = keyProjection(currentKey)
+            val projectedKey = getInternalRowOfKeyWithIndex(currentKey)
             logWarning(s"`keyWithIndexToValue` returns a null value for index ${numValues - 1} " +
               s"at current key $projectedKey.")
           }
@@ -293,6 +290,12 @@ class SymmetricHashJoinStateManager(
       override def close(): Unit = {}
     }
   }
+
+  // Unsafe row to internal row projection for key of `keyWithIndexToValue`.
+  lazy private val keyProjection = SafeProjection.create(keySchema)
+
+  /** Projects the key of unsafe row to internal row for printable log message. */
+  def getInternalRowOfKeyWithIndex(currentKey: UnsafeRow): InternalRow = keyProjection(currentKey)
 
   /** Commit all the changes to all the state stores */
   def commit(): Unit = {
