@@ -17,11 +17,13 @@
 
 import datetime
 import decimal
+from distutils.version import LooseVersion
 
 import numpy as np
 import pandas as pd
 
 import pyspark.pandas as ps
+from pyspark.pandas.typedef import extension_dtypes
 
 
 class TestCasesUtils(object):
@@ -64,6 +66,10 @@ class TestCasesUtils(object):
         return pssers
 
     @property
+    def non_numeric_pser_psser_pairs(self):
+        return zip(self.non_numeric_psers.values(), self.non_numeric_pssers.values())
+
+    @property
     def pssers(self):
         return self.numeric_pssers + list(self.non_numeric_pssers.values())
 
@@ -74,3 +80,10 @@ class TestCasesUtils(object):
     @property
     def pser_psser_pairs(self):
         return zip(self.psers, self.pssers)
+
+    def check_extension(self, psser, pser):
+        if LooseVersion("1.1") <= LooseVersion(pd.__version__) < LooseVersion("1.2.2"):
+            self.assert_eq(psser, pser, check_exact=False)
+            self.assertTrue(isinstance(psser.dtype, extension_dtypes))
+        else:
+            self.assert_eq(psser, pser)

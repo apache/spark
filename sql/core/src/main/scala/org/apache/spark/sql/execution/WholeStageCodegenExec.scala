@@ -934,6 +934,10 @@ case class CollapseCodegenStages(
         // Do not make LogicalTableScanExec the root of WholeStageCodegen
         // to support the fast driver-local collect/take paths.
         plan
+      case plan: CommandResultExec =>
+        // Do not make CommandResultExec the root of WholeStageCodegen
+        // to support the fast driver-local collect/take paths.
+        plan
       case plan: CodegenSupport if supportCodegen(plan) =>
         // The whole-stage-codegen framework is row-based. If a plan supports columnar execution,
         // it can't support whole-stage-codegen at the same time.

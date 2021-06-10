@@ -183,6 +183,18 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
 
   import testImplicits._
 
+  private def waitUntilBatchProcessed(clock: StreamManualClock) = AssertOnQuery { q =>
+    eventually(Timeout(streamingTimeout)) {
+      if (!q.exception.isDefined) {
+        assert(clock.isStreamWaitingAt(clock.getTimeMillis()))
+      }
+    }
+    if (q.exception.isDefined) {
+      throw q.exception.get
+    }
+    true
+  }
+
   test("(de)serialization of initial offsets") {
     val topic = newTopic()
     testUtils.createTopic(topic, partitions = 5)
@@ -257,39 +269,27 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
 
     val clock = new StreamManualClock
 
-    val waitUntilBatchProcessed = AssertOnQuery { q =>
-      eventually(Timeout(streamingTimeout)) {
-        if (!q.exception.isDefined) {
-          assert(clock.isStreamWaitingAt(clock.getTimeMillis()))
-        }
-      }
-      if (q.exception.isDefined) {
-        throw q.exception.get
-      }
-      true
-    }
-
     testStream(mapped)(
       StartStream(Trigger.ProcessingTime(100), clock),
-      waitUntilBatchProcessed,
+      waitUntilBatchProcessed(clock),
       // 1 from smallest, 1 from middle, 8 from biggest
       CheckAnswer(1, 10, 100, 101, 102, 103, 104, 105, 106, 107),
       AdvanceManualClock(100),
-      waitUntilBatchProcessed,
+      waitUntilBatchProcessed(clock),
       // smallest now empty, 1 more from middle, 9 more from biggest
       CheckAnswer(1, 10, 100, 101, 102, 103, 104, 105, 106, 107,
         11, 108, 109, 110, 111, 112, 113, 114, 115, 116
       ),
       StopStream,
       StartStream(Trigger.ProcessingTime(100), clock),
-      waitUntilBatchProcessed,
+      waitUntilBatchProcessed(clock),
       // smallest now empty, 1 more from middle, 9 more from biggest
       CheckAnswer(1, 10, 100, 101, 102, 103, 104, 105, 106, 107,
         11, 108, 109, 110, 111, 112, 113, 114, 115, 116,
         12, 117, 118, 119, 120, 121, 122, 123, 124, 125
       ),
       AdvanceManualClock(100),
-      waitUntilBatchProcessed,
+      waitUntilBatchProcessed(clock),
       // smallest now empty, 1 more from middle, 9 more from biggest
       CheckAnswer(1, 10, 100, 101, 102, 103, 104, 105, 106, 107,
         11, 108, 109, 110, 111, 112, 113, 114, 115, 116,
@@ -300,6 +300,197 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
 
     // When Trigger.Once() is used, the read limit should be ignored
     val allData = Seq(1) ++ (10 to 20) ++ (100 to 200)
+    withTempDir { dir =>
+      testStream(mapped)(
+        StartStream(Trigger.Once(), checkpointLocation = dir.getCanonicalPath),
+        AssertOnQuery { q =>
+          q.processAllAvailable()
+          true
+        },
+        CheckAnswer(allData: _*),
+        StopStream,
+
+        AddKafkaData(Set(topic), 1000 to 1010: _*),
+        StartStream(Trigger.Once(), checkpointLocation = dir.getCanonicalPath),
+        AssertOnQuery { q =>
+          q.processAllAvailable()
+          true
+        },
+        CheckAnswer((allData ++ 1000.to(1010)): _*)
+      )
+    }
+  }
+
+  test("minOffsetsPerTrigger") {
+    val topic = newTopic()
+    testUtils.createTopic(topic, partitions = 3)
+    testUtils.sendMessages(topic, (100 to 109).map(_.toString).toArray, Some(0))
+    testUtils.sendMessages(topic, (10 to 14).map(_.toString).toArray, Some(1))
+    testUtils.sendMessages(topic, Array("1"), Some(2))
+
+    val reader = spark
+      .readStream
+      .format("kafka")
+      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+      .option("kafka.metadata.max.age.ms", "1")
+      .option("minOffsetsPerTrigger", 15)
+      .option("maxTriggerDelay", "5s")
+      .option("subscribe", topic)
+      .option("startingOffsets", "earliest")
+    val kafka = reader.load()
+      .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+      .as[(String, String)]
+    val mapped: org.apache.spark.sql.Dataset[_] = kafka.map(kv => kv._2.toInt)
+
+    val clock = new StreamManualClock
+
+    testStream(mapped)(
+      StartStream(Trigger.ProcessingTime(100), clock),
+      waitUntilBatchProcessed(clock),
+      // First Batch is always processed
+      CheckAnswer(1, 10, 100, 101, 102, 103, 104, 105, 106, 107,
+        11, 108, 109, 12, 13, 14),
+      // Adding more data but less than minOffsetsPerTrigger
+      Assert {
+        testUtils.sendMessages(topic, (15 to 20).map(_.toString).toArray, Some(1))
+        true
+      },
+      // No data is processed for next batch as data is less than minOffsetsPerTrigger
+      // and maxTriggerDelay is not expired
+      AdvanceManualClock(100),
+      waitUntilBatchProcessed(clock),
+      CheckNewAnswer(),
+      Assert {
+        testUtils.sendMessages(topic, (110 to 120).map(_.toString).toArray, Some(0))
+        testUtils.sendMessages(topic, Array("2"), Some(2))
+        true
+      },
+      AdvanceManualClock(100),
+      waitUntilBatchProcessed(clock),
+      // Running batch now as number of records is greater than minOffsetsPerTrigger
+      CheckAnswer(1, 10, 100, 101, 102, 103, 104, 105, 106, 107,
+        11, 108, 109, 110, 111, 112, 113, 114, 115, 116,
+        12, 117, 118, 119, 120, 13, 14, 15, 16, 17, 18, 19, 2, 20),
+      // Testing maxTriggerDelay
+      // Adding more data but less than minOffsetsPerTrigger
+      Assert {
+        testUtils.sendMessages(topic, (121 to 125).map(_.toString).toArray, Some(0))
+        testUtils.sendMessages(topic, (21 to 25).map(_.toString).toArray, Some(1))
+        true
+      },
+      // No data is processed for next batch till maxTriggerDelay is expired
+      AdvanceManualClock(100),
+      waitUntilBatchProcessed(clock),
+      CheckNewAnswer(),
+      // Sleeping for 5s to let maxTriggerDelay expire
+      Assert {
+        Thread.sleep(5 * 1000)
+        true
+      },
+      AdvanceManualClock(100),
+      // Running batch as maxTriggerDelay is expired
+      waitUntilBatchProcessed(clock),
+      CheckAnswer(1, 10, 100, 101, 102, 103, 104, 105, 106, 107,
+        11, 108, 109, 110, 111, 112, 113, 114, 115, 116,
+        12, 117, 118, 119, 120, 121, 122, 123, 124, 125,
+        13, 14, 15, 16, 17, 18, 19, 2, 20, 21, 22, 23, 24, 25)
+    )
+    // When Trigger.Once() is used, the read limit should be ignored
+    val allData = Seq(1, 2) ++ (10 to 25) ++ (100 to 125)
+    withTempDir { dir =>
+      testStream(mapped)(
+        StartStream(Trigger.Once(), checkpointLocation = dir.getCanonicalPath),
+        AssertOnQuery { q =>
+          q.processAllAvailable()
+          true
+        },
+        CheckAnswer(allData: _*),
+        StopStream,
+
+        AddKafkaData(Set(topic), 1000 to 1010: _*),
+        StartStream(Trigger.Once(), checkpointLocation = dir.getCanonicalPath),
+        AssertOnQuery { q =>
+          q.processAllAvailable()
+          true
+        },
+        CheckAnswer((allData ++ 1000.to(1010)): _*)
+      )
+    }
+  }
+
+  test("compositeReadLimit") {
+    val topic = newTopic()
+    testUtils.createTopic(topic, partitions = 3)
+    testUtils.sendMessages(topic, (100 to 120).map(_.toString).toArray, Some(0))
+    testUtils.sendMessages(topic, (10 to 20).map(_.toString).toArray, Some(1))
+    testUtils.sendMessages(topic, Array("1"), Some(2))
+
+    val reader = spark
+      .readStream
+      .format("kafka")
+      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+      .option("kafka.metadata.max.age.ms", "1")
+      .option("minOffsetsPerTrigger", 15)
+      .option("maxTriggerDelay", "5s")
+      .option("maxOffsetsPerTrigger", 20)
+      .option("subscribe", topic)
+      .option("startingOffsets", "earliest")
+    val kafka = reader.load()
+      .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+      .as[(String, String)]
+    val mapped: org.apache.spark.sql.Dataset[_] = kafka.map(kv => kv._2.toInt)
+
+    val clock = new StreamManualClock
+
+    testStream(mapped)(
+      StartStream(Trigger.ProcessingTime(100), clock),
+      waitUntilBatchProcessed(clock),
+      // First Batch is always processed but it will process only 20
+      CheckAnswer(1, 10, 100, 101, 102, 103, 104, 105, 106, 107,
+        11, 108, 109, 110, 111,
+        12, 13, 14, 15),
+      // Pending data is less than minOffsetsPerTrigger
+      // No data is processed for next batch as data is less than minOffsetsPerTrigger
+      // and maxTriggerDelay is not expired
+      AdvanceManualClock(100),
+      waitUntilBatchProcessed(clock),
+      CheckNewAnswer(),
+      Assert {
+        testUtils.sendMessages(topic, (121 to 128).map(_.toString).toArray, Some(0))
+        testUtils.sendMessages(topic, (21 to 30).map(_.toString).toArray, Some(1))
+        testUtils.sendMessages(topic, Array("2"), Some(2))
+        true
+      },
+      AdvanceManualClock(100),
+      waitUntilBatchProcessed(clock),
+      // Running batch now as number of new records is greater than minOffsetsPerTrigger
+      // but reading limited data as per maxOffsetsPerTrigger
+      CheckAnswer(1, 10, 100, 101, 102, 103, 104, 105, 106, 107,
+        11, 108, 109, 110, 111, 112, 113, 114, 115, 116,
+        12, 117, 118, 119, 120, 121,
+        13, 14, 15, 16, 17, 18, 19, 2, 20, 21, 22, 23, 24),
+
+      // Testing maxTriggerDelay
+      // No data is processed for next batch till maxTriggerDelay is expired
+      AdvanceManualClock(100),
+      waitUntilBatchProcessed(clock),
+      CheckNewAnswer(),
+      // Sleeping for 5s to let maxTriggerDelay expire
+      Assert {
+        Thread.sleep(5 * 1000)
+        true
+      },
+      AdvanceManualClock(100),
+      // Running batch as maxTriggerDelay is expired
+      waitUntilBatchProcessed(clock),
+      CheckAnswer(1, 10, 100, 101, 102, 103, 104, 105, 106, 107,
+        11, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119,
+        12, 120, 121, 122, 123, 124, 125, 126, 127, 128,
+        13, 14, 15, 16, 17, 18, 19, 2, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30)
+    )
+
+    // When Trigger.Once() is used, the read limit should be ignored
+    val allData = Seq(1, 2) ++ (10 to 30) ++ (100 to 128)
     withTempDir { dir =>
       testStream(mapped)(
         StartStream(Trigger.Once(), checkpointLocation = dir.getCanonicalPath),
@@ -653,38 +844,26 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
 
     val clock = new StreamManualClock
 
-    val waitUntilBatchProcessed = AssertOnQuery { q =>
-      eventually(Timeout(streamingTimeout)) {
-        if (!q.exception.isDefined) {
-          assert(clock.isStreamWaitingAt(clock.getTimeMillis()))
-        }
-      }
-      if (q.exception.isDefined) {
-        throw q.exception.get
-      }
-      true
-    }
-
     testStream(kafka)(
       StartStream(Trigger.ProcessingTime(100), clock),
-      waitUntilBatchProcessed,
+      waitUntilBatchProcessed(clock),
       // 5 from smaller topic, 5 from bigger one
       CheckLastBatch((0 to 4) ++ (100 to 104): _*),
       AdvanceManualClock(100),
-      waitUntilBatchProcessed,
+      waitUntilBatchProcessed(clock),
       // 5 from smaller topic, 5 from bigger one
       CheckLastBatch((5 to 9) ++ (105 to 109): _*),
       AdvanceManualClock(100),
-      waitUntilBatchProcessed,
+      waitUntilBatchProcessed(clock),
       // smaller topic empty, 5 from bigger one
       CheckLastBatch(110 to 114: _*),
       StopStream,
       StartStream(Trigger.ProcessingTime(100), clock),
-      waitUntilBatchProcessed,
+      waitUntilBatchProcessed(clock),
       // smallest now empty, 5 from bigger one
       CheckLastBatch(115 to 119: _*),
       AdvanceManualClock(100),
-      waitUntilBatchProcessed,
+      waitUntilBatchProcessed(clock),
       // smallest now empty, 5 from bigger one
       CheckLastBatch(120 to 124: _*)
     )

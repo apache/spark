@@ -49,6 +49,8 @@ class NumOpsTest(PandasOnSparkTestCase, TestCasesUtils):
             self.assert_eq(pser + 1, psser + 1)
             # self.assert_eq(pser + 0.1, psser + 0.1)
             self.assert_eq(pser + pser.astype(bool), psser + psser.astype(bool))
+            self.assert_eq(pser + True, psser + True)
+            self.assert_eq(pser + False, psser + False)
 
         with option_context("compute.ops_on_diff_frames", True):
             for pser, psser in self.numeric_pser_psser_pairs:
@@ -61,14 +63,14 @@ class NumOpsTest(PandasOnSparkTestCase, TestCasesUtils):
                     pser + self.non_numeric_psers["bool"],
                 )
 
-        self.assertRaises(TypeError, lambda: self.float_psser + True)
-
     def test_sub(self):
         for pser, psser in self.numeric_pser_psser_pairs:
             self.assert_eq(pser - pser, psser - psser)
             self.assert_eq(pser - 1, psser - 1)
             # self.assert_eq(pser - 0.1, psser - 0.1)
             self.assert_eq(pser - pser.astype(bool), psser - psser.astype(bool))
+            self.assert_eq(pser - True, psser - True)
+            self.assert_eq(pser - False, psser - False)
 
         with option_context("compute.ops_on_diff_frames", True):
             for pser, psser in self.numeric_pser_psser_pairs:
@@ -81,12 +83,12 @@ class NumOpsTest(PandasOnSparkTestCase, TestCasesUtils):
                     pser - self.non_numeric_psers["bool"],
                 )
 
-        self.assertRaises(TypeError, lambda: self.float_psser - True)
-
     def test_mul(self):
         for pser, psser in self.numeric_pser_psser_pairs:
             self.assert_eq(pser * pser, psser * psser)
             self.assert_eq(pser * pser.astype(bool), psser * psser.astype(bool))
+            self.assert_eq(pser * True, psser * True)
+            self.assert_eq(pser * False, psser * False)
 
         with option_context("compute.ops_on_diff_frames", True):
             for pser, psser in self.numeric_pser_psser_pairs:
@@ -105,13 +107,13 @@ class NumOpsTest(PandasOnSparkTestCase, TestCasesUtils):
                     pser * self.non_numeric_psers["bool"],
                 )
 
-        self.assertRaises(TypeError, lambda: self.float_psser * True)
-
     def test_truediv(self):
         for pser, psser in self.numeric_pser_psser_pairs:
             if psser.dtype in [float, int, np.int32]:
                 self.assert_eq(pser / pser, psser / psser)
                 self.assert_eq(pser / pser.astype(bool), psser / psser.astype(bool))
+                self.assert_eq(pser / True, psser / True)
+                self.assert_eq(pser / False, psser / False)
 
         with option_context("compute.ops_on_diff_frames", True):
             for pser, psser in self.numeric_pser_psser_pairs:
@@ -124,13 +126,13 @@ class NumOpsTest(PandasOnSparkTestCase, TestCasesUtils):
                 self.float_pser / self.non_numeric_psers["bool"],
             )
 
-        self.assertRaises(TypeError, lambda: self.float_psser / True)
-
     def test_floordiv(self):
         for pser, psser in self.numeric_pser_psser_pairs:
             if psser.dtype == float:
                 self.assert_eq(pser // pser, psser // psser)
                 self.assert_eq(pser // pser.astype(bool), psser // psser.astype(bool))
+                self.assert_eq(pser // True, psser // True)
+                self.assert_eq(pser // False, psser // False)
 
         with option_context("compute.ops_on_diff_frames", True):
             for pser, psser in self.numeric_pser_psser_pairs:
@@ -151,12 +153,17 @@ class NumOpsTest(PandasOnSparkTestCase, TestCasesUtils):
                     ps.Series([1.0, 2.0, np.inf]),
                 )
 
-        self.assertRaises(TypeError, lambda: self.float_psser // True)
-
     def test_mod(self):
         for pser, psser in self.numeric_pser_psser_pairs:
             self.assert_eq(pser % pser, psser % psser)
             self.assert_eq(pser % pser.astype(bool), psser % psser.astype(bool))
+            self.assert_eq(pser % True, psser % True)
+            if psser.dtype in [int, np.int32]:
+                self.assert_eq(ps.Series([np.nan, np.nan, np.nan], dtype=float), psser % False)
+            else:
+                self.assert_eq(
+                    ps.Series([np.nan, np.nan, np.nan], dtype=psser.dtype), psser % False
+                )
 
         with option_context("compute.ops_on_diff_frames", True):
             for pser, psser in self.numeric_pser_psser_pairs:
@@ -169,13 +176,13 @@ class NumOpsTest(PandasOnSparkTestCase, TestCasesUtils):
                 self.float_pser % self.non_numeric_psers["bool"],
             )
 
-        self.assertRaises(TypeError, lambda: self.float_psser % True)
-
     def test_pow(self):
         for pser, psser in self.numeric_pser_psser_pairs:
             if psser.dtype == float:
                 self.assert_eq(pser ** pser, psser ** psser)
                 self.assert_eq(pser ** pser.astype(bool), psser ** psser.astype(bool))
+                self.assert_eq(pser ** True, psser ** True)
+                self.assert_eq(pser ** False, psser ** False)
 
         with option_context("compute.ops_on_diff_frames", True):
             for pser, psser in self.numeric_pser_psser_pairs:
@@ -190,14 +197,13 @@ class NumOpsTest(PandasOnSparkTestCase, TestCasesUtils):
                 self.float_pser ** self.non_numeric_psers["bool"],
             )
 
-        self.assertRaises(TypeError, lambda: self.float_psser ** True)
-
     def test_radd(self):
         for pser, psser in self.numeric_pser_psser_pairs:
             self.assert_eq(1 + pser, 1 + psser)
             # self.assert_eq(0.1 + pser, 0.1 + psser)
             self.assertRaises(TypeError, lambda: "x" + psser)
-            self.assertRaises(TypeError, lambda: True + psser)
+            self.assert_eq(True + pser, True + psser)
+            self.assert_eq(False + pser, False + psser)
             self.assertRaises(TypeError, lambda: datetime.date(1994, 1, 1) + psser)
             self.assertRaises(TypeError, lambda: datetime.datetime(1994, 1, 1) + psser)
 
@@ -206,7 +212,8 @@ class NumOpsTest(PandasOnSparkTestCase, TestCasesUtils):
             self.assert_eq(1 - pser, 1 - psser)
             # self.assert_eq(0.1 - pser, 0.1 - psser)
             self.assertRaises(TypeError, lambda: "x" - psser)
-            self.assertRaises(TypeError, lambda: True - psser)
+            self.assert_eq(True - pser, True - psser)
+            self.assert_eq(False - pser, False - psser)
             self.assertRaises(TypeError, lambda: datetime.date(1994, 1, 1) - psser)
             self.assertRaises(TypeError, lambda: datetime.datetime(1994, 1, 1) - psser)
 
@@ -215,7 +222,8 @@ class NumOpsTest(PandasOnSparkTestCase, TestCasesUtils):
             self.assert_eq(1 * pser, 1 * psser)
             # self.assert_eq(0.1 * pser, 0.1 * psser)
             self.assertRaises(TypeError, lambda: "x" * psser)
-            self.assertRaises(TypeError, lambda: True * psser)
+            self.assert_eq(True * pser, True * psser)
+            self.assert_eq(False * pser, False * psser)
             self.assertRaises(TypeError, lambda: datetime.date(1994, 1, 1) * psser)
             self.assertRaises(TypeError, lambda: datetime.datetime(1994, 1, 1) * psser)
 
@@ -223,8 +231,9 @@ class NumOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         for pser, psser in self.numeric_pser_psser_pairs:
             # self.assert_eq(5 / pser, 5 / psser)
             # self.assert_eq(0.1 / pser, 0.1 / psser)
-            self.assertRaises(TypeError, lambda: "x" + psser)
-            self.assertRaises(TypeError, lambda: True + psser)
+            self.assertRaises(TypeError, lambda: "x" / psser)
+            self.assert_eq((True / pser).astype(float), True / psser, check_exact=False)
+            self.assert_eq((False / pser).astype(float), False / psser)
             self.assertRaises(TypeError, lambda: datetime.date(1994, 1, 1) / psser)
             self.assertRaises(TypeError, lambda: datetime.datetime(1994, 1, 1) / psser)
 
@@ -233,7 +242,8 @@ class NumOpsTest(PandasOnSparkTestCase, TestCasesUtils):
             # self.assert_eq(5 // pser, 5 // psser)
             # self.assert_eq(0.1 // pser, 0.1 // psser)
             self.assertRaises(TypeError, lambda: "x" // psser)
-            self.assertRaises(TypeError, lambda: True // psser)
+            self.assert_eq((True // pser).astype(float), True // psser)
+            self.assert_eq((False // pser).astype(float), False // psser)
             self.assertRaises(TypeError, lambda: datetime.date(1994, 1, 1) // psser)
             self.assertRaises(TypeError, lambda: datetime.datetime(1994, 1, 1) // psser)
 
@@ -242,7 +252,8 @@ class NumOpsTest(PandasOnSparkTestCase, TestCasesUtils):
             # self.assert_eq(1 ** pser, 1 ** psser)
             # self.assert_eq(0.1 ** pser, 0.1 ** psser)
             self.assertRaises(TypeError, lambda: "x" ** psser)
-            self.assertRaises(TypeError, lambda: True ** psser)
+            self.assert_eq((True ** pser).astype(float), True ** psser)
+            self.assert_eq((False ** pser).astype(float), False ** psser)
             self.assertRaises(TypeError, lambda: datetime.date(1994, 1, 1) ** psser)
             self.assertRaises(TypeError, lambda: datetime.datetime(1994, 1, 1) ** psser)
 
@@ -250,14 +261,42 @@ class NumOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         for pser, psser in self.numeric_pser_psser_pairs:
             self.assert_eq(1 % pser, 1 % psser)
             # self.assert_eq(0.1 % pser, 0.1 % psser)
-            self.assertRaises(TypeError, lambda: True % psser)
+            self.assert_eq(True % pser, True % psser)
+            self.assert_eq(False % pser, False % psser)
             self.assertRaises(TypeError, lambda: datetime.date(1994, 1, 1) % psser)
             self.assertRaises(TypeError, lambda: datetime.datetime(1994, 1, 1) % psser)
+
+    def test_and(self):
+        psser = self.numeric_pssers[0]
+        self.assertRaises(TypeError, lambda: psser & True)
+        self.assertRaises(TypeError, lambda: psser & False)
+        self.assertRaises(TypeError, lambda: psser & psser)
+
+    def test_rand(self):
+        psser = self.numeric_pssers[0]
+        self.assertRaises(TypeError, lambda: True & psser)
+        self.assertRaises(TypeError, lambda: False & psser)
+
+    def test_or(self):
+        psser = self.numeric_pssers[0]
+        self.assertRaises(TypeError, lambda: psser | True)
+        self.assertRaises(TypeError, lambda: psser | False)
+        self.assertRaises(TypeError, lambda: psser | psser)
+
+    def test_ror(self):
+        psser = self.numeric_pssers[0]
+        self.assertRaises(TypeError, lambda: True | psser)
+        self.assertRaises(TypeError, lambda: False | psser)
+
+    def test_from_to_pandas(self):
+        for pser, psser in self.numeric_pser_psser_pairs:
+            self.assert_eq(pser, psser.to_pandas())
+            self.assert_eq(ps.from_pandas(pser), psser)
 
 
 if __name__ == "__main__":
     import unittest
-    from pyspark.pandas.tests.data_type_ops.test_string_ops import *  # noqa: F401
+    from pyspark.pandas.tests.data_type_ops.test_num_ops import *  # noqa: F401
 
     try:
         import xmlrunner  # type: ignore[import]

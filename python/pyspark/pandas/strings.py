@@ -2053,12 +2053,16 @@ class StringMethods(object):
             raise NotImplementedError("expand=True is currently only supported with n > 0.")
 
         # type hint does not support to specify array type yet.
+        return_type = ArrayType(StringType(), containsNull=True)
         pudf = pandas_udf(
             lambda s, *_: s.str.split(pat, n),
-            returnType=ArrayType(StringType(), containsNull=True),
+            returnType=return_type,
             functionType=PandasUDFType.SCALAR,
         )
-        psser = self._data._with_new_scol(pudf(self._data.spark.column), dtype=self._data.dtype)
+        psser = self._data._with_new_scol(
+            pudf(self._data.spark.column).alias(self._data._internal.data_spark_column_names[0]),
+            field=self._data._internal.data_fields[0].copy(spark_type=return_type, nullable=True),
+        )
 
         if expand:
             psdf = psser.to_frame()
@@ -2068,7 +2072,10 @@ class StringMethods(object):
             internal = psdf._internal.with_new_columns(
                 spark_columns,
                 column_labels=cast(Optional[List], column_labels),
-                data_dtypes=([self._data.dtype] * len(column_labels)),
+                data_fields=[
+                    self._data._internal.data_fields[0].copy(name=str(i), nullable=True)
+                    for i in range(n + 1)
+                ],
             )
             return DataFrame(internal)
         else:
@@ -2193,12 +2200,16 @@ class StringMethods(object):
             raise NotImplementedError("expand=True is currently only supported with n > 0.")
 
         # type hint does not support to specify array type yet.
+        return_type = ArrayType(StringType(), containsNull=True)
         pudf = pandas_udf(
             lambda s, *_: s.str.rsplit(pat, n),
-            returnType=ArrayType(StringType(), containsNull=True),
+            returnType=return_type,
             functionType=PandasUDFType.SCALAR,
         )
-        psser = self._data._with_new_scol(pudf(self._data.spark.column), dtype=self._data.dtype)
+        psser = self._data._with_new_scol(
+            pudf(self._data.spark.column).alias(self._data._internal.data_spark_column_names[0]),
+            field=self._data._internal.data_fields[0].copy(spark_type=return_type, nullable=True),
+        )
 
         if expand:
             psdf = psser.to_frame()
@@ -2208,7 +2219,10 @@ class StringMethods(object):
             internal = psdf._internal.with_new_columns(
                 spark_columns,
                 column_labels=cast(Optional[List], column_labels),
-                data_dtypes=([self._data.dtype] * len(column_labels)),
+                data_fields=[
+                    self._data._internal.data_fields[0].copy(name=str(i), nullable=True)
+                    for i in range(n + 1)
+                ],
             )
             return DataFrame(internal)
         else:
