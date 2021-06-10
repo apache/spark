@@ -1210,8 +1210,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       case TimestampWithoutTZType =>
         (c, evPrim, evNull) =>
           // scalastyle:off line.size.limit
-          code"""$evPrim =
-            org.apache.spark.sql.catalyst.util.DateTimeUtils.microsToDays($c, java.time.ZoneOffset.UTC);"""
+          code"$evPrim = org.apache.spark.sql.catalyst.util.DateTimeUtils.microsToDays($c, java.time.ZoneOffset.UTC);"
           // scalastyle:on line.size.limit
       case _ =>
         (c, evPrim, evNull) => code"$evNull = true;"
