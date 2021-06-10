@@ -109,14 +109,14 @@ case object DayTimeIntervalType extends AbstractDataType {
   override private[sql] def simpleString: String = defaultConcreteType.simpleString
 
   def dayTimeIntervalTypes(): Seq[DayTimeIntervalType] = Seq(
-    DayTimeIntervalType(DAY, SECOND),
-    DayTimeIntervalType(DAY, MINUTE),
-    DayTimeIntervalType(DAY, HOUR),
     DayTimeIntervalType(DAY, DAY),
-    DayTimeIntervalType(HOUR, SECOND),
+    DayTimeIntervalType(DAY, HOUR),
+    DayTimeIntervalType(DAY, MINUTE),
+    DayTimeIntervalType(DAY, SECOND),
+    DayTimeIntervalType(HOUR, HOUR),
     DayTimeIntervalType(HOUR, MINUTE),
     DayTimeIntervalType(HOUR, SECOND),
-    DayTimeIntervalType(MINUTE, SECOND),
     DayTimeIntervalType(MINUTE, MINUTE),
+    DayTimeIntervalType(MINUTE, SECOND),
     DayTimeIntervalType(SECOND, SECOND))
 }
