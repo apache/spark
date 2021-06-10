@@ -1295,10 +1295,14 @@ class IndexesTest(PandasOnSparkTestCase, TestUtils):
         pidx2 = pd.Index([3, 4, 5, 6], name="koalas")
         psidx1 = ps.from_pandas(pidx1)
         psidx2 = ps.from_pandas(pidx2)
+        # Series
+        pser = pd.Series([3, 4, 5, 6], name="koalas")
+        psser = ps.from_pandas(pser)
 
         self.assert_eq(
             psidx1.difference(psidx2).sort_values(), pidx1.difference(pidx2).sort_values()
         )
+        self.assert_eq(psidx1.difference(psser).sort_values(), pidx1.difference(pser).sort_values())
         self.assert_eq(
             psidx1.difference([3, 4, 5, 6]).sort_values(),
             pidx1.difference([3, 4, 5, 6]).sort_values(),
@@ -1333,30 +1337,37 @@ class IndexesTest(PandasOnSparkTestCase, TestUtils):
             psidx1.difference(psidx2, sort=1)
 
         # MultiIndex
-        pidx1 = pd.MultiIndex.from_tuples(
+        pmidx1 = pd.MultiIndex.from_tuples(
             [("a", "x", 1), ("b", "y", 2), ("c", "z", 3)], names=["hello", "koalas", "world"]
         )
-        pidx2 = pd.MultiIndex.from_tuples(
+        pmidx2 = pd.MultiIndex.from_tuples(
             [("a", "x", 1), ("b", "z", 2), ("k", "z", 3)], names=["hello", "koalas", "world"]
         )
-        psidx1 = ps.from_pandas(pidx1)
-        psidx2 = ps.from_pandas(pidx2)
+        psmidx1 = ps.from_pandas(pmidx1)
+        psmidx2 = ps.from_pandas(pmidx2)
 
         self.assert_eq(
-            psidx1.difference(psidx2).sort_values(), pidx1.difference(pidx2).sort_values()
+            psmidx1.difference(psmidx2).sort_values(), pmidx1.difference(pmidx2).sort_values()
         )
         self.assert_eq(
-            psidx1.difference({("a", "x", 1)}).sort_values(),
-            pidx1.difference({("a", "x", 1)}).sort_values(),
+            psmidx1.difference(psidx1).sort_values(), pmidx1.difference(pidx1).sort_values()
         )
         self.assert_eq(
-            psidx1.difference({("a", "x", 1): [1, 2, 3]}).sort_values(),
-            pidx1.difference({("a", "x", 1): [1, 2, 3]}).sort_values(),
+            psidx1.difference(psmidx1).sort_values(), pidx1.difference(pmidx1).sort_values()
+        )
+        self.assert_eq(psidx1.difference(psser).sort_values(), pidx1.difference(pser).sort_values())
+        self.assert_eq(
+            psmidx1.difference({("a", "x", 1)}).sort_values(),
+            pmidx1.difference({("a", "x", 1)}).sort_values(),
+        )
+        self.assert_eq(
+            psmidx1.difference({("a", "x", 1): [1, 2, 3]}).sort_values(),
+            pmidx1.difference({("a", "x", 1): [1, 2, 3]}).sort_values(),
         )
 
         # Exceptions for MultiIndex
         with self.assertRaisesRegex(TypeError, "other must be a MultiIndex or a list of tuples"):
-            psidx1.difference(["b", "z", "2"])
+            psmidx1.difference(["b", "z", "2"])
 
     def test_repeat(self):
         pidx = pd.Index(["a", "b", "c"])

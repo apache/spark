@@ -1992,6 +1992,16 @@ class Index(IndexOpsMixin):
         """
         from pyspark.pandas.indexes.multi import MultiIndex
 
+        if isinstance(other, Index) and not isinstance(self, type(other)):
+            if isinstance(self, MultiIndex):
+                # In case `self` is MultiIndex and `other` is Index,
+                # return MultiIndex without its names.
+                return self.rename([None] * len(self))
+            elif isinstance(self, Index):
+                # In case `self` is Index and `other` is MultiIndex,
+                # return Index without its name.
+                return self.rename(None)
+
         if not is_list_like(other):
             raise TypeError("Input must be Index or array-like")
         if not isinstance(sort, (type(None), type(True))):
@@ -2000,11 +2010,16 @@ class Index(IndexOpsMixin):
                     sort
                 )
             )
-        # Handling MultiIndex
+        # Handling MultiIndex when `other` is list-like objects.
         if isinstance(self, MultiIndex) and not isinstance(other, MultiIndex):
-            if not all([isinstance(item, tuple) for item in other]):
+            if isinstance(other, (list, set, dict)) and all(
+                [isinstance(item, tuple) for item in other]
+            ):
+                other = MultiIndex.from_tuples(other)
+            elif isinstance(other, Series):
+                other = Index(other)
+            else:
                 raise TypeError("other must be a MultiIndex or a list of tuples")
-            other = MultiIndex.from_tuples(other)
 
         if not isinstance(other, Index):
             other = Index(other)
