@@ -21,8 +21,10 @@ import java.io.File
 import java.net.{MalformedURLException, URI}
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.{CountDownLatch, Semaphore, TimeUnit}
+
 import scala.concurrent.duration._
 import scala.io.Source
+
 import com.google.common.io.Files
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
@@ -33,6 +35,7 @@ import org.json4s.{DefaultFormats, Extraction}
 import org.junit.Assert.{assertEquals, assertFalse}
 import org.scalatest.concurrent.Eventually
 import org.scalatest.matchers.must.Matchers._
+
 import org.apache.spark.TestUtils._
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Tests._
