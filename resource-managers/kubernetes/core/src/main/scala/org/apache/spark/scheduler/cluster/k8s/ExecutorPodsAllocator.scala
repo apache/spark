@@ -102,13 +102,15 @@ private[spark] class ExecutorPodsAllocator(
   @volatile private var deletedExecutorIds = Set.empty[Long]
 
   def start(applicationId: String, schedulerBackend: KubernetesClusterSchedulerBackend): Unit = {
-    // Wait until the driver pod is ready before starting executors, as the headless service won't
-    // be resolvable by DNS until the driver pod is ready.
-    Utils.tryLogNonFatalError {
-      kubernetesClient
-        .pods()
-        .withName(kubernetesDriverPodName.get)
-        .waitUntilReady(driverPodReadinessTimeout, TimeUnit.SECONDS)
+    driverPod.foreach { pod =>
+      // Wait until the driver pod is ready before starting executors, as the headless service won't
+      // be resolvable by DNS until the driver pod is ready.
+      Utils.tryLogNonFatalError {
+        kubernetesClient
+          .pods()
+          .withName(pod.getMetadata.getName)
+          .waitUntilReady(driverPodReadinessTimeout, TimeUnit.SECONDS)
+      }
     }
     snapshotsStore.addSubscriber(podAllocationDelay) {
       onNewSnapshots(applicationId, schedulerBackend, _)
