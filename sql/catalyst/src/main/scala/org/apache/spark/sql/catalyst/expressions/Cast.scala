@@ -534,6 +534,8 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       // throw valid precision more than seconds, according to Hive.
       // Timestamp.nanos is in 0 to 999,999,999, no more than a second.
       buildCast[Long](_, t => microsToDays(t, zoneId))
+    case TimestampWithoutTZType =>
+      buildCast[Long](_, t => microsToDays(t, ZoneOffset.UTC))
   }
 
   // IntervalConverter
@@ -1204,6 +1206,12 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
         (c, evPrim, evNull) =>
           code"""$evPrim =
             org.apache.spark.sql.catalyst.util.DateTimeUtils.microsToDays($c, $zid);"""
+      case TimestampWithoutTZType =>
+        (c, evPrim, evNull) =>
+          // scalastyle:off line.size.limit
+          code"""$evPrim =
+            org.apache.spark.sql.catalyst.util.DateTimeUtils.microsToDays($c, java.time.ZoneOffset.UTC);"""
+          // scalastyle:on line.size.limit
       case _ =>
         (c, evPrim, evNull) => code"$evNull = true;"
     }
