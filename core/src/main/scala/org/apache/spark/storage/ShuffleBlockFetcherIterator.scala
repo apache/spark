@@ -928,10 +928,10 @@ final class ShuffleBlockFetcherIterator(
           // this is added to numBlocksToFetch in collectFetchReqsFromMergedBlocks.
           numBlocksInFlightPerAddress(address) = numBlocksInFlightPerAddress(address) - 1
           numBlocksToFetch -= 1
-          val blocksToRequest = pushBasedFetchHelper.createChunkBlockInfosFromMetaResponse(
+          val blocksToFetch = pushBasedFetchHelper.createChunkBlockInfosFromMetaResponse(
             shuffleId, reduceId, blockSize, numChunks, bitmaps)
           val additionalRemoteReqs = new ArrayBuffer[FetchRequest]
-          collectFetchRequests(address, blocksToRequest.toSeq, additionalRemoteReqs)
+          collectFetchRequests(address, blocksToFetch.toSeq, additionalRemoteReqs)
           fetchRequests ++= additionalRemoteReqs
           // Set result to null to force another iteration.
           result = null
@@ -1069,7 +1069,9 @@ final class ShuffleBlockFetcherIterator(
 
   /**
    * Currently used by [[PushBasedFetchHelper]] to fetch fallback blocks when there is a fetch
-   * failure with a shuffle merged block/chunk.
+   * failure for a shuffle merged block/chunk.
+   * This is executed by the task thread when the `iterator.next()` is invoked and if that initiates
+   * fallback.
    */
   private[storage] def fetchFallbackBlocks(
       fallbackBlocksByAddr: Iterator[(BlockManagerId, Seq[(BlockId, Long, Int)])]): Unit = {
@@ -1096,6 +1098,8 @@ final class ShuffleBlockFetcherIterator(
   /**
    * Removes all the pending shuffle chunks that are on the same host as the block chunk that had
    * a fetch failure.
+   * This is executed by the task thread when the `iterator.next()` is invoked and if that initiates
+   * fallback.
    *
    * @return set of all the removed shuffle chunk Ids.
    */

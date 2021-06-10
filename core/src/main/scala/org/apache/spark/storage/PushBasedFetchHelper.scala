@@ -82,6 +82,18 @@ private class PushBasedFetchHelper(
     chunksMetaMap.remove(blockId)
   }
 
+  /**
+   * This is executed by the task thread when the `iterator.next()` is invoked and the iterator
+   * processes a response of type [[ShuffleBlockFetcherIterator.MergedBlocksMetaFetchResult]].
+   *
+   * @param shuffleId shuffle id.
+   * @param reduceId  reduce id.
+   * @param blockSize size of the merged block.
+   * @param numChunks number of chunks in the merged block.
+   * @param bitmaps   per chunk bitmap, where each bitmap contains all the mapIds that are merged
+   *                  to that chunk.
+   * @return  shuffle chunks to fetch.
+   */
   def createChunkBlockInfosFromMetaResponse(
       shuffleId: Int,
       reduceId: Int,
@@ -99,6 +111,13 @@ private class PushBasedFetchHelper(
     blocksToFetch
   }
 
+  /**
+   * This is executed by the task thread when the iterator is initialized and only if it has
+   * push-merged blocks for which it needs to fetch the metadata.
+   *
+   * @param req [[ShuffleBlockFetcherIterator.FetchRequest]] that only contains requests to fetch
+   *            metadata of merged blocks.
+   */
   def sendFetchMergedStatusRequest(req: FetchRequest): Unit = {
     val sizeMap = req.blocks.map {
       case FetchBlockInfo(blockId, size, _) =>
@@ -134,9 +153,13 @@ private class PushBasedFetchHelper(
     }
   }
 
-  // Fetch all outstanding merged local blocks
+  /**
+   * This is executed by the task thread when the iterator is initialized. It fetches all the
+   * outstanding merged local blocks.
+   * @param mergedLocalBlocks set of identified merged local blocks.
+   */
   def fetchAllMergedLocalBlocks(
-    mergedLocalBlocks: mutable.LinkedHashSet[BlockId]): Unit = {
+      mergedLocalBlocks: mutable.LinkedHashSet[BlockId]): Unit = {
     if (mergedLocalBlocks.nonEmpty) {
       blockManager.hostLocalDirManager.foreach(fetchMergedLocalBlocks(_, mergedLocalBlocks))
     }
@@ -229,9 +252,15 @@ private class PushBasedFetchHelper(
   }
 
   /**
-   * Initiate fetching fallback blocks for a merged block (or a merged block chunk) that's failed
-   * to fetch.
-   * It calls out to map output tracker to get the list of original blocks for the
+   * This is executed by the task thread when the `iterator.next()` is invoked and the iterator
+   * processes a response of type:
+   * 1) [[ShuffleBlockFetcherIterator.SuccessFetchResult]]
+   * 2) [[ShuffleBlockFetcherIterator.IgnoreFetchResult]]
+   * 3) [[ShuffleBlockFetcherIterator.MergedBlocksMetaFailedFetchResult]]
+   *
+   * This initiates fetching fallback blocks for a merged block (or a merged block chunk) that
+   * failed to fetch.
+   * It makes a call to the map output tracker to get the list of original blocks for the
    * given merged blocks, split them into remote and local blocks, and process them
    * accordingly.
    * The fallback happens when:
