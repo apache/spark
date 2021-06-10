@@ -1175,3 +1175,4 @@ DROP NAMESPACE query_ddl_namespace
 -- !query schema
 struct<>
 -- !query output
+
