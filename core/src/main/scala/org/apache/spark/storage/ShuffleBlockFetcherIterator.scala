@@ -379,10 +379,10 @@ final class ShuffleBlockFetcherIterator(
 
     val fallback = FallbackStorage.FALLBACK_BLOCK_MANAGER_ID.executorId
     for ((address, blockInfos) <- blocksByAddress) {
+      checkBlockSizes(blockInfos)
       if (pushBasedFetchHelper.isMergedShuffleBlockAddress(address)) {
         // These are push-based merged blocks or chunks of these merged blocks.
         if (address.host == blockManager.blockManagerId.host) {
-          checkBlockSizes(blockInfos)
           val pushMergedBlockInfos = blockInfos.map(
             info => FetchBlockInfo(info._1, info._2, info._3))
           numBlocksToFetch += pushMergedBlockInfos.size
@@ -397,7 +397,6 @@ final class ShuffleBlockFetcherIterator(
         }
       } else if (
         Seq(blockManager.blockManagerId.executorId, fallback).contains(address.executorId)) {
-        checkBlockSizes(blockInfos)
         val mergedBlockInfos = mergeContinuousShuffleBlockIdsIfNeeded(
           blockInfos.map(info => FetchBlockInfo(info._1, info._2, info._3)), doBatchFetch)
         numBlocksToFetch += mergedBlockInfos.size
@@ -405,7 +404,6 @@ final class ShuffleBlockFetcherIterator(
         localBlockBytes += mergedBlockInfos.map(_.size).sum
       } else if (blockManager.hostLocalDirManager.isDefined &&
         address.host == blockManager.blockManagerId.host) {
-        checkBlockSizes(blockInfos)
         val mergedBlockInfos = mergeContinuousShuffleBlockIdsIfNeeded(
           blockInfos.map(info => FetchBlockInfo(info._1, info._2, info._3)), doBatchFetch)
         numBlocksToFetch += mergedBlockInfos.size
@@ -492,7 +490,6 @@ final class ShuffleBlockFetcherIterator(
 
     while (iterator.hasNext) {
       val (blockId, size, mapIndex) = iterator.next()
-      assertPositiveBlockSize(blockId, size)
       curBlocks += FetchBlockInfo(blockId, size, mapIndex)
       curRequestSize += size
       blockId match {
