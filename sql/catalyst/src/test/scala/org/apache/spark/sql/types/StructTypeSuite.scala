@@ -96,6 +96,12 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
   test("SPARK-33846: round trip toDDL -> fromDDL - nested struct") {
     assert(StructType.fromDDL(nestedStruct.toDDL) == nestedStruct)
   }
+ 
+  test("SPARK-35706: making the ':' in STRUCT data type definition optional") {
+    val ddl = "`a` STRUCT<`b`: STRUCT<`c` STRING COMMENT 'Deep Nested comment'> " +
+      "COMMENT 'Nested comment'> COMMENT 'comment'"
+    assert(StructType.fromDDL(ddl) == nestedStruct)
+  }
 
   private val structWithEmptyString = new StructType()
     .add(StructField("a b", StringType).withComment("comment"))
