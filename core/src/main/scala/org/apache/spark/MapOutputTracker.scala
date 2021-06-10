@@ -1290,7 +1290,7 @@ private[spark] object MapOutputTracker extends Logging {
   private val DIRECT = 0
   private val BROADCAST = 1
 
-  private val SHUFFLE_PUSH_MAP_ID = -1
+  val SHUFFLE_PUSH_MAP_ID = -1
 
   // Serialize an array of map/merge output locations into an efficient byte format so that we can
   // send it to reduce tasks. We do this by compressing the serialized bytes using Zstd. They will
