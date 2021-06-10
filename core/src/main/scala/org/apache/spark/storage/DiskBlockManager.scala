@@ -211,7 +211,7 @@ private[spark] class DiskBlockManager(conf: SparkConf, var deleteFilesOnStop: Bo
               if (!subDir.exists()) {
                 // Only one container will create this directory. The filesystem will handle
                 // any race conditions.
-                createDirWithCustomizedPermission(subDir, "770")
+                createDirWithPermission770(subDir)
               }
             }
           }
