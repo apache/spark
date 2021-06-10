@@ -35,6 +35,7 @@ import org.apache.spark.sql.catalyst.expressions.Cast
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.execution.joins.BroadcastNestedLoopJoinExec
+import org.apache.spark.sql.hive.HiveUtils.{builtinHiveVersion => hiveVersion}
 import org.apache.spark.sql.hive.test.{HiveTestJars, TestHive}
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.internal.SQLConf
@@ -1507,7 +1508,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
       // and hence cannot be found in the test environment or are non-jar (.pom) which cause
       // failures in tests. Use transitive=false as it should be good enough to test the Ivy
       // support in Hive ADD JAR
-      sql(s"ADD JAR ivy://org.apache.hive.hcatalog:hive-hcatalog-core:2.3.8" +
+      sql(s"ADD JAR ivy://org.apache.hive.hcatalog:hive-hcatalog-core:$hiveVersion" +
         "?transitive=false")
       sql(
         """CREATE TABLE t(a string, b string)
@@ -1515,10 +1516,10 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
       sql(s"""LOAD DATA LOCAL INPATH "$testData" INTO TABLE t""")
       sql("SELECT * FROM src JOIN t on src.key = t.a")
       assert(sql("LIST JARS").filter(_.getString(0).contains(
-        s"org.apache.hive.hcatalog_hive-hcatalog-core-2.3.8.jar")).count() > 0)
+        s"org.apache.hive.hcatalog_hive-hcatalog-core-$hiveVersion.jar")).count() > 0)
       assert(sql("LIST JAR").
         filter(_.getString(0).contains(
-          s"org.apache.hive.hcatalog_hive-hcatalog-core-2.3.8.jar")).count() > 0)
+          s"org.apache.hive.hcatalog_hive-hcatalog-core-$hiveVersion.jar")).count() > 0)
     }
   }
 }
