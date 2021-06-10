@@ -440,6 +440,9 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
           case write: V2WriteCommand if write.resolved =>
             write.query.schema.foreach(f => TypeUtils.failWithIntervalType(f.dataType))
 
+          case alter @ AlterTableDropColumns(table: ResolvedTable, columnsToDrop) =>
+            columnsToDrop.foreach(col => findField(alter, table, "delete", col.toArray))
+
           case alter: AlterTable if alter.table.resolved =>
             val table = alter.table
             def findField(operation: String, fieldName: Array[String]): StructField = {
@@ -692,6 +695,24 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
     }
 
     plan.setAnalyzed()
+  }
+
+  /**
+   * Find the given field name in the resolved table's schema for alter table commands.
+   */
+  private def findField(
+      alterCommand: LogicalPlan,
+      table: ResolvedTable,
+      operation: String,
+      fieldName: Array[String]): StructField = {
+    // Include collections because structs nested in maps and arrays may be altered.
+    val field = table.schema.findNestedField(fieldName, includeCollections = true)
+    if (field.isEmpty) {
+      alterCommand.failAnalysis(
+        s"Cannot $operation missing field ${fieldName.quoted} in ${table.name} schema: " +
+          table.schema.treeString)
+    }
+    field.get._2
   }
 
   /**

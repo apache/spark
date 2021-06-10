@@ -992,7 +992,9 @@ class DDLParserSuite extends AnalysisTest {
   test("alter table: drop column") {
     comparePlans(
       parsePlan("ALTER TABLE table_name DROP COLUMN a.b.c"),
-      AlterTableDropColumnsStatement(Seq("table_name"), Seq(Seq("a", "b", "c"))))
+      AlterTableDropColumns(
+        UnresolvedTable(Seq("table_name"), "ALTER TABLE ... DROP COLUMNS", None),
+        Seq(Seq("a", "b", "c"))))
   }
 
   test("alter table: drop multiple columns") {
@@ -1000,8 +1002,8 @@ class DDLParserSuite extends AnalysisTest {
     Seq(sql, sql.replace("COLUMN", "COLUMNS")).foreach { drop =>
       comparePlans(
         parsePlan(drop),
-        AlterTableDropColumnsStatement(
-          Seq("table_name"),
+        AlterTableDropColumns(
+          UnresolvedTable(Seq("table_name"), "ALTER TABLE ... DROP COLUMNS", None),
           Seq(Seq("x"), Seq("y"), Seq("a", "b", "c"))))
     }
   }

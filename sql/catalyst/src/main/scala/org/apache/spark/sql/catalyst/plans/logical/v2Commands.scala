@@ -1098,3 +1098,14 @@ case class UnsetTableProperties(
   override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
     copy(table = newChild)
 }
+
+/**
+ * The logical plan of the ALTER TABLE ... DROP COLUMNS command.
+ */
+case class AlterTableDropColumns(
+    table: LogicalPlan,
+    columnsToDrop: Seq[Seq[String]]) extends UnaryCommand {
+  override def child: LogicalPlan = table
+  override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
+    copy(table = newChild)
+}

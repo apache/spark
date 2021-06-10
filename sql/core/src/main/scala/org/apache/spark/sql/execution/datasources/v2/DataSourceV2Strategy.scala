@@ -437,6 +437,10 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       val changes = keys.map(key => TableChange.removeProperty(key))
       AlterTableExec(table.catalog, table.identifier, changes) :: Nil
 
+    case AlterTableDropColumns(table: ResolvedTable, cols) =>
+      val changes = cols.map(col => TableChange.deleteColumn(col.toArray))
+      AlterTableExec(table.catalog, table.identifier, changes) :: Nil
+
     case _ => Nil
   }
 }
