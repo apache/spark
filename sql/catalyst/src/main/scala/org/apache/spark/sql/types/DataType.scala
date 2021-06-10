@@ -169,9 +169,10 @@ object DataType {
   def fromJson(json: String): DataType = parseDataType(parse(json))
 
   private val otherTypes = {
-    (Seq(NullType, DateType, TimestampType, BinaryType, IntegerType, BooleanType, LongType,
+    Seq(NullType, DateType, TimestampType, BinaryType, IntegerType, BooleanType, LongType,
       DoubleType, FloatType, ShortType, ByteType, StringType, CalendarIntervalType,
-      YearMonthIntervalType, TimestampWithoutTZType) ++ DayTimeIntervalType.dayTimeIntervalTypes())
+      // TODO(SPARK-XXXXX): Parse DayTimeIntervalType from JSON
+      DayTimeIntervalType(), YearMonthIntervalType, TimestampWithoutTZType)
       .map(t => t.typeName -> t).toMap
   }
 

@@ -30,7 +30,6 @@ import org.apache.spark.sql.catalyst.expressions.objects._
 import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.types.DayTimeIntervalType.dayTimeIntervalTypes
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 
@@ -863,7 +862,7 @@ object ScalaReflection extends ScalaReflection {
     BinaryType -> classOf[BinaryType.InternalType],
     CalendarIntervalType -> classOf[CalendarInterval],
     YearMonthIntervalType -> classOf[YearMonthIntervalType.InternalType]
-  ) ++ dayTimeIntervalTypes().map(it => it -> classOf[it.InternalType]).toMap
+  )
 
   val typeBoxedJavaMapping = Map[DataType, Class[_]](
     BooleanType -> classOf[java.lang.Boolean],
@@ -877,11 +876,12 @@ object ScalaReflection extends ScalaReflection {
     TimestampType -> classOf[java.lang.Long],
     TimestampWithoutTZType -> classOf[java.lang.Long],
     YearMonthIntervalType -> classOf[java.lang.Integer]
-  ) ++ dayTimeIntervalTypes().map(_ -> classOf[java.lang.Long]).toMap
+  )
 
   def dataTypeJavaClass(dt: DataType): Class[_] = {
     dt match {
       case _: DecimalType => classOf[Decimal]
+      case it: DayTimeIntervalType => classOf[it.InternalType]
       case _: StructType => classOf[InternalRow]
       case _: ArrayType => classOf[ArrayData]
       case _: MapType => classOf[MapData]
@@ -892,6 +892,7 @@ object ScalaReflection extends ScalaReflection {
 
   def javaBoxedType(dt: DataType): Class[_] = dt match {
     case _: DecimalType => classOf[Decimal]
+    case _: DayTimeIntervalType => classOf[java.lang.Long]
     case BinaryType => classOf[Array[Byte]]
     case StringType => classOf[UTF8String]
     case CalendarIntervalType => classOf[CalendarInterval]
