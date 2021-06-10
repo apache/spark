@@ -227,13 +227,13 @@ private[spark] class DiskBlockManager(conf: SparkConf, var deleteFilesOnStop: Bo
 
   /**
    * Create a directory that is writable by the group.
-   * Grant the customized permission so the shuffle server can
+   * Grant the permission 770 "rwxrwx---" to the directory so the shuffle server can
    * create subdirs/files within the merge folder.
    * TODO: Find out why can't we create a dir using java api with permission 770
    *  Files.createDirectories(mergeDir.toPath, PosixFilePermissions.asFileAttribute(
    *  PosixFilePermissions.fromString("rwxrwx---")))
    */
-  def createDirWithCustomizedPermission(dirToCreate: File, permission: String): Unit = {
+  def createDirWithPermission770(dirToCreate: File): Unit = {
     var attempts = 0
     val maxAttempts = Utils.MAX_DIR_CREATION_ATTEMPTS
     var created: File = null
@@ -242,11 +242,11 @@ private[spark] class DiskBlockManager(conf: SparkConf, var deleteFilesOnStop: Bo
       if (attempts > maxAttempts) {
         throw new IOException(
           s"Failed to create directory ${dirToCreate.getAbsolutePath} with permission " +
-            s"$permission after $maxAttempts attempts!")
+            s"770 after $maxAttempts attempts!")
       }
       try {
         val builder = new ProcessBuilder().command(
-          "mkdir", "-p", "-m" + permission, dirToCreate.getAbsolutePath)
+          "mkdir", "-p", "-m770", dirToCreate.getAbsolutePath)
         val proc = builder.start()
         val exitCode = proc.waitFor()
         if (dirToCreate.exists()) {
@@ -254,11 +254,11 @@ private[spark] class DiskBlockManager(conf: SparkConf, var deleteFilesOnStop: Bo
         }
         logDebug(
           s"Created directory at ${dirToCreate.getAbsolutePath} with permission " +
-            s"$permission and exitCode $exitCode")
+            s"770 and exitCode $exitCode")
       } catch {
         case e: SecurityException =>
           logWarning(s"Failed to create directory ${dirToCreate.getAbsolutePath} " +
-            s"with permission $permission", e)
+            s"with permission 770", e)
           created = null;
       }
     }

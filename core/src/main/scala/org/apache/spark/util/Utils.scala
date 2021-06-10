@@ -2585,7 +2585,8 @@ private[spark] object Utils extends Logging {
    * Push based shuffle can only be enabled when the application is submitted
    * to run in YARN mode, with external shuffle service enabled and
    * spark.yarn.maxAttempts or the yarn cluster default max attempts is set to 1.
-   * TODO: SPARK-35546 Support push based shuffle with multiple app attempts
+   * TODO: Remove the requirement on spark.yarn.maxAttempts after SPARK-35546
+   * Support push based shuffle with multiple app attempts
    */
   def isPushBasedShuffleEnabled(conf: SparkConf): Boolean = {
     conf.get(PUSH_BASED_SHUFFLE_ENABLED) &&
@@ -2595,7 +2596,11 @@ private[spark] object Utils extends Logging {
           getYarnMaxAttempts(conf) == 1))
   }
 
-  /** Returns the maximum number of attempts to register the AM in YARN mode. */
+  /**
+   * Returns the maximum number of attempts to register the AM in YARN mode.
+   * TODO: Remove this method after SPARK-35546 Support push based shuffle
+   * with multiple app attempts
+   */
   def getYarnMaxAttempts(conf: SparkConf): Int = {
     val sparkMaxAttempts = conf.getOption("spark.yarn.maxAttempts").map(_.toInt)
     val yarnMaxAttempts = getSparkOrYarnConfig(conf, YarnConfiguration.RM_AM_MAX_ATTEMPTS,
