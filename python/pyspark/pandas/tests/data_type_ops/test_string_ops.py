@@ -155,7 +155,19 @@ class StringOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         self.assert_eq(ps.from_pandas(pser), psser)
 
     def test_astype(self):
-        self.assert_eq(self.pser.astype("category"), self.psser.astype("category"))
+        pser = pd.Series(["1", "2", "3"])
+        psser = ps.from_pandas(pser)
+        self.assert_eq(pser.astype(int), psser.astype(int))
+        self.assert_eq(pser.astype(float), psser.astype(float))
+        self.assert_eq(pser.astype(np.float32), psser.astype(np.float32))
+        self.assert_eq(pser.astype(np.int32), psser.astype(np.int32))
+        self.assert_eq(pser.astype(np.int16), psser.astype(np.int16))
+        self.assert_eq(pser.astype(np.int8), psser.astype(np.int8))
+        self.assert_eq(pser.astype(str), psser.astype(str))
+        self.assert_eq(pser.astype(bool), psser.astype(bool))
+        self.assert_eq(pser.astype("category"), psser.astype("category"))
+        cat_type = pd.api.types.CategoricalDtype(categories=["3", "1", "2"])
+        self.assert_eq(pser.astype(cat_type), psser.astype(cat_type))
 
 
 if __name__ == "__main__":

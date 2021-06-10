@@ -173,7 +173,12 @@ class DatetimeOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         self.assert_eq(ps.from_pandas(pser), psser)
 
     def test_astype(self):
-        self.assert_eq(self.pser.astype(str), self.psser.astype(str))
+        pser = self.pser
+        psser = self.psser
+        self.assert_eq(pser.astype(str), psser.astype(str))
+        self.assert_eq(pser.astype("category"), psser.astype("category"))
+        cat_type = pd.api.types.CategoricalDtype(categories=["a", "b", "c"])
+        self.assert_eq(pser.astype(cat_type), psser.astype(cat_type))
 
 
 if __name__ == "__main__":

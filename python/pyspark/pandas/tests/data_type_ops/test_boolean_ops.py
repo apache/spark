@@ -288,7 +288,19 @@ class BooleanOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         self.assert_eq(False | pser, False | psser)
 
     def test_astype(self):
-        self.assert_eq(self.pser.astype(str), self.psser.astype(str))
+        pser = self.pser
+        psser = self.psser
+        self.assert_eq(pser.astype(int), psser.astype(int))
+        self.assert_eq(pser.astype(float), psser.astype(float))
+        self.assert_eq(pser.astype(np.float32), psser.astype(np.float32))
+        self.assert_eq(pser.astype(np.int32), psser.astype(np.int32))
+        self.assert_eq(pser.astype(np.int16), psser.astype(np.int16))
+        self.assert_eq(pser.astype(np.int8), psser.astype(np.int8))
+        self.assert_eq(pser.astype(str), psser.astype(str))
+        self.assert_eq(pser.astype(bool), psser.astype(bool))
+        self.assert_eq(pser.astype("category"), psser.astype("category"))
+        cat_type = pd.api.types.CategoricalDtype(categories=[False, True])
+        self.assert_eq(pser.astype(cat_type), psser.astype(cat_type))
 
 
 @unittest.skipIf(not extension_dtypes_available, "pandas extension dtypes are not available")
@@ -582,7 +594,12 @@ class BooleanExtensionOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         self.assert_eq(ps.from_pandas(pser), psser)
 
     def test_astype(self):
+        pser = self.pser
+        psser = self.psser
         self.assert_eq(["True", "False", "None"], self.psser.astype(str).tolist())
+        self.assert_eq(pser.astype("category"), psser.astype("category"))
+        cat_type = pd.api.types.CategoricalDtype(categories=[False, True])
+        self.assert_eq(pser.astype(cat_type), psser.astype(cat_type))
 
 
 if __name__ == "__main__":

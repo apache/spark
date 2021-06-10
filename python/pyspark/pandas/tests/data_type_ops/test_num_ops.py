@@ -296,6 +296,16 @@ class NumOpsTest(PandasOnSparkTestCase, TestCasesUtils):
     def test_astype(self):
         for pser, psser in self.numeric_pser_psser_pairs:
             self.assert_eq(pser.astype(int), psser.astype(int))
+            self.assert_eq(pser.astype(float), psser.astype(float))
+            self.assert_eq(pser.astype(np.float32), psser.astype(np.float32))
+            self.assert_eq(pser.astype(np.int32), psser.astype(np.int32))
+            self.assert_eq(pser.astype(np.int16), psser.astype(np.int16))
+            self.assert_eq(pser.astype(np.int8), psser.astype(np.int8))
+            self.assert_eq(pser.astype(str), psser.astype(str))
+            self.assert_eq(pser.astype(bool), psser.astype(bool))
+            self.assert_eq(pser.astype("category"), psser.astype("category"))
+            cat_type = pd.api.types.CategoricalDtype(categories=[2, 1, 3])
+            self.assert_eq(pser.astype(cat_type), psser.astype(cat_type))
 
 
 if __name__ == "__main__":
