@@ -687,7 +687,7 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
                     psdf[temp_key_col] = rows_sel
                 if isinstance(value, Series):
                     psdf[temp_value_col] = value
-                psdf = psdf.sort_values(temp_natural_order).drop(temp_natural_order)  # type: ignore
+                psdf = psdf.sort_values(temp_natural_order).drop(temp_natural_order)
 
                 if isinstance(rows_sel, Series):
                     rows_sel = F.col(
@@ -1810,7 +1810,7 @@ class iLocIndexer(LocIndexerLike):
                         )
         super().__setitem__(key, value)
         # Update again with resolved_copy to drop extra columns.
-        self._psdf._update_internal_frame(  # type: ignore
+        self._psdf._update_internal_frame(
             self._psdf._internal.resolved_copy, requires_same_anchor=False
         )
 
