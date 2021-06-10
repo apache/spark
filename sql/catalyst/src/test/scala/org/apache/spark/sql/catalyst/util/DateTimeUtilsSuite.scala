@@ -123,8 +123,8 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     checkFromToJavaDate(new Date(df2.parse("1776-07-04 18:30:00 UTC").getTime))
   }
 
-  private def toDate(s: String, zoneId: ZoneId = UTC): Option[Int] = {
-    stringToDate(UTF8String.fromString(s), zoneId)
+  private def toDate(s: String): Option[Int] = {
+    stringToDate(UTF8String.fromString(s))
   }
 
   test("string to date") {
@@ -634,6 +634,39 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     }
   }
 
+  test("SPARK-35664: microseconds to LocalDateTime") {
+    assert(microsToLocalDateTime(0) ==  LocalDateTime.parse("1970-01-01T00:00:00"))
+    assert(microsToLocalDateTime(100) ==  LocalDateTime.parse("1970-01-01T00:00:00.0001"))
+    assert(microsToLocalDateTime(100000000) ==  LocalDateTime.parse("1970-01-01T00:01:40"))
+    assert(microsToLocalDateTime(100000000000L) ==  LocalDateTime.parse("1970-01-02T03:46:40"))
+    assert(microsToLocalDateTime(253402300799999999L) ==
+      LocalDateTime.parse("9999-12-31T23:59:59.999999"))
+    assert(microsToLocalDateTime(Long.MinValue) ==
+      LocalDateTime.parse("-290308-12-21T19:59:05.224192"))
+    assert(microsToLocalDateTime(Long.MaxValue) ==
+      LocalDateTime.parse("+294247-01-10T04:00:54.775807"))
+  }
+
+  test("SPARK-35664: LocalDateTime to microseconds") {
+    assert(DateTimeUtils.localDateTimeToMicros(LocalDateTime.parse("1970-01-01T00:00:00")) == 0)
+    assert(
+      DateTimeUtils.localDateTimeToMicros(LocalDateTime.parse("1970-01-01T00:00:00.0001")) == 100)
+    assert(
+      DateTimeUtils.localDateTimeToMicros(LocalDateTime.parse("1970-01-01T00:01:40")) == 100000000)
+    assert(DateTimeUtils.localDateTimeToMicros(LocalDateTime.parse("1970-01-02T03:46:40")) ==
+      100000000000L)
+    assert(DateTimeUtils.localDateTimeToMicros(LocalDateTime.parse("9999-12-31T23:59:59.999999"))
+      == 253402300799999999L)
+    assert(DateTimeUtils.localDateTimeToMicros(LocalDateTime.parse("-1000-12-31T23:59:59.999999"))
+      == -93692592000000001L)
+    Seq(LocalDateTime.MIN, LocalDateTime.MAX).foreach { dt =>
+      val msg = intercept[ArithmeticException] {
+        DateTimeUtils.localDateTimeToMicros(dt)
+      }.getMessage
+      assert(msg == "long overflow")
+    }
+  }
+
   test("daysToMicros and microsToDays") {
     val input = date(2015, 12, 31, 16, zid = LA)
     assert(microsToDays(input, LA) === 16800)
@@ -673,35 +706,35 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     assert(DateTimeUtils.microsToMillis(-157700927876544L) === -157700927877L)
   }
 
-  test("special timestamp values") {
+  test("SPARK-29012: special timestamp values") {
     testSpecialDatetimeValues { zoneId =>
       val tolerance = TimeUnit.SECONDS.toMicros(30)
 
-      assert(toTimestamp("Epoch", zoneId).get === 0)
+      assert(convertSpecialTimestamp("Epoch", zoneId).get === 0)
       val now = instantToMicros(Instant.now())
-      toTimestamp("NOW", zoneId).get should be(now +- tolerance)
-      assert(toTimestamp("now UTC", zoneId) === None)
+      convertSpecialTimestamp("NOW", zoneId).get should be(now +- tolerance)
+      assert(convertSpecialTimestamp("now UTC", zoneId) === None)
       val localToday = LocalDateTime.now(zoneId)
         .`with`(LocalTime.MIDNIGHT)
         .atZone(zoneId)
       val yesterday = instantToMicros(localToday.minusDays(1).toInstant)
-      toTimestamp(" Yesterday", zoneId).get should be(yesterday +- tolerance)
+      convertSpecialTimestamp(" Yesterday", zoneId).get should be(yesterday +- tolerance)
       val today = instantToMicros(localToday.toInstant)
-      toTimestamp("Today ", zoneId).get should be(today +- tolerance)
+      convertSpecialTimestamp("Today ", zoneId).get should be(today +- tolerance)
       val tomorrow = instantToMicros(localToday.plusDays(1).toInstant)
-      toTimestamp(" tomorrow CET ", zoneId).get should be(tomorrow +- tolerance)
+      convertSpecialTimestamp(" tomorrow CET ", zoneId).get should be(tomorrow +- tolerance)
     }
   }
 
-  test("special date values") {
+  test("SPARK-28141: special date values") {
     testSpecialDatetimeValues { zoneId =>
-      assert(toDate("epoch", zoneId).get === 0)
+      assert(convertSpecialDate("epoch", zoneId).get === 0)
       val today = localDateToDays(LocalDate.now(zoneId))
-      assert(toDate("YESTERDAY", zoneId).get === today - 1)
-      assert(toDate(" Now ", zoneId).get === today)
-      assert(toDate("now UTC", zoneId) === None) // "now" does not accept time zones
-      assert(toDate("today", zoneId).get === today)
-      assert(toDate("tomorrow CET ", zoneId).get === today + 1)
+      assert(convertSpecialDate("YESTERDAY", zoneId).get === today - 1)
+      assert(convertSpecialDate(" Now ", zoneId).get === today)
+      assert(convertSpecialDate("now UTC", zoneId) === None) // "now" does not accept time zones
+      assert(convertSpecialDate("today", zoneId).get === today)
+      assert(convertSpecialDate("tomorrow CET ", zoneId).get === today + 1)
     }
   }
 
@@ -780,11 +813,16 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
         (LocalDateTime.of(2021, 3, 14, 1, 0, 0), LocalDateTime.of(2021, 3, 14, 3, 0, 0)) ->
           TimeUnit.HOURS.toMicros(2)
       ).foreach { case ((start, end), expected) =>
-        val startMicros = localDateTimeToMicros(start, zid)
-        val endMicros = localDateTimeToMicros(end, zid)
+        val startMicros = DateTimeTestUtils.localDateTimeToMicros(start, zid)
+        val endMicros = DateTimeTestUtils.localDateTimeToMicros(end, zid)
         val result = subtractTimestamps(endMicros, startMicros, zid)
         assert(result === expected)
       }
     }
+  }
+
+  test("SPARK-35679: instantToMicros should be able to return microseconds of Long.MinValue") {
+    assert(instantToMicros(microsToInstant(Long.MaxValue)) === Long.MaxValue)
+    assert(instantToMicros(microsToInstant(Long.MinValue)) === Long.MinValue)
   }
 }

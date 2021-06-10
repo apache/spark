@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.{CreateNamedStruct, Expression,
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.{LeafLike, UnaryLike}
-import org.apache.spark.sql.catalyst.trees.TreePattern.{IN_SUBQUERY, SCALAR_SUBQUERY}
+import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BooleanType, DataType, StructType}
 
@@ -125,6 +125,7 @@ case class InSubqueryExec(
   override def nullable: Boolean = child.nullable
   override def toString: String = s"$child IN ${plan.name}"
   override def withNewPlan(plan: BaseSubqueryExec): InSubqueryExec = copy(plan = plan)
+  final override def nodePatternsInternal: Seq[TreePattern] = Seq(IN_SUBQUERY_EXEC)
 
   override def semanticEquals(other: Expression): Boolean = other match {
     case in: InSubqueryExec => child.semanticEquals(in.child) && plan.sameResult(in.plan)
@@ -184,7 +185,7 @@ case class PlanSubqueries(sparkSession: SparkSession) extends Rule[SparkPlan] {
           SubqueryExec.createForScalarSubquery(
             s"scalar-subquery#${subquery.exprId.id}", executedPlan),
           subquery.exprId)
-      case expressions.InSubquery(values, ListQuery(query, _, exprId, _)) =>
+      case expressions.InSubquery(values, ListQuery(query, _, exprId, _, _)) =>
         val expr = if (values.length == 1) {
           values.head
         } else {
@@ -212,7 +213,7 @@ object ReuseSubquery extends Rule[SparkPlan] {
     }
     // Build a hash map using schema of subqueries to avoid O(N*N) sameResult calls.
     val subqueries = mutable.HashMap[StructType, ArrayBuffer[BaseSubqueryExec]]()
-    plan transformAllExpressions {
+    plan.transformAllExpressionsWithPruning(_.containsPattern(PLAN_EXPRESSION)) {
       case sub: ExecSubqueryExpression =>
         val sameSchema =
           subqueries.getOrElseUpdate(sub.plan.schema, ArrayBuffer[BaseSubqueryExec]())

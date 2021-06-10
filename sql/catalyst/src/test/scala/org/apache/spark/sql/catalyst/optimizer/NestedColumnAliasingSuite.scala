@@ -23,9 +23,10 @@ import org.apache.spark.sql.catalyst.SchemaPruningTest
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans.Cross
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
-import org.apache.spark.sql.types.{StringType, StructField, StructType}
+import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 
 class NestedColumnAliasingSuite extends SchemaPruningTest {
 
@@ -708,13 +709,42 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
       .analyze
     comparePlans(optimized, expected)
   }
+
+  test("SPARK-35636: do not push lambda key out of lambda function") {
+    val rel = LocalRelation(
+      'kvs.map(StringType, new StructType().add("v1", IntegerType)), 'keys.array(StringType))
+    val key = UnresolvedNamedLambdaVariable("key" :: Nil)
+    val lambda = LambdaFunction('kvs.getItem(key).getField("v1"), key :: Nil)
+    val query = rel
+      .limit(5)
+      .select('keys, 'kvs)
+      .limit(5)
+      .select(ArrayTransform('keys, lambda).as("a"))
+      .analyze
+    val optimized = Optimize.execute(query)
+    comparePlans(optimized, query)
+  }
+
+  test("SPARK-35636: do not push down extract value in higher order " +
+    "function that references both sides of a join") {
+    val left = LocalRelation('kvs.map(StringType, new StructType().add("v1", IntegerType)))
+    val right = LocalRelation('keys.array(StringType))
+    val key = UnresolvedNamedLambdaVariable("key" :: Nil)
+    val lambda = LambdaFunction('kvs.getItem(key).getField("v1"), key :: Nil)
+    val query = left
+      .join(right, Cross, None)
+      .select(ArrayTransform('keys, lambda).as("a"))
+      .analyze
+    val optimized = Optimize.execute(query)
+    comparePlans(optimized, query)
+  }
 }
 
 object NestedColumnAliasingSuite {
   def collectGeneratedAliases(query: LogicalPlan): ArrayBuffer[String] = {
     val aliases = ArrayBuffer[String]()
     query.transformAllExpressions {
-      case a @ Alias(_, name) if name.startsWith("_gen_alias_") =>
+      case a @ Alias(_, name) if name.startsWith("_extract_") =>
         aliases += name
         a
     }

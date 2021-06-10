@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, TypeUtils}
 import org.apache.spark.sql.connector.catalog.{LookupCatalog, SupportsAtomicPartitionManagement, SupportsPartitionManagement, Table}
 import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, After, ColumnPosition, DeleteColumn, RenameColumn, UpdateColumnComment, UpdateColumnNullability, UpdateColumnPosition, UpdateColumnType}
-import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -159,7 +159,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
 
       // `ShowTableExtended` should have been converted to the v1 command if the table is v1.
       case _: ShowTableExtended =>
-        throw new AnalysisException("SHOW TABLE EXTENDED is not supported for v2 tables.")
+        throw QueryCompilationErrors.commandUnsupportedInV2TableError("SHOW TABLE EXTENDED")
 
       case operator: LogicalPlan =>
         // Check argument data types of higher-order functions downwards first.
@@ -744,17 +744,17 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
     checkAnalysis(expr.plan)
 
     expr match {
-      case ScalarSubquery(query, conditions, _) =>
+      case ScalarSubquery(query, outerAttrs, _, _) =>
         // Scalar subquery must return one column as output.
         if (query.output.size != 1) {
           failAnalysis(
             s"Scalar subquery must return only one column, but got ${query.output.size}")
         }
 
-        if (conditions.nonEmpty) {
+        if (outerAttrs.nonEmpty) {
           cleanQueryInScalarSubquery(query) match {
-            case a: Aggregate => checkAggregateInScalarSubquery(conditions, query, a)
-            case Filter(_, a: Aggregate) => checkAggregateInScalarSubquery(conditions, query, a)
+            case a: Aggregate => checkAggregateInScalarSubquery(outerAttrs, query, a)
+            case Filter(_, a: Aggregate) => checkAggregateInScalarSubquery(outerAttrs, query, a)
             case p: LogicalPlan if p.maxRows.exists(_ <= 1) => // Ok
             case fail => failAnalysis(s"Correlated scalar subqueries must be aggregated: $fail")
           }
@@ -777,6 +777,9 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
           }
         }
 
+      case _: LateralSubquery =>
+        assert(plan.isInstanceOf[LateralJoin])
+
       case inSubqueryOrExistsSubquery =>
         plan match {
           case _: Filter | _: SupportsSubquery | _: Join => // Ok
@@ -788,7 +791,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
 
     // Validate to make sure the correlations appearing in the query are valid and
     // allowed by spark.
-    checkCorrelationsInSubquery(expr.plan)
+    checkCorrelationsInSubquery(expr.plan, isLateral = plan.isInstanceOf[LateralJoin])
   }
 
   /**
@@ -827,7 +830,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
    * Validates to make sure the outer references appearing inside the subquery
    * are allowed.
    */
-  private def checkCorrelationsInSubquery(sub: LogicalPlan): Unit = {
+  private def checkCorrelationsInSubquery(sub: LogicalPlan, isLateral: Boolean = false): Unit = {
     // Validate that correlated aggregate expression do not contain a mixture
     // of outer and local references.
     def checkMixedReferencesInsideAggregateExpr(expr: Expression): Unit = {
@@ -836,15 +839,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
           val outer = a.collect { case OuterReference(e) => e.toAttribute }
           val local = a.references -- outer
           if (local.nonEmpty) {
-            val msg =
-              s"""
-                 |Found an aggregate expression in a correlated predicate that has both
-                 |outer and local references, which is not supported yet.
-                 |Aggregate expression: ${SubExprUtils.stripOuterReference(a).sql},
-                 |Outer references: ${outer.map(_.sql).mkString(", ")},
-                 |Local references: ${local.map(_.sql).mkString(", ")}.
-               """.stripMargin.replace("\n", " ").trim()
-            failAnalysis(msg)
+            throw QueryCompilationErrors.mixedRefsInAggFunc(a.sql)
           }
         case _ =>
       }
@@ -857,12 +852,21 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
       }
     }
 
+    // Check whether the logical plan node can host outer references.
+    // A `Project` can host outer references if it is inside a lateral subquery.
+    // Otherwise, only Filter can only outer references.
+    def canHostOuter(plan: LogicalPlan): Boolean = plan match {
+      case _: Filter => true
+      case _: Project => isLateral
+      case _ => false
+    }
+
     // Make sure a plan's expressions do not contain :
     // 1. Aggregate expressions that have mixture of outer and local references.
-    // 2. Expressions containing outer references on plan nodes other than Filter.
+    // 2. Expressions containing outer references on plan nodes other than allowed operators.
     def failOnInvalidOuterReference(p: LogicalPlan): Unit = {
       p.expressions.foreach(checkMixedReferencesInsideAggregateExpr)
-      if (!p.isInstanceOf[Filter] && p.expressions.exists(containsOuter)) {
+      if (!canHostOuter(p) && p.expressions.exists(containsOuter)) {
         failAnalysis(
           "Expressions referencing the outer query are not supported outside of WHERE/HAVING " +
             s"clauses:\n$p")
@@ -995,6 +999,9 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
 
       case r: RepartitionByExpression =>
         failOnInvalidOuterReference(r)
+
+      case l: LateralJoin =>
+        failOnInvalidOuterReference(l)
 
       // Category 3:
       // Filter is one of the two operators allowed to host correlated expressions.

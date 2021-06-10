@@ -201,7 +201,7 @@ class ContextTests(unittest.TestCase):
         try:
             with SparkContext() as sc:
                 self.assertNotEqual(SparkContext._active_spark_context, None)
-                raise Exception()
+                raise RuntimeError()
         except:
             pass
         self.assertEqual(SparkContext._active_spark_context, None)

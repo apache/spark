@@ -20,14 +20,16 @@ package org.apache.spark.sql.connector
 import java.util
 import java.util.Collections
 
-import test.org.apache.spark.sql.connector.catalog.functions.{JavaAverage, JavaStrLen}
+import test.org.apache.spark.sql.connector.catalog.functions.{JavaAverage, JavaLongAdd, JavaStrLen}
+import test.org.apache.spark.sql.connector.catalog.functions.JavaLongAdd.{JavaLongAddDefault, JavaLongAddMagic, JavaLongAddMismatchMagic, JavaLongAddStaticMagic}
 import test.org.apache.spark.sql.connector.catalog.functions.JavaStrLen._
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode.{FALLBACK, NO_CODEGEN}
 import org.apache.spark.sql.connector.catalog.{BasicInMemoryTableCatalog, Identifier, InMemoryCatalog, SupportsNamespaces}
-import org.apache.spark.sql.connector.catalog.functions._
+import org.apache.spark.sql.connector.catalog.functions.{AggregateFunction, _}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -183,12 +185,99 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
     checkAnswer(sql("SELECT testcat.ns.strlen('abc')"), Row(3) :: Nil)
   }
 
+  test("scalar function: static magic method in Java") {
+    catalog("testcat").asInstanceOf[SupportsNamespaces].createNamespace(Array("ns"), emptyProps)
+    addFunction(Identifier.of(Array("ns"), "strlen"),
+      new JavaStrLen(new JavaStrLenStaticMagic))
+    checkAnswer(sql("SELECT testcat.ns.strlen('abc')"), Row(3) :: Nil)
+  }
+
+  test("scalar function: magic method should take higher precedence in Java") {
+    catalog("testcat").asInstanceOf[SupportsNamespaces].createNamespace(Array("ns"), emptyProps)
+    addFunction(Identifier.of(Array("ns"), "strlen"),
+      new JavaStrLen(new JavaStrLenBoth))
+    // to differentiate, the static method returns string length + 100
+    checkAnswer(sql("SELECT testcat.ns.strlen('abc')"), Row(103) :: Nil)
+  }
+
+  test("scalar function: bad static magic method should fallback to non-static") {
+    catalog("testcat").asInstanceOf[SupportsNamespaces].createNamespace(Array("ns"), emptyProps)
+    addFunction(Identifier.of(Array("ns"), "strlen"),
+      new JavaStrLen(new JavaStrLenBadStaticMagic))
+    checkAnswer(sql("SELECT testcat.ns.strlen('abc')"), Row(103) :: Nil)
+  }
+
   test("scalar function: no implementation found in Java") {
     catalog("testcat").asInstanceOf[SupportsNamespaces].createNamespace(Array("ns"), emptyProps)
     addFunction(Identifier.of(Array("ns"), "strlen"),
       new JavaStrLen(new JavaStrLenNoImpl))
     assert(intercept[AnalysisException](sql("SELECT testcat.ns.strlen('abc')").collect())
       .getMessage.contains("neither implement magic method nor override 'produceResult'"))
+  }
+
+  test("SPARK-35390: scalar function w/ bad input types") {
+    catalog("testcat").asInstanceOf[SupportsNamespaces].createNamespace(Array("ns"), emptyProps)
+    addFunction(Identifier.of(Array("ns"), "strlen"), StrLen(StrLenBadInputTypes))
+    assert(intercept[AnalysisException](sql("SELECT testcat.ns.strlen('abc')").collect())
+        .getMessage.contains("parameters returned from 'inputTypes()'"))
+  }
+
+  test("SPARK-35390: scalar function w/ mismatch type parameters from magic method") {
+    catalog("testcat").asInstanceOf[SupportsNamespaces].createNamespace(Array("ns"), emptyProps)
+    addFunction(Identifier.of(Array("ns"), "add"), new JavaLongAdd(new JavaLongAddMismatchMagic))
+    assert(intercept[AnalysisException](sql("SELECT testcat.ns.add(1L, 2L)").collect())
+        .getMessage.contains("neither implement magic method nor override 'produceResult'"))
+  }
+
+  test("SPARK-35390: scalar function w/ type coercion") {
+    catalog("testcat").asInstanceOf[SupportsNamespaces].createNamespace(Array("ns"), emptyProps)
+    addFunction(Identifier.of(Array("ns"), "add"), new JavaLongAdd(new JavaLongAddDefault(false)))
+    addFunction(Identifier.of(Array("ns"), "add2"), new JavaLongAdd(new JavaLongAddMagic(false)))
+    addFunction(Identifier.of(Array("ns"), "add3"),
+      new JavaLongAdd(new JavaLongAddStaticMagic(false)))
+    Seq("add", "add2", "add3").foreach { name =>
+      checkAnswer(sql(s"SELECT testcat.ns.$name(42, 58)"), Row(100) :: Nil)
+      checkAnswer(sql(s"SELECT testcat.ns.$name(42L, 58)"), Row(100) :: Nil)
+      checkAnswer(sql(s"SELECT testcat.ns.$name(42, 58L)"), Row(100) :: Nil)
+
+      // can't cast date time interval to long
+      assert(intercept[AnalysisException](
+        sql(s"SELECT testcat.ns.$name(date '2021-06-01' - date '2011-06-01', 93)").collect())
+          .getMessage.contains("due to data type mismatch"))
+    }
+  }
+
+  test("SPARK-35389: magic function should handle null arguments") {
+    catalog("testcat").asInstanceOf[SupportsNamespaces].createNamespace(Array("ns"), emptyProps)
+    addFunction(Identifier.of(Array("ns"), "strlen"), new JavaStrLen(new JavaStrLenMagicNullSafe))
+    addFunction(Identifier.of(Array("ns"), "strlen2"),
+      new JavaStrLen(new JavaStrLenStaticMagicNullSafe))
+    Seq("strlen", "strlen2").foreach { name =>
+      checkAnswer(sql(s"SELECT testcat.ns.$name(CAST(NULL as STRING))"), Row(0) :: Nil)
+    }
+  }
+
+  test("SPARK-35389: magic function should handle null primitive arguments") {
+    catalog("testcat").asInstanceOf[SupportsNamespaces].createNamespace(Array("ns"), emptyProps)
+    addFunction(Identifier.of(Array("ns"), "add"), new JavaLongAdd(new JavaLongAddMagic(false)))
+    addFunction(Identifier.of(Array("ns"), "static_add"),
+      new JavaLongAdd(new JavaLongAddMagic(false)))
+
+    Seq("add", "static_add").foreach { name =>
+      Seq(true, false).foreach { codegenEnabled =>
+        val codeGenFactoryMode = if (codegenEnabled) FALLBACK else NO_CODEGEN
+
+        withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegenEnabled.toString,
+          SQLConf.CODEGEN_FACTORY_MODE.key -> codeGenFactoryMode.toString) {
+
+          checkAnswer(sql(s"SELECT testcat.ns.$name(CAST(NULL as BIGINT), 42L)"), Row(null) :: Nil)
+          checkAnswer(sql(s"SELECT testcat.ns.$name(42L, CAST(NULL as BIGINT))"), Row(null) :: Nil)
+          checkAnswer(sql(s"SELECT testcat.ns.$name(42L, 58L)"), Row(100) :: Nil)
+          checkAnswer(sql(s"SELECT testcat.ns.$name(CAST(NULL as BIGINT), CAST(NULL as BIGINT))"),
+            Row(null) :: Nil)
+        }
+      }
+    }
   }
 
   test("bad bound function (neither scalar nor aggregate)") {
@@ -255,6 +344,27 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
     }
   }
 
+  test("SPARK-35390: aggregate function w/ type coercion") {
+    import testImplicits._
+
+    withTable("t1", "t2") {
+      addFunction(Identifier.of(Array("ns"), "avg"), UnboundDecimalAverage)
+
+      (1 to 100).toDF().write.saveAsTable("testcat.ns.t1")
+      checkAnswer(sql("SELECT testcat.ns.avg(value) from testcat.ns.t1"),
+        Row(BigDecimal(50.5)) :: Nil)
+
+      (1 to 100).map(BigDecimal(_)).toDF().write.saveAsTable("testcat.ns.t2")
+      checkAnswer(sql("SELECT testcat.ns.avg(value) from testcat.ns.t2"),
+        Row(BigDecimal(50.5)) :: Nil)
+
+      // can't cast interval to decimal
+      assert(intercept[AnalysisException](sql("SELECT testcat.ns.avg(*) from values" +
+          " (date '2021-06-01' - date '2011-06-01'), (date '2000-01-01' - date '1900-01-01')"))
+          .getMessage.contains("due to data type mismatch"))
+    }
+  }
+
   private case class StrLen(impl: BoundFunction) extends UnboundFunction {
     override def description(): String =
       """strlen: returns the length of the input string
@@ -284,7 +394,7 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
     }
   }
 
-  private case object StrLenMagic extends ScalarFunction[Int] {
+  case object StrLenMagic extends ScalarFunction[Int] {
     override def inputTypes(): Array[DataType] = Array(StringType)
     override def resultType(): DataType = IntegerType
     override def name(): String = "strlen_magic"
@@ -294,7 +404,7 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
     }
   }
 
-  private case object StrLenBadMagic extends ScalarFunction[Int] {
+  case object StrLenBadMagic extends ScalarFunction[Int] {
     override def inputTypes(): Array[DataType] = Array(StringType)
     override def resultType(): DataType = IntegerType
     override def name(): String = "strlen_bad_magic"
@@ -304,7 +414,7 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
     }
   }
 
-  private case object StrLenBadMagicWithDefault extends ScalarFunction[Int] {
+  case object StrLenBadMagicWithDefault extends ScalarFunction[Int] {
     override def inputTypes(): Array[DataType] = Array(StringType)
     override def resultType(): DataType = IntegerType
     override def name(): String = "strlen_bad_magic"
@@ -323,6 +433,13 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
     override def inputTypes(): Array[DataType] = Array(StringType)
     override def resultType(): DataType = IntegerType
     override def name(): String = "strlen_noimpl"
+  }
+
+  // input type doesn't match arguments accepted by `UnboundFunction.bind`
+  private case object StrLenBadInputTypes extends ScalarFunction[Int] {
+    override def inputTypes(): Array[DataType] = Array(StringType, IntegerType)
+    override def resultType(): DataType = IntegerType
+    override def name(): String = "strlen_bad_input_types"
   }
 
   private case object BadBoundFunction extends BoundFunction {
@@ -407,6 +524,55 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
     }
 
     override def produceResult(state: (Long, Long)): Long = state._1 / state._2
+  }
+
+  object UnboundDecimalAverage extends UnboundFunction {
+    override def name(): String = "decimal_avg"
+
+    override def bind(inputType: StructType): BoundFunction = {
+      if (inputType.fields.length > 1) {
+        throw new UnsupportedOperationException("Too many arguments")
+      }
+
+      // put interval type here for testing purpose
+      inputType.fields(0).dataType match {
+        case _: NumericType | _: DayTimeIntervalType => DecimalAverage
+        case dataType =>
+          throw new UnsupportedOperationException(s"Unsupported input type: $dataType")
+      }
+    }
+
+    override def description(): String =
+      "decimal_avg: produces an average using decimal division"
+  }
+
+  object DecimalAverage extends AggregateFunction[(Decimal, Int), Decimal] {
+    override def name(): String = "decimal_avg"
+    override def inputTypes(): Array[DataType] = Array(DecimalType.SYSTEM_DEFAULT)
+    override def resultType(): DataType = DecimalType.SYSTEM_DEFAULT
+
+    override def newAggregationState(): (Decimal, Int) = (Decimal.ZERO, 0)
+
+    override def update(state: (Decimal, Int), input: InternalRow): (Decimal, Int) = {
+      if (input.isNullAt(0)) {
+        state
+      } else {
+        val l = input.getDecimal(0, DecimalType.SYSTEM_DEFAULT.precision,
+          DecimalType.SYSTEM_DEFAULT.scale)
+        state match {
+          case (_, d) if d == 0 =>
+            (l, 1)
+          case (total, count) =>
+            (total + l, count + 1)
+        }
+      }
+    }
+
+    override def merge(leftState: (Decimal, Int), rightState: (Decimal, Int)): (Decimal, Int) = {
+      (leftState._1 + rightState._1, leftState._2 + rightState._2)
+    }
+
+    override def produceResult(state: (Decimal, Int)): Decimal = state._1 / Decimal(state._2)
   }
 
   object NoImplAverage extends UnboundFunction {

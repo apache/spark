@@ -124,3 +124,8 @@ DROP TABLE explain_temp1;
 DROP TABLE explain_temp2;
 DROP TABLE explain_temp3;
 DROP TABLE explain_temp4;
+
+-- SPARK-35479: Format PartitionFilters IN strings in scan nodes
+CREATE table  t(v array<string>) USING PARQUET;
+EXPLAIN SELECT * FROM t  WHERE v IN (array('a'), null);
+DROP TABLE t;

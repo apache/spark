@@ -66,9 +66,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
 
   // Allow removeExecutor to be accessible by ExecutorPodsLifecycleEventHandler
   private[k8s] def doRemoveExecutor(executorId: String, reason: ExecutorLossReason): Unit = {
-    if (isExecutorActive(executorId)) {
-      removeExecutor(executorId, reason)
-    }
+    removeExecutor(executorId, reason)
   }
 
   private def setUpExecutorConfigMap(driverPod: Option[Pod]): Unit = {

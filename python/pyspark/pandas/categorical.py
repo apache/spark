@@ -82,7 +82,7 @@ class CategoricalAccessor(object):
         return self._data.dtype.categories
 
     @categories.setter
-    def categories(self, categories) -> None:
+    def categories(self, categories: pd.Index) -> None:
         raise NotImplementedError()
 
     @property
@@ -137,34 +137,40 @@ class CategoricalAccessor(object):
         """
         return self._data._with_new_scol(self._data.spark.column).rename()
 
-    def add_categories(self, new_categories, inplace: bool = False):
+    def add_categories(self, new_categories: pd.Index, inplace: bool = False) -> "ps.Series":
         raise NotImplementedError()
 
-    def as_ordered(self, inplace: bool = False):
+    def as_ordered(self, inplace: bool = False) -> "ps.Series":
         raise NotImplementedError()
 
-    def as_unordered(self, inplace: bool = False):
+    def as_unordered(self, inplace: bool = False) -> "ps.Series":
         raise NotImplementedError()
 
-    def remove_categories(self, removals, inplace: bool = False):
+    def remove_categories(self, removals: pd.Index, inplace: bool = False) -> "ps.Series":
         raise NotImplementedError()
 
-    def remove_unused_categories(self):
+    def remove_unused_categories(self) -> "ps.Series":
         raise NotImplementedError()
 
-    def rename_categories(self, new_categories, inplace: bool = False):
+    def rename_categories(self, new_categories: pd.Index, inplace: bool = False) -> "ps.Series":
         raise NotImplementedError()
 
-    def reorder_categories(self, new_categories, ordered: bool = None, inplace: bool = False):
+    def reorder_categories(
+        self, new_categories: pd.Index, ordered: bool = None, inplace: bool = False
+    ) -> "ps.Series":
         raise NotImplementedError()
 
     def set_categories(
-        self, new_categories, ordered: bool = None, rename: bool = False, inplace: bool = False
-    ):
+        self,
+        new_categories: pd.Index,
+        ordered: bool = None,
+        rename: bool = False,
+        inplace: bool = False,
+    ) -> "ps.Series":
         raise NotImplementedError()
 
 
-def _test():
+def _test() -> None:
     import os
     import doctest
     import sys

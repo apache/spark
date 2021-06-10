@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.{Date, Timestamp}
-import java.time.{DateTimeException, Duration, Period}
+import java.time.{DateTimeException, Duration, LocalDateTime, Period}
 import java.time.temporal.ChronoUnit
 import java.util.{Calendar, TimeZone}
 
@@ -1705,6 +1705,17 @@ class CastSuite extends CastSuiteBase {
       checkEvaluation(cast(negativeTs, ShortType), expectedSecs.toShort)
       checkEvaluation(cast(negativeTs, IntegerType), expectedSecs.toInt)
       checkEvaluation(cast(negativeTs, LongType), expectedSecs)
+    }
+  }
+
+  test("SPARK-35698: cast timestamp without time zone to string") {
+    Seq(
+      "0001-01-01 00:00:00", // the fist timestamp of Common Era
+      "1582-10-15 23:59:59", // the cutover date from Julian to Gregorian calendar
+      "1970-01-01 00:00:00", // the epoch timestamp
+      "9999-12-31 23:59:59"  // the last supported timestamp according to SQL standard
+    ).foreach { s =>
+      checkEvaluation(cast(LocalDateTime.parse(s.replace(" ", "T")), StringType), s)
     }
   }
 

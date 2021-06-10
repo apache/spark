@@ -126,7 +126,7 @@ class RemoveRedundantAggregatesSuite extends PlanTest {
     comparePlans(optimized, expected)
   }
 
-  test("Keep non-redundant aggregate - upper has agg expression") {
+  test("Keep non-redundant aggregate - upper has duplicate sensitive agg expression") {
     val relation = LocalRelation('a.int, 'b.int)
     for (agg <- aggregates('b)) {
       val query = relation
@@ -137,6 +137,20 @@ class RemoveRedundantAggregatesSuite extends PlanTest {
       val optimized = Optimize.execute(query)
       comparePlans(optimized, query)
     }
+  }
+
+  test("Remove redundant aggregate - upper has duplicate agnostic agg expression") {
+    val relation = LocalRelation('a.int, 'b.int)
+    val query = relation
+      .groupBy('a, 'b)('a, 'b)
+      // The max does not change if there are duplicate values
+      .groupBy('a)('a, max('b))
+      .analyze
+    val expected = relation
+      .groupBy('a)('a, max('b))
+      .analyze
+    val optimized = Optimize.execute(query)
+    comparePlans(optimized, expected)
   }
 
   test("Keep non-redundant aggregate - upper references agg expression") {

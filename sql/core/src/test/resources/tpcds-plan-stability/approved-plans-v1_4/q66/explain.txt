@@ -160,7 +160,7 @@ Input [14]: [ws_sold_time_sk#1, ws_ship_mode_sk#2, ws_quantity#4, ws_ext_sales_p
 Output [2]: [sm_ship_mode_sk#24, sm_carrier#25]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/ship_mode]
-PushedFilters: [In(sm_carrier, [DHL                 ,BARIAN              ]), IsNotNull(sm_ship_mode_sk)]
+PushedFilters: [In(sm_carrier, [BARIAN              ,DHL                 ]), IsNotNull(sm_ship_mode_sk)]
 ReadSchema: struct<sm_ship_mode_sk:int,sm_carrier:string>
 
 (24) ColumnarToRow [codegen id : 4]

@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreePattern.OUTER_REFERENCE
+import org.apache.spark.sql.errors.QueryExecutionErrors
 
 /**
  * Decorrelate the inner query by eliminating outer references and create domain joins.
@@ -216,37 +217,42 @@ object DecorrelateInnerQuery extends PredicateHelper {
   def rewriteDomainJoins(
       outerPlan: LogicalPlan,
       innerPlan: LogicalPlan,
-      conditions: Seq[Expression]): LogicalPlan = {
-    innerPlan transform {
-      case d @ DomainJoin(domainAttrs, child) =>
-        val domainAttrMap = buildDomainAttrMap(conditions, domainAttrs)
-        // We should only rewrite a domain join when all corresponding outer plan attributes
-        // can be found from the join condition.
-        if (domainAttrMap.size == domainAttrs.size) {
-          val groupingExprs = domainAttrs.map(domainAttrMap)
-          val aggregateExprs = groupingExprs.zip(domainAttrs).map {
-            // Rebuild the aliases.
-            case (inputAttr, outputAttr) => Alias(inputAttr, outputAttr.name)(outputAttr.exprId)
-          }
-          // Construct a domain with the outer query plan.
-          // DomainJoin [a', b']  =>  Aggregate [a, b] [a AS a', b AS b']
-          //                          +- Relation [a, b]
-          val domain = Aggregate(groupingExprs, aggregateExprs, outerPlan)
-          child match {
-            // A special optimization for OneRowRelation.
-            // TODO: add a more general rule to optimize join with OneRowRelation.
-            case _: OneRowRelation => domain
-            // Construct a domain join.
-            // Join Inner
-            // :- Inner Query
-            // +- Domain
-            case _ => Join(child, domain, Inner, None, JoinHint.NONE)
-          }
-        } else {
-          throw new UnsupportedOperationException(
-            s"Unable to rewrite domain join with conditions: $conditions\n$d")
+      conditions: Seq[Expression]): LogicalPlan = innerPlan match {
+    case d @ DomainJoin(domainAttrs, child) =>
+      val domainAttrMap = buildDomainAttrMap(conditions, domainAttrs)
+      // We should only rewrite a domain join when all corresponding outer plan attributes
+      // can be found from the join condition.
+      if (domainAttrMap.size == domainAttrs.size) {
+        val groupingExprs = domainAttrs.map(domainAttrMap)
+        val aggregateExprs = groupingExprs.zip(domainAttrs).map {
+          // Rebuild the aliases.
+          case (inputAttr, outputAttr) => Alias(inputAttr, outputAttr.name)(outputAttr.exprId)
         }
-    }
+        // Construct a domain with the outer query plan.
+        // DomainJoin [a', b']  =>  Aggregate [a, b] [a AS a', b AS b']
+        //                          +- Relation [a, b]
+        val domain = Aggregate(groupingExprs, aggregateExprs, outerPlan)
+        child match {
+          // A special optimization for OneRowRelation.
+          // TODO: add a more general rule to optimize join with OneRowRelation.
+          case _: OneRowRelation => domain
+          // Construct a domain join.
+          // Join Inner
+          // :- Inner Query
+          // +- Domain
+          case _ =>
+            // The decorrelation framework adds domain joins by traversing down the plan tree
+            // recursively until it reaches a node that is not correlated with the outer query.
+            // So the child node of a domain join shouldn't contain another domain join.
+            assert(child.find(_.isInstanceOf[DomainJoin]).isEmpty,
+              s"Child of a domain join shouldn't contain another domain join.\n$child")
+            Join(child, domain, Inner, None, JoinHint.NONE)
+        }
+      } else {
+        throw QueryExecutionErrors.cannotRewriteDomainJoinWithConditionsError(conditions, d)
+      }
+    case p: LogicalPlan =>
+      p.mapChildren(rewriteDomainJoins(outerPlan, _, conditions))
   }
 
   def apply(
@@ -470,11 +476,12 @@ object DecorrelateInnerQuery extends PredicateHelper {
           case u: UnaryNode =>
             val outerReferences = collectOuterReferences(u.expressions)
             assert(outerReferences.isEmpty, s"Correlated column is not allowed in $u")
-            decorrelate(u.child, parentOuterReferences, aggregated)
+            val (newChild, joinCond, outerReferenceMap) =
+              decorrelate(u.child, parentOuterReferences, aggregated)
+            (u.withNewChildren(newChild :: Nil), joinCond, outerReferenceMap)
 
           case o =>
-            throw new UnsupportedOperationException(
-              s"Decorrelate inner query through ${o.nodeName} is not supported.")
+            throw QueryExecutionErrors.decorrelateInnerQueryThroughPlanUnsupportedError(o)
         }
       }
     }

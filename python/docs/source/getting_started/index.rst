@@ -26,7 +26,17 @@ There are more guides shared with other languages such as
 at `the Spark documentation <https://spark.apache.org/docs/latest/index.html#where-to-go-from-here>`_.
 
 .. toctree::
-    :maxdepth: 2
+   :maxdepth: 2
 
-    install
-    quickstart
+   install
+   quickstart
+
+For pandas APIs on Spark:
+
+.. toctree::
+   :maxdepth: 2
+
+   ps_install
+   ps_10mins
+   ps_videos_blogs
+

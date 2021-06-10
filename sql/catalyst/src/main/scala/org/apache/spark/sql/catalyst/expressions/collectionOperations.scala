@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{CONCAT, TreePattern}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.UTF8StringBuilder
@@ -109,8 +110,7 @@ case class Size(child: Expression, legacySizeOfNull: Boolean)
     } else child.dataType match {
       case _: ArrayType => value.asInstanceOf[ArrayData].numElements()
       case _: MapType => value.asInstanceOf[MapData].numElements()
-      case other => throw new UnsupportedOperationException(
-        s"The size function doesn't support the operand type ${other.getClass.getCanonicalName}")
+      case other => throw QueryExecutionErrors.unsupportedOperandTypeForSizeFunctionError(other)
     }
   }
 
@@ -1476,16 +1476,14 @@ case class Slice(x: Expression, start: Expression, length: Expression)
     val lengthInt = lengthVal.asInstanceOf[Int]
     val arr = xVal.asInstanceOf[ArrayData]
     val startIndex = if (startInt == 0) {
-      throw new RuntimeException(
-        s"Unexpected value for start in function $prettyName: SQL array indices start at 1.")
+      throw QueryExecutionErrors.unexpectedValueForStartInFunctionError(prettyName)
     } else if (startInt < 0) {
       startInt + arr.numElements()
     } else {
       startInt - 1
     }
     if (lengthInt < 0) {
-      throw new RuntimeException(s"Unexpected value for length in function $prettyName: " +
-        "length must be greater than or equal to 0.")
+      throw QueryExecutionErrors.unexpectedValueForLengthInFunctionError(prettyName)
     }
     // startIndex can be negative if start is negative and its absolute value is greater than the
     // number of elements in the array
@@ -1505,8 +1503,7 @@ case class Slice(x: Expression, start: Expression, length: Expression)
          |${CodeGenerator.JAVA_INT} $startIdx = $defaultIntValue;
          |${CodeGenerator.JAVA_INT} $resLength = $defaultIntValue;
          |if ($start == 0) {
-         |  throw new RuntimeException("Unexpected value for start in function $prettyName: "
-         |    + "SQL array indices start at 1.");
+         |  throw QueryExecutionErrors.unexpectedValueForStartInFunctionError("$prettyName");
          |} else if ($start < 0) {
          |  $startIdx = $start + $x.numElements();
          |} else {
@@ -1514,8 +1511,7 @@ case class Slice(x: Expression, start: Expression, length: Expression)
          |  $startIdx = $start - 1;
          |}
          |if ($length < 0) {
-         |  throw new RuntimeException("Unexpected value for length in function $prettyName: "
-         |    + "length must be greater than or equal to 0.");
+         |  throw QueryExecutionErrors.unexpectedValueForLengthInFunctionError("$prettyName");
          |} else if ($length > $x.numElements() - $startIdx) {
          |  $resLength = $x.numElements() - $startIdx;
          |} else {
@@ -2073,14 +2069,13 @@ case class ElementAt(
         val index = ordinal.asInstanceOf[Int]
         if (array.numElements() < math.abs(index)) {
           if (failOnError) {
-            throw new ArrayIndexOutOfBoundsException(
-              s"Invalid index: $index, numElements: ${array.numElements()}")
+            throw QueryExecutionErrors.invalidArrayIndexError(index, array.numElements())
           } else {
             null
           }
         } else {
           val idx = if (index == 0) {
-            throw new ArrayIndexOutOfBoundsException("SQL array indices start at 1")
+            throw QueryExecutionErrors.sqlArrayIndexNotStartAtOneError()
           } else if (index > 0) {
             index - 1
           } else {
@@ -2113,10 +2108,7 @@ case class ElementAt(
           }
 
           val indexOutOfBoundBranch = if (failOnError) {
-            s"""throw new ArrayIndexOutOfBoundsException(
-               |  "Invalid index: " + $index + ", numElements: " + $eval1.numElements()
-               |);
-             """.stripMargin
+            s"throw QueryExecutionErrors.invalidArrayIndexError($index, $eval1.numElements());"
           } else {
             s"${ev.isNull} = true;"
           }
@@ -2127,7 +2119,7 @@ case class ElementAt(
              |  $indexOutOfBoundBranch
              |} else {
              |  if ($index == 0) {
-             |    throw new ArrayIndexOutOfBoundsException("SQL array indices start at 1");
+             |    throw QueryExecutionErrors.sqlArrayIndexNotStartAtOneError();
              |  } else if ($index > 0) {
              |    $index--;
              |  } else {
@@ -2226,9 +2218,7 @@ case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpressio
           val arrayData = inputs.map(_.asInstanceOf[ArrayData])
           val numberOfElements = arrayData.foldLeft(0L)((sum, ad) => sum + ad.numElements())
           if (numberOfElements > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
-            throw new RuntimeException(s"Unsuccessful try to concat arrays with $numberOfElements" +
-              " elements due to exceeding the array size limit " +
-              ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH + ".")
+            throw QueryExecutionErrors.concatArraysWithElementsExceedLimitError(numberOfElements)
           }
           val finalData = new Array[AnyRef](numberOfElements.toInt)
           var position = 0
@@ -2403,9 +2393,7 @@ case class Flatten(child: Expression) extends UnaryExpression with NullIntoleran
       val arrayData = elements.map(_.asInstanceOf[ArrayData])
       val numberOfElements = arrayData.foldLeft(0L)((sum, e) => sum + e.numElements())
       if (numberOfElements > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
-        throw new RuntimeException("Unsuccessful try to flatten an array of arrays with " +
-          s"$numberOfElements elements due to exceeding the array size limit " +
-          ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH + ".")
+        throw QueryExecutionErrors.flattenArraysWithElementsExceedLimitError(numberOfElements)
       }
       val flattenedData = new Array(numberOfElements.toInt)
       var position = 0
@@ -2852,8 +2840,8 @@ object Sequence {
       val (stepMonths, stepDays, stepMicros) = splitStep(input3)
 
       if (scale == MICROS_PER_DAY && stepMonths == 0 && stepDays == 0) {
-        throw new IllegalArgumentException(
-          s"sequence step must be a day ${intervalType.typeName} if start and end values are dates")
+        throw new IllegalArgumentException(s"sequence step must be an ${intervalType.typeName}" +
+          " of day granularity if start and end values are dates")
       }
 
       if (stepMonths == 0 && stepMicros == 0 && scale == MICROS_PER_DAY) {
@@ -2929,8 +2917,8 @@ object Sequence {
         s"""
            |if ($stepMonths == 0 && $stepDays == 0) {
            |  throw new IllegalArgumentException(
-           |    "sequence step must be a day ${intervalType.typeName} " +
-           |    "if start and end values are dates");
+           |    "sequence step must be an ${intervalType.typeName} " +
+           |    "of day granularity if start and end values are dates");
            |}
          """.stripMargin
         } else {
@@ -3047,8 +3035,7 @@ case class ArrayRepeat(left: Expression, right: Expression)
       null
     } else {
       if (count.asInstanceOf[Int] > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
-        throw new RuntimeException(s"Unsuccessful try to create array with $count elements " +
-          s"due to exceeding the array size limit ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}.")
+        throw QueryExecutionErrors.createArrayWithElementsExceedLimitError(count)
       }
       val element = left.eval(input)
       new GenericArrayData(Array.fill(count.asInstanceOf[Int])(element))
@@ -3330,9 +3317,7 @@ trait ArraySetLike {
       nullElementIndex : String): String = withResultArrayNullCheck(
     s"""
        |if ($size > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
-       |  throw new RuntimeException("Cannot create array with " + $size +
-       |  " elements of data due to exceeding the limit " +
-       |  "${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH} elements for ArrayData.");
+       |  throw QueryExecutionErrors.createArrayWithElementsExceedLimitError($size);
        |}
        |
        |if (!UnsafeArrayData.shouldUseGenericArrayData(${et.defaultSize}, $size)) {
@@ -3517,9 +3502,7 @@ trait ArrayBinaryLike
 
 object ArrayBinaryLike {
   def throwUnionLengthOverflowException(length: Int): Unit = {
-    throw new RuntimeException(s"Unsuccessful try to union arrays with $length " +
-      s"elements due to exceeding the array size limit " +
-      s"${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}.")
+    throw QueryExecutionErrors.unionArrayWithElementsExceedLimitError(length)
   }
 }
 

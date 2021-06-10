@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.analysis.GetColumnByOrdinal
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.objects._
 import org.apache.spark.sql.catalyst.util.ArrayBasedMapData
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
 
 /**
@@ -118,6 +119,7 @@ object JavaTypeInference {
       case c: Class[_] if c == classOf[java.sql.Date] => (DateType, true)
       case c: Class[_] if c == classOf[java.time.Instant] => (TimestampType, true)
       case c: Class[_] if c == classOf[java.sql.Timestamp] => (TimestampType, true)
+      case c: Class[_] if c == classOf[java.time.LocalDateTime] => (TimestampWithoutTZType, true)
       case c: Class[_] if c == classOf[java.time.Duration] => (DayTimeIntervalType, true)
       case c: Class[_] if c == classOf[java.time.Period] => (YearMonthIntervalType, true)
 
@@ -140,9 +142,7 @@ object JavaTypeInference {
 
       case other =>
         if (seenTypeSet.contains(other)) {
-          throw new UnsupportedOperationException(
-            "Cannot have circular references in bean class, but got the circular reference " +
-              s"of class $other")
+          throw QueryExecutionErrors.cannotHaveCircularReferencesInBeanClassError(other)
         }
 
         // TODO: we should only collect properties that have getter and setter. However, some tests
@@ -250,6 +250,9 @@ object JavaTypeInference {
 
       case c if c == classOf[java.sql.Timestamp] =>
         createDeserializerForSqlTimestamp(path)
+
+      case c if c == classOf[java.time.LocalDateTime] =>
+        createDeserializerForLocalDateTime(path)
 
       case c if c == classOf[java.time.Duration] =>
         createDeserializerForDuration(path)
@@ -409,6 +412,9 @@ object JavaTypeInference {
         case c if c == classOf[java.time.Instant] => createSerializerForJavaInstant(inputObject)
 
         case c if c == classOf[java.sql.Timestamp] => createSerializerForSqlTimestamp(inputObject)
+
+        case c if c == classOf[java.time.LocalDateTime] =>
+          createSerializerForLocalDateTime(inputObject)
 
         case c if c == classOf[java.time.LocalDate] => createSerializerForJavaLocalDate(inputObject)
 

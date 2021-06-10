@@ -105,13 +105,12 @@ class Dsdgen(dsdgenDir: String) extends Serializable {
             s"Could not find dsdgen at $dsdgen or /$dsdgen. Run install")
         }
 
-        // NOTE: RNGSEED is the RNG seed used by the data generator. Right now, it is fixed to
-        // 19620718 that is used to generate `https://github.com/maropu/spark-tpcds-sf-1`.
+        // NOTE: RNGSEED is the RNG seed used by the data generator. Right now, it is fixed to 100.
         val parallel = if (partitions > 1) s"-parallel $partitions -child $i" else ""
         val commands = Seq(
           "bash", "-c",
           s"cd $localToolsDir && ./dsdgen -table $tableName -filter Y -scale $scaleFactor " +
-          s"-RNGSEED 19620718 $parallel")
+          s"-RNGSEED 100 $parallel")
         BlockingLineStream(commands)
       }
     }

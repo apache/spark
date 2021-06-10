@@ -62,7 +62,7 @@ import org.apache.spark.sql.execution.{ExternalAppendOnlyUnsafeRowArray, SparkPl
  *   An offset indicates the number of rows above or below the current row, the frame for the
  *   current row starts or ends. For instance, given a row based sliding frame with a lower bound
  *   offset of -1 and a upper bound offset of +2. The frame for row with index 5 would range from
- *   index 4 to index 6.
+ *   index 4 to index 7.
  * - Range based: A range based boundary is based on the actual value of the ORDER BY
  *   expression(s). An offset is used to alter the value of the ORDER BY expression, for
  *   instance if the current order by expression has a value of 10 and the lower bound offset

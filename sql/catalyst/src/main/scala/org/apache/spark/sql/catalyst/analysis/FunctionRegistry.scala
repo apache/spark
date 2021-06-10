@@ -47,9 +47,20 @@ trait FunctionRegistryBase[T] {
 
   type FunctionBuilder = Seq[Expression] => T
 
-  final def registerFunction(name: FunctionIdentifier, builder: FunctionBuilder): Unit = {
+  final def registerFunction(
+      name: FunctionIdentifier, builder: FunctionBuilder, source: String): Unit = {
     val info = new ExpressionInfo(
-      builder.getClass.getCanonicalName, name.database.orNull, name.funcName)
+      builder.getClass.getCanonicalName,
+      name.database.orNull,
+      name.funcName,
+      null,
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      source)
     registerFunction(name, info, builder)
   }
 
@@ -59,10 +70,12 @@ trait FunctionRegistryBase[T] {
     builder: FunctionBuilder): Unit
 
   /* Create or replace a temporary function. */
-  final def createOrReplaceTempFunction(name: String, builder: FunctionBuilder): Unit = {
+  final def createOrReplaceTempFunction(
+      name: String, builder: FunctionBuilder, source: String): Unit = {
     registerFunction(
       FunctionIdentifier(name),
-      builder)
+      builder,
+      source)
   }
 
   @throws[AnalysisException]("If function does not exist")
@@ -157,7 +170,8 @@ object FunctionRegistryBase {
           df.note(),
           df.group(),
           df.since(),
-          df.deprecated())
+          df.deprecated(),
+          df.source())
       } else {
         // This exists for the backward compatibility with old `ExpressionDescription`s defining
         // the extended description in `extended()`.
@@ -184,12 +198,23 @@ trait SimpleFunctionRegistryBase[T] extends FunctionRegistryBase[T] with Logging
   override def registerFunction(
       name: FunctionIdentifier,
       info: ExpressionInfo,
-      builder: FunctionBuilder): Unit = synchronized {
+      builder: FunctionBuilder): Unit = {
     val normalizedName = normalizeFuncName(name)
+    internalRegisterFunction(normalizedName, info, builder)
+  }
+
+  /**
+   * Perform function registry without any preprocessing.
+   * This is used when registering built-in functions and doing `FunctionRegistry.clone()`
+   */
+  def internalRegisterFunction(
+      name: FunctionIdentifier,
+      info: ExpressionInfo,
+      builder: FunctionBuilder): Unit = synchronized {
     val newFunction = (info, builder)
-    functionBuilders.put(normalizedName, newFunction) match {
+    functionBuilders.put(name, newFunction) match {
       case Some(previousFunction) if previousFunction != newFunction =>
-        logWarning(s"The function $normalizedName replaced a previously registered function.")
+        logWarning(s"The function $name replaced a previously registered function.")
       case _ =>
     }
   }
@@ -273,7 +298,7 @@ class SimpleFunctionRegistry
   override def clone(): SimpleFunctionRegistry = synchronized {
     val registry = new SimpleFunctionRegistry
     functionBuilders.iterator.foreach { case (name, (info, builder)) =>
-      registry.registerFunction(name, info, builder)
+      registry.internalRegisterFunction(name, info, builder)
     }
     registry
   }
@@ -379,6 +404,8 @@ object FunctionRegistry {
     expression[Divide]("/"),
     expression[IntegralDivide]("div"),
     expression[Remainder]("%"),
+    expression[TryAdd]("try_add"),
+    expression[TryDivide]("try_divide"),
 
     // aggregate functions
     expression[HyperLogLogPlusPlus]("approx_count_distinct"),
@@ -601,6 +628,7 @@ object FunctionRegistry {
     expression[MonotonicallyIncreasingID]("monotonically_increasing_id"),
     expression[CurrentDatabase]("current_database"),
     expression[CurrentCatalog]("current_catalog"),
+    expression[CurrentUser]("current_user"),
     expression[CallMethodViaReflection]("reflect"),
     expression[CallMethodViaReflection]("java_method", true),
     expression[SparkVersion]("version"),
@@ -681,7 +709,8 @@ object FunctionRegistry {
   val builtin: SimpleFunctionRegistry = {
     val fr = new SimpleFunctionRegistry
     expressions.foreach {
-      case (name, (info, builder)) => fr.registerFunction(FunctionIdentifier(name), info, builder)
+      case (name, (info, builder)) =>
+        fr.internalRegisterFunction(FunctionIdentifier(name), info, builder)
     }
     fr
   }
@@ -719,7 +748,7 @@ object FunctionRegistry {
     val usage = "_FUNC_(expr) - Casts the value `expr` to the target data type `_FUNC_`."
     val expressionInfo =
       new ExpressionInfo(clazz.getCanonicalName, null, name, usage, "", "", "",
-        "conversion_funcs", "2.0.1", "")
+        "conversion_funcs", "2.0.1", "", "built-in")
     (name, (expressionInfo, builder))
   }
 
@@ -748,7 +777,7 @@ class SimpleTableFunctionRegistry extends SimpleFunctionRegistryBase[LogicalPlan
   override def clone(): SimpleTableFunctionRegistry = synchronized {
     val registry = new SimpleTableFunctionRegistry
     functionBuilders.iterator.foreach { case (name, (info, builder)) =>
-      registry.registerFunction(name, info, builder)
+      registry.internalRegisterFunction(name, info, builder)
     }
     registry
   }
@@ -788,7 +817,7 @@ object TableFunctionRegistry {
     val fr = new SimpleTableFunctionRegistry
     logicalPlans.foreach {
       case (name, (info, builder)) =>
-        fr.registerFunction(FunctionIdentifier(name), info, builder)
+        fr.internalRegisterFunction(FunctionIdentifier(name), info, builder)
     }
     fr
   }

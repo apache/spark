@@ -20,7 +20,6 @@ package org.apache.spark.sql.catalyst.encoders
 import scala.collection.Map
 import scala.reflect.ClassTag
 
-import org.apache.spark.SparkException
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.{ScalaReflection, WalkedTypePath}
 import org.apache.spark.sql.catalyst.DeserializerBuildHelper._
@@ -29,6 +28,7 @@ import org.apache.spark.sql.catalyst.analysis.GetColumnByOrdinal
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.objects._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -52,6 +52,8 @@ import org.apache.spark.sql.types._
  *
  *   TimestampType -> java.sql.Timestamp if spark.sql.datetime.java8API.enabled is false
  *   TimestampType -> java.time.Instant if spark.sql.datetime.java8API.enabled is true
+ *
+ *   TimestampWithoutTZType -> java.time.LocalDateTime
  *
  *   DayTimeIntervalType -> java.time.Duration
  *   YearMonthIntervalType -> java.time.Period
@@ -87,8 +89,7 @@ object RowEncoder {
         annotation.udt()
       } else {
         UDTRegistration.getUDTFor(udt.userClass.getName).getOrElse {
-          throw new SparkException(s"${udt.userClass.getName} is not annotated with " +
-            "SQLUserDefinedType nor registered with UDTRegistration.}")
+          throw QueryExecutionErrors.userDefinedTypeNotAnnotatedAndRegisteredError(udt)
         }
       }
       val obj = NewInstance(
@@ -103,6 +104,8 @@ object RowEncoder {
       } else {
         createSerializerForSqlTimestamp(inputObject)
       }
+
+    case TimestampWithoutTZType => createSerializerForLocalDateTime(inputObject)
 
     case DateType =>
       if (SQLConf.get.datetimeJava8ApiEnabled) {
@@ -227,6 +230,8 @@ object RowEncoder {
       } else {
         ObjectType(classOf[java.sql.Timestamp])
       }
+    case TimestampWithoutTZType =>
+      ObjectType(classOf[java.time.LocalDateTime])
     case DateType =>
       if (SQLConf.get.datetimeJava8ApiEnabled) {
         ObjectType(classOf[java.time.LocalDate])
@@ -266,8 +271,7 @@ object RowEncoder {
         annotation.udt()
       } else {
         UDTRegistration.getUDTFor(udt.userClass.getName).getOrElse {
-          throw new SparkException(s"${udt.userClass.getName} is not annotated with " +
-            "SQLUserDefinedType nor registered with UDTRegistration.}")
+          throw QueryExecutionErrors.userDefinedTypeNotAnnotatedAndRegisteredError(udt)
         }
       }
       val obj = NewInstance(
@@ -282,6 +286,9 @@ object RowEncoder {
       } else {
         createDeserializerForSqlTimestamp(input)
       }
+
+    case TimestampWithoutTZType =>
+      createDeserializerForLocalDateTime(input)
 
     case DateType =>
       if (SQLConf.get.datetimeJava8ApiEnabled) {

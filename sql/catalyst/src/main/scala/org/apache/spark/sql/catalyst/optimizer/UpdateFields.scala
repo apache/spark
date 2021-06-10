@@ -24,6 +24,7 @@ import scala.collection.mutable
 import org.apache.spark.sql.catalyst.expressions.{Expression, UpdateFields, WithField}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.trees.TreePattern.UPDATE_FIELDS
 
 
 /**
@@ -71,14 +72,16 @@ object OptimizeUpdateFields extends Rule[LogicalPlan] {
       UpdateFields(struct, fieldOps1 ++ fieldOps2)
   }
 
-  def apply(plan: LogicalPlan): LogicalPlan = plan resolveExpressions(optimizeUpdateFields)
+  def apply(plan: LogicalPlan): LogicalPlan = plan.resolveExpressionsWithPruning(
+    _.containsPattern(UPDATE_FIELDS), ruleId)(optimizeUpdateFields)
 }
 
 /**
  * Replaces [[UpdateFields]] expression with an evaluable expression.
  */
 object ReplaceUpdateFieldsExpression extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
+  def apply(plan: LogicalPlan): LogicalPlan = plan.transformAllExpressionsWithPruning(
+    _.containsPattern(UPDATE_FIELDS)) {
     case u: UpdateFields => u.evalExpr
   }
 }
