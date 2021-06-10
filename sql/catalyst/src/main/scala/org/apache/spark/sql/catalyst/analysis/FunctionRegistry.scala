@@ -207,7 +207,7 @@ trait SimpleFunctionRegistryBase[T] extends FunctionRegistryBase[T] with Logging
    * Perform function registry without any preprocessing.
    * This is used when registering built-in functions and doing `FunctionRegistry.clone()`
    */
-  protected def internalRegisterFunction(
+  def internalRegisterFunction(
       name: FunctionIdentifier,
       info: ExpressionInfo,
       builder: FunctionBuilder): Unit = synchronized {
