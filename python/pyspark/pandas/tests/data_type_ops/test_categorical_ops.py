@@ -140,6 +140,9 @@ class CategoricalOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         self.assert_eq(pser, psser.to_pandas())
         self.assert_eq(ps.from_pandas(pser), psser)
 
+    def test_isnull(self):
+        self.assert_eq(self.pser.isnull(), self.psser.isnull())
+
 
 if __name__ == "__main__":
     import unittest

@@ -345,6 +345,9 @@ class FractionalOps(NumericOps):
         right = transform_boolean_operand_to_numeric(right, left.spark.data_type)
         return numpy_column_op(rfloordiv)(left, right)
 
+    def isnull(self, series) -> Union["Series", "Index"]:
+        return series._with_new_scol(series.spark.column.isNull() | F.isnan(series.spark.column))
+
 
 class DecimalOps(FractionalOps):
     """
@@ -355,3 +358,6 @@ class DecimalOps(FractionalOps):
     @property
     def pretty_name(self) -> str:
         return "decimal"
+
+    def isnull(self, series) -> Union["Series", "Index"]:
+        return series._with_new_scol(series.spark.column.isNull())

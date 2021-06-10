@@ -213,6 +213,10 @@ class ComplexOpsTest(PandasOnSparkTestCase, TestCasesUtils):
             self.assert_eq(pser, psser.to_pandas())
             self.assert_eq(ps.from_pandas(pser), psser)
 
+    def test_isnull(self):
+        for pser, psser in zip(self.psers, self.pssers):
+            self.assert_eq(pser.isnull(), psser.isnull())
+
 
 if __name__ == "__main__":
     import unittest

@@ -209,3 +209,10 @@ class DataTypeOps(object, metaclass=ABCMeta):
     def prepare(self, col: pd.Series) -> pd.Series:
         """Prepare column when from_pandas."""
         return col.replace({np.nan: None})
+
+    def isnull(self, series):
+        from pyspark.pandas.indexes import MultiIndex
+
+        if isinstance(series, MultiIndex):
+            raise NotImplementedError("isna is not defined for MultiIndex")
+        return series._with_new_scol(series.spark.column.isNull())
