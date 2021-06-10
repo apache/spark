@@ -1149,7 +1149,7 @@ class Dataset[T] private[sql](
   def joinWith[U](other: Dataset[U], condition: Column, joinType: String): Dataset[(T, U)] = {
     // Creates a Join node and resolve it first, to get join condition resolved, self-join resolved,
     // etc.
-    val joined = sparkSession.sessionState.executePlan(
+    var joined = sparkSession.sessionState.executePlan(
       Join(
         this.logicalPlan,
         other.logicalPlan,
@@ -1160,6 +1160,26 @@ class Dataset[T] private[sql](
     if (joined.joinType == LeftSemi || joined.joinType == LeftAnti) {
       throw new AnalysisException("Invalid join type in joinWith: " + joined.joinType.sql)
     }
+
+    val resolver = sparkSession.sessionState.analyzer.resolver
+    val cond = joined.condition.map { _.transform {
+      case catalyst.expressions.EqualTo(a: AttributeReference, b: AttributeReference)
+        if a.sameRef(b) =>
+        catalyst.expressions.EqualTo(
+          joined.left.resolveQuoted(a.name, resolver)
+            .getOrElse(throw resolveException(a.name, joined.left.schema.fieldNames)),
+          joined.right.resolveQuoted(b.name, resolver)
+            .getOrElse(throw resolveException(b.name, joined.right.schema.fieldNames)))
+      case catalyst.expressions.EqualNullSafe(a: AttributeReference, b: AttributeReference)
+        if a.sameRef(b) =>
+        catalyst.expressions.EqualNullSafe(
+          joined.left.resolveQuoted(a.name, resolver)
+            .getOrElse(throw resolveException(a.name, joined.left.schema.fieldNames)),
+          joined.right.resolveQuoted(b.name, resolver)
+            .getOrElse(throw resolveException(b.name, joined.right.schema.fieldNames)))
+    }}
+
+    joined = joined.copy(condition = cond)
 
     implicit val tuple2Encoder: Encoder[(T, U)] =
       ExpressionEncoder.tuple(this.exprEnc, other.exprEnc)
