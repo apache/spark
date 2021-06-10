@@ -281,6 +281,56 @@ class DataFrameCallbackSuite extends QueryTest
     }
   }
 
+  test("get observable metrics before persist by callback") {
+    val metricMaps = ArrayBuffer.empty[Map[String, Row]]
+    val listener = new QueryExecutionListener {
+      override def onSuccess(funcName: String, qe: QueryExecution, duration: Long): Unit = {
+        metricMaps += qe.observedMetrics
+      }
+
+      override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {
+        // No-op
+      }
+    }
+    spark.listenerManager.register(listener)
+    try {
+      val df = spark.range(100)
+        .observe(
+          name = "my_event",
+          min($"id").as("min_val"),
+          max($"id").as("max_val"),
+          sum($"id").as("sum_val"),
+          count(when($"id" % 2 === 0, 1)).as("num_even"))
+        .persist()
+        .observe(
+          name = "other_event",
+          avg($"id").cast("int").as("avg_val"))
+        .persist()
+
+      def checkMetrics(metrics: Map[String, Row]): Unit = {
+        assert(metrics.size === 2)
+        assert(metrics("my_event") === Row(0L, 99L, 4950L, 50L))
+        assert(metrics("other_event") === Row(49))
+      }
+
+      // First run
+      df.collect()
+      sparkContext.listenerBus.waitUntilEmpty()
+      assert(metricMaps.size === 1)
+      checkMetrics(metricMaps.head)
+      metricMaps.clear()
+
+      // Second run should produce the same result as the first run.
+      df.collect()
+      sparkContext.listenerBus.waitUntilEmpty()
+      assert(metricMaps.size === 1)
+      checkMetrics(metricMaps.head)
+
+    } finally {
+      spark.listenerManager.unregister(listener)
+    }
+  }
+
   testQuietly("SPARK-31144: QueryExecutionListener should receive `java.lang.Error`") {
     var e: Exception = null
     val listener = new QueryExecutionListener {
