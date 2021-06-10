@@ -647,19 +647,6 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     verify(persistentVolumeClaims, never()).create(any())
   }
 
-  test("SPARK-32975: Avoid None.get when KUBERNETES_DRIVER_POD_NAME is option for client mode") {
-    val msg = "None.get"
-    val logAppender = new LogAppender(msg)
-    withLogAppender(logAppender) {
-      val conf = new SparkConf()
-      new ExecutorPodsAllocator(
-        conf, secMgr, executorBuilder, kubernetesClient, snapshotsStore, waitForExecutorPodsClock)
-        .start(TEST_SPARK_APP_ID, schedulerBackend)
-    }
-
-    assert(!logAppender.loggingEvents.exists(_.getRenderedMessage.contains(msg)))
-  }
-
   private def executorPodAnswer(): Answer[KubernetesExecutorSpec] =
     (invocation: InvocationOnMock) => {
       val k8sConf: KubernetesExecutorConf = invocation.getArgument(0)
