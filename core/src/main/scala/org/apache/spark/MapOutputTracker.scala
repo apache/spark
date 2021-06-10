@@ -214,6 +214,7 @@ private class ShuffleStatus(
   def removeOutputsOnHost(host: String): Unit = withWriteLock {
     logDebug(s"Removing outputs for host ${host}")
     removeOutputsByFilter(x => x.host == host)
+    removeMergeResultsByFilter(x => x.host == host)
   }
 
   /**
@@ -238,6 +239,12 @@ private class ShuffleStatus(
         invalidateSerializedMapOutputStatusCache()
       }
     }
+  }
+
+  /**
+   * Removes all shuffle merge result which satisfies the filter.
+   */
+  def removeMergeResultsByFilter(f: BlockManagerId => Boolean): Unit = withWriteLock {
     for (reduceId <- mergeStatuses.indices) {
       if (mergeStatuses(reduceId) != null && f(mergeStatuses(reduceId).location)) {
         _numAvailableMergeResults -= 1
@@ -708,15 +715,16 @@ private[spark] class MapOutputTrackerMaster(
     }
   }
 
-  /** Unregister all map output information of the given shuffle. */
-  def unregisterAllMapOutput(shuffleId: Int): Unit = {
+  /** Unregister all map and merge output information of the given shuffle. */
+  def unregisterAllMapAndMergeOutput(shuffleId: Int): Unit = {
     shuffleStatuses.get(shuffleId) match {
       case Some(shuffleStatus) =>
         shuffleStatus.removeOutputsByFilter(x => true)
+        shuffleStatus.removeMergeResultsByFilter(x => true)
         incrementEpoch()
       case None =>
         throw new SparkException(
-          s"unregisterAllMapOutput called for nonexistent shuffle ID $shuffleId.")
+          s"unregisterAllMapAndMergeOutput called for nonexistent shuffle ID $shuffleId.")
     }
   }
 
@@ -731,30 +739,42 @@ private[spark] class MapOutputTrackerMaster(
   }
 
   /**
-   * Unregisters a merge result corresponding to the reduceId if present. If the optional mapId
-   * is specified, it will only unregister the merge result if the mapId is part of that merge
+   * Unregisters a merge result corresponding to the reduceId if present. If the optional mapIndex
+   * is specified, it will only unregister the merge result if the mapIndex is part of that merge
    * result.
    *
    * @param shuffleId the shuffleId.
    * @param reduceId  the reduceId.
    * @param bmAddress block manager address.
-   * @param mapId     the optional mapId which should be checked to see it was part of the merge
-   *                  result.
+   * @param mapIndex  the optional mapIndex which should be checked to see it was part of the
+   *                  merge result.
    */
   def unregisterMergeResult(
-    shuffleId: Int,
-    reduceId: Int,
-    bmAddress: BlockManagerId,
-    mapId: Option[Int] = None): Unit = {
+      shuffleId: Int,
+      reduceId: Int,
+      bmAddress: BlockManagerId,
+      mapIndex: Option[Int] = None): Unit = {
     shuffleStatuses.get(shuffleId) match {
       case Some(shuffleStatus) =>
         val mergeStatus = shuffleStatus.mergeStatuses(reduceId)
-        if (mergeStatus != null && (mapId.isEmpty || mergeStatus.tracker.contains(mapId.get))) {
+        if (mergeStatus != null &&
+          (mapIndex.isEmpty || mergeStatus.tracker.contains(mapIndex.get))) {
           shuffleStatus.removeMergeResult(reduceId, bmAddress)
           incrementEpoch()
         }
       case None =>
         throw new SparkException("unregisterMergeResult called for nonexistent shuffle ID")
+    }
+  }
+
+  def unregisterAllMergeResult(shuffleId: Int): Unit = {
+    shuffleStatuses.get(shuffleId) match {
+      case Some(shuffleStatus) =>
+        shuffleStatus.removeMergeResultsByFilter(x => true)
+        incrementEpoch()
+      case None =>
+        throw new SparkException(
+          s"unregisterAllMergeResult called for nonexistent shuffle ID $shuffleId.")
     }
   }
 
