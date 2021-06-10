@@ -381,7 +381,7 @@ def _check_option(key: str) -> None:
 
 
 class DictWrapper:
-    """ provide attribute-style access to a nested dict"""
+    """provide attribute-style access to a nested dict"""
 
     def __init__(self, d: Dict[str, Option], prefix: str = ""):
         object.__setattr__(self, "d", d)

@@ -107,7 +107,7 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
   }
 
   override def create(): Unit = {
-    runCommand("create") {
+    runCommand(
       CreateTableAsSelectStatement(
         tableName,
         logicalPlan,
@@ -121,8 +121,7 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
         options.toMap,
         None,
         ifNotExists = false,
-        external = false)
-    }
+        external = false))
   }
 
   override def replace(): Unit = {
@@ -146,7 +145,7 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
   @throws(classOf[NoSuchTableException])
   def append(): Unit = {
     val append = AppendData.byName(UnresolvedRelation(tableName), logicalPlan, options.toMap)
-    runCommand("append")(append)
+    runCommand(append)
   }
 
   /**
@@ -163,7 +162,7 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
   def overwrite(condition: Column): Unit = {
     val overwrite = OverwriteByExpression.byName(
       UnresolvedRelation(tableName), logicalPlan, condition.expr, options.toMap)
-    runCommand("overwrite")(overwrite)
+    runCommand(overwrite)
   }
 
   /**
@@ -183,21 +182,21 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
   def overwritePartitions(): Unit = {
     val dynamicOverwrite = OverwritePartitionsDynamic.byName(
       UnresolvedRelation(tableName), logicalPlan, options.toMap)
-    runCommand("overwritePartitions")(dynamicOverwrite)
+    runCommand(dynamicOverwrite)
   }
 
   /**
    * Wrap an action to track the QueryExecution and time cost, then report to the user-registered
    * callback functions.
    */
-  private def runCommand(name: String)(command: LogicalPlan): Unit = {
+  private def runCommand(command: LogicalPlan): Unit = {
     val qe = sparkSession.sessionState.executePlan(command)
     // call `QueryExecution.toRDD` to trigger the execution of commands.
-    SQLExecution.withNewExecutionId(qe, Some(name))(qe.toRdd)
+    SQLExecution.withNewExecutionId(qe, Some("command"))(qe.toRdd)
   }
 
   private def internalReplace(orCreate: Boolean): Unit = {
-    runCommand("replace") {
+    runCommand(
       ReplaceTableAsSelectStatement(
         tableName,
         logicalPlan,
@@ -210,8 +209,7 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
         None,
         options.toMap,
         None,
-        orCreate = orCreate)
-    }
+        orCreate = orCreate))
   }
 }
 

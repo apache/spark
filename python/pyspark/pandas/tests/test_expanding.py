@@ -96,7 +96,8 @@ class ExpandingTest(PandasOnSparkTestCase, TestUtils):
             psdf = ps.DataFrame({"a": [1, 2, 3, 2], "b": [4.0, 2.0, 3.0, 1.0]}, index=idx)
             psdf.columns = pd.MultiIndex.from_tuples([("a", "x"), ("a", "y")])
             expected_result = pd.DataFrame(
-                {("a", "x"): [None, 2.0, 3.0, 4.0], ("a", "y"): [None, 2.0, 3.0, 4.0]}, index=idx,
+                {("a", "x"): [None, 2.0, 3.0, 4.0], ("a", "y"): [None, 2.0, 3.0, 4.0]},
+                index=idx,
             )
             self.assert_eq(psdf.expanding(2).count().sort_index(), expected_result.sort_index())
 

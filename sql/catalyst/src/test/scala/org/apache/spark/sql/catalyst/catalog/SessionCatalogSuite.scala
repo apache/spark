@@ -191,17 +191,8 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
 
   test("drop database when the database does not exist") {
     withBasicCatalog { catalog =>
-      // TODO: fix this inconsistent between HiveExternalCatalog and InMemoryCatalog
-      if (isHiveExternalCatalog) {
-        val e = intercept[AnalysisException] {
-          catalog.dropDatabase("db_that_does_not_exist", ignoreIfNotExists = false, cascade = false)
-        }.getMessage
-        assert(e.contains(
-          "org.apache.hadoop.hive.metastore.api.NoSuchObjectException: db_that_does_not_exist"))
-      } else {
-        intercept[NoSuchDatabaseException] {
-          catalog.dropDatabase("db_that_does_not_exist", ignoreIfNotExists = false, cascade = false)
-        }
+      intercept[NoSuchDatabaseException] {
+        catalog.dropDatabase("db_that_does_not_exist", ignoreIfNotExists = false, cascade = false)
       }
       catalog.dropDatabase("db_that_does_not_exist", ignoreIfNotExists = true, cascade = false)
     }

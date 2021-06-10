@@ -31,7 +31,6 @@ import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.connector.catalog.{CatalogPlugin, CatalogV2Implicits, CatalogV2Util, Identifier, SupportsCatalogOptions, Table, TableCatalog, TableProvider, V1Table}
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.connector.expressions.{FieldReference, IdentityTransform, Transform}
-import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, DataSourceUtils, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.v2._
@@ -311,13 +310,13 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
           val relation = DataSourceV2Relation.create(table, catalog, ident, dsOptions)
           checkPartitioningMatchesV2Table(table)
           if (mode == SaveMode.Append) {
-            runCommand(df.sparkSession, "save") {
+            runCommand(df.sparkSession) {
               AppendData.byName(relation, df.logicalPlan, finalOptions)
             }
           } else {
             // Truncate the table. TableCapabilityCheck will throw a nice exception if this
             // isn't supported
-            runCommand(df.sparkSession, "save") {
+            runCommand(df.sparkSession) {
               OverwriteByExpression.byName(
                 relation, df.logicalPlan, Literal(true), finalOptions)
             }
@@ -332,7 +331,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
               val location = Option(dsOptions.get("path")).map(TableCatalog.PROP_LOCATION -> _)
 
-              runCommand(df.sparkSession, "save") {
+              runCommand(df.sparkSession) {
                 CreateTableAsSelect(
                   catalog,
                   ident,
@@ -379,7 +378,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
     val optionsWithPath = getOptionsWithPath(path)
 
     // Code path for data source v1.
-    runCommand(df.sparkSession, "save") {
+    runCommand(df.sparkSession) {
       DataSource(
         sparkSession = df.sparkSession,
         className = source,
@@ -475,13 +474,13 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
         }
     }
 
-    runCommand(df.sparkSession, "insertInto") {
+    runCommand(df.sparkSession) {
       command
     }
   }
 
   private def insertInto(tableIdent: TableIdentifier): Unit = {
-    runCommand(df.sparkSession, "insertInto") {
+    runCommand(df.sparkSession) {
       InsertIntoStatement(
         table = UnresolvedRelation(tableIdent),
         partitionSpec = Map.empty[String, Option[String]],
@@ -631,7 +630,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
           external = false)
     }
 
-    runCommand(df.sparkSession, "saveAsTable") {
+    runCommand(df.sparkSession) {
       command
     }
   }
@@ -698,7 +697,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       partitionColumnNames = partitioningColumns.getOrElse(Nil),
       bucketSpec = getBucketSpec)
 
-    runCommand(df.sparkSession, "saveAsTable")(
+    runCommand(df.sparkSession)(
       CreateTable(tableDesc, mode, Some(df.logicalPlan)))
   }
 
@@ -733,18 +732,10 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * Don't create too many partitions in parallel on a large cluster; otherwise Spark might crash
    * your external database systems.
    *
-   * You can set the following JDBC-specific option(s) for storing JDBC:
-   * <ul>
-   * <li>`truncate` (default `false`): use `TRUNCATE TABLE` instead of `DROP TABLE`.</li>
-   * </ul>
+   * JDBC-specific option and parameter documentation for storing tables via JDBC in
+   * <a href="https://spark.apache.org/docs/latest/sql-data-sources-jdbc.html#data-source-option">
+   *   Data Source Option</a> in the version you use.
    *
-   * In case of failures, users should turn off `truncate` option to use `DROP TABLE` again. Also,
-   * due to the different behavior of `TRUNCATE TABLE` among DBMS, it's not always safe to use this.
-   * MySQLDialect, DB2Dialect, MsSqlServerDialect, DerbyDialect, and OracleDialect supports this
-   * while PostgresDialect and default JDBCDirect doesn't. For unknown and unsupported JDBCDirect,
-   * the user option `truncate` is ignored.
-   *
-   * @param url JDBC database url of the form `jdbc:subprotocol:subname`
    * @param table Name of the table in the external database.
    * @param connectionProperties JDBC database connection arguments, a list of arbitrary string
    *                             tag/value. Normally at least a "user" and "password" property
@@ -864,10 +855,10 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * Wrap a DataFrameWriter action to track the QueryExecution and time cost, then report to the
    * user-registered callback functions.
    */
-  private def runCommand(session: SparkSession, name: String)(command: LogicalPlan): Unit = {
+  private def runCommand(session: SparkSession)(command: LogicalPlan): Unit = {
     val qe = session.sessionState.executePlan(command)
-    // call `QueryExecution.toRDD` to trigger the execution of commands.
-    SQLExecution.withNewExecutionId(qe, Some(name))(qe.toRdd)
+    // call `QueryExecution.commandExecuted` to trigger the execution of commands.
+    qe.commandExecuted
   }
 
   private def lookupV2Provider(): Option[TableProvider] = {

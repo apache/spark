@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.optimizer.BooleanSimplification
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, TypeUtils}
-import org.apache.spark.sql.connector.catalog.{LookupCatalog, SupportsAtomicPartitionManagement, SupportsPartitionManagement, Table}
+import org.apache.spark.sql.connector.catalog.{LookupCatalog, SupportsPartitionManagement}
 import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, After, ColumnPosition, DeleteColumn, RenameColumn, UpdateColumnComment, UpdateColumnNullability, UpdateColumnPosition, UpdateColumnType}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
@@ -121,6 +121,9 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
 
       case u: UnresolvedRelation =>
         u.failAnalysis(s"Table or view not found: ${u.multipartIdentifier.quoted}")
+
+      case u: UnresolvedHint =>
+        u.failAnalysis(s"Hint not found: ${u.name}")
 
       case InsertIntoStatement(u: UnresolvedRelation, _, _, _, _, _) =>
         u.failAnalysis(s"Table not found: ${u.multipartIdentifier.quoted}")
@@ -777,6 +780,9 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
           }
         }
 
+      case _: LateralSubquery =>
+        assert(plan.isInstanceOf[LateralJoin])
+
       case inSubqueryOrExistsSubquery =>
         plan match {
           case _: Filter | _: SupportsSubquery | _: Join => // Ok
@@ -788,7 +794,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
 
     // Validate to make sure the correlations appearing in the query are valid and
     // allowed by spark.
-    checkCorrelationsInSubquery(expr.plan)
+    checkCorrelationsInSubquery(expr.plan, isLateral = plan.isInstanceOf[LateralJoin])
   }
 
   /**
@@ -827,7 +833,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
    * Validates to make sure the outer references appearing inside the subquery
    * are allowed.
    */
-  private def checkCorrelationsInSubquery(sub: LogicalPlan): Unit = {
+  private def checkCorrelationsInSubquery(sub: LogicalPlan, isLateral: Boolean = false): Unit = {
     // Validate that correlated aggregate expression do not contain a mixture
     // of outer and local references.
     def checkMixedReferencesInsideAggregateExpr(expr: Expression): Unit = {
@@ -849,12 +855,21 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
       }
     }
 
+    // Check whether the logical plan node can host outer references.
+    // A `Project` can host outer references if it is inside a lateral subquery.
+    // Otherwise, only Filter can only outer references.
+    def canHostOuter(plan: LogicalPlan): Boolean = plan match {
+      case _: Filter => true
+      case _: Project => isLateral
+      case _ => false
+    }
+
     // Make sure a plan's expressions do not contain :
     // 1. Aggregate expressions that have mixture of outer and local references.
-    // 2. Expressions containing outer references on plan nodes other than Filter.
+    // 2. Expressions containing outer references on plan nodes other than allowed operators.
     def failOnInvalidOuterReference(p: LogicalPlan): Unit = {
       p.expressions.foreach(checkMixedReferencesInsideAggregateExpr)
-      if (!p.isInstanceOf[Filter] && p.expressions.exists(containsOuter)) {
+      if (!canHostOuter(p) && p.expressions.exists(containsOuter)) {
         failAnalysis(
           "Expressions referencing the outer query are not supported outside of WHERE/HAVING " +
             s"clauses:\n$p")
@@ -988,6 +1003,9 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
       case r: RepartitionByExpression =>
         failOnInvalidOuterReference(r)
 
+      case l: LateralJoin =>
+        failOnInvalidOuterReference(l)
+
       // Category 3:
       // Filter is one of the two operators allowed to host correlated expressions.
       // The other operator is Join. Filter can be anywhere in a correlated subquery.
@@ -1051,25 +1069,5 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
       case p =>
         failOnOuterReferenceInSubTree(p)
     }}
-  }
-
-  // Make sure that table is able to alter partition.
-  private def checkAlterTablePartition(
-      table: Table, parts: Seq[PartitionSpec]): Unit = {
-    (table, parts) match {
-      case (table, _) if !table.isInstanceOf[SupportsPartitionManagement] =>
-        failAnalysis(s"Table ${table.name()} can not alter partitions.")
-
-      case (_, parts) if parts.exists(_.isInstanceOf[UnresolvedPartitionSpec]) =>
-        failAnalysis("PartitionSpecs are not resolved")
-
-      // Skip atomic partition tables
-      case (_: SupportsAtomicPartitionManagement, _) =>
-      case (_: SupportsPartitionManagement, parts) if parts.size > 1 =>
-        failAnalysis(
-          s"Nonatomic partition table ${table.name()} can not alter multiple partitions.")
-
-      case _ =>
-    }
   }
 }

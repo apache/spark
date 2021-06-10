@@ -69,7 +69,7 @@ python/lib/pyspark.zip
 python/.eggs/
 python/deps
 python/docs/_site/
-python/docs/source/reference/api/
+python/docs/source/reference/**/api/
 python/test_coverage/coverage_data
 python/test_coverage/htmlcov
 python/pyspark/python

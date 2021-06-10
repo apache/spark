@@ -387,14 +387,16 @@ class CategoricalTest(PandasOnSparkTestCase, TestUtils):
             return pdf.astype(str)
 
         self.assert_eq(
-            psdf.pandas_on_spark.transform_batch(to_str).sort_index(), to_str(pdf).sort_index(),
+            psdf.pandas_on_spark.transform_batch(to_str).sort_index(),
+            to_str(pdf).sort_index(),
         )
 
         def to_codes(pdf) -> ps.Series[np.int8]:
             return pdf.b.cat.codes
 
         self.assert_eq(
-            psdf.pandas_on_spark.transform_batch(to_codes).sort_index(), to_codes(pdf).sort_index(),
+            psdf.pandas_on_spark.transform_batch(to_codes).sort_index(),
+            to_codes(pdf).sort_index(),
         )
 
         pdf = pd.DataFrame(

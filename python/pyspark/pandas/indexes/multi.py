@@ -42,11 +42,12 @@ from pyspark.pandas.utils import (
     verify_temp_column_name,
 )
 from pyspark.pandas.internal import (
+    InternalField,
     InternalFrame,
     NATURAL_ORDER_COLUMN_NAME,
     SPARK_INDEX_NAME_FORMAT,
 )
-from pyspark.pandas.typedef import Dtype, Scalar
+from pyspark.pandas.typedef import Scalar
 
 
 class MultiIndex(Index):
@@ -140,7 +141,7 @@ class MultiIndex(Index):
         return internal.copy(
             column_labels=[None],
             data_spark_columns=[scol],
-            data_dtypes=[None],
+            data_fields=[None],
             column_label_names=None,
         )
 
@@ -151,7 +152,7 @@ class MultiIndex(Index):
     def __abs__(self) -> Index:
         raise TypeError("TypeError: cannot perform __abs__ with this index type: MultiIndex")
 
-    def _with_new_scol(self, scol: spark.Column, *, dtype: Optional[Dtype] = None) -> Index:
+    def _with_new_scol(self, scol: spark.Column, *, field: Optional[InternalField] = None) -> Index:
         raise NotImplementedError("Not supported for type MultiIndex")
 
     @no_type_check
@@ -444,18 +445,18 @@ class MultiIndex(Index):
             zip(
                 self._internal.index_spark_columns,
                 self._internal.index_names,
-                self._internal.index_dtypes,
+                self._internal.index_fields,
             )
         )
-        index_map[i], index_map[j], = index_map[j], index_map[i]
-        index_spark_columns, index_names, index_dtypes = zip(*index_map)
+        index_map[i], index_map[j] = index_map[j], index_map[i]
+        index_spark_columns, index_names, index_fields = zip(*index_map)
         internal = self._internal.copy(
             index_spark_columns=list(index_spark_columns),
             index_names=list(index_names),
-            index_dtypes=list(index_dtypes),
+            index_fields=list(index_fields),
             column_labels=[],
             data_spark_columns=[],
-            data_dtypes=[],
+            data_fields=[],
         )
         return cast(MultiIndex, DataFrame(internal).index)
 
@@ -529,7 +530,7 @@ class MultiIndex(Index):
                 scol_for(sdf, col) for col in self._internal.index_spark_column_names
             ],
             index_names=self._internal.index_names,
-            index_dtypes=self._internal.index_dtypes,
+            index_fields=self._internal.index_fields,
         )
 
         return first_series(DataFrame(internal))
@@ -576,7 +577,7 @@ class MultiIndex(Index):
                 scol_for(sdf, col) for col in self._internal.index_spark_column_names
             ],
             index_names=self._internal.index_names,
-            index_dtypes=self._internal.index_dtypes,
+            index_fields=self._internal.index_fields,
         )
 
         return first_series(DataFrame(internal))
@@ -684,9 +685,7 @@ class MultiIndex(Index):
         raise NotImplementedError("nunique is not defined for MultiIndex")
 
     # TODO: add 'name' parameter after pd.MultiIndex.name is implemented
-    def copy(  # type: ignore[override]
-        self, deep: Optional[bool] = None
-    ) -> "MultiIndex":
+    def copy(self, deep: Optional[bool] = None) -> "MultiIndex":  # type: ignore[override]
         """
         Make a copy of this object.
 
@@ -880,10 +879,10 @@ class MultiIndex(Index):
             spark_frame=sdf,
             index_spark_columns=[scol_for(sdf, col) for col in internal.index_spark_column_names],
             index_names=internal.index_names,
-            index_dtypes=internal.index_dtypes,
+            index_fields=internal.index_fields,
             column_labels=[],
             data_spark_columns=[],
-            data_dtypes=[],
+            data_fields=[],
         )
         return cast(MultiIndex, DataFrame(internal).index)
 
@@ -993,14 +992,14 @@ class MultiIndex(Index):
         level = self._get_level_number(level)
         index_scol = self._internal.index_spark_columns[level]
         index_name = self._internal.index_names[level]
-        index_dtype = self._internal.index_dtypes[level]
+        index_field = self._internal.index_fields[level]
         internal = self._internal.copy(
             index_spark_columns=[index_scol],
             index_names=[index_name],
-            index_dtypes=[index_dtype],
+            index_fields=[index_field],
             column_labels=[],
             data_spark_columns=[],
-            data_dtypes=[],
+            data_fields=[],
         )
         return DataFrame(internal).index
 
