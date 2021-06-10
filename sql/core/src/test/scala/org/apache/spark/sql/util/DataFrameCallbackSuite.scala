@@ -283,6 +283,40 @@ class DataFrameCallbackSuite extends QueryTest
     }
   }
 
+  test("SPARK-35296: observe should work even if a task contains multiple partitions") {
+    val metricMaps = ArrayBuffer.empty[Map[String, Row]]
+    val listener = new QueryExecutionListener {
+      override def onSuccess(funcName: String, qe: QueryExecution, duration: Long): Unit = {
+        metricMaps += qe.observedMetrics
+      }
+
+      override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {
+        // No-op
+      }
+    }
+    spark.listenerManager.register(listener)
+    try {
+      val df = spark.range(1, 4, 1, 3)
+        .observe(
+          name = "my_event",
+          count($"id").as("count_val"))
+        .coalesce(2)
+
+      def checkMetrics(metrics: Map[String, Row]): Unit = {
+        assert(metrics.size === 1)
+        assert(metrics("my_event") === Row(3L))
+      }
+
+      df.collect()
+      sparkContext.listenerBus.waitUntilEmpty()
+      assert(metricMaps.size === 1)
+      checkMetrics(metricMaps.head)
+      metricMaps.clear()
+    } finally {
+      spark.listenerManager.unregister(listener)
+    }
+  }
+
   testQuietly("SPARK-31144: QueryExecutionListener should receive `java.lang.Error`") {
     var e: Exception = null
     val listener = new QueryExecutionListener {
