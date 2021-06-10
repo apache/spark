@@ -386,14 +386,14 @@ object DateTimeUtils {
    */
   def instantToMicros(instant: Instant): Long = {
     val secs = instant.getEpochSecond
-    if (secs == Math.floorDiv(Long.MinValue, MICROS_PER_SECOND)) {
+    // See issue SPARK-35679
+    // Math.floorDiv(Long.MinValue, MICROS_PER_SECOND) is equal to -9223372036855L
+    if (secs == -9223372036855L) {
       val us = Math.multiplyExact(secs + 1, MICROS_PER_SECOND)
-      val result = Math.addExact(us, NANOSECONDS.toMicros(instant.getNano) - MICROS_PER_SECOND)
-      result
+      Math.addExact(us, NANOSECONDS.toMicros(instant.getNano) - MICROS_PER_SECOND)
     } else {
       val us = Math.multiplyExact(secs, MICROS_PER_SECOND)
-      val result = Math.addExact(us, NANOSECONDS.toMicros(instant.getNano))
-      result
+      Math.addExact(us, NANOSECONDS.toMicros(instant.getNano))
     }
   }
 
