@@ -446,12 +446,12 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         IntervalUtils.getSeconds(IntervalUtils.durationToMicros(d)))
     }
     checkEvaluation(ExtractANSIIntervalDays(
-      Literal(null, DayTimeIntervalType.defaultConcreteType)), null)
+      Literal(null, DayTimeIntervalType())), null)
     checkEvaluation(ExtractANSIIntervalHours(
-      Literal(null, DayTimeIntervalType.defaultConcreteType)), null)
+      Literal(null, DayTimeIntervalType())), null)
     checkEvaluation(ExtractANSIIntervalMinutes(
-      Literal(null, DayTimeIntervalType.defaultConcreteType)), null)
+      Literal(null, DayTimeIntervalType())), null)
     checkEvaluation(ExtractANSIIntervalSeconds(
-      Literal(null, DayTimeIntervalType.defaultConcreteType)), null)
+      Literal(null, DayTimeIntervalType())), null)
   }
 }

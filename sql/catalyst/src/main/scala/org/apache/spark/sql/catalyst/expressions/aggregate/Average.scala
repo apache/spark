@@ -95,7 +95,7 @@ case class Average(child: Expression) extends DeclarativeAggregate with Implicit
         Literal(null, YearMonthIntervalType), DivideYMInterval(sum, count))
     case _: DayTimeIntervalType =>
       If(EqualTo(count, Literal(0L)),
-        Literal(null, DayTimeIntervalType.defaultConcreteType), DivideDTInterval(sum, count))
+        Literal(null, DayTimeIntervalType()), DivideDTInterval(sum, count))
     case _ =>
       Divide(sum.cast(resultType), count.cast(resultType), failOnError = false)
   }
