@@ -417,9 +417,9 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
     case YearMonthIntervalType =>
       buildCast[Int](_, i => UTF8String.fromString(
         IntervalUtils.toYearMonthIntervalString(i, ANSI_STYLE)))
-    case it: DayTimeIntervalType =>
+    case DayTimeIntervalType(startField, endField) =>
       buildCast[Long](_, i => UTF8String.fromString(
-        IntervalUtils.toDayTimeIntervalString(i, ANSI_STYLE, it)))
+        IntervalUtils.toDayTimeIntervalString(i, ANSI_STYLE, startField, endField)))
     case _ => buildCast[Any](_, o => UTF8String.fromString(o.toString))
   }
 
@@ -543,7 +543,8 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
   private[this] def castToDayTimeInterval(
       from: DataType,
       it: DayTimeIntervalType): Any => Any = from match {
-    case StringType => buildCast[UTF8String](_, s => IntervalUtils.castStringToDTInterval(s, it))
+    case StringType => buildCast[UTF8String](_, s =>
+      IntervalUtils.castStringToDTInterval(s, it.startField, it.endField))
   }
 
   private[this] def castToYearMonthInterval(from: DataType): Any => Any = from match {
@@ -1154,14 +1155,23 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
         (c, evPrim, evNull) => {
           code"$evPrim = UTF8String.fromString($udtRef.deserialize($c).toString());"
         }
-      // TODO(SPARK-XXXXX): Take into account day-time interval fields in cast
-      case i @ (YearMonthIntervalType | _: DayTimeIntervalType) =>
+      case YearMonthIntervalType =>
         val iu = IntervalUtils.getClass.getName.stripSuffix("$")
         val iss = IntervalStringStyles.getClass.getName.stripSuffix("$")
-        val subType = if (i.isInstanceOf[YearMonthIntervalType]) "YearMonth" else "DayTime"
-        val f = s"to${subType}IntervalString"
         val style = s"$iss$$.MODULE$$.ANSI_STYLE()"
-        (c, evPrim, _) => code"""$evPrim = UTF8String.fromString($iu.$f($c, $style));"""
+        (c, evPrim, _) =>
+          code"""
+            $evPrim = UTF8String.fromString($iu.toYearMonthIntervalString($c, $style));
+          """
+      case i : DayTimeIntervalType =>
+        val iu = IntervalUtils.getClass.getName.stripSuffix("$")
+        val iss = IntervalStringStyles.getClass.getName.stripSuffix("$")
+        val style = s"$iss$$.MODULE$$.ANSI_STYLE()"
+        (c, evPrim, _) =>
+          code"""
+            $evPrim = UTF8String.fromString($iu.toDayTimeIntervalString($c, $style,
+              (byte)${i.startField}, (byte)${i.endField}));
+          """
       case _ =>
         (c, evPrim, evNull) => code"$evPrim = UTF8String.fromString(String.valueOf($c));"
     }
@@ -1376,11 +1386,13 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
 
   private[this] def castToDayTimeIntervalCode(
       from: DataType,
-      // TODO(SPARK-XXXXX): Take into account day-time interval fields in cast
       it: DayTimeIntervalType): CastFunction = from match {
     case StringType =>
       val util = IntervalUtils.getClass.getCanonicalName.stripSuffix("$")
-      (c, evPrim, _) => code"$evPrim = $util.castStringToDTInterval($c);"
+      (c, evPrim, _) =>
+        code"""
+          $evPrim = $util.castStringToDTInterval($c, (byte)${it.startField}, (byte)${it.endField});
+        """
   }
 
   private[this] def castToYearMonthIntervalCode(from: DataType): CastFunction = from match {

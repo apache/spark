@@ -520,6 +520,7 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("SPARK-35016: format day-time intervals") {
+    import DayTimeIntervalType._
     Seq(
       0L -> ("0 00:00:00.000000000", "INTERVAL '0 00:00:00' DAY TO SECOND"),
       -1L -> ("-0 00:00:00.000001000", "INTERVAL '-0 00:00:00.000001' DAY TO SECOND"),
@@ -529,8 +530,8 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
       Long.MinValue -> ("-106751991 04:00:54.775808000",
         "INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND")
     ).foreach { case (micros, (hiveIntervalStr, ansiIntervalStr)) =>
-      assert(toDayTimeIntervalString(micros, ANSI_STYLE, DayTimeIntervalType()) === ansiIntervalStr)
-      assert(toDayTimeIntervalString(micros, HIVE_STYLE, DayTimeIntervalType()) === hiveIntervalStr)
+      assert(toDayTimeIntervalString(micros, ANSI_STYLE, DAY, SECOND) === ansiIntervalStr)
+      assert(toDayTimeIntervalString(micros, HIVE_STYLE, DAY, SECOND) === hiveIntervalStr)
     }
   }
 }

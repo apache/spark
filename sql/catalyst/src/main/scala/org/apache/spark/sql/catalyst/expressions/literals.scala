@@ -346,8 +346,8 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
           DateFormatter().format(value.asInstanceOf[Int])
         case TimestampType =>
           TimestampFormatter.getFractionFormatter(timeZoneId).format(value.asInstanceOf[Long])
-        case it: DayTimeIntervalType =>
-          toDayTimeIntervalString(value.asInstanceOf[Long], ANSI_STYLE, it)
+        case DayTimeIntervalType(startField, endField) =>
+          toDayTimeIntervalString(value.asInstanceOf[Long], ANSI_STYLE, startField, endField)
         case YearMonthIntervalType => toYearMonthIntervalString(value.asInstanceOf[Int], ANSI_STYLE)
         case _ =>
           other.toString
@@ -469,7 +469,8 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
     case (i: CalendarInterval, CalendarIntervalType) =>
       s"INTERVAL '${i.toString}'"
     case (v: Array[Byte], BinaryType) => s"X'${DatatypeConverter.printHexBinary(v)}'"
-    case (i: Long, it: DayTimeIntervalType) => toDayTimeIntervalString(i, ANSI_STYLE, it)
+    case (i: Long, DayTimeIntervalType(startField, endField)) =>
+      toDayTimeIntervalString(i, ANSI_STYLE, startField, endField)
     case (i: Int, YearMonthIntervalType) => toYearMonthIntervalString(i, ANSI_STYLE)
     case _ => value.toString
   }
