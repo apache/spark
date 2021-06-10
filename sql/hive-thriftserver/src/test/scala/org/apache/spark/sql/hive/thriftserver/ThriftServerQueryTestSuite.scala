@@ -84,6 +84,8 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
     "date.sql",
     // SPARK-28620
     "postgreSQL/float4.sql",
+    // SPARK-35283
+    "cte-ddl.sql",
     // SPARK-28636
     "decimalArithmeticOperations.sql",
     "literals.sql",
