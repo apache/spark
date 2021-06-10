@@ -116,7 +116,7 @@ class DiskBlockManagerSuite extends SparkFunSuite with BeforeAndAfterEach with B
     val testDir = new File("target/testDir");
     FileUtils.deleteQuietly(testDir)
     diskBlockManager = new DiskBlockManager(testConf, deleteFilesOnStop = true)
-    diskBlockManager.createDirWithCustomizedPermission(testDir, "770")
+    diskBlockManager.createDirWithPermission770(testDir)
     assert(testDir.exists && testDir.isDirectory)
     val permission = PosixFilePermissions.toString(
       Files.getPosixFilePermissions(Paths.get("target/testDir")))
