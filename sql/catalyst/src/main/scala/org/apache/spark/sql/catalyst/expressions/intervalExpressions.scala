@@ -405,8 +405,7 @@ case class MultiplyDTInterval(
   override def left: Expression = interval
   override def right: Expression = num
 
-  // TODO(SPARK-XXXXX): Multiply day-time intervals with any fields
-  override def inputTypes: Seq[AbstractDataType] = Seq(DayTimeIntervalType(), NumericType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(DayTimeIntervalType, NumericType)
   override def dataType: DataType = DayTimeIntervalType()
 
   @transient
@@ -535,8 +534,7 @@ case class DivideDTInterval(
   override def left: Expression = interval
   override def right: Expression = num
 
-  // TODO(SPARK-XXXXX): Divide day-time intervals with any fields
-  override def inputTypes: Seq[AbstractDataType] = Seq(DayTimeIntervalType(), NumericType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(DayTimeIntervalType, NumericType)
   override def dataType: DataType = DayTimeIntervalType()
 
   @transient
