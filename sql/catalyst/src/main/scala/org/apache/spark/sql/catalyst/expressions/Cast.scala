@@ -317,7 +317,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
   // The brackets that are used in casting structs and maps to strings
   private val (leftBracket, rightBracket) = if (legacyCastToStr) ("[", "]") else ("{", "}")
 
-  // THe class name of `DateTimeUtils`
+  // The class name of `DateTimeUtils`
   protected def dateTimeUtilsCls: String = DateTimeUtils.getClass.getName.stripSuffix("$")
 
   // UDFToString
