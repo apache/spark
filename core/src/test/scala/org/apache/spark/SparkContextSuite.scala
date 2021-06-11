@@ -1298,8 +1298,8 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
         val tmpJar = File.createTempFile("test", ".jar", tmpAbsoluteDir)
         val tmpFile = File.createTempFile("test", ".txt", tmpAbsoluteDir)
 
-        // Check those files are not canonical
-        assert(tmpCanonicalDir.getAbsolutePath !== tmpCanonicalDir.getCanonicalPath)
+        // Check those files and directory are not canonical
+        assert(tmpAbsoluteDir.getAbsolutePath !== tmpAbsoluteDir.getCanonicalPath)
         assert(tmpJar.getAbsolutePath !== tmpJar.getCanonicalPath)
         assert(tmpFile.getAbsolutePath !== tmpFile.getCanonicalPath)
 
