@@ -26,6 +26,7 @@ from pyspark.pandas.base import column_op, IndexOpsMixin
 from pyspark.pandas.data_type_ops.base import (
     DataTypeOps,
     _as_categorical_type,
+    _as_other_type,
     _as_string_type,
 )
 from pyspark.pandas.internal import InternalField
@@ -127,11 +128,11 @@ class StringOps(DataTypeOps):
                 scol = F.when(index_ops.spark.column.isNull(), F.lit(False)).otherwise(
                     F.length(index_ops.spark.column) > 0
                 )
+            return index_ops._with_new_scol(
+                scol.alias(index_ops._internal.data_spark_column_names[0]),
+                field=InternalField(dtype=dtype),
+            )
         elif isinstance(spark_type, StringType):
             return _as_string_type(index_ops, dtype)
         else:
-            scol = index_ops.spark.column.cast(spark_type)
-        return index_ops._with_new_scol(
-            scol.alias(index_ops._internal.data_spark_column_names[0]),
-            field=InternalField(dtype=dtype),
-        )
+            return _as_other_type(index_ops, dtype, spark_type)

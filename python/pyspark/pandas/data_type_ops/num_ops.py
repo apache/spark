@@ -28,6 +28,7 @@ from pyspark.pandas.data_type_ops.base import (
     transform_boolean_operand_to_numeric,
     _as_bool_type,
     _as_categorical_type,
+    _as_other_type,
     _as_string_type,
 )
 from pyspark.pandas.internal import InternalField
@@ -264,17 +265,12 @@ class IntegralOps(NumericOps):
 
         if isinstance(dtype, CategoricalDtype):
             return _as_categorical_type(index_ops, dtype, spark_type)
-
         elif isinstance(spark_type, BooleanType):
             return _as_bool_type(index_ops, dtype)
         elif isinstance(spark_type, StringType):
             return _as_string_type(index_ops, dtype, null_str=str(np.nan))
         else:
-            scol = index_ops.spark.column.cast(spark_type)
-        return index_ops._with_new_scol(
-            scol.alias(index_ops._internal.data_spark_column_names[0]),
-            field=InternalField(dtype=dtype),
-        )
+            return _as_other_type(index_ops, dtype, spark_type)
 
 
 class FractionalOps(NumericOps):
@@ -382,8 +378,7 @@ class FractionalOps(NumericOps):
 
         if isinstance(dtype, CategoricalDtype):
             return _as_categorical_type(index_ops, dtype, spark_type)
-
-        if isinstance(spark_type, BooleanType):
+        elif isinstance(spark_type, BooleanType):
             if isinstance(dtype, extension_dtypes):
                 scol = index_ops.spark.column.cast(spark_type)
             else:
@@ -396,11 +391,11 @@ class FractionalOps(NumericOps):
                     scol = F.when(index_ops.spark.column.isNull(), F.lit(False)).otherwise(
                         index_ops.spark.column.cast(spark_type)
                     )
+            return index_ops._with_new_scol(
+                scol.alias(index_ops._internal.data_spark_column_names[0]),
+                field=InternalField(dtype=dtype),
+            )
         elif isinstance(spark_type, StringType):
             return _as_string_type(index_ops, dtype, null_str=str(np.nan))
         else:
-            scol = index_ops.spark.column.cast(spark_type)
-        return index_ops._with_new_scol(
-            scol.alias(index_ops._internal.data_spark_column_names[0]),
-            field=InternalField(dtype=dtype),
-        )
+            return _as_other_type(index_ops, dtype, spark_type)

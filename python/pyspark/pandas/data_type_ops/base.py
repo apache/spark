@@ -145,9 +145,9 @@ def _as_string_type(
     *,
     null_str: str = str(None)
 ) -> Union["Index", "Series"]:
+    """Cast `index_ops` to StringType Spark type, given `dtype` and `null_str`,
+    representing null Spark column.
     """
-    Cast `index_ops` to StringType Spark type, given `dtype` and
-    `null_str` representing null Spark column."""
     from pyspark.pandas.internal import InternalField
 
     if isinstance(dtype, extension_dtypes):
@@ -155,6 +155,29 @@ def _as_string_type(
     else:
         casted = index_ops.spark.column.cast(StringType())
         scol = F.when(index_ops.spark.column.isNull(), null_str).otherwise(casted)
+    return index_ops._with_new_scol(
+        scol.alias(index_ops._internal.data_spark_column_names[0]),
+        field=InternalField(dtype=dtype),
+    )
+
+
+def _as_other_type(
+    index_ops: Union["Series", "Index"], dtype: Union[str, type, Dtype], spark_type: types.DataType
+) -> Union["Index", "Series"]:
+    """Cast `index_ops` to a `dtype` (`spark_type`) that needs no pre-processing.
+
+    Destination types that need pre-processing: CategoricalDtype, BooleanType, and StringType.
+    """
+    from pyspark.pandas.internal import InternalField
+
+    need_pre_process = (
+        isinstance(dtype, CategoricalDtype)
+        or isinstance(spark_type, BooleanType)
+        or isinstance(spark_type, StringType)
+    )
+    assert not need_pre_process, "Pre-processing is needed before the type casting."
+
+    scol = index_ops.spark.column.cast(spark_type)
     return index_ops._with_new_scol(
         scol.alias(index_ops._internal.data_spark_column_names[0]),
         field=InternalField(dtype=dtype),

@@ -26,7 +26,12 @@ from pyspark.sql import functions as F
 from pyspark.sql.types import BooleanType, StringType, TimestampType
 
 from pyspark.pandas.base import IndexOpsMixin
-from pyspark.pandas.data_type_ops.base import DataTypeOps, _as_bool_type, _as_categorical_type
+from pyspark.pandas.data_type_ops.base import (
+    DataTypeOps,
+    _as_bool_type,
+    _as_categorical_type,
+    _as_other_type,
+)
 from pyspark.pandas.internal import InternalField
 from pyspark.pandas.typedef import as_spark_type, Dtype, extension_dtypes, pandas_on_spark_type
 
@@ -92,7 +97,6 @@ class DatetimeOps(DataTypeOps):
 
         if isinstance(dtype, CategoricalDtype):
             return _as_categorical_type(index_ops, dtype, spark_type)
-
         elif isinstance(spark_type, BooleanType):
             return _as_bool_type(index_ops, dtype)
         elif isinstance(spark_type, StringType):
@@ -105,9 +109,9 @@ class DatetimeOps(DataTypeOps):
                 null_str = str(pd.NaT)
                 casted = index_ops.spark.column.cast(spark_type)
                 scol = F.when(index_ops.spark.column.isNull(), null_str).otherwise(casted)
+            return index_ops._with_new_scol(
+                scol.alias(index_ops._internal.data_spark_column_names[0]),
+                field=InternalField(dtype=dtype),
+            )
         else:
-            scol = index_ops.spark.column.cast(spark_type)
-        return index_ops._with_new_scol(
-            scol.alias(index_ops._internal.data_spark_column_names[0]),
-            field=InternalField(dtype=dtype),
-        )
+            return _as_other_type(index_ops, dtype, spark_type)

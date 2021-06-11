@@ -29,6 +29,7 @@ from pyspark.pandas.data_type_ops.base import (
     transform_boolean_operand_to_numeric,
     _as_bool_type,
     _as_categorical_type,
+    _as_other_type,
 )
 from pyspark.pandas.internal import InternalField
 from pyspark.pandas.typedef import Dtype, extension_dtypes, pandas_on_spark_type
@@ -258,7 +259,6 @@ class BooleanOps(DataTypeOps):
 
         if isinstance(dtype, CategoricalDtype):
             return _as_categorical_type(index_ops, dtype, spark_type)
-
         elif isinstance(spark_type, BooleanType):
             return _as_bool_type(index_ops, dtype)
         elif isinstance(spark_type, StringType):
@@ -271,12 +271,12 @@ class BooleanOps(DataTypeOps):
                 null_str = str(None)
                 casted = F.when(index_ops.spark.column, "True").otherwise("False")
                 scol = F.when(index_ops.spark.column.isNull(), null_str).otherwise(casted)
+            return index_ops._with_new_scol(
+                scol.alias(index_ops._internal.data_spark_column_names[0]),
+                field=InternalField(dtype=dtype),
+            )
         else:
-            scol = index_ops.spark.column.cast(spark_type)
-        return index_ops._with_new_scol(
-            scol.alias(index_ops._internal.data_spark_column_names[0]),
-            field=InternalField(dtype=dtype),
-        )
+            return _as_other_type(index_ops, dtype, spark_type)
 
 
 class BooleanExtensionOps(BooleanOps):

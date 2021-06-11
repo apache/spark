@@ -24,9 +24,9 @@ from pyspark.pandas.data_type_ops.base import (
     DataTypeOps,
     _as_bool_type,
     _as_categorical_type,
+    _as_other_type,
     _as_string_type,
 )
-from pyspark.pandas.internal import InternalField
 from pyspark.pandas.typedef import Dtype, pandas_on_spark_type
 from pyspark.sql import functions as F
 from pyspark.sql.types import ArrayType, BooleanType, NumericType, StringType
@@ -74,17 +74,12 @@ class ArrayOps(DataTypeOps):
 
         if isinstance(dtype, CategoricalDtype):
             return _as_categorical_type(index_ops, dtype, spark_type)
-
         elif isinstance(spark_type, BooleanType):
             return _as_bool_type(index_ops, dtype)
         elif isinstance(spark_type, StringType):
             return _as_string_type(index_ops, dtype)
         else:
-            scol = index_ops.spark.column.cast(spark_type)
-        return index_ops._with_new_scol(
-            scol.alias(index_ops._internal.data_spark_column_names[0]),
-            field=InternalField(dtype=dtype),
-        )
+            return _as_other_type(index_ops, dtype, spark_type)
 
 
 class MapOps(DataTypeOps):
