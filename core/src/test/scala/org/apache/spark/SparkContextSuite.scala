@@ -1289,16 +1289,17 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
   test("SPARK-35691: addFile/addJar/addDirectory should put CanonicalFile") {
     withTempDir { dir =>
       try {
+        sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
+
         val sep = File.separator
         val tmpCanonicalDir = Utils.createTempDir(dir.getAbsolutePath + sep + "test space")
         val tmpAbsoluteDir = new File(tmpCanonicalDir.getAbsolutePath + sep + '.' + sep)
         val tmpJar = File.createTempFile("test", ".jar", tmpAbsoluteDir)
         val tmpFile = File.createTempFile("test", ".txt", tmpAbsoluteDir)
 
-        assert(tmpJar.getAbsolutePath == tmpJar.getCanonicalPath)
-        assert(tmpFile.getAbsolutePath == tmpFile.getCanonicalPath)
+        assert(tmpJar.getAbsolutePath != tmpJar.getCanonicalPath)
+        assert(tmpFile.getAbsolutePath != tmpFile.getCanonicalPath)
 
-        sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
         sc.addJar(tmpJar.getAbsolutePath)
         sc.addFile(tmpFile.getAbsolutePath)
 
