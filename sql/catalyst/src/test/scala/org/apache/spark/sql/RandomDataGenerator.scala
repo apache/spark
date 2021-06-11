@@ -140,6 +140,26 @@ object RandomDataGenerator {
     StructType(fields.toSeq)
   }
 
+  private def uniformMicrosRand(rand: Random): Long = {
+    var milliseconds = rand.nextLong() % 253402329599999L
+    // -62135740800000L is the number of milliseconds before January 1, 1970, 00:00:00 GMT
+    // for "0001-01-01 00:00:00.000000". We need to find a
+    // number that is greater or equals to this number as a valid timestamp value.
+    while (milliseconds < -62135740800000L) {
+      // 253402329599999L is the number of milliseconds since
+      // January 1, 1970, 00:00:00 GMT for "9999-12-31 23:59:59.999999".
+      milliseconds = rand.nextLong() % 253402329599999L
+    }
+    milliseconds * MICROS_PER_MILLIS
+  }
+
+  private val specialTs = Seq(
+    "0001-01-01 00:00:00", // the fist timestamp of Common Era
+    "1582-10-15 23:59:59", // the cutover date from Julian to Gregorian calendar
+    "1970-01-01 00:00:00", // the epoch timestamp
+    "9999-12-31 23:59:59"  // the last supported timestamp according to SQL standard
+  )
+
   /**
    * Returns a function which generates random values for the given `DataType`, or `None` if no
    * random data generator is defined for that data type. The generated values will use an external
@@ -216,24 +236,6 @@ object RandomDataGenerator {
             specialDates.map(java.sql.Date.valueOf))
         }
       case TimestampType =>
-        def uniformMicrosRand(rand: Random): Long = {
-          var milliseconds = rand.nextLong() % 253402329599999L
-          // -62135740800000L is the number of milliseconds before January 1, 1970, 00:00:00 GMT
-          // for "0001-01-01 00:00:00.000000". We need to find a
-          // number that is greater or equals to this number as a valid timestamp value.
-          while (milliseconds < -62135740800000L) {
-            // 253402329599999L is the number of milliseconds since
-            // January 1, 1970, 00:00:00 GMT for "9999-12-31 23:59:59.999999".
-            milliseconds = rand.nextLong() % 253402329599999L
-          }
-          milliseconds * MICROS_PER_MILLIS
-        }
-        val specialTs = Seq(
-          "0001-01-01 00:00:00", // the fist timestamp of Common Era
-          "1582-10-15 23:59:59", // the cutover date from Julian to Gregorian calendar
-          "1970-01-01 00:00:00", // the epoch timestamp
-          "9999-12-31 23:59:59"  // the last supported timestamp according to SQL standard
-        )
         def getRandomTimestamp(rand: Random): java.sql.Timestamp = {
           // DateTimeUtils.toJavaTimestamp takes microsecond.
           val ts = DateTimeUtils.toJavaTimestamp(uniformMicrosRand(rand))
@@ -267,13 +269,21 @@ object RandomDataGenerator {
             getRandomTimestamp,
             specialTs.map(java.sql.Timestamp.valueOf))
         }
+      case TimestampWithoutTZType =>
+        randomNumeric[LocalDateTime](
+          rand,
+          (rand: Random) => {
+            DateTimeUtils.microsToLocalDateTime(uniformMicrosRand(rand))
+          },
+          specialTs.map { s => LocalDateTime.parse(s.replace(" ", "T")) }
+        )
       case CalendarIntervalType => Some(() => {
         val months = rand.nextInt(1000)
         val days = rand.nextInt(10000)
         val ns = rand.nextLong()
         new CalendarInterval(months, days, ns)
       })
-      case DayTimeIntervalType => Some(() => Duration.of(rand.nextLong(), ChronoUnit.MICROS))
+      case _: DayTimeIntervalType => Some(() => Duration.of(rand.nextLong(), ChronoUnit.MICROS))
       case YearMonthIntervalType => Some(() => Period.ofMonths(rand.nextInt()).normalized())
       case DecimalType.Fixed(precision, scale) => Some(
         () => BigDecimal.apply(

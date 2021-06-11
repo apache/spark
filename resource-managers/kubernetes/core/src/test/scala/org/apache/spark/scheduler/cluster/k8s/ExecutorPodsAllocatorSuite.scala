@@ -17,6 +17,7 @@
 package org.apache.spark.scheduler.cluster.k8s
 
 import java.time.Instant
+import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.JavaConverters._
 
@@ -29,6 +30,7 @@ import org.mockito.Mockito.{never, times, verify, when}
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
 import org.scalatest.BeforeAndAfter
+import org.scalatest.PrivateMethodTester._
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s.{KubernetesExecutorConf, KubernetesExecutorSpec}
@@ -127,11 +129,15 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
 
   test("Request executors in batches. Allow another batch to be requested if" +
     " all pending executors start running.") {
+    val counter = PrivateMethod[AtomicInteger](Symbol("EXECUTOR_ID_COUNTER"))()
+    assert(podsAllocatorUnderTest.invokePrivate(counter).get() === 0)
+
     podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> (podAllocationSize + 1)))
     assert(podsAllocatorUnderTest.numOutstandingPods.get() == 5)
     for (execId <- 1 until podAllocationSize) {
       snapshotsStore.updatePod(runningExecutor(execId))
     }
+    assert(podsAllocatorUnderTest.invokePrivate(counter).get() === 5)
     snapshotsStore.notifySubscribers()
     assert(podsAllocatorUnderTest.numOutstandingPods.get() == 1)
     verify(podOperations, never()).create(podWithAttachedContainerForId(podAllocationSize + 1))

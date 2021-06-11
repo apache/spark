@@ -90,6 +90,11 @@ private class ShuffleStatus(
   val mapStatuses = new Array[MapStatus](numPartitions)
 
   /**
+   * Keep the previous deleted MapStatus for recovery.
+   */
+  val mapStatusesDeleted = new Array[MapStatus](numPartitions)
+
+  /**
    * MergeStatus for each shuffle partition when push-based shuffle is enabled. The index of the
    * array is the shuffle partition id (reduce id). Each value in the array is the MergeStatus for
    * a shuffle partition, or null if not available. When push-based shuffle is enabled, this array
@@ -154,14 +159,25 @@ private class ShuffleStatus(
    */
   def updateMapOutput(mapId: Long, bmAddress: BlockManagerId): Unit = withWriteLock {
     try {
-      val mapStatusOpt = mapStatuses.find(_.mapId == mapId)
+      val mapStatusOpt = mapStatuses.find(x => x != null && x.mapId == mapId)
       mapStatusOpt match {
         case Some(mapStatus) =>
           logInfo(s"Updating map output for ${mapId} to ${bmAddress}")
           mapStatus.updateLocation(bmAddress)
           invalidateSerializedMapOutputStatusCache()
         case None =>
-          logWarning(s"Asked to update map output ${mapId} for untracked map status.")
+          val index = mapStatusesDeleted.indexWhere(x => x != null && x.mapId == mapId)
+          if (index >= 0 && mapStatuses(index) == null) {
+            val mapStatus = mapStatusesDeleted(index)
+            mapStatus.updateLocation(bmAddress)
+            mapStatuses(index) = mapStatus
+            _numAvailableMapOutputs += 1
+            invalidateSerializedMapOutputStatusCache()
+            mapStatusesDeleted(index) = null
+            logInfo(s"Recover ${mapStatus.mapId} ${mapStatus.location}")
+          } else {
+            logWarning(s"Asked to update map output ${mapId} for untracked map status.")
+          }
       }
     } catch {
       case e: java.lang.NullPointerException =>
@@ -178,6 +194,7 @@ private class ShuffleStatus(
     logDebug(s"Removing existing map output ${mapIndex} ${bmAddress}")
     if (mapStatuses(mapIndex) != null && mapStatuses(mapIndex).location == bmAddress) {
       _numAvailableMapOutputs -= 1
+      mapStatusesDeleted(mapIndex) = mapStatuses(mapIndex)
       mapStatuses(mapIndex) = null
       invalidateSerializedMapOutputStatusCache()
     }
@@ -214,6 +231,7 @@ private class ShuffleStatus(
   def removeOutputsOnHost(host: String): Unit = withWriteLock {
     logDebug(s"Removing outputs for host ${host}")
     removeOutputsByFilter(x => x.host == host)
+    removeMergeResultsByFilter(x => x.host == host)
   }
 
   /**
@@ -234,10 +252,17 @@ private class ShuffleStatus(
     for (mapIndex <- mapStatuses.indices) {
       if (mapStatuses(mapIndex) != null && f(mapStatuses(mapIndex).location)) {
         _numAvailableMapOutputs -= 1
+        mapStatusesDeleted(mapIndex) = mapStatuses(mapIndex)
         mapStatuses(mapIndex) = null
         invalidateSerializedMapOutputStatusCache()
       }
     }
+  }
+
+  /**
+   * Removes all shuffle merge result which satisfies the filter.
+   */
+  def removeMergeResultsByFilter(f: BlockManagerId => Boolean): Unit = withWriteLock {
     for (reduceId <- mergeStatuses.indices) {
       if (mergeStatuses(reduceId) != null && f(mergeStatuses(reduceId).location)) {
         _numAvailableMergeResults -= 1
@@ -708,15 +733,16 @@ private[spark] class MapOutputTrackerMaster(
     }
   }
 
-  /** Unregister all map output information of the given shuffle. */
-  def unregisterAllMapOutput(shuffleId: Int): Unit = {
+  /** Unregister all map and merge output information of the given shuffle. */
+  def unregisterAllMapAndMergeOutput(shuffleId: Int): Unit = {
     shuffleStatuses.get(shuffleId) match {
       case Some(shuffleStatus) =>
         shuffleStatus.removeOutputsByFilter(x => true)
+        shuffleStatus.removeMergeResultsByFilter(x => true)
         incrementEpoch()
       case None =>
         throw new SparkException(
-          s"unregisterAllMapOutput called for nonexistent shuffle ID $shuffleId.")
+          s"unregisterAllMapAndMergeOutput called for nonexistent shuffle ID $shuffleId.")
     }
   }
 
@@ -731,30 +757,42 @@ private[spark] class MapOutputTrackerMaster(
   }
 
   /**
-   * Unregisters a merge result corresponding to the reduceId if present. If the optional mapId
-   * is specified, it will only unregister the merge result if the mapId is part of that merge
+   * Unregisters a merge result corresponding to the reduceId if present. If the optional mapIndex
+   * is specified, it will only unregister the merge result if the mapIndex is part of that merge
    * result.
    *
    * @param shuffleId the shuffleId.
    * @param reduceId  the reduceId.
    * @param bmAddress block manager address.
-   * @param mapId     the optional mapId which should be checked to see it was part of the merge
-   *                  result.
+   * @param mapIndex  the optional mapIndex which should be checked to see it was part of the
+   *                  merge result.
    */
   def unregisterMergeResult(
-    shuffleId: Int,
-    reduceId: Int,
-    bmAddress: BlockManagerId,
-    mapId: Option[Int] = None): Unit = {
+      shuffleId: Int,
+      reduceId: Int,
+      bmAddress: BlockManagerId,
+      mapIndex: Option[Int] = None): Unit = {
     shuffleStatuses.get(shuffleId) match {
       case Some(shuffleStatus) =>
         val mergeStatus = shuffleStatus.mergeStatuses(reduceId)
-        if (mergeStatus != null && (mapId.isEmpty || mergeStatus.tracker.contains(mapId.get))) {
+        if (mergeStatus != null &&
+          (mapIndex.isEmpty || mergeStatus.tracker.contains(mapIndex.get))) {
           shuffleStatus.removeMergeResult(reduceId, bmAddress)
           incrementEpoch()
         }
       case None =>
         throw new SparkException("unregisterMergeResult called for nonexistent shuffle ID")
+    }
+  }
+
+  def unregisterAllMergeResult(shuffleId: Int): Unit = {
+    shuffleStatuses.get(shuffleId) match {
+      case Some(shuffleStatus) =>
+        shuffleStatus.removeMergeResultsByFilter(x => true)
+        incrementEpoch()
+      case None =>
+        throw new SparkException(
+          s"unregisterAllMergeResult called for nonexistent shuffle ID $shuffleId.")
     }
   }
 
@@ -1270,7 +1308,7 @@ private[spark] object MapOutputTracker extends Logging {
   private val DIRECT = 0
   private val BROADCAST = 1
 
-  private val SHUFFLE_PUSH_MAP_ID = -1
+  val SHUFFLE_PUSH_MAP_ID = -1
 
   // Serialize an array of map/merge output locations into an efficient byte format so that we can
   // send it to reduce tasks. We do this by compressing the serialized bytes using Zstd. They will
