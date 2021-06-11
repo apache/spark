@@ -318,7 +318,7 @@ Below is a list of all the keywords in Spark SQL.
 |JOIN|reserved|strict-non-reserved|reserved|
 |KEYS|non-reserved|non-reserved|non-reserved|
 |LAST|non-reserved|non-reserved|non-reserved|
-|LATERAL|non-reserved|non-reserved|reserved|
+|LATERAL|reserved|strict-non-reserved|reserved|
 |LAZY|non-reserved|non-reserved|non-reserved|
 |LEADING|reserved|non-reserved|reserved|
 |LEFT|reserved|strict-non-reserved|reserved|

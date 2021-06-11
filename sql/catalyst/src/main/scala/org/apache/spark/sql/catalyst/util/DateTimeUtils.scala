@@ -71,6 +71,14 @@ object DateTimeUtils {
     instantToMicros(instant)
   }
 
+  def microsToLocalDateTime(micros: Long): LocalDateTime = {
+    getLocalDateTime(micros, ZoneOffset.UTC)
+  }
+
+  def localDateTimeToMicros(localDateTime: LocalDateTime): Long = {
+    instantToMicros(localDateTime.toInstant(ZoneOffset.UTC))
+  }
+
   /**
    * Converts a local date at the default JVM time zone to the number of days since 1970-01-01
    * in the hybrid calendar (Julian + Gregorian) by discarding the time part. The resulted days are
@@ -370,6 +378,9 @@ object DateTimeUtils {
       throw QueryExecutionErrors.cannotCastUTF8StringToDataTypeError(s, TimestampType)
     }
   }
+  // See issue SPARK-35679
+  // min second cause overflow in instant to micro
+  private val MIN_SECONDS = Math.floorDiv(Long.MinValue, MICROS_PER_SECOND)
 
   /**
    * Gets the number of microseconds since the epoch of 1970-01-01 00:00:00Z from the given
@@ -377,9 +388,14 @@ object DateTimeUtils {
    * microseconds where microsecond 0 is 1970-01-01 00:00:00Z.
    */
   def instantToMicros(instant: Instant): Long = {
-    val us = Math.multiplyExact(instant.getEpochSecond, MICROS_PER_SECOND)
-    val result = Math.addExact(us, NANOSECONDS.toMicros(instant.getNano))
-    result
+    val secs = instant.getEpochSecond
+    if (secs == MIN_SECONDS) {
+      val us = Math.multiplyExact(secs + 1, MICROS_PER_SECOND)
+      Math.addExact(us, NANOSECONDS.toMicros(instant.getNano) - MICROS_PER_SECOND)
+    } else {
+      val us = Math.multiplyExact(secs, MICROS_PER_SECOND)
+      Math.addExact(us, NANOSECONDS.toMicros(instant.getNano))
+    }
   }
 
   /**
