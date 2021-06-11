@@ -55,7 +55,8 @@ private[spark] class YarnCoarseGrainedExecutorBackend(
 
   private lazy val hadoopConfiguration = SparkHadoopUtil.get.newConfiguration(env.conf)
 
-  override def getUserClassPath: Seq[URL] = Client.getUserClasspathUrls(env.conf)
+  override def getUserClassPath: Seq[URL] =
+    Client.getUserClasspathUrls(env.conf, useClusterPath = true)
 
   override def extractLogUrls: Map[String, String] = {
     YarnContainerInfoHelper.getLogUrls(hadoopConfiguration, container = None)

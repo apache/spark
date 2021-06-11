@@ -879,7 +879,7 @@ private[spark] class Executor(
       new File(uri.split("/").last).toURI.toURL
     }
     logInfo(s"Starting executor with user classpath (userClassPathFirst = $userClassPathFirst): " +
-        urls.mkString("'", ":", "'"))
+        urls.mkString("'", ",", "'"))
     if (userClassPathFirst) {
       new ChildFirstURLClassLoader(urls, currentLoader)
     } else {

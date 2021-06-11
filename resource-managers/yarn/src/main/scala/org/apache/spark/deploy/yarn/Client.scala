@@ -21,7 +21,7 @@ import java.io.{FileSystem => _, _}
 import java.net.{InetAddress, UnknownHostException, URI, URL}
 import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
-import java.nio.file.Files
+import java.nio.file.{Files, Paths}
 import java.util.{Locale, Properties, UUID}
 import java.util.zip.{ZipEntry, ZipOutputStream}
 
@@ -1471,12 +1471,32 @@ private[spark] object Client extends Logging {
   }
 
   /**
-   * Returns a list of local, absolute URLs representing the user classpath.
+   * Returns a list of local, absolute file URLs representing the user classpath. Note that this
+   * must be executed on the same host which will access the URLs, as it will resolve relative
+   * paths based on the current working directory.
    *
    * @param conf Spark configuration.
+   * @param useClusterPath Whether to use the 'cluster' path when resolving paths with the
+   *                       `local` scheme. This should be used when running on the cluster, but
+   *                       not when running on the gateway (i.e. for the driver in `client` mode).
+   * @return Array of local URLs ready to be passed to a [[java.net.URLClassLoader]].
    */
-  def getUserClasspathUrls(conf: SparkConf): Array[URL] =
-    getUserClasspath(conf).map(entry => new URL("file:" + new File(entry.getPath).getAbsolutePath))
+  def getUserClasspathUrls(conf: SparkConf, useClusterPath: Boolean): Array[URL] = {
+    Client.getUserClasspath(conf).map { uri =>
+      val inputPath = uri.getPath
+      val localPath = if (Utils.isLocalUri(uri.toString)) {
+        val localPath = if (useClusterPath) {
+          Client.getClusterPath(conf, inputPath)
+        } else {
+          inputPath
+        }
+        Paths.get(localPath)
+      } else {
+        new File(inputPath).toPath.toAbsolutePath
+      }
+      localPath.toUri.toURL
+    }
+  }
 
   private def getMainJarUri(mainJar: Option[String]): Option[URI] = {
     mainJar.flatMap { path =>
