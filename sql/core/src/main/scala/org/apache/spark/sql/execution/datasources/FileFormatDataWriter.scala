@@ -22,7 +22,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce.TaskAttemptContext
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.io.FileCommitProtocol
+import org.apache.spark.internal.io.{FileCommitProtocol, FileContext, FileNamingProtocol}
 import org.apache.spark.internal.io.FileCommitProtocol.TaskCommitMessage
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
@@ -122,7 +122,8 @@ class EmptyDirectoryDataWriter(
 class SingleDirectoryDataWriter(
     description: WriteJobDescription,
     taskAttemptContext: TaskAttemptContext,
-    committer: FileCommitProtocol)
+    committer: FileCommitProtocol,
+    namingProtocol: FileNamingProtocol)
   extends FileFormatDataWriter(description, taskAttemptContext, committer) {
   private var fileCounter: Int = _
   private var recordsInFile: Long = _
@@ -133,11 +134,11 @@ class SingleDirectoryDataWriter(
     recordsInFile = 0
     releaseResources()
 
-    val ext = description.outputWriterFactory.getFileExtension(taskAttemptContext)
-    val currentPath = committer.newTaskTempFile(
-      taskAttemptContext,
-      None,
-      f"-c$fileCounter%03d" + ext)
+    val ext = f"-c$fileCounter%03d" +
+      description.outputWriterFactory.getFileExtension(taskAttemptContext)
+    val fileContext = FileContext(ext, None, None, None)
+    val currentPath = namingProtocol.getTaskStagingPath(taskAttemptContext, fileContext)
+    committer.newTaskFile(taskAttemptContext, currentPath, None)
 
     currentWriter = description.outputWriterFactory.newInstance(
       path = currentPath,
@@ -169,7 +170,8 @@ class SingleDirectoryDataWriter(
 abstract class BaseDynamicPartitionDataWriter(
     description: WriteJobDescription,
     taskAttemptContext: TaskAttemptContext,
-    committer: FileCommitProtocol)
+    committer: FileCommitProtocol,
+    namingProtocol: FileNamingProtocol)
   extends FileFormatDataWriter(description, taskAttemptContext, committer) {
 
   /** Flag saying whether or not the data to be written out is partitioned. */
@@ -261,11 +263,15 @@ abstract class BaseDynamicPartitionDataWriter(
     val customPath = partDir.flatMap { dir =>
       description.customPartitionLocations.get(PartitioningUtils.parsePathFragment(dir))
     }
-    val currentPath = if (customPath.isDefined) {
-      committer.newTaskTempFileAbsPath(taskAttemptContext, customPath.get, ext)
+    val (currentPath, finalPath) = if (customPath.isDefined) {
+      val fileContext = FileContext(ext, None, Some(customPath.get), None)
+      (namingProtocol.getTaskStagingPath(taskAttemptContext, fileContext),
+        Some(namingProtocol.getTaskFinalPath(taskAttemptContext, fileContext)))
     } else {
-      committer.newTaskTempFile(taskAttemptContext, partDir, ext)
+      val fileContext = FileContext(ext, partDir, None, None)
+      (namingProtocol.getTaskStagingPath(taskAttemptContext, fileContext), None)
     }
+    committer.newTaskFile(taskAttemptContext, currentPath, finalPath)
 
     currentWriter = description.outputWriterFactory.newInstance(
       path = currentPath,
@@ -314,8 +320,10 @@ abstract class BaseDynamicPartitionDataWriter(
 class DynamicPartitionDataSingleWriter(
     description: WriteJobDescription,
     taskAttemptContext: TaskAttemptContext,
-    committer: FileCommitProtocol)
-  extends BaseDynamicPartitionDataWriter(description, taskAttemptContext, committer) {
+    committer: FileCommitProtocol,
+    namingProtocol: FileNamingProtocol)
+  extends BaseDynamicPartitionDataWriter(
+    description, taskAttemptContext, committer, namingProtocol) {
 
   private var currentPartitionValues: Option[UnsafeRow] = None
   private var currentBucketId: Option[Int] = None
@@ -361,8 +369,10 @@ class DynamicPartitionDataConcurrentWriter(
     description: WriteJobDescription,
     taskAttemptContext: TaskAttemptContext,
     committer: FileCommitProtocol,
+    namingProtocol: FileNamingProtocol,
     concurrentOutputWriterSpec: ConcurrentOutputWriterSpec)
-  extends BaseDynamicPartitionDataWriter(description, taskAttemptContext, committer)
+  extends BaseDynamicPartitionDataWriter(
+    description, taskAttemptContext, committer, namingProtocol)
   with Logging {
 
   /** Wrapper class to index a unique concurrent output writer. */

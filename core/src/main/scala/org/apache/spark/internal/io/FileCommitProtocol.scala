@@ -90,6 +90,7 @@ abstract class FileCommitProtocol extends Logging {
    * if a task is going to write out multiple files to the same dir. The file commit protocol only
    * guarantees that files written by different tasks will not conflict.
    */
+  @deprecated("use newTaskFile", "3.2.0")
   def newTaskTempFile(taskContext: TaskAttemptContext, dir: Option[String], ext: String): String
 
   /**
@@ -100,8 +101,28 @@ abstract class FileCommitProtocol extends Logging {
    * if a task is going to write out multiple files to the same dir. The file commit protocol only
    * guarantees that files written by different tasks will not conflict.
    */
+  @deprecated("use newTaskFile", "3.2.0")
   def newTaskTempFileAbsPath(
       taskContext: TaskAttemptContext, absoluteDir: String, ext: String): String
+
+  /**
+   * Notifies the commit protocol that a new file is added. Must be called on the executors when
+   * running tasks.
+   *
+   * The "stagingPath" parameter is the current path of new file. The "finalPath" parameter if
+   * specified, is the final path of file. The "finalPath" parameter is optional here because
+   * caller can leave up to file commit protocol to decide the final path.
+   *
+   * Important: it is the caller's responsibility to add uniquely identifying content to
+   * `stagingPath` and `finalPath`. The file commit protocol only guarantees that files written by
+   * different tasks will not conflict. This API should be preferred to use instead of deprecated
+   * [[newTaskTempFile]] and [[newTaskTempFileAbsPath]].
+   */
+  def newTaskFile(
+      taskContext: TaskAttemptContext, stagingPath: String, finalPath: Option[String]): Unit = {
+    // No-op as default implementation to be backward compatible with custom [[FileCommitProtocol]]
+    // implementations before Spark 3.2.0.
+  }
 
   /**
    * Commits a task after the writes succeed. Must be called on the executors when running tasks.

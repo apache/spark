@@ -27,7 +27,7 @@ import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 
 import org.apache.spark._
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.io.{FileCommitProtocol, SparkHadoopWriterUtils}
+import org.apache.spark.internal.io.{FileCommitProtocol, FileNamingProtocol, SparkHadoopWriterUtils}
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
@@ -96,7 +96,7 @@ object FileFormatWriter extends Logging {
       sparkSession: SparkSession,
       plan: SparkPlan,
       fileFormat: FileFormat,
-      committer: FileCommitProtocol,
+      protocols: (FileCommitProtocol, FileNamingProtocol),
       outputSpec: OutputSpec,
       hadoopConf: Configuration,
       partitionColumns: Seq[Attribute],
@@ -105,6 +105,7 @@ object FileFormatWriter extends Logging {
       options: Map[String, String])
     : Set[String] = {
 
+    val committer = protocols._1
     val job = Job.getInstance(hadoopConf)
     job.setOutputKeyClass(classOf[Void])
     job.setOutputValueClass(classOf[InternalRow])
@@ -225,6 +226,7 @@ object FileFormatWriter extends Logging {
             sparkPartitionId = taskContext.partitionId(),
             sparkAttemptNumber = taskContext.taskAttemptId().toInt & Integer.MAX_VALUE,
             committer,
+            protocols._2,
             iterator = iter,
             concurrentOutputWriterSpec = concurrentOutputWriterSpec)
         },
@@ -260,6 +262,7 @@ object FileFormatWriter extends Logging {
       sparkPartitionId: Int,
       sparkAttemptNumber: Int,
       committer: FileCommitProtocol,
+      namingProtocol: FileNamingProtocol,
       iterator: Iterator[InternalRow],
       concurrentOutputWriterSpec: Option[ConcurrentOutputWriterSpec]): WriteTaskResult = {
 
@@ -287,14 +290,15 @@ object FileFormatWriter extends Logging {
         // In case of empty job, leave first partition to save meta for file format like parquet.
         new EmptyDirectoryDataWriter(description, taskAttemptContext, committer)
       } else if (description.partitionColumns.isEmpty && description.bucketIdExpression.isEmpty) {
-        new SingleDirectoryDataWriter(description, taskAttemptContext, committer)
+        new SingleDirectoryDataWriter(description, taskAttemptContext, committer, namingProtocol)
       } else {
         concurrentOutputWriterSpec match {
           case Some(spec) =>
             new DynamicPartitionDataConcurrentWriter(
-              description, taskAttemptContext, committer, spec)
+              description, taskAttemptContext, committer, namingProtocol, spec)
           case _ =>
-            new DynamicPartitionDataSingleWriter(description, taskAttemptContext, committer)
+            new DynamicPartitionDataSingleWriter(
+              description, taskAttemptContext, committer, namingProtocol)
         }
       }
 

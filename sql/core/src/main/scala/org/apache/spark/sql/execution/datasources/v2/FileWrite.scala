@@ -25,7 +25,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce.Job
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat
 
-import org.apache.spark.internal.io.FileCommitProtocol
+import org.apache.spark.internal.io.{FileCommitProtocol, FileNamingProtocol}
 import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
@@ -57,15 +57,23 @@ trait FileWrite extends Write {
     // Hadoop Configurations are case sensitive.
     val hadoopConf = sparkSession.sessionState.newHadoopConfWithOptions(caseSensitiveMap)
     val job = getJobInstance(hadoopConf, path)
+    val jobId = java.util.UUID.randomUUID().toString
     val committer = FileCommitProtocol.instantiate(
       sparkSession.sessionState.conf.fileCommitProtocolClass,
-      jobId = java.util.UUID.randomUUID().toString,
+      jobId = jobId,
       outputPath = paths.head)
+    val namingProtocolClass = sparkSession.sessionState.conf.fileNamingProtocolClass
+      .getOrElse(FileNamingProtocol.getMappedProtocolClassName(committer))
+    val namingProtocol = FileNamingProtocol.instantiate(
+      namingProtocolClass,
+      jobId = jobId,
+      outputPath = paths.head,
+      commitProtocol = committer)
     lazy val description =
       createWriteJobDescription(sparkSession, hadoopConf, job, paths.head, options.asScala.toMap)
 
     committer.setupJob(job)
-    new FileBatchWrite(job, description, committer)
+    new FileBatchWrite(job, description, committer, namingProtocol)
   }
 
   /**

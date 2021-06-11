@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources.v2
 import org.apache.hadoop.mapreduce.Job
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.io.FileCommitProtocol
+import org.apache.spark.internal.io.{FileCommitProtocol, FileNamingProtocol}
 import org.apache.spark.sql.connector.write.{BatchWrite, DataWriterFactory, PhysicalWriteInfo, WriterCommitMessage}
 import org.apache.spark.sql.execution.datasources.{WriteJobDescription, WriteTaskResult}
 import org.apache.spark.sql.execution.datasources.FileFormatWriter.processStats
@@ -28,7 +28,8 @@ import org.apache.spark.util.Utils
 class FileBatchWrite(
     job: Job,
     description: WriteJobDescription,
-    committer: FileCommitProtocol)
+    committer: FileCommitProtocol,
+    namingProtocol: FileNamingProtocol)
   extends BatchWrite with Logging {
   override def commit(messages: Array[WriterCommitMessage]): Unit = {
     val results = messages.map(_.asInstanceOf[WriteTaskResult])
@@ -47,7 +48,7 @@ class FileBatchWrite(
   }
 
   override def createBatchWriterFactory(info: PhysicalWriteInfo): DataWriterFactory = {
-    FileWriterFactory(description, committer)
+    FileWriterFactory(description, committer, namingProtocol)
   }
 }
 

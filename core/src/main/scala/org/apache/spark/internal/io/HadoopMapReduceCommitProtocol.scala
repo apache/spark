@@ -18,7 +18,7 @@
 package org.apache.spark.internal.io
 
 import java.io.IOException
-import java.util.{Date, UUID}
+import java.util.Date
 
 import scala.collection.mutable
 import scala.util.Try
@@ -104,7 +104,7 @@ class HadoopMapReduceCommitProtocol(
    * The staging directory of this write job. Spark uses it to deal with files with absolute output
    * path, or writing data into partitioned directory with dynamicPartitionOverwrite=true.
    */
-  protected def stagingDir = getStagingDir(path, jobId)
+  def stagingDir: Path = getStagingDir(path, jobId)
 
   protected def setupCommitter(context: TaskAttemptContext): OutputCommitter = {
     val format = context.getOutputFormatClass.getConstructor().newInstance()
@@ -116,48 +116,30 @@ class HadoopMapReduceCommitProtocol(
     format.getOutputCommitter(context)
   }
 
+  @deprecated("use newTaskFile", "3.2.0")
   override def newTaskTempFile(
       taskContext: TaskAttemptContext, dir: Option[String], ext: String): String = {
-    val filename = getFilename(taskContext, ext)
-
-    val stagingDir: Path = committer match {
-      // For FileOutputCommitter it has its own staging path called "work path".
-      case f: FileOutputCommitter =>
-        if (dynamicPartitionOverwrite) {
-          assert(dir.isDefined,
-            "The dataset to be written must be partitioned when dynamicPartitionOverwrite is true.")
-          partitionPaths += dir.get
-        }
-        new Path(Option(f.getWorkPath).map(_.toString).getOrElse(path))
-      case _ => new Path(path)
-    }
-
-    dir.map { d =>
-      new Path(new Path(stagingDir, d), filename).toString
-    }.getOrElse {
-      new Path(stagingDir, filename).toString
-    }
+    throw new UnsupportedOperationException
   }
 
+  @deprecated("use newTaskFile", "3.2.0")
   override def newTaskTempFileAbsPath(
       taskContext: TaskAttemptContext, absoluteDir: String, ext: String): String = {
-    val filename = getFilename(taskContext, ext)
-    val absOutputPath = new Path(absoluteDir, filename).toString
-
-    // Include a UUID here to prevent file collisions for one task writing to different dirs.
-    // In principle we could include hash(absoluteDir) instead but this is simpler.
-    val tmpOutputPath = new Path(stagingDir, UUID.randomUUID().toString() + "-" + filename).toString
-
-    addedAbsPathFiles(tmpOutputPath) = absOutputPath
-    tmpOutputPath
+    throw new UnsupportedOperationException
   }
 
-  protected def getFilename(taskContext: TaskAttemptContext, ext: String): String = {
-    // The file name looks like part-00000-2dd664f9-d2c4-4ffe-878f-c6c70c1fb0cb_00003-c000.parquet
-    // Note that %05d does not truncate the split number, so if we have more than 100000 tasks,
-    // the file name is fine and won't overflow.
-    val split = taskContext.getTaskAttemptID.getTaskID.getId
-    f"part-$split%05d-$jobId$ext"
+  override def newTaskFile(
+      taskContext: TaskAttemptContext, stagingPath: String, finalPath: Option[String]): Unit = {
+    finalPath match {
+      case Some(path) => addedAbsPathFiles(stagingPath) = path
+      case None =>
+        committer match {
+          case _: FileOutputCommitter if dynamicPartitionOverwrite =>
+            val dir = new Path(stagingPath).getParent.getName
+            partitionPaths += dir
+          case _ =>
+        }
+    }
   }
 
   override def setupJob(jobContext: JobContext): Unit = {
@@ -294,5 +276,9 @@ class HadoopMapReduceCommitProtocol(
       case e: IOException =>
         logWarning(s"Exception while aborting ${taskContext.getTaskAttemptID}", e)
     }
+  }
+
+  def getCommitter: OutputCommitter = {
+    committer
   }
 }

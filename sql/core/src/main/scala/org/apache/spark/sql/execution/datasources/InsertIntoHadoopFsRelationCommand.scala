@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources
 
 import org.apache.hadoop.fs.{FileSystem, Path}
 
-import org.apache.spark.internal.io.FileCommitProtocol
+import org.apache.spark.internal.io.{FileCommitProtocol, FileNamingProtocol}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable, CatalogTablePartition}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
@@ -111,6 +111,14 @@ case class InsertIntoHadoopFsRelationCommand(
       outputPath = outputPath.toString,
       dynamicPartitionOverwrite = dynamicPartitionOverwrite)
 
+    val namingProtocolClass = sparkSession.sessionState.conf.fileNamingProtocolClass
+      .getOrElse(FileNamingProtocol.getMappedProtocolClassName(committer))
+    val namingProtocol = FileNamingProtocol.instantiate(
+      namingProtocolClass,
+      jobId = jobId,
+      outputPath = outputPath.toString,
+      commitProtocol = committer)
+
     val doInsertion = if (mode == SaveMode.Append) {
       true
     } else {
@@ -176,7 +184,7 @@ case class InsertIntoHadoopFsRelationCommand(
           sparkSession = sparkSession,
           plan = child,
           fileFormat = fileFormat,
-          committer = committer,
+          protocols = (committer, namingProtocol),
           outputSpec = FileFormatWriter.OutputSpec(
             committerOutputPath.toString, customPartitionLocations, outputColumns),
           hadoopConf = hadoopConf,

@@ -21,21 +21,23 @@ import java.util.Date
 import org.apache.hadoop.mapreduce.{TaskAttemptID, TaskID, TaskType}
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 
-import org.apache.spark.internal.io.{FileCommitProtocol, SparkHadoopWriterUtils}
+import org.apache.spark.internal.io.{FileCommitProtocol, FileNamingProtocol, SparkHadoopWriterUtils}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.write.{DataWriter, DataWriterFactory}
 import org.apache.spark.sql.execution.datasources.{DynamicPartitionDataSingleWriter, SingleDirectoryDataWriter, WriteJobDescription}
 
 case class FileWriterFactory (
     description: WriteJobDescription,
-    committer: FileCommitProtocol) extends DataWriterFactory {
+    committer: FileCommitProtocol,
+    namingProtocol: FileNamingProtocol) extends DataWriterFactory {
   override def createWriter(partitionId: Int, realTaskId: Long): DataWriter[InternalRow] = {
     val taskAttemptContext = createTaskAttemptContext(partitionId)
     committer.setupTask(taskAttemptContext)
     if (description.partitionColumns.isEmpty) {
-      new SingleDirectoryDataWriter(description, taskAttemptContext, committer)
+      new SingleDirectoryDataWriter(description, taskAttemptContext, committer, namingProtocol)
     } else {
-      new DynamicPartitionDataSingleWriter(description, taskAttemptContext, committer)
+      new DynamicPartitionDataSingleWriter(
+        description, taskAttemptContext, committer, namingProtocol)
     }
   }
 

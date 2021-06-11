@@ -1192,6 +1192,13 @@ object SQLConf {
       .createWithDefault(
         "org.apache.spark.sql.execution.datasources.SQLHadoopMapReduceCommitProtocol")
 
+  val FILE_NAMING_PROTOCOL_CLASS =
+    buildConf("spark.sql.sources.namingProtocolClass")
+      .version("3.2.0")
+      .internal()
+      .stringConf
+      .createOptional
+
   val PARALLEL_PARTITION_DISCOVERY_THRESHOLD =
     buildConf("spark.sql.sources.parallelPartitionDiscovery.threshold")
       .doc("The maximum number of paths allowed for listing files at driver side. If the number " +
@@ -1701,6 +1708,13 @@ object SQLConf {
       .internal()
       .stringConf
       .createWithDefault("org.apache.spark.sql.execution.streaming.ManifestFileCommitProtocol")
+
+  val STREAMING_FILE_NAMING_PROTOCOL_CLASS =
+    buildConf("spark.sql.streaming.namingProtocolClass")
+      .version("3.2.0")
+      .internal()
+      .stringConf
+      .createOptional
 
   val STREAMING_MULTIPLE_WATERMARK_POLICY =
     buildConf("spark.sql.streaming.multipleWatermarkPolicy")
@@ -3425,6 +3439,9 @@ class SQLConf extends Serializable with Logging {
 
   def streamingFileCommitProtocolClass: String = getConf(STREAMING_FILE_COMMIT_PROTOCOL_CLASS)
 
+  def streamingFileNamingProtocolClass: Option[String] =
+    getConf(SQLConf.STREAMING_FILE_NAMING_PROTOCOL_CLASS)
+
   def fileSinkLogDeletion: Boolean = getConf(FILE_SINK_LOG_DELETION)
 
   def fileSinkLogCompactInterval: Int = getConf(FILE_SINK_LOG_COMPACT_INTERVAL)
@@ -3684,6 +3701,8 @@ class SQLConf extends Serializable with Logging {
     getConf(SQLConf.PARTITION_COLUMN_TYPE_INFERENCE)
 
   def fileCommitProtocolClass: String = getConf(SQLConf.FILE_COMMIT_PROTOCOL_CLASS)
+
+  def fileNamingProtocolClass: Option[String] = getConf(SQLConf.FILE_NAMING_PROTOCOL_CLASS)
 
   def parallelPartitionDiscoveryThreshold: Int =
     getConf(SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD)

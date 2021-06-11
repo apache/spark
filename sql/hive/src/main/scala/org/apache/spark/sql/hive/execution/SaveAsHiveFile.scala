@@ -29,7 +29,7 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.hive.common.FileUtils
 import org.apache.hadoop.hive.ql.exec.TaskRunner
 
-import org.apache.spark.internal.io.FileCommitProtocol
+import org.apache.spark.internal.io.{FileCommitProtocol, FileNamingProtocol}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.Attribute
@@ -79,16 +79,26 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
         .foreach { case (compression, codec) => hadoopConf.set(compression, codec) }
     }
 
+    val jobId = java.util.UUID.randomUUID().toString
+
     val committer = FileCommitProtocol.instantiate(
       sparkSession.sessionState.conf.fileCommitProtocolClass,
-      jobId = java.util.UUID.randomUUID().toString,
+      jobId = jobId,
       outputPath = outputLocation)
+
+    val namingProtocolClass = sparkSession.sessionState.conf.fileNamingProtocolClass
+      .getOrElse(FileNamingProtocol.getMappedProtocolClassName(committer))
+    val namingProtocol = FileNamingProtocol.instantiate(
+      namingProtocolClass,
+      jobId = jobId,
+      outputPath = outputLocation,
+      commitProtocol = committer)
 
     FileFormatWriter.write(
       sparkSession = sparkSession,
       plan = plan,
       fileFormat = new HiveFileFormat(fileSinkConf),
-      committer = committer,
+      protocols = (committer, namingProtocol),
       outputSpec =
         FileFormatWriter.OutputSpec(outputLocation, customPartitionLocations, outputColumns),
       hadoopConf = hadoopConf,
