@@ -8929,7 +8929,13 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         else:
             raise TypeError("other must be a pandas-on-Spark DataFrame")
 
-    def melt(self, id_vars=None, value_vars=None, var_name=None, value_name="value") -> "DataFrame":
+    def melt(
+        self,
+        id_vars: Optional[Union[Any, Tuple, List[Union[Any, Tuple]]]] = None,
+        value_vars: Optional[Union[Any, Tuple, List[Union[Any, Tuple]]]] = None,
+        var_name: Optional[Union[str, List[str]]] = None,
+        value_name: str = "value",
+    ) -> "DataFrame":
         """
         Unpivot a DataFrame from wide format to long format, optionally
         leaving identifier variables set.
