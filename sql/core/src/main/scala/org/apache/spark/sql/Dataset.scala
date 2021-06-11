@@ -1037,7 +1037,6 @@ class Dataset[T] private[sql](
   /**
    * find the trivially true predicates and automatically resolves them to both sides.
    */
-  
   private def resolveSelfJoinCondition(plan: Join): Join = {
     val resolver = sparkSession.sessionState.analyzer.resolver
     val cond = plan.condition.map { _.transform {
