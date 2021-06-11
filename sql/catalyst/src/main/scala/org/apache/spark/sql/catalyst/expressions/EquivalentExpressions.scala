@@ -215,8 +215,8 @@ class EquivalentExpressions {
  * we want the child expressions come first than parent expressions, so we can replace
  * child expressions in parent expressions with subexpression evaluation. Note that
  * this is not for general expression ordering. For example, two irrelevant expressions
- * will be considered as e1 < e2 and e2 < e1 by this ordering. But for the usage here,
- * the order of irrelevant expressions does not matter.
+ * will be considered as equal by this ordering. But for the usage here, the order of
+ * irrelevant expressions does not matter.
  */
 class ExpressionContainmentOrdering extends Ordering[Expression] {
   override def compare(x: Expression, y: Expression): Int = {
