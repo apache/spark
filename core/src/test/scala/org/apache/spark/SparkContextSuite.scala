@@ -1289,7 +1289,8 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
   test("SPARK-35691: addFile/addJar/addDirectory should put CanonicalFile") {
     withTempDir { dir =>
       try {
-        sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
+        sc = new SparkContext(
+          new SparkConf().setAppName("test").setMaster("local-cluster[3, 1, 1024]"))
 
         val sep = File.separator
         val tmpCanonicalDir = Utils.createTempDir(dir.getAbsolutePath + sep + "test space")
@@ -1297,14 +1298,16 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
         val tmpJar = File.createTempFile("test", ".jar", tmpAbsoluteDir)
         val tmpFile = File.createTempFile("test", ".txt", tmpAbsoluteDir)
 
-        assert(tmpJar.getAbsolutePath != tmpJar.getCanonicalPath)
-        assert(tmpFile.getAbsolutePath != tmpFile.getCanonicalPath)
+        // Check those files are not canonical
+        assert(tmpCanonicalDir.getAbsolutePath !== tmpCanonicalDir.getCanonicalPath)
+        assert(tmpJar.getAbsolutePath !== tmpJar.getCanonicalPath)
+        assert(tmpFile.getAbsolutePath !== tmpFile.getCanonicalPath)
 
         sc.addJar(tmpJar.getAbsolutePath)
         sc.addFile(tmpFile.getAbsolutePath)
 
-        assert(sc.listJars().size == 1)
-        assert(sc.listFiles().size == 1)
+        assert(sc.listJars().size === 1)
+        assert(sc.listFiles().size === 1)
         assert(sc.listJars().head.contains(tmpJar.getName))
         assert(sc.listFiles().head.contains(tmpFile.getName))
         assert(!sc.listJars().head.contains("." + sep))
