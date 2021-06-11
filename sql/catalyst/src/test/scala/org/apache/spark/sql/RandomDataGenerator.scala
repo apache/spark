@@ -283,7 +283,7 @@ object RandomDataGenerator {
         val ns = rand.nextLong()
         new CalendarInterval(months, days, ns)
       })
-      case DayTimeIntervalType => Some(() => Duration.of(rand.nextLong(), ChronoUnit.MICROS))
+      case _: DayTimeIntervalType => Some(() => Duration.of(rand.nextLong(), ChronoUnit.MICROS))
       case YearMonthIntervalType => Some(() => Period.ofMonths(rand.nextInt()).normalized())
       case DecimalType.Fixed(precision, scale) => Some(
         () => BigDecimal.apply(

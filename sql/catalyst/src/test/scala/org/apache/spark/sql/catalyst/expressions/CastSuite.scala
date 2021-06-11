@@ -40,6 +40,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.catalyst.util.IntervalUtils.microsToDuration
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.DataTypeTestUtils.dayTimeIntervalTypes
 import org.apache.spark.unsafe.types.UTF8String
 
 abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
@@ -841,8 +842,10 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
         s"INTERVAL '$intervalPayload' DAY TO SECOND")
     }
 
-    checkConsistencyBetweenInterpretedAndCodegen(
-      (child: Expression) => Cast(child, StringType), DayTimeIntervalType)
+    dayTimeIntervalTypes.foreach { it =>
+      checkConsistencyBetweenInterpretedAndCodegen((child: Expression) =>
+        Cast(child, StringType), it)
+    }
   }
 }
 
@@ -1813,44 +1816,46 @@ class CastSuite extends CastSuiteBase {
   }
 
   test("SPARK-35112: Cast string to day-time interval") {
-    checkEvaluation(cast(Literal.create("0 0:0:0"), DayTimeIntervalType), 0L)
+    checkEvaluation(cast(Literal.create("0 0:0:0"), DayTimeIntervalType()), 0L)
     checkEvaluation(cast(Literal.create(" interval '0 0:0:0' Day TO second   "),
-      DayTimeIntervalType), 0L)
+      DayTimeIntervalType()), 0L)
     checkEvaluation(cast(Literal.create("INTERVAL '1 2:03:04' DAY TO SECOND"),
-      DayTimeIntervalType), 93784000000L)
+      DayTimeIntervalType()), 93784000000L)
     checkEvaluation(cast(Literal.create("INTERVAL '1 03:04:00' DAY TO SECOND"),
-      DayTimeIntervalType), 97440000000L)
+      DayTimeIntervalType()), 97440000000L)
     checkEvaluation(cast(Literal.create("INTERVAL '1 03:04:00.0000' DAY TO SECOND"),
-      DayTimeIntervalType), 97440000000L)
-    checkEvaluation(cast(Literal.create("1 2:03:04"), DayTimeIntervalType), 93784000000L)
+      DayTimeIntervalType()), 97440000000L)
+    checkEvaluation(cast(Literal.create("1 2:03:04"), DayTimeIntervalType()), 93784000000L)
     checkEvaluation(cast(Literal.create("INTERVAL '-10 2:03:04' DAY TO SECOND"),
-      DayTimeIntervalType), -871384000000L)
-    checkEvaluation(cast(Literal.create("-10 2:03:04"), DayTimeIntervalType), -871384000000L)
-    checkEvaluation(cast(Literal.create("-106751991 04:00:54.775808"), DayTimeIntervalType),
+      DayTimeIntervalType()), -871384000000L)
+    checkEvaluation(cast(Literal.create("-10 2:03:04"), DayTimeIntervalType()), -871384000000L)
+    checkEvaluation(cast(Literal.create("-106751991 04:00:54.775808"), DayTimeIntervalType()),
       Long.MinValue)
-    checkEvaluation(cast(Literal.create("106751991 04:00:54.775807"), DayTimeIntervalType),
+    checkEvaluation(cast(Literal.create("106751991 04:00:54.775807"), DayTimeIntervalType()),
       Long.MaxValue)
 
     Seq("-106751991 04:00:54.775808", "106751991 04:00:54.775807").foreach { interval =>
       val ansiInterval = s"INTERVAL '$interval' DAY TO SECOND"
       checkEvaluation(
-        cast(cast(Literal.create(interval), DayTimeIntervalType), StringType), ansiInterval)
+        cast(cast(Literal.create(interval), DayTimeIntervalType()), StringType), ansiInterval)
       checkEvaluation(cast(cast(Literal.create(ansiInterval),
-        DayTimeIntervalType), StringType), ansiInterval)
+        DayTimeIntervalType()), StringType), ansiInterval)
     }
 
     Seq("INTERVAL '-106751991 04:00:54.775809' YEAR TO MONTH",
       "INTERVAL '106751991 04:00:54.775808' YEAR TO MONTH").foreach { interval =>
         val e = intercept[IllegalArgumentException] {
-          cast(Literal.create(interval), DayTimeIntervalType).eval()
+          cast(Literal.create(interval), DayTimeIntervalType()).eval()
         }.getMessage
         assert(e.contains("Interval string must match day-time format of"))
       }
 
     Seq(Byte.MaxValue, Short.MaxValue, Int.MaxValue, Long.MaxValue, Long.MinValue + 1,
       Long.MinValue).foreach { duration =>
-        val interval = Literal.create(Duration.of(duration, ChronoUnit.MICROS), DayTimeIntervalType)
-        checkEvaluation(cast(cast(interval, StringType), DayTimeIntervalType), duration)
+        val interval = Literal.create(
+          Duration.of(duration, ChronoUnit.MICROS),
+          DayTimeIntervalType())
+        checkEvaluation(cast(cast(interval, StringType), DayTimeIntervalType()), duration)
       }
   }
 

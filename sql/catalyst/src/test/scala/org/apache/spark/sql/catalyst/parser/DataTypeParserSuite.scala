@@ -64,7 +64,7 @@ class DataTypeParserSuite extends SparkFunSuite {
   checkDataType("void", NullType)
   checkDataType("interval", CalendarIntervalType)
   checkDataType("INTERVAL YEAR TO MONTH", YearMonthIntervalType)
-  checkDataType("interval day to second", DayTimeIntervalType)
+  checkDataType("interval day to second", DayTimeIntervalType())
 
   checkDataType("array<doublE>", ArrayType(DoubleType, true))
   checkDataType("Array<map<int, tinYint>>", ArrayType(MapType(IntegerType, ByteType, true), true))

@@ -1625,4 +1625,15 @@ private[spark] object QueryCompilationErrors {
   def unknownHiveResourceTypeError(resourceType: String): Throwable = {
     new AnalysisException(s"Unknown resource type: $resourceType")
   }
+
+  def invalidDayTimeField(field: Byte): Throwable = {
+    val supportedIds = DayTimeIntervalType.dayTimeFields
+      .map(i => s"$i (${DayTimeIntervalType.fieldToString(i)})")
+    new AnalysisException(s"Invalid field id '$field' in day-time interval. " +
+      s"Supported interval fields: ${supportedIds.mkString(", ")}.")
+  }
+
+  def invalidDayTimeIntervalType(startFieldName: String, endFieldName: String): Throwable = {
+    new AnalysisException(s"'interval $startFieldName to $endFieldName' is invalid.")
+  }
 }

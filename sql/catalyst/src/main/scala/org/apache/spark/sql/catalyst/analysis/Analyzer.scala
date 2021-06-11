@@ -349,34 +349,34 @@ class Analyzer(override val catalogManager: CatalogManager)
       case p: LogicalPlan => p.transformExpressionsUpWithPruning(
         _.containsPattern(BINARY_ARITHMETIC), ruleId) {
         case a @ Add(l, r, f) if a.childrenResolved => (l.dataType, r.dataType) match {
-          case (DateType, DayTimeIntervalType) => TimeAdd(Cast(l, TimestampType), r)
-          case (DayTimeIntervalType, DateType) => TimeAdd(Cast(r, TimestampType), l)
+          case (DateType, _: DayTimeIntervalType) => TimeAdd(Cast(l, TimestampType), r)
+          case (_: DayTimeIntervalType, DateType) => TimeAdd(Cast(r, TimestampType), l)
           case (DateType, YearMonthIntervalType) => DateAddYMInterval(l, r)
           case (YearMonthIntervalType, DateType) => DateAddYMInterval(r, l)
           case (TimestampType, YearMonthIntervalType) => TimestampAddYMInterval(l, r)
           case (YearMonthIntervalType, TimestampType) => TimestampAddYMInterval(r, l)
           case (CalendarIntervalType, CalendarIntervalType) |
-               (DayTimeIntervalType, DayTimeIntervalType) => a
+               (_: DayTimeIntervalType, _: DayTimeIntervalType) => a
           case (DateType, CalendarIntervalType) => DateAddInterval(l, r, ansiEnabled = f)
-          case (_, CalendarIntervalType | DayTimeIntervalType) => Cast(TimeAdd(l, r), l.dataType)
+          case (_, CalendarIntervalType | _: DayTimeIntervalType) => Cast(TimeAdd(l, r), l.dataType)
           case (CalendarIntervalType, DateType) => DateAddInterval(r, l, ansiEnabled = f)
-          case (CalendarIntervalType | DayTimeIntervalType, _) => Cast(TimeAdd(r, l), r.dataType)
+          case (CalendarIntervalType | _: DayTimeIntervalType, _) => Cast(TimeAdd(r, l), r.dataType)
           case (DateType, dt) if dt != StringType => DateAdd(l, r)
           case (dt, DateType) if dt != StringType => DateAdd(r, l)
           case _ => a
         }
         case s @ Subtract(l, r, f) if s.childrenResolved => (l.dataType, r.dataType) match {
-          case (DateType, DayTimeIntervalType) =>
+          case (DateType, _: DayTimeIntervalType) =>
             DatetimeSub(l, r, TimeAdd(Cast(l, TimestampType), UnaryMinus(r, f)))
           case (DateType, YearMonthIntervalType) =>
             DatetimeSub(l, r, DateAddYMInterval(l, UnaryMinus(r, f)))
           case (TimestampType, YearMonthIntervalType) =>
             DatetimeSub(l, r, TimestampAddYMInterval(l, UnaryMinus(r, f)))
           case (CalendarIntervalType, CalendarIntervalType) |
-               (DayTimeIntervalType, DayTimeIntervalType) => s
+               (_: DayTimeIntervalType, _: DayTimeIntervalType) => s
           case (DateType, CalendarIntervalType) =>
             DatetimeSub(l, r, DateAddInterval(l, UnaryMinus(r, f), ansiEnabled = f))
-          case (_, CalendarIntervalType | DayTimeIntervalType) =>
+          case (_, CalendarIntervalType | _: DayTimeIntervalType) =>
             Cast(DatetimeSub(l, r, TimeAdd(l, UnaryMinus(r, f))), l.dataType)
           case (TimestampType, _) => SubtractTimestamps(l, r)
           case (_, TimestampType) => SubtractTimestamps(l, r)
@@ -389,14 +389,14 @@ class Analyzer(override val catalogManager: CatalogManager)
           case (_, CalendarIntervalType) => MultiplyInterval(r, l, f)
           case (YearMonthIntervalType, _) => MultiplyYMInterval(l, r)
           case (_, YearMonthIntervalType) => MultiplyYMInterval(r, l)
-          case (DayTimeIntervalType, _) => MultiplyDTInterval(l, r)
-          case (_, DayTimeIntervalType) => MultiplyDTInterval(r, l)
+          case (_: DayTimeIntervalType, _) => MultiplyDTInterval(l, r)
+          case (_, _: DayTimeIntervalType) => MultiplyDTInterval(r, l)
           case _ => m
         }
         case d @ Divide(l, r, f) if d.childrenResolved => (l.dataType, r.dataType) match {
           case (CalendarIntervalType, _) => DivideInterval(l, r, f)
           case (YearMonthIntervalType, _) => DivideYMInterval(l, r)
-          case (DayTimeIntervalType, _) => DivideDTInterval(l, r)
+          case (_: DayTimeIntervalType, _) => DivideDTInterval(l, r)
           case _ => d
         }
       }
