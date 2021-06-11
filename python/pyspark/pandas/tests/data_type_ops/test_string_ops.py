@@ -172,7 +172,7 @@ class StringOpsTest(PandasOnSparkTestCase, TestCasesUtils):
 
 if __name__ == "__main__":
     import unittest
-    from pyspark.pandas.tests.data_type_ops.test_num_ops import *  # noqa: F401
+    from pyspark.pandas.tests.data_type_ops.test_string_ops import *  # noqa: F401
 
     try:
         import xmlrunner  # type: ignore[import]
