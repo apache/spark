@@ -292,6 +292,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       ResolveUnion ::
       typeCoercionRules ++
       extendedResolutionRules : _*),
+    Batch("Remove TempResolvedColumn", Once, RemoveTempResolvedColumn),
     Batch("Apply Char Padding", Once,
       ApplyCharTypePadding),
     Batch("Post-Hoc Resolution", Once,
@@ -1706,7 +1707,7 @@ class Analyzer(override val catalogManager: CatalogManager)
           matched(ordinal)
 
         case u @ UnresolvedAttribute(nameParts) =>
-          val result = CurrentOrigin.withOrigin(u.origin)(withPosition(u) {
+          val result = withPosition(u) {
             resolveColumnByName(nameParts).orElse(resolveLiteralFunction(nameParts)).map {
               // We trim unnecessary alias here. Note that, we cannot trim the alias at top-level,
               // as we should resolve `UnresolvedAttribute` to a named expression. The caller side
@@ -1715,7 +1716,7 @@ class Analyzer(override val catalogManager: CatalogManager)
               case Alias(child, _) if !isTopLevel => child
               case other => other
             }.getOrElse(u)
-          })
+          }
           logDebug(s"Resolving $u to $result")
           result
 
@@ -2484,87 +2485,87 @@ class Analyzer(override val catalogManager: CatalogManager)
     def resolveExprsWithAggregate(
         exprs: Seq[Expression],
         agg: Aggregate): (Seq[NamedExpression], Seq[Expression]) = {
+      def resolveCol(input: Expression): Expression = {
+        input.transform {
+          case u: UnresolvedAttribute =>
+            try {
+              // Resolve the column and wrap it with `TempResolvedColumn`. If the resolved column
+              // doesn't end up with as aggregate function input or grouping column, we should
+              // undo the column resolution to avoid confusing error message. For example, if
+              // a table `t` has two columns `c1` and `c2`, for query `SELECT ... FROM t
+              // GROUP BY c1 HAVING c2 = 0`, even though we can resolve column `c2` here, we
+              // should undo it later and fail with "Column c2 not found".
+              agg.child.resolve(u.nameParts, resolver).map(TempResolvedColumn(_, u.nameParts))
+                .getOrElse(u)
+            } catch {
+              case _: AnalysisException => u
+            }
+        }
+      }
+
+      def resolveSubQuery(input: Expression): Expression = {
+        if (SubqueryExpression.hasSubquery(input)) {
+          val fake = Project(Alias(input, "fake")() :: Nil, agg.child)
+          ResolveSubquery(fake).asInstanceOf[Project].projectList.head.asInstanceOf[Alias].child
+        } else {
+          input
+        }
+      }
+
       val extraAggExprs = ArrayBuffer.empty[NamedExpression]
       val transformed = exprs.map { e =>
         // Try resolving the expression as though it is in the aggregate clause.
-        def resolveCol(input: Expression): Expression = {
-          resolveExpressionByPlanOutput(input, agg.child)
-        }
-        def resolveSubQuery(input: Expression): Expression = {
-          if (SubqueryExpression.hasSubquery(input)) {
-            val fake = Project(Alias(input, "fake")() :: Nil, agg.child)
-            ResolveSubquery(fake).asInstanceOf[Project].projectList.head.asInstanceOf[Alias].child
-          } else {
-            input
-          }
-        }
         val maybeResolved = resolveSubQuery(resolveCol(e))
-        if (maybeResolved.resolved && maybeResolved.references.subsetOf(agg.outputSet) &&
-          !containsAggregate(maybeResolved)) {
-          // The given expression is valid and doesn't need extra resolution.
-          maybeResolved
-        } else if (containsUnresolvedFunc(maybeResolved)) {
-          // The given expression has unresolved functions which may be aggregate functions and we
-          // need to wait for other rules to resolve the functions first.
+        if (!maybeResolved.resolved) {
           maybeResolved
         } else {
-          // Avoid adding an extra aggregate expression if it's already present in
-          // `agg.aggregateExpressions`.
-          val index = if (maybeResolved.resolved) {
-            agg.aggregateExpressions.indexWhere {
-              case Alias(child, _) => child semanticEquals maybeResolved
-              case other => other semanticEquals maybeResolved
-            }
-          } else {
-            -1
-          }
-          if (index >= 0) {
-            agg.aggregateExpressions(index).toAttribute
-          } else {
-            buildAggExprList(maybeResolved, agg, extraAggExprs)
-          }
+          buildAggExprList(maybeResolved, agg, extraAggExprs)
         }
       }
       (extraAggExprs.toSeq, transformed)
     }
 
+    private def trimTempResolvedField(input: Expression): Expression = input.transform {
+      case t: TempResolvedColumn => t.child
+    }
+
     private def buildAggExprList(
         expr: Expression,
         agg: Aggregate,
-        aggExprList: ArrayBuffer[NamedExpression]): Expression = expr match {
-      case ae: AggregateExpression if ae.resolved =>
-        val alias = Alias(ae, ae.toString)()
-        aggExprList += alias
-        alias.toAttribute
-      // Grouping functions are handled in the rule [[ResolveGroupingAnalytics]].
-      case grouping: Expression if grouping.resolved &&
-          agg.groupingExpressions.exists(_.semanticEquals(grouping)) &&
-          !ResolveGroupingAnalytics.hasGroupingFunction(grouping) &&
-          !agg.output.exists(_.semanticEquals(grouping)) =>
-        grouping match {
-          case ne: NamedExpression =>
-            aggExprList += ne
-            ne.toAttribute
-          case _ =>
-            val alias = Alias(grouping, grouping.toString)()
+        aggExprList: ArrayBuffer[NamedExpression]): Expression = {
+      // Avoid adding an extra aggregate expression if it's already present in
+      // `agg.aggregateExpressions`.
+      val index = agg.aggregateExpressions.indexWhere {
+        case Alias(child, _) => child semanticEquals expr
+        case other => other semanticEquals expr
+      }
+      if (index >= 0) {
+        agg.aggregateExpressions(index).toAttribute
+      } else {
+        expr match {
+          case ae: AggregateExpression =>
+            val cleaned = trimTempResolvedField(ae)
+            val alias = Alias(cleaned, cleaned.toString)()
             aggExprList += alias
             alias.toAttribute
+          case grouping: Expression if agg.groupingExpressions.exists(grouping.semanticEquals) =>
+            trimTempResolvedField(grouping) match {
+              case ne: NamedExpression =>
+                aggExprList += ne
+                ne.toAttribute
+              case other =>
+                val alias = Alias(other, other.toString)()
+                aggExprList += alias
+                alias.toAttribute
+            }
+          case t: TempResolvedColumn =>
+            // Undo the resolution as this column is neither inside aggregate functions nor a
+            // grouping column. It shouldn't be resolved with `agg.child.output`.
+            CurrentOrigin.withOrigin(t.origin)(UnresolvedAttribute(t.nameParts))
+          case other =>
+            other.withNewChildren(other.children.map(buildAggExprList(_, agg, aggExprList)))
         }
-      case a: Attribute if agg.child.outputSet.contains(a) && !agg.outputSet.contains(a) =>
-        // Undo the resolution. This attribute is neither inside aggregate functions nor a
-        // grouping column. It shouldn't be resolved with `agg.child.output`.
-        CurrentOrigin.withOrigin(a.origin)(UnresolvedAttribute(Seq(a.name)))
-      case other if other.resolved =>
-        other.withNewChildren(other.children.map(buildAggExprList(_, agg, aggExprList)))
-      case _ => expr
-    }
-
-    def containsAggregate(expr: Expression): Boolean = {
-      expr.find(_.isInstanceOf[AggregateExpression]).isDefined
-    }
-
-    def containsUnresolvedFunc(expr: Expression): Boolean = {
-      expr.find(_.isInstanceOf[UnresolvedFunction]).isDefined
+      }
     }
 
     def resolveOperatorWithAggregate(
@@ -4093,5 +4094,16 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
 
   private def addPadding(expr: Expression, charLength: Int, targetLength: Int): Expression = {
     if (targetLength > charLength) StringRPad(expr, Literal(targetLength)) else expr
+  }
+}
+
+/**
+ * Removes all [[TempResolvedColumn]]s in the query plan. This is the last resort, in case some
+ * rules in the main resolution batch miss to remove [[TempResolvedColumn]]s. We should run this
+ * rule right after the main resolution batch.
+ */
+object RemoveTempResolvedColumn extends Rule[LogicalPlan] {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveExpressions {
+    case t: TempResolvedColumn => UnresolvedAttribute(t.nameParts)
   }
 }

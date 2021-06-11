@@ -63,7 +63,7 @@ WHERE  t1a IN (SELECT   min(t2a)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 't2b' given input columns: [min(t2a), t2.t2c]; line 6 pos 24
+Resolved attribute(s) t2b#x missing from min(t2a)#x,t2c#x in operator !Filter t2c#x IN (list#x [t2b#x]).
 
 
 -- !query
