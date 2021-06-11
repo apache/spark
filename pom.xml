@@ -2602,7 +2602,7 @@
               <arg>-P:silencer:globalFilters=.*deprecated.*</arg>
             </args>
             <jvmArgs>
-              <jvmArg>-Xss4m</jvmArg>
+              <jvmArg>-Xss16m</jvmArg>
               <jvmArg>-Xms1024m</jvmArg>
               <jvmArg>-Xmx1024m</jvmArg>
               <jvmArg>-XX:ReservedCodeCacheSize=${CodeCacheSize}</jvmArg>

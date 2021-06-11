@@ -24,6 +24,8 @@ import java.util.UUID
 import org.apache.spark.SparkConf
 import org.apache.spark.executor.ExecutorExitCode
 import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.network.shuffle.ExecutorDiskUtils
+import org.apache.spark.storage.DiskBlockManager.MERGE_MANAGER_DIR
 import org.apache.spark.util.{ShutdownHookManager, Utils}
 
 /**
@@ -55,6 +57,9 @@ private[spark] class DiskBlockManager(conf: SparkConf, var deleteFilesOnStop: Bo
   // of subDirs(i) is protected by the lock of subDirs(i)
   private val subDirs = Array.fill(localDirs.length)(new Array[File](subDirsPerLocalDir))
 
+  // Create merge directories
+  createLocalDirsForMergedShuffleBlocks()
+
   private val shutdownHook = addShutdownHook()
 
   /** Looks up a file by hashing it into one of our local subdirectories. */
@@ -85,6 +90,33 @@ private[spark] class DiskBlockManager(conf: SparkConf, var deleteFilesOnStop: Bo
   }
 
   def getFile(blockId: BlockId): File = getFile(blockId.name)
+
+  /**
+   * This should be in sync with
+   * @see [[org.apache.spark.network.shuffle.RemoteBlockPushResolver#getFile(
+   *     java.lang.String, java.lang.String)]]
+   */
+  def getMergedShuffleFile(blockId: BlockId, dirs: Option[Array[String]]): File = {
+    blockId match {
+      case mergedBlockId: ShuffleMergedDataBlockId =>
+        getMergedShuffleFile(mergedBlockId.name, dirs)
+      case mergedIndexBlockId: ShuffleMergedIndexBlockId =>
+        getMergedShuffleFile(mergedIndexBlockId.name, dirs)
+      case mergedMetaBlockId: ShuffleMergedMetaBlockId =>
+        getMergedShuffleFile(mergedMetaBlockId.name, dirs)
+      case _ =>
+        throw new IllegalArgumentException(
+          s"Only merged block ID is supported, but got $blockId")
+    }
+  }
+
+  private def getMergedShuffleFile(filename: String, dirs: Option[Array[String]]): File = {
+    if (!dirs.exists(_.nonEmpty)) {
+      throw new IllegalArgumentException(
+        s"Cannot read $filename because merged shuffle dirs is empty")
+    }
+    ExecutorDiskUtils.getFile(dirs.get, subDirsPerLocalDir, filename)
+  }
 
   /** Check if disk block manager has a block. */
   def containsBlock(blockId: BlockId): Boolean = {
@@ -156,6 +188,82 @@ private[spark] class DiskBlockManager(conf: SparkConf, var deleteFilesOnStop: Bo
     }
   }
 
+  /**
+   * Get the list of configured local dirs storing merged shuffle blocks created by executors
+   * if push based shuffle is enabled. Note that the files in this directory will be created
+   * by the external shuffle services. We only create the merge_manager directories and
+   * subdirectories here because currently the external shuffle service doesn't have
+   * permission to create directories under application local directories.
+   */
+  private def createLocalDirsForMergedShuffleBlocks(): Unit = {
+    if (Utils.isPushBasedShuffleEnabled(conf)) {
+      // Will create the merge_manager directory only if it doesn't exist under the local dir.
+      Utils.getConfiguredLocalDirs(conf).foreach { rootDir =>
+        try {
+          val mergeDir = new File(rootDir, MERGE_MANAGER_DIR)
+          if (!mergeDir.exists()) {
+            // This executor does not find merge_manager directory, it will try to create
+            // the merge_manager directory and the sub directories.
+            logDebug(s"Try to create $mergeDir and its sub dirs since the " +
+              s"$MERGE_MANAGER_DIR dir does not exist")
+            for (dirNum <- 0 until subDirsPerLocalDir) {
+              val subDir = new File(mergeDir, "%02x".format(dirNum))
+              if (!subDir.exists()) {
+                // Only one container will create this directory. The filesystem will handle
+                // any race conditions.
+                createDirWithPermission770(subDir)
+              }
+            }
+          }
+          logInfo(s"Merge directory and its sub dirs get created at $mergeDir")
+        } catch {
+          case e: IOException =>
+            logError(
+              s"Failed to create $MERGE_MANAGER_DIR dir in $rootDir. Ignoring this directory.", e)
+        }
+      }
+    }
+  }
+
+  /**
+   * Create a directory that is writable by the group.
+   * Grant the permission 770 "rwxrwx---" to the directory so the shuffle server can
+   * create subdirs/files within the merge folder.
+   * TODO: Find out why can't we create a dir using java api with permission 770
+   *  Files.createDirectories(mergeDir.toPath, PosixFilePermissions.asFileAttribute(
+   *  PosixFilePermissions.fromString("rwxrwx---")))
+   */
+  def createDirWithPermission770(dirToCreate: File): Unit = {
+    var attempts = 0
+    val maxAttempts = Utils.MAX_DIR_CREATION_ATTEMPTS
+    var created: File = null
+    while (created == null) {
+      attempts += 1
+      if (attempts > maxAttempts) {
+        throw new IOException(
+          s"Failed to create directory ${dirToCreate.getAbsolutePath} with permission " +
+            s"770 after $maxAttempts attempts!")
+      }
+      try {
+        val builder = new ProcessBuilder().command(
+          "mkdir", "-p", "-m770", dirToCreate.getAbsolutePath)
+        val proc = builder.start()
+        val exitCode = proc.waitFor()
+        if (dirToCreate.exists()) {
+          created = dirToCreate
+        }
+        logDebug(
+          s"Created directory at ${dirToCreate.getAbsolutePath} with permission " +
+            s"770 and exitCode $exitCode")
+      } catch {
+        case e: SecurityException =>
+          logWarning(s"Failed to create directory ${dirToCreate.getAbsolutePath} " +
+            s"with permission 770", e)
+          created = null;
+      }
+    }
+  }
+
   private def addShutdownHook(): AnyRef = {
     logDebug("Adding shutdown hook") // force eager creation of logger
     ShutdownHookManager.addShutdownHook(ShutdownHookManager.TEMP_DIR_SHUTDOWN_PRIORITY + 1) { () =>
@@ -192,4 +300,8 @@ private[spark] class DiskBlockManager(conf: SparkConf, var deleteFilesOnStop: Bo
       }
     }
   }
+}
+
+private[spark] object DiskBlockManager {
+  private[spark] val MERGE_MANAGER_DIR = "merge_manager"
 }

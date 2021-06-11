@@ -17,9 +17,8 @@
 package org.apache.spark.scheduler.cluster.k8s
 
 import java.time.Instant
-import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.{AtomicInteger, AtomicLong}
+import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
+import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
@@ -46,7 +45,7 @@ private[spark] class ExecutorPodsAllocator(
     snapshotsStore: ExecutorPodsSnapshotsStore,
     clock: Clock) extends Logging {
 
-  private val EXECUTOR_ID_COUNTER = new AtomicLong(0L)
+  private val EXECUTOR_ID_COUNTER = new AtomicInteger(0)
 
   // ResourceProfile id -> total expected executors per profile, currently we don't remove
   // any resource profiles - https://issues.apache.org/jira/browse/SPARK-30749
@@ -102,13 +101,15 @@ private[spark] class ExecutorPodsAllocator(
   @volatile private var deletedExecutorIds = Set.empty[Long]
 
   def start(applicationId: String, schedulerBackend: KubernetesClusterSchedulerBackend): Unit = {
-    // Wait until the driver pod is ready before starting executors, as the headless service won't
-    // be resolvable by DNS until the driver pod is ready.
-    Utils.tryLogNonFatalError {
-      kubernetesClient
-        .pods()
-        .withName(kubernetesDriverPodName.get)
-        .waitUntilReady(driverPodReadinessTimeout, TimeUnit.SECONDS)
+    driverPod.foreach { pod =>
+      // Wait until the driver pod is ready before starting executors, as the headless service won't
+      // be resolvable by DNS until the driver pod is ready.
+      Utils.tryLogNonFatalError {
+        kubernetesClient
+          .pods()
+          .withName(pod.getMetadata.getName)
+          .waitUntilReady(driverPodReadinessTimeout, TimeUnit.SECONDS)
+      }
     }
     snapshotsStore.addSubscriber(podAllocationDelay) {
       onNewSnapshots(applicationId, schedulerBackend, _)

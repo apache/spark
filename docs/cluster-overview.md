@@ -70,9 +70,6 @@ The system currently supports several cluster managers:
 * [Kubernetes](running-on-kubernetes.html) -- an open-source system for automating deployment, scaling,
   and management of containerized applications.
 
-A third-party project (not supported by the Spark project) exists to add support for
-[Nomad](https://github.com/hashicorp/nomad-spark) as a cluster manager.
-
 # Submitting Applications
 
 Applications can be submitted to a cluster of any type using the `spark-submit` script.

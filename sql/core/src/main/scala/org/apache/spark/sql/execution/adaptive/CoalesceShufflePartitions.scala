@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.adaptive
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.plans.physical.SinglePartition
 import org.apache.spark.sql.execution.{ShufflePartitionSpec, SparkPlan}
-import org.apache.spark.sql.execution.exchange.{ENSURE_REQUIREMENTS, REPARTITION, ShuffleExchangeLike, ShuffleOrigin}
+import org.apache.spark.sql.execution.exchange.{ENSURE_REQUIREMENTS, REPARTITION_BY_COL, REPARTITION_BY_NONE, ShuffleExchangeLike, ShuffleOrigin}
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -29,7 +29,8 @@ import org.apache.spark.sql.internal.SQLConf
  */
 case class CoalesceShufflePartitions(session: SparkSession) extends CustomShuffleReaderRule {
 
-  override val supportedShuffleOrigins: Seq[ShuffleOrigin] = Seq(ENSURE_REQUIREMENTS, REPARTITION)
+  override val supportedShuffleOrigins: Seq[ShuffleOrigin] =
+    Seq(ENSURE_REQUIREMENTS, REPARTITION_BY_COL, REPARTITION_BY_NONE)
 
   override def apply(plan: SparkPlan): SparkPlan = {
     if (!conf.coalesceShufflePartitionsEnabled) {
