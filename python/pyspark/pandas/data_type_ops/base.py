@@ -51,7 +51,6 @@ if extension_object_dtypes_available:
 if TYPE_CHECKING:
     from pyspark.pandas.indexes import Index  # noqa: F401 (SPARK-34943)
     from pyspark.pandas.series import Series  # noqa: F401 (SPARK-34943)
-    from pyspark.pandas.base import IndexOpsMixin
 
 
 def is_valid_operand_for_numeric_arithmetic(operand: Any, *, allow_bool: bool = True) -> bool:
