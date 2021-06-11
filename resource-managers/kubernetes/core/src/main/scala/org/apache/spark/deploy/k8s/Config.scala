@@ -270,7 +270,7 @@ private[spark] object Config extends Logging {
         "working-with-objects/names/#dns-label-names\">DNS Label Names</a>. Besides, the " +
         "executor pod names will be generated in the form of " +
         "<code>$podNamePrefix-exec-$id</code>, where the `id` is a positive int value, " +
-        "so the length of the `podNamePrefix` need to be <= 47(= 63 - 10 - 6).")
+        "so the length of the `podNamePrefix` needs to be <= 47(= 63 - 10 - 6).")
       .version("2.3.0")
       .stringConf
       .checkValue(isValidExecutorPodNamePrefix,
