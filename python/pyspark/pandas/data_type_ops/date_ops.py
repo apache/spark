@@ -26,9 +26,14 @@ from pyspark.sql import functions as F
 from pyspark.sql.types import BooleanType, DateType, StringType
 
 from pyspark.pandas.base import column_op, IndexOpsMixin
-from pyspark.pandas.data_type_ops.base import DataTypeOps, _as_bool_type, _as_categorical_type
+from pyspark.pandas.data_type_ops.base import (
+    DataTypeOps,
+    _as_bool_type,
+    _as_categorical_type,
+    _as_string_type,
+)
 from pyspark.pandas.internal import InternalField
-from pyspark.pandas.typedef import Dtype, extension_dtypes, pandas_on_spark_type
+from pyspark.pandas.typedef import Dtype, pandas_on_spark_type
 
 if TYPE_CHECKING:
     from pyspark.pandas.indexes import Index  # noqa: F401 (SPARK-34943)
@@ -88,12 +93,7 @@ class DateOps(DataTypeOps):
         elif isinstance(spark_type, BooleanType):
             return _as_bool_type(index_ops, dtype)
         elif isinstance(spark_type, StringType):
-            if isinstance(dtype, extension_dtypes):
-                scol = index_ops.spark.column.cast(spark_type)
-            else:
-                null_str = str(pd.NaT)
-                casted = index_ops.spark.column.cast(spark_type)
-                scol = F.when(index_ops.spark.column.isNull(), null_str).otherwise(casted)
+            return _as_string_type(index_ops, dtype, null_str=str(pd.NaT))
         else:
             scol = index_ops.spark.column.cast(spark_type)
         return index_ops._with_new_scol(

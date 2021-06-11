@@ -139,6 +139,28 @@ def _as_bool_type(
     )
 
 
+def _as_string_type(
+    index_ops: Union["Series", "Index"],
+    dtype: Union[str, type, Dtype],
+    *,
+    null_str: str = str(None)
+) -> Union["Index", "Series"]:
+    """
+    Cast `index_ops` to StringType Spark type, given `dtype` and
+    `null_str` representing null Spark column."""
+    from pyspark.pandas.internal import InternalField
+
+    if isinstance(dtype, extension_dtypes):
+        scol = index_ops.spark.column.cast(StringType())
+    else:
+        casted = index_ops.spark.column.cast(StringType())
+        scol = F.when(index_ops.spark.column.isNull(), null_str).otherwise(casted)
+    return index_ops._with_new_scol(
+        scol.alias(index_ops._internal.data_spark_column_names[0]),
+        field=InternalField(dtype=dtype),
+    )
+
+
 class DataTypeOps(object, metaclass=ABCMeta):
     """The base class for binary operations of pandas-on-Spark objects (of different data types)."""
 

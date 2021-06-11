@@ -23,7 +23,11 @@ from pyspark.sql import functions as F
 from pyspark.sql.types import IntegralType, StringType
 
 from pyspark.pandas.base import column_op, IndexOpsMixin
-from pyspark.pandas.data_type_ops.base import DataTypeOps, _as_categorical_type
+from pyspark.pandas.data_type_ops.base import (
+    DataTypeOps,
+    _as_categorical_type,
+    _as_string_type,
+)
 from pyspark.pandas.internal import InternalField
 from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.typedef import Dtype, extension_dtypes, pandas_on_spark_type
@@ -124,12 +128,7 @@ class StringOps(DataTypeOps):
                     F.length(index_ops.spark.column) > 0
                 )
         elif isinstance(spark_type, StringType):
-            if isinstance(dtype, extension_dtypes):
-                scol = index_ops.spark.column.cast(spark_type)
-            else:
-                null_str = str(None)
-                casted = index_ops.spark.column.cast(spark_type)
-                scol = F.when(index_ops.spark.column.isNull(), null_str).otherwise(casted)
+            return _as_string_type(index_ops, dtype)
         else:
             scol = index_ops.spark.column.cast(spark_type)
         return index_ops._with_new_scol(
