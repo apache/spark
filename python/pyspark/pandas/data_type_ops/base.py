@@ -17,12 +17,14 @@
 
 import numbers
 from abc import ABCMeta
+from itertools import chain
 from typing import Any, Optional, TYPE_CHECKING, Union
 
 import numpy as np
 import pandas as pd
 from pandas.api.types import CategoricalDtype
 
+from pyspark.sql import functions as F
 from pyspark.sql.types import (
     ArrayType,
     BinaryType,
@@ -39,7 +41,6 @@ from pyspark.sql.types import (
     TimestampType,
     UserDefinedType,
 )
-
 import pyspark.sql.types as types
 from pyspark.pandas.typedef import Dtype
 from pyspark.pandas.typedef.typehints import extension_object_dtypes_available
@@ -50,6 +51,7 @@ if extension_object_dtypes_available:
 if TYPE_CHECKING:
     from pyspark.pandas.indexes import Index  # noqa: F401 (SPARK-34943)
     from pyspark.pandas.series import Series  # noqa: F401 (SPARK-34943)
+    from pyspark.pandas.base import IndexOpsMixin
 
 
 def is_valid_operand_for_numeric_arithmetic(operand: Any, *, allow_bool: bool = True) -> bool:
@@ -88,6 +90,36 @@ def transform_boolean_operand_to_numeric(
         return int(operand)
     else:
         return operand
+
+
+def _as_categorical_type(
+    index_ops: "IndexOpsMixin", dtype: CategoricalDtype, spark_type: types.DataType
+):
+    """Cast `index_ops` to categorical dtype, given `dtype` and `spark_type`."""
+    assert isinstance(dtype, CategoricalDtype)
+    if dtype.categories is None:
+        codes, uniques = index_ops.factorize()
+        return codes._with_new_scol(
+            codes.spark.column,
+            field=codes._internal.data_fields[0].copy(dtype=CategoricalDtype(categories=uniques)),
+        )
+    else:
+        categories = dtype.categories
+        if len(categories) == 0:
+            scol = F.lit(-1)
+        else:
+            kvs = chain(
+                *[(F.lit(category), F.lit(code)) for code, category in enumerate(categories)]
+            )
+            map_scol = F.create_map(*kvs)
+
+            scol = F.coalesce(map_scol.getItem(index_ops.spark.column), F.lit(-1))
+        return index_ops._with_new_scol(
+            scol.cast(spark_type).alias(index_ops._internal.data_fields[0].name),
+            field=index_ops._internal.data_fields[0].copy(
+                dtype=dtype, spark_type=spark_type, nullable=False
+            ),
+        )
 
 
 class DataTypeOps(object, metaclass=ABCMeta):

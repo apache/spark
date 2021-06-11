@@ -15,13 +15,12 @@
 # limitations under the License.
 #
 
-from itertools import chain
 from typing import TYPE_CHECKING, Union
 
 from pandas.api.types import CategoricalDtype
 
 from pyspark.pandas.base import column_op, IndexOpsMixin
-from pyspark.pandas.data_type_ops.base import DataTypeOps
+from pyspark.pandas.data_type_ops.base import DataTypeOps, _as_categorical_type
 from pyspark.pandas.internal import InternalField
 from pyspark.pandas.typedef import Dtype, extension_dtypes, pandas_on_spark_type
 from pyspark.sql import functions as F
@@ -69,34 +68,7 @@ class ArrayOps(DataTypeOps):
             raise ValueError("Type {} not understood".format(dtype))
 
         if isinstance(dtype, CategoricalDtype):
-            if dtype.categories is None:
-                codes, uniques = index_ops.factorize()
-                return codes._with_new_scol(
-                    codes.spark.column,
-                    field=codes._internal.data_fields[0].copy(
-                        dtype=CategoricalDtype(categories=uniques)
-                    ),
-                )
-            else:
-                categories = dtype.categories
-                if len(categories) == 0:
-                    scol = F.lit(-1)
-                else:
-                    kvs = chain(
-                        *[
-                            (F.lit(category), F.lit(code))
-                            for code, category in enumerate(categories)
-                        ]
-                    )
-                    map_scol = F.create_map(*kvs)
-
-                    scol = F.coalesce(map_scol.getItem(index_ops.spark.column), F.lit(-1))
-                return index_ops._with_new_scol(
-                    scol.cast(spark_type).alias(index_ops._internal.data_fields[0].name),
-                    field=index_ops._internal.data_fields[0].copy(
-                        dtype=dtype, spark_type=spark_type, nullable=False
-                    ),
-                )
+            return _as_categorical_type(index_ops, dtype, spark_type)
 
         if isinstance(spark_type, BooleanType):
             if isinstance(dtype, extension_dtypes):
