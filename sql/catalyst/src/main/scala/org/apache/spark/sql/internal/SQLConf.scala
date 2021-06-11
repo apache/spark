@@ -2478,12 +2478,14 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  val REPARTITION_BEFORE_INSERT =
-    buildConf("spark.sql.execution.repartitionBeforeInsert")
+  val REPARTITION_WRITING_DATASOURCE =
+    buildConf("spark.sql.sources.repartitionWritingDataSource")
       .internal()
-      .doc("When perform a insert into partitioned table. Turn on this config to " +
-        "insert a repartition by dynamic partition columns to ease pressure on the NameNode " +
-        "and improve insert performance.")
+      .doc("Add a repartition before writing Spark SQL Data Sources. It supports three patterns:" +
+        "1. Repartition by none when writing normal table/directory. " +
+        "2. Repartition by dynamic partition column when writing dynamic partition " +
+        "table/directory. 3. Repartition by bucket column with bucket number and sort by sort " +
+        "column when writing bucket table/directory.")
       .booleanConf
       .createWithDefault(false)
 
@@ -3610,7 +3612,7 @@ class SQLConf extends Serializable with Logging {
 
   def sortBeforeRepartition: Boolean = getConf(SORT_BEFORE_REPARTITION)
 
-  def repartitionBeforeInsert: Boolean = getConf(REPARTITION_BEFORE_INSERT)
+  def repartitionWritingDataSource: Boolean = getConf(REPARTITION_WRITING_DATASOURCE)
 
   def topKSortFallbackThreshold: Int = getConf(TOP_K_SORT_FALLBACK_THRESHOLD)
 

@@ -26,7 +26,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning._
-import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoDir, InsertIntoStatement, LogicalPlan, RepartitionByExpression, ScriptTransformation, Statistics}
+import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoDir, InsertIntoStatement, LogicalPlan, ScriptTransformation, Statistics}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.CatalogV2Util.assertNoNullTypeInSchema
 import org.apache.spark.sql.execution._
@@ -178,46 +178,6 @@ object HiveAnalysis extends Rule[LogicalPlan] {
       if (overwrite) DDLUtils.verifyNotReadPath(child, outputPath)
 
       InsertIntoHiveDirCommand(isLocal, storage, child, overwrite, child.output.map(_.name))
-  }
-}
-
-/**
- * Add a repartition by dynamic partition columns before insert Hive table.
- *
- * Note that, this rule must be run after `HiveAnalysis`.
- */
-object RepartitionBeforeInsertHiveTable extends Rule[LogicalPlan] {
-  override def apply(plan: LogicalPlan): LogicalPlan = {
-    if (conf.repartitionBeforeInsert) {
-      insertRepartition(plan)
-    } else {
-      plan
-    }
-  }
-
-  private def insertRepartition(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-    case c @ CreateHiveTableAsSelectCommand(table, query, _, _)
-      if query.resolved && DDLUtils.isHiveTable(table) && table.bucketSpec.isEmpty
-        && table.partitionColumnNames.nonEmpty =>
-      val dynamicPartExps = table.partitionColumnNames.flatMap(n => query.output.find(_.name == n))
-      query match {
-        case RepartitionByExpression(partExpressions, _, _) if partExpressions == dynamicPartExps =>
-          c
-        case _ =>
-          c.copy(query = RepartitionByExpression(dynamicPartExps, query, conf.numShufflePartitions))
-      }
-
-    case i @ InsertIntoHiveTable(table, partSpec, query, _, _, _)
-      if query.resolved && DDLUtils.isDatasourceTable(table) && table.bucketSpec.isEmpty
-        && table.partitionColumnNames.nonEmpty && partSpec.filter(_._2.isEmpty).keys.nonEmpty =>
-      val dynamicPartExps = partSpec.filter(_._2.isEmpty).keys
-        .flatMap(n => query.output.find(_.name == n)).toSeq
-      query match {
-        case RepartitionByExpression(partExpressions, _, _) if partExpressions == dynamicPartExps =>
-          i
-        case _ =>
-          i.copy(query = RepartitionByExpression(dynamicPartExps, query, conf.numShufflePartitions))
-      }
   }
 }
 
