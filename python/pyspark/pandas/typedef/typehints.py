@@ -21,7 +21,18 @@ Utilities to deal with types. This is mostly focused on python3.
 import datetime
 import decimal
 from inspect import getfullargspec, isclass
-from typing import Any, Callable, Generic, List, Optional, Tuple, TypeVar, Union  # noqa: F401
+from typing import (  # noqa: F401
+    Any,
+    Callable,
+    Dict,
+    Generic,
+    List,
+    Optional,
+    Tuple,
+    TypeVar,
+    Union,
+    cast,
+)
 
 import numpy as np
 import pandas as pd
@@ -86,15 +97,27 @@ class DataFrameType(object):
     def __init__(
         self, dtypes: List[Dtype], spark_types: List[types.DataType], names: List[Optional[str]]
     ):
+        from pyspark.pandas.internal import InternalField
         from pyspark.pandas.utils import name_like_string
 
-        self.dtypes = dtypes
-        self.spark_type = types.StructType(
-            [
-                types.StructField(name_like_string(n) if n is not None else ("c%s" % i), t)
-                for i, (n, t) in enumerate(zip(names, spark_types))
-            ]
-        )  # type: types.StructType
+        self.fields = [
+            InternalField(
+                dtype=dtype,
+                struct_field=types.StructField(
+                    name=(name_like_string(name) if name is not None else ("c%s" % i)),
+                    dataType=spark_type,
+                ),
+            )
+            for i, (name, dtype, spark_type) in enumerate(zip(names, dtypes, spark_types))
+        ]
+
+    @property
+    def dtypes(self) -> List[Dtype]:
+        return [field.dtype for field in self.fields]
+
+    @property
+    def spark_type(self) -> types.StructType:
+        return types.StructType([field.struct_field for field in self.fields])
 
     def __repr__(self) -> str:
         return "DataFrameType[{}]".format(self.spark_type)
@@ -216,7 +239,7 @@ def as_spark_type(tpe: Union[str, type, Dtype], *, raise_error: bool = True) -> 
 def spark_type_to_pandas_dtype(
     spark_type: types.DataType, *, use_extension_dtypes: bool = False
 ) -> Dtype:
-    """ Return the given Spark DataType to pandas dtype. """
+    """Return the given Spark DataType to pandas dtype."""
 
     if use_extension_dtypes and extension_dtypes_available:
         # IntegralType
@@ -316,8 +339,11 @@ def infer_pd_series_spark_type(pser: pd.Series, dtype: Dtype) -> types.DataType:
         else:
             return from_arrow_type(pa.Array.from_pandas(pser).type)
     elif isinstance(dtype, CategoricalDtype):
-        # `pser` must already be converted to codes.
-        return as_spark_type(pser.dtype)
+        if isinstance(pser.dtype, CategoricalDtype):
+            return as_spark_type(pser.cat.codes.dtype)
+        else:
+            # `pser` must already be converted to codes.
+            return as_spark_type(pser.dtype)
     else:
         return as_spark_type(dtype)
 

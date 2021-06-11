@@ -269,18 +269,14 @@ class SymmetricHashJoinStateManager(
         // The backing store is arraylike - we as the caller are responsible for filling back in
         // any hole. So we swap the last element into the hole and decrement numValues to shorten.
         // clean
-        if (numValues > 1) {
+        if (index != numValues - 1) {
           val valuePairAtMaxIndex = keyWithIndexToValue.get(currentKey, numValues - 1)
           if (valuePairAtMaxIndex != null) {
             keyWithIndexToValue.put(currentKey, index, valuePairAtMaxIndex.value,
               valuePairAtMaxIndex.matched)
-          } else {
-            keyWithIndexToValue.put(currentKey, index, null, false)
           }
-          keyWithIndexToValue.remove(currentKey, numValues - 1)
-        } else {
-          keyWithIndexToValue.remove(currentKey, 0)
         }
+        keyWithIndexToValue.remove(currentKey, numValues - 1)
         numValues -= 1
         valueRemoved = true
 
