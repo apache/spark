@@ -114,7 +114,7 @@ object RowEncoder {
         createSerializerForSqlDate(inputObject)
       }
 
-    case DayTimeIntervalType => createSerializerForJavaDuration(inputObject)
+    case _: DayTimeIntervalType => createSerializerForJavaDuration(inputObject)
 
     case YearMonthIntervalType => createSerializerForJavaPeriod(inputObject)
 
@@ -238,7 +238,7 @@ object RowEncoder {
       } else {
         ObjectType(classOf[java.sql.Date])
       }
-    case DayTimeIntervalType => ObjectType(classOf[java.time.Duration])
+    case _: DayTimeIntervalType => ObjectType(classOf[java.time.Duration])
     case YearMonthIntervalType => ObjectType(classOf[java.time.Period])
     case _: DecimalType => ObjectType(classOf[java.math.BigDecimal])
     case StringType => ObjectType(classOf[java.lang.String])
@@ -297,7 +297,7 @@ object RowEncoder {
         createDeserializerForSqlDate(input)
       }
 
-    case DayTimeIntervalType => createDeserializerForDuration(input)
+    case _: DayTimeIntervalType => createDeserializerForDuration(input)
 
     case YearMonthIntervalType => createDeserializerForPeriod(input)
 

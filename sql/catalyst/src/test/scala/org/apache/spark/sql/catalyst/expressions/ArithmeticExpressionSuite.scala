@@ -634,15 +634,15 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
 
       checkExceptionInExpression[ArithmeticException](
         Subtract(
-          Literal.create(Duration.ofDays(-106751991), DayTimeIntervalType),
-          Literal.create(Duration.ofDays(10), DayTimeIntervalType),
+          Literal.create(Duration.ofDays(-106751991), DayTimeIntervalType()),
+          Literal.create(Duration.ofDays(10), DayTimeIntervalType()),
           failOnError
         ),
         "overflow")
       checkExceptionInExpression[ArithmeticException](
         Add(
-          Literal.create(Duration.ofDays(106751991), DayTimeIntervalType),
-          Literal.create(Duration.ofDays(10), DayTimeIntervalType),
+          Literal.create(Duration.ofDays(106751991), DayTimeIntervalType()),
+          Literal.create(Duration.ofDays(10), DayTimeIntervalType()),
           failOnError
         ),
         "overflow")

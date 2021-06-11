@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.types
 
+import org.apache.spark.sql.types.DayTimeIntervalType.{DAY, HOUR, MINUTE, SECOND}
+
 /**
  * Utility functions for working with DataTypes in tests.
  */
@@ -49,13 +51,24 @@ object DataTypeTestUtils {
   // TODO: remove this once we find out how to handle decimal properly in property check
   val numericTypeWithoutDecimal: Set[DataType] = integralType ++ Set(DoubleType, FloatType)
 
+  val dayTimeIntervalTypes: Seq[DayTimeIntervalType] = Seq(
+    DayTimeIntervalType(DAY, DAY),
+    DayTimeIntervalType(DAY, HOUR),
+    DayTimeIntervalType(DAY, MINUTE),
+    DayTimeIntervalType(DAY, SECOND),
+    DayTimeIntervalType(HOUR, HOUR),
+    DayTimeIntervalType(HOUR, MINUTE),
+    DayTimeIntervalType(HOUR, SECOND),
+    DayTimeIntervalType(MINUTE, MINUTE),
+    DayTimeIntervalType(MINUTE, SECOND),
+    DayTimeIntervalType(SECOND, SECOND))
+
   /**
    * Instances of all [[NumericType]]s and [[CalendarIntervalType]]
    */
   val numericAndInterval: Set[DataType] = numericTypeWithoutDecimal ++ Set(
     CalendarIntervalType,
-    DayTimeIntervalType,
-    YearMonthIntervalType)
+    YearMonthIntervalType) ++ dayTimeIntervalTypes
 
   /**
    * All the types that support ordering
@@ -67,8 +80,7 @@ object DataTypeTestUtils {
     DateType,
     StringType,
     BinaryType,
-    DayTimeIntervalType,
-    YearMonthIntervalType)
+    YearMonthIntervalType) ++ dayTimeIntervalTypes
 
   /**
    * All the types that we can use in a property check
@@ -85,9 +97,8 @@ object DataTypeTestUtils {
     StringType,
     TimestampType,
     TimestampWithoutTZType,
-    DayTimeIntervalType,
     YearMonthIntervalType
-  )
+  ) ++ dayTimeIntervalTypes
 
   /**
    * Instances of [[ArrayType]] for all [[AtomicType]]s. Arrays of these types may contain null.

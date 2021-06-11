@@ -283,7 +283,8 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
       Seq(1L, -1L).foreach { sign =>
         val us = sign * input
         val duration = IntervalUtils.microsToDuration(us)
-        assert(CatalystTypeConverters.createToScalaConverter(DayTimeIntervalType)(us) === duration)
+        assert(CatalystTypeConverters.createToScalaConverter(DayTimeIntervalType())(us)
+          === duration)
       }
     }
   }

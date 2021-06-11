@@ -1362,7 +1362,7 @@ case class TimeAdd(start: Expression, interval: Expression, timeZoneId: Option[S
     copy(timeZoneId = Option(timeZoneId))
 
   override def nullSafeEval(start: Any, interval: Any): Any = right.dataType match {
-    case DayTimeIntervalType =>
+    case _: DayTimeIntervalType =>
       timestampAddDayTime(start.asInstanceOf[Long], interval.asInstanceOf[Long], zoneId)
     case CalendarIntervalType =>
       val i = interval.asInstanceOf[CalendarInterval]
@@ -1373,7 +1373,7 @@ case class TimeAdd(start: Expression, interval: Expression, timeZoneId: Option[S
     val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     interval.dataType match {
-      case DayTimeIntervalType =>
+      case _: DayTimeIntervalType =>
         defineCodeGen(ctx, ev, (sd, dt) => s"""$dtu.timestampAddDayTime($sd, $dt, $zid)""")
       case CalendarIntervalType =>
         defineCodeGen(ctx, ev, (sd, i) => {
@@ -2396,7 +2396,7 @@ object DatePart {
         throw QueryCompilationErrors.literalTypeUnsupportedForSourceTypeError(fieldStr, source)
 
       source.dataType match {
-        case YearMonthIntervalType | DayTimeIntervalType | CalendarIntervalType =>
+        case YearMonthIntervalType | _: DayTimeIntervalType | CalendarIntervalType =>
           ExtractIntervalPart.parseExtractField(fieldStr, source, analysisException)
         case _ =>
           DatePart.parseExtractField(fieldStr, source, analysisException)
@@ -2550,7 +2550,7 @@ case class SubtractTimestamps(
 
   override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType, TimestampType)
   override def dataType: DataType =
-    if (legacyInterval) CalendarIntervalType else DayTimeIntervalType
+    if (legacyInterval) CalendarIntervalType else DayTimeIntervalType()
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
@@ -2609,8 +2609,10 @@ case class SubtractDates(
     this(left, right, SQLConf.get.legacyIntervalEnabled)
 
   override def inputTypes: Seq[AbstractDataType] = Seq(DateType, DateType)
-  override def dataType: DataType =
-    if (legacyInterval) CalendarIntervalType else DayTimeIntervalType
+  override def dataType: DataType = {
+    // TODO(SPARK-35727): Return INTERVAL DAY from dates subtraction
+    if (legacyInterval) CalendarIntervalType else DayTimeIntervalType()
+  }
 
   @transient
   private lazy val evalFunc: (Int, Int) => Any = legacyInterval match {

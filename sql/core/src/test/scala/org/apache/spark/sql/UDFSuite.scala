@@ -879,18 +879,21 @@ class UDFSuite extends QueryTest with SharedSparkSession {
     val plusHour = udf((d: java.time.Duration) => d.plusHours(1))
     val result = input.select(plusHour($"d").as("new_d"))
     checkAnswer(result, Row(java.time.Duration.ofDays(1)) :: Nil)
-    assert(result.schema === new StructType().add("new_d", DayTimeIntervalType))
+    // TODO(SPARK-35730): Check all day-time interval types in UDF
+    assert(result.schema === new StructType().add("new_d", DayTimeIntervalType()))
     // UDF produces `null`
     val nullFunc = udf((_: java.time.Duration) => null.asInstanceOf[java.time.Duration])
     val nullResult = input.select(nullFunc($"d").as("null_d"))
     checkAnswer(nullResult, Row(null) :: Nil)
-    assert(nullResult.schema === new StructType().add("null_d", DayTimeIntervalType))
+    // TODO(SPARK-35730): Check all day-time interval types in UDF
+    assert(nullResult.schema === new StructType().add("null_d", DayTimeIntervalType()))
     // Input parameter of UDF is null
     val nullInput = Seq(null.asInstanceOf[java.time.Duration]).toDF("null_d")
     val constDuration = udf((_: java.time.Duration) => java.time.Duration.ofMinutes(10))
     val constResult = nullInput.select(constDuration($"null_d").as("10_min"))
     checkAnswer(constResult, Row(java.time.Duration.ofMinutes(10)) :: Nil)
-    assert(constResult.schema === new StructType().add("10_min", DayTimeIntervalType))
+    // TODO(SPARK-35730): Check all day-time interval types in UDF
+    assert(constResult.schema === new StructType().add("10_min", DayTimeIntervalType()))
     // Error in the conversion of UDF result to the internal representation of day-time interval
     val overflowFunc = udf((d: java.time.Duration) => d.plusDays(Long.MaxValue))
     val e = intercept[SparkException] {
