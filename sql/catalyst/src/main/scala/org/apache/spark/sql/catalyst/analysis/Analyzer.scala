@@ -622,7 +622,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       // groupingExpressions for condition resolving.
       val aggForResolving = aggregate.copy(groupingExpressions = groupByExprs)
       // Try resolving the condition of the filter as though it is in the aggregate clause
-      val (extraAggExprs, Seq(afterResolve)) =
+      val (extraAggExprs, Seq(resolvedHavingCond)) =
         ResolveAggregateFunctions.resolveExprsWithAggregate(Seq(h.havingCondition), aggForResolving)
 
       // Push the aggregate expressions into the aggregate (if any).
@@ -633,7 +633,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       // attrMap to resolve the condition again.
       val attrMap = AttributeMap((aggForResolving.output ++ extraAggExprs.map(_.toAttribute))
         .zip(newChild.output))
-      val newCond = afterResolve.transform {
+      val newCond = resolvedHavingCond.transform {
         case a: AttributeReference => attrMap.getOrElse(a, a)
       }
 
@@ -2475,10 +2475,16 @@ class Analyzer(override val catalogManager: CatalogManager)
         })
     }
 
+    /**
+     * Resolves the given expressions as if they are in the given Aggregate operator, which means
+     * the column can be resolved using `agg.child` and aggregate functions/grouping columns are
+     * allowed. It returns a list of named expressions that need to be appended to
+     * `agg.aggregateExpressions`, and the list of resolved expressions.
+     */
     def resolveExprsWithAggregate(
         exprs: Seq[Expression],
         agg: Aggregate): (Seq[NamedExpression], Seq[Expression]) = {
-      val aggregateExpressions = ArrayBuffer.empty[NamedExpression]
+      val extraAggExprs = ArrayBuffer.empty[NamedExpression]
       val transformed = exprs.map { e =>
         // Try resolving the expression as though it is in the aggregate clause.
         def resolveCol(input: Expression): Expression = {
@@ -2515,11 +2521,11 @@ class Analyzer(override val catalogManager: CatalogManager)
           if (index >= 0) {
             agg.aggregateExpressions(index).toAttribute
           } else {
-            buildAggExprList(maybeResolved, agg, aggregateExpressions)
+            buildAggExprList(maybeResolved, agg, extraAggExprs)
           }
         }
       }
-      (aggregateExpressions.toSeq, transformed)
+      (extraAggExprs.toSeq, transformed)
     }
 
     private def buildAggExprList(
