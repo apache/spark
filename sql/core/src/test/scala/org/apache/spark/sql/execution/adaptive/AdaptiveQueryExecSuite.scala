@@ -1833,7 +1833,7 @@ class AdaptiveQueryExecSuite
           .toDF("c1", "c2").createOrReplaceTempView("v")
 
         def checkPartitionNumber(
-                                  query: String, reducerPartitionNumber: Int, totalNumber: Int): Unit = {
+            query: String, reducerPartitionNumber: Int, totalNumber: Int): Unit = {
           val (_, adaptive) = runAdaptiveAndVerifyResult(query)
           val reader = collect(adaptive) {
             case reader: CustomShuffleReaderExec => reader
