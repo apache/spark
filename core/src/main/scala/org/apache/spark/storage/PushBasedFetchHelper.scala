@@ -17,7 +17,7 @@
 
 package org.apache.spark.storage
 
-import java.util.concurrent.TimeUnit
+import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
@@ -50,7 +50,7 @@ private class PushBasedFetchHelper(
     blockManager.blockManagerId.port, blockManager.blockManagerId.topologyInfo)
 
   /** A map for storing merged block shuffle chunk bitmap */
-  private[this] val chunksMetaMap = new mutable.HashMap[ShuffleBlockChunkId, RoaringBitmap]()
+  private[this] val chunksMetaMap = new ConcurrentHashMap[ShuffleBlockChunkId, RoaringBitmap]()
 
   /**
    * Returns true if the address is for a push-merged block.
@@ -81,7 +81,7 @@ private class PushBasedFetchHelper(
    * @param blockId shuffle block chunk id.
    */
   def getNumberOfBlocksInChunk(blockId : ShuffleBlockChunkId): Int = {
-    chunksMetaMap(blockId).getCardinality
+    chunksMetaMap.get(blockId).getCardinality
   }
 
   /**
@@ -145,7 +145,7 @@ private class PushBasedFetchHelper(
           iterator.addToResultsQueue(MergedMetaFetchResult(shuffleId, reduceId,
             sizeMap((shuffleId, reduceId)), meta.getNumChunks, meta.readChunkBitmaps(), address))
         } catch {
-          case exception: Throwable =>
+          case exception: Exception =>
             logError(s"Failed to parse the meta of merged block for ($shuffleId, $reduceId) " +
               s"from ${req.address.host}:${req.address.port}", exception)
             iterator.addToResultsQueue(
@@ -214,8 +214,8 @@ private class PushBasedFetchHelper(
             s"blocks: ${mergedLocalBlocks.mkString(", ")}. Fetch the original blocks instead",
             throwable)
           mergedLocalBlocks.foreach(
-            blockId => iterator.addToResultsQueue(
-              IgnoreFetchResult(blockId, localShuffleMergerBlockMgrId, 0, isNetworkReqDone = false))
+            blockId => iterator.addToResultsQueue(FallbackOnMergedFailureFetchResult(
+              blockId, localShuffleMergerBlockMgrId, 0, isNetworkReqDone = false))
           )
       }
     }
@@ -245,10 +245,10 @@ private class PushBasedFetchHelper(
         buf.retain()
         val shuffleChunkId = ShuffleBlockChunkId(shuffleBlockId.shuffleId,
           shuffleBlockId.reduceId, chunkId)
+        chunksMetaMap.put(shuffleChunkId, chunksMeta(chunkId))
         iterator.addToResultsQueue(
           SuccessFetchResult(shuffleChunkId, SHUFFLE_PUSH_MAP_ID, blockManagerId, buf.size(), buf,
             isNetworkReqDone = false))
-        chunksMetaMap.put(shuffleChunkId, chunksMeta(chunkId))
       }
       true
     } catch {
@@ -259,7 +259,7 @@ private class PushBasedFetchHelper(
         logWarning(s"Error occurred while fetching local merged block, " +
           s"prepare to fetch the original blocks", e)
         iterator.addToResultsQueue(
-          IgnoreFetchResult(blockId, blockManagerId, 0, isNetworkReqDone = false))
+          FallbackOnMergedFailureFetchResult(blockId, blockManagerId, 0, isNetworkReqDone = false))
         false
     }
   }
@@ -268,7 +268,7 @@ private class PushBasedFetchHelper(
    * This is executed by the task thread when the `iterator.next()` is invoked and the iterator
    * processes a response of type:
    * 1) [[ShuffleBlockFetcherIterator.SuccessFetchResult]]
-   * 2) [[ShuffleBlockFetcherIterator.IgnoreFetchResult]]
+   * 2) [[ShuffleBlockFetcherIterator.FallbackOnMergedFailureFetchResult]]
    * 3) [[ShuffleBlockFetcherIterator.MergedMetaFailedFetchResult]]
    *
    * This initiates fetching fallback blocks for a merged block (or a merged block chunk) that
@@ -300,7 +300,7 @@ private class PushBasedFetchHelper(
             shuffleBlockId.shuffleId, shuffleBlockId.reduceId)
         case _ =>
           val shuffleChunkId = blockId.asInstanceOf[ShuffleBlockChunkId]
-          val chunkBitmap: RoaringBitmap = chunksMetaMap.remove(shuffleChunkId).orNull
+          val chunkBitmap: RoaringBitmap = chunksMetaMap.remove(shuffleChunkId)
           assert(chunkBitmap != null)
           // When there is a failure to fetch a remote merged shuffle block chunk, then we try to
           // fallback not only for that particular remote shuffle block chunk but also for all the
@@ -315,8 +315,7 @@ private class PushBasedFetchHelper(
             if (pendingShuffleChunks.nonEmpty) {
               pendingShuffleChunks.foreach { pendingBlockId =>
                 logInfo(s"Falling back immediately for merged block $pendingBlockId")
-                val bitmapOfPendingChunk: RoaringBitmap =
-                  chunksMetaMap.remove(pendingBlockId).orNull
+                val bitmapOfPendingChunk: RoaringBitmap = chunksMetaMap.remove(pendingBlockId)
                 assert(bitmapOfPendingChunk != null)
                 chunkBitmap.or(bitmapOfPendingChunk)
               }

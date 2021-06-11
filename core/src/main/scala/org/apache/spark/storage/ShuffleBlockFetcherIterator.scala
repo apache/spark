@@ -334,7 +334,7 @@ final class ShuffleBlockFetcherIterator(
               if (block.isShuffleChunk) {
                 remainingBlocks -= blockId
                 results.put(
-                  IgnoreFetchResult(block, address, infoMap(blockId)._1, remainingBlocks.isEmpty))
+                  FallbackOnMergedFailureFetchResult(block, address, infoMap(blockId)._1, remainingBlocks.isEmpty))
               } else {
                 results.put(FailureFetchResult(block, infoMap(blockId)._2, address, e))
               }
@@ -893,7 +893,7 @@ final class ShuffleBlockFetcherIterator(
           defReqQueue.enqueue(request)
           result = null
 
-        case IgnoreFetchResult(blockId, address, size, isNetworkReqDone) =>
+        case FallbackOnMergedFailureFetchResult(blockId, address, size, isNetworkReqDone) =>
           // We get this result in 3 cases:
           // 1. Failure to fetch the data of a remote merged shuffle chunk. In this case, the
           //    blockId is a ShuffleBlockChunkId.
@@ -1402,7 +1402,7 @@ object ShuffleBlockFetcherIterator {
    * @param isNetworkReqDone Is this the last network request for this host in this fetch
    *                         request. Used to update reqsInFlight.
    */
-  private[storage] case class IgnoreFetchResult(blockId: BlockId,
+  private[storage] case class FallbackOnMergedFailureFetchResult(blockId: BlockId,
       address: BlockManagerId,
       size: Long,
       isNetworkReqDone: Boolean) extends FetchResult
