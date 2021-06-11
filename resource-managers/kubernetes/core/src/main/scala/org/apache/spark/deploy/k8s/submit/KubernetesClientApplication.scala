@@ -136,9 +136,17 @@ private[spark] class Client(
     val driverPodName = resolvedDriverPod.getMetadata.getName
 
     var watch: Watch = null
-    val createdDriverPod = kubernetesClient.pods().create(resolvedDriverPod)
+    var createdDriverPod: Pod = null
     try {
-      val otherKubernetesResources = resolvedDriverSpec.driverKubernetesResources ++ Seq(configMap)
+      createdDriverPod = kubernetesClient.pods().create(resolvedDriverPod)
+    } catch {
+      case NonFatal(e) =>
+        logError("Fail to create driver pod, you may use wrong master URL.")
+        throw e
+    }
+    try {
+      val otherKubernetesResources =
+        resolvedDriverSpec.driverKubernetesResources ++ Seq(configMap)
       addOwnerReference(createdDriverPod, otherKubernetesResources)
       kubernetesClient.resourceList(otherKubernetesResources: _*).createOrReplace()
     } catch {
