@@ -147,6 +147,14 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
       "+- Range (0, 3, step=1, splits=None)")
   }
 
+  test("explain lateral joins") {
+    checkKeywordsExistsInExplain(
+      sql("SELECT * FROM VALUES (0, 1) AS (a, b), LATERAL (SELECT a)"),
+      "LateralJoin lateral-subquery#x [a#x], Inner",
+      "Project [outer(a#x) AS a#x]"
+    )
+  }
+
   test("explain string functions") {
     // Check if catalyst combine nested `Concat`s
     val df1 = sql(
