@@ -171,7 +171,7 @@ object BloomFilterBenchmark extends SqlBasedBenchmark {
         .parquet(path + "/withBF")
 
       runBenchmark("Parquet Read for IN set") {
-        new Benchmark(s"Read a row from ${scaleFactor}M rows", N, output = output)
+        val benchmark = new Benchmark(s"Read a row from ${scaleFactor}M rows", N, output = output)
         benchmark.addCase("Without bloom filter") { _ =>
           spark.read.option("spark.sql.parquet.pushdown.inFilterThreshold", 50)
             .parquet(path + "/withoutBF").where(filter).noop()
