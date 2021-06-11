@@ -194,27 +194,6 @@ class EquivalentExpressions {
   }
 
   /**
-   * Orders `Expression` by parent/child relations. The child expression is smaller
-   * than parent expression. If there is child-parent relationships among the subexpressions,
-   * we want the child expressions come first than parent expressions, so we can replace
-   * child expressions in parent expressions with subexpression evaluation. Note that
-   * this is not for general expression ordering. For example, two irrelevant expressions
-   * will be considered as e1 < e2 and e2 < e1 by this ordering. But for the usage here,
-   * the order of irrelevant expressions does not matter.
-   */
-  class ExpressionContainmentOrdering extends Ordering[Expression] {
-    override def compare(x: Expression, y: Expression): Int = {
-      if (x.semanticEquals(y)) {
-        0
-      } else if (x.find(_.semanticEquals(y)).isDefined) {
-        1
-      } else {
-        -1
-      }
-    }
-  }
-
-  /**
    * Returns the state of the data structure as a string. If `all` is false, skips sets of
    * equivalent expressions with cardinality 1.
    */
@@ -227,5 +206,29 @@ class EquivalentExpressions {
       }
     }
     sb.toString()
+  }
+}
+
+/**
+ * Orders `Expression` by parent/child relations. The child expression is smaller
+ * than parent expression. If there is child-parent relationships among the subexpressions,
+ * we want the child expressions come first than parent expressions, so we can replace
+ * child expressions in parent expressions with subexpression evaluation. Note that
+ * this is not for general expression ordering. For example, two irrelevant or semantically-equal
+ * expressions will be considered as equal by this ordering. But for the usage here, the order of
+ * irrelevant expressions does not matter.
+ */
+class ExpressionContainmentOrdering extends Ordering[Expression] {
+  override def compare(x: Expression, y: Expression): Int = {
+    if (x.find(_.semanticEquals(y)).isDefined) {
+      // `y` is child expression of `x`.
+      1
+    } else if (y.find(_.semanticEquals(x)).isDefined) {
+      // `x` is child expression of `y`.
+      -1
+    } else {
+      // Irrelevant or semantically-equal expressions
+      0
+    }
   }
 }
