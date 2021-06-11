@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.trees.TreePattern.{CREATE_TABLE, TreePattern}
 import org.apache.spark.sql.execution.command.{DDLUtils, LeafRunnableCommand}
 import org.apache.spark.sql.execution.command.ViewHelper.createTemporaryViewRelation
 import org.apache.spark.sql.internal.StaticSQLConf
@@ -52,6 +53,7 @@ case class CreateTable(
   override def children: Seq[LogicalPlan] = query.toSeq
   override def output: Seq[Attribute] = Seq.empty
   override lazy val resolved: Boolean = false
+  final override val nodePatterns: Seq[TreePattern] = Seq(CREATE_TABLE)
 
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[LogicalPlan]): LogicalPlan =

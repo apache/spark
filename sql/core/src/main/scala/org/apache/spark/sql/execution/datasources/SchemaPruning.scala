@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LeafNode, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.trees.TreePattern.LOCAL_RELATION
 import org.apache.spark.sql.execution.datasources.orc.OrcFileFormat
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
 import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StructType}
@@ -42,7 +43,7 @@ object SchemaPruning extends Rule[LogicalPlan] {
     }
 
   private def apply0(plan: LogicalPlan): LogicalPlan =
-    plan transformDown {
+    plan.transformDownWithPruning(_.containsPattern(LOCAL_RELATION)) {
       case op @ PhysicalOperation(projects, filters,
           l @ LogicalRelation(hadoopFsRelation: HadoopFsRelation, _, _, _))
         if canPruneRelation(hadoopFsRelation) =>

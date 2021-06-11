@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.trees.TreePattern.JOIN
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
 
 /**
@@ -211,7 +212,7 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
   }
 
   private def prune(plan: LogicalPlan): LogicalPlan = {
-    plan transformUp {
+    plan.transformUpWithPruning(_.containsPattern(JOIN)) {
       // skip this rule if there's already a DPP subquery on the LHS of a join
       case j @ Join(Filter(_: DynamicPruningSubquery, _), _, _, _, _) => j
       case j @ Join(_, Filter(_: DynamicPruningSubquery, _), _, _, _) => j

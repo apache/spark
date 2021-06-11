@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression
 import org.apache.spark.sql.catalyst.expressions.aggregate.{ImperativeAggregate, TypedImperativeAggregate}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.trees.TreePattern.{SCALA_AGGREGATOR, TreePattern}
 import org.apache.spark.sql.expressions.{Aggregator, MutableAggregationBuffer, UserDefinedAggregateFunction}
 import org.apache.spark.sql.types._
 
@@ -506,6 +507,8 @@ case class ScalaAggregator[IN, BUF, OUT](
   private[this] lazy val outputEncoder = agg.outputEncoder.asInstanceOf[ExpressionEncoder[OUT]]
   private[this] lazy val outputSerializer = outputEncoder.createSerializer()
 
+  final override val nodePatterns: Seq[TreePattern] = Seq(SCALA_AGGREGATOR)
+
   def dataType: DataType = outputEncoder.objSerializer.dataType
 
   def inputTypes: Seq[DataType] = inputEncoder.schema.map(_.dataType)
@@ -557,9 +560,10 @@ case class ScalaAggregator[IN, BUF, OUT](
  * An extension rule to resolve encoder expressions from a [[ScalaAggregator]]
  */
 object ResolveEncodersInScalaAgg extends Rule[LogicalPlan] {
-  override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
+    _.containsPattern(SCALA_AGGREGATOR), ruleId) {
     case p if !p.resolved => p
-    case p => p.transformExpressionsUp {
+    case p => p.transformExpressionsUpWithPruning(_.containsPattern(SCALA_AGGREGATOR), ruleId) {
       case agg: ScalaAggregator[_, _, _] =>
         agg.copy(
           inputEncoder = agg.inputEncoder.resolveAndBind(),

@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.internal.SQLConf
@@ -49,7 +50,9 @@ case class OptimizeMetadataOnlyQuery(catalog: SessionCatalog) extends Rule[Logic
       return plan
     }
 
-    plan.transform {
+    plan.transformWithPruning(
+      t => t.containsPattern(AGGREGATE)
+           && t.containsAnyPattern(LOCAL_RELATION, HIVE_TABLE_RELATUON)) {
       case a @ Aggregate(_, aggExprs, child @ PhysicalOperation(
           projectList, filters, PartitionedRelation(partAttrs, rel))) =>
         // We only apply this optimization when only partitioned attributes are scanned.

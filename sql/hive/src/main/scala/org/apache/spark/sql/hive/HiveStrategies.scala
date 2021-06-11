@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoDir, InsertIntoStatement, LogicalPlan, ScriptTransformation, Statistics}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.connector.catalog.CatalogV2Util.assertNoNullTypeInSchema
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command.{CreateTableCommand, DDLUtils}
@@ -87,7 +88,8 @@ class ResolveHiveSerdeTable(session: SparkSession) extends Rule[LogicalPlan] {
     }
   }
 
-  override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
+    _.containsPattern(CREATE_TABLE), ruleId) {
     case c @ CreateTable(t, _, query) if DDLUtils.isHiveTable(t) =>
       // Finds the database name if the name does not exist.
       val dbName = t.identifier.database.getOrElse(session.catalog.currentDatabase)
@@ -138,7 +140,8 @@ class DetermineTableStats(session: SparkSession) extends Rule[LogicalPlan] {
     relation.copy(tableStats = stats)
   }
 
-  override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
+    _.containsPattern(HIVE_TABLE_RELATUON)) {
     case relation: HiveTableRelation
       if DDLUtils.isHiveTable(relation.tableMeta) && relation.tableMeta.stats.isEmpty =>
       hiveTableWithStats(relation)
@@ -158,7 +161,8 @@ class DetermineTableStats(session: SparkSession) extends Rule[LogicalPlan] {
  * `PreprocessTableInsertion`.
  */
 object HiveAnalysis extends Rule[LogicalPlan] {
-  override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
+    _.containsAnyPattern(PARSE_STATEMENT, CREATE_TABLE, INSERT_INTO_DIR)) {
     case InsertIntoStatement(
         r: HiveTableRelation, partSpec, _, query, overwrite, ifPartitionNotExists)
         if DDLUtils.isHiveTable(r.tableMeta) =>
@@ -205,7 +209,7 @@ case class RelationConversions(
   private val metastoreCatalog = sessionCatalog.metastoreCatalog
 
   override def apply(plan: LogicalPlan): LogicalPlan = {
-    plan resolveOperators {
+    plan.resolveOperatorsWithPruning(_.containsAnyPattern(HIVE_TABLE_RELATUON, CREATE_TABLE)) {
       // Write path
       case InsertIntoStatement(
           r: HiveTableRelation, partition, cols, query, overwrite, ifPartitionNotExists)

@@ -85,13 +85,21 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.analysis.ResolveHints$ResolveJoinStrategyHints" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveInlineTables" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveLambdaVariables" ::
+      "org.apache.spark.sql.catalyst.analysis.ResolveSessionCatalog" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveTimeZone" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveUnion" ::
       "org.apache.spark.sql.catalyst.analysis.SubstituteUnresolvedOrdinals" ::
       "org.apache.spark.sql.catalyst.analysis.TimeWindowing" ::
       "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$CombinedTypeCoercionRule" ::
+      "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$WidenSetOperationTypes" ::
       "org.apache.spark.sql.catalyst.analysis.UpdateOuterReferences" ::
       "org.apache.spark.sql.catalyst.analysis.UpdateAttributeNullability" ::
+      "org.apache.spark.sql.execution.aggregate.ResolveEncodersInScalaAgg" ::
+      "org.apache.spark.sql.execution.datasources.DataSourceAnalysis" ::
+      "org.apache.spark.sql.execution.datasources.FallBackFileSourceV2" ::
+      "org.apache.spark.sql.execution.datasources.FindDataSourceTable" ::
+      "org.apache.spark.sql.execution.datasources.ResolveSQLOnFile" ::
+      "org.apache.spark.sql.execution.streaming.ResolveWriteToStream" ::
       // Catalyst Optimizer rules
       "org.apache.spark.sql.catalyst.optimizer.BooleanSimplification" ::
       "org.apache.spark.sql.catalyst.optimizer.CollapseProject" ::

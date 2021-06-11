@@ -35,6 +35,7 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTable.VIEW_STORING_ANALYZED_
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, Cast, ExprId, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils
+import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
@@ -780,6 +781,7 @@ case class UnresolvedCatalogRelation(
   assert(tableMeta.identifier.database.isDefined)
   override lazy val resolved: Boolean = false
   override def output: Seq[Attribute] = Nil
+  final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_CATALOG_RELATION)
 }
 
 /**
@@ -812,6 +814,8 @@ case class HiveTableRelation(
   assert(tableMeta.identifier.database.isDefined)
   assert(tableMeta.partitionSchema.sameType(partitionCols.toStructType))
   assert(tableMeta.dataSchema.sameType(dataCols.toStructType))
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(HIVE_TABLE_RELATUON)
 
   // The partition column should always appear after data columns.
   override def output: Seq[AttributeReference] = dataCols ++ partitionCols

@@ -22,6 +22,7 @@ import scala.collection.JavaConverters._
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoStatement, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.trees.TreePattern.PARSE_STATEMENT
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, FileTable}
 
 /**
@@ -33,7 +34,8 @@ import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, File
  * removed when Catalog support of file data source v2 is finished.
  */
 class FallBackFileSourceV2(sparkSession: SparkSession) extends Rule[LogicalPlan] {
-  override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
+    _.containsPattern(PARSE_STATEMENT), ruleId) {
     case i @ InsertIntoStatement(
         d @ DataSourceV2Relation(table: FileTable, _, _, _, _), _, _, _, _, _) =>
       val v1FileFormat = table.fallbackFileFormat.newInstance()

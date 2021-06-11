@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.analysis.ViewType
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, FunctionResource}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.trees.{LeafLike, UnaryLike}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{PARSE_STATEMENT, TreePattern}
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -48,6 +49,8 @@ abstract class ParsedStatement extends LogicalPlan {
   }
 
   override def output: Seq[Attribute] = Seq.empty
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(PARSE_STATEMENT)
 
   final override lazy val resolved = false
 }

@@ -23,6 +23,7 @@ import org.apache.spark.sql.{Column, Dataset}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, Cast, Equality, Expression, ExprId}
 import org.apache.spark.sql.catalyst.plans.logical.{Join, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.trees.TreePattern.JOIN
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 
@@ -77,7 +78,7 @@ object DetectAmbiguousSelfJoin extends Rule[LogicalPlan] {
     // We always remove the special metadata from `AttributeReference` at the end of this rule, so
     // Dataset column reference only exists in the root node via Dataset transformations like
     // `Dataset#select`.
-    if (plan.find(_.isInstanceOf[Join]).isEmpty) return stripColumnReferenceMetadataInPlan(plan)
+    if (!plan.containsPattern(JOIN)) return stripColumnReferenceMetadataInPlan(plan)
 
     val colRefAttrs = plan.expressions.flatMap(_.collect {
       case a: AttributeReference if isColumnReference(a) => a

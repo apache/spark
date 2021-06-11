@@ -39,6 +39,7 @@ object TreePattern extends Enumeration  {
   val COUNT: Value = Value
   val COUNT_IF: Value = Value
   val CREATE_NAMED_STRUCT: Value = Value
+  val CREATE_TABLE: Value = Value
   val CURRENT_LIKE: Value = Value
   val DESERIALIZE_TO_OBJECT: Value = Value
   val DYNAMIC_PRUNING_EXPRESSION: Value = Value
@@ -93,18 +94,22 @@ object TreePattern extends Enumeration  {
   val EVENT_TIME_WATERMARK: Value = Value
   val EXCEPT: Value = Value
   val FILTER: Value = Value
+  val HIVE_TABLE_RELATUON: Value = Value
   val INNER_LIKE_JOIN: Value = Value
+  val INSERT_INTO_DIR: Value = Value
   val JOIN: Value = Value
   val LEFT_SEMI_OR_ANTI_JOIN: Value = Value
   val LIMIT: Value = Value
   val LOCAL_RELATION: Value = Value
   val NATURAL_LIKE_JOIN: Value = Value
   val OUTER_JOIN: Value = Value
+  val PARSE_STATEMENT: Value = Value
   val PROJECT: Value = Value
   val REPARTITION_OPERATION: Value = Value
+  val SCALA_AGGREGATOR: Value = Value
+  val TYPED_FILTER: Value = Value
   val UNION: Value = Value
   val UNRESOLVED_RELATION: Value = Value
-  val TYPED_FILTER: Value = Value
   val WINDOW: Value = Value
   val WITH_WINDOW_DEFINITION: Value = Value
 
@@ -115,6 +120,7 @@ object TreePattern extends Enumeration  {
   val UNRESOLVED_ORDINAL: Value = Value
   val UNRESOLVED_FUNCTION: Value = Value
   val UNRESOLVED_HINT: Value = Value
+  val UNRESOLVED_CATALOG_RELATION: Value = Value
 
   // Unresolved Plan patterns (Alphabetically ordered)
   val UNRESOLVED_SUBQUERY_COLUMN_ALIAS: Value = Value

@@ -520,6 +520,7 @@ case class InsertIntoDir(
   override def output: Seq[Attribute] = Seq.empty
   override def metadataOutput: Seq[Attribute] = Nil
   override lazy val resolved: Boolean = false
+  final override val nodePatterns: Seq[TreePattern] = Seq(INSERT_INTO_DIR)
 
   override protected def withNewChildInternal(newChild: LogicalPlan): InsertIntoDir =
     copy(child = newChild)
