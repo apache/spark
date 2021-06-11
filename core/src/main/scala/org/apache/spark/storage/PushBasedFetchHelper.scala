@@ -49,7 +49,10 @@ private class PushBasedFetchHelper(
     SHUFFLE_MERGER_IDENTIFIER, blockManager.blockManagerId.host,
     blockManager.blockManagerId.port, blockManager.blockManagerId.topologyInfo)
 
-  /** A map for storing merged block shuffle chunk bitmap */
+  /**
+   * A map for storing merged block shuffle chunk bitmap. This is a concurrent hashmap because it
+   * can be modified by both the task thread and the netty thread.
+   */
   private[this] val chunksMetaMap = new ConcurrentHashMap[ShuffleBlockChunkId, RoaringBitmap]()
 
   /**
@@ -222,7 +225,8 @@ private class PushBasedFetchHelper(
   }
 
   /**
-   * Fetch a single local merged block generated.
+   * Fetch a single local merged block generated. This can also be executed by the task thread as
+   * well as the netty thread.
    * @param blockId ShuffleBlockId to be fetched
    * @param localDirs Local directories where the merged shuffle files are stored
    * @param blockManagerId BlockManagerId
