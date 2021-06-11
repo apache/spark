@@ -28,12 +28,12 @@ import org.apache.spark.sql.internal.SQLConf
  *
  * We use ADVISORY_PARTITION_SIZE_IN_BYTES size to decide if a partition should be expanded.
  * Let's say we have 3 maps with 3 shuffle partitions, and assuming r1 has data skew issue.
- * the map side looks like::
+ * the map side looks like:
  *   m0:[b0, b1, b2], m1:[b0, b1, b2], m2:[b0, b1, b2]
  * and the reduce side looks like:
  *                          (without this rule) r1[m0-b1, m1-b1, m2-b1]
  *                              /                              \
- *   r0:[m0-b0, m1-b0, m2-b0], r1:[m0-b1], r2:[m1-b1], r3:[m2-b1], r2[m0-b2, m1-b2, m2-b2]
+ *   r0:[m0-b0, m1-b0, m2-b0], r1:[m0-b1], r2:[m1-b1], r3:[m2-b1], r4[m0-b2, m1-b2, m2-b2]
  */
 object ExpandShufflePartitions extends CustomShuffleReaderRule {
   override def supportedShuffleOrigins: Seq[ShuffleOrigin] =
