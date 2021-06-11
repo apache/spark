@@ -42,7 +42,7 @@ from pyspark.sql.types import (
     UserDefinedType,
 )
 import pyspark.sql.types as types
-from pyspark.pandas.typedef import Dtype
+from pyspark.pandas.typedef import Dtype, extension_dtypes
 from pyspark.pandas.typedef.typehints import extension_object_dtypes_available
 
 if extension_object_dtypes_available:
@@ -119,6 +119,24 @@ def _as_categorical_type(
                 dtype=dtype, spark_type=spark_type, nullable=False
             ),
         )
+
+
+def _as_bool_type(
+    index_ops: Union["Series", "Index"], dtype: Union[str, type, Dtype]
+) -> Union["Index", "Series"]:
+    """Cast `index_ops` to BooleanType Spark type, given `dtype`."""
+    from pyspark.pandas.internal import InternalField
+
+    if isinstance(dtype, extension_dtypes):
+        scol = index_ops.spark.column.cast(BooleanType())
+    else:
+        scol = F.when(index_ops.spark.column.isNull(), F.lit(False)).otherwise(
+            index_ops.spark.column.cast(BooleanType())
+        )
+    return index_ops._with_new_scol(
+        scol.alias(index_ops._internal.data_spark_column_names[0]),
+        field=InternalField(dtype=dtype),
+    )
 
 
 class DataTypeOps(object, metaclass=ABCMeta):

@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING, Union
 from pandas.api.types import CategoricalDtype
 
 from pyspark.pandas.base import column_op, IndexOpsMixin
-from pyspark.pandas.data_type_ops.base import DataTypeOps, _as_categorical_type
+from pyspark.pandas.data_type_ops.base import DataTypeOps, _as_bool_type, _as_categorical_type
 from pyspark.pandas.internal import InternalField
 from pyspark.pandas.typedef import Dtype, extension_dtypes, pandas_on_spark_type
 from pyspark.sql import functions as F
@@ -68,13 +68,9 @@ class BinaryOps(DataTypeOps):
         if isinstance(dtype, CategoricalDtype):
             return _as_categorical_type(index_ops, dtype, spark_type)
 
-        if isinstance(spark_type, BooleanType):
-            if isinstance(dtype, extension_dtypes):
-                scol = index_ops.spark.column.cast(spark_type)
-            else:
-                scol = F.when(index_ops.spark.column.isNull(), F.lit(False)).otherwise(
-                    index_ops.spark.column.cast(spark_type)
-                )
+        elif isinstance(spark_type, BooleanType):
+            return _as_bool_type(index_ops, dtype)
+
         elif isinstance(spark_type, StringType):
             if isinstance(dtype, extension_dtypes):
                 scol = index_ops.spark.column.cast(spark_type)
