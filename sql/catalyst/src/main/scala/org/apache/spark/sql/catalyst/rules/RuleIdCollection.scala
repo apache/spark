@@ -91,7 +91,6 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.analysis.SubstituteUnresolvedOrdinals" ::
       "org.apache.spark.sql.catalyst.analysis.TimeWindowing" ::
       "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$CombinedTypeCoercionRule" ::
-      "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$WidenSetOperationTypes" ::
       "org.apache.spark.sql.catalyst.analysis.UpdateOuterReferences" ::
       "org.apache.spark.sql.catalyst.analysis.UpdateAttributeNullability" ::
       "org.apache.spark.sql.execution.aggregate.ResolveEncodersInScalaAgg" ::
