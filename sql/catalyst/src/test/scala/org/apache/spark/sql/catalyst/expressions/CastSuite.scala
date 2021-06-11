@@ -1295,8 +1295,14 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
       }
     }
   }
-}
 
+  test("SPARK-35720: Support casting of String to timestamp without time zone type") {
+    specialTs.foreach { s =>
+      val expectedTs = LocalDateTime.parse(s)
+      checkEvaluation(cast(Literal(s), TimestampWithoutTZType), expectedTs)
+    }
+  }
+}
 /**
  * Test suite for data type casting expression [[Cast]].
  */

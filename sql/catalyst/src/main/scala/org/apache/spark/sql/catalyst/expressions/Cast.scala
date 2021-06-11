@@ -72,6 +72,7 @@ object Cast {
 
     case (DateType, TimestampWithoutTZType) => true
     case (TimestampType, TimestampWithoutTZType) => true
+    case (StringType, TimestampWithoutTZType) => true
 
     case (StringType, DateType) => true
     case (TimestampType, DateType) => true
@@ -517,6 +518,14 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       buildCast[Int](_, d => daysToMicros(d, ZoneOffset.UTC))
     case TimestampType =>
       buildCast[Long](_, ts => convertTz(ts, ZoneOffset.UTC, zoneId))
+    case StringType =>
+      buildCast[UTF8String](_, utfs => {
+        if (ansiEnabled) {
+          DateTimeUtils.stringToTimestampAnsi(utfs, ZoneOffset.UTC)
+        } else {
+          DateTimeUtils.stringToTimestamp(utfs, ZoneOffset.UTC).orNull
+        }
+      })
   }
 
   private[this] def decimalToTimestamp(d: Decimal): Long = {
@@ -1416,6 +1425,25 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
         zoneIdClass)
       (c, evPrim, evNull) =>
         code"$evPrim = $dateTimeUtilsCls.convertTz($c, java.time.ZoneOffset.UTC, $zid);"
+    case StringType =>
+      val longOpt = ctx.freshVariable("longOpt", classOf[Option[Long]])
+      (c, evPrim, evNull) =>
+        if (ansiEnabled) {
+          code"""
+            $evPrim =
+              $dateTimeUtilsCls.stringToTimestampAnsi($c, java.time.ZoneOffset.UTC);
+           """
+        } else {
+          code"""
+            scala.Option<Long> $longOpt =
+             $dateTimeUtilsCls.stringToTimestamp($c, java.time.ZoneOffset.UTC);
+            if ($longOpt.isDefined()) {
+              $evPrim = ((Long) $longOpt.get()).longValue();
+            } else {
+              $evNull = true;
+            }
+           """
+        }
   }
 
   private[this] def castToIntervalCode(from: DataType): CastFunction = from match {
@@ -2004,6 +2032,7 @@ object AnsiCast {
     case (_: NumericType, BooleanType) => true
 
     case (StringType, TimestampType) => true
+    case (StringType, TimestampWithoutTZType) => true
     case (DateType, TimestampType) => true
     case (TimestampWithoutTZType, TimestampType) => true
 
