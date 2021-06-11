@@ -227,7 +227,7 @@ class ExpressionContainmentOrdering extends Ordering[Expression] {
       // `x` is child expression of `y`.
       -1
     } else {
-      // Irrelevant expressions
+      // Irrelevant or semantically-equal expressions
       0
     }
   }
