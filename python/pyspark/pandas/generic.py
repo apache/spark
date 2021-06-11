@@ -2502,7 +2502,9 @@ class Frame(object, metaclass=ABCMeta):
         -------
         a Window sub-classed for the particular operation
         """
-        return Rolling(self, window=window, min_periods=min_periods)
+        return Rolling(
+            cast(Union["Series", "DataFrame"], self), window=window, min_periods=min_periods
+        )
 
     # TODO: 'center' and 'axis' parameter should be implemented.
     #   'axis' implementation, refer https://github.com/pyspark.pandas/pull/607
@@ -2524,7 +2526,7 @@ class Frame(object, metaclass=ABCMeta):
         -------
         a Window sub-classed for the particular operation
         """
-        return Expanding(self, min_periods=min_periods)
+        return Expanding(cast(Union["Series", "DataFrame"], self), min_periods=min_periods)
 
     def get(self, key, default=None) -> Any:
         """
