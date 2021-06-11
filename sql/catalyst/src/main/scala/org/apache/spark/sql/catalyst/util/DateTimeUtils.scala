@@ -80,6 +80,14 @@ object DateTimeUtils {
   }
 
   /**
+   * Gets the microseconds of the instant expressed as the number of microseconds since the
+   * epoch at the given time zone ID.
+   */
+  def getLocalMicros(micros: Long, zoneId: ZoneId): Long = {
+    localDateTimeToMicros(getLocalDateTime(micros, zoneId))
+  }
+
+  /**
    * Converts a local date at the default JVM time zone to the number of days since 1970-01-01
    * in the hybrid calendar (Julian + Gregorian) by discarding the time part. The resulted days are
    * rebased from the hybrid to Proleptic Gregorian calendar. The days rebasing is performed via

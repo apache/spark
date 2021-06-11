@@ -515,7 +515,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
     case DateType =>
       buildCast[Int](_, d => daysToMicros(d, ZoneOffset.UTC))
     case TimestampType =>
-      buildCast[Long](_, ts => ts)
+      buildCast[Long](_, ts => DateTimeUtils.getLocalMicros(ts, zoneId))
   }
 
   private[this] def decimalToTimestamp(d: Decimal): Long = {
@@ -930,7 +930,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
     case DateType => castToDateCode(from, ctx)
     case decimal: DecimalType => castToDecimalCode(from, decimal, ctx)
     case TimestampType => castToTimestampCode(from, ctx)
-    case TimestampWithoutTZType => castToTimestampWithoutTZCode(from)
+    case TimestampWithoutTZType => castToTimestampWithoutTZCode(from, ctx)
     case CalendarIntervalType => castToIntervalCode(from)
     case DayTimeIntervalType => castToDayTimeIntervalCode(from)
     case YearMonthIntervalType => castToYearMonthIntervalCode(from)
@@ -1384,12 +1384,18 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
         """
   }
 
-  private[this] def castToTimestampWithoutTZCode(from: DataType): CastFunction = from match {
+  private[this] def castToTimestampWithoutTZCode(
+      from: DataType,
+      ctx: CodegenContext): CastFunction = from match {
     case DateType =>
       (c, evPrim, evNull) =>
         code"$evPrim = $dateTimeUtilsCls.daysToMicros($c, java.time.ZoneOffset.UTC);"
     case TimestampType =>
-      (c, evPrim, evNull) => code"$evPrim = $c;"
+      val zoneIdClass = classOf[ZoneId]
+      val zid = JavaCode.global(
+        ctx.addReferenceObj("zoneId", zoneId, zoneIdClass.getName),
+        zoneIdClass)
+      (c, evPrim, evNull) => code"$evPrim = $dateTimeUtilsCls.getLocalMicros($c, $zid);"
   }
 
   private[this] def castToIntervalCode(from: DataType): CastFunction = from match {

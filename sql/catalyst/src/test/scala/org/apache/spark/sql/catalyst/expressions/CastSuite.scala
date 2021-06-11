@@ -1282,7 +1282,7 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
       withDefaultTimeZone(ZoneOffset.ofHours(hour)) {
         specialTs.foreach { s =>
           val input = Timestamp.valueOf(s.replace("T", " "))
-          val expectedTs = LocalDateTime.parse(s).minusHours(hour)
+          val expectedTs = LocalDateTime.parse(s)
           checkEvaluation(cast(input, TimestampWithoutTZType), expectedTs)
         }
       }
