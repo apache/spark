@@ -1567,7 +1567,7 @@ class AdaptiveQueryExecSuite
         assert(!smj.head.isSkewJoin)
         // Both sides are coalesced.
         val customReaders = collect(smj.head) {
-          case c: CustomShuffleReaderExec if c.hasCoalescedPartition => c
+          case c: CustomShuffleReaderExec => c
         }
         assert(customReaders.length == 2)
 
@@ -1582,7 +1582,7 @@ class AdaptiveQueryExecSuite
         // Skew join can apply as the repartition is not optimized out.
         assert(smjWithNum.head.isSkewJoin)
         val customReadersWithNum = collect(smjWithNum.head) {
-          case c: CustomShuffleReaderExec if c.hasCoalescedPartition => c
+          case c: CustomShuffleReaderExec => c
         }
         assert(customReadersWithNum.nonEmpty)
 

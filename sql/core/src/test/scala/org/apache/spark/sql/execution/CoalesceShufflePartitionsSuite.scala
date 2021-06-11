@@ -331,7 +331,8 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterAl
       }.length == 2)
       assert(
         finalPlan.collect {
-          case r @ CoalescedShuffleReader() => r
+          // only 1 partition - nothing to coalesce
+          case r: CustomShuffleReaderExec if !r.isLocalReader && !r.hasSkewedPartition =>
         }.length == 3)
 
 

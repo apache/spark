@@ -87,8 +87,22 @@ case class CustomShuffleReaderExec private(
     Iterator(desc)
   }
 
-  def hasCoalescedPartition: Boolean =
-    partitionSpecs.exists(_.isInstanceOf[CoalescedPartitionSpec])
+  private def isCoalesced(spec: ShufflePartitionSpec) = coalesceRange(spec) > 1
+
+  /**
+   * How many partitions were coalesced; 0 if not [[CoalescedPartitionSpec]]
+   */
+  private def coalesceRange(spec: ShufflePartitionSpec) = spec match {
+    case s: CoalescedPartitionSpec => s.endReducerIndex - s.startReducerIndex
+    case _ => 0
+  }
+
+  /**
+   * Returns true iff some non-empty partitions were combined
+   */
+  def hasCoalescedPartition: Boolean = {
+    partitionSpecs.exists(isCoalesced)
+  }
 
   def hasSkewedPartition: Boolean =
     partitionSpecs.exists(_.isInstanceOf[PartialReducerPartitionSpec])
