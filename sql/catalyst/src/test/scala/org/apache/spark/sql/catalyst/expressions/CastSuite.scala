@@ -1267,6 +1267,15 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
       checkEvaluation(cast(dt, DateType), LocalDate.parse(s.split("T")(0)))
     }
   }
+
+  test("SPARK-35718: cast date type to timestamp without timezone") {
+    specialTs.foreach { s =>
+      val inputDate = LocalDate.parse(s.split("T")(0))
+      // The hour/minute/second of the expect result should be 0
+      val expectedTs = LocalDateTime.parse(s.split("T")(0) + "T00:00:00")
+      checkEvaluation(cast(inputDate, TimestampWithoutTZType), expectedTs)
+    }
+  }
 }
 
 /**
