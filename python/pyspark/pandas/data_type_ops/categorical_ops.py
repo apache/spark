@@ -54,8 +54,6 @@ class CategoricalOps(DataTypeOps):
         self, index_ops: Union["Index", "Series"], dtype: Union[str, type, Dtype]
     ) -> Union["Index", "Series"]:
         dtype, spark_type = pandas_on_spark_type(dtype)
-        if not spark_type:
-            raise ValueError("Type {} not understood".format(dtype))
 
         if isinstance(dtype, CategoricalDtype) and dtype.categories is None:
             return cast(Union[ps.Index, ps.Series], index_ops).copy()

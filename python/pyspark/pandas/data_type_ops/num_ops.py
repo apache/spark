@@ -260,8 +260,6 @@ class IntegralOps(NumericOps):
         self, index_ops: Union["Index", "Series"], dtype: Union[str, type, Dtype]
     ) -> Union["Index", "Series"]:
         dtype, spark_type = pandas_on_spark_type(dtype)
-        if not spark_type:
-            raise ValueError("Type {} not understood".format(dtype))
 
         if isinstance(dtype, CategoricalDtype):
             return _as_categorical_type(index_ops, dtype, spark_type)
@@ -373,8 +371,6 @@ class FractionalOps(NumericOps):
         self, index_ops: Union["Index", "Series"], dtype: Union[str, type, Dtype]
     ) -> Union["Index", "Series"]:
         dtype, spark_type = pandas_on_spark_type(dtype)
-        if not spark_type:
-            raise ValueError("Type {} not understood".format(dtype))
 
         if isinstance(dtype, CategoricalDtype):
             return _as_categorical_type(index_ops, dtype, spark_type)
