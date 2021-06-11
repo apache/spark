@@ -188,7 +188,7 @@ private[spark] class ContextCleaner(
   private def keepCleaning(): Unit = Utils.tryOrStopSparkContext(sc) {
     while (!stopped) {
       try {
-        val reference = Option(referenceQueue.remove(ContextCleaner.REF_QUEUE_POLL_TIMEOUT))
+        val reference = Option(referenceQueue.remove())
           .map(_.asInstanceOf[CleanupTaskWeakReference])
         // Synchronize here to avoid being interrupted on stop()
         synchronized {
@@ -299,10 +299,6 @@ private[spark] class ContextCleaner(
 
   private def broadcastManager = sc.env.broadcastManager
   private def mapOutputTrackerMaster = sc.env.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster]
-}
-
-private object ContextCleaner {
-  private val REF_QUEUE_POLL_TIMEOUT = 100
 }
 
 /**
