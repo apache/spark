@@ -90,7 +90,8 @@ object SQLConf {
   private[internal] def containsConfigEntry(entry: ConfigEntry[_]): Boolean = {
     getConfigEntry(entry.key) == entry
   }
-    private[sql] def containsConfigKey(key: String): Boolean = {
+
+  private[sql] def containsConfigKey(key: String): Boolean = {
     sqlConfEntries.containsKey(key)
   }
 
@@ -101,7 +102,6 @@ object SQLConf {
   }
 
   def isStaticConfigKey(key: String): Boolean = staticConfKeys.contains(key)
-
 
   def buildConf(key: String): ConfigBuilder = ConfigBuilder(key).onCreate(register)
 
