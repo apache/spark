@@ -214,8 +214,8 @@ class EquivalentExpressions {
  * than parent expression. If there is child-parent relationships among the subexpressions,
  * we want the child expressions come first than parent expressions, so we can replace
  * child expressions in parent expressions with subexpression evaluation. Note that
- * this is not for general expression ordering. For example, two irrelevant expressions
- * will be considered as equal by this ordering. But for the usage here, the order of
+ * this is not for general expression ordering. For example, two irrelevant or semantically-equal
+ * expressions will be considered as equal by this ordering. But for the usage here, the order of
  * irrelevant expressions does not matter.
  */
 class ExpressionContainmentOrdering extends Ordering[Expression] {
