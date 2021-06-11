@@ -333,8 +333,8 @@ final class ShuffleBlockFetcherIterator(
               val block = BlockId(blockId)
               if (block.isShuffleChunk) {
                 remainingBlocks -= blockId
-                results.put(
-                  FallbackOnMergedFailureFetchResult(block, address, infoMap(blockId)._1, remainingBlocks.isEmpty))
+                results.put(FallbackOnMergedFailureFetchResult(
+                  block, address, infoMap(blockId)._1, remainingBlocks.isEmpty))
               } else {
                 results.put(FailureFetchResult(block, infoMap(blockId)._2, address, e))
               }
