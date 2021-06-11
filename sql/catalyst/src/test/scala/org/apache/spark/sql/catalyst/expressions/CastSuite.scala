@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.{Date, Timestamp}
-import java.time.{DateTimeException, Duration, LocalDate, LocalDateTime, Period}
+import java.time.{DateTimeException, Duration, LocalDate, LocalDateTime, Period, ZoneOffset}
 import java.time.temporal.ChronoUnit
 import java.util.{Calendar, TimeZone}
 
@@ -1274,6 +1274,18 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
       // The hour/minute/second of the expect result should be 0
       val expectedTs = LocalDateTime.parse(s.split("T")(0) + "T00:00:00")
       checkEvaluation(cast(inputDate, TimestampWithoutTZType), expectedTs)
+    }
+  }
+
+  test("SPARK-35719: cast timestamp with local time zone to timestamp without timezone") {
+    Seq(0, 8, -8, 9, -9).foreach { hour =>
+      withDefaultTimeZone(ZoneOffset.ofHours(hour)) {
+        specialTs.foreach { s =>
+          val input = Timestamp.valueOf(s.replace("T", " "))
+          val expectedTs = LocalDateTime.parse(s).minusHours(hour)
+          checkEvaluation(cast(input, TimestampWithoutTZType), expectedTs)
+        }
+      }
     }
   }
 }
