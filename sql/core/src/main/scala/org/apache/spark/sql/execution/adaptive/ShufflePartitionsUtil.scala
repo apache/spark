@@ -19,9 +19,9 @@ package org.apache.spark.sql.execution.adaptive
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.MapOutputStatistics
+import org.apache.spark.{MapOutputStatistics, MapOutputTrackerMaster, SparkEnv}
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.execution.{CoalescedPartitionSpec, PartialReducerPartitionSpec, ShufflePartitionSpec}
+import org.apache.spark.sql.execution.{CoalescedPartitionSpec, PartialReducerPartitionSpec, ShufflePartitionSpec, SparkPlan}
 
 object ShufflePartitionsUtil extends Logging {
   final val SMALL_PARTITION_FACTOR = 0.2
@@ -295,5 +295,124 @@ object ShufflePartitionsUtil extends Logging {
     }
     tryMergePartitions()
     partitionStartIndices.toArray
+  }
+
+  /**
+   * Splits the skewed partition based on the map size and the target partition size
+   * after split, and create a list of `PartialMapperPartitionSpec`. Returns None if can't split.
+   */
+  def createSkewPartitionSpecs(
+      shuffleId: Int,
+      reducerId: Int,
+      targetSize: Long): Option[Seq[PartialReducerPartitionSpec]] = {
+    val mapPartitionSizes = getMapSizesForReduceId(shuffleId, reducerId)
+    val mapStartIndices = splitSizeListByTargetSize(mapPartitionSizes, targetSize)
+    if (mapStartIndices.length > 1) {
+      Some(mapStartIndices.indices.map { i =>
+        val startMapIndex = mapStartIndices(i)
+        val endMapIndex = if (i == mapStartIndices.length - 1) {
+          mapPartitionSizes.length
+        } else {
+          mapStartIndices(i + 1)
+        }
+        val dataSize = startMapIndex.until(endMapIndex).map(mapPartitionSizes(_)).sum
+        PartialReducerPartitionSpec(reducerId, startMapIndex, endMapIndex, dataSize)
+      })
+    } else {
+      None
+    }
+  }
+
+  /**
+   * Get the map size of the specific reduce shuffle Id.
+   */
+  def getMapSizesForReduceId(shuffleId: Int, partitionId: Int): Array[Long] = {
+    val mapOutputTracker = SparkEnv.get.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster]
+    mapOutputTracker.shuffleStatuses(shuffleId).mapStatuses.map{_.getSizeForBlock(partitionId)}
+  }
+
+  private def expandPartitionsWithoutCoalesced(
+      shuffleId: Int,
+      bytesByPartitionId: Array[Long],
+      targetSize: Long): Seq[ShufflePartitionSpec] = {
+    bytesByPartitionId.indices.flatMap { reduceIndex =>
+      if (bytesByPartitionId(reduceIndex) > targetSize) {
+        val newPartitionSpec = createSkewPartitionSpecs(shuffleId, reduceIndex, targetSize)
+        if (newPartitionSpec.isEmpty) {
+          CoalescedPartitionSpec(reduceIndex, reduceIndex + 1) :: Nil
+        } else {
+          logDebug(s"For shuffle $shuffleId, partition $reduceIndex is skew, " +
+            s"split it into ${newPartitionSpec.get.size} parts.")
+          newPartitionSpec.get
+        }
+      } else {
+        CoalescedPartitionSpec(reduceIndex, reduceIndex + 1) :: Nil
+      }
+    }
+  }
+
+  private def expandPartitionsWithCoalesced(
+      shuffleId: Int,
+      bytesByPartitionId: Array[Long],
+      inputPartitionSpecs: Seq[ShufflePartitionSpec],
+      targetSize: Long): Seq[ShufflePartitionSpec] = {
+    inputPartitionSpecs.flatMap {
+      // We only need to handle no-coalesced partition(start + 1 == end)
+      // which may bigger than targetSize
+      case CoalescedPartitionSpec(start, end) if start + 1 == end &&
+        bytesByPartitionId(start) > targetSize =>
+        val newPartitionSpec = createSkewPartitionSpecs(shuffleId, start, targetSize)
+        if (newPartitionSpec.isEmpty) {
+          CoalescedPartitionSpec(start, end) :: Nil
+        } else {
+          logDebug(s"For shuffle: $shuffleId, partition $start is skew, " +
+            s"split it into ${newPartitionSpec.get.size} parts.")
+          newPartitionSpec.get
+        }
+
+      case other => other :: Nil
+    }
+  }
+
+  /**
+   * Expand the partitions with two options:
+   * - has no `ShufflePartitionSpec` before expand
+   *   We use some PartialReducerPartitionSpecs for every large partition, and use
+   *   CoalescedPartition for normal partition.
+   * - has `ShufflePartitionSpec` before expand that should be CoalescedPartition
+   *   We use some PartialReducerPartitionSpecs to replace CoalescedPartition for every
+   *   large partition, and use origin ShufflePartitionSpec for normal partition.
+   */
+  def expandPartitions(
+    mapOutputStatistics: MapOutputStatistics,
+    inputPartitionSpecs: Option[Seq[ShufflePartitionSpec]],
+    targetSize: Long): Seq[ShufflePartitionSpec] = {
+    if (inputPartitionSpecs.isEmpty) {
+      expandPartitionsWithoutCoalesced(
+        mapOutputStatistics.shuffleId,
+        mapOutputStatistics.bytesByPartitionId,
+        targetSize)
+    } else {
+      expandPartitionsWithCoalesced(
+        mapOutputStatistics.shuffleId,
+        mapOutputStatistics.bytesByPartitionId,
+        inputPartitionSpecs.get,
+        targetSize)
+    }
+  }
+}
+
+private[adaptive] class ShuffleStageInfo(
+    val shuffleStage: ShuffleQueryStageExec,
+    val partitionSpecs: Option[Seq[ShufflePartitionSpec]])
+
+private[adaptive] object ShuffleStageInfo {
+  def unapply(plan: SparkPlan)
+  : Option[(ShuffleQueryStageExec, Option[Seq[ShufflePartitionSpec]])] = plan match {
+    case stage: ShuffleQueryStageExec =>
+      Some((stage, None))
+    case CustomShuffleReaderExec(s: ShuffleQueryStageExec, partitionSpecs) =>
+      Some((s, Some(partitionSpecs)))
+    case _ => None
   }
 }

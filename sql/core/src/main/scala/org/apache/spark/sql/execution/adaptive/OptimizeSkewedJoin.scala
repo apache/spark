@@ -21,7 +21,6 @@ import scala.collection.mutable
 
 import org.apache.commons.io.FileUtils
 
-import org.apache.spark.{MapOutputTrackerMaster, SparkEnv}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.exchange.{ENSURE_REQUIREMENTS, EnsureRequirements, ShuffleExchangeExec, ShuffleOrigin}
@@ -87,41 +86,6 @@ object OptimizeSkewedJoin extends CustomShuffleReaderRule {
       advisorySize
     } else {
       math.max(advisorySize, nonSkewSizes.sum / nonSkewSizes.length)
-    }
-  }
-
-  /**
-   * Get the map size of the specific reduce shuffle Id.
-   */
-  private def getMapSizesForReduceId(shuffleId: Int, partitionId: Int): Array[Long] = {
-    val mapOutputTracker = SparkEnv.get.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster]
-    mapOutputTracker.shuffleStatuses(shuffleId).mapStatuses.map{_.getSizeForBlock(partitionId)}
-  }
-
-  /**
-   * Splits the skewed partition based on the map size and the target partition size
-   * after split, and create a list of `PartialMapperPartitionSpec`. Returns None if can't split.
-   */
-  private def createSkewPartitionSpecs(
-      shuffleId: Int,
-      reducerId: Int,
-      targetSize: Long): Option[Seq[PartialReducerPartitionSpec]] = {
-    val mapPartitionSizes = getMapSizesForReduceId(shuffleId, reducerId)
-    val mapStartIndices = ShufflePartitionsUtil.splitSizeListByTargetSize(
-      mapPartitionSizes, targetSize)
-    if (mapStartIndices.length > 1) {
-      Some(mapStartIndices.indices.map { i =>
-        val startMapIndex = mapStartIndices(i)
-        val endMapIndex = if (i == mapStartIndices.length - 1) {
-          mapPartitionSizes.length
-        } else {
-          mapStartIndices(i + 1)
-        }
-        val dataSize = startMapIndex.until(endMapIndex).map(mapPartitionSizes(_)).sum
-        PartialReducerPartitionSpec(reducerId, startMapIndex, endMapIndex, dataSize)
-      })
-    } else {
-      None
     }
   }
 
@@ -192,7 +156,7 @@ object OptimizeSkewedJoin extends CustomShuffleReaderRule {
       val noSkewPartitionSpec = Seq(CoalescedPartitionSpec(partitionIndex, partitionIndex + 1))
 
       val leftParts = if (isLeftSkew) {
-        val skewSpecs = createSkewPartitionSpecs(
+        val skewSpecs = ShufflePartitionsUtil.createSkewPartitionSpecs(
           left.mapStats.get.shuffleId, partitionIndex, leftTargetSize)
         if (skewSpecs.isDefined) {
           logDebug(s"Left side partition $partitionIndex " +
@@ -206,7 +170,7 @@ object OptimizeSkewedJoin extends CustomShuffleReaderRule {
       }
 
       val rightParts = if (isRightSkew) {
-        val skewSpecs = createSkewPartitionSpecs(
+        val skewSpecs = ShufflePartitionsUtil.createSkewPartitionSpecs(
           right.mapStats.get.shuffleId, partitionIndex, rightTargetSize)
         if (skewSpecs.isDefined) {
           logDebug(s"Right side partition $partitionIndex " +

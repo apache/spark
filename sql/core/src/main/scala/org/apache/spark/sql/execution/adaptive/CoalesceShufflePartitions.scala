@@ -91,18 +91,3 @@ case class CoalesceShufflePartitions(session: SparkSession) extends CustomShuffl
     s.outputPartitioning != SinglePartition && supportedShuffleOrigins.contains(s.shuffleOrigin)
   }
 }
-
-private class ShuffleStageInfo(
-    val shuffleStage: ShuffleQueryStageExec,
-    val partitionSpecs: Option[Seq[ShufflePartitionSpec]])
-
-private object ShuffleStageInfo {
-  def unapply(plan: SparkPlan)
-  : Option[(ShuffleQueryStageExec, Option[Seq[ShufflePartitionSpec]])] = plan match {
-    case stage: ShuffleQueryStageExec =>
-      Some((stage, None))
-    case CustomShuffleReaderExec(s: ShuffleQueryStageExec, partitionSpecs) =>
-      Some((s, Some(partitionSpecs)))
-    case _ => None
-  }
-}

@@ -1803,7 +1803,8 @@ class AdaptiveQueryExecSuite
   }
 
   test("SPARK-35650: Use local shuffle reader if can not coalesce number of partitions") {
-    withSQLConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "2") {
+    withSQLConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "2",
+      SQLConf.ADAPTIVE_EXPAND_PARTITIONS_ENABLED.key -> "false") {
       val query = "SELECT /*+ REPARTITION */ * FROM testData"
       val (_, adaptivePlan) = runAdaptiveAndVerifyResult(query)
       collect(adaptivePlan) {
@@ -1814,6 +1815,66 @@ class AdaptiveQueryExecSuite
           assert(customShuffleReader.isLocalReader)
         case _ =>
           fail("There should be a CustomShuffleReaderExec")
+      }
+    }
+  }
+
+  test("SPARK-35725: Support repartition expand partitions in AQE") {
+    withTempView("v") {
+      withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+        SQLConf.ADAPTIVE_EXPAND_PARTITIONS_ENABLED.key -> "true",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.SHUFFLE_PARTITIONS.key -> "5",
+        SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM.key -> "1") {
+
+        spark.sparkContext.parallelize(
+          (1 to 10).map(i => TestData(if (i > 4) 5 else i, i.toString)), 3)
+          .toDF("c1", "c2").createOrReplaceTempView("v")
+
+        def checkPartitionNumber(
+                                  query: String, reducerPartitionNumber: Int, totalNumber: Int): Unit = {
+          val (_, adaptive) = runAdaptiveAndVerifyResult(query)
+          val reader = collect(adaptive) {
+            case reader: CustomShuffleReaderExec => reader
+          }
+          if (totalNumber == 0) {
+            assert(reader.isEmpty)
+          } else {
+            assert(reader.size == 1)
+            assert(reader.head.partitionSpecs.count(_.isInstanceOf[PartialReducerPartitionSpec]) ==
+              reducerPartitionNumber)
+            assert(reader.head.partitionSpecs.size == totalNumber)
+          }
+        }
+
+        // test without coalesced
+        withSQLConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "100") {
+          // partition size [0,258,72,72,72]
+          checkPartitionNumber("SELECT /*+ REPARTITION(c1) */ * FROM v", 3, 6)
+          // partition size [72,216,216,144,72]
+          checkPartitionNumber("SELECT /*+ REPARTITION */ * FROM v", 8, 10)
+
+          // specified repartition number
+          checkPartitionNumber("SELECT /*+ REPARTITION(2, c1) */ * FROM v", 0, 0)
+          checkPartitionNumber("SELECT /*+ REPARTITION(2) */ * FROM v", 0, 0)
+          // extra shuffle
+          checkPartitionNumber(
+            "SELECT c1, count(*) FROM (SELECT /*+ REPARTITION(c1) */ * FROM v) GROUP BY c1",
+            0,
+            4)
+        }
+
+        // test with coalesced
+        withSQLConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "200") {
+          // partition size [0,258,72,72,72]
+          checkPartitionNumber("SELECT /*+ REPARTITION(c1) */ * FROM v", 2, 4)
+        }
+
+        // no partition should be expanded
+        withSQLConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "10000") {
+          checkPartitionNumber("SELECT /*+ REPARTITION(c1) */ * FROM v", 0, 1)
+        }
       }
     }
   }

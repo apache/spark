@@ -99,6 +99,7 @@ case class AdaptiveSparkPlanExec(
     // Skew join does not handle `CustomShuffleReader` so needs to be applied first.
     OptimizeSkewedJoin,
     CoalesceShufflePartitions(context.session),
+    ExpandShufflePartitions,
     // `OptimizeLocalShuffleReader` needs to make use of 'CustomShuffleReaderExec.partitionSpecs'
     // added by `CoalesceShufflePartitions`, and must be executed after it.
     OptimizeLocalShuffleReader

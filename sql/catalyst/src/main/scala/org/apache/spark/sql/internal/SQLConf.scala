@@ -609,6 +609,15 @@ object SQLConf {
       .bytesConf(ByteUnit.BYTE)
       .createWithDefault(0L)
 
+  val ADAPTIVE_EXPAND_PARTITIONS_ENABLED =
+    buildConf("spark.sql.adaptive.expandPartitions.enabled")
+      .doc(s"When true and '${ADAPTIVE_EXECUTION_ENABLED.key}' is true, Spark will expand large " +
+        "shuffle partition to some small partitions according to the target size (specified by " +
+        s"'${ADVISORY_PARTITION_SIZE_IN_BYTES.key}'), to avoid data skew.")
+      .version("3.2.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val SUBEXPRESSION_ELIMINATION_ENABLED =
     buildConf("spark.sql.subexpressionElimination.enabled")
       .internal()
