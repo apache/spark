@@ -8,9 +8,9 @@ Extensions
 Accessors
 ---------
 
-Accessors can be written and registered with Koalas Dataframes, Series, and
+Accessors can be written and registered with pandas-on-Spark Dataframes, Series, and
 Index objects. Accessors allow developers to extend the functionality of
-Koalas objects seamlessly by writing arbitrary classes and methods which are
+pandas-on-Spark objects seamlessly by writing arbitrary classes and methods which are
 then wrapped in one of the following decorators.
 
 .. autosummary::

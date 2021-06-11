@@ -5,15 +5,15 @@ Best Practices
 Leverage PySpark APIs
 ---------------------
 
-Koalas uses Spark under the hood; therefore, many features and performance optimization are available
-in Koalas as well. Leverage and combine those cutting-edge features with Koalas.
+Pandas APIs on Spark use Spark under the hood; therefore, many features and performance optimization are available
+in pandas APIs on Spark as well. Leverage and combine those cutting-edge features with pandas APIs on Spark.
 
-Existing Spark context and Spark sessions are used out of the box in Koalas. If you already have your own
-configured Spark context or sessions running, Koalas uses them.
+Existing Spark context and Spark sessions are used out of the box in pandas APIs on Spark. If you already have your own
+configured Spark context or sessions running, pandas APIs on Spark use them.
 
 If there is no Spark context or session running in your environment (e.g., ordinary Python interpreter),
 such configurations can be set to ``SparkContext`` and/or ``SparkSession``.
-Once Spark context and/or session is created, Koalas can use this context and/or session automatically.
+Once Spark context and/or session is created, pandas APIs on Spark can use this context and/or session automatically.
 For example, if you want to configure the executor memory in Spark, you can do as below:
 
 .. code-block:: python
@@ -21,7 +21,7 @@ For example, if you want to configure the executor memory in Spark, you can do a
    from pyspark import SparkConf, SparkContext
    conf = SparkConf()
    conf.set('spark.executor.memory', '2g')
-   # Koalas automatically uses this Spark context with the configurations set.
+   # Pandas APIs on Spark automatically use this Spark context with the configurations set.
    SparkContext(conf=conf)
 
    import pyspark.pandas as ks
@@ -33,15 +33,15 @@ it can be set into Spark session as below:
 .. code-block:: python
 
    from pyspark.sql import SparkSession
-   builder = SparkSession.builder.appName("Koalas")
+   builder = SparkSession.builder.appName("pandas-on-spark")
    builder = builder.config("spark.sql.execution.arrow.enabled", "true")
-   # Koalas automatically uses this Spark session with the configurations set.
+   # Pandas APIs on Spark automatically use this Spark session with the configurations set.
    builder.getOrCreate()
 
    import pyspark.pandas as ks
    ...
 
-All Spark features such as history server, web UI and deployment modes can be used as are with Koalas.
+All Spark features such as history server, web UI and deployment modes can be used as are with pandas APIs on Spark.
 If you are interested in performance tuning, please see also `Tuning Spark <https://spark.apache.org/docs/latest/tuning.html>`_.
 
 
@@ -49,7 +49,7 @@ Check execution plans
 ---------------------
 
 Expensive operations can be predicted by leveraging PySpark API `DataFrame.spark.explain()`
-before the actual computation since Koalas is based on lazy execution. For example, see below.
+before the actual computation since pandas APIs on Spark are based on lazy execution. For example, see below.
 
 .. code-block:: python
 
@@ -65,14 +65,14 @@ before the actual computation since Koalas is based on lazy execution. For examp
 Whenever you are not sure about such cases, you can check the actual execution plans and
 foresee the expensive cases.
 
-Even though Koalas tries its best to optimize and reduce such shuffle operations by leveraging Spark
+Even though pandas APIs on Spark try its best to optimize and reduce such shuffle operations by leveraging Spark
 optimizers, it is best to avoid shuffling in the application side whenever possible.
 
 
 Use checkpoint
 --------------
 
-After a bunch of operations on Koalas objects, the underlying Spark planner can slow down due to the huge and complex plan.
+After a bunch of operations on pandas APIs on Spark objects, the underlying Spark planner can slow down due to the huge and complex plan.
 If the Spark plan becomes huge or it takes the planning long time, ``DataFrame.spark.checkpoint()``
 or ``DataFrame.spark.local_checkpoint()`` would be helpful.
 
@@ -157,14 +157,14 @@ as it is less expensive because data can be distributed and computed for each gr
 Avoid reserved column names
 ---------------------------
 
-Columns with leading ``__`` and trailing ``__`` are reserved in Koalas. To handle internal behaviors for, such as, index,
-Koalas uses some internal columns. Therefore, it is discouraged to use such column names and not guaranteed to work.
+Columns with leading ``__`` and trailing ``__`` are reserved in pandas APIs on Spark. To handle internal behaviors for, such as, index,
+pandas APIs on Spark use some internal columns. Therefore, it is discouraged to use such column names and not guaranteed to work.
 
 
 Do not use duplicated column names
 ----------------------------------
 
-It is disallowed to use duplicated column names because Spark SQL does not allow this in general. Koalas inherits
+It is disallowed to use duplicated column names because Spark SQL does not allow this in general. Pandas APIs on Spark inherit
 this behavior. For instance, see below:
 
 .. code-block:: python
@@ -175,7 +175,7 @@ this behavior. For instance, see below:
    ...
    Reference 'a' is ambiguous, could be: a, a.;
 
-Additionally, it is strongly discouraged to use case sensitive column names. Koalas disallows it by default.
+Additionally, it is strongly discouraged to use case sensitive column names. Pandas APIs on Spark disallow it by default.
 
 .. code-block:: python
 
@@ -189,7 +189,7 @@ However, you can turn on ``spark.sql.caseSensitive`` in Spark configuration to e
 .. code-block:: python
 
    >>> from pyspark.sql import SparkSession
-   >>> builder = SparkSession.builder.appName("Koalas")
+   >>> builder = SparkSession.builder.appName("pandas-on-spark")
    >>> builder = builder.config("spark.sql.caseSensitive", "true")
    >>> builder.getOrCreate()
 
@@ -201,11 +201,11 @@ However, you can turn on ``spark.sql.caseSensitive`` in Spark configuration to e
    1  2  4
 
 
-Specify the index column in conversion from Spark DataFrame to Koalas DataFrame
--------------------------------------------------------------------------------
+Specify the index column in conversion from Spark DataFrame to pandas-on-Spark DataFrame
+----------------------------------------------------------------------------------------
 
-When Koalas Dataframe is converted from Spark DataFrame, it loses the index information, which results in using
-the default index in Koalas DataFrame. The default index is inefficient in general comparing to explicitly specifying
+When pandas APIs on Spark Dataframe are converted from Spark DataFrame, it loses the index information, which results in using
+the default index in pandas APIs on Spark DataFrame. The default index is inefficient in general comparing to explicitly specifying
 the index column. Specify the index column whenever possible.
 
 See  `working with PySpark <pandas_pyspark.rst#pyspark>`_
@@ -214,8 +214,8 @@ See  `working with PySpark <pandas_pyspark.rst#pyspark>`_
 Use ``distributed`` or ``distributed-sequence`` default index
 -------------------------------------------------------------
 
-One common issue when Koalas users face is the slow performance by default index. Koalas attaches
-a default index when the index is unknown, for example, Spark DataFrame is directly converted to Koalas DataFrame.
+One common issue when pandas-on-Spark users face is the slow performance by default index. Pandas APIs on Spark attache
+a default index when the index is unknown, for example, Spark DataFrame is directly converted to pandas-on-Spark DataFrame.
 
 This default index is ``sequence`` which requires the computation on single partition which is discouraged. If you plan
 to handle large data in production, make it distributed by configuring the default index to ``distributed`` or
@@ -227,19 +227,19 @@ See `Default Index Type <options.rst#default-index-type>`_ for more details abou
 Reduce the operations on different DataFrame/Series
 ---------------------------------------------------
 
-Koalas disallows the operations on different DataFrames (or Series) by default to prevent expensive operations.
+Pandas APIs on Spark disallow the operations on different DataFrames (or Series) by default to prevent expensive operations.
 It internally performs a join operation which can be expensive in general, which is discouraged. Whenever possible,
 this operation should be avoided.
 
 See `Operations on different DataFrames <options.rst#operations-on-different-dataframes>`_ for more details.
 
 
-Use Koalas APIs directly whenever possible
-------------------------------------------
+Use pandas APIs on Spark directly whenever possible
+---------------------------------------------------
 
-Although Koalas has most of the pandas-equivalent APIs, there are several APIs not implemented yet or explicitly unsupported.
+Although pandas APIs on Spark have most of the pandas-equivalent APIs, there are several APIs not implemented yet or explicitly unsupported.
 
-As an example, Koalas does not implement ``__iter__()`` to prevent users from collecting all data into the client (driver) side from the whole cluster.
+As an example, pandas APIs on Spark do not implement ``__iter__()`` to prevent users from collecting all data into the client (driver) side from the whole cluster.
 Unfortunately, many external APIs such as Python built-in functions such as min, max, sum, etc. require the given argument to be iterable.
 In case of pandas, it works properly out of the box as below:
 
@@ -254,9 +254,9 @@ In case of pandas, it works properly out of the box as below:
    6
 
 pandas dataset lives in the single machine, and is naturally iterable locally within the same machine.
-However, Koalas dataset lives across multiple machines, and they are computed in a distributed manner.
+However, pandas-on-Spark dataset lives across multiple machines, and they are computed in a distributed manner.
 It is difficult to be locally iterable and it is very likely users collect the entire data into the client side without knowing it.
-Therefore, it is best to stick to using Koalas APIs.
+Therefore, it is best to stick to using pandas-on-Spark APIs.
 The examples above can be converted as below:
 
 .. code-block:: python
@@ -291,8 +291,8 @@ Therefore, it works seamlessly in pandas as below:
    Helsinki    144.0
    dtype: float64
 
-However, for Koalas it does not work as the same reason above.
-The example above can be also changed to directly using Koalas APIs as below:
+However, for pandas APIs on Spark it do not work as the same reason above.
+The example above can be also changed to directly using pandas-on-Spark APIs as below:
 
 .. code-block:: python
 
