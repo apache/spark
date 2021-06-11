@@ -2610,7 +2610,7 @@ case class SubtractDates(
 
   override def inputTypes: Seq[AbstractDataType] = Seq(DateType, DateType)
   override def dataType: DataType = {
-    // TODO(SPARK-XXXXX): Return INTERVAL DAY from dates subtraction
+    // TODO(SPARK-35727): Return INTERVAL DAY from dates subtraction
     if (legacyInterval) CalendarIntervalType else DayTimeIntervalType()
   }
 

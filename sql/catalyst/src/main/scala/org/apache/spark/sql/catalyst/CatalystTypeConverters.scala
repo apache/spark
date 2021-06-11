@@ -75,6 +75,7 @@ object CatalystTypeConverters {
       case LongType => LongConverter
       case FloatType => FloatConverter
       case DoubleType => DoubleConverter
+      // TODO(SPARK-35726): Truncate java.time.Duration by fields of day-time interval type
       case _: DayTimeIntervalType => DurationConverter
       case YearMonthIntervalType => PeriodConverter
       case dataType: DataType => IdentityConverter(dataType)

@@ -312,7 +312,7 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
-  // TODO(SPARK-XXXXX): Check multiply day-time intervals of any fields by numeric
+  // TODO(SPARK-35728): Check multiply/divide of day-time intervals of any fields by numeric
   test("SPARK-34850: multiply day-time interval by numeric") {
     Seq(
       (Duration.ofHours(-123), Literal(null, DecimalType.USER_DEFAULT)) -> null,
@@ -381,7 +381,7 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
-  // TODO(SPARK-XXXXX): Check divide day-time intervals of any fields by numeric
+  // TODO(SPARK-35728): Check multiply/divide of day-time intervals of any fields by numeric
   test("SPARK-34875: divide day-time interval by numeric") {
     Seq(
       (Duration.ofDays(-123), Literal(null, DecimalType.USER_DEFAULT)) -> null,

@@ -2358,7 +2358,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       } else {
         assert(calendarInterval.months == 0)
         val micros = IntervalUtils.getDuration(calendarInterval, TimeUnit.MICROSECONDS)
-        // TODO(SPARK-XXXXX): Parse to tightest day-time interval type
+        // TODO(SPARK-35737): Parse day-time interval literals to tightest types
         Literal(micros, DayTimeIntervalType())
       }
     } else {
@@ -2514,7 +2514,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   override def visitDayTimeIntervalDataType(ctx: DayTimeIntervalDataTypeContext): DataType = {
-    // TODO(SPARK-XXXXX): Support day-time interval fields in SQL
+    // TODO(SPARK-35736): Parse any day-time interval types in SQL
     DayTimeIntervalType()
   }
 

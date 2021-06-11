@@ -1130,7 +1130,7 @@ class DataFrameAggregateSuite extends QueryTest
     checkAnswer(sumDF, Row(Period.of(2, 5, 0), Duration.ofDays(0)))
     assert(find(sumDF.queryExecution.executedPlan)(_.isInstanceOf[HashAggregateExec]).isDefined)
     assert(sumDF.schema == StructType(Seq(StructField("sum(year-month)", YearMonthIntervalType),
-      // TODO(SPARK-XXXXX): Check all day-time interval types in sum
+      // TODO(SPARK-35729): Check all day-time interval types in aggregate expressions
       StructField("sum(day-time)", DayTimeIntervalType()))))
 
     val sumDF2 = df.groupBy($"class").agg(sum($"year-month"), sum($"day-time"))
@@ -1140,7 +1140,7 @@ class DataFrameAggregateSuite extends QueryTest
     assert(find(sumDF2.queryExecution.executedPlan)(_.isInstanceOf[HashAggregateExec]).isDefined)
     assert(sumDF2.schema == StructType(Seq(StructField("class", IntegerType, false),
       StructField("sum(year-month)", YearMonthIntervalType),
-      // TODO(SPARK-XXXXX): Check all day-time interval types in sum
+      // TODO(SPARK-35729): Check all day-time interval types in aggregate expressions
       StructField("sum(day-time)", DayTimeIntervalType()))))
 
     val error = intercept[SparkException] {
@@ -1170,7 +1170,7 @@ class DataFrameAggregateSuite extends QueryTest
     checkAnswer(avgDF, Row(Period.ofMonths(7), Duration.ofDays(0)))
     assert(find(avgDF.queryExecution.executedPlan)(_.isInstanceOf[HashAggregateExec]).isDefined)
     assert(avgDF.schema == StructType(Seq(StructField("avg(year-month)", YearMonthIntervalType),
-      // TODO(SPARK-XXXXX): Check all day-time interval types in avg
+      // TODO(SPARK-35729): Check all day-time interval types in aggregate expressions
       StructField("avg(day-time)", DayTimeIntervalType()))))
 
     val avgDF2 = df.groupBy($"class").agg(avg($"year-month"), avg($"day-time"))
@@ -1180,7 +1180,7 @@ class DataFrameAggregateSuite extends QueryTest
     assert(find(avgDF2.queryExecution.executedPlan)(_.isInstanceOf[HashAggregateExec]).isDefined)
     assert(avgDF2.schema == StructType(Seq(StructField("class", IntegerType, false),
       StructField("avg(year-month)", YearMonthIntervalType),
-      // TODO(SPARK-XXXXX): Check all day-time interval types in avg
+      // TODO(SPARK-35729): Check all day-time interval types in aggregate expressions
       StructField("avg(day-time)", DayTimeIntervalType()))))
 
     val error = intercept[SparkException] {

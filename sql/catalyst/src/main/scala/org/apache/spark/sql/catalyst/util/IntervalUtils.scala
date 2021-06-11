@@ -160,7 +160,7 @@ object IntervalUtils {
 
   def castStringToDTInterval(
       input: UTF8String,
-      // TODO(SPARK-XXXXX): Take into account day-time interval fields in cast
+      // TODO(SPARK-35735): Take into account day-time interval fields in cast
       startField: Byte,
       endField: Byte): Long = {
     def secondAndMicro(second: String, micro: String): String = {
@@ -960,7 +960,7 @@ object IntervalUtils {
   def toDayTimeIntervalString(
       micros: Long,
       style: IntervalStyle,
-      // TODO(SPARK-XXXXX): Format day-time intervals using type fields
+      // TODO(SPARK-35734): Format day-time intervals using type fields
       startField: Byte,
       endField: Byte): String = {
     var sign = ""

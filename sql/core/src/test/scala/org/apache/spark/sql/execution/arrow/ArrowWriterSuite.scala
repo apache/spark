@@ -145,7 +145,7 @@ class ArrowWriterSuite extends SparkFunSuite {
     check(DateType, (0 until 10))
     check(TimestampType, (0 until 10).map(_ * 4.32e10.toLong), "America/Los_Angeles")
     check(YearMonthIntervalType, (0 until 10))
-    // TODO(SPARK-XXXXX): Check all day-time interval types in arrow
+    // TODO(SPARK-35731): Check all day-time interval types in arrow
     check(DayTimeIntervalType(), (-10 until 10).map(_ * 1000.toLong))
   }
 
