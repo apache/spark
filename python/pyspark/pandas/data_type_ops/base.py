@@ -93,7 +93,7 @@ def transform_boolean_operand_to_numeric(
 
 def _as_categorical_type(
     index_ops: Union["Series", "Index"], dtype: CategoricalDtype, spark_type: types.DataType
-):
+) -> Union["Index", "Series"]:
     """Cast `index_ops` to categorical dtype, given `dtype` and `spark_type`."""
     assert isinstance(dtype, CategoricalDtype)
     if dtype.categories is None:
