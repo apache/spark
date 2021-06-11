@@ -38,7 +38,7 @@ class DatetimeOps(DataTypeOps):
 
     @property
     def pretty_name(self) -> str:
-        return 'datetimes'
+        return "datetimes"
 
     def sub(self, left, right) -> Union["Series", "Index"]:
         # Note that timestamp subtraction casts arguments to integer. This is to mimic pandas's
@@ -53,7 +53,9 @@ class DatetimeOps(DataTypeOps):
             return left.astype("long") - right.astype("long")
         elif isinstance(right, datetime.datetime):
             warnings.warn(msg, UserWarning)
-            return left.astype("long") - F.lit(right).cast(as_spark_type("long"))
+            return left.astype("long").spark.transform(
+                lambda scol: scol - F.lit(right).cast(as_spark_type("long"))
+            )
         else:
             raise TypeError("datetime subtraction can only be applied to datetime series.")
 
@@ -67,6 +69,12 @@ class DatetimeOps(DataTypeOps):
         )
         if isinstance(right, datetime.datetime):
             warnings.warn(msg, UserWarning)
-            return -(left.astype("long") - F.lit(right).cast(as_spark_type("long")))
+            return -(left.astype("long")).spark.transform(
+                lambda scol: scol - F.lit(right).cast(as_spark_type("long"))
+            )
         else:
             raise TypeError("datetime subtraction can only be applied to datetime series.")
+
+    def prepare(self, col):
+        """Prepare column when from_pandas."""
+        return col

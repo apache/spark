@@ -1134,9 +1134,9 @@ case class HashedRelationBroadcastMode(key: Seq[Expression], isNullAware: Boolea
       sizeHint: Option[Long]): HashedRelation = {
     sizeHint match {
       case Some(numRows) =>
-        HashedRelation(rows, canonicalized.key, numRows.toInt, isNullAware = isNullAware)
+        HashedRelation(rows, key, numRows.toInt, isNullAware = isNullAware)
       case None =>
-        HashedRelation(rows, canonicalized.key, isNullAware = isNullAware)
+        HashedRelation(rows, key, isNullAware = isNullAware)
     }
   }
 

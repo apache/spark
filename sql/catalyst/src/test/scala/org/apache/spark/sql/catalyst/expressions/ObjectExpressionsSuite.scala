@@ -399,6 +399,7 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val newInst1 = NewInstance(
       cls = classOf[GenericArrayData],
       arguments = Literal.fromObject(List(1, 2, 3)) :: Nil,
+      inputTypes = Nil,
       propagateNull = false,
       dataType = ArrayType(IntegerType),
       outerPointer = None)
@@ -409,6 +410,7 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val newInst2 = NewInstance(
       cls = classOf[outerObj.Inner],
       arguments = Literal(1) :: Nil,
+      inputTypes = Nil,
       propagateNull = false,
       dataType = ObjectType(classOf[outerObj.Inner]),
       outerPointer = Some(() => outerObj))
@@ -418,6 +420,7 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val newInst3 = NewInstance(
       cls = classOf[ScroogeLikeExample],
       arguments = Literal(1) :: Nil,
+      inputTypes = Nil,
       propagateNull = false,
       dataType = ObjectType(classOf[ScroogeLikeExample]),
       outerPointer = Some(() => outerObj))

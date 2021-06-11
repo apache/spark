@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.AliasIdentifier
-import org.apache.spark.sql.catalyst.analysis.{AnsiTypeCoercion, MultiInstanceRelation, TypeCoercion, TypeCoercionBase}
+import org.apache.spark.sql.catalyst.analysis.{AnsiTypeCoercion, MultiInstanceRelation, Resolver, TypeCoercion, TypeCoercionBase}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable.VIEW_STORING_ANALYZED_PLAN
 import org.apache.spark.sql.catalyst.expressions._
@@ -621,6 +621,7 @@ case class WithWindowDefinition(
     windowDefinitions: Map[String, WindowSpecDefinition],
     child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
+  final override val nodePatterns: Seq[TreePattern] = Seq(WITH_WINDOW_DEFINITION)
   override protected def withNewChildInternal(newChild: LogicalPlan): WithWindowDefinition =
     copy(child = newChild)
 }
@@ -886,6 +887,11 @@ case class Aggregate(
 
   override protected def withNewChildInternal(newChild: LogicalPlan): Aggregate =
     copy(child = newChild)
+
+  // Whether this Aggregate operator is group only. For example: SELECT a, a FROM t GROUP BY a
+  private[sql] def groupOnly: Boolean = {
+    aggregateExpressions.forall(a => groupingExpressions.exists(g => a.semanticEquals(g)))
+  }
 }
 
 case class Window(
@@ -1056,6 +1062,7 @@ case class Pivot(
     groupByExprsOpt.getOrElse(Seq.empty).map(_.toAttribute) ++ pivotAgg
   }
   override def metadataOutput: Seq[Attribute] = Nil
+  final override val nodePatterns: Seq[TreePattern] = Seq(PIVOT)
 
   override protected def withNewChildInternal(newChild: LogicalPlan): Pivot = copy(child = newChild)
 }
@@ -1184,6 +1191,8 @@ case class SubqueryAlias(
   override def maxRows: Option[Long] = child.maxRows
 
   override def doCanonicalize(): LogicalPlan = child.canonicalized
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(SUBQUERY_ALIAS)
 
   override protected def withNewChildInternal(newChild: LogicalPlan): SubqueryAlias =
     copy(child = newChild)
@@ -1409,4 +1418,61 @@ case class DomainJoin(domainAttrs: Seq[Attribute], child: LogicalPlan) extends U
   override def producedAttributes: AttributeSet = AttributeSet(domainAttrs)
   override protected def withNewChildInternal(newChild: LogicalPlan): DomainJoin =
     copy(child = newChild)
+}
+
+/**
+ * A logical plan for lateral join.
+ */
+case class LateralJoin(
+    left: LogicalPlan,
+    right: LateralSubquery,
+    joinType: JoinType,
+    condition: Option[Expression]) extends UnaryNode {
+
+  require(Seq(Inner, LeftOuter, Cross).contains(joinType),
+    s"Unsupported lateral join type $joinType")
+
+  override def child: LogicalPlan = left
+
+  override def output: Seq[Attribute] = {
+    joinType match {
+      case LeftOuter => left.output ++ right.plan.output.map(_.withNullability(true))
+      case _ => left.output ++ right.plan.output
+    }
+  }
+
+  private[this] lazy val childAttributes = AttributeSeq(left.output ++ right.plan.output)
+
+  private[this] lazy val childMetadataAttributes =
+    AttributeSeq(left.metadataOutput ++ right.plan.metadataOutput)
+
+  /**
+   * Optionally resolves the given strings to a [[NamedExpression]] using the input from
+   * both the left plan and the lateral subquery's plan.
+   */
+  override def resolveChildren(
+      nameParts: Seq[String],
+      resolver: Resolver): Option[NamedExpression] = {
+    childAttributes.resolve(nameParts, resolver)
+      .orElse(childMetadataAttributes.resolve(nameParts, resolver))
+  }
+
+  override def childrenResolved: Boolean = left.resolved && right.resolved
+
+  def duplicateResolved: Boolean = left.outputSet.intersect(right.plan.outputSet).isEmpty
+
+  override lazy val resolved: Boolean = {
+    childrenResolved &&
+      expressions.forall(_.resolved) &&
+      duplicateResolved &&
+      condition.forall(_.dataType == BooleanType)
+  }
+
+  override def producedAttributes: AttributeSet = AttributeSet(right.plan.output)
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(LATERAL_JOIN)
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): LateralJoin = {
+    copy(left = newChild)
+  }
 }
