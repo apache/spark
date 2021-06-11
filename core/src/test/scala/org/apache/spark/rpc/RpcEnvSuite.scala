@@ -893,12 +893,12 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
 
         val file1Uri = env.fileServer.addFile(file1)
         val file2Uri = env.fileServer.addFile(file2)
-        assert(file1Uri == file2Uri)
+        assert(file1Uri === file2Uri)
         val fileWithSpecialCharsUri = env.fileServer.addFile(fileWithSpecialChars)
         val emptyUri = env.fileServer.addFile(empty)
         val jar1Uri = env.fileServer.addJar(jar1)
         val jar2Uri = env.fileServer.addJar(jar2)
-        assert(jar1Uri == jar2Uri)
+        assert(jar1Uri === jar2Uri)
         val dir1Uri = env.fileServer.addDirectory("/dir1", dir1)
         val dir2Uri = env.fileServer.addDirectory("/dir2", dir2)
         // Try registering directories with invalid names.
