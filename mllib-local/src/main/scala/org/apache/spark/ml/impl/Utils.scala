@@ -116,20 +116,11 @@ private[spark] object Utils {
 
     var sum = 0.0
     i = 0
-    if (maxValue > 0) {
-      while (i < values.length) {
-        val exp = math.exp(values(i) - maxValue)
-        values(i) = exp
-        sum += exp
-        i += 1
-      }
-    } else {
-      while (i < values.length) {
-        val exp = math.exp(values(i))
-        values(i) = exp
-        sum += exp
-        i += 1
-      }
+    while (i < values.length) {
+      val exp = math.exp(values(i) - maxValue)
+      values(i) = exp
+      sum += exp
+      i += 1
     }
 
     BLAS.javaBLAS.dscal(values.length, 1.0 / sum, values, 1)
