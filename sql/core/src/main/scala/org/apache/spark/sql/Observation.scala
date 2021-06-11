@@ -29,15 +29,15 @@ import org.apache.spark.sql.util.QueryExecutionListener
  * @param name
  * @param sparkSession
  */
-case class Observation(name: String) {
+class Observation(name: String) {
 
-  val lock: Lock = new ReentrantLock()
-  val completed: Condition = lock.newCondition()
-  val listener: ObservationListener = ObservationListener(this)
+  private val lock: Lock = new ReentrantLock()
+  private val completed: Condition = lock.newCondition()
+  private val listener: ObservationListener = ObservationListener(this)
 
-  var sparkSession: Option[SparkSession] = None
+  private var sparkSession: Option[SparkSession] = None
 
-  @transient var row: Option[Row] = None
+  @transient private var row: Option[Row] = None
 
   /**
    * Attach this observation to the given Dataset.
@@ -109,7 +109,9 @@ case class Observation(name: String) {
 
   /**
    * Reset the observation. This deletes the observation and allows to wait for completion
-   * of the next action called on the observed dataset.
+   * of the next action called on the observed dataset. Not resetting the observation before
+   * attempting to retrieve the next action's results via get, option or waitCompleted is not
+   * guaranteed to work.
    */
   def reset(): Unit = {
     lock.lock()
@@ -177,8 +179,11 @@ object Observation {
   /**
    * Observation constructor for creating an anonymous observation.
    */
-  def apply()(implicit sparkSession: SparkSession): Observation = {
-    new Observation(UUID.randomUUID().toString)
-  }
+  def apply(): Observation = new Observation(UUID.randomUUID().toString)
+
+  /**
+   * Observation constructor for creating a named observation.
+   */
+  def apply(name: String): Observation = new Observation(name)
 
 }
