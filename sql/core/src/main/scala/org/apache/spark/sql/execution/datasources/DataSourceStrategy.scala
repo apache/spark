@@ -244,15 +244,13 @@ object RepartitionWritingDataSource extends Rule[LogicalPlan] {
       val dynamicPartExps = resolveColumnNames(table.partitionColumnNames, query.output)
       applyRepartition(c, table.bucketSpec, dynamicPartExps)
 
-    case i @ InsertIntoHadoopFsRelationCommand(
-        _, staticParts, _, partColumns, bucket, _, _, _, _, _, _, _) if i.resolved =>
-      val dynamicPartExps =
-        partColumns.filterNot(p => staticParts.exists(s => conf.resolver(p.name, s._1)))
-      applyRepartition(i, bucket, dynamicPartExps)
+    case i: InsertIntoHadoopFsRelationCommand if i.resolved =>
+      val dynamicPartExps = i.partitionColumns
+        .filterNot(p => i.staticPartitions.exists(s => conf.resolver(p.name, s._1)))
+      applyRepartition(i, i.bucketSpec, dynamicPartExps)
 
-    case i @ InsertIntoDataSourceDirCommand(_, _, query, _)
-        if i.resolved && canApplyRepartition(query) =>
-      i.copy(query = RepartitionByExpression(Nil, query, None))
+    case i: InsertIntoDataSourceDirCommand if i.resolved && canApplyRepartition(i.query) =>
+      i.copy(query = RepartitionByExpression(Nil, i.query, None))
 
     // InsertIntoDataSourceCommand only accept InsertableRelation, do not need repartition.
   }
