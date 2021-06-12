@@ -768,7 +768,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         """
         return 1
 
-    def astype(self, dtype: Union[str, type, Dtype]) -> Union["Index", "Series"]:
+    def astype(self, dtype: Union[str, type, Dtype]) -> Union["Index", "Series", "DataFrame"]:
         """
         Cast a pandas-on-Spark object to a specified dtype ``dtype``.
 
