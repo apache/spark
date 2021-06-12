@@ -41,7 +41,6 @@ from pyspark.sql.types import (
     TimestampType,
     UserDefinedType,
 )
-import pyspark.sql.types as types
 from pyspark.pandas.typedef import Dtype, extension_dtypes
 from pyspark.pandas.typedef.typehints import extension_object_dtypes_available
 
@@ -71,7 +70,7 @@ def is_valid_operand_for_numeric_arithmetic(operand: Any, *, allow_bool: bool = 
 
 
 def transform_boolean_operand_to_numeric(
-    operand: Any, spark_type: Optional[types.DataType] = None
+    operand: Any, spark_type: Optional[DataType] = None
 ) -> Any:
     """Transform boolean operand to numeric.
 
@@ -92,7 +91,7 @@ def transform_boolean_operand_to_numeric(
 
 
 def _as_categorical_type(
-    index_ops: Union["Series", "Index"], dtype: CategoricalDtype, spark_type: types.DataType
+    index_ops: Union["Series", "Index"], dtype: CategoricalDtype, spark_type: DataType
 ) -> Union["Index", "Series"]:
     """Cast `index_ops` to categorical dtype, given `dtype` and `spark_type`."""
     assert isinstance(dtype, CategoricalDtype)
@@ -162,7 +161,7 @@ def _as_string_type(
 
 
 def _as_other_type(
-    index_ops: Union["Series", "Index"], dtype: Union[str, type, Dtype], spark_type: types.DataType
+    index_ops: Union["Series", "Index"], dtype: Union[str, type, Dtype], spark_type: DataType
 ) -> Union["Index", "Series"]:
     """Cast `index_ops` to a `dtype` (`spark_type`) that needs no pre-processing.
 
