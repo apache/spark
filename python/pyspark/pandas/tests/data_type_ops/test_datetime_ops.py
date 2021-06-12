@@ -19,6 +19,7 @@ import datetime
 
 import numpy as np
 import pandas as pd
+from pandas.api.types import CategoricalDtype
 
 from pyspark import pandas as ps
 from pyspark.pandas.config import option_context
@@ -177,7 +178,7 @@ class DatetimeOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         psser = self.psser
         self.assert_eq(pser.astype(str), psser.astype(str))
         self.assert_eq(pser.astype("category"), psser.astype("category"))
-        cat_type = pd.api.types.CategoricalDtype(categories=["a", "b", "c"])
+        cat_type = CategoricalDtype(categories=["a", "b", "c"])
         self.assert_eq(pser.astype(cat_type), psser.astype(cat_type))
 
 

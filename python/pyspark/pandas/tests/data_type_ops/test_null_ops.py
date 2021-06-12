@@ -16,6 +16,7 @@
 #
 
 import pandas as pd
+from pandas.api.types import CategoricalDtype
 
 import pyspark.pandas as ps
 from pyspark.pandas.config import option_context
@@ -128,7 +129,7 @@ class NullOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         self.assert_eq(pser.astype(str), psser.astype(str))
         self.assert_eq(pser.astype(bool), psser.astype(bool))
         self.assert_eq(pser.astype("category"), psser.astype("category"))
-        cat_type = pd.api.types.CategoricalDtype(categories=[1, 2, 3])
+        cat_type = CategoricalDtype(categories=[1, 2, 3])
         self.assert_eq(pser.astype(cat_type), psser.astype(cat_type))
 
 

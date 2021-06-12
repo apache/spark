@@ -21,6 +21,7 @@ from distutils.version import LooseVersion
 
 import pandas as pd
 import numpy as np
+from pandas.api.types import CategoricalDtype
 
 from pyspark import pandas as ps
 from pyspark.pandas.config import option_context
@@ -299,7 +300,7 @@ class BooleanOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         self.assert_eq(pser.astype(str), psser.astype(str))
         self.assert_eq(pser.astype(bool), psser.astype(bool))
         self.assert_eq(pser.astype("category"), psser.astype("category"))
-        cat_type = pd.api.types.CategoricalDtype(categories=[False, True])
+        cat_type = CategoricalDtype(categories=[False, True])
         self.assert_eq(pser.astype(cat_type), psser.astype(cat_type))
 
 
@@ -598,7 +599,7 @@ class BooleanExtensionOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         psser = self.psser
         self.assert_eq(["True", "False", "None"], self.psser.astype(str).tolist())
         self.assert_eq(pser.astype("category"), psser.astype("category"))
-        cat_type = pd.api.types.CategoricalDtype(categories=[False, True])
+        cat_type = CategoricalDtype(categories=[False, True])
         self.assert_eq(pser.astype(cat_type), psser.astype(cat_type))
 
 
