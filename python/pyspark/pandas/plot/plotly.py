@@ -73,8 +73,14 @@ def plot_pie(data: Union["ps.DataFrame", "ps.Series"], **kwargs):
 
 def plot_histogram(data: Union["ps.DataFrame", "ps.Series"], **kwargs):
     import plotly.graph_objs as go
+    import pyspark.pandas as ps
 
     bins = kwargs.get("bins", 10)
+    y = kwargs.get("y")
+    if y and isinstance(data, ps.DataFrame):
+        # Note that the results here are matched with matplotlib. x and y
+        # handling is different from pandas' plotly output.
+        data = data[y]
     psdf, bins = HistogramPlotBase.prepare_hist_data(data, bins)
     assert len(bins) > 2, "the number of buckets must be higher than 2."
     output_series = HistogramPlotBase.compute_hist(psdf, bins)
