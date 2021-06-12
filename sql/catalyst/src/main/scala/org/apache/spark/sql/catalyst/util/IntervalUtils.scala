@@ -979,13 +979,16 @@ object IntervalUtils {
               case DayTimeIntervalType.DAY => 0
               case DayTimeIntervalType.HOUR => 11
               case DayTimeIntervalType.MINUTE => 14
+              case DayTimeIntervalType.SECOND => 17
             }
             val toPos = endField match {
+              case DayTimeIntervalType.DAY => 10
               case DayTimeIntervalType.HOUR => 13
               case DayTimeIntervalType.MINUTE => 16
               case DayTimeIntervalType.SECOND => baseStr.length
             }
-            s"INTERVAL '${baseStr.substring(fromPos, toPos)}' $from TO $to"
+            val postfix = if (startField == endField) from else s"$from TO $to"
+            s"INTERVAL '${baseStr.substring(fromPos, toPos)}' $postfix"
           case HIVE_STYLE => "-106751991 04:00:54.775808000"
         }
         return minIntervalString
@@ -1007,30 +1010,39 @@ object IntervalUtils {
           .stripTrailingZeros()
           .toPlainString()
         val formatBuilder = new StringBuilder("INTERVAL '")
-        val formatArgs = new mutable.ArrayBuffer[Long]
-        if (startField <= DayTimeIntervalType.DAY && DayTimeIntervalType.DAY < endField) {
-          formatBuilder.append(s"$sign$days ")
-        }
-        if (startField <= DayTimeIntervalType.HOUR && DayTimeIntervalType.HOUR < endField) {
-          formatBuilder.append("%02d:")
-          formatArgs.append(hours)
-        }
-        if (startField <= DayTimeIntervalType.MINUTE && DayTimeIntervalType.MINUTE < endField) {
-          formatBuilder.append("%02d:")
-          formatArgs.append(minutes)
-        }
-        endField match {
-          case DayTimeIntervalType.HOUR =>
-            formatBuilder.append("%02d' ")
+        if (startField == endField) {
+          startField match {
+            case DayTimeIntervalType.DAY => formatBuilder.append(s"$sign$days' ")
+            case DayTimeIntervalType.HOUR => formatBuilder.append(f"$hours%02d' ")
+            case DayTimeIntervalType.MINUTE => formatBuilder.append(f"$minutes%02d' ")
+            case DayTimeIntervalType.SECOND => formatBuilder.append(s"$leadSecZero$secStr' ")
+          }
+          formatBuilder.append(from).toString
+        } else {
+          val formatArgs = new mutable.ArrayBuffer[Long]
+          if (startField <= DayTimeIntervalType.DAY && DayTimeIntervalType.DAY < endField) {
+            formatBuilder.append(s"$sign$days ")
+          }
+          if (startField <= DayTimeIntervalType.HOUR && DayTimeIntervalType.HOUR < endField) {
+            formatBuilder.append("%02d:")
             formatArgs.append(hours)
-          case DayTimeIntervalType.MINUTE =>
-            formatBuilder.append("%02d' ")
+          }
+          if (startField <= DayTimeIntervalType.MINUTE && DayTimeIntervalType.MINUTE < endField) {
+            formatBuilder.append("%02d:")
             formatArgs.append(minutes)
-          case DayTimeIntervalType.SECOND =>
-            formatBuilder.append(s"$leadSecZero$secStr' ")
+          }
+          endField match {
+            case DayTimeIntervalType.HOUR =>
+              formatBuilder.append("%02d' ")
+              formatArgs.append(hours)
+            case DayTimeIntervalType.MINUTE =>
+              formatBuilder.append("%02d' ")
+              formatArgs.append(minutes)
+            case DayTimeIntervalType.SECOND =>
+              formatBuilder.append(s"$leadSecZero$secStr' ")
+          }
+          formatBuilder.append(s"$from TO $to").toString.format(formatArgs: _*)
         }
-
-        formatBuilder.append(s"$from TO $to").toString().format(formatArgs: _*)
       case HIVE_STYLE =>
         val seconds = secondsWithFraction / MICROS_PER_SECOND
         val nanos = (secondsWithFraction % MICROS_PER_SECOND) * NANOS_PER_MICROS
