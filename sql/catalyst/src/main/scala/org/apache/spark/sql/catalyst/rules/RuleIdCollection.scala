@@ -99,6 +99,7 @@ object RuleIdCollection {
       "org.apache.spark.sql.execution.datasources.FindDataSourceTable" ::
       "org.apache.spark.sql.execution.datasources.ResolveSQLOnFile" ::
       "org.apache.spark.sql.execution.streaming.ResolveWriteToStream" ::
+      "org.apache.spark.sql.hive.ResolveHiveSerdeTable" ::
       // Catalyst Optimizer rules
       "org.apache.spark.sql.catalyst.optimizer.BooleanSimplification" ::
       "org.apache.spark.sql.catalyst.optimizer.CollapseProject" ::
