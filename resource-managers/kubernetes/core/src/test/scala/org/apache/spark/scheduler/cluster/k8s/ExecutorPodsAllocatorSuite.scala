@@ -32,7 +32,7 @@ import org.mockito.stubbing.Answer
 import org.scalatest.BeforeAndAfter
 import org.scalatest.PrivateMethodTester._
 
-import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
+import org.apache.spark.{SecurityManager, SparkConf, SparkException, SparkFunSuite}
 import org.apache.spark.deploy.k8s.{KubernetesExecutorConf, KubernetesExecutorSpec}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
@@ -651,6 +651,18 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     assert(podsAllocatorUnderTest.numOutstandingPods.get() == 1)
     verify(podOperations).create(podWithAttachedContainerForIdAndVolume(2))
     verify(persistentVolumeClaims, never()).create(any())
+  }
+
+  test("print the pod name instead of Some(name) if pod is absent") {
+    val nonexistentPod = "i-do-not-exist"
+    val conf = new SparkConf().set(KUBERNETES_DRIVER_POD_NAME, nonexistentPod)
+    when(kubernetesClient.pods()).thenReturn(podOperations)
+    when(podOperations.withName(nonexistentPod)).thenReturn(driverPodOperations)
+    when(driverPodOperations.get()).thenReturn(null)
+    val e = intercept[SparkException](new ExecutorPodsAllocator(
+      conf, secMgr, executorBuilder, kubernetesClient, snapshotsStore, waitForExecutorPodsClock))
+    assert(e.getMessage.contains("No pod was found named i-do-not-exist in the cluster in the" +
+      " namespace default"))
   }
 
   private def executorPodAnswer(): Answer[KubernetesExecutorSpec] =
