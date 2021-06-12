@@ -25,11 +25,12 @@ import org.apache.spark.internal.config.UI.UI_ENABLED
 import org.apache.spark.sql._
 import org.apache.spark.sql.execution.adaptive._
 import org.apache.spark.sql.execution.adaptive.CustomShuffleReaderExec
-import org.apache.spark.sql.execution.exchange.ReusedExchangeExec
+import org.apache.spark.sql.execution.exchange.{REPARTITION_BY_NONE, ReusedExchangeExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 
-class CoalesceShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterAll {
+class CoalesceShufflePartitionsSuite
+  extends SparkFunSuite with BeforeAndAfterAll with AdaptiveSparkPlanHelper {
 
   private var originalActiveSparkSession: Option[SparkSession] = _
   private var originalInstantiatedSparkSession: Option[SparkSession] = _
@@ -59,7 +60,6 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterAl
       f: SparkSession => Unit,
       targetPostShuffleInputSize: Int,
       minNumPostShufflePartitions: Option[Int],
-      finalStageMinPartitionNum: Option[Int] = None,
       enableIOEncryption: Boolean = false): Unit = {
     val sparkConf =
       new SparkConf(false)
@@ -80,10 +80,6 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterAl
         sparkConf.set(SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM.key, numPartitions.toString)
       case None =>
         sparkConf.set(SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM.key, "1")
-    }
-    finalStageMinPartitionNum.foreach { numPartitions =>
-      sparkConf.set(SQLConf.COALESCE_PARTITIONS_FINAL_STAGE_MIN_PARTITION_NUM.key,
-        numPartitions.toString)
     }
 
     val spark = SparkSession.builder()
@@ -429,26 +425,34 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterAl
     }
     Seq(true, false).foreach { enableIOEncryption =>
       // Before SPARK-34790, it will throw an exception when io encryption enabled.
-      withSparkSession(test, Int.MaxValue, None, None, enableIOEncryption)
+      withSparkSession(test, Int.MaxValue, None, enableIOEncryption)
     }
   }
 
-  test(s"SPARK-35335: Introduce ${SQLConf.COALESCE_PARTITIONS_FINAL_STAGE_MIN_PARTITION_NUM.key}") {
+  test("SPARK-35335: Coalesce shuffle partitions as much as possible for REPARTITION_BY_NONE") {
     val test: SparkSession => Unit = { spark: SparkSession =>
-      val df1 = spark.range(0, 100, 1, numInputPartitions).selectExpr("id AS a", "id AS b")
-      val df2 = spark.range(0, 50, 1, numInputPartitions).selectExpr("id AS c", "id AS d")
-      val resultDf = df1.join(df2, df1("a") === df2("c")).groupBy("b").count()
-      resultDf.collect()
+      val resultDf = spark.sql("SELECT /*+ REPARTITION */ * FROM range(1, 5, 1, 4)")
+      QueryTest.checkAnswer(resultDf, Seq(1, 2, 3, 4).map(i => Row(i)))
 
       val finalPlan = resultDf.queryExecution.executedPlan
         .asInstanceOf[AdaptiveSparkPlanExec].executedPlan
-      val coalescedNumPartitions = finalPlan.collectFirst {
-        case r @ CoalescedShuffleReader() => r.outputPartitioning.numPartitions
+      collect(finalPlan) {
+        case r: CustomShuffleReaderExec => r
+      } match {
+        case Seq(customShuffleReader) =>
+          assert(customShuffleReader.partitionSpecs.size === 1)
+          assert(!customShuffleReader.isLocalReader)
+          assert(customShuffleReader.child.asInstanceOf[ShuffleQueryStageExec]
+            .shuffle.shuffleOrigin === REPARTITION_BY_NONE)
+        case _ =>
+          fail("There should be a CustomShuffleReaderExec")
       }
-      assert(coalescedNumPartitions === Some(1))
     }
 
-    withSparkSession(test, Int.MaxValue, Some(2), Some(1))
+    // COALESCE_PARTITIONS_MIN_PARTITION_NUM will not affect the number of partitions.
+    Seq(Some(10), None).foreach { minPartitionNum =>
+      withSparkSession(test, 10000, minPartitionNum)
+    }
   }
 }
 
