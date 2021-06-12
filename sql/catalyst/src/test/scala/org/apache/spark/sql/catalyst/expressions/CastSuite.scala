@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.{Date, Timestamp}
-import java.time.{DateTimeException, Duration, LocalDate, LocalDateTime, Period, ZoneOffset}
+import java.time.{DateTimeException, Duration, LocalDate, LocalDateTime, Period}
 import java.time.temporal.ChronoUnit
 import java.util.{Calendar, TimeZone}
 
@@ -35,7 +35,6 @@ import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.catalyst.util.IntervalUtils.microsToDuration
 import org.apache.spark.sql.internal.SQLConf
@@ -1255,9 +1254,14 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
   }
 
   test("SPARK-35711: cast timestamp without time zone to timestamp with local time zone") {
-    specialTs.foreach { s =>
-      val dt = LocalDateTime.parse(s)
-      checkEvaluation(cast(dt, TimestampType), DateTimeUtils.localDateTimeToMicros(dt))
+    outstandingZoneIds.foreach { zoneId =>
+      withDefaultTimeZone(zoneId) {
+        specialTs.foreach { s =>
+          val input = LocalDateTime.parse(s)
+          val expectedTs = Timestamp.valueOf(s.replace("T", " "))
+          checkEvaluation(cast(input, TimestampType), expectedTs)
+        }
+      }
     }
   }
 
@@ -1278,8 +1282,8 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
   }
 
   test("SPARK-35719: cast timestamp with local time zone to timestamp without timezone") {
-    Seq(0, 8, -8, 9, -9).foreach { hour =>
-      withDefaultTimeZone(ZoneOffset.ofHours(hour)) {
+    outstandingZoneIds.foreach { zoneId =>
+      withDefaultTimeZone(zoneId) {
         specialTs.foreach { s =>
           val input = Timestamp.valueOf(s.replace("T", " "))
           val expectedTs = LocalDateTime.parse(s)
