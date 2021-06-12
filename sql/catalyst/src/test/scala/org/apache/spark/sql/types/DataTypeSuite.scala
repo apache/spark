@@ -258,6 +258,15 @@ class DataTypeSuite extends SparkFunSuite {
 
   checkDataTypeFromDDL(YearMonthIntervalType)
   checkDataTypeFromDDL(DayTimeIntervalType())
+  checkDataTypeFromDDL(DayTimeIntervalType(DayTimeIntervalType.DAY, DayTimeIntervalType.MINUTE))
+  checkDataTypeFromDDL(DayTimeIntervalType(DayTimeIntervalType.DAY, DayTimeIntervalType.HOUR))
+  checkDataTypeFromDDL(DayTimeIntervalType(DayTimeIntervalType.DAY, DayTimeIntervalType.DAY))
+  checkDataTypeFromDDL(DayTimeIntervalType(DayTimeIntervalType.HOUR, DayTimeIntervalType.SECOND))
+  checkDataTypeFromDDL(DayTimeIntervalType(DayTimeIntervalType.HOUR, DayTimeIntervalType.MINUTE))
+  checkDataTypeFromDDL(DayTimeIntervalType(DayTimeIntervalType.HOUR, DayTimeIntervalType.HOUR))
+  checkDataTypeFromDDL(DayTimeIntervalType(DayTimeIntervalType.MINUTE, DayTimeIntervalType.SECOND))
+  checkDataTypeFromDDL(DayTimeIntervalType(DayTimeIntervalType.MINUTE, DayTimeIntervalType.MINUTE))
+  checkDataTypeFromDDL(DayTimeIntervalType(DayTimeIntervalType.SECOND, DayTimeIntervalType.SECOND))
 
   val metadata = new MetadataBuilder()
     .putString("name", "age")

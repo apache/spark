@@ -2514,8 +2514,19 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   override def visitDayTimeIntervalDataType(ctx: DayTimeIntervalDataTypeContext): DataType = {
-    // TODO(SPARK-35736): Parse any day-time interval types in SQL
-    DayTimeIntervalType()
+    def strToFieldIndex(str: String): Byte = str match {
+      case "day" => 0
+      case "hour" => 1
+      case "minute" => 2
+      case "second" => 3
+    }
+    val from = strToFieldIndex(ctx.from.getText.toLowerCase(Locale.ROOT))
+    val to = if (ctx.to != null ) {
+      strToFieldIndex(ctx.to.getText.toLowerCase(Locale.ROOT))
+    } else {
+      from
+    }
+    DayTimeIntervalType(from, to)
   }
 
   /**
