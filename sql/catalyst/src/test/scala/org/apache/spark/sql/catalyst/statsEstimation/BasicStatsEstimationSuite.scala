@@ -260,7 +260,11 @@ class BasicStatsEstimationSuite extends PlanTest with StatsEstimationTestBase {
   }
 
   test("SPARK-35203: Improve Repartition statistics estimation") {
-    Seq(RepartitionByExpression(plan.output, plan, 10), plan.repartition(2)).foreach { rep =>
+    Seq(
+      RepartitionByExpression(plan.output, plan, 10),
+      RepartitionByExpression(Nil, plan, None),
+      plan.repartition(2),
+      plan.coalesce(3)).foreach { rep =>
       val expectedStats = Statistics(plan.size.get, Some(plan.rowCount), plan.attributeStats)
       checkStats(
         rep,
