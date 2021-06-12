@@ -1041,7 +1041,7 @@ object IntervalUtils {
             case DayTimeIntervalType.SECOND =>
               formatBuilder.append(s"$leadSecZero$secStr' ")
           }
-          formatBuilder.append(s"$from TO $to").toString.format(formatArgs: _*)
+          formatBuilder.append(s"$from TO $to").toString.format(formatArgs.toSeq: _*)
         }
       case HIVE_STYLE =>
         val seconds = secondsWithFraction / MICROS_PER_SECOND
