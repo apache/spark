@@ -39,7 +39,6 @@ if TYPE_CHECKING:
     from pyspark.pandas.series import Series  # noqa: F401 (SPARK-34943)
     from pyspark.pandas.groupby import SeriesGroupBy  # noqa: F401 (SPARK-34943)
     from pyspark.pandas.groupby import DataFrameGroupBy  # noqa: F401 (SPARK-34943)
-    from pyspark.pandas.indexes import Index  # noqa: F401 (SPARK-34943)
 
 
 class RollingAndExpanding(object):
