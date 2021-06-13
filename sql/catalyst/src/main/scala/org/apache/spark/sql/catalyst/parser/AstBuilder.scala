@@ -2346,18 +2346,6 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    */
   override def visitInterval(ctx: IntervalContext): Literal = withOrigin(ctx) {
     val calendarInterval = parseIntervalLiteral(ctx)
-
-    def strToFieldIndex(str: String): Byte = str match {
-      case "day" =>
-        DayTimeIntervalType.DAY
-      case "hour" =>
-        DayTimeIntervalType.HOUR
-      case "minute" =>
-        DayTimeIntervalType.MINUTE
-      case "second" =>
-        DayTimeIntervalType.SECOND
-    }
-
     if (ctx.errorCapturingUnitToUnitInterval != null && !conf.legacyIntervalEnabled) {
       // Check the `to` unit to distinguish year-month and day-time intervals because
       // `CalendarInterval` doesn't have enough info. For instance, new CalendarInterval(0, 0, 0)
@@ -2369,12 +2357,14 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
         Literal(calendarInterval.months, YearMonthIntervalType)
       } else {
         assert(calendarInterval.months == 0)
+        val strToFieldIndex = DayTimeIntervalType.dayTimeFields.map(i =>
+          DayTimeIntervalType.fieldToString(i) -> i).toMap
         val fromUnit =
           ctx.errorCapturingUnitToUnitInterval.body.from.getText.toLowerCase(Locale.ROOT)
         val micros = IntervalUtils.getDuration(calendarInterval, TimeUnit.MICROSECONDS)
-        val from = strToFieldIndex(fromUnit)
-        val to = strToFieldIndex(toUnit)
-        Literal(micros, DayTimeIntervalType(from, to))
+        val start = strToFieldIndex(fromUnit)
+        val end = strToFieldIndex(toUnit)
+        Literal(micros, DayTimeIntervalType(start, end))
       }
     } else {
       Literal(calendarInterval, CalendarIntervalType)
