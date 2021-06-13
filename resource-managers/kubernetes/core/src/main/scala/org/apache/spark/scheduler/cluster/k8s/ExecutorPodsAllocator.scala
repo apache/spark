@@ -77,7 +77,7 @@ private[spark] class ExecutorPodsAllocator(
       .withName(name)
       .get())
       .getOrElse(throw new SparkException(
-        s"No pod was found named $kubernetesDriverPodName in the cluster in the " +
+        s"No pod was found named $name in the cluster in the " +
           s"namespace $namespace (this was supposed to be the driver pod.).")))
 
   // Executor IDs that have been requested from Kubernetes but have not been detected in any
