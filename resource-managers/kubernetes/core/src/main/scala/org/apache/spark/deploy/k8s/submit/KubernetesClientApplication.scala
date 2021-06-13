@@ -141,12 +141,12 @@ private[spark] class Client(
       createdDriverPod = kubernetesClient.pods().create(resolvedDriverPod)
     } catch {
       case NonFatal(e) =>
-        logError("Fail to create driver pod, you may use wrong master URL.")
+        logError("Fail to create driver pod, you may use wrong master URL or permission denied." +
+          "please check the network connection and permission.")
         throw e
     }
     try {
-      val otherKubernetesResources =
-        resolvedDriverSpec.driverKubernetesResources ++ Seq(configMap)
+      val otherKubernetesResources = resolvedDriverSpec.driverKubernetesResources ++ Seq(configMap)
       addOwnerReference(createdDriverPod, otherKubernetesResources)
       kubernetesClient.resourceList(otherKubernetesResources: _*).createOrReplace()
     } catch {
