@@ -154,7 +154,7 @@ trait DDLCommandTestUtils extends SQLTestUtils {
     val catalogAndNs = idents.init
     val in = if (catalogAndNs.isEmpty) "" else s"IN ${catalogAndNs.mkString(".")}"
     val location = sql(s"SHOW TABLE EXTENDED $in LIKE '$table' PARTITION ($part)")
-      .selectExpr("information['Location']")
+      .selectExpr("information.storage.Location")
       .first().getString(0)
     location.replace("file:", "")
   }

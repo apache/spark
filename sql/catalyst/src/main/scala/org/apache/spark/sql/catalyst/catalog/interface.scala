@@ -29,6 +29,7 @@ import org.json4s.JsonAST.{JArray, JString}
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, SQLConfHelper, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.catalog.CatalogTable.VIEW_STORING_ANALYZED_PLAN
@@ -87,6 +88,19 @@ case class CatalogStorageFormat(
     }
     map
   }
+
+  def toCatalystRow: Row = {
+    val storageProperties = SQLConf.get.redactOptions(properties) match {
+      case props if props.isEmpty => null
+      case props => props.map(p => p._1 + "=" + p._2).mkString("[", ", ", "]")
+    }
+    Row(locationUri.map(_.toString).orNull,
+      serde.orNull,
+      inputFormat.orNull,
+      outputFormat.orNull,
+      if (compressed) "true" else "false",
+      storageProperties)
+  }
 }
 
 object CatalogStorageFormat {
@@ -128,6 +142,34 @@ case class CatalogTablePartition(
     map.put("Last Access", lastAccess)
     stats.foreach(s => map.put("Partition Statistics", s.simpleString))
     map
+  }
+
+  def toCatalystRow: Row = {
+    Row(null,
+      null,
+      null,
+      new java.sql.Date(createTime),
+      if (lastAccessTime <= 0) null else new java.sql.Date(lastAccessTime),
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      stats.map(_.toString).orNull,
+      storage.toCatalystRow,
+      null,
+      null,
+      s"[${spec.map { case (k, v) => s"$k=$v" }.mkString(", ")}]",
+      if (parameters.nonEmpty) {
+        s"{${parameters.map(p => p._1 + "=" + p._2).mkString(", ")}}"
+      } else {
+        null
+      },
+      stats.map(_.simpleString).orNull,
+      null
+    )
   }
 
   override def toString: String = {
@@ -202,6 +244,13 @@ case class BucketSpec(
       "Num Buckets" -> numBuckets.toString,
       "Bucket Columns" -> bucketColumnNames.map(quoteIdentifier).mkString("[", ", ", "]"),
       "Sort Columns" -> sortColumnNames.map(quoteIdentifier).mkString("[", ", ", "]")
+    )
+  }
+
+  def toCatalystRow: Row = {
+    Row(numBuckets.toString,
+      bucketColumnNames.map(quoteIdentifier).mkString("[", ", ", "]"),
+      sortColumnNames.map(quoteIdentifier).mkString("[", ", ", "]")
     )
   }
 }
@@ -380,7 +429,6 @@ case class CatalogTable(
       locationUri, inputFormat, outputFormat, serde, compressed, properties))
   }
 
-
   def toLinkedHashMap: mutable.LinkedHashMap[String, String] = {
     val map = new mutable.LinkedHashMap[String, String]()
     val tableProperties = properties
@@ -422,6 +470,52 @@ case class CatalogTable(
     if (schema.nonEmpty) map.put("Schema", schema.catalogString)
 
     map
+  }
+
+  def toCatalystRow: Row = {
+    val viewInformation = if (tableType == CatalogTableType.VIEW) {
+      val catalogAndNamespace = if (viewCatalogAndNamespace.nonEmpty) {
+        import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+        viewCatalogAndNamespace.quoted
+      } else {
+        null
+      }
+      val outputColumns = if (viewQueryColumnNames.nonEmpty) {
+        viewQueryColumnNames.mkString("[", ", ", "]")
+      } else {
+        null
+      }
+      Row(viewText.orNull, viewOriginalText.orNull, catalogAndNamespace, outputColumns)
+    } else {
+      null
+    }
+    val tableProperties = properties
+      .filterKeys(!_.startsWith(VIEW_PREFIX))
+      .toSeq.sortBy(_._1)
+      .map(p => p._1 + "=" + p._2).mkString("[", ", ", "]")
+    val partitionColumns = partitionColumnNames.map(quoteIdentifier).mkString("[", ", ", "]")
+
+    Row(identifier.database.orNull,
+      identifier.table,
+      if (owner == null || owner.isEmpty) "UNKNOWN" else owner,
+      new java.sql.Date(createTime),
+      if (lastAccessTime <= 0) null else new java.sql.Date(lastAccessTime),
+      "Spark " + createVersion,
+      tableType.name,
+      provider.orNull,
+      bucketSpec.map(_.toCatalystRow).orNull,
+      comment.orNull,
+      viewInformation,
+      tableProperties,
+      stats.map(_.toString).orNull,
+      storage.toCatalystRow,
+      if (tracksPartitionsInCatalog) "Catalog" else null,
+      if (partitionColumnNames.nonEmpty) partitionColumns else null,
+      null,
+      null,
+      null,
+      if (schema.nonEmpty) schema.catalogString else null
+    )
   }
 
   override def toString: String = {

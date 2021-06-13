@@ -22,6 +22,7 @@ import java.sql.{Date, Timestamp}
 import java.time.{Duration, Instant, LocalDate, Period}
 
 import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.plans.logical.ShowTableExtended
 import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.IntervalStringStyles.HIVE_STYLE
 import org.apache.spark.sql.catalyst.util.IntervalUtils.{durationToMicros, periodToMonths, toDayTimeIntervalString, toYearMonthIntervalString}
@@ -63,6 +64,20 @@ object HiveResult {
       // database, table name, isTemp.
       case ExecutedCommandExec(s: ShowTablesCommand) if !s.isExtended =>
         executedPlan.executeCollect().map(_.getString(1))
+      // SHOW TABLE EXTENDED in Hive only output the information column.
+      case command @ ExecutedCommandExec(s: ShowTablesCommand) if s.isExtended =>
+        if (s.output(3).dataType == StringType) {
+          command.executeCollect().map(_.getString(3) + "\n")
+        } else {
+          val timeFormatters = getTimeFormatters
+          command.executeCollectPublic().map(_.getStruct(3))
+            .map { data =>
+              ShowTableExtended.informationSchema.zipWithIndex.map { case (field, index) =>
+                val value = toHiveString((data.get(index), field.dataType), true, timeFormatters)
+                s"${field.name}:$value"
+              }.mkString("\n") + "\n"
+            }
+        }
       // SHOW TABLES in Hive only output table names while our v2 command outputs
       // namespace and table name.
       case _ : ShowTablesExec =>

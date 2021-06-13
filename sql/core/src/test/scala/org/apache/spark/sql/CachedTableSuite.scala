@@ -1356,7 +1356,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
 
       // Create new partition (part = 1) in the filesystem
       val part0Loc = sql("SHOW TABLE EXTENDED LIKE 't' PARTITION (part = 0)")
-        .selectExpr("information['Location']")
+        .selectExpr("information.storage.Location")
         .first().getString(0)
         .replace("file:", "")
       FileUtils.copyDirectory(

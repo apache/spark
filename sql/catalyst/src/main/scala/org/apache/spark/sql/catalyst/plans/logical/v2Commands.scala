@@ -27,7 +27,7 @@ import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, ColumnChange}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.write.Write
-import org.apache.spark.sql.types.{BooleanType, DataType, MapType, MetadataBuilder, StringType, StructType}
+import org.apache.spark.sql.types.{BooleanType, DataType, DateType, MetadataBuilder, StringType, StructField, StructType}
 
 /**
  * Base trait for DataSourceV2 write commands
@@ -608,11 +608,47 @@ case class ShowTableExtended(
 }
 
 object ShowTableExtended {
+  val informationSchema = StructType(Seq(
+    StructField("Database", StringType),
+    StructField("Table", StringType),
+    StructField("Owner", StringType),
+    StructField("Created Time", DateType, false),
+    StructField("Last Access", DateType),
+    StructField("Created By", StringType),
+    StructField("Type", StringType),
+    StructField("Provider", StringType),
+    StructField("Bucket", StructType(Seq(
+      StructField("Num Buckets", StringType),
+      StructField("Bucket Columns", StringType),
+      StructField("Sort Columns", StringType)))),
+    StructField("Comment", StringType),
+    StructField("View Information", StructType(Seq(
+      StructField("View Text", StringType),
+      StructField("View Original Text", StringType),
+      StructField("View Catalog and Namespace", StringType),
+      StructField("View Query Output Columns", StringType)))),
+    StructField("Table Properties", StringType),
+    StructField("Statistics", StringType),
+    StructField("Storage", StructType(Seq(
+      StructField("Location", StringType),
+      StructField("Serde Library", StringType),
+      StructField("InputFormat", StringType),
+      StructField("OutputFormat", StringType),
+      StructField("Compressed", StringType),
+      StructField("Storage Properties", StringType)
+    ))),
+    StructField("Partition Provider", StringType),
+    StructField("Partition Columns", StringType),
+    StructField("Partition Values", StringType),
+    StructField("Partition Parameters", StringType),
+    StructField("Partition Statistics", StringType),
+    StructField("schema", StringType)))
+
   def getOutputAttrs: Seq[Attribute] = Seq(
     AttributeReference("namespace", StringType, nullable = false)(),
     AttributeReference("tableName", StringType, nullable = false)(),
     AttributeReference("isTemporary", BooleanType, nullable = false)(),
-    AttributeReference("information", MapType(StringType, StringType, false), nullable = false)())
+    AttributeReference("information", informationSchema, nullable = false)())
 }
 
 /**

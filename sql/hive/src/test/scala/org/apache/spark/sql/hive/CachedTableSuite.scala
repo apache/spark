@@ -479,7 +479,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
 
   private def getPartitionLocation(t: String, partition: String): String = {
     val location = sql(s"SHOW TABLE EXTENDED LIKE '$t' PARTITION ($partition)")
-      .selectExpr("information['Location']")
+      .selectExpr("information.storage.Location")
       .first().getString(0)
     location.replace("file:", "")
   }

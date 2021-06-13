@@ -120,37 +120,70 @@ show_t3
 -- !query
 SHOW TABLE EXTENDED LIKE 'show_t*'
 -- !query schema
-struct<namespace:string,tableName:string,isTemporary:boolean,information:map<string,string>>
+struct<namespace:string,tableName:string,isTemporary:boolean,information:struct<Database:string,Table:string,Owner:string,Created Time:date,Last Access:date,Created By:string,Type:string,Provider:string,Bucket:struct<Num Buckets:string,Bucket Columns:string,Sort Columns:string>,Comment:string,View Information:struct<View Text:string,View Original Text:string,View Catalog and Namespace:string,View Query Output Columns:string>,Table Properties:string,Statistics:string,Storage:struct<Location:string,Serde Library:string,InputFormat:string,OutputFormat:string,Compressed:string,Storage Properties:string>,Partition Provider:string,Partition Columns:string,Partition Values:string,Partition Parameters:string,Partition Statistics:string,schema:string>>
 -- !query output
-Database:showdb
-Table:show_t1
+Database:"showdb"
+Table:"show_t1"
+Owner:"UNKNOWN"
 Created Time [not included in comparison]
 Last Access [not included in comparison]
 Created By [not included in comparison]
-Type:MANAGED
-Provider:parquet
-Location [not included in comparison]/{warehouse_dir}/showdb.db/show_t1
-Partition Provider:Catalog
-Partition Columns:[`c`, `d`]
-Schema:struct<a:string,b:int,c:string,d:string>
+Type:"MANAGED"
+Provider:"parquet"
+Bucket:null
+Comment:null
+View Information:null
+Table Properties:"[]"
+Statistics:null
+Storage:{"Location [not included in comparison]/{warehouse_dir}/showdb.db/show_t1","Serde Library":null,"InputFormat":null,"OutputFormat":null,"Compressed":"false","Storage Properties":null}
+Partition Provider:"Catalog"
+Partition Columns:"[`c`, `d`]"
+Partition Values:null
+Partition Parameters:null
+Partition Statistics:null
+schema:"struct<a:string,b:int,c:string,d:string>"
 
-Database:showdb
-Table:show_t2
+Database:"showdb"
+Table:"show_t2"
+Owner:"UNKNOWN"
 Created Time [not included in comparison]
 Last Access [not included in comparison]
 Created By [not included in comparison]
-Type:MANAGED
-Provider:parquet
-Location [not included in comparison]/{warehouse_dir}/showdb.db/show_t2
-Schema:struct<b:string,d:int>
+Type:"MANAGED"
+Provider:"parquet"
+Bucket:null
+Comment:null
+View Information:null
+Table Properties:"[]"
+Statistics:null
+Storage:{"Location [not included in comparison]/{warehouse_dir}/showdb.db/show_t2","Serde Library":null,"InputFormat":null,"OutputFormat":null,"Compressed":"false","Storage Properties":null}
+Partition Provider:null
+Partition Columns:null
+Partition Values:null
+Partition Parameters:null
+Partition Statistics:null
+schema:"struct<b:string,d:int>"
 
-Table:show_t3
+Database:null
+Table:"show_t3"
+Owner:"UNKNOWN"
 Created Time [not included in comparison]
 Last Access [not included in comparison]
 Created By [not included in comparison]
-Type:VIEW
-Table Properties:[]
-Schema:struct<e:int>
+Type:"VIEW"
+Provider:null
+Bucket:null
+Comment:null
+View Information:{"View Text":null,"View Original Text":null,"View Catalog and Namespace":null,"View Query Output Columns":null}
+Table Properties:"[]"
+Statistics:null
+Storage:{"Location":null,"Serde Library":null,"InputFormat":null,"OutputFormat":null,"Compressed":"false","Storage Properties":null}
+Partition Provider:null
+Partition Columns:null
+Partition Values:null
+Partition Parameters:null
+Partition Statistics:null
+schema:"struct<e:int>"
 
 
 -- !query
@@ -170,12 +203,28 @@ SHOW TABLE EXTENDED
 -- !query
 SHOW TABLE EXTENDED LIKE 'show_t1' PARTITION(c='Us', d=1)
 -- !query schema
-struct<namespace:string,tableName:string,isTemporary:boolean,information:map<string,string>>
+struct<namespace:string,tableName:string,isTemporary:boolean,information:struct<Database:string,Table:string,Owner:string,Created Time:date,Last Access:date,Created By:string,Type:string,Provider:string,Bucket:struct<Num Buckets:string,Bucket Columns:string,Sort Columns:string>,Comment:string,View Information:struct<View Text:string,View Original Text:string,View Catalog and Namespace:string,View Query Output Columns:string>,Table Properties:string,Statistics:string,Storage:struct<Location:string,Serde Library:string,InputFormat:string,OutputFormat:string,Compressed:string,Storage Properties:string>,Partition Provider:string,Partition Columns:string,Partition Values:string,Partition Parameters:string,Partition Statistics:string,schema:string>>
 -- !query output
-Partition Values:[c=Us, d=1]
-Location [not included in comparison]/{warehouse_dir}/showdb.db/show_t1/c=Us/d=1
+Database:null
+Table:null
+Owner:null
 Created Time [not included in comparison]
 Last Access [not included in comparison]
+Created By [not included in comparison]
+Type:null
+Provider:null
+Bucket:null
+Comment:null
+View Information:null
+Table Properties:null
+Statistics:null
+Storage:{"Location [not included in comparison]/{warehouse_dir}/showdb.db/show_t1/c=Us/d=1","Serde Library":null,"InputFormat":null,"OutputFormat":null,"Compressed":"false","Storage Properties":null}
+Partition Provider:null
+Partition Columns:null
+Partition Values:"[c=Us, d=1]"
+Partition Parameters:null
+Partition Statistics:null
+schema:null
 
 
 -- !query

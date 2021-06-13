@@ -848,7 +848,7 @@ case class ShowTablesCommand(
           val infoValue = if (output(3).dataType == StringType) {
             catalogTable.simpleString
           } else {
-            catalogTable.toLinkedHashMap
+            catalogTable.toCatalystRow
           }
           Row(database, tableName, isTemp, infoValue)
         } else {
@@ -877,7 +877,7 @@ case class ShowTablesCommand(
       val infoValue = if (output(3).dataType == StringType) {
         partition.simpleString
       } else {
-        partition.toLinkedHashMap
+        partition.toCatalystRow
       }
       Seq(Row(database, tableName, isTemp, infoValue))
     }

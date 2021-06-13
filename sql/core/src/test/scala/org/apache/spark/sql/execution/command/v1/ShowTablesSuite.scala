@@ -18,9 +18,10 @@
 package org.apache.spark.sql.execution.command.v1
 
 import org.apache.spark.sql.{AnalysisException, Row, SaveMode}
+import org.apache.spark.sql.catalyst.plans.logical.ShowTableExtended
 import org.apache.spark.sql.execution.command
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{MapType, StringType}
+import org.apache.spark.sql.types.StringType
 
 /**
  * This base suite contains unified tests for the `SHOW TABLES` command that check V1
@@ -69,7 +70,7 @@ trait ShowTablesSuiteBase extends command.ShowTablesSuiteBase {
 
       assert(resultWithoutInfo === expected)
       result.foreach {
-        case Row(_, _, _, info: Map[String, String] @ unchecked) => assert(info.nonEmpty)
+        case Row(_, _, _, info: Row @ unchecked) => assert(info.size > 0)
       }
     }
   }
@@ -118,7 +119,7 @@ trait ShowTablesSuiteBase extends command.ShowTablesSuiteBase {
         assert(sql("show table extended like 'tbl'").schema.fieldNames ===
           Seq("namespace", "tableName", "isTemporary", "information"))
         assert(sql("show table extended like 'tbl'").schema.last.dataType ===
-          MapType(StringType, StringType, false))
+          ShowTableExtended.getOutputAttrs.last.dataType)
 
         // Keep the legacy output schema
         withSQLConf(SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA.key -> "true") {
