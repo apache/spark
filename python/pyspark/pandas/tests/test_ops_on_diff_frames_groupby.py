@@ -135,7 +135,8 @@ class OpsOnDiffFramesGroupByTest(PandasOnSparkTestCase, SQLTestUtils):
                 )
 
         self.assert_eq(
-            psdf1.B.groupby(psdf2.A).sum().sort_index(), pdf1.B.groupby(pdf2.A).sum().sort_index(),
+            psdf1.B.groupby(psdf2.A).sum().sort_index(),
+            pdf1.B.groupby(pdf2.A).sum().sort_index(),
         )
         self.assert_eq(
             (psdf1.B + 1).groupby(psdf2.A).sum().sort_index(),

@@ -472,21 +472,31 @@ class PlanParserSuite extends AnalysisTest {
         s"select * from t $sql u using(a, b)",
         table("t").join(table("u"), UsingJoin(jt, Seq("a", "b")), None).select(star()))
     }
-    val testAll = Seq(testUnconditionalJoin, testConditionalJoin, testNaturalJoin, testUsingJoin)
+    val testLateralJoin = (sql: String, jt: JoinType) => {
+      assertEqual(
+        s"select * from t $sql lateral (select * from u) uu",
+        LateralJoin(
+          table("t"),
+          LateralSubquery(table("u").select(star()).as("uu")),
+          jt, None).select(star()))
+    }
+    val testAllExceptLateral = Seq(testUnconditionalJoin, testConditionalJoin, testNaturalJoin,
+      testUsingJoin)
+    val testAll = testAllExceptLateral :+ testLateralJoin
     val testExistence = Seq(testUnconditionalJoin, testConditionalJoin, testUsingJoin)
     def test(sql: String, jt: JoinType, tests: Seq[(String, JoinType) => Unit]): Unit = {
       tests.foreach(_(sql, jt))
     }
-    test("cross join", Cross, Seq(testUnconditionalJoin))
-    test(",", Inner, Seq(testUnconditionalJoin))
+    test("cross join", Cross, Seq(testUnconditionalJoin, testLateralJoin))
+    test(",", Inner, Seq(testUnconditionalJoin, testLateralJoin))
     test("join", Inner, testAll)
     test("inner join", Inner, testAll)
     test("left join", LeftOuter, testAll)
     test("left outer join", LeftOuter, testAll)
-    test("right join", RightOuter, testAll)
-    test("right outer join", RightOuter, testAll)
-    test("full join", FullOuter, testAll)
-    test("full outer join", FullOuter, testAll)
+    test("right join", RightOuter, testAllExceptLateral)
+    test("right outer join", RightOuter, testAllExceptLateral)
+    test("full join", FullOuter, testAllExceptLateral)
+    test("full outer join", FullOuter, testAllExceptLateral)
     test("left semi join", LeftSemi, testExistence)
     test("semi join", LeftSemi, testExistence)
     test("left anti join", LeftAnti, testExistence)
@@ -540,6 +550,26 @@ class PlanParserSuite extends AnalysisTest {
         .join(table("t3"))
         .join(table("t2"), Inner, Option(Symbol("t1.col1") === Symbol("t2.col2")))
         .select(star()))
+
+    // Test lateral join with join conditions
+    assertEqual(
+      s"select * from t join lateral (select * from u) uu on true",
+      LateralJoin(
+        table("t"),
+        LateralSubquery(table("u").select(star()).as("uu")),
+        Inner, Option(true)).select(star()))
+
+    // Test multiple lateral joins
+    assertEqual(
+      "select * from a, lateral (select * from b) bb, lateral (select * from c) cc",
+      LateralJoin(
+        LateralJoin(
+          table("a"),
+          LateralSubquery(table("b").select(star()).as("bb")),
+          Inner, None),
+        LateralSubquery(table("c").select(star()).as("cc")),
+        Inner, None).select(star())
+    )
   }
 
   test("sampled relations") {

@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.catalyst.util.{toPrettySQL, FailFastMode, ParseMode, PermissiveMode}
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
+import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, UnboundFunction}
 import org.apache.spark.sql.connector.expressions.{NamedReference, Transform}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LEGACY_CTE_PRECEDENCE_POLICY
@@ -938,10 +938,6 @@ private[spark] object QueryCompilationErrors {
     notSupportedForV2TablesError("SHOW CREATE TABLE")
   }
 
-  def truncateTableNotSupportedForV2TablesError(): Throwable = {
-    notSupportedForV2TablesError("TRUNCATE TABLE")
-  }
-
   def showColumnsNotSupportedForV2TablesError(): Throwable = {
     notSupportedForV2TablesError("SHOW COLUMNS")
   }
@@ -1470,6 +1466,13 @@ private[spark] object QueryCompilationErrors {
       unsupported.getMessage, cause = Some(unsupported))
   }
 
+  def v2FunctionInvalidInputTypeLengthError(
+      bound: BoundFunction,
+      args: Seq[Expression]): Throwable = {
+    new AnalysisException(s"Invalid bound function '${bound.name()}: there are ${args.length} " +
+        s"arguments but ${bound.inputTypes().length} parameters returned from 'inputTypes()'")
+  }
+
   def ambiguousRelationAliasNameInNestedCTEError(name: String): Throwable = {
     new AnalysisException(s"Name $name is ambiguous in nested CTE. " +
       s"Please set ${LEGACY_CTE_PRECEDENCE_POLICY.key} to CORRECTED so that name " +
@@ -1604,5 +1607,33 @@ private[spark] object QueryCompilationErrors {
   def tableIdentifierNotConvertedToHadoopFsRelationError(
       tableIdentifier: TableIdentifier): Throwable = {
     new AnalysisException(s"$tableIdentifier should be converted to HadoopFsRelation.")
+  }
+
+  def alterDatabaseLocationUnsupportedError(version: String): Throwable = {
+    new AnalysisException(s"Hive $version does not support altering database location")
+  }
+
+  def hiveTableTypeUnsupportedError(tableType: String): Throwable = {
+    new AnalysisException(s"Hive $tableType is not supported.")
+  }
+
+  def hiveCreatePermanentFunctionsUnsupportedError(): Throwable = {
+    new AnalysisException("Hive 0.12 doesn't support creating permanent functions. " +
+      "Please use Hive 0.13 or higher.")
+  }
+
+  def unknownHiveResourceTypeError(resourceType: String): Throwable = {
+    new AnalysisException(s"Unknown resource type: $resourceType")
+  }
+
+  def invalidDayTimeField(field: Byte): Throwable = {
+    val supportedIds = DayTimeIntervalType.dayTimeFields
+      .map(i => s"$i (${DayTimeIntervalType.fieldToString(i)})")
+    new AnalysisException(s"Invalid field id '$field' in day-time interval. " +
+      s"Supported interval fields: ${supportedIds.mkString(", ")}.")
+  }
+
+  def invalidDayTimeIntervalType(startFieldName: String, endFieldName: String): Throwable = {
+    new AnalysisException(s"'interval $startFieldName to $endFieldName' is invalid.")
   }
 }

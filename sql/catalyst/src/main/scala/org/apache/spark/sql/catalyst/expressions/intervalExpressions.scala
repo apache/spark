@@ -132,19 +132,19 @@ object ExtractIntervalPart {
         ExtractANSIIntervalMonths(source)
       case ("MONTH" | "MON" | "MONS" | "MONTHS", CalendarIntervalType) =>
         ExtractIntervalMonths(source)
-      case ("DAY" | "D" | "DAYS", DayTimeIntervalType) =>
+      case ("DAY" | "D" | "DAYS", _: DayTimeIntervalType) =>
         ExtractANSIIntervalDays(source)
       case ("DAY" | "D" | "DAYS", CalendarIntervalType) =>
         ExtractIntervalDays(source)
-      case ("HOUR" | "H" | "HOURS" | "HR" | "HRS", DayTimeIntervalType) =>
+      case ("HOUR" | "H" | "HOURS" | "HR" | "HRS", _: DayTimeIntervalType) =>
         ExtractANSIIntervalHours(source)
       case ("HOUR" | "H" | "HOURS" | "HR" | "HRS", CalendarIntervalType) =>
         ExtractIntervalHours(source)
-      case ("MINUTE" | "M" | "MIN" | "MINS" | "MINUTES", DayTimeIntervalType) =>
+      case ("MINUTE" | "M" | "MIN" | "MINS" | "MINUTES", _: DayTimeIntervalType) =>
         ExtractANSIIntervalMinutes(source)
       case ("MINUTE" | "M" | "MIN" | "MINS" | "MINUTES", CalendarIntervalType) =>
         ExtractIntervalMinutes(source)
-      case ("SECOND" | "S" | "SEC" | "SECONDS" | "SECS", DayTimeIntervalType) =>
+      case ("SECOND" | "S" | "SEC" | "SECONDS" | "SECS", _: DayTimeIntervalType) =>
         ExtractANSIIntervalSeconds(source)
       case ("SECOND" | "S" | "SEC" | "SECONDS" | "SECS", CalendarIntervalType) =>
         ExtractIntervalSeconds(source)
@@ -406,7 +406,7 @@ case class MultiplyDTInterval(
   override def right: Expression = num
 
   override def inputTypes: Seq[AbstractDataType] = Seq(DayTimeIntervalType, NumericType)
-  override def dataType: DataType = DayTimeIntervalType
+  override def dataType: DataType = DayTimeIntervalType()
 
   @transient
   private lazy val evalFunc: (Long, Any) => Any = right.dataType match {
@@ -535,7 +535,7 @@ case class DivideDTInterval(
   override def right: Expression = num
 
   override def inputTypes: Seq[AbstractDataType] = Seq(DayTimeIntervalType, NumericType)
-  override def dataType: DataType = DayTimeIntervalType
+  override def dataType: DataType = DayTimeIntervalType()
 
   @transient
   private lazy val evalFunc: (Long, Any) => Any = right.dataType match {

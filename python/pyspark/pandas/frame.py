@@ -65,14 +65,15 @@ from pyspark import StorageLevel
 from pyspark import sql as spark
 from pyspark.sql import Column, DataFrame as SparkDataFrame, functions as F
 from pyspark.sql.functions import pandas_udf, PandasUDFType
-from pyspark.sql.types import (
+from pyspark.sql.types import (  # noqa: F401 (SPARK-34943)
     BooleanType,
+    DataType,
     DoubleType,
     FloatType,
     NumericType,
     StringType,
-    StructType,
     StructField,
+    StructType,
     ArrayType,
 )
 from pyspark.sql.window import Window
@@ -98,9 +99,9 @@ from pyspark.pandas.utils import (
     validate_how,
     verify_temp_column_name,
 )
-from pyspark.pandas.spark.utils import as_nullable_spark_type, force_decimal_precision_scale
 from pyspark.pandas.generic import Frame
 from pyspark.pandas.internal import (
+    InternalField,
     InternalFrame,
     HIDDEN_COLUMNS,
     NATURAL_ORDER_COLUMN_NAME,
@@ -512,7 +513,7 @@ class DataFrame(Frame, Generic[T]):
 
     @property
     def _pssers(self):
-        """ Return a dict of column label -> Series which anchors `self`. """
+        """Return a dict of column label -> Series which anchors `self`."""
         from pyspark.pandas.series import Series
 
         if not hasattr(self, "_psseries"):
@@ -722,7 +723,7 @@ class DataFrame(Frame, Generic[T]):
                     scol_for(sdf, col) for col in self._internal.index_spark_column_names
                 ],
                 index_names=self._internal.index_names,
-                index_dtypes=self._internal.index_dtypes,
+                index_fields=self._internal.index_fields,
             )
             return first_series(DataFrame(internal)).rename(pser.name)
 
@@ -2525,9 +2526,12 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 should_return_series = True
                 psdf = psser_or_psdf._psdf
 
-            return_schema = force_decimal_precision_scale(
-                as_nullable_spark_type(psdf._internal.to_internal_spark_frame.schema)
-            )
+            index_fields = [field.normalize_spark_type() for field in psdf._internal.index_fields]
+            data_fields = [field.normalize_spark_type() for field in psdf._internal.data_fields]
+
+            return_schema = StructType(
+                [field.struct_field for field in index_fields + data_fields]
+            )  # type: DataType
 
             output_func = GroupBy._make_pandas_df_builder_func(
                 self_applied, apply_func, return_schema, retain_index=True
@@ -2537,7 +2541,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             )
 
             # If schema is inferred, we can restore indexes too.
-            internal = psdf._internal.with_new_sdf(sdf)
+            internal = psdf._internal.with_new_sdf(
+                spark_frame=sdf, index_fields=index_fields, data_fields=data_fields
+            )
         else:
             return_type = infer_return_type(func)
             require_index_axis = isinstance(return_type, SeriesType)
@@ -2550,12 +2556,15 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                         "hints when axis is 0 or 'index'; however, the return type "
                         "was %s" % return_sig
                     )
-                return_schema = cast(SeriesType, return_type).spark_type
-                fields_types = zip(
-                    self_applied.columns, [return_schema] * len(self_applied.columns)
-                )
-                return_schema = StructType([StructField(c, t) for c, t in fields_types])
-                data_dtypes = [cast(SeriesType, return_type).dtype] * len(self_applied.columns)
+                dtype = cast(SeriesType, return_type).dtype
+                spark_type = cast(SeriesType, return_type).spark_type
+                data_fields = [
+                    InternalField(
+                        dtype=dtype, struct_field=StructField(name=name, dataType=spark_type)
+                    )
+                    for name in self_applied.columns
+                ]
+                return_schema = StructType([field.struct_field for field in data_fields])
             elif require_column_axis:
                 if axis != 1:
                     raise TypeError(
@@ -2563,14 +2572,22 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                         "hints when axis is 1 or 'column'; however, the return type "
                         "was %s" % return_sig
                     )
+                data_fields = cast(DataFrameType, return_type).fields
                 return_schema = cast(DataFrameType, return_type).spark_type
-                data_dtypes = cast(DataFrameType, return_type).dtypes
             else:
                 # any axis is fine.
                 should_return_series = True
-                return_schema = cast(ScalarType, return_type).spark_type
-                return_schema = StructType([StructField(SPARK_DEFAULT_SERIES_NAME, return_schema)])
-                data_dtypes = [cast(ScalarType, return_type).dtype]
+                spark_type = cast(ScalarType, return_type).spark_type
+                dtype = cast(ScalarType, return_type).dtype
+                data_fields = [
+                    InternalField(
+                        dtype=dtype,
+                        struct_field=StructField(
+                            name=SPARK_DEFAULT_SERIES_NAME, dataType=spark_type
+                        ),
+                    )
+                ]
+                return_schema = StructType([field.struct_field for field in data_fields])
                 column_labels = [None]
 
             output_func = GroupBy._make_pandas_df_builder_func(
@@ -2585,7 +2602,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 spark_frame=sdf,
                 index_spark_columns=None,
                 column_labels=column_labels,
-                data_dtypes=data_dtypes,
+                data_fields=data_fields,
             )
 
         result = DataFrame(internal)  # type: "DataFrame"
@@ -2726,24 +2743,24 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 return psdf
 
             applied = []
+            data_fields = []
             for input_label, output_label in zip(
                 self._internal.column_labels, psdf._internal.column_labels
             ):
                 psser = self._psser_for(input_label)
-                dtype = psdf._internal.dtype_for(output_label)
-                return_schema = force_decimal_precision_scale(
-                    as_nullable_spark_type(psdf._internal.spark_type_for(output_label))
-                )
+
+                field = psdf._internal.field_for(output_label).normalize_spark_type()
+                data_fields.append(field)
+
+                return_schema = field.spark_type
                 applied.append(
                     psser.pandas_on_spark._transform_batch(
                         func=lambda c: func(c, *args, **kwargs),
-                        return_type=SeriesType(dtype, return_schema),
+                        return_type=SeriesType(field.dtype, return_schema),
                     )
                 )
 
-            internal = self._internal.with_new_columns(
-                applied, data_dtypes=psdf._internal.data_dtypes
-            )
+            internal = self._internal.with_new_columns(applied, data_fields=data_fields)
             return DataFrame(internal)
         else:
             return self._apply_series_op(
@@ -2945,15 +2962,15 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         else:
             index_spark_columns = (
                 internal.index_spark_columns[:level]
-                + internal.index_spark_columns[level + len(key):]
+                + internal.index_spark_columns[level + len(key) :]
             )
-            index_names = internal.index_names[:level] + internal.index_names[level + len(key):]
-            index_dtypes = internal.index_dtypes[:level] + internal.index_dtypes[level + len(key):]
+            index_names = internal.index_names[:level] + internal.index_names[level + len(key) :]
+            index_fields = internal.index_fields[:level] + internal.index_fields[level + len(key) :]
 
             internal = internal.copy(
                 index_spark_columns=index_spark_columns,
                 index_names=index_names,
-                index_dtypes=index_dtypes,
+                index_fields=index_fields,
             ).resolved_copy
             return DataFrame(internal)
 
@@ -3051,7 +3068,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             self._internal.copy(
                 spark_frame=psdf._internal.spark_frame,
                 index_spark_columns=psdf._internal.data_spark_columns[:1],
+                index_fields=psdf._internal.data_fields[:1],
                 data_spark_columns=psdf._internal.data_spark_columns[1:],
+                data_fields=psdf._internal.data_fields[1:],
             )
         )
 
@@ -3133,7 +3152,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             self._internal.copy(
                 spark_frame=psdf._internal.spark_frame,
                 index_spark_columns=psdf._internal.data_spark_columns[:1],
+                index_fields=psdf._internal.data_fields[:1],
                 data_spark_columns=psdf._internal.data_spark_columns[1:],
+                data_fields=psdf._internal.data_fields[1:],
             )
         )
 
@@ -3547,21 +3568,21 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 self._internal.spark_column_for(label) for label in keys
             ]
             index_names = self._internal.index_names + keys
-            index_dtypes = self._internal.index_dtypes + [
-                self._internal.dtype_for(label) for label in keys
+            index_fields = self._internal.index_fields + [
+                self._internal.field_for(label) for label in keys
             ]
         else:
             index_spark_columns = [self._internal.spark_column_for(label) for label in keys]
             index_names = keys
-            index_dtypes = [self._internal.dtype_for(label) for label in keys]
+            index_fields = [self._internal.field_for(label) for label in keys]
 
         internal = self._internal.copy(
             index_spark_columns=index_spark_columns,
             index_names=index_names,
-            index_dtypes=index_dtypes,
+            index_fields=index_fields,
             column_labels=column_labels,
             data_spark_columns=[self._internal.spark_column_for(label) for label in column_labels],
-            data_dtypes=[self._internal.dtype_for(label) for label in column_labels],
+            data_fields=[self._internal.field_for(label) for label in column_labels],
         )
 
         if inplace:
@@ -3736,11 +3757,11 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 scol.alias(name_like_string(label))
                 for scol, label in zip(self._internal.index_spark_columns, new_column_labels)
             ]
-            new_data_dtypes = self._internal.index_dtypes
+            new_data_fields = self._internal.index_fields
 
             index_spark_columns = []
             index_names = []
-            index_dtypes = []
+            index_fields = []
         else:
             if is_list_like(level):
                 level = list(level)
@@ -3784,11 +3805,11 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
             new_column_labels = []
             new_data_spark_columns = []
-            new_data_dtypes = []
+            new_data_fields = []
 
             index_spark_columns = self._internal.index_spark_columns.copy()
             index_names = self._internal.index_names.copy()
-            index_dtypes = self._internal.index_dtypes.copy()
+            index_fields = self._internal.index_fields.copy()
 
             for i in idx[::-1]:
                 name = index_names.pop(i)
@@ -3797,12 +3818,12 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 scol = index_spark_columns.pop(i)
                 new_data_spark_columns.insert(0, scol.alias(name_like_string(name)))
 
-                new_data_dtypes.insert(0, index_dtypes.pop(i))
+                new_data_fields.insert(0, index_fields.pop(i).copy(name=name_like_string(name)))
 
         if drop:
             new_data_spark_columns = []
             new_column_labels = []
-            new_data_dtypes = []
+            new_data_fields = []
 
         for label in new_column_labels:
             if label in self._internal.column_labels:
@@ -3830,10 +3851,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         internal = self._internal.copy(
             index_spark_columns=index_spark_columns,
             index_names=index_names,
-            index_dtypes=index_dtypes,
+            index_fields=index_fields,
             column_labels=new_column_labels + self._internal.column_labels,
             data_spark_columns=new_data_spark_columns + self._internal.data_spark_columns,
-            data_dtypes=new_data_dtypes + self._internal.data_dtypes,
+            data_fields=new_data_fields + self._internal.data_fields,
         )
 
         if inplace:
@@ -4184,11 +4205,11 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 spark_frame=sdf,
                 index_spark_columns=[scol_for(sdf, SPARK_DEFAULT_INDEX_NAME)],
                 index_names=[None],
-                index_dtypes=[None],
+                index_fields=[None],
                 data_spark_columns=[
                     scol_for(sdf, col) for col in self._internal.data_spark_column_names
                 ],
-                data_dtypes=None,
+                data_fields=None,
             )
             return first_series(DataFrame(internal).transpose())
 
@@ -4383,7 +4404,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                         scol_for(sdf, col) for col in self._internal.index_spark_column_names
                     ],
                     index_names=self._internal.index_names,
-                    index_dtypes=self._internal.index_dtypes,
+                    index_fields=self._internal.index_fields,
                     column_labels=[None],  # type: ignore
                     data_spark_columns=[scol_for(sdf, SPARK_DEFAULT_SERIES_NAME)],
                 )
@@ -4904,7 +4925,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         pairs = {
             (k if is_name_like_tuple(k) else (k,)): (
-                (v.spark.column, v.dtype)
+                (v.spark.column, v._internal.data_fields[0])
                 if isinstance(v, IndexOpsMixin) and not isinstance(v, MultiIndex)
                 else (v, None)
                 if isinstance(v, spark.Column)
@@ -4914,25 +4935,33 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         }
 
         scols = []
-        data_dtypes = []
+        data_fields = []
         for label in self._internal.column_labels:
             for i in range(len(label)):
                 if label[: len(label) - i] in pairs:
-                    scol, dtype = pairs[label[: len(label) - i]]
-                    scol = scol.alias(self._internal.spark_column_name_for(label))
+                    scol, field = pairs[label[: len(label) - i]]
+
+                    name = self._internal.spark_column_name_for(label)
+                    scol = scol.alias(name)
+                    if field is not None:
+                        field = field.copy(name=name)
                     break
             else:
                 scol = self._internal.spark_column_for(label)
-                dtype = self._internal.dtype_for(label)
+                field = self._internal.field_for(label)
             scols.append(scol)
-            data_dtypes.append(dtype)
+            data_fields.append(field)
 
         column_labels = self._internal.column_labels.copy()
-        for label, (scol, dtype) in pairs.items():
+        for label, (scol, field) in pairs.items():
             if label not in set(i[: len(label)] for i in self._internal.column_labels):
-                scols.append(scol.alias(name_like_string(label)))
+                name = name_like_string(label)
+                scols.append(scol.alias(name))
+                if field is not None:
+                    field = field.copy(name=name)
+                data_fields.append(field)
+
                 column_labels.append(label)
-                data_dtypes.append(dtype)
 
         level = self._internal.column_labels_level
         column_labels = [
@@ -4940,7 +4969,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         ]
 
         internal = self._internal.with_new_columns(
-            scols, column_labels=column_labels, data_dtypes=data_dtypes
+            scols, column_labels=column_labels, data_fields=data_fields
         )
         return DataFrame(internal)
 
@@ -5445,7 +5474,13 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             return psdf
 
     def replace(
-        self, to_replace=None, value=None, inplace=False, limit=None, regex=False, method="pad",
+        self,
+        to_replace=None,
+        value=None,
+        inplace=False,
+        limit=None,
+        regex=False,
+        method="pad",
     ) -> Optional["DataFrame"]:
         """
         Returns a new DataFrame replacing a value with another value.
@@ -5980,7 +6015,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         if index is not None:
             index_columns = [self._internal.spark_column_name_for(label) for label in index]
-            index_dtypes = [self._internal.dtype_for(label) for label in index]
+            index_fields = [self._internal.field_for(label) for label in index]
 
             if isinstance(values, list):
                 data_columns = [column for column in sdf.columns if column not in index_columns]
@@ -6009,7 +6044,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                         spark_frame=sdf,
                         index_spark_columns=[scol_for(sdf, col) for col in index_columns],
                         index_names=index,
-                        index_dtypes=index_dtypes,
+                        index_fields=index_fields,
                         column_labels=column_labels,
                         data_spark_columns=[scol_for(sdf, col) for col in data_columns],
                         column_label_names=column_label_names,  # type: ignore
@@ -6022,7 +6057,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                         spark_frame=sdf,
                         index_spark_columns=[scol_for(sdf, col) for col in index_columns],
                         index_names=index,
-                        index_dtypes=index_dtypes,
+                        index_fields=index_fields,
                         column_labels=column_labels,
                         data_spark_columns=[scol_for(sdf, col) for col in data_columns],
                         column_label_names=column_label_names,  # type: ignore
@@ -6033,7 +6068,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                     spark_frame=sdf,
                     index_spark_columns=[scol_for(sdf, col) for col in index_columns],
                     index_names=index,
-                    index_dtypes=index_dtypes,
+                    index_fields=index_fields,
                     column_label_names=[columns],
                 )
                 psdf = DataFrame(internal)
@@ -6536,14 +6571,14 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                     "at least one level must be left.".format(len(level), nlevels)
                 )
 
-            index_spark_columns, index_names, index_dtypes = zip(
+            index_spark_columns, index_names, index_fields = zip(
                 *[
                     item
                     for i, item in enumerate(
                         zip(
                             self._internal.index_spark_columns,
                             self._internal.index_names,
-                            self._internal.index_dtypes,
+                            self._internal.index_fields,
                         )
                     )
                     if i not in int_level
@@ -6553,7 +6588,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             internal = self._internal.copy(
                 index_spark_columns=list(index_spark_columns),
                 index_names=list(index_names),
-                index_dtypes=list(index_dtypes),
+                index_fields=list(index_fields),
             )
             return DataFrame(internal)
         else:
@@ -7107,15 +7142,15 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             zip(
                 self._internal.index_spark_columns,
                 self._internal.index_names,
-                self._internal.index_dtypes,
+                self._internal.index_fields,
             )
         )
-        index_map[i], index_map[j], = index_map[j], index_map[i]
-        index_spark_columns, index_names, index_dtypes = zip(*index_map)
+        index_map[i], index_map[j] = index_map[j], index_map[i]
+        index_spark_columns, index_names, index_fields = zip(*index_map)
         internal = self._internal.copy(
             index_spark_columns=list(index_spark_columns),
             index_names=list(index_names),
-            index_dtypes=list(index_dtypes),
+            index_fields=list(index_fields),
         )
         return internal
 
@@ -7556,9 +7591,13 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 index_spark_columns=[
                     scol_for(sdf, rename(col)) for col in internal.index_spark_column_names
                 ],
+                index_fields=[
+                    field.copy(name=rename(field.name)) for field in internal.index_fields
+                ],
                 data_spark_columns=[
                     scol_for(sdf, rename(col)) for col in internal.data_spark_column_names
                 ],
+                data_fields=[field.copy(name=rename(field.name)) for field in internal.data_fields],
             )
 
         left_internal = self._internal.resolved_copy
@@ -7620,7 +7659,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             column_labels.append(label)
         for label in right_internal.column_labels:
             # recover `right_prefix` here.
-            col = right_internal.spark_column_name_for(label)[len(right_prefix):]
+            col = right_internal.spark_column_name_for(label)[len(right_prefix) :]
             scol = right_scol_for(label).alias(col)
             if label in duplicate_columns:
                 spark_column_name = left_internal.spark_column_name_for(label)
@@ -7972,7 +8011,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             other[update_columns], rsuffix="_new"
         )._internal.resolved_copy.spark_frame
 
-        data_dtypes = self._internal.data_dtypes.copy()
+        data_fields = self._internal.data_fields.copy()
         for column_labels in update_columns:
             column_name = self._internal.spark_column_name_for(column_labels)
             old_col = scol_for(update_sdf, column_name)
@@ -7987,12 +8026,12 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 update_sdf = update_sdf.withColumn(
                     column_name, F.when(old_col.isNull(), new_col).otherwise(old_col)
                 )
-            data_dtypes[self._internal.column_labels.index(column_labels)] = None  # TODO: dtype?
+            data_fields[self._internal.column_labels.index(column_labels)] = None  # TODO: dtype?
         sdf = update_sdf.select(
             *[scol_for(update_sdf, col) for col in self._internal.spark_column_names],
             *HIDDEN_COLUMNS,
         )
-        internal = self._internal.with_new_sdf(sdf, data_dtypes=data_dtypes)
+        internal = self._internal.with_new_sdf(sdf, data_fields=data_fields)
         self._update_internal_frame(internal, requires_same_anchor=False)
 
     def sample(
@@ -8772,10 +8811,11 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 scol_for(sdf, col) for col in self._internal.index_spark_column_names
             ],
             index_names=index_names,
-            index_dtypes=None,  # TODO: dtypes?
+            index_fields=None,  # TODO: dtypes?
             data_spark_columns=[
                 scol_for(sdf, col) for col in self._internal.data_spark_column_names
             ],
+            data_fields=[InternalField(dtype=field.dtype) for field in self._internal.data_fields],
         )
         return DataFrame(internal)
 
@@ -8889,7 +8929,13 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         else:
             raise TypeError("other must be a pandas-on-Spark DataFrame")
 
-    def melt(self, id_vars=None, value_vars=None, var_name=None, value_name="value") -> "DataFrame":
+    def melt(
+        self,
+        id_vars: Optional[Union[Any, Tuple, List[Union[Any, Tuple]]]] = None,
+        value_vars: Optional[Union[Any, Tuple, List[Union[Any, Tuple]]]] = None,
+        var_name: Optional[Union[str, List[str]]] = None,
+        value_name: str = "value",
+    ) -> "DataFrame":
         """
         Unpivot a DataFrame from wide format to long format, optionally
         leaving identifier variables set.
@@ -9272,7 +9318,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 for col in (self._internal.index_spark_column_names + [index_column])
             ],
             index_names=self._internal.index_names + [index_name],
-            index_dtypes=self._internal.index_dtypes + [None],
+            index_fields=self._internal.index_fields + [None],
             column_labels=list(column_labels),
             data_spark_columns=[scol_for(sdf, col) for col in data_columns],
             column_label_names=column_label_names,  # type: ignore
@@ -9376,7 +9422,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             )
             internal = df._internal.copy(
                 index_names=self._internal.index_names[:-1],
-                index_dtypes=self._internal.index_dtypes[:-1],
+                index_fields=df._internal.index_fields[: self._internal.index_level - 1],
                 column_label_names=(
                     df._internal.column_label_names[:-1]
                     + [
@@ -10028,15 +10074,15 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 return index_mapper_udf(scol_for(psdf._internal.spark_frame, index_col_name))
 
             sdf = psdf._internal.resolved_copy.spark_frame
-            index_dtypes = self._internal.index_dtypes.copy()
+            index_fields = self._internal.index_fields.copy()
             if level is None:
                 for i in range(num_indices):
                     sdf = sdf.withColumn(index_columns[i], gen_new_index_column(i))
-                    index_dtypes[i] = None  # TODO: dtype?
+                    index_fields[i] = None  # TODO: dtype?
             else:
                 sdf = sdf.withColumn(index_columns[level], gen_new_index_column(level))
-                index_dtypes[level] = None  # TODO: dtype?
-            psdf = DataFrame(psdf._internal.with_new_sdf(sdf, index_dtypes=index_dtypes))
+                index_fields[level] = None  # TODO: dtype?
+            psdf = DataFrame(psdf._internal.with_new_sdf(sdf, index_fields=index_fields))
         if columns_mapper_fn:
             # rename column name.
             # Will modify the `_internal._column_labels` and transform underlying spark dataframe
@@ -11103,10 +11149,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             psser._internal.data_spark_column_names[0], F.explode_outer(psser.spark.column)
         )
 
-        data_dtypes = psdf._internal.data_dtypes.copy()
-        data_dtypes[psdf._internal.column_labels.index(psser._column_label)] = None  # TODO: dtype?
+        data_fields = psdf._internal.data_fields.copy()
+        data_fields[psdf._internal.column_labels.index(psser._column_label)] = None  # TODO: dtype?
 
-        internal = psdf._internal.with_new_sdf(sdf, data_dtypes=data_dtypes)
+        internal = psdf._internal.with_new_sdf(sdf, data_fields=data_fields)
         return DataFrame(internal)
 
     def mad(self, axis=0) -> "Series":
@@ -11197,7 +11243,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                         SPARK_DEFAULT_SERIES_NAME
                     )
                 ],
-                data_dtypes=[None],
+                data_fields=[None],
                 column_label_names=None,
             )
             return first_series(DataFrame(internal))

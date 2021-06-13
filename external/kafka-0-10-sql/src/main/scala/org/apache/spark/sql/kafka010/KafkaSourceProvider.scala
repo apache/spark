@@ -378,6 +378,10 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     if (params.contains(MAX_OFFSET_PER_TRIGGER)) {
       logWarning("maxOffsetsPerTrigger option ignored in batch queries")
     }
+
+    if (params.contains(MIN_OFFSET_PER_TRIGGER)) {
+      logWarning("minOffsetsPerTrigger option ignored in batch queries")
+    }
   }
 
   class KafkaTable(includeHeaders: Boolean) extends Table with SupportsRead with SupportsWrite {
@@ -535,6 +539,9 @@ private[kafka010] object KafkaSourceProvider extends Logging {
   private val FAIL_ON_DATA_LOSS_OPTION_KEY = "failondataloss"
   private[kafka010] val MIN_PARTITIONS_OPTION_KEY = "minpartitions"
   private[kafka010] val MAX_OFFSET_PER_TRIGGER = "maxoffsetspertrigger"
+  private[kafka010] val MIN_OFFSET_PER_TRIGGER = "minoffsetspertrigger"
+  private[kafka010] val MAX_TRIGGER_DELAY = "maxtriggerdelay"
+  private[kafka010] val DEFAULT_MAX_TRIGGER_DELAY = "15m"
   private[kafka010] val FETCH_OFFSET_NUM_RETRY = "fetchoffset.numretries"
   private[kafka010] val FETCH_OFFSET_RETRY_INTERVAL_MS = "fetchoffset.retryintervalms"
   private[kafka010] val CONSUMER_POLL_TIMEOUT = "kafkaconsumer.polltimeoutms"

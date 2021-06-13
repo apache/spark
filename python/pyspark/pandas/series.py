@@ -57,6 +57,7 @@ from pyspark.pandas.exceptions import SparkPandasIndexingError
 from pyspark.pandas.frame import DataFrame
 from pyspark.pandas.generic import Frame
 from pyspark.pandas.internal import (
+    InternalField,
     InternalFrame,
     DEFAULT_SERIES_NAME,
     NATURAL_ORDER_COLUMN_NAME,
@@ -427,16 +428,21 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         self._anchor = psdf
         object.__setattr__(psdf, "_psseries", {self._column_label: self})
 
-    def _with_new_scol(self, scol: spark.Column, *, dtype=None) -> "Series":
+    def _with_new_scol(
+        self, scol: spark.Column, *, field: Optional[InternalField] = None
+    ) -> "Series":
         """
         Copy pandas-on-Spark Series with the new Spark Column.
 
         :param scol: the new Spark Column
         :return: the copied Series
         """
+        name = name_like_string(self._column_label)
         internal = self._internal.copy(
-            data_spark_columns=[scol.alias(name_like_string(self._column_label))],
-            data_dtypes=[dtype],
+            data_spark_columns=[scol.alias(name)],
+            data_fields=[
+                field if field is None or field.struct_field is None else field.copy(name=name)
+            ],
         )
         return first_series(DataFrame(internal))
 
@@ -1068,10 +1074,15 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             raise TypeError("Series.name must be a hashable type")
         elif not isinstance(index, tuple):
             index = (index,)
-        scol = self.spark.column.alias(name_like_string(index))
+        name = name_like_string(index)
+        scol = self.spark.column.alias(name)
+        field = self._internal.data_fields[0].copy(name=name)
 
         internal = self._internal.copy(
-            column_labels=[index], data_spark_columns=[scol], column_label_names=None
+            column_labels=[index],
+            data_spark_columns=[scol],
+            data_fields=[field],
+            column_label_names=None,
         )
         psdf = DataFrame(internal)  # type: DataFrame
 
@@ -1592,7 +1603,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         else:
             return first_series(psdf)
 
-    def reindex(self, index: Optional[Any] = None, fill_value: Optional[Any] = None,) -> "Series":
+    def reindex(self, index: Optional[Any] = None, fill_value: Optional[Any] = None) -> "Series":
         """
         Conform Series to new index with optional filling logic, placing
         NA/NaN in locations having no value in the previous index. A new object
@@ -2002,7 +2013,10 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                 scol = F.when(scol < lower, lower).otherwise(scol)
             if upper is not None:
                 scol = F.when(scol > upper, upper).otherwise(scol)
-            return self._with_new_scol(scol, dtype=self.dtype)
+            return self._with_new_scol(
+                scol.alias(self._internal.data_spark_column_names[0]),
+                field=self._internal.data_fields[0],
+            )
         else:
             return self
 
@@ -2334,7 +2348,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             index_spark_columns=None,
             column_labels=[self._column_label],
             data_spark_columns=[scol_for(sdf, self._internal.data_spark_column_names[0])],
-            data_dtypes=[self.dtype],
+            data_fields=[self._internal.data_fields[0]],
             column_label_names=self._internal.column_label_names,
         )
         return first_series(DataFrame(internal))
@@ -2679,7 +2693,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             + internal.data_spark_columns
         )
         return first_series(
-            DataFrame(internal.with_new_sdf(sdf, index_dtypes=([None] * internal.index_level)))
+            DataFrame(internal.with_new_sdf(sdf, index_fields=([None] * internal.index_level)))
         )
 
     def add_suffix(self, suffix) -> "Series":
@@ -2734,7 +2748,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             + internal.data_spark_columns
         )
         return first_series(
-            DataFrame(internal.with_new_sdf(sdf, index_dtypes=([None] * internal.index_level)))
+            DataFrame(internal.with_new_sdf(sdf, index_fields=([None] * internal.index_level)))
         )
 
     def corr(self, other, method="pearson") -> float:
@@ -3485,7 +3499,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         if method == "first":
             window = (
                 Window.orderBy(
-                    asc_func(self.spark.column), asc_func(F.col(NATURAL_ORDER_COLUMN_NAME)),
+                    asc_func(self.spark.column),
+                    asc_func(F.col(NATURAL_ORDER_COLUMN_NAME)),
                 )
                 .partitionBy(*part_cols)
                 .rowsBetween(Window.unboundedPreceding, Window.currentRow)
@@ -3609,7 +3624,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             .rowsBetween(-periods, -periods)
         )
         scol = self.spark.column - F.lag(self.spark.column, periods).over(window)
-        return self._with_new_scol(scol, dtype=self.dtype)
+        return self._with_new_scol(scol, field=self._internal.data_fields[0].copy(nullable=True))
 
     def idxmax(self, skipna=True) -> Union[Tuple, Any]:
         """
@@ -3958,7 +3973,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             )
 
         internal = self._internal
-        scols = internal.index_spark_columns[len(item):] + [self.spark.column]
+        scols = internal.index_spark_columns[len(item) :] + [self.spark.column]
         rows = [internal.spark_columns[level] == index for level, index in enumerate(item)]
         sdf = internal.spark_frame.filter(reduce(lambda x, y: x & y, rows)).select(scols)
 
@@ -3978,17 +3993,17 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                 spark_frame=sdf,
                 index_spark_columns=[scol_for(sdf, SPARK_DEFAULT_INDEX_NAME)],
                 column_labels=[self._column_label],
-                data_dtypes=[self.dtype],
+                data_fields=[self._internal.data_fields[0]],
             )
             return first_series(DataFrame(internal))
         else:
             internal = internal.copy(
                 spark_frame=sdf,
                 index_spark_columns=[
-                    scol_for(sdf, col) for col in internal.index_spark_column_names[len(item):]
+                    scol_for(sdf, col) for col in internal.index_spark_column_names[len(item) :]
                 ],
-                index_dtypes=internal.index_dtypes[len(item):],
-                index_names=self._internal.index_names[len(item):],
+                index_fields=internal.index_fields[len(item) :],
+                index_names=self._internal.index_names[len(item) :],
                 data_spark_columns=[scol_for(sdf, internal.data_spark_column_names[0])],
             )
             return first_series(DataFrame(internal))
@@ -4660,7 +4675,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         internal = self._internal
         scols = (
             internal.index_spark_columns[:level]
-            + internal.index_spark_columns[level + len(key):]
+            + internal.index_spark_columns[level + len(key) :]
             + [self.spark.column]
         )
         rows = [internal.spark_columns[lvl] == index for lvl, index in enumerate(key, level)]
@@ -4675,16 +4690,16 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         index_spark_column_names = (
             internal.index_spark_column_names[:level]
-            + internal.index_spark_column_names[level + len(key):]
+            + internal.index_spark_column_names[level + len(key) :]
         )
-        index_names = internal.index_names[:level] + internal.index_names[level + len(key):]
-        index_dtypes = internal.index_dtypes[:level] + internal.index_dtypes[level + len(key):]
+        index_names = internal.index_names[:level] + internal.index_names[level + len(key) :]
+        index_fields = internal.index_fields[:level] + internal.index_fields[level + len(key) :]
 
         internal = internal.copy(
             spark_frame=sdf,
             index_spark_columns=[scol_for(sdf, col) for col in index_spark_column_names],
             index_names=index_names,
-            index_dtypes=index_dtypes,
+            index_fields=index_fields,
             data_spark_columns=[scol_for(sdf, internal.data_spark_column_names[0])],
         )
         return first_series(DataFrame(internal))
@@ -4794,7 +4809,9 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         sdf = combined._internal.spark_frame.select(
             *index_scols, cond.alias(self._internal.data_spark_column_names[0])
         ).distinct()
-        internal = self._internal.with_new_sdf(sdf, data_dtypes=[None])  # TODO: dtype?
+        internal = self._internal.with_new_sdf(
+            sdf, index_fields=combined._internal.index_fields, data_fields=[None]  # TODO: dtype?
+        )
         return first_series(DataFrame(internal))
 
     def dot(self, other: Union["Series", DataFrame]) -> Union[Scalar, "Series"]:
@@ -5425,7 +5442,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         sdf_for_index = notnull._internal.spark_frame.select(notnull._internal.index_spark_columns)
 
         tmp_join_key = verify_temp_column_name(sdf_for_index, "__tmp_join_key__")
-        sdf_for_index = InternalFrame.attach_distributed_sequence_column(
+        sdf_for_index, _ = InternalFrame.attach_distributed_sequence_column(
             sdf_for_index, tmp_join_key
         )
         # sdf_for_index:
@@ -5442,7 +5459,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         sdf_for_data = notnull._internal.spark_frame.select(
             notnull.spark.column.alias("values"), NATURAL_ORDER_COLUMN_NAME
         )
-        sdf_for_data = InternalFrame.attach_distributed_sequence_column(
+        sdf_for_data, _ = InternalFrame.attach_distributed_sequence_column(
             sdf_for_data, SPARK_DEFAULT_SERIES_NAME
         )
         # sdf_for_data:
@@ -5461,7 +5478,9 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         ).drop("values", NATURAL_ORDER_COLUMN_NAME)
 
         tmp_join_key = verify_temp_column_name(sdf_for_data, "__tmp_join_key__")
-        sdf_for_data = InternalFrame.attach_distributed_sequence_column(sdf_for_data, tmp_join_key)
+        sdf_for_data, _ = InternalFrame.attach_distributed_sequence_column(
+            sdf_for_data, tmp_join_key
+        )
         # sdf_for_index:                         sdf_for_data:
         # +----------------+-----------------+   +----------------+---+
         # |__tmp_join_key__|__index_level_0__|   |__tmp_join_key__|  0|
@@ -5476,7 +5495,12 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         sdf = sdf_for_index.join(sdf_for_data, on=tmp_join_key).drop(tmp_join_key)
 
         internal = self._internal.with_new_sdf(
-            spark_frame=sdf, data_columns=[SPARK_DEFAULT_SERIES_NAME], data_dtypes=[None]
+            spark_frame=sdf,
+            data_columns=[SPARK_DEFAULT_SERIES_NAME],
+            index_fields=[
+                InternalField(dtype=field.dtype) for field in self._internal.index_fields
+            ],
+            data_fields=[None],
         )
         psser = first_series(DataFrame(internal))
 
@@ -5523,7 +5547,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             return -1
         # We should remember the natural sequence started from 0
         seq_col_name = verify_temp_column_name(sdf, "__distributed_sequence_column__")
-        sdf = InternalFrame.attach_distributed_sequence_column(
+        sdf, _ = InternalFrame.attach_distributed_sequence_column(
             sdf.drop(NATURAL_ORDER_COLUMN_NAME), seq_col_name
         )
         # If the maximum is achieved in multiple locations, the first row position is returned.
@@ -5570,7 +5594,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             return -1
         # We should remember the natural sequence started from 0
         seq_col_name = verify_temp_column_name(sdf, "__distributed_sequence_column__")
-        sdf = InternalFrame.attach_distributed_sequence_column(
+        sdf, _ = InternalFrame.attach_distributed_sequence_column(
             sdf.drop(NATURAL_ORDER_COLUMN_NAME), seq_col_name
         )
         # If the minimum is achieved in multiple locations, the first row position is returned.
@@ -5670,15 +5694,26 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                 .otherwise(this_data_scol)
                 .alias(this_column_label)
             )
+            this_field = combined._internal.data_fields[0].copy(
+                name=this_column_label, nullable=True
+            )
+
             that_scol = (
                 F.when(this_data_scol == that_data_scol, None)
                 .otherwise(that_data_scol)
                 .alias(that_column_label)
             )
+            that_field = combined._internal.data_fields[1].copy(
+                name=that_column_label, nullable=True
+            )
         else:
             sdf = sdf.filter(~this_data_scol.eqNullSafe(that_data_scol))
+
             this_scol = this_data_scol.alias(this_column_label)
+            this_field = combined._internal.data_fields[0].copy(name=this_column_label)
+
             that_scol = that_data_scol.alias(that_column_label)
+            that_field = combined._internal.data_fields[1].copy(name=that_column_label)
 
         sdf = sdf.select(*index_scols, this_scol, that_scol, NATURAL_ORDER_COLUMN_NAME)
         internal = InternalFrame(
@@ -5687,9 +5722,10 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                 scol_for(sdf, col) for col in self._internal.index_spark_column_names
             ],
             index_names=self._internal.index_names,
-            index_dtypes=self._internal.index_dtypes,
+            index_fields=combined._internal.index_fields,
             column_labels=[(this_column_label,), (that_column_label,)],
             data_spark_columns=[scol_for(sdf, this_column_label), scol_for(sdf, that_column_label)],
+            data_fields=[this_field, that_field],
             column_label_names=[None],
         )
         return DataFrame(internal)
