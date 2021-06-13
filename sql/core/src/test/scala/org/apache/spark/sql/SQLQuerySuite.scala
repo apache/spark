@@ -4011,20 +4011,12 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     assert(dayToMinuteDF.schema.head.dataType === DayTimeIntervalType(0, 2))
     val dayToHourDF = spark.sql("SELECT INTERVAL '0 15' DAY TO HOUR")
     assert(dayToHourDF.schema.head.dataType === DayTimeIntervalType(0, 1))
-    val dayDF = spark.sql("SELECT INTERVAL '20' DAY")
-    assert(dayDF.schema.head.dataType === DayTimeIntervalType(0, 0))
     val hourToSecDF = spark.sql("SELECT INTERVAL '00:21:02.03' HOUR TO SECOND")
     assert(hourToSecDF.schema.head.dataType === DayTimeIntervalType(1, 3))
     val hourToMinuteDF = spark.sql("SELECT INTERVAL '01:02' HOUR TO MINUTE")
     assert(hourToMinuteDF.schema.head.dataType === DayTimeIntervalType(1, 2))
-    val hourDF = spark.sql("SELECT INTERVAL '11' HOUR")
-    assert(hourDF.schema.head.dataType === DayTimeIntervalType(1, 1))
     val minuteToSecDF = spark.sql("SELECT INTERVAL '10:03.775808000' MINUTE TO SECOND")
     assert(minuteToSecDF.schema.head.dataType === DayTimeIntervalType(2, 3))
-    val minuteDF = spark.sql("SELECT INTERVAL '24' MINUTE")
-    assert(minuteDF.schema.head.dataType === DayTimeIntervalType(2, 2))
-    val secDF = spark.sql("SELECT INTERVAL '03.775808000' SECOND")
-    assert(secDF.schema.head.dataType === DayTimeIntervalType(3, 3))
   }
 }
 

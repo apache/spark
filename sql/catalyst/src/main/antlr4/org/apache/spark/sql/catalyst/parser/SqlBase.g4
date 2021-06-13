@@ -877,7 +877,7 @@ interval
     ;
 
 errorCapturingMultiUnitsInterval
-    : body=multiUnitsInterval unitToUnitInterval?
+    : multiUnitsInterval unitToUnitInterval?
     ;
 
 multiUnitsInterval

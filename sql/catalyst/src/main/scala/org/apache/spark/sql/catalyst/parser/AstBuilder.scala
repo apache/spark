@@ -2347,7 +2347,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   override def visitInterval(ctx: IntervalContext): Literal = withOrigin(ctx) {
     val calendarInterval = parseIntervalLiteral(ctx)
 
-    def strToDayTimeIntervalType(str: String): Byte = str match {
+    def strToFieldIndex(str: String): Byte = str match {
       case "day" =>
         DayTimeIntervalType.DAY
       case "hour" =>
@@ -2372,16 +2372,10 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
         val fromUnit =
           ctx.errorCapturingUnitToUnitInterval.body.from.getText.toLowerCase(Locale.ROOT)
         val micros = IntervalUtils.getDuration(calendarInterval, TimeUnit.MICROSECONDS)
-
-        val from = strToDayTimeIntervalType(fromUnit)
-        val to = strToDayTimeIntervalType(toUnit)
+        val from = strToFieldIndex(fromUnit)
+        val to = strToFieldIndex(toUnit)
         Literal(micros, DayTimeIntervalType(from, to))
       }
-    } else if (ctx.errorCapturingMultiUnitsInterval != null && !conf.legacyIntervalEnabled) {
-      val micros = IntervalUtils.getDuration(calendarInterval, TimeUnit.MICROSECONDS)
-      val unit = strToDayTimeIntervalType(
-        ctx.errorCapturingMultiUnitsInterval.body.unit.get(0).getText.toLowerCase(Locale.ROOT))
-      Literal(micros, DayTimeIntervalType(unit, unit))
     } else {
       Literal(calendarInterval, CalendarIntervalType)
     }
