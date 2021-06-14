@@ -499,6 +499,14 @@ package object config {
       .bytesConf(ByteUnit.BYTE)
       .createOptional
 
+  private[spark] val STORAGE_DECOMMISSION_ON_DISK_ONLY =
+    ConfigBuilder("spark.storage.decommission.diskOnly")
+      .doc("When this conf is enabled, blocks will be put on disk only, even the blocks which" +
+        " were on memory will be put on disk only.")
+      .version("3.2.0")
+      .booleanConf
+      .createOptional
+
   private[spark] val STORAGE_REPLICATION_TOPOLOGY_FILE =
     ConfigBuilder("spark.storage.replication.topologyFile")
       .version("2.1.0")

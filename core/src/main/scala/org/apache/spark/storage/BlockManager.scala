@@ -1639,13 +1639,16 @@ private[spark] class BlockManager(
       blockId: BlockId,
       existingReplicas: Set[BlockManagerId],
       maxReplicas: Int,
-      maxReplicationFailures: Option[Int] = None): Boolean = {
+      maxReplicationFailures: Option[Int] = None,
+      isDecommissioning: Boolean = false): Boolean = {
     logInfo(s"Using $blockManagerId to pro-actively replicate $blockId")
+    val putOnDiskOnly = isDecommissioning &&
+      conf.get(config.STORAGE_DECOMMISSION_ON_DISK_ONLY).getOrElse(false)
     blockInfoManager.lockForReading(blockId).forall { info =>
       val data = doGetLocalBytes(blockId, info)
       val storageLevel = StorageLevel(
-        useDisk = info.level.useDisk,
-        useMemory = info.level.useMemory,
+        useDisk = putOnDiskOnly || info.level.useDisk,
+        useMemory = !putOnDiskOnly && info.level.useMemory,
         useOffHeap = info.level.useOffHeap,
         deserialized = info.level.deserialized,
         replication = maxReplicas)
