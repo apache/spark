@@ -1048,6 +1048,7 @@ class CodegenContext extends Logging {
     // Get all the expressions that appear at least twice and set up the state for subexpression
     // elimination.
     val commonExprs = equivalentExpressions.getAllEquivalentExprs(1)
+    println(s"expressions: $expressions, commonExprs: $commonExprs")
 
     val nonSplitExprCode = {
       commonExprs.map { exprs =>
