@@ -1946,6 +1946,26 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     assert(master.getLocations(blockIdLarge) === Seq(store1.blockManagerId))
   }
 
+  test("SPARK-35754: test migratig blocks are put on disk only") {
+    val testConf = new SparkConf()
+      .set("spark.storage.decommission.diskOnly", "true")
+    val store1 = makeBlockManager(3500, "exec1", testConf = Option(testConf))
+    val store2 = makeBlockManager(1000, "exec2", testConf = Option(testConf))
+
+    val data = new Array[Byte](1500)
+    val blockId = rdd(0, 0)
+
+
+    store1.putSingle(blockId, data, StorageLevel.MEMORY_ONLY)
+
+    val decomManager = new BlockManagerDecommissioner(conf, store1)
+    decomManager.decommissionRddCacheBlocks()
+    // Block is put in disk only even though it was in memory on decommissioning block manager
+    val storageLevel = master.getBlockStatus(blockId).toArray.head._2.storageLevel
+    assert(!storageLevel.useMemory && storageLevel.useDisk)
+
+  }
+
   private def testShuffleBlockDecommissioning(maxShuffleSize: Option[Int], willReject: Boolean) = {
     maxShuffleSize.foreach{ size =>
       conf.set(STORAGE_DECOMMISSION_SHUFFLE_MAX_DISK_SIZE.key, s"${size}b")
