@@ -24,7 +24,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, JoinedRow, Literal, SpecificInternalRow, UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, JoinedRow, Literal, SafeProjection, SpecificInternalRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.execution.streaming.StatefulOperatorStateInfo
 import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper._
 import org.apache.spark.sql.types.{BooleanType, LongType, StructField, StructType}
@@ -269,18 +269,18 @@ class SymmetricHashJoinStateManager(
         // The backing store is arraylike - we as the caller are responsible for filling back in
         // any hole. So we swap the last element into the hole and decrement numValues to shorten.
         // clean
-        if (numValues > 1) {
+        if (index != numValues - 1) {
           val valuePairAtMaxIndex = keyWithIndexToValue.get(currentKey, numValues - 1)
           if (valuePairAtMaxIndex != null) {
             keyWithIndexToValue.put(currentKey, index, valuePairAtMaxIndex.value,
               valuePairAtMaxIndex.matched)
           } else {
-            keyWithIndexToValue.put(currentKey, index, null, false)
+            val projectedKey = getInternalRowOfKeyWithIndex(currentKey)
+            logWarning(s"`keyWithIndexToValue` returns a null value for index ${numValues - 1} " +
+              s"at current key $projectedKey.")
           }
-          keyWithIndexToValue.remove(currentKey, numValues - 1)
-        } else {
-          keyWithIndexToValue.remove(currentKey, 0)
         }
+        keyWithIndexToValue.remove(currentKey, numValues - 1)
         numValues -= 1
         valueRemoved = true
 
@@ -290,6 +290,12 @@ class SymmetricHashJoinStateManager(
       override def close(): Unit = {}
     }
   }
+
+  // Unsafe row to internal row projection for key of `keyWithIndexToValue`.
+  lazy private val keyProjection = SafeProjection.create(keySchema)
+
+  /** Projects the key of unsafe row to internal row for printable log message. */
+  def getInternalRowOfKeyWithIndex(currentKey: UnsafeRow): InternalRow = keyProjection(currentKey)
 
   /** Commit all the changes to all the state stores */
   def commit(): Unit = {

@@ -314,9 +314,9 @@ specific plotting methods of the form ``DataFrame.plot.<kind>``.
    DataFrame.hist
    DataFrame.kde
 
-Koalas-specific
----------------
-``DataFrame.pandas_on_spark`` provides Koalas-specific features that exists only in Koalas.
+Pandas-on-Spark specific
+------------------------
+``DataFrame.pandas_on_spark`` provides pandas-on-Spark specific features that exists only in pandas APIs on Spark.
 These can be accessed by ``DataFrame.pandas_on_spark.<function/property>``.
 
 .. autosummary::

@@ -49,7 +49,7 @@ class ArrowUtilsSuite extends SparkFunSuite {
     roundtrip(DecimalType.SYSTEM_DEFAULT)
     roundtrip(DateType)
     roundtrip(YearMonthIntervalType)
-    roundtrip(DayTimeIntervalType)
+    roundtrip(DayTimeIntervalType())
     val tsExMsg = intercept[UnsupportedOperationException] {
       roundtrip(TimestampType)
     }

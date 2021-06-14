@@ -134,7 +134,7 @@ object InternalRow {
       case ShortType => (input, ordinal) => input.getShort(ordinal)
       case IntegerType | DateType | YearMonthIntervalType =>
         (input, ordinal) => input.getInt(ordinal)
-      case LongType | TimestampType | DayTimeIntervalType =>
+      case LongType | TimestampType | TimestampWithoutTZType | _: DayTimeIntervalType =>
         (input, ordinal) => input.getLong(ordinal)
       case FloatType => (input, ordinal) => input.getFloat(ordinal)
       case DoubleType => (input, ordinal) => input.getDouble(ordinal)
@@ -171,7 +171,7 @@ object InternalRow {
     case ShortType => (input, v) => input.setShort(ordinal, v.asInstanceOf[Short])
     case IntegerType | DateType | YearMonthIntervalType =>
       (input, v) => input.setInt(ordinal, v.asInstanceOf[Int])
-    case LongType | TimestampType | DayTimeIntervalType =>
+    case LongType | TimestampType | TimestampWithoutTZType | _: DayTimeIntervalType =>
       (input, v) => input.setLong(ordinal, v.asInstanceOf[Long])
     case FloatType => (input, v) => input.setFloat(ordinal, v.asInstanceOf[Float])
     case DoubleType => (input, v) => input.setDouble(ordinal, v.asInstanceOf[Double])

@@ -3064,25 +3064,25 @@ class Frame(object, metaclass=ABCMeta):
 
     @property
     def at(self) -> AtIndexer:
-        return AtIndexer(self)
+        return AtIndexer(self)  # type: ignore
 
     at.__doc__ = AtIndexer.__doc__
 
     @property
     def iat(self) -> iAtIndexer:
-        return iAtIndexer(self)
+        return iAtIndexer(self)  # type: ignore
 
     iat.__doc__ = iAtIndexer.__doc__
 
     @property
     def iloc(self) -> iLocIndexer:
-        return iLocIndexer(self)
+        return iLocIndexer(self)  # type: ignore
 
     iloc.__doc__ = iLocIndexer.__doc__
 
     @property
     def loc(self) -> LocIndexer:
-        return LocIndexer(self)
+        return LocIndexer(self)  # type: ignore
 
     loc.__doc__ = LocIndexer.__doc__
 

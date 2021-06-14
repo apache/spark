@@ -1,20 +1,20 @@
-===============================
-Working with pandas and PySpark
-===============================
+=====================================
+From/to pandas and PySpark DataFrames
+=====================================
 
 .. currentmodule:: pyspark.pandas
 
 Users from pandas and/or PySpark face API compatibility issue sometimes when they
-work with Koalas. Since Koalas does not target 100% compatibility of both pandas and
+work with pandas APIs on Spark. Since pandas APIs on Spark do not target 100% compatibility of both pandas and
 PySpark, users need to do some workaround to port their pandas and/or PySpark codes or
-get familiar with Koalas in this case. This page aims to describe it.
+get familiar with pandas APIs on Spark in this case. This page aims to describe it.
 
 
 pandas
 ------
 
 pandas users can access to full pandas APIs by calling :func:`DataFrame.to_pandas`.
-Koalas DataFrame and pandas DataFrame are similar. However, the former is distributed
+pandas-on-Spark DataFrame and pandas DataFrame are similar. However, the former is distributed
 and the latter is in a single machine. When converting to each other, the data is
 transferred between multiple machines and the single client machine.
 
@@ -39,7 +39,7 @@ as below:
           [8],
           [9]])
 
-pandas DataFrame can be a Koalas DataFrame easily as below:
+pandas DataFrame can be a pandas-on-Spark DataFrame easily as below:
 
 .. code-block:: python
 
@@ -56,15 +56,15 @@ pandas DataFrame can be a Koalas DataFrame easily as below:
    8   8
    9   9
 
-Note that converting Koalas DataFrame to pandas requires to collect all the data into the client machine; therefore,
-if possible, it is recommended to use Koalas or PySpark APIs instead.
+Note that converting pandas-on-Spark DataFrame to pandas requires to collect all the data into the client machine; therefore,
+if possible, it is recommended to use pandas APIs on Spark or PySpark APIs instead.
 
 
 PySpark
 -------
 
 PySpark users can access to full PySpark APIs by calling :func:`DataFrame.to_spark`.
-Koalas DataFrame and Spark DataFrame are virtually interchangeable.
+pandas-on-Spark DataFrame and Spark DataFrame are virtually interchangeable.
 
 For example, if you need to call ``spark_df.filter(...)`` of Spark DataFrame, you can do
 as below:
@@ -85,7 +85,7 @@ as below:
    |  9|
    +---+
 
-Spark DataFrame can be a Koalas DataFrame easily as below:
+Spark DataFrame can be a pandas-on-Spark DataFrame easily as below:
 
 .. code-block:: python
 
@@ -96,13 +96,13 @@ Spark DataFrame can be a Koalas DataFrame easily as below:
    2   8
    3   9
 
-However, note that it requires to create new default index in case Koalas DataFrame is created from
+However, note that it requires to create new default index in case pandas-on-Spark DataFrame is created from
 Spark DataFrame. See `Default Index Type <options.rst#default-index-type>`_. In order to avoid this overhead, specify the column
 to use as an index when possible.
 
 .. code-block:: python
 
-   >>> # Create a Koalas DataFrame with an explicit index.
+   >>> # Create a pandas-on-Spark DataFrame with an explicit index.
    ... kdf = ks.DataFrame({'id': range(10)}, index=range(10))
    >>> # Keep the explicit index.
    ... sdf = kdf.to_spark(index_col='index')

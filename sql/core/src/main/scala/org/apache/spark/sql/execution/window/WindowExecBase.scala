@@ -99,7 +99,7 @@ trait WindowExecBase extends UnaryExecNode {
           case (TimestampType, CalendarIntervalType) => TimeAdd(expr, boundOffset, Some(timeZone))
           case (TimestampType, YearMonthIntervalType) =>
             TimestampAddYMInterval(expr, boundOffset, Some(timeZone))
-          case (TimestampType, DayTimeIntervalType) => TimeAdd(expr, boundOffset, Some(timeZone))
+          case (TimestampType, _: DayTimeIntervalType) => TimeAdd(expr, boundOffset, Some(timeZone))
           case (a, b) if a == b => Add(expr, boundOffset)
         }
         val bound = MutableProjection.create(boundExpr :: Nil, child.output)

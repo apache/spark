@@ -121,7 +121,7 @@ private[hive] class SparkExecuteStatementOperation(
           false,
           timeFormatters)
       case _: ArrayType | _: StructType | _: MapType | _: UserDefinedType[_] |
-          YearMonthIntervalType | DayTimeIntervalType =>
+          YearMonthIntervalType | _: DayTimeIntervalType =>
         to += toHiveString((from.get(ordinal), dataTypes(ordinal)), false, timeFormatters)
     }
   }
@@ -378,7 +378,7 @@ object SparkExecuteStatementOperation {
         case NullType => "void"
         case CalendarIntervalType => StringType.catalogString
         case YearMonthIntervalType => "interval_year_month"
-        case DayTimeIntervalType => "interval_day_time"
+        case _: DayTimeIntervalType => "interval_day_time"
         case other => other.catalogString
       }
       new FieldSchema(field.name, attrTypeString, field.getComment.getOrElse(""))

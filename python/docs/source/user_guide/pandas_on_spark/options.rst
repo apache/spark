@@ -3,7 +3,7 @@ Options and settings
 ====================
 .. currentmodule:: pyspark.pandas
 
-Koalas has an options system that lets you customize some aspects of its behaviour,
+Pandas APIs on Spark have an options system that lets you customize some aspects of its behaviour,
 display-related options being those the user is most likely to adjust.
 
 Options have a full "dotted-style", case-insensitive name (e.g. ``display.max_rows``).
@@ -92,7 +92,7 @@ are restored automatically when you exit the `with` block:
 Operations on different DataFrames
 ----------------------------------
 
-Koalas disallows the operations on different DataFrames (or Series) by default to prevent expensive
+Pandas APIs on Spark disallow the operations on different DataFrames (or Series) by default to prevent expensive
 operations. It internally performs a join operation which can be expensive in general.
 
 This can be enabled by setting `compute.ops_on_diff_frames` to `True` to allow such cases.
@@ -134,9 +134,9 @@ See the examples below.
 Default Index type
 ------------------
 
-In Koalas, the default index is used in several cases, for instance,
-when Spark DataFrame is converted into Koalas DataFrame. In this case, internally Koalas attaches a
-default index into Koalas DataFrame.
+In pandas APIs on Spark, the default index is used in several cases, for instance,
+when Spark DataFrame is converted into pandas-on-Spark DataFrame. In this case, internally pandas APIs on Spark attache a
+default index into pandas-on-Spark DataFrame.
 
 There are several types of the default index that can be configured by `compute.default_index_type` as below:
 
@@ -230,21 +230,23 @@ Available options
 =============================== ============== =====================================================
 Option                          Default        Description
 =============================== ============== =====================================================
-display.max_rows                1000           This sets the maximum number of rows Koalas should
-                                               output when printing out various output. For example,
-                                               this value determines the number of rows to be shown
-                                               at the repr() in a dataframe. Set `None` to unlimit
-                                               the input length. Default is 1000.
+display.max_rows                1000           This sets the maximum number of rows pandas-on-Spark
+                                               should output when printing out various output. For
+                                               example, this value determines the number of rows to
+                                               be shown at the repr() in a dataframe. Set `None` to
+                                               unlimit the input length. Default is 1000.
 compute.max_rows                1000           'compute.max_rows' sets the limit of the current
-                                               Koalas DataFrame. Set `None` to unlimit the input
-                                               length. When the limit is set, it is executed by the
-                                               shortcut by collecting the data into the driver, and
-                                               then using the pandas API. If the limit is unset, the
-                                               operation is executed by PySpark. Default is 1000.
+                                               pandas-on-Spark DataFrame. Set `None` to unlimit the
+                                               input length. When the limit is set, it is executed
+                                               by the shortcut by collecting the data into the
+                                               driver, and then using the pandas API. If the limit
+                                               is unset, the operation is executed by PySpark.
+                                               Default is 1000.
 compute.shortcut_limit          1000           'compute.shortcut_limit' sets the limit for a
                                                shortcut. It computes specified number of rows and
                                                use its schema. When the dataframe length is larger
-                                               than this limit, Koalas uses PySpark to compute.
+                                               than this limit, pandas-on-Spark uses PySpark to
+                                               compute.
 compute.ops_on_diff_frames      False          This determines whether or not to operate between two
                                                different dataframes. For example, 'combine_frames'
                                                function internally performs a join operation which
@@ -254,12 +256,12 @@ compute.ops_on_diff_frames      False          This determines whether or not to
 compute.default_index_type      'sequence'     This sets the default index type: sequence,
                                                distributed and distributed-sequence.
 compute.ordered_head            False          'compute.ordered_head' sets whether or not to operate
-                                               head with natural ordering. Koalas does not guarantee
-                                               the row ordering so `head` could return some rows
-                                               from distributed partitions. If
-                                               'compute.ordered_head' is set to True, Koalas
-                                               performs natural ordering beforehand, but it will
-                                               cause a performance overhead.
+                                               head with natural ordering. pandas-on-Spark does not
+                                               guarantee the row ordering so `head` could return
+                                               some rows from distributed partitions. If
+                                               'compute.ordered_head' is set to True, pandas-on-
+                                               Spark performs natural ordering beforehand, but it
+                                               will cause a performance overhead.
 plotting.max_rows               1000           'plotting.max_rows' sets the visual limit on top-n-
                                                based plots such as `plot.bar` and `plot.pie`. If it
                                                is set to 1000, the first 1000 data points will be

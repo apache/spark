@@ -64,7 +64,7 @@ class DataTypeParserSuite extends SparkFunSuite {
   checkDataType("void", NullType)
   checkDataType("interval", CalendarIntervalType)
   checkDataType("INTERVAL YEAR TO MONTH", YearMonthIntervalType)
-  checkDataType("interval day to second", DayTimeIntervalType)
+  checkDataType("interval day to second", DayTimeIntervalType())
 
   checkDataType("array<doublE>", ArrayType(DoubleType, true))
   checkDataType("Array<map<int, tinYint>>", ArrayType(MapType(IntegerType, ByteType, true), true))
@@ -119,11 +119,16 @@ class DataTypeParserSuite extends SparkFunSuite {
   )
   // Empty struct.
   checkDataType("strUCt<>", StructType(Nil))
+  // struct data type definition without ":"
+  checkDataType("struct<x int, y string>",
+    StructType(
+      StructField("x", IntegerType, true) ::
+      StructField("y", StringType, true) :: Nil)
+  )
 
   unsupported("it is not a data type")
   unsupported("struct<x+y: int, 1.1:timestamp>")
   unsupported("struct<x: int")
-  unsupported("struct<x int, y string>")
 
   test("Do not print empty parentheses for no params") {
     assert(intercept("unknown").getMessage.contains("unknown is not supported"))

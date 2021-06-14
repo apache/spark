@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan}
 import org.apache.spark.sql.catalyst.trees.LeafLike
 import org.apache.spark.sql.connector.ExternalCommandRunner
-import org.apache.spark.sql.execution.{ExplainMode, LeafExecNode, SparkPlan, UnaryExecNode}
+import org.apache.spark.sql.execution.{CommandExecutionMode, ExplainMode, LeafExecNode, SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.streaming.IncrementalExecution
 import org.apache.spark.sql.types._
@@ -163,7 +163,8 @@ case class ExplainCommand(
 
   // Run through the optimizer to generate the physical plan.
   override def run(sparkSession: SparkSession): Seq[Row] = try {
-    val outputString = sparkSession.sessionState.executePlan(logicalPlan).explainString(mode)
+    val outputString = sparkSession.sessionState.executePlan(logicalPlan, CommandExecutionMode.SKIP)
+      .explainString(mode)
     Seq(Row(outputString))
   } catch { case NonFatal(cause) =>
     ("Error occurred during query planning: \n" + cause.getMessage).split("\n").map(Row(_))

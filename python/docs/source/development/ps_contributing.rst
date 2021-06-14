@@ -17,9 +17,9 @@ The largest amount of work consists simply of implementing the pandas API using 
 
 3. Improve the project's documentation.
 
-4. Write blog posts or tutorial articles evangelizing Koalas and help new users learn Koalas.
+4. Write blog posts or tutorial articles evangelizing pandas APIs on Spark and help new users learn pandas APIs on Spark.
 
-5. Give a talk about Koalas at your local meetup or a conference.
+5. Give a talk about pandas APIs on Spark at your local meetup or a conference.
 
 
 Step-by-step Guide For Code Contributions
@@ -48,7 +48,7 @@ Environment Setup
 Conda
 -----
 
-If you are using Conda, the Koalas installation and development environment are as follows.
+If you are using Conda, the pandas APIs on Spark installation and development environment are as follows.
 
 .. code-block:: bash
 
@@ -79,7 +79,7 @@ With Python 3.6+, pip can be used as below to install and set up the development
 Running Tests
 =============
 
-There is a script `./dev/pytest` which is exactly same as `pytest` but with some default settings to run Koalas tests easily.
+There is a script `./dev/pytest` which is exactly same as `pytest` but with some default settings to run the tests easily.
 
 To run all the tests, similar to our CI pipeline:
 
@@ -131,13 +131,13 @@ We follow `PEP 8 <https://www.python.org/dev/peps/pep-0008/>`_ with one exceptio
 Doctest Conventions
 ===================
 
-When writing doctests, usually the doctests in pandas are converted into Koalas to make sure the same codes work in Koalas.
+When writing doctests, usually the doctests in pandas are converted into pandas APIs on Spark to make sure the same codes work in pandas APIs on Spark.
 In general, doctests should be grouped logically by separating a newline.
 
 For instance, the first block is for the statements for preparation, the second block is for using the function with a specific argument,
 and third block is for another argument. As a example, please refer `DataFrame.rsub <https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.DataFrame.rsub.html#pandas.DataFrame.rsub>`_ in pandas.
 
-These blocks should be consistently separated in Koalas, and more doctests should be added if the coverage of the doctests or the number of examples to show is not enough even though they are different from pandas'.
+These blocks should be consistently separated in pandas-on-Spark doctests, and more doctests should be added if the coverage of the doctests or the number of examples to show is not enough even though they are different from pandas'.
 
 Release Guide
 =============
@@ -176,7 +176,7 @@ Only project maintainers can do the following to publish a release.
       # for release
       python3 -m twine upload --repository-url https://upload.pypi.org/legacy/ dist/koalas-$package_version-py3-none-any.whl dist/koalas-$package_version.tar.gz
 
-5. Verify the uploaded package can be installed and executed. One unofficial tip is to run the doctests of Koalas within a Python interpreter after installing it.
+5. Verify the uploaded package can be installed and executed. One unofficial tip is to run the doctests of pandas APIs on Spark within a Python interpreter after installing it.
 
   .. code-block:: python
 

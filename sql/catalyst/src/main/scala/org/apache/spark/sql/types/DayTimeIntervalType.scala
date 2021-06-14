@@ -21,6 +21,8 @@ import scala.math.Ordering
 import scala.reflect.runtime.universe.typeTag
 
 import org.apache.spark.annotation.Unstable
+import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.types.DayTimeIntervalType.fieldToString
 
 /**
  * The type represents day-time intervals of the SQL standard. A day-time interval is made up
@@ -32,12 +34,15 @@ import org.apache.spark.annotation.Unstable
  *
  * `DayTimeIntervalType` represents positive as well as negative day-time intervals.
  *
- * Please use the singleton `DataTypes.DayTimeIntervalType` to refer the type.
+ * @param startField The leftmost field which the type comprises of. Valid values:
+ *                   0 (DAY), 1 (HOUR), 2 (MINUTE), 3 (SECOND).
+ * @param endField The rightmost field which the type comprises of. Valid values:
+ *                 0 (DAY), 1 (HOUR), 2 (MINUTE), 3 (SECOND).
  *
  * @since 3.2.0
  */
 @Unstable
-class DayTimeIntervalType private() extends AtomicType {
+case class DayTimeIntervalType(startField: Byte, endField: Byte) extends AtomicType {
   /**
    * Internally, values of day-time intervals are stored in `Long` values as amount of time in terms
    * of microseconds that are calculated by the formula:
@@ -57,16 +62,49 @@ class DayTimeIntervalType private() extends AtomicType {
 
   private[spark] override def asNullable: DayTimeIntervalType = this
 
-  override def typeName: String = "interval day to second"
+  override val typeName: String = {
+    val startFieldName = fieldToString(startField)
+    val endFieldName = fieldToString(endField)
+    if (startFieldName == endFieldName) {
+      s"interval $startFieldName"
+    } else if (startField < endField) {
+      s"interval $startFieldName to $endFieldName"
+    } else {
+      throw QueryCompilationErrors.invalidDayTimeIntervalType(startFieldName, endFieldName)
+    }
+  }
 }
 
 /**
- * The companion case object and its class is separated so the companion object also subclasses
- * the DayTimeIntervalType class. Otherwise, the companion object would be of type
- * "DayTimeIntervalType$" in byte code. Defined with a private constructor so the companion object
- * is the only possible instantiation.
+ * Extra factory methods and pattern matchers for DayTimeIntervalType.
  *
  * @since 3.2.0
  */
 @Unstable
-case object DayTimeIntervalType extends DayTimeIntervalType
+case object DayTimeIntervalType extends AbstractDataType {
+  val DAY: Byte = 0
+  val HOUR: Byte = 1
+  val MINUTE: Byte = 2
+  val SECOND: Byte = 3
+  val dayTimeFields = Seq(DAY, HOUR, MINUTE, SECOND)
+
+  def fieldToString(field: Byte): String = field match {
+    case DAY => "day"
+    case HOUR => "hour"
+    case MINUTE => "minute"
+    case SECOND => "second"
+    case invalid => throw QueryCompilationErrors.invalidDayTimeField(invalid)
+  }
+
+  val DEFAULT = DayTimeIntervalType(DAY, SECOND)
+
+  def apply(): DayTimeIntervalType = DEFAULT
+
+  override private[sql] def defaultConcreteType: DataType = DEFAULT
+
+  override private[sql] def acceptsType(other: DataType): Boolean = {
+    other.isInstanceOf[DayTimeIntervalType]
+  }
+
+  override private[sql] def simpleString: String = defaultConcreteType.simpleString
+}

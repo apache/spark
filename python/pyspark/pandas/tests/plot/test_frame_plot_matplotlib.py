@@ -411,6 +411,19 @@ class DataFramePlotMatplotlibTest(PandasOnSparkTestCase, TestUtils):
             bin2 = self.plot_to_base64(ax2)
             self.assertEqual(bin1, bin2)
 
+            non_numeric_pdf = self.pdf1.copy()
+            non_numeric_pdf.c = ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k"]
+            non_numeric_psdf = ps.from_pandas(non_numeric_pdf)
+            ax1 = non_numeric_pdf.plot.hist(
+                x=non_numeric_pdf.columns[0], y=non_numeric_pdf.columns[1], bins=3
+            )
+            bin1 = self.plot_to_base64(ax1)
+            ax2 = non_numeric_psdf.plot.hist(
+                x=non_numeric_pdf.columns[0], y=non_numeric_pdf.columns[1], bins=3
+            )
+            bin2 = self.plot_to_base64(ax2)
+            self.assertEqual(bin1, bin2)
+
         pdf1 = self.pdf1
         psdf1 = self.psdf1
         check_hist_plot(pdf1, psdf1)

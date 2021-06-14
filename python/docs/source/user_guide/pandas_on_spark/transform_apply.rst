@@ -2,11 +2,11 @@
 Transform and apply a function
 ==============================
 
-.. NOTE: the images are stored at https://github.com/pyspark.pandas/issues/1443. Feel free to edit and/or add.
+.. NOTE: the images are stored at https://github.com/koalas/issues/1443. Feel free to edit and/or add.
 
 .. currentmodule:: pyspark.pandas
 
-There are many APIs that allow users to apply a function against Koalas DataFrame such as
+There are many APIs that allow users to apply a function against pandas-on-Spark DataFrame such as
 :func:`DataFrame.transform`, :func:`DataFrame.apply`, :func:`DataFrame.koalas.transform_batch`,
 :func:`DataFrame.koalas.apply_batch`, :func:`Series.koalas.transform_batch`, etc. Each has a distinct
 purpose and works differently internally. This section describes the differences among
@@ -34,7 +34,7 @@ to return the same length of the input and the latter does not require this. See
    ...
    >>> kdf.apply(pandas_plus)
 
-In this case, each function takes a pandas Series, and Koalas computes the functions in a distributed manner as below.
+In this case, each function takes a pandas Series, and pandas APIs on Spark compute the functions in a distributed manner as below.
 
 .. image:: https://user-images.githubusercontent.com/6477701/80076790-a1cf0680-8587-11ea-8b08-8dc694071ba0.png
   :alt: transform and apply
@@ -66,7 +66,7 @@ Please refer the API documentations.
 -----------------------------------------------------
 
 In :func:`DataFrame.koalas.transform_batch`, :func:`DataFrame.koalas.apply_batch`, :func:`Series.koalas.transform_batch`, etc., the ``batch``
-postfix means each chunk in Koalas DataFrame or Series. The APIs slice the Koalas DataFrame or Series, and
+postfix means each chunk in pandas-on-Spark DataFrame or Series. The APIs slice the pandas-on-Spark DataFrame or Series, and
 then applies the given function with pandas DataFrame or Series as input and output. See the examples below:
 
 .. code-block:: python
@@ -85,8 +85,8 @@ then applies the given function with pandas DataFrame or Series as input and out
    ...
    >>> kdf.koalas.apply_batch(pandas_plus)
 
-The functions in both examples take a pandas DataFrame as a chunk of Koalas DataFrame, and output a pandas DataFrame.
-Koalas combines the pandas DataFrames as a Koalas DataFrame.
+The functions in both examples take a pandas DataFrame as a chunk of pandas-on-Spark DataFrame, and output a pandas DataFrame.
+Pandas APIs on Spark combine the pandas DataFrames as a pandas-on-Spark DataFrame.
 
 Note that :func:`DataFrame.koalas.transform_batch` has the length restriction - the length of input and output should be
 the same whereas :func:`DataFrame.koalas.apply_batch` does not.  However, it is important to know that
@@ -101,7 +101,7 @@ treated that it belongs to a new different DataFrame. See also
   :width: 650
 
 In case of :func:`Series.koalas.transform_batch`, it is also similar with :func:`DataFrame.koalas.transform_batch`; however, it takes
-a pandas Series as a chunk of Koalas Series.
+a pandas Series as a chunk of pandas-on-Spark Series.
 
 .. code-block:: python
 
@@ -111,7 +111,7 @@ a pandas Series as a chunk of Koalas Series.
    ...
    >>> kdf.a.koalas.transform_batch(pandas_plus)
 
-Under the hood, each batch of Koalas Series is split to multiple pandas Series, and each function computes on that as below:
+Under the hood, each batch of pandas-on-Spark Series is split to multiple pandas Series, and each function computes on that as below:
 
 .. image:: https://user-images.githubusercontent.com/6477701/80076795-a3003380-8587-11ea-8b73-186e4047f8c0.png
   :alt: koalas.transform_batch in Series
