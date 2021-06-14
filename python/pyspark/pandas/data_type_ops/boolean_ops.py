@@ -304,3 +304,7 @@ class BooleanExtensionOps(BooleanOps):
             return left | right
 
         return column_op(or_func)(left, right)
+
+    def restore(self, col: pd.Series) -> pd.Series:
+        """Restore column when to_pandas."""
+        return col.astype(self.dtype)
