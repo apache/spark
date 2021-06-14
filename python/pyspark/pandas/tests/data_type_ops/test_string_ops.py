@@ -180,7 +180,33 @@ class StringOpsTest(PandasOnSparkTestCase, TestCasesUtils):
 @unittest.skipIf(
     not extension_object_dtypes_available, "pandas extension object dtypes are not available"
 )
-class StringExtensionOpsTest(PandasOnSparkTestCase, TestCasesUtils):
+class StringExtensionOpsTest(StringOpsTest, PandasOnSparkTestCase, TestCasesUtils):
+    @property
+    def pser(self):
+        return pd.Series(["x", "y", "z", None], dtype="string")
+
+    @property
+    def psser(self):
+        return ps.from_pandas(self.pser)
+
+    def test_radd(self):
+        self.assert_eq("x" + self.pser, ("x" + self.psser).astype("string"))
+        self.assertRaises(TypeError, lambda: 1 + self.psser)
+
+    def test_mul(self):
+        self.assertRaises(TypeError, lambda: self.psser * "x")
+        self.assert_eq(self.pser * 1, self.psser * 1)
+
+        with option_context("compute.ops_on_diff_frames", True):
+            for pser, psser in self.pser_psser_pairs:
+                if psser.dtype in [np.int32, np.int64]:
+                    self.assert_eq(
+                        ps.Series(["x", "yy", "zzz", None]).astype("string"),
+                        (self.psser * psser).sort_index(),
+                    )
+                else:
+                    self.assertRaises(TypeError, lambda: self.psser * psser)
+
     def test_from_to_pandas(self):
         data = ["x", "y", "z", None]
         pser = pd.Series(data, dtype="string")
