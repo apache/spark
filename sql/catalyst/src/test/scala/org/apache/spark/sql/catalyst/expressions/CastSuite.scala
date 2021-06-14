@@ -39,7 +39,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.catalyst.util.IntervalUtils.microsToDuration
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.types.DataTypeTestUtils.dayTimeIntervalTypes
+import org.apache.spark.sql.types.DataTypeTestUtils.{dayTimeIntervalTypes, yearMonthIntervalTypes}
 import org.apache.spark.unsafe.types.UTF8String
 
 abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
@@ -816,8 +816,10 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
         s"INTERVAL '$intervalPayload' YEAR TO MONTH")
     }
 
-    checkConsistencyBetweenInterpretedAndCodegen(
-      (child: Expression) => Cast(child, StringType), YearMonthIntervalType)
+    yearMonthIntervalTypes.foreach { it =>
+      checkConsistencyBetweenInterpretedAndCodegen(
+        (child: Expression) => Cast(child, StringType), it)
+    }
   }
 
   test("SPARK-34668: cast day-time interval to string") {
@@ -1877,43 +1879,43 @@ class CastSuite extends CastSuiteBase {
 
   test("SPARK-35111: Cast string to year-month interval") {
     checkEvaluation(cast(Literal.create("INTERVAL '1-0' YEAR TO MONTH"),
-      YearMonthIntervalType), 12)
+      YearMonthIntervalType()), 12)
     checkEvaluation(cast(Literal.create("INTERVAL '-1-0' YEAR TO MONTH"),
-      YearMonthIntervalType), -12)
+      YearMonthIntervalType()), -12)
     checkEvaluation(cast(Literal.create("INTERVAL -'-1-0' YEAR TO MONTH"),
-      YearMonthIntervalType), 12)
+      YearMonthIntervalType()), 12)
     checkEvaluation(cast(Literal.create("INTERVAL +'-1-0' YEAR TO MONTH"),
-      YearMonthIntervalType), -12)
+      YearMonthIntervalType()), -12)
     checkEvaluation(cast(Literal.create("INTERVAL +'+1-0' YEAR TO MONTH"),
-      YearMonthIntervalType), 12)
+      YearMonthIntervalType()), 12)
     checkEvaluation(cast(Literal.create("INTERVAL +'1-0' YEAR TO MONTH"),
-      YearMonthIntervalType), 12)
+      YearMonthIntervalType()), 12)
     checkEvaluation(cast(Literal.create(" interval +'1-0' YEAR  TO MONTH "),
-      YearMonthIntervalType), 12)
-    checkEvaluation(cast(Literal.create(" -1-0 "), YearMonthIntervalType), -12)
-    checkEvaluation(cast(Literal.create("-1-0"), YearMonthIntervalType), -12)
-    checkEvaluation(cast(Literal.create(null, StringType), YearMonthIntervalType), null)
+      YearMonthIntervalType()), 12)
+    checkEvaluation(cast(Literal.create(" -1-0 "), YearMonthIntervalType()), -12)
+    checkEvaluation(cast(Literal.create("-1-0"), YearMonthIntervalType()), -12)
+    checkEvaluation(cast(Literal.create(null, StringType), YearMonthIntervalType()), null)
 
     Seq("0-0", "10-1", "-178956970-7", "178956970-7", "-178956970-8").foreach { interval =>
       val ansiInterval = s"INTERVAL '$interval' YEAR TO MONTH"
       checkEvaluation(
-        cast(cast(Literal.create(interval), YearMonthIntervalType), StringType), ansiInterval)
+        cast(cast(Literal.create(interval), YearMonthIntervalType()), StringType), ansiInterval)
       checkEvaluation(cast(cast(Literal.create(ansiInterval),
-        YearMonthIntervalType), StringType), ansiInterval)
+        YearMonthIntervalType()), StringType), ansiInterval)
     }
 
     Seq("INTERVAL '-178956970-9' YEAR TO MONTH", "INTERVAL '178956970-8' YEAR TO MONTH")
       .foreach { interval =>
         val e = intercept[IllegalArgumentException] {
-          cast(Literal.create(interval), YearMonthIntervalType).eval()
+          cast(Literal.create(interval), YearMonthIntervalType()).eval()
         }.getMessage
         assert(e.contains("Error parsing interval year-month string: integer overflow"))
       }
 
     Seq(Byte.MaxValue, Short.MaxValue, Int.MaxValue, Int.MinValue + 1, Int.MinValue)
       .foreach { period =>
-        val interval = Literal.create(Period.ofMonths(period), YearMonthIntervalType)
-        checkEvaluation(cast(cast(interval, StringType), YearMonthIntervalType), period)
+        val interval = Literal.create(Period.ofMonths(period), YearMonthIntervalType())
+        checkEvaluation(cast(cast(interval, StringType), YearMonthIntervalType()), period)
       }
   }
 }

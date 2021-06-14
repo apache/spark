@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.IntervalUtils.{safeStringToInterval, stringToInterval}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DayTimeIntervalType, Decimal, DecimalType, YearMonthIntervalType}
-import org.apache.spark.sql.types.DataTypeTestUtils.{dayTimeIntervalTypes, numericTypes}
+import org.apache.spark.sql.types.DataTypeTestUtils.{dayTimeIntervalTypes, numericTypes, yearMonthIntervalTypes}
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
@@ -306,9 +306,11 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
 
     numericTypes.foreach { numType =>
-      checkConsistencyBetweenInterpretedAndCodegenAllowingException(
-        (interval: Expression, num: Expression) => MultiplyYMInterval(interval, num),
-        YearMonthIntervalType, numType)
+      yearMonthIntervalTypes.foreach { it =>
+        checkConsistencyBetweenInterpretedAndCodegenAllowingException(
+          (interval: Expression, num: Expression) => MultiplyYMInterval(interval, num),
+          it, numType)
+      }
     }
   }
 
@@ -375,9 +377,11 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
 
     numericTypes.foreach { numType =>
-      checkConsistencyBetweenInterpretedAndCodegenAllowingException(
-        (interval: Expression, num: Expression) => DivideYMInterval(interval, num),
-        YearMonthIntervalType, numType)
+      yearMonthIntervalTypes.foreach { it =>
+        checkConsistencyBetweenInterpretedAndCodegenAllowingException(
+          (interval: Expression, num: Expression) => DivideYMInterval(interval, num),
+          it, numType)
+      }
     }
   }
 
@@ -428,8 +432,8 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(ExtractANSIIntervalMonths(Literal(p)),
         IntervalUtils.getMonths(p.toTotalMonths.toInt))
     }
-    checkEvaluation(ExtractANSIIntervalYears(Literal(null, YearMonthIntervalType)), null)
-    checkEvaluation(ExtractANSIIntervalMonths(Literal(null, YearMonthIntervalType)), null)
+    checkEvaluation(ExtractANSIIntervalYears(Literal(null, YearMonthIntervalType())), null)
+    checkEvaluation(ExtractANSIIntervalMonths(Literal(null, YearMonthIntervalType())), null)
   }
 
   test("ANSI: extract days, hours, minutes and seconds") {

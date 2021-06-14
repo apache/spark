@@ -699,7 +699,7 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("SPARK-35113: HashExpression support DayTimeIntervalType/YearMonthIntervalType") {
     val dayTime = Literal.create(Duration.ofSeconds(1237123123), DayTimeIntervalType())
-    val yearMonth = Literal.create(Period.ofMonths(1234), YearMonthIntervalType)
+    val yearMonth = Literal.create(Period.ofMonths(1234), YearMonthIntervalType())
     checkEvaluation(Murmur3Hash(Seq(dayTime), 10), -428664612)
     checkEvaluation(Murmur3Hash(Seq(yearMonth), 10), -686520021)
     checkEvaluation(XxHash64(Seq(dayTime), 10), 8228802290839366895L)
