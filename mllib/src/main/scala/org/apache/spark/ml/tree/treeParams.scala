@@ -76,6 +76,23 @@ private[ml] trait DecisionTreeParams extends PredictorParams
     " for any categorical feature.", ParamValidators.gtEq(2))
 
   /**
+   * If true, the trained tree will undergo a 'pruning' process after training in which nodes
+   * that have the same class predictions will be merged.  The benefit being that at prediction
+   * time the tree will be 'leaner'
+   * If false, the post-training tree will undergo no pruning.  The benefit being that you
+   * maintain the class prediction probabilities
+   * (default = false)
+   * @group param
+   */
+  final val pruneTree: BooleanParam = new BooleanParam(this, "pruneTree", "" +
+    "If true, the trained tree will undergo a 'pruning' process after training in which nodes" +
+    " that have the same class predictions will be merged.  The benefit being that at prediction" +
+    " time the tree will be 'leaner'" +
+    " If false, the post-training tree will undergo no pruning.  The benefit being that you" +
+    " maintain the class prediction probabilities"
+  )
+
+  /**
    * Minimum number of instances each child must have after split.
    * If a split causes the left or right child to have fewer than minInstancesPerNode,
    * the split will be discarded as invalid.
@@ -137,7 +154,7 @@ private[ml] trait DecisionTreeParams extends PredictorParams
     " trees.")
 
   setDefault(leafCol -> "", maxDepth -> 5, maxBins -> 32, minInstancesPerNode -> 1,
-    minWeightFractionPerNode -> 0.0, minInfoGain -> 0.0, maxMemoryInMB -> 256,
+    minWeightFractionPerNode -> 0.0, minInfoGain -> 0.0, pruneTree -> false, maxMemoryInMB -> 256,
     cacheNodeIds -> false, checkpointInterval -> 10)
 
   /** @group setParam */
@@ -163,6 +180,9 @@ private[ml] trait DecisionTreeParams extends PredictorParams
   /** @group getParam */
   final def getMinInfoGain: Double = $(minInfoGain)
 
+  /** @group getParam */
+  final def getPruneTree: Boolean = $(pruneTree)
+
   /** @group expertGetParam */
   final def getMaxMemoryInMB: Int = $(maxMemoryInMB)
 
@@ -183,6 +203,7 @@ private[ml] trait DecisionTreeParams extends PredictorParams
     strategy.maxDepth = getMaxDepth
     strategy.maxMemoryInMB = getMaxMemoryInMB
     strategy.minInfoGain = getMinInfoGain
+    strategy.pruneTree = getPruneTree
     strategy.minInstancesPerNode = getMinInstancesPerNode
     strategy.minWeightFractionPerNode = getMinWeightFractionPerNode
     strategy.useNodeIdCache = getCacheNodeIds

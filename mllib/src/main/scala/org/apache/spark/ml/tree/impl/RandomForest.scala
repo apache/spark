@@ -117,7 +117,6 @@ private[spark] object RandomForest extends Logging with Serializable {
       featureSubsetStrategy: String,
       seed: Long,
       instr: Option[Instrumentation],
-      prune: Boolean = false, // exposed for testing only, real trees are always not pruned
       parentUID: Option[String] = None): Array[DecisionTreeModel] = {
     val timer = new TimeTracker()
     timer.start("total")
@@ -245,26 +244,26 @@ private[spark] object RandomForest extends Logging with Serializable {
           topNodes.map { rootNode =>
             new DecisionTreeClassificationModel(
               uid,
-              rootNode.toNode(prune),
+              rootNode.toNode(strategy.pruneTree),
               numFeatures,
               strategy.getNumClasses)
           }
         } else {
           topNodes.map { rootNode =>
-            new DecisionTreeRegressionModel(uid, rootNode.toNode(prune), numFeatures)
+            new DecisionTreeRegressionModel(uid, rootNode.toNode(strategy.pruneTree), numFeatures)
           }
         }
       case None =>
         if (strategy.algo == OldAlgo.Classification) {
           topNodes.map { rootNode =>
             new DecisionTreeClassificationModel(
-              rootNode.toNode(prune),
+              rootNode.toNode(strategy.pruneTree),
               numFeatures,
               strategy.getNumClasses)
           }
         } else {
           topNodes.map(rootNode =>
-            new DecisionTreeRegressionModel(rootNode.toNode(prune), numFeatures))
+            new DecisionTreeRegressionModel(rootNode.toNode(strategy.pruneTree), numFeatures))
         }
     }
   }
@@ -282,7 +281,6 @@ private[spark] object RandomForest extends Logging with Serializable {
       featureSubsetStrategy: String,
       seed: Long,
       instr: Option[Instrumentation],
-      prune: Boolean = false, // exposed for testing only, real trees are always not pruned
       parentUID: Option[String] = None): Array[DecisionTreeModel] = {
     val timer = new TimeTracker()
 
@@ -331,7 +329,6 @@ private[spark] object RandomForest extends Logging with Serializable {
       featureSubsetStrategy = featureSubsetStrategy,
       seed = seed,
       instr = instr,
-      prune = prune,
       parentUID = parentUID)
 
     baggedInput.unpersist()
@@ -973,8 +970,9 @@ private[spark] object RandomForest extends Logging with Serializable {
             val numCategories = binAggregates.metadata.numBins(featureIndex)
 
             /* Each bin is one category (feature value).
-             * The bins are ordered based on centroidForCategories, and this ordering determines which
-             * splits are considered.  (With K categories, we consider K - 1 possible splits.)
+             * The bins are ordered based on centroidForCategories, and this ordering determines
+             * which splits are considered.  (With K categories, we
+             * consider K - 1 possible splits.)
              *
            * centroidForCategories is a list: (category, centroid)
              */
