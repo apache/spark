@@ -23,11 +23,10 @@ from abc import ABCMeta, abstractmethod
 import sys
 import inspect
 from collections import OrderedDict, namedtuple
-from collections.abc import Callable
 from distutils.version import LooseVersion
 from functools import partial
 from itertools import product
-from typing import Any, List, Set, Tuple, Union, cast
+from typing import Any, Callable, List, Set, Tuple, Union, cast
 
 import pandas as pd
 from pandas.api.types import is_hashable, is_list_like
