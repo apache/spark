@@ -83,9 +83,9 @@ class TestCasesUtils(object):
 
     def check_extension(self, psser, pser):
         """
-        Compare `psser` and `pser` of ExtensionDtypes.
+        Compare `psser` and `pser` of numeric ExtensionDtypes.
 
-        This utility is to adjust an issue for comparing ExtensionDtypes objects in specific
+        This utility is to adjust an issue for comparing numeric ExtensionDtypes in specific
         pandas versions. Please refer to https://github.com/pandas-dev/pandas/issues/39410.
         """
         if LooseVersion("1.1") <= LooseVersion(pd.__version__) < LooseVersion("1.2.2"):
