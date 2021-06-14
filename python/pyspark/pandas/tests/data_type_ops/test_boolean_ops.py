@@ -26,7 +26,7 @@ from pandas.api.types import CategoricalDtype
 from pyspark import pandas as ps
 from pyspark.pandas.config import option_context
 from pyspark.pandas.tests.data_type_ops.testing_utils import TestCasesUtils
-from pyspark.pandas.typedef.typehints import extension_dtypes_available
+from pyspark.pandas.typedef.typehints import extension_object_dtypes_available
 from pyspark.sql.types import BooleanType
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 
@@ -307,7 +307,9 @@ class BooleanOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         self.assert_eq(pser.astype(cat_type), psser.astype(cat_type))
 
 
-@unittest.skipIf(not extension_dtypes_available, "pandas extension dtypes are not available")
+@unittest.skipIf(
+    not extension_object_dtypes_available, "pandas extension object dtypes are not available"
+)
 class BooleanExtensionOpsTest(PandasOnSparkTestCase, TestCasesUtils):
     @property
     def pser(self):
@@ -591,9 +593,9 @@ class BooleanExtensionOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         self.check_extension(False | self.pser, False | self.psser)
 
     def test_from_to_pandas(self):
-        data = [True, True, False]
-        pser = pd.Series(data)
-        psser = ps.Series(data)
+        data = [True, True, False, None]
+        pser = pd.Series(data, dtype="boolean")
+        psser = ps.Series(data, dtype="boolean")
         self.assert_eq(pser, psser.to_pandas())
         self.assert_eq(ps.from_pandas(pser), psser)
 
