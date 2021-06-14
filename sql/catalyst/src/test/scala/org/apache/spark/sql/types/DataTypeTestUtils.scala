@@ -18,7 +18,7 @@
 package org.apache.spark.sql.types
 
 import org.apache.spark.sql.types.DayTimeIntervalType.{DAY, HOUR, MINUTE, SECOND}
-import org.apache.spark.sql.types.YearMonthIntervalType.{YEAR, MONTH}
+import org.apache.spark.sql.types.YearMonthIntervalType.{MONTH, YEAR}
 
 /**
  * Utility functions for working with DataTypes in tests.
