@@ -57,6 +57,15 @@ class DataFrameJoinSuite extends QueryTest
       Row(1, 2, "1", "2") :: Row(2, 3, "2", "3") :: Row(3, 4, "3", "4") :: Nil)
   }
 
+  test("join - join using multiple columns array") {
+    val df = Seq(1, 2, 3).map(i => (i, i + 1, i.toString)).toDF("int", "int2", "str")
+    val df2 = Seq(1, 2, 3).map(i => (i, i + 1, (i + 1).toString)).toDF("int", "int2", "str")
+
+    checkAnswer(
+      df.join(df2, Array("int", "int2")),
+      Row(1, 2, "1", "2") :: Row(2, 3, "2", "3") :: Row(3, 4, "3", "4") :: Nil)
+  }
+
   test("join - sorted columns not in join's outputSet") {
     val df = Seq((1, 2, "1"), (3, 4, "3")).toDF("int", "int2", "str_sort").as("df1")
     val df2 = Seq((1, 3, "1"), (5, 6, "5")).toDF("int", "int2", "str").as("df2")
@@ -71,6 +80,15 @@ class DataFrameJoinSuite extends QueryTest
       df2.join(df3, $"df2.int" === $"df3.int", "inner")
         .select($"df2.int", $"df3.int").orderBy($"df2.str".desc),
       Row(5, 5) :: Row(1, 1) :: Nil)
+  }
+
+  test("join - join using specifying join type") {
+    val df = Seq(1, 2, 3).map(i => (i, i.toString)).toDF("int", "str")
+    val df2 = Seq(1, 2, 3).map(i => (i, (i + 1).toString)).toDF("int", "str")
+
+    checkAnswer(
+      df.join(df2, "int", "inner"),
+      Row(1, "1", "2") :: Row(2, "2", "3") :: Row(3, "3", "4") :: Nil)
   }
 
   test("join - join using multiple columns and specifying join type") {
@@ -107,6 +125,43 @@ class DataFrameJoinSuite extends QueryTest
 
     checkAnswer(
       df.join(df2, Seq("int", "str"), "anti"),
+      Row(3, "3", 4) :: Nil)
+  }
+
+  test("join - join using multiple columns array and specifying join type") {
+    val df = Seq((1, 2, "1"), (3, 4, "3")).toDF("int", "int2", "str")
+    val df2 = Seq((1, 3, "1"), (5, 6, "5")).toDF("int", "int2", "str")
+
+    checkAnswer(
+      df.join(df2, Array("int", "str"), "inner"),
+      Row(1, "1", 2, 3) :: Nil)
+
+    checkAnswer(
+      df.join(df2, Array("int", "str"), "left"),
+      Row(1, "1", 2, 3) :: Row(3, "3", 4, null) :: Nil)
+
+    checkAnswer(
+      df.join(df2, Array("int", "str"), "right"),
+      Row(1, "1", 2, 3) :: Row(5, "5", null, 6) :: Nil)
+
+    checkAnswer(
+      df.join(df2, Array("int", "str"), "outer"),
+      Row(1, "1", 2, 3) :: Row(3, "3", 4, null) :: Row(5, "5", null, 6) :: Nil)
+
+    checkAnswer(
+      df.join(df2, Array("int", "str"), "left_semi"),
+      Row(1, "1", 2) :: Nil)
+
+    checkAnswer(
+      df.join(df2, Array("int", "str"), "semi"),
+      Row(1, "1", 2) :: Nil)
+
+    checkAnswer(
+      df.join(df2, Array("int", "str"), "left_anti"),
+      Row(3, "3", 4) :: Nil)
+
+    checkAnswer(
+      df.join(df2, Array("int", "str"), "anti"),
       Row(3, "3", 4) :: Nil)
   }
 
