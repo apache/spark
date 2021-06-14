@@ -161,7 +161,7 @@ Package       Minimum supported version Note
 `Py4J`        0.10.9.2                  Required
 `pandas`      0.23.2                    Required for pandas APIs on Spark
 `pyarrow`     1.0.0                     Required for pandas APIs on Spark
-`Numpy`       1.14(<1.20.0)             Required for pandas APIs on Spark
+`Numpy`       1.14                      Required for pandas APIs on Spark
 ============= ========================= ======================================
 
 Note that PySpark requires Java 8 or later with ``JAVA_HOME`` properly set.  
