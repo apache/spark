@@ -125,6 +125,16 @@ public abstract class BloomFilter {
    * @throws IncompatibleMergeException if {@code isCompatible(other) == false}
    */
   public abstract BloomFilter mergeInPlace(BloomFilter other) throws IncompatibleMergeException;
+  
+  /**
+   * Combines this bloom filter with another bloom filter by performing a bitwise AND of the
+   * underlying data. The mutations happen to <b>this</b> instance. Callers must ensure the
+   * bloom filters are appropriately sized to avoid saturating them.
+   *
+   * @param other The bloom filter to combine this bloom filter with. It is not mutated.
+   * @throws IncompatibleMergeException if {@code isCompatible(other) == false}
+   */
+  public abstract BloomFilter intersectInPlace(BloomFilter other) throws IncompatibleMergeException;
 
   /**
    * Returns {@code true} if the element <i>might</i> have been put in this Bloom filter,
