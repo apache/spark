@@ -143,11 +143,11 @@ class RemoveRedundantAggregatesSuite extends PlanTest {
     val relation = LocalRelation('a.int, 'b.int)
     val query = relation
       .groupBy('a, 'b)('a, 'b)
-      // The max does not change if there are duplicate values
-      .groupBy('a)('a, max('b))
+      // The max and countDistinct does not change if there are duplicate values
+      .groupBy('a)('a, max('b), countDistinct('b))
       .analyze
     val expected = relation
-      .groupBy('a)('a, max('b))
+      .groupBy('a)('a, max('b), countDistinct('b))
       .analyze
     val optimized = Optimize.execute(query)
     comparePlans(optimized, expected)
