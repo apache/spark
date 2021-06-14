@@ -49,7 +49,48 @@ license: |
   
   - In Spark 3.2, the output schema of `SHOW TABLES` becomes `namespace: string, tableName: string, isTemporary: boolean`. In Spark 3.1 or earlier, the `namespace` field was named `database` for the builtin catalog, and there is no `isTemporary` field for v2 catalogs. To restore the old schema with the builtin catalog, you can set `spark.sql.legacy.keepCommandOutputSchema` to `true`.
 
-  - In Spark 3.2, the output schema of `SHOW TABLE EXTENDED` becomes `namespace: string, tableName: string, isTemporary: boolean, information:struct<Database:string,Table:string,Owner:string,Created Time:date,Last Access:date,Created By:string,Type:string,Provider:string,Bucket:struct<Num Buckets:string,Bucket Columns:string,Sort Columns:string>,Comment:string,View Information:struct<View Text:string,View Original Text:string,View Catalog and Namespace:string,View Query Output Columns:string>,Table Properties:string,Statistics:string,Storage:struct<Location:string,Serde Library:string,InputFormat:string,OutputFormat:string,Compressed:string,Storage Properties:string>,Partition Provider:string,Partition Columns:string,Partition Values:string,Partition Parameters:string,Partition Statistics:string,schema:string>`. In Spark 3.1 or earlier, the `namespace` field was named `database` for the builtin catalog, and no change for the v2 catalogs. In Spark 3.1 or earlier, the `information` field was string type. To restore the old schema, you can set `spark.sql.legacy.keepCommandOutputSchema` to `true`.
+  - In Spark 3.2, the output schema of `SHOW TABLE EXTENDED` becomes like below:
+    ```
+    root
+     |-- namespace: string (nullable = false)
+     |-- tableName: string (nullable = false)
+     |-- isTemporary: boolean (nullable = false)
+     |-- information: struct (nullable = false)
+     |    |-- Database: string (nullable = true)
+     |    |-- Table: string (nullable = true)
+     |    |-- Owner: string (nullable = true)
+     |    |-- Created Time: date (nullable = false)
+     |    |-- Last Access: date (nullable = true)
+     |    |-- Created By: string (nullable = true)
+     |    |-- Type: string (nullable = true)
+     |    |-- Provider: string (nullable = true)
+     |    |-- Bucket: struct (nullable = true)
+     |    |    |-- Num Buckets: string (nullable = true)
+     |    |    |-- Bucket Columns: string (nullable = true)
+     |    |    |-- Sort Columns: string (nullable = true)
+     |    |-- Comment: string (nullable = true)
+     |    |-- View Information: struct (nullable = true)
+     |    |    |-- View Text: string (nullable = true)
+     |    |    |-- View Original Text: string (nullable = true)
+     |    |    |-- View Catalog and Namespace: string (nullable = true)
+     |    |    |-- View Query Output Columns: string (nullable = true)
+     |    |-- Table Properties: string (nullable = true)
+     |    |-- Statistics: string (nullable = true)
+     |    |-- Storage: struct (nullable = true)
+     |    |    |-- Location: string (nullable = true)
+     |    |    |-- Serde Library: string (nullable = true)
+     |    |    |-- InputFormat: string (nullable = true)
+     |    |    |-- OutputFormat: string (nullable = true)
+     |    |    |-- Compressed: string (nullable = true)
+     |    |    |-- Storage Properties: string (nullable = true)
+     |    |-- Partition Provider: string (nullable = true)
+     |    |-- Partition Columns: string (nullable = true)
+     |    |-- Partition Values: string (nullable = true)
+     |    |-- Partition Parameters: string (nullable = true)
+     |    |-- Partition Statistics: string (nullable = true)
+     |    |-- schema: string (nullable = true)
+    ```
+    In Spark 3.1 or earlier, the `namespace` field was named `database` for the builtin catalog, and no change for the v2 catalogs. In Spark 3.1 or earlier, the `information` field was string type. To restore the old schema, you can set `spark.sql.legacy.keepCommandOutputSchema` to `true`.
 
   - In Spark 3.2, the output schema of `SHOW TBLPROPERTIES` becomes `key: string, value: string` whether you specify the table property key or not. In Spark 3.1 and earlier, the output schema of `SHOW TBLPROPERTIES` is `value: string` when you specify the table property key. To restore the old schema with the builtin catalog, you can set `spark.sql.legacy.keepCommandOutputSchema` to `true`.
 
