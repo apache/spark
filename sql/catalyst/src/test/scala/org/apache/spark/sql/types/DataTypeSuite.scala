@@ -256,7 +256,7 @@ class DataTypeSuite extends SparkFunSuite {
   checkDataTypeFromJson(VarcharType(10))
   checkDataTypeFromDDL(VarcharType(11))
 
-  yearMonthIntervalTypes.foreach(checkDataTypeFromDDL)
+  checkDataTypeFromDDL(YearMonthIntervalType())
   dayTimeIntervalTypes.foreach(checkDataTypeFromDDL)
 
   val metadata = new MetadataBuilder()
