@@ -2459,14 +2459,14 @@ class Analyzer(override val catalogManager: CatalogManager)
         })
 
       case Filter(cond, agg: Aggregate) if agg.resolved =>
-        // We should resolve the references normally based on child.output first.
+        // We should resolve the references normally based on child (agg.output) first.
         val maybeResolved = resolveExpressionByPlanOutput(cond, agg)
         resolveOperatorWithAggregate(Seq(maybeResolved), agg, (newExprs, newChild) => {
           Filter(newExprs.head, newChild)
         })
 
       case Sort(sortOrder, global, agg: Aggregate) if agg.resolved =>
-        // We should resolve the references normally based on child.output first.
+        // We should resolve the references normally based on child (agg.output) first.
         val maybeResolved = sortOrder.map(_.child).map(resolveExpressionByPlanOutput(_, agg))
         resolveOperatorWithAggregate(maybeResolved, agg, (newExprs, newChild) => {
           val newSortOrder = sortOrder.zip(newExprs).map {
