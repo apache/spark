@@ -1295,6 +1295,19 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
       }
     }
   }
+
+  test("disallow type conversions between Numeric types and Timestamp without time zone type") {
+    import DataTypeTestUtils.numericTypes
+    checkInvalidCastFromNumericType(TimestampWithoutTZType)
+    var errorMsg = "cannot cast bigint to timestamp without time zone"
+    verifyCastFailure(cast(Literal(0L), TimestampWithoutTZType), Some(errorMsg))
+
+    val timestampWithoutTZLiteral = Literal.create(LocalDateTime.now(), TimestampWithoutTZType)
+    errorMsg = "cannot cast timestamp without time zone to"
+    numericTypes.foreach { numericType =>
+      verifyCastFailure(cast(timestampWithoutTZLiteral, numericType), Some(errorMsg))
+    }
+  }
 }
 
 /**
