@@ -237,6 +237,7 @@ org.apache.spark:spark-network-shuffle_2.12
 org.apache.spark:spark-sketch_2.12
 org.apache.spark:spark-tags_2.12
 org.apache.spark:spark-unsafe_2.12
+commons-httpclient:commons-httpclient
 com.vlkan:flatbuffers
 com.ning:compress-lzf
 io.airlift:aircompressor
