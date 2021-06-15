@@ -155,13 +155,13 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
     val schema2 = StructType.fromDDL("A2 STRING, a3 DOUBLE, nested STRUCT<B2: STRING, b3: DOUBLE>")
     val resolver = SQLConf.get.resolver
 
-    assert(schema1.merge(schema2, resolver).sameType(StructType.fromDDL(
+    assert(schema1.merge(schema2, resolver) === StructType.fromDDL(
       "a1 INT, a2 STRING, nested STRUCT<b1: INT, b2: STRING, b3: DOUBLE>, a3 DOUBLE"
-    )))
+    ))
 
-    assert(schema2.merge(schema1, resolver).sameType(StructType.fromDDL(
-      "a2 STRING, a3 DOUBLE, nested STRUCT<b2: STRING, b3: DOUBLE, b1: INT>, a1 INT"
-    )))
+    assert(schema2.merge(schema1, resolver) === StructType.fromDDL(
+      "A2 STRING, a3 DOUBLE, nested STRUCT<B2: STRING, b3: DOUBLE, b1: INT>, a1 INT"
+    ))
   }
 
   test("SPARK-35290: Struct merging case sensitive") {
@@ -171,15 +171,15 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
         "A2 STRING, a3 DOUBLE, nested STRUCT<B2: STRING, b3: DOUBLE>")
       val resolver = SQLConf.get.resolver
 
-      assert(schema1.merge(schema2, resolver).sameType(StructType.fromDDL(
+      assert(schema1.merge(schema2, resolver) === StructType.fromDDL(
         "a1 INT, a2 STRING, nested STRUCT<b1: INT, b2: STRING, B2: STRING, b3: DOUBLE>, " +
           "A2 STRING, a3 DOUBLE"
-      )))
+      ))
 
-      assert(schema2.merge(schema1, resolver).sameType(StructType.fromDDL(
+      assert(schema2.merge(schema1, resolver) === StructType.fromDDL(
         "A2 STRING, a3 DOUBLE, nested STRUCT<B2: STRING, b3: DOUBLE, b1: INT, b2: STRING>, " +
           "a1 INT, a2 STRING"
-      )))
+      ))
     }
   }
 
