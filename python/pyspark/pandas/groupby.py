@@ -23,16 +23,15 @@ from abc import ABCMeta, abstractmethod
 import sys
 import inspect
 from collections import OrderedDict, namedtuple
-from collections.abc import Callable
 from distutils.version import LooseVersion
 from functools import partial
 from itertools import product
-from typing import Any, List, Set, Tuple, Union, cast
+from typing import Any, Callable, List, Set, Tuple, Union, cast
 
 import pandas as pd
 from pandas.api.types import is_hashable, is_list_like
 
-from pyspark.sql import Column, Window, functions as F
+from pyspark.sql import Column, DataFrame as SparkDataFrame, Window, functions as F
 from pyspark.sql.types import (  # noqa: F401
     DataType,
     FloatType,
@@ -42,7 +41,6 @@ from pyspark.sql.types import (  # noqa: F401
     StructType,
     StringType,
 )
-from pyspark.sql.functions import PandasUDFType, pandas_udf
 
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
 from pyspark.pandas.typedef import infer_return_type, DataFrameType, ScalarType, SeriesType
@@ -1175,9 +1173,7 @@ class GroupBy(object, metaclass=ABCMeta):
             data_fields = [
                 field.normalize_spark_type() for field in psdf_from_pandas._internal.data_fields
             ]
-            return_schema = StructType(
-                [field.struct_field for field in index_fields + data_fields]
-            )  # type: DataType
+            return_schema = StructType([field.struct_field for field in index_fields + data_fields])
         else:
             return_type = infer_return_type(func)
             if not is_series_groupby and isinstance(return_type, SeriesType):
@@ -1375,14 +1371,24 @@ class GroupBy(object, metaclass=ABCMeta):
         return DataFrame(psdf._internal.resolved_copy), groupkey_labels, groupkey_names
 
     @staticmethod
-    def _spark_group_map_apply(psdf, func, groupkeys_scols, return_schema, retain_index):
+    def _spark_group_map_apply(
+        psdf: DataFrame,
+        func: Callable[[pd.DataFrame], pd.DataFrame],
+        groupkeys_scols: List[Column],
+        return_schema: StructType,
+        retain_index: bool,
+    ) -> SparkDataFrame:
         output_func = GroupBy._make_pandas_df_builder_func(psdf, func, return_schema, retain_index)
-        grouped_map_func = pandas_udf(return_schema, PandasUDFType.GROUPED_MAP)(output_func)
         sdf = psdf._internal.spark_frame.drop(*HIDDEN_COLUMNS)
-        return sdf.groupby(*groupkeys_scols).apply(grouped_map_func)
+        return sdf.groupby(*groupkeys_scols).applyInPandas(output_func, return_schema)
 
     @staticmethod
-    def _make_pandas_df_builder_func(psdf, func, return_schema, retain_index):
+    def _make_pandas_df_builder_func(
+        psdf: DataFrame,
+        func: Callable[[pd.DataFrame], pd.DataFrame],
+        return_schema: StructType,
+        retain_index: bool,
+    ) -> Callable[[pd.DataFrame], pd.DataFrame]:
         """
         Creates a function that can be used inside the pandas UDF. This function can construct
         the same pandas DataFrame as if the pandas-on-Spark DataFrame is collected to driver side.
@@ -1390,7 +1396,7 @@ class GroupBy(object, metaclass=ABCMeta):
         """
         arguments_for_restore_index = psdf._internal.arguments_for_restore_index
 
-        def rename_output(pdf):
+        def rename_output(pdf: pd.DataFrame) -> pd.DataFrame:
             pdf = InternalFrame.restore_index(pdf.copy(), **arguments_for_restore_index)
 
             pdf = func(pdf)
@@ -2161,7 +2167,7 @@ class GroupBy(object, metaclass=ABCMeta):
                 as_nullable_spark_type(
                     psdf_from_pandas._internal.spark_frame.drop(*HIDDEN_COLUMNS).schema
                 )
-            )  # type: DataType
+            )
             if len(pdf) <= limit:
                 return psdf_from_pandas
 
