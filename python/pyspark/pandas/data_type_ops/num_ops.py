@@ -345,8 +345,8 @@ class FractionalOps(NumericOps):
         right = transform_boolean_operand_to_numeric(right, left.spark.data_type)
         return numpy_column_op(rfloordiv)(left, right)
 
-    def isnull(self, series) -> Union["Series", "Index"]:
-        return series._with_new_scol(series.spark.column.isNull() | F.isnan(series.spark.column))
+    def isnull(self, index_ops) -> Union["Series", "Index"]:
+        return index_ops._with_new_scol(index_ops.spark.column.isNull() | F.isnan(index_ops.spark.column))
 
 
 class DecimalOps(FractionalOps):
@@ -359,5 +359,5 @@ class DecimalOps(FractionalOps):
     def pretty_name(self) -> str:
         return "decimal"
 
-    def isnull(self, series) -> Union["Series", "Index"]:
-        return series._with_new_scol(series.spark.column.isNull())
+    def isnull(self, index_ops) -> Union["Series", "Index"]:
+        return index_ops._with_new_scol(index_ops.spark.column.isNull())
