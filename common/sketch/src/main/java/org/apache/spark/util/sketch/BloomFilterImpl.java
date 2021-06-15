@@ -215,7 +215,7 @@ class BloomFilterImpl extends BloomFilter implements Serializable {
 
     if (!(other instanceof BloomFilterImpl)) {
       throw new IncompatibleMergeException(
-              "Cannot merge bloom filter of class " + other.getClass().getName()
+        "Cannot merge bloom filter of class " + other.getClass().getName()
       );
     }
 
@@ -227,7 +227,7 @@ class BloomFilterImpl extends BloomFilter implements Serializable {
 
     if (this.numHashFunctions != that.numHashFunctions) {
       throw new IncompatibleMergeException(
-              "Cannot merge bloom filters with different number of hash functions"
+        "Cannot merge bloom filters with different number of hash functions"
       );
     }
     return that;
