@@ -1185,7 +1185,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
         val style = s"$iss$$.MODULE$$.ANSI_STYLE()"
         (c, evPrim, _) =>
           code"""
-            $evPrim = UTF8String.fromString($iu.toYearMonthIntervalString($c, $style),
+            $evPrim = UTF8String.fromString($iu.toYearMonthIntervalString($c, $style,
               (byte)${i.startField}, (byte)${i.endField}));
           """
       case i: DayTimeIntervalType =>
