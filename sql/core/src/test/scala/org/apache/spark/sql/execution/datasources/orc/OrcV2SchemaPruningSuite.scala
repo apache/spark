@@ -29,6 +29,8 @@ class OrcV2SchemaPruningSuite extends SchemaPruningSuite with AdaptiveSparkPlanH
   override protected val dataSourceName: String = "orc"
   override protected val vectorizedReaderEnabledKey: String =
     SQLConf.ORC_VECTORIZED_READER_ENABLED.key
+  override protected val vectorizedReaderNestedEnabledKey: String =
+    SQLConf.ORC_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key
 
   override protected def sparkConf: SparkConf =
     super

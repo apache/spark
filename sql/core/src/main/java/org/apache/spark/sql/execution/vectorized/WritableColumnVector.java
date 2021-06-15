@@ -81,6 +81,10 @@ public abstract class WritableColumnVector extends ColumnVector {
     dictionary = null;
   }
 
+  public void reserveAdditional(int additionalCapacity) {
+    reserve(elementsAppended + additionalCapacity);
+  }
+
   public void reserve(int requiredCapacity) {
     if (requiredCapacity < 0) {
       throwUnsupportedException(requiredCapacity, null);
@@ -674,6 +678,14 @@ public abstract class WritableColumnVector extends ColumnVector {
    * Returns the elements appended.
    */
   public final int getElementsAppended() { return elementsAppended; }
+
+  /**
+   * Add `num` to the elements appended. This is useful when calling the `putXXX` APIs, for
+   * keeping track of how many values have been added in the vector.
+   */
+  public final void addElementsAppended(int num) {
+    this.elementsAppended += num;
+  }
 
   /**
    * Marks this column as being constant.

@@ -15,22 +15,30 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.datasources.orc
+package org.apache.parquet.column.page;
 
-import org.apache.spark.SparkConf
-import org.apache.spark.sql.execution.datasources.SchemaPruningSuite
-import org.apache.spark.sql.internal.SQLConf
+import java.util.Optional;
 
-class OrcV1SchemaPruningSuite extends SchemaPruningSuite {
-  override protected val dataSourceName: String = "orc"
-  override protected val vectorizedReaderEnabledKey: String =
-    SQLConf.ORC_VECTORIZED_READER_ENABLED.key
-  override protected val vectorizedReaderNestedEnabledKey: String =
-    SQLConf.ORC_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key
+/**
+ * A hack to create Parquet data pages with customized first row index. We have to put it under
+ * 'org.apache.parquet.column.page' since the constructor of `DataPage` is package-private.
+ */
+public class TestDataPage extends DataPage {
+  private final DataPage wrapped;
 
-  override protected def sparkConf: SparkConf =
-    super
-      .sparkConf
-      .set(SQLConf.USE_V1_SOURCE_LIST, "orc")
+  public TestDataPage(DataPage wrapped, long firstRowIndex) {
+    super(wrapped.getCompressedSize(), wrapped.getUncompressedSize(), wrapped.getValueCount(),
+      firstRowIndex);
+    this.wrapped = wrapped;
+  }
 
+  @Override
+  public Optional<Integer> getIndexRowCount() {
+    return Optional.empty();
+  }
+
+  @Override
+  public <T> T accept(Visitor<T> visitor) {
+    return wrapped.accept(visitor);
+  }
 }

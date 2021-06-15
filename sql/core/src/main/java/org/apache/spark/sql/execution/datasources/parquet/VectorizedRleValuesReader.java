@@ -166,9 +166,10 @@ public final class VectorizedRleValuesReader extends ValuesReader
   public void readBatch(
       ParquetReadState state,
       WritableColumnVector values,
+      WritableColumnVector defLevels,
       VectorizedValuesReader valueReader,
       ParquetVectorUpdater updater) {
-    readBatchInternal(state, values, values, valueReader, updater);
+    readBatchInternal(state, values, values, defLevels, valueReader, updater);
   }
 
   /**
@@ -179,20 +180,23 @@ public final class VectorizedRleValuesReader extends ValuesReader
       ParquetReadState state,
       WritableColumnVector values,
       WritableColumnVector nulls,
-      VectorizedValuesReader data) {
-    readBatchInternal(state, values, nulls, data, new ParquetVectorUpdaterFactory.IntegerUpdater());
+      WritableColumnVector defLevels,
+      VectorizedValuesReader valueReader) throws IOException {
+    readBatchInternal(state, values, nulls, defLevels, valueReader,
+      new ParquetVectorUpdaterFactory.IntegerUpdater());
   }
 
   private void readBatchInternal(
       ParquetReadState state,
       WritableColumnVector values,
       WritableColumnVector nulls,
+      WritableColumnVector defLevels,
       VectorizedValuesReader valueReader,
       ParquetVectorUpdater updater) {
 
-    int offset = state.offset;
+    int offset = state.levelOffset;
     long rowId = state.rowId;
-    int leftInBatch = state.valuesToReadInBatch;
+    int leftInBatch = state.rowsToReadInBatch;
     int leftInPage = state.valuesToReadInPage;
 
     while (leftInBatch > 0 && leftInPage > 0) {
@@ -231,14 +235,17 @@ public final class VectorizedRleValuesReader extends ValuesReader
             } else {
               nulls.putNulls(offset, n);
             }
+            defLevels.putInts(offset, n, currentValue);
             break;
           case PACKED:
             for (int i = 0; i < n; ++i) {
-              if (currentBuffer[currentBufferIdx++] == state.maxDefinitionLevel) {
+              int currentValue = currentBuffer[currentBufferIdx++];
+              if (currentValue == state.maxDefinitionLevel) {
                 updater.readValue(offset + i, values, valueReader);
               } else {
                 nulls.putNull(offset + i);
               }
+              defLevels.putInt(offset + i, currentValue);
             }
             break;
         }
@@ -247,24 +254,316 @@ public final class VectorizedRleValuesReader extends ValuesReader
         rowId += n;
         leftInPage -= n;
         currentCount -= n;
+        defLevels.addElementsAppended(n);
       }
     }
 
     state.advanceOffsetAndRowId(offset, rowId);
   }
 
-  /**
-   * Skip the next `n` values (either null or non-null) from this definition level reader and
-   * `valueReader`.
-   */
-  private void skipValues(
-      int n,
+  public void readBatchNested(
       ParquetReadState state,
-      VectorizedValuesReader valuesReader,
+      WritableColumnVector repLevels,
+      VectorizedRleValuesReader defLevelsReader,
+      WritableColumnVector defLevels,
+      WritableColumnVector values,
+      VectorizedValuesReader valueReader,
       ParquetVectorUpdater updater) {
+    readBatchNestedInternal(state, repLevels, defLevelsReader, defLevels, values, values, true,
+      valueReader, updater);
+  }
+
+  public void readIntegersNested(
+      ParquetReadState state,
+      WritableColumnVector repLevels,
+      VectorizedRleValuesReader defLevelsReader,
+      WritableColumnVector defLevels,
+      WritableColumnVector values,
+      WritableColumnVector nulls,
+      VectorizedValuesReader valueReader) {
+    readBatchNestedInternal(state, repLevels, defLevelsReader, defLevels, values, nulls, false,
+      valueReader, new ParquetVectorUpdaterFactory.IntegerUpdater());
+  }
+
+  /**
+   * Keep reading repetition level values from the page until either: 1) we've read enough
+   * top-level rows to fill the current batch, or 2) we've drained the data page completely.
+   *
+   * @param valuesReused whether `values` vector is reused for `nulls`
+   */
+  public void readBatchNestedInternal(
+      ParquetReadState state,
+      WritableColumnVector repLevels,
+      VectorizedRleValuesReader defLevelsReader,
+      WritableColumnVector defLevels,
+      WritableColumnVector values,
+      WritableColumnVector nulls,
+      boolean valuesReused,
+      VectorizedValuesReader valueReader,
+      ParquetVectorUpdater updater) {
+
+    int leftInBatch = state.rowsToReadInBatch;
+    int leftInPage = state.valuesToReadInPage;
+    long rowId = state.rowId;
+
+    DefLevelProcessor defLevelProcessor = new DefLevelProcessor(defLevelsReader, state, defLevels,
+      values, nulls, valuesReused, valueReader, updater);
+
+    while ((leftInBatch > 0 || !state.lastListCompleted) && leftInPage > 0) {
+      if (currentCount == 0 && !readNextGroup()) break;
+
+      // values to read in the current RLE/PACKED block, must be <= what's left in the page
+      int valuesLeftInBlock = Math.min(leftInPage, currentCount);
+
+      // the current row range start and end
+      long rangeStart = state.currentRangeStart();
+      long rangeEnd = state.currentRangeEnd();
+
+      switch (mode) {
+        case RLE:
+          // this RLE block is consist of top-level rows, so we'll need to check
+          // if the rows should be skipped according to row indexes.
+          if (currentValue == 0) {
+            if (leftInBatch == 0) {
+              state.lastListCompleted = true;
+            } else {
+              // # of rows to read in the block, must be <= what's left in the current batch
+              int n = Math.min(leftInBatch, valuesLeftInBlock);
+
+              if (rowId + n < rangeStart) {
+                // need to skip all rows in [rowId, rowId + n)
+                defLevelProcessor.skipValues(n);
+                rowId += n;
+                currentCount -= n;
+                leftInPage -= n;
+              } else if (rowId > rangeEnd) {
+                // the current row index already beyond the current range: move to the next range
+                // and repeat
+                state.nextRange();
+              } else {
+                // the range [rowId, rowId + n) overlaps with the current row range
+                long start = Math.max(rangeStart, rowId);
+                long end = Math.min(rangeEnd, rowId + n - 1);
+
+                // skip the rows in [rowId, start)
+                int toSkip = (int) (start - rowId);
+                if (toSkip > 0) {
+                  defLevelProcessor.skipValues(toSkip);
+                  rowId += toSkip;
+                  currentCount -= toSkip;
+                  leftInPage -= toSkip;
+                }
+
+                // read the rows in [start, end]
+                n = (int) (end - start + 1);
+
+                leftInBatch -= n;
+                if (n > 0) {
+                  repLevels.appendInts(n, 0);
+                  defLevelProcessor.readValues(n);
+                }
+
+                rowId += n;
+                currentCount -= n;
+                leftInPage -= n;
+              }
+            }
+          } else {
+            // not a top-level row: just read all the repetition levels in the block if the row
+            // should be included according to row indexes, else skip the rows.
+            if (!state.shouldSkip) {
+              repLevels.appendInts(valuesLeftInBlock, currentValue);
+            }
+            state.numBatchedDefLevels += valuesLeftInBlock;
+            leftInPage -= valuesLeftInBlock;
+            currentCount -= valuesLeftInBlock;
+          }
+          break;
+        case PACKED:
+          int i = 0;
+
+          for (; i < valuesLeftInBlock; i++) {
+            int currentValue = currentBuffer[currentBufferIdx + i];
+            if (currentValue == 0) {
+              if (leftInBatch == 0) {
+                state.lastListCompleted = true;
+                break;
+              } else if (rowId < rangeStart) {
+                // this is a top-level row, therefore check if we should skip it with row indexes
+                // the row is before the current range, skip it
+                defLevelProcessor.skipValues(1);
+              } else if (rowId > rangeEnd) {
+                // the row is after the current range, move to the next range and compare again
+                state.nextRange();
+                break;
+              } else {
+                // the row is in the current range, decrement the row counter and read it
+                leftInBatch--;
+                repLevels.appendInt(0);
+                defLevelProcessor.readValues(1);
+              }
+              rowId++;
+            } else {
+              if (!state.shouldSkip) {
+                repLevels.appendInt(currentValue);
+              }
+              state.numBatchedDefLevels += 1;
+            }
+          }
+
+          leftInPage -= i;
+          currentCount -= i;
+          currentBufferIdx += i;
+          break;
+      }
+    }
+
+    // process all the batched def levels
+    defLevelProcessor.finish();
+
+    state.rowsToReadInBatch = leftInBatch;
+    state.valuesToReadInPage = leftInPage;
+    state.rowId = rowId;
+  }
+
+  private static class DefLevelProcessor {
+    private final VectorizedRleValuesReader reader;
+    private final ParquetReadState state;
+    private final WritableColumnVector defLevels;
+    private final WritableColumnVector values;
+    private final WritableColumnVector nulls;
+    private final boolean valuesReused;
+    private final VectorizedValuesReader valueReader;
+    private final ParquetVectorUpdater updater;
+
+    DefLevelProcessor(
+        VectorizedRleValuesReader reader,
+        ParquetReadState state,
+        WritableColumnVector defLevels,
+        WritableColumnVector values,
+        WritableColumnVector nulls,
+        boolean valuesReused,
+        VectorizedValuesReader valueReader,
+        ParquetVectorUpdater updater) {
+      this.reader = reader;
+      this.state = state;
+      this.defLevels = defLevels;
+      this.values = values;
+      this.nulls = nulls;
+      this.valuesReused = valuesReused;
+      this.valueReader = valueReader;
+      this.updater = updater;
+    }
+
+    void readValues(int n) {
+      if (!state.shouldSkip) {
+        state.numBatchedDefLevels += n;
+      } else {
+        reader.skipValues(state.numBatchedDefLevels, state, valueReader, updater);
+        state.numBatchedDefLevels = n;
+        state.shouldSkip = false;
+      }
+    }
+
+    void skipValues(int n) {
+      if (state.shouldSkip) {
+        state.numBatchedDefLevels += n;
+      } else {
+        reader.readValues(state.numBatchedDefLevels, state, defLevels, values, nulls, valuesReused,
+          valueReader, updater);
+        state.numBatchedDefLevels = n;
+        state.shouldSkip = true;
+      }
+    }
+
+    void finish() {
+      if (state.numBatchedDefLevels > 0) {
+        if (state.shouldSkip) {
+          reader.skipValues(state.numBatchedDefLevels, state, valueReader, updater);
+        } else {
+          reader.readValues(state.numBatchedDefLevels, state, defLevels, values, nulls,
+            valuesReused, valueReader, updater);
+        }
+        state.numBatchedDefLevels = 0;
+      }
+    }
+  }
+
+  /**
+   * Read the next 'total' values (either null or non-null) from this definition level reader and
+   * 'valueReader'. The definition levels are read into 'defLevels'. If a value is not
+   * null, it is appended to 'values'. Otherwise, a null bit will be set in 'nulls'.
+   *
+   * This is only used when reading repeated values.
+   */
+  private void readValues(
+      int total,
+      ParquetReadState state,
+      WritableColumnVector defLevels,
+      WritableColumnVector values,
+      WritableColumnVector nulls,
+      boolean valuesReused,
+      VectorizedValuesReader valueReader,
+      ParquetVectorUpdater updater) {
+    defLevels.reserveAdditional(total);
+    values.reserveAdditional(total);
+    if (!valuesReused) {
+      nulls.reserveAdditional(total);
+    }
+    int n = total;
     while (n > 0) {
       if (this.currentCount == 0) this.readNextGroup();
       int num = Math.min(n, this.currentCount);
+      switch (mode) {
+        case RLE:
+          if (currentValue == state.maxDefinitionLevel) {
+            updater.readValues(num, state.valueOffset, values, valueReader);
+            state.valueOffset += num;
+          } else if (currentValue == state.maxDefinitionLevel - 1) {
+            nulls.putNulls(state.valueOffset, num);
+            state.valueOffset += num;
+          }
+          defLevels.putInts(state.levelOffset, num, currentValue);
+          break;
+        case PACKED:
+          for (int i = 0; i < num; ++i) {
+            int currentValue = currentBuffer[currentBufferIdx++];
+            if (currentValue == state.maxDefinitionLevel) {
+              updater.readValue(state.valueOffset++, values, valueReader);
+            } else if (currentValue == state.maxDefinitionLevel - 1) {
+              // only add null if this represents a null element, but not the case when a
+              // collection is null or empty.
+              nulls.putNull(state.valueOffset++);
+            }
+            defLevels.putInt(state.levelOffset + i, currentValue);
+          }
+          break;
+      }
+      state.levelOffset += num;
+      currentCount -= num;
+      n -= num;
+    }
+    defLevels.addElementsAppended(total);
+    values.addElementsAppended(total);
+    if (!valuesReused) {
+      nulls.addElementsAppended(total);
+    }
+  }
+
+  /**
+   * Skip the next 'total' values (either null or non-null) from this definition level reader and
+   * 'valuesReader'.
+   *
+   * This is used in reading both non-repeated and repeated values.
+   */
+  private void skipValues(
+      int total,
+      ParquetReadState state,
+      VectorizedValuesReader valuesReader,
+      ParquetVectorUpdater updater) {
+    while (total > 0) {
+      if (this.currentCount == 0) this.readNextGroup();
+      int num = Math.min(total, this.currentCount);
       switch (mode) {
         case RLE:
           // we only need to skip non-null values from `valuesReader` since nulls are represented
@@ -283,7 +582,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
           break;
       }
       currentCount -= num;
-      n -= num;
+      total -= num;
     }
   }
 
@@ -497,7 +796,12 @@ public final class VectorizedRleValuesReader extends ValuesReader
   /**
    * Reads the next group.
    */
-  private void readNextGroup() {
+  private boolean readNextGroup() {
+    if (in.available() <= 0) {
+      currentCount = 0;
+      return false;
+    }
+
     try {
       int header = readUnsignedVarInt();
       this.mode = (header & 1) == 0 ? MODE.RLE : MODE.PACKED;
@@ -505,7 +809,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
         case RLE:
           this.currentCount = header >>> 1;
           this.currentValue = readIntLittleEndianPaddedOnBitWidth();
-          return;
+          break;
         case PACKED:
           int numGroups = header >>> 1;
           this.currentCount = numGroups * 8;
@@ -521,12 +825,13 @@ public final class VectorizedRleValuesReader extends ValuesReader
             this.packer.unpack8Values(buffer, buffer.position(), this.currentBuffer, valueIndex);
             valueIndex += 8;
           }
-          return;
+          break;
         default:
           throw new ParquetDecodingException("not a valid mode " + this.mode);
       }
     } catch (IOException e) {
       throw new ParquetDecodingException("Failed to read from input stream", e);
     }
+    return true;
   }
 }

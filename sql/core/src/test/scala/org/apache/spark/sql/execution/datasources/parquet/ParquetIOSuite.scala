@@ -290,6 +290,43 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
     }
   }
 
+  test("vectorized reader: array") {
+    withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> "true") {
+      val data = Seq(
+        Tuple1(null),
+        Tuple1(Seq()),
+        Tuple1(Seq("a", "b", "c")),
+        Tuple1(Seq(null))
+      )
+
+      withParquetFile(data) { file =>
+        readParquetFile(file) { df =>
+          checkAnswer(df.sort("_1"),
+            Row(null) :: Row(Seq()) :: Row(Seq(null)) :: Row(Seq("a", "b", "c")) :: Nil
+          )
+        }
+      }
+    }
+  }
+
+  test("vectorized reader: struct") {
+    withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> "true") {
+      val data = Seq(
+        Tuple1((1, "a")),
+        Tuple1((2, null)),
+        Tuple1(null)
+      )
+
+      withParquetFile(data) { file =>
+        readParquetFile(file) { df =>
+          checkAnswer(df.sort("_1"),
+            Row(null) :: Row(Row(1, "a")) :: Row(Row(2, null)) :: Nil
+          )
+        }
+      }
+    }
+  }
+
   test("SPARK-34817: Support for unsigned Parquet logical types") {
     val parquetSchema = MessageTypeParser.parseMessageType(
       """message root {

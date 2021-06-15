@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources.parquet;
 
+import org.apache.parquet.column.ColumnDescriptor;
+
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
@@ -45,21 +47,41 @@ final class ParquetReadState {
   /** Maximum definition level for the Parquet column */
   final int maxDefinitionLevel;
 
+  /** Maximum repetition level for the Parquet column */
+  final int maxRepetitionLevel;
+
   /** The current index over all rows within the column chunk. This is used to check if the
    * current row should be skipped by comparing against the row ranges. */
   long rowId;
 
-  /** The offset in the current batch to put the next value */
-  int offset;
+  /** The offset to put new values into definition & repetition level vector */
+  int levelOffset;
+
+  /** The offset to put new values into value vector */
+  int valueOffset;
 
   /** The remaining number of values to read in the current page */
   int valuesToReadInPage;
 
-  /** The remaining number of values to read in the current batch */
-  int valuesToReadInBatch;
+  /** The remaining number of rows to read in the current batch */
+  int rowsToReadInBatch;
 
-  ParquetReadState(int maxDefinitionLevel, PrimitiveIterator.OfLong rowIndexes) {
-    this.maxDefinitionLevel = maxDefinitionLevel;
+  // The following are only used when reading repeated values
+
+  /** When processing repeated values, whether we've found the beginning of the first list after the
+   *  current batch. */
+  boolean lastListCompleted;
+
+  /** When processing repeated types, the number of accumulated definition levels to process */
+  int numBatchedDefLevels;
+
+  /** When processing repeated types, whether we should skip the current batch of definition
+   * levels. */
+  boolean shouldSkip;
+
+  ParquetReadState(ColumnDescriptor descriptor, PrimitiveIterator.OfLong rowIndexes) {
+    this.maxDefinitionLevel = descriptor.getMaxDefinitionLevel();
+    this.maxRepetitionLevel = descriptor.getMaxRepetitionLevel();
     this.rowRanges = constructRanges(rowIndexes);
     nextRange();
   }
@@ -101,8 +123,12 @@ final class ParquetReadState {
    * Must be called at the beginning of reading a new batch.
    */
   void resetForNewBatch(int batchSize) {
-    this.offset = 0;
-    this.valuesToReadInBatch = batchSize;
+    this.levelOffset = 0;
+    this.valueOffset = 0;
+    this.rowsToReadInBatch = batchSize;
+    this.lastListCompleted = this.maxRepetitionLevel == 0;
+    this.numBatchedDefLevels = 0;
+    this.shouldSkip = false;
   }
 
   /**
@@ -131,9 +157,10 @@ final class ParquetReadState {
    * Advance the current offset and rowId to the new values.
    */
   void advanceOffsetAndRowId(int newOffset, long newRowId) {
-    valuesToReadInBatch -= (newOffset - offset);
+    rowsToReadInBatch -= (newOffset - levelOffset);
     valuesToReadInPage -= (newRowId - rowId);
-    offset = newOffset;
+    levelOffset = newOffset;
+    valueOffset = newOffset;
     rowId = newRowId;
   }
 

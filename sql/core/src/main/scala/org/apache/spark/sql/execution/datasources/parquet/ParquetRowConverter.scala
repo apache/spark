@@ -25,8 +25,9 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.parquet.column.Dictionary
+import org.apache.parquet.io.ColumnIOFactory
 import org.apache.parquet.io.api.{Binary, Converter, GroupConverter, PrimitiveConverter}
-import org.apache.parquet.schema.{GroupType, Type}
+import org.apache.parquet.schema.{GroupType, Type, Types}
 import org.apache.parquet.schema.LogicalTypeAnnotation._
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName.{BINARY, FIXED_LEN_BYTE_ARRAY, INT32, INT64, INT96}
 
@@ -601,7 +602,9 @@ private[parquet] class ParquetRowConverter(
       // Here we try to convert field `list` into a Catalyst type to see whether the converted type
       // matches the Catalyst array element type. If it doesn't match, then it's case 1; otherwise,
       // it's case 2.
-      val guessedElementType = schemaConverter.convertField(repeatedType)
+      val messageType = Types.buildMessage().addField(repeatedType).named("foo")
+      val column = new ColumnIOFactory().getColumnIO(messageType)
+      val guessedElementType = schemaConverter.convertField(column.getChild(0)).sparkType
 
       if (DataType.equalsIgnoreCompatibleNullability(guessedElementType, elementType)) {
         // If the repeated field corresponds to the element type, creates a new converter using the

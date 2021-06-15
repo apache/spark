@@ -15,22 +15,20 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.datasources.orc
+package org.apache.parquet.io;
 
-import org.apache.spark.SparkConf
-import org.apache.spark.sql.execution.datasources.SchemaPruningSuite
-import org.apache.spark.sql.internal.SQLConf
+/**
+ * This is a workaround since both methods below are not public in {@link ColumnIO}.
+ * We should remove this once PARQUET-2050 is released with Parquet 1.13
+ */
+public class ColumnIOUtil {
+  private ColumnIOUtil() {}
 
-class OrcV1SchemaPruningSuite extends SchemaPruningSuite {
-  override protected val dataSourceName: String = "orc"
-  override protected val vectorizedReaderEnabledKey: String =
-    SQLConf.ORC_VECTORIZED_READER_ENABLED.key
-  override protected val vectorizedReaderNestedEnabledKey: String =
-    SQLConf.ORC_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key
+  public static int getDefinitionLevel(ColumnIO column) {
+    return column.getDefinitionLevel();
+  }
 
-  override protected def sparkConf: SparkConf =
-    super
-      .sparkConf
-      .set(SQLConf.USE_V1_SOURCE_LIST, "orc")
-
+  public static int getRepetitionLevel(ColumnIO column) {
+    return column.getRepetitionLevel();
+  }
 }

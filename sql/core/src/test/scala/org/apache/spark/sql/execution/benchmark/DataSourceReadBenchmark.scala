@@ -66,15 +66,23 @@ object DataSourceReadBenchmark extends SqlBasedBenchmark {
     try f finally tableNames.foreach(spark.catalog.dropTempView)
   }
 
-  private def prepareTable(dir: File, df: DataFrame, partition: Option[String] = None): Unit = {
+  private def prepareTable(
+      dir: File,
+      df: DataFrame,
+      partition: Option[String] = None,
+      isComplexType: Boolean = false): Unit = {
     val testDf = if (partition.isDefined) {
       df.write.partitionBy(partition.get)
     } else {
       df.write
     }
 
-    saveAsCsvTable(testDf, dir.getCanonicalPath + "/csv")
-    saveAsJsonTable(testDf, dir.getCanonicalPath + "/json")
+    // don't create CSV & JSON tables when benchmarking complex types as they don't support them
+    if (!isComplexType) {
+      saveAsCsvTable(testDf, dir.getCanonicalPath + "/csv")
+      saveAsJsonTable(testDf, dir.getCanonicalPath + "/json")
+    }
+
     saveAsParquetTable(testDf, dir.getCanonicalPath + "/parquet")
     saveAsOrcTable(testDf, dir.getCanonicalPath + "/orc")
   }
@@ -540,6 +548,100 @@ object DataSourceReadBenchmark extends SqlBasedBenchmark {
     }
   }
 
+  /**
+   * Similar to [[nestedColumnScanBenchmark]] but accessed column is a struct field.
+   */
+  def nestedNumericScanBenchmark(values: Int, dataType: DataType): Unit = {
+    val sqlBenchmark = new Benchmark(
+      s"SQL Single ${dataType.sql} Column Scan in Struct",
+      values,
+      output = output)
+
+    withTempPath { dir =>
+      withTempTable("t1", "parquetTable", "orcTable") {
+        import spark.implicits._
+        spark.range(values).map(_ => Random.nextLong).createOrReplaceTempView("t1")
+
+        prepareTable(dir,
+          spark.sql(s"SELECT named_struct('f', CAST(value as ${dataType.sql})) as col FROM t1"),
+          isComplexType = true)
+
+        sqlBenchmark.addCase("SQL Parquet MR") { _ =>
+          withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
+            spark.sql("select sum(col.f) from parquetTable").noop()
+          }
+        }
+
+        sqlBenchmark.addCase("SQL Parquet Vectorized (Disabled Nested Column)") { _ =>
+          spark.sql("select sum(col.f) from parquetTable").noop()
+        }
+
+        sqlBenchmark.addCase("SQL Parquet Vectorized (Enabled Nested Column)") { _ =>
+          withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> "true") {
+            spark.sql("select sum(col.f) from parquetTable").noop()
+          }
+        }
+
+        sqlBenchmark.run()
+      }
+    }
+  }
+
+  def nestedColumnScanBenchmark(values: Int): Unit = {
+    val benchmark = new Benchmark(s"SQL Nested Column Scan", values, minNumIters = 10,
+      output = output)
+
+    withTempPath { dir =>
+      withTempTable("t1", "parquetTable", "orcTable") {
+        import spark.implicits._
+        spark.range(values).map(_ => Random.nextLong).map { x =>
+          val arrayOfStructColumn = (0 until 5).map(i => (x + i, s"$x" * 5))
+          val mapOfStructColumn = Map(
+            s"$x" -> (x * 0.1, (x, s"$x" * 100)),
+            (s"$x" * 2) -> (x * 0.2, (x, s"$x" * 200)),
+            (s"$x" * 3) -> (x * 0.3, (x, s"$x" * 300)))
+          (arrayOfStructColumn, mapOfStructColumn)
+        }.toDF("col1", "col2").createOrReplaceTempView("t1")
+
+        prepareTable(dir, spark.sql(s"SELECT * FROM t1"), isComplexType = true)
+
+        benchmark.addCase("SQL ORC MR") { _ =>
+          withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> "false") {
+            spark.sql("SELECT SUM(SIZE(col1)), SUM(SIZE(col2)) FROM orcTable").noop()
+          }
+        }
+
+        benchmark.addCase("SQL ORC Vectorized (Disabled Nested Column)") { _ =>
+          spark.sql("SELECT SUM(SIZE(col1)), SUM(SIZE(col2)) FROM orcTable").noop()
+        }
+
+        benchmark.addCase("SQL ORC Vectorized (Enabled Nested Column)") { _ =>
+          withSQLConf(SQLConf.ORC_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> "true") {
+            spark.sql("SELECT SUM(SIZE(col1)), SUM(SIZE(col2)) FROM orcTable").noop()
+          }
+        }
+
+        benchmark.addCase("SQL Parquet MR") { _ =>
+          withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
+            spark.sql("SELECT SUM(SIZE(col1)), SUM(SIZE(col2)) FROM parquetTable").noop()
+          }
+        }
+
+        benchmark.addCase("SQL Parquet Vectorized (Disabled Nested Column)") { _ =>
+          spark.sql("SELECT SUM(SIZE(col1)), SUM(SIZE(col2)) FROM parquetTable").noop()
+        }
+
+        benchmark.addCase("SQL Parquet Vectorized (Enabled Nested Column)") { _ =>
+          withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> "true") {
+            spark.sql("SELECT SUM(SIZE(col1)), SUM(SIZE(col2)) FROM parquetTable").noop()
+          }
+        }
+
+        benchmark.run()
+      }
+    }
+  }
+
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     runBenchmark("SQL Single Numeric Column Scan") {
       Seq(ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType).foreach {
@@ -564,6 +666,14 @@ object DataSourceReadBenchmark extends SqlBasedBenchmark {
       for (columnWidth <- List(10, 50, 100)) {
         columnsBenchmark(1024 * 1024 * 1, columnWidth)
       }
+    }
+    runBenchmark("SQL Single Numeric Column Scan in Struct") {
+      Seq(ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType).foreach {
+        dataType => nestedNumericScanBenchmark(1024 * 1024 * 15, dataType)
+      }
+    }
+    runBenchmark("SQL Nested Column Scan") {
+      nestedColumnScanBenchmark(1024 * 1024)
     }
   }
 }
