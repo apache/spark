@@ -303,7 +303,7 @@ class DataTypeOps(object, metaclass=ABCMeta):
         """Prepare column when from_pandas."""
         return col.replace({np.nan: None})
 
-    def isnull(self, index_ops) -> Union["Series", "Index"]:
+    def isnull(self, index_ops: Union["Index", "Series"]) -> Union["Series", "Index"]:
         from pyspark.pandas.indexes import MultiIndex
 
         if isinstance(index_ops, MultiIndex):
