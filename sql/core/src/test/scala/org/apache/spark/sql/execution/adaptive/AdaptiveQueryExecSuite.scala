@@ -1817,7 +1817,7 @@ class AdaptiveQueryExecSuite
       }
     }
   }
-    
+
   test("SPARK-35414: Submit broadcast job first to avoid broadcast timeout in AQE") {
     val shuffleMapTaskParallelism = 10
 
