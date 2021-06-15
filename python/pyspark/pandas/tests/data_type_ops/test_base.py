@@ -15,13 +15,16 @@
 # limitations under the License.
 #
 
+from pyspark.pandas.typedef.typehints import extension_object_dtypes_available
+
+if extension_object_dtypes_available:
+    from pandas import BooleanDtype
 from pandas.api.types import CategoricalDtype
 from pandas.api.extensions import ExtensionDtype
-from pandas import BooleanDtype
+
 from pyspark.pandas.typedef.typehints import (
     extension_object_dtypes_available,
 )
-
 from pyspark.pandas.data_type_ops.base import DataTypeOps
 from pyspark.pandas.data_type_ops.binary_ops import BinaryOps
 from pyspark.pandas.data_type_ops.boolean_ops import BooleanOps, BooleanExtensionOps
@@ -75,10 +78,10 @@ class BaseTest(PandasOnSparkTestCase, TestCasesUtils):
             self.assertIsInstance(DataTypeOps(_dtype, _spark_type), _ops)
 
         _unknow_spark_type = _mock_spark_type
-        self.assertRaises(TypeError, DataTypeOps, BooleanDtype(), _unknow_spark_type)
+        self.assertRaises(TypeError, DataTypeOps, BooleanType(), _unknow_spark_type)
 
     def test_bool_ext_ops(self):
         if extension_object_dtypes_available:
             self.assertIsInstance(DataTypeOps(BooleanDtype(), BooleanType()), BooleanExtensionOps)
         else:
-            self.assertIsInstance(DataTypeOps(BooleanDtype(), BooleanType()), BooleanOps)
+            self.assertIsInstance(DataTypeOps(ExtensionDtype(), BooleanType()), BooleanOps)
