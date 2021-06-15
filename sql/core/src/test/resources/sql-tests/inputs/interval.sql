@@ -46,6 +46,8 @@ select make_ym_interval(178956970, 7);
 select make_ym_interval(178956970, 8);
 select make_ym_interval(-178956970, -8);
 select make_ym_interval(-178956970, -9);
+select make_ym_interval(178956970L, 7L);
+select make_ym_interval(0d, 1.1d);
 
 -- cast string to intervals
 select cast('1 second' as interval);

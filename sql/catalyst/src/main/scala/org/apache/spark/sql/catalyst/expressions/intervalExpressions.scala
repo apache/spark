@@ -346,7 +346,6 @@ case class MakeInterval(
     )
 }
 
-// scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(years, months) - Make year-month interval from years, months.",
   arguments = """
@@ -360,14 +359,14 @@ case class MakeInterval(
        1-2
       > SELECT _FUNC_(1, 0);
        1-0
-      > SELECT _FUNC_(0, 1);
-       0-1
+      > SELECT _FUNC_(-1, 1);
+       -1-1
   """,
   since = "3.2.0",
   group = "datetime_funcs")
 // scalastyle:on line.size.limit
 case class MakeYMInterval(years: Expression, months: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
+  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant with Serializable {
 
   def this(years: Expression) = this(years, Literal(0))
   def this() = this(Literal(0))
@@ -376,24 +375,18 @@ case class MakeYMInterval(years: Expression, months: Expression)
   override def right: Expression = months
   override def inputTypes: Seq[AbstractDataType] = Seq(IntegerType, IntegerType)
   override def dataType: DataType = YearMonthIntervalType
-  override def nullable: Boolean = children.exists(_.nullable)
-
-  private def evalIntValue(dt: DataType, value: Any): Long = dt match {
-    case _: ByteType | _: ShortType | _: IntegerType => value.asInstanceOf[Number].longValue()
-    case _: LongType => value.asInstanceOf[Long]
-  }
 
   override def nullSafeEval(year: Any, month: Any): Any = {
-    LongExactNumeric.toInt(Math.addExact(evalIntValue(right.dataType, month),
-      Math.multiplyExact(evalIntValue(left.dataType, year), MONTHS_PER_YEAR)))
+    Math.toIntExact(Math.addExact(month.asInstanceOf[Number].longValue(),
+      Math.multiplyExact(year.asInstanceOf[Number].longValue(), MONTHS_PER_YEAR)))
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (years, months) => {
-      val extractor = LongExactNumeric.getClass.getName.stripSuffix("$")
+      val math = classOf[Math].getName.stripSuffix("$")
       s"""
-         |$extractor.toInt(java.lang.Math.addExact($months,
-         |  java.lang.Math.multiplyExact($years, $MONTHS_PER_YEAR)))
+         |$math.toIntExact(java.lang.Math.addExact($months,
+         |  $math.multiplyExact($years, $MONTHS_PER_YEAR)))
          |""".stripMargin
     })
   }
@@ -401,8 +394,7 @@ case class MakeYMInterval(years: Expression, months: Expression)
   override def prettyName: String = "make_ym_interval"
 
   override protected def withNewChildrenInternal(
-      newLeft: Expression,
-      newRight: Expression): Expression =
+      newLeft: Expression, newRight: Expression): Expression =
     copy(years = newLeft, months = newRight)
 }
 
