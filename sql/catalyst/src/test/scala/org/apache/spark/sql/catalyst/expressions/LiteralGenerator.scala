@@ -178,7 +178,7 @@ object LiteralGenerator {
     calendarIntervalLiterGen.map { calendarIntervalLiteral =>
       Literal.create(
         calendarIntervalLiteral.value.asInstanceOf[CalendarInterval].extractAsDuration(),
-        DayTimeIntervalType)
+        DayTimeIntervalType())
     }
   }
 
@@ -203,7 +203,7 @@ object LiteralGenerator {
       case BinaryType => binaryLiteralGen
       case CalendarIntervalType => calendarIntervalLiterGen
       case DecimalType.Fixed(precision, scale) => decimalLiteralGen(precision, scale)
-      case DayTimeIntervalType => dayTimeIntervalLiteralGen
+      case _: DayTimeIntervalType => dayTimeIntervalLiteralGen
       case YearMonthIntervalType => yearMonthIntervalLiteralGen
       case dt => throw new IllegalArgumentException(s"not supported type $dt")
     }

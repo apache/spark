@@ -21,6 +21,7 @@ import java.time.{Duration, Period}
 import java.time.temporal.ChronoUnit
 import java.util.concurrent.TimeUnit
 
+import scala.collection.mutable
 import scala.util.control.NonFatal
 
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
@@ -28,7 +29,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils.millisToMicros
 import org.apache.spark.sql.catalyst.util.IntervalStringStyles.{ANSI_STYLE, HIVE_STYLE, IntervalStyle}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.Decimal
+import org.apache.spark.sql.types.{DayTimeIntervalType, Decimal}
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 // The style of textual representation of intervals
@@ -158,7 +159,11 @@ object IntervalUtils {
   private val daySecondLiteralRegex =
     (s"(?i)^INTERVAL\\s+([+|-])?\\'$daySecondPatternString\\'\\s+DAY\\s+TO\\s+SECOND$$").r
 
-  def castStringToDTInterval(input: UTF8String): Long = {
+  def castStringToDTInterval(
+      input: UTF8String,
+      // TODO(SPARK-35735): Take into account day-time interval fields in cast
+      startField: Byte,
+      endField: Byte): Long = {
     def secondAndMicro(second: String, micro: String): String = {
       if (micro != null) {
         s"$second$micro"
@@ -953,16 +958,37 @@ object IntervalUtils {
    * @param style The style of textual representation of the interval
    * @return Day-time interval string
    */
-  def toDayTimeIntervalString(micros: Long, style: IntervalStyle): String = {
+  def toDayTimeIntervalString(
+      micros: Long,
+      style: IntervalStyle,
+      startField: Byte,
+      endField: Byte): String = {
     var sign = ""
     var rest = micros
+    val from = DayTimeIntervalType.fieldToString(startField).toUpperCase
+    val to = DayTimeIntervalType.fieldToString(endField).toUpperCase
     if (micros < 0) {
       if (micros == Long.MinValue) {
         // Especial handling of minimum `Long` value because negate op overflows `Long`.
         // seconds = 106751991 * (24 * 60 * 60) + 4 * 60 * 60 + 54 = 9223372036854
         // microseconds = -9223372036854000000L-775808 == Long.MinValue
         val minIntervalString = style match {
-          case ANSI_STYLE => "INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND"
+          case ANSI_STYLE =>
+            val baseStr = "-106751991 04:00:54.775808"
+            val fromPos = startField match {
+              case DayTimeIntervalType.DAY => 0
+              case DayTimeIntervalType.HOUR => 11
+              case DayTimeIntervalType.MINUTE => 14
+              case DayTimeIntervalType.SECOND => 17
+            }
+            val toPos = endField match {
+              case DayTimeIntervalType.DAY => 10
+              case DayTimeIntervalType.HOUR => 13
+              case DayTimeIntervalType.MINUTE => 16
+              case DayTimeIntervalType.SECOND => baseStr.length
+            }
+            val postfix = if (startField == endField) from else s"$from TO $to"
+            s"INTERVAL '${baseStr.substring(fromPos, toPos)}' $postfix"
           case HIVE_STYLE => "-106751991 04:00:54.775808000"
         }
         return minIntervalString
@@ -983,7 +1009,40 @@ object IntervalUtils {
         val secStr = java.math.BigDecimal.valueOf(secondsWithFraction, 6)
           .stripTrailingZeros()
           .toPlainString()
-        f"INTERVAL '$sign$days $hours%02d:$minutes%02d:$leadSecZero$secStr' DAY TO SECOND"
+        val formatBuilder = new StringBuilder("INTERVAL '")
+        if (startField == endField) {
+          startField match {
+            case DayTimeIntervalType.DAY => formatBuilder.append(s"$sign$days' ")
+            case DayTimeIntervalType.HOUR => formatBuilder.append(f"$hours%02d' ")
+            case DayTimeIntervalType.MINUTE => formatBuilder.append(f"$minutes%02d' ")
+            case DayTimeIntervalType.SECOND => formatBuilder.append(s"$leadSecZero$secStr' ")
+          }
+          formatBuilder.append(from).toString
+        } else {
+          val formatArgs = new mutable.ArrayBuffer[Long]
+          if (startField <= DayTimeIntervalType.DAY && DayTimeIntervalType.DAY < endField) {
+            formatBuilder.append(s"$sign$days ")
+          }
+          if (startField <= DayTimeIntervalType.HOUR && DayTimeIntervalType.HOUR < endField) {
+            formatBuilder.append("%02d:")
+            formatArgs.append(hours)
+          }
+          if (startField <= DayTimeIntervalType.MINUTE && DayTimeIntervalType.MINUTE < endField) {
+            formatBuilder.append("%02d:")
+            formatArgs.append(minutes)
+          }
+          endField match {
+            case DayTimeIntervalType.HOUR =>
+              formatBuilder.append("%02d' ")
+              formatArgs.append(hours)
+            case DayTimeIntervalType.MINUTE =>
+              formatBuilder.append("%02d' ")
+              formatArgs.append(minutes)
+            case DayTimeIntervalType.SECOND =>
+              formatBuilder.append(s"$leadSecZero$secStr' ")
+          }
+          formatBuilder.append(s"$from TO $to").toString.format(formatArgs.toSeq: _*)
+        }
       case HIVE_STYLE =>
         val seconds = secondsWithFraction / MICROS_PER_SECOND
         val nanos = (secondsWithFraction % MICROS_PER_SECOND) * NANOS_PER_MICROS

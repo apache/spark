@@ -363,7 +363,7 @@ struct<INTERVAL '10-9' YEAR TO MONTH:interval year to month>
 -- !query
 select interval '20 15' day to hour
 -- !query schema
-struct<INTERVAL '20 15:00:00' DAY TO SECOND:interval day to second>
+struct<INTERVAL '20 15' DAY TO HOUR:interval day to hour>
 -- !query output
 20 15:00:00.000000000
 
@@ -371,7 +371,7 @@ struct<INTERVAL '20 15:00:00' DAY TO SECOND:interval day to second>
 -- !query
 select interval '20 15:40' day to minute
 -- !query schema
-struct<INTERVAL '20 15:40:00' DAY TO SECOND:interval day to second>
+struct<INTERVAL '20 15:40' DAY TO MINUTE:interval day to minute>
 -- !query output
 20 15:40:00.000000000
 
@@ -387,7 +387,7 @@ struct<INTERVAL '20 15:40:32.998999' DAY TO SECOND:interval day to second>
 -- !query
 select interval '15:40' hour to minute
 -- !query schema
-struct<INTERVAL '0 15:40:00' DAY TO SECOND:interval day to second>
+struct<INTERVAL '15:40' HOUR TO MINUTE:interval hour to minute>
 -- !query output
 0 15:40:00.000000000
 
@@ -395,7 +395,7 @@ struct<INTERVAL '0 15:40:00' DAY TO SECOND:interval day to second>
 -- !query
 select interval '15:40:32.99899999' hour to second
 -- !query schema
-struct<INTERVAL '0 15:40:32.998999' DAY TO SECOND:interval day to second>
+struct<INTERVAL '15:40:32.998999' HOUR TO SECOND:interval hour to second>
 -- !query output
 0 15:40:32.998999000
 
@@ -403,7 +403,7 @@ struct<INTERVAL '0 15:40:32.998999' DAY TO SECOND:interval day to second>
 -- !query
 select interval '40:32.99899999' minute to second
 -- !query schema
-struct<INTERVAL '0 00:40:32.998999' DAY TO SECOND:interval day to second>
+struct<INTERVAL '40:32.998999' MINUTE TO SECOND:interval minute to second>
 -- !query output
 0 00:40:32.998999000
 
@@ -411,7 +411,7 @@ struct<INTERVAL '0 00:40:32.998999' DAY TO SECOND:interval day to second>
 -- !query
 select interval '40:32' minute to second
 -- !query schema
-struct<INTERVAL '0 00:40:32' DAY TO SECOND:interval day to second>
+struct<INTERVAL '40:32' MINUTE TO SECOND:interval minute to second>
 -- !query output
 0 00:40:32.000000000
 

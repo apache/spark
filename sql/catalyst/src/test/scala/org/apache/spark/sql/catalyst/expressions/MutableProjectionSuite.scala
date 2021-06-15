@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.util.IntervalUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.DataTypeTestUtils.dayTimeIntervalTypes
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -30,7 +31,7 @@ class MutableProjectionSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   val fixedLengthTypes = Array[DataType](
     BooleanType, ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType,
-    DateType, TimestampType, YearMonthIntervalType, DayTimeIntervalType)
+    DateType, TimestampType, YearMonthIntervalType) ++ dayTimeIntervalTypes
 
   val variableLengthTypes = Array(
     StringType, DecimalType.defaultConcreteType, CalendarIntervalType, BinaryType,
@@ -43,14 +44,16 @@ class MutableProjectionSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   testBothCodegenAndInterpreted("fixed-length types") {
     val inputRow = InternalRow.fromSeq(Seq(
-      true, 3.toByte, 15.toShort, -83, 129L, 1.0f, 5.0, 1, 2L, Int.MaxValue, Long.MinValue))
+      true, 3.toByte, 15.toShort, -83, 129L, 1.0f, 5.0, 1, 2L, Int.MaxValue) ++
+      Seq.tabulate(dayTimeIntervalTypes.length)(_ => Long.MaxValue))
     val proj = createMutableProjection(fixedLengthTypes)
     assert(proj(inputRow) === inputRow)
   }
 
   testBothCodegenAndInterpreted("unsafe buffer") {
     val inputRow = InternalRow.fromSeq(Seq(
-      false, 1.toByte, 9.toShort, -18, 53L, 3.2f, 7.8, 4, 9L, Int.MinValue, Long.MaxValue))
+      false, 1.toByte, 9.toShort, -18, 53L, 3.2f, 7.8, 4, 9L, Int.MinValue) ++
+      Seq.tabulate(dayTimeIntervalTypes.length)(_ => Long.MaxValue))
     val numFields = fixedLengthTypes.length
     val numBytes = Platform.BYTE_ARRAY_OFFSET + UnsafeRow.calculateBitSetWidthInBytes(numFields) +
       UnsafeRow.WORD_SIZE * numFields

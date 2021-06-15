@@ -18,7 +18,8 @@
 package org.apache.spark.sql.internal
 
 import java.util.{Locale, NoSuchElementException, Properties, TimeZone}
-import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
+import java.util
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
 import java.util.zip.Deflater
 
@@ -53,28 +54,60 @@ import org.apache.spark.util.Utils
 
 object SQLConf {
 
-  private[sql] val sqlConfEntries =
-    new ConcurrentHashMap[String, ConfigEntry[_]]()
+  private[this] val sqlConfEntriesUpdateLock = new Object
 
-  val staticConfKeys: java.util.Set[String] =
-    java.util.Collections.synchronizedSet(new java.util.HashSet[String]())
+  @volatile
+  private[this] var sqlConfEntries: util.Map[String, ConfigEntry[_]] = util.Collections.emptyMap()
 
-  private def register(entry: ConfigEntry[_]): Unit = sqlConfEntries.merge(entry.key, entry,
-    (existingConfigEntry, newConfigEntry) => {
-      require(existingConfigEntry == null,
-        s"Duplicate SQLConfigEntry. ${newConfigEntry.key} has been registered")
-      newConfigEntry
-    }
-  )
+  private[this] val staticConfKeysUpdateLock = new Object
+
+  @volatile
+  private[this] var staticConfKeys: java.util.Set[String] = util.Collections.emptySet()
+
+  private def register(entry: ConfigEntry[_]): Unit = sqlConfEntriesUpdateLock.synchronized {
+    require(!sqlConfEntries.containsKey(entry.key),
+      s"Duplicate SQLConfigEntry. ${entry.key} has been registered")
+    val updatedMap = new java.util.HashMap[String, ConfigEntry[_]](sqlConfEntries)
+    updatedMap.put(entry.key, entry)
+    sqlConfEntries = updatedMap
+  }
 
   // For testing only
-  private[sql] def unregister(entry: ConfigEntry[_]): Unit = sqlConfEntries.remove(entry.key)
+  private[sql] def unregister(entry: ConfigEntry[_]): Unit = sqlConfEntriesUpdateLock.synchronized {
+    val updatedMap = new java.util.HashMap[String, ConfigEntry[_]](sqlConfEntries)
+    updatedMap.remove(entry.key)
+    sqlConfEntries = updatedMap
+  }
+
+  private[internal] def getConfigEntry(key: String): ConfigEntry[_] = {
+    sqlConfEntries.get(key)
+  }
+
+  private[internal] def getConfigEntries(): util.Collection[ConfigEntry[_]] = {
+    sqlConfEntries.values()
+  }
+
+  private[internal] def containsConfigEntry(entry: ConfigEntry[_]): Boolean = {
+    getConfigEntry(entry.key) == entry
+  }
+
+  private[sql] def containsConfigKey(key: String): Boolean = {
+    sqlConfEntries.containsKey(key)
+  }
+
+  def registerStaticConfigKey(key: String): Unit = staticConfKeysUpdateLock.synchronized {
+    val updated = new util.HashSet[String](staticConfKeys)
+    updated.add(key)
+    staticConfKeys = updated
+  }
+
+  def isStaticConfigKey(key: String): Boolean = staticConfKeys.contains(key)
 
   def buildConf(key: String): ConfigBuilder = ConfigBuilder(key).onCreate(register)
 
   def buildStaticConf(key: String): ConfigBuilder = {
     ConfigBuilder(key).onCreate { entry =>
-      staticConfKeys.add(entry.key)
+      SQLConf.registerStaticConfigKey(entry.key)
       SQLConf.register(entry)
     }
   }
@@ -3930,7 +3963,7 @@ class SQLConf extends Serializable with Logging {
   def setConfString(key: String, value: String): Unit = {
     require(key != null, "key cannot be null")
     require(value != null, s"value cannot be null for key: $key")
-    val entry = sqlConfEntries.get(key)
+    val entry = getConfigEntry(key)
     if (entry != null) {
       // Only verify configs in the SQLConf object
       entry.valueConverter(value)
@@ -3942,7 +3975,7 @@ class SQLConf extends Serializable with Logging {
   def setConf[T](entry: ConfigEntry[T], value: T): Unit = {
     require(entry != null, "entry cannot be null")
     require(value != null, s"value cannot be null for key: ${entry.key}")
-    require(sqlConfEntries.get(entry.key) == entry, s"$entry is not registered")
+    require(containsConfigEntry(entry), s"$entry is not registered")
     setConfWithCheck(entry.key, entry.stringConverter(value))
   }
 
@@ -3952,7 +3985,7 @@ class SQLConf extends Serializable with Logging {
     Option(settings.get(key)).
       orElse {
         // Try to use the default value
-        Option(sqlConfEntries.get(key)).map { e => e.stringConverter(e.readFrom(reader)) }
+        Option(getConfigEntry(key)).map { e => e.stringConverter(e.readFrom(reader)) }
       }.
       getOrElse(throw new NoSuchElementException(key))
   }
@@ -3963,7 +3996,7 @@ class SQLConf extends Serializable with Logging {
    * desired one.
    */
   def getConf[T](entry: ConfigEntry[T], defaultValue: T): T = {
-    require(sqlConfEntries.get(entry.key) == entry, s"$entry is not registered")
+    require(containsConfigEntry(entry), s"$entry is not registered")
     Option(settings.get(entry.key)).map(entry.valueConverter).getOrElse(defaultValue)
   }
 
@@ -3972,7 +4005,7 @@ class SQLConf extends Serializable with Logging {
    * yet, return `defaultValue` in [[ConfigEntry]].
    */
   def getConf[T](entry: ConfigEntry[T]): T = {
-    require(sqlConfEntries.get(entry.key) == entry, s"$entry is not registered")
+    require(containsConfigEntry(entry), s"$entry is not registered")
     entry.readFrom(reader)
   }
 
@@ -3981,7 +4014,7 @@ class SQLConf extends Serializable with Logging {
    * is not set yet, returns None.
    */
   def getConf[T](entry: OptionalConfigEntry[T]): Option[T] = {
-    require(sqlConfEntries.get(entry.key) == entry, s"$entry is not registered")
+    require(containsConfigEntry(entry), s"$entry is not registered")
     entry.readFrom(reader)
   }
 
@@ -3990,19 +4023,18 @@ class SQLConf extends Serializable with Logging {
    * not set yet, return `defaultValue`.
    */
   def getConfString(key: String, defaultValue: String): String = {
-    if (defaultValue != null && defaultValue != ConfigEntry.UNDEFINED) {
-      val entry = sqlConfEntries.get(key)
-      if (entry != null) {
-        // Only verify configs in the SQLConf object
-        entry.valueConverter(defaultValue)
-      }
-    }
     Option(settings.get(key)).getOrElse {
       // If the key is not set, need to check whether the config entry is registered and is
       // a fallback conf, so that we can check its parent.
-      sqlConfEntries.get(key) match {
-        case e: FallbackConfigEntry[_] => getConfString(e.fallback.key, defaultValue)
-        case _ => defaultValue
+      getConfigEntry(key) match {
+        case e: FallbackConfigEntry[_] =>
+          getConfString(e.fallback.key, defaultValue)
+        case e: ConfigEntry[_] if defaultValue != null && defaultValue != ConfigEntry.UNDEFINED =>
+          // Only verify configs in the SQLConf object
+          e.valueConverter(defaultValue)
+          defaultValue
+        case _ =>
+          defaultValue
       }
     }
   }
@@ -4039,9 +4071,9 @@ class SQLConf extends Serializable with Logging {
    * Return all the configuration definitions that have been defined in [[SQLConf]]. Each
    * definition contains key, defaultValue and doc.
    */
-  def getAllDefinedConfs: Seq[(String, String, String, String)] = sqlConfEntries.synchronized {
+  def getAllDefinedConfs: Seq[(String, String, String, String)] = {
     loadDefinedConfs()
-    sqlConfEntries.values.asScala.filter(_.isPublic).map { entry =>
+    getConfigEntries().asScala.filter(_.isPublic).map { entry =>
       val displayValue = Option(getConfString(entry.key, null)).getOrElse(entry.defaultValueString)
       (entry.key, displayValue, entry.doc, entry.version)
     }.toSeq
@@ -4131,6 +4163,6 @@ class SQLConf extends Serializable with Logging {
   }
 
   def isModifiable(key: String): Boolean = {
-    sqlConfEntries.containsKey(key) && !staticConfKeys.contains(key)
+    containsConfigKey(key) && !isStaticConfigKey(key)
   }
 }

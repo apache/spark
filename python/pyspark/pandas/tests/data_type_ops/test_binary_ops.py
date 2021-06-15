@@ -16,6 +16,7 @@
 #
 
 import pandas as pd
+from pandas.api.types import CategoricalDtype
 
 from pyspark import pandas as ps
 from pyspark.pandas.config import option_context
@@ -149,6 +150,14 @@ class BinaryOpsTest(PandasOnSparkTestCase, TestCasesUtils):
 
     def test_isnull(self):
         self.assert_eq(self.pser.isnull(), self.psser.isnull())
+
+    def test_astype(self):
+        pser = self.pser
+        psser = self.psser
+        self.assert_eq(pd.Series(["1", "2", "3"]), psser.astype(str))
+        self.assert_eq(pser.astype("category"), psser.astype("category"))
+        cat_type = CategoricalDtype(categories=[b"2", b"3", b"1"])
+        self.assert_eq(pser.astype(cat_type), psser.astype(cat_type))
 
 
 if __name__ == "__main__":

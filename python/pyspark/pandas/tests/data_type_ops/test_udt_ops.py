@@ -128,6 +128,9 @@ class UDTOpsTest(PandasOnSparkTestCase, TestCasesUtils):
     def test_isnull(self):
         self.assert_eq(self.pser.isnull(), self.psser.isnull())
 
+    def test_astype(self):
+        self.assertRaises(TypeError, lambda: self.psser.astype(str))
+
 
 if __name__ == "__main__":
     import unittest

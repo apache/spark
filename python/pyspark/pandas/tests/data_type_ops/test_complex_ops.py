@@ -66,8 +66,12 @@ class ComplexOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         return self.numeric_array_pssers + list(self.non_numeric_array_pssers.values())
 
     @property
+    def pser(self):
+        return pd.Series([[1, 2, 3]])
+
+    @property
     def psser(self):
-        return ps.Series([[1, 2, 3]])
+        return ps.from_pandas(self.pser)
 
     def test_add(self):
         for pser, psser in zip(self.psers, self.pssers):
@@ -216,6 +220,9 @@ class ComplexOpsTest(PandasOnSparkTestCase, TestCasesUtils):
     def test_isnull(self):
         for pser, psser in zip(self.psers, self.pssers):
             self.assert_eq(pser.isnull(), psser.isnull())
+
+    def test_astype(self):
+        self.assert_eq(self.pser.astype(str), self.psser.astype(str))
 
 
 if __name__ == "__main__":

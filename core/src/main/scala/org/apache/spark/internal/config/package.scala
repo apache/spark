@@ -2084,6 +2084,27 @@ package object config {
       .booleanConf
       .createWithDefault(false)
 
+  private[spark] val PUSH_BASED_SHUFFLE_MERGE_RESULTS_TIMEOUT =
+    ConfigBuilder("spark.shuffle.push.merge.results.timeout")
+      .doc("Specify the max amount of time DAGScheduler waits for the merge results from " +
+        "all remote shuffle services for a given shuffle. DAGScheduler will start to submit " +
+        "following stages if not all results are received within the timeout.")
+      .version("3.2.0")
+      .timeConf(TimeUnit.SECONDS)
+      .checkValue(_ >= 0L, "Timeout must be >= 0.")
+      .createWithDefaultString("10s")
+
+  private[spark] val PUSH_BASED_SHUFFLE_MERGE_FINALIZE_TIMEOUT =
+    ConfigBuilder("spark.shuffle.push.merge.finalize.timeout")
+      .doc("Specify the amount of time DAGScheduler waits after all mappers finish for " +
+        "a given shuffle map stage before it starts sending merge finalize requests to " +
+        "remote shuffle services. This allows the shuffle services some extra time to " +
+        "merge as many blocks as possible.")
+      .version("3.2.0")
+      .timeConf(TimeUnit.SECONDS)
+      .checkValue(_ >= 0L, "Timeout must be >= 0.")
+      .createWithDefaultString("10s")
+
   private[spark] val SHUFFLE_MERGER_MAX_RETAINED_LOCATIONS =
     ConfigBuilder("spark.shuffle.push.maxRetainedMergerLocations")
       .doc("Maximum number of shuffle push merger locations cached for push based shuffle. " +
@@ -2117,7 +2138,7 @@ package object config {
         s"${SHUFFLE_MERGER_LOCATIONS_MIN_THRESHOLD_RATIO.key} set to 0.05, we would need " +
         "at least 50 mergers to enable push based shuffle for that stage.")
       .version("3.1.0")
-      .doubleConf
+      .intConf
       .createWithDefault(5)
 
   private[spark] val SHUFFLE_NUM_PUSH_THREADS =

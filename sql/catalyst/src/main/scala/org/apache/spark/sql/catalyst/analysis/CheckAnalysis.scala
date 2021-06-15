@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.optimizer.BooleanSimplification
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, TypeUtils}
-import org.apache.spark.sql.connector.catalog.{LookupCatalog, SupportsAtomicPartitionManagement, SupportsPartitionManagement, Table}
+import org.apache.spark.sql.connector.catalog.{LookupCatalog, SupportsPartitionManagement}
 import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, After, ColumnPosition, DeleteColumn, RenameColumn, UpdateColumnComment, UpdateColumnNullability, UpdateColumnPosition, UpdateColumnType}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
@@ -121,6 +121,9 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
 
       case u: UnresolvedRelation =>
         u.failAnalysis(s"Table or view not found: ${u.multipartIdentifier.quoted}")
+
+      case u: UnresolvedHint =>
+        u.failAnalysis(s"Hint not found: ${u.name}")
 
       case InsertIntoStatement(u: UnresolvedRelation, _, _, _, _, _) =>
         u.failAnalysis(s"Table not found: ${u.multipartIdentifier.quoted}")
@@ -1066,25 +1069,5 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
       case p =>
         failOnOuterReferenceInSubTree(p)
     }}
-  }
-
-  // Make sure that table is able to alter partition.
-  private def checkAlterTablePartition(
-      table: Table, parts: Seq[PartitionSpec]): Unit = {
-    (table, parts) match {
-      case (table, _) if !table.isInstanceOf[SupportsPartitionManagement] =>
-        failAnalysis(s"Table ${table.name()} can not alter partitions.")
-
-      case (_, parts) if parts.exists(_.isInstanceOf[UnresolvedPartitionSpec]) =>
-        failAnalysis("PartitionSpecs are not resolved")
-
-      // Skip atomic partition tables
-      case (_: SupportsAtomicPartitionManagement, _) =>
-      case (_: SupportsPartitionManagement, parts) if parts.size > 1 =>
-        failAnalysis(
-          s"Nonatomic partition table ${table.name()} can not alter multiple partitions.")
-
-      case _ =>
-    }
   }
 }
