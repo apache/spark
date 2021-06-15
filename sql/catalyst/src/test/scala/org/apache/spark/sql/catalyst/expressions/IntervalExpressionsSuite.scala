@@ -23,6 +23,7 @@ import java.time.temporal.ChronoUnit
 import scala.language.implicitConversions
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.analysis.TypeCoercion
 import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, IntervalUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.IntervalUtils.{safeStringToInterval, stringToInterval}
@@ -455,5 +456,32 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       Literal(null, DayTimeIntervalType())), null)
     checkEvaluation(ExtractANSIIntervalSeconds(
       Literal(null, DayTimeIntervalType())), null)
+  }
+
+  test("SPARK-35129: make_ym_interval") {
+    checkEvaluation(MakeYMInterval(Literal(0), Literal(10)), 10)
+    checkEvaluation(MakeYMInterval(Literal(1), Literal(10)), 22)
+    checkEvaluation(MakeYMInterval(Literal(1), Literal(0)), 12)
+    checkEvaluation(MakeYMInterval(Literal(1), Literal(-1)), 11)
+    checkEvaluation(MakeYMInterval(Literal(-2), Literal(-1)), -25)
+
+    checkEvaluation(MakeYMInterval(Literal(178956970), Literal(7)), Int.MaxValue)
+    checkEvaluation(MakeYMInterval(Literal(-178956970), Literal(-8)), Int.MinValue)
+
+    Seq(MakeYMInterval(Literal(178956970), Literal(8)),
+      MakeYMInterval(Literal(-178956970), Literal(-9)))
+      .foreach { ym =>
+        checkExceptionInExpression[ArithmeticException](ym, "integer overflow")
+      }
+
+    def checkImplicitEvaluation(expr: Expression, value: Any): Unit = {
+      val resolvedExpr = TypeCoercion.ImplicitTypeCasts.transform(expr)
+      checkEvaluation(resolvedExpr, value)
+    }
+
+    // Check implicit casts.
+    checkImplicitEvaluation(MakeYMInterval(Literal(1L), Literal(-1L)), 11)
+    checkImplicitEvaluation(MakeYMInterval(Literal(1d), Literal(-1L)), 11)
+    checkImplicitEvaluation(MakeYMInterval(Literal(1.1), Literal(-1L)), 11)
   }
 }

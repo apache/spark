@@ -23,6 +23,7 @@ import java.util.Locale
 import com.google.common.math.{DoubleMath, IntMath, LongMath}
 
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
+import org.apache.spark.sql.catalyst.util.DateTimeConstants.MONTHS_PER_YEAR
 import org.apache.spark.sql.catalyst.util.IntervalUtils
 import org.apache.spark.sql.catalyst.util.IntervalUtils._
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -343,6 +344,58 @@ case class MakeInterval(
       mins = newChildren(5),
       secs = newChildren(6)
     )
+}
+
+@ExpressionDescription(
+  usage = "_FUNC_(years, months) - Make year-month interval from years, months.",
+  arguments = """
+    Arguments:
+      * years - the number of years, positive or negative
+      * months - the number of months, positive or negative
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(1, 2);
+       1-2
+      > SELECT _FUNC_(1, 0);
+       1-0
+      > SELECT _FUNC_(-1, 1);
+       -0-11
+  """,
+  since = "3.2.0",
+  group = "datetime_funcs")
+// scalastyle:on line.size.limit
+case class MakeYMInterval(years: Expression, months: Expression)
+  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant with Serializable {
+
+  def this(years: Expression) = this(years, Literal(0))
+  def this() = this(Literal(0))
+
+  override def left: Expression = years
+  override def right: Expression = months
+  override def inputTypes: Seq[AbstractDataType] = Seq(IntegerType, IntegerType)
+  override def dataType: DataType = YearMonthIntervalType
+
+  override def nullSafeEval(year: Any, month: Any): Any = {
+    Math.toIntExact(Math.addExact(month.asInstanceOf[Number].longValue(),
+      Math.multiplyExact(year.asInstanceOf[Number].longValue(), MONTHS_PER_YEAR)))
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    defineCodeGen(ctx, ev, (years, months) => {
+      val math = classOf[Math].getName.stripSuffix("$")
+      s"""
+         |$math.toIntExact(java.lang.Math.addExact($months,
+         |  $math.multiplyExact($years, $MONTHS_PER_YEAR)))
+         |""".stripMargin
+    })
+  }
+
+  override def prettyName: String = "make_ym_interval"
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): Expression =
+    copy(years = newLeft, months = newRight)
 }
 
 // Multiply an year-month interval by a numeric
