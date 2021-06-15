@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCo
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Window}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.types._
 
 /**
@@ -56,7 +57,7 @@ import org.apache.spark.sql.types._
 object NormalizeFloatingNumbers extends Rule[LogicalPlan] {
 
   def apply(plan: LogicalPlan): LogicalPlan = plan match {
-    case _ => plan transform {
+    case _ => plan.transformWithPruning( _.containsAnyPattern(WINDOW, JOIN)) {
       case w: Window if w.partitionSpec.exists(p => needNormalize(p)) =>
         // Although the `windowExpressions` may refer to `partitionSpec` expressions, we don't need
         // to normalize the `windowExpressions`, as they are executed per input row and should take

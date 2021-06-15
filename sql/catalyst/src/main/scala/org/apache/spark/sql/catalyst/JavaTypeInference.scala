@@ -119,7 +119,8 @@ object JavaTypeInference {
       case c: Class[_] if c == classOf[java.sql.Date] => (DateType, true)
       case c: Class[_] if c == classOf[java.time.Instant] => (TimestampType, true)
       case c: Class[_] if c == classOf[java.sql.Timestamp] => (TimestampType, true)
-      case c: Class[_] if c == classOf[java.time.Duration] => (DayTimeIntervalType, true)
+      case c: Class[_] if c == classOf[java.time.LocalDateTime] => (TimestampWithoutTZType, true)
+      case c: Class[_] if c == classOf[java.time.Duration] => (DayTimeIntervalType(), true)
       case c: Class[_] if c == classOf[java.time.Period] => (YearMonthIntervalType, true)
 
       case _ if typeToken.isArray =>
@@ -249,6 +250,9 @@ object JavaTypeInference {
 
       case c if c == classOf[java.sql.Timestamp] =>
         createDeserializerForSqlTimestamp(path)
+
+      case c if c == classOf[java.time.LocalDateTime] =>
+        createDeserializerForLocalDateTime(path)
 
       case c if c == classOf[java.time.Duration] =>
         createDeserializerForDuration(path)
@@ -408,6 +412,9 @@ object JavaTypeInference {
         case c if c == classOf[java.time.Instant] => createSerializerForJavaInstant(inputObject)
 
         case c if c == classOf[java.sql.Timestamp] => createSerializerForSqlTimestamp(inputObject)
+
+        case c if c == classOf[java.time.LocalDateTime] =>
+          createSerializerForLocalDateTime(inputObject)
 
         case c if c == classOf[java.time.LocalDate] => createSerializerForJavaLocalDate(inputObject)
 

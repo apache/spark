@@ -246,7 +246,7 @@ class ArrowTests(ReusedSQLTestCase):
         df = self.spark.range(3).toDF("i")
 
         def raise_exception():
-            raise Exception("My error")
+            raise RuntimeError("My error")
         exception_udf = udf(raise_exception, IntegerType())
         df = df.withColumn("error", exception_udf())
         with QuietTest(self.sc):

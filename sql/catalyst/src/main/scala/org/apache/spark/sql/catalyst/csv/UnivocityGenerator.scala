@@ -50,7 +50,6 @@ class UnivocityGenerator(
     isParsing = false)
   private val dateFormatter = DateFormatter(
     options.dateFormat,
-    options.zoneId,
     options.locale,
     legacyFormat = FAST_DATE_FORMAT,
     isParsing = false)

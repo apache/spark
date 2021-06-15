@@ -22,7 +22,6 @@ from abc import ABCMeta, abstractmethod
 from functools import wraps, partial
 from itertools import chain
 from typing import Any, Callable, Optional, Tuple, Union, cast, TYPE_CHECKING
-import warnings
 
 import numpy as np
 import pandas as pd  # noqa: F401
@@ -30,20 +29,16 @@ from pandas.api.types import is_list_like, CategoricalDtype
 from pyspark import sql as spark
 from pyspark.sql import functions as F, Window, Column
 from pyspark.sql.types import (
-    BooleanType,
-    DateType,
     DoubleType,
     FloatType,
     LongType,
-    NumericType,
-    StringType,
-    TimestampType,
 )
 
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
 from pyspark.pandas import numpy_compat
 from pyspark.pandas.config import get_option, option_context
 from pyspark.pandas.internal import (
+    InternalField,
     InternalFrame,
     NATURAL_ORDER_COLUMN_NAME,
     SPARK_DEFAULT_INDEX_NAME,
@@ -52,8 +47,6 @@ from pyspark.pandas.spark.accessors import SparkIndexOpsMethods
 from pyspark.pandas.typedef import (
     Dtype,
     extension_dtypes,
-    pandas_on_spark_type,
-    spark_type_to_pandas_dtype,
 )
 from pyspark.pandas.utils import (
     combine_frames,
@@ -231,22 +224,21 @@ def column_op(f):
             args = [arg.spark.column if isinstance(arg, IndexOpsMixin) else arg for arg in args]
             scol = f(self.spark.column, *args)
 
-            spark_type = self._internal.spark_frame.select(scol).schema[0].dataType
-            use_extension_dtypes = any(
-                isinstance(col.dtype, extension_dtypes) for col in [self] + cols
-            )
-            dtype = spark_type_to_pandas_dtype(
-                spark_type, use_extension_dtypes=use_extension_dtypes
+            field = InternalField.from_struct_field(
+                self._internal.spark_frame.select(scol).schema[0],
+                use_extension_dtypes=any(
+                    isinstance(col.dtype, extension_dtypes) for col in [self] + cols
+                ),
             )
 
-            if not isinstance(dtype, extension_dtypes):
-                scol = booleanize_null(scol, f)
+            if not field.is_extension_dtype:
+                scol = booleanize_null(scol, f).alias(field.name)
 
             if isinstance(self, Series) or not any(isinstance(col, Series) for col in cols):
-                index_ops = self._with_new_scol(scol, dtype=dtype)
+                index_ops = self._with_new_scol(scol, field=field)
             else:
                 psser = next(col for col in cols if isinstance(col, Series))
-                index_ops = psser._with_new_scol(scol, dtype=dtype)
+                index_ops = psser._with_new_scol(scol, field=field)
         elif get_option("compute.ops_on_diff_frames"):
             index_ops = align_diff_index_ops(f, self, *args)
         else:
@@ -294,7 +286,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         pass
 
     @abstractmethod
-    def _with_new_scol(self, scol: spark.Column, *, dtype=None):
+    def _with_new_scol(self, scol: spark.Column, *, field: Optional[InternalField] = None):
         pass
 
     @property
@@ -306,17 +298,6 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
     @abstractmethod
     def spark(self) -> SparkIndexOpsMethods:
         pass
-
-    @property
-    def spark_column(self) -> Column:
-        warnings.warn(
-            "Series.spark_column is deprecated as of Series.spark.column. "
-            "Please use the API instead.",
-            FutureWarning,
-        )
-        return self.spark.column
-
-    spark_column.__doc__ = SparkIndexOpsMethods.column.__doc__
 
     @property
     def _dtype_op(self):
@@ -411,65 +392,21 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
     __ge__ = column_op(Column.__ge__)
     __gt__ = column_op(Column.__gt__)
 
+    __invert__ = column_op(Column.__invert__)
+
     # `and`, `or`, `not` cannot be overloaded in Python,
     # so use bitwise operators as boolean operators
     def __and__(self, other) -> Union["Series", "Index"]:
-        if isinstance(self.dtype, extension_dtypes) or (
-            isinstance(other, IndexOpsMixin) and isinstance(other.dtype, extension_dtypes)
-        ):
-
-            def and_func(left, right):
-                if not isinstance(right, spark.Column):
-                    if pd.isna(right):
-                        right = F.lit(None)
-                    else:
-                        right = F.lit(right)
-                return left & right
-
-        else:
-
-            def and_func(left, right):
-                if not isinstance(right, spark.Column):
-                    if pd.isna(right):
-                        right = F.lit(None)
-                    else:
-                        right = F.lit(right)
-                scol = left & right
-                return F.when(scol.isNull(), False).otherwise(scol)
-
-        return column_op(and_func)(self, other)
+        return self._dtype_op.__and__(self, other)
 
     def __or__(self, other) -> Union["Series", "Index"]:
-        if isinstance(self.dtype, extension_dtypes) or (
-            isinstance(other, IndexOpsMixin) and isinstance(other.dtype, extension_dtypes)
-        ):
-
-            def or_func(left, right):
-                if not isinstance(right, spark.Column):
-                    if pd.isna(right):
-                        right = F.lit(None)
-                    else:
-                        right = F.lit(right)
-                return left | right
-
-        else:
-
-            def or_func(left, right):
-                if not isinstance(right, spark.Column) and pd.isna(right):
-                    return F.lit(False)
-                else:
-                    scol = left | F.lit(right)
-                    return F.when(left.isNull() | scol.isNull(), False).otherwise(scol)
-
-        return column_op(or_func)(self, other)
-
-    __invert__ = column_op(Column.__invert__)
+        return self._dtype_op.__or__(self, other)
 
     def __rand__(self, other) -> Union["Series", "Index"]:
-        return self.__and__(other)
+        return self._dtype_op.rand(self, other)
 
     def __ror__(self, other) -> Union["Series", "Index"]:
-        return self.__or__(other)
+        return self._dtype_op.ror(self, other)
 
     def __len__(self):
         return len(self._psdf)
@@ -516,7 +453,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         >>> s.rename("a").to_frame().set_index("a").index.dtype
         dtype('<M8[ns]')
         """
-        return self._internal.data_dtypes[0]
+        return self._internal.data_fields[0].dtype
 
     @property
     def empty(self) -> bool:
@@ -859,97 +796,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         >>> ser.rename("a").to_frame().set_index("a").index.astype('int64')
         Int64Index([1, 2], dtype='int64', name='a')
         """
-        dtype, spark_type = pandas_on_spark_type(dtype)
-        if not spark_type:
-            raise ValueError("Type {} not understood".format(dtype))
-
-        if isinstance(self.dtype, CategoricalDtype):
-            if isinstance(dtype, CategoricalDtype) and dtype.categories is None:
-                return cast(Union[ps.Index, ps.Series], self).copy()
-
-            categories = self.dtype.categories
-            if len(categories) == 0:
-                scol = F.lit(None)
-            else:
-                kvs = chain(
-                    *[(F.lit(code), F.lit(category)) for code, category in enumerate(categories)]
-                )
-                map_scol = F.create_map(*kvs)
-                scol = map_scol.getItem(self.spark.column)
-            return self._with_new_scol(
-                scol.alias(self._internal.data_spark_column_names[0])
-            ).astype(dtype)
-        elif isinstance(dtype, CategoricalDtype):
-            if dtype.categories is None:
-                codes, uniques = self.factorize()
-                return codes._with_new_scol(
-                    codes.spark.column, dtype=CategoricalDtype(categories=uniques)
-                )
-            else:
-                categories = dtype.categories
-                if len(categories) == 0:
-                    scol = F.lit(-1)
-                else:
-                    kvs = chain(
-                        *[
-                            (F.lit(category), F.lit(code))
-                            for code, category in enumerate(categories)
-                        ]
-                    )
-                    map_scol = F.create_map(*kvs)
-
-                    scol = F.coalesce(map_scol.getItem(self.spark.column), F.lit(-1))
-                return self._with_new_scol(
-                    scol.alias(self._internal.data_spark_column_names[0]), dtype=dtype
-                )
-
-        if isinstance(spark_type, BooleanType):
-            if isinstance(dtype, extension_dtypes):
-                scol = self.spark.column.cast(spark_type)
-            else:
-                if isinstance(self.spark.data_type, StringType):
-                    scol = F.when(self.spark.column.isNull(), F.lit(False)).otherwise(
-                        F.length(self.spark.column) > 0
-                    )
-                elif isinstance(self.spark.data_type, (FloatType, DoubleType)):
-                    scol = F.when(
-                        self.spark.column.isNull() | F.isnan(self.spark.column), F.lit(True)
-                    ).otherwise(self.spark.column.cast(spark_type))
-                else:
-                    scol = F.when(self.spark.column.isNull(), F.lit(False)).otherwise(
-                        self.spark.column.cast(spark_type)
-                    )
-        elif isinstance(spark_type, StringType):
-            if isinstance(dtype, extension_dtypes):
-                if isinstance(self.spark.data_type, BooleanType):
-                    scol = F.when(
-                        self.spark.column.isNotNull(),
-                        F.when(self.spark.column, "True").otherwise("False"),
-                    )
-                elif isinstance(self.spark.data_type, TimestampType):
-                    # seems like a pandas' bug?
-                    scol = F.when(self.spark.column.isNull(), str(pd.NaT)).otherwise(
-                        self.spark.column.cast(spark_type)
-                    )
-                else:
-                    scol = self.spark.column.cast(spark_type)
-            else:
-                if isinstance(self.spark.data_type, NumericType):
-                    null_str = str(np.nan)
-                elif isinstance(self.spark.data_type, (DateType, TimestampType)):
-                    null_str = str(pd.NaT)
-                else:
-                    null_str = str(None)
-                if isinstance(self.spark.data_type, BooleanType):
-                    casted = F.when(self.spark.column, "True").otherwise("False")
-                else:
-                    casted = self.spark.column.cast(spark_type)
-                scol = F.when(self.spark.column.isNull(), null_str).otherwise(casted)
-        else:
-            scol = self.spark.column.cast(spark_type)
-        return self._with_new_scol(
-            scol.alias(self._internal.data_spark_column_names[0]), dtype=dtype
-        )
+        return self._dtype_op.astype(self, dtype)
 
     def isin(self, values) -> Union["Series", "Index"]:
         """
@@ -1080,9 +927,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
 
         if isinstance(self, MultiIndex):
             raise NotImplementedError("notna is not defined for MultiIndex")
-        return (~self.isnull()).rename(
-            self.name  # type: ignore
-        )
+        return (~self.isnull()).rename(self.name)  # type: ignore
 
     notna = notnull
 
@@ -1274,7 +1119,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         )
         lag_col = F.lag(col, periods).over(window)
         col = F.when(lag_col.isNull() | F.isnan(lag_col), fill_value).otherwise(lag_col)
-        return self._with_new_scol(col, dtype=self.dtype)
+        return self._with_new_scol(col, field=self._internal.data_fields[0].copy(nullable=True))
 
     # TODO: Update Documentation for Bins Parameter when its supported
     def value_counts(

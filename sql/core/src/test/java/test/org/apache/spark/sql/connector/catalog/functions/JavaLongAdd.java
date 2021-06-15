@@ -23,6 +23,8 @@ import org.apache.spark.sql.connector.catalog.functions.ScalarFunction;
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction;
 import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.DataTypes;
+import org.apache.spark.sql.types.DayTimeIntervalType;
+import org.apache.spark.sql.types.IntegerType;
 import org.apache.spark.sql.types.LongType;
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
@@ -44,14 +46,19 @@ public class JavaLongAdd implements UnboundFunction {
     if (inputType.fields().length != 2) {
       throw new UnsupportedOperationException("Expect two arguments");
     }
-    StructField[] fields = inputType.fields();
-    if (!(fields[0].dataType() instanceof LongType)) {
-      throw new UnsupportedOperationException("Expect first argument to be LongType");
-    }
-    if (!(fields[1].dataType() instanceof LongType)) {
-      throw new UnsupportedOperationException("Expect second argument to be LongType");
+    for (StructField field : inputType.fields()) {
+      checkInputType(field.dataType());
     }
     return impl;
+  }
+
+  // also allow integer and interval type for testing purpose
+  private static void checkInputType(DataType type) {
+    if (!(type instanceof IntegerType || type instanceof LongType ||
+        type instanceof DayTimeIntervalType)) {
+      throw new UnsupportedOperationException(
+          "Expect one of [IntegerType|LongType|DateTimeIntervalType] but found " + type);
+    }
   }
 
   @Override
@@ -124,6 +131,22 @@ public class JavaLongAdd implements UnboundFunction {
     }
 
     public static long invoke(long left, long right) {
+      return left + right;
+    }
+  }
+
+  // invalid UDF where type parameters from magic method don't match those from `inputTypes()`
+  public static class JavaLongAddMismatchMagic extends JavaLongAddBase {
+    public JavaLongAddMismatchMagic() {
+      super(false);
+    }
+
+    @Override
+    public String name() {
+      return "long_add_mismatch_magic";
+    }
+
+    public long invoke(int left, int right) {
       return left + right;
     }
   }

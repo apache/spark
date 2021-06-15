@@ -24,7 +24,8 @@ import java.util.concurrent.TimeUnit
 import org.scalacheck.{Arbitrary, Gen}
 import org.scalatest.Assertions._
 
-import org.apache.spark.sql.catalyst.util.DateTimeConstants.MILLIS_PER_DAY
+import org.apache.spark.sql.catalyst.util.DateTimeConstants.{MICROS_PER_MILLIS, MILLIS_PER_DAY}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 
@@ -122,7 +123,7 @@ object LiteralGenerator {
       yield Literal.create(new Date(day * MILLIS_PER_DAY), DateType)
   }
 
-  lazy val timestampLiteralGen: Gen[Literal] = {
+  private def millisGen = {
     // Catalyst's Timestamp type stores number of microseconds since epoch in
     // a variable of Long type. To prevent arithmetic overflow of Long on
     // conversion from milliseconds to microseconds, the range of random milliseconds
@@ -130,8 +131,18 @@ object LiteralGenerator {
     // Valid range for TimestampType is [0001-01-01T00:00:00.000000Z, 9999-12-31T23:59:59.999999Z]
     val minMillis = Instant.parse("0001-01-01T00:00:00.000000Z").toEpochMilli
     val maxMillis = Instant.parse("9999-12-31T23:59:59.999999Z").toEpochMilli
-    for { millis <- Gen.choose(minMillis, maxMillis) }
+    Gen.choose(minMillis, maxMillis)
+  }
+
+  lazy val timestampLiteralGen: Gen[Literal] = {
+    for { millis <- millisGen }
       yield Literal.create(new Timestamp(millis), TimestampType)
+  }
+
+  lazy val timestampWithoutTZLiteralGen: Gen[Literal] = {
+    for { millis <- millisGen }
+      yield Literal.create(
+        DateTimeUtils.microsToLocalDateTime(millis * MICROS_PER_MILLIS), TimestampWithoutTZType)
   }
 
   // Valid range for DateType and TimestampType is [0001-01-01, 9999-12-31]
@@ -167,7 +178,7 @@ object LiteralGenerator {
     calendarIntervalLiterGen.map { calendarIntervalLiteral =>
       Literal.create(
         calendarIntervalLiteral.value.asInstanceOf[CalendarInterval].extractAsDuration(),
-        DayTimeIntervalType)
+        DayTimeIntervalType())
     }
   }
 
@@ -186,12 +197,13 @@ object LiteralGenerator {
       case FloatType => floatLiteralGen
       case DateType => dateLiteralGen
       case TimestampType => timestampLiteralGen
+      case TimestampWithoutTZType => timestampWithoutTZLiteralGen
       case BooleanType => booleanLiteralGen
       case StringType => stringLiteralGen
       case BinaryType => binaryLiteralGen
       case CalendarIntervalType => calendarIntervalLiterGen
       case DecimalType.Fixed(precision, scale) => decimalLiteralGen(precision, scale)
-      case DayTimeIntervalType => dayTimeIntervalLiteralGen
+      case _: DayTimeIntervalType => dayTimeIntervalLiteralGen
       case YearMonthIntervalType => yearMonthIntervalLiteralGen
       case dt => throw new IllegalArgumentException(s"not supported type $dt")
     }

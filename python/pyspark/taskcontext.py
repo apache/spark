@@ -185,7 +185,7 @@ class BarrierTaskContext(TaskContext):
         This API is experimental
         """
         if not isinstance(cls._taskContext, BarrierTaskContext):
-            raise Exception('It is not in a barrier stage')
+            raise RuntimeError('It is not in a barrier stage')
         return cls._taskContext
 
     @classmethod
@@ -214,8 +214,8 @@ class BarrierTaskContext(TaskContext):
         This API is experimental
         """
         if self._port is None or self._secret is None:
-            raise Exception("Not supported to call barrier() before initialize " +
-                            "BarrierTaskContext.")
+            raise RuntimeError("Not supported to call barrier() before initialize " +
+                               "BarrierTaskContext.")
         else:
             _load_from_socket(self._port, self._secret, BARRIER_FUNCTION)
 
@@ -238,8 +238,8 @@ class BarrierTaskContext(TaskContext):
         if not isinstance(message, str):
             raise TypeError("Argument `message` must be of type `str`")
         elif self._port is None or self._secret is None:
-            raise Exception("Not supported to call barrier() before initialize " +
-                            "BarrierTaskContext.")
+            raise RuntimeError("Not supported to call barrier() before initialize " +
+                               "BarrierTaskContext.")
         else:
             return _load_from_socket(self._port, self._secret, ALL_GATHER_FUNCTION, message)
 
@@ -255,8 +255,8 @@ class BarrierTaskContext(TaskContext):
         This API is experimental
         """
         if self._port is None or self._secret is None:
-            raise Exception("Not supported to call getTaskInfos() before initialize " +
-                            "BarrierTaskContext.")
+            raise RuntimeError("Not supported to call getTaskInfos() before initialize " +
+                               "BarrierTaskContext.")
         else:
             addresses = self._localProperties.get("addresses", "")
             return [BarrierTaskInfo(h.strip()) for h in addresses.split(",")]

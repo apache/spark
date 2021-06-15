@@ -375,6 +375,13 @@ class StatsTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(len(psdf.kurtosis(numeric_only=True)), len(pdf.kurtosis(numeric_only=True)))
         self.assert_eq(len(psdf.skew(numeric_only=True)), len(pdf.skew(numeric_only=True)))
 
+        # Boolean was excluded because of a behavior change in NumPy
+        # https://github.com/numpy/numpy/pull/16273#discussion_r641264085 which pandas inherits
+        # but this behavior is inconsistent in pandas context.
+        # Boolean column in quantile tests are excluded for now.
+        # TODO(SPARK-35555): track and match the behavior of quantile to pandas'
+        pdf = pd.DataFrame({"i": [0, 1, 2], "s": ["x", "y", "z"]})
+        psdf = ps.from_pandas(pdf)
         self.assert_eq(
             len(psdf.quantile(q=0.5, numeric_only=True)),
             len(pdf.quantile(q=0.5, numeric_only=True)),
