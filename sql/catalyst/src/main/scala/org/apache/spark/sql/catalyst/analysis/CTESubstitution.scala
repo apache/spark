@@ -22,6 +22,7 @@ import scala.collection.mutable
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias, With}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf.{LEGACY_CTE_PRECEDENCE_POLICY, LegacyBehaviorPolicy}
 
@@ -130,13 +131,13 @@ object CTESubstitution extends Rule[LogicalPlan] {
    * @return the plan where CTE substitution is applied
    */
   private def traverseAndSubstituteCTE(plan: LogicalPlan): LogicalPlan = {
-    plan.resolveOperatorsUp {
+    plan.resolveOperatorsUpWithPruning(_.containsAnyPattern(UNRESOLVED_RELATION, PLAN_EXPRESSION)) {
       case With(child: LogicalPlan, relations) =>
         val resolvedCTERelations = resolveCTERelations(relations, isLegacy = false)
         substituteCTE(child, resolvedCTERelations)
 
       case other =>
-        other.transformExpressions {
+        other.transformExpressionsWithPruning(_.containsPattern(PLAN_EXPRESSION)) {
           case e: SubqueryExpression => e.withNewPlan(traverseAndSubstituteCTE(e.plan))
         }
     }
@@ -166,13 +167,13 @@ object CTESubstitution extends Rule[LogicalPlan] {
   private def substituteCTE(
       plan: LogicalPlan,
       cteRelations: Seq[(String, LogicalPlan)]): LogicalPlan =
-    plan resolveOperatorsUp {
+    plan.resolveOperatorsUpWithPruning(_.containsAnyPattern(UNRESOLVED_RELATION, PLAN_EXPRESSION)) {
       case u @ UnresolvedRelation(Seq(table), _, _) =>
         cteRelations.find(r => plan.conf.resolver(r._1, table)).map(_._2).getOrElse(u)
 
       case other =>
         // This cannot be done in ResolveSubquery because ResolveSubquery does not know the CTE.
-        other transformExpressions {
+        other.transformExpressionsWithPruning(_.containsPattern(PLAN_EXPRESSION)) {
           case e: SubqueryExpression => e.withNewPlan(substituteCTE(e.plan, cteRelations))
         }
     }

@@ -140,7 +140,7 @@ private[sql] object ColumnAccessor {
       case ByteType => new ByteColumnAccessor(buf)
       case ShortType => new ShortColumnAccessor(buf)
       case IntegerType | DateType | YearMonthIntervalType => new IntColumnAccessor(buf)
-      case LongType | TimestampType | DayTimeIntervalType => new LongColumnAccessor(buf)
+      case LongType | TimestampType | _: DayTimeIntervalType => new LongColumnAccessor(buf)
       case FloatType => new FloatColumnAccessor(buf)
       case DoubleType => new DoubleColumnAccessor(buf)
       case StringType => new StringColumnAccessor(buf)

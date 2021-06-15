@@ -1000,6 +1000,19 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
     assert(combinedMetrics.customMetrics(customTimingMetric) == 400L)
   }
 
+  test("SPARK-35659: StateStore.put cannot put null value") {
+    val provider = newStoreProvider()
+
+    // Verify state before starting a new set of updates
+    assert(getLatestData(provider).isEmpty)
+
+    val store = provider.getStore(0)
+    val err = intercept[IllegalArgumentException] {
+      store.put(stringToRow("key"), null)
+    }
+    assert(err.getMessage.contains("Cannot put a null value"))
+  }
+
   /** Return a new provider with a random id */
   def newStoreProvider(): ProviderClass
 

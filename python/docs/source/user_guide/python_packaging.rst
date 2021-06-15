@@ -23,7 +23,7 @@ Python Package Management
 When you want to run your PySpark application on a cluster such as YARN, Kubernetes, Mesos, etc., you need to make
 sure that your code and all used libraries are available on the executors.
 
-As an example let's say you may want to run the `Pandas UDF's examples <arrow_pandas.rst#series-to-scalar>`_.
+As an example let's say you may want to run the `Pandas UDF's examples <sql/arrow_pandas.rst#series-to-scalar>`_.
 As it uses pyarrow as an underlying implementation we need to make sure to have pyarrow installed on each executor
 on the cluster. Otherwise you may get errors such as ``ModuleNotFoundError: No module named 'pyarrow'``.
 

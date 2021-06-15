@@ -174,7 +174,8 @@ class IndexesTest(PandasOnSparkTestCase, TestUtils):
             # The `name` argument is added in pandas 0.24.
             self.assert_eq(psidx.to_frame(name="x"), pidx.to_frame(name="x"))
             self.assert_eq(
-                psidx.to_frame(index=False, name="x"), pidx.to_frame(index=False, name="x"),
+                psidx.to_frame(index=False, name="x"),
+                pidx.to_frame(index=False, name="x"),
             )
 
             self.assertRaises(TypeError, lambda: psidx.to_frame(name=["x"]))
@@ -1253,40 +1254,40 @@ class IndexesTest(PandasOnSparkTestCase, TestUtils):
             self.assert_eq(psmidx.is_monotonic_increasing, False)
             self.assert_eq(psmidx.is_monotonic_decreasing, False)
 
-        # Disable the test cases below because pandas returns `True` or `False` randomly.
-        # else:
-        #     [(-5, None), (-4, None), (-3, None), (-2, None), (-1, None)]
-        #     psdf = ps.DataFrame({"a": [-5, -4, -3, -2, -1], "b": [1, 1, 1, 1, 1]})
-        #     psdf["b"] = None
-        #     psmidx = psdf.set_index(["a", "b"]).index
-        #     pmidx = psmidx.to_pandas()
-        #     self.assert_eq(psmidx.is_monotonic_increasing, pmidx.is_monotonic_increasing)
-        #     self.assert_eq(psmidx.is_monotonic_decreasing, pmidx.is_monotonic_decreasing)
+        else:
+            # For [(-5, None), (-4, None), (-3, None), (-2, None), (-1, None)]
+            psdf = ps.DataFrame({"a": [-5, -4, -3, -2, -1], "b": [1, 1, 1, 1, 1]})
+            psdf["b"] = None
+            psmidx = psdf.set_index(["a", "b"]).index
+            pmidx = psmidx.to_pandas()
+            self.assert_eq(psmidx.is_monotonic_increasing, pmidx.is_monotonic_increasing)
+            self.assert_eq(psmidx.is_monotonic_decreasing, pmidx.is_monotonic_decreasing)
 
-        #     [(None, "e"), (None, "c"), (None, "b"), (None, "d"), (None, "a")]
-        #     psdf = ps.DataFrame({"a": [1, 1, 1, 1, 1], "b": ["e", "c", "b", "d", "a"]})
-        #     psdf["a"] = None
-        #     psmidx = psdf.set_index(["a", "b"]).index
-        #     pmidx = psmidx.to_pandas()
-        #     self.assert_eq(psmidx.is_monotonic_increasing, pmidx.is_monotonic_increasing)
-        #     self.assert_eq(psmidx.is_monotonic_decreasing, pmidx.is_monotonic_decreasing)
+            # For [(None, "e"), (None, "c"), (None, "b"), (None, "d"), (None, "a")]
+            psdf = ps.DataFrame({"a": [1, 1, 1, 1, 1], "b": ["e", "c", "b", "d", "a"]})
+            psdf["a"] = None
+            psmidx = psdf.set_index(["a", "b"]).index
+            pmidx = psmidx.to_pandas()
+            self.assert_eq(psmidx.is_monotonic_increasing, pmidx.is_monotonic_increasing)
+            self.assert_eq(psmidx.is_monotonic_decreasing, pmidx.is_monotonic_decreasing)
 
-        #     [(None, None), (None, None), (None, None), (None, None), (None, None)]
-        #     psdf = ps.DataFrame({"a": [1, 1, 1, 1, 1], "b": [1, 1, 1, 1, 1]})
-        #     psdf["a"] = None
-        #     psdf["b"] = None
-        #     psmidx = psdf.set_index(["a", "b"]).index
-        #     pmidx = psmidx.to_pandas()
-        #     self.assert_eq(psmidx.is_monotonic_increasing, pmidx.is_monotonic_increasing)
-        #     self.assert_eq(psmidx.is_monotonic_decreasing, pmidx.is_monotonic_decreasing)
-        #     [(None, None)]
-        #     psdf = ps.DataFrame({"a": [1], "b": [1]})
-        #     psdf["a"] = None
-        #     psdf["b"] = None
-        #     psmidx = psdf.set_index(["a", "b"]).index
-        #     pmidx = psmidx.to_pandas()
-        #     self.assert_eq(psmidx.is_monotonic_increasing, pmidx.is_monotonic_increasing)
-        #     self.assert_eq(psmidx.is_monotonic_decreasing, pmidx.is_monotonic_decreasing)
+            # For [(None, None), (None, None), (None, None), (None, None), (None, None)]
+            psdf = ps.DataFrame({"a": [1, 1, 1, 1, 1], "b": [1, 1, 1, 1, 1]})
+            psdf["a"] = None
+            psdf["b"] = None
+            psmidx = psdf.set_index(["a", "b"]).index
+            pmidx = psmidx.to_pandas()
+            self.assert_eq(psmidx.is_monotonic_increasing, pmidx.is_monotonic_increasing)
+            self.assert_eq(psmidx.is_monotonic_decreasing, pmidx.is_monotonic_decreasing)
+
+            # For [(None, None)]
+            psdf = ps.DataFrame({"a": [1], "b": [1]})
+            psdf["a"] = None
+            psdf["b"] = None
+            psmidx = psdf.set_index(["a", "b"]).index
+            pmidx = psmidx.to_pandas()
+            self.assert_eq(psmidx.is_monotonic_increasing, pmidx.is_monotonic_increasing)
+            self.assert_eq(psmidx.is_monotonic_decreasing, pmidx.is_monotonic_decreasing)
 
     def test_difference(self):
         # Index
@@ -1294,10 +1295,14 @@ class IndexesTest(PandasOnSparkTestCase, TestUtils):
         pidx2 = pd.Index([3, 4, 5, 6], name="koalas")
         psidx1 = ps.from_pandas(pidx1)
         psidx2 = ps.from_pandas(pidx2)
+        # Series
+        pser = pd.Series([3, 4, 5, 6], name="koalas")
+        psser = ps.from_pandas(pser)
 
         self.assert_eq(
             psidx1.difference(psidx2).sort_values(), pidx1.difference(pidx2).sort_values()
         )
+        self.assert_eq(psidx1.difference(psser).sort_values(), pidx1.difference(pser).sort_values())
         self.assert_eq(
             psidx1.difference([3, 4, 5, 6]).sort_values(),
             pidx1.difference([3, 4, 5, 6]).sort_values(),
@@ -1332,30 +1337,37 @@ class IndexesTest(PandasOnSparkTestCase, TestUtils):
             psidx1.difference(psidx2, sort=1)
 
         # MultiIndex
-        pidx1 = pd.MultiIndex.from_tuples(
+        pmidx1 = pd.MultiIndex.from_tuples(
             [("a", "x", 1), ("b", "y", 2), ("c", "z", 3)], names=["hello", "koalas", "world"]
         )
-        pidx2 = pd.MultiIndex.from_tuples(
+        pmidx2 = pd.MultiIndex.from_tuples(
             [("a", "x", 1), ("b", "z", 2), ("k", "z", 3)], names=["hello", "koalas", "world"]
         )
-        psidx1 = ps.from_pandas(pidx1)
-        psidx2 = ps.from_pandas(pidx2)
+        psmidx1 = ps.from_pandas(pmidx1)
+        psmidx2 = ps.from_pandas(pmidx2)
 
         self.assert_eq(
-            psidx1.difference(psidx2).sort_values(), pidx1.difference(pidx2).sort_values()
+            psmidx1.difference(psmidx2).sort_values(), pmidx1.difference(pmidx2).sort_values()
         )
         self.assert_eq(
-            psidx1.difference({("a", "x", 1)}).sort_values(),
-            pidx1.difference({("a", "x", 1)}).sort_values(),
+            psmidx1.difference(psidx1).sort_values(), pmidx1.difference(pidx1).sort_values()
         )
         self.assert_eq(
-            psidx1.difference({("a", "x", 1): [1, 2, 3]}).sort_values(),
-            pidx1.difference({("a", "x", 1): [1, 2, 3]}).sort_values(),
+            psidx1.difference(psmidx1).sort_values(), pidx1.difference(pmidx1).sort_values()
+        )
+        self.assert_eq(psidx1.difference(psser).sort_values(), pidx1.difference(pser).sort_values())
+        self.assert_eq(
+            psmidx1.difference({("a", "x", 1)}).sort_values(),
+            pmidx1.difference({("a", "x", 1)}).sort_values(),
+        )
+        self.assert_eq(
+            psmidx1.difference({("a", "x", 1): [1, 2, 3]}).sort_values(),
+            pmidx1.difference({("a", "x", 1): [1, 2, 3]}).sort_values(),
         )
 
         # Exceptions for MultiIndex
         with self.assertRaisesRegex(TypeError, "other must be a MultiIndex or a list of tuples"):
-            psidx1.difference(["b", "z", "2"])
+            psmidx1.difference(["b", "z", "2"])
 
     def test_repeat(self):
         pidx = pd.Index(["a", "b", "c"])

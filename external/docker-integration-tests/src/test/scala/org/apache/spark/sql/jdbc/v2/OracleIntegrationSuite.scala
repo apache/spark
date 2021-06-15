@@ -45,6 +45,7 @@ import org.apache.spark.tags.DockerTest
  *  $ cd docker-images/OracleDatabase/SingleInstance/dockerfiles
  *  $ ./buildContainerImage.sh -v 18.4.0 -x
  *  $ export ORACLE_DOCKER_IMAGE_NAME=oracle/database:18.4.0-xe
+ *  $ export ENABLE_DOCKER_INTEGRATION_TESTS=1
  *  $ cd $SPARK_HOME
  *  $ ./build/sbt -Pdocker-integration-tests
  *    "testOnly org.apache.spark.sql.jdbc.v2.OracleIntegrationSuite"
@@ -55,7 +56,7 @@ import org.apache.spark.tags.DockerTest
 class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest {
   override val catalogName: String = "oracle"
   override val db = new DatabaseOnDocker {
-    override val imageName = sys.env("ORACLE_DOCKER_IMAGE_NAME")
+    lazy override val imageName = sys.env("ORACLE_DOCKER_IMAGE_NAME")
     override val env = Map(
       "ORACLE_PWD" -> "oracle"
     )

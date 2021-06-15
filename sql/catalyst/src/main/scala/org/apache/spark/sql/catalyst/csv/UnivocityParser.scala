@@ -95,7 +95,6 @@ class UnivocityParser(
     isParsing = true)
   private lazy val dateFormatter = DateFormatter(
     options.dateFormat,
-    options.zoneId,
     options.locale,
     legacyFormat = FAST_DATE_FORMAT,
     isParsing = true)
@@ -206,7 +205,7 @@ class UnivocityParser(
             // If fails to parse, then tries the way used in 2.0 and 1.x for backwards
             // compatibility.
             val str = DateTimeUtils.cleanLegacyTimestampStr(UTF8String.fromString(datum))
-            DateTimeUtils.stringToDate(str, options.zoneId).getOrElse(throw e)
+            DateTimeUtils.stringToDate(str).getOrElse(throw e)
         }
       }
 

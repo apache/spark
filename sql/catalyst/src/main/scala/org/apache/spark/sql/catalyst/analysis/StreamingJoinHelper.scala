@@ -266,6 +266,9 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
                 Literal(calendarInterval.days * MICROS_PER_DAY.toDouble +
                   calendarInterval.microseconds.toDouble)
               }
+            case _: DayTimeIntervalType =>
+              // Unbox and then cast
+              Literal(lit.value.asInstanceOf[Long].toDouble)
             case DoubleType =>
               Multiply(lit, Literal(1000000.0))
             case _: NumericType =>

@@ -397,4 +397,8 @@ This file is divided into 3 sections:
     <parameters><parameter name="ignore">-1,0,1,2,3</parameter></parameters>
   </check>
 
+  <check customId="GuavaToStringHelper" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">Objects.toStringHelper</parameter></parameters>
+    <customMessage>Avoid using Object.toStringHelper. Use ToStringBuilder instead.</customMessage>
+  </check>
 </scalastyle>
