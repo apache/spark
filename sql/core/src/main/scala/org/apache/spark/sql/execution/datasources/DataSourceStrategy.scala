@@ -700,23 +700,23 @@ abstract class PushableColumnBase {
   def unapply(e: Expression): Option[String] = {
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
     if (nestedPredicatePushdownEnabled) {
-      extractNameAdvanced(e).map(_.quoted)
+      extractNestedCol(e).map(_.quoted)
     } else {
-      extractNameBasic(e)
+      extractTopLevelCol(e)
     }
   }
 
-  private def extractNameBasic(e: Expression): Option[String] = e match {
+  private def extractTopLevelCol(e: Expression): Option[String] = e match {
     // Attribute that contains dot "." in name is supported only when nested predicate pushdown
     // is enabled.
     case a: Attribute if !a.name.contains(".") => Some(a.name)
     case _ => None
   }
 
-  private def extractNameAdvanced(e: Expression): Option[Seq[String]] = e match {
+  private def extractNestedCol(e: Expression): Option[Seq[String]] = e match {
     case a: Attribute => Some(Seq(a.name))
     case s: GetStructField =>
-      extractNameAdvanced(s.child).map(_ :+ s.childSchema(s.ordinal).name)
+      extractNestedCol(s.child).map(_ :+ s.childSchema(s.ordinal).name)
     case _ => None
   }
 }
