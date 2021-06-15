@@ -17,6 +17,7 @@
 
 import numpy as np
 import pandas as pd
+from pandas.api.types import CategoricalDtype
 
 from pyspark import pandas as ps
 from pyspark.pandas.config import option_context
@@ -154,10 +155,25 @@ class StringOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         self.assert_eq(pser, psser.to_pandas())
         self.assert_eq(ps.from_pandas(pser), psser)
 
+    def test_astype(self):
+        pser = pd.Series(["1", "2", "3"])
+        psser = ps.from_pandas(pser)
+        self.assert_eq(pser.astype(int), psser.astype(int))
+        self.assert_eq(pser.astype(float), psser.astype(float))
+        self.assert_eq(pser.astype(np.float32), psser.astype(np.float32))
+        self.assert_eq(pser.astype(np.int32), psser.astype(np.int32))
+        self.assert_eq(pser.astype(np.int16), psser.astype(np.int16))
+        self.assert_eq(pser.astype(np.int8), psser.astype(np.int8))
+        self.assert_eq(pser.astype(str), psser.astype(str))
+        self.assert_eq(pser.astype(bool), psser.astype(bool))
+        self.assert_eq(pser.astype("category"), psser.astype("category"))
+        cat_type = CategoricalDtype(categories=["3", "1", "2"])
+        self.assert_eq(pser.astype(cat_type), psser.astype(cat_type))
+
 
 if __name__ == "__main__":
     import unittest
-    from pyspark.pandas.tests.data_type_ops.test_num_ops import *  # noqa: F401
+    from pyspark.pandas.tests.data_type_ops.test_string_ops import *  # noqa: F401
 
     try:
         import xmlrunner  # type: ignore[import]

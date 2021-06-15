@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
 import org.apache.spark.sql.connector.read.streaming.SparkDataStream
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.LeafExecNode
 import org.apache.spark.sql.execution.datasources.DataSource
 
@@ -88,7 +89,7 @@ case class StreamingExecutionRelation(
 case class StreamingRelationExec(sourceName: String, output: Seq[Attribute]) extends LeafExecNode {
   override def toString: String = sourceName
   override protected def doExecute(): RDD[InternalRow] = {
-    throw new UnsupportedOperationException("StreamingRelationExec cannot be executed")
+    throw QueryExecutionErrors.cannotExecuteStreamingRelationExecError()
   }
 }
 

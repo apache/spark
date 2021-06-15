@@ -64,7 +64,7 @@ from pandas.core.dtypes.inference import is_sequence
 from pyspark import StorageLevel
 from pyspark import sql as spark
 from pyspark.sql import Column, DataFrame as SparkDataFrame, functions as F
-from pyspark.sql.functions import pandas_udf, PandasUDFType
+from pyspark.sql.functions import pandas_udf
 from pyspark.sql.types import (  # noqa: F401 (SPARK-34943)
     BooleanType,
     DataType,
@@ -2529,9 +2529,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             index_fields = [field.normalize_spark_type() for field in psdf._internal.index_fields]
             data_fields = [field.normalize_spark_type() for field in psdf._internal.data_fields]
 
-            return_schema = StructType(
-                [field.struct_field for field in index_fields + data_fields]
-            )  # type: DataType
+            return_schema = StructType([field.struct_field for field in index_fields + data_fields])
 
             output_func = GroupBy._make_pandas_df_builder_func(
                 self_applied, apply_func, return_schema, retain_index=True
@@ -10068,9 +10066,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             def gen_new_index_column(level):
                 index_col_name = index_columns[level]
 
-                index_mapper_udf = pandas_udf(
-                    lambda s: s.map(index_mapper_fn), returnType=index_mapper_ret_stype
-                )
+                @pandas_udf(returnType=index_mapper_ret_stype)
+                def index_mapper_udf(s: pd.Series) -> pd.Series:
+                    return s.map(index_mapper_fn)
+
                 return index_mapper_udf(scol_for(psdf._internal.spark_frame, index_col_name))
 
             sdf = psdf._internal.resolved_copy.spark_frame
@@ -11232,9 +11231,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 return first_series(DataFrame(internal).transpose())
 
         else:
-            calculate_columns_axis = pandas_udf(
-                returnType=DoubleType(), functionType=PandasUDFType.SCALAR
-            )(lambda *cols: pd.concat(cols, axis=1).mad(axis=1))
+
+            @pandas_udf(returnType=DoubleType())  # type: ignore
+            def calculate_columns_axis(*cols: pd.Series) -> pd.Series:
+                return pd.concat(cols, axis=1).mad(axis=1)
 
             internal = self._internal.copy(
                 column_labels=[None],

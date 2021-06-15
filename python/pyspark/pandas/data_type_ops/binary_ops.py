@@ -17,10 +17,19 @@
 
 from typing import TYPE_CHECKING, Union
 
-from pyspark.sql import functions as F
-from pyspark.sql.types import BinaryType
+from pandas.api.types import CategoricalDtype
+
 from pyspark.pandas.base import column_op, IndexOpsMixin
-from pyspark.pandas.data_type_ops.base import DataTypeOps
+from pyspark.pandas.data_type_ops.base import (
+    DataTypeOps,
+    _as_bool_type,
+    _as_categorical_type,
+    _as_other_type,
+    _as_string_type,
+)
+from pyspark.pandas.typedef import Dtype, pandas_on_spark_type
+from pyspark.sql import functions as F
+from pyspark.sql.types import BinaryType, BooleanType, StringType
 
 if TYPE_CHECKING:
     from pyspark.pandas.indexes import Index  # noqa: F401 (SPARK-34943)
@@ -53,3 +62,17 @@ class BinaryOps(DataTypeOps):
             raise TypeError(
                 "Concatenation can not be applied to %s and the given type." % self.pretty_name
             )
+
+    def astype(
+        self, index_ops: Union["Index", "Series"], dtype: Union[str, type, Dtype]
+    ) -> Union["Index", "Series"]:
+        dtype, spark_type = pandas_on_spark_type(dtype)
+
+        if isinstance(dtype, CategoricalDtype):
+            return _as_categorical_type(index_ops, dtype, spark_type)
+        elif isinstance(spark_type, BooleanType):
+            return _as_bool_type(index_ops, dtype)
+        elif isinstance(spark_type, StringType):
+            return _as_string_type(index_ops, dtype)
+        else:
+            return _as_other_type(index_ops, dtype, spark_type)
