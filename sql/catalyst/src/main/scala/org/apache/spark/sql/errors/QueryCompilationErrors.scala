@@ -1652,4 +1652,26 @@ private[spark] object QueryCompilationErrors {
     new AnalysisException(
       s"The SQL config '$configName' was removed in the version $version. $comment")
   }
+
+  def failedFallbackParsingError(msg: String, e1: Exception, e2: Exception): Throwable = {
+    new AnalysisException(
+      message = s"$msg${e1.getMessage}\nFailed fallback parsing: ${e2.getMessage}",
+      cause = Some(e1.getCause))
+  }
+
+  def decimalCannotGreaterThanPrecisionError(scale: Int, precision: String): Throwable = {
+    new AnalysisException(
+      s"Decimal scale ($scale) cannot be greater than precision ($precision).")
+  }
+
+  def decimalOnlySupportPrecisionUptoError(decimalType: String, precision: Int): Throwable = {
+    new AnalysisException(
+      s"$decimalType can only support precision up to $precision")
+  }
+
+  def negativeScaleNotAllowedError(scale: Int): Throwable = {
+    new AnalysisException(s"Negative scale is not allowed: $scale. " +
+      s"You can use spark.sql.legacy.allowNegativeScaleOfDecimal=true " +
+      s"to enable legacy mode to allow it.")
+  }
 }

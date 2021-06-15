@@ -24,6 +24,7 @@ import org.json4s.JsonDSL._
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.util.ArrayData
 import org.apache.spark.sql.catalyst.util.StringUtils.StringConcat
+import org.apache.spark.sql.errors.QueryExecutionErrors
 
 /**
  * Companion object for ArrayType.
@@ -109,8 +110,7 @@ case class ArrayType(elementType: DataType, containsNull: Boolean) extends DataT
       case a : ArrayType => a.interpretedOrdering.asInstanceOf[Ordering[Any]]
       case s: StructType => s.interpretedOrdering.asInstanceOf[Ordering[Any]]
       case other =>
-        throw new IllegalArgumentException(
-          s"Type ${other.catalogString} does not support ordered operations")
+        throw QueryExecutionErrors.typeNotSupportOrderedOperationsError(other.catalogString)
     }
 
     def compare(x: ArrayData, y: ArrayData): Int = {

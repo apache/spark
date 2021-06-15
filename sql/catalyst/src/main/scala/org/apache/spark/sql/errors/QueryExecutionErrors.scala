@@ -1517,5 +1517,44 @@ object QueryExecutionErrors {
     new RuntimeException("Cannot get SQLConf inside scheduler event loop thread.")
   }
 
+  def unsupportedOperationExceptionError(): Throwable = {
+    new UnsupportedOperationException
+  }
 
+  def typeNotSupportOrderedOperationsError(name: String): Throwable = {
+    new IllegalArgumentException(
+      s"Type ${name} does not support ordered operations")
+  }
+
+  def failedConvertJSONStringToError(name: String, dest: String): Throwable = {
+    new IllegalArgumentException(
+      s"Failed to convert the JSON string '$name' to $dest.")
+  }
+
+  def nullLiteralsCannotCastToError(name: String): Throwable = {
+    new UnsupportedOperationException(
+      s"null literals can't be casted to $name")
+  }
+
+  def nameNotExistError(name: String, availableName: Array[String]): Throwable = {
+    new IllegalArgumentException(
+      s"$name does not exist. Available: ${availableName.mkString(", ")}")
+  }
+
+  def namesNotExistError(nonExistName: Set[String], availableName: Array[String]): Throwable = {
+    new IllegalArgumentException(
+      s"${nonExistName.mkString(", ")} do(es) not exist. " +
+        s"Available: ${availableName.mkString(", ")}")
+  }
+
+  def notUDFError(name: String, userClass: String): Throwable = {
+    new SparkException(
+      s"${name} is not an UserDefinedType. Please make sure registering " +
+        s"an UserDefinedType for ${userClass}")
+  }
+
+  def cannotLoadUDFError(name: String, userClass: String): Throwable = {
+    new SparkException(
+      s"Can not load in UserDefinedType ${name} for user class ${userClass}.")
+  }
 }
