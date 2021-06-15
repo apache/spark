@@ -36,7 +36,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{getZoneId, TimeZoneUTC}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.types.DataTypeTestUtils.dayTimeIntervalTypes
+import org.apache.spark.sql.types.DataTypeTestUtils.{dayTimeIntervalTypes, yearMonthIntervalTypes}
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
@@ -526,7 +526,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   private def testAddMonths(dataType: DataType): Unit = {
     def addMonths(date: Literal, months: Any): AddMonthsBase = dataType match {
       case IntegerType => AddMonths(date, Literal.create(months, dataType))
-      case YearMonthIntervalType =>
+      case _: YearMonthIntervalType =>
         val period = if (months == null) null else Period.ofMonths(months.asInstanceOf[Int])
         DateAddYMInterval(date, Literal.create(period, dataType))
     }
@@ -561,7 +561,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("SPARK-34721: add a year-month interval to a date") {
-    testAddMonths(YearMonthIntervalType)
+    testAddMonths(YearMonthIntervalType())
     // Test evaluation results between Interpreted mode and Codegen mode
     forAll (
       LiteralGenerator.randomGen(DateType),
@@ -1596,18 +1596,21 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(
         TimestampAddYMInterval(
           Literal(new Timestamp(sdf.parse("2016-01-29 10:00:00.000").getTime)),
-          Literal.create(null, YearMonthIntervalType),
+          Literal.create(null, YearMonthIntervalType()),
           timeZoneId),
         null)
       checkEvaluation(
         TimestampAddYMInterval(
           Literal.create(null, TimestampType),
-          Literal.create(null, YearMonthIntervalType),
+          Literal.create(null, YearMonthIntervalType()),
           timeZoneId),
         null)
-      checkConsistencyBetweenInterpretedAndCodegen(
-        (ts: Expression, interval: Expression) => TimestampAddYMInterval(ts, interval, timeZoneId),
-        TimestampType, YearMonthIntervalType)
+      yearMonthIntervalTypes.foreach { it =>
+        checkConsistencyBetweenInterpretedAndCodegen(
+          (ts: Expression, interval: Expression) =>
+            TimestampAddYMInterval(ts, interval, timeZoneId),
+          TimestampType, it)
+      }
     }
   }
 

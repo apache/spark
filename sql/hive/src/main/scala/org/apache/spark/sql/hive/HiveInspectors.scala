@@ -842,7 +842,7 @@ private[hive] trait HiveInspectors {
     case TimestampType => PrimitiveObjectInspectorFactory.javaTimestampObjectInspector
     case _: DayTimeIntervalType =>
       PrimitiveObjectInspectorFactory.javaHiveIntervalDayTimeObjectInspector
-    case YearMonthIntervalType =>
+    case _: YearMonthIntervalType =>
       PrimitiveObjectInspectorFactory.javaHiveIntervalYearMonthObjectInspector
     // TODO decimal precision?
     case DecimalType() => PrimitiveObjectInspectorFactory.javaHiveDecimalObjectInspector
@@ -891,7 +891,7 @@ private[hive] trait HiveInspectors {
       getPrimitiveNullWritableConstantObjectInspector
     case Literal(_, _: DayTimeIntervalType) =>
       getHiveIntervalDayTimeWritableConstantObjectInspector
-    case Literal(_, YearMonthIntervalType) =>
+    case Literal(_, _: YearMonthIntervalType) =>
       getHiveIntervalYearMonthWritableConstantObjectInspector
     case Literal(value, ArrayType(dt, _)) =>
       val listObjectInspector = toInspector(dt)
@@ -971,8 +971,8 @@ private[hive] trait HiveInspectors {
     case _: JavaTimestampObjectInspector => TimestampType
     case _: WritableHiveIntervalDayTimeObjectInspector => DayTimeIntervalType()
     case _: JavaHiveIntervalDayTimeObjectInspector => DayTimeIntervalType()
-    case _: WritableHiveIntervalYearMonthObjectInspector => YearMonthIntervalType
-    case _: JavaHiveIntervalYearMonthObjectInspector => YearMonthIntervalType
+    case _: WritableHiveIntervalYearMonthObjectInspector => YearMonthIntervalType()
+    case _: JavaHiveIntervalYearMonthObjectInspector => YearMonthIntervalType()
     case _: WritableVoidObjectInspector => NullType
     case _: JavaVoidObjectInspector => NullType
   }
@@ -1156,7 +1156,7 @@ private[hive] trait HiveInspectors {
       case TimestampType => timestampTypeInfo
       case NullType => voidTypeInfo
       case _: DayTimeIntervalType => intervalDayTimeTypeInfo
-      case YearMonthIntervalType => intervalYearMonthTypeInfo
+      case _: YearMonthIntervalType => intervalYearMonthTypeInfo
       case dt =>
         throw new AnalysisException(
           s"${dt.catalogString} cannot be converted to Hive TypeInfo")

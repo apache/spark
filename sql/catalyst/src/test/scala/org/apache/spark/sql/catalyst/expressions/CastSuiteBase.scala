@@ -36,7 +36,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.catalyst.util.IntervalUtils.microsToDuration
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.types.DataTypeTestUtils.dayTimeIntervalTypes
+import org.apache.spark.sql.types.DataTypeTestUtils.{dayTimeIntervalTypes, yearMonthIntervalTypes}
 import org.apache.spark.unsafe.types.UTF8String
 
 abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
@@ -831,8 +831,10 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
         s"INTERVAL '$intervalPayload' YEAR TO MONTH")
     }
 
-    checkConsistencyBetweenInterpretedAndCodegen(
-      (child: Expression) => Cast(child, StringType), YearMonthIntervalType)
+    yearMonthIntervalTypes.foreach { it =>
+      checkConsistencyBetweenInterpretedAndCodegen(
+        (child: Expression) => Cast(child, StringType), it)
+    }
   }
 
   test("SPARK-34668: cast day-time interval to string") {

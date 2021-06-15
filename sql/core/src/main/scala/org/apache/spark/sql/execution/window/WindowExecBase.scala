@@ -95,9 +95,9 @@ trait WindowExecBase extends UnaryExecNode {
         // Create the projection which returns the current 'value' modified by adding the offset.
         val boundExpr = (expr.dataType, boundOffset.dataType) match {
           case (DateType, IntegerType) => DateAdd(expr, boundOffset)
-          case (DateType, YearMonthIntervalType) => DateAddYMInterval(expr, boundOffset)
+          case (DateType, _: YearMonthIntervalType) => DateAddYMInterval(expr, boundOffset)
           case (TimestampType, CalendarIntervalType) => TimeAdd(expr, boundOffset, Some(timeZone))
-          case (TimestampType, YearMonthIntervalType) =>
+          case (TimestampType, _: YearMonthIntervalType) =>
             TimestampAddYMInterval(expr, boundOffset, Some(timeZone))
           case (TimestampType, _: DayTimeIntervalType) => TimeAdd(expr, boundOffset, Some(timeZone))
           case (a, b) if a == b => Add(expr, boundOffset)

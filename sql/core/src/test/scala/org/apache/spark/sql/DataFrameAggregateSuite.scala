@@ -1129,7 +1129,9 @@ class DataFrameAggregateSuite extends QueryTest
     val sumDF = df.select(sum($"year-month"), sum($"day-time"))
     checkAnswer(sumDF, Row(Period.of(2, 5, 0), Duration.ofDays(0)))
     assert(find(sumDF.queryExecution.executedPlan)(_.isInstanceOf[HashAggregateExec]).isDefined)
-    assert(sumDF.schema == StructType(Seq(StructField("sum(year-month)", YearMonthIntervalType),
+    assert(sumDF.schema == StructType(Seq(
+      // TODO(SPARK-35775): Check all year-month interval types in aggregate expressions
+      StructField("sum(year-month)", YearMonthIntervalType()),
       // TODO(SPARK-35729): Check all day-time interval types in aggregate expressions
       StructField("sum(day-time)", DayTimeIntervalType()))))
 
@@ -1139,7 +1141,8 @@ class DataFrameAggregateSuite extends QueryTest
       Row(3, Period.of(1, 6, 0), Duration.ofDays(-11)) :: Nil)
     assert(find(sumDF2.queryExecution.executedPlan)(_.isInstanceOf[HashAggregateExec]).isDefined)
     assert(sumDF2.schema == StructType(Seq(StructField("class", IntegerType, false),
-      StructField("sum(year-month)", YearMonthIntervalType),
+      // TODO(SPARK-35775): Check all year-month interval types in aggregate expressions
+      StructField("sum(year-month)", YearMonthIntervalType()),
       // TODO(SPARK-35729): Check all day-time interval types in aggregate expressions
       StructField("sum(day-time)", DayTimeIntervalType()))))
 
@@ -1169,7 +1172,9 @@ class DataFrameAggregateSuite extends QueryTest
     val avgDF = df.select(avg($"year-month"), avg($"day-time"))
     checkAnswer(avgDF, Row(Period.ofMonths(7), Duration.ofDays(0)))
     assert(find(avgDF.queryExecution.executedPlan)(_.isInstanceOf[HashAggregateExec]).isDefined)
-    assert(avgDF.schema == StructType(Seq(StructField("avg(year-month)", YearMonthIntervalType),
+    assert(avgDF.schema == StructType(Seq(
+      // TODO(SPARK-35775): Check all year-month interval types in aggregate expressions
+      StructField("avg(year-month)", YearMonthIntervalType()),
       // TODO(SPARK-35729): Check all day-time interval types in aggregate expressions
       StructField("avg(day-time)", DayTimeIntervalType()))))
 
@@ -1179,7 +1184,8 @@ class DataFrameAggregateSuite extends QueryTest
       Row(3, Period.ofMonths(9), Duration.ofDays(-5).plusHours(-12)) :: Nil)
     assert(find(avgDF2.queryExecution.executedPlan)(_.isInstanceOf[HashAggregateExec]).isDefined)
     assert(avgDF2.schema == StructType(Seq(StructField("class", IntegerType, false),
-      StructField("avg(year-month)", YearMonthIntervalType),
+      // TODO(SPARK-35775): Check all year-month interval types in aggregate expressions
+      StructField("avg(year-month)", YearMonthIntervalType()),
       // TODO(SPARK-35729): Check all day-time interval types in aggregate expressions
       StructField("avg(day-time)", DayTimeIntervalType()))))
 

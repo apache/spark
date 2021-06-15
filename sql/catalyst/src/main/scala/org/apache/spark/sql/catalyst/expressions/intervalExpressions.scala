@@ -125,11 +125,11 @@ object ExtractIntervalPart {
       source: Expression,
       errorHandleFunc: => Nothing): Expression = {
     (extractField.toUpperCase(Locale.ROOT), source.dataType) match {
-      case ("YEAR" | "Y" | "YEARS" | "YR" | "YRS", YearMonthIntervalType) =>
+      case ("YEAR" | "Y" | "YEARS" | "YR" | "YRS", _: YearMonthIntervalType) =>
         ExtractANSIIntervalYears(source)
       case ("YEAR" | "Y" | "YEARS" | "YR" | "YRS", CalendarIntervalType) =>
         ExtractIntervalYears(source)
-      case ("MONTH" | "MON" | "MONS" | "MONTHS", YearMonthIntervalType) =>
+      case ("MONTH" | "MON" | "MONS" | "MONTHS", _: YearMonthIntervalType) =>
         ExtractANSIIntervalMonths(source)
       case ("MONTH" | "MON" | "MONS" | "MONTHS", CalendarIntervalType) =>
         ExtractIntervalMonths(source)
@@ -374,7 +374,7 @@ case class MakeYMInterval(years: Expression, months: Expression)
   override def left: Expression = years
   override def right: Expression = months
   override def inputTypes: Seq[AbstractDataType] = Seq(IntegerType, IntegerType)
-  override def dataType: DataType = YearMonthIntervalType
+  override def dataType: DataType = YearMonthIntervalType()
 
   override def nullSafeEval(year: Any, month: Any): Any = {
     Math.toIntExact(Math.addExact(month.asInstanceOf[Number].longValue(),
@@ -407,7 +407,7 @@ case class MultiplyYMInterval(
   override def right: Expression = num
 
   override def inputTypes: Seq[AbstractDataType] = Seq(YearMonthIntervalType, NumericType)
-  override def dataType: DataType = YearMonthIntervalType
+  override def dataType: DataType = YearMonthIntervalType()
 
   @transient
   private lazy val evalFunc: (Int, Any) => Any = right.dataType match {
@@ -517,7 +517,7 @@ case class DivideYMInterval(
   override def right: Expression = num
 
   override def inputTypes: Seq[AbstractDataType] = Seq(YearMonthIntervalType, NumericType)
-  override def dataType: DataType = YearMonthIntervalType
+  override def dataType: DataType = YearMonthIntervalType()
 
   @transient
   private lazy val evalFunc: (Int, Any) => Any = right.dataType match {
