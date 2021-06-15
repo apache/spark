@@ -1354,15 +1354,15 @@ object QueryExecutionErrors {
          |Error: we detected a possible problem with the location of your "_spark_metadata"
          |directory and you likely need to move it before restarting this query.
          |
-             |Earlier version of Spark incorrectly escaped paths when writing out the
+         |Earlier version of Spark incorrectly escaped paths when writing out the
          |"_spark_metadata" directory for structured streaming. While this was corrected in
          |Spark 3.0, it appears that your query was started using an earlier version that
          |incorrectly handled the "_spark_metadata" path.
          |
-             |Correct "_spark_metadata" Directory: $metadataPath
+         |Correct "_spark_metadata" Directory: $metadataPath
          |Incorrect "_spark_metadata" Directory: $legacyMetadataPath
          |
-             |Please move the data from the incorrect directory to the correct one, delete the
+         |Please move the data from the incorrect directory to the correct one, delete the
          |incorrect directory, and then restart this query. If you believe you are receiving
          |this message in error, you can disable it with the SQL conf
          |${SQLConf.STREAMING_CHECKPOINT_ESCAPED_PATH_CHECK_ENABLED.key}.
