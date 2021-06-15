@@ -271,15 +271,6 @@ class Dataset[T] private[sql](
       }
   }
 
-  private def resolveException(colName: String, fields: Array[String]): AnalysisException = {
-    val extraMsg = if (fields.exists(sparkSession.sessionState.analyzer.resolver(_, colName))) {
-      s"; did you mean to quote the `$colName` column?"
-    } else ""
-    val fieldsStr = fields.mkString(", ")
-    val errorMsg = s"""Cannot resolve column name "$colName" among (${fieldsStr})${extraMsg}"""
-    new AnalysisException(errorMsg)
-  }
-
   private[sql] def numericColumns: Seq[Expression] = {
     schema.fields.filter(_.dataType.isInstanceOf[NumericType]).map { n =>
       queryExecution.analyzed.resolveQuoted(n.name, sparkSession.sessionState.analyzer.resolver).get
@@ -1052,22 +1043,17 @@ class Dataset[T] private[sql](
    * find the trivially true predicates and automatically resolves them to both sides.
    */
   private def resolveSelfJoinCondition(plan: Join): Join = {
-    val resolver = sparkSession.sessionState.analyzer.resolver
     val cond = plan.condition.map { _.transform {
       case catalyst.expressions.EqualTo(a: AttributeReference, b: AttributeReference)
         if a.sameRef(b) =>
         catalyst.expressions.EqualTo(
-          plan.left.resolveQuoted(a.name, resolver)
-            .getOrElse(throw resolveException(a.name, plan.left.schema.fieldNames)),
-          plan.right.resolveQuoted(b.name, resolver)
-            .getOrElse(throw resolveException(b.name, plan.right.schema.fieldNames)))
+          withPlan(plan.left).resolve(a.name),
+          withPlan(plan.right).resolve(b.name))
       case catalyst.expressions.EqualNullSafe(a: AttributeReference, b: AttributeReference)
         if a.sameRef(b) =>
         catalyst.expressions.EqualNullSafe(
-          plan.left.resolveQuoted(a.name, resolver)
-            .getOrElse(throw resolveException(a.name, plan.left.schema.fieldNames)),
-          plan.right.resolveQuoted(b.name, resolver)
-            .getOrElse(throw resolveException(b.name, plan.right.schema.fieldNames)))
+          withPlan(plan.left).resolve(a.name),
+          withPlan(plan.right).resolve(b.name))
     }}
     plan.copy(condition = cond)
   }
