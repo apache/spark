@@ -109,6 +109,8 @@ case class BroadcastExchangeExec(
   @transient
   private lazy val maxBroadcastRows = mode match {
     case HashedRelationBroadcastMode(key, _)
+      // NOTE: LongHashedRelation is used for single key with LongType. This should be kept
+      // consistent with HashedRelation.apply.
       if !(key.length == 1 && key.head.dataType == LongType) =>
       // Since the maximum number of keys that BytesToBytesMap supports is 1 << 29,
       // and only 70% of the slots can be used before growing in UnsafeHashedRelation,
