@@ -170,19 +170,20 @@ public final class VectorizedRleValuesReader extends ValuesReader
    *  }
    */
   public void readBatch(
-      int total,
-      int offset,
+      ParquetReadState state,
       WritableColumnVector values,
-      int maxDefinitionLevel,
       VectorizedValuesReader valueReader,
       ParquetVectorUpdater updater) throws IOException {
-    int left = total;
-    while (left > 0) {
+    int offset = state.offset;
+
+    while (state.hasMoreInPage(offset)) {
       if (this.currentCount == 0) this.readNextGroup();
-      int n = Math.min(left, this.currentCount);
+      int n = Math.min(state.valuesToReadInBatch + state.offset - offset, this.currentCount);
+      n = Math.min(state.valuesToReadInPage + state.offset - offset, n);
+
       switch (mode) {
         case RLE:
-          if (currentValue == maxDefinitionLevel) {
+          if (currentValue == state.maxDefinitionLevel) {
             updater.updateBatch(n, offset, values, valueReader);
           } else {
             values.putNulls(offset, n);
@@ -190,7 +191,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
           break;
         case PACKED:
           for (int i = 0; i < n; ++i) {
-            if (currentBuffer[currentBufferIdx++] == maxDefinitionLevel) {
+            if (currentBuffer[currentBufferIdx++] == state.maxDefinitionLevel) {
               updater.update(offset + i, values, valueReader);
             } else {
               values.putNull(offset + i);
@@ -199,9 +200,10 @@ public final class VectorizedRleValuesReader extends ValuesReader
           break;
       }
       offset += n;
-      left -= n;
       currentCount -= n;
     }
+
+    state.advanceOffset(offset);
   }
 
   /**
@@ -209,38 +211,40 @@ public final class VectorizedRleValuesReader extends ValuesReader
    * populated into `nulls`.
    */
   public void readIntegers(
-      int total,
+      ParquetReadState state,
       WritableColumnVector values,
       WritableColumnVector nulls,
-      int rowId,
-      int level,
       VectorizedValuesReader data) throws IOException {
-    int left = total;
-    while (left > 0) {
+    int offset = state.offset;
+
+    while (state.hasMoreInPage(offset)) {
       if (this.currentCount == 0) this.readNextGroup();
-      int n = Math.min(left, this.currentCount);
+      int n = Math.min(state.valuesToReadInBatch + state.offset - offset, this.currentCount);
+      n = Math.min(state.valuesToReadInPage + state.offset - offset, n);
+
       switch (mode) {
         case RLE:
-          if (currentValue == level) {
-            data.readIntegers(n, values, rowId);
+          if (currentValue == state.maxDefinitionLevel) {
+            data.readIntegers(n, values, offset);
           } else {
-            nulls.putNulls(rowId, n);
+            nulls.putNulls(offset, n);
           }
           break;
         case PACKED:
           for (int i = 0; i < n; ++i) {
-            if (currentBuffer[currentBufferIdx++] == level) {
-              values.putInt(rowId + i, data.readInteger());
+            if (currentBuffer[currentBufferIdx++] == state.maxDefinitionLevel) {
+              values.putInt(offset + i, data.readInteger());
             } else {
-              nulls.putNull(rowId + i);
+              nulls.putNull(offset + i);
             }
           }
           break;
       }
-      rowId += n;
-      left -= n;
+      offset += n;
       currentCount -= n;
     }
+
+    state.advanceOffset(offset);
   }
 
 
