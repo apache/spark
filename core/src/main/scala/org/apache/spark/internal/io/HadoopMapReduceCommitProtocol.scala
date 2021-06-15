@@ -138,13 +138,16 @@ class HadoopMapReduceCommitProtocol(
   }
 
   override def newTaskFile(
-      taskContext: TaskAttemptContext, stagingPath: String, finalPath: Option[String]): Unit = {
+      taskContext:
+      TaskAttemptContext,
+      stagingPath: String,
+      finalPath: Option[String],
+      stagingDir: Option[String]): Unit = {
     finalPath match {
       case Some(path) => addedAbsPathFiles(stagingPath) = path
       case None =>
-        committer match {
-          case _: FileOutputCommitter if dynamicPartitionOverwrite =>
-            val dir = new Path(stagingPath).getParent.getName
+        (committer, stagingDir) match {
+          case (_: FileOutputCommitter, Some(dir)) if dynamicPartitionOverwrite =>
             partitionPaths += dir
           case _ =>
         }

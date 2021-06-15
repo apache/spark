@@ -111,7 +111,9 @@ abstract class FileCommitProtocol extends Logging {
    *
    * The "stagingPath" parameter is the current path of new file. The "finalPath" parameter if
    * specified, is the final path of file. The "finalPath" parameter is optional here because
-   * caller can leave up to file commit protocol to decide the final path.
+   * caller can leave up to file commit protocol to decide the final path. The "stagingDir"
+   * parameter if specified, is the sub-directory used to specify dynamic partitioning. The
+   * "stagingDir" parameter is optional here for non-dynamic partitioning.
    *
    * Important: it is the caller's responsibility to add uniquely identifying content to
    * `stagingPath` and `finalPath`. The file commit protocol only guarantees that files written by
@@ -119,7 +121,10 @@ abstract class FileCommitProtocol extends Logging {
    * [[newTaskTempFile]] and [[newTaskTempFileAbsPath]].
    */
   def newTaskFile(
-      taskContext: TaskAttemptContext, stagingPath: String, finalPath: Option[String]): Unit = {
+      taskContext: TaskAttemptContext,
+      stagingPath: String,
+      finalPath: Option[String],
+      stagingDir: Option[String]): Unit = {
     // No-op as default implementation to be backward compatible with custom [[FileCommitProtocol]]
     // implementations before Spark 3.2.0.
   }

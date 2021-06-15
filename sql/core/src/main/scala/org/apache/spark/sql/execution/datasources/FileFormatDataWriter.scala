@@ -138,7 +138,7 @@ class SingleDirectoryDataWriter(
       description.outputWriterFactory.getFileExtension(taskAttemptContext)
     val fileContext = FileContext(ext, None, None, None)
     val currentPath = namingProtocol.getTaskStagingPath(taskAttemptContext, fileContext)
-    committer.newTaskFile(taskAttemptContext, currentPath, None)
+    committer.newTaskFile(taskAttemptContext, currentPath, None, None)
 
     currentWriter = description.outputWriterFactory.newInstance(
       path = currentPath,
@@ -263,15 +263,16 @@ abstract class BaseDynamicPartitionDataWriter(
     val customPath = partDir.flatMap { dir =>
       description.customPartitionLocations.get(PartitioningUtils.parsePathFragment(dir))
     }
-    val (currentPath, finalPath) = if (customPath.isDefined) {
+    val (currentPath, finalPath, currentDir) = if (customPath.isDefined) {
       val fileContext = FileContext(ext, None, Some(customPath.get), None)
       (namingProtocol.getTaskStagingPath(taskAttemptContext, fileContext),
-        Some(namingProtocol.getTaskFinalPath(taskAttemptContext, fileContext)))
+        Some(namingProtocol.getTaskFinalPath(taskAttemptContext, fileContext)),
+        None)
     } else {
       val fileContext = FileContext(ext, partDir, None, None)
-      (namingProtocol.getTaskStagingPath(taskAttemptContext, fileContext), None)
+      (namingProtocol.getTaskStagingPath(taskAttemptContext, fileContext), None, partDir)
     }
-    committer.newTaskFile(taskAttemptContext, currentPath, finalPath)
+    committer.newTaskFile(taskAttemptContext, currentPath, finalPath, currentDir)
 
     currentWriter = description.outputWriterFactory.newInstance(
       path = currentPath,
