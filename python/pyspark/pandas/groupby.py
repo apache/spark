@@ -1005,7 +1005,7 @@ class GroupBy(object, metaclass=ABCMeta):
             <https://koalas.readthedocs.io/en/latest/user_guide/options.html#default-index-type>`_.
 
         .. note:: the dataframe within ``func`` is actually a pandas dataframe. Therefore,
-            any pandas APIs within this function is allowed.
+            any pandas API within this function is allowed.
 
         Parameters
         ----------
@@ -2048,7 +2048,7 @@ class GroupBy(object, metaclass=ABCMeta):
             <https://koalas.readthedocs.io/en/latest/user_guide/options.html#default-index-type>`_.
 
         .. note:: the series within ``func`` is actually a pandas series. Therefore,
-            any pandas APIs within this function is allowed.
+            any pandas API within this function is allowed.
 
 
         Parameters

@@ -34,7 +34,7 @@ to return the same length of the input and the latter does not require this. See
    ...
    >>> kdf.apply(pandas_plus)
 
-In this case, each function takes a pandas Series, and pandas APIs on Spark compute the functions in a distributed manner as below.
+In this case, each function takes a pandas Series, and pandas API on Spark computes the functions in a distributed manner as below.
 
 .. image:: https://user-images.githubusercontent.com/6477701/80076790-a1cf0680-8587-11ea-8b08-8dc694071ba0.png
   :alt: transform and apply
@@ -86,7 +86,7 @@ then applies the given function with pandas DataFrame or Series as input and out
    >>> kdf.koalas.apply_batch(pandas_plus)
 
 The functions in both examples take a pandas DataFrame as a chunk of pandas-on-Spark DataFrame, and output a pandas DataFrame.
-Pandas APIs on Spark combine the pandas DataFrames as a pandas-on-Spark DataFrame.
+Pandas API on Spark combines the pandas DataFrames as a pandas-on-Spark DataFrame.
 
 Note that :func:`DataFrame.koalas.transform_batch` has the length restriction - the length of input and output should be
 the same whereas :func:`DataFrame.koalas.apply_batch` does not.  However, it is important to know that
