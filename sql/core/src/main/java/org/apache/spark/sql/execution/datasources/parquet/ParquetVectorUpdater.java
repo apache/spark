@@ -37,6 +37,14 @@ public interface ParquetVectorUpdater {
       VectorizedValuesReader valuesReader);
 
   /**
+   * Skip a batch of `total` from `valuesReader` into `values`, starting from `offset`.
+   *
+   * @param total total number of values to skip
+   * @param valuesReader reader to read values from
+   */
+  void skipBatch(int total, VectorizedValuesReader valuesReader);
+
+  /**
    * Read a single value from `valuesReader` into `values`, at `offset`.
    *
    * @param offset offset in `values` to put the new value
