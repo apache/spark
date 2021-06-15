@@ -1130,7 +1130,8 @@ class DataFrameAggregateSuite extends QueryTest
     checkAnswer(sumDF, Row(Period.of(2, 5, 0), Duration.ofDays(0)))
     assert(find(sumDF.queryExecution.executedPlan)(_.isInstanceOf[HashAggregateExec]).isDefined)
     assert(sumDF.schema == StructType(Seq(StructField("sum(year-month)", YearMonthIntervalType),
-      StructField("sum(day-time)", DayTimeIntervalType))))
+      // TODO(SPARK-35729): Check all day-time interval types in aggregate expressions
+      StructField("sum(day-time)", DayTimeIntervalType()))))
 
     val sumDF2 = df.groupBy($"class").agg(sum($"year-month"), sum($"day-time"))
     checkAnswer(sumDF2, Row(1, Period.ofMonths(10), Duration.ofDays(10)) ::
@@ -1139,7 +1140,8 @@ class DataFrameAggregateSuite extends QueryTest
     assert(find(sumDF2.queryExecution.executedPlan)(_.isInstanceOf[HashAggregateExec]).isDefined)
     assert(sumDF2.schema == StructType(Seq(StructField("class", IntegerType, false),
       StructField("sum(year-month)", YearMonthIntervalType),
-      StructField("sum(day-time)", DayTimeIntervalType))))
+      // TODO(SPARK-35729): Check all day-time interval types in aggregate expressions
+      StructField("sum(day-time)", DayTimeIntervalType()))))
 
     val error = intercept[SparkException] {
       checkAnswer(df2.select(sum($"year-month")), Nil)
@@ -1168,7 +1170,8 @@ class DataFrameAggregateSuite extends QueryTest
     checkAnswer(avgDF, Row(Period.ofMonths(7), Duration.ofDays(0)))
     assert(find(avgDF.queryExecution.executedPlan)(_.isInstanceOf[HashAggregateExec]).isDefined)
     assert(avgDF.schema == StructType(Seq(StructField("avg(year-month)", YearMonthIntervalType),
-      StructField("avg(day-time)", DayTimeIntervalType))))
+      // TODO(SPARK-35729): Check all day-time interval types in aggregate expressions
+      StructField("avg(day-time)", DayTimeIntervalType()))))
 
     val avgDF2 = df.groupBy($"class").agg(avg($"year-month"), avg($"day-time"))
     checkAnswer(avgDF2, Row(1, Period.ofMonths(10), Duration.ofDays(10)) ::
@@ -1177,7 +1180,8 @@ class DataFrameAggregateSuite extends QueryTest
     assert(find(avgDF2.queryExecution.executedPlan)(_.isInstanceOf[HashAggregateExec]).isDefined)
     assert(avgDF2.schema == StructType(Seq(StructField("class", IntegerType, false),
       StructField("avg(year-month)", YearMonthIntervalType),
-      StructField("avg(day-time)", DayTimeIntervalType))))
+      // TODO(SPARK-35729): Check all day-time interval types in aggregate expressions
+      StructField("avg(day-time)", DayTimeIntervalType()))))
 
     val error = intercept[SparkException] {
       checkAnswer(df2.select(avg($"year-month")), Nil)
@@ -1195,6 +1199,13 @@ class DataFrameAggregateSuite extends QueryTest
 
     val avgDF4 = df3.groupBy($"class").agg(avg($"year-month"), avg($"day-time"))
     checkAnswer(avgDF4, Nil)
+  }
+
+  test("SPARK-35412: groupBy of year-month/day-time intervals should work") {
+    val df1 = Seq(Duration.ofDays(1)).toDF("a").groupBy("a").count()
+    checkAnswer(df1, Row(Duration.ofDays(1), 1))
+    val df2 = Seq(Period.ofYears(1)).toDF("a").groupBy("a").count()
+    checkAnswer(df2, Row(Period.ofYears(1), 1))
   }
 }
 

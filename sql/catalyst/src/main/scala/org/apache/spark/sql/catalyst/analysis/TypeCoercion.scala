@@ -23,11 +23,11 @@ import scala.annotation.tailrec
 import scala.collection.mutable
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -184,8 +184,6 @@ abstract class TypeCoercionBase {
         }
       }
     }
-
-    override val ruleName: String = rules.map(_.ruleName).mkString("Combined[", ", ", "]")
   }
 
   /**
@@ -322,7 +320,7 @@ abstract class TypeCoercionBase {
 
       // Handle type casting required between value expression and subquery output
       // in IN subquery.
-      case i @ InSubquery(lhs, ListQuery(sub, children, exprId, _))
+      case i @ InSubquery(lhs, ListQuery(sub, children, exprId, _, conditions))
           if !i.resolved && lhs.length == sub.output.length =>
         // LHS is the value expressions of IN subquery.
         // RHS is the subquery output.
@@ -345,7 +343,7 @@ abstract class TypeCoercionBase {
           }
 
           val newSub = Project(castedRhs, sub)
-          InSubquery(newLhs, ListQuery(newSub, children, exprId, newSub.output))
+          InSubquery(newLhs, ListQuery(newSub, children, exprId, newSub.output, conditions))
         } else {
           i
         }
@@ -780,16 +778,16 @@ abstract class TypeCoercionBase {
         val days = try {
           AnsiCast(r, IntegerType).eval().asInstanceOf[Int]
         } catch {
-          case e: NumberFormatException => throw new AnalysisException(
-            "The second argument of 'date_add' function needs to be an integer.", cause = Some(e))
+          case e: NumberFormatException =>
+            throw QueryCompilationErrors.secondArgumentOfFunctionIsNotIntegerError("date_add", e)
         }
         DateAdd(l, Literal(days))
       case DateSub(l, r) if r.dataType == StringType && r.foldable =>
         val days = try {
           AnsiCast(r, IntegerType).eval().asInstanceOf[Int]
         } catch {
-          case e: NumberFormatException => throw new AnalysisException(
-            "The second argument of 'date_sub' function needs to be an integer.", cause = Some(e))
+          case e: NumberFormatException =>
+            throw QueryCompilationErrors.secondArgumentOfFunctionIsNotIntegerError("date_sub", e)
         }
         DateSub(l, Literal(days))
     }
@@ -1157,21 +1155,20 @@ trait TypeCoercionRule extends Rule[LogicalPlan] with Logging {
    */
   def apply(plan: LogicalPlan): LogicalPlan = {
     val typeCoercionFn = transform
-    def rewrite(plan: LogicalPlan): LogicalPlan = {
-      val withNewChildren = plan.mapChildren(rewrite)
-      if (!withNewChildren.childrenResolved) {
-        withNewChildren
-      } else {
-        // Only propagate types if the children have changed.
-        val withPropagatedTypes = if (withNewChildren ne plan) {
-          propagateTypes(withNewChildren)
+    plan.transformUpWithBeforeAndAfterRuleOnChildren(!_.analyzed, ruleId) {
+      case (beforeMapChildren, afterMapChildren) =>
+        if (!afterMapChildren.childrenResolved) {
+          afterMapChildren
         } else {
-          plan
+          // Only propagate types if the children have changed.
+          val withPropagatedTypes = if (beforeMapChildren ne afterMapChildren) {
+            propagateTypes(afterMapChildren)
+          } else {
+            beforeMapChildren
+          }
+          withPropagatedTypes.transformExpressionsUp(typeCoercionFn)
         }
-        withPropagatedTypes.transformExpressionsUp(typeCoercionFn)
-      }
     }
-    rewrite(plan)
   }
 
   def transform: PartialFunction[Expression, Expression]

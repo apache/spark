@@ -121,7 +121,7 @@ private[hive] class SparkExecuteStatementOperation(
           false,
           timeFormatters)
       case _: ArrayType | _: StructType | _: MapType | _: UserDefinedType[_] |
-          YearMonthIntervalType | DayTimeIntervalType =>
+          YearMonthIntervalType | _: DayTimeIntervalType =>
         to += toHiveString((from.get(ordinal), dataTypes(ordinal)), false, timeFormatters)
     }
   }
@@ -255,8 +255,7 @@ private[hive] class SparkExecuteStatementOperation(
           setState(OperationState.ERROR)
           HiveThriftServer2.eventManager.onStatementError(
             statementId, rejected.getMessage, SparkUtils.exceptionString(rejected))
-          throw new HiveSQLException("The background threadpool cannot accept" +
-            " new task for execution, please retry the operation", rejected)
+          throw HiveThriftServerErrors.taskExecutionRejectedError(rejected)
         case NonFatal(e) =>
           logError(s"Error executing query in background", e)
           setState(OperationState.ERROR)
@@ -322,7 +321,7 @@ private[hive] class SparkExecuteStatementOperation(
             statementId, e.getMessage, SparkUtils.exceptionString(e))
           e match {
             case _: HiveSQLException => throw e
-            case _ => throw new HiveSQLException("Error running query: " + e.toString, e)
+            case _ => throw HiveThriftServerErrors.runningQueryError(e)
           }
         }
     } finally {
@@ -379,7 +378,7 @@ object SparkExecuteStatementOperation {
         case NullType => "void"
         case CalendarIntervalType => StringType.catalogString
         case YearMonthIntervalType => "interval_year_month"
-        case DayTimeIntervalType => "interval_day_time"
+        case _: DayTimeIntervalType => "interval_day_time"
         case other => other.catalogString
       }
       new FieldSchema(field.name, attrTypeString, field.getComment.getOrElse(""))

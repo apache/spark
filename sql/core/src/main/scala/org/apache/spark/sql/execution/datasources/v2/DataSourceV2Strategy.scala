@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, StagingTableCatalog, SupportsNamespaces, SupportsPartitionManagement, SupportsWrite, Table, TableCapability, TableCatalog, TableChange}
+import org.apache.spark.sql.connector.read.LocalScan
 import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, MicroBatchStream}
 import org.apache.spark.sql.connector.write.V1Write
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
@@ -104,6 +105,11 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         tableIdentifier = None)
       withProjectAndFilter(project, filters, dsScan, needsUnsafeConversion = false) :: Nil
 
+    case PhysicalOperation(project, filters,
+        DataSourceV2ScanRelation(_, scan: LocalScan, output)) =>
+      val localScanExec = LocalTableScanExec(output, scan.rows().toSeq)
+      withProjectAndFilter(project, filters, localScanExec, needsUnsafeConversion = false) :: Nil
+
     case PhysicalOperation(project, filters, relation: DataSourceV2ScanRelation) =>
       // projection and filters were already pushed down in the optimizer.
       // this uses PhysicalOperation to get the projection and ensure that if the batch scan does
@@ -111,32 +117,24 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       val batchExec = BatchScanExec(relation.output, relation.scan)
       withProjectAndFilter(project, filters, batchExec, !batchExec.supportsColumnar) :: Nil
 
-    case r: StreamingDataSourceV2Relation if r.startOffset.isDefined && r.endOffset.isDefined =>
+    case PhysicalOperation(p, f, r: StreamingDataSourceV2Relation)
+      if r.startOffset.isDefined && r.endOffset.isDefined =>
+
       val microBatchStream = r.stream.asInstanceOf[MicroBatchStream]
       val scanExec = MicroBatchScanExec(
         r.output, r.scan, microBatchStream, r.startOffset.get, r.endOffset.get)
 
-      val withProjection = if (scanExec.supportsColumnar) {
-        scanExec
-      } else {
-        // Add a Project here to make sure we produce unsafe rows.
-        ProjectExec(r.output, scanExec)
-      }
+      // Add a Project here to make sure we produce unsafe rows.
+      withProjectAndFilter(p, f, scanExec, !scanExec.supportsColumnar) :: Nil
 
-      withProjection :: Nil
+    case PhysicalOperation(p, f, r: StreamingDataSourceV2Relation)
+      if r.startOffset.isDefined && r.endOffset.isEmpty =>
 
-    case r: StreamingDataSourceV2Relation if r.startOffset.isDefined && r.endOffset.isEmpty =>
       val continuousStream = r.stream.asInstanceOf[ContinuousStream]
       val scanExec = ContinuousScanExec(r.output, r.scan, continuousStream, r.startOffset.get)
 
-      val withProjection = if (scanExec.supportsColumnar) {
-        scanExec
-      } else {
-        // Add a Project here to make sure we produce unsafe rows.
-        ProjectExec(r.output, scanExec)
-      }
-
-      withProjection :: Nil
+      // Add a Project here to make sure we produce unsafe rows.
+      withProjectAndFilter(p, f, scanExec, !scanExec.supportsColumnar) :: Nil
 
     case WriteToDataSourceV2(relationOpt, writer, query) =>
       val invalidateCacheFunc: () => Unit = () => relationOpt match {

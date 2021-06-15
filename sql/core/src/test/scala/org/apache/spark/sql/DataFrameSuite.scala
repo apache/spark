@@ -2861,6 +2861,52 @@ class DataFrameSuite extends QueryTest
       checkAnswer(result, Row(0, 0, 0, 0, 100))
     }
   }
+
+  test("SPARK-35410: SubExpr elimination should not include redundant child exprs " +
+    "for conditional expressions") {
+    val accum = sparkContext.longAccumulator("call")
+    val simpleUDF = udf((s: String) => {
+      accum.add(1)
+      s
+    })
+    val df1 = spark.range(5).select(when(functions.length(simpleUDF($"id")) > 0,
+      functions.length(simpleUDF($"id"))).otherwise(
+        functions.length(simpleUDF($"id")) + 1))
+    df1.collect()
+    assert(accum.value == 5)
+
+    val nondeterministicUDF = simpleUDF.asNondeterministic()
+    val df2 = spark.range(5).select(when(functions.length(nondeterministicUDF($"id")) > 0,
+      functions.length(nondeterministicUDF($"id"))).otherwise(
+        functions.length(nondeterministicUDF($"id")) + 1))
+    df2.collect()
+    assert(accum.value == 15)
+  }
+
+  test("SPARK-35560: Remove redundant subexpression evaluation in nested subexpressions") {
+    Seq(1, Int.MaxValue).foreach { splitThreshold =>
+      withSQLConf(SQLConf.CODEGEN_METHOD_SPLIT_THRESHOLD.key -> splitThreshold.toString) {
+        val accum = sparkContext.longAccumulator("call")
+        val simpleUDF = udf((s: String) => {
+          accum.add(1)
+          s
+        })
+
+        // Common exprs:
+        //  1. simpleUDF($"id")
+        //  2. functions.length(simpleUDF($"id"))
+        // We should only evaluate `simpleUDF($"id")` once, i.e.
+        // subExpr1 = simpleUDF($"id");
+        // subExpr2 = functions.length(subExpr1);
+        val df = spark.range(5).select(
+          when(functions.length(simpleUDF($"id")) === 1, lower(simpleUDF($"id")))
+            .when(functions.length(simpleUDF($"id")) === 0, upper(simpleUDF($"id")))
+            .otherwise(simpleUDF($"id")).as("output"))
+        df.collect()
+        assert(accum.value == 5)
+      }
+    }
+  }
 }
 
 case class GroupByKey(a: Int, b: Int)

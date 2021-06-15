@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.IntervalUtils.{safeStringToInterval, stringToInterval}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DayTimeIntervalType, Decimal, DecimalType, YearMonthIntervalType}
-import org.apache.spark.sql.types.DataTypeTestUtils.numericTypes
+import org.apache.spark.sql.types.DataTypeTestUtils.{dayTimeIntervalTypes, numericTypes}
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
@@ -312,6 +312,7 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  // TODO(SPARK-35728): Check multiply/divide of day-time intervals of any fields by numeric
   test("SPARK-34850: multiply day-time interval by numeric") {
     Seq(
       (Duration.ofHours(-123), Literal(null, DecimalType.USER_DEFAULT)) -> null,
@@ -339,9 +340,11 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
 
     numericTypes.foreach { numType =>
-      checkConsistencyBetweenInterpretedAndCodegenAllowingException(
-        (interval: Expression, num: Expression) => MultiplyDTInterval(interval, num),
-        DayTimeIntervalType, numType)
+      dayTimeIntervalTypes.foreach { it =>
+        checkConsistencyBetweenInterpretedAndCodegenAllowingException(
+          (interval: Expression, num: Expression) => MultiplyDTInterval(interval, num),
+          it, numType)
+      }
     }
   }
 
@@ -378,6 +381,7 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  // TODO(SPARK-35728): Check multiply/divide of day-time intervals of any fields by numeric
   test("SPARK-34875: divide day-time interval by numeric") {
     Seq(
       (Duration.ofDays(-123), Literal(null, DecimalType.USER_DEFAULT)) -> null,
@@ -405,9 +409,11 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
 
     numericTypes.foreach { numType =>
-      checkConsistencyBetweenInterpretedAndCodegenAllowingException(
-        (interval: Expression, num: Expression) => DivideDTInterval(interval, num),
-        DayTimeIntervalType, numType)
+      dayTimeIntervalTypes.foreach { it =>
+        checkConsistencyBetweenInterpretedAndCodegenAllowingException(
+          (interval: Expression, num: Expression) => DivideDTInterval(interval, num),
+          it, numType)
+      }
     }
   }
 
@@ -441,9 +447,13 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(ExtractANSIIntervalSeconds(Literal(d)),
         IntervalUtils.getSeconds(IntervalUtils.durationToMicros(d)))
     }
-    checkEvaluation(ExtractANSIIntervalDays(Literal(null, DayTimeIntervalType)), null)
-    checkEvaluation(ExtractANSIIntervalHours(Literal(null, DayTimeIntervalType)), null)
-    checkEvaluation(ExtractANSIIntervalMinutes(Literal(null, DayTimeIntervalType)), null)
-    checkEvaluation(ExtractANSIIntervalSeconds(Literal(null, DayTimeIntervalType)), null)
+    checkEvaluation(ExtractANSIIntervalDays(
+      Literal(null, DayTimeIntervalType())), null)
+    checkEvaluation(ExtractANSIIntervalHours(
+      Literal(null, DayTimeIntervalType())), null)
+    checkEvaluation(ExtractANSIIntervalMinutes(
+      Literal(null, DayTimeIntervalType())), null)
+    checkEvaluation(ExtractANSIIntervalSeconds(
+      Literal(null, DayTimeIntervalType())), null)
   }
 }

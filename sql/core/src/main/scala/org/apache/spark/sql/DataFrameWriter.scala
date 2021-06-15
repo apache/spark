@@ -31,7 +31,6 @@ import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.connector.catalog.{CatalogPlugin, CatalogV2Implicits, CatalogV2Util, Identifier, SupportsCatalogOptions, Table, TableCatalog, TableProvider, V1Table}
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.connector.expressions.{FieldReference, IdentityTransform, Transform}
-import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, DataSourceUtils, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.v2._
@@ -108,23 +107,6 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * All options are maintained in a case-insensitive way in terms of key names.
    * If a new option has the same key case-insensitively, it will override the existing option.
    *
-   * You can set the following option(s):
-   * <ul>
-   * <li>`timeZone` (default session local timezone): sets the string that indicates a time zone ID
-   * to be used to format timestamps in the JSON/CSV datasources or partition values. The following
-   * formats of `timeZone` are supported:
-   *   <ul>
-   *     <li> Region-based zone ID: It should have the form 'area/city', such as
-   *         'America/Los_Angeles'.</li>
-   *     <li> Zone offset: It should be in the format '(+|-)HH:mm', for example '-08:00'
-   *          or '+01:00'. Also 'UTC' and 'Z' are supported as aliases of '+00:00'.</li>
-   *   </ul>
-   * Other short names like 'CST' are not recommended to use because they can be ambiguous.
-   * If it isn't set, the current value of the SQL config `spark.sql.session.timeZone` is
-   * used by default.
-   * </li>
-   * </ul>
-   *
    * @since 1.4.0
    */
   def option(key: String, value: String): DataFrameWriter[T] = {
@@ -168,23 +150,6 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * All options are maintained in a case-insensitive way in terms of key names.
    * If a new option has the same key case-insensitively, it will override the existing option.
    *
-   * You can set the following option(s):
-   * <ul>
-   * <li>`timeZone` (default session local timezone): sets the string that indicates a time zone ID
-   * to be used to format timestamps in the JSON/CSV datasources or partition values. The following
-   * formats of `timeZone` are supported:
-   *   <ul>
-   *     <li> Region-based zone ID: It should have the form 'area/city', such as
-   *         'America/Los_Angeles'.</li>
-   *     <li> Zone offset: It should be in the format '(+|-)HH:mm', for example '-08:00'
-   *          or '+01:00'. Also 'UTC' and 'Z' are supported as aliases of '+00:00'.</li>
-   *   </ul>
-   * Other short names like 'CST' are not recommended to use because they can be ambiguous.
-   * If it isn't set, the current value of the SQL config `spark.sql.session.timeZone` is
-   * used by default.
-   * </li>
-   * </ul>
-   *
    * @since 1.4.0
    */
   def options(options: scala.collection.Map[String, String]): DataFrameWriter[T] = {
@@ -197,23 +162,6 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    *
    * All options are maintained in a case-insensitive way in terms of key names.
    * If a new option has the same key case-insensitively, it will override the existing option.
-   *
-   * You can set the following option(s):
-   * <ul>
-   * <li>`timeZone` (default session local timezone): sets the string that indicates a time zone ID
-   * to be used to format timestamps in the JSON/CSV datasources or partition values. The following
-   * formats of `timeZone` are supported:
-   *   <ul>
-   *     <li> Region-based zone ID: It should have the form 'area/city', such as
-   *         'America/Los_Angeles'.</li>
-   *     <li> Zone offset: It should be in the format '(+|-)HH:mm', for example '-08:00'
-   *          or '+01:00'. Also 'UTC' and 'Z' are supported as aliases of '+00:00'.</li>
-   *   </ul>
-   * Other short names like 'CST' are not recommended to use because they can be ambiguous.
-   * If it isn't set, the current value of the SQL config `spark.sql.session.timeZone` is
-   * used by default.
-   * </li>
-   * </ul>
    *
    * @since 1.4.0
    */
@@ -362,13 +310,13 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
           val relation = DataSourceV2Relation.create(table, catalog, ident, dsOptions)
           checkPartitioningMatchesV2Table(table)
           if (mode == SaveMode.Append) {
-            runCommand(df.sparkSession, "save") {
+            runCommand(df.sparkSession) {
               AppendData.byName(relation, df.logicalPlan, finalOptions)
             }
           } else {
             // Truncate the table. TableCapabilityCheck will throw a nice exception if this
             // isn't supported
-            runCommand(df.sparkSession, "save") {
+            runCommand(df.sparkSession) {
               OverwriteByExpression.byName(
                 relation, df.logicalPlan, Literal(true), finalOptions)
             }
@@ -383,7 +331,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
               val location = Option(dsOptions.get("path")).map(TableCatalog.PROP_LOCATION -> _)
 
-              runCommand(df.sparkSession, "save") {
+              runCommand(df.sparkSession) {
                 CreateTableAsSelect(
                   catalog,
                   ident,
@@ -430,7 +378,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
     val optionsWithPath = getOptionsWithPath(path)
 
     // Code path for data source v1.
-    runCommand(df.sparkSession, "save") {
+    runCommand(df.sparkSession) {
       DataSource(
         sparkSession = df.sparkSession,
         className = source,
@@ -526,13 +474,13 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
         }
     }
 
-    runCommand(df.sparkSession, "insertInto") {
+    runCommand(df.sparkSession) {
       command
     }
   }
 
   private def insertInto(tableIdent: TableIdentifier): Unit = {
-    runCommand(df.sparkSession, "insertInto") {
+    runCommand(df.sparkSession) {
       InsertIntoStatement(
         table = UnresolvedRelation(tableIdent),
         partitionSpec = Map.empty[String, Option[String]],
@@ -682,7 +630,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
           external = false)
     }
 
-    runCommand(df.sparkSession, "saveAsTable") {
+    runCommand(df.sparkSession) {
       command
     }
   }
@@ -749,7 +697,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       partitionColumnNames = partitioningColumns.getOrElse(Nil),
       bucketSpec = getBucketSpec)
 
-    runCommand(df.sparkSession, "saveAsTable")(
+    runCommand(df.sparkSession)(
       CreateTable(tableDesc, mode, Some(df.logicalPlan)))
   }
 
@@ -784,18 +732,10 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * Don't create too many partitions in parallel on a large cluster; otherwise Spark might crash
    * your external database systems.
    *
-   * You can set the following JDBC-specific option(s) for storing JDBC:
-   * <ul>
-   * <li>`truncate` (default `false`): use `TRUNCATE TABLE` instead of `DROP TABLE`.</li>
-   * </ul>
+   * JDBC-specific option and parameter documentation for storing tables via JDBC in
+   * <a href="https://spark.apache.org/docs/latest/sql-data-sources-jdbc.html#data-source-option">
+   *   Data Source Option</a> in the version you use.
    *
-   * In case of failures, users should turn off `truncate` option to use `DROP TABLE` again. Also,
-   * due to the different behavior of `TRUNCATE TABLE` among DBMS, it's not always safe to use this.
-   * MySQLDialect, DB2Dialect, MsSqlServerDialect, DerbyDialect, and OracleDialect supports this
-   * while PostgresDialect and default JDBCDirect doesn't. For unknown and unsupported JDBCDirect,
-   * the user option `truncate` is ignored.
-   *
-   * @param url JDBC database url of the form `jdbc:subprotocol:subname`
    * @param table Name of the table in the external database.
    * @param connectionProperties JDBC database connection arguments, a list of arbitrary string
    *                             tag/value. Normally at least a "user" and "password" property
@@ -825,27 +765,9 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    *   format("json").save(path)
    * }}}
    *
-   * You can set the following JSON-specific option(s) for writing JSON files:
-   * <ul>
-   * <li>`compression` (default `null`): compression codec to use when saving to file. This can be
-   * one of the known case-insensitive shorten names (`none`, `bzip2`, `gzip`, `lz4`,
-   * `snappy` and `deflate`). </li>
-   * <li>`dateFormat` (default `yyyy-MM-dd`): sets the string that indicates a date format.
-   * Custom date formats follow the formats at
-   * <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">
-   *   Datetime Patterns</a>.
-   * This applies to date type.</li>
-   * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss[.SSS][XXX]`): sets the string that
-   * indicates a timestamp format. Custom date formats follow the formats at
-   * <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">
-   *   Datetime Patterns</a>.
-   * This applies to timestamp type.</li>
-   * <li>`encoding` (by default it is not set): specifies encoding (charset) of saved json
-   * files. If it is not set, the UTF-8 charset will be used. </li>
-   * <li>`lineSep` (default `\n`): defines the line separator that should be used for writing.</li>
-   * <li>`ignoreNullFields` (default `true`): Whether to ignore null fields
-   * when generating JSON objects. </li>
-   * </ul>
+   * You can find the JSON-specific options for writing JSON files in
+   * <a href="https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option">
+   *   Data Source Option</a> in the version you use.
    *
    * @since 1.4.0
    */
@@ -860,13 +782,10 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    *   format("parquet").save(path)
    * }}}
    *
-   * You can set the following Parquet-specific option(s) for writing Parquet files:
-   * <ul>
-   * <li>`compression` (default is the value specified in `spark.sql.parquet.compression.codec`):
-   * compression codec to use when saving to file. This can be one of the known case-insensitive
-   * shorten names(`none`, `uncompressed`, `snappy`, `gzip`, `lzo`, `brotli`, `lz4`, and `zstd`).
-   * This will override `spark.sql.parquet.compression.codec`.</li>
-   * </ul>
+   * Parquet-specific option(s) for writing Parquet files can be found in
+   * <a href=
+   *   "https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#data-source-option">
+   *   Data Source Option</a> in the version you use.
    *
    * @since 1.4.0
    */
@@ -881,14 +800,10 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    *   format("orc").save(path)
    * }}}
    *
-   * You can set the following ORC-specific option(s) for writing ORC files:
-   * <ul>
-   * <li>`compression` (default is the value specified in `spark.sql.orc.compression.codec`):
-   * compression codec to use when saving to file. This can be one of the known case-insensitive
-   * shorten names(`none`, `snappy`, `zlib`, `lzo`, and `zstd`). This will override
-   * `orc.compress` and `spark.sql.orc.compression.codec`. If `orc.compress` is given,
-   * it overrides `spark.sql.orc.compression.codec`.</li>
-   * </ul>
+   * ORC-specific option(s) for writing ORC files can be found in
+   * <a href=
+   *   "https://spark.apache.org/docs/latest/sql-data-sources-orc.html#data-source-option">
+   *   Data Source Option</a> in the version you use.
    *
    * @since 1.5.0
    */
@@ -909,13 +824,9 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * }}}
    * The text files will be encoded as UTF-8.
    *
-   * You can set the following option(s) for writing text files:
-   * <ul>
-   * <li>`compression` (default `null`): compression codec to use when saving to file. This can be
-   * one of the known case-insensitive shorten names (`none`, `bzip2`, `gzip`, `lz4`,
-   * `snappy` and `deflate`). </li>
-   * <li>`lineSep` (default `\n`): defines the line separator that should be used for writing.</li>
-   * </ul>
+   * You can find the text-specific options for writing text files in
+   * <a href="https://spark.apache.org/docs/latest/sql-data-sources-text.html#data-source-option">
+   *   Data Source Option</a> in the version you use.
    *
    * @since 1.6.0
    */
@@ -930,48 +841,9 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    *   format("csv").save(path)
    * }}}
    *
-   * You can set the following CSV-specific option(s) for writing CSV files:
-   * <ul>
-   * <li>`sep` (default `,`): sets a single character as a separator for each
-   * field and value.</li>
-   * <li>`quote` (default `"`): sets a single character used for escaping quoted values where
-   * the separator can be part of the value. If an empty string is set, it uses `u0000`
-   * (null character).</li>
-   * <li>`escape` (default `\`): sets a single character used for escaping quotes inside
-   * an already quoted value.</li>
-   * <li>`charToEscapeQuoteEscaping` (default `escape` or `\0`): sets a single character used for
-   * escaping the escape for the quote character. The default value is escape character when escape
-   * and quote characters are different, `\0` otherwise.</li>
-   * <li>`escapeQuotes` (default `true`): a flag indicating whether values containing
-   * quotes should always be enclosed in quotes. Default is to escape all values containing
-   * a quote character.</li>
-   * <li>`quoteAll` (default `false`): a flag indicating whether all values should always be
-   * enclosed in quotes. Default is to only escape values containing a quote character.</li>
-   * <li>`header` (default `false`): writes the names of columns as the first line.</li>
-   * <li>`nullValue` (default empty string): sets the string representation of a null value.</li>
-   * <li>`emptyValue` (default `""`): sets the string representation of an empty value.</li>
-   * <li>`encoding` (by default it is not set): specifies encoding (charset) of saved csv
-   * files. If it is not set, the UTF-8 charset will be used.</li>
-   * <li>`compression` (default `null`): compression codec to use when saving to file. This can be
-   * one of the known case-insensitive shorten names (`none`, `bzip2`, `gzip`, `lz4`,
-   * `snappy` and `deflate`). </li>
-   * <li>`dateFormat` (default `yyyy-MM-dd`): sets the string that indicates a date format.
-   * Custom date formats follow the formats at
-   * <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">
-   *   Datetime Patterns</a>.
-   * This applies to date type.</li>
-   * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss[.SSS][XXX]`): sets the string that
-   * indicates a timestamp format. Custom date formats follow the formats at
-   * <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">
-   *   Datetime Patterns</a>.
-   * This applies to timestamp type.</li>
-   * <li>`ignoreLeadingWhiteSpace` (default `true`): a flag indicating whether or not leading
-   * whitespaces from values being written should be skipped.</li>
-   * <li>`ignoreTrailingWhiteSpace` (default `true`): a flag indicating defines whether or not
-   * trailing whitespaces from values being written should be skipped.</li>
-   * <li>`lineSep` (default `\n`): defines the line separator that should be used for writing.
-   * Maximum length is 1 character.</li>
-   * </ul>
+   * You can find the CSV-specific options for writing CSV files in
+   * <a href="https://spark.apache.org/docs/latest/sql-data-sources-csv.html#data-source-option">
+   *   Data Source Option</a> in the version you use.
    *
    * @since 2.0.0
    */
@@ -983,10 +855,10 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * Wrap a DataFrameWriter action to track the QueryExecution and time cost, then report to the
    * user-registered callback functions.
    */
-  private def runCommand(session: SparkSession, name: String)(command: LogicalPlan): Unit = {
+  private def runCommand(session: SparkSession)(command: LogicalPlan): Unit = {
     val qe = session.sessionState.executePlan(command)
-    // call `QueryExecution.toRDD` to trigger the execution of commands.
-    SQLExecution.withNewExecutionId(qe, Some(name))(qe.toRdd)
+    // call `QueryExecution.commandExecuted` to trigger the execution of commands.
+    qe.commandExecuted
   }
 
   private def lookupV2Provider(): Option[TableProvider] = {

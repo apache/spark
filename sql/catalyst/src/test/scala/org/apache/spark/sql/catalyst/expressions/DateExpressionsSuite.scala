@@ -36,6 +36,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{getZoneId, TimeZoneUTC}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.DataTypeTestUtils.dayTimeIntervalTypes
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
@@ -1650,18 +1651,19 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(
         TimeAdd(
           Literal(new Timestamp(sdf.parse("2021-01-01 00:00:00.123").getTime)),
-          Literal.create(null, DayTimeIntervalType),
+          Literal.create(null, DayTimeIntervalType()),
           timeZoneId),
         null)
       checkEvaluation(
         TimeAdd(
           Literal.create(null, TimestampType),
-          Literal.create(null, DayTimeIntervalType),
+          Literal.create(null, DayTimeIntervalType()),
           timeZoneId),
         null)
-      checkConsistencyBetweenInterpretedAndCodegen(
-        (ts: Expression, interval: Expression) => TimeAdd(ts, interval, timeZoneId),
-        TimestampType, DayTimeIntervalType)
+      dayTimeIntervalTypes.foreach { it =>
+        checkConsistencyBetweenInterpretedAndCodegen((ts: Expression, interval: Expression) =>
+          TimeAdd(ts, interval, timeZoneId), TimestampType, it)
+      }
     }
   }
 }

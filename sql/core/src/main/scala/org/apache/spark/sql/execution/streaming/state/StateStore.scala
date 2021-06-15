@@ -99,8 +99,8 @@ trait ReadStateStore {
 trait StateStore extends ReadStateStore {
 
   /**
-   * Put a new value for a non-null key. Implementations must be aware that the UnsafeRows in
-   * the params can be reused, and must make copies of the data as needed for persistence.
+   * Put a new non-null value for a non-null key. Implementations must be aware that the UnsafeRows
+   * in the params can be reused, and must make copies of the data as needed for persistence.
    */
   def put(key: UnsafeRow, value: UnsafeRow): Unit
 

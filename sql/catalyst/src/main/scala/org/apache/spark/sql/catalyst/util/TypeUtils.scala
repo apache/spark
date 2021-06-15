@@ -63,7 +63,8 @@ object TypeUtils {
 
   def checkForAnsiIntervalOrNumericType(
       dt: DataType, funcName: String): TypeCheckResult = dt match {
-    case YearMonthIntervalType | DayTimeIntervalType | NullType => TypeCheckResult.TypeCheckSuccess
+    case YearMonthIntervalType | _: DayTimeIntervalType | NullType =>
+      TypeCheckResult.TypeCheckSuccess
     case dt if dt.isInstanceOf[NumericType] => TypeCheckResult.TypeCheckSuccess
     case other => TypeCheckResult.TypeCheckFailure(
       s"function $funcName requires numeric or interval types, not ${other.catalogString}")
@@ -116,7 +117,7 @@ object TypeUtils {
 
   def invokeOnceForInterval(dataType: DataType)(f: => Unit): Unit = {
     def isInterval(dataType: DataType): Boolean = dataType match {
-      case CalendarIntervalType | DayTimeIntervalType | YearMonthIntervalType => true
+      case CalendarIntervalType | _: DayTimeIntervalType | YearMonthIntervalType => true
       case _ => false
     }
     if (dataType.existsRecursively(isInterval)) f

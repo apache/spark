@@ -48,11 +48,11 @@ private[sql] object PythonSQLUtils extends Logging {
 
   def listRuntimeSQLConfigs(): Array[(String, String, String, String)] = {
     // Py4J doesn't seem to translate Seq well, so we convert to an Array.
-    listAllSQLConfigs().filterNot(p => SQLConf.staticConfKeys.contains(p._1)).toArray
+    listAllSQLConfigs().filterNot(p => SQLConf.isStaticConfigKey(p._1)).toArray
   }
 
   def listStaticSQLConfigs(): Array[(String, String, String, String)] = {
-    listAllSQLConfigs().filter(p => SQLConf.staticConfKeys.contains(p._1)).toArray
+    listAllSQLConfigs().filter(p => SQLConf.isStaticConfigKey(p._1)).toArray
   }
 
   /**

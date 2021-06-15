@@ -643,12 +643,12 @@ setQuantifier
     ;
 
 relation
-    : relationPrimary joinRelation*
+    : LATERAL? relationPrimary joinRelation*
     ;
 
 joinRelation
-    : (joinType) JOIN right=relationPrimary joinCriteria?
-    | NATURAL joinType JOIN right=relationPrimary
+    : (joinType) JOIN LATERAL? right=relationPrimary joinCriteria?
+    | NATURAL joinType JOIN LATERAL? right=relationPrimary
     ;
 
 joinType
@@ -816,7 +816,7 @@ valueExpression
     ;
 
 primaryExpression
-    : name=(CURRENT_DATE | CURRENT_TIMESTAMP)                                                  #currentDatetime
+    : name=(CURRENT_DATE | CURRENT_TIMESTAMP | CURRENT_USER)                                   #currentLike
     | CASE whenClause+ (ELSE elseExpression=expression)? END                                   #searchedCase
     | CASE value=expression whenClause+ (ELSE elseExpression=expression)? END                  #simpleCase
     | name=(CAST | TRY_CAST) '(' expression AS dataType ')'                                    #cast
@@ -905,7 +905,8 @@ dataType
     | complex=MAP '<' dataType ',' dataType '>'                 #complexDataType
     | complex=STRUCT ('<' complexColTypeList? '>' | NEQ)        #complexDataType
     | INTERVAL YEAR TO MONTH                                    #yearMonthIntervalDataType
-    | INTERVAL DAY TO SECOND                                    #dayTimeIntervalDataType
+    | INTERVAL from=(DAY | HOUR | MINUTE | SECOND)
+      (TO to=(HOUR | MINUTE | SECOND))?                         #dayTimeIntervalDataType
     | identifier ('(' INTEGER_VALUE (',' INTEGER_VALUE)* ')')?  #primitiveDataType
     ;
 
@@ -930,7 +931,7 @@ complexColTypeList
     ;
 
 complexColType
-    : identifier ':' dataType (NOT NULL)? commentSpec?
+    : identifier ':'? dataType (NOT NULL)? commentSpec?
     ;
 
 whenClause
@@ -1110,6 +1111,7 @@ ansiNonReserved
     | FUNCTIONS
     | GLOBAL
     | GROUPING
+    | HOUR
     | IF
     | IGNORE
     | IMPORT
@@ -1122,7 +1124,6 @@ ansiNonReserved
     | ITEMS
     | KEYS
     | LAST
-    | LATERAL
     | LAZY
     | LIKE
     | LIMIT
@@ -1138,6 +1139,7 @@ ansiNonReserved
     | MAP
     | MATCHED
     | MERGE
+    | MINUTE
     | MONTH
     | MSCK
     | NAMESPACE
@@ -1252,6 +1254,7 @@ strictNonReserved
     | INNER
     | INTERSECT
     | JOIN
+    | LATERAL
     | LEFT
     | NATURAL
     | ON
@@ -1358,6 +1361,7 @@ nonReserved
     | GROUP
     | GROUPING
     | HAVING
+    | HOUR
     | IF
     | IGNORE
     | IMPORT
@@ -1373,7 +1377,6 @@ nonReserved
     | ITEMS
     | KEYS
     | LAST
-    | LATERAL
     | LAZY
     | LEADING
     | LIKE
@@ -1390,6 +1393,7 @@ nonReserved
     | MAP
     | MATCHED
     | MERGE
+    | MINUTE
     | MONTH
     | MSCK
     | NAMESPACE
@@ -1613,6 +1617,7 @@ GRANT: 'GRANT';
 GROUP: 'GROUP';
 GROUPING: 'GROUPING';
 HAVING: 'HAVING';
+HOUR: 'HOUR';
 IF: 'IF';
 IGNORE: 'IGNORE';
 IMPORT: 'IMPORT';
@@ -1649,6 +1654,7 @@ MACRO: 'MACRO';
 MAP: 'MAP';
 MATCHED: 'MATCHED';
 MERGE: 'MERGE';
+MINUTE: 'MINUTE';
 MONTH: 'MONTH';
 MSCK: 'MSCK';
 NAMESPACE: 'NAMESPACE';

@@ -735,8 +735,8 @@ class SparseVector(Vector):
 
         if isinstance(other, np.ndarray) or isinstance(other, DenseVector):
             if isinstance(other, np.ndarray) and other.ndim != 1:
-                raise Exception("Cannot call squared_distance with %d-dimensional array" %
-                                other.ndim)
+                raise ValueError("Cannot call squared_distance with %d-dimensional array" %
+                                 other.ndim)
             if isinstance(other, DenseVector):
                 other = other.array
             sparse_ind = np.zeros(other.size, dtype=bool)
