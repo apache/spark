@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjectio
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
 import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistribution, Distribution, Partitioning}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.execution.streaming.state._
@@ -418,7 +419,7 @@ case class StateStoreSaveExec(
               }
             }
 
-          case _ => throw new UnsupportedOperationException(s"Invalid output mode: $outputMode")
+          case _ => throw QueryExecutionErrors.invalidStreamingOutputModeError(outputMode)
         }
     }
   }
