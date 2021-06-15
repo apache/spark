@@ -360,7 +360,7 @@ case class MakeInterval(
       > SELECT _FUNC_(1, 0);
        1-0
       > SELECT _FUNC_(-1, 1);
-       -1-1
+       -0-11
   """,
   since = "3.2.0",
   group = "datetime_funcs")
