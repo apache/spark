@@ -99,7 +99,7 @@ class BloomFilterSuite extends AnyFunSuite { // scalastyle:ignore funsuite
     }
   }
 
-  def testIntersect[T: ClassTag](typeName: String, numItems: Int)(itemGen: Random => T): Unit = {
+  def testIntersectInPlace[T: ClassTag](typeName: String, numItems: Int)(itemGen: Random => T): Unit = {
     test(s"intersectInPlace - $typeName") {
       // use a fixed seed to make the test predictable.
       val r = new Random(37)
@@ -130,7 +130,7 @@ class BloomFilterSuite extends AnyFunSuite { // scalastyle:ignore funsuite
   def testItemType[T: ClassTag](typeName: String, numItems: Int)(itemGen: Random => T): Unit = {
     testAccuracy[T](typeName, numItems)(itemGen)
     testMergeInPlace[T](typeName, numItems)(itemGen)
-    testIntersect[T](typeName, numItems)(itemGen)
+    testIntersectInPlace[T](typeName, numItems)(itemGen)
   }
 
   testItemType[Byte]("Byte", 160) { _.nextInt().toByte }
