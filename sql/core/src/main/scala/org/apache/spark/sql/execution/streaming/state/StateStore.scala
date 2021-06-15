@@ -187,11 +187,18 @@ object StateStoreMetrics {
 trait StateStoreCustomMetric {
   def name: String
   def desc: String
+  def withNewDesc(desc: String): StateStoreCustomMetric
 }
 
-case class StateStoreCustomSumMetric(name: String, desc: String) extends StateStoreCustomMetric
-case class StateStoreCustomSizeMetric(name: String, desc: String) extends StateStoreCustomMetric
-case class StateStoreCustomTimingMetric(name: String, desc: String) extends StateStoreCustomMetric
+case class StateStoreCustomSumMetric(name: String, desc: String) extends StateStoreCustomMetric {
+  override def withNewDesc(newDesc: String): StateStoreCustomSumMetric = copy(desc = desc)
+}
+case class StateStoreCustomSizeMetric(name: String, desc: String) extends StateStoreCustomMetric {
+  override def withNewDesc(desc: String): StateStoreCustomSizeMetric = copy(desc = desc)
+}
+case class StateStoreCustomTimingMetric(name: String, desc: String) extends StateStoreCustomMetric {
+  override def withNewDesc(desc: String): StateStoreCustomTimingMetric = copy(desc = desc)
+}
 
 /**
  * An exception thrown when an invalid UnsafeRow is detected in state store.

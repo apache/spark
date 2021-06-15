@@ -319,15 +319,7 @@ class SymmetricHashJoinStateManager(
       keyWithIndexToValueMetrics.numKeys,       // represent each buffered row only once
       keyToNumValuesMetrics.memoryUsedBytes + keyWithIndexToValueMetrics.memoryUsedBytes,
       keyWithIndexToValueMetrics.customMetrics.map {
-        case (s @ StateStoreCustomSumMetric(_, desc), value) =>
-          s.copy(desc = newDesc(desc)) -> value
-        case (s @ StateStoreCustomSizeMetric(_, desc), value) =>
-          s.copy(desc = newDesc(desc)) -> value
-        case (s @ StateStoreCustomTimingMetric(_, desc), value) =>
-          s.copy(desc = newDesc(desc)) -> value
-        case (s, _) =>
-          throw new IllegalArgumentException(
-            s"Unknown state store custom metric is found at metrics: $s")
+        case (metric, value) => (metric.withNewDesc(desc = newDesc(metric.desc)), value)
       }
     )
   }
