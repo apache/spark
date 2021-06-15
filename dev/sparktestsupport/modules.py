@@ -33,7 +33,7 @@ def _discover_python_unittests(paths):
     pyspark_path = os.path.join(SPARK_HOME, "python")
     for path in paths:
         # Discover the test*.py in every path
-        files = glob.glob(os.path.join(pyspark_path, path, "test*.py"))
+        files = glob.glob(os.path.join(pyspark_path, path, "test_*.py"))
         for f in files:
             # Convert 'pyspark_path/pyspark/tests/test_abc.py' to 'pyspark.tests.test_abc'
             file2module = os.path.relpath(f, pyspark_path)[:-3].replace("/", ".")
