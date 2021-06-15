@@ -108,7 +108,7 @@ object IntervalUtils {
 
   def castStringToYMInterval(
       input: UTF8String,
-      // TODO(SPARK-XXXXX): Take into account day-time interval fields in cast
+      // TODO(SPARK-35768): Take into account year-month interval fields in cast
       startField: Byte,
       endField: Byte): Int = {
     input.trimAll().toString match {
@@ -945,7 +945,7 @@ object IntervalUtils {
   def toYearMonthIntervalString(
       months: Int,
       style: IntervalStyle,
-      // TODO(SPARK-XXXXX): Format year-month intervals using type fields
+      // TODO(SPARK-35771): Format year-month intervals using type fields
       startField: Byte,
       endField: Byte): String = {
     var sign = ""

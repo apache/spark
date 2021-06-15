@@ -77,7 +77,7 @@ object CatalystTypeConverters {
       case DoubleType => DoubleConverter
       // TODO(SPARK-35726): Truncate java.time.Duration by fields of day-time interval type
       case _: DayTimeIntervalType => DurationConverter
-      // TODO(SPARK-XXXXX): Truncate java.time.Period by fields of year-month interval type
+      // TODO(SPARK-35769): Truncate java.time.Period by fields of year-month interval type
       case _: YearMonthIntervalType => PeriodConverter
       case dataType: DataType => IdentityConverter(dataType)
     }

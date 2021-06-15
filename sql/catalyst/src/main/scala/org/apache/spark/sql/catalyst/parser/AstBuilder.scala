@@ -2354,7 +2354,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       val toUnit = ctx.errorCapturingUnitToUnitInterval.body.to.getText.toLowerCase(Locale.ROOT)
       if (toUnit == "month") {
         assert(calendarInterval.days == 0 && calendarInterval.microseconds == 0)
-        // TODO(SPARK-XXXXX): Parse year-month interval literals to tightest types
+        // TODO(SPARK-35773): Parse year-month interval literals to tightest types
         Literal(calendarInterval.months, YearMonthIntervalType())
       } else {
         assert(calendarInterval.months == 0)
@@ -2514,7 +2514,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   override def visitYearMonthIntervalDataType(ctx: YearMonthIntervalDataTypeContext): DataType = {
-    // TODO(SPARK-XXXXX): Parse any year-month interval types in SQL
+    // TODO(SPARK-35774): Parse any year-month interval types in SQL
     YearMonthIntervalType()
   }
 

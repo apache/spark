@@ -173,7 +173,7 @@ object DataType {
       DoubleType, FloatType, ShortType, ByteType, StringType, CalendarIntervalType,
       // TODO(SPARK-35732): Parse DayTimeIntervalType from JSON
       DayTimeIntervalType(),
-      // TODO(SPARK-XXXXX): Parse YearMonthIntervalType from JSON
+      // TODO(SPARK-35770): Parse YearMonthIntervalType from JSON
       YearMonthIntervalType(), TimestampWithoutTZType)
       .map(t => t.typeName -> t).toMap
   }
