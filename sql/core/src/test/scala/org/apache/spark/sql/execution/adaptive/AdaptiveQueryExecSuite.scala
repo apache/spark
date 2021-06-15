@@ -1645,11 +1645,9 @@ class AdaptiveQueryExecSuite
   test("SPARK-35414: Submit broadcast job first to avoid broadcast timeout in AQE") {
     val shuffleMapTaskParallelism = 10
 
-    val df = spark.sparkContext.parallelize(Range(0, 26), shuffleMapTaskParallelism)
-      .flatMap(x => {
-        Thread.sleep(10)
-        for (i <- Range(0, 100)) yield (x % 26, x % 10)
-      }).toDF("index", "pv")
+    val df = spark.range(0, 1000, 1, shuffleMapTaskParallelism)
+      .select($"id" % 26, $"id" % 10)
+      .toDF("index", "pv")
     val dim = Range(0, 26).map(x => (x, ('a' + x).toChar.toString))
       .toDF("index", "name")
       .coalesce(1)
