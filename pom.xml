@@ -157,8 +157,6 @@
     <!--  org.apache.httpcomponents/httpclient-->
     <commons.httpclient.version>4.5.13</commons.httpclient.version>
     <commons.httpcore.version>4.4.14</commons.httpcore.version>
-    <!--  commons-httpclient/commons-httpclient-->
-    <httpclient.classic.version>3.1</httpclient.classic.version>
     <commons.math3.version>3.4.1</commons.math3.version>
     <!-- managed up from 3.2.1 for SPARK-11652 -->
     <commons.collections.version>3.2.2</commons.collections.version>
@@ -591,11 +589,6 @@
         <groupId>com.google.code.findbugs</groupId>
         <artifactId>jsr305</artifactId>
         <version>${jsr305.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>commons-httpclient</groupId>
-        <artifactId>commons-httpclient</artifactId>
-        <version>${httpclient.classic.version}</version>
       </dependency>
       <dependency>
         <groupId>org.apache.httpcomponents</groupId>
@@ -1809,10 +1802,6 @@
           <exclusion>
             <groupId>commons-codec</groupId>
             <artifactId>commons-codec</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>commons-httpclient</groupId>
-            <artifactId>commons-httpclient</artifactId>
           </exclusion>
           <exclusion>
             <groupId>org.apache.avro</groupId>
