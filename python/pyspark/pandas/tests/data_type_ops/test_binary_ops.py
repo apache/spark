@@ -16,6 +16,7 @@
 #
 
 import pandas as pd
+from pandas.api.types import CategoricalDtype
 
 from pyspark import pandas as ps
 from pyspark.pandas.config import option_context
@@ -26,7 +27,7 @@ from pyspark.testing.pandasutils import PandasOnSparkTestCase
 class BinaryOpsTest(PandasOnSparkTestCase, TestCasesUtils):
     @property
     def pser(self):
-        return pd.Series([b'1', b'2', b'3'])
+        return pd.Series([b"1", b"2", b"3"])
 
     @property
     def psser(self):
@@ -35,9 +36,9 @@ class BinaryOpsTest(PandasOnSparkTestCase, TestCasesUtils):
     def test_add(self):
         psser = self.psser
         pser = self.pser
-        self.assert_eq(psser + b'1', pser + b'1')
+        self.assert_eq(psser + b"1", pser + b"1")
         self.assert_eq(psser + psser, pser + pser)
-        self.assert_eq(psser + psser.astype('bytes'), pser + pser.astype('bytes'))
+        self.assert_eq(psser + psser.astype("bytes"), pser + pser.astype("bytes"))
         self.assertRaises(TypeError, lambda: psser + "x")
         self.assertRaises(TypeError, lambda: psser + 1)
 
@@ -95,7 +96,7 @@ class BinaryOpsTest(PandasOnSparkTestCase, TestCasesUtils):
                 self.assertRaises(TypeError, lambda: self.psser ** psser)
 
     def test_radd(self):
-        self.assert_eq(b'1' + self.psser, b'1' + self.pser)
+        self.assert_eq(b"1" + self.psser, b"1" + self.pser)
         self.assertRaises(TypeError, lambda: "x" + self.psser)
         self.assertRaises(TypeError, lambda: 1 + self.psser)
 
@@ -122,6 +123,39 @@ class BinaryOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         self.assertRaises(TypeError, lambda: "x" ** self.psser)
         self.assertRaises(TypeError, lambda: 1 ** self.psser)
 
+    def test_and(self):
+        self.assertRaises(TypeError, lambda: self.psser & True)
+        self.assertRaises(TypeError, lambda: self.psser & False)
+        self.assertRaises(TypeError, lambda: self.psser & self.psser)
+
+    def test_rand(self):
+        self.assertRaises(TypeError, lambda: True & self.psser)
+        self.assertRaises(TypeError, lambda: False & self.psser)
+
+    def test_or(self):
+        self.assertRaises(TypeError, lambda: self.psser | True)
+        self.assertRaises(TypeError, lambda: self.psser | False)
+        self.assertRaises(TypeError, lambda: self.psser | self.psser)
+
+    def test_ror(self):
+        self.assertRaises(TypeError, lambda: True | self.psser)
+        self.assertRaises(TypeError, lambda: False | self.psser)
+
+    def test_from_to_pandas(self):
+        data = [b"1", b"2", b"3"]
+        pser = pd.Series(data)
+        psser = ps.Series(data)
+        self.assert_eq(pser, psser.to_pandas())
+        self.assert_eq(ps.from_pandas(pser), psser)
+
+    def test_astype(self):
+        pser = self.pser
+        psser = self.psser
+        self.assert_eq(pd.Series(["1", "2", "3"]), psser.astype(str))
+        self.assert_eq(pser.astype("category"), psser.astype("category"))
+        cat_type = CategoricalDtype(categories=[b"2", b"3", b"1"])
+        self.assert_eq(pser.astype(cat_type), psser.astype(cat_type))
+
 
 if __name__ == "__main__":
     import unittest
@@ -129,7 +163,8 @@ if __name__ == "__main__":
 
     try:
         import xmlrunner  # type: ignore[import]
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
+
+        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

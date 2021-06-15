@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.util.IntervalStringStyles.{ANSI_STYLE, HIVE
 import org.apache.spark.sql.catalyst.util.IntervalUtils._
 import org.apache.spark.sql.catalyst.util.IntervalUtils.IntervalUnit._
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.DayTimeIntervalType
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
@@ -519,6 +520,7 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("SPARK-35016: format day-time intervals") {
+    import DayTimeIntervalType._
     Seq(
       0L -> ("0 00:00:00.000000000", "INTERVAL '0 00:00:00' DAY TO SECOND"),
       -1L -> ("-0 00:00:00.000001000", "INTERVAL '-0 00:00:00.000001' DAY TO SECOND"),
@@ -528,8 +530,92 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
       Long.MinValue -> ("-106751991 04:00:54.775808000",
         "INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND")
     ).foreach { case (micros, (hiveIntervalStr, ansiIntervalStr)) =>
-      assert(toDayTimeIntervalString(micros, ANSI_STYLE) === ansiIntervalStr)
-      assert(toDayTimeIntervalString(micros, HIVE_STYLE) === hiveIntervalStr)
+      assert(toDayTimeIntervalString(micros, ANSI_STYLE, DAY, SECOND) === ansiIntervalStr)
+      assert(toDayTimeIntervalString(micros, HIVE_STYLE, DAY, SECOND) === hiveIntervalStr)
+    }
+  }
+
+  test("SPARK-35734: Format day-time intervals using type fields") {
+    import DayTimeIntervalType._
+    Seq(
+      0L ->
+        ("INTERVAL '0 00:00:00' DAY TO SECOND",
+          "INTERVAL '0 00:00' DAY TO MINUTE",
+          "INTERVAL '0 00' DAY TO HOUR",
+          "INTERVAL '00:00:00' HOUR TO SECOND",
+          "INTERVAL '00:00' HOUR TO MINUTE",
+          "INTERVAL '00:00' MINUTE TO SECOND",
+          "INTERVAL '0' DAY",
+          "INTERVAL '00' HOUR",
+          "INTERVAL '00' MINUTE",
+          "INTERVAL '00' SECOND"),
+      -1L ->
+        ("INTERVAL '-0 00:00:00.000001' DAY TO SECOND",
+          "INTERVAL '-0 00:00' DAY TO MINUTE",
+          "INTERVAL '-0 00' DAY TO HOUR",
+          "INTERVAL '00:00:00.000001' HOUR TO SECOND",
+          "INTERVAL '00:00' HOUR TO MINUTE",
+          "INTERVAL '00:00.000001' MINUTE TO SECOND",
+          "INTERVAL '-0' DAY",
+          "INTERVAL '00' HOUR",
+          "INTERVAL '00' MINUTE",
+          "INTERVAL '00.000001' SECOND"),
+      10 * MICROS_PER_MILLIS ->
+        ("INTERVAL '0 00:00:00.01' DAY TO SECOND",
+          "INTERVAL '0 00:00' DAY TO MINUTE",
+          "INTERVAL '0 00' DAY TO HOUR",
+          "INTERVAL '00:00:00.01' HOUR TO SECOND",
+          "INTERVAL '00:00' HOUR TO MINUTE",
+          "INTERVAL '00:00.01' MINUTE TO SECOND",
+          "INTERVAL '0' DAY",
+          "INTERVAL '00' HOUR",
+          "INTERVAL '00' MINUTE",
+          "INTERVAL '00.01' SECOND"),
+      (-123 * MICROS_PER_DAY - 3 * MICROS_PER_SECOND) ->
+        ("INTERVAL '-123 00:00:03' DAY TO SECOND",
+          "INTERVAL '-123 00:00' DAY TO MINUTE",
+          "INTERVAL '-123 00' DAY TO HOUR",
+          "INTERVAL '00:00:03' HOUR TO SECOND",
+          "INTERVAL '00:00' HOUR TO MINUTE",
+          "INTERVAL '00:03' MINUTE TO SECOND",
+          "INTERVAL '-123' DAY",
+          "INTERVAL '00' HOUR",
+          "INTERVAL '00' MINUTE",
+          "INTERVAL '03' SECOND"),
+      Long.MinValue ->
+        ("INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND",
+          "INTERVAL '-106751991 04:00' DAY TO MINUTE",
+          "INTERVAL '-106751991 04' DAY TO HOUR",
+          "INTERVAL '04:00:54.775808' HOUR TO SECOND",
+          "INTERVAL '04:00' HOUR TO MINUTE",
+          "INTERVAL '00:54.775808' MINUTE TO SECOND",
+          "INTERVAL '-106751991' DAY",
+          "INTERVAL '04' HOUR",
+          "INTERVAL '00' MINUTE",
+          "INTERVAL '54.775808' SECOND")
+    ).foreach {
+      case (
+        micros, (
+          dayToSec,
+          dayToMinute,
+          dayToHour,
+          hourToSec,
+          hourToMinute,
+          minuteToSec,
+          day,
+          hour,
+          minute,
+          sec)) =>
+        assert(toDayTimeIntervalString(micros, ANSI_STYLE, DAY, SECOND) === dayToSec)
+        assert(toDayTimeIntervalString(micros, ANSI_STYLE, DAY, MINUTE) === dayToMinute)
+        assert(toDayTimeIntervalString(micros, ANSI_STYLE, DAY, HOUR) === dayToHour)
+        assert(toDayTimeIntervalString(micros, ANSI_STYLE, HOUR, SECOND) === hourToSec)
+        assert(toDayTimeIntervalString(micros, ANSI_STYLE, HOUR, MINUTE) === hourToMinute)
+        assert(toDayTimeIntervalString(micros, ANSI_STYLE, MINUTE, SECOND) === minuteToSec)
+        assert(toDayTimeIntervalString(micros, ANSI_STYLE, DAY, DAY) === day)
+        assert(toDayTimeIntervalString(micros, ANSI_STYLE, HOUR, HOUR) === hour)
+        assert(toDayTimeIntervalString(micros, ANSI_STYLE, MINUTE, MINUTE) === minute)
+        assert(toDayTimeIntervalString(micros, ANSI_STYLE, SECOND, SECOND) === sec)
     }
   }
 }

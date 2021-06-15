@@ -44,36 +44,42 @@ object HiveResult {
     TimeFormatters(dateFormatter, timestampFormatter)
   }
 
+  private def stripRootCommandResult(executedPlan: SparkPlan): SparkPlan = executedPlan match {
+    case CommandResultExec(_, plan, _) => plan
+    case other => other
+  }
+
   /**
    * Returns the result as a hive compatible sequence of strings. This is used in tests and
    * `SparkSQLDriver` for CLI applications.
    */
-  def hiveResultString(executedPlan: SparkPlan): Seq[String] = executedPlan match {
-    case ExecutedCommandExec(_: DescribeCommandBase) =>
-      formatDescribeTableOutput(executedPlan.executeCollectPublic())
-    case _: DescribeTableExec =>
-      formatDescribeTableOutput(executedPlan.executeCollectPublic())
-    // SHOW TABLES in Hive only output table names while our v1 command outputs
-    // database, table name, isTemp.
-    case command @ ExecutedCommandExec(s: ShowTablesCommand) if !s.isExtended =>
-      command.executeCollect().map(_.getString(1))
-    // SHOW TABLES in Hive only output table names while our v2 command outputs
-    // namespace and table name.
-    case command : ShowTablesExec =>
-      command.executeCollect().map(_.getString(1))
-    // SHOW VIEWS in Hive only outputs view names while our v1 command outputs
-    // namespace, viewName, and isTemporary.
-    case command @ ExecutedCommandExec(_: ShowViewsCommand) =>
-      command.executeCollect().map(_.getString(1))
-    case other =>
-      val timeFormatters = getTimeFormatters
-      val result: Seq[Seq[Any]] = other.executeCollectPublic().map(_.toSeq).toSeq
-      // We need the types so we can output struct field names
-      val types = executedPlan.output.map(_.dataType)
-      // Reformat to match hive tab delimited output.
-      result.map(_.zip(types).map(e => toHiveString(e, false, timeFormatters)))
-        .map(_.mkString("\t"))
-  }
+  def hiveResultString(executedPlan: SparkPlan): Seq[String] =
+    stripRootCommandResult(executedPlan) match {
+      case ExecutedCommandExec(_: DescribeCommandBase) =>
+        formatDescribeTableOutput(executedPlan.executeCollectPublic())
+      case _: DescribeTableExec =>
+        formatDescribeTableOutput(executedPlan.executeCollectPublic())
+      // SHOW TABLES in Hive only output table names while our v1 command outputs
+      // database, table name, isTemp.
+      case ExecutedCommandExec(s: ShowTablesCommand) if !s.isExtended =>
+        executedPlan.executeCollect().map(_.getString(1))
+      // SHOW TABLES in Hive only output table names while our v2 command outputs
+      // namespace and table name.
+      case _ : ShowTablesExec =>
+        executedPlan.executeCollect().map(_.getString(1))
+      // SHOW VIEWS in Hive only outputs view names while our v1 command outputs
+      // namespace, viewName, and isTemporary.
+      case ExecutedCommandExec(_: ShowViewsCommand) =>
+        executedPlan.executeCollect().map(_.getString(1))
+      case other =>
+        val timeFormatters = getTimeFormatters
+        val result: Seq[Seq[Any]] = other.executeCollectPublic().map(_.toSeq).toSeq
+        // We need the types so we can output struct field names
+        val types = executedPlan.output.map(_.dataType)
+        // Reformat to match hive tab delimited output.
+        result.map(_.zip(types).map(e => toHiveString(e, false, timeFormatters)))
+          .map(_.mkString("\t"))
+    }
 
   private def formatDescribeTableOutput(rows: Array[Row]): Seq[String] = {
     rows.map {
@@ -113,8 +119,8 @@ object HiveResult {
       }.mkString("{", ",", "}")
     case (period: Period, YearMonthIntervalType) =>
       toYearMonthIntervalString(periodToMonths(period), HIVE_STYLE)
-    case (duration: Duration, DayTimeIntervalType) =>
-      toDayTimeIntervalString(durationToMicros(duration), HIVE_STYLE)
+    case (duration: Duration, DayTimeIntervalType(startField, endField)) =>
+      toDayTimeIntervalString(durationToMicros(duration), HIVE_STYLE, startField, endField)
     case (other, _: UserDefinedType[_]) => other.toString
   }
 }

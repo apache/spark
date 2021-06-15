@@ -41,10 +41,10 @@ Spark SQL provides `spark.read().csv("file_name")` to read a file or directory o
 
 Data source options of CSV can be set via:
 * the `.option`/`.options` methods of
-  *  `DataFrameReader`
-  *  `DataFrameWriter`
-  *  `DataStreamReader`
-  *  `DataStreamWriter`
+  * `DataFrameReader`
+  * `DataFrameWriter`
+  * `DataStreamReader`
+  * `DataStreamWriter`
 * the built-in functions below
   * `from_csv`
   * `to_csv`
@@ -188,7 +188,7 @@ Data source options of CSV can be set via:
   </tr>
   <tr>
     <td><code>columnNameOfCorruptRecord</code></td>
-    <td>The value specified in <code>spark.sql.columnNameOfCorruptRecord</code></td>
+    <td>(value of <code>spark.sql.columnNameOfCorruptRecord</code> configuration)</td>
     <td>Allows renaming the new field having malformed string created by <code>PERMISSIVE</code> mode. This overrides <code>spark.sql.columnNameOfCorruptRecord</code>.</td>
     <td>read</td>
   </tr>

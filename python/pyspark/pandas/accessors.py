@@ -24,16 +24,16 @@ import types
 import numpy as np  # noqa: F401
 import pandas as pd
 from pyspark.sql import functions as F
-from pyspark.sql.functions import pandas_udf, PandasUDFType
-from pyspark.sql.types import StructField, StructType
+from pyspark.sql.functions import pandas_udf
+from pyspark.sql.types import LongType, StructField, StructType
 
 from pyspark.pandas.internal import (
+    InternalField,
     InternalFrame,
     SPARK_INDEX_NAME_FORMAT,
     SPARK_DEFAULT_SERIES_NAME,
 )
 from pyspark.pandas.typedef import infer_return_type, DataFrameType, ScalarType, SeriesType
-from pyspark.pandas.spark.utils import as_nullable_spark_type, force_decimal_precision_scale
 from pyspark.pandas.utils import (
     is_name_like_value,
     is_name_like_tuple,
@@ -48,7 +48,7 @@ if TYPE_CHECKING:
 
 
 class PandasOnSparkFrameMethods(object):
-    """ pandas-on-Spark specific features for DataFrame. """
+    """pandas-on-Spark specific features for DataFrame."""
 
     def __init__(self, frame: "DataFrame"):
         self._psdf = frame
@@ -166,7 +166,7 @@ class PandasOnSparkFrameMethods(object):
                 for scol, label in zip(internal.data_spark_columns, internal.column_labels)
             ]
         )
-        sdf = attach_func(sdf, name_like_string(column))
+        sdf, force_nullable = attach_func(sdf, name_like_string(column))
 
         return DataFrame(
             InternalFrame(
@@ -175,13 +175,28 @@ class PandasOnSparkFrameMethods(object):
                     scol_for(sdf, SPARK_INDEX_NAME_FORMAT(i)) for i in range(internal.index_level)
                 ],
                 index_names=internal.index_names,
-                index_dtypes=internal.index_dtypes,
+                index_fields=(
+                    [field.copy(nullable=True) for field in internal.index_fields]
+                    if force_nullable
+                    else internal.index_fields
+                ),
                 column_labels=internal.column_labels + [column],
                 data_spark_columns=(
                     [scol_for(sdf, name_like_string(label)) for label in internal.column_labels]
                     + [scol_for(sdf, name_like_string(column))]
                 ),
-                data_dtypes=(internal.data_dtypes + [None]),
+                data_fields=(
+                    (
+                        [field.copy(nullable=True) for field in internal.data_fields]
+                        if force_nullable
+                        else internal.data_fields
+                    )
+                    + [
+                        InternalField.from_struct_field(
+                            StructField(name_like_string(column), LongType(), nullable=False)
+                        )
+                    ]
+                ),
                 column_label_names=internal.column_label_names,
             ).resolved_copy
         )
@@ -352,19 +367,22 @@ class PandasOnSparkFrameMethods(object):
             if len(pdf) <= limit:
                 return psdf
 
-            return_schema = force_decimal_precision_scale(
-                as_nullable_spark_type(psdf._internal.to_internal_spark_frame.schema)
-            )
+            index_fields = [field.normalize_spark_type() for field in psdf._internal.index_fields]
+            data_fields = [field.normalize_spark_type() for field in psdf._internal.data_fields]
+
+            return_schema = StructType([field.struct_field for field in index_fields + data_fields])
 
             output_func = GroupBy._make_pandas_df_builder_func(
                 self_applied, func, return_schema, retain_index=True
             )
-            sdf = self_applied._internal.to_internal_spark_frame.mapInPandas(
+            sdf = self_applied._internal.spark_frame.mapInPandas(
                 lambda iterator: map(output_func, iterator), schema=return_schema
             )
 
             # If schema is inferred, we can restore indexes too.
-            internal = psdf._internal.with_new_sdf(sdf)
+            internal = psdf._internal.with_new_sdf(
+                spark_frame=sdf, index_fields=index_fields, data_fields=data_fields
+            )
         else:
             return_type = infer_return_type(original_func)
             is_return_dataframe = isinstance(return_type, DataFrameType)
@@ -386,7 +404,7 @@ class PandasOnSparkFrameMethods(object):
             internal = InternalFrame(
                 spark_frame=sdf,
                 index_spark_columns=None,
-                data_dtypes=cast(DataFrameType, return_type).dtypes,
+                data_fields=cast(DataFrameType, return_type).fields,
             )
 
         return DataFrame(internal)
@@ -539,30 +557,17 @@ class PandasOnSparkFrameMethods(object):
         original_func = func
         func = lambda o: original_func(o, *args, **kwargs)
 
-        names = self._psdf._internal.to_internal_spark_frame.schema.names
-
-        def pandas_concat(series):
-            # The input can only be a DataFrame for struct from Spark 3.0.
-            # This works around to make the input as a frame. See SPARK-27240
-            pdf = pd.concat(series, axis=1)
-            pdf.columns = names
-            return pdf
-
-        def apply_func(pdf):
+        def apply_func(pdf: pd.DataFrame) -> pd.DataFrame:
             return func(pdf).to_frame()
 
-        def pandas_extract(pdf, name):
-            # This is for output to work around a DataFrame for struct
-            # from Spark 3.0.  See SPARK-23836
-            return pdf[name]
-
-        def pandas_series_func(f):
+        def pandas_series_func(f, return_type):
             ff = f
-            return lambda *series: first_series(ff(*series))
 
-        def pandas_frame_func(f, field_name):
-            ff = f
-            return lambda *series: pandas_extract(ff(pandas_concat(series)), field_name)
+            @pandas_udf(returnType=return_type)
+            def udf(*series: pd.Series) -> pd.Series:
+                return first_series(ff(*series))
+
+            return udf
 
         if should_infer_schema:
             # Here we execute with the first 1000 to get the return type.
@@ -582,27 +587,20 @@ class PandasOnSparkFrameMethods(object):
             if isinstance(psdf_or_psser, ps.Series):
                 psser = cast(ps.Series, psdf_or_psser)
 
-                spark_return_type = force_decimal_precision_scale(
-                    as_nullable_spark_type(psser.spark.data_type)
-                )
-                return_schema = StructType(
-                    [StructField(SPARK_DEFAULT_SERIES_NAME, spark_return_type)]
-                )
+                field = psser._internal.data_fields[0].normalize_spark_type()
+
+                return_schema = StructType([field.struct_field])
                 output_func = GroupBy._make_pandas_df_builder_func(
                     self._psdf, apply_func, return_schema, retain_index=False
                 )
 
-                pudf = pandas_udf(returnType=spark_return_type, functionType=PandasUDFType.SCALAR)(
-                    pandas_series_func(output_func)
-                )
+                pudf = pandas_series_func(output_func, return_type=field.spark_type)
                 columns = self._psdf._internal.spark_columns
                 # TODO: Index will be lost in this case.
                 internal = self._psdf._internal.copy(
                     column_labels=psser._internal.column_labels,
-                    data_spark_columns=[
-                        pudf(F.struct(*columns)).alias(psser._internal.data_spark_column_names[0])
-                    ],
-                    data_dtypes=psser._internal.data_dtypes,
+                    data_spark_columns=[pudf(F.struct(*columns)).alias(field.name)],
+                    data_fields=[field],
                     column_label_names=psser._internal.column_label_names,
                 )
                 return first_series(DataFrame(internal))
@@ -613,9 +611,13 @@ class PandasOnSparkFrameMethods(object):
                     # operations on different dataframes in case of series.
                     return psdf
 
-                # Force nullability.
-                return_schema = force_decimal_precision_scale(
-                    as_nullable_spark_type(psdf._internal.to_internal_spark_frame.schema)
+                index_fields = [
+                    field.normalize_spark_type() for field in psdf._internal.index_fields
+                ]
+                data_fields = [field.normalize_spark_type() for field in psdf._internal.data_fields]
+
+                return_schema = StructType(
+                    [field.struct_field for field in index_fields + data_fields]
                 )
 
                 self_applied = DataFrame(self._psdf._internal.resolved_copy)  # type: DataFrame
@@ -625,9 +627,7 @@ class PandasOnSparkFrameMethods(object):
                 )
                 columns = self_applied._internal.spark_columns
 
-                pudf = pandas_udf(returnType=return_schema, functionType=PandasUDFType.SCALAR)(
-                    output_func
-                )
+                pudf = pandas_udf(output_func, returnType=return_schema)  # type: ignore
                 temp_struct_column = verify_temp_column_name(
                     self_applied._internal.spark_frame, "__temp_struct__"
                 )
@@ -635,7 +635,11 @@ class PandasOnSparkFrameMethods(object):
                 sdf = self_applied._internal.spark_frame.select(applied)
                 sdf = sdf.selectExpr("%s.*" % temp_struct_column)
 
-                return DataFrame(psdf._internal.with_new_sdf(sdf))
+                return DataFrame(
+                    psdf._internal.with_new_sdf(
+                        spark_frame=sdf, index_fields=index_fields, data_fields=data_fields
+                    )
+                )
         else:
             return_type = infer_return_type(original_func)
             is_return_series = isinstance(return_type, SeriesType)
@@ -646,29 +650,34 @@ class PandasOnSparkFrameMethods(object):
                     "hints; however, the return type was %s." % return_sig
                 )
             if is_return_series:
-                spark_return_type = force_decimal_precision_scale(
-                    as_nullable_spark_type(cast(SeriesType, return_type).spark_type)
-                )
-                return_schema = StructType(
-                    [StructField(SPARK_DEFAULT_SERIES_NAME, spark_return_type)]
-                )
+                field = InternalField(
+                    dtype=cast(SeriesType, return_type).dtype,
+                    struct_field=StructField(
+                        name=SPARK_DEFAULT_SERIES_NAME,
+                        dataType=cast(SeriesType, return_type).spark_type,
+                    ),
+                ).normalize_spark_type()
+
+                return_schema = StructType([field.struct_field])
                 output_func = GroupBy._make_pandas_df_builder_func(
                     self._psdf, apply_func, return_schema, retain_index=False
                 )
 
-                pudf = pandas_udf(returnType=spark_return_type, functionType=PandasUDFType.SCALAR)(
-                    pandas_series_func(output_func)
-                )
+                pudf = pandas_series_func(output_func, return_type=field.spark_type)
                 columns = self._psdf._internal.spark_columns
                 internal = self._psdf._internal.copy(
                     column_labels=[None],
-                    data_spark_columns=[pudf(F.struct(*columns)).alias(SPARK_DEFAULT_SERIES_NAME)],
-                    data_dtypes=[cast(SeriesType, return_type).dtype],
+                    data_spark_columns=[pudf(F.struct(*columns)).alias(field.name)],
+                    data_fields=[field],
                     column_label_names=None,
                 )
                 return first_series(DataFrame(internal))
             else:
-                return_schema = cast(DataFrameType, return_type).spark_type
+                data_fields = [
+                    field.normalize_spark_type()
+                    for field in cast(DataFrameType, return_type).fields
+                ]
+                return_schema = StructType([field.struct_field for field in data_fields])
 
                 self_applied = DataFrame(self._psdf._internal.resolved_copy)
 
@@ -677,9 +686,7 @@ class PandasOnSparkFrameMethods(object):
                 )
                 columns = self_applied._internal.spark_columns
 
-                pudf = pandas_udf(returnType=return_schema, functionType=PandasUDFType.SCALAR)(
-                    output_func
-                )
+                pudf = pandas_udf(output_func, returnType=return_schema)  # type: ignore
                 temp_struct_column = verify_temp_column_name(
                     self_applied._internal.spark_frame, "__temp_struct__"
                 )
@@ -688,15 +695,13 @@ class PandasOnSparkFrameMethods(object):
                 sdf = sdf.selectExpr("%s.*" % temp_struct_column)
 
                 internal = InternalFrame(
-                    spark_frame=sdf,
-                    index_spark_columns=None,
-                    data_dtypes=cast(DataFrameType, return_type).dtypes,
+                    spark_frame=sdf, index_spark_columns=None, data_fields=data_fields
                 )
                 return DataFrame(internal)
 
 
 class PandasOnSparkSeriesMethods(object):
-    """ pandas-on-Spark specific features for Series. """
+    """pandas-on-Spark specific features for Series."""
 
     def __init__(self, series: "Series"):
         self._psser = series
@@ -752,7 +757,7 @@ class PandasOnSparkSeriesMethods(object):
         See Also
         --------
         DataFrame.pandas_on_spark.apply_batch : Similar but it takes pandas DataFrame as its
-        internal batch.
+            internal batch.
 
         Examples
         --------
@@ -844,13 +849,18 @@ class PandasOnSparkSeriesMethods(object):
             pser = self._psser.head(limit + 1)._to_internal_pandas()
             transformed = pser.transform(func)
             psser = Series(transformed)  # type: Series
-            spark_return_type = force_decimal_precision_scale(
-                as_nullable_spark_type(psser.spark.data_type)
-            )
-            dtype = psser.dtype
+
+            field = psser._internal.data_fields[0].normalize_spark_type()
         else:
             spark_return_type = return_type.spark_type
             dtype = return_type.dtype
+            field = InternalField(
+                dtype=dtype,
+                struct_field=StructField(
+                    name=self._psser._internal.data_spark_column_names[0],
+                    dataType=spark_return_type,
+                ),
+            )
 
         psdf = self._psser.to_frame()
         columns = psdf._internal.spark_column_names
@@ -865,20 +875,17 @@ class PandasOnSparkSeriesMethods(object):
         def apply_func(pdf):
             return func(first_series(pdf)).to_frame()
 
-        return_schema = StructType([StructField(SPARK_DEFAULT_SERIES_NAME, spark_return_type)])
+        return_schema = StructType([StructField(SPARK_DEFAULT_SERIES_NAME, field.spark_type)])
         output_func = GroupBy._make_pandas_df_builder_func(
             psdf, apply_func, return_schema, retain_index=False
         )
 
-        pudf = pandas_udf(returnType=spark_return_type, functionType=PandasUDFType.SCALAR)(
-            lambda *series: first_series(output_func(pandas_concat(series)))
-        )
+        @pandas_udf(returnType=field.spark_type)  # type: ignore
+        def pudf(*series: pd.Series) -> pd.Series:
+            return first_series(output_func(pandas_concat(series)))
 
         return self._psser._with_new_scol(
-            scol=pudf(*psdf._internal.spark_columns).alias(
-                self._psser._internal.spark_column_names[0]
-            ),
-            dtype=dtype,
+            scol=pudf(*psdf._internal.spark_columns).alias(field.name), field=field
         )
 
 

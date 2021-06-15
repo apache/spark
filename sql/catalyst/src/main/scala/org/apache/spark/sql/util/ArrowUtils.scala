@@ -55,7 +55,7 @@ private[sql] object ArrowUtils {
       }
     case NullType => ArrowType.Null.INSTANCE
     case YearMonthIntervalType => new ArrowType.Interval(IntervalUnit.YEAR_MONTH)
-    case DayTimeIntervalType => new ArrowType.Interval(IntervalUnit.DAY_TIME)
+    case _: DayTimeIntervalType => new ArrowType.Interval(IntervalUnit.DAY_TIME)
     case _ =>
       throw new UnsupportedOperationException(s"Unsupported data type: ${dt.catalogString}")
   }
@@ -77,7 +77,7 @@ private[sql] object ArrowUtils {
     case ts: ArrowType.Timestamp if ts.getUnit == TimeUnit.MICROSECOND => TimestampType
     case ArrowType.Null.INSTANCE => NullType
     case yi: ArrowType.Interval if yi.getUnit == IntervalUnit.YEAR_MONTH => YearMonthIntervalType
-    case di: ArrowType.Interval if di.getUnit == IntervalUnit.DAY_TIME => DayTimeIntervalType
+    case di: ArrowType.Interval if di.getUnit == IntervalUnit.DAY_TIME => DayTimeIntervalType()
     case _ => throw new UnsupportedOperationException(s"Unsupported data type: $dt")
   }
 

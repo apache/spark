@@ -26,6 +26,8 @@ from pyspark import StorageLevel
 from pyspark.sql import Column, DataFrame as SparkDataFrame
 from pyspark.sql.types import DataType, StructType
 
+from pyspark.pandas.internal import InternalField
+
 if TYPE_CHECKING:
     from pyspark.sql._typing import OptionalPrimitiveType  # noqa: F401 (SPARK-34943)
     from pyspark._typing import PrimitiveType  # noqa: F401 (SPARK-34943)
@@ -44,12 +46,12 @@ class SparkIndexOpsMethods(metaclass=ABCMeta):
 
     @property
     def data_type(self) -> DataType:
-        """ Returns the data type as defined by Spark, as a Spark DataType object."""
+        """Returns the data type as defined by Spark, as a Spark DataType object."""
         return self._data._internal.spark_type_for(self._data._column_label)
 
     @property
     def nullable(self) -> bool:
-        """ Returns the nullability as defined by Spark. """
+        """Returns the nullability as defined by Spark."""
         return self._data._internal.spark_column_nullable_for(self._data._column_label)
 
     @property
@@ -119,12 +121,15 @@ class SparkIndexOpsMethods(metaclass=ABCMeta):
                 "The output of the function [%s] should be of a "
                 "pyspark.sql.Column; however, got [%s]." % (func, type(output))
             )
-        new_ser = self._data._with_new_scol(scol=output)
         # Trigger the resolution so it throws an exception if anything does wrong
         # within the function, for example,
         # `df1.a.spark.transform(lambda _: F.col("non-existent"))`.
-        new_ser._internal.to_internal_spark_frame
-        return new_ser
+        field = InternalField.from_struct_field(
+            self._data._internal.spark_frame.select(output).schema.fields[0]
+        )
+        return cast(
+            Union["ps.Series", "ps.Index"], self._data._with_new_scol(scol=output, field=field)
+        )
 
     @property
     @abstractmethod

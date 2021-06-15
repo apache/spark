@@ -104,7 +104,7 @@ case class WindowSpecDefinition(
     case (DateType, YearMonthIntervalType) => true
     case (TimestampType, CalendarIntervalType) => true
     case (TimestampType, YearMonthIntervalType) => true
-    case (TimestampType, DayTimeIntervalType) => true
+    case (TimestampType, _: DayTimeIntervalType) => true
     case (a, b) => a == b
   }
 }

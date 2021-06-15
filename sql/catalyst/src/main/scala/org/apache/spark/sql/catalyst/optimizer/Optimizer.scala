@@ -112,6 +112,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         SimplifyCasts,
         SimplifyCaseConversionExpressions,
         RewriteCorrelatedScalarSubquery,
+        RewriteLateralSubquery,
         EliminateSerialization,
         RemoveRedundantAliases,
         RemoveRedundantAggregates,
@@ -151,7 +152,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       RewriteNonCorrelatedExists,
       PullOutGroupingExpressions,
       ComputeCurrentTime,
-      GetCurrentDatabaseAndCatalog(catalogManager)) ::
+      ReplaceCurrentLike(catalogManager)) ::
     //////////////////////////////////////////////////////////////////////////////////////////
     // Optimizer rules start here
     //////////////////////////////////////////////////////////////////////////////////////////
@@ -256,7 +257,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       EliminateView.ruleName ::
       ReplaceExpressions.ruleName ::
       ComputeCurrentTime.ruleName ::
-      GetCurrentDatabaseAndCatalog(catalogManager).ruleName ::
+      ReplaceCurrentLike(catalogManager).ruleName ::
       RewriteDistinctAggregates.ruleName ::
       ReplaceDeduplicateWithAggregate.ruleName ::
       ReplaceIntersectWithSemiJoin.ruleName ::

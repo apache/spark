@@ -310,7 +310,8 @@ class DataFrameSparkIOTest(PandasOnSparkTestCase, TestUtils):
                 self.assert_eq(psdfs["Sheet_name_2"], pdfs1_squeezed["Sheet_name_2"])
 
             self.assert_eq(
-                ps.read_excel(tmp, index_col=0, sheet_name="Sheet_name_2"), pdfs1["Sheet_name_2"],
+                ps.read_excel(tmp, index_col=0, sheet_name="Sheet_name_2"),
+                pdfs1["Sheet_name_2"],
             )
 
             for sheet_name in sheet_names:

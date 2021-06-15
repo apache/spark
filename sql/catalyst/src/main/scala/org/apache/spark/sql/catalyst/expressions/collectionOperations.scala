@@ -2564,14 +2564,14 @@ case class Sequence(
            |1. The start and stop expressions must resolve to the same type.
            |2. If start and stop expressions resolve to the 'date' or 'timestamp' type
            |then the step expression must resolve to the 'interval' or
-           |'${YearMonthIntervalType.typeName}' or '${DayTimeIntervalType.typeName}' type,
+           |'${YearMonthIntervalType.typeName}' or '${DayTimeIntervalType.simpleString}' type,
            |otherwise to the same type as the start and stop expressions.
          """.stripMargin)
     }
   }
 
   private def isNotIntervalType(expr: Expression) = expr.dataType match {
-    case CalendarIntervalType | YearMonthIntervalType | DayTimeIntervalType => false
+    case CalendarIntervalType | YearMonthIntervalType | _: DayTimeIntervalType => false
     case _ => true
   }
 
@@ -2774,10 +2774,10 @@ object Sequence {
 
     override val defaultStep: DefaultStep = new DefaultStep(
       (dt.ordering.lteq _).asInstanceOf[LessThanOrEqualFn],
-      DayTimeIntervalType,
+      DayTimeIntervalType(),
       Duration.ofDays(1))
 
-    val intervalType: DataType = DayTimeIntervalType
+    val intervalType: DataType = DayTimeIntervalType()
 
     def splitStep(input: Any): (Int, Int, Long) = {
       (0, 0, input.asInstanceOf[Long])
