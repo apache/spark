@@ -43,6 +43,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{DomainJoin, LogicalPlan}
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.ValueInterval
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.catalyst.util.{sideBySide, BadRecordException, FailFastMode}
+import org.apache.spark.sql.connector.catalog.CatalogNotFoundException
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.expressions.Transform
@@ -1421,5 +1422,73 @@ object QueryExecutionErrors {
 
   def invalidStreamingOutputModeError(outputMode: Option[OutputMode]): Throwable = {
     new UnsupportedOperationException(s"Invalid output mode: $outputMode")
+  }
+
+  def catalogPluginClassNotFoundError(name: String): Throwable = {
+    new CatalogNotFoundException(
+      s"Catalog '$name' plugin class not found: spark.sql.catalog.$name is not defined")
+  }
+
+  def catalogPluginClassNotImplementError(name: String): Throwable = {
+    new SparkException(
+      s"Plugin class for catalog '$name' does not implement CatalogPlugin: $name")
+  }
+
+  def catalogPluginClassNotFindForCatalogError(name: String, pluginClassName: String): Throwable = {
+    new SparkException(
+      s"Cannot find catalog plugin class for catalog '$name': $pluginClassName")
+  }
+
+  def catalogFailToFindPublicNoArgConstructorError(
+    name: String,
+    pluginClassName: String,
+    e: Exception): Throwable = {
+    new SparkException(
+      s"Failed to find public no-arg constructor for catalog '$name': $pluginClassName)", e)
+  }
+
+  def catalogFailToCallPublicNoArgConstructorError(
+    name: String,
+    pluginClassName: String,
+    e: Exception): Throwable = {
+    new SparkException(
+      s"Failed to call public no-arg constructor for catalog '$name': $pluginClassName)", e)
+  }
+
+  def catalogCannotInstantiateAbstractPluginClassError(
+    name: String,
+    pluginClassName: String,
+    e: Exception): Throwable = {
+    new SparkException("Cannot instantiate abstract catalog plugin class for " +
+      s"catalog '$name': $pluginClassName", e.getCause)
+  }
+
+  def failInstantiatingConstructorError(
+    name: String,
+    pluginClassName: String,
+    e: Exception): Throwable = {
+    new SparkException("Failed during instantiating constructor for catalog " +
+      s"'$name': $pluginClassName", e.getCause)
+  }
+
+  def notStructError(name: String): Throwable = {
+    new IllegalArgumentException(s"Not a struct: $name")
+  }
+
+  def fieldNotFoundError(name: String): Throwable = {
+    new IllegalArgumentException("Field not found: " + name)
+  }
+
+  def afterColumnNotFoundError(name: String): Throwable = {
+    new IllegalArgumentException("AFTER column not found: " + name)
+  }
+
+  def cannotDelete(name: String): Throwable = {
+    new IllegalArgumentException(s"Cannot delete $name")
+  }
+
+  def fieldNotFoundInError(name: String, names: String): Throwable = {
+    new IllegalArgumentException(
+      s"Cannot find field: ${name} in ${names}")
   }
 }
