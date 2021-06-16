@@ -61,7 +61,7 @@ object MimaExcludes {
     ProblemFilters.exclude[IncompatibleTemplateDefProblem]("org.apache.spark.util.collection.WritablePartitionedIterator"),
 
     // [SPARK-35757][CORE] Add bitwise AND operation and functionality for intersecting bloom filters
-    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.util.sketch.BloomFilter")
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.util.sketch.BloomFilter.intersectInPlace")
   )
 
   // Exclude rules for 3.1.x
