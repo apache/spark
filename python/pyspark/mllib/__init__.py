@@ -27,7 +27,7 @@ import numpy
 
 ver = [int(x) for x in numpy.version.version.split('.')[:2]]
 if ver < [1, 4]:
-    raise Exception("MLlib requires NumPy 1.4+")
+    raise RuntimeError("MLlib requires NumPy 1.4+")
 
 __all__ = ['classification', 'clustering', 'feature', 'fpm', 'linalg', 'random',
            'recommendation', 'regression', 'stat', 'tree', 'util']

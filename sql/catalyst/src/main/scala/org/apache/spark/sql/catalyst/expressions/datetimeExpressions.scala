@@ -27,6 +27,7 @@ import org.apache.commons.text.StringEscapeUtils
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util.{DateTimeUtils, LegacyDateFormats, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
@@ -43,6 +44,12 @@ trait TimeZoneAwareExpression extends Expression {
   /** The expression is only resolved when the time zone has been set. */
   override lazy val resolved: Boolean =
     childrenResolved && checkInputDataTypes().isSuccess && timeZoneId.isDefined
+
+  final override val nodePatterns: Seq[TreePattern] =
+    Seq(TIME_ZONE_AWARE_EXPRESSION) ++ nodePatternsInternal
+
+  // Subclasses can override this function to provide more TreePatterns.
+  def nodePatternsInternal(): Seq[TreePattern] = Seq()
 
   /** the timezone ID to be used to evaluate value. */
   def timeZoneId: Option[String]
@@ -86,6 +93,7 @@ case class CurrentTimeZone() extends LeafExpression with Unevaluable {
   override def nullable: Boolean = false
   override def dataType: DataType = StringType
   override def prettyName: String = "current_timezone"
+  final override val nodePatterns: Seq[TreePattern] = Seq(CURRENT_LIKE)
 }
 
 /**
@@ -122,6 +130,8 @@ case class CurrentDate(timeZoneId: Option[String] = None)
 
   override def dataType: DataType = DateType
 
+  final override def nodePatternsInternal(): Seq[TreePattern] = Seq(CURRENT_LIKE)
+
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
 
@@ -135,6 +145,7 @@ abstract class CurrentTimestampLike() extends LeafExpression with CodegenFallbac
   override def nullable: Boolean = false
   override def dataType: DataType = TimestampType
   override def eval(input: InternalRow): Any = currentTimestamp()
+  final override val nodePatterns: Seq[TreePattern] = Seq(CURRENT_LIKE)
 }
 
 /**
@@ -197,6 +208,8 @@ case class CurrentBatchTimestamp(
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
+
+  final override def nodePatternsInternal(): Seq[TreePattern] = Seq(CURRENT_LIKE)
 
   override def prettyName: String = "current_batch_timestamp"
 
@@ -1349,7 +1362,7 @@ case class TimeAdd(start: Expression, interval: Expression, timeZoneId: Option[S
     copy(timeZoneId = Option(timeZoneId))
 
   override def nullSafeEval(start: Any, interval: Any): Any = right.dataType match {
-    case DayTimeIntervalType =>
+    case _: DayTimeIntervalType =>
       timestampAddDayTime(start.asInstanceOf[Long], interval.asInstanceOf[Long], zoneId)
     case CalendarIntervalType =>
       val i = interval.asInstanceOf[CalendarInterval]
@@ -1360,7 +1373,7 @@ case class TimeAdd(start: Expression, interval: Expression, timeZoneId: Option[S
     val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     interval.dataType match {
-      case DayTimeIntervalType =>
+      case _: DayTimeIntervalType =>
         defineCodeGen(ctx, ev, (sd, dt) => s"""$dtu.timestampAddDayTime($sd, $dt, $zid)""")
       case CalendarIntervalType =>
         defineCodeGen(ctx, ev, (sd, i) => {
@@ -2383,7 +2396,7 @@ object DatePart {
         throw QueryCompilationErrors.literalTypeUnsupportedForSourceTypeError(fieldStr, source)
 
       source.dataType match {
-        case YearMonthIntervalType | DayTimeIntervalType | CalendarIntervalType =>
+        case _: YearMonthIntervalType | _: DayTimeIntervalType | CalendarIntervalType =>
           ExtractIntervalPart.parseExtractField(fieldStr, source, analysisException)
         case _ =>
           DatePart.parseExtractField(fieldStr, source, analysisException)
@@ -2537,7 +2550,7 @@ case class SubtractTimestamps(
 
   override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType, TimestampType)
   override def dataType: DataType =
-    if (legacyInterval) CalendarIntervalType else DayTimeIntervalType
+    if (legacyInterval) CalendarIntervalType else DayTimeIntervalType()
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
@@ -2596,8 +2609,10 @@ case class SubtractDates(
     this(left, right, SQLConf.get.legacyIntervalEnabled)
 
   override def inputTypes: Seq[AbstractDataType] = Seq(DateType, DateType)
-  override def dataType: DataType =
-    if (legacyInterval) CalendarIntervalType else DayTimeIntervalType
+  override def dataType: DataType = {
+    // TODO(SPARK-35727): Return INTERVAL DAY from dates subtraction
+    if (legacyInterval) CalendarIntervalType else DayTimeIntervalType()
+  }
 
   @transient
   private lazy val evalFunc: (Int, Int) => Any = legacyInterval match {

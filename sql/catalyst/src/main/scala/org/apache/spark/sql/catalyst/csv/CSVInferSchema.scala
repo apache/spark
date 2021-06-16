@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCoercion
 import org.apache.spark.sql.catalyst.expressions.ExprUtils
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
 import org.apache.spark.sql.catalyst.util.TimestampFormatter
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
 
 class CSVInferSchema(val options: CSVOptions) extends Serializable {
@@ -112,7 +113,7 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
         case BooleanType => tryParseBoolean(field)
         case StringType => StringType
         case other: DataType =>
-          throw new UnsupportedOperationException(s"Unexpected data type $other")
+          throw QueryExecutionErrors.dataTypeUnexpectedError(other)
       }
       compatibleType(typeSoFar, typeElemInfer).getOrElse(StringType)
     }

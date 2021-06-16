@@ -277,7 +277,7 @@ Arguments: [cs_bill_customer_sk#1 ASC NULLS FIRST], false, 0
 Output [5]: [c_customer_sk#23, c_current_cdemo_sk#24, c_current_addr_sk#25, c_birth_month#26, c_birth_year#27]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer]
-PushedFilters: [In(c_birth_month, [9,5,12,4,1,10]), IsNotNull(c_customer_sk), IsNotNull(c_current_cdemo_sk), IsNotNull(c_current_addr_sk)]
+PushedFilters: [In(c_birth_month, [1,10,12,4,5,9]), IsNotNull(c_customer_sk), IsNotNull(c_current_cdemo_sk), IsNotNull(c_current_addr_sk)]
 ReadSchema: struct<c_customer_sk:int,c_current_cdemo_sk:int,c_current_addr_sk:int,c_birth_month:int,c_birth_year:int>
 
 (27) ColumnarToRow [codegen id : 7]
@@ -295,7 +295,7 @@ Input [5]: [c_customer_sk#23, c_current_cdemo_sk#24, c_current_addr_sk#25, c_bir
 Output [4]: [ca_address_sk#28, ca_county#29, ca_state#30, ca_country#31]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer_address]
-PushedFilters: [In(ca_state, [ND,WI,AL,NC,OK,MS,TN]), IsNotNull(ca_address_sk)]
+PushedFilters: [In(ca_state, [AL,MS,NC,ND,OK,TN,WI]), IsNotNull(ca_address_sk)]
 ReadSchema: struct<ca_address_sk:int,ca_county:string,ca_state:string,ca_country:string>
 
 (31) ColumnarToRow [codegen id : 6]
@@ -403,7 +403,7 @@ Arguments: [cs_bill_customer_sk#87 ASC NULLS FIRST], false, 0
 Output [5]: [c_customer_sk#95, c_current_cdemo_sk#96, c_current_addr_sk#97, c_birth_month#98, c_birth_year#99]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer]
-PushedFilters: [In(c_birth_month, [9,5,12,4,1,10]), IsNotNull(c_customer_sk), IsNotNull(c_current_cdemo_sk), IsNotNull(c_current_addr_sk)]
+PushedFilters: [In(c_birth_month, [1,10,12,4,5,9]), IsNotNull(c_customer_sk), IsNotNull(c_current_cdemo_sk), IsNotNull(c_current_addr_sk)]
 ReadSchema: struct<c_customer_sk:int,c_current_cdemo_sk:int,c_current_addr_sk:int,c_birth_month:int,c_birth_year:int>
 
 (55) ColumnarToRow [codegen id : 21]
@@ -421,7 +421,7 @@ Input [5]: [c_customer_sk#95, c_current_cdemo_sk#96, c_current_addr_sk#97, c_bir
 Output [3]: [ca_address_sk#100, ca_state#101, ca_country#102]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer_address]
-PushedFilters: [In(ca_state, [ND,WI,AL,NC,OK,MS,TN]), IsNotNull(ca_address_sk)]
+PushedFilters: [In(ca_state, [AL,MS,NC,ND,OK,TN,WI]), IsNotNull(ca_address_sk)]
 ReadSchema: struct<ca_address_sk:int,ca_state:string,ca_country:string>
 
 (59) ColumnarToRow [codegen id : 20]
@@ -514,7 +514,7 @@ Arguments: [cs_bill_customer_sk#151 ASC NULLS FIRST], false, 0
 Output [5]: [c_customer_sk#159, c_current_cdemo_sk#160, c_current_addr_sk#161, c_birth_month#162, c_birth_year#163]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer]
-PushedFilters: [In(c_birth_month, [9,5,12,4,1,10]), IsNotNull(c_customer_sk), IsNotNull(c_current_cdemo_sk), IsNotNull(c_current_addr_sk)]
+PushedFilters: [In(c_birth_month, [1,10,12,4,5,9]), IsNotNull(c_customer_sk), IsNotNull(c_current_cdemo_sk), IsNotNull(c_current_addr_sk)]
 ReadSchema: struct<c_customer_sk:int,c_current_cdemo_sk:int,c_current_addr_sk:int,c_birth_month:int,c_birth_year:int>
 
 (80) ColumnarToRow [codegen id : 35]
@@ -532,7 +532,7 @@ Input [5]: [c_customer_sk#159, c_current_cdemo_sk#160, c_current_addr_sk#161, c_
 Output [3]: [ca_address_sk#164, ca_state#165, ca_country#166]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer_address]
-PushedFilters: [In(ca_state, [ND,WI,AL,NC,OK,MS,TN]), IsNotNull(ca_address_sk)]
+PushedFilters: [In(ca_state, [AL,MS,NC,ND,OK,TN,WI]), IsNotNull(ca_address_sk)]
 ReadSchema: struct<ca_address_sk:int,ca_state:string,ca_country:string>
 
 (84) ColumnarToRow [codegen id : 34]
@@ -661,7 +661,7 @@ Input [10]: [cs_bill_customer_sk#216, cs_item_sk#218, cs_quantity#219, cs_list_p
 Output [5]: [c_customer_sk#228, c_current_cdemo_sk#229, c_current_addr_sk#230, c_birth_month#231, c_birth_year#232]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer]
-PushedFilters: [In(c_birth_month, [9,5,12,4,1,10]), IsNotNull(c_customer_sk), IsNotNull(c_current_cdemo_sk), IsNotNull(c_current_addr_sk)]
+PushedFilters: [In(c_birth_month, [1,10,12,4,5,9]), IsNotNull(c_customer_sk), IsNotNull(c_current_cdemo_sk), IsNotNull(c_current_addr_sk)]
 ReadSchema: struct<c_customer_sk:int,c_current_cdemo_sk:int,c_current_addr_sk:int,c_birth_month:int,c_birth_year:int>
 
 (113) ColumnarToRow [codegen id : 46]
@@ -679,7 +679,7 @@ Input [5]: [c_customer_sk#228, c_current_cdemo_sk#229, c_current_addr_sk#230, c_
 Output [2]: [ca_address_sk#233, ca_state#234]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer_address]
-PushedFilters: [In(ca_state, [ND,WI,AL,NC,OK,MS,TN]), IsNotNull(ca_address_sk)]
+PushedFilters: [In(ca_state, [AL,MS,NC,ND,OK,TN,WI]), IsNotNull(ca_address_sk)]
 ReadSchema: struct<ca_address_sk:int,ca_state:string>
 
 (117) ColumnarToRow [codegen id : 45]

@@ -47,7 +47,6 @@ import org.apache.hadoop.security.UserGroupInformation
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.source.HiveCatalogMetrics
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{NoSuchDatabaseException, NoSuchPartitionException, NoSuchPartitionsException, PartitionAlreadyExistsException, PartitionsAlreadyExistException}
 import org.apache.spark.sql.catalyst.catalog._
@@ -56,12 +55,13 @@ import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces._
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.QueryExecutionException
-import org.apache.spark.sql.hive.HiveExternalCatalog
+import org.apache.spark.sql.hive.{HiveExternalCatalog, HiveUtils}
 import org.apache.spark.sql.hive.HiveExternalCatalog.DATASOURCE_SCHEMA
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.util.{CircularBuffer, ShutdownHookManager, Utils}
+import org.apache.spark.util.{CircularBuffer, ShutdownHookManager, Utils, VersionUtils}
 
 /**
  * A class that wraps the HiveClient and converts its responses to externally visible classes.
@@ -190,7 +190,7 @@ private[hive] class HiveClientImpl(
     // For this reason we cannot load the jars added by ADDJarsCommand because of class loader
     // got changed. We reset it to clientLoader.ClassLoader here.
     state.getConf.setClassLoader(clientLoader.classLoader)
-    SessionState.start(state)
+    shim.setCurrentSessionState(state)
     state.out = new PrintStream(outputBuffer, true, UTF_8.name())
     state.err = new PrintStream(outputBuffer, true, UTF_8.name())
     state
@@ -217,6 +217,16 @@ private[hive] class HiveClientImpl(
       hiveConf.setBoolean("datanucleus.schema.autoCreateAll", true)
     }
     hiveConf
+  }
+
+  private def getHive(conf: HiveConf): Hive = {
+    VersionUtils.majorMinorPatchVersion(version.fullVersion).map {
+      case (2, 3, v) if v >= 9 => Hive.getWithoutRegisterFns(conf)
+      case _ => Hive.get(conf)
+    }.getOrElse {
+      throw QueryExecutionErrors.unsupportedHiveMetastoreVersionError(
+        version.fullVersion, HiveUtils.HIVE_METASTORE_VERSION.key)
+    }
   }
 
   override val userName = UserGroupInformation.getCurrentUser.getShortUserName
@@ -273,7 +283,7 @@ private[hive] class HiveClientImpl(
     if (clientLoader.cachedHive != null) {
       clientLoader.cachedHive.asInstanceOf[Hive]
     } else {
-      val c = Hive.get(conf)
+      val c = getHive(conf)
       clientLoader.cachedHive = c
       c
     }
@@ -303,7 +313,7 @@ private[hive] class HiveClientImpl(
     // with the side-effect of Hive.get(conf) to avoid using out-of-date HiveConf.
     // See discussion in https://github.com/apache/spark/pull/16826/files#r104606859
     // for more details.
-    Hive.get(conf)
+    getHive(conf)
     // setCurrentSessionState will use the classLoader associated
     // with the HiveConf in `state` to override the context class loader of the current
     // thread.
@@ -312,8 +322,7 @@ private[hive] class HiveClientImpl(
       f
     } catch {
       case e: NoClassDefFoundError if e.getMessage.contains("apache/hadoop/hive/serde2/SerDe") =>
-        throw new ClassNotFoundException("The SerDe interface removed since Hive 2.3(HIVE-15167)." +
-          " Please migrate your custom SerDes to Hive 2.3. See HIVE-15167 for more details.", e)
+        throw QueryExecutionErrors.serDeInterfaceNotFoundError(e)
     } finally {
       state.getConf.setClassLoader(originalConfLoader)
       Thread.currentThread().setContextClassLoader(original)
@@ -366,8 +375,7 @@ private[hive] class HiveClientImpl(
     if (!getDatabase(database.name).locationUri.equals(database.locationUri)) {
       // SPARK-29260: Enable supported versions once it support altering database location.
       if (!(version.equals(hive.v3_0) || version.equals(hive.v3_1))) {
-        throw new AnalysisException(
-          s"Hive ${version.fullVersion} does not support altering database location")
+        throw QueryCompilationErrors.alterDatabaseLocationUnsupportedError(version.fullVersion)
       }
     }
     val hiveDb = toHiveDatabase(database)
@@ -419,7 +427,7 @@ private[hive] class HiveClientImpl(
         .map(extraFixesForNonView).map(new HiveTable(_)).toSeq
     } catch {
       case ex: Exception =>
-        throw new HiveException(s"Unable to fetch tables of db $dbName", ex);
+        throw QueryExecutionErrors.cannotFetchTablesOfDatabaseError(dbName, ex)
     }
   }
 
@@ -447,8 +455,8 @@ private[hive] class HiveClientImpl(
       (h.getCols.asScala.map(fromHiveColumn), h.getPartCols.asScala.map(fromHiveColumn))
     } catch {
       case ex: SparkException =>
-        throw new SparkException(
-          s"${ex.getMessage}, db: ${h.getDbName}, table: ${h.getTableName}", ex)
+        throw QueryExecutionErrors.convertHiveTableToCatalogTableError(
+          ex, h.getDbName, h.getTableName)
     }
     val schema = StructType((cols ++ partCols).toSeq)
 
@@ -515,7 +523,7 @@ private[hive] class HiveClientImpl(
         case HiveTableType.VIRTUAL_VIEW => CatalogTableType.VIEW
         case unsupportedType =>
           val tableTypeStr = unsupportedType.toString.toLowerCase(Locale.ROOT).replace("_", " ")
-          throw new AnalysisException(s"Hive $tableTypeStr is not supported.")
+          throw QueryCompilationErrors.hiveTableTypeUnsupportedError(tableTypeStr)
       },
       schema = schema,
       partitionColumnNames = partCols.map(_.name).toSeq,
@@ -765,10 +773,9 @@ private[hive] class HiveClientImpl(
 
   override def getPartitionsByFilter(
       table: CatalogTable,
-      predicates: Seq[Expression],
-      timeZoneId: String): Seq[CatalogTablePartition] = withHiveState {
+      predicates: Seq[Expression]): Seq[CatalogTablePartition] = withHiveState {
     val hiveTable = toHiveTable(table, Some(userName))
-    val parts = shim.getPartitionsByFilter(client, hiveTable, predicates, timeZoneId)
+    val parts = shim.getPartitionsByFilter(client, hiveTable, predicates)
       .map(fromHivePartition)
     HiveCatalogMetrics.incrementFetchedPartitions(parts.length)
     parts
@@ -828,6 +835,8 @@ private[hive] class HiveClientImpl(
       }
     }
 
+    // Hive query needs to start SessionState.
+    SessionState.start(state)
     logDebug(s"Running hiveql '$cmd'")
     if (cmd.toLowerCase(Locale.ROOT).startsWith("set")) { logDebug(s"Changing config: $cmd") }
     try {
@@ -1016,8 +1025,7 @@ private[hive] object HiveClientImpl extends Logging {
       CatalystSqlParser.parseDataType(hc.getType)
     } catch {
       case e: ParseException =>
-        throw new SparkException(
-          s"Cannot recognize hive type string: ${hc.getType}, column: ${hc.getName}", e)
+        throw QueryExecutionErrors.cannotRecognizeHiveTypeError(e, hc.getType, hc.getName)
     }
   }
 

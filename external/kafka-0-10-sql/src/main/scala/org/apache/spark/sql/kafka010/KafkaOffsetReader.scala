@@ -78,6 +78,20 @@ private[kafka010] trait KafkaOffsetReader {
       failsOnNoMatchingOffset: Boolean): KafkaSourceOffset
 
   /**
+   * Resolves the specific offsets based on timestamp per all topic-partitions being subscribed.
+   * The returned offset for each partition is the earliest offset whose timestamp is greater
+   * than or equal to the given timestamp in the corresponding partition. If the matched offset
+   * doesn't exist, depending on `failsOnNoMatchingOffset` parameter, the offset will be set to
+   * latest or this method throws an error.
+   *
+   * @param timestamp the timestamp.
+   * @param failsOnNoMatchingOffset whether to fail the query when no matched offset can be found.
+   */
+  def fetchGlobalTimestampBasedOffsets(
+      timestamp: Long,
+      failsOnNoMatchingOffset: Boolean): KafkaSourceOffset
+
+  /**
    * Fetch the earliest offsets for the topic partitions that are indicated
    * in the [[ConsumerStrategy]].
    */

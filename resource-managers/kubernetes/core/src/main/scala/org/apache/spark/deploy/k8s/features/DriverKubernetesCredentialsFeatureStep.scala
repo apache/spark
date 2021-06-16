@@ -202,6 +202,7 @@ private[spark] class DriverKubernetesCredentialsFeatureStep(kubernetesConf: Kube
       .withNewMetadata()
         .withName(driverCredentialsSecretName)
         .endMetadata()
+      .withImmutable(true)
       .withData(allSecretData.asJava)
       .build()
   }

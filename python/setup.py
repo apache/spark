@@ -221,6 +221,7 @@ try:
                   'pyspark.sbin',
                   'pyspark.jars',
                   'pyspark.pandas',
+                  'pyspark.pandas.data_type_ops',
                   'pyspark.pandas.indexes',
                   'pyspark.pandas.missing',
                   'pyspark.pandas.plot',
@@ -268,7 +269,7 @@ try:
             'pandas_on_spark': [
                 'pandas>=%s' % _minimum_pandas_version,
                 'pyarrow>=%s' % _minimum_pyarrow_version,
-                'numpy>=1.14,<1.20.0',
+                'numpy>=1.14',
             ],
         },
         python_requires='>=3.6',

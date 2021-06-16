@@ -40,6 +40,7 @@ import org.apache.spark.sql.catalyst.rules.UnknownRuleId
 import org.apache.spark.sql.catalyst.trees.TreePattern.TreePattern
 import org.apache.spark.sql.catalyst.util.StringUtils.PlanStringConcat
 import org.apache.spark.sql.catalyst.util.truncatedString
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -549,6 +550,44 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
   }
 
   /**
+   * Returns a copy of this node where `rule` has been recursively applied first to all of its
+   * children and then itself (post-order). When `rule` does not apply to a given node, it is left
+   * unchanged.
+   *
+   * @param cond   a Lambda expression to prune tree traversals. If `cond.apply` returns false
+   *               on a TreeNode T, skips processing T and its subtree; otherwise, processes
+   *               T and its subtree recursively.
+   * @param rule   the function use to transform this node and its descendant nodes. The function
+   *               takes a tuple as its input, where the first/second field is the before/after
+   *               image of applying the rule on the node's children.
+   * @param ruleId is a unique Id for `rule` to prune unnecessary tree traversals. When it is
+   *               UnknownRuleId, no pruning happens. Otherwise, if `rule` (with id `ruleId`)
+   *               has been marked as in effective on a TreeNode T, skips processing T and its
+   *               subtree. Do not pass it if the rule is not purely functional and reads a
+   *               varying initial state for different invocations.
+   */
+  def transformUpWithBeforeAndAfterRuleOnChildren(
+      cond: BaseType => Boolean, ruleId: RuleId = UnknownRuleId)(
+    rule: PartialFunction[(BaseType, BaseType), BaseType]): BaseType = {
+    if (!cond.apply(this) || isRuleIneffective(ruleId)) {
+      return this
+    }
+    val afterRuleOnChildren =
+      mapChildren(_.transformUpWithBeforeAndAfterRuleOnChildren(cond, ruleId)(rule))
+    val newNode = CurrentOrigin.withOrigin(origin) {
+      rule.applyOrElse((this, afterRuleOnChildren), { t: (BaseType, BaseType) => t._2 })
+    }
+    if (this eq newNode) {
+      this.markRuleAsIneffective(ruleId)
+      this
+    } else {
+      // If the transform function replaces this node with a new one, carry over the tags.
+      newNode.copyTagsFrom(this)
+      newNode
+    }
+  }
+
+  /**
    * Returns a copy of this node where `f` has been applied to all the nodes in `children`.
    */
   def mapChildren(f: BaseType => BaseType): BaseType = {
@@ -674,7 +713,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
     // Skip no-arg constructors that are just there for kryo.
     val ctors = allCtors.filter(allowEmptyArgs || _.getParameterTypes.size != 0)
     if (ctors.isEmpty) {
-      sys.error(s"No valid constructor for $nodeName")
+      throw QueryExecutionErrors.constructorNotFoundError(nodeName)
     }
     val allArgs: Array[AnyRef] = if (otherCopyArgs.isEmpty) {
       newArgs
@@ -743,6 +782,18 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
     truncatedString(keyValuePairs, "[", ", ", "]", maxFields) :: Nil
   }
 
+  private def formatArg(arg: Any, maxFields: Int): String = arg match {
+    case seq: Seq[_] =>
+      truncatedString(seq.map(formatArg(_, maxFields)), "[", ", ", "]", maxFields)
+    case set: Set[_] =>
+      // Sort elements for deterministic behaviours
+      truncatedString(set.toSeq.map(formatArg(_, maxFields).sorted), "{", ", ", "}", maxFields)
+    case array: Array[_] =>
+      truncatedString(array.map(formatArg(_, maxFields)), "[", ", ", "]", maxFields)
+    case other =>
+      other.toString
+  }
+
   /** Returns a string representing the arguments to this node, minus any children */
   def argString(maxFields: Int): String = stringArgs.flatMap {
     case tn: TreeNode[_] if allChildren.contains(tn) => Nil
@@ -751,10 +802,15 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
     case tn: TreeNode[_] => tn.simpleString(maxFields) :: Nil
     case seq: Seq[Any] if seq.toSet.subsetOf(allChildren.asInstanceOf[Set[Any]]) => Nil
     case iter: Iterable[_] if iter.isEmpty => Nil
-    case seq: Seq[_] => truncatedString(seq, "[", ", ", "]", maxFields) :: Nil
-    case set: Set[_] => truncatedString(set.toSeq, "{", ", ", "}", maxFields) :: Nil
+    case seq: Seq[_] =>
+      truncatedString(seq.map(formatArg(_, maxFields)), "[", ", ", "]", maxFields) :: Nil
+    case set: Set[_] =>
+      // Sort elements for deterministic behaviours
+      val sortedSeq = set.toSeq.map(formatArg(_, maxFields).sorted)
+      truncatedString(sortedSeq, "{", ", ", "}", maxFields) :: Nil
     case array: Array[_] if array.isEmpty => Nil
-    case array: Array[_] => truncatedString(array, "[", ", ", "]", maxFields) :: Nil
+    case array: Array[_] =>
+      truncatedString(array.map(formatArg(_, maxFields)), "[", ", ", "]", maxFields) :: Nil
     case null => Nil
     case None => Nil
     case Some(null) => Nil
@@ -996,9 +1052,10 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
         ("deserialized" -> s.deserialized) ~ ("replication" -> s.replication)
     case n: TreeNode[_] => n.jsonValue
     case o: Option[_] => o.map(parseToJson)
-    // Recursive scan Seq[TreeNode], Seq[Partitioning], Seq[DataType]
-    case t: Seq[_] if t.forall(_.isInstanceOf[TreeNode[_]]) ||
-      t.forall(_.isInstanceOf[Partitioning]) || t.forall(_.isInstanceOf[DataType]) =>
+    // Recursive scan Seq[Partitioning], Seq[DataType], Seq[Product]
+    case t: Seq[_] if t.forall(_.isInstanceOf[Partitioning]) ||
+      t.forall(_.isInstanceOf[DataType]) ||
+      t.forall(_.isInstanceOf[Product]) =>
       JArray(t.map(parseToJson).toList)
     case t: Seq[_] if t.length > 0 && t.head.isInstanceOf[String] =>
       JString(truncatedString(t, "[", ", ", "]", SQLConf.get.maxToStringFields))
@@ -1011,7 +1068,20 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
     case p: Product if shouldConvertToJson(p) =>
       try {
         val fieldNames = getConstructorParameterNames(p.getClass)
-        val fieldValues = p.productIterator.toSeq
+        val fieldValues = {
+          if (p.productArity == fieldNames.length) {
+            p.productIterator.toSeq
+          } else {
+            val clazz = p.getClass
+            // Fallback to use reflection if length of product elements do not match
+            // constructor params.
+            fieldNames.map { fieldName =>
+              val field = clazz.getDeclaredField(fieldName)
+              field.setAccessible(true)
+              field.get(p)
+            }
+          }
+        }
         assert(fieldNames.length == fieldValues.length, s"$simpleClassName fields: " +
           fieldNames.mkString(", ") + s", values: " + fieldValues.mkString(", "))
         ("product-class" -> JString(p.getClass.getName)) :: fieldNames.zip(fieldValues).map {
@@ -1019,6 +1089,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
         }.toList
       } catch {
         case _: RuntimeException => null
+        case _: ReflectiveOperationException => null
       }
     case _ => JNull
   }
@@ -1036,6 +1107,9 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
     case broadcast: BroadcastMode => true
     case table: CatalogTableType => true
     case storage: CatalogStorageFormat => true
+    // Write out product that contains TreeNode, since there are some Tuples such as cteRelations
+    // in With, branches in CaseWhen which are essential to understand the plan.
+    case p if p.productIterator.exists(_.isInstanceOf[TreeNode[_]]) => true
     case _ => false
   }
 }

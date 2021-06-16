@@ -4,7 +4,7 @@ TakeOrderedAndProject (74)
    +- Exchange (72)
       +- * HashAggregate (71)
          +- * Project (70)
-            +- SortMergeJoin LeftOuter (69)
+            +- * SortMergeJoin LeftOuter (69)
                :- * Sort (62)
                :  +- Exchange (61)
                :     +- * Project (60)
@@ -380,7 +380,7 @@ Arguments: hashpartitioning(cr_item_sk#41, cr_order_number#42, 5), ENSURE_REQUIR
 Input [2]: [cr_item_sk#41, cr_order_number#42]
 Arguments: [cr_item_sk#41 ASC NULLS FIRST, cr_order_number#42 ASC NULLS FIRST], false, 0
 
-(69) SortMergeJoin
+(69) SortMergeJoin [codegen id : 14]
 Left keys [2]: [cs_item_sk#4, cs_order_number#6]
 Right keys [2]: [cr_item_sk#41, cr_order_number#42]
 Join condition: None

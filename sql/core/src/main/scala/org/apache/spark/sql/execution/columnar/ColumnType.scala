@@ -257,7 +257,7 @@ private[columnar] object LONG extends NativeColumnType(LongType, 8) {
   }
 }
 
-private[columnar] object YEAR_MONTH_INTERVAL extends NativeColumnType(YearMonthIntervalType, 4) {
+private[columnar] object YEAR_MONTH_INTERVAL extends NativeColumnType(YearMonthIntervalType(), 4) {
   override def append(v: Int, buffer: ByteBuffer): Unit = {
     buffer.putInt(v)
   }
@@ -290,7 +290,7 @@ private[columnar] object YEAR_MONTH_INTERVAL extends NativeColumnType(YearMonthI
   }
 }
 
-private[columnar] object DAY_TIME_INTERVAL extends NativeColumnType(DayTimeIntervalType, 8) {
+private[columnar] object DAY_TIME_INTERVAL extends NativeColumnType(DayTimeIntervalType(), 8) {
   override def append(v: Long, buffer: ByteBuffer): Unit = {
     buffer.putLong(v)
   }
@@ -817,8 +817,8 @@ private[columnar] object ColumnType {
       case BooleanType => BOOLEAN
       case ByteType => BYTE
       case ShortType => SHORT
-      case IntegerType | DateType => INT
-      case LongType | TimestampType => LONG
+      case IntegerType | DateType | _: YearMonthIntervalType => INT
+      case LongType | TimestampType | _: DayTimeIntervalType => LONG
       case FloatType => FLOAT
       case DoubleType => DOUBLE
       case StringType => STRING

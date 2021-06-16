@@ -67,12 +67,15 @@ case class HashAggregateExec(
     "spillSize" -> SQLMetrics.createSizeMetric(sparkContext, "spill size"),
     "aggTime" -> SQLMetrics.createTimingMetric(sparkContext, "time in aggregation build"),
     "avgHashProbe" ->
-      SQLMetrics.createAverageMetric(sparkContext, "avg hash probe bucket list iters"))
+      SQLMetrics.createAverageMetric(sparkContext, "avg hash probe bucket list iters"),
+    "numTasksFallBacked" -> SQLMetrics.createMetric(sparkContext, "number of sort fallback tasks"))
 
   // This is for testing. We force TungstenAggregationIterator to fall back to the unsafe row hash
   // map and/or the sort-based aggregation once it has processed a given number of input rows.
   private val testFallbackStartsAt: Option[(Int, Int)] = {
-    sqlContext.getConf("spark.sql.TungstenAggregate.testFallbackStartsAt", null) match {
+    Option(sqlContext).map { sc =>
+      sc.getConf("spark.sql.TungstenAggregate.testFallbackStartsAt", null)
+    }.orNull match {
       case null | "" => None
       case fallbackStartsAt =>
         val splits = fallbackStartsAt.split(",").map(_.trim)
@@ -86,6 +89,7 @@ case class HashAggregateExec(
     val spillSize = longMetric("spillSize")
     val avgHashProbe = longMetric("avgHashProbe")
     val aggTime = longMetric("aggTime")
+    val numTasksFallBacked = longMetric("numTasksFallBacked")
 
     child.execute().mapPartitionsWithIndex { (partIndex, iter) =>
 
@@ -112,7 +116,8 @@ case class HashAggregateExec(
             numOutputRows,
             peakMemory,
             spillSize,
-            avgHashProbe)
+            avgHashProbe,
+            numTasksFallBacked)
         if (!hasInput && groupingExpressions.isEmpty) {
           numOutputRows += 1
           Iterator.single[UnsafeRow](aggregationIterator.outputForEmptyGroupingKeyWithoutInput())
@@ -460,7 +465,8 @@ case class HashAggregateExec(
       sorter: UnsafeKVExternalSorter,
       peakMemory: SQLMetric,
       spillSize: SQLMetric,
-      avgHashProbe: SQLMetric): KVIterator[UnsafeRow, UnsafeRow] = {
+      avgHashProbe: SQLMetric,
+      numTasksFallBacked: SQLMetric): KVIterator[UnsafeRow, UnsafeRow] = {
 
     // update peak execution memory
     val mapMemory = hashMap.getPeakMemoryUsedBytes
@@ -479,6 +485,7 @@ case class HashAggregateExec(
     }
 
     // merge the final hashMap into sorter
+    numTasksFallBacked += 1
     sorter.merge(hashMap.destructAndCreateExternalSorter())
     hashMap.free()
     val sortedIter = sorter.sortedIterator()
@@ -764,9 +771,10 @@ case class HashAggregateExec(
     val peakMemory = metricTerm(ctx, "peakMemory")
     val spillSize = metricTerm(ctx, "spillSize")
     val avgHashProbe = metricTerm(ctx, "avgHashProbe")
+    val numTasksFallBacked = metricTerm(ctx, "numTasksFallBacked")
 
     val finishRegularHashMap = s"$iterTerm = $thisPlan.finishAggregate(" +
-      s"$hashMapTerm, $sorterTerm, $peakMemory, $spillSize, $avgHashProbe);"
+      s"$hashMapTerm, $sorterTerm, $peakMemory, $spillSize, $avgHashProbe, $numTasksFallBacked);"
     val finishHashMap = if (isFastHashMapEnabled) {
       s"""
          |$iterTermForFastHashMap = $fastHashMapTerm.rowIterator();

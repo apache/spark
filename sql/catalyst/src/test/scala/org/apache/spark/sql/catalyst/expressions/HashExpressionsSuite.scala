@@ -176,7 +176,7 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("hive-hash for date type") {
     def checkHiveHashForDateType(dateString: String, expected: Long): Unit = {
       checkHiveHash(
-        DateTimeUtils.stringToDate(UTF8String.fromString(dateString), ZoneOffset.UTC).get,
+        DateTimeUtils.stringToDate(UTF8String.fromString(dateString)).get,
         DateType,
         expected)
     }
@@ -698,14 +698,25 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("SPARK-35113: HashExpression support DayTimeIntervalType/YearMonthIntervalType") {
-    val dayTime = Literal.create(Duration.ofSeconds(1237123123), DayTimeIntervalType)
-    val yearMonth = Literal.create(Period.ofMonths(1234), YearMonthIntervalType)
+    val dayTime = Literal.create(Duration.ofSeconds(1237123123), DayTimeIntervalType())
+    val yearMonth = Literal.create(Period.ofMonths(1234), YearMonthIntervalType())
     checkEvaluation(Murmur3Hash(Seq(dayTime), 10), -428664612)
     checkEvaluation(Murmur3Hash(Seq(yearMonth), 10), -686520021)
     checkEvaluation(XxHash64(Seq(dayTime), 10), 8228802290839366895L)
     checkEvaluation(XxHash64(Seq(yearMonth), 10), -1774215319882784110L)
     checkEvaluation(HiveHash(Seq(dayTime)), 743331816)
     checkEvaluation(HiveHash(Seq(yearMonth)), 1234)
+  }
+
+  test("SPARK-35207: Compute hash consistent between -0.0 and 0.0") {
+    def checkResult(exprs1: Expression, exprs2: Expression): Unit = {
+      checkEvaluation(Murmur3Hash(Seq(exprs1), 42), Murmur3Hash(Seq(exprs2), 42).eval())
+      checkEvaluation(XxHash64(Seq(exprs1), 42), XxHash64(Seq(exprs2), 42).eval())
+      checkEvaluation(HiveHash(Seq(exprs1)), HiveHash(Seq(exprs2)).eval())
+    }
+
+    checkResult(Literal.create(-0D, DoubleType), Literal.create(0D, DoubleType))
+    checkResult(Literal.create(-0F, FloatType), Literal.create(0F, FloatType))
   }
 
   private def testHash(inputSchema: StructType): Unit = {

@@ -35,6 +35,7 @@ CONTEXT=
 INCLUDE_TAGS="k8s"
 EXCLUDE_TAGS=
 JAVA_VERSION="8"
+BUILD_DEPENDENCIES_MVN_FLAG="-am"
 HADOOP_PROFILE="hadoop-3.2"
 MVN="$TEST_ROOT_DIR/build/mvn"
 
@@ -117,6 +118,9 @@ while (( "$#" )); do
       HADOOP_PROFILE="$2"
       shift
       ;;
+    --skip-building-dependencies)
+      BUILD_DEPENDENCIES_MVN_FLAG=""
+      ;;
     *)
       echo "Unexpected command line flag $2 $1."
       exit 1
@@ -176,4 +180,4 @@ properties+=(
   -Dlog4j.logger.org.apache.spark=DEBUG
 )
 
-$TEST_ROOT_DIR/build/mvn integration-test -f $TEST_ROOT_DIR/pom.xml -pl resource-managers/kubernetes/integration-tests -am -Pscala-$SCALA_VERSION -P$HADOOP_PROFILE -Pkubernetes -Pkubernetes-integration-tests ${properties[@]}
+$TEST_ROOT_DIR/build/mvn install -f $TEST_ROOT_DIR/pom.xml -pl resource-managers/kubernetes/integration-tests $BUILD_DEPENDENCIES_MVN_FLAG -Pscala-$SCALA_VERSION -P$HADOOP_PROFILE -Pkubernetes -Pkubernetes-integration-tests ${properties[@]}

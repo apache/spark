@@ -172,7 +172,7 @@ Input [6]: [ws_item_sk#2, ws_sales_price#4, ca_city#11, ca_zip#12, i_item_sk#18,
 Output [2]: [i_item_sk#21, i_item_id#22]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/item]
-PushedFilters: [In(i_item_sk, [2,3,5,7,11,13,17,19,23,29])]
+PushedFilters: [In(i_item_sk, [11,13,17,19,2,23,29,3,5,7])]
 ReadSchema: struct<i_item_sk:int,i_item_id:string>
 
 (30) ColumnarToRow [codegen id : 5]

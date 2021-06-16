@@ -65,6 +65,9 @@ public final class SpecializedGettersReader {
     if (dataType instanceof TimestampType) {
       return obj.getLong(ordinal);
     }
+    if (dataType instanceof TimestampWithoutTZType) {
+      return obj.getLong(ordinal);
+    }
     if (dataType instanceof CalendarIntervalType) {
       return obj.getInterval(ordinal);
     }

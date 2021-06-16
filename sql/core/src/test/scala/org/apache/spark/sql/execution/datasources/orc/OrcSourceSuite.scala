@@ -338,7 +338,7 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll with CommonFileDa
     }
 
     // Test all the valid options of spark.sql.orc.compression.codec
-    Seq("NONE", "UNCOMPRESSED", "SNAPPY", "ZLIB", "LZO", "ZSTD").foreach { c =>
+    Seq("NONE", "UNCOMPRESSED", "SNAPPY", "ZLIB", "LZO", "ZSTD", "LZ4").foreach { c =>
       withSQLConf(SQLConf.ORC_COMPRESSION.key -> c) {
         val expected = if (c == "UNCOMPRESSED") "NONE" else c
         assert(new OrcOptions(Map.empty[String, String], conf).compressionCodec == expected)
@@ -538,6 +538,16 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll with CommonFileDa
               Row(java.sql.Timestamp.valueOf("1582-10-15 11:12:13.654321"))))
         }
       }
+    }
+  }
+
+  test("SPARK-35612: Support LZ4 compression in ORC data source") {
+    withTempPath { dir =>
+      val path = dir.getAbsolutePath
+      spark.range(3).write.option("compression", "lz4").orc(path)
+      checkAnswer(spark.read.orc(path), Seq(Row(0), Row(1), Row(2)))
+      val files = OrcUtils.listOrcFiles(path, spark.sessionState.newHadoopConf())
+      assert(files.nonEmpty && files.forall(_.getName.contains("lz4")))
     }
   }
 }

@@ -104,16 +104,17 @@ def lit(col):
 def col(col):
     """
     Returns a :class:`~pyspark.sql.Column` based on the given column name.'
+    Examples
+    --------
+    >>> col('x')
+    Column<'x'>
+    >>> column('x')
+    Column<'x'>
     """
     return _invoke_function("col", col)
 
 
-@since(1.3)
-def column(col):
-    """
-    Returns a :class:`~pyspark.sql.Column` based on the given column name.'
-    """
-    return col(col)
+column = col
 
 
 @since(1.3)
@@ -2681,6 +2682,45 @@ def overlay(src, replace, pos, len=-1):
     ))
 
 
+def sentences(string, language=None, country=None):
+    """
+    Splits a string into arrays of sentences, where each sentence is an array of words.
+    The 'language' and 'country' arguments are optional, and if omitted, the default locale is used.
+
+    .. versionadded:: 3.2.0
+
+    Parameters
+    ----------
+    string : :class:`~pyspark.sql.Column` or str
+        a string to be split
+    language : :class:`~pyspark.sql.Column` or str, optional
+        a language of the locale
+    country : :class:`~pyspark.sql.Column` or str, optional
+        a country of the locale
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([["This is an example sentence."]], ["string"])
+    >>> df.select(sentences(df.string, lit("en"), lit("US"))).show(truncate=False)
+    +-----------------------------------+
+    |sentences(string, en, US)          |
+    +-----------------------------------+
+    |[[This, is, an, example, sentence]]|
+    +-----------------------------------+
+    """
+    if language is None:
+        language = lit("")
+    if country is None:
+        country = lit("")
+
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.sentences(
+        _to_java_column(string),
+        _to_java_column(language),
+        _to_java_column(country)
+    ))
+
+
 def substring(str, pos, len):
     """
     Substring starts at `pos` and is of length `len` when str is String type or
@@ -3576,7 +3616,11 @@ def from_json(col, schema, options=None):
         .. versionchanged:: 2.3
             the DDL-formatted string is also supported for ``schema``.
     options : dict, optional
-        options to control parsing. accepts the same options as the json datasource
+        options to control parsing. accepts the same options as the json datasource.
+        See `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option>`_
+        in the version you use.
+
+        .. # noqa
 
     Examples
     --------
@@ -3627,8 +3671,12 @@ def to_json(col, options=None):
         name of column containing a struct, an array or a map.
     options : dict, optional
         options to control converting. accepts the same options as the JSON datasource.
+        See `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option>`_
+        in the version you use.
         Additionally the function supports the `pretty` option which enables
         pretty JSON generation.
+
+        .. # noqa
 
     Examples
     --------
@@ -3672,7 +3720,11 @@ def schema_of_json(json, options=None):
     json : :class:`~pyspark.sql.Column` or str
         a JSON string or a foldable string column containing a JSON string.
     options : dict, optional
-        options to control parsing. accepts the same options as the JSON datasource
+        options to control parsing. accepts the same options as the JSON datasource.
+        See `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option>`_
+        in the version you use.
+
+        .. # noqa
 
         .. versionchanged:: 3.0
            It accepts `options` parameter to control schema inferring.
@@ -3709,7 +3761,11 @@ def schema_of_csv(csv, options=None):
     csv : :class:`~pyspark.sql.Column` or str
         a CSV string or a foldable string column containing a CSV string.
     options : dict, optional
-        options to control parsing. accepts the same options as the CSV datasource
+        options to control parsing. accepts the same options as the CSV datasource.
+        See `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-csv.html#data-source-option>`_
+        in the version you use.
+
+        .. # noqa
 
     Examples
     --------
@@ -3744,6 +3800,10 @@ def to_csv(col, options=None):
         name of column containing a struct.
     options: dict, optional
         options to control converting. accepts the same options as the CSV datasource.
+        See `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-csv.html#data-source-option>`_
+        in the version you use.
+
+        .. # noqa
 
     Examples
     --------
@@ -4156,7 +4216,11 @@ def from_csv(col, schema, options=None):
     schema :class:`~pyspark.sql.Column` or str
         a string with schema in DDL format to use when parsing the CSV column.
     options : dict, optional
-        options to control parsing. accepts the same options as the CSV datasource
+        options to control parsing. accepts the same options as the CSV datasource.
+        See `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-csv.html#data-source-option>`_
+        in the version you use.
+
+        .. # noqa
 
     Examples
     --------
@@ -4254,7 +4318,10 @@ def _create_lambda(f):
 
     argnames = ["x", "y", "z"]
     args = [
-        _unresolved_named_lambda_variable(arg) for arg in argnames[: len(parameters)]
+        _unresolved_named_lambda_variable(
+            expressions.UnresolvedNamedLambdaVariable.freshVarName(arg)
+        )
+        for arg in argnames[: len(parameters)]
     ]
 
     result = f(*args)

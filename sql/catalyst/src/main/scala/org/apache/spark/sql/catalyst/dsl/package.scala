@@ -297,14 +297,24 @@ package object dsl {
       /** Creates a new AttributeReference of type timestamp */
       def timestamp: AttributeReference = AttributeReference(s, TimestampType, nullable = true)()
 
+      /** Creates a new AttributeReference of type timestamp without time zone */
+      def timestampWithoutTZ: AttributeReference =
+        AttributeReference(s, TimestampWithoutTZType, nullable = true)()
+
       /** Creates a new AttributeReference of the day-time interval type */
-      def dayTimeInterval: AttributeReference = {
-        AttributeReference(s, DayTimeIntervalType, nullable = true)()
+      def dayTimeInterval(startField: Byte, endField: Byte): AttributeReference = {
+        AttributeReference(s, DayTimeIntervalType(startField, endField), nullable = true)()
+      }
+      def dayTimeInterval(): AttributeReference = {
+        AttributeReference(s, DayTimeIntervalType(), nullable = true)()
       }
 
       /** Creates a new AttributeReference of the year-month interval type */
-      def yearMonthInterval: AttributeReference = {
-        AttributeReference(s, YearMonthIntervalType, nullable = true)()
+      def yearMonthInterval(startField: Byte, endField: Byte): AttributeReference = {
+        AttributeReference(s, YearMonthIntervalType(startField, endField), nullable = true)()
+      }
+      def yearMonthInterval(): AttributeReference = {
+        AttributeReference(s, YearMonthIntervalType(), nullable = true)()
       }
 
       /** Creates a new AttributeReference of type binary */
