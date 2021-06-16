@@ -1048,11 +1048,28 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
           val df2 = spark.read.parquet(file.getCanonicalPath)
           df2.createOrReplaceTempView("test")
 
-          val testMin = sql("SELECT min(StringCol), min(BooleanCol), min(ByteCol), " +
+          val testMinWithTS = sql("SELECT min(StringCol), min(BooleanCol), min(ByteCol), " +
+            "min(BinaryCol), min(ShortCol), min(IntegerCol), min(LongCol), min(FloatCol), " +
+            "min(DoubleCol), min(DecimalCol), min(DateCol), min(TimestampCol) FROM test")
+
+          // INT96 (Timestamp) sort order is undefined, parquet doesn't return stats for this type
+          // so aggregates are not pushed down
+          testMinWithTS.queryExecution.optimizedPlan.collect {
+            case _: DataSourceV2ScanRelation =>
+              val expected_plan_fragment =
+                "PushedAggregation: []"
+              checkKeywordsExistsInExplain(testMinWithTS, expected_plan_fragment)
+          }
+
+          checkAnswer(testMinWithTS, Seq(Row("a string", false, 1.toByte, "Parquet".getBytes,
+            2.toShort, 3, -9223372036854775808L, 0.15.toFloat, 0.75D, 1.23457,
+            ("2004-06-19").date, ("1999-08-26 10:43:59.123").ts)))
+
+          val testMinWithOutTS = sql("SELECT min(StringCol), min(BooleanCol), min(ByteCol), " +
             "min(BinaryCol), min(ShortCol), min(IntegerCol), min(LongCol), min(FloatCol), " +
             "min(DoubleCol), min(DecimalCol), min(DateCol) FROM test")
 
-          testMin.queryExecution.optimizedPlan.collect {
+          testMinWithOutTS.queryExecution.optimizedPlan.collect {
             case _: DataSourceV2ScanRelation =>
               val expected_plan_fragment =
                 "PushedAggregation: [Min(StringCol,StringType), " +
@@ -1066,18 +1083,35 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
                   "Min(DoubleCol,DoubleType), " +
                   "Min(DecimalCol,DecimalType(25,5)), " +
                   "Min(DateCol,DateType)]"
-              checkKeywordsExistsInExplain(testMin, expected_plan_fragment)
+              checkKeywordsExistsInExplain(testMinWithOutTS, expected_plan_fragment)
           }
 
-          checkAnswer(testMin, Seq(Row("a string", false, 1.toByte, "Parquet".getBytes,
+          checkAnswer(testMinWithOutTS, Seq(Row("a string", false, 1.toByte, "Parquet".getBytes,
             2.toShort, 3, -9223372036854775808L, 0.15.toFloat, 0.75D, 1.23457,
             ("2004-06-19").date)))
 
-          val testMax = sql("SELECT max(StringCol), max(BooleanCol), max(ByteCol), " +
+          val testMaxWithTS = sql("SELECT max(StringCol), max(BooleanCol), max(ByteCol), " +
+            "max(BinaryCol), max(ShortCol), max(IntegerCol), max(LongCol), max(FloatCol), " +
+            "max(DoubleCol), max(DecimalCol), max(DateCol), max(TimestampCol) FROM test")
+
+          // INT96 (Timestamp) sort order is undefined, parquet doesn't return stats for this type
+          // so aggregates are not pushed down
+          testMaxWithTS.queryExecution.optimizedPlan.collect {
+            case _: DataSourceV2ScanRelation =>
+              val expected_plan_fragment =
+                "PushedAggregation: []"
+              checkKeywordsExistsInExplain(testMaxWithTS, expected_plan_fragment)
+          }
+
+          checkAnswer(testMaxWithTS, Seq(Row("test string", true, 16.toByte,
+            "Spark SQL".getBytes, 222.toShort, 113, 9223372036854775807L, 0.25.toFloat, 0.85D,
+            12345.678, ("2021-01-01").date, ("2021-01-01 23:50:59.123").ts)))
+
+          val testMaxWithoutTS = sql("SELECT max(StringCol), max(BooleanCol), max(ByteCol), " +
             "max(BinaryCol), max(ShortCol), max(IntegerCol), max(LongCol), max(FloatCol), " +
             "max(DoubleCol), max(DecimalCol), max(DateCol) FROM test")
 
-          testMax.queryExecution.optimizedPlan.collect {
+          testMaxWithoutTS.queryExecution.optimizedPlan.collect {
             case _: DataSourceV2ScanRelation =>
               val expected_plan_fragment =
                 "PushedAggregation: [Max(StringCol,StringType), " +
@@ -1091,12 +1125,12 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
                   "Max(DoubleCol,DoubleType), " +
                   "Max(DecimalCol,DecimalType(25,5)), " +
                   "Max(DateCol,DateType)]"
-              checkKeywordsExistsInExplain(testMax, expected_plan_fragment)
+              checkKeywordsExistsInExplain(testMaxWithoutTS, expected_plan_fragment)
           }
 
-          checkAnswer(testMax, Seq(Row("test string", true, 16.toByte, "Spark SQL".getBytes,
-            222.toShort, 113, 9223372036854775807L, 0.25.toFloat, 0.85D, 12345.678,
-            ("2021-01-01").date)))
+          checkAnswer(testMaxWithoutTS, Seq(Row("test string", true, 16.toByte,
+            "Spark SQL".getBytes, 222.toShort, 113, 9223372036854775807L, 0.25.toFloat, 0.85D,
+            12345.678, ("2021-01-01").date)))
 
           val testCount = sql("SELECT count(*), count(StringCol), count(BooleanCol)," +
             " count(ByteCol), count(BinaryCol), count(ShortCol), count(IntegerCol)," +

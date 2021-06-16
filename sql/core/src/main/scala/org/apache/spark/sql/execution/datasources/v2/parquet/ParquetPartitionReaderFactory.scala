@@ -147,7 +147,7 @@ case class ParquetPartitionReaderFactory(
           count += 1
           val footer = getFooter(file)
           ParquetUtils.createInternalRowFromAggResult(footer, dataSchema, aggregation, aggSchema,
-            datetimeRebaseModeInRead, int96RebaseModeInRead, convertTz(isCreatedByParquetMr(file)))
+            datetimeRebaseModeInRead)
         }
 
         override def close(): Unit = return
@@ -181,8 +181,7 @@ case class ParquetPartitionReaderFactory(
           count += 1
           val footer = getFooter(file)
           ParquetUtils.createColumnarBatchFromAggResult(footer, dataSchema, aggregation, aggSchema,
-            enableOffHeapColumnVector, datetimeRebaseModeInRead, int96RebaseModeInRead,
-            convertTz(isCreatedByParquetMr(file)))
+            enableOffHeapColumnVector, datetimeRebaseModeInRead)
         }
 
         override def close(): Unit = return

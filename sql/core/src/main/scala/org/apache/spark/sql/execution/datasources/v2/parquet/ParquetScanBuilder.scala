@@ -26,7 +26,7 @@ import org.apache.spark.sql.execution.datasources.PartitioningAwareFileIndex
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetFilters, SparkToParquetSchemaConverter}
 import org.apache.spark.sql.execution.datasources.v2.FileScanBuilder
 import org.apache.spark.sql.sources.Filter
-import org.apache.spark.sql.types.{ArrayType, LongType, MapType, StructField, StructType}
+import org.apache.spark.sql.types.{ArrayType, LongType, MapType, StructField, StructType, TimestampType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 case class ParquetScanBuilder(
@@ -84,15 +84,16 @@ case class ParquetScanBuilder(
       case Max(col, _) =>
         dataSchema.fields(dataSchema.fieldNames.toList.indexOf(col.fieldNames.head))
           .dataType match {
-          // not push down nested column
-          case StructType(_) | ArrayType(_, _) | MapType(_, _, _) => return false
+          // not push down nested column and Timestamp (INT96 sort order is undefined, parquet
+          // doesn't return statistics for INT96)
+          case StructType(_) | ArrayType(_, _) | MapType(_, _, _) | TimestampType => return false
           case _ =>
         }
       case Min(col, _) =>
         dataSchema.fields(dataSchema.fieldNames.toList.indexOf(col.fieldNames.head))
           .dataType match {
           // not push down nested column
-          case StructType(_) | ArrayType(_, _) | MapType(_, _, _) => return false
+          case StructType(_) | ArrayType(_, _) | MapType(_, _, _) | TimestampType => return false
           case _ =>
         }
       // not push down distinct count

@@ -17,7 +17,6 @@
 package org.apache.spark.sql.execution.datasources.parquet
 
 import java.math.{BigDecimal, BigInteger}
-import java.time.{ZoneId, ZoneOffset}
 import java.util
 
 import scala.collection.mutable.ArrayBuilder
@@ -33,11 +32,10 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.SpecificInternalRow
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.expressions.{Aggregation, Count, Max, Min}
 import org.apache.spark.sql.execution.datasources.DataSourceUtils
 import org.apache.spark.sql.execution.vectorized.{OffHeapColumnVector, OnHeapColumnVector}
-import org.apache.spark.sql.types.{BinaryType, ByteType, DateType, Decimal, DecimalType, IntegerType, LongType, ShortType, StringType, StructType, TimestampType}
+import org.apache.spark.sql.types.{BinaryType, ByteType, DateType, Decimal, DecimalType, IntegerType, LongType, ShortType, StringType, StructType}
 import org.apache.spark.sql.vectorized.{ColumnarBatch, ColumnVector}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -160,9 +158,7 @@ object ParquetUtils {
       dataSchema: StructType,
       aggregation: Aggregation,
       aggSchema: StructType,
-      datetimeRebaseModeInRead: String,
-      int96RebaseModeInRead: String,
-      convertTz: Option[ZoneId]): InternalRow = {
+      datetimeRebaseModeInRead: String): InternalRow = {
     val (parquetTypes, values) =
       ParquetUtils.getPushedDownAggResult(footer, dataSchema, aggregation)
     val mutableRow = new SpecificInternalRow(aggSchema.fields.map(x => x.dataType))
@@ -170,9 +166,6 @@ object ParquetUtils {
     val datetimeRebaseMode = DataSourceUtils.datetimeRebaseMode(
       footerFileMetaData.getKeyValueMetaData.get,
       datetimeRebaseModeInRead)
-    val int96RebaseMode = DataSourceUtils.int96RebaseMode(
-      footerFileMetaData.getKeyValueMetaData.get,
-      int96RebaseModeInRead)
     parquetTypes.zipWithIndex.foreach {
       case (PrimitiveType.PrimitiveTypeName.INT32, i) =>
         aggSchema.fields(i).dataType match {
@@ -199,22 +192,6 @@ object ParquetUtils {
             val decimal = Decimal(values(i).asInstanceOf[Long], d.precision, d.scale)
             mutableRow.setDecimal(i, decimal, d.precision)
           case _ => throw new SparkException("Unexpected type for INT64")
-        }
-      case (PrimitiveType.PrimitiveTypeName.INT96, i) =>
-        aggSchema.fields(i).dataType match {
-          case LongType =>
-            mutableRow.setLong(i, values(i).asInstanceOf[Long])
-          case TimestampType =>
-            val int96RebaseFunc = DataSourceUtils.creteTimestampRebaseFuncInRead(
-              int96RebaseMode, "Parquet INT96")
-            val julianMicros =
-              ParquetRowConverter.binaryToSQLTimestamp(values(i).asInstanceOf[Binary])
-            val gregorianMicros = int96RebaseFunc(julianMicros)
-            val adjTime =
-              convertTz.map(DateTimeUtils.convertTz(gregorianMicros, _, ZoneOffset.UTC))
-                .getOrElse(gregorianMicros)
-            mutableRow.setLong(i, adjTime)
-          case _ => throw new SparkException("Unexpected type for INT96")
         }
       case (PrimitiveType.PrimitiveTypeName.FLOAT, i) =>
         mutableRow.setFloat(i, values(i).asInstanceOf[Float])
@@ -265,9 +242,7 @@ object ParquetUtils {
       aggregation: Aggregation,
       aggSchema: StructType,
       offHeap: Boolean,
-      datetimeRebaseModeInRead: String,
-      int96RebaseModeInRead: String,
-      convertTz: Option[ZoneId]): ColumnarBatch = {
+      datetimeRebaseModeInRead: String): ColumnarBatch = {
     val (parquetTypes, values) =
       ParquetUtils.getPushedDownAggResult(footer, dataSchema, aggregation)
     val capacity = 4 * 1024
@@ -275,9 +250,6 @@ object ParquetUtils {
     val datetimeRebaseMode = DataSourceUtils.datetimeRebaseMode(
       footerFileMetaData.getKeyValueMetaData.get,
       datetimeRebaseModeInRead)
-    val int96RebaseMode = DataSourceUtils.int96RebaseMode(
-      footerFileMetaData.getKeyValueMetaData.get,
-      int96RebaseModeInRead)
     val columnVectors = if (offHeap) {
       OffHeapColumnVector.allocateColumns(capacity, aggSchema)
     } else {
@@ -301,22 +273,6 @@ object ParquetUtils {
         }
       case (PrimitiveType.PrimitiveTypeName.INT64, i) =>
         columnVectors(i).appendLong(values(i).asInstanceOf[Long])
-      case (PrimitiveType.PrimitiveTypeName.INT96, i) =>
-        aggSchema.fields(i).dataType match {
-          case LongType =>
-            columnVectors(i).appendLong(values(i).asInstanceOf[Long])
-          case TimestampType =>
-            val int96RebaseFunc = DataSourceUtils.creteTimestampRebaseFuncInRead(
-              int96RebaseMode, "Parquet INT96")
-            val julianMicros =
-              ParquetRowConverter.binaryToSQLTimestamp(values(i).asInstanceOf[Binary])
-            val gregorianMicros = int96RebaseFunc(julianMicros)
-            val adjTime =
-              convertTz.map(DateTimeUtils.convertTz(gregorianMicros, _, ZoneOffset.UTC))
-                .getOrElse(gregorianMicros)
-            columnVectors(i).appendLong(adjTime)
-          case _ => throw new SparkException("Unexpected type for INT96")
-        }
       case (PrimitiveType.PrimitiveTypeName.FLOAT, i) =>
         columnVectors(i).appendFloat(values(i).asInstanceOf[Float])
       case (PrimitiveType.PrimitiveTypeName.DOUBLE, i) =>
@@ -391,7 +347,7 @@ object ParquetUtils {
       }
       if (isCount) {
         valuesBuilder += rowCount
-        typesBuilder += PrimitiveType.PrimitiveTypeName.INT96
+        typesBuilder += PrimitiveType.PrimitiveTypeName.INT64
       } else {
         valuesBuilder += value
         typesBuilder += fields.get(index).asPrimitiveType.getPrimitiveTypeName
