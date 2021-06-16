@@ -185,8 +185,9 @@ object NestedColumnAliasing {
 
         // Each expression can contain multiple nested fields.
         // Note that we keep the original names to deliver to parquet in a case-sensitive way.
+        val exprIdMap = scala.collection.mutable.HashMap[Expression, ExprId]()
         val nestedFieldToAlias = dedupNestedFields.distinct.map { f =>
-          val exprId = NamedExpression.newExprId
+          val exprId = exprIdMap.getOrElseUpdate(f.canonicalized, NamedExpression.newExprId)
           (f, Alias(f, s"_gen_alias_${exprId.id}")(exprId, Seq.empty, None))
         }
 

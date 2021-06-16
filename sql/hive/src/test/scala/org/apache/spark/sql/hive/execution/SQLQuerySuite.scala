@@ -2583,6 +2583,16 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
       }
     }
   }
+
+  test("SPARK-35835: Select filter query with struct complex type should be case insensitive") {
+    withTable("contact") {
+      sql("create table contact(SL_NO int,ID_NAME struct<ID:int,name:string>) stored as parquet")
+      sql("INSERT INTO contact values(1, struct(1, 'adam'))")
+      checkAnswer(sql("select ID_NAME.name, ID_NAME.Name,ID_NAME.NAME from contact group by " +
+        "ID_NAME.name, ID_NAME.Name, ID_NAME.NAME order by " +
+        "ID_NAME.name, ID_NAME.Name, ID_NAME.NAME"), Row("adam", "adam", "adam"))
+    }
+  }
 }
 
 @SlowHiveTest
