@@ -417,6 +417,10 @@ class CodegenContext extends Logging {
   // The collection of sub-expression result resetting methods that need to be called on each row.
   private val subexprFunctions = mutable.ArrayBuffer.empty[String]
 
+  // The collection of reset sub-expression, in lazy evaluation sub-expression, we should invoke
+  // after processing sub-expression.
+  private val subexprResetFunctions = mutable.ArrayBuffer.empty[String]
+
   val outerClassName = "OuterClass"
 
   /**
@@ -1013,6 +1017,14 @@ class CodegenContext extends Logging {
   }
 
   /**
+   * Returns the code for reset subexpression after splitting it if necessary.
+   */
+  def subexprResetFunctionCode: String = {
+    assert(currentVars == null || subexprResetFunctions.isEmpty)
+    splitExpressions(subexprResetFunctions.toSeq, "subexprResetFunc_split", Seq())
+  }
+
+  /**
    * Perform a function which generates a sequence of ExprCodes with a given mapping between
    * expressions and common expressions, instead of using the mapping in current context.
    */
@@ -1136,7 +1148,9 @@ class CodegenContext extends Logging {
    * common subexpressions, generates the functions that evaluate those expressions and populates
    * the mapping of common subexpressions to the generated functions.
    */
-  private def subexpressionElimination(expressions: Seq[Expression]): Unit = {
+  private def subexpressionElimination(
+      expressions: Seq[Expression],
+      lazyEval: Boolean = false): Unit = {
     // Add each expression tree and compute the common subexpressions.
     expressions.foreach(equivalentExpressions.addExprTree(_))
 
@@ -1145,40 +1159,104 @@ class CodegenContext extends Logging {
     val commonExprs = equivalentExpressions.getAllEquivalentExprs(1)
     commonExprs.foreach { e =>
       val expr = e.head
-      val fnName = freshName("subExpr")
-      val isNull = addMutableState(JAVA_BOOLEAN, "subExprIsNull")
-      val value = addMutableState(javaType(expr.dataType), "subExprValue")
-
       // Generate the code for this expression tree and wrap it in a function.
       val eval = expr.genCode(this)
-      val fn =
-        s"""
-           |private void $fnName(InternalRow $INPUT_ROW) {
-           |  ${eval.code}
-           |  $isNull = ${eval.isNull};
-           |  $value = ${eval.value};
-           |}
+
+      val subExprValue = addMutableState(javaType(expr.dataType), "subExprValue")
+      val subExprValueisNull = addMutableState(JAVA_BOOLEAN, "subExprIsNull")
+      val evalSubExprValueFnName = freshName("evalSubExprValue")
+
+      if (!lazyEval) {
+        val fn =
+          s"""
+             |private void $evalSubExprValueFnName(InternalRow $INPUT_ROW) {
+             |  ${eval.code}
+             |  $subExprValueisNull = ${eval.isNull};
+             |  $subExprValue = ${eval.value};
+             |}
            """.stripMargin
 
-      // Add a state and a mapping of the common subexpressions that are associate with this
-      // state. Adding this expression to subExprEliminationExprMap means it will call `fn`
-      // when it is code generated. This decision should be a cost based one.
-      //
-      // The cost of doing subexpression elimination is:
-      //   1. Extra function call, although this is probably *good* as the JIT can decide to
-      //      inline or not.
-      // The benefit doing subexpression elimination is:
-      //   1. Running the expression logic. Even for a simple expression, it is likely more than 3
-      //      above.
-      //   2. Less code.
-      // Currently, we will do this for all non-leaf only expression trees (i.e. expr trees with
-      // at least two nodes) as the cost of doing it is expected to be low.
+        // Add a state and a mapping of the common subexpressions that are associate with this
+        // state. Adding this expression to subExprEliminationExprMap means it will call `fn`
+        // when it is code generated. This decision should be a cost based one.
+        //
+        // The cost of doing subexpression elimination is:
+        //   1. Extra function call, although this is probably *good* as the JIT can decide to
+        //      inline or not.
+        // The benefit doing subexpression elimination is:
+        //   1. Running the expression logic. Even for a simple expression, it is likely more than 3
+        //      above.
+        //   2. Less code.
+        // Currently, we will do this for all non-leaf only expression trees (i.e. expr trees with
+        // at least two nodes) as the cost of doing it is expected to be low.
 
-      subexprFunctions += s"${addNewFunction(fnName, fn)}($INPUT_ROW);"
-      val state = SubExprEliminationState(
-        JavaCode.isNullGlobal(isNull),
-        JavaCode.global(value, expr.dataType))
-      subExprEliminationExprs ++= e.map(_ -> state).toMap
+        subexprFunctions += s"${addNewFunction(evalSubExprValueFnName, fn)}($INPUT_ROW);"
+        val state = SubExprEliminationState(
+          JavaCode.isNullGlobal(subExprValueisNull),
+          JavaCode.global(subExprValue, expr.dataType))
+        subExprEliminationExprs ++= e.map(_ -> state).toMap
+      } else {
+
+        // the variable to check if a subexpression is evaulated
+        val isSubExprEval = addMutableState(JAVA_BOOLEAN, "isSubExprEval")
+
+        val evalSubExprValueFnName = freshName("evalSubExprValue")
+        val evalSubExprValueFn =
+          s"""
+             |private void $evalSubExprValueFnName(InternalRow ${INPUT_ROW}) {
+             |  ${eval.code}
+             |  $subExprValueisNull = ${eval.isNull};
+             |  $subExprValue = ${eval.value};
+             |  $isSubExprEval = true;
+             |}
+             |""".stripMargin
+
+        val getSubExprValueFnName = freshName("getSubExprValue")
+        val getSubExprValueFn =
+          s"""
+             |private ${boxedType(expr.dataType)} $getSubExprValueFnName(InternalRow ${INPUT_ROW}) {
+             |  if (!$isSubExprEval) {
+             |    $evalSubExprValueFnName($INPUT_ROW);
+             |  }
+             |  return ${subExprValue};
+             |}
+             |""".stripMargin
+
+        val getSubExprValueIsNullFnName = freshName("getSubExprValueIsNull")
+        val getSubExprValueIsNullFn =
+          s"""
+             |private boolean ${getSubExprValueIsNullFnName}(InternalRow ${INPUT_ROW}) {
+             |  if (!$isSubExprEval) {
+             |    $evalSubExprValueFnName($INPUT_ROW);
+             |  }
+             |  return $subExprValueisNull;
+             |}
+             |""".stripMargin
+
+        // the function for reset subexpression after processing.
+        val resetFnName = freshName("resetSubExpr")
+        val resetFn =
+          s"""
+             |private void $resetFnName() {
+             |  $isSubExprEval = false;
+             |}
+             |""".stripMargin
+
+        addNewFunction(evalSubExprValueFnName, evalSubExprValueFn)
+        subexprResetFunctions += s"${addNewFunction(resetFnName, resetFn)}();"
+
+        val splitIsNull = splitExpressions(Seq(
+          s"${addNewFunction(getSubExprValueIsNullFnName, getSubExprValueIsNullFn)}($INPUT_ROW)"),
+          s"${getSubExprValueIsNullFnName}_split", Seq("InternalRow" -> INPUT_ROW))
+        val splitValue = splitExpressions(
+          Seq(s"${addNewFunction(getSubExprValueFnName, getSubExprValueFn)}($INPUT_ROW)"),
+          s"${getSubExprValueFnName}_split", Seq("InternalRow" -> INPUT_ROW))
+        val state = SubExprEliminationState(
+          JavaCode.isNullGlobal(splitIsNull),
+          JavaCode.global(splitValue, expr.dataType))
+
+        subExprEliminationExprs ++= e.map(_ -> state).toMap
+      }
     }
   }
 
@@ -1189,8 +1267,9 @@ class CodegenContext extends Logging {
    */
   def generateExpressions(
       expressions: Seq[Expression],
-      doSubexpressionElimination: Boolean = false): Seq[ExprCode] = {
-    if (doSubexpressionElimination) subexpressionElimination(expressions)
+      doSubexpressionElimination: Boolean = false,
+      lazyEvalSubexpression: Boolean = false): Seq[ExprCode] = {
+    if (doSubexpressionElimination) subexpressionElimination(expressions, lazyEvalSubexpression)
     expressions.map(e => e.genCode(this))
   }
 

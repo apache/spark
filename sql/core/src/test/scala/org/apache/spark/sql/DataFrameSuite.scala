@@ -2907,6 +2907,36 @@ class DataFrameSuite extends QueryTest
       }
     }
   }
+
+  test("SPARK-35688: subexpressions should be lazy evaluation in GeneratePredicate") {
+    withTempPath(dir => {
+      Seq(
+        ("true", "false"),
+        ("false", "true"),
+        ("false", "false"),
+        ("true", "true"),
+      ).foreach { case (subExprEliminationEnabled, codegenEnabled) =>
+
+        withSQLConf(
+          SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> subExprEliminationEnabled,
+          SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegenEnabled,
+          "spark.sql.ansi.enabled" -> "true") {
+          Seq(
+            (1 to 10).toArray,
+            (1 to 5).toArray
+          ).toDF("c1")
+            .write
+            .mode("overwrite")
+            .save(dir.getCanonicalPath)
+          val df = spark.read.load(dir.getCanonicalPath)
+            .filter("size(c1) > 5 and (element_at(c1, 7) = 8 or element_at(c1, 7) = 7)")
+          checkAnswer(
+            df, Row((1 to 10).toArray) :: Nil
+          )
+        }
+      }
+    })
+  }
 }
 
 case class GroupByKey(a: Int, b: Int)
