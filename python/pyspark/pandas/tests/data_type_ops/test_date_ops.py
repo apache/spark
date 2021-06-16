@@ -18,6 +18,7 @@
 import datetime
 
 import pandas as pd
+from pandas.api.types import CategoricalDtype
 
 from pyspark.sql.types import DateType
 
@@ -55,7 +56,8 @@ class DateOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         self.assertRaises(TypeError, lambda: self.psser - "x")
         self.assertRaises(TypeError, lambda: self.psser - 1)
         self.assert_eq(
-            (self.pser - self.some_date).dt.days, self.psser - self.some_date,
+            (self.pser - self.some_date).dt.days,
+            self.psser - self.some_date,
         )
         with option_context("compute.ops_on_diff_frames", True):
             for pser, psser in self.pser_psser_pairs:
@@ -118,7 +120,8 @@ class DateOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         self.assertRaises(TypeError, lambda: "x" - self.psser)
         self.assertRaises(TypeError, lambda: 1 - self.psser)
         self.assert_eq(
-            (self.some_date - self.pser).dt.days, self.some_date - self.psser,
+            (self.some_date - self.pser).dt.days,
+            self.some_date - self.psser,
         )
 
     def test_rmul(self):
@@ -145,6 +148,39 @@ class DateOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         self.assertRaises(TypeError, lambda: 1 ** self.psser)
         self.assertRaises(TypeError, lambda: self.some_date ** self.psser)
 
+    def test_and(self):
+        self.assertRaises(TypeError, lambda: self.psser & True)
+        self.assertRaises(TypeError, lambda: self.psser & False)
+        self.assertRaises(TypeError, lambda: self.psser & self.psser)
+
+    def test_rand(self):
+        self.assertRaises(TypeError, lambda: True & self.psser)
+        self.assertRaises(TypeError, lambda: False & self.psser)
+
+    def test_or(self):
+        self.assertRaises(TypeError, lambda: self.psser | True)
+        self.assertRaises(TypeError, lambda: self.psser | False)
+        self.assertRaises(TypeError, lambda: self.psser | self.psser)
+
+    def test_ror(self):
+        self.assertRaises(TypeError, lambda: True | self.psser)
+        self.assertRaises(TypeError, lambda: False | self.psser)
+
+    def test_from_to_pandas(self):
+        data = [datetime.date(1994, 1, 31), datetime.date(1994, 2, 1), datetime.date(1994, 2, 2)]
+        pser = pd.Series(data)
+        psser = ps.Series(data)
+        self.assert_eq(pser, psser.to_pandas())
+        self.assert_eq(ps.from_pandas(pser), psser)
+
+    def test_astype(self):
+        pser = self.pser
+        psser = self.psser
+        self.assert_eq(pser.astype(str), psser.astype(str))
+        self.assert_eq(pd.Series([None, None, None]), psser.astype(bool))
+        cat_type = CategoricalDtype(categories=["a", "b", "c"])
+        self.assert_eq(pser.astype(cat_type), psser.astype(cat_type))
+
 
 if __name__ == "__main__":
     import unittest
@@ -152,7 +188,8 @@ if __name__ == "__main__":
 
     try:
         import xmlrunner  # type: ignore[import]
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
+
+        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

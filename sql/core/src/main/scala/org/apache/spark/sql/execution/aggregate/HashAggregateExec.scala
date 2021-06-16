@@ -73,7 +73,9 @@ case class HashAggregateExec(
   // This is for testing. We force TungstenAggregationIterator to fall back to the unsafe row hash
   // map and/or the sort-based aggregation once it has processed a given number of input rows.
   private val testFallbackStartsAt: Option[(Int, Int)] = {
-    sqlContext.getConf("spark.sql.TungstenAggregate.testFallbackStartsAt", null) match {
+    Option(sqlContext).map { sc =>
+      sc.getConf("spark.sql.TungstenAggregate.testFallbackStartsAt", null)
+    }.orNull match {
       case null | "" => None
       case fallbackStartsAt =>
         val splits = fallbackStartsAt.split(",").map(_.trim)

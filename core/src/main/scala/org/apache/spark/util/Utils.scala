@@ -96,7 +96,7 @@ private[spark] object Utils extends Logging {
    */
   val DEFAULT_DRIVER_MEM_MB = JavaUtils.DEFAULT_DRIVER_MEM_MB.toInt
 
-  private val MAX_DIR_CREATION_ATTEMPTS: Int = 10
+  val MAX_DIR_CREATION_ATTEMPTS: Int = 10
   @volatile private var localRootDirs: Array[String] = null
 
   /** Scheme used for files that are locally available on worker nodes in the cluster. */
@@ -1130,6 +1130,22 @@ private[spark] object Utils extends Logging {
   }
 
   /**
+   * Lists files recursively.
+   */
+  def recursiveList(f: File): Array[File] = {
+    require(f.isDirectory)
+    val result = f.listFiles.toBuffer
+    val dirList = result.filter(_.isDirectory)
+    while (dirList.nonEmpty) {
+      val curDir = dirList.remove(0)
+      val files = curDir.listFiles()
+      result ++= files
+      dirList ++= files.filter(_.isDirectory)
+    }
+    result.toArray
+  }
+
+  /**
    * Delete a file or directory and its contents recursively.
    * Don't follow directories if they are symlinks.
    * Throws an exception if deletion is unsuccessful.
@@ -2051,7 +2067,7 @@ private[spark] object Utils extends Logging {
     } catch {
       case e: URISyntaxException =>
     }
-    new File(path).getAbsoluteFile().toURI()
+    new File(path).getCanonicalFile().toURI()
   }
 
   /** Resolve a comma-separated list of paths. */
@@ -2566,11 +2582,33 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Push based shuffle can only be enabled when external shuffle service is enabled.
+   * Push based shuffle can only be enabled when the application is submitted
+   * to run in YARN mode, with external shuffle service enabled and
+   * spark.yarn.maxAttempts or the yarn cluster default max attempts is set to 1.
+   * TODO: Remove the requirement on spark.yarn.maxAttempts after SPARK-35546
+   * Support push based shuffle with multiple app attempts
    */
   def isPushBasedShuffleEnabled(conf: SparkConf): Boolean = {
     conf.get(PUSH_BASED_SHUFFLE_ENABLED) &&
-      (conf.get(IS_TESTING).getOrElse(false) || conf.get(SHUFFLE_SERVICE_ENABLED))
+      (conf.get(IS_TESTING).getOrElse(false) ||
+        (conf.get(SHUFFLE_SERVICE_ENABLED) &&
+          conf.get(SparkLauncher.SPARK_MASTER, null) == "yarn" &&
+          getYarnMaxAttempts(conf) == 1))
+  }
+
+  /**
+   * Returns the maximum number of attempts to register the AM in YARN mode.
+   * TODO: Remove this method after SPARK-35546 Support push based shuffle
+   * with multiple app attempts
+   */
+  def getYarnMaxAttempts(conf: SparkConf): Int = {
+    val sparkMaxAttempts = conf.getOption("spark.yarn.maxAttempts").map(_.toInt)
+    val yarnMaxAttempts = getSparkOrYarnConfig(conf, YarnConfiguration.RM_AM_MAX_ATTEMPTS,
+      YarnConfiguration.DEFAULT_RM_AM_MAX_ATTEMPTS.toString).toInt
+    sparkMaxAttempts match {
+      case Some(x) => if (x <= yarnMaxAttempts) x else yarnMaxAttempts
+      case None => yarnMaxAttempts
+    }
   }
 
   /**

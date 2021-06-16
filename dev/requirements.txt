@@ -32,3 +32,6 @@ sphinx-plotly-directive
 # Development scripts
 jira
 PyGithub
+
+# pandas API on Spark Code formatter.
+black

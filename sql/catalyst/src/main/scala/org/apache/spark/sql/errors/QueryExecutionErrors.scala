@@ -18,14 +18,15 @@
 package org.apache.spark.sql.errors
 
 import java.io.{FileNotFoundException, IOException}
-import java.net.URISyntaxException
+import java.lang.reflect.InvocationTargetException
+import java.net.{URISyntaxException, URL}
 import java.sql.{SQLException, SQLFeatureNotSupportedException}
 import java.time.{DateTimeException, LocalDate}
 import java.time.temporal.ChronoField
 import java.util.ConcurrentModificationException
 
 import com.fasterxml.jackson.core.JsonToken
-import org.apache.hadoop.fs.{FileStatus, Path}
+import org.apache.hadoop.fs.{FileAlreadyExistsException, FileStatus, Path}
 import org.codehaus.commons.compiler.{CompileException, InternalCompilerException}
 
 import org.apache.spark.{Partition, SparkException, SparkUpgradeException}
@@ -36,6 +37,7 @@ import org.apache.spark.sql.catalyst.WalkedTypePath
 import org.apache.spark.sql.catalyst.analysis.UnresolvedGenerator
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogTable}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression, UnevaluableAggregate}
+import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.plans.logical.{DomainJoin, LogicalPlan}
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.ValueInterval
@@ -46,6 +48,7 @@ import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.unsafe.types.UTF8String
@@ -1141,7 +1144,7 @@ object QueryExecutionErrors {
 
   def cannotRewriteDomainJoinWithConditionsError(
       conditions: Seq[Expression], d: DomainJoin): Throwable = {
-    new UnsupportedOperationException(
+    new IllegalStateException(
       s"Unable to rewrite domain join with conditions: $conditions\n$d")
   }
 
@@ -1255,5 +1258,168 @@ object QueryExecutionErrors {
 
   def cannotCreateStagingDirError(message: String, e: IOException): Throwable = {
     new RuntimeException(s"Cannot create staging directory: $message", e)
+  }
+
+  def serDeInterfaceNotFoundError(e: NoClassDefFoundError): Throwable = {
+    new ClassNotFoundException("The SerDe interface removed since Hive 2.3(HIVE-15167)." +
+      " Please migrate your custom SerDes to Hive 2.3. See HIVE-15167 for more details.", e)
+  }
+
+  def convertHiveTableToCatalogTableError(
+      e: SparkException, dbName: String, tableName: String): Throwable = {
+    new SparkException(s"${e.getMessage}, db: $dbName, table: $tableName", e)
+  }
+
+  def cannotRecognizeHiveTypeError(
+      e: ParseException, fieldType: String, fieldName: String): Throwable = {
+    new SparkException(
+      s"Cannot recognize hive type string: $fieldType, column: $fieldName", e)
+  }
+
+  def getTablesByTypeUnsupportedByHiveVersionError(): Throwable = {
+    new UnsupportedOperationException("Hive 2.2 and lower versions don't support " +
+      "getTablesByType. Please use Hive 2.3 or higher version.")
+  }
+
+  def dropTableWithPurgeUnsupportedError(): Throwable = {
+    new UnsupportedOperationException("DROP TABLE ... PURGE")
+  }
+
+  def alterTableWithDropPartitionAndPurgeUnsupportedError(): Throwable = {
+    new UnsupportedOperationException("ALTER TABLE ... DROP PARTITION ... PURGE")
+  }
+
+  def invalidPartitionFilterError(): Throwable = {
+    new UnsupportedOperationException(
+      """Partition filter cannot have both `"` and `'` characters""")
+  }
+
+  def getPartitionMetadataByFilterError(e: InvocationTargetException): Throwable = {
+    new RuntimeException(
+      s"""
+         |Caught Hive MetaException attempting to get partition metadata by filter
+         |from Hive. You can set the Spark configuration setting
+         |${SQLConf.HIVE_MANAGE_FILESOURCE_PARTITIONS.key} to false to work around
+         |this problem, however this will result in degraded performance. Please
+         |report a bug: https://issues.apache.org/jira/browse/SPARK
+       """.stripMargin.replaceAll("\n", " "), e)
+  }
+
+  def unsupportedHiveMetastoreVersionError(version: String, key: String): Throwable = {
+    new UnsupportedOperationException(s"Unsupported Hive Metastore version ($version). " +
+      s"Please set $key with a valid version.")
+  }
+
+  def loadHiveClientCausesNoClassDefFoundError(
+      cnf: NoClassDefFoundError,
+      execJars: Seq[URL],
+      key: String,
+      e: InvocationTargetException): Throwable = {
+    new ClassNotFoundException(
+      s"""
+         |$cnf when creating Hive client using classpath: ${execJars.mkString(", ")}\n
+         |Please make sure that jars for your version of hive and hadoop are included in the
+         |paths passed to $key.
+       """.stripMargin.replaceAll("\n", " "), e)
+  }
+
+  def cannotFetchTablesOfDatabaseError(dbName: String, e: Exception): Throwable = {
+    new SparkException(s"Unable to fetch tables of db $dbName", e)
+  }
+
+  def illegalLocationClauseForViewPartitionError(): Throwable = {
+    new SparkException("LOCATION clause illegal for view partition")
+  }
+
+  def renamePathAsExistsPathError(srcPath: Path, dstPath: Path): Throwable = {
+    new FileAlreadyExistsException(
+      s"Failed to rename $srcPath to $dstPath as destination already exists")
+  }
+
+  def renameAsExistsPathError(dstPath: Path): Throwable = {
+    new FileAlreadyExistsException(s"Failed to rename as $dstPath already exists")
+  }
+
+  def renameSrcPathNotFoundError(srcPath: Path): Throwable = {
+    new FileNotFoundException(s"Failed to rename as $srcPath was not found")
+  }
+
+  def failedRenameTempFileError(srcPath: Path, dstPath: Path): Throwable = {
+    new IOException(s"Failed to rename temp file $srcPath to $dstPath as rename returned false")
+  }
+
+  def legacyMetadataPathExistsError(metadataPath: Path, legacyMetadataPath: Path): Throwable = {
+    new SparkException(
+      s"""
+         |Error: we detected a possible problem with the location of your "_spark_metadata"
+         |directory and you likely need to move it before restarting this query.
+         |
+         |Earlier version of Spark incorrectly escaped paths when writing out the
+         |"_spark_metadata" directory for structured streaming. While this was corrected in
+         |Spark 3.0, it appears that your query was started using an earlier version that
+         |incorrectly handled the "_spark_metadata" path.
+         |
+         |Correct "_spark_metadata" Directory: $metadataPath
+         |Incorrect "_spark_metadata" Directory: $legacyMetadataPath
+         |
+         |Please move the data from the incorrect directory to the correct one, delete the
+         |incorrect directory, and then restart this query. If you believe you are receiving
+         |this message in error, you can disable it with the SQL conf
+         |${SQLConf.STREAMING_CHECKPOINT_ESCAPED_PATH_CHECK_ENABLED.key}.
+       """.stripMargin)
+  }
+
+  def partitionColumnNotFoundInSchemaError(col: String, schema: StructType): Throwable = {
+    new RuntimeException(s"Partition column $col not found in schema $schema")
+  }
+
+  def stateNotDefinedOrAlreadyRemovedError(): Throwable = {
+    new NoSuchElementException("State is either not defined or has already been removed")
+  }
+
+  def cannotSetTimeoutDurationError(): Throwable = {
+    new UnsupportedOperationException(
+      "Cannot set timeout duration without enabling processing time timeout in " +
+        "[map|flatMap]GroupsWithState")
+  }
+
+  def cannotGetEventTimeWatermarkError(): Throwable = {
+    new UnsupportedOperationException(
+      "Cannot get event time watermark timestamp without setting watermark before " +
+        "[map|flatMap]GroupsWithState")
+  }
+
+  def cannotSetTimeoutTimestampError(): Throwable = {
+    new UnsupportedOperationException(
+      "Cannot set timeout timestamp without enabling event time timeout in " +
+        "[map|flatMapGroupsWithState")
+  }
+
+  def batchMetadataFileNotFoundError(batchMetadataFile: Path): Throwable = {
+    new FileNotFoundException(s"Unable to find batch $batchMetadataFile")
+  }
+
+  def multiStreamingQueriesUsingPathConcurrentlyError(
+      path: String, e: FileAlreadyExistsException): Throwable = {
+    new ConcurrentModificationException(
+      s"Multiple streaming queries are concurrently using $path", e)
+  }
+
+  def addFilesWithAbsolutePathUnsupportedError(commitProtocol: String): Throwable = {
+    new UnsupportedOperationException(
+      s"$commitProtocol does not support adding files with an absolute path")
+  }
+
+  def microBatchUnsupportedByDataSourceError(srcName: String): Throwable = {
+    new UnsupportedOperationException(
+      s"Data source $srcName does not support microbatch processing.")
+  }
+
+  def cannotExecuteStreamingRelationExecError(): Throwable = {
+    new UnsupportedOperationException("StreamingRelationExec cannot be executed")
+  }
+
+  def invalidStreamingOutputModeError(outputMode: Option[OutputMode]): Throwable = {
+    new UnsupportedOperationException(s"Invalid output mode: $outputMode")
   }
 }

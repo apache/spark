@@ -17,6 +17,7 @@
 
 import numpy as np
 import pandas as pd
+from pandas.api.types import CategoricalDtype
 
 from pyspark import pandas as ps
 from pyspark.pandas.config import option_context
@@ -45,7 +46,8 @@ class StringOpsTest(PandasOnSparkTestCase, TestCasesUtils):
             self.assertRaises(TypeError, lambda: self.psser + self.non_numeric_pssers["datetime"])
             self.assertRaises(TypeError, lambda: self.psser + self.non_numeric_pssers["date"])
             self.assertRaises(
-                TypeError, lambda: self.psser + self.non_numeric_pssers["categorical"])
+                TypeError, lambda: self.psser + self.non_numeric_pssers["categorical"]
+            )
             self.assertRaises(TypeError, lambda: self.psser + self.non_numeric_pssers["bool"])
             for psser in self.numeric_pssers:
                 self.assertRaises(TypeError, lambda: self.psser + psser)
@@ -128,14 +130,55 @@ class StringOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         self.assertRaises(TypeError, lambda: "x" ** self.psser)
         self.assertRaises(TypeError, lambda: 1 ** self.psser)
 
+    def test_and(self):
+        self.assertRaises(TypeError, lambda: self.psser & True)
+        self.assertRaises(TypeError, lambda: self.psser & False)
+        self.assertRaises(TypeError, lambda: self.psser & self.psser)
+
+    def test_rand(self):
+        self.assertRaises(TypeError, lambda: True & self.psser)
+        self.assertRaises(TypeError, lambda: False & self.psser)
+
+    def test_or(self):
+        self.assertRaises(TypeError, lambda: self.psser | True)
+        self.assertRaises(TypeError, lambda: self.psser | False)
+        self.assertRaises(TypeError, lambda: self.psser | self.psser)
+
+    def test_ror(self):
+        self.assertRaises(TypeError, lambda: True | self.psser)
+        self.assertRaises(TypeError, lambda: False | self.psser)
+
+    def test_from_to_pandas(self):
+        data = ["x", "y", "z"]
+        pser = pd.Series(data)
+        psser = ps.Series(data)
+        self.assert_eq(pser, psser.to_pandas())
+        self.assert_eq(ps.from_pandas(pser), psser)
+
+    def test_astype(self):
+        pser = pd.Series(["1", "2", "3"])
+        psser = ps.from_pandas(pser)
+        self.assert_eq(pser.astype(int), psser.astype(int))
+        self.assert_eq(pser.astype(float), psser.astype(float))
+        self.assert_eq(pser.astype(np.float32), psser.astype(np.float32))
+        self.assert_eq(pser.astype(np.int32), psser.astype(np.int32))
+        self.assert_eq(pser.astype(np.int16), psser.astype(np.int16))
+        self.assert_eq(pser.astype(np.int8), psser.astype(np.int8))
+        self.assert_eq(pser.astype(str), psser.astype(str))
+        self.assert_eq(pser.astype(bool), psser.astype(bool))
+        self.assert_eq(pser.astype("category"), psser.astype("category"))
+        cat_type = CategoricalDtype(categories=["3", "1", "2"])
+        self.assert_eq(pser.astype(cat_type), psser.astype(cat_type))
+
 
 if __name__ == "__main__":
     import unittest
-    from pyspark.pandas.tests.data_type_ops.test_num_ops import *  # noqa: F401
+    from pyspark.pandas.tests.data_type_ops.test_string_ops import *  # noqa: F401
 
     try:
         import xmlrunner  # type: ignore[import]
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
+
+        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

@@ -2,9 +2,9 @@
 Installation
 ============
 
-Koalas requires PySpark so please make sure your PySpark is available.
+Pandas API on Spark requires PySpark so please make sure your PySpark is available.
 
-To install Koalas, you can use:
+To install pandas API on Spark, you can use:
 
 - `Conda <https://anaconda.org/conda-forge/koalas>`__
 - `PyPI <https://pypi.org/project/koalas>`__
@@ -24,13 +24,13 @@ Python version support
 Officially Python 3.5 to 3.8.
 
 .. note::
-   Koalas support for Python 3.5 is deprecated and will be dropped in the future release.
-   At that point, existing Python 3.5 workflows that use Koalas will continue to work without
-   modification, but Python 3.5 users will no longer get access to the latest Koalas features
+   Python 3.5 support is deprecated and will be dropped in the future release.
+   At that point, existing Python 3.5 workflows that use pandas API on Spark will continue to work without
+   modification, but Python 3.5 users will no longer get access to the latest pandas-on-Spark features
    and bugfixes. We recommend that you upgrade to Python 3.6 or newer.
 
-Installing Koalas
------------------
+Installing pandas API on Spark
+-------------------------------
 
 Installing with Conda
 ~~~~~~~~~~~~~~~~~~~~~~
@@ -47,12 +47,12 @@ To put your self inside this environment run::
 
     conda activate koalas-dev-env
 
-The final step required is to install Koalas. This can be done with the
+The final step required is to install pandas API on Spark. This can be done with the
 following command::
 
     conda install -c conda-forge koalas
 
-To install a specific Koalas version::
+To install a specific version of pandas API on Spark::
 
     conda install -c conda-forge koalas=1.3.0
 
@@ -60,7 +60,7 @@ To install a specific Koalas version::
 Installing from PyPI
 ~~~~~~~~~~~~~~~~~~~~
 
-Koalas can be installed via pip from
+Pandas API on Spark can be installed via pip from
 `PyPI <https://pypi.org/project/koalas>`__::
 
     pip install koalas

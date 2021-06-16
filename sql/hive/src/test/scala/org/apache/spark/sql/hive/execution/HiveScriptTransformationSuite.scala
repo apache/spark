@@ -542,10 +542,12 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
         (child: SparkPlan) => createScriptTransformationExec(
           script = "cat",
           output = Seq(
-            AttributeReference("a", DayTimeIntervalType)(),
-            AttributeReference("b", DayTimeIntervalType)(),
-            AttributeReference("c", DayTimeIntervalType)(),
-            AttributeReference("d", YearMonthIntervalType)()),
+            // TODO(SPARK-35733): Check all day-time interval types in HiveInspectors tests
+            AttributeReference("a", DayTimeIntervalType())(),
+            AttributeReference("b", DayTimeIntervalType())(),
+            AttributeReference("c", DayTimeIntervalType())(),
+            // TODO(SPARK-35772): Check all year-month interval types in HiveInspectors tests
+            AttributeReference("d", YearMonthIntervalType())()),
           child = child,
           ioschema = hiveIOSchema),
         df.select($"a", $"b", $"c", $"d").collect())
@@ -563,7 +565,8 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
           df,
           (child: SparkPlan) => createScriptTransformationExec(
             script = "cat",
-            output = Seq(AttributeReference("a", DayTimeIntervalType)()),
+            // TODO(SPARK-35733): Check all day-time interval types in HiveInspectors tests
+            output = Seq(AttributeReference("a", DayTimeIntervalType())()),
             child = child,
             ioschema = hiveIOSchema),
           df.select($"a").collect())

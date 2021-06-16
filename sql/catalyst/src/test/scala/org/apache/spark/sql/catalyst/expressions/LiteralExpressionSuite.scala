@@ -50,8 +50,8 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Literal.create(null, DateType), null)
     checkEvaluation(Literal.create(null, TimestampType), null)
     checkEvaluation(Literal.create(null, CalendarIntervalType), null)
-    checkEvaluation(Literal.create(null, YearMonthIntervalType), null)
-    checkEvaluation(Literal.create(null, DayTimeIntervalType), null)
+    checkEvaluation(Literal.create(null, YearMonthIntervalType()), null)
+    checkEvaluation(Literal.create(null, DayTimeIntervalType()), null)
     checkEvaluation(Literal.create(null, ArrayType(ByteType, true)), null)
     checkEvaluation(Literal.create(null, ArrayType(StringType, true)), null)
     checkEvaluation(Literal.create(null, MapType(StringType, IntegerType)), null)
@@ -79,8 +79,8 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(Literal.default(TimestampType), Instant.ofEpochSecond(0))
     }
     checkEvaluation(Literal.default(CalendarIntervalType), new CalendarInterval(0, 0, 0L))
-    checkEvaluation(Literal.default(YearMonthIntervalType), 0)
-    checkEvaluation(Literal.default(DayTimeIntervalType), 0L)
+    checkEvaluation(Literal.default(YearMonthIntervalType()), 0)
+    checkEvaluation(Literal.default(DayTimeIntervalType()), 0L)
     checkEvaluation(Literal.default(ArrayType(StringType)), Array())
     checkEvaluation(Literal.default(MapType(IntegerType, StringType)), Map())
     checkEvaluation(Literal.default(StructType(StructField("a", StringType) :: Nil)), Row(""))
@@ -345,7 +345,7 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(Literal(Array("1", "2", "3")) ==
       Literal.create(Array("1", "2", "3"), ArrayType(StringType)))
     assert(Literal(Array(Period.ofMonths(1))) ==
-      Literal.create(Array(Period.ofMonths(1)), ArrayType(YearMonthIntervalType)))
+      Literal.create(Array(Period.ofMonths(1)), ArrayType(YearMonthIntervalType())))
   }
 
   test("SPARK-34342: Date/Timestamp toString") {
@@ -357,6 +357,17 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
         .toInstant
       val literalStr = Literal.create(timestamp).toString
       assert(literalStr === "2021-02-03 17:50:03.456")
+    }
+  }
+
+  test("SPARK-35664: construct literals from java.time.LocalDateTime") {
+    Seq(
+      LocalDateTime.of(1, 1, 1, 0, 0, 0, 0),
+      LocalDateTime.of(2021, 5, 31, 23, 59, 59, 100),
+      LocalDateTime.of(2020, 2, 29, 23, 50, 57, 9999),
+      LocalDateTime.parse("9999-12-31T23:59:59.999999")
+    ).foreach { dateTime =>
+      checkEvaluation(Literal(dateTime), dateTime)
     }
   }
 

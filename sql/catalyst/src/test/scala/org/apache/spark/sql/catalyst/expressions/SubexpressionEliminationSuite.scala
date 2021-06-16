@@ -370,6 +370,27 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
     // `add1` is not in the elseValue, so we can't extract it from the branches
     assert(equivalence.getAllEquivalentExprs().count(_.size == 2) == 0)
   }
+
+  test("SPARK-35439: sort exprs with ExpressionContainmentOrdering") {
+    val exprOrdering = new ExpressionContainmentOrdering
+
+    val add1 = Add(Literal(1), Literal(2))
+    val add2 = Add(Literal(2), Literal(3))
+
+    // Non parent-child expressions. Don't sort on them.
+    val exprs = Seq(add2, add1, add2, add1, add2, add1)
+    assert(exprs.sorted(exprOrdering) === exprs)
+
+    val conditions = (GreaterThan(add1, Literal(3)), add1) ::
+      (GreaterThan(add2, Literal(4)), add1) ::
+      (GreaterThan(add2, Literal(5)), add1) :: Nil
+
+    // `caseWhenExpr` contains add1, add2.
+    val caseWhenExpr = CaseWhen(conditions, None)
+    val exprs2 = Seq(caseWhenExpr, add2, add1, add2, add1, add2, add1)
+    assert(exprs2.sorted(exprOrdering) ===
+      Seq(add2, add1, add2, add1, add2, add1, caseWhenExpr))
+  }
 }
 
 case class CodegenFallbackExpression(child: Expression)

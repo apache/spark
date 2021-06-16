@@ -349,34 +349,34 @@ class Analyzer(override val catalogManager: CatalogManager)
       case p: LogicalPlan => p.transformExpressionsUpWithPruning(
         _.containsPattern(BINARY_ARITHMETIC), ruleId) {
         case a @ Add(l, r, f) if a.childrenResolved => (l.dataType, r.dataType) match {
-          case (DateType, DayTimeIntervalType) => TimeAdd(Cast(l, TimestampType), r)
-          case (DayTimeIntervalType, DateType) => TimeAdd(Cast(r, TimestampType), l)
-          case (DateType, YearMonthIntervalType) => DateAddYMInterval(l, r)
-          case (YearMonthIntervalType, DateType) => DateAddYMInterval(r, l)
-          case (TimestampType, YearMonthIntervalType) => TimestampAddYMInterval(l, r)
-          case (YearMonthIntervalType, TimestampType) => TimestampAddYMInterval(r, l)
+          case (DateType, _: DayTimeIntervalType) => TimeAdd(Cast(l, TimestampType), r)
+          case (_: DayTimeIntervalType, DateType) => TimeAdd(Cast(r, TimestampType), l)
+          case (DateType, _: YearMonthIntervalType) => DateAddYMInterval(l, r)
+          case (_: YearMonthIntervalType, DateType) => DateAddYMInterval(r, l)
+          case (TimestampType, _: YearMonthIntervalType) => TimestampAddYMInterval(l, r)
+          case (_: YearMonthIntervalType, TimestampType) => TimestampAddYMInterval(r, l)
           case (CalendarIntervalType, CalendarIntervalType) |
-               (DayTimeIntervalType, DayTimeIntervalType) => a
+               (_: DayTimeIntervalType, _: DayTimeIntervalType) => a
           case (DateType, CalendarIntervalType) => DateAddInterval(l, r, ansiEnabled = f)
-          case (_, CalendarIntervalType | DayTimeIntervalType) => Cast(TimeAdd(l, r), l.dataType)
+          case (_, CalendarIntervalType | _: DayTimeIntervalType) => Cast(TimeAdd(l, r), l.dataType)
           case (CalendarIntervalType, DateType) => DateAddInterval(r, l, ansiEnabled = f)
-          case (CalendarIntervalType | DayTimeIntervalType, _) => Cast(TimeAdd(r, l), r.dataType)
+          case (CalendarIntervalType | _: DayTimeIntervalType, _) => Cast(TimeAdd(r, l), r.dataType)
           case (DateType, dt) if dt != StringType => DateAdd(l, r)
           case (dt, DateType) if dt != StringType => DateAdd(r, l)
           case _ => a
         }
         case s @ Subtract(l, r, f) if s.childrenResolved => (l.dataType, r.dataType) match {
-          case (DateType, DayTimeIntervalType) =>
+          case (DateType, _: DayTimeIntervalType) =>
             DatetimeSub(l, r, TimeAdd(Cast(l, TimestampType), UnaryMinus(r, f)))
-          case (DateType, YearMonthIntervalType) =>
+          case (DateType, _: YearMonthIntervalType) =>
             DatetimeSub(l, r, DateAddYMInterval(l, UnaryMinus(r, f)))
-          case (TimestampType, YearMonthIntervalType) =>
+          case (TimestampType, _: YearMonthIntervalType) =>
             DatetimeSub(l, r, TimestampAddYMInterval(l, UnaryMinus(r, f)))
           case (CalendarIntervalType, CalendarIntervalType) |
-               (DayTimeIntervalType, DayTimeIntervalType) => s
+               (_: DayTimeIntervalType, _: DayTimeIntervalType) => s
           case (DateType, CalendarIntervalType) =>
             DatetimeSub(l, r, DateAddInterval(l, UnaryMinus(r, f), ansiEnabled = f))
-          case (_, CalendarIntervalType | DayTimeIntervalType) =>
+          case (_, CalendarIntervalType | _: DayTimeIntervalType) =>
             Cast(DatetimeSub(l, r, TimeAdd(l, UnaryMinus(r, f))), l.dataType)
           case (TimestampType, _) => SubtractTimestamps(l, r)
           case (_, TimestampType) => SubtractTimestamps(l, r)
@@ -387,16 +387,16 @@ class Analyzer(override val catalogManager: CatalogManager)
         case m @ Multiply(l, r, f) if m.childrenResolved => (l.dataType, r.dataType) match {
           case (CalendarIntervalType, _) => MultiplyInterval(l, r, f)
           case (_, CalendarIntervalType) => MultiplyInterval(r, l, f)
-          case (YearMonthIntervalType, _) => MultiplyYMInterval(l, r)
-          case (_, YearMonthIntervalType) => MultiplyYMInterval(r, l)
-          case (DayTimeIntervalType, _) => MultiplyDTInterval(l, r)
-          case (_, DayTimeIntervalType) => MultiplyDTInterval(r, l)
+          case (_: YearMonthIntervalType, _) => MultiplyYMInterval(l, r)
+          case (_, _: YearMonthIntervalType) => MultiplyYMInterval(r, l)
+          case (_: DayTimeIntervalType, _) => MultiplyDTInterval(l, r)
+          case (_, _: DayTimeIntervalType) => MultiplyDTInterval(r, l)
           case _ => m
         }
         case d @ Divide(l, r, f) if d.childrenResolved => (l.dataType, r.dataType) match {
           case (CalendarIntervalType, _) => DivideInterval(l, r, f)
-          case (YearMonthIntervalType, _) => DivideYMInterval(l, r)
-          case (DayTimeIntervalType, _) => DivideDTInterval(l, r)
+          case (_: YearMonthIntervalType, _) => DivideYMInterval(l, r)
+          case (_: DayTimeIntervalType, _) => DivideDTInterval(l, r)
           case _ => d
         }
       }
@@ -455,6 +455,9 @@ class Analyzer(override val catalogManager: CatalogManager)
 
       case Project(projectList, child) if child.resolved && hasUnresolvedAlias(projectList) =>
         Project(assignAliases(projectList), child)
+
+      case c: CollectMetrics if c.child.resolved && hasUnresolvedAlias(c.metrics) =>
+        c.copy(metrics = assignAliases(c.metrics))
     }
   }
 
@@ -2170,9 +2173,14 @@ class Analyzer(override val catalogManager: CatalogManager)
                         unbound, arguments, unsupported)
                   }
 
+                  if (bound.inputTypes().length != arguments.length) {
+                    throw QueryCompilationErrors.v2FunctionInvalidInputTypeLengthError(
+                      bound, arguments)
+                  }
+
                   bound match {
                     case scalarFunc: ScalarFunction[_] =>
-                      processV2ScalarFunction(scalarFunc, inputType, arguments, isDistinct,
+                      processV2ScalarFunction(scalarFunc, arguments, isDistinct,
                         filter, ignoreNulls)
                     case aggFunc: V2AggregateFunction[_, _] =>
                       processV2AggregateFunction(aggFunc, arguments, isDistinct, filter,
@@ -2190,7 +2198,6 @@ class Analyzer(override val catalogManager: CatalogManager)
 
     private def processV2ScalarFunction(
         scalarFunc: ScalarFunction[_],
-        inputType: StructType,
         arguments: Seq[Expression],
         isDistinct: Boolean,
         filter: Option[Expression],
@@ -2205,30 +2212,27 @@ class Analyzer(override val catalogManager: CatalogManager)
         throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
           scalarFunc.name(), "IGNORE NULLS")
       } else {
-        // TODO: implement type coercion by looking at input type from the UDF. We
-        //  may also want to check if the parameter types from the magic method
-        //  match the input type through `BoundFunction.inputTypes`.
-        val argClasses = inputType.fields.map(_.dataType)
+        val declaredInputTypes = scalarFunc.inputTypes().toSeq
+        val argClasses = declaredInputTypes.map(ScalaReflection.dataTypeJavaClass)
         findMethod(scalarFunc, MAGIC_METHOD_NAME, argClasses) match {
           case Some(m) if Modifier.isStatic(m.getModifiers) =>
             StaticInvoke(scalarFunc.getClass, scalarFunc.resultType(),
-              MAGIC_METHOD_NAME, arguments, propagateNull = false,
-              returnNullable = scalarFunc.isResultNullable)
+              MAGIC_METHOD_NAME, arguments, inputTypes = declaredInputTypes,
+                propagateNull = false, returnNullable = scalarFunc.isResultNullable)
           case Some(_) =>
             val caller = Literal.create(scalarFunc, ObjectType(scalarFunc.getClass))
             Invoke(caller, MAGIC_METHOD_NAME, scalarFunc.resultType(),
-              arguments, propagateNull = false, returnNullable = scalarFunc.isResultNullable)
+              arguments, methodInputTypes = declaredInputTypes, propagateNull = false,
+              returnNullable = scalarFunc.isResultNullable)
           case _ =>
             // TODO: handle functions defined in Scala too - in Scala, even if a
             //  subclass do not override the default method in parent interface
             //  defined in Java, the method can still be found from
             //  `getDeclaredMethod`.
-            // since `inputType` is a `StructType`, it is mapped to a `InternalRow`
-            // which we can use to lookup the `produceResult` method.
-            findMethod(scalarFunc, "produceResult", Seq(inputType)) match {
+            findMethod(scalarFunc, "produceResult", Seq(classOf[InternalRow])) match {
               case Some(_) =>
                 ApplyFunctionExpression(scalarFunc, arguments)
-              case None =>
+              case _ =>
                 failAnalysis(s"ScalarFunction '${scalarFunc.name()}' neither implement" +
                   s" magic method nor override 'produceResult'")
             }
@@ -2252,15 +2256,14 @@ class Analyzer(override val catalogManager: CatalogManager)
 
     /**
      * Check if the input `fn` implements the given `methodName` with parameter types specified
-     * via `inputType`.
+     * via `argClasses`.
      */
     private def findMethod(
         fn: BoundFunction,
         methodName: String,
-        inputType: Seq[DataType]): Option[Method] = {
+        argClasses: Seq[Class[_]]): Option[Method] = {
       val cls = fn.getClass
       try {
-        val argClasses = inputType.map(ScalaReflection.dataTypeJavaClass)
         Some(cls.getDeclaredMethod(methodName, argClasses: _*))
       } catch {
         case _: NoSuchMethodException =>
@@ -2275,6 +2278,14 @@ class Analyzer(override val catalogManager: CatalogManager)
    * Note: CTEs are handled in CTESubstitution.
    */
   object ResolveSubquery extends Rule[LogicalPlan] with PredicateHelper {
+
+    /**
+     * Wrap attributes in the expression with [[OuterReference]]s.
+     */
+    private def wrapOuterReference[E <: Expression](e: E): E = {
+      e.transform { case a: Attribute => OuterReference(a) }.asInstanceOf[E]
+    }
+
     /**
      * Resolve the correlated expressions in a subquery by using the an outer plans' references. All
      * resolved outer references are wrapped in an [[OuterReference]]
@@ -2287,7 +2298,7 @@ class Analyzer(override val catalogManager: CatalogManager)
               withPosition(u) {
                 try {
                   outer.resolve(nameParts, resolver) match {
-                    case Some(outerAttr) => OuterReference(outerAttr)
+                    case Some(outerAttr) => wrapOuterReference(outerAttr)
                     case None => u
                   }
                 } catch {
@@ -2346,8 +2357,7 @@ class Analyzer(override val catalogManager: CatalogManager)
      *     outer plan to get evaluated.
      */
     private def resolveSubQueries(plan: LogicalPlan, plans: Seq[LogicalPlan]): LogicalPlan = {
-      plan.transformAllExpressionsWithPruning(_.containsAnyPattern(SCALAR_SUBQUERY,
-        EXISTS_SUBQUERY, IN_SUBQUERY), ruleId) {
+      plan.transformAllExpressionsWithPruning(_.containsPattern(PLAN_EXPRESSION), ruleId) {
         case s @ ScalarSubquery(sub, _, exprId, _) if !sub.resolved =>
           resolveSubQuery(s, plans)(ScalarSubquery(_, _, exprId))
         case e @ Exists(sub, _, exprId, _) if !sub.resolved =>
@@ -2358,6 +2368,8 @@ class Analyzer(override val catalogManager: CatalogManager)
             ListQuery(plan, exprs, exprId, plan.output)
           })
           InSubquery(values, expr.asInstanceOf[ListQuery])
+        case s @ LateralSubquery(sub, _, exprId, _) if !sub.resolved =>
+          resolveSubQuery(s, plans)(LateralSubquery(_, _, exprId))
       }
     }
 
@@ -2365,11 +2377,13 @@ class Analyzer(override val catalogManager: CatalogManager)
      * Resolve and rewrite all subqueries in an operator tree..
      */
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
-      _.containsAnyPattern(SCALAR_SUBQUERY, EXISTS_SUBQUERY, IN_SUBQUERY), ruleId) {
+      _.containsPattern(PLAN_EXPRESSION), ruleId) {
       // In case of HAVING (a filter after an aggregate) we use both the aggregate and
       // its child for resolution.
       case f @ Filter(_, a: Aggregate) if f.childrenResolved =>
         resolveSubQueries(f, Seq(a, a.child))
+      case j: LateralJoin if j.left.resolved =>
+        resolveSubQueries(j, j.children)
       // Only a few unary nodes (Project/Filter/Aggregate) can contain subqueries.
       case q: UnaryNode if q.childrenResolved =>
         resolveSubQueries(q, q.children)
