@@ -1674,4 +1674,23 @@ private[spark] object QueryCompilationErrors {
       s"You can use spark.sql.legacy.allowNegativeScaleOfDecimal=true " +
       s"to enable legacy mode to allow it.")
   }
+
+  def keyNotValidColumnInTableError(key: String, tblName: String): Throwable = {
+    new AnalysisException(s"$key is not a valid partition column in table $tblName.")
+  }
+
+  def partitionSpecNotValidError(
+    specKeys: String,
+    partitionColumnNames: Seq[String],
+    tableName: String): Throwable = {
+    new AnalysisException(
+      s"Partition spec is invalid. The spec ($specKeys) must match " +
+        s"the partition spec (${partitionColumnNames.mkString(", ")}) defined in " +
+        s"table '$tableName'")
+  }
+
+  def foundDuplicateColError(colType: String, duplicateCol: Seq[String]): Throwable = {
+    new AnalysisException(
+      s"Found duplicate column(s) $colType: ${duplicateCol.sorted.mkString(", ")}")
+  }
 }

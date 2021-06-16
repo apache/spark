@@ -753,8 +753,8 @@ object QueryExecutionErrors {
     new IllegalArgumentException(s"Could not compare cost with $cost")
   }
 
-  def unsupportedDataTypeError(dt: DataType): Throwable = {
-    new UnsupportedOperationException(s"Unsupported data type: ${dt.catalogString}")
+  def unsupportedDataTypeError(dt: String): Throwable = {
+    new UnsupportedOperationException(s"Unsupported data type: ${dt}")
   }
 
   def notSupportTypeError(dataType: DataType): Throwable = {
@@ -1558,5 +1558,26 @@ object QueryExecutionErrors {
       s"Can not load in UserDefinedType ${name} for user class ${userClass}.")
   }
 
+  def timestampTypeMustSupplyTZidError(): Throwable = {
+    new UnsupportedOperationException(
+      s"${TimestampType.catalogString} must supply timeZoneId parameter")
+  }
 
+  def notPublicClassError(name: String): Throwable = {
+    new UnsupportedOperationException(
+      s"$name is not a public class. " +
+        "Only public classes are supported.")
+  }
+
+  def primitiveTypesNotSupportedError(): Throwable = {
+    new UnsupportedOperationException("Primitive types are not supported.")
+  }
+
+  def fieldIndexOnRowWithoutSchemaError(): Throwable = {
+    new UnsupportedOperationException("fieldIndex on a Row without schema is undefined.")
+  }
+
+  def valueIsNullError(index: Int): Throwable = {
+    new NullPointerException(s"Value at index $index is null")
+  }
 }
