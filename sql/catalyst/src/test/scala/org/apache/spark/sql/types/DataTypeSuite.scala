@@ -22,6 +22,7 @@ import com.fasterxml.jackson.core.JsonParseException
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.StringUtils.StringConcat
+import org.apache.spark.sql.types.DataTypeTestUtils.dayTimeIntervalTypes
 
 class DataTypeSuite extends SparkFunSuite {
 
@@ -255,6 +256,9 @@ class DataTypeSuite extends SparkFunSuite {
   checkDataTypeFromJson(VarcharType(10))
   checkDataTypeFromDDL(VarcharType(11))
 
+  checkDataTypeFromDDL(YearMonthIntervalType)
+  checkDataTypeFromDDL(DayTimeIntervalType())
+
   val metadata = new MetadataBuilder()
     .putString("name", "age")
     .build()
@@ -309,6 +313,7 @@ class DataTypeSuite extends SparkFunSuite {
   checkDefaultSize(DecimalType.SYSTEM_DEFAULT, 16)
   checkDefaultSize(DateType, 4)
   checkDefaultSize(TimestampType, 8)
+  checkDefaultSize(TimestampWithoutTZType, 8)
   checkDefaultSize(StringType, 20)
   checkDefaultSize(BinaryType, 100)
   checkDefaultSize(ArrayType(DoubleType, true), 8)
@@ -321,7 +326,7 @@ class DataTypeSuite extends SparkFunSuite {
   checkDefaultSize(VarcharType(5), 5)
   checkDefaultSize(VarcharType(10), 10)
   checkDefaultSize(YearMonthIntervalType, 4)
-  checkDefaultSize(DayTimeIntervalType, 8)
+  dayTimeIntervalTypes.foreach(checkDefaultSize(_, 8))
 
   def checkEqualsIgnoreCompatibleNullability(
       from: DataType,

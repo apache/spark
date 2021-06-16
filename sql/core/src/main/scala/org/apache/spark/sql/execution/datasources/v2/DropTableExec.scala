@@ -30,7 +30,7 @@ case class DropTableExec(
     ident: Identifier,
     ifExists: Boolean,
     purge: Boolean,
-    invalidateCache: () => Unit) extends V2CommandExec {
+    invalidateCache: () => Unit) extends LeafV2CommandExec {
 
   override def run(): Seq[InternalRow] = {
     if (catalog.tableExists(ident)) {

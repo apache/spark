@@ -28,9 +28,9 @@ import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalyst.{AliasIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, Analyzer, EmptyFunctionRegistry, NoSuchTableException, ResolvedTable, ResolveSessionCatalog, UnresolvedAttribute, UnresolvedRelation, UnresolvedSubqueryColumnAliases, UnresolvedTable}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, InMemoryCatalog, SessionCatalog}
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, EqualTo, Expression, InSubquery, IntegerLiteral, ListQuery, StringLiteral}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, EqualTo, Expression, InSubquery, IntegerLiteral, ListQuery, Literal, StringLiteral}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
-import org.apache.spark.sql.catalyst.plans.logical.{AlterTable, AppendData, Assignment, CreateTableAsSelect, CreateTableStatement, CreateV2Table, DeleteAction, DeleteFromTable, DescribeRelation, DropTable, InsertAction, LocalRelation, LogicalPlan, MergeIntoTable, OneRowRelation, Project, SetTableLocation, SetTableProperties, ShowTableProperties, SubqueryAlias, UnsetTableProperties, UpdateAction, UpdateTable}
+import org.apache.spark.sql.catalyst.plans.logical.{AlterTable, AnalysisOnlyCommand, AppendData, Assignment, CreateTableAsSelect, CreateTableStatement, CreateV2Table, DeleteAction, DeleteFromTable, DescribeRelation, DropTable, InsertAction, LocalRelation, LogicalPlan, MergeIntoTable, OneRowRelation, Project, SetTableLocation, SetTableProperties, ShowTableProperties, SubqueryAlias, UnsetTableProperties, UpdateAction, UpdateTable}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.FakeV2Provider
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogNotFoundException, Identifier, Table, TableCapability, TableCatalog, TableChange, V1Table}
@@ -40,7 +40,7 @@ import org.apache.spark.sql.execution.datasources.CreateTable
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 import org.apache.spark.sql.sources.SimpleScanSource
-import org.apache.spark.sql.types.{CharType, DoubleType, IntegerType, LongType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{BooleanType, CharType, DoubleType, IntegerType, LongType, StringType, StructField, StructType}
 
 class PlanResolutionSuite extends AnalysisTest {
   import CatalystSqlParser._
@@ -51,6 +51,20 @@ class PlanResolutionSuite extends AnalysisTest {
   private val table: Table = {
     val t = mock(classOf[Table])
     when(t.schema()).thenReturn(new StructType().add("i", "int").add("s", "string"))
+    when(t.partitioning()).thenReturn(Array.empty[Transform])
+    t
+  }
+
+  private val table1: Table = {
+    val t = mock(classOf[Table])
+    when(t.schema()).thenReturn(new StructType().add("s", "string").add("i", "int"))
+    when(t.partitioning()).thenReturn(Array.empty[Transform])
+    t
+  }
+
+  private val table2: Table = {
+    val t = mock(classOf[Table])
+    when(t.schema()).thenReturn(new StructType().add("i", "int").add("x", "string"))
     when(t.partitioning()).thenReturn(Array.empty[Transform])
     t
   }
@@ -91,7 +105,8 @@ class PlanResolutionSuite extends AnalysisTest {
     when(newCatalog.loadTable(any())).thenAnswer((invocation: InvocationOnMock) => {
       invocation.getArgument[Identifier](0).name match {
         case "tab" => table
-        case "tab1" => table
+        case "tab1" => table1
+        case "tab2" => table2
         case name => throw new NoSuchTableException(name)
       }
     })
@@ -107,7 +122,7 @@ class PlanResolutionSuite extends AnalysisTest {
         case "v1Table1" => v1Table
         case "v1HiveTable" => v1HiveTable
         case "v2Table" => table
-        case "v2Table1" => table
+        case "v2Table1" => table1
         case "v2TableWithAcceptAnySchemaCapability" => tableWithAcceptAnySchemaCapability
         case "view" => view
         case name => throw new NoSuchTableException(name)
@@ -955,7 +970,7 @@ class PlanResolutionSuite extends AnalysisTest {
           query match {
             case ListQuery(Project(projects, SubqueryAlias(AliasIdentifier("s", Seq()),
                 UnresolvedSubqueryColumnAliases(outputColumnNames, Project(_, _: OneRowRelation)))),
-                _, _, _) =>
+                _, _, _, _) =>
               assert(projects.size == 1 && projects.head.name == "s.name")
               assert(outputColumnNames.size == 1 && outputColumnNames.head == "name")
             case o => fail("Unexpected subquery: \n" + o.treeString)
@@ -1031,7 +1046,7 @@ class PlanResolutionSuite extends AnalysisTest {
           query match {
             case ListQuery(Project(projects, SubqueryAlias(AliasIdentifier("s", Seq()),
                 UnresolvedSubqueryColumnAliases(outputColumnNames, Project(_, _: OneRowRelation)))),
-                _, _, _) =>
+                _, _, _, _) =>
               assert(projects.size == 1 && projects.head.name == "s.name")
               assert(outputColumnNames.size == 1 && outputColumnNames.head == "name")
             case o => fail("Unexpected subquery: \n" + o.treeString)
@@ -1229,6 +1244,7 @@ class PlanResolutionSuite extends AnalysisTest {
       mergeCondition match {
         case EqualTo(l: AttributeReference, r: AttributeReference) =>
           assert(l.sameRef(ti) && r.sameRef(si))
+        case Literal(_, BooleanType) => // this is acceptable as a merge condition
         case other => fail("unexpected merge condition " + other)
       }
 
@@ -1309,6 +1325,28 @@ class PlanResolutionSuite extends AnalysisTest {
           case other => fail("Expect MergeIntoTable, but got:\n" + other.treeString)
         }
 
+        // merge with star should get resolved into specific actions even if there
+        // is no other unresolved expression in the merge
+        parseAndResolve(s"""
+             |MERGE INTO $target AS target
+             |USING $source AS source
+             |ON true
+             |WHEN MATCHED THEN UPDATE SET *
+             |WHEN NOT MATCHED THEN INSERT *
+           """.stripMargin) match {
+          case MergeIntoTable(
+              SubqueryAlias(AliasIdentifier("target", Seq()), AsDataSourceV2Relation(target)),
+              SubqueryAlias(AliasIdentifier("source", Seq()), AsDataSourceV2Relation(source)),
+              mergeCondition,
+              Seq(UpdateAction(None, updateAssigns)),
+              Seq(InsertAction(None, insertAssigns))) =>
+
+            checkResolution(target, source, mergeCondition, None, None, None,
+              updateAssigns, insertAssigns, starInUpdate = true)
+
+          case other => fail("Expect MergeIntoTable, but got:\n" + other.treeString)
+        }
+
         // no additional conditions
         val sql3 =
           s"""
@@ -1362,7 +1400,7 @@ class PlanResolutionSuite extends AnalysisTest {
         // cte
         val sql5 =
           s"""
-             |WITH source(i, s) AS
+             |WITH source(s, i) AS
              | (SELECT * FROM $source)
              |MERGE INTO $target AS target
              |USING source
@@ -1382,7 +1420,7 @@ class PlanResolutionSuite extends AnalysisTest {
                   updateAssigns)),
               Seq(InsertAction(Some(EqualTo(il: AttributeReference, StringLiteral("insert"))),
                 insertAssigns))) =>
-            assert(source.output.map(_.name) == Seq("i", "s"))
+            assert(source.output.map(_.name) == Seq("s", "i"))
             checkResolution(target, source, mergeCondition, Some(dl), Some(ul), Some(il),
               updateAssigns, insertAssigns)
 
@@ -1391,8 +1429,7 @@ class PlanResolutionSuite extends AnalysisTest {
     }
 
     // no aliases
-    Seq(("v2Table", "v2Table1"),
-      ("testcat.tab", "testcat.tab1")).foreach { pair =>
+    Seq(("v2Table", "v2Table1"), ("testcat.tab", "testcat.tab1")).foreach { pair =>
 
       val target = pair._1
       val source = pair._2
@@ -1484,7 +1521,7 @@ class PlanResolutionSuite extends AnalysisTest {
       assert(e5.message.contains("Reference 's' is ambiguous"))
     }
 
-    val sql6 =
+    val sql1 =
       s"""
          |MERGE INTO non_exist_target
          |USING non_exist_source
@@ -1493,13 +1530,37 @@ class PlanResolutionSuite extends AnalysisTest {
          |WHEN MATCHED THEN UPDATE SET *
          |WHEN NOT MATCHED THEN INSERT *
        """.stripMargin
-    val parsed = parseAndResolve(sql6)
+    val parsed = parseAndResolve(sql1)
     parsed match {
       case u: MergeIntoTable =>
         assert(u.targetTable.isInstanceOf[UnresolvedRelation])
         assert(u.sourceTable.isInstanceOf[UnresolvedRelation])
       case _ => fail("Expect MergeIntoTable, but got:\n" + parsed.treeString)
     }
+
+    // UPDATE * with incompatible schema between source and target tables.
+    val sql2 =
+      """
+         |MERGE INTO testcat.tab
+         |USING testcat.tab2
+         |ON 1 = 1
+         |WHEN MATCHED THEN UPDATE SET *
+         |""".stripMargin
+    val e2 = intercept[AnalysisException](parseAndResolve(sql2))
+    assert(e2.message.contains(
+      "cannot resolve s in MERGE command given columns [testcat.tab2.i, testcat.tab2.x]"))
+
+    // INSERT * with incompatible schema between source and target tables.
+    val sql3 =
+      """
+        |MERGE INTO testcat.tab
+        |USING testcat.tab2
+        |ON 1 = 1
+        |WHEN NOT MATCHED THEN INSERT *
+        |""".stripMargin
+    val e3 = intercept[AnalysisException](parseAndResolve(sql3))
+    assert(e3.message.contains(
+      "cannot resolve s in MERGE command given columns [testcat.tab2.i, testcat.tab2.x]"))
   }
 
   test("MERGE INTO TABLE - skip resolution on v2 tables that accept any schema") {
@@ -2169,6 +2230,15 @@ class PlanResolutionSuite extends AnalysisTest {
     assert(desc.comment == Some("no comment"))
   }
 
+  test("SPARK-34701: children/innerChildren should be mutually exclusive for AnalysisOnlyCommand") {
+    val cmdNotAnalyzed = DummyAnalysisOnlyCommand(isAnalyzed = false, childrenToAnalyze = Seq(null))
+    assert(cmdNotAnalyzed.innerChildren.isEmpty)
+    assert(cmdNotAnalyzed.children.length == 1)
+    val cmdAnalyzed = cmdNotAnalyzed.markAsAnalyzed()
+    assert(cmdAnalyzed.innerChildren.length == 1)
+    assert(cmdAnalyzed.children.isEmpty)
+  }
+
   // TODO: add tests for more commands.
 }
 
@@ -2176,5 +2246,15 @@ object AsDataSourceV2Relation {
   def unapply(plan: LogicalPlan): Option[DataSourceV2Relation] = plan match {
     case SubqueryAlias(_, r: DataSourceV2Relation) => Some(r)
     case _ => None
+  }
+}
+
+case class DummyAnalysisOnlyCommand(
+    isAnalyzed: Boolean,
+    childrenToAnalyze: Seq[LogicalPlan]) extends AnalysisOnlyCommand {
+  override def markAsAnalyzed(): LogicalPlan = copy(isAnalyzed = true)
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[LogicalPlan]): LogicalPlan = {
+    copy(childrenToAnalyze = newChildren)
   }
 }

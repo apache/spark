@@ -21,13 +21,22 @@ import java.time.{Duration, Period}
 import java.time.temporal.ChronoUnit
 import java.util.concurrent.TimeUnit
 
+import scala.collection.mutable
 import scala.util.control.NonFatal
 
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.millisToMicros
+import org.apache.spark.sql.catalyst.util.IntervalStringStyles.{ANSI_STYLE, HIVE_STYLE, IntervalStyle}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.Decimal
+import org.apache.spark.sql.types.{DayTimeIntervalType, Decimal}
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
+
+// The style of textual representation of intervals
+object IntervalStringStyles extends Enumeration {
+  type IntervalStyle = Value
+  val ANSI_STYLE, HIVE_STYLE = Value
+}
 
 object IntervalUtils {
 
@@ -47,30 +56,38 @@ object IntervalUtils {
   }
   import IntervalUnit._
 
-  def getYears(interval: CalendarInterval): Int = {
-    interval.months / MONTHS_PER_YEAR
-  }
+  def getYears(months: Int): Int = months / MONTHS_PER_YEAR
 
-  def getMonths(interval: CalendarInterval): Byte = {
-    (interval.months % MONTHS_PER_YEAR).toByte
-  }
+  def getYears(interval: CalendarInterval): Int = getYears(interval.months)
+
+  def getMonths(months: Int): Byte = (months % MONTHS_PER_YEAR).toByte
+
+  def getMonths(interval: CalendarInterval): Byte = getMonths(interval.months)
+
+  def getDays(microseconds: Long): Int = (microseconds / MICROS_PER_DAY).toInt
 
   def getDays(interval: CalendarInterval): Int = {
-    val daysInMicroseconds = (interval.microseconds / MICROS_PER_DAY).toInt
+    val daysInMicroseconds = getDays(interval.microseconds)
     Math.addExact(interval.days, daysInMicroseconds)
   }
 
-  def getHours(interval: CalendarInterval): Long = {
-    (interval.microseconds % MICROS_PER_DAY) / MICROS_PER_HOUR
+  def getHours(microseconds: Long): Byte = {
+    ((microseconds % MICROS_PER_DAY) / MICROS_PER_HOUR).toByte
   }
 
-  def getMinutes(interval: CalendarInterval): Byte = {
-    ((interval.microseconds % MICROS_PER_HOUR) / MICROS_PER_MINUTE).toByte
+  def getHours(interval: CalendarInterval): Byte = getHours(interval.microseconds)
+
+  def getMinutes(microseconds: Long): Byte = {
+    ((microseconds % MICROS_PER_HOUR) / MICROS_PER_MINUTE).toByte
   }
 
-  def getSeconds(interval: CalendarInterval): Decimal = {
-    Decimal(interval.microseconds % MICROS_PER_MINUTE, 8, 6)
+  def getMinutes(interval: CalendarInterval): Byte = getMinutes(interval.microseconds)
+
+  def getSeconds(microseconds: Long): Decimal = {
+    Decimal(microseconds % MICROS_PER_MINUTE, 8, 6)
   }
+
+  def getSeconds(interval: CalendarInterval): Decimal = getSeconds(interval.microseconds)
 
   private def toLongWithRange(
       fieldName: IntervalUnit,
@@ -84,7 +101,27 @@ object IntervalUtils {
     result
   }
 
-  private val yearMonthPattern = "^([+|-])?(\\d+)-(\\d+)$".r
+  private val yearMonthPatternString = "([+|-])?(\\d+)-(\\d+)"
+  private val yearMonthRegex = (s"^$yearMonthPatternString$$").r
+  private val yearMonthLiteralRegex =
+    (s"(?i)^INTERVAL\\s+([+|-])?'$yearMonthPatternString'\\s+YEAR\\s+TO\\s+MONTH$$").r
+
+  def castStringToYMInterval(input: UTF8String): Int = {
+    input.trimAll().toString match {
+      case yearMonthRegex("-", year, month) => toYMInterval(year, month, -1)
+      case yearMonthRegex(_, year, month) => toYMInterval(year, month, 1)
+      case yearMonthLiteralRegex(firstSign, secondSign, year, month) =>
+        (firstSign, secondSign) match {
+          case ("-", "-") => toYMInterval(year, month, 1)
+          case ("-", _) => toYMInterval(year, month, -1)
+          case (_, "-") => toYMInterval(year, month, -1)
+          case (_, _) => toYMInterval(year, month, 1)
+        }
+      case _ => throw new IllegalArgumentException(
+        s"Interval string does not match year-month format of `[+|-]y-m` " +
+          s"or `INTERVAL [+|-]'[+|-]y-m' YEAR TO MONTH`: ${input.toString}")
+    }
+  }
 
   /**
    * Parse YearMonth string in form: [+|-]YYYY-MM
@@ -93,27 +130,83 @@ object IntervalUtils {
    */
   def fromYearMonthString(input: String): CalendarInterval = {
     require(input != null, "Interval year-month string must be not null")
-    def toInterval(yearStr: String, monthStr: String): CalendarInterval = {
-      try {
-        val years = toLongWithRange(YEAR, yearStr, 0, Integer.MAX_VALUE).toInt
-        val months = toLongWithRange(MONTH, monthStr, 0, 11).toInt
-        val totalMonths = Math.addExact(Math.multiplyExact(years, 12), months)
-        new CalendarInterval(totalMonths, 0, 0)
-      } catch {
-        case NonFatal(e) =>
-          throw new IllegalArgumentException(
-            s"Error parsing interval year-month string: ${e.getMessage}", e)
-      }
-    }
     input.trim match {
-      case yearMonthPattern("-", yearStr, monthStr) =>
-        negateExact(toInterval(yearStr, monthStr))
-      case yearMonthPattern(_, yearStr, monthStr) =>
-        toInterval(yearStr, monthStr)
+      case yearMonthRegex("-", yearStr, monthStr) =>
+        new CalendarInterval(toYMInterval(yearStr, monthStr, -1), 0, 0)
+      case yearMonthRegex(_, yearStr, monthStr) =>
+        new CalendarInterval(toYMInterval(yearStr, monthStr, 1), 0, 0)
       case _ =>
         throw new IllegalArgumentException(
           s"Interval string does not match year-month format of 'y-m': $input")
     }
+  }
+
+  def toYMInterval(yearStr: String, monthStr: String, sign: Int): Int = {
+    try {
+      val years = toLongWithRange(YEAR, yearStr, 0, Integer.MAX_VALUE / MONTHS_PER_YEAR)
+      val totalMonths = sign * (years * MONTHS_PER_YEAR + toLongWithRange(MONTH, monthStr, 0, 11))
+      Math.toIntExact(totalMonths)
+    } catch {
+      case NonFatal(e) =>
+        throw new IllegalArgumentException(
+          s"Error parsing interval year-month string: ${e.getMessage}", e)
+    }
+  }
+
+  private val daySecondPatternString =
+    "([+|-])?(\\d+) (\\d{1,2}):(\\d{1,2}):(\\d{1,2})(\\.\\d{1,9})?"
+  private val daySecondRegex = (s"^$daySecondPatternString$$").r
+  private val daySecondLiteralRegex =
+    (s"(?i)^INTERVAL\\s+([+|-])?\\'$daySecondPatternString\\'\\s+DAY\\s+TO\\s+SECOND$$").r
+
+  def castStringToDTInterval(
+      input: UTF8String,
+      // TODO(SPARK-35735): Take into account day-time interval fields in cast
+      startField: Byte,
+      endField: Byte): Long = {
+    def secondAndMicro(second: String, micro: String): String = {
+      if (micro != null) {
+        s"$second$micro"
+      } else {
+        second
+      }
+    }
+
+    input.trimAll().toString match {
+      case daySecondRegex("-", day, hour, minute, second, micro) =>
+        toDTInterval(day, hour, minute, secondAndMicro(second, micro), -1)
+      case daySecondRegex(_, day, hour, minute, second, micro) =>
+        toDTInterval(day, hour, minute, secondAndMicro(second, micro), 1)
+      case daySecondLiteralRegex(firstSign, secondSign, day, hour, minute, second, micro) =>
+        (firstSign, secondSign) match {
+          case ("-", "-") => toDTInterval(day, hour, minute, secondAndMicro(second, micro), 1)
+          case ("-", _) => toDTInterval(day, hour, minute, secondAndMicro(second, micro), -1)
+          case (_, "-") => toDTInterval(day, hour, minute, secondAndMicro(second, micro), -1)
+          case (_, _) => toDTInterval(day, hour, minute, secondAndMicro(second, micro), 1)
+        }
+      case _ =>
+        throw new IllegalArgumentException(
+          s"Interval string must match day-time format of `d h:m:s.n` " +
+            s"or `INTERVAL [+|-]'[+|-]d h:m:s.n' DAY TO SECOND`: ${input.toString}, " +
+            s"$fallbackNotice")
+    }
+  }
+
+  def toDTInterval(
+      dayStr: String,
+      hourStr: String,
+      minuteStr: String,
+      secondStr: String,
+      sign: Int): Long = {
+    var micros = 0L
+    val days = toLongWithRange(DAY, dayStr, 0, Int.MaxValue).toInt
+    micros = Math.addExact(micros, sign * days * MICROS_PER_DAY)
+    val hours = toLongWithRange(HOUR, hourStr, 0, 23)
+    micros = Math.addExact(micros, sign * hours * MICROS_PER_HOUR)
+    val minutes = toLongWithRange(MINUTE, minuteStr, 0, 59)
+    micros = Math.addExact(micros, sign * minutes * MICROS_PER_MINUTE)
+    micros = Math.addExact(micros, sign * parseSecondNano(secondStr))
+    micros
   }
 
   /**
@@ -498,7 +591,7 @@ object IntervalUtils {
    * @throws ArithmeticException if the result overflows any field value or divided by zero
    */
   def divideExact(interval: CalendarInterval, num: Double): CalendarInterval = {
-    if (num == 0) throw new ArithmeticException("divide by zero")
+    if (num == 0) throw QueryExecutionErrors.divideByZeroError()
     fromDoubles(interval.months / num, interval.days / num, interval.microseconds / num)
   }
 
@@ -834,4 +927,127 @@ object IntervalUtils {
    * @return The period of months, not null
    */
   def monthsToPeriod(months: Int): Period = Period.ofMonths(months).normalized()
+
+  /**
+   * Converts an year-month interval as a number of months to its textual representation
+   * which conforms to the ANSI SQL standard.
+   *
+   * @param months The number of months, positive or negative
+   * @param style The style of textual representation of the interval
+   * @return Year-month interval string
+   */
+  def toYearMonthIntervalString(months: Int, style: IntervalStyle): String = {
+    var sign = ""
+    var absMonths: Long = months
+    if (months < 0) {
+      sign = "-"
+      absMonths = -absMonths
+    }
+    val payload = s"$sign${absMonths / MONTHS_PER_YEAR}-${absMonths % MONTHS_PER_YEAR}"
+    style match {
+      case ANSI_STYLE => s"INTERVAL '$payload' YEAR TO MONTH"
+      case HIVE_STYLE => payload
+    }
+  }
+
+  /**
+   * Converts a day-time interval as a number of microseconds to its textual representation
+   * which conforms to the ANSI SQL standard.
+   *
+   * @param micros The number of microseconds, positive or negative
+   * @param style The style of textual representation of the interval
+   * @return Day-time interval string
+   */
+  def toDayTimeIntervalString(
+      micros: Long,
+      style: IntervalStyle,
+      startField: Byte,
+      endField: Byte): String = {
+    var sign = ""
+    var rest = micros
+    val from = DayTimeIntervalType.fieldToString(startField).toUpperCase
+    val to = DayTimeIntervalType.fieldToString(endField).toUpperCase
+    if (micros < 0) {
+      if (micros == Long.MinValue) {
+        // Especial handling of minimum `Long` value because negate op overflows `Long`.
+        // seconds = 106751991 * (24 * 60 * 60) + 4 * 60 * 60 + 54 = 9223372036854
+        // microseconds = -9223372036854000000L-775808 == Long.MinValue
+        val minIntervalString = style match {
+          case ANSI_STYLE =>
+            val baseStr = "-106751991 04:00:54.775808"
+            val fromPos = startField match {
+              case DayTimeIntervalType.DAY => 0
+              case DayTimeIntervalType.HOUR => 11
+              case DayTimeIntervalType.MINUTE => 14
+              case DayTimeIntervalType.SECOND => 17
+            }
+            val toPos = endField match {
+              case DayTimeIntervalType.DAY => 10
+              case DayTimeIntervalType.HOUR => 13
+              case DayTimeIntervalType.MINUTE => 16
+              case DayTimeIntervalType.SECOND => baseStr.length
+            }
+            val postfix = if (startField == endField) from else s"$from TO $to"
+            s"INTERVAL '${baseStr.substring(fromPos, toPos)}' $postfix"
+          case HIVE_STYLE => "-106751991 04:00:54.775808000"
+        }
+        return minIntervalString
+      } else {
+        sign = "-"
+        rest = -rest
+      }
+    }
+    val secondsWithFraction = rest % MICROS_PER_MINUTE
+    rest /= MICROS_PER_MINUTE
+    val minutes = rest % MINUTES_PER_HOUR
+    rest /= MINUTES_PER_HOUR
+    val hours = rest % HOURS_PER_DAY
+    val days = rest / HOURS_PER_DAY
+    val leadSecZero = if (secondsWithFraction < 10 * MICROS_PER_SECOND) "0" else ""
+    val intervalString = style match {
+      case ANSI_STYLE =>
+        val secStr = java.math.BigDecimal.valueOf(secondsWithFraction, 6)
+          .stripTrailingZeros()
+          .toPlainString()
+        val formatBuilder = new StringBuilder("INTERVAL '")
+        if (startField == endField) {
+          startField match {
+            case DayTimeIntervalType.DAY => formatBuilder.append(s"$sign$days' ")
+            case DayTimeIntervalType.HOUR => formatBuilder.append(f"$hours%02d' ")
+            case DayTimeIntervalType.MINUTE => formatBuilder.append(f"$minutes%02d' ")
+            case DayTimeIntervalType.SECOND => formatBuilder.append(s"$leadSecZero$secStr' ")
+          }
+          formatBuilder.append(from).toString
+        } else {
+          val formatArgs = new mutable.ArrayBuffer[Long]
+          if (startField <= DayTimeIntervalType.DAY && DayTimeIntervalType.DAY < endField) {
+            formatBuilder.append(s"$sign$days ")
+          }
+          if (startField <= DayTimeIntervalType.HOUR && DayTimeIntervalType.HOUR < endField) {
+            formatBuilder.append("%02d:")
+            formatArgs.append(hours)
+          }
+          if (startField <= DayTimeIntervalType.MINUTE && DayTimeIntervalType.MINUTE < endField) {
+            formatBuilder.append("%02d:")
+            formatArgs.append(minutes)
+          }
+          endField match {
+            case DayTimeIntervalType.HOUR =>
+              formatBuilder.append("%02d' ")
+              formatArgs.append(hours)
+            case DayTimeIntervalType.MINUTE =>
+              formatBuilder.append("%02d' ")
+              formatArgs.append(minutes)
+            case DayTimeIntervalType.SECOND =>
+              formatBuilder.append(s"$leadSecZero$secStr' ")
+          }
+          formatBuilder.append(s"$from TO $to").toString.format(formatArgs.toSeq: _*)
+        }
+      case HIVE_STYLE =>
+        val seconds = secondsWithFraction / MICROS_PER_SECOND
+        val nanos = (secondsWithFraction % MICROS_PER_SECOND) * NANOS_PER_MICROS
+        f"$sign$days $hours%02d:$minutes%02d:$seconds%02d.$nanos%09d"
+    }
+    intervalString
+  }
 }

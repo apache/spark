@@ -18,24 +18,37 @@
 package org.apache.spark.sql.errors
 
 import java.io.{FileNotFoundException, IOException}
-import java.net.URISyntaxException
+import java.lang.reflect.InvocationTargetException
+import java.net.{URISyntaxException, URL}
 import java.sql.{SQLException, SQLFeatureNotSupportedException}
-import java.time.DateTimeException
+import java.time.{DateTimeException, LocalDate}
+import java.time.temporal.ChronoField
+import java.util.ConcurrentModificationException
 
+import com.fasterxml.jackson.core.JsonToken
 import org.apache.hadoop.fs.{FileStatus, Path}
-import org.codehaus.commons.compiler.CompileException
-import org.codehaus.janino.InternalCompilerException
+import org.codehaus.commons.compiler.{CompileException, InternalCompilerException}
 
 import org.apache.spark.{Partition, SparkException, SparkUpgradeException}
 import org.apache.spark.executor.CommitDeniedException
+import org.apache.spark.memory.SparkOutOfMemoryError
+import org.apache.spark.sql.catalyst.ScalaReflection.Schema
+import org.apache.spark.sql.catalyst.WalkedTypePath
 import org.apache.spark.sql.catalyst.analysis.UnresolvedGenerator
-import org.apache.spark.sql.catalyst.catalog.CatalogDatabase
-import org.apache.spark.sql.catalyst.expressions.{Expression, UnevaluableAggregate}
+import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogTable}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression, UnevaluableAggregate}
+import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.catalyst.plans.JoinType
+import org.apache.spark.sql.catalyst.plans.logical.{DomainJoin, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.ValueInterval
+import org.apache.spark.sql.catalyst.trees.TreeNode
+import org.apache.spark.sql.catalyst.util.{sideBySide, BadRecordException, FailFastMode}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.execution.QueryExecutionException
-import org.apache.spark.sql.types.{DataType, Decimal, StructType}
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -144,6 +157,10 @@ object QueryExecutionErrors {
     new ArithmeticException("Overflow in sum of decimals.")
   }
 
+  def overflowInIntegralDivideError(): ArithmeticException = {
+    new ArithmeticException("Overflow in integral divide.")
+  }
+
   def mapSizeExceedArraySizeWhenZipMapError(size: Int): RuntimeException = {
     new RuntimeException(s"Unsuccessful try to zip maps with $size " +
       "unique keys due to exceeding the array size limit " +
@@ -241,6 +258,51 @@ object QueryExecutionErrors {
       "in any enclosing class nor any supertype")
   }
 
+  def constructorNotFoundError(cls: String): Throwable = {
+    new RuntimeException(s"Couldn't find a valid constructor on $cls")
+  }
+
+  def primaryConstructorNotFoundError(cls: Class[_]): Throwable = {
+    new RuntimeException(s"Couldn't find a primary constructor on $cls")
+  }
+
+  def unsupportedNaturalJoinTypeError(joinType: JoinType): Throwable = {
+    new RuntimeException("Unsupported natural join type " + joinType)
+  }
+
+  def notExpectedUnresolvedEncoderError(attr: AttributeReference): Throwable = {
+    new RuntimeException(s"Unresolved encoder expected, but $attr was found.")
+  }
+
+  def unsupportedEncoderError(): Throwable = {
+    new RuntimeException("Only expression encoders are supported for now.")
+  }
+
+  def notOverrideExpectedMethodsError(className: String, m1: String, m2: String): Throwable = {
+    new RuntimeException(s"$className must override either $m1 or $m2")
+  }
+
+  def failToConvertValueToJsonError(value: AnyRef, cls: Class[_], dataType: DataType): Throwable = {
+    new RuntimeException(s"Failed to convert value $value (class of $cls) " +
+      s"with the type of $dataType to JSON.")
+  }
+
+  def unexpectedOperatorInCorrelatedSubquery(op: LogicalPlan, pos: String = ""): Throwable = {
+    new RuntimeException(s"Unexpected operator $op in correlated subquery" + pos)
+  }
+
+  def unreachableError(err: String = ""): Throwable = {
+    new RuntimeException("This line should be unreachable" + err)
+  }
+
+  def unsupportedRoundingMode(roundMode: BigDecimal.RoundingMode.Value): Throwable = {
+    new RuntimeException(s"Not supported rounding mode: $roundMode")
+  }
+
+  def resolveCannotHandleNestedSchema(plan: LogicalPlan): Throwable = {
+    new RuntimeException(s"Can not handle nested schema yet...  plan $plan")
+  }
+
   def inputExternalRowCannotBeNullError(): RuntimeException = {
     new RuntimeException("The input external row cannot be null.")
   }
@@ -303,7 +365,7 @@ object QueryExecutionErrors {
     new IllegalStateException("table stats must be specified.")
   }
 
-  def unaryMinusCauseOverflowError(originValue: Short): ArithmeticException = {
+  def unaryMinusCauseOverflowError(originValue: AnyVal): ArithmeticException = {
     new ArithmeticException(s"- $originValue caused overflow.")
   }
 
@@ -666,5 +728,605 @@ object QueryExecutionErrors {
   def failedToMergeIncompatibleSchemasError(
       left: StructType, right: StructType, e: Throwable): Throwable = {
     new SparkException(s"Failed to merge incompatible schemas $left and $right", e)
+  }
+
+  def ddlUnsupportedTemporarilyError(ddl: String): Throwable = {
+    new UnsupportedOperationException(s"$ddl is not supported temporarily.")
+  }
+
+  def operatingOnCanonicalizationPlanError(): Throwable = {
+    new IllegalStateException("operating on canonicalization plan")
+  }
+
+  def executeBroadcastTimeoutError(timeout: Long): Throwable = {
+    new SparkException(
+      s"""
+         |Could not execute broadcast in $timeout secs. You can increase the timeout
+         |for broadcasts via ${SQLConf.BROADCAST_TIMEOUT.key} or disable broadcast join
+         |by setting ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key} to -1
+       """.stripMargin.replaceAll("\n", " "))
+  }
+
+  def cannotCompareCostWithTargetCostError(cost: String): Throwable = {
+    new IllegalArgumentException(s"Could not compare cost with $cost")
+  }
+
+  def unsupportedDataTypeError(dt: DataType): Throwable = {
+    new UnsupportedOperationException(s"Unsupported data type: ${dt.catalogString}")
+  }
+
+  def notSupportTypeError(dataType: DataType): Throwable = {
+    new Exception(s"not support type: $dataType")
+  }
+
+  def notSupportNonPrimitiveTypeError(): Throwable = {
+    new RuntimeException("Not support non-primitive type now")
+  }
+
+  def unsupportedTypeError(dataType: DataType): Throwable = {
+    new Exception(s"Unsupported type: ${dataType.catalogString}")
+  }
+
+  def useDictionaryEncodingWhenDictionaryOverflowError(): Throwable = {
+    new IllegalStateException(
+      "Dictionary encoding should not be used because of dictionary overflow.")
+  }
+
+  def endOfIteratorError(): Throwable = {
+    new NoSuchElementException("End of the iterator")
+  }
+
+  def cannotAllocateMemoryToGrowBytesToBytesMapError(): Throwable = {
+    new IOException("Could not allocate memory to grow BytesToBytesMap")
+  }
+
+  def cannotAcquireMemoryToBuildLongHashedRelationError(size: Long, got: Long): Throwable = {
+    new SparkException(s"Can't acquire $size bytes memory to build hash relation, " +
+      s"got $got bytes")
+  }
+
+  def cannotAcquireMemoryToBuildUnsafeHashedRelationError(): Throwable = {
+    new SparkOutOfMemoryError("There is not enough memory to build hash map")
+  }
+
+  def rowLargerThan256MUnsupportedError(): Throwable = {
+    new UnsupportedOperationException("Does not support row that is larger than 256M")
+  }
+
+  def cannotBuildHashedRelationWithUniqueKeysExceededError(): Throwable = {
+    new UnsupportedOperationException(
+      "Cannot build HashedRelation with more than 1/3 billions unique keys")
+  }
+
+  def cannotBuildHashedRelationLargerThan8GError(): Throwable = {
+    new UnsupportedOperationException(
+      "Can not build a HashedRelation that is larger than 8G")
+  }
+
+  def failedToPushRowIntoRowQueueError(rowQueue: String): Throwable = {
+    new SparkException(s"failed to push a row into $rowQueue")
+  }
+
+  def unexpectedWindowFunctionFrameError(frame: String): Throwable = {
+    new RuntimeException(s"Unexpected window function frame $frame.")
+  }
+
+  def cannotParseStatisticAsPercentileError(
+      stats: String, e: NumberFormatException): Throwable = {
+    new IllegalArgumentException(s"Unable to parse $stats as a percentile", e)
+  }
+
+  def statisticNotRecognizedError(stats: String): Throwable = {
+    new IllegalArgumentException(s"$stats is not a recognised statistic")
+  }
+
+  def unknownColumnError(unknownColumn: String): Throwable = {
+    new IllegalArgumentException(s"Unknown column: $unknownColumn")
+  }
+
+  def unexpectedAccumulableUpdateValueError(o: Any): Throwable = {
+    new IllegalArgumentException(s"Unexpected: $o")
+  }
+
+  def unscaledValueTooLargeForPrecisionError(): Throwable = {
+    new ArithmeticException("Unscaled value too large for precision")
+  }
+
+  def decimalPrecisionExceedsMaxPrecisionError(precision: Int, maxPrecision: Int): Throwable = {
+    new ArithmeticException(
+      s"Decimal precision $precision exceeds max precision $maxPrecision")
+  }
+
+  def outOfDecimalTypeRangeError(str: UTF8String): Throwable = {
+    new ArithmeticException(s"out of decimal type range: $str")
+  }
+
+  def unsupportedArrayTypeError(clazz: Class[_]): Throwable = {
+    new RuntimeException(s"Do not support array of type $clazz.")
+  }
+
+  def unsupportedJavaTypeError(clazz: Class[_]): Throwable = {
+    new RuntimeException(s"Do not support type $clazz.")
+  }
+
+  def failedParsingStructTypeError(raw: String): Throwable = {
+    new RuntimeException(s"Failed parsing ${StructType.simpleString}: $raw")
+  }
+
+  def failedMergingFieldsError(leftName: String, rightName: String, e: Throwable): Throwable = {
+    new SparkException(s"Failed to merge fields '$leftName' and '$rightName'. ${e.getMessage}")
+  }
+
+  def cannotMergeDecimalTypesWithIncompatiblePrecisionAndScaleError(
+      leftPrecision: Int, rightPrecision: Int, leftScale: Int, rightScale: Int): Throwable = {
+    new SparkException("Failed to merge decimal types with incompatible " +
+      s"precision $leftPrecision and $rightPrecision & scale $leftScale and $rightScale")
+  }
+
+  def cannotMergeDecimalTypesWithIncompatiblePrecisionError(
+      leftPrecision: Int, rightPrecision: Int): Throwable = {
+    new SparkException("Failed to merge decimal types with incompatible " +
+      s"precision $leftPrecision and $rightPrecision")
+  }
+
+  def cannotMergeDecimalTypesWithIncompatibleScaleError(
+      leftScale: Int, rightScale: Int): Throwable = {
+    new SparkException("Failed to merge decimal types with incompatible " +
+      s"scala $leftScale and $rightScale")
+  }
+
+  def cannotMergeIncompatibleDataTypesError(left: DataType, right: DataType): Throwable = {
+    new SparkException(s"Failed to merge incompatible data types ${left.catalogString}" +
+      s" and ${right.catalogString}")
+  }
+
+  def exceedMapSizeLimitError(size: Int): Throwable = {
+    new RuntimeException(s"Unsuccessful attempt to build maps with $size elements " +
+      s"due to exceeding the map size limit ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}.")
+  }
+
+  def duplicateMapKeyFoundError(key: Any): Throwable = {
+    new RuntimeException(s"Duplicate map key $key was found, please check the input " +
+      "data. If you want to remove the duplicated keys, you can set " +
+      s"${SQLConf.MAP_KEY_DEDUP_POLICY.key} to ${SQLConf.MapKeyDedupPolicy.LAST_WIN} so that " +
+      "the key inserted at last takes precedence.")
+  }
+
+  def mapDataKeyArrayLengthDiffersFromValueArrayLengthError(): Throwable = {
+    new RuntimeException("The key array and value array of MapData must have the same length.")
+  }
+
+  def fieldDiffersFromDerivedLocalDateError(
+      field: ChronoField, actual: Int, expected: Int, candidate: LocalDate): Throwable = {
+    new DateTimeException(s"Conflict found: Field $field $actual differs from" +
+      s" $field $expected derived from $candidate")
+  }
+
+  def failToParseDateTimeInNewParserError(s: String, e: Throwable): Throwable = {
+    new SparkUpgradeException("3.0", s"Fail to parse '$s' in the new parser. You can " +
+      s"set ${SQLConf.LEGACY_TIME_PARSER_POLICY.key} to LEGACY to restore the behavior " +
+      s"before Spark 3.0, or set to CORRECTED and treat it as an invalid datetime string.", e)
+  }
+
+  def failToFormatDateTimeInNewFormatterError(
+      resultCandidate: String, e: Throwable): Throwable = {
+    new SparkUpgradeException("3.0",
+      s"""
+         |Fail to format it to '$resultCandidate' in the new formatter. You can set
+         |${SQLConf.LEGACY_TIME_PARSER_POLICY.key} to LEGACY to restore the behavior before
+         |Spark 3.0, or set to CORRECTED and treat it as an invalid datetime string.
+       """.stripMargin.replaceAll("\n", " "), e)
+  }
+
+  def failToRecognizePatternInDateTimeFormatterError(
+      pattern: String, e: Throwable): Throwable = {
+    new SparkUpgradeException("3.0", s"Fail to recognize '$pattern' pattern in the" +
+      s" DateTimeFormatter. 1) You can set ${SQLConf.LEGACY_TIME_PARSER_POLICY.key} to LEGACY" +
+      s" to restore the behavior before Spark 3.0. 2) You can form a valid datetime pattern" +
+      s" with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html",
+      e)
+  }
+
+  def cannotCastUTF8StringToDataTypeError(s: UTF8String, to: DataType): Throwable = {
+    new DateTimeException(s"Cannot cast $s to $to.")
+  }
+
+  def registeringStreamingQueryListenerError(e: Exception): Throwable = {
+    new SparkException("Exception when registering StreamingQueryListener", e)
+  }
+
+  def concurrentQueryInstanceError(): Throwable = {
+    new ConcurrentModificationException(
+      "Another instance of this query was just started by a concurrent session.")
+  }
+
+  def cannotParseJsonArraysAsStructsError(): Throwable = {
+    new RuntimeException("Parsing JSON arrays as structs is forbidden.")
+  }
+
+  def cannotParseStringAsDataTypeError(str: String, dataType: DataType): Throwable = {
+    new RuntimeException(s"Cannot parse $str as ${dataType.catalogString}.")
+  }
+
+  def failToParseEmptyStringForDataTypeError(dataType: DataType): Throwable = {
+    new RuntimeException(
+      s"Failed to parse an empty string for data type ${dataType.catalogString}")
+  }
+
+  def failToParseValueForDataTypeError(dataType: DataType, token: JsonToken): Throwable = {
+    new RuntimeException(
+      s"Failed to parse a value for data type ${dataType.catalogString} (current token: $token).")
+  }
+
+  def rootConverterReturnNullError(): Throwable = {
+    new RuntimeException("Root converter returned null")
+  }
+
+  def cannotHaveCircularReferencesInBeanClassError(clazz: Class[_]): Throwable = {
+    new UnsupportedOperationException(
+      "Cannot have circular references in bean class, but got the circular reference " +
+        s"of class $clazz")
+  }
+
+  def cannotHaveCircularReferencesInClassError(t: String): Throwable = {
+    new UnsupportedOperationException(
+      s"cannot have circular references in class, but got the circular reference of class $t")
+  }
+
+  def cannotUseInvalidJavaIdentifierAsFieldNameError(
+      fieldName: String, walkedTypePath: WalkedTypePath): Throwable = {
+    new UnsupportedOperationException(s"`$fieldName` is not a valid identifier of " +
+      s"Java and cannot be used as field name\n$walkedTypePath")
+  }
+
+  def cannotFindEncoderForTypeError(
+      tpe: String, walkedTypePath: WalkedTypePath): Throwable = {
+    new UnsupportedOperationException(s"No Encoder found for $tpe\n$walkedTypePath")
+  }
+
+  def attributesForTypeUnsupportedError(schema: Schema): Throwable = {
+    new UnsupportedOperationException(s"Attributes for type $schema is not supported")
+  }
+
+  def schemaForTypeUnsupportedError(tpe: String): Throwable = {
+    new UnsupportedOperationException(s"Schema for type $tpe is not supported")
+  }
+
+  def cannotFindConstructorForTypeError(tpe: String): Throwable = {
+    new UnsupportedOperationException(
+      s"""
+         |Unable to find constructor for $tpe.
+         |This could happen if $tpe is an interface, or a trait without companion object
+         |constructor.
+       """.stripMargin.replaceAll("\n", " "))
+  }
+
+  def paramExceedOneCharError(paramName: String): Throwable = {
+    new RuntimeException(s"$paramName cannot be more than one character")
+  }
+
+  def paramIsNotIntegerError(paramName: String, value: String): Throwable = {
+    new RuntimeException(s"$paramName should be an integer. Found $value")
+  }
+
+  def paramIsNotBooleanValueError(paramName: String): Throwable = {
+    new Exception(s"$paramName flag can be true or false")
+  }
+
+  def foundNullValueForNotNullableFieldError(name: String): Throwable = {
+    new RuntimeException(s"null value found but field $name is not nullable.")
+  }
+
+  def malformedCSVRecordError(): Throwable = {
+    new RuntimeException("Malformed CSV record")
+  }
+
+  def elementsOfTupleExceedLimitError(): Throwable = {
+    new UnsupportedOperationException("Due to Scala's limited support of tuple, " +
+      "tuple with more than 22 elements are not supported.")
+  }
+
+  def expressionDecodingError(e: Exception, expressions: Seq[Expression]): Throwable = {
+    new RuntimeException(s"Error while decoding: $e\n" +
+      s"${expressions.map(_.simpleString(SQLConf.get.maxToStringFields)).mkString("\n")}", e)
+  }
+
+  def expressionEncodingError(e: Exception, expressions: Seq[Expression]): Throwable = {
+    new RuntimeException(s"Error while encoding: $e\n" +
+      s"${expressions.map(_.simpleString(SQLConf.get.maxToStringFields)).mkString("\n")}", e)
+  }
+
+  def classHasUnexpectedSerializerError(clsName: String, objSerializer: Expression): Throwable = {
+    new RuntimeException(s"class $clsName has unexpected serializer: $objSerializer")
+  }
+
+  def cannotGetOuterPointerForInnerClassError(innerCls: Class[_]): Throwable = {
+    new RuntimeException(s"Failed to get outer pointer for ${innerCls.getName}")
+  }
+
+  def userDefinedTypeNotAnnotatedAndRegisteredError(udt: UserDefinedType[_]): Throwable = {
+    new SparkException(s"${udt.userClass.getName} is not annotated with " +
+      "SQLUserDefinedType nor registered with UDTRegistration.}")
+  }
+
+  def invalidInputSyntaxForBooleanError(s: UTF8String): UnsupportedOperationException = {
+    new UnsupportedOperationException(s"invalid input syntax for type boolean: $s")
+  }
+
+  def unsupportedOperandTypeForSizeFunctionError(dataType: DataType): Throwable = {
+    new UnsupportedOperationException(
+      s"The size function doesn't support the operand type ${dataType.getClass.getCanonicalName}")
+  }
+
+  def unexpectedValueForStartInFunctionError(prettyName: String): RuntimeException = {
+    new RuntimeException(
+      s"Unexpected value for start in function $prettyName: SQL array indices start at 1.")
+  }
+
+  def unexpectedValueForLengthInFunctionError(prettyName: String): RuntimeException = {
+    new RuntimeException(s"Unexpected value for length in function $prettyName: " +
+      "length must be greater than or equal to 0.")
+  }
+
+  def sqlArrayIndexNotStartAtOneError(): ArrayIndexOutOfBoundsException = {
+    new ArrayIndexOutOfBoundsException("SQL array indices start at 1")
+  }
+
+  def concatArraysWithElementsExceedLimitError(numberOfElements: Long): Throwable = {
+    new RuntimeException(
+      s"""
+         |Unsuccessful try to concat arrays with $numberOfElements
+         |elements due to exceeding the array size limit
+         |${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}.
+       """.stripMargin.replaceAll("\n", " "))
+  }
+
+  def flattenArraysWithElementsExceedLimitError(numberOfElements: Long): Throwable = {
+    new RuntimeException(
+      s"""
+         |Unsuccessful try to flatten an array of arrays with $numberOfElements
+         |elements due to exceeding the array size limit
+         |${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}.
+       """.stripMargin.replaceAll("\n", " "))
+  }
+
+  def createArrayWithElementsExceedLimitError(count: Any): RuntimeException = {
+    new RuntimeException(
+      s"""
+         |Unsuccessful try to create array with $count elements
+         |due to exceeding the array size limit
+         |${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}.
+       """.stripMargin.replaceAll("\n", " "))
+  }
+
+  def unionArrayWithElementsExceedLimitError(length: Int): Throwable = {
+    new RuntimeException(
+      s"""
+         |Unsuccessful try to union arrays with $length
+         |elements due to exceeding the array size limit
+         |${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}.
+       """.stripMargin.replaceAll("\n", " "))
+  }
+
+  def initialTypeNotTargetDataTypeError(dataType: DataType, target: String): Throwable = {
+    new UnsupportedOperationException(s"Initial type ${dataType.catalogString} must be a $target")
+  }
+
+  def initialTypeNotTargetDataTypesError(dataType: DataType): Throwable = {
+    new UnsupportedOperationException(
+      s"Initial type ${dataType.catalogString} must be " +
+        s"an ${ArrayType.simpleString}, a ${StructType.simpleString} or a ${MapType.simpleString}")
+  }
+
+  def cannotConvertColumnToJSONError(name: String, dataType: DataType): Throwable = {
+    new UnsupportedOperationException(
+      s"Unable to convert column $name of type ${dataType.catalogString} to JSON.")
+  }
+
+  def malformedRecordsDetectedInSchemaInferenceError(e: Throwable): Throwable = {
+    new SparkException("Malformed records are detected in schema inference. " +
+      s"Parse Mode: ${FailFastMode.name}.", e)
+  }
+
+  def malformedJSONError(): Throwable = {
+    new SparkException("Malformed JSON")
+  }
+
+  def malformedRecordsDetectedInSchemaInferenceError(dataType: DataType): Throwable = {
+    new SparkException(
+      s"""
+         |Malformed records are detected in schema inference.
+         |Parse Mode: ${FailFastMode.name}. Reasons: Failed to infer a common schema.
+         |Struct types are expected, but `${dataType.catalogString}` was found.
+       """.stripMargin.replaceAll("\n", " "))
+  }
+
+  def cannotRewriteDomainJoinWithConditionsError(
+      conditions: Seq[Expression], d: DomainJoin): Throwable = {
+    new IllegalStateException(
+      s"Unable to rewrite domain join with conditions: $conditions\n$d")
+  }
+
+  def decorrelateInnerQueryThroughPlanUnsupportedError(plan: LogicalPlan): Throwable = {
+    new UnsupportedOperationException(
+      s"Decorrelate inner query through ${plan.nodeName} is not supported.")
+  }
+
+  def methodCalledInAnalyzerNotAllowedError(): Throwable = {
+    new RuntimeException("This method should not be called in the analyzer")
+  }
+
+  def cannotSafelyMergeSerdePropertiesError(
+      props1: Map[String, String],
+      props2: Map[String, String],
+      conflictKeys: Set[String]): Throwable = {
+    new UnsupportedOperationException(
+      s"""
+         |Cannot safely merge SERDEPROPERTIES:
+         |${props1.map { case (k, v) => s"$k=$v" }.mkString("{", ",", "}")}
+         |${props2.map { case (k, v) => s"$k=$v" }.mkString("{", ",", "}")}
+         |The conflict keys: ${conflictKeys.mkString(", ")}
+         |""".stripMargin)
+  }
+
+  def pairUnsupportedAtFunctionError(
+      r1: ValueInterval, r2: ValueInterval, function: String): Throwable = {
+    new UnsupportedOperationException(s"Not supported pair: $r1, $r2 at $function()")
+  }
+
+  def onceStrategyIdempotenceIsBrokenForBatchError[TreeType <: TreeNode[_]](
+      batchName: String, plan: TreeType, reOptimized: TreeType): Throwable = {
+    new RuntimeException(
+      s"""
+         |Once strategy's idempotence is broken for batch $batchName
+         |${sideBySide(plan.treeString, reOptimized.treeString).mkString("\n")}
+       """.stripMargin)
+  }
+
+  def structuralIntegrityOfInputPlanIsBrokenInClassError(className: String): Throwable = {
+    new RuntimeException("The structural integrity of the input plan is broken in " +
+      s"$className.")
+  }
+
+  def structuralIntegrityIsBrokenAfterApplyingRuleError(
+      ruleName: String, batchName: String): Throwable = {
+    new RuntimeException(s"After applying rule $ruleName in batch $batchName, " +
+      "the structural integrity of the plan is broken.")
+  }
+
+  def ruleIdNotFoundForRuleError(ruleName: String): Throwable = {
+    new NoSuchElementException(s"Rule id not found for $ruleName")
+  }
+
+  def cannotCreateArrayWithElementsExceedLimitError(
+      numElements: Long, additionalErrorMessage: String): Throwable = {
+    new RuntimeException(
+      s"""
+         |Cannot create array with $numElements
+         |elements of data due to exceeding the limit
+         |${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH} elements for ArrayData.
+         |$additionalErrorMessage
+       """.stripMargin.replaceAll("\n", " "))
+  }
+
+  def indexOutOfBoundsOfArrayDataError(idx: Int): Throwable = {
+    new IndexOutOfBoundsException(
+      s"Index $idx must be between 0 and the length of the ArrayData.")
+  }
+
+  def malformedRecordsDetectedInRecordParsingError(e: BadRecordException): Throwable = {
+    new SparkException("Malformed records are detected in record parsing. " +
+      s"Parse Mode: ${FailFastMode.name}. To process malformed records as null " +
+      "result, try setting the option 'mode' as 'PERMISSIVE'.", e)
+  }
+
+  def remoteOperationsUnsupportedError(): Throwable = {
+    new RuntimeException("Remote operations not supported")
+  }
+
+  def invalidKerberosConfigForHiveServer2Error(): Throwable = {
+    new IOException(
+      "HiveServer2 Kerberos principal or keytab is not correctly configured")
+  }
+
+  def parentSparkUIToAttachTabNotFoundError(): Throwable = {
+    new SparkException("Parent SparkUI to attach this tab to not found!")
+  }
+
+  def inferSchemaUnsupportedForHiveError(): Throwable = {
+    new UnsupportedOperationException("inferSchema is not supported for hive data source.")
+  }
+
+  def requestedPartitionsMismatchTablePartitionsError(
+      table: CatalogTable, partition: Map[String, Option[String]]): Throwable = {
+    new SparkException(
+      s"""
+         |Requested partitioning does not match the ${table.identifier.table} table:
+         |Requested partitions: ${partition.keys.mkString(",")}
+         |Table partitions: ${table.partitionColumnNames.mkString(",")}
+       """.stripMargin)
+  }
+
+  def dynamicPartitionKeyNotAmongWrittenPartitionPathsError(key: String): Throwable = {
+    new SparkException(s"Dynamic partition key $key is not among written partition paths.")
+  }
+
+  def cannotRemovePartitionDirError(partitionPath: Path): Throwable = {
+    new RuntimeException(s"Cannot remove partition directory '$partitionPath'")
+  }
+
+  def cannotCreateStagingDirError(message: String, e: IOException): Throwable = {
+    new RuntimeException(s"Cannot create staging directory: $message", e)
+  }
+
+  def serDeInterfaceNotFoundError(e: NoClassDefFoundError): Throwable = {
+    new ClassNotFoundException("The SerDe interface removed since Hive 2.3(HIVE-15167)." +
+      " Please migrate your custom SerDes to Hive 2.3. See HIVE-15167 for more details.", e)
+  }
+
+  def convertHiveTableToCatalogTableError(
+      e: SparkException, dbName: String, tableName: String): Throwable = {
+    new SparkException(s"${e.getMessage}, db: $dbName, table: $tableName", e)
+  }
+
+  def cannotRecognizeHiveTypeError(
+      e: ParseException, fieldType: String, fieldName: String): Throwable = {
+    new SparkException(
+      s"Cannot recognize hive type string: $fieldType, column: $fieldName", e)
+  }
+
+  def getTablesByTypeUnsupportedByHiveVersionError(): Throwable = {
+    new UnsupportedOperationException("Hive 2.2 and lower versions don't support " +
+      "getTablesByType. Please use Hive 2.3 or higher version.")
+  }
+
+  def dropTableWithPurgeUnsupportedError(): Throwable = {
+    new UnsupportedOperationException("DROP TABLE ... PURGE")
+  }
+
+  def alterTableWithDropPartitionAndPurgeUnsupportedError(): Throwable = {
+    new UnsupportedOperationException("ALTER TABLE ... DROP PARTITION ... PURGE")
+  }
+
+  def invalidPartitionFilterError(): Throwable = {
+    new UnsupportedOperationException(
+      """Partition filter cannot have both `"` and `'` characters""")
+  }
+
+  def getPartitionMetadataByFilterError(e: InvocationTargetException): Throwable = {
+    new RuntimeException(
+      s"""
+         |Caught Hive MetaException attempting to get partition metadata by filter
+         |from Hive. You can set the Spark configuration setting
+         |${SQLConf.HIVE_MANAGE_FILESOURCE_PARTITIONS.key} to false to work around
+         |this problem, however this will result in degraded performance. Please
+         |report a bug: https://issues.apache.org/jira/browse/SPARK
+       """.stripMargin.replaceAll("\n", " "), e)
+  }
+
+  def unsupportedHiveMetastoreVersionError(version: String, key: String): Throwable = {
+    new UnsupportedOperationException(s"Unsupported Hive Metastore version ($version). " +
+      s"Please set $key with a valid version.")
+  }
+
+  def loadHiveClientCausesNoClassDefFoundError(
+      cnf: NoClassDefFoundError,
+      execJars: Seq[URL],
+      key: String,
+      e: InvocationTargetException): Throwable = {
+    new ClassNotFoundException(
+      s"""
+         |$cnf when creating Hive client using classpath: ${execJars.mkString(", ")}\n
+         |Please make sure that jars for your version of hive and hadoop are included in the
+         |paths passed to $key.
+       """.stripMargin.replaceAll("\n", " "), e)
+  }
+
+  def cannotFetchTablesOfDatabaseError(dbName: String, e: Exception): Throwable = {
+    new SparkException(s"Unable to fetch tables of db $dbName", e)
+  }
+
+  def illegalLocationClauseForViewPartitionError(): Throwable = {
+    new SparkException("LOCATION clause illegal for view partition")
   }
 }

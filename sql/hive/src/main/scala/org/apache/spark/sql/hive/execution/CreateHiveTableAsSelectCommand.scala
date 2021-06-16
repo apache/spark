@@ -19,10 +19,11 @@ package org.apache.spark.sql.hive.execution
 
 import scala.util.control.NonFatal
 
-import org.apache.spark.sql.{AnalysisException, Row, SaveMode, SparkSession}
+import org.apache.spark.sql.{Row, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, SessionCatalog}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.command.{DataWritingCommand, DDLUtils}
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, InsertIntoHadoopFsRelationCommand, LogicalRelation}
@@ -46,7 +47,7 @@ trait CreateHiveTableAsSelectBase extends DataWritingCommand {
         s"Expect the table $tableIdentifier has been dropped when the save mode is Overwrite")
 
       if (mode == SaveMode.ErrorIfExists) {
-        throw new AnalysisException(s"$tableIdentifier already exists.")
+        throw QueryCompilationErrors.tableIdentifierExistsError(tableIdentifier)
       }
       if (mode == SaveMode.Ignore) {
         // Since the table already exists and the save mode is Ignore, we will just return.
@@ -57,6 +58,9 @@ trait CreateHiveTableAsSelectBase extends DataWritingCommand {
       command.run(sparkSession, child)
       DataWritingCommand.propogateMetrics(sparkSession.sparkContext, command, metrics)
     } else {
+        tableDesc.storage.locationUri.foreach { p =>
+          DataWritingCommand.assertEmptyRootPath(p, mode, sparkSession.sessionState.newHadoopConf)
+        }
       // TODO ideally, we should get the output data ready first and then
       // add the relation into catalog, just in case of failure occurs while data
       // processing.
@@ -130,6 +134,9 @@ case class CreateHiveTableAsSelectCommand(
 
   override def writingCommandClassName: String =
     Utils.getSimpleName(classOf[InsertIntoHiveTable])
+
+  override protected def withNewChildInternal(
+    newChild: LogicalPlan): CreateHiveTableAsSelectCommand = copy(query = newChild)
 }
 
 /**
@@ -156,8 +163,8 @@ case class OptimizedCreateHiveTableAsSelectCommand(
 
     val hadoopRelation = metastoreCatalog.convert(hiveTable) match {
       case LogicalRelation(t: HadoopFsRelation, _, _, _) => t
-      case _ => throw new AnalysisException(s"$tableIdentifier should be converted to " +
-        "HadoopFsRelation.")
+      case _ => throw QueryCompilationErrors.tableIdentifierNotConvertedToHadoopFsRelationError(
+        tableIdentifier)
     }
 
     InsertIntoHadoopFsRelationCommand(
@@ -177,4 +184,7 @@ case class OptimizedCreateHiveTableAsSelectCommand(
 
   override def writingCommandClassName: String =
     Utils.getSimpleName(classOf[InsertIntoHadoopFsRelationCommand])
+
+  override protected def withNewChildInternal(
+    newChild: LogicalPlan): OptimizedCreateHiveTableAsSelectCommand = copy(query = newChild)
 }

@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodegenFallback, ExprCode}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{AGGREGATE_EXPRESSION, TreePattern}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
 
@@ -62,10 +63,9 @@ case object Complete extends AggregateMode
  * A place holder expressions used in code-gen, it does not change the corresponding value
  * in the row.
  */
-case object NoOp extends Expression with Unevaluable {
+case object NoOp extends LeafExpression with Unevaluable {
   override def nullable: Boolean = true
   override def dataType: DataType = NullType
-  override def children: Seq[Expression] = Nil
 }
 
 object AggregateExpression {
@@ -80,6 +80,14 @@ object AggregateExpression {
       isDistinct,
       filter,
       NamedExpression.newExprId)
+  }
+
+  def containsAggregate(expr: Expression): Boolean = {
+    expr.find(isAggregate).isDefined
+  }
+
+  def isAggregate(expr: Expression): Boolean = {
+    expr.isInstanceOf[AggregateExpression] || PythonUDF.isGroupedAggPandasUDF(expr)
   }
 }
 
@@ -96,6 +104,8 @@ case class AggregateExpression(
     resultId: ExprId)
   extends Expression
   with Unevaluable {
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(AGGREGATE_EXPRESSION)
 
   @transient
   lazy val resultAttribute: Attribute = if (aggregateFunction.resolved) {
@@ -165,6 +175,16 @@ case class AggregateExpression(
       case _ => aggFuncStr
     }
   }
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): AggregateExpression =
+    if (filter.isDefined) {
+      copy(
+        aggregateFunction = newChildren(0).asInstanceOf[AggregateFunction],
+        filter = Some(newChildren(1)))
+    } else {
+      copy(aggregateFunction = newChildren(0).asInstanceOf[AggregateFunction])
+    }
 }
 
 /**

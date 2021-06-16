@@ -142,13 +142,12 @@ an executor should not be idle if there are still pending tasks to be scheduled.
 
 ### Graceful Decommission of Executors
 
-Before dynamic allocation, a Spark executor exits either on failure or when the associated
-application has also exited. In both scenarios, all state associated with the executor is no
-longer needed and can be safely discarded. With dynamic allocation, however, the application
-is still running when an executor is explicitly removed. If the application attempts to access
-state stored in or written by the executor, it will have to perform a recompute the state. Thus,
-Spark needs a mechanism to decommission an executor gracefully by preserving its state before
-removing it.
+Before dynamic allocation, if a Spark executor exits when the associated application has also exited 
+then all state associated with the executor is no longer needed and can be safely discarded. 
+With dynamic allocation, however, the application is still running when an executor is explicitly 
+removed. If the application attempts to access state stored in or written by the executor, it will 
+have to perform a recompute the state. Thus, Spark needs a mechanism to decommission an executor 
+gracefully by preserving its state before removing it.
 
 This requirement is especially important for shuffles. During a shuffle, the Spark executor first
 writes its own map outputs locally to disk, and then acts as the server for those files when other
@@ -252,10 +251,11 @@ properties:
 
 The pool properties can be set by creating an XML file, similar to `conf/fairscheduler.xml.template`,
 and either putting a file named `fairscheduler.xml` on the classpath, or setting `spark.scheduler.allocation.file` property in your
-[SparkConf](configuration.html#spark-properties).
+[SparkConf](configuration.html#spark-properties). The file path can either be a local file path or HDFS file path.
 
 {% highlight scala %}
 conf.set("spark.scheduler.allocation.file", "/path/to/file")
+conf.set("spark.scheduler.allocation.file", "hdfs:///path/to/file")
 {% endhighlight %}
 
 The format of the XML file is simply a `<pool>` element for each pool, with different elements

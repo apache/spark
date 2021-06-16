@@ -26,7 +26,7 @@ import org.scalatest.exceptions.TestFailedException
 
 import org.apache.spark.{SparkException, TestUtils}
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.functions._
@@ -39,14 +39,14 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
 
   import ScriptTransformationIOSchema._
 
+  override protected def defaultSerDe(): String = "hive-serde"
+
   override def createScriptTransformationExec(
-      input: Seq[Expression],
       script: String,
       output: Seq[Attribute],
       child: SparkPlan,
       ioschema: ScriptTransformationIOSchema): BaseScriptTransformationExec = {
     HiveScriptTransformationExec(
-      input = input,
       script = script,
       output = output,
       child = child,
@@ -68,7 +68,6 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
     checkAnswer(
       rowsDf,
       (child: SparkPlan) => createScriptTransformationExec(
-        input = Seq(rowsDf.col("a").expr),
         script = "cat",
         output = Seq(AttributeReference("a", StringType)()),
         child = child,
@@ -86,7 +85,6 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
       checkAnswer(
         rowsDf,
         (child: SparkPlan) => createScriptTransformationExec(
-          input = Seq(rowsDf.col("a").expr),
           script = "cat",
           output = Seq(AttributeReference("a", StringType)()),
           child = ExceptionInjectingOperator(child),
@@ -107,7 +105,6 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
     val e = intercept[SparkException] {
       val plan =
         createScriptTransformationExec(
-          input = Seq(rowsDf.col("a").expr),
           script = "some_non_existent_command",
           output = Seq(AttributeReference("a", StringType)()),
           child = rowsDf.queryExecution.sparkPlan,
@@ -129,7 +126,6 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
     checkAnswer(
       rowsDf,
       (child: SparkPlan) => createScriptTransformationExec(
-        input = Seq(rowsDf.col("name").expr),
         script = "cat",
         output = Seq(AttributeReference("name", StringType)()),
         child = child,
@@ -146,7 +142,6 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
     val e = intercept[SparkException] {
       val plan =
         createScriptTransformationExec(
-          input = Seq(rowsDf.col("a").expr),
           script = "some_non_existent_command",
           output = Seq(AttributeReference("a", StringType)()),
           child = rowsDf.queryExecution.sparkPlan,
@@ -334,12 +329,8 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
 
       // Hive serde support ArrayType/MapType/StructType as input and output data type
       checkAnswer(
-        df,
+        df.select('c, 'd, 'e),
         (child: SparkPlan) => createScriptTransformationExec(
-          input = Seq(
-            df.col("c").expr,
-            df.col("d").expr,
-            df.col("e").expr),
           script = "cat",
           output = Seq(
             AttributeReference("c", ArrayType(IntegerType))(),
@@ -387,12 +378,11 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
 
       val e1 = intercept[SparkException] {
         val plan = createScriptTransformationExec(
-          input = Seq(df.col("a").expr, df.col("b").expr),
           script = "cat",
           output = Seq(
             AttributeReference("a", IntegerType)(),
             AttributeReference("b", CalendarIntervalType)()),
-          child = df.queryExecution.sparkPlan,
+          child = df.select('a, 'b).queryExecution.sparkPlan,
           ioschema = hiveIOSchema)
         SparkPlanTest.executePlan(plan, hiveContext)
       }.getMessage
@@ -400,12 +390,11 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
 
       val e2 = intercept[SparkException] {
         val plan = createScriptTransformationExec(
-          input = Seq(df.col("a").expr, df.col("c").expr),
           script = "cat",
           output = Seq(
             AttributeReference("a", IntegerType)(),
             AttributeReference("c", new TestUDT.MyDenseVectorUDT)()),
-          child = df.queryExecution.sparkPlan,
+          child = df.select('a, 'c).queryExecution.sparkPlan,
           ioschema = hiveIOSchema)
         SparkPlanTest.executePlan(plan, hiveContext)
       }.getMessage
@@ -551,16 +540,12 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
       checkAnswer(
         df,
         (child: SparkPlan) => createScriptTransformationExec(
-          input = Seq(
-            df.col("a").expr,
-            df.col("b").expr,
-            df.col("c").expr,
-            df.col("d").expr),
           script = "cat",
           output = Seq(
-            AttributeReference("a", DayTimeIntervalType)(),
-            AttributeReference("b", DayTimeIntervalType)(),
-            AttributeReference("c", DayTimeIntervalType)(),
+            // TODO(SPARK-35733): Check all day-time interval types in HiveInspectors tests
+            AttributeReference("a", DayTimeIntervalType())(),
+            AttributeReference("b", DayTimeIntervalType())(),
+            AttributeReference("c", DayTimeIntervalType())(),
             AttributeReference("d", YearMonthIntervalType)()),
           child = child,
           ioschema = hiveIOSchema),
@@ -578,9 +563,9 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
         checkAnswer(
           df,
           (child: SparkPlan) => createScriptTransformationExec(
-            input = Seq(df.col("a").expr),
             script = "cat",
-            output = Seq(AttributeReference("a", DayTimeIntervalType)()),
+            // TODO(SPARK-35733): Check all day-time interval types in HiveInspectors tests
+            output = Seq(AttributeReference("a", DayTimeIntervalType())()),
             child = child,
             ioschema = hiveIOSchema),
           df.select($"a").collect())

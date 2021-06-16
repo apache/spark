@@ -20,11 +20,13 @@ import java.util.concurrent.{ScheduledExecutorService, TimeUnit}
 
 import scala.concurrent.Future
 
+import io.fabric8.kubernetes.api.model.Pod
 import io.fabric8.kubernetes.client.KubernetesClient
 
 import org.apache.spark.SparkContext
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
+import org.apache.spark.deploy.k8s.KubernetesUtils
 import org.apache.spark.deploy.k8s.submit.KubernetesClientUtils
 import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.internal.config.SCHEDULER_MIN_REGISTERED_RESOURCES_RATIO
@@ -56,24 +58,25 @@ private[spark] class KubernetesClusterSchedulerBackend(
 
   private val initialExecutors = SchedulerBackendUtils.getInitialTargetExecutorNumber(conf)
 
+  private val shouldDeleteDriverService = conf.get(KUBERNETES_DRIVER_SERVICE_DELETE_ON_TERMINATION)
+
   private val shouldDeleteExecutors = conf.get(KUBERNETES_DELETE_EXECUTORS)
 
   private val defaultProfile = scheduler.sc.resourceProfileManager.defaultResourceProfile
 
   // Allow removeExecutor to be accessible by ExecutorPodsLifecycleEventHandler
   private[k8s] def doRemoveExecutor(executorId: String, reason: ExecutorLossReason): Unit = {
-    if (isExecutorActive(executorId)) {
-      removeExecutor(executorId, reason)
-    }
+    removeExecutor(executorId, reason)
   }
 
-  private def setUpExecutorConfigMap(): Unit = {
+  private def setUpExecutorConfigMap(driverPod: Option[Pod]): Unit = {
     val configMapName = KubernetesClientUtils.configMapNameExecutor
     val confFilesMap = KubernetesClientUtils
       .buildSparkConfDirFilesMap(configMapName, conf, Map.empty)
     val labels =
       Map(SPARK_APP_ID_LABEL -> applicationId(), SPARK_ROLE_LABEL -> SPARK_POD_EXECUTOR_ROLE)
     val configMap = KubernetesClientUtils.buildConfigMap(configMapName, confFilesMap, labels)
+    KubernetesUtils.addOwnerReference(driverPod.orNull, Seq(configMap))
     kubernetesClient.configMaps().create(configMap)
   }
 
@@ -97,7 +100,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
     watchEvents.start(applicationId())
     pollEvents.start(applicationId())
     if (!conf.get(KUBERNETES_EXECUTOR_DISABLE_CONFIGMAP)) {
-      setUpExecutorConfigMap()
+      setUpExecutorConfigMap(podAllocator.driverPod)
     }
   }
 
@@ -118,6 +121,22 @@ private[spark] class KubernetesClusterSchedulerBackend(
 
     Utils.tryLogNonFatalError {
       pollEvents.stop()
+    }
+
+    if (shouldDeleteDriverService) {
+      Utils.tryLogNonFatalError {
+        kubernetesClient
+          .services()
+          .withLabel(SPARK_APP_ID_LABEL, applicationId())
+          .delete()
+      }
+    }
+
+    Utils.tryLogNonFatalError {
+      kubernetesClient
+        .persistentVolumeClaims()
+        .withLabel(SPARK_APP_ID_LABEL, applicationId())
+        .delete()
     }
 
     if (shouldDeleteExecutors) {

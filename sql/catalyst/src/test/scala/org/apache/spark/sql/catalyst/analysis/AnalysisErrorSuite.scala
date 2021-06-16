@@ -88,6 +88,8 @@ case class TestFunction(
   extends Expression with ImplicitCastInputTypes with Unevaluable {
   override def nullable: Boolean = true
   override def dataType: DataType = StringType
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
+    copy(children = newChildren)
 }
 
 case class UnresolvedTestPlan() extends LeafNode {
@@ -732,5 +734,77 @@ class AnalysisErrorSuite extends AnalysisTest {
       assertAnalysisError(plan,
         s"data type mismatch: argument 1 requires (int or bigint) type" :: Nil)
     }
+  }
+
+  test("SPARK-34946: correlated scalar subquery in grouping expressions only") {
+    val c1 = AttributeReference("c1", IntegerType)()
+    val c2 = AttributeReference("c2", IntegerType)()
+    val t = LocalRelation(c1, c2)
+    val plan = Aggregate(
+      ScalarSubquery(
+        Aggregate(Nil, sum($"c2").as("sum") :: Nil,
+          Filter($"t1.c1" === $"t2.c1",
+            t.as("t2")))
+      ) :: Nil,
+      sum($"c2").as("sum") :: Nil, t.as("t1"))
+    assertAnalysisError(plan, "Correlated scalar subqueries in the group by clause must also be " +
+      "in the aggregate expressions" :: Nil)
+  }
+
+  test("SPARK-34946: correlated scalar subquery in aggregate expressions only") {
+    val c1 = AttributeReference("c1", IntegerType)()
+    val c2 = AttributeReference("c2", IntegerType)()
+    val t = LocalRelation(c1, c2)
+    val plan = Aggregate(
+      $"c1" :: Nil,
+      ScalarSubquery(
+        Aggregate(Nil, sum($"c2").as("sum") :: Nil,
+          Filter($"t1.c1" === $"t2.c1",
+            t.as("t2")))
+      ).as("sub") :: Nil, t.as("t1"))
+    assertAnalysisError(plan, "Correlated scalar subquery 'scalarsubquery(t1.c1)' is " +
+      "neither present in the group by, nor in an aggregate function. Add it to group by " +
+      "using ordinal position or wrap it in first() (or first_value) if you don't care " +
+      "which value you get." :: Nil)
+  }
+
+  test("SPARK-35080: Unsupported correlated equality predicates in subquery") {
+    val a = AttributeReference("a", IntegerType)()
+    val b = AttributeReference("b", IntegerType)()
+    val c = AttributeReference("c", IntegerType)()
+    val t1 = LocalRelation(a, b)
+    val t2 = LocalRelation(c)
+    val conditions = Seq(
+      (abs($"a") === $"c", "abs(a) = outer(c)"),
+      (abs($"a") <=> $"c", "abs(a) <=> outer(c)"),
+      ($"a" + 1 === $"c", "(a + 1) = outer(c)"),
+      ($"a" + $"b" === $"c", "(a + b) = outer(c)"),
+      ($"a" + $"c" === $"b", "(a + outer(c)) = b"),
+      (And($"a" === $"c", Cast($"a", IntegerType) === $"c"), "CAST(a AS INT) = outer(c)"))
+    conditions.foreach { case (cond, msg) =>
+      val plan = Project(
+        ScalarSubquery(
+          Aggregate(Nil, count(Literal(1)).as("cnt") :: Nil,
+            Filter(cond, t1))
+        ).as("sub") :: Nil,
+        t2)
+      assertAnalysisError(plan, s"Correlated column is not allowed in predicate ($msg)" :: Nil)
+    }
+  }
+
+  test("SPARK-35673: fail if the plan still contains UnresolvedHint after analysis") {
+    val hintName = "some_random_hint_that_does_not_exist"
+    val plan = UnresolvedHint(hintName, Seq.empty,
+      Project(Alias(Literal(1), "x")() :: Nil, OneRowRelation())
+    )
+    assert(plan.resolved)
+
+    val error = intercept[AnalysisException] {
+      SimpleAnalyzer.checkAnalysis(plan)
+    }
+    assert(error.message.contains(s"Hint not found: ${hintName}"))
+
+    // UnresolvedHint be removed by batch `Remove Unresolved Hints`
+    assertAnalysisSuccess(plan, true)
   }
 }

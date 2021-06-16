@@ -22,7 +22,7 @@ Upgrading from PySpark 2.4 to 3.0
 
 * In Spark 3.0, PySpark requires a pandas version of 0.23.2 or higher to use pandas related functionality, such as ``toPandas``, ``createDataFrame`` from pandas DataFrame, and so on.
 
-* In Spark 3.0, PySpark requires a PyArrow version of 0.12.1 or higher to use PyArrow related functionality, such as ``pandas_udf``, ``toPandas`` and ``createDataFrame`` with “spark.sql.execution.arrow.enabled=true”, etc.
+* In Spark 3.0, PySpark requires a PyArrow version of 0.12.1 or higher to use PyArrow related functionality, such as ``pandas_udf``, ``toPandas`` and ``createDataFrame`` with "spark.sql.execution.arrow.enabled=true", etc.
 
 * In PySpark, when creating a ``SparkSession`` with ``SparkSession.builder.getOrCreate()``, if there is an existing ``SparkContext``, the builder was trying to update the ``SparkConf`` of the existing ``SparkContext`` with configurations specified to the builder, but the ``SparkContext`` is shared by all ``SparkSession`` s, so we should not update them. In 3.0, the builder comes to not update the configurations. This is the same behavior as Java/Scala API in 2.3 and above. If you want to update them, you need to update them prior to creating a ``SparkSession``.
 

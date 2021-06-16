@@ -69,10 +69,12 @@ class RelationalGroupedDataset protected[sql](
         Dataset.ofRows(df.sparkSession, Aggregate(groupingExprs, aliasedAgg, df.logicalPlan))
       case RelationalGroupedDataset.RollupType =>
         Dataset.ofRows(
-          df.sparkSession, Aggregate(Seq(Rollup(groupingExprs)), aliasedAgg, df.logicalPlan))
+          df.sparkSession, Aggregate(Seq(Rollup(groupingExprs.map(Seq(_)))),
+            aliasedAgg, df.logicalPlan))
       case RelationalGroupedDataset.CubeType =>
         Dataset.ofRows(
-          df.sparkSession, Aggregate(Seq(Cube(groupingExprs)), aliasedAgg, df.logicalPlan))
+          df.sparkSession, Aggregate(Seq(Cube(groupingExprs.map(Seq(_)))),
+            aliasedAgg, df.logicalPlan))
       case RelationalGroupedDataset.PivotType(pivotCol, values) =>
         val aliasedGrps = groupingExprs.map(alias)
         Dataset.ofRows(
@@ -591,11 +593,10 @@ class RelationalGroupedDataset protected[sql](
     val right = r.df.sparkSession.sessionState.executePlan(
       Project(rightGroupingNamedExpressions ++ rightChild.output, rightChild)).analyzed
 
-    val leftAttributes = left.output.take(leftGroupingNamedExpressions.length)
-    val rightAttributes = right.output.take(rightGroupingNamedExpressions.length)
-
     val output = expr.dataType.asInstanceOf[StructType].toAttributes
-    val plan = FlatMapCoGroupsInPandas(leftAttributes, rightAttributes, expr, output, left, right)
+    val plan = FlatMapCoGroupsInPandas(
+      leftGroupingNamedExpressions.length, rightGroupingNamedExpressions.length,
+      expr, output, left, right)
     Dataset.ofRows(df.sparkSession, plan)
   }
 

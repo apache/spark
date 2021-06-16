@@ -18,7 +18,8 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.{Date, Timestamp}
-import java.time.DateTimeException
+import java.time.{DateTimeException, Duration, LocalDate, LocalDateTime, Period}
+import java.time.temporal.ChronoUnit
 import java.util.{Calendar, TimeZone}
 
 import scala.collection.parallel.immutable.ParVector
@@ -34,9 +35,12 @@ import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
+import org.apache.spark.sql.catalyst.util.IntervalUtils.microsToDuration
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.DataTypeTestUtils.dayTimeIntervalTypes
 import org.apache.spark.unsafe.types.UTF8String
 
 abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
@@ -52,6 +56,8 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(cast(Literal.create(null, from), to, UTC_OPT), null)
   }
 
+  protected def isAlwaysNullable: Boolean = false
+
   test("null cast") {
     import DataTypeTestUtils._
 
@@ -60,11 +66,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     }
 
     atomicTypes.foreach(dt => checkNullCast(NullType, dt))
-    (atomicTypes -- Set(
-      // TODO(SPARK-34668): Support casting of day-time intervals to strings
-      DayTimeIntervalType,
-      // TODO(SPARK-34667): Support casting of year-month intervals to strings
-      YearMonthIntervalType)).foreach(dt => checkNullCast(dt, StringType))
+    atomicTypes.foreach(dt => checkNullCast(dt, StringType))
     checkNullCast(StringType, BinaryType)
     checkNullCast(StringType, BooleanType)
     numericTypes.foreach(dt => checkNullCast(dt, BooleanType))
@@ -252,8 +254,8 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("cast from string") {
-    assert(cast("abcdef", StringType).nullable === false)
-    assert(cast("abcdef", BinaryType).nullable === false)
+    assert(cast("abcdef", StringType).nullable === isAlwaysNullable)
+    assert(cast("abcdef", BinaryType).nullable === isAlwaysNullable)
     assert(cast("abcdef", BooleanType).nullable)
     assert(cast("abcdef", TimestampType).nullable)
     assert(cast("abcdef", LongType).nullable)
@@ -797,6 +799,54 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       }
     }
   }
+
+  test("SPARK-34667: cast year-month interval to string") {
+    Seq(
+      Period.ofMonths(0) -> "0-0",
+      Period.ofMonths(1) -> "0-1",
+      Period.ofMonths(-1) -> "-0-1",
+      Period.ofYears(1) -> "1-0",
+      Period.ofYears(-1) -> "-1-0",
+      Period.ofYears(10).plusMonths(10) -> "10-10",
+      Period.ofYears(-123).minusMonths(6) -> "-123-6",
+      Period.ofMonths(Int.MaxValue) -> "178956970-7",
+      Period.ofMonths(Int.MinValue) -> "-178956970-8"
+    ).foreach { case (period, intervalPayload) =>
+      checkEvaluation(
+        Cast(Literal(period), StringType),
+        s"INTERVAL '$intervalPayload' YEAR TO MONTH")
+    }
+
+    checkConsistencyBetweenInterpretedAndCodegen(
+      (child: Expression) => Cast(child, StringType), YearMonthIntervalType)
+  }
+
+  test("SPARK-34668: cast day-time interval to string") {
+    Seq(
+      Duration.ZERO -> "0 00:00:00",
+      Duration.of(1, ChronoUnit.MICROS) -> "0 00:00:00.000001",
+      Duration.ofMillis(-1) -> "-0 00:00:00.001",
+      Duration.ofMillis(1234) -> "0 00:00:01.234",
+      Duration.ofSeconds(-9).minus(999999, ChronoUnit.MICROS) -> "-0 00:00:09.999999",
+      Duration.ofMinutes(30).plusMillis(59010) -> "0 00:30:59.01",
+      Duration.ofHours(-23).minusSeconds(59) -> "-0 23:00:59",
+      Duration.ofDays(1).plus(12345678, ChronoUnit.MICROS) -> "1 00:00:12.345678",
+      Duration.ofDays(-1234).minusHours(23).minusMinutes(59).minusSeconds(59).minusMillis(999) ->
+        "-1234 23:59:59.999",
+      microsToDuration(Long.MaxValue) -> "106751991 04:00:54.775807",
+      microsToDuration(Long.MinValue + 1) -> "-106751991 04:00:54.775807",
+      microsToDuration(Long.MinValue) -> "-106751991 04:00:54.775808"
+    ).foreach { case (period, intervalPayload) =>
+      checkEvaluation(
+        Cast(Literal(period), StringType),
+        s"INTERVAL '$intervalPayload' DAY TO SECOND")
+    }
+
+    dayTimeIntervalTypes.foreach { it =>
+      checkConsistencyBetweenInterpretedAndCodegen((child: Expression) =>
+        Cast(child, StringType), it)
+    }
+  }
 }
 
 abstract class AnsiCastSuiteBase extends CastSuiteBase {
@@ -910,9 +960,11 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
 
     if (optionalExpectedMsg.isDefined) {
       assert(message.contains(optionalExpectedMsg.get))
-    } else {
+    } else if (setConfigurationHint.nonEmpty) {
       assert(message.contains("with ANSI mode on"))
       assert(message.contains(setConfigurationHint))
+    } else {
+      assert("cannot cast [a-zA-Z]+ to [a-zA-Z]+".r.findFirstIn(message).isDefined)
     }
   }
 
@@ -965,11 +1017,6 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
   test("cast from invalid string to numeric should throw NumberFormatException") {
     // cast to IntegerType
     Seq(IntegerType, ShortType, ByteType, LongType).foreach { dataType =>
-      val array = Literal.create(Seq("123", "true", "f", null),
-        ArrayType(StringType, containsNull = true))
-      checkExceptionInExpression[NumberFormatException](
-        cast(array, ArrayType(dataType, containsNull = true)),
-        "invalid input syntax for type numeric: true")
       checkExceptionInExpression[NumberFormatException](
         cast("string", dataType), "invalid input syntax for type numeric: string")
       checkExceptionInExpression[NumberFormatException](
@@ -988,6 +1035,25 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
       checkExceptionInExpression[NumberFormatException](
         cast("abc.com", dataType), "invalid input syntax for type numeric: abc.com")
     }
+  }
+
+  protected def checkCastToNumericError(l: Literal, to: DataType, tryCastResult: Any): Unit = {
+    checkExceptionInExpression[NumberFormatException](
+      cast(l, to), "invalid input syntax for type numeric: true")
+  }
+
+  test("cast from invalid string array to numeric array should throw NumberFormatException") {
+    val array = Literal.create(Seq("123", "true", "f", null),
+      ArrayType(StringType, containsNull = true))
+
+    checkCastToNumericError(array, ArrayType(ByteType, containsNull = true),
+      Seq(123.toByte, null, null, null))
+    checkCastToNumericError(array, ArrayType(ShortType, containsNull = true),
+      Seq(123.toShort, null, null, null))
+    checkCastToNumericError(array, ArrayType(IntegerType, containsNull = true),
+      Seq(123, null, null, null))
+    checkCastToNumericError(array, ArrayType(LongType, containsNull = true),
+      Seq(123L, null, null, null))
   }
 
   test("Fast fail for cast string type to decimal type in ansi mode") {
@@ -1023,14 +1089,14 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
       "invalid input syntax for type numeric")
   }
 
-  protected def checkCastToBooleanError(l: Literal, to: DataType): Unit = {
+  protected def checkCastToBooleanError(l: Literal, to: DataType, tryCastResult: Any): Unit = {
     checkExceptionInExpression[UnsupportedOperationException](
       cast(l, to), s"invalid input syntax for type boolean")
   }
 
   test("ANSI mode: cast string to boolean with parse error") {
-    checkCastToBooleanError(Literal("abc"), BooleanType)
-    checkCastToBooleanError(Literal(""), BooleanType)
+    checkCastToBooleanError(Literal("abc"), BooleanType, null)
+    checkCastToBooleanError(Literal(""), BooleanType, null)
   }
 
   test("cast from array II") {
@@ -1043,14 +1109,14 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
       val to: DataType = ArrayType(BooleanType, containsNull = true)
       val ret = cast(array, to)
       assert(ret.resolved)
-      checkCastToBooleanError(array, to)
+      checkCastToBooleanError(array, to, Seq(null, true, false, null))
     }
 
     {
       val to: DataType = ArrayType(BooleanType, containsNull = true)
       val ret = cast(array_notNull, to)
       assert(ret.resolved)
-      checkCastToBooleanError(array_notNull, to)
+      checkCastToBooleanError(array_notNull, to, Seq(null, true, false))
     }
   }
 
@@ -1068,14 +1134,14 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
       val to: DataType = MapType(StringType, BooleanType, valueContainsNull = true)
       val ret = cast(map, to)
       assert(ret.resolved)
-      checkCastToBooleanError(map, to)
+      checkCastToBooleanError(map, to, Map("a" -> null, "b" -> true, "c" -> false, "d" -> null))
     }
 
     {
       val to: DataType = MapType(StringType, BooleanType, valueContainsNull = true)
       val ret = cast(map_notNull, to)
       assert(ret.resolved)
-      checkCastToBooleanError(map_notNull, to)
+      checkCastToBooleanError(map_notNull, to, Map("a" -> null, "b" -> true, "c" -> false))
     }
   }
 
@@ -1117,7 +1183,7 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
         StructField("d", BooleanType, nullable = true)))
       val ret = cast(struct, to)
       assert(ret.resolved)
-      checkCastToBooleanError(struct, to)
+      checkCastToBooleanError(struct, to, InternalRow(null, true, false, null))
     }
 
     {
@@ -1127,7 +1193,7 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
         StructField("c", BooleanType, nullable = true)))
       val ret = cast(struct_notNull, to)
       assert(ret.resolved)
-      checkCastToBooleanError(struct_notNull, to)
+      checkCastToBooleanError(struct_notNull, to, InternalRow(null, true, false))
     }
   }
 
@@ -1176,6 +1242,42 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
   test("SPARK-26218: Fix the corner case of codegen when casting float to Integer") {
     checkExceptionInExpression[ArithmeticException](
       cast(cast(Literal("2147483648"), FloatType), IntegerType), "overflow")
+  }
+
+  private val specialTs = Seq(
+    "0001-01-01T00:00:00", // the fist timestamp of Common Era
+    "1582-10-15T23:59:59", // the cutover date from Julian to Gregorian calendar
+    "1970-01-01T00:00:00", // the epoch timestamp
+    "9999-12-31T23:59:59"  // the last supported timestamp according to SQL standard
+  )
+
+  test("SPARK-35698: cast timestamp without time zone to string") {
+    specialTs.foreach { s =>
+      checkEvaluation(cast(LocalDateTime.parse(s), StringType), s.replace("T", " "))
+    }
+  }
+
+  test("SPARK-35711: cast timestamp without time zone to timestamp with local time zone") {
+    specialTs.foreach { s =>
+      val dt = LocalDateTime.parse(s)
+      checkEvaluation(cast(dt, TimestampType), DateTimeUtils.localDateTimeToMicros(dt))
+    }
+  }
+
+  test("SPARK-35716: cast timestamp without time zone to date type") {
+    specialTs.foreach { s =>
+      val dt = LocalDateTime.parse(s)
+      checkEvaluation(cast(dt, DateType), LocalDate.parse(s.split("T")(0)))
+    }
+  }
+
+  test("SPARK-35718: cast date type to timestamp without timezone") {
+    specialTs.foreach { s =>
+      val inputDate = LocalDate.parse(s.split("T")(0))
+      // The hour/minute/second of the expect result should be 0
+      val expectedTs = LocalDateTime.parse(s.split("T")(0) + "T00:00:00")
+      checkEvaluation(cast(inputDate, TimestampWithoutTZType), expectedTs)
+    }
   }
 }
 
@@ -1711,6 +1813,92 @@ class CastSuite extends CastSuiteBase {
       }.getMessage
       assert(e3.contains("Casting 2147483648 to int causes overflow"))
     }
+  }
+
+  test("SPARK-35112: Cast string to day-time interval") {
+    checkEvaluation(cast(Literal.create("0 0:0:0"), DayTimeIntervalType()), 0L)
+    checkEvaluation(cast(Literal.create(" interval '0 0:0:0' Day TO second   "),
+      DayTimeIntervalType()), 0L)
+    checkEvaluation(cast(Literal.create("INTERVAL '1 2:03:04' DAY TO SECOND"),
+      DayTimeIntervalType()), 93784000000L)
+    checkEvaluation(cast(Literal.create("INTERVAL '1 03:04:00' DAY TO SECOND"),
+      DayTimeIntervalType()), 97440000000L)
+    checkEvaluation(cast(Literal.create("INTERVAL '1 03:04:00.0000' DAY TO SECOND"),
+      DayTimeIntervalType()), 97440000000L)
+    checkEvaluation(cast(Literal.create("1 2:03:04"), DayTimeIntervalType()), 93784000000L)
+    checkEvaluation(cast(Literal.create("INTERVAL '-10 2:03:04' DAY TO SECOND"),
+      DayTimeIntervalType()), -871384000000L)
+    checkEvaluation(cast(Literal.create("-10 2:03:04"), DayTimeIntervalType()), -871384000000L)
+    checkEvaluation(cast(Literal.create("-106751991 04:00:54.775808"), DayTimeIntervalType()),
+      Long.MinValue)
+    checkEvaluation(cast(Literal.create("106751991 04:00:54.775807"), DayTimeIntervalType()),
+      Long.MaxValue)
+
+    Seq("-106751991 04:00:54.775808", "106751991 04:00:54.775807").foreach { interval =>
+      val ansiInterval = s"INTERVAL '$interval' DAY TO SECOND"
+      checkEvaluation(
+        cast(cast(Literal.create(interval), DayTimeIntervalType()), StringType), ansiInterval)
+      checkEvaluation(cast(cast(Literal.create(ansiInterval),
+        DayTimeIntervalType()), StringType), ansiInterval)
+    }
+
+    Seq("INTERVAL '-106751991 04:00:54.775809' YEAR TO MONTH",
+      "INTERVAL '106751991 04:00:54.775808' YEAR TO MONTH").foreach { interval =>
+        val e = intercept[IllegalArgumentException] {
+          cast(Literal.create(interval), DayTimeIntervalType()).eval()
+        }.getMessage
+        assert(e.contains("Interval string must match day-time format of"))
+      }
+
+    Seq(Byte.MaxValue, Short.MaxValue, Int.MaxValue, Long.MaxValue, Long.MinValue + 1,
+      Long.MinValue).foreach { duration =>
+        val interval = Literal.create(
+          Duration.of(duration, ChronoUnit.MICROS),
+          DayTimeIntervalType())
+        checkEvaluation(cast(cast(interval, StringType), DayTimeIntervalType()), duration)
+      }
+  }
+
+  test("SPARK-35111: Cast string to year-month interval") {
+    checkEvaluation(cast(Literal.create("INTERVAL '1-0' YEAR TO MONTH"),
+      YearMonthIntervalType), 12)
+    checkEvaluation(cast(Literal.create("INTERVAL '-1-0' YEAR TO MONTH"),
+      YearMonthIntervalType), -12)
+    checkEvaluation(cast(Literal.create("INTERVAL -'-1-0' YEAR TO MONTH"),
+      YearMonthIntervalType), 12)
+    checkEvaluation(cast(Literal.create("INTERVAL +'-1-0' YEAR TO MONTH"),
+      YearMonthIntervalType), -12)
+    checkEvaluation(cast(Literal.create("INTERVAL +'+1-0' YEAR TO MONTH"),
+      YearMonthIntervalType), 12)
+    checkEvaluation(cast(Literal.create("INTERVAL +'1-0' YEAR TO MONTH"),
+      YearMonthIntervalType), 12)
+    checkEvaluation(cast(Literal.create(" interval +'1-0' YEAR  TO MONTH "),
+      YearMonthIntervalType), 12)
+    checkEvaluation(cast(Literal.create(" -1-0 "), YearMonthIntervalType), -12)
+    checkEvaluation(cast(Literal.create("-1-0"), YearMonthIntervalType), -12)
+    checkEvaluation(cast(Literal.create(null, StringType), YearMonthIntervalType), null)
+
+    Seq("0-0", "10-1", "-178956970-7", "178956970-7", "-178956970-8").foreach { interval =>
+      val ansiInterval = s"INTERVAL '$interval' YEAR TO MONTH"
+      checkEvaluation(
+        cast(cast(Literal.create(interval), YearMonthIntervalType), StringType), ansiInterval)
+      checkEvaluation(cast(cast(Literal.create(ansiInterval),
+        YearMonthIntervalType), StringType), ansiInterval)
+    }
+
+    Seq("INTERVAL '-178956970-9' YEAR TO MONTH", "INTERVAL '178956970-8' YEAR TO MONTH")
+      .foreach { interval =>
+        val e = intercept[IllegalArgumentException] {
+          cast(Literal.create(interval), YearMonthIntervalType).eval()
+        }.getMessage
+        assert(e.contains("Error parsing interval year-month string: integer overflow"))
+      }
+
+    Seq(Byte.MaxValue, Short.MaxValue, Int.MaxValue, Int.MinValue + 1, Int.MinValue)
+      .foreach { period =>
+        val interval = Literal.create(Period.ofMonths(period), YearMonthIntervalType)
+        checkEvaluation(cast(cast(interval, StringType), YearMonthIntervalType), period)
+      }
   }
 }
 

@@ -240,14 +240,23 @@ class LeftSemiPushdownSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("Union: LeftSemiAnti join no pushdown in self join scenario") {
+  test("Union: LeftSemiAnti join pushdown in self join scenario") {
     val testRelation2 = LocalRelation('x.int, 'y.int, 'z.int)
+    val attrX = testRelation2.output.head
 
     val originalQuery = Union(Seq(testRelation, testRelation2))
-      .join(testRelation2, joinType = LeftSemi, condition = Some('a === 'x))
+      .join(testRelation2, joinType = LeftSemi, condition = Some('a === attrX))
 
     val optimized = Optimize.execute(originalQuery.analyze)
-    comparePlans(optimized, originalQuery.analyze)
+
+    val correctAnswer = Union(Seq(
+      testRelation.join(testRelation2, joinType = LeftSemi, condition = Some('a === 'x)),
+      // We can't construct the actual query, as relations deduplication will create new attribute
+      // IDs. Here we use a fake join condition (always true) to verify the query plan shape.
+      testRelation2.join(testRelation2, joinType = LeftSemi, condition = Some(attrX === attrX))))
+      .analyze
+
+    comparePlans(optimized, correctAnswer)
   }
 
   test("Unary: LeftSemiAnti join pushdown") {

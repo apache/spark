@@ -233,7 +233,7 @@ statement
     | TRUNCATE TABLE multipartIdentifier partitionSpec?                #truncateTable
     | MSCK REPAIR TABLE multipartIdentifier
         (option=(ADD|DROP|SYNC) PARTITIONS)?                           #repairTable
-    | op=(ADD | LIST) identifier (STRING | .*?)                        #manageResource
+    | op=(ADD | LIST) identifier .*?                                   #manageResource
     | SET ROLE .*?                                                     #failNativeCommand
     | SET TIME ZONE interval                                           #setTimeZone
     | SET TIME ZONE timezone=(STRING | LOCAL)                          #setTimeZone
@@ -509,7 +509,11 @@ fromStatementBody
 querySpecification
     : transformClause
       fromClause?
-      whereClause?                                                          #transformQuerySpecification
+      lateralView*
+      whereClause?
+      aggregationClause?
+      havingClause?
+      windowClause?                                                         #transformQuerySpecification
     | selectClause
       fromClause?
       lateralView*
@@ -520,9 +524,9 @@ querySpecification
     ;
 
 transformClause
-    : (SELECT kind=TRANSFORM '(' namedExpressionSeq ')'
-            | kind=MAP namedExpressionSeq
-            | kind=REDUCE namedExpressionSeq)
+    : (SELECT kind=TRANSFORM '(' setQuantifier? expressionSeq ')'
+            | kind=MAP setQuantifier? expressionSeq
+            | kind=REDUCE setQuantifier? expressionSeq)
       inRowFormat=rowFormat?
       (RECORDWRITER recordWriter=STRING)?
       USING script=STRING
@@ -588,11 +592,27 @@ fromClause
     ;
 
 aggregationClause
-    : GROUP BY groupingExpressions+=expression (',' groupingExpressions+=expression)* (
+    : GROUP BY groupingExpressionsWithGroupingAnalytics+=groupByClause
+        (',' groupingExpressionsWithGroupingAnalytics+=groupByClause)*
+    | GROUP BY groupingExpressions+=expression (',' groupingExpressions+=expression)* (
       WITH kind=ROLLUP
     | WITH kind=CUBE
     | kind=GROUPING SETS '(' groupingSet (',' groupingSet)* ')')?
-    | GROUP BY kind=GROUPING SETS '(' groupingSet (',' groupingSet)* ')'
+    ;
+
+groupByClause
+    : groupingAnalytics
+    | expression
+    ;
+
+groupingAnalytics
+    : (ROLLUP | CUBE) '(' groupingSet (',' groupingSet)* ')'
+    | GROUPING SETS '(' groupingElement (',' groupingElement)* ')'
+    ;
+
+groupingElement
+    : groupingAnalytics
+    | groupingSet
     ;
 
 groupingSet
@@ -623,12 +643,12 @@ setQuantifier
     ;
 
 relation
-    : relationPrimary joinRelation*
+    : LATERAL? relationPrimary joinRelation*
     ;
 
 joinRelation
-    : (joinType) JOIN right=relationPrimary joinCriteria?
-    | NATURAL joinType JOIN right=relationPrimary
+    : (joinType) JOIN LATERAL? right=relationPrimary joinCriteria?
+    | NATURAL joinType JOIN LATERAL? right=relationPrimary
     ;
 
 joinType
@@ -760,6 +780,10 @@ expression
     : booleanExpression
     ;
 
+expressionSeq
+    : expression (',' expression)*
+    ;
+
 booleanExpression
     : NOT booleanExpression                                        #logicalNot
     | EXISTS '(' query ')'                                         #exists
@@ -792,10 +816,10 @@ valueExpression
     ;
 
 primaryExpression
-    : name=(CURRENT_DATE | CURRENT_TIMESTAMP)                                                  #currentDatetime
+    : name=(CURRENT_DATE | CURRENT_TIMESTAMP | CURRENT_USER)                                   #currentLike
     | CASE whenClause+ (ELSE elseExpression=expression)? END                                   #searchedCase
     | CASE value=expression whenClause+ (ELSE elseExpression=expression)? END                  #simpleCase
-    | CAST '(' expression AS dataType ')'                                                      #cast
+    | name=(CAST | TRY_CAST) '(' expression AS dataType ')'                                    #cast
     | STRUCT '(' (argument+=namedExpression (',' argument+=namedExpression)*)? ')'             #struct
     | FIRST '(' expression (IGNORE NULLS)? ')'                                                 #first
     | LAST '(' expression (IGNORE NULLS)? ')'                                                  #last
@@ -869,8 +893,7 @@ unitToUnitInterval
     ;
 
 intervalValue
-    : (PLUS | MINUS)? (INTEGER_VALUE | DECIMAL_VALUE)
-    | STRING
+    : (PLUS | MINUS)? (INTEGER_VALUE | DECIMAL_VALUE | STRING)
     ;
 
 colPosition
@@ -881,6 +904,8 @@ dataType
     : complex=ARRAY '<' dataType '>'                            #complexDataType
     | complex=MAP '<' dataType ',' dataType '>'                 #complexDataType
     | complex=STRUCT ('<' complexColTypeList? '>' | NEQ)        #complexDataType
+    | INTERVAL YEAR TO MONTH                                    #yearMonthIntervalDataType
+    | INTERVAL DAY TO SECOND                                    #dayTimeIntervalDataType
     | identifier ('(' INTEGER_VALUE (',' INTEGER_VALUE)* ')')?  #primitiveDataType
     ;
 
@@ -905,7 +930,7 @@ complexColTypeList
     ;
 
 complexColType
-    : identifier ':' dataType (NOT NULL)? commentSpec?
+    : identifier ':'? dataType (NOT NULL)? commentSpec?
     ;
 
 whenClause
@@ -1054,6 +1079,7 @@ ansiNonReserved
     | DATA
     | DATABASE
     | DATABASES
+    | DAY
     | DBPROPERTIES
     | DEFINED
     | DELETE
@@ -1096,7 +1122,6 @@ ansiNonReserved
     | ITEMS
     | KEYS
     | LAST
-    | LATERAL
     | LAZY
     | LIKE
     | LIMIT
@@ -1112,6 +1137,7 @@ ansiNonReserved
     | MAP
     | MATCHED
     | MERGE
+    | MONTH
     | MSCK
     | NAMESPACE
     | NAMESPACES
@@ -1158,6 +1184,7 @@ ansiNonReserved
     | ROW
     | ROWS
     | SCHEMA
+    | SECOND
     | SEMI
     | SEPARATED
     | SERDE
@@ -1189,6 +1216,7 @@ ansiNonReserved
     | TRIM
     | TRUE
     | TRUNCATE
+    | TRY_CAST
     | TYPE
     | UNARCHIVE
     | UNBOUNDED
@@ -1201,6 +1229,7 @@ ansiNonReserved
     | VIEW
     | VIEWS
     | WINDOW
+    | YEAR
     | ZONE
 //--ANSI-NON-RESERVED-END
     ;
@@ -1222,6 +1251,7 @@ strictNonReserved
     | INNER
     | INTERSECT
     | JOIN
+    | LATERAL
     | LEFT
     | NATURAL
     | ON
@@ -1284,6 +1314,7 @@ nonReserved
     | DATA
     | DATABASE
     | DATABASES
+    | DAY
     | DBPROPERTIES
     | DEFINED
     | DELETE
@@ -1342,7 +1373,6 @@ nonReserved
     | ITEMS
     | KEYS
     | LAST
-    | LATERAL
     | LAZY
     | LEADING
     | LIKE
@@ -1359,6 +1389,7 @@ nonReserved
     | MAP
     | MATCHED
     | MERGE
+    | MONTH
     | MSCK
     | NAMESPACE
     | NAMESPACES
@@ -1414,6 +1445,7 @@ nonReserved
     | ROW
     | ROWS
     | SCHEMA
+    | SECOND
     | SELECT
     | SEPARATED
     | SERDE
@@ -1451,6 +1483,7 @@ nonReserved
     | TRIM
     | TRUE
     | TRUNCATE
+    | TRY_CAST
     | TYPE
     | UNARCHIVE
     | UNBOUNDED
@@ -1469,6 +1502,7 @@ nonReserved
     | WHERE
     | WINDOW
     | WITH
+    | YEAR
     | ZONE
 //--DEFAULT-NON-RESERVED-END
     ;
@@ -1529,6 +1563,7 @@ CURRENT_DATE: 'CURRENT_DATE';
 CURRENT_TIME: 'CURRENT_TIME';
 CURRENT_TIMESTAMP: 'CURRENT_TIMESTAMP';
 CURRENT_USER: 'CURRENT_USER';
+DAY: 'DAY';
 DATA: 'DATA';
 DATABASE: 'DATABASE';
 DATABASES: 'DATABASES' | 'SCHEMAS';
@@ -1613,6 +1648,7 @@ MACRO: 'MACRO';
 MAP: 'MAP';
 MATCHED: 'MATCHED';
 MERGE: 'MERGE';
+MONTH: 'MONTH';
 MSCK: 'MSCK';
 NAMESPACE: 'NAMESPACE';
 NAMESPACES: 'NAMESPACES';
@@ -1670,6 +1706,7 @@ ROLLBACK: 'ROLLBACK';
 ROLLUP: 'ROLLUP';
 ROW: 'ROW';
 ROWS: 'ROWS';
+SECOND: 'SECOND';
 SCHEMA: 'SCHEMA';
 SELECT: 'SELECT';
 SEMI: 'SEMI';
@@ -1710,6 +1747,7 @@ TRANSFORM: 'TRANSFORM';
 TRIM: 'TRIM';
 TRUE: 'TRUE';
 TRUNCATE: 'TRUNCATE';
+TRY_CAST: 'TRY_CAST';
 TYPE: 'TYPE';
 UNARCHIVE: 'UNARCHIVE';
 UNBOUNDED: 'UNBOUNDED';
@@ -1730,6 +1768,7 @@ WHEN: 'WHEN';
 WHERE: 'WHERE';
 WINDOW: 'WINDOW';
 WITH: 'WITH';
+YEAR: 'YEAR';
 ZONE: 'ZONE';
 //--SPARK-KEYWORD-LIST-END
 //============================

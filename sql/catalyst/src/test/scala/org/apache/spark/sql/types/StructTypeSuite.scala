@@ -97,6 +97,12 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
     assert(StructType.fromDDL(nestedStruct.toDDL) == nestedStruct)
   }
 
+  test("SPARK-35706: make the ':' in STRUCT data type definition optional") {
+    val ddl = "`a` STRUCT<`b` STRUCT<`c` STRING COMMENT 'Deep Nested comment'> " +
+      "COMMENT 'Nested comment'> COMMENT 'comment'"
+    assert(StructType.fromDDL(ddl) == nestedStruct)
+  }
+
   private val structWithEmptyString = new StructType()
     .add(StructField("a b", StringType).withComment("comment"))
 
@@ -234,5 +240,13 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
       assert(StructType.findMissingFields(source4, schema, resolver)
         .exists(_.sameType(missing4)))
     }
+  }
+
+  test("SPARK-35285: ANSI interval types in schema") {
+    val yearMonthInterval = "`ymi` INTERVAL YEAR TO MONTH"
+    assert(fromDDL(yearMonthInterval).toDDL === yearMonthInterval)
+
+    val dayTimeInterval = "`dti` INTERVAL DAY TO SECOND"
+    assert(fromDDL(dayTimeInterval).toDDL === dayTimeInterval)
   }
 }

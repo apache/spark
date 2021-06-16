@@ -263,8 +263,9 @@ case class StateStoreRestoreExec(
           iter.flatMap { row =>
             val key = stateManager.getKey(row.asInstanceOf[UnsafeRow])
             val restoredRow = stateManager.get(store, key)
-            numOutputRows += 1
-            Option(restoredRow).toSeq :+ row
+            val outputRows = Option(restoredRow).toSeq :+ row
+            numOutputRows += outputRows.size
+            outputRows
           }
         }
     }
@@ -281,6 +282,9 @@ case class StateStoreRestoreExec(
       ClusteredDistribution(keyExpressions, stateInfo.map(_.numPartitions)) :: Nil
     }
   }
+
+  override protected def withNewChildInternal(newChild: SparkPlan): StateStoreRestoreExec =
+    copy(child = newChild)
 }
 
 /**
@@ -436,6 +440,9 @@ case class StateStoreSaveExec(
       eventTimeWatermark.isDefined &&
       newMetadata.batchWatermarkMs > eventTimeWatermark.get
   }
+
+  override protected def withNewChildInternal(newChild: SparkPlan): StateStoreSaveExec =
+    copy(child = newChild)
 }
 
 /** Physical operator for executing streaming Deduplicate. */
@@ -509,6 +516,9 @@ case class StreamingDeduplicateExec(
   override def shouldRunAnotherBatch(newMetadata: OffsetSeqMetadata): Boolean = {
     eventTimeWatermark.isDefined && newMetadata.batchWatermarkMs > eventTimeWatermark.get
   }
+
+  override protected def withNewChildInternal(newChild: SparkPlan): StreamingDeduplicateExec =
+    copy(child = newChild)
 }
 
 object StreamingDeduplicateExec {

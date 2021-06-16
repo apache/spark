@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.ApproximatePercentile.PercentileDigest
+import org.apache.spark.sql.catalyst.trees.TernaryLike
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData}
 import org.apache.spark.sql.catalyst.util.QuantileSummaries
 import org.apache.spark.sql.catalyst.util.QuantileSummaries.{defaultCompressThreshold, Stats}
@@ -76,7 +77,8 @@ case class ApproximatePercentile(
     accuracyExpression: Expression,
     override val mutableAggBufferOffset: Int,
     override val inputAggBufferOffset: Int)
-  extends TypedImperativeAggregate[PercentileDigest] with ImplicitCastInputTypes {
+  extends TypedImperativeAggregate[PercentileDigest] with ImplicitCastInputTypes
+  with TernaryLike[Expression] {
 
   def this(child: Expression, percentageExpression: Expression, accuracyExpression: Expression) = {
     this(child, percentageExpression, accuracyExpression, 0, 0)
@@ -182,7 +184,9 @@ case class ApproximatePercentile(
   override def withNewInputAggBufferOffset(newOffset: Int): ApproximatePercentile =
     copy(inputAggBufferOffset = newOffset)
 
-  override def children: Seq[Expression] = Seq(child, percentageExpression, accuracyExpression)
+  override def first: Expression = child
+  override def second: Expression = percentageExpression
+  override def third: Expression = accuracyExpression
 
   // Returns null for empty inputs
   override def nullable: Boolean = true
@@ -204,6 +208,10 @@ case class ApproximatePercentile(
   override def deserialize(bytes: Array[Byte]): PercentileDigest = {
     ApproximatePercentile.serializer.deserialize(bytes)
   }
+
+  override protected def withNewChildrenInternal(
+      newFirst: Expression, newSecond: Expression, newThird: Expression): ApproximatePercentile =
+    copy(child = newFirst, percentageExpression = newSecond, accuracyExpression = newThird)
 }
 
 object ApproximatePercentile {
@@ -253,19 +261,12 @@ object ApproximatePercentile {
      *   val Array(p25, median, p75) = percentileDigest.getPercentiles(Array(0.25, 0.5, 0.75))
      * }}}
      */
-    def getPercentiles(percentages: Array[Double]): Array[Double] = {
+    def getPercentiles(percentages: Array[Double]): Seq[Double] = {
       if (!isCompressed) compress()
       if (summaries.count == 0 || percentages.length == 0) {
         Array.emptyDoubleArray
       } else {
-        val result = new Array[Double](percentages.length)
-        var i = 0
-        while (i < percentages.length) {
-          // Since summaries.count != 0, the query here never return None.
-          result(i) = summaries.query(percentages(i)).get
-          i += 1
-        }
-        result
+        summaries.query(percentages).get
       }
     }
 

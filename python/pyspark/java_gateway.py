@@ -105,7 +105,7 @@ def launch_gateway(conf=None, popen_kwargs=None):
                 time.sleep(0.1)
 
             if not os.path.isfile(conn_info_file):
-                raise Exception("Java gateway process exited before sending its port number")
+                raise RuntimeError("Java gateway process exited before sending its port number")
 
             with open(conn_info_file, "rb") as info:
                 gateway_port = read_int(info)
@@ -175,7 +175,7 @@ def _do_server_auth(conn, auth_secret):
     reply = UTF8Deserializer().loads(conn)
     if reply != "ok":
         conn.close()
-        raise Exception("Unexpected reply from iterator server.")
+        raise RuntimeError("Unexpected reply from iterator server.")
 
 
 def local_connect_and_auth(port, auth_secret):
@@ -211,7 +211,7 @@ def local_connect_and_auth(port, auth_secret):
             errors.append("tried to connect to %s, but an error occurred: %s" % (sa, emsg))
             sock.close()
             sock = None
-    raise Exception("could not open socket: %s" % errors)
+    raise RuntimeError("could not open socket: %s" % errors)
 
 
 def ensure_callback_server_started(gw):

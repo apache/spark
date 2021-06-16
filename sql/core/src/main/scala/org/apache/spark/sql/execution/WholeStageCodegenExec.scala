@@ -554,6 +554,9 @@ case class InputAdapter(child: SparkPlan) extends UnaryExecNode with InputRDDCod
   }
 
   override def needCopyResult: Boolean = false
+
+  override protected def withNewChildInternal(newChild: SparkPlan): InputAdapter =
+    copy(child = newChild)
 }
 
 object WholeStageCodegenExec {
@@ -829,6 +832,9 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
   override def limitNotReachedChecks: Seq[String] = Nil
 
   override protected def otherCopyArgs: Seq[AnyRef] = Seq(codegenStageId.asInstanceOf[Integer])
+
+  override protected def withNewChildInternal(newChild: SparkPlan): WholeStageCodegenExec =
+    copy(child = newChild)(codegenStageId)
 }
 
 
@@ -926,6 +932,10 @@ case class CollapseCodegenStages(
         plan.withNewChildren(plan.children.map(insertWholeStageCodegen))
       case plan: LocalTableScanExec =>
         // Do not make LogicalTableScanExec the root of WholeStageCodegen
+        // to support the fast driver-local collect/take paths.
+        plan
+      case plan: CommandResultExec =>
+        // Do not make CommandResultExec the root of WholeStageCodegen
         // to support the fast driver-local collect/take paths.
         plan
       case plan: CodegenSupport if supportCodegen(plan) =>

@@ -160,7 +160,7 @@ object InterpretedUnsafeProjection {
       case IntegerType | DateType | YearMonthIntervalType =>
         (v, i) => writer.write(i, v.getInt(i))
 
-      case LongType | TimestampType | DayTimeIntervalType =>
+      case LongType | TimestampType | TimestampWithoutTZType | _: DayTimeIntervalType =>
         (v, i) => writer.write(i, v.getLong(i))
 
       case FloatType =>

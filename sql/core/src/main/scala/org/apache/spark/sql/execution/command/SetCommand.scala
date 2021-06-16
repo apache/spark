@@ -34,7 +34,8 @@ import org.apache.spark.sql.types.{StringType, StructField, StructType}
  *   set;
  * }}}
  */
-case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableCommand with Logging {
+case class SetCommand(kv: Option[(String, Option[String])])
+  extends LeafRunnableCommand with Logging {
 
   private def keyValueOutput: Seq[Attribute] = {
     val schema = StructType(
@@ -106,7 +107,8 @@ case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableComm
     // Queries all key-value pairs that are set in the SQLConf of the sparkSession.
     case None =>
       val runFunc = (sparkSession: SparkSession) => {
-        sparkSession.conf.getAll.toSeq.sorted.map { case (k, v) => Row(k, v) }
+        val redactedConf = SQLConf.get.redactOptions(sparkSession.conf.getAll)
+        redactedConf.toSeq.sorted.map { case (k, v) => Row(k, v) }
       }
       (keyValueOutput, runFunc)
 
@@ -138,15 +140,31 @@ case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableComm
             s"showing ${SQLConf.SHUFFLE_PARTITIONS.key} instead.")
         Seq(Row(
           SQLConf.SHUFFLE_PARTITIONS.key,
-          sparkSession.sessionState.conf.numShufflePartitions.toString))
+          sparkSession.sessionState.conf.defaultNumShufflePartitions.toString))
       }
       (keyValueOutput, runFunc)
 
     // Queries a single property.
     case Some((key, None)) =>
       val runFunc = (sparkSession: SparkSession) => {
-        val value = sparkSession.conf.getOption(key).getOrElse("<undefined>")
-        Seq(Row(key, value))
+        val value = sparkSession.conf.getOption(key).getOrElse {
+          // Also lookup the `sharedState.hadoopConf` to display default value for hadoop conf
+          // correctly. It completes all the session-level configs with `sparkSession.conf`
+          // together.
+          //
+          // Note that, as the write-side does not prohibit to set static hadoop/hive to SQLConf
+          // yet, users may get wrong results before reaching here,
+          // e.g. 'SET hive.metastore.uris=abc', where 'hive.metastore.uris' is static and 'abc' is
+          // of no effect, but will show 'abc' via 'SET hive.metastore.uris' wrongly.
+          //
+          // Instead of showing incorrect `<undefined>` to users, it's more reasonable to show the
+          // effective default values. For example, the hadoop output codec/compression configs
+          // take affect from table to table, file to file, so they are not static and users are
+          // very likely to change them based the default value they see.
+          sparkSession.sharedState.hadoopConf.get(key, "<undefined>")
+        }
+        val (_, redactedValue) = SQLConf.get.redactOptions(Seq((key, value))).head
+        Seq(Row(key, redactedValue))
       }
       (keyValueOutput, runFunc)
   }
@@ -169,7 +187,7 @@ object SetCommand {
  *   reset spark.sql.session.timeZone;
  * }}}
  */
-case class ResetCommand(config: Option[String]) extends RunnableCommand with IgnoreCachedData {
+case class ResetCommand(config: Option[String]) extends LeafRunnableCommand with IgnoreCachedData {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val globalInitialConfigs = sparkSession.sharedState.conf

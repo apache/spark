@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.{AliasIdentifier, FunctionIdentifier, Quali
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan, Project, Range, SubqueryAlias, View}
+import org.apache.spark.sql.catalyst.plans.logical.{LeafCommand, LogicalPlan, Project, Range, SubqueryAlias, View}
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces.PROP_OWNER
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
@@ -191,17 +191,8 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
 
   test("drop database when the database does not exist") {
     withBasicCatalog { catalog =>
-      // TODO: fix this inconsistent between HiveExternalCatalog and InMemoryCatalog
-      if (isHiveExternalCatalog) {
-        val e = intercept[AnalysisException] {
-          catalog.dropDatabase("db_that_does_not_exist", ignoreIfNotExists = false, cascade = false)
-        }.getMessage
-        assert(e.contains(
-          "org.apache.hadoop.hive.metastore.api.NoSuchObjectException: db_that_does_not_exist"))
-      } else {
-        intercept[NoSuchDatabaseException] {
-          catalog.dropDatabase("db_that_does_not_exist", ignoreIfNotExists = false, cascade = false)
-        }
+      intercept[NoSuchDatabaseException] {
+        catalog.dropDatabase("db_that_does_not_exist", ignoreIfNotExists = false, cascade = false)
       }
       catalog.dropDatabase("db_that_does_not_exist", ignoreIfNotExists = true, cascade = false)
     }
@@ -1675,7 +1666,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
   }
 
   test("expire table relation cache if TTL is configured") {
-    case class TestCommand() extends Command
+    case class TestCommand() extends LeafCommand
 
     val conf = new SQLConf()
     conf.setConf(StaticSQLConf.METADATA_CACHE_TTL_SECONDS, 1L)

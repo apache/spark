@@ -74,8 +74,9 @@ import org.apache.spark.sql.types._
  */
 object AnsiTypeCoercion extends TypeCoercionBase {
   override def typeCoercionRules: List[Rule[LogicalPlan]] =
-    InConversion ::
-      WidenSetOperationTypes ::
+    WidenSetOperationTypes ::
+    CombinedTypeCoercionRule(
+      InConversion ::
       PromoteStringLiterals ::
       DecimalPrecision ::
       FunctionArgumentConversion ::
@@ -90,39 +91,35 @@ object AnsiTypeCoercion extends TypeCoercionBase {
       ImplicitTypeCasts ::
       DateTimeOperations ::
       WindowFrameCoercion ::
-      StringLiteralCoercion ::
-      Nil
+      StringLiteralCoercion :: Nil) :: Nil
 
-  override def findTightestCommonType(t1: DataType, t2: DataType): Option[DataType] = {
-    (t1, t2) match {
-      case (t1, t2) if t1 == t2 => Some(t1)
-      case (NullType, t1) => Some(t1)
-      case (t1, NullType) => Some(t1)
+  val findTightestCommonType: (DataType, DataType) => Option[DataType] = {
+    case (t1, t2) if t1 == t2 => Some(t1)
+    case (NullType, t1) => Some(t1)
+    case (t1, NullType) => Some(t1)
 
-      case (t1: IntegralType, t2: DecimalType) if t2.isWiderThan(t1) =>
-        Some(t2)
-      case (t1: DecimalType, t2: IntegralType) if t1.isWiderThan(t2) =>
-        Some(t1)
+    case (t1: IntegralType, t2: DecimalType) if t2.isWiderThan(t1) =>
+      Some(t2)
+    case (t1: DecimalType, t2: IntegralType) if t1.isWiderThan(t2) =>
+      Some(t1)
 
-      case (t1: NumericType, t2: NumericType)
-          if !t1.isInstanceOf[DecimalType] && !t2.isInstanceOf[DecimalType] =>
-        val index = numericPrecedence.lastIndexWhere(t => t == t1 || t == t2)
-        val widerType = numericPrecedence(index)
-        if (widerType == FloatType) {
-          // If the input type is an Integral type and a Float type, simply return Double type as
-          // the tightest common type to avoid potential precision loss on converting the Integral
-          // type as Float type.
-          Some(DoubleType)
-        } else {
-          Some(widerType)
-        }
+    case (t1: NumericType, t2: NumericType)
+        if !t1.isInstanceOf[DecimalType] && !t2.isInstanceOf[DecimalType] =>
+      val index = numericPrecedence.lastIndexWhere(t => t == t1 || t == t2)
+      val widerType = numericPrecedence(index)
+      if (widerType == FloatType) {
+        // If the input type is an Integral type and a Float type, simply return Double type as
+        // the tightest common type to avoid potential precision loss on converting the Integral
+        // type as Float type.
+        Some(DoubleType)
+      } else {
+        Some(widerType)
+      }
 
-      case (_: TimestampType, _: DateType) | (_: DateType, _: TimestampType) =>
-        Some(TimestampType)
+    case (_: TimestampType, _: DateType) | (_: DateType, _: TimestampType) =>
+      Some(TimestampType)
 
-      case (t1, t2) => findTypeForComplex(t1, t2, findTightestCommonType)
-    }
-
+    case (t1, t2) => findTypeForComplex(t1, t2, findTightestCommonType)
   }
 
   override def findWiderTypeForTwo(t1: DataType, t2: DataType): Option[DataType] = {
@@ -260,15 +257,14 @@ object AnsiTypeCoercion extends TypeCoercionBase {
    */
   object PromoteStringLiterals extends TypeCoercionRule {
     private def castExpr(expr: Expression, targetType: DataType): Expression = {
-      (expr.dataType, targetType) match {
-        case (NullType, dt) => Literal.create(null, targetType)
-        case (l, dt) if (l != dt) => Cast(expr, targetType)
+      expr.dataType match {
+        case NullType => Literal.create(null, targetType)
+        case l if l != targetType => Cast(expr, targetType)
         case _ => expr
       }
     }
 
-    override protected def coerceTypes(
-        plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
+    override def transform: PartialFunction[Expression, Expression] = {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
 

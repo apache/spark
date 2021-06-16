@@ -28,7 +28,7 @@ import org.apache.spark.{SparkException, SparkFiles}
 import org.apache.spark.internal.config
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, QualifiedTableName, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, NoSuchDatabaseException, NoSuchFunctionException, TempTableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, NoSuchDatabaseException, NoSuchFunctionException, TableFunctionRegistry, TempTableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces.PROP_OWNER
@@ -823,12 +823,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       var message = intercept[AnalysisException] {
         sql(s"DROP DATABASE $dbName")
       }.getMessage
-      // TODO: Unify the exception.
-      if (isUsingHiveMetastore) {
-        assert(message.contains(s"NoSuchObjectException: $dbNameWithoutBackTicks"))
-      } else {
-        assert(message.contains(s"Database '$dbNameWithoutBackTicks' not found"))
-      }
+      assert(message.contains(s"Database '$dbNameWithoutBackTicks' not found"))
 
       message = intercept[AnalysisException] {
         sql(s"ALTER DATABASE $dbName SET DBPROPERTIES ('d'='d')")
@@ -1699,6 +1694,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
   test("show functions") {
     withUserDefinedFunction("add_one" -> true) {
       val numFunctions = FunctionRegistry.functionSet.size.toLong +
+        TableFunctionRegistry.functionSet.size.toLong +
         FunctionsCommand.virtualOperators.size.toLong
       assert(sql("show functions").count() === numFunctions)
       assert(sql("show system functions").count() === numFunctions)

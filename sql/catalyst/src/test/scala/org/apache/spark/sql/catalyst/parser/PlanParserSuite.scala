@@ -315,22 +315,35 @@ class PlanParserSuite extends AnalysisTest {
 
   test("aggregation") {
     val sql = "select a, b, sum(c) as c from d group by a, b"
+    val sqlWithoutGroupBy = "select a, b, sum(c) as c from d"
 
     // Normal
     assertEqual(sql, table("d").groupBy('a, 'b)('a, 'b, 'sum.function('c).as("c")))
 
     // Cube
     assertEqual(s"$sql with cube",
-      table("d").groupBy(Cube(Seq('a, 'b)))('a, 'b, 'sum.function('c).as("c")))
+      table("d").groupBy(Cube(Seq(Seq('a), Seq('b))))('a, 'b, 'sum.function('c).as("c")))
+    assertEqual(s"$sqlWithoutGroupBy group by cube(a, b)",
+      table("d").groupBy(Cube(Seq(Seq('a), Seq('b))))('a, 'b, 'sum.function('c).as("c")))
+    assertEqual(s"$sqlWithoutGroupBy group by cube (a, b)",
+      table("d").groupBy(Cube(Seq(Seq('a), Seq('b))))('a, 'b, 'sum.function('c).as("c")))
 
     // Rollup
     assertEqual(s"$sql with rollup",
-      table("d").groupBy(Rollup(Seq('a, 'b)))('a, 'b, 'sum.function('c).as("c")))
+      table("d").groupBy(Rollup(Seq(Seq('a), Seq('b))))('a, 'b, 'sum.function('c).as("c")))
+    assertEqual(s"$sqlWithoutGroupBy group by rollup(a, b)",
+      table("d").groupBy(Rollup(Seq(Seq('a), Seq('b))))('a, 'b, 'sum.function('c).as("c")))
+    assertEqual(s"$sqlWithoutGroupBy group by rollup (a, b)",
+      table("d").groupBy(Rollup(Seq(Seq('a), Seq('b))))('a, 'b, 'sum.function('c).as("c")))
 
     // Grouping Sets
     assertEqual(s"$sql grouping sets((a, b), (a), ())",
-      GroupingSets(Seq(Seq('a, 'b), Seq('a), Seq()), Seq('a, 'b), table("d"),
-        Seq('a, 'b, 'sum.function('c).as("c"))))
+      Aggregate(Seq(GroupingSets(Seq(Seq('a, 'b), Seq('a), Seq()), Seq('a, 'b))),
+        Seq('a, 'b, 'sum.function('c).as("c")), table("d")))
+
+    assertEqual(s"$sqlWithoutGroupBy group by grouping sets((a, b), (a), ())",
+      Aggregate(Seq(GroupingSets(Seq(Seq('a, 'b), Seq('a), Seq()))),
+        Seq('a, 'b, 'sum.function('c).as("c")), table("d")))
 
     val m = intercept[ParseException] {
       parsePlan("SELECT a, b, count(distinct a, distinct b) as c FROM d GROUP BY a, b")
@@ -459,21 +472,31 @@ class PlanParserSuite extends AnalysisTest {
         s"select * from t $sql u using(a, b)",
         table("t").join(table("u"), UsingJoin(jt, Seq("a", "b")), None).select(star()))
     }
-    val testAll = Seq(testUnconditionalJoin, testConditionalJoin, testNaturalJoin, testUsingJoin)
+    val testLateralJoin = (sql: String, jt: JoinType) => {
+      assertEqual(
+        s"select * from t $sql lateral (select * from u) uu",
+        LateralJoin(
+          table("t"),
+          LateralSubquery(table("u").select(star()).as("uu")),
+          jt, None).select(star()))
+    }
+    val testAllExceptLateral = Seq(testUnconditionalJoin, testConditionalJoin, testNaturalJoin,
+      testUsingJoin)
+    val testAll = testAllExceptLateral :+ testLateralJoin
     val testExistence = Seq(testUnconditionalJoin, testConditionalJoin, testUsingJoin)
     def test(sql: String, jt: JoinType, tests: Seq[(String, JoinType) => Unit]): Unit = {
       tests.foreach(_(sql, jt))
     }
-    test("cross join", Cross, Seq(testUnconditionalJoin))
-    test(",", Inner, Seq(testUnconditionalJoin))
+    test("cross join", Cross, Seq(testUnconditionalJoin, testLateralJoin))
+    test(",", Inner, Seq(testUnconditionalJoin, testLateralJoin))
     test("join", Inner, testAll)
     test("inner join", Inner, testAll)
     test("left join", LeftOuter, testAll)
     test("left outer join", LeftOuter, testAll)
-    test("right join", RightOuter, testAll)
-    test("right outer join", RightOuter, testAll)
-    test("full join", FullOuter, testAll)
-    test("full outer join", FullOuter, testAll)
+    test("right join", RightOuter, testAllExceptLateral)
+    test("right outer join", RightOuter, testAllExceptLateral)
+    test("full join", FullOuter, testAllExceptLateral)
+    test("full outer join", FullOuter, testAllExceptLateral)
     test("left semi join", LeftSemi, testExistence)
     test("semi join", LeftSemi, testExistence)
     test("left anti join", LeftAnti, testExistence)
@@ -527,6 +550,26 @@ class PlanParserSuite extends AnalysisTest {
         .join(table("t3"))
         .join(table("t2"), Inner, Option(Symbol("t1.col1") === Symbol("t2.col2")))
         .select(star()))
+
+    // Test lateral join with join conditions
+    assertEqual(
+      s"select * from t join lateral (select * from u) uu on true",
+      LateralJoin(
+        table("t"),
+        LateralSubquery(table("u").select(star()).as("uu")),
+        Inner, Option(true)).select(star()))
+
+    // Test multiple lateral joins
+    assertEqual(
+      "select * from a, lateral (select * from b) bb, lateral (select * from c) cc",
+      LateralJoin(
+        LateralJoin(
+          table("a"),
+          LateralSubquery(table("b").select(star()).as("bb")),
+          Inner, None),
+        LateralSubquery(table("c").select(star()).as("cc")),
+        Inner, None).select(star())
+    )
   }
 
   test("sampled relations") {
@@ -1061,11 +1104,10 @@ class PlanParserSuite extends AnalysisTest {
         |FROM testData
       """.stripMargin,
       ScriptTransformation(
-        Seq('a, 'b, 'c),
         "cat",
         Seq(AttributeReference("key", StringType)(),
           AttributeReference("value", StringType)()),
-        UnresolvedRelation(TableIdentifier("testData")),
+        Project(Seq('a, 'b, 'c), UnresolvedRelation(TableIdentifier("testData"))),
         ScriptInputOutputSchema(List.empty, List.empty, None, None,
           List.empty, List.empty, None, None, true))
     )
@@ -1078,12 +1120,11 @@ class PlanParserSuite extends AnalysisTest {
         |FROM testData
       """.stripMargin,
       ScriptTransformation(
-        Seq('a, 'b, 'c),
         "cat",
         Seq(AttributeReference("a", StringType)(),
           AttributeReference("b", StringType)(),
           AttributeReference("c", StringType)()),
-        UnresolvedRelation(TableIdentifier("testData")),
+        Project(Seq('a, 'b, 'c), UnresolvedRelation(TableIdentifier("testData"))),
         ScriptInputOutputSchema(List.empty, List.empty, None, None,
           List.empty, List.empty, None, None, false)))
 
@@ -1095,12 +1136,11 @@ class PlanParserSuite extends AnalysisTest {
         |FROM testData
       """.stripMargin,
       ScriptTransformation(
-        Seq('a, 'b, 'c),
         "cat",
         Seq(AttributeReference("a", IntegerType)(),
           AttributeReference("b", StringType)(),
           AttributeReference("c", LongType)()),
-        UnresolvedRelation(TableIdentifier("testData")),
+        Project(Seq('a, 'b, 'c), UnresolvedRelation(TableIdentifier("testData"))),
         ScriptInputOutputSchema(List.empty, List.empty, None, None,
           List.empty, List.empty, None, None, false)))
 
@@ -1124,12 +1164,11 @@ class PlanParserSuite extends AnalysisTest {
         |FROM testData
       """.stripMargin,
       ScriptTransformation(
-        Seq('a, 'b, 'c),
         "cat",
         Seq(AttributeReference("a", StringType)(),
           AttributeReference("b", StringType)(),
           AttributeReference("c", StringType)()),
-        UnresolvedRelation(TableIdentifier("testData")),
+        Project(Seq('a, 'b, 'c), UnresolvedRelation(TableIdentifier("testData"))),
         ScriptInputOutputSchema(
           Seq(("TOK_TABLEROWFORMATFIELD", "\t"),
             ("TOK_TABLEROWFORMATCOLLITEMS", "\u0002"),

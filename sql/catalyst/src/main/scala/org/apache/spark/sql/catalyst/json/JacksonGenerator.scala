@@ -20,11 +20,13 @@ package org.apache.spark.sql.catalyst.json
 import java.io.Writer
 
 import com.fasterxml.jackson.core._
+import com.fasterxml.jackson.core.util.DefaultPrettyPrinter
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
 
 /**
@@ -52,28 +54,32 @@ private[sql] class JacksonGenerator(
   // `ValueWriter`s for all fields of the schema
   private lazy val rootFieldWriters: Array[ValueWriter] = dataType match {
     case st: StructType => st.map(_.dataType).map(makeWriter).toArray
-    case _ => throw new UnsupportedOperationException(
-      s"Initial type ${dataType.catalogString} must be a ${StructType.simpleString}")
+    case _ => throw QueryExecutionErrors.initialTypeNotTargetDataTypeError(
+      dataType, StructType.simpleString)
   }
 
   // `ValueWriter` for array data storing rows of the schema.
   private lazy val arrElementWriter: ValueWriter = dataType match {
     case at: ArrayType => makeWriter(at.elementType)
     case _: StructType | _: MapType => makeWriter(dataType)
-    case _ => throw new UnsupportedOperationException(
-      s"Initial type ${dataType.catalogString} must be " +
-      s"an ${ArrayType.simpleString}, a ${StructType.simpleString} or a ${MapType.simpleString}")
+    case _ => throw QueryExecutionErrors.initialTypeNotTargetDataTypesError(dataType)
   }
 
   private lazy val mapElementWriter: ValueWriter = dataType match {
     case mt: MapType => makeWriter(mt.valueType)
-    case _ => throw new UnsupportedOperationException(
-      s"Initial type ${dataType.catalogString} must be a ${MapType.simpleString}")
+    case _ => throw QueryExecutionErrors.initialTypeNotTargetDataTypeError(
+      dataType, MapType.simpleString)
   }
 
   private val gen = {
     val generator = new JsonFactory().createGenerator(writer).setRootValueSeparator(null)
-    if (options.pretty) generator.useDefaultPrettyPrinter() else generator
+    if (options.pretty) {
+      generator.setPrettyPrinter(new DefaultPrettyPrinter(""))
+    }
+    if (options.writeNonAsciiCharacterAsCodePoint) {
+      generator.setHighestNonEscapedChar(0x7F)
+    }
+    generator
   }
 
   private val lineSeparator: String = options.lineSeparatorInWrite
@@ -86,7 +92,6 @@ private[sql] class JacksonGenerator(
     isParsing = false)
   private val dateFormatter = DateFormatter(
     options.dateFormat,
-    options.zoneId,
     options.locale,
     legacyFormat = FAST_DATE_FORMAT,
     isParsing = false)
@@ -175,8 +180,7 @@ private[sql] class JacksonGenerator(
     case _ =>
       (row: SpecializedGetters, ordinal: Int) =>
         val v = row.get(ordinal, dataType)
-        sys.error(s"Failed to convert value $v (class of ${v.getClass}}) " +
-          s"with the type of $dataType to JSON.")
+        throw QueryExecutionErrors.failToConvertValueToJsonError(v, v.getClass, dataType)
   }
 
   private def writeObject(f: => Unit): Unit = {
