@@ -873,6 +873,9 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       val right = plan(relation.relationPrimary)
       val join = right.optionalMap(left) { (left, right) =>
         if (relation.LATERAL != null) {
+          if (!relation.relationPrimary.isInstanceOf[AliasedQueryContext]) {
+            throw QueryParsingErrors.invalidLateralJoinRelationError(relation.relationPrimary)
+          }
           LateralJoin(left, LateralSubquery(right), Inner, None)
         } else {
           Join(left, right, Inner, None, JoinHint.NONE)
@@ -1128,6 +1131,10 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
           case jt if jt.LEFT != null => LeftOuter
           case jt if jt.RIGHT != null => RightOuter
           case _ => Inner
+        }
+
+        if (join.LATERAL != null && !join.right.isInstanceOf[AliasedQueryContext]) {
+          throw QueryParsingErrors.invalidLateralJoinRelationError(join.right)
         }
 
         // Resolve the join type and join condition
