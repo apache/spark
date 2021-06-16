@@ -1500,12 +1500,6 @@ object QueryExecutionErrors {
       s"null literals can't be casted to $name")
   }
 
-  def namesNotExistError(nonExistName: Set[String], availableName: Array[String]): Throwable = {
-    new IllegalArgumentException(
-      s"${nonExistName.mkString(", ")} do(es) not exist. " +
-        s"Available: ${availableName.mkString(", ")}")
-  }
-
   def notUDFError(name: String, userClass: String): Throwable = {
     new SparkException(
       s"${name} is not an UserDefinedType. Please make sure registering " +

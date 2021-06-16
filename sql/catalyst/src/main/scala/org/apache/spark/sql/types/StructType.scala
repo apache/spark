@@ -286,7 +286,9 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
   def apply(names: Set[String]): StructType = {
     val nonExistFields = names -- fieldNamesSet
     if (nonExistFields.nonEmpty) {
-      throw QueryExecutionErrors.namesNotExistError(nonExistFields, fieldNames)
+      throw new IllegalArgumentException(
+        s"${nonExistFields.mkString(", ")} do(es) not exist. " +
+          s"Available: ${fieldNames.mkString(", ")}")
     }
     // Preserve the original order of fields.
     StructType(fields.filter(f => names.contains(f.name)))
