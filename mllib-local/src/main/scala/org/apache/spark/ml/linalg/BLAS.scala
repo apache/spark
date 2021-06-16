@@ -480,7 +480,7 @@ private[spark] object BLAS extends Serializable {
             val indEnd = AcolPtrs(rowCounterForA + 1)
             var sum = 0.0
             while (i < indEnd) {
-              sum += Avals(i) * B(ArowIndices(i), colCounterForB)
+              sum += Avals(i) * Bvals(colCounterForB + nB * ArowIndices(i))
               i += 1
             }
             val Cindex = Cstart + rowCounterForA
@@ -522,7 +522,7 @@ private[spark] object BLAS extends Serializable {
           while (colCounterForA < kA) {
             var i = AcolPtrs(colCounterForA)
             val indEnd = AcolPtrs(colCounterForA + 1)
-            val Bval = B(colCounterForA, colCounterForB) * alpha
+            val Bval = Bvals(colCounterForB + nB * colCounterForA) * alpha
             while (i < indEnd) {
               Cvals(Cstart + ArowIndices(i)) += Avals(i) * Bval
               i += 1
