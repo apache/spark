@@ -208,9 +208,16 @@ public class OneForOneBlockFetcher {
     // For batch block id, the format contains shuffleId, mapId, begin reduceId, end reduceId.
     // For single block id, the format contains shuffleId, mapId, educeId.
     // For single block chunk id, the format contains shuffleId, reduceId, chunkId.
-    if (blockIdParts.length < 4 || blockIdParts.length > 5 ||
-      !(blockIdParts[0].equals("shuffle") ||
-        blockIdParts[0].equals("shuffleChunk"))) {
+    if (blockIdParts.length < 4 || blockIdParts.length > 5) {
+      throw new IllegalArgumentException(
+        "Unexpected shuffle block id format: " + blockId);
+    }
+    if (blockIdParts.length == 5 && !blockIdParts[0].equals("shuffle")) {
+      throw new IllegalArgumentException(
+        "Unexpected shuffle block id format: " + blockId);
+    }
+    if (blockIdParts.length == 4 &&
+      !(blockIdParts[0].equals("shuffle") || blockIdParts[0].equals("shuffleChunk"))) {
       throw new IllegalArgumentException(
         "Unexpected shuffle block id format: " + blockId);
     }

@@ -27,8 +27,7 @@ import com.google.common.collect.Maps;
 import io.netty.buffer.Unpooled;
 import org.junit.Test;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.fail;
+import static org.junit.Assert.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
@@ -279,14 +278,20 @@ public class OneForOneBlockFetcherSuite {
       blocks.get("shuffleChunk_0_0_2"));
   }
 
-  @Test(expected = IllegalArgumentException.class)
-  public void testInvalidShuffleChunksFetch() {
-    LinkedHashMap<String, ManagedBuffer> blocks = Maps.newLinkedHashMap();
-    blocks.put("shuffleChunk_0_0", new NioManagedBuffer(ByteBuffer.wrap(new byte[12])));
-    String[] blockIds = blocks.keySet().toArray(new String[blocks.size()]);
-    fetchBlocks(blocks, blockIds,
+  @Test
+  public void testInvalidShuffleBlockIds() {
+    assertThrows(IllegalArgumentException.class, () -> fetchBlocks(new LinkedHashMap<>(),
+      new String[]{"shuffle_0_0"},
       new FetchShuffleBlockChunks("app-id", "exec-id", 0, new int[] { 0 },
-        new int[][] {{ 0, 1, 2 }}), conf);
+        new int[][] {{ 0 }}), conf));
+    assertThrows(IllegalArgumentException.class, () -> fetchBlocks(new LinkedHashMap<>(),
+      new String[]{"shuffleChunk_0_0_0_0_0"},
+      new FetchShuffleBlockChunks("app-id", "exec-id", 0, new int[] { 0 },
+        new int[][] {{ 0 }}), conf));
+    assertThrows(IllegalArgumentException.class, () -> fetchBlocks(new LinkedHashMap<>(),
+      new String[]{"shuffleChunk_0_0_0_0"},
+      new FetchShuffleBlockChunks("app-id", "exec-id", 0, new int[] { 0 },
+        new int[][] {{ 0 }}), conf));
   }
 
   /**
