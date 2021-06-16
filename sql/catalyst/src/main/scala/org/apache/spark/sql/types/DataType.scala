@@ -175,7 +175,8 @@ object DataType {
       // TODO(SPARK-35732): Parse DayTimeIntervalType from JSON
       DayTimeIntervalType(),
       YearMonthIntervalType(YEAR, YEAR),
-      YearMonthIntervalType(MONTH, MONTH), YearMonthIntervalType(YEAR, MONTH),
+      YearMonthIntervalType(MONTH, MONTH),
+      YearMonthIntervalType(YEAR, MONTH),
       TimestampWithoutTZType)
       .map(t => t.typeName -> t).toMap
   }
