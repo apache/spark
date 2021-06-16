@@ -443,7 +443,19 @@ class DynamicPartitionDataConcurrentWriter(
       if (isPartitioned && currentWriterId.partitionValues != nextPartitionValues) {
         currentWriterId.partitionValues = Some(nextPartitionValues.get.copy())
         if (!concurrentWriters.contains(currentWriterId)) {
-          statsTrackers.foreach(_.newPartition(currentWriterId.partitionValues.get))
+          val partitionSpec: Map[String, String] =
+            description.partitionColumns.zipWithIndex.map { case (attr, index) =>
+              val value = if (currentWriterId.partitionValues.get.isNullAt(index)) {
+                null
+              } else {
+                Cast(
+                  Literal(
+                    currentWriterId.partitionValues.get.get(index, attr.dataType), attr.dataType),
+                  StringType, Some(SQLConf.get.sessionLocalTimeZone)).eval().toString
+              }
+              attr.name -> value
+            }.toMap
+          statsTrackers.foreach(_.newPartition(partitionSpec))
         }
       }
       setupCurrentWriterUsingMap()

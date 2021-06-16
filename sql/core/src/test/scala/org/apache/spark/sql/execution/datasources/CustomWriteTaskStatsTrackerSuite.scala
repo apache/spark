@@ -21,6 +21,7 @@ import scala.collection.mutable
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 
 class CustomWriteTaskStatsTrackerSuite extends SparkFunSuite {
 
@@ -52,7 +53,7 @@ class CustomWriteTaskStatsTracker extends WriteTaskStatsTracker {
 
   val numRowsPerFile = mutable.Map.empty[String, Int]
 
-  override def newPartition(partitionValues: InternalRow): Unit = {}
+  override def newPartition(partitionValues: TablePartitionSpec): Unit = {}
 
   override def newFile(filePath: String): Unit = {
     numRowsPerFile.put(filePath, 0)
