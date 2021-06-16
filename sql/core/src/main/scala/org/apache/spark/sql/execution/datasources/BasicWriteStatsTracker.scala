@@ -65,12 +65,14 @@ case class PartitionStats(var numFiles: Int = 0, var numBytes: Long = 0, var num
 class BasicWriteTaskStatsTracker(hadoopConf: Configuration)
   extends WriteTaskStatsTracker with Logging {
 
-  private[this] val partitions: mutable.ArrayBuffer[InternalRow] = mutable.ArrayBuffer.empty
-  private[this] var numFiles: Int = 0
+  private[this] val partitionsStats: mutable.Map[TablePartitionSpec, PartitionStats] =
+    mutable.Map.empty
+  private[this] var totalNumFiles: Int = 0
   private[this] var numSubmittedFiles: Int = 0
-  private[this] var numBytes: Long = 0L
-  private[this] var numRows: Long = 0L
+  private[this] var totalNumBytes: Long = 0L
+  private[this] var totalNumRows: Long = 0L
 
+  private[this] var curPartitionValue: Option[TablePartitionSpec] = None
   private[this] val submittedFiles = mutable.HashSet[String]()
 
   /**
@@ -161,13 +163,13 @@ class BasicWriteTaskStatsTracker(hadoopConf: Configuration)
 
   private def updateFileStats(filePath: String): Unit = {
     getFileSize(filePath).foreach { len =>
-      numBytes += len
-      numFiles += 1
+      totalNumBytes += len
+      totalNumFiles += 1
     }
   }
 
   override def newRow(filePath: String, row: InternalRow): Unit = {
-    numRows += 1
+    totalNumRows += 1
   }
 
   override def getFinalStats(): WriteTaskStats = {
@@ -180,8 +182,8 @@ class BasicWriteTaskStatsTracker(hadoopConf: Configuration)
       outputMetrics.setRecordsWritten(totalNumRows)
     }
 
-    if (numSubmittedFiles != numFiles) {
-      logInfo(s"Expected $numSubmittedFiles files, but only saw $numFiles. " +
+    if (numSubmittedFiles != totalNumFiles) {
+      logInfo(s"Expected $numSubmittedFiles files, but only saw $totalNumFiles. " +
         "This could be due to the output format not writing empty files, " +
         "or files being not immediately visible in the filesystem.")
     }
