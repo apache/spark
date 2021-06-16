@@ -14,6 +14,9 @@ SELECT * FROM t1, LATERAL (SELECT *);
 SELECT * FROM t1, LATERAL (SELECT * FROM t2);
 SELECT * FROM t1, LATERAL (SELECT t1.*);
 SELECT * FROM t1, LATERAL (SELECT t1.*, t2.* FROM t2);
+SELECT * FROM t1, LATERAL (SELECT t1.* FROM t2 AS t1);
+-- expect error: cannot resolve 't1.*'
+SELECT * FROM t1, LATERAL (SELECT t1.*, t2.* FROM t2, LATERAL (SELECT t1.*, t2.*, t3.* FROM t2 AS t3));
 
 -- lateral join with different join types
 SELECT * FROM t1 JOIN LATERAL (SELECT c1 + c2 AS c3) ON c2 = c3;

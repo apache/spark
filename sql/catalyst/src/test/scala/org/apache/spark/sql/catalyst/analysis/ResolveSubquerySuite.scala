@@ -208,6 +208,11 @@ class ResolveSubquerySuite extends AnalysisTest {
       lateralJoin(t1.as("t1"), t0.select(star("t2"))),
       Seq("cannot resolve 't2.*' given input columns ''")
     )
+    // Check case sensitivities.
+    // SELECT * FROM t1, LATERAL (SELECT T1.*)
+    val plan = lateralJoin(t1.as("t1"), t0.select(star("T1")))
+    assertAnalysisError(plan, "cannot resolve 'T1.*' given input columns ''" :: Nil)
+    assertAnalysisSuccess(plan, caseSensitive = false)
   }
 
   test("SPARK-35618: lateral join with star expansion in functions") {

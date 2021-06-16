@@ -93,8 +93,9 @@ object FakeV2SessionCatalog extends TableCatalog {
 }
 
 /**
- * Provides a way to keep state during the analysis, mostly for resolving views. This enables us to
- * decouple the concerns of analysis environment from the catalog.
+ * Provides a way to keep state during the analysis, mostly for resolving views and subqueries.
+ * This enables us to decouple the concerns of analysis environment from the catalog and resolve
+ * star expressions in subqueries that reference the outer query plans.
  * The state that is kept here is per-query.
  *
  * Note this is thread local.
@@ -114,7 +115,8 @@ object FakeV2SessionCatalog extends TableCatalog {
  *                              if `t` was a permanent table when the current view was created, it
  *                              should still be a permanent table when resolving the current view,
  *                              even if a temp view `t` has been created.
- * @param outerPlans outer query plans.
+ * @param outerPlans The query plans from the outer query that can be used to resolve star
+ *                   expressions in a subquery.
  */
 case class AnalysisContext(
     catalogAndNamespace: Seq[String] = Nil,
@@ -156,7 +158,10 @@ object AnalysisContext {
 
   def withOuterPlans[A](outerPlans: Seq[LogicalPlan])(f: => A): A = {
     val originContext = value.get()
-    val context = originContext.copy(outerPlans = outerPlans ++ originContext.outerPlans)
+    // Since currently Spark can only resolve a subquery using the immediate outer query plans,
+    // the context should only include the current outer plans instead of adding the plans to
+    // the existing outer plans in the context.
+    val context = originContext.copy(outerPlans = outerPlans)
     set(context)
     try f finally { set(originContext) }
   }
