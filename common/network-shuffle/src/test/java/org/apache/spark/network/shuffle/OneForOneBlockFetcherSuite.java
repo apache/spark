@@ -279,6 +279,16 @@ public class OneForOneBlockFetcherSuite {
       blocks.get("shuffleChunk_0_0_2"));
   }
 
+  @Test(expected = IllegalArgumentException.class)
+  public void testInvalidShuffleChunksFetch() {
+    LinkedHashMap<String, ManagedBuffer> blocks = Maps.newLinkedHashMap();
+    blocks.put("shuffleChunk_0_0", new NioManagedBuffer(ByteBuffer.wrap(new byte[12])));
+    String[] blockIds = blocks.keySet().toArray(new String[blocks.size()]);
+    fetchBlocks(blocks, blockIds,
+      new FetchShuffleBlockChunks("app-id", "exec-id", 0, new int[] { 0 },
+        new int[][] {{ 0, 1, 2 }}), conf);
+  }
+
   /**
    * Begins a fetch on the given set of blocks by mocking out the server side of the RPC which
    * simply returns the given (BlockId, Block) pairs.

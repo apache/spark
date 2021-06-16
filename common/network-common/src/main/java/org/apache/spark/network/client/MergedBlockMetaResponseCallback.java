@@ -32,6 +32,10 @@ public interface MergedBlockMetaResponseCallback extends BaseResponseCallback {
    * The given buffer will initially have a refcount of 1, but will be release()'d as soon as this
    * call returns. You must therefore either retain() the buffer or copy its contents before
    * returning.
+   *
+   * @param numChunks number of merged chunks in the merged block
+   * @param buffer the buffer contains an array of roaring bitmaps. The i-th roaring bitmap
+   *               contains the mapIds that were merged to the i-th merged chunk.
    */
   void onSuccess(int numChunks, ManagedBuffer buffer);
 }

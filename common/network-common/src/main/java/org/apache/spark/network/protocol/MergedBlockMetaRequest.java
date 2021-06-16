@@ -49,7 +49,7 @@ public class MergedBlockMetaRequest extends AbstractMessage implements RequestMe
 
   @Override
   public int encodedLength() {
-    return 8 + Encoders.Strings.encodedLength(appId) + 8;
+    return 8 + Encoders.Strings.encodedLength(appId) + 4 + 4;
   }
 
   @Override

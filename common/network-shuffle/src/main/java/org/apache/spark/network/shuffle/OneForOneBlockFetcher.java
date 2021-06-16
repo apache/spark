@@ -22,7 +22,6 @@ import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
-import java.util.Map;
 import java.util.Set;
 
 import com.google.common.primitives.Ints;
@@ -134,7 +133,7 @@ public class OneForOneBlockFetcher {
 
   /**
    * Create FetchShuffleBlocks/FetchShuffleBlockChunks message and rebuild internal blockIds by
-   * analyzing the pass in blockIds.
+   * analyzing the passed in blockIds.
    */
   private AbstractFetchShuffleBlocks createFetchShuffleMsgAndBuildBlockIds(
       String appId,
@@ -181,14 +180,13 @@ public class OneForOneBlockFetcher {
     int[][] secondaryIdsArray = new int[primaryIdToBlocksInfo.size()][];
     int blockIdIndex = 0;
     int secIndex = 0;
-    for (Map.Entry<Number, BlocksInfo> entry : primaryIdToBlocksInfo.entrySet()) {
-      BlocksInfo blocksInfoByPrimaryId = entry.getValue();
-      secondaryIdsArray[secIndex++] = Ints.toArray(blocksInfoByPrimaryId.ids);
+    for (BlocksInfo blocksInfo: primaryIdToBlocksInfo.values()) {
+      secondaryIdsArray[secIndex++] = Ints.toArray(blocksInfo.ids);
 
       // The `blockIds`'s order must be same with the read order specified in FetchShuffleBlocks/
       // FetchShuffleBlockChunks because the shuffle data's return order should match the
       // `blockIds`'s order to ensure blockId and data match.
-      for (String blockId : blocksInfoByPrimaryId.blockIds) {
+      for (String blockId : blocksInfo.blockIds) {
         this.blockIds[blockIdIndex++] = blockId;
       }
     }
@@ -211,8 +209,8 @@ public class OneForOneBlockFetcher {
     // For single block id, the format contains shuffleId, mapId, educeId.
     // For single block chunk id, the format contains shuffleId, reduceId, chunkId.
     if (blockIdParts.length < 4 || blockIdParts.length > 5 ||
-      !(blockIdParts[0].equals(SHUFFLE_BLOCK_PREFIX) ||
-        !blockIdParts[0].equals(SHUFFLE_CHUNK_PREFIX))) {
+      !(blockIdParts[0].equals("shuffle") ||
+        blockIdParts[0].equals("shuffleChunk"))) {
       throw new IllegalArgumentException(
         "Unexpected shuffle block id format: " + blockId);
     }

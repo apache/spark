@@ -96,6 +96,8 @@ public class FetchShuffleBlockChunks extends AbstractFetchShuffleBlocks {
   public void encode(ByteBuf buf) {
     super.encode(buf);
     Encoders.IntArrays.encode(buf, reduceIds);
+    // Even though reduceIds.length == chunkIds.length, we are explicitly setting the length in the
+    // interest of forward compatibility.
     buf.writeInt(chunkIds.length);
     for (int[] ids: chunkIds) {
       Encoders.IntArrays.encode(buf, ids);

@@ -211,12 +211,10 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
 
           @Override
           public void onFailure(Throwable e) {
-            logger.error("Failed while getting merged block meta", e);
             listener.onFailure(shuffleId, reduceId, e);
           }
         });
     } catch (Exception e) {
-      logger.error("Exception while getting merged block meta", e);
       listener.onFailure(shuffleId, reduceId, e);
     }
   }
