@@ -536,6 +536,32 @@ private[spark] object BLAS extends Serializable {
   }
 
   /**
+   * y[0: A.numRows] := alpha * A * x[0: A.numCols] + beta * y[0: A.numRows]
+   */
+  def gemv(
+      alpha: Double,
+      A: Matrix,
+      x: Array[Double],
+      beta: Double,
+      y: Array[Double]): Unit = {
+    require(A.numCols <= x.length,
+      s"The columns of A don't match the number of elements of x. A: ${A.numCols}, x: ${x.length}")
+    require(A.numRows <= y.length,
+      s"The rows of A don't match the number of elements of y. A: ${A.numRows}, y:${y.length}")
+    if (alpha == 0.0 && beta == 1.0) {
+      // gemv: alpha is equal to 0 and beta is equal to 1. Returning y.
+      return
+    } else if (alpha == 0.0) {
+      getBLAS(A.numRows).dscal(A.numRows, beta, y, 1)
+    } else {
+      A match {
+        case smA: SparseMatrix => gemvImpl(alpha, smA, x, beta, y)
+        case dmA: DenseMatrix => gemvImpl(alpha, dmA, x, beta, y)
+      }
+    }
+  }
+
+  /**
    * y := alpha * A * x + beta * y
    * @param alpha a scalar to scale the multiplication A * x.
    * @param A the matrix A that will be left multiplied to x. Size of m x n.
@@ -585,11 +611,24 @@ private[spark] object BLAS extends Serializable {
       x: DenseVector,
       beta: Double,
       y: DenseVector): Unit = {
+    gemvImpl(alpha, A, x.values, beta, y.values)
+  }
+
+  /**
+   * y[0: A.numRows] := alpha * A * x[0: A.numCols] + beta * y[0: A.numRows]
+   * For `DenseMatrix` A.
+   */
+  private def gemvImpl(
+      alpha: Double,
+      A: DenseMatrix,
+      xValues: Array[Double],
+      beta: Double,
+      yValues: Array[Double]): Unit = {
     val tStrA = if (A.isTransposed) "T" else "N"
     val mA = if (!A.isTransposed) A.numRows else A.numCols
     val nA = if (!A.isTransposed) A.numCols else A.numRows
-    nativeBLAS.dgemv(tStrA, mA, nA, alpha, A.values, mA, x.values, 1, beta,
-      y.values, 1)
+    nativeBLAS.dgemv(tStrA, mA, nA, alpha, A.values, mA, xValues, 1, beta,
+      yValues, 1)
   }
 
   /**
@@ -715,8 +754,19 @@ private[spark] object BLAS extends Serializable {
       x: DenseVector,
       beta: Double,
       y: DenseVector): Unit = {
-    val xValues = x.values
-    val yValues = y.values
+    gemvImpl(alpha, A, x.values, beta, y.values)
+  }
+
+  /**
+   * y[0: A.numRows] := alpha * A * x[0: A.numCols] + beta * y[0: A.numRows]
+   * For `SparseMatrix` A.
+   */
+  private def gemvImpl(
+      alpha: Double,
+      A: SparseMatrix,
+      xValues: Array[Double],
+      beta: Double,
+      yValues: Array[Double]): Unit = {
     val mA: Int = A.numRows
     val nA: Int = A.numCols
 
@@ -738,7 +788,7 @@ private[spark] object BLAS extends Serializable {
         rowCounter += 1
       }
     } else {
-      if (beta != 1.0) scal(beta, y)
+      if (beta != 1.0) getBLAS(mA).dscal(mA, beta, yValues, 1)
       // Perform matrix-vector multiplication and add to y
       var colCounterForA = 0
       while (colCounterForA < nA) {

@@ -60,8 +60,6 @@ private[ml] class HuberBlockAggregator(
       s"got type ${bcCoefficients.value.getClass}.)")
   }
 
-  @transient private lazy val linear = new DenseVector(coefficientsArray.take(numFeatures))
-
   // pre-computed margin of an empty vector.
   // with this variable as an offset, for a sparse vector, we only need to
   // deal with non-zero values in prediction.
@@ -89,14 +87,13 @@ private[ml] class HuberBlockAggregator(
     if (block.weightIter.forall(_ == 0)) return this
     val size = block.size
 
-    // vec/arr here represents margins
-    val vec = new DenseVector(Array.ofDim[Double](size))
-    val arr = vec.values
+    // arr here represents margins
+    val arr = Array.ofDim[Double](size)
     if (fitIntercept) java.util.Arrays.fill(arr, marginOffset)
-    BLAS.gemv(1.0, block.matrix, linear, 1.0, vec)
+    BLAS.gemv(1.0, block.matrix, coefficientsArray, 1.0, arr)
 
     // in-place convert margins to multiplier
-    // then, vec/arr represents multiplier
+    // then, arr represents multiplier
     val sigma = coefficientsArray.last
     var sigmaGradSum = 0.0
     var localLossSum = 0.0
@@ -133,17 +130,8 @@ private[ml] class HuberBlockAggregator(
     lossSum += localLossSum
     weightSum += localWeightSum
 
-    block.matrix match {
-      case dm: DenseMatrix =>
-        BLAS.nativeBLAS.dgemv("N", dm.numCols, dm.numRows, 1.0, dm.values, dm.numCols,
-          arr, 1, 1.0, gradientSumArray, 1)
-
-      case sm: SparseMatrix =>
-        val linearGradSumVec = Vectors.zeros(numFeatures).toDense
-        BLAS.gemv(1.0, sm.transpose, vec, 0.0, linearGradSumVec)
-        BLAS.javaBLAS.daxpy(numFeatures, 1.0, linearGradSumVec.values, 1,
-          gradientSumArray, 1)
-    }
+    // update the linear part of gradientSumArray
+    BLAS.gemv(1.0, block.matrix.transpose, arr, 1.0, gradientSumArray)
 
     if (fitIntercept) {
       // above update of the linear part of gradientSumArray does NOT take the centering
