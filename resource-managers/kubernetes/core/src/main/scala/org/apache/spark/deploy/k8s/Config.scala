@@ -54,6 +54,36 @@ private[spark] object Config extends Logging {
       .stringConf
       .createWithDefault(KUBERNETES_MASTER_INTERNAL_URL)
 
+  val KUBERNETES_DRIVER_SERVICE_DELETE_ON_TERMINATION =
+    ConfigBuilder("spark.kubernetes.driver.service.deleteOnTermination")
+      .doc("If true, driver service will be deleted on Spark application termination. " +
+        "If false, it will be cleaned up when the driver pod is deletion.")
+      .version("3.2.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  val KUBERNETES_DRIVER_OWN_PVC =
+    ConfigBuilder("spark.kubernetes.driver.ownPersistentVolumeClaim")
+      .doc("If true, driver pod becomes the owner of on-demand persistent volume claims " +
+        "instead of the executor pods")
+      .version("3.2.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val KUBERNETES_DRIVER_REUSE_PVC =
+    ConfigBuilder("spark.kubernetes.driver.reusePersistentVolumeClaim")
+      .doc("If true, driver pod tries to reuse driver-owned on-demand persistent volume claims " +
+        "of the deleted executor pods if exists. This can be useful to reduce executor pod " +
+        "creation delay by skipping persistent volume creations. Note that a pod in " +
+        "`Terminating` pod status is not a deleted pod by definition and its resources " +
+        "including persistent volume claims are not reusable yet. Spark will create new " +
+        "persistent volume claims when there exists no reusable one. In other words, the total " +
+        "number of persistent volume claims can be larger than the number of running executors " +
+        s"sometimes. This config requires ${KUBERNETES_DRIVER_OWN_PVC.key}=true.")
+      .version("3.2.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val KUBERNETES_NAMESPACE =
     ConfigBuilder("spark.kubernetes.namespace")
       .doc("The namespace that will be used for running the driver and executor pods.")
@@ -268,6 +298,17 @@ private[spark] object Config extends Logging {
       .version("2.3.0")
       .timeConf(TimeUnit.MILLISECONDS)
       .checkValue(value => value > 0, "Allocation batch delay must be a positive time value.")
+      .createWithDefaultString("1s")
+
+  val KUBERNETES_ALLOCATION_DRIVER_READINESS_TIMEOUT =
+    ConfigBuilder("spark.kubernetes.allocation.driver.readinessTimeout")
+      .doc("Time to wait for driver pod to get ready before creating executor pods. This wait " +
+        "only happens on application start. If timeout happens, executor pods will still be " +
+        "created.")
+      .version("3.1.3")
+      .timeConf(TimeUnit.SECONDS)
+      .checkValue(value => value > 0, "Allocation driver readiness timeout must be a positive "
+        + "time value.")
       .createWithDefaultString("1s")
 
   val KUBERNETES_ALLOCATION_EXECUTOR_TIMEOUT =

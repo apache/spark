@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.adaptive
 
+import org.apache.spark.sql.catalyst.analysis.UpdateAttributeNullability
+import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, LogicalPlanIntegrity, PlanHelper}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.internal.SQLConf
@@ -26,10 +28,17 @@ import org.apache.spark.util.Utils
  * The optimizer for re-optimizing the logical plan used by AdaptiveSparkPlanExec.
  */
 class AQEOptimizer(conf: SQLConf) extends RuleExecutor[LogicalPlan] {
+  private def fixedPoint =
+    FixedPoint(
+      conf.optimizerMaxIterations,
+      maxIterationsSetting = SQLConf.OPTIMIZER_MAX_ITERATIONS.key)
+
   private val defaultBatches = Seq(
-    Batch("Demote BroadcastHashJoin", Once,
-      DemoteBroadcastHashJoin),
-    Batch("Eliminate Unnecessary Join", Once, EliminateUnnecessaryJoin)
+    Batch("Propagate Empty Relations", fixedPoint,
+      AQEPropagateEmptyRelation,
+      ConvertToLocalRelation,
+      UpdateAttributeNullability),
+    Batch("Dynamic Join Selection", Once, DynamicJoinSelection)
   )
 
   final override protected def batches: Seq[Batch] = {

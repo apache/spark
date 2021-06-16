@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.ScroogeLikeExample
 import org.apache.spark.sql.catalyst.analysis.{ResolveTimeZone, SimpleAnalyzer, UnresolvedDeserializer}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.encoders._
-import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, GenerateUnsafeProjection}
 import org.apache.spark.sql.catalyst.expressions.objects._
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project}
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, DateTimeUtils, GenericArrayData, IntervalUtils}
@@ -399,6 +399,7 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val newInst1 = NewInstance(
       cls = classOf[GenericArrayData],
       arguments = Literal.fromObject(List(1, 2, 3)) :: Nil,
+      inputTypes = Nil,
       propagateNull = false,
       dataType = ArrayType(IntegerType),
       outerPointer = None)
@@ -409,6 +410,7 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val newInst2 = NewInstance(
       cls = classOf[outerObj.Inner],
       arguments = Literal(1) :: Nil,
+      inputTypes = Nil,
       propagateNull = false,
       dataType = ObjectType(classOf[outerObj.Inner]),
       outerPointer = Some(() => outerObj))
@@ -418,6 +420,7 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val newInst3 = NewInstance(
       cls = classOf[ScroogeLikeExample],
       arguments = Literal(1) :: Nil,
+      inputTypes = Nil,
       propagateNull = false,
       dataType = ObjectType(classOf[ScroogeLikeExample]),
       outerPointer = Some(() => outerObj))
@@ -608,6 +611,60 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkExceptionInExpression[RuntimeException](
       serializer4, EmptyRow, "Cannot use null as map key!")
   }
+
+  test("SPARK-35244: invoke should throw the original exception") {
+    val strClsType = ObjectType(classOf[String])
+    checkExceptionInExpression[StringIndexOutOfBoundsException](
+      Invoke(Literal("a", strClsType), "substring", strClsType, Seq(Literal(3))), "")
+
+    val mathCls = classOf[Math]
+    checkExceptionInExpression[ArithmeticException](
+      StaticInvoke(mathCls, IntegerType, "addExact", Seq(Literal(Int.MaxValue), Literal(1))), "")
+  }
+
+  test("SPARK-35278: invoke should find method with correct number of parameters") {
+    val strClsType = ObjectType(classOf[String])
+    checkExceptionInExpression[StringIndexOutOfBoundsException](
+      Invoke(Literal("a", strClsType), "substring", strClsType, Seq(Literal(3))), "")
+
+    checkObjectExprEvaluation(
+      Invoke(Literal("a", strClsType), "substring", strClsType, Seq(Literal(0))), "a")
+
+    checkExceptionInExpression[StringIndexOutOfBoundsException](
+      Invoke(Literal("a", strClsType), "substring", strClsType, Seq(Literal(0), Literal(3))), "")
+
+    checkObjectExprEvaluation(
+      Invoke(Literal("a", strClsType), "substring", strClsType, Seq(Literal(0), Literal(1))), "a")
+  }
+
+  test("SPARK-35278: invoke should correctly invoke override method") {
+    val clsType = ObjectType(classOf[ConcreteClass])
+    val obj = new ConcreteClass
+
+    val input = (1, 2)
+    checkObjectExprEvaluation(
+      Invoke(Literal(obj, clsType), "testFunc", IntegerType,
+        Seq(Literal(input, ObjectType(input.getClass)))), 2)
+  }
+
+  test("SPARK-35288: static invoke should find method without exact param type match") {
+    val input = (1, 2)
+
+    checkObjectExprEvaluation(
+      StaticInvoke(TestStaticInvoke.getClass, IntegerType, "func",
+        Seq(Literal(input, ObjectType(input.getClass)))), 3)
+
+    checkObjectExprEvaluation(
+      StaticInvoke(TestStaticInvoke.getClass, IntegerType, "func",
+        Seq(Literal(1, IntegerType))), -1)
+  }
+
+  test("SPARK-35281: StaticInvoke shouldn't box primitive when result is nullable") {
+    val ctx = new CodegenContext
+    val arguments = Seq(Literal(0), Literal(1))
+    val genCode = StaticInvoke(TestFun.getClass, IntegerType, "foo", arguments).genCode(ctx)
+    assert(!genCode.code.toString.contains("boxedResult"))
+  }
 }
 
 class TestBean extends Serializable {
@@ -618,3 +675,28 @@ class TestBean extends Serializable {
   def setNonPrimitive(i: AnyRef): Unit =
     assert(i != null, "this setter should not be called with null.")
 }
+
+object TestStaticInvoke {
+  def func(param: Any): Int = param match {
+    case pair: Tuple2[_, _] =>
+      pair.asInstanceOf[Tuple2[Int, Int]]._1 + pair.asInstanceOf[Tuple2[Int, Int]]._2
+    case _ => -1
+  }
+}
+
+abstract class BaseClass[T] {
+  def testFunc(param: T): Int
+}
+
+class ConcreteClass extends BaseClass[Product] with Serializable {
+  override def testFunc(param: Product): Int = param match {
+    case _: Tuple2[_, _] => 2
+    case _: Tuple3[_, _, _] => 3
+    case _ => 4
+  }
+}
+
+case object TestFun {
+  def foo(left: Int, right: Int): Int = left + right
+}
+

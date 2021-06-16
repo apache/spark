@@ -25,7 +25,7 @@ import scala.util.Random
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{Final, Partial}
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
-import org.apache.spark.sql.execution.{FilterExec, RangeExec, SparkPlan, WholeStageCodegenExec}
+import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecutionSuite
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
@@ -106,10 +106,12 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
     val expected1 = Seq(
       Map("number of output rows" -> 2L,
         "avg hash probe bucket list iters" ->
-          aggregateMetricsPattern),
+          aggregateMetricsPattern,
+        "number of sort fallback tasks" -> 0L),
       Map("number of output rows" -> 1L,
         "avg hash probe bucket list iters" ->
-          aggregateMetricsPattern))
+          aggregateMetricsPattern,
+        "number of sort fallback tasks" -> 0L))
     val shuffleExpected1 = Map(
       "records read" -> 2L,
       "local blocks read" -> 2L,
@@ -126,10 +128,12 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
     val expected2 = Seq(
       Map("number of output rows" -> 4L,
         "avg hash probe bucket list iters" ->
-          aggregateMetricsPattern),
+          aggregateMetricsPattern,
+        "number of sort fallback tasks" -> 0L),
       Map("number of output rows" -> 3L,
         "avg hash probe bucket list iters" ->
-          aggregateMetricsPattern))
+          aggregateMetricsPattern,
+        "number of sort fallback tasks" -> 0L))
 
     val shuffleExpected2 = Map(
       "records read" -> 4L,
@@ -168,7 +172,7 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
     //           Exchange(nodeId = 5)
     //             LocalTableScan(nodeId = 6)
     Seq(true, false).foreach { enableWholeStage =>
-      val df = generateRandomBytesDF().repartition(1).groupBy('a).count()
+      val df = generateRandomBytesDF().repartition(2).groupBy('a).count()
       val nodeIds = if (enableWholeStage) {
         Set(4L, 1L)
       } else {
@@ -212,7 +216,7 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
     testSparkPlanMetrics(df2, 1, Map(
       2L -> (("ObjectHashAggregate", Map(
         "number of output rows" -> 4L,
-        "number of tasks fall-backed to sort-based aggregation" -> 0L))),
+        "number of sort fallback tasks" -> 0L))),
       1L -> (("Exchange", Map(
         "shuffle records written" -> 4L,
         "records read" -> 4L,
@@ -220,7 +224,7 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
         "remote blocks read" -> 0L))),
       0L -> (("ObjectHashAggregate", Map(
         "number of output rows" -> 3L,
-        "number of tasks fall-backed to sort-based aggregation" -> 0L))))
+        "number of sort fallback tasks" -> 0L))))
     )
 
     // 2 partitions and each partition contains 2 keys, with fallback to sort-based aggregation
@@ -229,10 +233,10 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
       testSparkPlanMetrics(df3, 1, Map(
         2L -> (("ObjectHashAggregate", Map(
           "number of output rows" -> 4L,
-          "number of tasks fall-backed to sort-based aggregation" -> 2L))),
+          "number of sort fallback tasks" -> 2L))),
         0L -> (("ObjectHashAggregate", Map(
           "number of output rows" -> 3L,
-          "number of tasks fall-backed to sort-based aggregation" -> 1L))))
+          "number of sort fallback tasks" -> 1L))))
       )
       testSparkPlanMetricsWithPredicates(df3, 1, Map(
         2L -> (("ObjectHashAggregate", Map(
@@ -309,11 +313,11 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
       val rightJoinQuery = "SELECT * FROM testDataForJoin right JOIN testData2 ON " +
         "testData2.a = testDataForJoin.a"
 
-      Seq((leftJoinQuery, false), (leftJoinQuery, true), (rightJoinQuery, false),
-        (rightJoinQuery, true)).foreach { case (query, enableWholeStage) =>
+      Seq((leftJoinQuery, 0L, false), (leftJoinQuery, 1L, true), (rightJoinQuery, 0L, false),
+        (rightJoinQuery, 1L, true)).foreach { case (query, nodeId, enableWholeStage) =>
         val df = spark.sql(query)
         testSparkPlanMetrics(df, 1, Map(
-          0L -> (("SortMergeJoin", Map(
+          nodeId -> (("SortMergeJoin", Map(
             // It's 8 because we read 6 rows in the left and 2 row in the right one
             "number of output rows" -> 8L)))),
           enableWholeStage
@@ -517,10 +521,10 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
     withTempView("antiData") {
       anti.createOrReplaceTempView("antiData")
       val query = "SELECT * FROM testData2 ANTI JOIN antiData ON testData2.a = antiData.a"
-      Seq(false, true).foreach { enableWholeStage =>
+      Seq((0L, false), (1L, true)).foreach { case (nodeId, enableWholeStage) =>
         val df = spark.sql(query)
         testSparkPlanMetrics(df, 1, Map(
-          0L -> (("SortMergeJoin", Map("number of output rows" -> 4L)))),
+          nodeId -> (("SortMergeJoin", Map("number of output rows" -> 4L)))),
           enableWholeStage
         )
       }
@@ -787,9 +791,10 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
   test("SPARK-34567: Add metrics for CTAS operator") {
     withTable("t") {
       val df = sql("CREATE TABLE t USING PARQUET AS SELECT 1 as a")
+      assert(df.queryExecution.executedPlan.isInstanceOf[CommandResultExec])
+      val commandResultExec = df.queryExecution.executedPlan.asInstanceOf[CommandResultExec]
       val dataWritingCommandExec =
-        df.queryExecution.executedPlan.asInstanceOf[DataWritingCommandExec]
-      dataWritingCommandExec.executeCollect()
+        commandResultExec.commandPhysicalPlan.asInstanceOf[DataWritingCommandExec]
       val createTableAsSelect = dataWritingCommandExec.cmd
       assert(createTableAsSelect.metrics.contains("numFiles"))
       assert(createTableAsSelect.metrics("numFiles").value == 1)

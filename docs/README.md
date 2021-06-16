@@ -67,10 +67,13 @@ To generate API docs for any language, you'll need to install these libraries:
 <!--
 TODO(SPARK-32407): Sphinx 3.1+ does not correctly index nested classes.
 See also https://github.com/sphinx-doc/sphinx/issues/7551.
+
+TODO(SPARK-35375): Jinja2 3.0.0+ causes error when building with Sphinx.
+See also https://issues.apache.org/jira/browse/SPARK-35375.
 -->
 
 ```sh
-$ sudo pip install 'sphinx<3.1.0' mkdocs numpy pydata_sphinx_theme ipython nbsphinx numpydoc
+$ sudo pip install 'sphinx<3.1.0' mkdocs numpy pydata_sphinx_theme ipython nbsphinx numpydoc 'jinja2<3.0.0'
 ```
 
 ## Generating the Documentation HTML

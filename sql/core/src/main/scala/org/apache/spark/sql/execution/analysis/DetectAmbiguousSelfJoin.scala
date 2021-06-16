@@ -19,10 +19,11 @@ package org.apache.spark.sql.execution.analysis
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.{AnalysisException, Column, Dataset}
+import org.apache.spark.sql.{Column, Dataset}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, Cast, Equality, Expression, ExprId}
 import org.apache.spark.sql.catalyst.plans.logical.{Join, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -57,8 +58,8 @@ object DetectAmbiguousSelfJoin extends Rule[LogicalPlan] {
   }
 
   object LogicalPlanWithDatasetId {
-    def unapply(p: LogicalPlan): Option[(LogicalPlan, Long)] = {
-      p.getTagValue(Dataset.DATASET_ID_TAG).map(id => p -> id)
+    def unapply(p: LogicalPlan): Option[(LogicalPlan, mutable.HashSet[Long])] = {
+      p.getTagValue(Dataset.DATASET_ID_TAG).map(ids => p -> ids)
     }
   }
 
@@ -89,9 +90,9 @@ object DetectAmbiguousSelfJoin extends Rule[LogicalPlan] {
       val inputAttrs = AttributeSet(plan.children.flatMap(_.output))
 
       plan.foreach {
-        case LogicalPlanWithDatasetId(p, id) if dsIdSet.contains(id) =>
+        case LogicalPlanWithDatasetId(p, ids) if dsIdSet.intersect(ids).nonEmpty =>
           colRefs.foreach { ref =>
-            if (id == ref.datasetId) {
+            if (ids.contains(ref.datasetId)) {
               if (ref.colPos < 0 || ref.colPos >= p.output.length) {
                 throw new IllegalStateException("[BUG] Hit an invalid Dataset column reference: " +
                   s"$ref. Please open a JIRA ticket to report it.")
@@ -154,13 +155,7 @@ object DetectAmbiguousSelfJoin extends Rule[LogicalPlan] {
       }
 
       if (ambiguousAttrs.nonEmpty) {
-        throw new AnalysisException(s"Column ${ambiguousAttrs.mkString(", ")} are ambiguous. " +
-          "It's probably because you joined several Datasets together, and some of these " +
-          "Datasets are the same. This column points to one of the Datasets but Spark is unable " +
-          "to figure out which one. Please alias the Datasets with different names via " +
-          "`Dataset.as` before joining them, and specify the column using qualified name, e.g. " +
-          """`df.as("a").join(df.as("b"), $"a.id" > $"b.id")`. You can also set """ +
-          s"${SQLConf.FAIL_AMBIGUOUS_SELF_JOIN_ENABLED.key} to false to disable this check.")
+        throw QueryCompilationErrors.ambiguousAttributesInSelfJoinError(ambiguousAttrs)
       }
     }
 

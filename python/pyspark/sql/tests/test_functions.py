@@ -279,9 +279,9 @@ class FunctionsTests(ReusedSQLTestCase):
         self.assertTrue(isinstance(aqt[1], list))
         self.assertEqual(len(aqt[1]), 3)
         self.assertTrue(all(isinstance(q, float) for q in aqt[1]))
-        self.assertRaises(ValueError, lambda: df.stat.approxQuantile(123, [0.1, 0.9], 0.1))
-        self.assertRaises(ValueError, lambda: df.stat.approxQuantile(("a", 123), [0.1, 0.9], 0.1))
-        self.assertRaises(ValueError, lambda: df.stat.approxQuantile(["a", 123], [0.1, 0.9], 0.1))
+        self.assertRaises(TypeError, lambda: df.stat.approxQuantile(123, [0.1, 0.9], 0.1))
+        self.assertRaises(TypeError, lambda: df.stat.approxQuantile(("a", 123), [0.1, 0.9], 0.1))
+        self.assertRaises(TypeError, lambda: df.stat.approxQuantile(["a", 123], [0.1, 0.9], 0.1))
 
     def test_sorting_functions_with_column(self):
         from pyspark.sql import functions
@@ -492,6 +492,28 @@ class FunctionsTests(ReusedSQLTestCase):
         # Should fail if function doesn't return Column
         with self.assertRaises(ValueError):
             transform(col("foo"), lambda x: 1)
+
+    def test_nested_higher_order_function(self):
+        # SPARK-35382: lambda vars must be resolved properly in nested higher order functions
+        from pyspark.sql.functions import flatten, struct, transform
+
+        df = self.spark.sql("SELECT array(1, 2, 3) as numbers, array('a', 'b', 'c') as letters")
+
+        actual = df.select(flatten(
+            transform(
+                "numbers",
+                lambda number: transform(
+                    "letters",
+                    lambda letter: struct(number.alias("n"), letter.alias("l"))
+                )
+            )
+        )).first()[0]
+
+        expected = [(1, "a"), (1, "b"), (1, "c"),
+                    (2, "a"), (2, "b"), (2, "c"),
+                    (3, "a"), (3, "b"), (3, "c")]
+
+        self.assertEquals(actual, expected)
 
     def test_window_functions(self):
         df = self.spark.createDataFrame([(1, "1"), (2, "2"), (1, "2"), (1, "2")], ["key", "value"])

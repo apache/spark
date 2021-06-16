@@ -5,13 +5,13 @@
       +- * HashAggregate (68)
          +- Exchange (67)
             +- * HashAggregate (66)
-               +- SortMergeJoin LeftSemi (65)
+               +- * SortMergeJoin LeftSemi (65)
                   :- * Sort (47)
                   :  +- Exchange (46)
                   :     +- * HashAggregate (45)
                   :        +- Exchange (44)
                   :           +- * HashAggregate (43)
-                  :              +- SortMergeJoin LeftSemi (42)
+                  :              +- * SortMergeJoin LeftSemi (42)
                   :                 :- * Sort (24)
                   :                 :  +- Exchange (23)
                   :                 :     +- * HashAggregate (22)
@@ -260,7 +260,7 @@ Arguments: hashpartitioning(coalesce(c_last_name#22, ), isnull(c_last_name#22), 
 Input [3]: [c_last_name#22, c_first_name#21, d_date#18]
 Arguments: [coalesce(c_last_name#22, ) ASC NULLS FIRST, isnull(c_last_name#22) ASC NULLS FIRST, coalesce(c_first_name#21, ) ASC NULLS FIRST, isnull(c_first_name#21) ASC NULLS FIRST, coalesce(d_date#18, 1970-01-01) ASC NULLS FIRST, isnull(d_date#18) ASC NULLS FIRST], false, 0
 
-(42) SortMergeJoin
+(42) SortMergeJoin [codegen id : 17]
 Left keys [6]: [coalesce(c_last_name#11, ), isnull(c_last_name#11), coalesce(c_first_name#10, ), isnull(c_first_name#10), coalesce(d_date#5, 1970-01-01), isnull(d_date#5)]
 Right keys [6]: [coalesce(c_last_name#22, ), isnull(c_last_name#22), coalesce(c_first_name#21, ), isnull(c_first_name#21), coalesce(d_date#18, 1970-01-01), isnull(d_date#18)]
 Join condition: None
@@ -368,7 +368,7 @@ Arguments: hashpartitioning(coalesce(c_last_name#34, ), isnull(c_last_name#34), 
 Input [3]: [c_last_name#34, c_first_name#33, d_date#30]
 Arguments: [coalesce(c_last_name#34, ) ASC NULLS FIRST, isnull(c_last_name#34) ASC NULLS FIRST, coalesce(c_first_name#33, ) ASC NULLS FIRST, isnull(c_first_name#33) ASC NULLS FIRST, coalesce(d_date#30, 1970-01-01) ASC NULLS FIRST, isnull(d_date#30) ASC NULLS FIRST], false, 0
 
-(65) SortMergeJoin
+(65) SortMergeJoin [codegen id : 28]
 Left keys [6]: [coalesce(c_last_name#11, ), isnull(c_last_name#11), coalesce(c_first_name#10, ), isnull(c_first_name#10), coalesce(d_date#5, 1970-01-01), isnull(d_date#5)]
 Right keys [6]: [coalesce(c_last_name#34, ), isnull(c_last_name#34), coalesce(c_first_name#33, ), isnull(c_first_name#33), coalesce(d_date#30, 1970-01-01), isnull(d_date#30)]
 Join condition: None

@@ -18,7 +18,8 @@
 package org.apache.spark.sql.internal
 
 import java.util.{Locale, NoSuchElementException, Properties, TimeZone}
-import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
+import java.util
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
 import java.util.zip.Deflater
 
@@ -53,28 +54,60 @@ import org.apache.spark.util.Utils
 
 object SQLConf {
 
-  private[sql] val sqlConfEntries =
-    new ConcurrentHashMap[String, ConfigEntry[_]]()
+  private[this] val sqlConfEntriesUpdateLock = new Object
 
-  val staticConfKeys: java.util.Set[String] =
-    java.util.Collections.synchronizedSet(new java.util.HashSet[String]())
+  @volatile
+  private[this] var sqlConfEntries: util.Map[String, ConfigEntry[_]] = util.Collections.emptyMap()
 
-  private def register(entry: ConfigEntry[_]): Unit = sqlConfEntries.merge(entry.key, entry,
-    (existingConfigEntry, newConfigEntry) => {
-      require(existingConfigEntry == null,
-        s"Duplicate SQLConfigEntry. ${newConfigEntry.key} has been registered")
-      newConfigEntry
-    }
-  )
+  private[this] val staticConfKeysUpdateLock = new Object
+
+  @volatile
+  private[this] var staticConfKeys: java.util.Set[String] = util.Collections.emptySet()
+
+  private def register(entry: ConfigEntry[_]): Unit = sqlConfEntriesUpdateLock.synchronized {
+    require(!sqlConfEntries.containsKey(entry.key),
+      s"Duplicate SQLConfigEntry. ${entry.key} has been registered")
+    val updatedMap = new java.util.HashMap[String, ConfigEntry[_]](sqlConfEntries)
+    updatedMap.put(entry.key, entry)
+    sqlConfEntries = updatedMap
+  }
 
   // For testing only
-  private[sql] def unregister(entry: ConfigEntry[_]): Unit = sqlConfEntries.remove(entry.key)
+  private[sql] def unregister(entry: ConfigEntry[_]): Unit = sqlConfEntriesUpdateLock.synchronized {
+    val updatedMap = new java.util.HashMap[String, ConfigEntry[_]](sqlConfEntries)
+    updatedMap.remove(entry.key)
+    sqlConfEntries = updatedMap
+  }
+
+  private[internal] def getConfigEntry(key: String): ConfigEntry[_] = {
+    sqlConfEntries.get(key)
+  }
+
+  private[internal] def getConfigEntries(): util.Collection[ConfigEntry[_]] = {
+    sqlConfEntries.values()
+  }
+
+  private[internal] def containsConfigEntry(entry: ConfigEntry[_]): Boolean = {
+    getConfigEntry(entry.key) == entry
+  }
+
+  private[sql] def containsConfigKey(key: String): Boolean = {
+    sqlConfEntries.containsKey(key)
+  }
+
+  def registerStaticConfigKey(key: String): Unit = staticConfKeysUpdateLock.synchronized {
+    val updated = new util.HashSet[String](staticConfKeys)
+    updated.add(key)
+    staticConfKeys = updated
+  }
+
+  def isStaticConfigKey(key: String): Boolean = staticConfKeys.contains(key)
 
   def buildConf(key: String): ConfigBuilder = ConfigBuilder(key).onCreate(register)
 
   def buildStaticConf(key: String): ConfigBuilder = {
     ConfigBuilder(key).onCreate { entry =>
-      staticConfKeys.add(entry.key)
+      SQLConf.registerStaticConfigKey(entry.key)
       SQLConf.register(entry)
     }
   }
@@ -205,6 +238,17 @@ object SQLConf {
     .version("3.0.0")
     .intConf
     .createWithDefault(100)
+
+  val ANSI_ENABLED = buildConf("spark.sql.ansi.enabled")
+    .doc("When true, Spark SQL uses an ANSI compliant dialect instead of being Hive compliant. " +
+      "For example, Spark will throw an exception at runtime instead of returning null results " +
+      "when the inputs to a SQL operator/function are invalid." +
+      "For full details of this dialect, you can find them in the section \"ANSI Compliance\" of " +
+      "Spark's documentation. Some ANSI dialect features may be not from the ANSI SQL " +
+      "standard directly, but their behaviors align with ANSI SQL's style")
+    .version("3.0.0")
+    .booleanConf
+    .createWithDefault(false)
 
   val OPTIMIZER_EXCLUDED_RULES = buildConf("spark.sql.optimizer.excludedRules")
     .doc("Configures a list of rules to be disabled in the optimizer, in which the rules are " +
@@ -530,8 +574,8 @@ object SQLConf {
   val SKEW_JOIN_ENABLED =
     buildConf("spark.sql.adaptive.skewJoin.enabled")
       .doc(s"When true and '${ADAPTIVE_EXECUTION_ENABLED.key}' is true, Spark dynamically " +
-        "handles skew in sort-merge join by splitting (and replicating if needed) skewed " +
-        "partitions.")
+        "handles skew in shuffled join (sort-merge and shuffled hash) by splitting (and " +
+        "replicating if needed) skewed partitions.")
       .version("3.0.0")
       .booleanConf
       .createWithDefault(true)
@@ -576,6 +620,27 @@ object SQLConf {
       .version("3.1.0")
       .stringConf
       .createOptional
+
+  val ADAPTIVE_AUTO_BROADCASTJOIN_THRESHOLD =
+    buildConf("spark.sql.adaptive.autoBroadcastJoinThreshold")
+      .doc("Configures the maximum size in bytes for a table that will be broadcast to all " +
+        "worker nodes when performing a join. By setting this value to -1 broadcasting can be " +
+        s"disabled. The default value is same with ${AUTO_BROADCASTJOIN_THRESHOLD.key}. " +
+        "Note that, this config is used only in adaptive framework.")
+      .version("3.2.0")
+      .bytesConf(ByteUnit.BYTE)
+      .createOptional
+
+  val ADAPTIVE_MAX_SHUFFLE_HASH_JOIN_LOCAL_MAP_THRESHOLD =
+    buildConf("spark.sql.adaptive.maxShuffledHashJoinLocalMapThreshold")
+      .doc("Configures the maximum size in bytes per partition that can be allowed to build " +
+        "local hash map. If this value is not smaller than " +
+        s"${ADVISORY_PARTITION_SIZE_IN_BYTES.key} and all the partition size are not larger " +
+        "than this config, join selection prefer to use shuffled hash join instead of " +
+        s"sort merge join regardless of the value of ${PREFER_SORTMERGEJOIN.key}.")
+      .version("3.2.0")
+      .bytesConf(ByteUnit.BYTE)
+      .createWithDefault(0L)
 
   val SUBEXPRESSION_ELIMINATION_ENABLED =
     buildConf("spark.sql.subexpressionElimination.enabled")
@@ -749,10 +814,10 @@ object SQLConf {
 
   val PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD =
     buildConf("spark.sql.parquet.pushdown.inFilterThreshold")
-      .doc("The maximum number of values to filter push-down optimization for IN predicate. " +
-        "Large threshold won't necessarily provide much better performance. " +
-        "The experiment argued that 300 is the limit threshold. " +
-        "By setting this value to 0 this feature can be disabled. " +
+      .doc("For IN predicate, Parquet filter will push-down a set of OR clauses if its " +
+        "number of values not exceeds this threshold. Otherwise, Parquet filter will push-down " +
+        "a value greater than or equal to its minimum value and less than or equal to " +
+        "its maximum value. By setting this value to 0 this feature can be disabled. " +
         s"This configuration only has an effect when '${PARQUET_FILTER_PUSHDOWN_ENABLED.key}' is " +
         "enabled.")
       .version("2.4.0")
@@ -810,11 +875,11 @@ object SQLConf {
     .doc("Sets the compression codec used when writing ORC files. If either `compression` or " +
       "`orc.compress` is specified in the table-specific options/properties, the precedence " +
       "would be `compression`, `orc.compress`, `spark.sql.orc.compression.codec`." +
-      "Acceptable values include: none, uncompressed, snappy, zlib, lzo, zstd.")
+      "Acceptable values include: none, uncompressed, snappy, zlib, lzo, zstd, lz4.")
     .version("2.3.0")
     .stringConf
     .transform(_.toLowerCase(Locale.ROOT))
-    .checkValues(Set("none", "uncompressed", "snappy", "zlib", "lzo", "zstd"))
+    .checkValues(Set("none", "uncompressed", "snappy", "zlib", "lzo", "zstd", "lz4"))
     .createWithDefault("snappy")
 
   val ORC_IMPLEMENTATION = buildConf("spark.sql.orc.impl")
@@ -838,6 +903,13 @@ object SQLConf {
     .version("2.4.0")
     .intConf
     .createWithDefault(4096)
+
+  val ORC_VECTORIZED_READER_NESTED_COLUMN_ENABLED =
+    buildConf("spark.sql.orc.enableNestedColumnVectorizedReader")
+      .doc("Enables vectorized orc decoding for nested column.")
+      .version("3.2.0")
+      .booleanConf
+      .createWithDefault(false)
 
   val ORC_FILTER_PUSHDOWN_ENABLED = buildConf("spark.sql.orc.filterPushdown")
     .doc("When true, enable filter pushdown for ORC files.")
@@ -1062,6 +1134,18 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING =
+    buildConf("spark.sql.optimizer.canChangeCachedPlanOutputPartitioning")
+      .internal()
+      .doc("Whether to forcibly enable some optimization rules that can change the output " +
+        "partitioning of a cached query when executing it for caching. If it is set to true, " +
+        "queries may need an extra shuffle to read the cached data. This configuration is " +
+        "disabled by default. Currently, the optimization rules enabled by this configuration " +
+        s"are ${ADAPTIVE_EXECUTION_ENABLED.key} and ${AUTO_BUCKETED_SCAN_ENABLED.key}.")
+      .version("3.2.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val CROSS_JOINS_ENABLED = buildConf("spark.sql.crossJoin.enabled")
     .internal()
     .doc("When false, we will throw an error if a query contains a cartesian product without " +
@@ -1085,8 +1169,9 @@ object SQLConf {
     .createWithDefault(true)
 
   val GROUP_BY_ALIASES = buildConf("spark.sql.groupByAliases")
-    .doc("When true, aliases in a select list can be used in group by clauses. When false, " +
-      "an analysis exception is thrown in the case.")
+    .doc("This configuration is only effective when ANSI mode is disabled. When it is true and " +
+      s"${ANSI_ENABLED.key} is false, aliases in a select list can be used in group by clauses. " +
+      "Otherwise, an analysis exception is thrown in the case.")
     .version("2.2.0")
     .booleanConf
     .createWithDefault(true)
@@ -1575,6 +1660,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val ALLOW_NON_EMPTY_LOCATION_IN_CTAS =
+    buildConf("spark.sql.legacy.allowNonEmptyLocationInCTAS")
+      .internal()
+      .doc("When false, CTAS with LOCATION throws an analysis exception if the " +
+        "location is not empty.")
+      .version("3.2.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val ALLOW_STAR_WITH_SINGLE_TABLE_IDENTIFIER_IN_COUNT =
     buildConf("spark.sql.legacy.allowStarWithSingleTableIdentifierInCount")
       .internal()
@@ -1919,8 +2013,10 @@ object SQLConf {
   val JOIN_REORDER_CARD_WEIGHT =
     buildConf("spark.sql.cbo.joinReorder.card.weight")
       .internal()
-      .doc("The weight of cardinality (number of rows) for plan cost comparison in join reorder: " +
-        "rows * weight + size * (1 - weight).")
+      .doc("The weight of the ratio of cardinalities (number of rows) " +
+        "in the cost comparison function. The ratio of sizes in bytes has weight " +
+        "1 - this value. The weighted geometric mean of these ratios is used to decide " +
+        "which of the candidate plans will be chosen by the CBO.")
       .version("2.2.0")
       .doubleConf
       .checkValue(weight => weight >= 0 && weight <= 1, "The weight value must be in [0, 1].")
@@ -1976,6 +2072,26 @@ object SQLConf {
       .internal()
       .doc("Threshold for number of rows to be spilled by window operator")
       .version("2.2.0")
+      .intConf
+      .createWithDefault(SHUFFLE_SPILL_NUM_ELEMENTS_FORCE_SPILL_THRESHOLD.defaultValue.get)
+
+  val SESSION_WINDOW_BUFFER_IN_MEMORY_THRESHOLD =
+    buildConf("spark.sql.sessionWindow.buffer.in.memory.threshold")
+      .internal()
+      .doc("Threshold for number of windows guaranteed to be held in memory by the " +
+        "session window operator. Note that the buffer is used only for the query Spark " +
+        "cannot apply aggregations on determining session window.")
+      .version("3.2.0")
+      .intConf
+      .createWithDefault(4096)
+
+  val SESSION_WINDOW_BUFFER_SPILL_THRESHOLD =
+    buildConf("spark.sql.sessionWindow.buffer.spill.threshold")
+      .internal()
+      .doc("Threshold for number of rows to be spilled by window operator. Note that " +
+        "the buffer is used only for the query Spark cannot apply aggregations on determining " +
+        "session window.")
+      .version("3.2.0")
       .intConf
       .createWithDefault(SHUFFLE_SPILL_NUM_ELEMENTS_FORCE_SPILL_THRESHOLD.defaultValue.get)
 
@@ -2122,7 +2238,7 @@ object SQLConf {
         "shows the exception messages from UDFs. Note that this works only with CPython 3.7+.")
       .version("3.1.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val PANDAS_GROUPED_MAP_ASSIGN_COLUMNS_BY_NAME =
     buildConf("spark.sql.legacy.execution.pandas.groupedMap.assignColumnsByName")
@@ -2339,17 +2455,6 @@ object SQLConf {
       .checkValues(StoreAssignmentPolicy.values.map(_.toString))
       .createWithDefault(StoreAssignmentPolicy.ANSI.toString)
 
-  val ANSI_ENABLED = buildConf("spark.sql.ansi.enabled")
-    .doc("When true, Spark SQL uses an ANSI compliant dialect instead of being Hive compliant. " +
-      "For example, Spark will throw an exception at runtime instead of returning null results " +
-      "when the inputs to a SQL operator/function are invalid." +
-      "For full details of this dialect, you can find them in the section \"ANSI Compliance\" of " +
-      "Spark's documentation. Some ANSI dialect features may be not from the ANSI SQL " +
-      "standard directly, but their behaviors align with ANSI SQL's style")
-    .version("3.0.0")
-    .booleanConf
-    .createWithDefault(false)
-
   val SORT_BEFORE_REPARTITION =
     buildConf("spark.sql.execution.sortBeforeRepartition")
       .internal()
@@ -2417,6 +2522,14 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val DECORRELATE_INNER_QUERY_ENABLED =
+    buildConf("spark.sql.optimizer.decorrelateInnerQuery.enabled")
+      .internal()
+      .doc("Decorrelate inner query by eliminating correlated references and build domain joins.")
+      .version("3.2.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val TOP_K_SORT_FALLBACK_THRESHOLD =
     buildConf("spark.sql.execution.topKSortFallbackThreshold")
       .internal()
@@ -2442,6 +2555,16 @@ object SQLConf {
     .version("2.4.0")
     .booleanConf
     .createWithDefault(true)
+
+  val CSV_INPUT_BUFFER_SIZE = buildConf("spark.sql.csv.parser.inputBufferSize")
+    .internal()
+    .doc("If it is set, it configures the buffer size of CSV input during parsing. " +
+      "It is the same as inputBufferSize option in CSV which has a higher priority. " +
+      "Note that this is a workaround for the parsing library's regression, and this " +
+      "configuration is internal and supposed to be removed in the near future.")
+    .version("3.0.3")
+    .intConf
+    .createOptional
 
   val REPL_EAGER_EVAL_ENABLED = buildConf("spark.sql.repl.eagerEval.enabled")
     .doc("Enables eager evaluation or not. When true, the top K rows of Dataset will be " +
@@ -2856,8 +2979,9 @@ object SQLConf {
     buildConf("spark.sql.addPartitionInBatch.size")
       .internal()
       .doc("The number of partitions to be handled in one turn when use " +
-        "`AlterTableAddPartitionCommand` to add partitions into table. The smaller " +
-        "batch size is, the less memory is required for the real handler, e.g. Hive Metastore.")
+        "`AlterTableAddPartitionCommand` or `RepairTableCommand` to add partitions into table. " +
+        "The smaller batch size is, the less memory is required for the real handler, e.g. " +
+        "Hive Metastore.")
       .version("3.0.0")
       .intConf
       .checkValue(_ > 0, "The value of spark.sql.addPartitionInBatch.size must be positive")
@@ -3122,6 +3246,14 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val MAX_CONCURRENT_OUTPUT_FILE_WRITERS = buildConf("spark.sql.maxConcurrentOutputFileWriters")
+    .internal()
+    .doc("Maximum number of output file writers to use concurrently. If number of writers " +
+      "needed reaches this limit, task will sort rest of output then writing them.")
+    .version("3.2.0")
+    .intConf
+    .createWithDefault(0)
+
   /**
    * Holds information about keys that have been deprecated.
    *
@@ -3338,6 +3470,9 @@ class SQLConf extends Serializable with Logging {
   def orcVectorizedReaderEnabled: Boolean = getConf(ORC_VECTORIZED_READER_ENABLED)
 
   def orcVectorizedReaderBatchSize: Int = getConf(ORC_VECTORIZED_READER_BATCH_SIZE)
+
+  def orcVectorizedReaderNestedColumnEnabled: Boolean =
+    getConf(ORC_VECTORIZED_READER_NESTED_COLUMN_ENABLED)
 
   def parquetCompressionCodec: String = getConf(PARQUET_COMPRESSION)
 
@@ -3635,6 +3770,10 @@ class SQLConf extends Serializable with Logging {
 
   def windowExecBufferSpillThreshold: Int = getConf(WINDOW_EXEC_BUFFER_SPILL_THRESHOLD)
 
+  def sessionWindowBufferInMemoryThreshold: Int = getConf(SESSION_WINDOW_BUFFER_IN_MEMORY_THRESHOLD)
+
+  def sessionWindowBufferSpillThreshold: Int = getConf(SESSION_WINDOW_BUFFER_SPILL_THRESHOLD)
+
   def sortMergeJoinExecBufferInMemoryThreshold: Int =
     getConf(SORT_MERGE_JOIN_EXEC_BUFFER_IN_MEMORY_THRESHOLD)
 
@@ -3657,6 +3796,9 @@ class SQLConf extends Serializable with Logging {
 
   def allowStarWithSingleTableIdentifierInCount: Boolean =
     getConf(SQLConf.ALLOW_STAR_WITH_SINGLE_TABLE_IDENTIFIER_IN_COUNT)
+
+  def allowNonEmptyLocationInCTAS: Boolean =
+    getConf(SQLConf.ALLOW_NON_EMPTY_LOCATION_IN_CTAS)
 
   def starSchemaDetection: Boolean = getConf(STARSCHEMA_DETECTION)
 
@@ -3806,6 +3948,10 @@ class SQLConf extends Serializable with Logging {
 
   def legacyIntervalEnabled: Boolean = getConf(LEGACY_INTERVAL_ENABLED)
 
+  def decorrelateInnerQueryEnabled: Boolean = getConf(SQLConf.DECORRELATE_INNER_QUERY_ENABLED)
+
+  def maxConcurrentOutputFileWriters: Int = getConf(SQLConf.MAX_CONCURRENT_OUTPUT_FILE_WRITERS)
+
   /** ********************** SQLConf functionality methods ************ */
 
   /** Set Spark SQL configuration properties. */
@@ -3817,7 +3963,7 @@ class SQLConf extends Serializable with Logging {
   def setConfString(key: String, value: String): Unit = {
     require(key != null, "key cannot be null")
     require(value != null, s"value cannot be null for key: $key")
-    val entry = sqlConfEntries.get(key)
+    val entry = getConfigEntry(key)
     if (entry != null) {
       // Only verify configs in the SQLConf object
       entry.valueConverter(value)
@@ -3829,7 +3975,7 @@ class SQLConf extends Serializable with Logging {
   def setConf[T](entry: ConfigEntry[T], value: T): Unit = {
     require(entry != null, "entry cannot be null")
     require(value != null, s"value cannot be null for key: ${entry.key}")
-    require(sqlConfEntries.get(entry.key) == entry, s"$entry is not registered")
+    require(containsConfigEntry(entry), s"$entry is not registered")
     setConfWithCheck(entry.key, entry.stringConverter(value))
   }
 
@@ -3839,7 +3985,7 @@ class SQLConf extends Serializable with Logging {
     Option(settings.get(key)).
       orElse {
         // Try to use the default value
-        Option(sqlConfEntries.get(key)).map { e => e.stringConverter(e.readFrom(reader)) }
+        Option(getConfigEntry(key)).map { e => e.stringConverter(e.readFrom(reader)) }
       }.
       getOrElse(throw new NoSuchElementException(key))
   }
@@ -3850,7 +3996,7 @@ class SQLConf extends Serializable with Logging {
    * desired one.
    */
   def getConf[T](entry: ConfigEntry[T], defaultValue: T): T = {
-    require(sqlConfEntries.get(entry.key) == entry, s"$entry is not registered")
+    require(containsConfigEntry(entry), s"$entry is not registered")
     Option(settings.get(entry.key)).map(entry.valueConverter).getOrElse(defaultValue)
   }
 
@@ -3859,7 +4005,7 @@ class SQLConf extends Serializable with Logging {
    * yet, return `defaultValue` in [[ConfigEntry]].
    */
   def getConf[T](entry: ConfigEntry[T]): T = {
-    require(sqlConfEntries.get(entry.key) == entry, s"$entry is not registered")
+    require(containsConfigEntry(entry), s"$entry is not registered")
     entry.readFrom(reader)
   }
 
@@ -3868,7 +4014,7 @@ class SQLConf extends Serializable with Logging {
    * is not set yet, returns None.
    */
   def getConf[T](entry: OptionalConfigEntry[T]): Option[T] = {
-    require(sqlConfEntries.get(entry.key) == entry, s"$entry is not registered")
+    require(containsConfigEntry(entry), s"$entry is not registered")
     entry.readFrom(reader)
   }
 
@@ -3877,19 +4023,18 @@ class SQLConf extends Serializable with Logging {
    * not set yet, return `defaultValue`.
    */
   def getConfString(key: String, defaultValue: String): String = {
-    if (defaultValue != null && defaultValue != ConfigEntry.UNDEFINED) {
-      val entry = sqlConfEntries.get(key)
-      if (entry != null) {
-        // Only verify configs in the SQLConf object
-        entry.valueConverter(defaultValue)
-      }
-    }
     Option(settings.get(key)).getOrElse {
       // If the key is not set, need to check whether the config entry is registered and is
       // a fallback conf, so that we can check its parent.
-      sqlConfEntries.get(key) match {
-        case e: FallbackConfigEntry[_] => getConfString(e.fallback.key, defaultValue)
-        case _ => defaultValue
+      getConfigEntry(key) match {
+        case e: FallbackConfigEntry[_] =>
+          getConfString(e.fallback.key, defaultValue)
+        case e: ConfigEntry[_] if defaultValue != null && defaultValue != ConfigEntry.UNDEFINED =>
+          // Only verify configs in the SQLConf object
+          e.valueConverter(defaultValue)
+          defaultValue
+        case _ =>
+          defaultValue
       }
     }
   }
@@ -3926,9 +4071,9 @@ class SQLConf extends Serializable with Logging {
    * Return all the configuration definitions that have been defined in [[SQLConf]]. Each
    * definition contains key, defaultValue and doc.
    */
-  def getAllDefinedConfs: Seq[(String, String, String, String)] = sqlConfEntries.synchronized {
+  def getAllDefinedConfs: Seq[(String, String, String, String)] = {
     loadDefinedConfs()
-    sqlConfEntries.values.asScala.filter(_.isPublic).map { entry =>
+    getConfigEntries().asScala.filter(_.isPublic).map { entry =>
       val displayValue = Option(getConfString(entry.key, null)).getOrElse(entry.defaultValueString)
       (entry.key, displayValue, entry.doc, entry.version)
     }.toSeq
@@ -3938,11 +4083,18 @@ class SQLConf extends Serializable with Logging {
    * Redacts the given option map according to the description of SQL_OPTIONS_REDACTION_PATTERN.
    */
   def redactOptions[K, V](options: Map[K, V]): Map[K, V] = {
+    redactOptions(options.toSeq).toMap
+  }
+
+  /**
+   * Redacts the given option map according to the description of SQL_OPTIONS_REDACTION_PATTERN.
+   */
+  def redactOptions[K, V](options: Seq[(K, V)]): Seq[(K, V)] = {
     val regexes = Seq(
       getConf(SQL_OPTIONS_REDACTION_PATTERN),
       SECRET_REDACTION_PATTERN.readFrom(reader))
 
-    regexes.foldLeft(options.toSeq) { case (opts, r) => Utils.redact(Some(r), opts) }.toMap
+    regexes.foldLeft(options) { case (opts, r) => Utils.redact(Some(r), opts) }
   }
 
   /**
@@ -4011,6 +4163,6 @@ class SQLConf extends Serializable with Logging {
   }
 
   def isModifiable(key: String): Boolean = {
-    sqlConfEntries.containsKey(key) && !staticConfKeys.contains(key)
+    containsConfigKey(key) && !isStaticConfigKey(key)
   }
 }

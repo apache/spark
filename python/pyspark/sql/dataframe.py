@@ -276,9 +276,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         if self._schema is None:
             try:
                 self._schema = _parse_datatype_json_string(self._jdf.schema().json())
-            except AttributeError as e:
-                raise Exception(
-                    "Unable to parse datatype from schema. %s" % e)
+            except Exception as e:
+                raise ValueError(
+                    "Unable to parse datatype from schema. %s" % e) from e
         return self._schema
 
     def printSchema(self):
@@ -350,7 +350,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
 
         if extended is not None and mode is not None:
-            raise Exception("extended and mode should not be set together.")
+            raise ValueError("extended and mode should not be set together.")
 
         # For the no argument case: df.explain()
         is_no_argument = extended is None and mode is None
@@ -448,7 +448,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         ----------
         n : int, optional
             Number of rows to show.
-        truncate : bool, optional
+        truncate : bool or int, optional
             If set to ``True``, truncate strings longer than 20 chars by default.
             If set to a number greater than one, truncates long strings to length ``truncate``
             and align cells right.
@@ -482,10 +482,23 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
          age  | 5
          name | Bob
         """
+
+        if not isinstance(n, int) or isinstance(n, bool):
+            raise TypeError("Parameter 'n' (number of rows) must be an int")
+
+        if not isinstance(vertical, bool):
+            raise TypeError("Parameter 'vertical' must be a bool")
+
         if isinstance(truncate, bool) and truncate:
             print(self._jdf.showString(n, 20, vertical))
         else:
-            print(self._jdf.showString(n, int(truncate), vertical))
+            try:
+                int_truncate = int(truncate)
+            except ValueError:
+                raise TypeError(
+                    "Parameter 'truncate={}' should be either bool or int.".format(truncate))
+
+            print(self._jdf.showString(n, int_truncate, vertical))
 
     def __repr__(self):
         if not self._support_repr_html and self.sql_ctx._conf.isReplEagerEvalEnabled():
@@ -588,7 +601,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Parameters
         ----------
-        eventTime : str or :class:`Column`
+        eventTime : str
             the name of the column that contains the event time of the row.
         delayThreshold : str
             the minimum delay to wait to data to arrive late, relative to the
@@ -1134,12 +1147,12 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         if isinstance(col, str):
             col = Column(col)
         elif not isinstance(col, Column):
-            raise ValueError("col must be a string or a column, but got %r" % type(col))
+            raise TypeError("col must be a string or a column, but got %r" % type(col))
         if not isinstance(fractions, dict):
-            raise ValueError("fractions must be a dict but got %r" % type(fractions))
+            raise TypeError("fractions must be a dict but got %r" % type(fractions))
         for k, v in fractions.items():
             if not isinstance(k, (float, int, str)):
-                raise ValueError("key must be float, int, or string, but got %r" % type(k))
+                raise TypeError("key must be float, int, or string, but got %r" % type(k))
             fractions[k] = float(v)
         col = col._jc
         seed = seed if seed is not None else random.randint(0, sys.maxsize)
@@ -1225,7 +1238,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         +----+
         """
         if not isinstance(colName, str):
-            raise ValueError("colName should be provided as string")
+            raise TypeError("colName should be provided as string")
         jc = self._jdf.colRegex(colName)
         return Column(jc)
 
@@ -2009,7 +2022,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         elif isinstance(subset, str):
             subset = [subset]
         elif not isinstance(subset, (list, tuple)):
-            raise ValueError("subset should be a list or tuple of column names")
+            raise TypeError("subset should be a list or tuple of column names")
 
         if thresh is None:
             thresh = len(subset) if how == 'any' else 1
@@ -2067,7 +2080,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         +---+------+-------+
         """
         if not isinstance(value, (float, int, str, bool, dict)):
-            raise ValueError("value should be a float, int, string, bool or dict")
+            raise TypeError("value should be a float, int, string, bool or dict")
 
         # Note that bool validates isinstance(int), but we don't want to
         # convert bools to floats
@@ -2083,7 +2096,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             if isinstance(subset, str):
                 subset = [subset]
             elif not isinstance(subset, (list, tuple)):
-                raise ValueError("subset should be a list or tuple of column names")
+                raise TypeError("subset should be a list or tuple of column names")
 
             return DataFrame(self._jdf.na().fill(value, self._jseq(subset)), self.sql_ctx)
 
@@ -2186,15 +2199,15 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         # Validate input types
         valid_types = (bool, float, int, str, list, tuple)
         if not isinstance(to_replace, valid_types + (dict, )):
-            raise ValueError(
+            raise TypeError(
                 "to_replace should be a bool, float, int, string, list, tuple, or dict. "
                 "Got {0}".format(type(to_replace)))
 
         if not isinstance(value, valid_types) and value is not None \
                 and not isinstance(to_replace, dict):
-            raise ValueError("If to_replace is not a dict, value should be "
-                             "a bool, float, int, string, list, tuple or None. "
-                             "Got {0}".format(type(value)))
+            raise TypeError("If to_replace is not a dict, value should be "
+                            "a bool, float, int, string, list, tuple or None. "
+                            "Got {0}".format(type(value)))
 
         if isinstance(to_replace, (list, tuple)) and isinstance(value, (list, tuple)):
             if len(to_replace) != len(value):
@@ -2202,8 +2215,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
                                  "Got {0} and {1}".format(len(to_replace), len(value)))
 
         if not (subset is None or isinstance(subset, (list, tuple, str))):
-            raise ValueError("subset should be a list or tuple of column names, "
-                             "column name or None. Got {0}".format(type(subset)))
+            raise TypeError("subset should be a list or tuple of column names, "
+                            "column name or None. Got {0}".format(type(subset)))
 
         # Reshape input arguments if necessary
         if isinstance(to_replace, (float, int, str)):
@@ -2285,7 +2298,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
 
         if not isinstance(col, (str, list, tuple)):
-            raise ValueError("col should be a string, list or tuple, but got %r" % type(col))
+            raise TypeError("col should be a string, list or tuple, but got %r" % type(col))
 
         isStr = isinstance(col, str)
 
@@ -2296,11 +2309,11 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         for c in col:
             if not isinstance(c, str):
-                raise ValueError("columns should be strings, but got %r" % type(c))
+                raise TypeError("columns should be strings, but got %r" % type(c))
         col = _to_list(self._sc, col)
 
         if not isinstance(probabilities, (list, tuple)):
-            raise ValueError("probabilities should be a list or tuple")
+            raise TypeError("probabilities should be a list or tuple")
         if isinstance(probabilities, tuple):
             probabilities = list(probabilities)
         for p in probabilities:
@@ -2308,8 +2321,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
                 raise ValueError("probabilities should be numerical (float, int) in [0,1].")
         probabilities = _to_list(self._sc, probabilities)
 
-        if not isinstance(relativeError, (float, int)) or relativeError < 0:
-            raise ValueError("relativeError should be numerical (float, int) >= 0.")
+        if not isinstance(relativeError, (float, int)):
+            raise TypeError("relativeError should be numerical (float, int)")
+        if relativeError < 0:
+            raise ValueError("relativeError should be >= 0.")
         relativeError = float(relativeError)
 
         jaq = self._jdf.stat().approxQuantile(col, probabilities, relativeError)
@@ -2334,9 +2349,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             The correlation method. Currently only supports "pearson"
         """
         if not isinstance(col1, str):
-            raise ValueError("col1 should be a string.")
+            raise TypeError("col1 should be a string.")
         if not isinstance(col2, str):
-            raise ValueError("col2 should be a string.")
+            raise TypeError("col2 should be a string.")
         if not method:
             method = "pearson"
         if not method == "pearson":
@@ -2359,9 +2374,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             The name of the second column
         """
         if not isinstance(col1, str):
-            raise ValueError("col1 should be a string.")
+            raise TypeError("col1 should be a string.")
         if not isinstance(col2, str):
-            raise ValueError("col2 should be a string.")
+            raise TypeError("col2 should be a string.")
         return self._jdf.stat().cov(col1, col2)
 
     def crosstab(self, col1, col2):
@@ -2386,9 +2401,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             of the :class:`DataFrame`.
         """
         if not isinstance(col1, str):
-            raise ValueError("col1 should be a string.")
+            raise TypeError("col1 should be a string.")
         if not isinstance(col2, str):
-            raise ValueError("col2 should be a string.")
+            raise TypeError("col2 should be a string.")
         return DataFrame(self._jdf.stat().crosstab(col1, col2), self.sql_ctx)
 
     def freqItems(self, cols, support=None):
@@ -2418,7 +2433,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         if isinstance(cols, tuple):
             cols = list(cols)
         if not isinstance(cols, list):
-            raise ValueError("cols must be a list or tuple of column names as strings.")
+            raise TypeError("cols must be a list or tuple of column names as strings.")
         if not support:
             support = 0.01
         return DataFrame(self._jdf.stat().freqItems(_to_seq(self._sc, cols), support), self.sql_ctx)
@@ -2453,7 +2468,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         [Row(age=2, name='Alice', age2=4), Row(age=5, name='Bob', age2=7)]
 
         """
-        assert isinstance(col, Column), "col should be Column"
+        if not isinstance(col, Column):
+            raise TypeError("col should be Column")
         return DataFrame(self._jdf.withColumn(colName, col._jc), self.sql_ctx)
 
     def withColumnRenamed(self, existing, new):
@@ -2597,8 +2613,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         True
         """
         if not isinstance(other, DataFrame):
-            raise ValueError("other parameter should be of DataFrame; however, got %s"
-                             % type(other))
+            raise TypeError("other parameter should be of DataFrame; however, got %s"
+                            % type(other))
         return self._jdf.sameSemantics(other._jdf)
 
     def semanticHash(self):

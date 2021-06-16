@@ -17,12 +17,12 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.TypeCheckSuccess
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.trees.UnaryLike
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types._
 
 /**
@@ -118,12 +118,14 @@ case class First(child: Expression, ignoreNulls: Boolean)
   override lazy val evaluateExpression: AttributeReference = first
 
   override def toString: String = s"$prettyName($child)${if (ignoreNulls) " ignore nulls"}"
+
+  override protected def withNewChildInternal(newChild: Expression): First = copy(child = newChild)
 }
 
 object FirstLast {
   def validateIgnoreNullExpr(exp: Expression, funcName: String): Boolean = exp match {
     case Literal(b: Boolean, BooleanType) => b
-    case _ => throw new AnalysisException(
-      s"The second argument in $funcName should be a boolean literal.")
+    case _ => throw QueryCompilationErrors.secondArgumentInFunctionIsNotBooleanLiteralError(
+      funcName)
   }
 }

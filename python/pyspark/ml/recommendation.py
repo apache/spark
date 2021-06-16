@@ -260,9 +260,9 @@ class ALS(JavaEstimator, _ALSParams, JavaMLWritable, JavaMLReadable):
     >>> test = spark.createDataFrame([(0, 2), (1, 0), (2, 0)], ["user", "item"])
     >>> predictions = sorted(model.transform(test).collect(), key=lambda r: r[0])
     >>> predictions[0]
-    Row(user=0, item=2, newPrediction=0.692910...)
+    Row(user=0, item=2, newPrediction=0.69291...)
     >>> predictions[1]
-    Row(user=1, item=0, newPrediction=3.473569...)
+    Row(user=1, item=0, newPrediction=3.47356...)
     >>> predictions[2]
     Row(user=2, item=0, newPrediction=-0.899198...)
     >>> user_recs = model.recommendForAllUsers(3)

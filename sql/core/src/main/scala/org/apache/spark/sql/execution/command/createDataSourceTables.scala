@@ -23,7 +23,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
-import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.{CommandExecutionMode, SparkPlan}
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types.StructType
@@ -42,7 +42,7 @@ import org.apache.spark.sql.types.StructType
  * }}}
  */
 case class CreateDataSourceTableCommand(table: CatalogTable, ignoreIfExists: Boolean)
-  extends RunnableCommand {
+  extends LeafRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     assert(table.tableType != CatalogTableType.VIEW)
@@ -166,6 +166,9 @@ case class CreateDataSourceTableAsSelectCommand(
       saveDataIntoTable(
         sparkSession, table, table.storage.locationUri, child, SaveMode.Append, tableExists = true)
     } else {
+      table.storage.locationUri.foreach { p =>
+        DataWritingCommand.assertEmptyRootPath(p, mode, sparkSession.sessionState.newHadoopConf)
+      }
       assert(table.schema.isEmpty)
       sparkSession.sessionState.catalog.validateTableLocation(table)
       val tableLocation = if (table.tableType == CatalogTableType.MANAGED) {
@@ -192,7 +195,7 @@ case class CreateDataSourceTableAsSelectCommand(
           sessionState.executePlan(RepairTableCommand(
             table.identifier,
             enableAddPartitions = true,
-            enableDropPartitions = false)).toRdd
+            enableDropPartitions = false), CommandExecutionMode.SKIP).toRdd
         case _ =>
       }
     }
@@ -227,4 +230,7 @@ case class CreateDataSourceTableAsSelectCommand(
         throw ex
     }
   }
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
+    copy(query = newChild)
 }

@@ -271,7 +271,7 @@ private[orc] class OrcSerializer(dataSchema: StructType, conf: Configuration)
 }
 
 private[orc] class OrcOutputWriter(
-    path: String,
+    val path: String,
     dataSchema: StructType,
     context: TaskAttemptContext)
   extends OutputWriter {
@@ -314,6 +314,7 @@ private[orc] object OrcFileFormat extends HiveInspectors with Logging {
     "NONE" -> "",
     "SNAPPY" -> ".snappy",
     "ZLIB" -> ".zlib",
+    "LZ4" -> ".lz4",
     "LZO" -> ".lzo")
 
   def unwrapOrcStructs(

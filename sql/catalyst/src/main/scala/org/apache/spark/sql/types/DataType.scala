@@ -171,7 +171,8 @@ object DataType {
   private val otherTypes = {
     Seq(NullType, DateType, TimestampType, BinaryType, IntegerType, BooleanType, LongType,
       DoubleType, FloatType, ShortType, ByteType, StringType, CalendarIntervalType,
-      DayTimeIntervalType, YearMonthIntervalType)
+      // TODO(SPARK-35732): Parse DayTimeIntervalType from JSON
+      DayTimeIntervalType(), YearMonthIntervalType, TimestampWithoutTZType)
       .map(t => t.typeName -> t).toMap
   }
 

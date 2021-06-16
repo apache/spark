@@ -55,7 +55,7 @@ import org.apache.spark.util.io.ChunkedByteBuffer
 /**
  * Spark executor, backed by a threadpool to run tasks.
  *
- * This can be used with Mesos, YARN, and the standalone scheduler.
+ * This can be used with Mesos, YARN, kubernetes and the standalone scheduler.
  * An internal RPC interface is used for communication with the driver,
  * except in the case of Mesos fine-grained mode.
  */
@@ -72,7 +72,7 @@ private[spark] class Executor(
   logInfo(s"Starting executor ID $executorId on host $executorHostname")
 
   private val executorShutdown = new AtomicBoolean(false)
-  ShutdownHookManager.addShutdownHook(
+  val stopHookReference = ShutdownHookManager.addShutdownHook(
     () => stop()
   )
   // Application dependencies (added through SparkContext) that we've fetched so far on this node.
@@ -312,6 +312,7 @@ private[spark] class Executor(
 
   def stop(): Unit = {
     if (!executorShutdown.getAndSet(true)) {
+      ShutdownHookManager.removeShutdownHook(stopHookReference)
       env.metricsSystem.report()
       try {
         metricsPoller.stop()
@@ -996,7 +997,7 @@ private[spark] class Executor(
     try {
       val response = heartbeatReceiverRef.askSync[HeartbeatResponse](
         message, new RpcTimeout(HEARTBEAT_INTERVAL_MS.millis, EXECUTOR_HEARTBEAT_INTERVAL.key))
-      if (response.reregisterBlockManager) {
+      if (!executorShutdown.get && response.reregisterBlockManager) {
         logInfo("Told to re-register on heartbeat")
         env.blockManager.reregister()
       }

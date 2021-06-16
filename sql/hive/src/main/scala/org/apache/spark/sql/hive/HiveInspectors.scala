@@ -840,7 +840,7 @@ private[hive] trait HiveInspectors {
     case BinaryType => PrimitiveObjectInspectorFactory.javaByteArrayObjectInspector
     case DateType => PrimitiveObjectInspectorFactory.javaDateObjectInspector
     case TimestampType => PrimitiveObjectInspectorFactory.javaTimestampObjectInspector
-    case DayTimeIntervalType =>
+    case _: DayTimeIntervalType =>
       PrimitiveObjectInspectorFactory.javaHiveIntervalDayTimeObjectInspector
     case YearMonthIntervalType =>
       PrimitiveObjectInspectorFactory.javaHiveIntervalYearMonthObjectInspector
@@ -889,7 +889,7 @@ private[hive] trait HiveInspectors {
       getDecimalWritableConstantObjectInspector(value)
     case Literal(_, NullType) =>
       getPrimitiveNullWritableConstantObjectInspector
-    case Literal(_, DayTimeIntervalType) =>
+    case Literal(_, _: DayTimeIntervalType) =>
       getHiveIntervalDayTimeWritableConstantObjectInspector
     case Literal(_, YearMonthIntervalType) =>
       getHiveIntervalYearMonthWritableConstantObjectInspector
@@ -969,8 +969,8 @@ private[hive] trait HiveInspectors {
     case _: JavaDateObjectInspector => DateType
     case _: WritableTimestampObjectInspector => TimestampType
     case _: JavaTimestampObjectInspector => TimestampType
-    case _: WritableHiveIntervalDayTimeObjectInspector => DayTimeIntervalType
-    case _: JavaHiveIntervalDayTimeObjectInspector => DayTimeIntervalType
+    case _: WritableHiveIntervalDayTimeObjectInspector => DayTimeIntervalType()
+    case _: JavaHiveIntervalDayTimeObjectInspector => DayTimeIntervalType()
     case _: WritableHiveIntervalYearMonthObjectInspector => YearMonthIntervalType
     case _: JavaHiveIntervalYearMonthObjectInspector => YearMonthIntervalType
     case _: WritableVoidObjectInspector => NullType
@@ -1155,7 +1155,7 @@ private[hive] trait HiveInspectors {
       case DateType => dateTypeInfo
       case TimestampType => timestampTypeInfo
       case NullType => voidTypeInfo
-      case DayTimeIntervalType => intervalDayTimeTypeInfo
+      case _: DayTimeIntervalType => intervalDayTimeTypeInfo
       case YearMonthIntervalType => intervalYearMonthTypeInfo
       case dt =>
         throw new AnalysisException(

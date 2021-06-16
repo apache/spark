@@ -52,7 +52,8 @@ private[jdbc] abstract class SecureConnectionProvider extends BasicConnectionPro
   private[connection] def setAuthenticationConfig(driver: Driver, options: JDBCOptions) = {
     val parent = Configuration.getConfiguration
     val config = new SecureConnectionProvider.JDBCConfiguration(
-      parent, appEntry(driver, options), options.keytab, options.principal)
+      parent, appEntry(driver, options), options.keytab,
+      options.principal, options.refreshKrb5Config)
     logDebug("Adding database specific security configuration")
     Configuration.setConfiguration(config)
   }
@@ -63,7 +64,8 @@ object SecureConnectionProvider {
     parent: Configuration,
     appEntry: String,
     keytab: String,
-    principal: String) extends Configuration {
+    principal: String,
+    refreshKrb5Config: Boolean) extends Configuration {
   val entry =
     new AppConfigurationEntry(
       SecurityUtils.getKrb5LoginModuleName(),
@@ -73,7 +75,8 @@ object SecureConnectionProvider {
         "useKeyTab" -> "true",
         "keyTab" -> keytab,
         "principal" -> principal,
-        "debug" -> "true"
+        "debug" -> "true",
+        "refreshKrb5Config" -> refreshKrb5Config.toString
       ).asJava
     )
 

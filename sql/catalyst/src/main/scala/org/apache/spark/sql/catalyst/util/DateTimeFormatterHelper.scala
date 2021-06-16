@@ -25,8 +25,8 @@ import java.util.{Date, Locale}
 
 import com.google.common.cache.CacheBuilder
 
-import org.apache.spark.SparkUpgradeException
 import org.apache.spark.sql.catalyst.util.DateTimeFormatterHelper._
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy._
 
@@ -45,8 +45,8 @@ trait DateTimeFormatterHelper {
       val actual = accessor.get(field)
       val expected = candidate.get(field)
       if (actual != expected) {
-        throw new DateTimeException(s"Conflict found: Field $field $actual differs from" +
-          s" $field $expected derived from $candidate")
+        throw QueryExecutionErrors.fieldDiffersFromDerivedLocalDateError(
+          field, actual, expected, candidate)
       }
     }
   }
@@ -145,9 +145,7 @@ trait DateTimeFormatterHelper {
       } catch {
         case _: Throwable => throw e
       }
-      throw new SparkUpgradeException("3.0", s"Fail to parse '$s' in the new parser. You can " +
-        s"set ${SQLConf.LEGACY_TIME_PARSER_POLICY.key} to LEGACY to restore the behavior " +
-        s"before Spark 3.0, or set to CORRECTED and treat it as an invalid datetime string.", e)
+      throw QueryExecutionErrors.failToParseDateTimeInNewParserError(s, e)
   }
 
   // When legacy time parser policy set to EXCEPTION, check whether we will get different results
@@ -163,10 +161,7 @@ trait DateTimeFormatterHelper {
       } catch {
         case _: Throwable => throw e
       }
-      throw new SparkUpgradeException("3.0", s"Fail to format it to '$resultCandidate' in the new" +
-        s" formatter. You can set ${SQLConf.LEGACY_TIME_PARSER_POLICY.key} to LEGACY to restore" +
-        " the behavior before Spark 3.0, or set to CORRECTED and treat it as an invalid" +
-        " datetime string.", e)
+      throw QueryExecutionErrors.failToFormatDateTimeInNewFormatterError(resultCandidate, e)
   }
 
   /**
@@ -189,11 +184,7 @@ trait DateTimeFormatterHelper {
       } catch {
         case _: Throwable => throw e
       }
-      throw new SparkUpgradeException("3.0", s"Fail to recognize '$pattern' pattern in the" +
-        s" DateTimeFormatter. 1) You can set ${SQLConf.LEGACY_TIME_PARSER_POLICY.key} to LEGACY" +
-        s" to restore the behavior before Spark 3.0. 2) You can form a valid datetime pattern" +
-        s" with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html",
-        e)
+      throw QueryExecutionErrors.failToRecognizePatternInDateTimeFormatterError(pattern, e)
   }
 }
 

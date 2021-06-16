@@ -65,15 +65,13 @@ case class PartitionStats(var numFiles: Int = 0, var numBytes: Long = 0, var num
 class BasicWriteTaskStatsTracker(hadoopConf: Configuration)
   extends WriteTaskStatsTracker with Logging {
 
-  private[this] val partitionsStats: mutable.Map[TablePartitionSpec, PartitionStats] =
-    mutable.Map.empty
-  private[this] var totalNumFiles: Int = 0
-  private[this] var submittedFiles: Int = 0
-  private[this] var totalNumBytes: Long = 0L
-  private[this] var totalNumRows: Long = 0L
+  private[this] val partitions: mutable.ArrayBuffer[InternalRow] = mutable.ArrayBuffer.empty
+  private[this] var numFiles: Int = 0
+  private[this] var numSubmittedFiles: Int = 0
+  private[this] var numBytes: Long = 0L
+  private[this] var numRows: Long = 0L
 
-  private[this] var curPartitionValue: Option[TablePartitionSpec] = None
-  private[this] var curFile: Option[String] = None
+  private[this] val submittedFiles = mutable.HashSet[String]()
 
   /**
    * Get the size of the file expected to have been written by a worker.
@@ -151,43 +149,30 @@ class BasicWriteTaskStatsTracker(hadoopConf: Configuration)
     partitionsStats.put(partitionValues, origin)
   }
 
-  override def newBucket(bucketId: Int): Unit = {
-    // currently unhandled
-  }
-
   override def newFile(filePath: String): Unit = {
-    statCurrentFile()
-    curFile = Some(filePath)
-    submittedFiles += 1
+    submittedFiles += filePath
+    numSubmittedFiles += 1
   }
 
-  private def statCurrentFile(): Unit = {
-    curFile.foreach { path =>
-      getFileSize(path).foreach { len =>
-        curPartitionValue.foreach { partitionValue =>
-          val partitionStats = partitionsStats.getOrElse(partitionValue, PartitionStats())
-          partitionStats.updateNumFiles(1)
-          partitionStats.updateNumBytes(len)
-          partitionsStats.update(partitionValue, partitionStats)
-        }
-        totalNumBytes += len
-        totalNumFiles += 1
-      }
-      curFile = None
+  override def closeFile(filePath: String): Unit = {
+    updateFileStats(filePath)
+    submittedFiles.remove(filePath)
+  }
+
+  private def updateFileStats(filePath: String): Unit = {
+    getFileSize(filePath).foreach { len =>
+      numBytes += len
+      numFiles += 1
     }
   }
 
-  override def newRow(row: InternalRow): Unit = {
-    curPartitionValue.foreach { partitionValue =>
-      val partitionStats = partitionsStats.getOrElse(partitionValue, PartitionStats())
-      partitionStats.updateNumRows(1)
-      partitionsStats.update(partitionValue, partitionStats)
-    }
-    totalNumRows += 1
+  override def newRow(filePath: String, row: InternalRow): Unit = {
+    numRows += 1
   }
 
   override def getFinalStats(): WriteTaskStats = {
-    statCurrentFile()
+    submittedFiles.foreach(updateFileStats)
+    submittedFiles.clear()
 
     // Reports bytesWritten and recordsWritten to the Spark output metrics.
     Option(TaskContext.get()).map(_.taskMetrics().outputMetrics).foreach { outputMetrics =>
@@ -195,8 +180,8 @@ class BasicWriteTaskStatsTracker(hadoopConf: Configuration)
       outputMetrics.setRecordsWritten(totalNumRows)
     }
 
-    if (submittedFiles != totalNumFiles) {
-      logInfo(s"Expected $submittedFiles files, but only saw $totalNumFiles. " +
+    if (numSubmittedFiles != numFiles) {
+      logInfo(s"Expected $numSubmittedFiles files, but only saw $numFiles. " +
         "This could be due to the output format not writing empty files, " +
         "or files being not immediately visible in the filesystem.")
     }

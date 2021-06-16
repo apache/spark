@@ -22,8 +22,8 @@ TakeOrderedAndProject [sales_cnt_diff,sales_amt_diff,prev_year,year,i_brand_id,i
                                           Union
                                             WholeStageCodegen (7)
                                               Project [d_year,i_brand_id,i_class_id,i_category_id,i_manufact_id,cs_quantity,cr_return_quantity,cs_ext_sales_price,cr_return_amount]
-                                                InputAdapter
-                                                  SortMergeJoin [cs_order_number,cs_item_sk,cr_order_number,cr_item_sk]
+                                                SortMergeJoin [cs_order_number,cs_item_sk,cr_order_number,cr_item_sk]
+                                                  InputAdapter
                                                     WholeStageCodegen (4)
                                                       Sort [cs_order_number,cs_item_sk]
                                                         InputAdapter
@@ -54,6 +54,7 @@ TakeOrderedAndProject [sales_cnt_diff,sales_amt_diff,prev_year,year,i_brand_id,i
                                                                           ColumnarToRow
                                                                             InputAdapter
                                                                               Scan parquet default.date_dim [d_date_sk,d_year]
+                                                  InputAdapter
                                                     WholeStageCodegen (6)
                                                       Sort [cr_order_number,cr_item_sk]
                                                         InputAdapter
@@ -66,8 +67,8 @@ TakeOrderedAndProject [sales_cnt_diff,sales_amt_diff,prev_year,year,i_brand_id,i
                                                                       Scan parquet default.catalog_returns [cr_item_sk,cr_order_number,cr_return_quantity,cr_return_amount,cr_returned_date_sk]
                                             WholeStageCodegen (14)
                                               Project [d_year,i_brand_id,i_class_id,i_category_id,i_manufact_id,ss_quantity,sr_return_quantity,ss_ext_sales_price,sr_return_amt]
-                                                InputAdapter
-                                                  SortMergeJoin [ss_ticket_number,ss_item_sk,sr_ticket_number,sr_item_sk]
+                                                SortMergeJoin [ss_ticket_number,ss_item_sk,sr_ticket_number,sr_item_sk]
+                                                  InputAdapter
                                                     WholeStageCodegen (11)
                                                       Sort [ss_ticket_number,ss_item_sk]
                                                         InputAdapter
@@ -86,6 +87,7 @@ TakeOrderedAndProject [sales_cnt_diff,sales_amt_diff,prev_year,year,i_brand_id,i
                                                                         ReusedExchange [i_item_sk,i_brand_id,i_class_id,i_category_id,i_manufact_id] #6
                                                                   InputAdapter
                                                                     ReusedExchange [d_date_sk,d_year] #5
+                                                  InputAdapter
                                                     WholeStageCodegen (13)
                                                       Sort [sr_ticket_number,sr_item_sk]
                                                         InputAdapter
@@ -98,8 +100,8 @@ TakeOrderedAndProject [sales_cnt_diff,sales_amt_diff,prev_year,year,i_brand_id,i
                                                                       Scan parquet default.store_returns [sr_item_sk,sr_ticket_number,sr_return_quantity,sr_return_amt,sr_returned_date_sk]
                                             WholeStageCodegen (21)
                                               Project [d_year,i_brand_id,i_class_id,i_category_id,i_manufact_id,ws_quantity,wr_return_quantity,ws_ext_sales_price,wr_return_amt]
-                                                InputAdapter
-                                                  SortMergeJoin [ws_order_number,ws_item_sk,wr_order_number,wr_item_sk]
+                                                SortMergeJoin [ws_order_number,ws_item_sk,wr_order_number,wr_item_sk]
+                                                  InputAdapter
                                                     WholeStageCodegen (18)
                                                       Sort [ws_order_number,ws_item_sk]
                                                         InputAdapter
@@ -118,6 +120,7 @@ TakeOrderedAndProject [sales_cnt_diff,sales_amt_diff,prev_year,year,i_brand_id,i
                                                                         ReusedExchange [i_item_sk,i_brand_id,i_class_id,i_category_id,i_manufact_id] #6
                                                                   InputAdapter
                                                                     ReusedExchange [d_date_sk,d_year] #5
+                                                  InputAdapter
                                                     WholeStageCodegen (20)
                                                       Sort [wr_order_number,wr_item_sk]
                                                         InputAdapter
@@ -148,8 +151,8 @@ TakeOrderedAndProject [sales_cnt_diff,sales_amt_diff,prev_year,year,i_brand_id,i
                                           Union
                                             WholeStageCodegen (32)
                                               Project [d_year,i_brand_id,i_class_id,i_category_id,i_manufact_id,cs_quantity,cr_return_quantity,cs_ext_sales_price,cr_return_amount]
-                                                InputAdapter
-                                                  SortMergeJoin [cs_order_number,cs_item_sk,cr_order_number,cr_item_sk]
+                                                SortMergeJoin [cs_order_number,cs_item_sk,cr_order_number,cr_item_sk]
+                                                  InputAdapter
                                                     WholeStageCodegen (29)
                                                       Sort [cs_order_number,cs_item_sk]
                                                         InputAdapter
@@ -174,14 +177,15 @@ TakeOrderedAndProject [sales_cnt_diff,sales_amt_diff,prev_year,year,i_brand_id,i
                                                                           ColumnarToRow
                                                                             InputAdapter
                                                                               Scan parquet default.date_dim [d_date_sk,d_year]
+                                                  InputAdapter
                                                     WholeStageCodegen (31)
                                                       Sort [cr_order_number,cr_item_sk]
                                                         InputAdapter
                                                           ReusedExchange [cr_item_sk,cr_order_number,cr_return_quantity,cr_return_amount] #7
                                             WholeStageCodegen (39)
                                               Project [d_year,i_brand_id,i_class_id,i_category_id,i_manufact_id,ss_quantity,sr_return_quantity,ss_ext_sales_price,sr_return_amt]
-                                                InputAdapter
-                                                  SortMergeJoin [ss_ticket_number,ss_item_sk,sr_ticket_number,sr_item_sk]
+                                                SortMergeJoin [ss_ticket_number,ss_item_sk,sr_ticket_number,sr_item_sk]
+                                                  InputAdapter
                                                     WholeStageCodegen (36)
                                                       Sort [ss_ticket_number,ss_item_sk]
                                                         InputAdapter
@@ -200,14 +204,15 @@ TakeOrderedAndProject [sales_cnt_diff,sales_amt_diff,prev_year,year,i_brand_id,i
                                                                         ReusedExchange [i_item_sk,i_brand_id,i_class_id,i_category_id,i_manufact_id] #6
                                                                   InputAdapter
                                                                     ReusedExchange [d_date_sk,d_year] #16
+                                                  InputAdapter
                                                     WholeStageCodegen (38)
                                                       Sort [sr_ticket_number,sr_item_sk]
                                                         InputAdapter
                                                           ReusedExchange [sr_item_sk,sr_ticket_number,sr_return_quantity,sr_return_amt] #9
                                             WholeStageCodegen (46)
                                               Project [d_year,i_brand_id,i_class_id,i_category_id,i_manufact_id,ws_quantity,wr_return_quantity,ws_ext_sales_price,wr_return_amt]
-                                                InputAdapter
-                                                  SortMergeJoin [ws_order_number,ws_item_sk,wr_order_number,wr_item_sk]
+                                                SortMergeJoin [ws_order_number,ws_item_sk,wr_order_number,wr_item_sk]
+                                                  InputAdapter
                                                     WholeStageCodegen (43)
                                                       Sort [ws_order_number,ws_item_sk]
                                                         InputAdapter
@@ -226,6 +231,7 @@ TakeOrderedAndProject [sales_cnt_diff,sales_amt_diff,prev_year,year,i_brand_id,i
                                                                         ReusedExchange [i_item_sk,i_brand_id,i_class_id,i_category_id,i_manufact_id] #6
                                                                   InputAdapter
                                                                     ReusedExchange [d_date_sk,d_year] #16
+                                                  InputAdapter
                                                     WholeStageCodegen (45)
                                                       Sort [wr_order_number,wr_item_sk]
                                                         InputAdapter

@@ -30,6 +30,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.UpdateFieldsBenchmark._
 import org.apache.spark.sql.catalyst.expressions.{InSet, Literal, NamedExpression}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{outstandingTimezonesIds, outstandingZoneIds}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.ProjectExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -1685,6 +1686,61 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
       StructType(Seq(StructField("a", IntegerType, nullable = true))))
   }
 
+  test("SPARK-35213: chained withField operations should have correct schema for new columns") {
+    val df = spark.createDataFrame(
+      sparkContext.parallelize(Row(null) :: Nil),
+      StructType(Seq(StructField("data", NullType))))
+
+    checkAnswer(
+      df.withColumn("data", struct()
+        .withField("a", struct())
+        .withField("b", struct())
+        .withField("a.aa", lit("aa1"))
+        .withField("b.ba", lit("ba1"))
+        .withField("a.ab", lit("ab1"))),
+        Row(Row(Row("aa1", "ab1"), Row("ba1"))) :: Nil,
+        StructType(Seq(
+          StructField("data", StructType(Seq(
+            StructField("a", StructType(Seq(
+              StructField("aa", StringType, nullable = false),
+              StructField("ab", StringType, nullable = false)
+            )), nullable = false),
+            StructField("b", StructType(Seq(
+              StructField("ba", StringType, nullable = false)
+            )), nullable = false)
+          )), nullable = false)
+        ))
+    )
+  }
+
+  test("SPARK-35213: optimized withField operations should maintain correct nested struct " +
+    "ordering") {
+    val df = spark.createDataFrame(
+      sparkContext.parallelize(Row(null) :: Nil),
+      StructType(Seq(StructField("data", NullType))))
+
+    checkAnswer(
+      df.withColumn("data", struct()
+          .withField("a", struct().withField("aa", lit("aa1")))
+          .withField("b", struct().withField("ba", lit("ba1")))
+        )
+        .withColumn("data", col("data").withField("b.bb", lit("bb1")))
+        .withColumn("data", col("data").withField("a.ab", lit("ab1"))),
+        Row(Row(Row("aa1", "ab1"), Row("ba1", "bb1"))) :: Nil,
+        StructType(Seq(
+          StructField("data", StructType(Seq(
+            StructField("a", StructType(Seq(
+              StructField("aa", StringType, nullable = false),
+              StructField("ab", StringType, nullable = false)
+            )), nullable = false),
+            StructField("b", StructType(Seq(
+              StructField("ba", StringType, nullable = false),
+              StructField("bb", StringType, nullable = false)
+            )), nullable = false)
+          )), nullable = false)
+        ))
+    )
+  }
 
   test("dropFields should throw an exception if called on a non-StructType column") {
     intercept[AnalysisException] {
@@ -2528,7 +2584,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("SPARK-34761: add/subtract a day-time interval to/from a timestamp") {
+  test("SPARK-34761, SPARK-34903: add/subtract a day-time interval to/from a timestamp") {
     withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> "true") {
       outstandingZoneIds.foreach { zid =>
         withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> zid.getId) {
@@ -2553,8 +2609,9 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
             val result = expected.atZone(zid).toInstant
             val df = Seq((ts, duration, result)).toDF("ts", "interval", "result")
             checkAnswer(
-              df.select($"ts" + $"interval", $"interval" + $"ts", $"result" - $"interval"),
-              Row(result, result, ts))
+              df.select($"ts" + $"interval", $"interval" + $"ts", $"result" - $"interval",
+                $"result" - $"ts"),
+              Row(result, result, ts, duration))
           }
         }
       }
@@ -2746,6 +2803,79 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
       }.getCause
       assert(e.isInstanceOf[ArithmeticException])
       assert(e.getMessage.contains("long overflow"))
+    }
+  }
+
+  test("SPARK-34903: Return day-time interval from timestamps subtraction") {
+    outstandingTimezonesIds.foreach { tz =>
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> tz) {
+        checkAnswer(
+          sql("select timestamp '2021-03-31 19:11:10' - timestamp '2021-03-01 19:11:10'"),
+          Row(Duration.ofDays(30)))
+        checkAnswer(
+          Seq((Instant.parse("2021-03-31T00:01:02Z"), Instant.parse("2021-04-01T00:00:00Z")))
+            .toDF("start", "end").select($"end" - $"start" < Duration.ofDays(1)),
+          Row(true))
+        checkAnswer(
+          Seq((Instant.parse("2021-03-31T00:01:02.777Z"), Duration.ofMillis(333)))
+            .toDF("ts", "i")
+            .select(($"ts" + $"i") - $"ts"),
+          Row(Duration.ofMillis(333)))
+        checkAnswer(
+          Seq((LocalDateTime.of(2021, 3, 31, 10, 0, 0)
+              .atZone(DateTimeUtils.getZoneId(tz)).toInstant, LocalDate.of(2020, 3, 31)))
+            .toDF("ts", "d")
+          .select($"ts" - $"d"),
+          Row(Duration.ofDays(365).plusHours(10)))
+      }
+    }
+  }
+
+  test("SPARK-35051: add/subtract a day-time interval to/from a date") {
+    withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> "true") {
+      outstandingZoneIds.foreach { zid =>
+        withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> zid.getId) {
+          Seq(
+            (LocalDate.of(1, 1, 1), Duration.ofDays(31)) -> LocalDateTime.of(1, 2, 1, 0, 0, 0),
+            (LocalDate.of(1582, 9, 15), Duration.ofDays(30).plus(1, ChronoUnit.MICROS)) ->
+              LocalDateTime.of(1582, 10, 15, 0, 0, 0, 1000),
+            (LocalDate.of(1900, 1, 1), Duration.ofDays(0).plusHours(1)) ->
+              LocalDateTime.of(1900, 1, 1, 1, 0, 0),
+            (LocalDate.of(1970, 1, 1), Duration.ofDays(-1).minusMinutes(1)) ->
+              LocalDateTime.of(1969, 12, 30, 23, 59, 0),
+            (LocalDate.of(2021, 3, 14), Duration.ofDays(1)) ->
+              LocalDateTime.of(2021, 3, 15, 0, 0, 0),
+            (LocalDate.of(2020, 12, 31), Duration.ofDays(4 * 30).plusMinutes(30)) ->
+              LocalDateTime.of(2021, 4, 30, 0, 30, 0),
+            (LocalDate.of(2020, 2, 29), Duration.ofDays(365).plusSeconds(59)) ->
+              LocalDateTime.of(2021, 2, 28, 0, 0, 59),
+            (LocalDate.of(10000, 1, 1), Duration.ofDays(-2)) ->
+              LocalDateTime.of(9999, 12, 30, 0, 0, 0)
+          ).foreach { case ((date, duration), expected) =>
+            val result = expected.atZone(zid).toInstant
+            val ts = date.atStartOfDay(zid).toInstant
+            val df = Seq((date, duration, result)).toDF("date", "interval", "result")
+            checkAnswer(
+              df.select($"date" + $"interval", $"interval" + $"date", $"result" - $"interval",
+                $"result" - $"date"),
+              Row(result, result, ts, duration))
+          }
+        }
+      }
+
+      Seq(
+        "2021-04-14" -> "date + i",
+        "1900-04-14" -> "date - i").foreach { case (date, op) =>
+        val e = intercept[SparkException] {
+          Seq(
+            (LocalDate.parse(date), Duration.of(Long.MaxValue, ChronoUnit.MICROS)))
+            .toDF("date", "i")
+            .selectExpr(op)
+            .collect()
+        }.getCause
+        assert(e.isInstanceOf[ArithmeticException])
+        assert(e.getMessage.contains("long overflow"))
+      }
     }
   }
 }

@@ -69,18 +69,24 @@ trait PlanTestBase extends PredicateHelper with SQLHelper with SQLConfHelper { s
    * Since attribute references are given globally unique ids during analysis,
    * we must normalize them to check if two different queries are identical.
    */
-  protected def normalizeExprIds(plan: LogicalPlan) = {
+  protected def normalizeExprIds(plan: LogicalPlan): LogicalPlan = {
     plan transformAllExpressions {
       case s: ScalarSubquery =>
-        s.copy(exprId = ExprId(0))
+        s.copy(plan = normalizeExprIds(s.plan), exprId = ExprId(0))
+      case s: LateralSubquery =>
+        s.copy(plan = normalizeExprIds(s.plan), exprId = ExprId(0))
       case e: Exists =>
         e.copy(exprId = ExprId(0))
       case l: ListQuery =>
         l.copy(exprId = ExprId(0))
       case a: AttributeReference =>
         AttributeReference(a.name, a.dataType, a.nullable)(exprId = ExprId(0))
+      case OuterReference(a: AttributeReference) =>
+        OuterReference(AttributeReference(a.name, a.dataType, a.nullable)(exprId = ExprId(0)))
       case a: Alias =>
         Alias(a.child, a.name)(exprId = ExprId(0))
+      case OuterReference(a: Alias) =>
+        OuterReference(Alias(a.child, a.name)(exprId = ExprId(0)))
       case ae: AggregateExpression =>
         ae.copy(resultId = ExprId(0))
       case lv: NamedLambdaVariable =>

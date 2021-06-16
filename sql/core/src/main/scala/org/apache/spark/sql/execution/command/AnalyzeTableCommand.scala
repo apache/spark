@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
  */
 case class AnalyzeTableCommand(
     tableIdent: TableIdentifier,
-    noScan: Boolean = true) extends RunnableCommand {
+    noScan: Boolean = true) extends LeafRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     CommandUtils.analyzeTable(sparkSession, tableIdent, noScan)

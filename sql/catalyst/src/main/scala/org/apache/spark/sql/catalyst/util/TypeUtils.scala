@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.catalyst.util
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.expressions.RowOrdering
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types._
 
 /**
@@ -59,6 +59,15 @@ object TypeUtils {
     } else {
       TypeCheckResult.TypeCheckSuccess
     }
+  }
+
+  def checkForAnsiIntervalOrNumericType(
+      dt: DataType, funcName: String): TypeCheckResult = dt match {
+    case YearMonthIntervalType | _: DayTimeIntervalType | NullType =>
+      TypeCheckResult.TypeCheckSuccess
+    case dt if dt.isInstanceOf[NumericType] => TypeCheckResult.TypeCheckSuccess
+    case other => TypeCheckResult.TypeCheckFailure(
+      s"function $funcName requires numeric or interval types, not ${other.catalogString}")
   }
 
   def getNumeric(t: DataType, exactNumericRequired: Boolean = false): Numeric[Any] = {
@@ -102,13 +111,13 @@ object TypeUtils {
 
   def failWithIntervalType(dataType: DataType): Unit = {
     invokeOnceForInterval(dataType) {
-      throw new AnalysisException("Cannot use interval type in the table schema.")
+      throw QueryCompilationErrors.cannotUseIntervalTypeInTableSchemaError()
     }
   }
 
   def invokeOnceForInterval(dataType: DataType)(f: => Unit): Unit = {
     def isInterval(dataType: DataType): Boolean = dataType match {
-      case CalendarIntervalType | DayTimeIntervalType | YearMonthIntervalType => true
+      case CalendarIntervalType | _: DayTimeIntervalType | YearMonthIntervalType => true
       case _ => false
     }
     if (dataType.existsRecursively(isInterval)) f

@@ -127,43 +127,43 @@ Input [4]: [cs_sold_time_sk#18, cs_item_sk#19, cs_ext_sales_price#20, cs_sold_da
 Condition : (isnotnull(cs_item_sk#19) AND isnotnull(cs_sold_time_sk#18))
 
 (19) ReusedExchange [Reuses operator id: 13]
-Output [1]: [d_date_sk#11]
+Output [1]: [d_date_sk#22]
 
 (20) BroadcastHashJoin [codegen id : 5]
 Left keys [1]: [cs_sold_date_sk#21]
-Right keys [1]: [d_date_sk#11]
+Right keys [1]: [d_date_sk#22]
 Join condition: None
 
 (21) Project [codegen id : 5]
-Output [3]: [cs_ext_sales_price#20 AS ext_price#22, cs_item_sk#19 AS sold_item_sk#23, cs_sold_time_sk#18 AS time_sk#24]
-Input [5]: [cs_sold_time_sk#18, cs_item_sk#19, cs_ext_sales_price#20, cs_sold_date_sk#21, d_date_sk#11]
+Output [3]: [cs_ext_sales_price#20 AS ext_price#23, cs_item_sk#19 AS sold_item_sk#24, cs_sold_time_sk#18 AS time_sk#25]
+Input [5]: [cs_sold_time_sk#18, cs_item_sk#19, cs_ext_sales_price#20, cs_sold_date_sk#21, d_date_sk#22]
 
 (22) Scan parquet default.store_sales
-Output [4]: [ss_sold_time_sk#25, ss_item_sk#26, ss_ext_sales_price#27, ss_sold_date_sk#28]
+Output [4]: [ss_sold_time_sk#26, ss_item_sk#27, ss_ext_sales_price#28, ss_sold_date_sk#29]
 Batched: true
 Location: InMemoryFileIndex []
-PartitionFilters: [isnotnull(ss_sold_date_sk#28), dynamicpruningexpression(ss_sold_date_sk#28 IN dynamicpruning#10)]
+PartitionFilters: [isnotnull(ss_sold_date_sk#29), dynamicpruningexpression(ss_sold_date_sk#29 IN dynamicpruning#10)]
 PushedFilters: [IsNotNull(ss_item_sk), IsNotNull(ss_sold_time_sk)]
 ReadSchema: struct<ss_sold_time_sk:int,ss_item_sk:int,ss_ext_sales_price:decimal(7,2)>
 
 (23) ColumnarToRow [codegen id : 7]
-Input [4]: [ss_sold_time_sk#25, ss_item_sk#26, ss_ext_sales_price#27, ss_sold_date_sk#28]
+Input [4]: [ss_sold_time_sk#26, ss_item_sk#27, ss_ext_sales_price#28, ss_sold_date_sk#29]
 
 (24) Filter [codegen id : 7]
-Input [4]: [ss_sold_time_sk#25, ss_item_sk#26, ss_ext_sales_price#27, ss_sold_date_sk#28]
-Condition : (isnotnull(ss_item_sk#26) AND isnotnull(ss_sold_time_sk#25))
+Input [4]: [ss_sold_time_sk#26, ss_item_sk#27, ss_ext_sales_price#28, ss_sold_date_sk#29]
+Condition : (isnotnull(ss_item_sk#27) AND isnotnull(ss_sold_time_sk#26))
 
 (25) ReusedExchange [Reuses operator id: 13]
-Output [1]: [d_date_sk#11]
+Output [1]: [d_date_sk#30]
 
 (26) BroadcastHashJoin [codegen id : 7]
-Left keys [1]: [ss_sold_date_sk#28]
-Right keys [1]: [d_date_sk#11]
+Left keys [1]: [ss_sold_date_sk#29]
+Right keys [1]: [d_date_sk#30]
 Join condition: None
 
 (27) Project [codegen id : 7]
-Output [3]: [ss_ext_sales_price#27 AS ext_price#29, ss_item_sk#26 AS sold_item_sk#30, ss_sold_time_sk#25 AS time_sk#31]
-Input [5]: [ss_sold_time_sk#25, ss_item_sk#26, ss_ext_sales_price#27, ss_sold_date_sk#28, d_date_sk#11]
+Output [3]: [ss_ext_sales_price#28 AS ext_price#31, ss_item_sk#27 AS sold_item_sk#32, ss_sold_time_sk#26 AS time_sk#33]
+Input [5]: [ss_sold_time_sk#26, ss_item_sk#27, ss_ext_sales_price#28, ss_sold_date_sk#29, d_date_sk#30]
 
 (28) Union
 
@@ -177,61 +177,61 @@ Output [4]: [i_brand_id#2, i_brand#3, ext_price#15, time_sk#17]
 Input [6]: [i_item_sk#1, i_brand_id#2, i_brand#3, ext_price#15, sold_item_sk#16, time_sk#17]
 
 (31) Scan parquet default.time_dim
-Output [4]: [t_time_sk#32, t_hour#33, t_minute#34, t_meal_time#35]
+Output [4]: [t_time_sk#34, t_hour#35, t_minute#36, t_meal_time#37]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/time_dim]
 PushedFilters: [Or(EqualTo(t_meal_time,breakfast           ),EqualTo(t_meal_time,dinner              )), IsNotNull(t_time_sk)]
 ReadSchema: struct<t_time_sk:int,t_hour:int,t_minute:int,t_meal_time:string>
 
 (32) ColumnarToRow [codegen id : 8]
-Input [4]: [t_time_sk#32, t_hour#33, t_minute#34, t_meal_time#35]
+Input [4]: [t_time_sk#34, t_hour#35, t_minute#36, t_meal_time#37]
 
 (33) Filter [codegen id : 8]
-Input [4]: [t_time_sk#32, t_hour#33, t_minute#34, t_meal_time#35]
-Condition : (((t_meal_time#35 = breakfast           ) OR (t_meal_time#35 = dinner              )) AND isnotnull(t_time_sk#32))
+Input [4]: [t_time_sk#34, t_hour#35, t_minute#36, t_meal_time#37]
+Condition : (((t_meal_time#37 = breakfast           ) OR (t_meal_time#37 = dinner              )) AND isnotnull(t_time_sk#34))
 
 (34) Project [codegen id : 8]
-Output [3]: [t_time_sk#32, t_hour#33, t_minute#34]
-Input [4]: [t_time_sk#32, t_hour#33, t_minute#34, t_meal_time#35]
+Output [3]: [t_time_sk#34, t_hour#35, t_minute#36]
+Input [4]: [t_time_sk#34, t_hour#35, t_minute#36, t_meal_time#37]
 
 (35) BroadcastExchange
-Input [3]: [t_time_sk#32, t_hour#33, t_minute#34]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#36]
+Input [3]: [t_time_sk#34, t_hour#35, t_minute#36]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#38]
 
 (36) BroadcastHashJoin [codegen id : 9]
 Left keys [1]: [time_sk#17]
-Right keys [1]: [t_time_sk#32]
+Right keys [1]: [t_time_sk#34]
 Join condition: None
 
 (37) Project [codegen id : 9]
-Output [5]: [i_brand_id#2, i_brand#3, ext_price#15, t_hour#33, t_minute#34]
-Input [7]: [i_brand_id#2, i_brand#3, ext_price#15, time_sk#17, t_time_sk#32, t_hour#33, t_minute#34]
+Output [5]: [i_brand_id#2, i_brand#3, ext_price#15, t_hour#35, t_minute#36]
+Input [7]: [i_brand_id#2, i_brand#3, ext_price#15, time_sk#17, t_time_sk#34, t_hour#35, t_minute#36]
 
 (38) HashAggregate [codegen id : 9]
-Input [5]: [i_brand_id#2, i_brand#3, ext_price#15, t_hour#33, t_minute#34]
-Keys [4]: [i_brand#3, i_brand_id#2, t_hour#33, t_minute#34]
+Input [5]: [i_brand_id#2, i_brand#3, ext_price#15, t_hour#35, t_minute#36]
+Keys [4]: [i_brand#3, i_brand_id#2, t_hour#35, t_minute#36]
 Functions [1]: [partial_sum(UnscaledValue(ext_price#15))]
-Aggregate Attributes [1]: [sum#37]
-Results [5]: [i_brand#3, i_brand_id#2, t_hour#33, t_minute#34, sum#38]
+Aggregate Attributes [1]: [sum#39]
+Results [5]: [i_brand#3, i_brand_id#2, t_hour#35, t_minute#36, sum#40]
 
 (39) Exchange
-Input [5]: [i_brand#3, i_brand_id#2, t_hour#33, t_minute#34, sum#38]
-Arguments: hashpartitioning(i_brand#3, i_brand_id#2, t_hour#33, t_minute#34, 5), ENSURE_REQUIREMENTS, [id=#39]
+Input [5]: [i_brand#3, i_brand_id#2, t_hour#35, t_minute#36, sum#40]
+Arguments: hashpartitioning(i_brand#3, i_brand_id#2, t_hour#35, t_minute#36, 5), ENSURE_REQUIREMENTS, [id=#41]
 
 (40) HashAggregate [codegen id : 10]
-Input [5]: [i_brand#3, i_brand_id#2, t_hour#33, t_minute#34, sum#38]
-Keys [4]: [i_brand#3, i_brand_id#2, t_hour#33, t_minute#34]
+Input [5]: [i_brand#3, i_brand_id#2, t_hour#35, t_minute#36, sum#40]
+Keys [4]: [i_brand#3, i_brand_id#2, t_hour#35, t_minute#36]
 Functions [1]: [sum(UnscaledValue(ext_price#15))]
-Aggregate Attributes [1]: [sum(UnscaledValue(ext_price#15))#40]
-Results [5]: [i_brand_id#2 AS brand_id#41, i_brand#3 AS brand#42, t_hour#33, t_minute#34, MakeDecimal(sum(UnscaledValue(ext_price#15))#40,17,2) AS ext_price#43]
+Aggregate Attributes [1]: [sum(UnscaledValue(ext_price#15))#42]
+Results [5]: [i_brand_id#2 AS brand_id#43, i_brand#3 AS brand#44, t_hour#35, t_minute#36, MakeDecimal(sum(UnscaledValue(ext_price#15))#42,17,2) AS ext_price#45]
 
 (41) Exchange
-Input [5]: [brand_id#41, brand#42, t_hour#33, t_minute#34, ext_price#43]
-Arguments: rangepartitioning(ext_price#43 DESC NULLS LAST, brand_id#41 ASC NULLS FIRST, 5), ENSURE_REQUIREMENTS, [id=#44]
+Input [5]: [brand_id#43, brand#44, t_hour#35, t_minute#36, ext_price#45]
+Arguments: rangepartitioning(ext_price#45 DESC NULLS LAST, brand_id#43 ASC NULLS FIRST, 5), ENSURE_REQUIREMENTS, [id=#46]
 
 (42) Sort [codegen id : 11]
-Input [5]: [brand_id#41, brand#42, t_hour#33, t_minute#34, ext_price#43]
-Arguments: [ext_price#43 DESC NULLS LAST, brand_id#41 ASC NULLS FIRST], true, 0
+Input [5]: [brand_id#43, brand#44, t_hour#35, t_minute#36, ext_price#45]
+Arguments: [ext_price#45 DESC NULLS LAST, brand_id#43 ASC NULLS FIRST], true, 0
 
 ===== Subqueries =====
 
@@ -244,6 +244,6 @@ Output [1]: [d_date_sk#11]
 
 Subquery:2 Hosting operator id = 16 Hosting Expression = cs_sold_date_sk#21 IN dynamicpruning#10
 
-Subquery:3 Hosting operator id = 22 Hosting Expression = ss_sold_date_sk#28 IN dynamicpruning#10
+Subquery:3 Hosting operator id = 22 Hosting Expression = ss_sold_date_sk#29 IN dynamicpruning#10
 
 

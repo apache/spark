@@ -36,7 +36,7 @@ import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.command.FunctionsCommand
-import org.apache.spark.sql.execution.datasources.{LogicalRelation, SchemaColumnConvertNotSupportedException}
+import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcScan
 import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
@@ -44,7 +44,7 @@ import org.apache.spark.sql.execution.exchange.ReusedExchangeExec
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, CartesianProductExec, SortMergeJoinExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.{SharedSparkSession, TestSQLContext}
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.test.SQLTestData._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
@@ -122,6 +122,14 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     checkKeywordsNotExist(sql("describe functioN Upper"), "Extended Usage")
 
     checkKeywordsExist(sql("describe functioN abcadf"), "Function: abcadf not found.")
+  }
+
+  test("SPARK-34678: describe functions for table-valued functions") {
+    checkKeywordsExist(sql("describe function range"),
+      "Function: range",
+      "Class: org.apache.spark.sql.catalyst.plans.logical.Range",
+      "range(end: long)"
+    )
   }
 
   test("SPARK-14415: All functions should have own descriptions") {
@@ -965,100 +973,6 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       Row(4, "d") :: Nil)
     checkAnswer(
       sql("SELECT * FROM lowerCaseData INTERSECT SELECT * FROM upperCaseData"), Nil)
-  }
-
-  test("SET commands semantics using sql()") {
-    spark.sessionState.conf.clear()
-    val testKey = "test.key.0"
-    val testVal = "test.val.0"
-    val nonexistentKey = "nonexistent"
-
-    // "set" itself returns all config variables currently specified in SQLConf.
-    assert(sql("SET").collect().size === TestSQLContext.overrideConfs.size)
-    sql("SET").collect().foreach { row =>
-      val key = row.getString(0)
-      val value = row.getString(1)
-      assert(
-        TestSQLContext.overrideConfs.contains(key),
-        s"$key should exist in SQLConf.")
-      assert(
-        TestSQLContext.overrideConfs(key) === value,
-        s"The value of $key should be ${TestSQLContext.overrideConfs(key)} instead of $value.")
-    }
-    val overrideConfs = sql("SET").collect()
-
-    // "set key=val"
-    sql(s"SET $testKey=$testVal")
-    checkAnswer(
-      sql("SET"),
-      overrideConfs ++ Seq(Row(testKey, testVal))
-    )
-
-    sql(s"SET ${testKey + testKey}=${testVal + testVal}")
-    checkAnswer(
-      sql("set"),
-      overrideConfs ++ Seq(Row(testKey, testVal), Row(testKey + testKey, testVal + testVal))
-    )
-
-    // "set key"
-    checkAnswer(
-      sql(s"SET $testKey"),
-      Row(testKey, testVal)
-    )
-    checkAnswer(
-      sql(s"SET $nonexistentKey"),
-      Row(nonexistentKey, "<undefined>")
-    )
-    spark.sessionState.conf.clear()
-  }
-
-  test("SPARK-19218 SET command should show a result in a sorted order") {
-    val overrideConfs = sql("SET").collect()
-    sql(s"SET test.key3=1")
-    sql(s"SET test.key2=2")
-    sql(s"SET test.key1=3")
-    val result = sql("SET").collect()
-    assert(result ===
-      (overrideConfs ++ Seq(
-        Row("test.key1", "3"),
-        Row("test.key2", "2"),
-        Row("test.key3", "1"))).sortBy(_.getString(0))
-    )
-    spark.sessionState.conf.clear()
-  }
-
-  test("SPARK-19218 `SET -v` should not fail with null value configuration") {
-    import SQLConf._
-    val confEntry = buildConf("spark.test").doc("doc").stringConf.createWithDefault(null)
-
-    try {
-      val result = sql("SET -v").collect()
-      assert(result === result.sortBy(_.getString(0)))
-    } finally {
-      SQLConf.unregister(confEntry)
-    }
-  }
-
-  test("SET commands with illegal or inappropriate argument") {
-    spark.sessionState.conf.clear()
-    // Set negative mapred.reduce.tasks for automatically determining
-    // the number of reducers is not supported
-    intercept[IllegalArgumentException](sql(s"SET mapred.reduce.tasks=-1"))
-    intercept[IllegalArgumentException](sql(s"SET mapred.reduce.tasks=-01"))
-    intercept[IllegalArgumentException](sql(s"SET mapred.reduce.tasks=-2"))
-    spark.sessionState.conf.clear()
-  }
-
-  test("SET mapreduce.job.reduces automatically converted to spark.sql.shuffle.partitions") {
-    spark.sessionState.conf.clear()
-    val before = spark.conf.get(SQLConf.SHUFFLE_PARTITIONS.key).toInt
-    val newConf = before + 1
-    sql(s"SET mapreduce.job.reduces=${newConf.toString}")
-    val after = spark.conf.get(SQLConf.SHUFFLE_PARTITIONS.key).toInt
-    assert(before != after)
-    assert(newConf === after)
-    intercept[IllegalArgumentException](sql(s"SET mapreduce.job.reduces=-1"))
-    spark.sessionState.conf.clear()
   }
 
   test("apply schema") {
@@ -3728,7 +3642,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
 
   test("SPARK-33084: Add jar support Ivy URI in SQL") {
     val sc = spark.sparkContext
-    val hiveVersion = "2.3.8"
+    val hiveVersion = "2.3.9"
     // transitive=false, only download specified jar
     sql(s"ADD JAR ivy://org.apache.hive.hcatalog:hive-hcatalog-core:$hiveVersion?transitive=false")
     assert(sc.listJars()
@@ -3881,69 +3795,6 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     }
 
     assert(unions.size == 1)
-  }
-
-  test("SPARK-34212 Parquet should read decimals correctly") {
-    def readParquet(schema: String, path: File): DataFrame = {
-      spark.read.schema(schema).parquet(path.toString)
-    }
-
-    withTempPath { path =>
-      // a is int-decimal (4 bytes), b is long-decimal (8 bytes), c is binary-decimal (16 bytes)
-      val df = sql("SELECT 1.0 a, CAST(1.23 AS DECIMAL(17, 2)) b, CAST(1.23 AS DECIMAL(36, 2)) c")
-      df.write.parquet(path.toString)
-
-      Seq(true, false).foreach { vectorizedReader =>
-        withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorizedReader.toString) {
-          // We can read the decimal parquet field with a larger precision, if scale is the same.
-          val schema = "a DECIMAL(9, 1), b DECIMAL(18, 2), c DECIMAL(38, 2)"
-          checkAnswer(readParquet(schema, path), df)
-        }
-      }
-
-      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
-        val schema1 = "a DECIMAL(3, 2), b DECIMAL(18, 3), c DECIMAL(37, 3)"
-        checkAnswer(readParquet(schema1, path), df)
-        val schema2 = "a DECIMAL(3, 0), b DECIMAL(18, 1), c DECIMAL(37, 1)"
-        checkAnswer(readParquet(schema2, path), Row(1, 1.2, 1.2))
-      }
-
-      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true") {
-        Seq("a DECIMAL(3, 2)", "b DECIMAL(18, 1)", "c DECIMAL(37, 1)").foreach { schema =>
-          val e = intercept[SparkException] {
-            readParquet(schema, path).collect()
-          }.getCause.getCause
-          assert(e.isInstanceOf[SchemaColumnConvertNotSupportedException])
-        }
-      }
-    }
-
-    // tests for parquet types without decimal metadata.
-    withTempPath { path =>
-      val df = sql(s"SELECT 1 a, 123456 b, ${Int.MaxValue.toLong * 10} c, CAST('1.2' AS BINARY) d")
-      df.write.parquet(path.toString)
-
-      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
-        checkAnswer(readParquet("a DECIMAL(3, 2)", path), sql("SELECT 1.00"))
-        checkAnswer(readParquet("b DECIMAL(3, 2)", path), Row(null))
-        checkAnswer(readParquet("b DECIMAL(11, 1)", path), sql("SELECT 123456.0"))
-        checkAnswer(readParquet("c DECIMAL(11, 1)", path), Row(null))
-        checkAnswer(readParquet("c DECIMAL(13, 0)", path), df.select("c"))
-        val e = intercept[SparkException] {
-          readParquet("d DECIMAL(3, 2)", path).collect()
-        }.getCause
-        assert(e.getMessage.contains("Please read this column/field as Spark BINARY type"))
-      }
-
-      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true") {
-        Seq("a DECIMAL(3, 2)", "c DECIMAL(18, 1)", "d DECIMAL(37, 1)").foreach { schema =>
-          val e = intercept[SparkException] {
-            readParquet(schema, path).collect()
-          }.getCause.getCause
-          assert(e.isInstanceOf[SchemaColumnConvertNotSupportedException])
-        }
-      }
-    }
   }
 
   test("SPARK-34421: Resolve temporary objects in temporary views with CTEs") {
@@ -4139,6 +3990,18 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         }
       }
     }
+  }
+
+  test("SPARK-35331: Fix resolving original expression in RepartitionByExpression after aliased") {
+    Seq("CLUSTER", "DISTRIBUTE").foreach { keyword =>
+      Seq("a", "substr(a, 0, 3)").foreach { expr =>
+        val clause = keyword + " by " + expr
+        withClue(clause) {
+          checkAnswer(sql(s"select a b from values('123') t(a) $clause"), Row("123"))
+        }
+      }
+    }
+    checkAnswer(sql(s"select /*+ REPARTITION(3, a) */ a b from values('123') t(a)"), Row("123"))
   }
 }
 

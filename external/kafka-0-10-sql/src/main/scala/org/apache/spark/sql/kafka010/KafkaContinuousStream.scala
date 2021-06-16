@@ -72,6 +72,8 @@ class KafkaContinuousStream(
       case SpecificOffsetRangeLimit(p) => offsetReader.fetchSpecificOffsets(p, reportDataLoss)
       case SpecificTimestampRangeLimit(p) => offsetReader.fetchSpecificTimestampBasedOffsets(p,
         failsOnNoMatchingOffset = true)
+      case GlobalTimestampRangeLimit(ts) => offsetReader.fetchGlobalTimestampBasedOffsets(
+        ts, failsOnNoMatchingOffset = true)
     }
     logInfo(s"Initial offsets: $offsets")
     offsets

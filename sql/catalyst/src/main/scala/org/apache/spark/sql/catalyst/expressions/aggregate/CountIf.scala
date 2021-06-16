@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionDescription, ImplicitCastInputTypes, UnevaluableAggregate}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{COUNT_IF, TreePattern}
 import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.types.{AbstractDataType, BooleanType, DataType, LongType}
 
@@ -36,7 +37,7 @@ import org.apache.spark.sql.types.{AbstractDataType, BooleanType, DataType, Long
   group = "agg_funcs",
   since = "3.0.0")
 case class CountIf(predicate: Expression) extends UnevaluableAggregate with ImplicitCastInputTypes
-    with UnaryLike[Expression] {
+  with UnaryLike[Expression] {
 
   override def prettyName: String = "count_if"
 
@@ -48,6 +49,8 @@ case class CountIf(predicate: Expression) extends UnevaluableAggregate with Impl
 
   override def inputTypes: Seq[AbstractDataType] = Seq(BooleanType)
 
+  final override val nodePatterns: Seq[TreePattern] = Seq(COUNT_IF)
+
   override def checkInputDataTypes(): TypeCheckResult = predicate.dataType match {
     case BooleanType =>
       TypeCheckResult.TypeCheckSuccess
@@ -56,4 +59,7 @@ case class CountIf(predicate: Expression) extends UnevaluableAggregate with Impl
         s"function $prettyName requires boolean type, not ${predicate.dataType.catalogString}"
       )
   }
+
+  override protected def withNewChildInternal(newChild: Expression): CountIf =
+    copy(predicate = newChild)
 }

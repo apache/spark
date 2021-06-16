@@ -18,13 +18,15 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.util.Comparator
-import java.util.concurrent.atomic.AtomicReference
+import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
 
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion, UnresolvedException}
 import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.trees.{BinaryLike, QuaternaryLike, TernaryLike}
+import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -47,10 +49,21 @@ case class UnresolvedNamedLambdaVariable(nameParts: Seq[String])
   override def toAttribute: Attribute = throw new UnresolvedException("toAttribute")
   override def newInstance(): NamedExpression = throw new UnresolvedException("newInstance")
   override lazy val resolved = false
+  final override val nodePatterns: Seq[TreePattern] = Seq(LAMBDA_VARIABLE)
 
   override def toString: String = s"lambda '$name"
 
   override def sql: String = name
+}
+
+object UnresolvedNamedLambdaVariable {
+
+  // Counter to ensure lambda variable names are unique
+  private val nextVarNameId = new AtomicInteger(0)
+
+  def freshVarName(name: String): String = {
+    s"${name}_${nextVarNameId.getAndIncrement()}"
+  }
 }
 
 /**
@@ -75,6 +88,9 @@ case class NamedLambdaVariable(
     AttributeReference(name, dataType, nullable, Metadata.empty)(exprId, Seq.empty)
   }
 
+  // Check if this lambda variable is referenced outside the lambda function it is bound to
+  override def references: AttributeSet = AttributeSet(toAttribute)
+
   override def eval(input: InternalRow): Any = value.get
 
   override def toString: String = s"lambda $name#${exprId.id}$typeSuffix"
@@ -98,10 +114,24 @@ case class LambdaFunction(
   override def children: Seq[Expression] = function +: arguments
   override def dataType: DataType = function.dataType
   override def nullable: Boolean = function.nullable
+  final override val nodePatterns: Seq[TreePattern] = Seq(LAMBDA_FUNCTION)
+
+  // Check if lambda variables bound to this lambda function are referenced in the wrong scope
+  override def references: AttributeSet = if (resolved) {
+    function.references -- AttributeSet(arguments.flatMap(_.references))
+  } else {
+    super.references
+  }
 
   lazy val bound: Boolean = arguments.forall(_.resolved)
 
   override def eval(input: InternalRow): Any = function.eval(input)
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): LambdaFunction =
+    copy(
+      function = newChildren.head,
+      arguments = newChildren.tail.asInstanceOf[Seq[NamedExpression]])
 }
 
 object LambdaFunction {
@@ -119,7 +149,7 @@ trait HigherOrderFunction extends Expression with ExpectsInputTypes {
 
   override def nullable: Boolean = arguments.exists(_.nullable)
 
-  override def children: Seq[Expression] = arguments ++ functions
+  final override val nodePatterns: Seq[TreePattern] = Seq(HIGH_ORDER_FUNCTION)
 
   /**
    * Arguments of the higher ordered function.
@@ -177,12 +207,29 @@ trait HigherOrderFunction extends Expression with ExpectsInputTypes {
           argumentMap(variable.exprId)
       }
   }
+
+  override lazy val canonicalized: Expression = {
+    var currExprId = -1
+    val argumentMap = functions.flatMap(_.collect {
+      case l: NamedLambdaVariable =>
+        currExprId += 1
+        l.exprId -> currExprId
+    }).toMap
+
+    val cleaned = this.transformUp {
+      case l: NamedLambdaVariable if argumentMap.contains(l.exprId) =>
+        val newExprId = argumentMap(l.exprId)
+        NamedLambdaVariable("none", l.dataType, l.nullable, exprId = ExprId(newExprId), null)
+    }
+    val canonicalizedChildren = cleaned.children.map(_.canonicalized)
+    Canonicalize.execute(withNewChildren(canonicalizedChildren))
+  }
 }
 
 /**
  * Trait for functions having as input one argument and one function.
  */
-trait SimpleHigherOrderFunction extends HigherOrderFunction  {
+trait SimpleHigherOrderFunction extends HigherOrderFunction with BinaryLike[Expression] {
 
   def argument: Expression
 
@@ -202,12 +249,16 @@ trait SimpleHigherOrderFunction extends HigherOrderFunction  {
 
   def functionForEval: Expression = functionsForEval.head
 
+  override def left: Expression = argument
+  override def right: Expression = function
+
   /**
    * Called by [[eval]]. If a subclass keeps the default nullability, it can override this method
    * in order to save null-check code.
    */
   protected def nullSafeEval(inputRow: InternalRow, argumentValue: Any): Any =
-    sys.error(s"UnaryHigherOrderFunction must override either eval or nullSafeEval")
+    throw QueryExecutionErrors.notOverrideExpectedMethodsError("UnaryHigherOrderFunction",
+      "eval", "nullSafeEval")
 
   override def eval(inputRow: InternalRow): Any = {
     val value = argument.eval(inputRow)
@@ -217,6 +268,7 @@ trait SimpleHigherOrderFunction extends HigherOrderFunction  {
       nullSafeEval(inputRow, value)
     }
   }
+
 }
 
 trait ArrayBasedSimpleHigherOrderFunction extends SimpleHigherOrderFunction {
@@ -287,6 +339,10 @@ case class ArrayTransform(
   }
 
   override def prettyName: String = "transform"
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): ArrayTransform =
+    copy(argument = newLeft, function = newRight)
 }
 
 /**
@@ -376,6 +432,10 @@ case class ArraySort(
   }
 
   override def prettyName: String = "array_sort"
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): ArraySort =
+    copy(argument = newLeft, function = newRight)
 }
 
 object ArraySort {
@@ -446,6 +506,10 @@ case class MapFilter(
   override def functionType: AbstractDataType = BooleanType
 
   override def prettyName: String = "map_filter"
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): MapFilter =
+    copy(argument = newLeft, function = newRight)
 }
 
 /**
@@ -511,6 +575,10 @@ case class ArrayFilter(
   }
 
   override def prettyName: String = "filter"
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): ArrayFilter =
+    copy(argument = newLeft, function = newRight)
 }
 
 /**
@@ -592,6 +660,10 @@ case class ArrayExists(
   }
 
   override def prettyName: String = "exists"
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): ArrayExists =
+    copy(argument = newLeft, function = newRight)
 }
 
 object ArrayExists {
@@ -668,6 +740,10 @@ case class ArrayForAll(
   }
 
   override def prettyName: String = "forall"
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): ArrayForAll =
+    copy(argument = newLeft, function = newRight)
 }
 
 /**
@@ -694,7 +770,7 @@ case class ArrayAggregate(
     zero: Expression,
     merge: Expression,
     finish: Expression)
-  extends HigherOrderFunction with CodegenFallback {
+  extends HigherOrderFunction with CodegenFallback with QuaternaryLike[Expression] {
 
   def this(argument: Expression, zero: Expression, merge: Expression) = {
     this(argument, zero, merge, LambdaFunction.identity)
@@ -760,6 +836,15 @@ case class ArrayAggregate(
   }
 
   override def prettyName: String = "aggregate"
+
+  override def first: Expression = argument
+  override def second: Expression = zero
+  override def third: Expression = merge
+  override def fourth: Expression = finish
+
+  override protected def withNewChildrenInternal(first: Expression, second: Expression,
+      third: Expression, fourth: Expression): ArrayAggregate =
+    copy(argument = first, zero = second, merge = third, finish = fourth)
 }
 
 /**
@@ -795,7 +880,7 @@ case class TransformKeys(
   }
 
   @transient lazy val LambdaFunction(
-    _, (keyVar: NamedLambdaVariable) :: (valueVar: NamedLambdaVariable) :: Nil, _) = function
+    _, Seq(keyVar: NamedLambdaVariable, valueVar: NamedLambdaVariable), _) = function
 
   private lazy val mapBuilder = new ArrayBasedMapBuilder(dataType.keyType, dataType.valueType)
 
@@ -814,6 +899,10 @@ case class TransformKeys(
   }
 
   override def prettyName: String = "transform_keys"
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): TransformKeys =
+    copy(argument = newLeft, function = newRight)
 }
 
 /**
@@ -845,7 +934,7 @@ case class TransformValues(
   }
 
   @transient lazy val LambdaFunction(
-    _, (keyVar: NamedLambdaVariable) :: (valueVar: NamedLambdaVariable) :: Nil, _) = function
+    _, Seq(keyVar: NamedLambdaVariable, valueVar: NamedLambdaVariable), _) = function
 
   override def nullSafeEval(inputRow: InternalRow, argumentValue: Any): Any = {
     val map = argumentValue.asInstanceOf[MapData]
@@ -862,6 +951,10 @@ case class TransformValues(
   }
 
   override def prettyName: String = "transform_values"
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): TransformValues =
+    copy(argument = newLeft, function = newRight)
 }
 
 /**
@@ -884,7 +977,7 @@ case class TransformValues(
   since = "3.0.0",
   group = "lambda_funcs")
 case class MapZipWith(left: Expression, right: Expression, function: Expression)
-  extends HigherOrderFunction with CodegenFallback {
+  extends HigherOrderFunction with CodegenFallback with TernaryLike[Expression] {
 
   def functionForEval: Expression = functionsForEval.head
 
@@ -1045,6 +1138,17 @@ case class MapZipWith(left: Expression, right: Expression, function: Expression)
   }
 
   override def prettyName: String = "map_zip_with"
+
+  override def first: Expression = left
+  override def second: Expression = right
+  override def third: Expression = function
+
+  override protected def withNewChildrenInternal(
+      newFirst: Expression, newSecond: Expression, newThird: Expression): MapZipWith =
+    copy(
+      left = newFirst,
+      right = newSecond,
+      function = newThird)
 }
 
 // scalastyle:off line.size.limit
@@ -1063,7 +1167,7 @@ case class MapZipWith(left: Expression, right: Expression, function: Expression)
   group = "lambda_funcs")
 // scalastyle:on line.size.limit
 case class ZipWith(left: Expression, right: Expression, function: Expression)
-  extends HigherOrderFunction with CodegenFallback {
+  extends HigherOrderFunction with CodegenFallback with TernaryLike[Expression] {
 
   def functionForEval: Expression = functionsForEval.head
 
@@ -1071,7 +1175,7 @@ case class ZipWith(left: Expression, right: Expression, function: Expression)
 
   override def argumentTypes: Seq[AbstractDataType] = ArrayType :: ArrayType :: Nil
 
-  override def functions: Seq[Expression] = List(function)
+  override def functions: Seq[Expression] = function :: Nil
 
   override def functionTypes: Seq[AbstractDataType] = AnyDataType :: Nil
 
@@ -1121,4 +1225,12 @@ case class ZipWith(left: Expression, right: Expression, function: Expression)
   }
 
   override def prettyName: String = "zip_with"
+
+  override def first: Expression = left
+  override def second: Expression = right
+  override def third: Expression = function
+
+  override protected def withNewChildrenInternal(
+      newFirst: Expression, newSecond: Expression, newThird: Expression): ZipWith =
+    copy(left = newFirst, right = newSecond, function = newThird)
 }

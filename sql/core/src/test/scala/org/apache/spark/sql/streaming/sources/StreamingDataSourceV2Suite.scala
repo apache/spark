@@ -28,7 +28,7 @@ import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReaderFactory, Scan, ScanBuilder}
 import org.apache.spark.sql.connector.read.streaming.{ContinuousPartitionReaderFactory, ContinuousStream, MicroBatchStream, Offset, PartitionOffset}
-import org.apache.spark.sql.connector.write.{LogicalWriteInfo, PhysicalWriteInfo, WriteBuilder, WriterCommitMessage}
+import org.apache.spark.sql.connector.write.{LogicalWriteInfo, PhysicalWriteInfo, Write, WriteBuilder, WriterCommitMessage}
 import org.apache.spark.sql.connector.write.streaming.{StreamingDataWriterFactory, StreamingWrite}
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.streaming.{ContinuousTrigger, RateStreamOffset, Sink, StreamingQueryWrapper}
@@ -68,8 +68,15 @@ class FakeScanBuilder extends ScanBuilder with Scan {
   override def toContinuousStream(checkpointLocation: String): ContinuousStream = new FakeDataStream
 }
 
-class FakeWriteBuilder extends WriteBuilder with StreamingWrite {
-  override def buildForStreaming(): StreamingWrite = this
+class FakeWriteBuilder extends WriteBuilder {
+  override def build(): Write = {
+    new Write {
+      override def toStreaming: StreamingWrite = new FakeStreamingWrite
+    }
+  }
+}
+
+class FakeStreamingWrite extends StreamingWrite {
   override def createStreamingWriterFactory(
       info: PhysicalWriteInfo): StreamingDataWriterFactory = {
     throw new IllegalStateException("fake sink - cannot actually write")

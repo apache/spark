@@ -76,7 +76,7 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
    */
   public static final Set<DataType> mutableFieldTypes;
 
-  // DecimalType is also mutable
+  // DecimalType and DayTimeIntervalType are also mutable
   static {
     mutableFieldTypes = Collections.unmodifiableSet(
       new HashSet<>(
@@ -90,7 +90,8 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
           FloatType,
           DoubleType,
           DateType,
-          TimestampType
+          TimestampType,
+          YearMonthIntervalType
         })));
   }
 
@@ -102,7 +103,7 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
     if (dt instanceof DecimalType) {
       return ((DecimalType) dt).precision() <= Decimal.MAX_LONG_DIGITS();
     } else {
-      return mutableFieldTypes.contains(dt);
+      return dt instanceof DayTimeIntervalType || mutableFieldTypes.contains(dt);
     }
   }
 
@@ -112,7 +113,7 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
     }
 
     return mutableFieldTypes.contains(dt) || dt instanceof DecimalType ||
-      dt instanceof CalendarIntervalType;
+      dt instanceof CalendarIntervalType || dt instanceof DayTimeIntervalType;
   }
 
   //////////////////////////////////////////////////////////////////////////////
