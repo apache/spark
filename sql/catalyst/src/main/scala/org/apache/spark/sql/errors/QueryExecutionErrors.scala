@@ -1491,4 +1491,31 @@ object QueryExecutionErrors {
     new IllegalArgumentException(
       s"Cannot find field: ${name} in ${names}")
   }
+
+  def computeStatsCalledBeforePushDownError(name: String): Throwable = {
+    new IllegalStateException(
+      s"BUG: computeStats called before pushdown on DSv2 relation: $name")
+  }
+
+  def noSuchElementExceptionError(): Throwable = {
+    new NoSuchElementException
+  }
+
+  def noSuchElementExceptionError(key: String): Throwable = {
+    new NoSuchElementException(key)
+  }
+
+  def cannotMutateReadOnlySQLConfError(): Throwable = {
+    new UnsupportedOperationException("Cannot mutate ReadOnlySQLConf.")
+  }
+
+  def cannotCloneCopyReadOnlySQLConfError(): Throwable = {
+    new UnsupportedOperationException("Cannot clone/copy ReadOnlySQLConf.")
+  }
+
+  def cannotGetSQLCOnfInSchedulerEventLoopThread(): Throwable = {
+    new RuntimeException("Cannot get SQLConf inside scheduler event loop thread.")
+  }
+
+
 }
