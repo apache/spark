@@ -51,9 +51,9 @@ public interface VectorizedValuesReader {
   void readDoubles(int total, WritableColumnVector c, int rowId);
   void readBinary(int total, WritableColumnVector c, int rowId);
 
-  /*
-   * Skips `total` values
-   */
+   /*
+    * Skips `total` values
+    */
    void skipBooleans(int total);
    void skipBytes(int total);
    void skipShorts(int total);
