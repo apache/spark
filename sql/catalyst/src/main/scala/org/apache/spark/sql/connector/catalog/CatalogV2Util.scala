@@ -254,7 +254,7 @@ private[sql] object CatalogV2Util {
 
       case (Seq("element"), array @ ArrayType(elementType, isNullable)) =>
         val updated = update(StructField("element", elementType, nullable = isNullable))
-          .getOrElse(throw new IllegalArgumentException(s"Cannot delete array element"))
+            .getOrElse(throw new IllegalArgumentException(s"Cannot delete array element"))
         Some(field.copy(dataType = array.copy(
           elementType = updated.dataType,
           containsNull = updated.nullable)))
