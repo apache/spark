@@ -170,10 +170,9 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     val b = testRelation2.output(1)
     val c = testRelation2.output(2)
     val alias_a3 = count(a).as("a3")
-    val alias_b = b.as("aggOrder")
 
     // Case 1: when the child of Sort is not Aggregate,
-    //   the sort reference is handled by the rule ResolveSortReferences
+    //   the sort reference is handled by the rule ResolveMissingReferences
     val plan1 = testRelation2
       .groupBy($"a", $"c", $"b")($"a", $"c", count($"a").as("a3"))
       .select($"a", $"c", $"a3")
@@ -194,8 +193,8 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       .orderBy($"b".asc)
 
     val expected2 = testRelation2
-      .groupBy(a, c, b)(a, c, alias_a3, alias_b)
-      .orderBy(alias_b.toAttribute.asc)
+      .groupBy(a, c, b)(a, c, alias_a3, b)
+      .orderBy(b.asc)
       .select(a, c, alias_a3.toAttribute)
 
     checkAnalysis(plan2, expected2)
@@ -415,7 +414,6 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     val expected = testRelation2
       .groupBy(a, c)(alias1, alias2, alias3)
       .orderBy(alias1.toAttribute.asc, alias2.toAttribute.asc)
-      .select(alias1.toAttribute, alias2.toAttribute, alias3.toAttribute)
     checkAnalysis(plan, expected)
   }
 
