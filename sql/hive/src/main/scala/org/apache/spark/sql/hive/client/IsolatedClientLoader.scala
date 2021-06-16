@@ -34,6 +34,7 @@ import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkSubmitUtils
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.util.quietly
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.internal.NonClosableMutableURLClassLoader
 import org.apache.spark.sql.internal.SQLConf
@@ -104,8 +105,8 @@ private[hive] object IsolatedClientLoader extends Logging {
       case (3, 1, _) => Some(hive.v3_1)
       case _ => None
     }.getOrElse {
-      throw new UnsupportedOperationException(s"Unsupported Hive Metastore version ($version). " +
-        s"Please set ${HiveUtils.HIVE_METASTORE_VERSION.key} with a valid version.")
+      throw QueryExecutionErrors.unsupportedHiveMetastoreVersionError(
+        version, HiveUtils.HIVE_METASTORE_VERSION.key)
     }
   }
 
@@ -311,10 +312,8 @@ private[hive] class IsolatedClientLoader(
       case e: InvocationTargetException =>
         if (e.getCause().isInstanceOf[NoClassDefFoundError]) {
           val cnf = e.getCause().asInstanceOf[NoClassDefFoundError]
-          throw new ClassNotFoundException(
-            s"$cnf when creating Hive client using classpath: ${execJars.mkString(", ")}\n" +
-            "Please make sure that jars for your version of hive and hadoop are included in the " +
-            s"paths passed to ${HiveUtils.HIVE_METASTORE_JARS.key}.", e)
+          throw QueryExecutionErrors.loadHiveClientCausesNoClassDefFoundError(
+            cnf, execJars, HiveUtils.HIVE_METASTORE_JARS.key, e)
         } else {
           throw e
         }

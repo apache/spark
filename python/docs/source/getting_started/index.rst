@@ -31,7 +31,7 @@ at `the Spark documentation <https://spark.apache.org/docs/latest/index.html#whe
    install
    quickstart
 
-For pandas APIs on Spark:
+For pandas API on Spark:
 
 .. toctree::
    :maxdepth: 2

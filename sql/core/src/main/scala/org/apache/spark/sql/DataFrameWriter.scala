@@ -31,7 +31,6 @@ import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.connector.catalog.{CatalogPlugin, CatalogV2Implicits, CatalogV2Util, Identifier, SupportsCatalogOptions, Table, TableCatalog, TableProvider, V1Table}
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.connector.expressions.{FieldReference, IdentityTransform, Transform}
-import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, DataSourceUtils, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.v2._
@@ -311,13 +310,13 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
           val relation = DataSourceV2Relation.create(table, catalog, ident, dsOptions)
           checkPartitioningMatchesV2Table(table)
           if (mode == SaveMode.Append) {
-            runCommand(df.sparkSession, "save") {
+            runCommand(df.sparkSession) {
               AppendData.byName(relation, df.logicalPlan, finalOptions)
             }
           } else {
             // Truncate the table. TableCapabilityCheck will throw a nice exception if this
             // isn't supported
-            runCommand(df.sparkSession, "save") {
+            runCommand(df.sparkSession) {
               OverwriteByExpression.byName(
                 relation, df.logicalPlan, Literal(true), finalOptions)
             }
@@ -332,7 +331,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
               val location = Option(dsOptions.get("path")).map(TableCatalog.PROP_LOCATION -> _)
 
-              runCommand(df.sparkSession, "save") {
+              runCommand(df.sparkSession) {
                 CreateTableAsSelect(
                   catalog,
                   ident,
@@ -379,7 +378,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
     val optionsWithPath = getOptionsWithPath(path)
 
     // Code path for data source v1.
-    runCommand(df.sparkSession, "save") {
+    runCommand(df.sparkSession) {
       DataSource(
         sparkSession = df.sparkSession,
         className = source,
@@ -475,13 +474,13 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
         }
     }
 
-    runCommand(df.sparkSession, "insertInto") {
+    runCommand(df.sparkSession) {
       command
     }
   }
 
   private def insertInto(tableIdent: TableIdentifier): Unit = {
-    runCommand(df.sparkSession, "insertInto") {
+    runCommand(df.sparkSession) {
       InsertIntoStatement(
         table = UnresolvedRelation(tableIdent),
         partitionSpec = Map.empty[String, Option[String]],
@@ -631,7 +630,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
           external = false)
     }
 
-    runCommand(df.sparkSession, "saveAsTable") {
+    runCommand(df.sparkSession) {
       command
     }
   }
@@ -698,7 +697,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       partitionColumnNames = partitioningColumns.getOrElse(Nil),
       bucketSpec = getBucketSpec)
 
-    runCommand(df.sparkSession, "saveAsTable")(
+    runCommand(df.sparkSession)(
       CreateTable(tableDesc, mode, Some(df.logicalPlan)))
   }
 
@@ -856,10 +855,10 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * Wrap a DataFrameWriter action to track the QueryExecution and time cost, then report to the
    * user-registered callback functions.
    */
-  private def runCommand(session: SparkSession, name: String)(command: LogicalPlan): Unit = {
+  private def runCommand(session: SparkSession)(command: LogicalPlan): Unit = {
     val qe = session.sessionState.executePlan(command)
-    // call `QueryExecution.toRDD` to trigger the execution of commands.
-    SQLExecution.withNewExecutionId(qe, Some(name))(qe.toRdd)
+    // call `QueryExecution.commandExecuted` to trigger the execution of commands.
+    qe.commandExecuted
   }
 
   private def lookupV2Provider(): Option[TableProvider] = {

@@ -28,6 +28,7 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.sql.{DataFrame, Row, SparkSession}
+import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.streaming.{MemoryStream, StatefulOperatorStateInfo, StreamingSymmetricHashJoinExec, StreamingSymmetricHashJoinHelper}
 import org.apache.spark.sql.execution.streaming.state.{StateStore, StateStoreProviderId}
 import org.apache.spark.sql.functions._
@@ -574,7 +575,14 @@ class StreamingInnerJoinSuite extends StreamingJoinSuite {
     testStream(joined)(
       AddData(input1, 1.to(1000): _*),
       AddData(input2, 1.to(1000): _*),
-      CheckAnswer(1.to(1000): _*))
+      CheckAnswer(1.to(1000): _*),
+      Execute { query =>
+        // Verify the query plan
+        assert(query.lastExecution.executedPlan.collect {
+          case j @ StreamingSymmetricHashJoinExec(_, _, _, _, _, _, _, _,
+            _: ShuffleExchangeExec, ShuffleExchangeExec(_, _: ShuffleExchangeExec, _)) => j
+        }.size == 1)
+      })
   }
 
   test("SPARK-26187 restore the stream-stream inner join query from Spark 2.4") {

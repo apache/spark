@@ -16,11 +16,11 @@
     under the License.
 
 
-====================
-Pandas APIs on Spark
-====================
+===================
+Pandas API on Spark
+===================
 
-This page gives an overview of all public pandas APIs on Spark.
+This page gives an overview of all public pandas API on Spark.
 
 .. toctree::
    :maxdepth: 2

@@ -31,6 +31,7 @@ import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.DataTypeTestUtils.dayTimeIntervalTypes
 import org.apache.spark.tags.SlowHiveTest
 import org.apache.spark.unsafe.UnsafeAlignedOffset
 
@@ -890,7 +891,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
       FloatType, DoubleType, DecimalType(25, 5), DecimalType(6, 5),
       DateType, TimestampType,
       ArrayType(IntegerType), MapType(StringType, LongType), struct,
-      new TestUDT.MyDenseVectorUDT())
+      new TestUDT.MyDenseVectorUDT()) ++ dayTimeIntervalTypes
     // Right now, we will use SortAggregate to handle UDAFs.
     // UnsafeRow.mutableFieldTypes.asScala.toSeq will trigger SortAggregate to use
     // UnsafeRow as the aggregation buffer. While, dataTypes will trigger

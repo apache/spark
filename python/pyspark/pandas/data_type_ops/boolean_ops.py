@@ -19,6 +19,7 @@ import numbers
 from typing import TYPE_CHECKING, Union
 
 import pandas as pd
+from pandas.api.types import CategoricalDtype
 
 from pyspark import sql as spark
 from pyspark.pandas.base import column_op, IndexOpsMixin
@@ -26,10 +27,15 @@ from pyspark.pandas.data_type_ops.base import (
     is_valid_operand_for_numeric_arithmetic,
     DataTypeOps,
     transform_boolean_operand_to_numeric,
+    _as_bool_type,
+    _as_categorical_type,
+    _as_other_type,
 )
-from pyspark.pandas.typedef import extension_dtypes
+from pyspark.pandas.internal import InternalField
+from pyspark.pandas.typedef import Dtype, extension_dtypes, pandas_on_spark_type
 from pyspark.pandas.typedef.typehints import as_spark_type
 from pyspark.sql import functions as F
+from pyspark.sql.types import BooleanType, StringType
 
 if TYPE_CHECKING:
     from pyspark.pandas.indexes import Index  # noqa: F401 (SPARK-34943)
@@ -46,18 +52,23 @@ class BooleanOps(DataTypeOps):
         return "booleans"
 
     def add(self, left, right) -> Union["Series", "Index"]:
-        if not is_valid_operand_for_numeric_arithmetic(right, allow_bool=False):
+        if not is_valid_operand_for_numeric_arithmetic(right):
             raise TypeError(
                 "Addition can not be applied to %s and the given type." % self.pretty_name
             )
 
-        if isinstance(right, numbers.Number) and not isinstance(right, bool):
+        if isinstance(right, bool):
+            return left.__or__(right)
+        elif isinstance(right, numbers.Number):
             left = left.spark.transform(lambda scol: scol.cast(as_spark_type(type(right))))
             return left + right
         else:
             assert isinstance(right, IndexOpsMixin)
-            left = transform_boolean_operand_to_numeric(left, right.spark.data_type)
-            return left + right
+            if isinstance(right, IndexOpsMixin) and isinstance(right.spark.data_type, BooleanType):
+                return left.__or__(right)
+            else:
+                left = transform_boolean_operand_to_numeric(left, right.spark.data_type)
+                return left + right
 
     def sub(self, left, right) -> Union["Series", "Index"]:
         if not is_valid_operand_for_numeric_arithmetic(right, allow_bool=False):
@@ -73,17 +84,22 @@ class BooleanOps(DataTypeOps):
             return left - right
 
     def mul(self, left, right) -> Union["Series", "Index"]:
-        if not is_valid_operand_for_numeric_arithmetic(right, allow_bool=False):
+        if not is_valid_operand_for_numeric_arithmetic(right):
             raise TypeError(
                 "Multiplication can not be applied to %s and the given type." % self.pretty_name
             )
-        if isinstance(right, numbers.Number) and not isinstance(right, bool):
+        if isinstance(right, bool):
+            return left.__and__(right)
+        elif isinstance(right, numbers.Number):
             left = left.spark.transform(lambda scol: scol.cast(as_spark_type(type(right))))
             return left * right
         else:
             assert isinstance(right, IndexOpsMixin)
-            left = transform_boolean_operand_to_numeric(left, right.spark.data_type)
-            return left * right
+            if isinstance(right, IndexOpsMixin) and isinstance(right.spark.data_type, BooleanType):
+                return left.__and__(right)
+            else:
+                left = transform_boolean_operand_to_numeric(left, right.spark.data_type)
+                return left * right
 
     def truediv(self, left, right) -> Union["Series", "Index"]:
         if not is_valid_operand_for_numeric_arithmetic(right, allow_bool=False):
@@ -138,7 +154,9 @@ class BooleanOps(DataTypeOps):
             return left ** right
 
     def radd(self, left, right) -> Union["Series", "Index"]:
-        if isinstance(right, numbers.Number) and not isinstance(right, bool):
+        if isinstance(right, bool):
+            return left.__or__(right)
+        elif isinstance(right, numbers.Number):
             left = left.spark.transform(lambda scol: scol.cast(as_spark_type(type(right))))
             return right + left
         else:
@@ -156,7 +174,9 @@ class BooleanOps(DataTypeOps):
             )
 
     def rmul(self, left, right) -> Union["Series", "Index"]:
-        if isinstance(right, numbers.Number) and not isinstance(right, bool):
+        if isinstance(right, bool):
+            return left.__and__(right)
+        elif isinstance(right, numbers.Number):
             left = left.spark.transform(lambda scol: scol.cast(as_spark_type(type(right))))
             return right * left
         else:
@@ -229,6 +249,32 @@ class BooleanOps(DataTypeOps):
                     return F.when(left.isNull() | scol.isNull(), False).otherwise(scol)
 
             return column_op(or_func)(left, right)
+
+    def astype(
+        self, index_ops: Union["Index", "Series"], dtype: Union[str, type, Dtype]
+    ) -> Union["Index", "Series"]:
+        dtype, spark_type = pandas_on_spark_type(dtype)
+
+        if isinstance(dtype, CategoricalDtype):
+            return _as_categorical_type(index_ops, dtype, spark_type)
+        elif isinstance(spark_type, BooleanType):
+            return _as_bool_type(index_ops, dtype)
+        elif isinstance(spark_type, StringType):
+            if isinstance(dtype, extension_dtypes):
+                scol = F.when(
+                    index_ops.spark.column.isNotNull(),
+                    F.when(index_ops.spark.column, "True").otherwise("False"),
+                )
+            else:
+                null_str = str(None)
+                casted = F.when(index_ops.spark.column, "True").otherwise("False")
+                scol = F.when(index_ops.spark.column.isNull(), null_str).otherwise(casted)
+            return index_ops._with_new_scol(
+                scol.alias(index_ops._internal.data_spark_column_names[0]),
+                field=InternalField(dtype=dtype),
+            )
+        else:
+            return _as_other_type(index_ops, dtype, spark_type)
 
 
 class BooleanExtensionOps(BooleanOps):
