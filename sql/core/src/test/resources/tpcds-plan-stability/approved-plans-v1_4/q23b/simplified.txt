@@ -29,8 +29,8 @@ TakeOrderedAndProject [c_last_name,c_first_name,sales]
                                             BroadcastExchange #4
                                               WholeStageCodegen (4)
                                                 Project [item_sk]
-                                                  Filter [count(1)]
-                                                    HashAggregate [_groupingexpression,i_item_sk,d_date,count] [count(1),item_sk,count(1),count]
+                                                  Filter [cnt]
+                                                    HashAggregate [_groupingexpression,i_item_sk,d_date,count] [count(1),item_sk,cnt,count]
                                                       InputAdapter
                                                         Exchange [_groupingexpression,i_item_sk,d_date] #5
                                                           WholeStageCodegen (3)
@@ -64,7 +64,7 @@ TakeOrderedAndProject [c_last_name,c_first_name,sales]
                             WholeStageCodegen (9)
                               Sort [c_customer_sk]
                                 Project [c_customer_sk]
-                                  Filter [sum(CheckOverflow((promote_precision(cast(cast(ss_quantity as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_sales_price as decimal(12,2)))), DecimalType(18,2), true))]
+                                  Filter [ssales]
                                     Subquery #3
                                       WholeStageCodegen (5)
                                         HashAggregate [max] [max(csales),tpcds_cmax,max]
@@ -102,7 +102,7 @@ TakeOrderedAndProject [c_last_name,c_first_name,sales]
                                                                           ColumnarToRow
                                                                             InputAdapter
                                                                               Scan parquet default.date_dim [d_date_sk,d_year]
-                                    HashAggregate [c_customer_sk,sum,isEmpty] [sum(CheckOverflow((promote_precision(cast(cast(ss_quantity as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_sales_price as decimal(12,2)))), DecimalType(18,2), true)),sum(CheckOverflow((promote_precision(cast(cast(ss_quantity as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_sales_price as decimal(12,2)))), DecimalType(18,2), true)),sum,isEmpty]
+                                    HashAggregate [c_customer_sk,sum,isEmpty] [sum(CheckOverflow((promote_precision(cast(cast(ss_quantity as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_sales_price as decimal(12,2)))), DecimalType(18,2), true)),ssales,sum,isEmpty]
                                       InputAdapter
                                         Exchange [c_customer_sk] #8
                                           WholeStageCodegen (8)
@@ -139,9 +139,9 @@ TakeOrderedAndProject [c_last_name,c_first_name,sales]
                                   WholeStageCodegen (14)
                                     Sort [c_customer_sk]
                                       Project [c_customer_sk]
-                                        Filter [sum(CheckOverflow((promote_precision(cast(cast(ss_quantity as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_sales_price as decimal(12,2)))), DecimalType(18,2), true))]
+                                        Filter [ssales]
                                           ReusedSubquery [tpcds_cmax] #3
-                                          HashAggregate [c_customer_sk,sum,isEmpty] [sum(CheckOverflow((promote_precision(cast(cast(ss_quantity as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_sales_price as decimal(12,2)))), DecimalType(18,2), true)),sum(CheckOverflow((promote_precision(cast(cast(ss_quantity as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_sales_price as decimal(12,2)))), DecimalType(18,2), true)),sum,isEmpty]
+                                          HashAggregate [c_customer_sk,sum,isEmpty] [sum(CheckOverflow((promote_precision(cast(cast(ss_quantity as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_sales_price as decimal(12,2)))), DecimalType(18,2), true)),ssales,sum,isEmpty]
                                             InputAdapter
                                               ReusedExchange [c_customer_sk,sum,isEmpty] #8
                     InputAdapter
@@ -182,9 +182,9 @@ TakeOrderedAndProject [c_last_name,c_first_name,sales]
                             WholeStageCodegen (27)
                               Sort [c_customer_sk]
                                 Project [c_customer_sk]
-                                  Filter [sum(CheckOverflow((promote_precision(cast(cast(ss_quantity as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_sales_price as decimal(12,2)))), DecimalType(18,2), true))]
+                                  Filter [ssales]
                                     ReusedSubquery [tpcds_cmax] #3
-                                    HashAggregate [c_customer_sk,sum,isEmpty] [sum(CheckOverflow((promote_precision(cast(cast(ss_quantity as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_sales_price as decimal(12,2)))), DecimalType(18,2), true)),sum(CheckOverflow((promote_precision(cast(cast(ss_quantity as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_sales_price as decimal(12,2)))), DecimalType(18,2), true)),sum,isEmpty]
+                                    HashAggregate [c_customer_sk,sum,isEmpty] [sum(CheckOverflow((promote_precision(cast(cast(ss_quantity as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_sales_price as decimal(12,2)))), DecimalType(18,2), true)),ssales,sum,isEmpty]
                                       InputAdapter
                                         ReusedExchange [c_customer_sk,sum,isEmpty] #8
                         InputAdapter
