@@ -50,15 +50,15 @@ TakeOrderedAndProject [c_customer_id,c_salutation,c_first_name,c_last_name,ca_st
                                                             InputAdapter
                                                               Scan parquet default.catalog_returns [cr_returning_customer_sk,cr_returning_addr_sk,cr_return_amt_inc_tax,cr_returned_date_sk]
                                                                 SubqueryBroadcast [d_date_sk] #1
-                                                                  ReusedExchange [d_date_sk] #6
+                                                                  BroadcastExchange #6
+                                                                    WholeStageCodegen (1)
+                                                                      Project [d_date_sk]
+                                                                        Filter [d_year,d_date_sk]
+                                                                          ColumnarToRow
+                                                                            InputAdapter
+                                                                              Scan parquet default.date_dim [d_date_sk,d_year]
                                                         InputAdapter
-                                                          BroadcastExchange #6
-                                                            WholeStageCodegen (4)
-                                                              Project [d_date_sk]
-                                                                Filter [d_year,d_date_sk]
-                                                                  ColumnarToRow
-                                                                    InputAdapter
-                                                                      Scan parquet default.date_dim [d_date_sk,d_year]
+                                                          ReusedExchange [d_date_sk] #6
                                         InputAdapter
                                           WholeStageCodegen (8)
                                             Sort [ca_address_sk]

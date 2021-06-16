@@ -28,15 +28,15 @@ WholeStageCodegen (14)
                                                       InputAdapter
                                                         Scan parquet default.inventory [inv_item_sk,inv_warehouse_sk,inv_quantity_on_hand,inv_date_sk]
                                                           SubqueryBroadcast [d_date_sk] #1
-                                                            ReusedExchange [d_date_sk,d_moy] #4
+                                                            BroadcastExchange #4
+                                                              WholeStageCodegen (1)
+                                                                Project [d_date_sk,d_moy]
+                                                                  Filter [d_year,d_moy,d_date_sk]
+                                                                    ColumnarToRow
+                                                                      InputAdapter
+                                                                        Scan parquet default.date_dim [d_date_sk,d_year,d_moy]
                                                   InputAdapter
-                                                    BroadcastExchange #4
-                                                      WholeStageCodegen (1)
-                                                        Project [d_date_sk,d_moy]
-                                                          Filter [d_year,d_moy,d_date_sk]
-                                                            ColumnarToRow
-                                                              InputAdapter
-                                                                Scan parquet default.date_dim [d_date_sk,d_year,d_moy]
+                                                    ReusedExchange [d_date_sk,d_moy] #4
                                               InputAdapter
                                                 BroadcastExchange #5
                                                   WholeStageCodegen (2)
@@ -75,15 +75,15 @@ WholeStageCodegen (14)
                                                       InputAdapter
                                                         Scan parquet default.inventory [inv_item_sk,inv_warehouse_sk,inv_quantity_on_hand,inv_date_sk]
                                                           SubqueryBroadcast [d_date_sk] #2
-                                                            ReusedExchange [d_date_sk,d_moy] #9
+                                                            BroadcastExchange #9
+                                                              WholeStageCodegen (1)
+                                                                Project [d_date_sk,d_moy]
+                                                                  Filter [d_year,d_moy,d_date_sk]
+                                                                    ColumnarToRow
+                                                                      InputAdapter
+                                                                        Scan parquet default.date_dim [d_date_sk,d_year,d_moy]
                                                   InputAdapter
-                                                    BroadcastExchange #9
-                                                      WholeStageCodegen (7)
-                                                        Project [d_date_sk,d_moy]
-                                                          Filter [d_year,d_moy,d_date_sk]
-                                                            ColumnarToRow
-                                                              InputAdapter
-                                                                Scan parquet default.date_dim [d_date_sk,d_year,d_moy]
+                                                    ReusedExchange [d_date_sk,d_moy] #9
                                               InputAdapter
                                                 ReusedExchange [i_item_sk] #5
                                           InputAdapter

@@ -25,7 +25,13 @@ TakeOrderedAndProject [s_store_name,s_company_id,s_street_number,s_street_name,s
                                         InputAdapter
                                           Scan parquet default.store_returns [sr_item_sk,sr_customer_sk,sr_ticket_number,sr_returned_date_sk]
                                             SubqueryBroadcast [d_date_sk] #1
-                                              ReusedExchange [d_date_sk] #3
+                                              BroadcastExchange #3
+                                                WholeStageCodegen (1)
+                                                  Project [d_date_sk]
+                                                    Filter [d_year,d_moy,d_date_sk]
+                                                      ColumnarToRow
+                                                        InputAdapter
+                                                          Scan parquet default.date_dim [d_date_sk,d_year,d_moy]
                           InputAdapter
                             BroadcastExchange #4
                               WholeStageCodegen (2)
@@ -41,10 +47,4 @@ TakeOrderedAndProject [s_store_name,s_company_id,s_street_number,s_street_name,s
                                 InputAdapter
                                   Scan parquet default.date_dim [d_date_sk]
                   InputAdapter
-                    BroadcastExchange #3
-                      WholeStageCodegen (4)
-                        Project [d_date_sk]
-                          Filter [d_year,d_moy,d_date_sk]
-                            ColumnarToRow
-                              InputAdapter
-                                Scan parquet default.date_dim [d_date_sk,d_year,d_moy]
+                    ReusedExchange [d_date_sk] #3

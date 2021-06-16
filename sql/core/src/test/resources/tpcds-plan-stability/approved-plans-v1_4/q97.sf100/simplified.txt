@@ -20,15 +20,15 @@ WholeStageCodegen (8)
                                       InputAdapter
                                         Scan parquet default.store_sales [ss_item_sk,ss_customer_sk,ss_sold_date_sk]
                                           SubqueryBroadcast [d_date_sk] #1
-                                            ReusedExchange [d_date_sk] #3
+                                            BroadcastExchange #3
+                                              WholeStageCodegen (1)
+                                                Project [d_date_sk]
+                                                  Filter [d_month_seq,d_date_sk]
+                                                    ColumnarToRow
+                                                      InputAdapter
+                                                        Scan parquet default.date_dim [d_date_sk,d_month_seq]
                                     InputAdapter
-                                      BroadcastExchange #3
-                                        WholeStageCodegen (1)
-                                          Project [d_date_sk]
-                                            Filter [d_month_seq,d_date_sk]
-                                              ColumnarToRow
-                                                InputAdapter
-                                                  Scan parquet default.date_dim [d_date_sk,d_month_seq]
+                                      ReusedExchange [d_date_sk] #3
                   WholeStageCodegen (6)
                     Sort [customer_sk,item_sk]
                       HashAggregate [cs_bill_customer_sk,cs_item_sk] [customer_sk,item_sk]

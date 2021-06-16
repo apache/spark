@@ -22,15 +22,15 @@ TakeOrderedAndProject [c_last_name,ss_ticket_number,c_first_name,ca_city,bought_
                                           InputAdapter
                                             Scan parquet default.store_sales [ss_customer_sk,ss_hdemo_sk,ss_addr_sk,ss_store_sk,ss_ticket_number,ss_ext_sales_price,ss_ext_list_price,ss_ext_tax,ss_sold_date_sk]
                                               SubqueryBroadcast [d_date_sk] #1
-                                                ReusedExchange [d_date_sk] #2
+                                                BroadcastExchange #2
+                                                  WholeStageCodegen (1)
+                                                    Project [d_date_sk]
+                                                      Filter [d_dom,d_year,d_date_sk]
+                                                        ColumnarToRow
+                                                          InputAdapter
+                                                            Scan parquet default.date_dim [d_date_sk,d_year,d_dom]
                                       InputAdapter
-                                        BroadcastExchange #2
-                                          WholeStageCodegen (1)
-                                            Project [d_date_sk]
-                                              Filter [d_dom,d_year,d_date_sk]
-                                                ColumnarToRow
-                                                  InputAdapter
-                                                    Scan parquet default.date_dim [d_date_sk,d_year,d_dom]
+                                        ReusedExchange [d_date_sk] #2
                                   InputAdapter
                                     BroadcastExchange #3
                                       WholeStageCodegen (2)

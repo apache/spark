@@ -24,7 +24,13 @@ TakeOrderedAndProject [i_item_id,i_item_desc,s_store_id,s_store_name,store_sales
                                               InputAdapter
                                                 Scan parquet default.store_sales [ss_item_sk,ss_customer_sk,ss_store_sk,ss_ticket_number,ss_quantity,ss_sold_date_sk]
                                                   SubqueryBroadcast [d_date_sk] #1
-                                                    ReusedExchange [d_date_sk] #2
+                                                    BroadcastExchange #2
+                                                      WholeStageCodegen (1)
+                                                        Project [d_date_sk]
+                                                          Filter [d_moy,d_year,d_date_sk]
+                                                            ColumnarToRow
+                                                              InputAdapter
+                                                                Scan parquet default.date_dim [d_date_sk,d_year,d_moy]
                                           InputAdapter
                                             BroadcastExchange #3
                                               WholeStageCodegen (1)
@@ -33,7 +39,13 @@ TakeOrderedAndProject [i_item_id,i_item_desc,s_store_id,s_store_name,store_sales
                                                     InputAdapter
                                                       Scan parquet default.store_returns [sr_item_sk,sr_customer_sk,sr_ticket_number,sr_return_quantity,sr_returned_date_sk]
                                                         SubqueryBroadcast [d_date_sk] #2
-                                                          ReusedExchange [d_date_sk] #4
+                                                          BroadcastExchange #4
+                                                            WholeStageCodegen (1)
+                                                              Project [d_date_sk]
+                                                                Filter [d_moy,d_year,d_date_sk]
+                                                                  ColumnarToRow
+                                                                    InputAdapter
+                                                                      Scan parquet default.date_dim [d_date_sk,d_year,d_moy]
                                       InputAdapter
                                         BroadcastExchange #5
                                           WholeStageCodegen (2)
@@ -42,31 +54,19 @@ TakeOrderedAndProject [i_item_id,i_item_desc,s_store_id,s_store_name,store_sales
                                                 InputAdapter
                                                   Scan parquet default.catalog_sales [cs_bill_customer_sk,cs_item_sk,cs_quantity,cs_sold_date_sk]
                                                     SubqueryBroadcast [d_date_sk] #3
-                                                      ReusedExchange [d_date_sk] #6
+                                                      BroadcastExchange #6
+                                                        WholeStageCodegen (1)
+                                                          Project [d_date_sk]
+                                                            Filter [d_year,d_date_sk]
+                                                              ColumnarToRow
+                                                                InputAdapter
+                                                                  Scan parquet default.date_dim [d_date_sk,d_year]
                                   InputAdapter
-                                    BroadcastExchange #2
-                                      WholeStageCodegen (3)
-                                        Project [d_date_sk]
-                                          Filter [d_moy,d_year,d_date_sk]
-                                            ColumnarToRow
-                                              InputAdapter
-                                                Scan parquet default.date_dim [d_date_sk,d_year,d_moy]
+                                    ReusedExchange [d_date_sk] #2
                               InputAdapter
-                                BroadcastExchange #4
-                                  WholeStageCodegen (4)
-                                    Project [d_date_sk]
-                                      Filter [d_moy,d_year,d_date_sk]
-                                        ColumnarToRow
-                                          InputAdapter
-                                            Scan parquet default.date_dim [d_date_sk,d_year,d_moy]
+                                ReusedExchange [d_date_sk] #4
                           InputAdapter
-                            BroadcastExchange #6
-                              WholeStageCodegen (5)
-                                Project [d_date_sk]
-                                  Filter [d_year,d_date_sk]
-                                    ColumnarToRow
-                                      InputAdapter
-                                        Scan parquet default.date_dim [d_date_sk,d_year]
+                            ReusedExchange [d_date_sk] #6
                       InputAdapter
                         BroadcastExchange #7
                           WholeStageCodegen (6)
