@@ -52,20 +52,13 @@ TakeOrderedAndProject [rnk,best_performing,worst_performing]
                               WholeStageCodegen (7)
                                 Sort [rank_col]
                                   InputAdapter
-                                    Exchange #4
-                                      WholeStageCodegen (6)
-                                        Project [item_sk,rank_col]
-                                          Filter [avg(ss_net_profit)]
-                                            ReusedSubquery [rank_col] #1
-                                            HashAggregate [ss_item_sk,sum,count] [avg(UnscaledValue(ss_net_profit)),item_sk,rank_col,avg(ss_net_profit),sum,count]
-                                              InputAdapter
-                                                ReusedExchange [ss_item_sk,sum,count] #2
+                                    ReusedExchange [item_sk,rank_col] #1
             InputAdapter
-              BroadcastExchange #5
+              BroadcastExchange #4
                 WholeStageCodegen (9)
                   Filter [i_item_sk]
                     ColumnarToRow
                       InputAdapter
                         Scan parquet default.item [i_item_sk,i_product_name]
         InputAdapter
-          ReusedExchange [i_item_sk,i_product_name] #5
+          ReusedExchange [i_item_sk,i_product_name] #4

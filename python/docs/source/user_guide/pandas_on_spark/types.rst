@@ -1,14 +1,14 @@
-====================================
-Type Support in Pandas APIs on Spark
-====================================
+===================================
+Type Support in Pandas API on Spark
+===================================
 
 .. currentmodule:: pyspark.pandas
 
 In this chapter, we will briefly show you how data types change when converting pandas-on-Spark DataFrame from/to PySpark DataFrame or pandas DataFrame.
 
 
-Type casting between PySpark and pandas APIs on Spark
------------------------------------------------------
+Type casting between PySpark and pandas API on Spark
+----------------------------------------------------
 
 When converting a pandas-on-Spark DataFrame from/to PySpark DataFrame, the data types are automatically casted to the appropriate type.
 
@@ -80,8 +80,8 @@ The example below shows how data types are casted from pandas-on-Spark DataFrame
     DataFrame[int8: tinyint, bool: boolean, float32: float, float64: double, int32: int, int64: bigint, int16: smallint, datetime: timestamp, object_string: string, object_decimal: decimal(2,1), object_date: date]
 
 
-Type casting between pandas and pandas APIs on Spark
-----------------------------------------------------
+Type casting between pandas and pandas API on Spark
+---------------------------------------------------
 
 When converting pandas-on-Spark DataFrame to pandas DataFrame, and the data types are basically same as pandas.
 
@@ -110,7 +110,7 @@ However, there are several data types only provided by pandas.
 
 .. code-block:: python
 
-    # pd.Catrgorical type is not supported in pandas APIs on Spark yet.
+    # pd.Catrgorical type is not supported in pandas API on Spark yet.
     >>> ks.Series([pd.Categorical([1, 2, 3])])
     Traceback (most recent call last):
     ...
@@ -118,14 +118,14 @@ However, there are several data types only provided by pandas.
     Categories (3, int64): [1, 2, 3] with type Categorical: did not recognize Python value type when inferring an Arrow data type
 
 
-These kind of pandas specific data types below are not currently supported in pandas APIs on Spark but planned to be supported.
+These kind of pandas specific data types below are not currently supported in pandas API on Spark but planned to be supported.
 
 * pd.Timedelta
 * pd.Categorical
 * pd.CategoricalDtype
 
 
-The pandas specific data types below are not planned to be supported in pandas APIs on Spark yet.
+The pandas specific data types below are not planned to be supported in pandas API on Spark yet.
 
 * pd.SparseDtype
 * pd.DatetimeTZDtype
@@ -137,7 +137,7 @@ The pandas specific data types below are not planned to be supported in pandas A
 Internal type mapping
 ---------------------
 
-The table below shows which NumPy data types are matched to which PySpark data types internally in pandas APIs on Spark.
+The table below shows which NumPy data types are matched to which PySpark data types internally in pandas API on Spark.
 
 ============= =======================
 NumPy         PySpark
@@ -162,7 +162,7 @@ np.ndarray    ArrayType(StringType())
 ============= =======================
 
 
-The table below shows which Python data types are matched to which PySpark data types internally in pandas APIs on Spark.
+The table below shows which Python data types are matched to which PySpark data types internally in pandas API on Spark.
 
 ================= ===================
 Python            PySpark
@@ -177,7 +177,7 @@ datetime.date     DateType
 decimal.Decimal   DecimalType(38, 18)
 ================= ===================
 
-For decimal type, pandas APIs on Spark use Spark's system default precision and scale.
+For decimal type, pandas API on Spark uses Spark's system default precision and scale.
 
 You can check this mapping by using `as_spark_type` function.
 
@@ -218,7 +218,7 @@ You can also check the underlying PySpark data type of `Series` or schema of `Da
 
 .. note::
 
-    Pandas APIs on Spark currently do not support multiple types of data in single column.
+    Pandas API on Spark currently does not support multiple types of data in single column.
 
     .. code-block:: python
     

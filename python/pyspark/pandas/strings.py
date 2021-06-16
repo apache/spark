@@ -32,9 +32,10 @@ from typing import (
 
 import numpy as np
 
+import pandas as pd
 from pyspark.sql.types import StringType, BinaryType, ArrayType, LongType, MapType
 from pyspark.sql import functions as F
-from pyspark.sql.functions import pandas_udf, PandasUDFType
+from pyspark.sql.functions import pandas_udf
 
 from pyspark.pandas.spark import functions as SF
 
@@ -1182,11 +1183,10 @@ class StringMethods(object):
         dtype: object
         """
         # type hint does not support to specify array type yet.
-        pudf = pandas_udf(
-            lambda s, *_: s.str.findall(pat, flags),
-            returnType=ArrayType(StringType(), containsNull=True),
-            functionType=PandasUDFType.SCALAR,
-        )
+        @pandas_udf(returnType=ArrayType(StringType(), containsNull=True))  # type: ignore
+        def pudf(s: pd.Series) -> pd.Series:
+            return s.str.findall(pat, flags)
+
         return self._data._with_new_scol(scol=pudf(self._data.spark.column))
 
     def index(self, sub: str, start: int = 0, end: Optional[int] = None) -> "ps.Series":
@@ -2054,11 +2054,11 @@ class StringMethods(object):
 
         # type hint does not support to specify array type yet.
         return_type = ArrayType(StringType(), containsNull=True)
-        pudf = pandas_udf(
-            lambda s, *_: s.str.split(pat, n),
-            returnType=return_type,
-            functionType=PandasUDFType.SCALAR,
-        )
+
+        @pandas_udf(returnType=return_type)  # type: ignore
+        def pudf(s: pd.Series) -> pd.Series:
+            return s.str.split(pat, n)
+
         psser = self._data._with_new_scol(
             pudf(self._data.spark.column).alias(self._data._internal.data_spark_column_names[0]),
             field=self._data._internal.data_fields[0].copy(spark_type=return_type, nullable=True),
@@ -2201,11 +2201,11 @@ class StringMethods(object):
 
         # type hint does not support to specify array type yet.
         return_type = ArrayType(StringType(), containsNull=True)
-        pudf = pandas_udf(
-            lambda s, *_: s.str.rsplit(pat, n),
-            returnType=return_type,
-            functionType=PandasUDFType.SCALAR,
-        )
+
+        @pandas_udf(returnType=return_type)  # type: ignore
+        def pudf(s: pd.Series) -> pd.Series:
+            return s.str.rsplit(pat, n)
+
         psser = self._data._with_new_scol(
             pudf(self._data.spark.column).alias(self._data._internal.data_spark_column_names[0]),
             field=self._data._internal.data_fields[0].copy(spark_type=return_type, nullable=True),

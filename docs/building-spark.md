@@ -77,7 +77,11 @@ from `hadoop.version`.
 
 Example:
 
-    ./build/mvn -Pyarn -Dhadoop.version=2.8.5 -DskipTests clean package
+    ./build/mvn -Pyarn -Dhadoop.version=3.3.0 -DskipTests clean package
+
+If you want to build with Hadoop 2.x, enable hadoop-2.7 profile:
+
+    ./build/mvn -Phadoop-2.7 -Pyarn -Dhadoop.version=2.8.5 -DskipTests clean package
 
 ## Building With Hive and JDBC Support
 
