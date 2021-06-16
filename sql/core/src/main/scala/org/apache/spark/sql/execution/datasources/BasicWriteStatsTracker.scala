@@ -163,12 +163,23 @@ class BasicWriteTaskStatsTracker(hadoopConf: Configuration)
 
   private def updateFileStats(filePath: String): Unit = {
     getFileSize(filePath).foreach { len =>
+      curPartitionValue.foreach { partitionValue =>
+        val partitionStats = partitionsStats.getOrElse(partitionValue, PartitionStats())
+        partitionStats.updateNumFiles(1)
+        partitionStats.updateNumBytes(len)
+        partitionsStats.update(partitionValue, partitionStats)
+      }
       totalNumBytes += len
       totalNumFiles += 1
     }
   }
 
   override def newRow(filePath: String, row: InternalRow): Unit = {
+    curPartitionValue.foreach { partitionValue =>
+      val partitionStats = partitionsStats.getOrElse(partitionValue, PartitionStats())
+      partitionStats.updateNumRows(1)
+      partitionsStats.update(partitionValue, partitionStats)
+    }
     totalNumRows += 1
   }
 
