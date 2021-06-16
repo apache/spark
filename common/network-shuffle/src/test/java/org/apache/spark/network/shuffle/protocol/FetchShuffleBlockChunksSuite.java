@@ -15,20 +15,28 @@
  * limitations under the License.
  */
 
-package org.apache.spark.network.client;
+package org.apache.spark.network.shuffle.protocol;
 
-import java.nio.ByteBuffer;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
+import org.junit.Assert;
+import org.junit.Test;
 
-/**
- * Callback for the result of a single RPC. This will be invoked once with either success or
- * failure.
- */
-public interface RpcResponseCallback extends BaseResponseCallback {
-  /**
-   * Successful serialized result from server.
-   *
-   * After `onSuccess` returns, `response` will be recycled and its content will become invalid.
-   * Please copy the content of `response` if you want to use it after `onSuccess` returns.
-   */
-  void onSuccess(ByteBuffer response);
+import static org.junit.Assert.*;
+
+public class FetchShuffleBlockChunksSuite {
+
+  @Test
+  public void testFetchShuffleBlockChunksEncodeDecode() {
+    FetchShuffleBlockChunks shuffleBlockChunks =
+      new FetchShuffleBlockChunks("app0", "exec1", 0, new int[] {0}, new int[][] {{0, 1}});
+    Assert.assertEquals(2, shuffleBlockChunks.getNumBlocks());
+    int len = shuffleBlockChunks.encodedLength();
+    Assert.assertEquals(45, len);
+    ByteBuf buf = Unpooled.buffer(len);
+    shuffleBlockChunks.encode(buf);
+
+    FetchShuffleBlockChunks decoded = FetchShuffleBlockChunks.decode(buf);
+    assertEquals(shuffleBlockChunks, decoded);
+  }
 }
