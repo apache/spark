@@ -61,7 +61,7 @@ import org.apache.spark.sql.hive.{HiveExternalCatalog, HiveUtils}
 import org.apache.spark.sql.hive.HiveExternalCatalog.DATASOURCE_SCHEMA
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.util.{CircularBuffer, ShutdownHookManager, Utils, VersionUtils}
+import org.apache.spark.util.{CircularBuffer, Utils, VersionUtils}
 
 /**
  * A class that wraps the HiveClient and converts its responses to externally visible classes.
