@@ -862,7 +862,7 @@ object IntervalUtils {
     new CalendarInterval(totalMonths, totalDays, micros)
   }
 
-  def makeMicrosInterval(
+  def makeDayTimeInterval(
       days: Int,
       hours: Int,
       mins: Int,

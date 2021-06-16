@@ -370,23 +370,14 @@ case class MakeDTInterval(
     days: Expression,
     hours: Expression,
     mins: Expression,
-    secs: Expression,
-    failOnError: Boolean = SQLConf.get.ansiEnabled)
-    extends QuaternaryExpression with ImplicitCastInputTypes with NullIntolerant {
+    secs: Expression)
+  extends QuaternaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   def this(
       days: Expression,
       hours: Expression,
-      mins: Expression,
-      secs: Expression) = {
-    this(days, hours, mins, secs, SQLConf.get.ansiEnabled)
-  }
-  def this(
-      days: Expression,
-      hours: Expression,
       mins: Expression) = {
-    this(days, hours, mins, Literal(Decimal(0, Decimal.MAX_LONG_DIGITS, 6)),
-      SQLConf.get.ansiEnabled)
+    this(days, hours, mins, Literal(Decimal(0, Decimal.MAX_LONG_DIGITS, 6)))
   }
   def this(days: Expression, hours: Expression) = this(days, hours, Literal(0))
   def this(days: Expression) = this(days, Literal(0))
@@ -401,36 +392,24 @@ case class MakeDTInterval(
   // them to the fractional part of `secs`.
   override def inputTypes: Seq[AbstractDataType] = Seq(
     IntegerType, IntegerType, IntegerType, DecimalType(Decimal.MAX_LONG_DIGITS, 6))
-  override def dataType: DataType = DayTimeIntervalType
-  override def nullable: Boolean = if (failOnError) children.exists(_.nullable) else true
+  override def dataType: DataType = DayTimeIntervalType()
 
   override def nullSafeEval(
       day: Any,
       hour: Any,
       min: Any,
       sec: Any): Any = {
-    try {
-      IntervalUtils.makeMicrosInterval(
-        day.asInstanceOf[Int],
-        hour.asInstanceOf[Int],
-        min.asInstanceOf[Int],
-        sec.asInstanceOf[Decimal])
-    } catch {
-      case _: ArithmeticException if !failOnError => null
-    }
+    IntervalUtils.makeDayTimeInterval(
+      day.asInstanceOf[Int],
+      hour.asInstanceOf[Int],
+      min.asInstanceOf[Int],
+      sec.asInstanceOf[Decimal])
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, (day, hour, min, sec) => {
+    defineCodeGen(ctx, ev, (day, hour, min, sec) => {
       val iu = IntervalUtils.getClass.getName.stripSuffix("$")
-      val failOnErrorBranch = if (failOnError) "throw e;" else s"${ev.isNull} = true;"
-      s"""
-        try {
-          ${ev.value} = $iu.makeMicrosInterval($day, $hour, $min, $sec);
-        } catch (java.lang.ArithmeticException e) {
-          $failOnErrorBranch
-        }
-      """
+      s"$iu.makeMicrosInterval($day, $hour, $min, $sec)"
     })
   }
 
