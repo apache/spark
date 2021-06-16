@@ -155,29 +155,6 @@ private[hive] class HiveClientImpl(
     }
   }
 
-  private def closeState(): Unit = withHiveState {
-    // These temp files are registered in o.a.h.u.ShutdownHookManager too during state start.
-    // The state.close() will delete them if they are not null and try remove them from the
-    // o.a.h.u.ShutdownHookManager which causes undesirable IllegalStateException.
-    // We delete them ahead with a high priority hook here and set them to null to bypass the
-    // deletion in state.close().
-    if (state.getTmpOutputFile != null) {
-      state.getTmpOutputFile.delete()
-      state.setTmpOutputFile(null)
-    }
-    // SPARK-35556: there are some UTs testing multiple versions of hive such as
-    // `org.apache.spark.sql.hive.client.VersionsSuite`, but `getTmpErrOutputFile` method
-    // is added to `SessionState`` after Hive 2.0, So we use `Shim` mechanism to ensure that
-    // `NoSuchMethodError` is not thrown when call `getTmpErrOutputFile` method.
-    if (shim.getTmpErrOutputFile(state) != null) {
-      state.getTmpErrOutputFile.delete()
-      state.setTmpErrOutputFile(null)
-    }
-    state.close()
-  }
-
-  ShutdownHookManager.addShutdownHook(() => closeState())
-
   // Log the default warehouse location.
   logInfo(
     s"Warehouse location for Hive client " +
@@ -889,6 +866,10 @@ private[hive] class HiveClientImpl(
             |======================
           """.stripMargin)
         throw e
+    } finally {
+      if (state != null) {
+        state.close()
+      }
     }
   }
 
