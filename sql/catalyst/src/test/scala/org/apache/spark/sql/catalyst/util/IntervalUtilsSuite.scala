@@ -503,6 +503,7 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("SPARK-35016: format year-month intervals") {
+    import org.apache.spark.sql.types.YearMonthIntervalType._
     Seq(
       0 -> ("0-0", "INTERVAL '0-0' YEAR TO MONTH"),
       -11 -> ("-0-11", "INTERVAL '-0-11' YEAR TO MONTH"),
@@ -514,8 +515,8 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
       Int.MinValue -> ("-178956970-8", "INTERVAL '-178956970-8' YEAR TO MONTH"),
       Int.MaxValue -> ("178956970-7", "INTERVAL '178956970-7' YEAR TO MONTH")
     ).foreach { case (months, (hiveIntervalStr, ansiIntervalStr)) =>
-      assert(toYearMonthIntervalString(months, ANSI_STYLE) === ansiIntervalStr)
-      assert(toYearMonthIntervalString(months, HIVE_STYLE) === hiveIntervalStr)
+      assert(toYearMonthIntervalString(months, ANSI_STYLE, YEAR, MONTH) === ansiIntervalStr)
+      assert(toYearMonthIntervalString(months, HIVE_STYLE, YEAR, MONTH) === hiveIntervalStr)
     }
   }
 

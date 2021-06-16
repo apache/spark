@@ -957,6 +957,16 @@ class FileBasedDataSourceSuite extends QueryTest
       }
     }
   }
+
+  test("SPARK-35669: special char in CSV header with filter pushdown") {
+    withTempPath { path =>
+      val pathStr = path.getCanonicalPath
+      Seq("a / b,a`b", "v1,v2").toDF().coalesce(1).write.text(pathStr)
+      val df = spark.read.option("header", true).csv(pathStr)
+        .where($"a / b".isNotNull and $"`a``b`".isNotNull)
+      checkAnswer(df, Row("v1", "v2"))
+    }
+  }
 }
 
 object TestingUDT {

@@ -17,9 +17,9 @@ The largest amount of work consists simply of implementing the pandas API using 
 
 3. Improve the project's documentation.
 
-4. Write blog posts or tutorial articles evangelizing pandas APIs on Spark and help new users learn pandas APIs on Spark.
+4. Write blog posts or tutorial articles evangelizing pandas API on Spark and help new users learn pandas API on Spark.
 
-5. Give a talk about pandas APIs on Spark at your local meetup or a conference.
+5. Give a talk about pandas API on Spark at your local meetup or a conference.
 
 
 Step-by-step Guide For Code Contributions
@@ -48,7 +48,7 @@ Environment Setup
 Conda
 -----
 
-If you are using Conda, the pandas APIs on Spark installation and development environment are as follows.
+If you are using Conda, the pandas API on Spark installation and development environment are as follows.
 
 .. code-block:: bash
 
@@ -131,7 +131,7 @@ We follow `PEP 8 <https://www.python.org/dev/peps/pep-0008/>`_ with one exceptio
 Doctest Conventions
 ===================
 
-When writing doctests, usually the doctests in pandas are converted into pandas APIs on Spark to make sure the same codes work in pandas APIs on Spark.
+When writing doctests, usually the doctests in pandas are converted into pandas API on Spark to make sure the same codes work in pandas API on Spark.
 In general, doctests should be grouped logically by separating a newline.
 
 For instance, the first block is for the statements for preparation, the second block is for using the function with a specific argument,
@@ -176,7 +176,7 @@ Only project maintainers can do the following to publish a release.
       # for release
       python3 -m twine upload --repository-url https://upload.pypi.org/legacy/ dist/koalas-$package_version-py3-none-any.whl dist/koalas-$package_version.tar.gz
 
-5. Verify the uploaded package can be installed and executed. One unofficial tip is to run the doctests of pandas APIs on Spark within a Python interpreter after installing it.
+5. Verify the uploaded package can be installed and executed. One unofficial tip is to run the doctests of pandas API on Spark within a Python interpreter after installing it.
 
   .. code-block:: python
 

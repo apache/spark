@@ -5,15 +5,15 @@ From/to pandas and PySpark DataFrames
 .. currentmodule:: pyspark.pandas
 
 Users from pandas and/or PySpark face API compatibility issue sometimes when they
-work with pandas APIs on Spark. Since pandas APIs on Spark do not target 100% compatibility of both pandas and
+work with pandas API on Spark. Since pandas API on Spark does not target 100% compatibility of both pandas and
 PySpark, users need to do some workaround to port their pandas and/or PySpark codes or
-get familiar with pandas APIs on Spark in this case. This page aims to describe it.
+get familiar with pandas API on Spark in this case. This page aims to describe it.
 
 
 pandas
 ------
 
-pandas users can access to full pandas APIs by calling :func:`DataFrame.to_pandas`.
+pandas users can access to full pandas API by calling :func:`DataFrame.to_pandas`.
 pandas-on-Spark DataFrame and pandas DataFrame are similar. However, the former is distributed
 and the latter is in a single machine. When converting to each other, the data is
 transferred between multiple machines and the single client machine.
@@ -57,7 +57,7 @@ pandas DataFrame can be a pandas-on-Spark DataFrame easily as below:
    9   9
 
 Note that converting pandas-on-Spark DataFrame to pandas requires to collect all the data into the client machine; therefore,
-if possible, it is recommended to use pandas APIs on Spark or PySpark APIs instead.
+if possible, it is recommended to use pandas API on Spark or PySpark APIs instead.
 
 
 PySpark

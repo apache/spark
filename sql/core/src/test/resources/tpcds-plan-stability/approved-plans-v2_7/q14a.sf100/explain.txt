@@ -1,9 +1,9 @@
 == Physical Plan ==
-TakeOrderedAndProject (213)
-+- * HashAggregate (212)
-   +- Exchange (211)
-      +- * HashAggregate (210)
-         +- Union (209)
+TakeOrderedAndProject (157)
++- * HashAggregate (156)
+   +- Exchange (155)
+      +- * HashAggregate (154)
+         +- Union (153)
             :- * HashAggregate (132)
             :  +- Exchange (131)
             :     +- * HashAggregate (130)
@@ -136,82 +136,26 @@ TakeOrderedAndProject (213)
             :                                :     :     +- ReusedExchange (115)
             :                                :     +- ReusedExchange (118)
             :                                +- ReusedExchange (121)
-            :- * HashAggregate (151)
-            :  +- Exchange (150)
-            :     +- * HashAggregate (149)
-            :        +- * HashAggregate (148)
-            :           +- Exchange (147)
-            :              +- * HashAggregate (146)
-            :                 +- Union (145)
-            :                    :- * Project (136)
-            :                    :  +- * Filter (135)
-            :                    :     +- * HashAggregate (134)
-            :                    :        +- ReusedExchange (133)
-            :                    :- * Project (140)
-            :                    :  +- * Filter (139)
-            :                    :     +- * HashAggregate (138)
-            :                    :        +- ReusedExchange (137)
-            :                    +- * Project (144)
-            :                       +- * Filter (143)
-            :                          +- * HashAggregate (142)
-            :                             +- ReusedExchange (141)
-            :- * HashAggregate (170)
-            :  +- Exchange (169)
-            :     +- * HashAggregate (168)
-            :        +- * HashAggregate (167)
-            :           +- Exchange (166)
-            :              +- * HashAggregate (165)
-            :                 +- Union (164)
-            :                    :- * Project (155)
-            :                    :  +- * Filter (154)
-            :                    :     +- * HashAggregate (153)
-            :                    :        +- ReusedExchange (152)
-            :                    :- * Project (159)
-            :                    :  +- * Filter (158)
-            :                    :     +- * HashAggregate (157)
-            :                    :        +- ReusedExchange (156)
-            :                    +- * Project (163)
-            :                       +- * Filter (162)
-            :                          +- * HashAggregate (161)
-            :                             +- ReusedExchange (160)
-            :- * HashAggregate (189)
-            :  +- Exchange (188)
-            :     +- * HashAggregate (187)
-            :        +- * HashAggregate (186)
-            :           +- Exchange (185)
-            :              +- * HashAggregate (184)
-            :                 +- Union (183)
-            :                    :- * Project (174)
-            :                    :  +- * Filter (173)
-            :                    :     +- * HashAggregate (172)
-            :                    :        +- ReusedExchange (171)
-            :                    :- * Project (178)
-            :                    :  +- * Filter (177)
-            :                    :     +- * HashAggregate (176)
-            :                    :        +- ReusedExchange (175)
-            :                    +- * Project (182)
-            :                       +- * Filter (181)
-            :                          +- * HashAggregate (180)
-            :                             +- ReusedExchange (179)
-            +- * HashAggregate (208)
-               +- Exchange (207)
-                  +- * HashAggregate (206)
-                     +- * HashAggregate (205)
-                        +- Exchange (204)
-                           +- * HashAggregate (203)
-                              +- Union (202)
-                                 :- * Project (193)
-                                 :  +- * Filter (192)
-                                 :     +- * HashAggregate (191)
-                                 :        +- ReusedExchange (190)
-                                 :- * Project (197)
-                                 :  +- * Filter (196)
-                                 :     +- * HashAggregate (195)
-                                 :        +- ReusedExchange (194)
-                                 +- * Project (201)
-                                    +- * Filter (200)
-                                       +- * HashAggregate (199)
-                                          +- ReusedExchange (198)
+            :- * HashAggregate (137)
+            :  +- Exchange (136)
+            :     +- * HashAggregate (135)
+            :        +- * HashAggregate (134)
+            :           +- ReusedExchange (133)
+            :- * HashAggregate (142)
+            :  +- Exchange (141)
+            :     +- * HashAggregate (140)
+            :        +- * HashAggregate (139)
+            :           +- ReusedExchange (138)
+            :- * HashAggregate (147)
+            :  +- Exchange (146)
+            :     +- * HashAggregate (145)
+            :        +- * HashAggregate (144)
+            :           +- ReusedExchange (143)
+            +- * HashAggregate (152)
+               +- Exchange (151)
+                  +- * HashAggregate (150)
+                     +- * HashAggregate (149)
+                        +- ReusedExchange (148)
 
 
 (1) Scan parquet default.store_sales
@@ -816,581 +760,325 @@ Aggregate Attributes [2]: [sum(sales#68)#127, sum(number_sales#69)#128]
 Results [6]: [channel#73, i_brand_id#54, i_class_id#55, i_category_id#56, sum(sales#68)#127 AS sum_sales#129, sum(number_sales#69)#128 AS number_sales#130]
 
 (133) ReusedExchange [Reuses operator id: unknown]
-Output [6]: [i_brand_id#131, i_class_id#132, i_category_id#133, sum#134, isEmpty#135, count#136]
+Output [7]: [channel#73, i_brand_id#131, i_class_id#132, i_category_id#133, sum#134, isEmpty#135, sum#136]
 
-(134) HashAggregate [codegen id : 186]
-Input [6]: [i_brand_id#131, i_class_id#132, i_category_id#133, sum#134, isEmpty#135, count#136]
-Keys [3]: [i_brand_id#131, i_class_id#132, i_category_id#133]
-Functions [2]: [sum(CheckOverflow((promote_precision(cast(cast(ss_quantity#137 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_list_price#138 as decimal(12,2)))), DecimalType(18,2), true)), count(1)]
-Aggregate Attributes [2]: [sum(CheckOverflow((promote_precision(cast(cast(ss_quantity#137 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_list_price#138 as decimal(12,2)))), DecimalType(18,2), true))#139, count(1)#140]
-Results [6]: [i_brand_id#131, i_class_id#132, i_category_id#133, sum(CheckOverflow((promote_precision(cast(cast(ss_quantity#137 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_list_price#138 as decimal(12,2)))), DecimalType(18,2), true))#139 AS sales#68, count(1)#140 AS number_sales#69, sum(CheckOverflow((promote_precision(cast(cast(ss_quantity#137 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_list_price#138 as decimal(12,2)))), DecimalType(18,2), true))#139 AS sum(CheckOverflow((promote_precision(cast(cast(ss_quantity#137 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_list_price#138 as decimal(12,2)))), DecimalType(18,2), true))#141]
-
-(135) Filter [codegen id : 186]
-Input [6]: [i_brand_id#131, i_class_id#132, i_category_id#133, sales#68, number_sales#69, sum(CheckOverflow((promote_precision(cast(cast(ss_quantity#137 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_list_price#138 as decimal(12,2)))), DecimalType(18,2), true))#141]
-Condition : (isnotnull(sum(CheckOverflow((promote_precision(cast(cast(ss_quantity#137 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_list_price#138 as decimal(12,2)))), DecimalType(18,2), true))#141) AND (cast(sum(CheckOverflow((promote_precision(cast(cast(ss_quantity#137 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_list_price#138 as decimal(12,2)))), DecimalType(18,2), true))#141 as decimal(32,6)) > cast(ReusedSubquery Subquery scalar-subquery#71, [id=#72] as decimal(32,6))))
-
-(136) Project [codegen id : 186]
-Output [6]: [store AS channel#73, i_brand_id#131, i_class_id#132, i_category_id#133, sales#68, number_sales#69]
-Input [6]: [i_brand_id#131, i_class_id#132, i_category_id#133, sales#68, number_sales#69, sum(CheckOverflow((promote_precision(cast(cast(ss_quantity#137 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_list_price#138 as decimal(12,2)))), DecimalType(18,2), true))#141]
-
-(137) ReusedExchange [Reuses operator id: unknown]
-Output [6]: [i_brand_id#142, i_class_id#143, i_category_id#144, sum#145, isEmpty#146, count#147]
-
-(138) HashAggregate [codegen id : 232]
-Input [6]: [i_brand_id#142, i_class_id#143, i_category_id#144, sum#145, isEmpty#146, count#147]
-Keys [3]: [i_brand_id#142, i_class_id#143, i_category_id#144]
-Functions [2]: [sum(CheckOverflow((promote_precision(cast(cast(cs_quantity#148 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(cs_list_price#149 as decimal(12,2)))), DecimalType(18,2), true)), count(1)]
-Aggregate Attributes [2]: [sum(CheckOverflow((promote_precision(cast(cast(cs_quantity#148 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(cs_list_price#149 as decimal(12,2)))), DecimalType(18,2), true))#150, count(1)#151]
-Results [6]: [i_brand_id#142, i_class_id#143, i_category_id#144, sum(CheckOverflow((promote_precision(cast(cast(cs_quantity#148 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(cs_list_price#149 as decimal(12,2)))), DecimalType(18,2), true))#150 AS sales#93, count(1)#151 AS number_sales#94, sum(CheckOverflow((promote_precision(cast(cast(cs_quantity#148 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(cs_list_price#149 as decimal(12,2)))), DecimalType(18,2), true))#150 AS sum(CheckOverflow((promote_precision(cast(cast(cs_quantity#148 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(cs_list_price#149 as decimal(12,2)))), DecimalType(18,2), true))#152]
-
-(139) Filter [codegen id : 232]
-Input [6]: [i_brand_id#142, i_class_id#143, i_category_id#144, sales#93, number_sales#94, sum(CheckOverflow((promote_precision(cast(cast(cs_quantity#148 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(cs_list_price#149 as decimal(12,2)))), DecimalType(18,2), true))#152]
-Condition : (isnotnull(sum(CheckOverflow((promote_precision(cast(cast(cs_quantity#148 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(cs_list_price#149 as decimal(12,2)))), DecimalType(18,2), true))#152) AND (cast(sum(CheckOverflow((promote_precision(cast(cast(cs_quantity#148 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(cs_list_price#149 as decimal(12,2)))), DecimalType(18,2), true))#152 as decimal(32,6)) > cast(ReusedSubquery Subquery scalar-subquery#71, [id=#72] as decimal(32,6))))
-
-(140) Project [codegen id : 232]
-Output [6]: [catalog AS channel#96, i_brand_id#142, i_class_id#143, i_category_id#144, sales#93, number_sales#94]
-Input [6]: [i_brand_id#142, i_class_id#143, i_category_id#144, sales#93, number_sales#94, sum(CheckOverflow((promote_precision(cast(cast(cs_quantity#148 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(cs_list_price#149 as decimal(12,2)))), DecimalType(18,2), true))#152]
-
-(141) ReusedExchange [Reuses operator id: unknown]
-Output [6]: [i_brand_id#153, i_class_id#154, i_category_id#155, sum#156, isEmpty#157, count#158]
-
-(142) HashAggregate [codegen id : 278]
-Input [6]: [i_brand_id#153, i_class_id#154, i_category_id#155, sum#156, isEmpty#157, count#158]
-Keys [3]: [i_brand_id#153, i_class_id#154, i_category_id#155]
-Functions [2]: [sum(CheckOverflow((promote_precision(cast(cast(ws_quantity#159 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ws_list_price#160 as decimal(12,2)))), DecimalType(18,2), true)), count(1)]
-Aggregate Attributes [2]: [sum(CheckOverflow((promote_precision(cast(cast(ws_quantity#159 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ws_list_price#160 as decimal(12,2)))), DecimalType(18,2), true))#161, count(1)#162]
-Results [6]: [i_brand_id#153, i_class_id#154, i_category_id#155, sum(CheckOverflow((promote_precision(cast(cast(ws_quantity#159 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ws_list_price#160 as decimal(12,2)))), DecimalType(18,2), true))#161 AS sales#116, count(1)#162 AS number_sales#117, sum(CheckOverflow((promote_precision(cast(cast(ws_quantity#159 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ws_list_price#160 as decimal(12,2)))), DecimalType(18,2), true))#161 AS sum(CheckOverflow((promote_precision(cast(cast(ws_quantity#159 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ws_list_price#160 as decimal(12,2)))), DecimalType(18,2), true))#163]
-
-(143) Filter [codegen id : 278]
-Input [6]: [i_brand_id#153, i_class_id#154, i_category_id#155, sales#116, number_sales#117, sum(CheckOverflow((promote_precision(cast(cast(ws_quantity#159 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ws_list_price#160 as decimal(12,2)))), DecimalType(18,2), true))#163]
-Condition : (isnotnull(sum(CheckOverflow((promote_precision(cast(cast(ws_quantity#159 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ws_list_price#160 as decimal(12,2)))), DecimalType(18,2), true))#163) AND (cast(sum(CheckOverflow((promote_precision(cast(cast(ws_quantity#159 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ws_list_price#160 as decimal(12,2)))), DecimalType(18,2), true))#163 as decimal(32,6)) > cast(ReusedSubquery Subquery scalar-subquery#71, [id=#72] as decimal(32,6))))
-
-(144) Project [codegen id : 278]
-Output [6]: [web AS channel#119, i_brand_id#153, i_class_id#154, i_category_id#155, sales#116, number_sales#117]
-Input [6]: [i_brand_id#153, i_class_id#154, i_category_id#155, sales#116, number_sales#117, sum(CheckOverflow((promote_precision(cast(cast(ws_quantity#159 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ws_list_price#160 as decimal(12,2)))), DecimalType(18,2), true))#163]
-
-(145) Union
-
-(146) HashAggregate [codegen id : 279]
-Input [6]: [channel#73, i_brand_id#131, i_class_id#132, i_category_id#133, sales#68, number_sales#69]
-Keys [4]: [channel#73, i_brand_id#131, i_class_id#132, i_category_id#133]
-Functions [2]: [partial_sum(sales#68), partial_sum(number_sales#69)]
-Aggregate Attributes [3]: [sum#164, isEmpty#165, sum#166]
-Results [7]: [channel#73, i_brand_id#131, i_class_id#132, i_category_id#133, sum#167, isEmpty#168, sum#169]
-
-(147) Exchange
-Input [7]: [channel#73, i_brand_id#131, i_class_id#132, i_category_id#133, sum#167, isEmpty#168, sum#169]
-Arguments: hashpartitioning(channel#73, i_brand_id#131, i_class_id#132, i_category_id#133, 5), ENSURE_REQUIREMENTS, [id=#170]
-
-(148) HashAggregate [codegen id : 280]
-Input [7]: [channel#73, i_brand_id#131, i_class_id#132, i_category_id#133, sum#167, isEmpty#168, sum#169]
+(134) HashAggregate [codegen id : 280]
+Input [7]: [channel#73, i_brand_id#131, i_class_id#132, i_category_id#133, sum#134, isEmpty#135, sum#136]
 Keys [4]: [channel#73, i_brand_id#131, i_class_id#132, i_category_id#133]
 Functions [2]: [sum(sales#68), sum(number_sales#69)]
-Aggregate Attributes [2]: [sum(sales#68)#171, sum(number_sales#69)#172]
-Results [5]: [channel#73, i_brand_id#131, i_class_id#132, sum(sales#68)#171 AS sum_sales#129, sum(number_sales#69)#172 AS number_sales#130]
+Aggregate Attributes [2]: [sum(sales#68)#137, sum(number_sales#69)#138]
+Results [5]: [channel#73, i_brand_id#131, i_class_id#132, sum(sales#68)#137 AS sum_sales#129, sum(number_sales#69)#138 AS number_sales#130]
 
-(149) HashAggregate [codegen id : 280]
+(135) HashAggregate [codegen id : 280]
 Input [5]: [channel#73, i_brand_id#131, i_class_id#132, sum_sales#129, number_sales#130]
 Keys [3]: [channel#73, i_brand_id#131, i_class_id#132]
 Functions [2]: [partial_sum(sum_sales#129), partial_sum(number_sales#130)]
-Aggregate Attributes [3]: [sum#173, isEmpty#174, sum#175]
-Results [6]: [channel#73, i_brand_id#131, i_class_id#132, sum#176, isEmpty#177, sum#178]
+Aggregate Attributes [3]: [sum#139, isEmpty#140, sum#141]
+Results [6]: [channel#73, i_brand_id#131, i_class_id#132, sum#142, isEmpty#143, sum#144]
 
-(150) Exchange
-Input [6]: [channel#73, i_brand_id#131, i_class_id#132, sum#176, isEmpty#177, sum#178]
-Arguments: hashpartitioning(channel#73, i_brand_id#131, i_class_id#132, 5), ENSURE_REQUIREMENTS, [id=#179]
+(136) Exchange
+Input [6]: [channel#73, i_brand_id#131, i_class_id#132, sum#142, isEmpty#143, sum#144]
+Arguments: hashpartitioning(channel#73, i_brand_id#131, i_class_id#132, 5), ENSURE_REQUIREMENTS, [id=#145]
 
-(151) HashAggregate [codegen id : 281]
-Input [6]: [channel#73, i_brand_id#131, i_class_id#132, sum#176, isEmpty#177, sum#178]
+(137) HashAggregate [codegen id : 281]
+Input [6]: [channel#73, i_brand_id#131, i_class_id#132, sum#142, isEmpty#143, sum#144]
 Keys [3]: [channel#73, i_brand_id#131, i_class_id#132]
 Functions [2]: [sum(sum_sales#129), sum(number_sales#130)]
-Aggregate Attributes [2]: [sum(sum_sales#129)#180, sum(number_sales#130)#181]
-Results [6]: [channel#73, i_brand_id#131, i_class_id#132, null AS i_category_id#182, sum(sum_sales#129)#180 AS sum(sum_sales)#183, sum(number_sales#130)#181 AS sum(number_sales)#184]
+Aggregate Attributes [2]: [sum(sum_sales#129)#146, sum(number_sales#130)#147]
+Results [6]: [channel#73, i_brand_id#131, i_class_id#132, null AS i_category_id#148, sum(sum_sales#129)#146 AS sum(sum_sales)#149, sum(number_sales#130)#147 AS sum(number_sales)#150]
 
-(152) ReusedExchange [Reuses operator id: unknown]
-Output [6]: [i_brand_id#185, i_class_id#186, i_category_id#187, sum#188, isEmpty#189, count#190]
+(138) ReusedExchange [Reuses operator id: unknown]
+Output [7]: [channel#73, i_brand_id#151, i_class_id#152, i_category_id#153, sum#154, isEmpty#155, sum#156]
 
-(153) HashAggregate [codegen id : 327]
-Input [6]: [i_brand_id#185, i_class_id#186, i_category_id#187, sum#188, isEmpty#189, count#190]
-Keys [3]: [i_brand_id#185, i_class_id#186, i_category_id#187]
-Functions [2]: [sum(CheckOverflow((promote_precision(cast(cast(ss_quantity#191 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_list_price#192 as decimal(12,2)))), DecimalType(18,2), true)), count(1)]
-Aggregate Attributes [2]: [sum(CheckOverflow((promote_precision(cast(cast(ss_quantity#191 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_list_price#192 as decimal(12,2)))), DecimalType(18,2), true))#193, count(1)#194]
-Results [6]: [i_brand_id#185, i_class_id#186, i_category_id#187, sum(CheckOverflow((promote_precision(cast(cast(ss_quantity#191 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_list_price#192 as decimal(12,2)))), DecimalType(18,2), true))#193 AS sales#68, count(1)#194 AS number_sales#69, sum(CheckOverflow((promote_precision(cast(cast(ss_quantity#191 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_list_price#192 as decimal(12,2)))), DecimalType(18,2), true))#193 AS sum(CheckOverflow((promote_precision(cast(cast(ss_quantity#191 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_list_price#192 as decimal(12,2)))), DecimalType(18,2), true))#195]
-
-(154) Filter [codegen id : 327]
-Input [6]: [i_brand_id#185, i_class_id#186, i_category_id#187, sales#68, number_sales#69, sum(CheckOverflow((promote_precision(cast(cast(ss_quantity#191 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_list_price#192 as decimal(12,2)))), DecimalType(18,2), true))#195]
-Condition : (isnotnull(sum(CheckOverflow((promote_precision(cast(cast(ss_quantity#191 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_list_price#192 as decimal(12,2)))), DecimalType(18,2), true))#195) AND (cast(sum(CheckOverflow((promote_precision(cast(cast(ss_quantity#191 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_list_price#192 as decimal(12,2)))), DecimalType(18,2), true))#195 as decimal(32,6)) > cast(ReusedSubquery Subquery scalar-subquery#71, [id=#72] as decimal(32,6))))
-
-(155) Project [codegen id : 327]
-Output [6]: [store AS channel#73, i_brand_id#185, i_class_id#186, i_category_id#187, sales#68, number_sales#69]
-Input [6]: [i_brand_id#185, i_class_id#186, i_category_id#187, sales#68, number_sales#69, sum(CheckOverflow((promote_precision(cast(cast(ss_quantity#191 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_list_price#192 as decimal(12,2)))), DecimalType(18,2), true))#195]
-
-(156) ReusedExchange [Reuses operator id: unknown]
-Output [6]: [i_brand_id#196, i_class_id#197, i_category_id#198, sum#199, isEmpty#200, count#201]
-
-(157) HashAggregate [codegen id : 373]
-Input [6]: [i_brand_id#196, i_class_id#197, i_category_id#198, sum#199, isEmpty#200, count#201]
-Keys [3]: [i_brand_id#196, i_class_id#197, i_category_id#198]
-Functions [2]: [sum(CheckOverflow((promote_precision(cast(cast(cs_quantity#202 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(cs_list_price#203 as decimal(12,2)))), DecimalType(18,2), true)), count(1)]
-Aggregate Attributes [2]: [sum(CheckOverflow((promote_precision(cast(cast(cs_quantity#202 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(cs_list_price#203 as decimal(12,2)))), DecimalType(18,2), true))#204, count(1)#205]
-Results [6]: [i_brand_id#196, i_class_id#197, i_category_id#198, sum(CheckOverflow((promote_precision(cast(cast(cs_quantity#202 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(cs_list_price#203 as decimal(12,2)))), DecimalType(18,2), true))#204 AS sales#93, count(1)#205 AS number_sales#94, sum(CheckOverflow((promote_precision(cast(cast(cs_quantity#202 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(cs_list_price#203 as decimal(12,2)))), DecimalType(18,2), true))#204 AS sum(CheckOverflow((promote_precision(cast(cast(cs_quantity#202 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(cs_list_price#203 as decimal(12,2)))), DecimalType(18,2), true))#206]
-
-(158) Filter [codegen id : 373]
-Input [6]: [i_brand_id#196, i_class_id#197, i_category_id#198, sales#93, number_sales#94, sum(CheckOverflow((promote_precision(cast(cast(cs_quantity#202 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(cs_list_price#203 as decimal(12,2)))), DecimalType(18,2), true))#206]
-Condition : (isnotnull(sum(CheckOverflow((promote_precision(cast(cast(cs_quantity#202 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(cs_list_price#203 as decimal(12,2)))), DecimalType(18,2), true))#206) AND (cast(sum(CheckOverflow((promote_precision(cast(cast(cs_quantity#202 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(cs_list_price#203 as decimal(12,2)))), DecimalType(18,2), true))#206 as decimal(32,6)) > cast(ReusedSubquery Subquery scalar-subquery#71, [id=#72] as decimal(32,6))))
-
-(159) Project [codegen id : 373]
-Output [6]: [catalog AS channel#96, i_brand_id#196, i_class_id#197, i_category_id#198, sales#93, number_sales#94]
-Input [6]: [i_brand_id#196, i_class_id#197, i_category_id#198, sales#93, number_sales#94, sum(CheckOverflow((promote_precision(cast(cast(cs_quantity#202 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(cs_list_price#203 as decimal(12,2)))), DecimalType(18,2), true))#206]
-
-(160) ReusedExchange [Reuses operator id: unknown]
-Output [6]: [i_brand_id#207, i_class_id#208, i_category_id#209, sum#210, isEmpty#211, count#212]
-
-(161) HashAggregate [codegen id : 419]
-Input [6]: [i_brand_id#207, i_class_id#208, i_category_id#209, sum#210, isEmpty#211, count#212]
-Keys [3]: [i_brand_id#207, i_class_id#208, i_category_id#209]
-Functions [2]: [sum(CheckOverflow((promote_precision(cast(cast(ws_quantity#213 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ws_list_price#214 as decimal(12,2)))), DecimalType(18,2), true)), count(1)]
-Aggregate Attributes [2]: [sum(CheckOverflow((promote_precision(cast(cast(ws_quantity#213 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ws_list_price#214 as decimal(12,2)))), DecimalType(18,2), true))#215, count(1)#216]
-Results [6]: [i_brand_id#207, i_class_id#208, i_category_id#209, sum(CheckOverflow((promote_precision(cast(cast(ws_quantity#213 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ws_list_price#214 as decimal(12,2)))), DecimalType(18,2), true))#215 AS sales#116, count(1)#216 AS number_sales#117, sum(CheckOverflow((promote_precision(cast(cast(ws_quantity#213 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ws_list_price#214 as decimal(12,2)))), DecimalType(18,2), true))#215 AS sum(CheckOverflow((promote_precision(cast(cast(ws_quantity#213 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ws_list_price#214 as decimal(12,2)))), DecimalType(18,2), true))#217]
-
-(162) Filter [codegen id : 419]
-Input [6]: [i_brand_id#207, i_class_id#208, i_category_id#209, sales#116, number_sales#117, sum(CheckOverflow((promote_precision(cast(cast(ws_quantity#213 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ws_list_price#214 as decimal(12,2)))), DecimalType(18,2), true))#217]
-Condition : (isnotnull(sum(CheckOverflow((promote_precision(cast(cast(ws_quantity#213 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ws_list_price#214 as decimal(12,2)))), DecimalType(18,2), true))#217) AND (cast(sum(CheckOverflow((promote_precision(cast(cast(ws_quantity#213 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ws_list_price#214 as decimal(12,2)))), DecimalType(18,2), true))#217 as decimal(32,6)) > cast(ReusedSubquery Subquery scalar-subquery#71, [id=#72] as decimal(32,6))))
-
-(163) Project [codegen id : 419]
-Output [6]: [web AS channel#119, i_brand_id#207, i_class_id#208, i_category_id#209, sales#116, number_sales#117]
-Input [6]: [i_brand_id#207, i_class_id#208, i_category_id#209, sales#116, number_sales#117, sum(CheckOverflow((promote_precision(cast(cast(ws_quantity#213 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ws_list_price#214 as decimal(12,2)))), DecimalType(18,2), true))#217]
-
-(164) Union
-
-(165) HashAggregate [codegen id : 420]
-Input [6]: [channel#73, i_brand_id#185, i_class_id#186, i_category_id#187, sales#68, number_sales#69]
-Keys [4]: [channel#73, i_brand_id#185, i_class_id#186, i_category_id#187]
-Functions [2]: [partial_sum(sales#68), partial_sum(number_sales#69)]
-Aggregate Attributes [3]: [sum#218, isEmpty#219, sum#220]
-Results [7]: [channel#73, i_brand_id#185, i_class_id#186, i_category_id#187, sum#221, isEmpty#222, sum#223]
-
-(166) Exchange
-Input [7]: [channel#73, i_brand_id#185, i_class_id#186, i_category_id#187, sum#221, isEmpty#222, sum#223]
-Arguments: hashpartitioning(channel#73, i_brand_id#185, i_class_id#186, i_category_id#187, 5), ENSURE_REQUIREMENTS, [id=#224]
-
-(167) HashAggregate [codegen id : 421]
-Input [7]: [channel#73, i_brand_id#185, i_class_id#186, i_category_id#187, sum#221, isEmpty#222, sum#223]
-Keys [4]: [channel#73, i_brand_id#185, i_class_id#186, i_category_id#187]
+(139) HashAggregate [codegen id : 421]
+Input [7]: [channel#73, i_brand_id#151, i_class_id#152, i_category_id#153, sum#154, isEmpty#155, sum#156]
+Keys [4]: [channel#73, i_brand_id#151, i_class_id#152, i_category_id#153]
 Functions [2]: [sum(sales#68), sum(number_sales#69)]
-Aggregate Attributes [2]: [sum(sales#68)#225, sum(number_sales#69)#226]
-Results [4]: [channel#73, i_brand_id#185, sum(sales#68)#225 AS sum_sales#129, sum(number_sales#69)#226 AS number_sales#130]
+Aggregate Attributes [2]: [sum(sales#68)#157, sum(number_sales#69)#158]
+Results [4]: [channel#73, i_brand_id#151, sum(sales#68)#157 AS sum_sales#129, sum(number_sales#69)#158 AS number_sales#130]
 
-(168) HashAggregate [codegen id : 421]
-Input [4]: [channel#73, i_brand_id#185, sum_sales#129, number_sales#130]
-Keys [2]: [channel#73, i_brand_id#185]
+(140) HashAggregate [codegen id : 421]
+Input [4]: [channel#73, i_brand_id#151, sum_sales#129, number_sales#130]
+Keys [2]: [channel#73, i_brand_id#151]
 Functions [2]: [partial_sum(sum_sales#129), partial_sum(number_sales#130)]
-Aggregate Attributes [3]: [sum#227, isEmpty#228, sum#229]
-Results [5]: [channel#73, i_brand_id#185, sum#230, isEmpty#231, sum#232]
+Aggregate Attributes [3]: [sum#159, isEmpty#160, sum#161]
+Results [5]: [channel#73, i_brand_id#151, sum#162, isEmpty#163, sum#164]
 
-(169) Exchange
-Input [5]: [channel#73, i_brand_id#185, sum#230, isEmpty#231, sum#232]
-Arguments: hashpartitioning(channel#73, i_brand_id#185, 5), ENSURE_REQUIREMENTS, [id=#233]
+(141) Exchange
+Input [5]: [channel#73, i_brand_id#151, sum#162, isEmpty#163, sum#164]
+Arguments: hashpartitioning(channel#73, i_brand_id#151, 5), ENSURE_REQUIREMENTS, [id=#165]
 
-(170) HashAggregate [codegen id : 422]
-Input [5]: [channel#73, i_brand_id#185, sum#230, isEmpty#231, sum#232]
-Keys [2]: [channel#73, i_brand_id#185]
+(142) HashAggregate [codegen id : 422]
+Input [5]: [channel#73, i_brand_id#151, sum#162, isEmpty#163, sum#164]
+Keys [2]: [channel#73, i_brand_id#151]
 Functions [2]: [sum(sum_sales#129), sum(number_sales#130)]
-Aggregate Attributes [2]: [sum(sum_sales#129)#234, sum(number_sales#130)#235]
-Results [6]: [channel#73, i_brand_id#185, null AS i_class_id#236, null AS i_category_id#237, sum(sum_sales#129)#234 AS sum(sum_sales)#238, sum(number_sales#130)#235 AS sum(number_sales)#239]
+Aggregate Attributes [2]: [sum(sum_sales#129)#166, sum(number_sales#130)#167]
+Results [6]: [channel#73, i_brand_id#151, null AS i_class_id#168, null AS i_category_id#169, sum(sum_sales#129)#166 AS sum(sum_sales)#170, sum(number_sales#130)#167 AS sum(number_sales)#171]
 
-(171) ReusedExchange [Reuses operator id: unknown]
-Output [6]: [i_brand_id#240, i_class_id#241, i_category_id#242, sum#243, isEmpty#244, count#245]
+(143) ReusedExchange [Reuses operator id: unknown]
+Output [7]: [channel#73, i_brand_id#172, i_class_id#173, i_category_id#174, sum#175, isEmpty#176, sum#177]
 
-(172) HashAggregate [codegen id : 468]
-Input [6]: [i_brand_id#240, i_class_id#241, i_category_id#242, sum#243, isEmpty#244, count#245]
-Keys [3]: [i_brand_id#240, i_class_id#241, i_category_id#242]
-Functions [2]: [sum(CheckOverflow((promote_precision(cast(cast(ss_quantity#246 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_list_price#247 as decimal(12,2)))), DecimalType(18,2), true)), count(1)]
-Aggregate Attributes [2]: [sum(CheckOverflow((promote_precision(cast(cast(ss_quantity#246 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_list_price#247 as decimal(12,2)))), DecimalType(18,2), true))#248, count(1)#249]
-Results [6]: [i_brand_id#240, i_class_id#241, i_category_id#242, sum(CheckOverflow((promote_precision(cast(cast(ss_quantity#246 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_list_price#247 as decimal(12,2)))), DecimalType(18,2), true))#248 AS sales#68, count(1)#249 AS number_sales#69, sum(CheckOverflow((promote_precision(cast(cast(ss_quantity#246 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_list_price#247 as decimal(12,2)))), DecimalType(18,2), true))#248 AS sum(CheckOverflow((promote_precision(cast(cast(ss_quantity#246 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_list_price#247 as decimal(12,2)))), DecimalType(18,2), true))#250]
-
-(173) Filter [codegen id : 468]
-Input [6]: [i_brand_id#240, i_class_id#241, i_category_id#242, sales#68, number_sales#69, sum(CheckOverflow((promote_precision(cast(cast(ss_quantity#246 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_list_price#247 as decimal(12,2)))), DecimalType(18,2), true))#250]
-Condition : (isnotnull(sum(CheckOverflow((promote_precision(cast(cast(ss_quantity#246 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_list_price#247 as decimal(12,2)))), DecimalType(18,2), true))#250) AND (cast(sum(CheckOverflow((promote_precision(cast(cast(ss_quantity#246 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_list_price#247 as decimal(12,2)))), DecimalType(18,2), true))#250 as decimal(32,6)) > cast(ReusedSubquery Subquery scalar-subquery#71, [id=#72] as decimal(32,6))))
-
-(174) Project [codegen id : 468]
-Output [6]: [store AS channel#73, i_brand_id#240, i_class_id#241, i_category_id#242, sales#68, number_sales#69]
-Input [6]: [i_brand_id#240, i_class_id#241, i_category_id#242, sales#68, number_sales#69, sum(CheckOverflow((promote_precision(cast(cast(ss_quantity#246 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_list_price#247 as decimal(12,2)))), DecimalType(18,2), true))#250]
-
-(175) ReusedExchange [Reuses operator id: unknown]
-Output [6]: [i_brand_id#251, i_class_id#252, i_category_id#253, sum#254, isEmpty#255, count#256]
-
-(176) HashAggregate [codegen id : 514]
-Input [6]: [i_brand_id#251, i_class_id#252, i_category_id#253, sum#254, isEmpty#255, count#256]
-Keys [3]: [i_brand_id#251, i_class_id#252, i_category_id#253]
-Functions [2]: [sum(CheckOverflow((promote_precision(cast(cast(cs_quantity#257 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(cs_list_price#258 as decimal(12,2)))), DecimalType(18,2), true)), count(1)]
-Aggregate Attributes [2]: [sum(CheckOverflow((promote_precision(cast(cast(cs_quantity#257 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(cs_list_price#258 as decimal(12,2)))), DecimalType(18,2), true))#259, count(1)#260]
-Results [6]: [i_brand_id#251, i_class_id#252, i_category_id#253, sum(CheckOverflow((promote_precision(cast(cast(cs_quantity#257 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(cs_list_price#258 as decimal(12,2)))), DecimalType(18,2), true))#259 AS sales#93, count(1)#260 AS number_sales#94, sum(CheckOverflow((promote_precision(cast(cast(cs_quantity#257 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(cs_list_price#258 as decimal(12,2)))), DecimalType(18,2), true))#259 AS sum(CheckOverflow((promote_precision(cast(cast(cs_quantity#257 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(cs_list_price#258 as decimal(12,2)))), DecimalType(18,2), true))#261]
-
-(177) Filter [codegen id : 514]
-Input [6]: [i_brand_id#251, i_class_id#252, i_category_id#253, sales#93, number_sales#94, sum(CheckOverflow((promote_precision(cast(cast(cs_quantity#257 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(cs_list_price#258 as decimal(12,2)))), DecimalType(18,2), true))#261]
-Condition : (isnotnull(sum(CheckOverflow((promote_precision(cast(cast(cs_quantity#257 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(cs_list_price#258 as decimal(12,2)))), DecimalType(18,2), true))#261) AND (cast(sum(CheckOverflow((promote_precision(cast(cast(cs_quantity#257 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(cs_list_price#258 as decimal(12,2)))), DecimalType(18,2), true))#261 as decimal(32,6)) > cast(ReusedSubquery Subquery scalar-subquery#71, [id=#72] as decimal(32,6))))
-
-(178) Project [codegen id : 514]
-Output [6]: [catalog AS channel#96, i_brand_id#251, i_class_id#252, i_category_id#253, sales#93, number_sales#94]
-Input [6]: [i_brand_id#251, i_class_id#252, i_category_id#253, sales#93, number_sales#94, sum(CheckOverflow((promote_precision(cast(cast(cs_quantity#257 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(cs_list_price#258 as decimal(12,2)))), DecimalType(18,2), true))#261]
-
-(179) ReusedExchange [Reuses operator id: unknown]
-Output [6]: [i_brand_id#262, i_class_id#263, i_category_id#264, sum#265, isEmpty#266, count#267]
-
-(180) HashAggregate [codegen id : 560]
-Input [6]: [i_brand_id#262, i_class_id#263, i_category_id#264, sum#265, isEmpty#266, count#267]
-Keys [3]: [i_brand_id#262, i_class_id#263, i_category_id#264]
-Functions [2]: [sum(CheckOverflow((promote_precision(cast(cast(ws_quantity#268 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ws_list_price#269 as decimal(12,2)))), DecimalType(18,2), true)), count(1)]
-Aggregate Attributes [2]: [sum(CheckOverflow((promote_precision(cast(cast(ws_quantity#268 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ws_list_price#269 as decimal(12,2)))), DecimalType(18,2), true))#270, count(1)#271]
-Results [6]: [i_brand_id#262, i_class_id#263, i_category_id#264, sum(CheckOverflow((promote_precision(cast(cast(ws_quantity#268 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ws_list_price#269 as decimal(12,2)))), DecimalType(18,2), true))#270 AS sales#116, count(1)#271 AS number_sales#117, sum(CheckOverflow((promote_precision(cast(cast(ws_quantity#268 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ws_list_price#269 as decimal(12,2)))), DecimalType(18,2), true))#270 AS sum(CheckOverflow((promote_precision(cast(cast(ws_quantity#268 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ws_list_price#269 as decimal(12,2)))), DecimalType(18,2), true))#272]
-
-(181) Filter [codegen id : 560]
-Input [6]: [i_brand_id#262, i_class_id#263, i_category_id#264, sales#116, number_sales#117, sum(CheckOverflow((promote_precision(cast(cast(ws_quantity#268 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ws_list_price#269 as decimal(12,2)))), DecimalType(18,2), true))#272]
-Condition : (isnotnull(sum(CheckOverflow((promote_precision(cast(cast(ws_quantity#268 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ws_list_price#269 as decimal(12,2)))), DecimalType(18,2), true))#272) AND (cast(sum(CheckOverflow((promote_precision(cast(cast(ws_quantity#268 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ws_list_price#269 as decimal(12,2)))), DecimalType(18,2), true))#272 as decimal(32,6)) > cast(ReusedSubquery Subquery scalar-subquery#71, [id=#72] as decimal(32,6))))
-
-(182) Project [codegen id : 560]
-Output [6]: [web AS channel#119, i_brand_id#262, i_class_id#263, i_category_id#264, sales#116, number_sales#117]
-Input [6]: [i_brand_id#262, i_class_id#263, i_category_id#264, sales#116, number_sales#117, sum(CheckOverflow((promote_precision(cast(cast(ws_quantity#268 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ws_list_price#269 as decimal(12,2)))), DecimalType(18,2), true))#272]
-
-(183) Union
-
-(184) HashAggregate [codegen id : 561]
-Input [6]: [channel#73, i_brand_id#240, i_class_id#241, i_category_id#242, sales#68, number_sales#69]
-Keys [4]: [channel#73, i_brand_id#240, i_class_id#241, i_category_id#242]
-Functions [2]: [partial_sum(sales#68), partial_sum(number_sales#69)]
-Aggregate Attributes [3]: [sum#273, isEmpty#274, sum#275]
-Results [7]: [channel#73, i_brand_id#240, i_class_id#241, i_category_id#242, sum#276, isEmpty#277, sum#278]
-
-(185) Exchange
-Input [7]: [channel#73, i_brand_id#240, i_class_id#241, i_category_id#242, sum#276, isEmpty#277, sum#278]
-Arguments: hashpartitioning(channel#73, i_brand_id#240, i_class_id#241, i_category_id#242, 5), ENSURE_REQUIREMENTS, [id=#279]
-
-(186) HashAggregate [codegen id : 562]
-Input [7]: [channel#73, i_brand_id#240, i_class_id#241, i_category_id#242, sum#276, isEmpty#277, sum#278]
-Keys [4]: [channel#73, i_brand_id#240, i_class_id#241, i_category_id#242]
+(144) HashAggregate [codegen id : 562]
+Input [7]: [channel#73, i_brand_id#172, i_class_id#173, i_category_id#174, sum#175, isEmpty#176, sum#177]
+Keys [4]: [channel#73, i_brand_id#172, i_class_id#173, i_category_id#174]
 Functions [2]: [sum(sales#68), sum(number_sales#69)]
-Aggregate Attributes [2]: [sum(sales#68)#280, sum(number_sales#69)#281]
-Results [3]: [channel#73, sum(sales#68)#280 AS sum_sales#129, sum(number_sales#69)#281 AS number_sales#130]
+Aggregate Attributes [2]: [sum(sales#68)#178, sum(number_sales#69)#179]
+Results [3]: [channel#73, sum(sales#68)#178 AS sum_sales#129, sum(number_sales#69)#179 AS number_sales#130]
 
-(187) HashAggregate [codegen id : 562]
+(145) HashAggregate [codegen id : 562]
 Input [3]: [channel#73, sum_sales#129, number_sales#130]
 Keys [1]: [channel#73]
 Functions [2]: [partial_sum(sum_sales#129), partial_sum(number_sales#130)]
-Aggregate Attributes [3]: [sum#282, isEmpty#283, sum#284]
-Results [4]: [channel#73, sum#285, isEmpty#286, sum#287]
+Aggregate Attributes [3]: [sum#180, isEmpty#181, sum#182]
+Results [4]: [channel#73, sum#183, isEmpty#184, sum#185]
 
-(188) Exchange
-Input [4]: [channel#73, sum#285, isEmpty#286, sum#287]
-Arguments: hashpartitioning(channel#73, 5), ENSURE_REQUIREMENTS, [id=#288]
+(146) Exchange
+Input [4]: [channel#73, sum#183, isEmpty#184, sum#185]
+Arguments: hashpartitioning(channel#73, 5), ENSURE_REQUIREMENTS, [id=#186]
 
-(189) HashAggregate [codegen id : 563]
-Input [4]: [channel#73, sum#285, isEmpty#286, sum#287]
+(147) HashAggregate [codegen id : 563]
+Input [4]: [channel#73, sum#183, isEmpty#184, sum#185]
 Keys [1]: [channel#73]
 Functions [2]: [sum(sum_sales#129), sum(number_sales#130)]
-Aggregate Attributes [2]: [sum(sum_sales#129)#289, sum(number_sales#130)#290]
-Results [6]: [channel#73, null AS i_brand_id#291, null AS i_class_id#292, null AS i_category_id#293, sum(sum_sales#129)#289 AS sum(sum_sales)#294, sum(number_sales#130)#290 AS sum(number_sales)#295]
+Aggregate Attributes [2]: [sum(sum_sales#129)#187, sum(number_sales#130)#188]
+Results [6]: [channel#73, null AS i_brand_id#189, null AS i_class_id#190, null AS i_category_id#191, sum(sum_sales#129)#187 AS sum(sum_sales)#192, sum(number_sales#130)#188 AS sum(number_sales)#193]
 
-(190) ReusedExchange [Reuses operator id: unknown]
-Output [6]: [i_brand_id#296, i_class_id#297, i_category_id#298, sum#299, isEmpty#300, count#301]
+(148) ReusedExchange [Reuses operator id: unknown]
+Output [7]: [channel#73, i_brand_id#194, i_class_id#195, i_category_id#196, sum#197, isEmpty#198, sum#199]
 
-(191) HashAggregate [codegen id : 609]
-Input [6]: [i_brand_id#296, i_class_id#297, i_category_id#298, sum#299, isEmpty#300, count#301]
-Keys [3]: [i_brand_id#296, i_class_id#297, i_category_id#298]
-Functions [2]: [sum(CheckOverflow((promote_precision(cast(cast(ss_quantity#302 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_list_price#303 as decimal(12,2)))), DecimalType(18,2), true)), count(1)]
-Aggregate Attributes [2]: [sum(CheckOverflow((promote_precision(cast(cast(ss_quantity#302 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_list_price#303 as decimal(12,2)))), DecimalType(18,2), true))#304, count(1)#305]
-Results [6]: [i_brand_id#296, i_class_id#297, i_category_id#298, sum(CheckOverflow((promote_precision(cast(cast(ss_quantity#302 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_list_price#303 as decimal(12,2)))), DecimalType(18,2), true))#304 AS sales#68, count(1)#305 AS number_sales#69, sum(CheckOverflow((promote_precision(cast(cast(ss_quantity#302 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_list_price#303 as decimal(12,2)))), DecimalType(18,2), true))#304 AS sum(CheckOverflow((promote_precision(cast(cast(ss_quantity#302 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_list_price#303 as decimal(12,2)))), DecimalType(18,2), true))#306]
-
-(192) Filter [codegen id : 609]
-Input [6]: [i_brand_id#296, i_class_id#297, i_category_id#298, sales#68, number_sales#69, sum(CheckOverflow((promote_precision(cast(cast(ss_quantity#302 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_list_price#303 as decimal(12,2)))), DecimalType(18,2), true))#306]
-Condition : (isnotnull(sum(CheckOverflow((promote_precision(cast(cast(ss_quantity#302 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_list_price#303 as decimal(12,2)))), DecimalType(18,2), true))#306) AND (cast(sum(CheckOverflow((promote_precision(cast(cast(ss_quantity#302 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_list_price#303 as decimal(12,2)))), DecimalType(18,2), true))#306 as decimal(32,6)) > cast(ReusedSubquery Subquery scalar-subquery#71, [id=#72] as decimal(32,6))))
-
-(193) Project [codegen id : 609]
-Output [6]: [store AS channel#73, i_brand_id#296, i_class_id#297, i_category_id#298, sales#68, number_sales#69]
-Input [6]: [i_brand_id#296, i_class_id#297, i_category_id#298, sales#68, number_sales#69, sum(CheckOverflow((promote_precision(cast(cast(ss_quantity#302 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_list_price#303 as decimal(12,2)))), DecimalType(18,2), true))#306]
-
-(194) ReusedExchange [Reuses operator id: unknown]
-Output [6]: [i_brand_id#307, i_class_id#308, i_category_id#309, sum#310, isEmpty#311, count#312]
-
-(195) HashAggregate [codegen id : 655]
-Input [6]: [i_brand_id#307, i_class_id#308, i_category_id#309, sum#310, isEmpty#311, count#312]
-Keys [3]: [i_brand_id#307, i_class_id#308, i_category_id#309]
-Functions [2]: [sum(CheckOverflow((promote_precision(cast(cast(cs_quantity#313 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(cs_list_price#314 as decimal(12,2)))), DecimalType(18,2), true)), count(1)]
-Aggregate Attributes [2]: [sum(CheckOverflow((promote_precision(cast(cast(cs_quantity#313 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(cs_list_price#314 as decimal(12,2)))), DecimalType(18,2), true))#315, count(1)#316]
-Results [6]: [i_brand_id#307, i_class_id#308, i_category_id#309, sum(CheckOverflow((promote_precision(cast(cast(cs_quantity#313 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(cs_list_price#314 as decimal(12,2)))), DecimalType(18,2), true))#315 AS sales#93, count(1)#316 AS number_sales#94, sum(CheckOverflow((promote_precision(cast(cast(cs_quantity#313 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(cs_list_price#314 as decimal(12,2)))), DecimalType(18,2), true))#315 AS sum(CheckOverflow((promote_precision(cast(cast(cs_quantity#313 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(cs_list_price#314 as decimal(12,2)))), DecimalType(18,2), true))#317]
-
-(196) Filter [codegen id : 655]
-Input [6]: [i_brand_id#307, i_class_id#308, i_category_id#309, sales#93, number_sales#94, sum(CheckOverflow((promote_precision(cast(cast(cs_quantity#313 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(cs_list_price#314 as decimal(12,2)))), DecimalType(18,2), true))#317]
-Condition : (isnotnull(sum(CheckOverflow((promote_precision(cast(cast(cs_quantity#313 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(cs_list_price#314 as decimal(12,2)))), DecimalType(18,2), true))#317) AND (cast(sum(CheckOverflow((promote_precision(cast(cast(cs_quantity#313 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(cs_list_price#314 as decimal(12,2)))), DecimalType(18,2), true))#317 as decimal(32,6)) > cast(ReusedSubquery Subquery scalar-subquery#71, [id=#72] as decimal(32,6))))
-
-(197) Project [codegen id : 655]
-Output [6]: [catalog AS channel#96, i_brand_id#307, i_class_id#308, i_category_id#309, sales#93, number_sales#94]
-Input [6]: [i_brand_id#307, i_class_id#308, i_category_id#309, sales#93, number_sales#94, sum(CheckOverflow((promote_precision(cast(cast(cs_quantity#313 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(cs_list_price#314 as decimal(12,2)))), DecimalType(18,2), true))#317]
-
-(198) ReusedExchange [Reuses operator id: unknown]
-Output [6]: [i_brand_id#318, i_class_id#319, i_category_id#320, sum#321, isEmpty#322, count#323]
-
-(199) HashAggregate [codegen id : 701]
-Input [6]: [i_brand_id#318, i_class_id#319, i_category_id#320, sum#321, isEmpty#322, count#323]
-Keys [3]: [i_brand_id#318, i_class_id#319, i_category_id#320]
-Functions [2]: [sum(CheckOverflow((promote_precision(cast(cast(ws_quantity#324 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ws_list_price#325 as decimal(12,2)))), DecimalType(18,2), true)), count(1)]
-Aggregate Attributes [2]: [sum(CheckOverflow((promote_precision(cast(cast(ws_quantity#324 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ws_list_price#325 as decimal(12,2)))), DecimalType(18,2), true))#326, count(1)#327]
-Results [6]: [i_brand_id#318, i_class_id#319, i_category_id#320, sum(CheckOverflow((promote_precision(cast(cast(ws_quantity#324 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ws_list_price#325 as decimal(12,2)))), DecimalType(18,2), true))#326 AS sales#116, count(1)#327 AS number_sales#117, sum(CheckOverflow((promote_precision(cast(cast(ws_quantity#324 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ws_list_price#325 as decimal(12,2)))), DecimalType(18,2), true))#326 AS sum(CheckOverflow((promote_precision(cast(cast(ws_quantity#324 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ws_list_price#325 as decimal(12,2)))), DecimalType(18,2), true))#328]
-
-(200) Filter [codegen id : 701]
-Input [6]: [i_brand_id#318, i_class_id#319, i_category_id#320, sales#116, number_sales#117, sum(CheckOverflow((promote_precision(cast(cast(ws_quantity#324 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ws_list_price#325 as decimal(12,2)))), DecimalType(18,2), true))#328]
-Condition : (isnotnull(sum(CheckOverflow((promote_precision(cast(cast(ws_quantity#324 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ws_list_price#325 as decimal(12,2)))), DecimalType(18,2), true))#328) AND (cast(sum(CheckOverflow((promote_precision(cast(cast(ws_quantity#324 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ws_list_price#325 as decimal(12,2)))), DecimalType(18,2), true))#328 as decimal(32,6)) > cast(ReusedSubquery Subquery scalar-subquery#71, [id=#72] as decimal(32,6))))
-
-(201) Project [codegen id : 701]
-Output [6]: [web AS channel#119, i_brand_id#318, i_class_id#319, i_category_id#320, sales#116, number_sales#117]
-Input [6]: [i_brand_id#318, i_class_id#319, i_category_id#320, sales#116, number_sales#117, sum(CheckOverflow((promote_precision(cast(cast(ws_quantity#324 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ws_list_price#325 as decimal(12,2)))), DecimalType(18,2), true))#328]
-
-(202) Union
-
-(203) HashAggregate [codegen id : 702]
-Input [6]: [channel#73, i_brand_id#296, i_class_id#297, i_category_id#298, sales#68, number_sales#69]
-Keys [4]: [channel#73, i_brand_id#296, i_class_id#297, i_category_id#298]
-Functions [2]: [partial_sum(sales#68), partial_sum(number_sales#69)]
-Aggregate Attributes [3]: [sum#329, isEmpty#330, sum#331]
-Results [7]: [channel#73, i_brand_id#296, i_class_id#297, i_category_id#298, sum#332, isEmpty#333, sum#334]
-
-(204) Exchange
-Input [7]: [channel#73, i_brand_id#296, i_class_id#297, i_category_id#298, sum#332, isEmpty#333, sum#334]
-Arguments: hashpartitioning(channel#73, i_brand_id#296, i_class_id#297, i_category_id#298, 5), ENSURE_REQUIREMENTS, [id=#335]
-
-(205) HashAggregate [codegen id : 703]
-Input [7]: [channel#73, i_brand_id#296, i_class_id#297, i_category_id#298, sum#332, isEmpty#333, sum#334]
-Keys [4]: [channel#73, i_brand_id#296, i_class_id#297, i_category_id#298]
+(149) HashAggregate [codegen id : 703]
+Input [7]: [channel#73, i_brand_id#194, i_class_id#195, i_category_id#196, sum#197, isEmpty#198, sum#199]
+Keys [4]: [channel#73, i_brand_id#194, i_class_id#195, i_category_id#196]
 Functions [2]: [sum(sales#68), sum(number_sales#69)]
-Aggregate Attributes [2]: [sum(sales#68)#336, sum(number_sales#69)#337]
-Results [2]: [sum(sales#68)#336 AS sum_sales#129, sum(number_sales#69)#337 AS number_sales#130]
+Aggregate Attributes [2]: [sum(sales#68)#200, sum(number_sales#69)#201]
+Results [2]: [sum(sales#68)#200 AS sum_sales#129, sum(number_sales#69)#201 AS number_sales#130]
 
-(206) HashAggregate [codegen id : 703]
+(150) HashAggregate [codegen id : 703]
 Input [2]: [sum_sales#129, number_sales#130]
 Keys: []
 Functions [2]: [partial_sum(sum_sales#129), partial_sum(number_sales#130)]
-Aggregate Attributes [3]: [sum#338, isEmpty#339, sum#340]
-Results [3]: [sum#341, isEmpty#342, sum#343]
+Aggregate Attributes [3]: [sum#202, isEmpty#203, sum#204]
+Results [3]: [sum#205, isEmpty#206, sum#207]
 
-(207) Exchange
-Input [3]: [sum#341, isEmpty#342, sum#343]
-Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#344]
+(151) Exchange
+Input [3]: [sum#205, isEmpty#206, sum#207]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#208]
 
-(208) HashAggregate [codegen id : 704]
-Input [3]: [sum#341, isEmpty#342, sum#343]
+(152) HashAggregate [codegen id : 704]
+Input [3]: [sum#205, isEmpty#206, sum#207]
 Keys: []
 Functions [2]: [sum(sum_sales#129), sum(number_sales#130)]
-Aggregate Attributes [2]: [sum(sum_sales#129)#345, sum(number_sales#130)#346]
-Results [6]: [null AS channel#347, null AS i_brand_id#348, null AS i_class_id#349, null AS i_category_id#350, sum(sum_sales#129)#345 AS sum(sum_sales)#351, sum(number_sales#130)#346 AS sum(number_sales)#352]
+Aggregate Attributes [2]: [sum(sum_sales#129)#209, sum(number_sales#130)#210]
+Results [6]: [null AS channel#211, null AS i_brand_id#212, null AS i_class_id#213, null AS i_category_id#214, sum(sum_sales#129)#209 AS sum(sum_sales)#215, sum(number_sales#130)#210 AS sum(number_sales)#216]
 
-(209) Union
+(153) Union
 
-(210) HashAggregate [codegen id : 705]
+(154) HashAggregate [codegen id : 705]
 Input [6]: [channel#73, i_brand_id#54, i_class_id#55, i_category_id#56, sum_sales#129, number_sales#130]
 Keys [6]: [channel#73, i_brand_id#54, i_class_id#55, i_category_id#56, sum_sales#129, number_sales#130]
 Functions: []
 Aggregate Attributes: []
 Results [6]: [channel#73, i_brand_id#54, i_class_id#55, i_category_id#56, sum_sales#129, number_sales#130]
 
-(211) Exchange
+(155) Exchange
 Input [6]: [channel#73, i_brand_id#54, i_class_id#55, i_category_id#56, sum_sales#129, number_sales#130]
-Arguments: hashpartitioning(channel#73, i_brand_id#54, i_class_id#55, i_category_id#56, sum_sales#129, number_sales#130, 5), ENSURE_REQUIREMENTS, [id=#353]
+Arguments: hashpartitioning(channel#73, i_brand_id#54, i_class_id#55, i_category_id#56, sum_sales#129, number_sales#130, 5), ENSURE_REQUIREMENTS, [id=#217]
 
-(212) HashAggregate [codegen id : 706]
+(156) HashAggregate [codegen id : 706]
 Input [6]: [channel#73, i_brand_id#54, i_class_id#55, i_category_id#56, sum_sales#129, number_sales#130]
 Keys [6]: [channel#73, i_brand_id#54, i_class_id#55, i_category_id#56, sum_sales#129, number_sales#130]
 Functions: []
 Aggregate Attributes: []
 Results [6]: [channel#73, i_brand_id#54, i_class_id#55, i_category_id#56, sum_sales#129, number_sales#130]
 
-(213) TakeOrderedAndProject
+(157) TakeOrderedAndProject
 Input [6]: [channel#73, i_brand_id#54, i_class_id#55, i_category_id#56, sum_sales#129, number_sales#130]
 Arguments: 100, [channel#73 ASC NULLS FIRST, i_brand_id#54 ASC NULLS FIRST, i_class_id#55 ASC NULLS FIRST, i_category_id#56 ASC NULLS FIRST], [channel#73, i_brand_id#54, i_class_id#55, i_category_id#56, sum_sales#129, number_sales#130]
 
 ===== Subqueries =====
 
 Subquery:1 Hosting operator id = 89 Hosting Expression = Subquery scalar-subquery#71, [id=#72]
-* HashAggregate (240)
-+- Exchange (239)
-   +- * HashAggregate (238)
-      +- Union (237)
-         :- * Project (222)
-         :  +- * BroadcastHashJoin Inner BuildRight (221)
-         :     :- * ColumnarToRow (215)
-         :     :  +- Scan parquet default.store_sales (214)
-         :     +- BroadcastExchange (220)
-         :        +- * Project (219)
-         :           +- * Filter (218)
-         :              +- * ColumnarToRow (217)
-         :                 +- Scan parquet default.date_dim (216)
-         :- * Project (231)
-         :  +- * BroadcastHashJoin Inner BuildRight (230)
-         :     :- * ColumnarToRow (224)
-         :     :  +- Scan parquet default.catalog_sales (223)
-         :     +- BroadcastExchange (229)
-         :        +- * Project (228)
-         :           +- * Filter (227)
-         :              +- * ColumnarToRow (226)
-         :                 +- Scan parquet default.date_dim (225)
-         +- * Project (236)
-            +- * BroadcastHashJoin Inner BuildRight (235)
-               :- * ColumnarToRow (233)
-               :  +- Scan parquet default.web_sales (232)
-               +- ReusedExchange (234)
+* HashAggregate (184)
++- Exchange (183)
+   +- * HashAggregate (182)
+      +- Union (181)
+         :- * Project (166)
+         :  +- * BroadcastHashJoin Inner BuildRight (165)
+         :     :- * ColumnarToRow (159)
+         :     :  +- Scan parquet default.store_sales (158)
+         :     +- BroadcastExchange (164)
+         :        +- * Project (163)
+         :           +- * Filter (162)
+         :              +- * ColumnarToRow (161)
+         :                 +- Scan parquet default.date_dim (160)
+         :- * Project (175)
+         :  +- * BroadcastHashJoin Inner BuildRight (174)
+         :     :- * ColumnarToRow (168)
+         :     :  +- Scan parquet default.catalog_sales (167)
+         :     +- BroadcastExchange (173)
+         :        +- * Project (172)
+         :           +- * Filter (171)
+         :              +- * ColumnarToRow (170)
+         :                 +- Scan parquet default.date_dim (169)
+         +- * Project (180)
+            +- * BroadcastHashJoin Inner BuildRight (179)
+               :- * ColumnarToRow (177)
+               :  +- Scan parquet default.web_sales (176)
+               +- ReusedExchange (178)
 
 
-(214) Scan parquet default.store_sales
-Output [3]: [ss_quantity#354, ss_list_price#355, ss_sold_date_sk#356]
+(158) Scan parquet default.store_sales
+Output [3]: [ss_quantity#218, ss_list_price#219, ss_sold_date_sk#220]
 Batched: true
 Location: InMemoryFileIndex []
-PartitionFilters: [isnotnull(ss_sold_date_sk#356), dynamicpruningexpression(ss_sold_date_sk#356 IN dynamicpruning#357)]
+PartitionFilters: [isnotnull(ss_sold_date_sk#220), dynamicpruningexpression(ss_sold_date_sk#220 IN dynamicpruning#221)]
 ReadSchema: struct<ss_quantity:int,ss_list_price:decimal(7,2)>
 
-(215) ColumnarToRow [codegen id : 2]
-Input [3]: [ss_quantity#354, ss_list_price#355, ss_sold_date_sk#356]
+(159) ColumnarToRow [codegen id : 2]
+Input [3]: [ss_quantity#218, ss_list_price#219, ss_sold_date_sk#220]
 
-(216) Scan parquet default.date_dim
-Output [2]: [d_date_sk#358, d_year#359]
+(160) Scan parquet default.date_dim
+Output [2]: [d_date_sk#222, d_year#223]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
 PushedFilters: [IsNotNull(d_year), GreaterThanOrEqual(d_year,1999), LessThanOrEqual(d_year,2001), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_year:int>
 
-(217) ColumnarToRow [codegen id : 1]
-Input [2]: [d_date_sk#358, d_year#359]
+(161) ColumnarToRow [codegen id : 1]
+Input [2]: [d_date_sk#222, d_year#223]
 
-(218) Filter [codegen id : 1]
-Input [2]: [d_date_sk#358, d_year#359]
-Condition : (((isnotnull(d_year#359) AND (d_year#359 >= 1999)) AND (d_year#359 <= 2001)) AND isnotnull(d_date_sk#358))
+(162) Filter [codegen id : 1]
+Input [2]: [d_date_sk#222, d_year#223]
+Condition : (((isnotnull(d_year#223) AND (d_year#223 >= 1999)) AND (d_year#223 <= 2001)) AND isnotnull(d_date_sk#222))
 
-(219) Project [codegen id : 1]
-Output [1]: [d_date_sk#358]
-Input [2]: [d_date_sk#358, d_year#359]
+(163) Project [codegen id : 1]
+Output [1]: [d_date_sk#222]
+Input [2]: [d_date_sk#222, d_year#223]
 
-(220) BroadcastExchange
-Input [1]: [d_date_sk#358]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#360]
+(164) BroadcastExchange
+Input [1]: [d_date_sk#222]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#224]
 
-(221) BroadcastHashJoin [codegen id : 2]
-Left keys [1]: [ss_sold_date_sk#356]
-Right keys [1]: [d_date_sk#358]
+(165) BroadcastHashJoin [codegen id : 2]
+Left keys [1]: [ss_sold_date_sk#220]
+Right keys [1]: [d_date_sk#222]
 Join condition: None
 
-(222) Project [codegen id : 2]
-Output [2]: [ss_quantity#354 AS quantity#361, ss_list_price#355 AS list_price#362]
-Input [4]: [ss_quantity#354, ss_list_price#355, ss_sold_date_sk#356, d_date_sk#358]
+(166) Project [codegen id : 2]
+Output [2]: [ss_quantity#218 AS quantity#225, ss_list_price#219 AS list_price#226]
+Input [4]: [ss_quantity#218, ss_list_price#219, ss_sold_date_sk#220, d_date_sk#222]
 
-(223) Scan parquet default.catalog_sales
-Output [3]: [cs_quantity#363, cs_list_price#364, cs_sold_date_sk#365]
+(167) Scan parquet default.catalog_sales
+Output [3]: [cs_quantity#227, cs_list_price#228, cs_sold_date_sk#229]
 Batched: true
 Location: InMemoryFileIndex []
-PartitionFilters: [isnotnull(cs_sold_date_sk#365), dynamicpruningexpression(cs_sold_date_sk#365 IN dynamicpruning#366)]
+PartitionFilters: [isnotnull(cs_sold_date_sk#229), dynamicpruningexpression(cs_sold_date_sk#229 IN dynamicpruning#230)]
 ReadSchema: struct<cs_quantity:int,cs_list_price:decimal(7,2)>
 
-(224) ColumnarToRow [codegen id : 4]
-Input [3]: [cs_quantity#363, cs_list_price#364, cs_sold_date_sk#365]
+(168) ColumnarToRow [codegen id : 4]
+Input [3]: [cs_quantity#227, cs_list_price#228, cs_sold_date_sk#229]
 
-(225) Scan parquet default.date_dim
-Output [2]: [d_date_sk#367, d_year#368]
+(169) Scan parquet default.date_dim
+Output [2]: [d_date_sk#231, d_year#232]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
 PushedFilters: [IsNotNull(d_year), GreaterThanOrEqual(d_year,1998), LessThanOrEqual(d_year,2000), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_year:int>
 
-(226) ColumnarToRow [codegen id : 3]
-Input [2]: [d_date_sk#367, d_year#368]
+(170) ColumnarToRow [codegen id : 3]
+Input [2]: [d_date_sk#231, d_year#232]
 
-(227) Filter [codegen id : 3]
-Input [2]: [d_date_sk#367, d_year#368]
-Condition : (((isnotnull(d_year#368) AND (d_year#368 >= 1998)) AND (d_year#368 <= 2000)) AND isnotnull(d_date_sk#367))
+(171) Filter [codegen id : 3]
+Input [2]: [d_date_sk#231, d_year#232]
+Condition : (((isnotnull(d_year#232) AND (d_year#232 >= 1998)) AND (d_year#232 <= 2000)) AND isnotnull(d_date_sk#231))
 
-(228) Project [codegen id : 3]
-Output [1]: [d_date_sk#367]
-Input [2]: [d_date_sk#367, d_year#368]
+(172) Project [codegen id : 3]
+Output [1]: [d_date_sk#231]
+Input [2]: [d_date_sk#231, d_year#232]
 
-(229) BroadcastExchange
-Input [1]: [d_date_sk#367]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#369]
+(173) BroadcastExchange
+Input [1]: [d_date_sk#231]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#233]
 
-(230) BroadcastHashJoin [codegen id : 4]
-Left keys [1]: [cs_sold_date_sk#365]
-Right keys [1]: [d_date_sk#367]
+(174) BroadcastHashJoin [codegen id : 4]
+Left keys [1]: [cs_sold_date_sk#229]
+Right keys [1]: [d_date_sk#231]
 Join condition: None
 
-(231) Project [codegen id : 4]
-Output [2]: [cs_quantity#363 AS quantity#370, cs_list_price#364 AS list_price#371]
-Input [4]: [cs_quantity#363, cs_list_price#364, cs_sold_date_sk#365, d_date_sk#367]
+(175) Project [codegen id : 4]
+Output [2]: [cs_quantity#227 AS quantity#234, cs_list_price#228 AS list_price#235]
+Input [4]: [cs_quantity#227, cs_list_price#228, cs_sold_date_sk#229, d_date_sk#231]
 
-(232) Scan parquet default.web_sales
-Output [3]: [ws_quantity#372, ws_list_price#373, ws_sold_date_sk#374]
+(176) Scan parquet default.web_sales
+Output [3]: [ws_quantity#236, ws_list_price#237, ws_sold_date_sk#238]
 Batched: true
 Location: InMemoryFileIndex []
-PartitionFilters: [isnotnull(ws_sold_date_sk#374), dynamicpruningexpression(ws_sold_date_sk#374 IN dynamicpruning#366)]
+PartitionFilters: [isnotnull(ws_sold_date_sk#238), dynamicpruningexpression(ws_sold_date_sk#238 IN dynamicpruning#230)]
 ReadSchema: struct<ws_quantity:int,ws_list_price:decimal(7,2)>
 
-(233) ColumnarToRow [codegen id : 6]
-Input [3]: [ws_quantity#372, ws_list_price#373, ws_sold_date_sk#374]
+(177) ColumnarToRow [codegen id : 6]
+Input [3]: [ws_quantity#236, ws_list_price#237, ws_sold_date_sk#238]
 
-(234) ReusedExchange [Reuses operator id: 229]
-Output [1]: [d_date_sk#375]
+(178) ReusedExchange [Reuses operator id: 173]
+Output [1]: [d_date_sk#239]
 
-(235) BroadcastHashJoin [codegen id : 6]
-Left keys [1]: [ws_sold_date_sk#374]
-Right keys [1]: [d_date_sk#375]
+(179) BroadcastHashJoin [codegen id : 6]
+Left keys [1]: [ws_sold_date_sk#238]
+Right keys [1]: [d_date_sk#239]
 Join condition: None
 
-(236) Project [codegen id : 6]
-Output [2]: [ws_quantity#372 AS quantity#376, ws_list_price#373 AS list_price#377]
-Input [4]: [ws_quantity#372, ws_list_price#373, ws_sold_date_sk#374, d_date_sk#375]
+(180) Project [codegen id : 6]
+Output [2]: [ws_quantity#236 AS quantity#240, ws_list_price#237 AS list_price#241]
+Input [4]: [ws_quantity#236, ws_list_price#237, ws_sold_date_sk#238, d_date_sk#239]
 
-(237) Union
+(181) Union
 
-(238) HashAggregate [codegen id : 7]
-Input [2]: [quantity#361, list_price#362]
+(182) HashAggregate [codegen id : 7]
+Input [2]: [quantity#225, list_price#226]
 Keys: []
-Functions [1]: [partial_avg(CheckOverflow((promote_precision(cast(cast(quantity#361 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(list_price#362 as decimal(12,2)))), DecimalType(18,2), true))]
-Aggregate Attributes [2]: [sum#378, count#379]
-Results [2]: [sum#380, count#381]
+Functions [1]: [partial_avg(CheckOverflow((promote_precision(cast(cast(quantity#225 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(list_price#226 as decimal(12,2)))), DecimalType(18,2), true))]
+Aggregate Attributes [2]: [sum#242, count#243]
+Results [2]: [sum#244, count#245]
 
-(239) Exchange
-Input [2]: [sum#380, count#381]
-Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#382]
+(183) Exchange
+Input [2]: [sum#244, count#245]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#246]
 
-(240) HashAggregate [codegen id : 8]
-Input [2]: [sum#380, count#381]
+(184) HashAggregate [codegen id : 8]
+Input [2]: [sum#244, count#245]
 Keys: []
-Functions [1]: [avg(CheckOverflow((promote_precision(cast(cast(quantity#361 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(list_price#362 as decimal(12,2)))), DecimalType(18,2), true))]
-Aggregate Attributes [1]: [avg(CheckOverflow((promote_precision(cast(cast(quantity#361 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(list_price#362 as decimal(12,2)))), DecimalType(18,2), true))#383]
-Results [1]: [avg(CheckOverflow((promote_precision(cast(cast(quantity#361 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(list_price#362 as decimal(12,2)))), DecimalType(18,2), true))#383 AS average_sales#384]
+Functions [1]: [avg(CheckOverflow((promote_precision(cast(cast(quantity#225 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(list_price#226 as decimal(12,2)))), DecimalType(18,2), true))]
+Aggregate Attributes [1]: [avg(CheckOverflow((promote_precision(cast(cast(quantity#225 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(list_price#226 as decimal(12,2)))), DecimalType(18,2), true))#247]
+Results [1]: [avg(CheckOverflow((promote_precision(cast(cast(quantity#225 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(list_price#226 as decimal(12,2)))), DecimalType(18,2), true))#247 AS average_sales#248]
 
-Subquery:2 Hosting operator id = 214 Hosting Expression = ss_sold_date_sk#356 IN dynamicpruning#357
-ReusedExchange (241)
-
-
-(241) ReusedExchange [Reuses operator id: 220]
-Output [1]: [d_date_sk#358]
-
-Subquery:3 Hosting operator id = 223 Hosting Expression = cs_sold_date_sk#365 IN dynamicpruning#366
-ReusedExchange (242)
+Subquery:2 Hosting operator id = 158 Hosting Expression = ss_sold_date_sk#220 IN dynamicpruning#221
+ReusedExchange (185)
 
 
-(242) ReusedExchange [Reuses operator id: 229]
-Output [1]: [d_date_sk#367]
+(185) ReusedExchange [Reuses operator id: 164]
+Output [1]: [d_date_sk#222]
 
-Subquery:4 Hosting operator id = 232 Hosting Expression = ws_sold_date_sk#374 IN dynamicpruning#366
+Subquery:3 Hosting operator id = 167 Hosting Expression = cs_sold_date_sk#229 IN dynamicpruning#230
+ReusedExchange (186)
+
+
+(186) ReusedExchange [Reuses operator id: 173]
+Output [1]: [d_date_sk#231]
+
+Subquery:4 Hosting operator id = 176 Hosting Expression = ws_sold_date_sk#238 IN dynamicpruning#230
 
 Subquery:5 Hosting operator id = 1 Hosting Expression = ss_sold_date_sk#4 IN dynamicpruning#5
-ReusedExchange (243)
+ReusedExchange (187)
 
 
-(243) ReusedExchange [Reuses operator id: 72]
+(187) ReusedExchange [Reuses operator id: 72]
 Output [1]: [d_date_sk#49]
 
 Subquery:6 Hosting operator id = 9 Hosting Expression = ss_sold_date_sk#12 IN dynamicpruning#13
-ReusedExchange (244)
+ReusedExchange (188)
 
 
-(244) ReusedExchange [Reuses operator id: 16]
+(188) ReusedExchange [Reuses operator id: 16]
 Output [1]: [d_date_sk#14]
 
 Subquery:7 Hosting operator id = 24 Hosting Expression = cs_sold_date_sk#23 IN dynamicpruning#13
@@ -1404,29 +1092,5 @@ Subquery:10 Hosting operator id = 91 Hosting Expression = cs_sold_date_sk#77 IN 
 Subquery:11 Hosting operator id = 127 Hosting Expression = ReusedSubquery Subquery scalar-subquery#71, [id=#72]
 
 Subquery:12 Hosting operator id = 110 Hosting Expression = ws_sold_date_sk#100 IN dynamicpruning#5
-
-Subquery:13 Hosting operator id = 135 Hosting Expression = ReusedSubquery Subquery scalar-subquery#71, [id=#72]
-
-Subquery:14 Hosting operator id = 139 Hosting Expression = ReusedSubquery Subquery scalar-subquery#71, [id=#72]
-
-Subquery:15 Hosting operator id = 143 Hosting Expression = ReusedSubquery Subquery scalar-subquery#71, [id=#72]
-
-Subquery:16 Hosting operator id = 154 Hosting Expression = ReusedSubquery Subquery scalar-subquery#71, [id=#72]
-
-Subquery:17 Hosting operator id = 158 Hosting Expression = ReusedSubquery Subquery scalar-subquery#71, [id=#72]
-
-Subquery:18 Hosting operator id = 162 Hosting Expression = ReusedSubquery Subquery scalar-subquery#71, [id=#72]
-
-Subquery:19 Hosting operator id = 173 Hosting Expression = ReusedSubquery Subquery scalar-subquery#71, [id=#72]
-
-Subquery:20 Hosting operator id = 177 Hosting Expression = ReusedSubquery Subquery scalar-subquery#71, [id=#72]
-
-Subquery:21 Hosting operator id = 181 Hosting Expression = ReusedSubquery Subquery scalar-subquery#71, [id=#72]
-
-Subquery:22 Hosting operator id = 192 Hosting Expression = ReusedSubquery Subquery scalar-subquery#71, [id=#72]
-
-Subquery:23 Hosting operator id = 196 Hosting Expression = ReusedSubquery Subquery scalar-subquery#71, [id=#72]
-
-Subquery:24 Hosting operator id = 200 Hosting Expression = ReusedSubquery Subquery scalar-subquery#71, [id=#72]
 
 

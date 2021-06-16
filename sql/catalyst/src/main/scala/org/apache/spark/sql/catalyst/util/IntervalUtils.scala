@@ -106,7 +106,11 @@ object IntervalUtils {
   private val yearMonthLiteralRegex =
     (s"(?i)^INTERVAL\\s+([+|-])?'$yearMonthPatternString'\\s+YEAR\\s+TO\\s+MONTH$$").r
 
-  def castStringToYMInterval(input: UTF8String): Int = {
+  def castStringToYMInterval(
+      input: UTF8String,
+      // TODO(SPARK-35768): Take into account year-month interval fields in cast
+      startField: Byte,
+      endField: Byte): Int = {
     input.trimAll().toString match {
       case yearMonthRegex("-", year, month) => toYMInterval(year, month, -1)
       case yearMonthRegex(_, year, month) => toYMInterval(year, month, 1)
@@ -934,9 +938,16 @@ object IntervalUtils {
    *
    * @param months The number of months, positive or negative
    * @param style The style of textual representation of the interval
+   * @param startField The start field (YEAR or MONTH) which the interval comprises of.
+   * @param endField The end field (YEAR or MONTH) which the interval comprises of.
    * @return Year-month interval string
    */
-  def toYearMonthIntervalString(months: Int, style: IntervalStyle): String = {
+  def toYearMonthIntervalString(
+      months: Int,
+      style: IntervalStyle,
+      // TODO(SPARK-35771): Format year-month intervals using type fields
+      startField: Byte,
+      endField: Byte): String = {
     var sign = ""
     var absMonths: Long = months
     if (months < 0) {
@@ -956,6 +967,8 @@ object IntervalUtils {
    *
    * @param micros The number of microseconds, positive or negative
    * @param style The style of textual representation of the interval
+   * @param startField The start field (DAY, HOUR, MINUTE, SECOND) which the interval comprises of.
+   * @param endField The end field (DAY, HOUR, MINUTE, SECOND) which the interval comprises of.
    * @return Day-time interval string
    */
   def toDayTimeIntervalString(

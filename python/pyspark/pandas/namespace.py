@@ -47,7 +47,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 from pyspark import sql as spark
 from pyspark.sql import functions as F
-from pyspark.sql.functions import pandas_udf, PandasUDFType
+from pyspark.sql.functions import pandas_udf
 from pyspark.sql.types import (
     ByteType,
     ShortType,
@@ -763,8 +763,8 @@ def read_parquet(
         # Try to read pandas metadata
 
         @no_type_check
-        @pandas_udf("index_col array<string>, index_names array<string>", PandasUDFType.SCALAR)
-        def read_index_metadata(pser):
+        @pandas_udf("index_col array<string>, index_names array<string>")
+        def read_index_metadata(pser: pd.Series) -> pd.DataFrame:
             binary = pser.iloc[0]
             metadata = pq.ParquetFile(pa.BufferReader(binary)).metadata.metadata
             if b"pandas" in metadata:

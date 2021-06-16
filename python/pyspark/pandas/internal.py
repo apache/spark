@@ -29,7 +29,7 @@ from pandas.api.types import CategoricalDtype  # noqa: F401
 from pyspark import sql as spark
 from pyspark._globals import _NoValue, _NoValueType
 from pyspark.sql import functions as F, Window
-from pyspark.sql.functions import PandasUDFType, pandas_udf
+from pyspark.sql.functions import pandas_udf
 from pyspark.sql.types import (  # noqa: F401
     BooleanType,
     DataType,
@@ -1008,7 +1008,7 @@ class InternalFrame(object):
         sums = dict(zip(map(lambda count: count[0], sorted_counts), cumulative_counts))
 
         # 3. Attach offset for each partition.
-        @pandas_udf(LongType(), PandasUDFType.SCALAR)
+        @pandas_udf(returnType=LongType())  # type: ignore
         def offset(id: pd.Series) -> pd.Series:
             current_partition_offset = sums[id.iloc[0]]
             return pd.Series(current_partition_offset).repeat(len(id))

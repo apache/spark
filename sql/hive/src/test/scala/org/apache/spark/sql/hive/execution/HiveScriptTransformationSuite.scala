@@ -546,7 +546,8 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
             AttributeReference("a", DayTimeIntervalType())(),
             AttributeReference("b", DayTimeIntervalType())(),
             AttributeReference("c", DayTimeIntervalType())(),
-            AttributeReference("d", YearMonthIntervalType)()),
+            // TODO(SPARK-35772): Check all year-month interval types in HiveInspectors tests
+            AttributeReference("d", YearMonthIntervalType())()),
           child = child,
           ioschema = hiveIOSchema),
         df.select($"a", $"b", $"c", $"d").collect())

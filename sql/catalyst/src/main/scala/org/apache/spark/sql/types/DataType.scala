@@ -172,7 +172,9 @@ object DataType {
     Seq(NullType, DateType, TimestampType, BinaryType, IntegerType, BooleanType, LongType,
       DoubleType, FloatType, ShortType, ByteType, StringType, CalendarIntervalType,
       // TODO(SPARK-35732): Parse DayTimeIntervalType from JSON
-      DayTimeIntervalType(), YearMonthIntervalType, TimestampWithoutTZType)
+      DayTimeIntervalType(),
+      // TODO(SPARK-35770): Parse YearMonthIntervalType from JSON
+      YearMonthIntervalType(), TimestampWithoutTZType)
       .map(t => t.typeName -> t).toMap
   }
 

@@ -2354,16 +2354,15 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       val toUnit = ctx.errorCapturingUnitToUnitInterval.body.to.getText.toLowerCase(Locale.ROOT)
       if (toUnit == "month") {
         assert(calendarInterval.days == 0 && calendarInterval.microseconds == 0)
-        Literal(calendarInterval.months, YearMonthIntervalType)
+        // TODO(SPARK-35773): Parse year-month interval literals to tightest types
+        Literal(calendarInterval.months, YearMonthIntervalType())
       } else {
         assert(calendarInterval.months == 0)
-        val strToFieldIndex = DayTimeIntervalType.dayTimeFields.map(i =>
-          DayTimeIntervalType.fieldToString(i) -> i).toMap
         val fromUnit =
           ctx.errorCapturingUnitToUnitInterval.body.from.getText.toLowerCase(Locale.ROOT)
         val micros = IntervalUtils.getDuration(calendarInterval, TimeUnit.MICROSECONDS)
-        val start = strToFieldIndex(fromUnit)
-        val end = strToFieldIndex(toUnit)
+        val start = DayTimeIntervalType.stringToField(fromUnit)
+        val end = DayTimeIntervalType.stringToField(toUnit)
         Literal(micros, DayTimeIntervalType(start, end))
       }
     } else {
@@ -2515,15 +2514,14 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   override def visitYearMonthIntervalDataType(ctx: YearMonthIntervalDataTypeContext): DataType = {
-    YearMonthIntervalType
+    // TODO(SPARK-35774): Parse any year-month interval types in SQL
+    YearMonthIntervalType()
   }
 
   override def visitDayTimeIntervalDataType(ctx: DayTimeIntervalDataTypeContext): DataType = {
-    val strToFieldIndex =
-      DayTimeIntervalType.dayTimeFields.map(i => DayTimeIntervalType.fieldToString(i) -> i).toMap
-    val start = strToFieldIndex(ctx.from.getText.toLowerCase(Locale.ROOT))
+    val start = DayTimeIntervalType.stringToField(ctx.from.getText.toLowerCase(Locale.ROOT))
     val end = if (ctx.to != null ) {
-      strToFieldIndex(ctx.to.getText.toLowerCase(Locale.ROOT))
+      DayTimeIntervalType.stringToField(ctx.to.getText.toLowerCase(Locale.ROOT))
     } else {
       start
     }
