@@ -1998,6 +1998,11 @@ class DatasetSuite extends QueryTest
       joined,
       (1, 1), (2, 2), (3, 3))
   }
+
+  test("SPARK-35622: DataFrame's count function do not need groupBy and avoid shuffle") {
+    val df = Seq((1, 2), (4, 5)).toDF("col1", "col2")
+    assert(df.count == 2)
+  }
 }
 
 case class Bar(a: Int)

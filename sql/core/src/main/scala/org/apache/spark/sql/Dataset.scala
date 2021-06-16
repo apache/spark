@@ -3015,8 +3015,8 @@ class Dataset[T] private[sql](
    * @group action
    * @since 1.6.0
    */
-  def count(): Long = withAction("count", groupBy().count().queryExecution) { plan =>
-    plan.executeCollect().head.getLong(0)
+  def count(): Long = {
+    rdd.count()
   }
 
   /**
