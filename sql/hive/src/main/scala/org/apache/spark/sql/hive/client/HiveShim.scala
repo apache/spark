@@ -1198,6 +1198,7 @@ private[client] class Shim_v2_0 extends Shim_v1_2 {
     loadDynamicPartitionsMethod.invoke(hive, loadPath, tableName, partSpec, replace: JBoolean,
       numDP: JInteger, listBucketingEnabled: JBoolean, isAcid, txnIdInLoadDynamicPartitions)
   }
+
 }
 
 private[client] class Shim_v2_1 extends Shim_v2_0 {
