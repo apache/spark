@@ -58,8 +58,8 @@ case class FlatMapGroupsWithStateExec(
     child: SparkPlan
   ) extends UnaryExecNode with ObjectProducerExec with StateStoreWriter with WatermarkSupport {
 
-  import GroupStateImpl._
   import FlatMapGroupsWithStateExecHelper._
+  import GroupStateImpl._
 
   private val isTimeoutEnabled = timeoutConf != NoTimeout
   private val watermarkPresent = child.output.exists {
@@ -226,11 +226,11 @@ case class FlatMapGroupsWithStateExec(
 
       // When the iterator is consumed, then write changes to state
       def onIteratorCompletion: Unit = {
-        if (groupState.hasRemoved && groupState.getTimeoutTimestamp == NO_TIMESTAMP) {
+        if (groupState.hasRemoved && !groupState.getTimeoutTimestampMs.isPresent()) {
           stateManager.removeState(store, stateData.keyRow)
           numUpdatedStateRows += 1
         } else {
-          val currentTimeoutTimestamp = groupState.getTimeoutTimestamp
+          val currentTimeoutTimestamp = groupState.getTimeoutTimestampMs.orElse(NO_TIMESTAMP)
           val hasTimeoutChanged = currentTimeoutTimestamp != stateData.timeoutTimestamp
           val shouldWriteState = groupState.hasUpdated || groupState.hasRemoved || hasTimeoutChanged
 
