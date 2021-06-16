@@ -1788,33 +1788,39 @@ class AdaptiveQueryExecSuite
 
   test("SPARK-35650: Coalesce number of partitions by AEQ") {
     withSQLConf(SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM.key -> "1") {
-      val query = "SELECT /*+ REPARTITION */ * FROM testData"
-      val (_, adaptivePlan) = runAdaptiveAndVerifyResult(query)
-      collect(adaptivePlan) {
-        case r: CustomShuffleReaderExec => r
-      } match {
-        case Seq(customShuffleReader) =>
-          assert(customShuffleReader.partitionSpecs.size === 1)
-          assert(!customShuffleReader.isLocalReader)
-        case _ =>
-          fail("There should be a CustomShuffleReaderExec")
-      }
+      Seq("REPARTITION", "ADAPTIVE_REPARTITION", "ADAPTIVE_REPARTITION(key)")
+        .foreach {repartition =>
+          val query = s"SELECT /*+ $repartition */ * FROM testData"
+          val (_, adaptivePlan) = runAdaptiveAndVerifyResult(query)
+          collect(adaptivePlan) {
+            case r: CustomShuffleReaderExec => r
+          } match {
+            case Seq(customShuffleReader) =>
+              assert(customShuffleReader.partitionSpecs.size === 1)
+              assert(!customShuffleReader.isLocalReader)
+            case _ =>
+              fail("There should be a CustomShuffleReaderExec")
+          }
+        }
     }
   }
 
   test("SPARK-35650: Use local shuffle reader if can not coalesce number of partitions") {
     withSQLConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "2") {
-      val query = "SELECT /*+ REPARTITION */ * FROM testData"
-      val (_, adaptivePlan) = runAdaptiveAndVerifyResult(query)
-      collect(adaptivePlan) {
-        case r: CustomShuffleReaderExec => r
-      } match {
-        case Seq(customShuffleReader) =>
-          assert(customShuffleReader.partitionSpecs.size === 4)
-          assert(customShuffleReader.isLocalReader)
-        case _ =>
-          fail("There should be a CustomShuffleReaderExec")
-      }
+      Seq("REPARTITION", "ADAPTIVE_REPARTITION", "ADAPTIVE_REPARTITION(key)")
+        .foreach { repartition =>
+          val query = s"SELECT /*+ $repartition */ * FROM testData"
+          val (_, adaptivePlan) = runAdaptiveAndVerifyResult(query)
+          collect(adaptivePlan) {
+            case r: CustomShuffleReaderExec => r
+          } match {
+            case Seq(customShuffleReader) =>
+              assert(customShuffleReader.partitionSpecs.size === 4)
+              assert(customShuffleReader.isLocalReader)
+            case _ =>
+              fail("There should be a CustomShuffleReaderExec")
+          }
+        }
     }
   }
 }

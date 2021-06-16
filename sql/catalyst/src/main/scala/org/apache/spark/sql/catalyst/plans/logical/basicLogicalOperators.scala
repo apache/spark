@@ -1352,6 +1352,26 @@ object RepartitionByExpression {
 }
 
 /**
+ * This operator does not guarantee the output partitioning, because the partition number will be
+ * optimized by AQE.
+ */
+case class AdaptiveRepartition(
+    partitionExpressions: Seq[Expression],
+    child: LogicalPlan) extends RepartitionOperation {
+  override def shuffle: Boolean = true
+  override def numPartitions: Int = conf.numShufflePartitions
+
+  override lazy val partitioning: Partitioning = if (partitionExpressions.nonEmpty) {
+    HashPartitioning(partitionExpressions, numPartitions)
+  } else {
+    RoundRobinPartitioning(numPartitions)
+  }
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): AdaptiveRepartition =
+    copy(child = newChild)
+}
+
+/**
  * A relation with one row. This is used in "SELECT ..." without a from clause.
  */
 case class OneRowRelation() extends LeafNode {

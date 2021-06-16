@@ -295,4 +295,18 @@ class ResolveHintsSuite extends AnalysisTest {
         caseSensitive = true)
     }
   }
+
+  test("SPARK-35786: Support optimize repartition by expression in AQE") {
+    checkAnalysisWithoutViewWrapper(
+      UnresolvedHint("ADAPTIVE_REPARTITION", Seq(UnresolvedAttribute("a")), table("TaBlE")),
+      AdaptiveRepartition(Seq(AttributeReference("a", IntegerType)()), testRelation))
+
+    checkAnalysisWithoutViewWrapper(
+      UnresolvedHint("ADAPTIVE_REPARTITION", Seq.empty, table("TaBlE")),
+      AdaptiveRepartition(Seq.empty, testRelation))
+
+    assertAnalysisError(
+      UnresolvedHint("ADAPTIVE_REPARTITION", Seq(Literal(1)), table("TaBlE")),
+      Seq("Hint parameter should include columns"))
+  }
 }

@@ -175,7 +175,8 @@ object ResolveHints {
    */
   object ResolveCoalesceHints extends Rule[LogicalPlan] {
 
-    val COALESCE_HINT_NAMES: Set[String] = Set("COALESCE", "REPARTITION", "REPARTITION_BY_RANGE")
+    val COALESCE_HINT_NAMES: Set[String] =
+      Set("COALESCE", "REPARTITION", "REPARTITION_BY_RANGE", "ADAPTIVE_REPARTITION")
 
     /**
      * This function handles hints for "COALESCE" and "REPARTITION".
@@ -183,11 +184,11 @@ object ResolveHints {
      * has a partition number, columns, or both of them as parameters.
      */
     private def createRepartition(
-        shuffle: Boolean, hint: UnresolvedHint): LogicalPlan = {
+        shuffle: Boolean, hint: UnresolvedHint, adaptive: Boolean = false): LogicalPlan = {
       val hintName = hint.name.toUpperCase(Locale.ROOT)
 
       def createRepartitionByExpression(
-          numPartitions: Option[Int], partitionExprs: Seq[Any]): RepartitionByExpression = {
+          numPartitions: Option[Int], partitionExprs: Seq[Any]): RepartitionOperation = {
         val sortOrders = partitionExprs.filter(_.isInstanceOf[SortOrder])
         if (sortOrders.nonEmpty) {
           throw QueryCompilationErrors.invalidRepartitionExpressionsError(sortOrders)
@@ -196,11 +197,18 @@ object ResolveHints {
         if (invalidParams.nonEmpty) {
           throw QueryCompilationErrors.invalidHintParameterError(hintName, invalidParams)
         }
-        RepartitionByExpression(
-          partitionExprs.map(_.asInstanceOf[Expression]), hint.child, numPartitions)
+        if (adaptive) {
+          AdaptiveRepartition(partitionExprs.map(_.asInstanceOf[Expression]), hint.child)
+        } else {
+          RepartitionByExpression(
+            partitionExprs.map(_.asInstanceOf[Expression]), hint.child, numPartitions)
+        }
       }
 
       hint.parameters match {
+        case param @ Seq(_*) if adaptive =>
+          createRepartitionByExpression(None, param)
+
         case Seq(IntegerLiteral(numPartitions)) =>
           Repartition(numPartitions, shuffle, hint.child)
         case Seq(numPartitions: Int) =>
@@ -257,6 +265,8 @@ object ResolveHints {
             createRepartition(shuffle = false, hint)
           case "REPARTITION_BY_RANGE" =>
             createRepartitionByRange(hint)
+          case "ADAPTIVE_REPARTITION" =>
+            createRepartition(shuffle = true, hint, true)
           case _ => hint
         }
     }
