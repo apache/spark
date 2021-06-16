@@ -1647,7 +1647,7 @@ private[spark] object QueryCompilationErrors {
   def invalidYearMonthIntervalType(startFieldName: String, endFieldName: String): Throwable = {
     new AnalysisException(s"'interval $startFieldName to $endFieldName' is invalid.")
   }
-  
+
   def configRemovedInVersion(configName: String, version: String, comment: String): Throwable = {
     new AnalysisException(
       s"The SQL config '$configName' was removed in the version $version. $comment")
