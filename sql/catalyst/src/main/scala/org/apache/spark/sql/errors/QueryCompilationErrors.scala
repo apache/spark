@@ -1653,13 +1653,13 @@ private[spark] object QueryCompilationErrors {
       s"The SQL config '$configName' was removed in the version $version. $comment")
   }
 
-  def failedFallbackParsingError(msg: String, e1: Exception, e2: Exception): Throwable = {
+  def failedFallbackParsingError(msg: String, e1: Throwable, e2: Throwable): Throwable = {
     new AnalysisException(
       message = s"$msg${e1.getMessage}\nFailed fallback parsing: ${e2.getMessage}",
       cause = Some(e1.getCause))
   }
 
-  def decimalCannotGreaterThanPrecisionError(scale: Int, precision: String): Throwable = {
+  def decimalCannotGreaterThanPrecisionError(scale: Int, precision: Int): Throwable = {
     new AnalysisException(
       s"Decimal scale ($scale) cannot be greater than precision ($precision).")
   }

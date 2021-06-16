@@ -1557,4 +1557,6 @@ object QueryExecutionErrors {
     new SparkException(
       s"Can not load in UserDefinedType ${name} for user class ${userClass}.")
   }
+
+
 }
