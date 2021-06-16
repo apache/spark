@@ -16,61 +16,28 @@
 #
 
 from functools import total_ordering
-from importlib import import_module
-import inspect
 import itertools
 import os
-from pkgutil import iter_modules
 import re
-import sys
-import unittest
+import glob
 
 from sparktestsupport import SPARK_HOME
 
-
 all_modules = []
-pyspark_path = os.path.join(SPARK_HOME, "python")
-sys.path.append(pyspark_path)
-
-
-def _contain_unittests_class(module_name):
-    """
-    Check if the module with specific module_name has classes are derived from unittest.TestCase.
-    Such as:
-    pyspark.tests.test_appsubmit, it will return True, because there is SparkSubmitTests which is
-    included under the module of pyspark.tests.test_appsubmit, inherits from unittest.TestCase.
-    ``
-    :param module_name: the complete name of module to be checked.
-    :return: True if contains unittest classes otherwise False.
-             An ``ModuleNotFoundError`` will raise if the module is not found
-    """
-    _module = import_module(module_name)
-    for _, _class in inspect.getmembers(_module, inspect.isclass):
-        if issubclass(_class, unittest.TestCase):
-            return True
-    return False
 
 
 def _discover_python_unittests(paths):
-    """
-    Discover the python module which contains unittests under paths.
-    Such as:
-    ['pyspark/tests'], it will return the set of module name under the path of pyspark/tests, like
-    {'pyspark.tests.test_appsubmit', 'pyspark.tests.test_broadcast', ...}
-    :param paths: paths of module to be discovered.
-    :return: A set of complete test module name discovered udner the paths
-    """
     if not paths:
-        return set()
-    tests = set()
-
+        return set([])
+    tests = set([])
+    pyspark_path = os.path.join(SPARK_HOME, "python")
     for path in paths:
-        real_path = os.path.join(pyspark_path, path)
-        _prefix = path.replace('/', '.')
-        # iter modules under the specific tests path
-        for module in iter_modules([real_path], prefix=_prefix+'.'):
-            if _contain_unittests_class(module.name):
-                tests.add(module.name)
+        # Discover the test*.py in every path
+        files = glob.glob(os.path.join(pyspark_path, path, "test_*.py"))
+        for f in files:
+            # Convert 'pyspark_path/pyspark/tests/test_abc.py' to 'pyspark.tests.test_abc'
+            file2module = os.path.relpath(f, pyspark_path)[:-3].replace("/", ".")
+            tests.add(file2module)
     return tests
 
 
