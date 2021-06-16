@@ -95,7 +95,7 @@ final class BitArray {
     }
     this.bitCount = bitCount;
   }
-  
+
   void writeTo(DataOutputStream out) throws IOException {
     out.writeInt(data.length);
     for (long datum : data) {

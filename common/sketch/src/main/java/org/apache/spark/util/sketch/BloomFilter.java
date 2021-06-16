@@ -125,7 +125,7 @@ public abstract class BloomFilter {
    * @throws IncompatibleMergeException if {@code isCompatible(other) == false}
    */
   public abstract BloomFilter mergeInPlace(BloomFilter other) throws IncompatibleMergeException;
-  
+
   /**
    * Combines this bloom filter with another bloom filter by performing a bitwise AND of the
    * underlying data. The mutations happen to <b>this</b> instance. Callers must ensure the

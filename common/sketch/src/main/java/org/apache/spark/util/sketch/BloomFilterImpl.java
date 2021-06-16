@@ -207,7 +207,8 @@ class BloomFilterImpl extends BloomFilter implements Serializable {
     return this;
   }
 
-  private BloomFilterImpl checkCompatibilityForMerge(BloomFilter other) throws IncompatibleMergeException {
+  private BloomFilterImpl checkCompatibilityForMerge(BloomFilter other)
+          throws IncompatibleMergeException {
     // Duplicates the logic of `isCompatible` here to provide better error message.
     if (other == null) {
       throw new IncompatibleMergeException("Cannot merge null bloom filter");
