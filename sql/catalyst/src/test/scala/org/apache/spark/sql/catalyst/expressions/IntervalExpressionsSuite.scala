@@ -296,36 +296,6 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(durationExpr, expected)
     }
 
-    check(millis = -123)
-    check(31, 23, 59, 59, 999, 999)
-    check(31, 123, 159, 159, 1999, 1999)
-    check(days = 10000, micros = -1)
-    check(-31, -23, -59, -59, -999, -999)
-    check(days = -10000, micros = 1)
-    check(
-      hours = Int.MaxValue,
-      minutes = Int.MaxValue,
-      seconds = Int.MaxValue,
-      millis = Int.MaxValue,
-      micros = Int.MaxValue)
-  }
-
-  test("SPARK-35130: ANSI mode make day time interval") {
-    def check(
-        days: Int = 0,
-        hours: Int = 0,
-        minutes: Int = 0,
-        seconds: Int = 0,
-        millis: Int = 0,
-        micros: Int = 0): Unit = {
-      val secFrac = DateTimeTestUtils.secFrac(seconds, millis, micros)
-      val durationExpr = MakeDTInterval(Literal(days), Literal(hours), Literal(minutes),
-        Literal(Decimal(secFrac, Decimal.MAX_LONG_DIGITS, 6)))
-      val expected = secFrac + minutes * MICROS_PER_MINUTE + hours * MICROS_PER_HOUR +
-          days * MICROS_PER_DAY
-      checkEvaluation(durationExpr, expected)
-    }
-
     def checkException(
         days: Int = 0,
         hours: Int = 0,
@@ -339,21 +309,20 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkExceptionInExpression[ArithmeticException](durationExpr, EmptyRow, "")
     }
 
-    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
-      check(millis = -123)
-      check(31, 23, 59, 59, 999, 999)
-      check(days = 10000, micros = -1)
-      check(-31, -23, -59, -59, -999, -999)
-      check(days = -10000, micros = 1)
-      check(
-        hours = Int.MaxValue,
-        minutes = Int.MaxValue,
-        seconds = Int.MaxValue,
-        millis = Int.MaxValue,
-        micros = Int.MaxValue)
+    check(millis = -123)
+    check(31, 23, 59, 59, 999, 999)
+    check(31, 123, 159, 159, 1999, 1999)
+    check(days = 10000, micros = -1)
+    check(-31, -23, -59, -59, -999, -999)
+    check(days = -10000, micros = 1)
+    check(
+      hours = Int.MaxValue,
+      minutes = Int.MaxValue,
+      seconds = Int.MaxValue,
+      millis = Int.MaxValue,
+      micros = Int.MaxValue)
 
-      checkException(days = Int.MaxValue)
-    }
+    checkException(days = Int.MaxValue)
   }
 
   // TODO(SPARK-35778): Check multiply/divide of year-month intervals of any fields by numeric

@@ -288,12 +288,12 @@ struct<make_dt_interval(1, 0, 0, 123456789012.123456):interval day to second>
 
 
 -- !query
-select make_dt_interval(0, 0, 0, 1234567890123456789)
+select make_dt_interval(2147483647)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-cannot resolve 'make_dt_interval(0, 0, 0, 1234567890123456789L)' due to data type mismatch: argument 4 requires decimal(18,6) type, however, '1234567890123456789L' is of bigint type.; line 1 pos 7
+java.lang.ArithmeticException
+long overflow
 
 -- !query
 select make_ym_interval(1)

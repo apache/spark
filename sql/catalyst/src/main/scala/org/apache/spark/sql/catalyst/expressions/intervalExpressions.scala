@@ -409,7 +409,7 @@ case class MakeDTInterval(
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (day, hour, min, sec) => {
       val iu = IntervalUtils.getClass.getName.stripSuffix("$")
-      s"$iu.makeMicrosInterval($day, $hour, $min, $sec)"
+      s"$iu.makeDayTimeInterval($day, $hour, $min, $sec)"
     })
   }
 

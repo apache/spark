@@ -44,7 +44,7 @@ select make_dt_interval(1, 2);
 select make_dt_interval(1, 2, 3);
 select make_dt_interval(1, 2, 3, 4.005006);
 select make_dt_interval(1, 0, 0, 123456789012.123456);
-select make_dt_interval(0, 0, 0, 1234567890123456789);
+select make_dt_interval(2147483647);
 
 -- make_ym_interval
 select make_ym_interval(1);
