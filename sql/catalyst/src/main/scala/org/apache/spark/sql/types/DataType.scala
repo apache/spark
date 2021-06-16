@@ -181,7 +181,7 @@ object DataType {
       DayTimeIntervalType(HOUR, SECOND),
       DayTimeIntervalType(MINUTE, MINUTE),
       DayTimeIntervalType(MINUTE, SECOND),
-      DayTimeIntervalType(SECOND, SECOND))
+      DayTimeIntervalType(SECOND, SECOND),
       // TODO(SPARK-35770): Parse YearMonthIntervalType from JSON
       YearMonthIntervalType(), TimestampWithoutTZType)
       .map(t => t.typeName -> t).toMap
