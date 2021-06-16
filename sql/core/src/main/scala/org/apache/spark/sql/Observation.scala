@@ -56,32 +56,26 @@ class Observation(name: String) {
   }
 
   /**
-   * Get the observation results. Waits for the first action on the observed dataset to complete.
-   * After calling `reset()`, waits for completion of the next action on the observed dataset.
-   */
-  def get: Row = option().get
-
-  /**
-   * Get the observation results. Waits for the first action on the observed dataset to complete.
-   * This method times out waiting for the action after the given amount of time.
-   * After calling `reset()`, waits for completion of the next action on the observed dataset.
-   *
-   * @param time timeout
-   * @param unit timeout time unit
-   * @return observation row as an Option, or None on timeout
-   */
-  def option(time: Long, unit: TimeUnit): Option[Row] = option(Some(time), unit)
-
-  /**
-   * Wait for the first action on the observed dataset to complete.
-   * When the time parameter is given, this method times out waiting for the action.
-   * After calling `reset()`, waits for completion of the next action on the observed dataset.
+   * Wait for the first action on the observed dataset to complete and returns true.
+   * This method times out after the given amount of time and returns false.
    *
    * @param time timeout
    * @param unit timeout time unit
    * @return true if action complete within timeout, false on timeout
    */
-  def waitCompleted(time: Option[Long] = None, unit: TimeUnit = TimeUnit.MILLISECONDS): Boolean = {
+  def waitCompleted(time: Long, unit: TimeUnit): Boolean = waitCompleted(Some(time), unit)
+
+  /**
+   * Get the observation results. This waits until the observed dataset finishes its first action.
+   * If you want to wait for the result and provide a timeout, use waitCompleted.
+   * Only the result of the first action is available. Subsequent actions do not modify the result.
+   */
+  def get: Row = {
+    waitCompleted(None, TimeUnit.SECONDS)
+    row.get
+  }
+
+  private def waitCompleted(time: Option[Long], unit: TimeUnit): Boolean = {
     lock.lock()
     try {
       if (row.isEmpty) {
@@ -92,53 +86,6 @@ class Observation(name: String) {
         }
       }
       row.isDefined
-    } finally {
-      lock.unlock()
-    }
-  }
-
-  /**
-   * Wait for the first action on the observed dataset to complete.
-   * After calling `reset()`, waits for completion of the next action on the observed dataset.
-   *
-   * @param time timeout
-   * @param unit timeout time unit
-   * @return true if action complete within timeout, false on timeout
-   */
-  def waitCompleted(time: Long, unit: TimeUnit): Boolean = waitCompleted(Some(time), unit)
-
-  /**
-   * Reset the observation. This deletes the observation and allows to wait for completion
-   * of the next action called on the observed dataset. Not resetting the observation before
-   * attempting to retrieve the next action's results via get, option or waitCompleted is not
-   * guaranteed to work.
-   */
-  def reset(): Unit = {
-    lock.lock()
-    try {
-      row = None
-    } finally {
-      lock.unlock()
-    }
-  }
-
-  /**
-   * Terminates the observation. Subsequent calls to actions on the observed dataset
-   * will not update the observation. The current observation persists after calling this method.
-   */
-  def close(): Unit = unregister()
-
-  private def option(time: Option[Long] = None,
-                     unit: TimeUnit = TimeUnit.MILLISECONDS): Option[Row] = {
-    waitCompleted(time, unit)
-    row
-  }
-
-  private[spark] def onFinish(funcName: String, qe: QueryExecution): Unit = {
-    lock.lock()
-    try {
-      this.row = getMetricRow(qe.observedMetrics)
-      if (this.row.isDefined) completed.signalAll()
     } finally {
       lock.unlock()
     }
@@ -159,6 +106,17 @@ class Observation(name: String) {
 
   private def unregister(): Unit = {
     this.sparkSession.foreach(_.listenerManager.unregister(listener))
+  }
+
+  private[spark] def onFinish(funcName: String, qe: QueryExecution): Unit = {
+    lock.lock()
+    try {
+      this.row = getMetricRow(qe.observedMetrics)
+      if (this.row.isDefined) completed.signalAll()
+    } finally {
+      lock.unlock()
+    }
+    unregister()
   }
 
 }

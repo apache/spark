@@ -2388,60 +2388,36 @@ class DataFrameSuite extends QueryTest
     val namedObservation = Observation("named")
     val unnamedObservation = Observation()
 
-    try {
-      val df = spark
-        .range(100)
-        .observe(
-          namedObservation,
-          min($"id").as("min_val"),
-          max($"id").as("max_val"),
-          sum($"id").as("sum_val"),
-          count(when($"id" % 2 === 0, 1)).as("num_even")
-        )
-        .observe(
-          unnamedObservation,
-          avg($"id").cast("int").as("avg_val")
-        )
-
-      def checkMetrics(namedMetric: Row, unnamedMetric: Row): Unit = {
-        assert(namedMetric === Row(0L, 99L, 4950L, 50L))
-        assert(unnamedMetric === Row(49))
-      }
-
-      // Before first run observation times out
-      assert(namedObservation.waitCompleted(100, TimeUnit.MILLISECONDS) === false)
-      assert(unnamedObservation.waitCompleted(100, TimeUnit.MILLISECONDS) === false)
-
-      // First run
-      df.collect()
-      assert(namedObservation.waitCompleted(1, TimeUnit.SECONDS))
-      assert(unnamedObservation.waitCompleted(1, TimeUnit.SECONDS))
-      checkMetrics(namedObservation.get, unnamedObservation.get)
-      namedObservation.reset()
-      unnamedObservation.reset()
-
-      // Second run should produce the same result as the first run.
-      df.collect()
-      assert(namedObservation.waitCompleted(1, TimeUnit.SECONDS))
-      assert(unnamedObservation.waitCompleted(1, TimeUnit.SECONDS))
-      checkMetrics(namedObservation.get, unnamedObservation.get)
-      checkMetrics(
-        namedObservation.option(100, TimeUnit.MILLISECONDS).get,
-        unnamedObservation.option(100, TimeUnit.MILLISECONDS).get
+    val df = spark
+      .range(100)
+      .observe(
+        namedObservation,
+        min($"id").as("min_val"),
+        max($"id").as("max_val"),
+        sum($"id").as("sum_val"),
+        count(when($"id" % 2 === 0, 1)).as("num_even")
       )
-      namedObservation.reset()
-      unnamedObservation.reset()
+      .observe(
+        unnamedObservation,
+        avg($"id").cast("int").as("avg_val")
+      )
 
-      // After reset, option times out
-      assert(namedObservation.option(100, TimeUnit.MILLISECONDS).isEmpty)
-      assert(unnamedObservation.option(100, TimeUnit.MILLISECONDS).isEmpty)
-    } finally {
-      namedObservation.close()
-      unnamedObservation.close()
+    def checkMetrics(namedMetric: Row, unnamedMetric: Row): Unit = {
+      assert(namedMetric === Row(0L, 99L, 4950L, 50L))
+      assert(unnamedMetric === Row(49))
     }
 
-    // an unused observation can be closed
-    Observation().close()
+    // Before first run observation times out
+    assert(namedObservation.waitCompleted(100, TimeUnit.MILLISECONDS) === false)
+    assert(unnamedObservation.waitCompleted(100, TimeUnit.MILLISECONDS) === false)
+
+    // First run
+    df.collect()
+    assert(namedObservation.waitCompleted(1, TimeUnit.SECONDS))
+    assert(unnamedObservation.waitCompleted(1, TimeUnit.SECONDS))
+    checkMetrics(namedObservation.get, unnamedObservation.get)
+    // we can get the result multiple times
+    checkMetrics(namedObservation.get, unnamedObservation.get)
 
     // an observation can be used only once
     assertThrows[IllegalStateException] {
