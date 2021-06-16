@@ -381,9 +381,13 @@ class IndexesTest(PandasOnSparkTestCase, TestUtils):
         psidx = ps.from_pandas(pidx)
 
         with self.sql_conf({"spark.sql.execution.arrow.pyspark.selfDestruct.enabled": True}):
-            self.assert_eq(psidx.drop_duplicates().sort_values(), pidx.drop_duplicates().sort_values())
+            self.assert_eq(
+                psidx.drop_duplicates().sort_values(), pidx.drop_duplicates().sort_values()
+            )
         with self.sql_conf({"spark.sql.execution.arrow.pyspark.selfDestruct.enabled": False}):
-            self.assert_eq(psidx.drop_duplicates().sort_values(), pidx.drop_duplicates().sort_values())
+            self.assert_eq(
+                psidx.drop_duplicates().sort_values(), pidx.drop_duplicates().sort_values()
+            )
 
     def test_dropna(self):
         pidx = pd.Index([np.nan, 2, 4, 1, np.nan, 3])
