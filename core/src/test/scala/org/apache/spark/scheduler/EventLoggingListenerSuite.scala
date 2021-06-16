@@ -620,7 +620,7 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
       case (expected: SparkListenerTaskEnd, actual: SparkListenerTaskEnd) =>
         assert(expected.stageId === actual.stageId)
       case (expected: SparkListenerExecutorMetricsUpdate,
-      actual: SparkListenerExecutorMetricsUpdate) =>
+          actual: SparkListenerExecutorMetricsUpdate) =>
         assert(expected.execId == actual.execId)
         assert(expected.execId == SparkContext.DRIVER_IDENTIFIER)
       case (expected: SparkListenerEvent, actual: SparkListenerEvent) =>
