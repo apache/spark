@@ -651,4 +651,10 @@ class CastSuite extends CastSuiteBase {
         checkEvaluation(cast(cast(interval, StringType), YearMonthIntervalType()), period)
       }
   }
+
+  test("SPARK-35720: cast invalid string input to timestamp without time zone") {
+    Seq("00:00:00", "a", "123", "a2021-06-17", "2021-06-17abc").foreach { invalidInput =>
+      checkEvaluation(cast(invalidInput, TimestampWithoutTZType), null)
+    }
+  }
 }
