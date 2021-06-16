@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.expressions.{Cast, Expression}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.DataTypeJsonUtils.{DataTypeJsonDeserializer, DataTypeJsonSerializer}
 import org.apache.spark.sql.catalyst.util.StringUtils.StringConcat
-import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy.{ANSI, STRICT}
@@ -197,7 +197,8 @@ object DataType {
       case VARCHAR_TYPE(length) => VarcharType(length.toInt)
       case other => otherTypes.getOrElse(
         other,
-        throw QueryExecutionErrors.failedConvertJSONStringToError(name, "a data type"))
+        throw new IllegalArgumentException(
+          s"Failed to convert the JSON string '$name' to a data type."))
     }
   }
 
@@ -248,7 +249,8 @@ object DataType {
         new PythonUserDefinedType(parseDataType(v), pyClass, serialized)
 
     case other =>
-      throw QueryExecutionErrors.failedConvertJSONStringToError(compact(render(other)), "a data type")
+      throw new IllegalArgumentException(
+        s"Failed to convert the JSON string '${compact(render(other))}' to a data type.")
   }
 
   private def parseStructField(json: JValue): StructField = json match {
@@ -265,7 +267,8 @@ object DataType {
     ("type", dataType: JValue)) =>
       StructField(name, parseDataType(dataType), nullable)
     case other =>
-      throw QueryExecutionErrors.failedConvertJSONStringToError(compact(render(other)), "a field")
+      throw new IllegalArgumentException(
+        s"Failed to convert the JSON string '${compact(render(other))}' to a field.")
   }
 
   protected[types] def buildFormattedString(

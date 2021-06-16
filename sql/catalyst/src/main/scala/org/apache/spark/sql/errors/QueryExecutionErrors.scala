@@ -1471,32 +1471,6 @@ object QueryExecutionErrors {
       s"'$name': $pluginClassName", e.getCause)
   }
 
-  def notStructError(name: String): Throwable = {
-    new IllegalArgumentException(s"Not a struct: $name")
-  }
-
-  def fieldNotFoundError(name: String): Throwable = {
-    new IllegalArgumentException("Field not found: " + name)
-  }
-
-  def afterColumnNotFoundError(name: String): Throwable = {
-    new IllegalArgumentException("AFTER column not found: " + name)
-  }
-
-  def cannotDelete(name: String): Throwable = {
-    new IllegalArgumentException(s"Cannot delete $name")
-  }
-
-  def fieldNotFoundInError(name: String, names: String): Throwable = {
-    new IllegalArgumentException(
-      s"Cannot find field: ${name} in ${names}")
-  }
-
-  def computeStatsCalledBeforePushDownError(name: String): Throwable = {
-    new IllegalStateException(
-      s"BUG: computeStats called before pushdown on DSv2 relation: $name")
-  }
-
   def noSuchElementExceptionError(): Throwable = {
     new NoSuchElementException
   }
@@ -1521,24 +1495,9 @@ object QueryExecutionErrors {
     new UnsupportedOperationException
   }
 
-  def typeNotSupportOrderedOperationsError(name: String): Throwable = {
-    new IllegalArgumentException(
-      s"Type ${name} does not support ordered operations")
-  }
-
-  def failedConvertJSONStringToError(name: String, dest: String): Throwable = {
-    new IllegalArgumentException(
-      s"Failed to convert the JSON string '$name' to $dest.")
-  }
-
   def nullLiteralsCannotCastToError(name: String): Throwable = {
     new UnsupportedOperationException(
       s"null literals can't be casted to $name")
-  }
-
-  def nameNotExistError(name: String, availableName: Array[String]): Throwable = {
-    new IllegalArgumentException(
-      s"$name does not exist. Available: ${availableName.mkString(", ")}")
   }
 
   def namesNotExistError(nonExistName: Set[String], availableName: Array[String]): Throwable = {

@@ -273,7 +273,8 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
    */
   def apply(name: String): StructField = {
     nameToField.getOrElse(name,
-      throw QueryExecutionErrors.nameNotExistError(name, fieldNames))
+      throw new IllegalArgumentException(
+        s"$name does not exist. Available: ${fieldNames.mkString(", ")}"))
   }
 
   /**
@@ -298,7 +299,8 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
    */
   def fieldIndex(name: String): Int = {
     nameToIndex.getOrElse(name,
-      throw QueryExecutionErrors.nameNotExistError(name, fieldNames))
+      throw new IllegalArgumentException(
+        s"$name does not exist. Available: ${fieldNames.mkString(", ")}"))
   }
 
   private[sql] def getFieldIndex(name: String): Option[Int] = {

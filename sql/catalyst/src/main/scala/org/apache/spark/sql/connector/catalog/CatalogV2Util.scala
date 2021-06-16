@@ -25,7 +25,7 @@ import scala.collection.JavaConverters._
 import org.apache.spark.sql.catalyst.analysis.{NamedRelation, NoSuchDatabaseException, NoSuchNamespaceException, NoSuchTableException, UnresolvedV2Relation}
 import org.apache.spark.sql.catalyst.plans.logical.{AlterTable, CreateTableAsSelectStatement, CreateTableStatement, ReplaceTableAsSelectStatement, ReplaceTableStatement, SerdeInfo}
 import org.apache.spark.sql.connector.catalog.TableChange._
-import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.types.{ArrayType, DataType, MapType, NullType, StructField, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -146,7 +146,7 @@ private[sql] object CatalogV2Util {
                   Some(parent.copy(dataType = addField(parentType, newField, add.position())))
 
                 case _ =>
-                  throw QueryExecutionErrors.notStructError(names.init.last)
+                  throw new IllegalArgumentException(s"Not a struct: ${names.init.last}")
               })
           }
 
@@ -171,7 +171,7 @@ private[sql] object CatalogV2Util {
         case update: UpdateColumnPosition =>
           def updateFieldPos(struct: StructType, name: String): StructType = {
             val oldField = struct.fields.find(_.name == name).getOrElse {
-              throw QueryExecutionErrors.fieldNotFoundError(name)
+              throw new IllegalArgumentException("Field not found: " + name)
             }
             val withFieldRemoved = StructType(struct.fields.filter(_ != oldField))
             addField(withFieldRemoved, oldField, update.position())
@@ -185,7 +185,7 @@ private[sql] object CatalogV2Util {
                 case parentType: StructType =>
                   Some(parent.copy(dataType = updateFieldPos(parentType, names.last)))
                 case _ =>
-                  throw QueryExecutionErrors.notStructError(names.init.last)
+                  throw new IllegalArgumentException(s"Not a struct: ${names.init.last}")
               })
           }
 
@@ -211,7 +211,7 @@ private[sql] object CatalogV2Util {
       val afterCol = position.asInstanceOf[After].column()
       val fieldIndex = schema.fields.indexWhere(_.name == afterCol)
       if (fieldIndex == -1) {
-        throw QueryExecutionErrors.afterColumnNotFoundError(afterCol)
+        throw new IllegalArgumentException("AFTER column not found: " + afterCol)
       }
       val (before, after) = schema.fields.splitAt(fieldIndex + 1)
       StructType(before ++ (field +: after))
@@ -224,7 +224,7 @@ private[sql] object CatalogV2Util {
       update: StructField => Option[StructField]): StructType = {
 
     val pos = struct.getFieldIndex(fieldNames.head)
-        .getOrElse(throw QueryExecutionErrors.fieldNotFoundError(fieldNames.head))
+      .getOrElse(throw new IllegalArgumentException(s"Cannot find field: ${fieldNames.head}"))
     val field = struct.fields(pos)
     val replacement: Option[StructField] = (fieldNames.tail, field.dataType) match {
       case (Seq(), _) =>
@@ -236,7 +236,7 @@ private[sql] object CatalogV2Util {
 
       case (Seq("key"), map @ MapType(keyType, _, _)) =>
         val updated = update(StructField("key", keyType, nullable = false))
-            .getOrElse(throw QueryExecutionErrors.cannotDelete("map key"))
+          .getOrElse(throw new IllegalArgumentException(s"Cannot delete map key"))
         Some(field.copy(dataType = map.copy(keyType = updated.dataType)))
 
       case (Seq("key", names @ _*), map @ MapType(keyStruct: StructType, _, _)) =>
@@ -244,7 +244,7 @@ private[sql] object CatalogV2Util {
 
       case (Seq("value"), map @ MapType(_, mapValueType, isNullable)) =>
         val updated = update(StructField("value", mapValueType, nullable = isNullable))
-            .getOrElse(throw QueryExecutionErrors.cannotDelete("map value"))
+          .getOrElse(throw new IllegalArgumentException(s"Cannot delete map value"))
         Some(field.copy(dataType = map.copy(
           valueType = updated.dataType,
           valueContainsNull = updated.nullable)))
@@ -254,7 +254,7 @@ private[sql] object CatalogV2Util {
 
       case (Seq("element"), array @ ArrayType(elementType, isNullable)) =>
         val updated = update(StructField("element", elementType, nullable = isNullable))
-            .getOrElse(throw QueryExecutionErrors.cannotDelete("array element"))
+          .getOrElse(throw new IllegalArgumentException(s"Cannot delete array element"))
         Some(field.copy(dataType = array.copy(
           elementType = updated.dataType,
           containsNull = updated.nullable)))
@@ -263,7 +263,8 @@ private[sql] object CatalogV2Util {
         Some(field.copy(dataType = array.copy(elementType = replace(elementStruct, names, update))))
 
       case (names, dataType) =>
-        throw QueryExecutionErrors.fieldNotFoundInError(names.head, dataType.simpleString)
+        throw new IllegalArgumentException(
+          s"Cannot find field: ${names.head} in ${dataType.simpleString}")
     }
 
     val newFields = struct.fields.zipWithIndex.flatMap {

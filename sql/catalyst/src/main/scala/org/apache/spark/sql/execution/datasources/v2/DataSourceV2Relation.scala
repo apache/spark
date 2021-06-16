@@ -24,7 +24,6 @@ import org.apache.spark.sql.catalyst.util.{truncatedString, CharVarcharUtils}
 import org.apache.spark.sql.connector.catalog.{CatalogPlugin, Identifier, MetadataColumn, SupportsMetadataColumns, Table, TableCapability}
 import org.apache.spark.sql.connector.read.{Scan, Statistics => V2Statistics, SupportsReportStatistics}
 import org.apache.spark.sql.connector.read.streaming.{Offset, SparkDataStream}
-import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.Utils
 
@@ -77,7 +76,8 @@ case class DataSourceV2Relation(
       // when testing, throw an exception if this computeStats method is called because stats should
       // not be accessed before pushing the projection and filters to create a scan. otherwise, the
       // stats are not accurate because they are based on a full table scan of all columns.
-      throw QueryExecutionErrors.computeStatsCalledBeforePushDownError(name)
+      throw new IllegalStateException(
+        s"BUG: computeStats called before pushdown on DSv2 relation: $name")
     } else {
       // when not testing, return stats because bad stats are better than failing a query
       table.asReadable.newScanBuilder(options) match {
