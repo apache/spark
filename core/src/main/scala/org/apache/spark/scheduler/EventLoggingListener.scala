@@ -249,10 +249,10 @@ private[spark] class EventLoggingListener(
   }
 
   override def onExecutorMetricsUpdate(event: SparkListenerExecutorMetricsUpdate): Unit = {
-    if (event.execId == SparkContext.DRIVER_IDENTIFIER) {
-      logEvent(event)
-    }
     if (shouldLogStageExecutorMetrics) {
+      if (event.execId == SparkContext.DRIVER_IDENTIFIER) {
+        logEvent(event)
+      }
       event.executorUpdates.foreach { case (stageKey1, newPeaks) =>
         liveStageExecutorMetrics.foreach { case (stageKey2, metricsPerExecutor) =>
           // If the update came from the driver, stageKey1 will be the dummy key (-1, -1),
