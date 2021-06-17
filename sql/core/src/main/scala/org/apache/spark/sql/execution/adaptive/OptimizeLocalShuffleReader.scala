@@ -36,7 +36,7 @@ import org.apache.spark.sql.internal.SQLConf
 object OptimizeLocalShuffleReader extends CustomShuffleReaderRule {
 
   override val supportedShuffleOrigins: Seq[ShuffleOrigin] =
-    Seq(ENSURE_REQUIREMENTS, REPARTITION_BY_NONE, ADAPTIVE_REPARTITION)
+    Seq(ENSURE_REQUIREMENTS, REPARTITION_BY_NONE)
 
   private val ensureRequirements = EnsureRequirements
 
@@ -144,7 +144,7 @@ object OptimizeLocalShuffleReader extends CustomShuffleReaderRule {
       s.shuffle.shuffleOrigin match {
         case ENSURE_REQUIREMENTS =>
           s.mapStats.isDefined && partitionSpecs.nonEmpty && supportLocalReader(s.shuffle)
-        case REPARTITION_BY_NONE | ADAPTIVE_REPARTITION =>
+        case REPARTITION_BY_NONE =>
           // Use LocalShuffleReader only when we can't CoalesceShufflePartitions
           s.mapStats.exists(_.bytesByPartitionId.length == partitionSpecs.size) &&
             partitionSpecs.nonEmpty && supportLocalReader(s.shuffle)
