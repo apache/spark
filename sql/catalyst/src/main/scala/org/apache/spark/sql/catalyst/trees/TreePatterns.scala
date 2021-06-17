@@ -114,6 +114,7 @@ object TreePattern extends Enumeration  {
   val UNRESOLVED_RELATION: Value = Value
   val WINDOW: Value = Value
   val WITH_WINDOW_DEFINITION: Value = Value
+  val WRITE_TO_STREAM_STATEMENT: Value = Value
 
   // Unresolved expression patterns (Alphabetically ordered)
   val UNRESOLVED_ALIAS: Value = Value

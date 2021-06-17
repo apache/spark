@@ -21,6 +21,7 @@ import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, UnaryNode}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{TreePattern, WRITE_TO_STREAM_STATEMENT}
 import org.apache.spark.sql.connector.catalog.{Identifier, Table, TableCatalog}
 import org.apache.spark.sql.streaming.OutputMode
 
@@ -62,5 +63,7 @@ case class WriteToStreamStatement(
 
   override protected def withNewChildInternal(newChild: LogicalPlan): WriteToStreamStatement =
     copy(inputQuery = newChild)
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(WRITE_TO_STREAM_STATEMENT)
 }
 
