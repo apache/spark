@@ -2,14 +2,14 @@
 range
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 11.0.4+11-LTS on Linux 3.10.0-862.3.2.el7.x86_64
-Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+OpenJDK 64-Bit Server VM 11.0.10+9-LTS on Linux 5.4.0-1043-azure
+Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
 range:                                    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-full scan                                         20357          21595        1692         25.8          38.8       1.0X
-limit after range                                   115            130          15       4563.9           0.2     177.2X
-filter after range                                 1890           1906          21        277.5           3.6      10.8X
-count after range                                    85             87           3       6200.7           0.2     240.8X
-count after limit after range                       101            109           9       5213.9           0.2     202.4X
+full scan                                         28020          28353         518         18.7          53.4       1.0X
+limit after range                                    34             58          44      15423.8           0.1     824.3X
+filter after range                                 1848           1863          12        283.7           3.5      15.2X
+count after range                                    34             44          15      15406.4           0.1     823.4X
+count after limit after range                        50             79          36      10485.2           0.1     560.4X
 
 

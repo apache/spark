@@ -188,21 +188,6 @@ class CountVectorizerSuite extends MLTest with DefaultReadWriteTest {
     }
   }
 
-  test("CountVectorizer throws exception when vocab is empty") {
-    intercept[IllegalArgumentException] {
-      val df = Seq(
-        (0, split("a a b b c c")),
-        (1, split("aa bb cc"))
-      ).toDF("id", "words")
-      val cvModel = new CountVectorizer()
-        .setInputCol("words")
-        .setOutputCol("features")
-        .setVocabSize(3) // limit vocab size to 3
-        .setMinDF(3)
-        .fit(df)
-    }
-  }
-
   test("CountVectorizerModel with minTF count") {
     val df = Seq(
       (0, split("a a a b b c c c d "), Vectors.sparse(4, Seq((0, 3.0), (2, 3.0)))),
@@ -304,5 +289,64 @@ class CountVectorizerSuite extends MLTest with DefaultReadWriteTest {
     val interaction = new Interaction().setInputCols(Array("features1", "features2"))
       .setOutputCol("features")
     interaction.transform(df1)
+  }
+
+  test("SPARK-32662: Test on empty dataset") {
+    val df = Seq[(Int, Array[String])]().toDF("id", "words")
+    val cvModel = new CountVectorizer()
+      .setInputCol("words")
+      .setOutputCol("features")
+      .fit(df)
+    assert(cvModel.vocabulary.isEmpty === true)
+    val ans = cvModel.transform(df).select("features").collect()
+    assert(ans.length === 0)
+  }
+
+  test("SPARK-32662: Remove requirement for minimum vocabulary size") {
+    val df = Seq(
+      (0, Array[String]()),
+      (1, Array[String]())
+    ).toDF("id", "words")
+    val cvModel = new CountVectorizer()
+      .setInputCol("words")
+      .setOutputCol("features")
+      .fit(df)
+    assert(cvModel.vocabulary.isEmpty === true)
+    testTransformer[(Int, Seq[String])](df, cvModel, "features") {
+      case Row(features: Vector) =>
+        assert(features === Vectors.sparse(0, Seq()))
+    }
+
+    val df2 = Seq(
+      (0, Array("a", "b", "c")),
+      (1, Array("d", "e")),
+      (2, Array[String]())
+    ).toDF("id", "words")
+    val cvModel2 = new CountVectorizer()
+      .setInputCol("words")
+      .setOutputCol("features")
+      .setMinDF(2)
+      .fit(df2)
+    assert(cvModel2.vocabulary.isEmpty === true)
+    testTransformer[(Int, Seq[String])](df2, cvModel2, "features") {
+      case Row(features: Vector) =>
+        assert(features === Vectors.sparse(0, Seq()))
+    }
+
+    val df3 = Seq(
+      (0, Array("a")),
+      (1, Array("a")),
+      (2, Array("a"))
+    ).toDF("id", "words")
+    val cvModel3 = new CountVectorizer()
+      .setInputCol("words")
+      .setOutputCol("features")
+      .setMaxDF(2)
+      .fit(df3)
+    assert(cvModel3.vocabulary.isEmpty === true)
+    testTransformer[(Int, Seq[String])](df3, cvModel3, "features") {
+      case Row(features: Vector) =>
+        assert(features === Vectors.sparse(0, Seq()))
+    }
   }
 }

@@ -17,16 +17,13 @@
 
 package org.apache.spark.sql.execution.datasources.csv
 
-import java.nio.charset.Charset
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.mapreduce._
 
-import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.csv.{CSVHeaderChecker, CSVOptions, UnivocityGenerator, UnivocityParser}
+import org.apache.spark.sql.catalyst.csv.{CSVHeaderChecker, CSVOptions, UnivocityParser}
 import org.apache.spark.sql.catalyst.expressions.ExprUtils
 import org.apache.spark.sql.catalyst.util.CompressionCodecs
 import org.apache.spark.sql.execution.datasources._
@@ -134,7 +131,11 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
         dataSchema.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord))
       val actualRequiredSchema = StructType(
         requiredSchema.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord))
-      val parser = new UnivocityParser(actualDataSchema, actualRequiredSchema, parsedOptions)
+      val parser = new UnivocityParser(
+        actualDataSchema,
+        actualRequiredSchema,
+        parsedOptions,
+        filters)
       val schema = if (columnPruning) actualRequiredSchema else actualDataSchema
       val isStartOfFile = file.start == 0
       val headerChecker = new CSVHeaderChecker(

@@ -25,7 +25,7 @@ import scala.concurrent.Future
 import scala.concurrent.duration._
 
 import org.scalatest.BeforeAndAfter
-import org.scalatest.Matchers
+import org.scalatest.matchers.must.Matchers
 
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Deploy._

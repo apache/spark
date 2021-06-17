@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Cast, Expr
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.catalyst.util.{GenericArrayData, QuantileSummaries}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -70,7 +71,7 @@ object StatFunctions extends Logging {
     require(relativeError >= 0,
       s"Relative Error must be non-negative but got $relativeError")
     val columns: Seq[Column] = cols.map { colName =>
-      val field = df.schema(colName)
+      val field = df.resolve(colName)
       require(field.dataType.isInstanceOf[NumericType],
         s"Quantile calculation for column $colName with data type ${field.dataType}" +
         " is not supported.")
@@ -101,7 +102,12 @@ object StatFunctions extends Logging {
     }
     val summaries = df.select(columns: _*).rdd.treeAggregate(emptySummaries)(apply, merge)
 
-    summaries.map { summary => probabilities.flatMap(summary.query) }
+    summaries.map {
+      summary => summary.query(probabilities) match {
+        case Some(q) => q
+        case None => Seq()
+      }
+    }
   }
 
   /** Calculate the Pearson Correlation Coefficient for the given columns */
@@ -154,10 +160,9 @@ object StatFunctions extends Logging {
               functionName: String): CovarianceCounter = {
     require(cols.length == 2, s"Currently $functionName calculation is supported " +
       "between two columns.")
-    cols.map(name => (name, df.schema.fields.find(_.name == name))).foreach { case (name, data) =>
-      require(data.nonEmpty, s"Couldn't find column with name $name")
-      require(data.get.dataType.isInstanceOf[NumericType], s"Currently $functionName calculation " +
-        s"for columns with dataType ${data.get.dataType.catalogString} not supported.")
+    cols.map(name => (name, df.resolve(name))).foreach { case (name, data) =>
+      require(data.dataType.isInstanceOf[NumericType], s"Currently $functionName calculation " +
+        s"for columns with dataType ${data.dataType.catalogString} not supported.")
     }
     val columns = cols.map(n => Column(Cast(Column(n).expr, DoubleType)))
     df.select(columns: _*).queryExecution.toRdd.treeAggregate(new CovarianceCounter)(
@@ -236,7 +241,7 @@ object StatFunctions extends Logging {
         p.stripSuffix("%").toDouble / 100.0
       } catch {
         case e: NumberFormatException =>
-          throw new IllegalArgumentException(s"Unable to parse $p as a percentile", e)
+          throw QueryExecutionErrors.cannotParseStatisticAsPercentileError(p, e)
       }
     }
     require(percentiles.forall(p => p >= 0 && p <= 1), "Percentiles must be in the range [0, 1]")
@@ -255,11 +260,15 @@ object StatFunctions extends Logging {
       } else {
         stats.toLowerCase(Locale.ROOT) match {
           case "count" => (child: Expression) => Count(child).toAggregateExpression()
+          case "count_distinct" => (child: Expression) =>
+            Count(child).toAggregateExpression(isDistinct = true)
+          case "approx_count_distinct" => (child: Expression) =>
+            HyperLogLogPlusPlus(child).toAggregateExpression()
           case "mean" => (child: Expression) => Average(child).toAggregateExpression()
           case "stddev" => (child: Expression) => StddevSamp(child).toAggregateExpression()
           case "min" => (child: Expression) => Min(child).toAggregateExpression()
           case "max" => (child: Expression) => Max(child).toAggregateExpression()
-          case _ => throw new IllegalArgumentException(s"$stats is not a recognised statistic")
+          case _ => throw QueryExecutionErrors.statisticNotRecognizedError(stats)
         }
       }
     }

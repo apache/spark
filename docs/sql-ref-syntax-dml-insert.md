@@ -20,6 +20,7 @@ license: |
 ---
 
 The INSERT statements:
+
 * [INSERT INTO statement](sql-ref-syntax-dml-insert-into.html)
 * [INSERT OVERWRITE statement](sql-ref-syntax-dml-insert-overwrite-table.html)
 * [INSERT OVERWRITE DIRECTORY statement](sql-ref-syntax-dml-insert-overwrite-directory.html)

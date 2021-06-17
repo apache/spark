@@ -34,7 +34,7 @@ import org.apache.spark.util.ThreadUtils
  * To run this benchmark:
  * {{{
  *   1. without sbt:
- *      bin/spark-submit --class <this class> --jars <spark core test jar>
+ *      bin/spark-submit --class <this class> <spark core test jar>
  *   2. build/sbt "core/test:runMain <this class>"
  *   3. generate result:
  *      SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "core/test:runMain <this class>"
@@ -76,7 +76,7 @@ object KryoSerializerBenchmark extends BenchmarkBase {
     conf.set(EXECUTOR_EXTRA_JAVA_OPTIONS,
       "-XX:+UseParallelGC -XX:-UseDynamicNumberOfGCThreads")
     conf.set(SERIALIZER, "org.apache.spark.serializer.KryoSerializer")
-    conf.set(KRYO_USER_REGISTRATORS, classOf[MyRegistrator].getName)
+    conf.set(KRYO_USER_REGISTRATORS, Seq(classOf[MyRegistrator].getName))
     conf.set(KRYO_USE_POOL, usePool)
 
     if (sc != null) {

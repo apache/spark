@@ -131,12 +131,12 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
     // Consider table and storage properties. For properties existing in both sides, storage
     // properties will supersede table properties.
     if (serde.contains("parquet")) {
-      val options = relation.tableMeta.properties.filterKeys(isParquetProperty) ++
+      val options = relation.tableMeta.properties.filterKeys(isParquetProperty).toMap ++
         relation.tableMeta.storage.properties + (ParquetOptions.MERGE_SCHEMA ->
         SQLConf.get.getConf(HiveUtils.CONVERT_METASTORE_PARQUET_WITH_SCHEMA_MERGING).toString)
         convertToLogicalRelation(relation, options, classOf[ParquetFileFormat], "parquet")
     } else {
-      val options = relation.tableMeta.properties.filterKeys(isOrcProperty) ++
+      val options = relation.tableMeta.properties.filterKeys(isOrcProperty).toMap ++
         relation.tableMeta.storage.properties
       if (SQLConf.get.getConf(SQLConf.ORC_IMPLEMENTATION) == "native") {
         convertToLogicalRelation(
@@ -332,7 +332,7 @@ private[hive] object HiveMetastoreCatalog {
       metastoreSchema: StructType,
       inferredSchema: StructType): StructType = try {
     // scalastyle:off caselocale
-    // Find any nullable fields in mestastore schema that are missing from the inferred schema.
+    // Find any nullable fields in metastore schema that are missing from the inferred schema.
     val metastoreFields = metastoreSchema.map(f => f.name.toLowerCase -> f).toMap
     val missingNullables = metastoreFields
       .filterKeys(!inferredSchema.map(_.name.toLowerCase).contains(_))

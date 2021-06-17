@@ -18,7 +18,6 @@
 package org.apache.spark.sql
 
 import scala.collection.JavaConverters._
-import scala.language.implicitConversions
 
 import org.apache.spark.annotation.Stable
 import org.apache.spark.internal.Logging
@@ -27,11 +26,10 @@ import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.catalyst.util.toPrettySQL
+import org.apache.spark.sql.catalyst.util.{toPrettySQL, CharVarcharUtils}
 import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions.lit
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 private[sql] object Column {
@@ -171,20 +169,11 @@ class Column(val expr: Expression) extends Logging {
    * Returns the expression for this column either with an existing or auto assigned name.
    */
   private[sql] def named: NamedExpression = expr match {
-    // Wrap UnresolvedAttribute with UnresolvedAlias, as when we resolve UnresolvedAttribute, we
-    // will remove intermediate Alias for ExtractValue chain, and we need to alias it again to
-    // make it a NamedExpression.
-    case u: UnresolvedAttribute => UnresolvedAlias(u)
-
-    case u: UnresolvedExtractValue => UnresolvedAlias(u)
-
     case expr: NamedExpression => expr
 
     // Leave an unaliased generator with an empty list of names since the analyzer will generate
     // the correct defaults after the nested expression's type has been resolved.
     case g: Generator => MultiAlias(g, Nil)
-
-    case func: UnresolvedFunction => UnresolvedAlias(func, Some(Column.generateAlias))
 
     // If we have a top level Cast, there is a chance to give it a better alias, if there is a
     // NamedExpression under this Cast.
@@ -193,16 +182,10 @@ class Column(val expr: Expression) extends Logging {
         case c @ Cast(_: NamedExpression, _, _) => UnresolvedAlias(c)
       } match {
         case ne: NamedExpression => ne
-        case _ => Alias(expr, toPrettySQL(expr))()
+        case _ => UnresolvedAlias(expr, Some(Column.generateAlias))
       }
 
-    case a: AggregateExpression if a.aggregateFunction.isInstanceOf[TypedAggregateExpression] =>
-      UnresolvedAlias(a, Some(Column.generateAlias))
-
-    // Wait until the struct is resolved. This will generate a nicer looking alias.
-    case struct: CreateNamedStruct => UnresolvedAlias(struct)
-
-    case expr: Expression => Alias(expr, toPrettySQL(expr))()
+    case expr: Expression => UnresolvedAlias(expr, Some(Column.generateAlias))
   }
 
   /**
@@ -318,6 +301,24 @@ class Column(val expr: Expression) extends Logging {
    * @since 2.0.0
     */
   def =!= (other: Any): Column = withExpr{ Not(EqualTo(expr, lit(other).expr)) }
+
+  /**
+   * Inequality test.
+   * {{{
+   *   // Scala:
+   *   df.select( df("colA") !== df("colB") )
+   *   df.select( !(df("colA") === df("colB")) )
+   *
+   *   // Java:
+   *   import static org.apache.spark.sql.functions.*;
+   *   df.filter( col("colA").notEqual(col("colB")) );
+   * }}}
+   *
+   * @group expr_ops
+   * @since 1.3.0
+    */
+  @deprecated("!== does not have the same precedence as ===, use =!= instead", "2.0.0")
+  def !== (other: Any): Column = this =!= other
 
   /**
    * Inequality test.
@@ -809,14 +810,7 @@ class Column(val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 2.4.0
    */
-  def isInCollection(values: scala.collection.Iterable[_]): Column = withExpr {
-    val hSet = values.toSet[Any]
-    if (hSet.size > SQLConf.get.optimizerInSetConversionThreshold) {
-      InSet(expr, hSet)
-    } else {
-      In(expr, values.toSeq.map(lit(_).expr))
-    }
-  }
+  def isInCollection(values: scala.collection.Iterable[_]): Column = isin(values.toSeq: _*)
 
   /**
    * A boolean expression that is evaluated to true if the value of this expression is contained
@@ -841,7 +835,7 @@ class Column(val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 1.3.0
    */
-  def like(literal: String): Column = withExpr { Like(expr, lit(literal).expr) }
+  def like(literal: String): Column = withExpr { new Like(expr, lit(literal).expr) }
 
   /**
    * SQL RLIKE expression (LIKE with Regex). Returns a boolean column based on a regex
@@ -860,6 +854,129 @@ class Column(val expr: Expression) extends Logging {
    * @since 1.3.0
    */
   def getItem(key: Any): Column = withExpr { UnresolvedExtractValue(expr, Literal(key)) }
+
+  // scalastyle:off line.size.limit
+  /**
+   * An expression that adds/replaces field in `StructType` by name.
+   *
+   * {{{
+   *   val df = sql("SELECT named_struct('a', 1, 'b', 2) struct_col")
+   *   df.select($"struct_col".withField("c", lit(3)))
+   *   // result: {"a":1,"b":2,"c":3}
+   *
+   *   val df = sql("SELECT named_struct('a', 1, 'b', 2) struct_col")
+   *   df.select($"struct_col".withField("b", lit(3)))
+   *   // result: {"a":1,"b":3}
+   *
+   *   val df = sql("SELECT CAST(NULL AS struct<a:int,b:int>) struct_col")
+   *   df.select($"struct_col".withField("c", lit(3)))
+   *   // result: null of type struct<a:int,b:int,c:int>
+   *
+   *   val df = sql("SELECT named_struct('a', 1, 'b', 2, 'b', 3) struct_col")
+   *   df.select($"struct_col".withField("b", lit(100)))
+   *   // result: {"a":1,"b":100,"b":100}
+   *
+   *   val df = sql("SELECT named_struct('a', named_struct('a', 1, 'b', 2)) struct_col")
+   *   df.select($"struct_col".withField("a.c", lit(3)))
+   *   // result: {"a":{"a":1,"b":2,"c":3}}
+   *
+   *   val df = sql("SELECT named_struct('a', named_struct('b', 1), 'a', named_struct('c', 2)) struct_col")
+   *   df.select($"struct_col".withField("a.c", lit(3)))
+   *   // result: org.apache.spark.sql.AnalysisException: Ambiguous reference to fields
+   * }}}
+   *
+   * This method supports adding/replacing nested fields directly e.g.
+   *
+   * {{{
+   *   val df = sql("SELECT named_struct('a', named_struct('a', 1, 'b', 2)) struct_col")
+   *   df.select($"struct_col".withField("a.c", lit(3)).withField("a.d", lit(4)))
+   *   // result: {"a":{"a":1,"b":2,"c":3,"d":4}}
+   * }}}
+   *
+   * However, if you are going to add/replace multiple nested fields, it is more optimal to extract
+   * out the nested struct before adding/replacing multiple fields e.g.
+   *
+   * {{{
+   *   val df = sql("SELECT named_struct('a', named_struct('a', 1, 'b', 2)) struct_col")
+   *   df.select($"struct_col".withField("a", $"struct_col.a".withField("c", lit(3)).withField("d", lit(4))))
+   *   // result: {"a":{"a":1,"b":2,"c":3,"d":4}}
+   * }}}
+   *
+   * @group expr_ops
+   * @since 3.1.0
+   */
+  // scalastyle:on line.size.limit
+  def withField(fieldName: String, col: Column): Column = withExpr {
+    require(fieldName != null, "fieldName cannot be null")
+    require(col != null, "col cannot be null")
+    UpdateFields(expr, fieldName, col.expr)
+  }
+
+  // scalastyle:off line.size.limit
+  /**
+   * An expression that drops fields in `StructType` by name.
+   * This is a no-op if schema doesn't contain field name(s).
+   *
+   * {{{
+   *   val df = sql("SELECT named_struct('a', 1, 'b', 2) struct_col")
+   *   df.select($"struct_col".dropFields("b"))
+   *   // result: {"a":1}
+   *
+   *   val df = sql("SELECT named_struct('a', 1, 'b', 2) struct_col")
+   *   df.select($"struct_col".dropFields("c"))
+   *   // result: {"a":1,"b":2}
+   *
+   *   val df = sql("SELECT named_struct('a', 1, 'b', 2, 'c', 3) struct_col")
+   *   df.select($"struct_col".dropFields("b", "c"))
+   *   // result: {"a":1}
+   *
+   *   val df = sql("SELECT named_struct('a', 1, 'b', 2) struct_col")
+   *   df.select($"struct_col".dropFields("a", "b"))
+   *   // result: org.apache.spark.sql.AnalysisException: cannot resolve 'update_fields(update_fields(`struct_col`))' due to data type mismatch: cannot drop all fields in struct
+   *
+   *   val df = sql("SELECT CAST(NULL AS struct<a:int,b:int>) struct_col")
+   *   df.select($"struct_col".dropFields("b"))
+   *   // result: null of type struct<a:int>
+   *
+   *   val df = sql("SELECT named_struct('a', 1, 'b', 2, 'b', 3) struct_col")
+   *   df.select($"struct_col".dropFields("b"))
+   *   // result: {"a":1}
+   *
+   *   val df = sql("SELECT named_struct('a', named_struct('a', 1, 'b', 2)) struct_col")
+   *   df.select($"struct_col".dropFields("a.b"))
+   *   // result: {"a":{"a":1}}
+   *
+   *   val df = sql("SELECT named_struct('a', named_struct('b', 1), 'a', named_struct('c', 2)) struct_col")
+   *   df.select($"struct_col".dropFields("a.c"))
+   *   // result: org.apache.spark.sql.AnalysisException: Ambiguous reference to fields
+   * }}}
+   *
+   * This method supports dropping multiple nested fields directly e.g.
+   *
+   * {{{
+   *   val df = sql("SELECT named_struct('a', named_struct('a', 1, 'b', 2)) struct_col")
+   *   df.select($"struct_col".dropFields("a.b", "a.c"))
+   *   // result: {"a":{"a":1}}
+   * }}}
+   *
+   * However, if you are going to drop multiple nested fields, it is more optimal to extract
+   * out the nested struct before dropping multiple fields from it e.g.
+   *
+   * {{{
+   *   val df = sql("SELECT named_struct('a', named_struct('a', 1, 'b', 2)) struct_col")
+   *   df.select($"struct_col".withField("a", $"struct_col.a".dropFields("b", "c")))
+   *   // result: {"a":{"a":1}}
+   * }}}
+   *
+   * @group expr_ops
+   * @since 3.1.0
+   */
+  // scalastyle:on line.size.limit
+  def dropFields(fieldNames: String*): Column = withExpr {
+    fieldNames.tail.foldLeft(UpdateFields(expr, fieldNames.head)) {
+      (resExpr, fieldName) => UpdateFields(resExpr, fieldName)
+    }
+  }
 
   /**
    * An expression that gets a field by name in a `StructType`.
@@ -955,7 +1072,8 @@ class Column(val expr: Expression) extends Logging {
    * }}}
    *
    * If the current column has metadata associated with it, this metadata will be propagated
-   * to the new column.  If this not desired, use `as` with explicitly empty metadata.
+   * to the new column. If this not desired, use the API `as(alias: String, metadata: Metadata)`
+   * with explicit metadata.
    *
    * @group expr_ops
    * @since 1.3.0
@@ -990,11 +1108,12 @@ class Column(val expr: Expression) extends Logging {
    * Gives the column an alias.
    * {{{
    *   // Renames colA to colB in select output.
-   *   df.select($"colA".as('colB))
+   *   df.select($"colA".as("colB"))
    * }}}
    *
    * If the current column has metadata associated with it, this metadata will be propagated
-   * to the new column.  If this not desired, use `as` with explicitly empty metadata.
+   * to the new column. If this not desired, use the API `as(alias: String, metadata: Metadata)`
+   * with explicit metadata.
    *
    * @group expr_ops
    * @since 1.3.0
@@ -1023,16 +1142,18 @@ class Column(val expr: Expression) extends Logging {
    * }}}
    *
    * If the current column has metadata associated with it, this metadata will be propagated
-   * to the new column.  If this not desired, use `as` with explicitly empty metadata.
+   * to the new column. If this not desired, use the API `as(alias: String, metadata: Metadata)`
+   * with explicit metadata.
    *
    * @group expr_ops
    * @since 2.0.0
    */
   def name(alias: String): Column = withExpr {
-    normalizedExpr() match {
-      case ne: NamedExpression => Alias(expr, alias)(explicitMetadata = Some(ne.metadata))
-      case other => Alias(other, alias)()
-    }
+    // SPARK-33536: an alias is no longer a column reference. Therefore,
+    // we should not inherit the column reference related metadata in an alias
+    // so that it is not caught as a column reference in DetectAmbiguousSelfJoin.
+    Alias(expr, alias)(
+      nonInheritableMetadataKeys = Seq(Dataset.DATASET_ID_KEY, Dataset.COL_POS_KEY))
   }
 
   /**
@@ -1049,7 +1170,11 @@ class Column(val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 1.3.0
    */
-  def cast(to: DataType): Column = withExpr { Cast(expr, to) }
+  def cast(to: DataType): Column = withExpr {
+    val cast = Cast(expr, CharVarcharUtils.replaceCharVarcharWithStringForCast(to))
+    cast.setTagValue(Cast.USER_SPECIFIED_CAST, true)
+    cast
+  }
 
   /**
    * Casts the column to a different data type, using the canonical string representation
@@ -1094,7 +1219,7 @@ class Column(val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 2.1.0
    */
-  def desc_nulls_first: Column = withExpr { SortOrder(expr, Descending, NullsFirst, Set.empty) }
+  def desc_nulls_first: Column = withExpr { SortOrder(expr, Descending, NullsFirst, Seq.empty) }
 
   /**
    * Returns a sort expression based on the descending order of the column,
@@ -1110,7 +1235,7 @@ class Column(val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 2.1.0
    */
-  def desc_nulls_last: Column = withExpr { SortOrder(expr, Descending, NullsLast, Set.empty) }
+  def desc_nulls_last: Column = withExpr { SortOrder(expr, Descending, NullsLast, Seq.empty) }
 
   /**
    * Returns a sort expression based on ascending order of the column.
@@ -1141,7 +1266,7 @@ class Column(val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 2.1.0
    */
-  def asc_nulls_first: Column = withExpr { SortOrder(expr, Ascending, NullsFirst, Set.empty) }
+  def asc_nulls_first: Column = withExpr { SortOrder(expr, Ascending, NullsFirst, Seq.empty) }
 
   /**
    * Returns a sort expression based on ascending order of the column,
@@ -1157,7 +1282,7 @@ class Column(val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 2.1.0
    */
-  def asc_nulls_last: Column = withExpr { SortOrder(expr, Ascending, NullsLast, Set.empty) }
+  def asc_nulls_last: Column = withExpr { SortOrder(expr, Ascending, NullsLast, Seq.empty) }
 
   /**
    * Prints the expression to the console for debugging purposes.

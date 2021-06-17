@@ -27,11 +27,10 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.connector.catalog.{SessionConfigSupport, SupportsWrite, Table, TableCapability, TableProvider}
+import org.apache.spark.sql.connector.catalog.{SupportsWrite, Table, TableCapability}
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory, ScanBuilder}
 import org.apache.spark.sql.connector.write._
-import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.SerializableConfiguration
 
@@ -40,11 +39,7 @@ import org.apache.spark.util.SerializableConfiguration
  * Each task writes data to `target/_temporary/uniqueId/$jobId-$partitionId-$attemptNumber`.
  * Each job moves files from `target/_temporary/uniqueId/` to `target`.
  */
-class SimpleWritableDataSource extends TableProvider with SessionConfigSupport {
-
-  private val tableSchema = new StructType().add("i", "long").add("j", "long")
-
-  override def keyPrefix: String = "simpleWritableDataSource"
+class SimpleWritableDataSource extends TestingV2Source {
 
   class MyScanBuilder(path: String, conf: Configuration) extends SimpleScanBuilder {
     override def planInputPartitions(): Array[InputPartition] = {
@@ -66,8 +61,6 @@ class SimpleWritableDataSource extends TableProvider with SessionConfigSupport {
       val serializableConf = new SerializableConfiguration(conf)
       new CSVReaderFactory(serializableConf)
     }
-
-    override def readSchema(): StructType = tableSchema
   }
 
   class MyWriteBuilder(path: String, info: LogicalWriteInfo)
@@ -80,17 +73,21 @@ class SimpleWritableDataSource extends TableProvider with SessionConfigSupport {
       this
     }
 
-    override def buildForBatch(): BatchWrite = {
-      val hadoopPath = new Path(path)
-      val hadoopConf = SparkContext.getActive.get.hadoopConfiguration
-      val fs = hadoopPath.getFileSystem(hadoopConf)
+    override def build(): Write = {
+      new Write {
+        override def toBatch: BatchWrite = {
+          val hadoopPath = new Path(path)
+          val hadoopConf = SparkContext.getActive.get.hadoopConfiguration
+          val fs = hadoopPath.getFileSystem(hadoopConf)
 
-      if (needTruncate) {
-        fs.delete(hadoopPath, true)
+          if (needTruncate) {
+            fs.delete(hadoopPath, true)
+          }
+
+          val pathStr = hadoopPath.toUri.toString
+          new MyBatchWrite(queryId, pathStr, hadoopConf)
+        }
       }
-
-      val pathStr = hadoopPath.toUri.toString
-      new MyBatchWrite(queryId, pathStr, hadoopConf)
     }
   }
 
@@ -132,8 +129,6 @@ class SimpleWritableDataSource extends TableProvider with SessionConfigSupport {
 
     private val path = options.get("path")
     private val conf = SparkContext.getActive.get.hadoopConfiguration
-
-    override def schema(): StructType = tableSchema
 
     override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
       new MyScanBuilder(new Path(path).toUri.toString, conf)
@@ -178,7 +173,7 @@ class CSVReaderFactory(conf: SerializableConfiguration)
         }
       }
 
-      override def get(): InternalRow = InternalRow(currentLine.split(",").map(_.trim.toLong): _*)
+      override def get(): InternalRow = InternalRow(currentLine.split(",").map(_.trim.toInt): _*)
 
       override def close(): Unit = {
         inputStream.close()
@@ -221,7 +216,7 @@ class CSVDataWriter(fs: FileSystem, file: Path) extends DataWriter[InternalRow] 
   private val out = fs.create(file)
 
   override def write(record: InternalRow): Unit = {
-    out.writeBytes(s"${record.getLong(0)},${record.getLong(1)}\n")
+    out.writeBytes(s"${record.getInt(0)},${record.getInt(1)}\n")
   }
 
   override def commit(): WriterCommitMessage = {

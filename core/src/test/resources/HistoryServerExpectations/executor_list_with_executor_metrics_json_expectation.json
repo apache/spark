@@ -50,7 +50,10 @@
     "MajorGCTime" : 144
   },
   "attributes" : { },
-  "resources" : { }
+  "resources" : { },
+  "resourceProfileId" : 0,
+  "isExcluded" : false,
+  "excludedInStages" : [ ]
 }, {
   "id" : "3",
   "hostPort" : "test-3.vpc.company.com:37641",
@@ -116,7 +119,10 @@
     "NM_HOST" : "test-3.vpc.company.com",
     "CONTAINER_ID" : "container_1553914137147_0018_01_000004"
   },
-  "resources" : { }
+  "resources" : { },
+  "resourceProfileId" : 0,
+  "isExcluded" : false,
+  "excludedInStages" : [ ]
 }, {
   "id" : "2",
   "hostPort" : "test-4.vpc.company.com:33179",
@@ -182,7 +188,10 @@
     "NM_HOST" : "test-4.vpc.company.com",
     "CONTAINER_ID" : "container_1553914137147_0018_01_000003"
   },
-  "resources" : { }
+  "resources" : { },
+  "resourceProfileId" : 0,
+  "isExcluded" : false,
+  "excludedInStages" : [ ]
 }, {
   "id" : "1",
   "hostPort" : "test-2.vpc.company.com:43764",
@@ -248,5 +257,8 @@
     "NM_HOST" : "test-2.vpc.company.com",
     "CONTAINER_ID" : "container_1553914137147_0018_01_000002"
   },
-  "resources" : { }
+  "resources" : { },
+  "resourceProfileId" : 0,
+  "isExcluded" : false,
+  "excludedInStages" : [ ]
 } ]

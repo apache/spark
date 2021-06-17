@@ -17,10 +17,11 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
-import org.apache.spark.sql.types.{DataType, IntegerType}
+import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.{BinaryType, DataType, IntegerType}
 
-class SubexpressionEliminationSuite extends SparkFunSuite {
+class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("Semantic equals and hash") {
     val a: AttributeReference = AttributeReference("name", IntegerType)()
     val id = {
@@ -46,7 +47,7 @@ class SubexpressionEliminationSuite extends SparkFunSuite {
 
   test("Expression Equivalence - basic") {
     val equivalence = new EquivalentExpressions
-    assert(equivalence.getAllEquivalentExprs.isEmpty)
+    assert(equivalence.getAllEquivalentExprs().isEmpty)
 
     val oneA = Literal(1)
     val oneB = Literal(1)
@@ -71,10 +72,10 @@ class SubexpressionEliminationSuite extends SparkFunSuite {
     assert(equivalence.getEquivalentExprs(oneB).exists(_ eq oneA))
     assert(equivalence.getEquivalentExprs(oneB).exists(_ eq oneB))
     assert(equivalence.getEquivalentExprs(twoA).isEmpty)
-    assert(equivalence.getAllEquivalentExprs.size == 1)
-    assert(equivalence.getAllEquivalentExprs.head.size == 3)
-    assert(equivalence.getAllEquivalentExprs.head.contains(oneA))
-    assert(equivalence.getAllEquivalentExprs.head.contains(oneB))
+    assert(equivalence.getAllEquivalentExprs().size == 1)
+    assert(equivalence.getAllEquivalentExprs().head.size == 3)
+    assert(equivalence.getAllEquivalentExprs().head.contains(oneA))
+    assert(equivalence.getAllEquivalentExprs().head.contains(oneB))
 
     val add1 = Add(oneA, oneB)
     val add2 = Add(oneA, oneB)
@@ -82,7 +83,7 @@ class SubexpressionEliminationSuite extends SparkFunSuite {
     equivalence.addExpr(add1)
     equivalence.addExpr(add2)
 
-    assert(equivalence.getAllEquivalentExprs.size == 2)
+    assert(equivalence.getAllEquivalentExprs().size == 2)
     assert(equivalence.getEquivalentExprs(add2).exists(_ eq add1))
     assert(equivalence.getEquivalentExprs(add2).size == 2)
     assert(equivalence.getEquivalentExprs(add1).exists(_ eq add2))
@@ -102,8 +103,8 @@ class SubexpressionEliminationSuite extends SparkFunSuite {
     equivalence.addExprTree(add2)
 
     // Should only have one equivalence for `one + two`
-    assert(equivalence.getAllEquivalentExprs.count(_.size > 1) == 1)
-    assert(equivalence.getAllEquivalentExprs.filter(_.size > 1).head.size == 4)
+    assert(equivalence.getAllEquivalentExprs(1).size == 1)
+    assert(equivalence.getAllEquivalentExprs(1).head.size == 4)
 
     // Set up the expressions
     //   one * two,
@@ -121,7 +122,7 @@ class SubexpressionEliminationSuite extends SparkFunSuite {
     equivalence.addExprTree(sum)
 
     // (one * two), (one * two) * (one * two) and sqrt( (one * two) * (one * two) ) should be found
-    assert(equivalence.getAllEquivalentExprs.count(_.size > 1) == 3)
+    assert(equivalence.getAllEquivalentExprs(1).size == 3)
     assert(equivalence.getEquivalentExprs(mul).size == 3)
     assert(equivalence.getEquivalentExprs(mul2).size == 3)
     assert(equivalence.getEquivalentExprs(sqrt).size == 2)
@@ -133,7 +134,7 @@ class SubexpressionEliminationSuite extends SparkFunSuite {
     val equivalence = new EquivalentExpressions
     equivalence.addExpr(sum)
     equivalence.addExpr(sum)
-    assert(equivalence.getAllEquivalentExprs.isEmpty)
+    assert(equivalence.getAllEquivalentExprs().isEmpty)
   }
 
   test("Children of CodegenFallback") {
@@ -145,25 +146,256 @@ class SubexpressionEliminationSuite extends SparkFunSuite {
     val equivalence = new EquivalentExpressions
     equivalence.addExprTree(add)
     // the `two` inside `fallback` should not be added
-    assert(equivalence.getAllEquivalentExprs.count(_.size > 1) == 0)
-    assert(equivalence.getAllEquivalentExprs.count(_.size == 1) == 3)  // add, two, explode
+    assert(equivalence.getAllEquivalentExprs(1).size == 0)
+    assert(equivalence.getAllEquivalentExprs().count(_.size == 1) == 3) // add, two, explode
   }
 
-  test("Children of conditional expressions") {
-    val condition = And(Literal(true), Literal(false))
+  test("Children of conditional expressions: If") {
     val add = Add(Literal(1), Literal(2))
-    val ifExpr = If(condition, add, add)
+    val condition = GreaterThan(add, Literal(3))
 
+    val ifExpr1 = If(condition, add, add)
+    val equivalence1 = new EquivalentExpressions
+    equivalence1.addExprTree(ifExpr1)
+
+    // `add` is in both two branches of `If` and predicate.
+    assert(equivalence1.getAllEquivalentExprs().count(_.size == 2) == 1)
+    assert(equivalence1.getAllEquivalentExprs().filter(_.size == 2).head == Seq(add, add))
+    // one-time expressions: only ifExpr and its predicate expression
+    assert(equivalence1.getAllEquivalentExprs().count(_.size == 1) == 2)
+    assert(equivalence1.getAllEquivalentExprs().filter(_.size == 1).contains(Seq(ifExpr1)))
+    assert(equivalence1.getAllEquivalentExprs().filter(_.size == 1).contains(Seq(condition)))
+
+    // Repeated `add` is only in one branch, so we don't count it.
+    val ifExpr2 = If(condition, Add(Literal(1), Literal(3)), Add(add, add))
+    val equivalence2 = new EquivalentExpressions
+    equivalence2.addExprTree(ifExpr2)
+
+    assert(equivalence2.getAllEquivalentExprs(1).size == 0)
+    assert(equivalence2.getAllEquivalentExprs().count(_.size == 1) == 3)
+
+    val ifExpr3 = If(condition, ifExpr1, ifExpr1)
+    val equivalence3 = new EquivalentExpressions
+    equivalence3.addExprTree(ifExpr3)
+
+    // `add`: 2, `condition`: 2
+    assert(equivalence3.getAllEquivalentExprs().count(_.size == 2) == 2)
+    assert(equivalence3.getAllEquivalentExprs().filter(_.size == 2).contains(Seq(add, add)))
+    assert(
+      equivalence3.getAllEquivalentExprs().filter(_.size == 2).contains(Seq(condition, condition)))
+
+    // `ifExpr1`, `ifExpr3`
+    assert(equivalence3.getAllEquivalentExprs().count(_.size == 1) == 2)
+    assert(equivalence3.getAllEquivalentExprs().filter(_.size == 1).contains(Seq(ifExpr1)))
+    assert(equivalence3.getAllEquivalentExprs().filter(_.size == 1).contains(Seq(ifExpr3)))
+  }
+
+  test("Children of conditional expressions: CaseWhen") {
+    val add1 = Add(Literal(1), Literal(2))
+    val add2 = Add(Literal(2), Literal(3))
+    val conditions1 = (GreaterThan(add2, Literal(3)), add1) ::
+      (GreaterThan(add2, Literal(4)), add1) ::
+      (GreaterThan(add2, Literal(5)), add1) :: Nil
+
+    val caseWhenExpr1 = CaseWhen(conditions1, None)
+    val equivalence1 = new EquivalentExpressions
+    equivalence1.addExprTree(caseWhenExpr1)
+
+    // `add2` is repeatedly in all conditions.
+    assert(equivalence1.getAllEquivalentExprs().count(_.size == 2) == 1)
+    assert(equivalence1.getAllEquivalentExprs().filter(_.size == 2).head == Seq(add2, add2))
+
+    val conditions2 = (GreaterThan(add1, Literal(3)), add1) ::
+      (GreaterThan(add2, Literal(4)), add1) ::
+      (GreaterThan(add2, Literal(5)), add1) :: Nil
+
+    val caseWhenExpr2 = CaseWhen(conditions2, add1)
+    val equivalence2 = new EquivalentExpressions
+    equivalence2.addExprTree(caseWhenExpr2)
+
+    // `add1` is repeatedly in all branch values, and first predicate.
+    assert(equivalence2.getAllEquivalentExprs().count(_.size == 2) == 1)
+    assert(equivalence2.getAllEquivalentExprs().filter(_.size == 2).head == Seq(add1, add1))
+
+    // Negative case. `add1` or `add2` is not commonly used in all predicates/branch values.
+    val conditions3 = (GreaterThan(add1, Literal(3)), add2) ::
+      (GreaterThan(add2, Literal(4)), add1) ::
+      (GreaterThan(add2, Literal(5)), add1) :: Nil
+
+    val caseWhenExpr3 = CaseWhen(conditions3, None)
+    val equivalence3 = new EquivalentExpressions
+    equivalence3.addExprTree(caseWhenExpr3)
+    assert(equivalence3.getAllEquivalentExprs().count(_.size == 2) == 0)
+  }
+
+  test("Children of conditional expressions: Coalesce") {
+    val add1 = Add(Literal(1), Literal(2))
+    val add2 = Add(Literal(2), Literal(3))
+    val conditions1 = GreaterThan(add2, Literal(3)) ::
+      GreaterThan(add2, Literal(4)) ::
+      GreaterThan(add2, Literal(5)) :: Nil
+
+    val coalesceExpr1 = Coalesce(conditions1)
+    val equivalence1 = new EquivalentExpressions
+    equivalence1.addExprTree(coalesceExpr1)
+
+    // `add2` is repeatedly in all conditions.
+    assert(equivalence1.getAllEquivalentExprs().count(_.size == 2) == 1)
+    assert(equivalence1.getAllEquivalentExprs().filter(_.size == 2).head == Seq(add2, add2))
+
+    // Negative case. `add1` and `add2` both are not used in all branches.
+    val conditions2 = GreaterThan(add1, Literal(3)) ::
+      GreaterThan(add2, Literal(4)) ::
+      GreaterThan(add2, Literal(5)) :: Nil
+
+    val coalesceExpr2 = Coalesce(conditions2)
+    val equivalence2 = new EquivalentExpressions
+    equivalence2.addExprTree(coalesceExpr2)
+
+    assert(equivalence2.getAllEquivalentExprs().count(_.size == 2) == 0)
+  }
+
+  test("SPARK-34723: Correct parameter type for subexpression elimination under whole-stage") {
+    withSQLConf(SQLConf.CODEGEN_METHOD_SPLIT_THRESHOLD.key -> "1") {
+      val str = BoundReference(0, BinaryType, false)
+      val pos = BoundReference(1, IntegerType, false)
+
+      val substr = new Substring(str, pos)
+
+      val add = Add(Length(substr), Literal(1))
+      val add2 = Add(Length(substr), Literal(2))
+
+      val ctx = new CodegenContext()
+      val exprs = Seq(add, add2)
+
+      val oneVar = ctx.freshVariable("str", BinaryType)
+      val twoVar = ctx.freshVariable("pos", IntegerType)
+      ctx.addMutableState("byte[]", oneVar, forceInline = true, useFreshName = false)
+      ctx.addMutableState("int", twoVar, useFreshName = false)
+
+      ctx.INPUT_ROW = null
+      ctx.currentVars = Seq(
+        ExprCode(TrueLiteral, oneVar),
+        ExprCode(TrueLiteral, twoVar))
+
+      val subExprs = ctx.subexpressionEliminationForWholeStageCodegen(exprs)
+      ctx.withSubExprEliminationExprs(subExprs.states) {
+        exprs.map(_.genCode(ctx))
+      }
+      val subExprsCode = subExprs.codes.mkString("\n")
+
+      val codeBody = s"""
+        public java.lang.Object generate(Object[] references) {
+          return new TestCode(references);
+        }
+
+        class TestCode {
+          ${ctx.declareMutableStates()}
+
+          public TestCode(Object[] references) {
+          }
+
+          public void initialize(int partitionIndex) {
+            ${subExprsCode}
+          }
+
+          ${ctx.declareAddedFunctions()}
+        }
+      """
+
+      val code = CodeFormatter.stripOverlappingComments(
+        new CodeAndComment(codeBody, ctx.getPlaceHolderToComments()))
+
+      CodeGenerator.compile(code)
+    }
+  }
+
+  test("SPARK-35410: SubExpr elimination should not include redundant child exprs " +
+    "for conditional expressions") {
+    val add1 = Add(Literal(1), Literal(2))
+    val add2 = Add(Literal(2), Literal(3))
+    val add3 = Add(add1, add2)
+    val condition = (GreaterThan(add3, Literal(3)), add3) :: Nil
+
+    val caseWhenExpr = CaseWhen(condition, Add(add3, Literal(1)))
     val equivalence = new EquivalentExpressions
-    equivalence.addExprTree(ifExpr)
-    // the `add` inside `If` should not be added
-    assert(equivalence.getAllEquivalentExprs.count(_.size > 1) == 0)
-    // only ifExpr and its predicate expression
-    assert(equivalence.getAllEquivalentExprs.count(_.size == 1) == 2)
+    equivalence.addExprTree(caseWhenExpr)
+
+    val commonExprs = equivalence.getAllEquivalentExprs(1)
+    assert(commonExprs.size == 1)
+    assert(commonExprs.head === Seq(add3, add3))
+  }
+
+  test("SPARK-35439: Children subexpr should come first than parent subexpr") {
+    val add = Add(Literal(1), Literal(2))
+
+    val equivalence1 = new EquivalentExpressions
+
+    equivalence1.addExprTree(add)
+    assert(equivalence1.getAllEquivalentExprs().head === Seq(add))
+
+    equivalence1.addExprTree(Add(Literal(3), add))
+    assert(equivalence1.getAllEquivalentExprs() ===
+      Seq(Seq(add, add), Seq(Add(Literal(3), add))))
+
+    equivalence1.addExprTree(Add(Literal(3), add))
+    assert(equivalence1.getAllEquivalentExprs() ===
+      Seq(Seq(add, add), Seq(Add(Literal(3), add), Add(Literal(3), add))))
+
+    val equivalence2 = new EquivalentExpressions
+
+    equivalence2.addExprTree(Add(Literal(3), add))
+    assert(equivalence2.getAllEquivalentExprs() === Seq(Seq(add), Seq(Add(Literal(3), add))))
+
+    equivalence2.addExprTree(add)
+    assert(equivalence2.getAllEquivalentExprs() === Seq(Seq(add, add), Seq(Add(Literal(3), add))))
+
+    equivalence2.addExprTree(Add(Literal(3), add))
+    assert(equivalence2.getAllEquivalentExprs() ===
+      Seq(Seq(add, add), Seq(Add(Literal(3), add), Add(Literal(3), add))))
+  }
+
+  test("SPARK-35499: Subexpressions should only be extracted from CaseWhen values with an "
+    + "elseValue") {
+    val add1 = Add(Literal(1), Literal(2))
+    val add2 = Add(Literal(2), Literal(3))
+    val conditions = (GreaterThan(add1, Literal(3)), add1) ::
+      (GreaterThan(add2, Literal(4)), add1) ::
+      (GreaterThan(add2, Literal(5)), add1) :: Nil
+
+    val caseWhenExpr = CaseWhen(conditions, None)
+    val equivalence = new EquivalentExpressions
+    equivalence.addExprTree(caseWhenExpr)
+
+    // `add1` is not in the elseValue, so we can't extract it from the branches
+    assert(equivalence.getAllEquivalentExprs().count(_.size == 2) == 0)
+  }
+
+  test("SPARK-35439: sort exprs with ExpressionContainmentOrdering") {
+    val exprOrdering = new ExpressionContainmentOrdering
+
+    val add1 = Add(Literal(1), Literal(2))
+    val add2 = Add(Literal(2), Literal(3))
+
+    // Non parent-child expressions. Don't sort on them.
+    val exprs = Seq(add2, add1, add2, add1, add2, add1)
+    assert(exprs.sorted(exprOrdering) === exprs)
+
+    val conditions = (GreaterThan(add1, Literal(3)), add1) ::
+      (GreaterThan(add2, Literal(4)), add1) ::
+      (GreaterThan(add2, Literal(5)), add1) :: Nil
+
+    // `caseWhenExpr` contains add1, add2.
+    val caseWhenExpr = CaseWhen(conditions, None)
+    val exprs2 = Seq(caseWhenExpr, add2, add1, add2, add1, add2, add1)
+    assert(exprs2.sorted(exprOrdering) ===
+      Seq(add2, add1, add2, add1, add2, add1, caseWhenExpr))
   }
 }
 
 case class CodegenFallbackExpression(child: Expression)
   extends UnaryExpression with CodegenFallback {
   override def dataType: DataType = child.dataType
+  override protected def withNewChildInternal(newChild: Expression): CodegenFallbackExpression =
+    copy(child = newChild)
 }

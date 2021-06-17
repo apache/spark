@@ -19,6 +19,8 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, EmptyBlock, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -27,7 +29,7 @@ import org.apache.spark.sql.types._
  * Note: this expression is internal and created only by the optimizer,
  * we don't need to do type check for it.
  */
-case class UnscaledValue(child: Expression) extends UnaryExpression {
+case class UnscaledValue(child: Expression) extends UnaryExpression with NullIntolerant {
 
   override def dataType: DataType = LongType
   override def toString: String = s"UnscaledValue($child)"
@@ -38,6 +40,9 @@ case class UnscaledValue(child: Expression) extends UnaryExpression {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, c => s"$c.toUnscaledLong()")
   }
+
+  override protected def withNewChildInternal(newChild: Expression): UnscaledValue =
+    copy(child = newChild)
 }
 
 /**
@@ -45,9 +50,15 @@ case class UnscaledValue(child: Expression) extends UnaryExpression {
  * Note: this expression is internal and created only by the optimizer,
  * we don't need to do type check for it.
  */
-case class MakeDecimal(child: Expression, precision: Int, scale: Int) extends UnaryExpression {
+case class MakeDecimal(
+    child: Expression,
+    precision: Int,
+    scale: Int,
+    nullOnOverflow: Boolean) extends UnaryExpression with NullIntolerant {
 
-  private val nullOnOverflow = !SQLConf.get.ansiEnabled
+  def this(child: Expression, precision: Int, scale: Int) = {
+    this(child, precision, scale, !SQLConf.get.ansiEnabled)
+  }
 
   override def dataType: DataType = DecimalType(precision, scale)
   override def nullable: Boolean = child.nullable || nullOnOverflow
@@ -81,6 +92,15 @@ case class MakeDecimal(child: Expression, precision: Int, scale: Int) extends Un
          |""".stripMargin
     })
   }
+
+  override protected def withNewChildInternal(newChild: Expression): MakeDecimal =
+    copy(child = newChild)
+}
+
+object MakeDecimal {
+  def apply(child: Expression, precision: Int, scale: Int): MakeDecimal = {
+    new MakeDecimal(child, precision, scale)
+  }
 }
 
 /**
@@ -97,6 +117,9 @@ case class PromotePrecision(child: Expression) extends UnaryExpression {
   override def prettyName: String = "promote_precision"
   override def sql: String = child.sql
   override lazy val canonicalized: Expression = child.canonicalized
+
+  override protected def withNewChildInternal(newChild: Expression): Expression =
+    copy(child = newChild)
 }
 
 /**
@@ -131,4 +154,59 @@ case class CheckOverflow(
   override def toString: String = s"CheckOverflow($child, $dataType, $nullOnOverflow)"
 
   override def sql: String = child.sql
+
+  override protected def withNewChildInternal(newChild: Expression): CheckOverflow =
+    copy(child = newChild)
+}
+
+// A variant `CheckOverflow`, which treats null as overflow. This is necessary in `Sum`.
+case class CheckOverflowInSum(
+    child: Expression,
+    dataType: DecimalType,
+    nullOnOverflow: Boolean) extends UnaryExpression {
+
+  override def nullable: Boolean = true
+
+  override def eval(input: InternalRow): Any = {
+    val value = child.eval(input)
+    if (value == null) {
+      if (nullOnOverflow) null else throw QueryExecutionErrors.overflowInSumOfDecimalError
+    } else {
+      value.asInstanceOf[Decimal].toPrecision(
+        dataType.precision,
+        dataType.scale,
+        Decimal.ROUND_HALF_UP,
+        nullOnOverflow)
+    }
+  }
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val childGen = child.genCode(ctx)
+    val nullHandling = if (nullOnOverflow) {
+      ""
+    } else {
+      s"throw QueryExecutionErrors.overflowInSumOfDecimalError();"
+    }
+    val code = code"""
+       |${childGen.code}
+       |boolean ${ev.isNull} = ${childGen.isNull};
+       |Decimal ${ev.value} = null;
+       |if (${childGen.isNull}) {
+       |  $nullHandling
+       |} else {
+       |  ${ev.value} = ${childGen.value}.toPrecision(
+       |    ${dataType.precision}, ${dataType.scale}, Decimal.ROUND_HALF_UP(), $nullOnOverflow);
+       |  ${ev.isNull} = ${ev.value} == null;
+       |}
+       |""".stripMargin
+
+    ev.copy(code = code)
+  }
+
+  override def toString: String = s"CheckOverflowInSum($child, $dataType, $nullOnOverflow)"
+
+  override def sql: String = child.sql
+
+  override protected def withNewChildInternal(newChild: Expression): CheckOverflowInSum =
+    copy(child = newChild)
 }

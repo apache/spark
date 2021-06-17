@@ -23,6 +23,7 @@ import org.apache.orc.mapred.{OrcList, OrcMap, OrcStruct, OrcTimestamp}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{SpecificInternalRow, UnsafeArrayData}
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -30,7 +31,6 @@ import org.apache.spark.unsafe.types.UTF8String
  * A deserializer to deserialize ORC structs to Spark rows.
  */
 class OrcDeserializer(
-    dataSchema: StructType,
     requiredSchema: StructType,
     requestedColIds: Array[Int]) {
 
@@ -108,7 +108,7 @@ class OrcDeserializer(
         updater.set(ordinal, bytes)
 
       case DateType => (ordinal, value) =>
-        updater.setInt(ordinal, DateTimeUtils.fromJavaDate(OrcShimUtils.getSqlDate(value)))
+        updater.setInt(ordinal, OrcShimUtils.getGregorianDays(value))
 
       case TimestampType => (ordinal, value) =>
         updater.setLong(ordinal, DateTimeUtils.fromJavaTimestamp(value.asInstanceOf[OrcTimestamp]))
@@ -190,7 +190,7 @@ class OrcDeserializer(
       case udt: UserDefinedType[_] => newWriter(udt.sqlType, updater)
 
       case _ =>
-        throw new UnsupportedOperationException(s"$dataType is not supported yet.")
+        throw QueryExecutionErrors.dataTypeUnsupportedYetError(dataType)
     }
 
   private def createArrayData(elementType: DataType, length: Int): ArrayData = elementType match {

@@ -17,7 +17,9 @@
 
 package org.apache.spark.deploy.worker
 
-import org.scalatest.{Matchers, PrivateMethodTester}
+import org.scalatest.PrivateMethodTester
+import org.scalatest.matchers.must.Matchers
+import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.Command

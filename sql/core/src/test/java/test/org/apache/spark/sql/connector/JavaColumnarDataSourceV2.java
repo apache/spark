@@ -20,8 +20,8 @@ package test.org.apache.spark.sql.connector;
 import java.io.IOException;
 
 import org.apache.spark.sql.catalyst.InternalRow;
+import org.apache.spark.sql.connector.TestingV2Source;
 import org.apache.spark.sql.connector.catalog.Table;
-import org.apache.spark.sql.connector.catalog.TableProvider;
 import org.apache.spark.sql.connector.read.InputPartition;
 import org.apache.spark.sql.connector.read.PartitionReader;
 import org.apache.spark.sql.connector.read.PartitionReaderFactory;
@@ -33,7 +33,7 @@ import org.apache.spark.sql.vectorized.ColumnVector;
 import org.apache.spark.sql.vectorized.ColumnarBatch;
 
 
-public class JavaColumnarDataSourceV2 implements TableProvider {
+public class JavaColumnarDataSourceV2 implements TestingV2Source {
 
   class MyScanBuilder extends JavaSimpleScanBuilder {
 

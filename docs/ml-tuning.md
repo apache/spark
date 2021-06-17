@@ -49,12 +49,12 @@ Built-in Cross-Validation and other tooling allow users to optimize hyperparamet
 An important task in ML is *model selection*, or using data to find the best model or parameters for a given task.  This is also called *tuning*.
 Tuning may be done for individual `Estimator`s such as `LogisticRegression`, or for entire `Pipeline`s which include multiple algorithms, featurization, and other steps.  Users can tune an entire `Pipeline` at once, rather than tuning each element in the `Pipeline` separately.
 
-MLlib supports model selection using tools such as [`CrossValidator`](api/scala/index.html#org.apache.spark.ml.tuning.CrossValidator) and [`TrainValidationSplit`](api/scala/index.html#org.apache.spark.ml.tuning.TrainValidationSplit).
+MLlib supports model selection using tools such as [`CrossValidator`](api/scala/org/apache/spark/ml/tuning/CrossValidator.html) and [`TrainValidationSplit`](api/scala/org/apache/spark/ml/tuning/TrainValidationSplit.html).
 These tools require the following items:
 
-* [`Estimator`](api/scala/index.html#org.apache.spark.ml.Estimator): algorithm or `Pipeline` to tune
+* [`Estimator`](api/scala/org/apache/spark/ml/Estimator.html): algorithm or `Pipeline` to tune
 * Set of `ParamMap`s: parameters to choose from, sometimes called a "parameter grid" to search over
-* [`Evaluator`](api/scala/index.html#org.apache.spark.ml.evaluation.Evaluator): metric to measure how well a fitted `Model` does on held-out test data
+* [`Evaluator`](api/scala/org/apache/spark/ml/evaluation/Evaluator.html): metric to measure how well a fitted `Model` does on held-out test data
 
 At a high level, these model selection tools work as follows:
 
@@ -63,15 +63,51 @@ At a high level, these model selection tools work as follows:
   * For each `ParamMap`, they fit the `Estimator` using those parameters, get the fitted `Model`, and evaluate the `Model`'s performance using the `Evaluator`.
 * They select the `Model` produced by the best-performing set of parameters.
 
-The `Evaluator` can be a [`RegressionEvaluator`](api/scala/index.html#org.apache.spark.ml.evaluation.RegressionEvaluator)
-for regression problems, a [`BinaryClassificationEvaluator`](api/scala/index.html#org.apache.spark.ml.evaluation.BinaryClassificationEvaluator)
-for binary data, or a [`MulticlassClassificationEvaluator`](api/scala/index.html#org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator)
-for multiclass problems. The default metric used to choose the best `ParamMap` can be overridden by the `setMetricName`
-method in each of these evaluators.
+The `Evaluator` can be a [`RegressionEvaluator`](api/scala/org/apache/spark/ml/evaluation/RegressionEvaluator.html)
+for regression problems, a [`BinaryClassificationEvaluator`](api/scala/org/apache/spark/ml/evaluation/BinaryClassificationEvaluator.html)
+for binary data, a [`MulticlassClassificationEvaluator`](api/scala/org/apache/spark/ml/evaluation/MulticlassClassificationEvaluator.html)
+for multiclass problems, a [`MultilabelClassificationEvaluator`](api/scala/org/apache/spark/ml/evaluation/MultilabelClassificationEvaluator.html)
+ for multi-label classifications, or a
+[`RankingEvaluator`](api/scala/org/apache/spark/ml/evaluation/RankingEvaluator.html) for ranking problems. The default metric used to
+choose the best `ParamMap` can be overridden by the `setMetricName` method in each of these evaluators.
 
-To help construct the parameter grid, users can use the [`ParamGridBuilder`](api/scala/index.html#org.apache.spark.ml.tuning.ParamGridBuilder) utility.
+To help construct the parameter grid, users can use the [`ParamGridBuilder`](api/scala/org/apache/spark/ml/tuning/ParamGridBuilder.html) utility (see the *Cross-Validation* section below for an example).
 By default, sets of parameters from the parameter grid are evaluated in serial. Parameter evaluation can be done in parallel by setting `parallelism` with a value of 2 or more (a value of 1 will be serial) before running model selection with `CrossValidator` or `TrainValidationSplit`.
 The value of `parallelism` should be chosen carefully to maximize parallelism without exceeding cluster resources, and larger values may not always lead to improved performance.  Generally speaking, a value up to 10 should be sufficient for most clusters.
+
+Alternatively, users can use the [`ParamRandomBuilder`](api/scala/org/apache/spark/ml/tuning/ParamRandomBuilder.html) utility.
+This has the same properties of `ParamGridBuilder` mentioned above, but hyperparameters are chosen at random within a user-defined range.
+The mathematical principle behind this is that given enough samples, the probability of at least one sample *not* being near the optimum within a range tends to zero.
+Irrespective of machine learning model, the expected number of samples needed to have at least one within 5% of the optimum is about 60. 
+If this 5% volume lies between the parameters defined in a grid search, it will *never* be found by `ParamGridBuilder`.  
+
+<div class="codetabs">
+
+<div data-lang="scala" markdown="1">
+
+Refer to the [`ParamRandomBuilder` Scala docs](api/scala/org/apache/spark/ml/tuning/ParamRandomBuilder.html) for details on the API.
+
+{% include_example scala/org/apache/spark/examples/ml/ModelSelectionViaRandomHyperparametersExample.scala %}
+</div>
+
+<div data-lang="java" markdown="1">
+
+Refer to the [`ParamRandomBuilder` Java docs](api/java/org/apache/spark/ml/tuning/ParamRandomBuilder.html) for details on the API.
+
+{% include_example java/org/apache/spark/examples/ml/JavaModelSelectionViaRandomHyperparametersExample.java %}
+</div>
+
+<div data-lang="python" markdown="1">
+
+Python users are recommended to look at Python libraries that are specifically for hyperparameter tuning such as Hyperopt.  
+
+Refer to the [`ParamRandomBuilder` Java docs](api/python/reference/api/pyspark.ml.tuning.ParamRandomBuilder.html) for details on the API.
+
+{% include_example python/ml/model_selection_random_hyperparameters_example.py %}
+
+</div>
+
+</div>
 
 # Cross-Validation
 
@@ -93,7 +129,7 @@ However, it is also a well-established method for choosing parameters which is m
 
 <div data-lang="scala" markdown="1">
 
-Refer to the [`CrossValidator` Scala docs](api/scala/index.html#org.apache.spark.ml.tuning.CrossValidator) for details on the API.
+Refer to the [`CrossValidator` Scala docs](api/scala/org/apache/spark/ml/tuning/CrossValidator.html) for details on the API.
 
 {% include_example scala/org/apache/spark/examples/ml/ModelSelectionViaCrossValidationExample.scala %}
 </div>
@@ -107,7 +143,7 @@ Refer to the [`CrossValidator` Java docs](api/java/org/apache/spark/ml/tuning/Cr
 
 <div data-lang="python" markdown="1">
 
-Refer to the [`CrossValidator` Python docs](api/python/pyspark.ml.html#pyspark.ml.tuning.CrossValidator) for more details on the API.
+Refer to the [`CrossValidator` Python docs](api/python/reference/api/pyspark.ml.tuning.CrossValidator.html) for more details on the API.
 
 {% include_example python/ml/cross_validator.py %}
 </div>
@@ -133,7 +169,7 @@ Like `CrossValidator`, `TrainValidationSplit` finally fits the `Estimator` using
 
 <div data-lang="scala" markdown="1">
 
-Refer to the [`TrainValidationSplit` Scala docs](api/scala/index.html#org.apache.spark.ml.tuning.TrainValidationSplit) for details on the API.
+Refer to the [`TrainValidationSplit` Scala docs](api/scala/org/apache/spark/ml/tuning/TrainValidationSplit.html) for details on the API.
 
 {% include_example scala/org/apache/spark/examples/ml/ModelSelectionViaTrainValidationSplitExample.scala %}
 </div>
@@ -147,7 +183,7 @@ Refer to the [`TrainValidationSplit` Java docs](api/java/org/apache/spark/ml/tun
 
 <div data-lang="python" markdown="1">
 
-Refer to the [`TrainValidationSplit` Python docs](api/python/pyspark.ml.html#pyspark.ml.tuning.TrainValidationSplit) for more details on the API.
+Refer to the [`TrainValidationSplit` Python docs](api/python/reference/api/pyspark.ml.tuning.TrainValidationSplit.html) for more details on the API.
 
 {% include_example python/ml/train_validation_split.py %}
 </div>

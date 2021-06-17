@@ -26,10 +26,6 @@ import base64
 from array import array
 import ctypes
 
-if sys.version >= "3":
-    long = int
-    basestring = unicode = str
-
 from py4j.protocol import register_input_converter
 from py4j.java_gateway import JavaClass
 
@@ -74,7 +70,7 @@ class DataType(object):
 
     def needConversion(self):
         """
-        Does this type need to conversion between Python object and internal SQL object.
+        Does this type needs conversion between Python object and internal SQL object.
 
         This is used to avoid the unnecessary conversion for ArrayType/MapType/StructType.
         """
@@ -106,13 +102,12 @@ class DataTypeSingleton(type):
         return cls._instances[cls]
 
 
-class NullType(DataType):
+class NullType(DataType, metaclass=DataTypeSingleton):
     """Null type.
 
     The data type representing None, used for the types that cannot be inferred.
     """
-
-    __metaclass__ = DataTypeSingleton
+    pass
 
 
 class AtomicType(DataType):
@@ -125,11 +120,10 @@ class NumericType(AtomicType):
     """
 
 
-class IntegralType(NumericType):
+class IntegralType(NumericType, metaclass=DataTypeSingleton):
     """Integral data types.
     """
-
-    __metaclass__ = DataTypeSingleton
+    pass
 
 
 class FractionalType(NumericType):
@@ -137,32 +131,27 @@ class FractionalType(NumericType):
     """
 
 
-class StringType(AtomicType):
+class StringType(AtomicType, metaclass=DataTypeSingleton):
     """String data type.
     """
+    pass
 
-    __metaclass__ = DataTypeSingleton
 
-
-class BinaryType(AtomicType):
+class BinaryType(AtomicType, metaclass=DataTypeSingleton):
     """Binary (byte array) data type.
     """
+    pass
 
-    __metaclass__ = DataTypeSingleton
 
-
-class BooleanType(AtomicType):
+class BooleanType(AtomicType, metaclass=DataTypeSingleton):
     """Boolean data type.
     """
+    pass
 
-    __metaclass__ = DataTypeSingleton
 
-
-class DateType(AtomicType):
+class DateType(AtomicType, metaclass=DataTypeSingleton):
     """Date (datetime.date) data type.
     """
-
-    __metaclass__ = DataTypeSingleton
 
     EPOCH_ORDINAL = datetime.datetime(1970, 1, 1).toordinal()
 
@@ -178,11 +167,9 @@ class DateType(AtomicType):
             return datetime.date.fromordinal(v + self.EPOCH_ORDINAL)
 
 
-class TimestampType(AtomicType):
+class TimestampType(AtomicType, metaclass=DataTypeSingleton):
     """Timestamp (datetime.datetime) data type.
     """
-
-    __metaclass__ = DataTypeSingleton
 
     def needConversion(self):
         return True
@@ -208,17 +195,21 @@ class DecimalType(FractionalType):
 
     The precision can be up to 38, the scale must be less or equal to precision.
 
-    When create a DecimalType, the default precision and scale is (10, 0). When infer
+    When creating a DecimalType, the default precision and scale is (10, 0). When inferring
     schema from decimal.Decimal objects, it will be DecimalType(38, 18).
 
-    :param precision: the maximum total number of digits (default: 10)
-    :param scale: the number of digits on right side of dot. (default: 0)
+    Parameters
+    ----------
+    precision : int, optional
+        the maximum (i.e. total) number of digits (default: 10)
+    scale : int, optional
+        the number of digits on right side of dot. (default: 0)
     """
 
     def __init__(self, precision=10, scale=0):
         self.precision = precision
         self.scale = scale
-        self.hasPrecisionInfo = True  # this is public API
+        self.hasPrecisionInfo = True  # this is a public API
 
     def simpleString(self):
         return "decimal(%d,%d)" % (self.precision, self.scale)
@@ -230,18 +221,16 @@ class DecimalType(FractionalType):
         return "DecimalType(%d,%d)" % (self.precision, self.scale)
 
 
-class DoubleType(FractionalType):
+class DoubleType(FractionalType, metaclass=DataTypeSingleton):
     """Double data type, representing double precision floats.
     """
+    pass
 
-    __metaclass__ = DataTypeSingleton
 
-
-class FloatType(FractionalType):
+class FloatType(FractionalType, metaclass=DataTypeSingleton):
     """Float data type, representing single precision floats.
     """
-
-    __metaclass__ = DataTypeSingleton
+    pass
 
 
 class ByteType(IntegralType):
@@ -278,17 +267,22 @@ class ShortType(IntegralType):
 class ArrayType(DataType):
     """Array data type.
 
-    :param elementType: :class:`DataType` of each element in the array.
-    :param containsNull: boolean, whether the array can contain null (None) values.
+    Parameters
+    ----------
+    elementType : :class:`DataType`
+        :class:`DataType` of each element in the array.
+    containsNull : bool, optional
+        whether the array can contain null (None) values.
+
+    Examples
+    --------
+    >>> ArrayType(StringType()) == ArrayType(StringType(), True)
+    True
+    >>> ArrayType(StringType(), False) == ArrayType(StringType())
+    False
     """
 
     def __init__(self, elementType, containsNull=True):
-        """
-        >>> ArrayType(StringType()) == ArrayType(StringType(), True)
-        True
-        >>> ArrayType(StringType(), False) == ArrayType(StringType())
-        False
-        """
         assert isinstance(elementType, DataType),\
             "elementType %s should be an instance of %s" % (elementType, DataType)
         self.elementType = elementType
@@ -328,22 +322,30 @@ class ArrayType(DataType):
 class MapType(DataType):
     """Map data type.
 
-    :param keyType: :class:`DataType` of the keys in the map.
-    :param valueType: :class:`DataType` of the values in the map.
-    :param valueContainsNull: indicates whether values can contain null (None) values.
+    Parameters
+    ----------
+    keyType : :class:`DataType`
+        :class:`DataType` of the keys in the map.
+    valueType : :class:`DataType`
+        :class:`DataType` of the values in the map.
+    valueContainsNull : bool, optional
+        indicates whether values can contain null (None) values.
 
+    Notes
+    -----
     Keys in a map data type are not allowed to be null (None).
+
+    Examples
+    --------
+    >>> (MapType(StringType(), IntegerType())
+    ...        == MapType(StringType(), IntegerType(), True))
+    True
+    >>> (MapType(StringType(), IntegerType(), False)
+    ...        == MapType(StringType(), FloatType()))
+    False
     """
 
     def __init__(self, keyType, valueType, valueContainsNull=True):
-        """
-        >>> (MapType(StringType(), IntegerType())
-        ...        == MapType(StringType(), IntegerType(), True))
-        True
-        >>> (MapType(StringType(), IntegerType(), False)
-        ...        == MapType(StringType(), FloatType()))
-        False
-        """
         assert isinstance(keyType, DataType),\
             "keyType %s should be an instance of %s" % (keyType, DataType)
         assert isinstance(valueType, DataType),\
@@ -390,26 +392,31 @@ class MapType(DataType):
 class StructField(DataType):
     """A field in :class:`StructType`.
 
-    :param name: string, name of the field.
-    :param dataType: :class:`DataType` of the field.
-    :param nullable: boolean, whether the field can be null (None) or not.
-    :param metadata: a dict from string to simple type that can be toInternald to JSON automatically
+    Parameters
+    ----------
+    name : str
+        name of the field.
+    dataType : :class:`DataType`
+        :class:`DataType` of the field.
+    nullable : bool
+        whether the field can be null (None) or not.
+    metadata : dict
+        a dict from string to simple type that can be toInternald to JSON automatically
+
+    Examples
+    --------
+    >>> (StructField("f1", StringType(), True)
+    ...      == StructField("f1", StringType(), True))
+    True
+    >>> (StructField("f1", StringType(), True)
+    ...      == StructField("f2", StringType(), True))
+    False
     """
 
     def __init__(self, name, dataType, nullable=True, metadata=None):
-        """
-        >>> (StructField("f1", StringType(), True)
-        ...      == StructField("f1", StringType(), True))
-        True
-        >>> (StructField("f1", StringType(), True)
-        ...      == StructField("f2", StringType(), True))
-        False
-        """
         assert isinstance(dataType, DataType),\
             "dataType %s should be an instance of %s" % (dataType, DataType)
-        assert isinstance(name, basestring), "field name %s should be string" % (name)
-        if not isinstance(name, str):
-            name = name.encode('utf-8')
+        assert isinstance(name, str), "field name %s should be a string" % (name)
         self.name = name
         self.dataType = dataType
         self.nullable = nullable
@@ -455,27 +462,28 @@ class StructType(DataType):
 
     This is the data type representing a :class:`Row`.
 
-    Iterating a :class:`StructType` will iterate its :class:`StructField`\\s.
-    A contained :class:`StructField` can be accessed by name or position.
+    Iterating a :class:`StructType` will iterate over its :class:`StructField`\\s.
+    A contained :class:`StructField` can be accessed by its name or position.
 
+    Examples
+    --------
     >>> struct1 = StructType([StructField("f1", StringType(), True)])
     >>> struct1["f1"]
     StructField(f1,StringType,true)
     >>> struct1[0]
     StructField(f1,StringType,true)
+
+    >>> struct1 = StructType([StructField("f1", StringType(), True)])
+    >>> struct2 = StructType([StructField("f1", StringType(), True)])
+    >>> struct1 == struct2
+    True
+    >>> struct1 = StructType([StructField("f1", StringType(), True)])
+    >>> struct2 = StructType([StructField("f1", StringType(), True),
+    ...     StructField("f2", IntegerType(), False)])
+    >>> struct1 == struct2
+    False
     """
     def __init__(self, fields=None):
-        """
-        >>> struct1 = StructType([StructField("f1", StringType(), True)])
-        >>> struct2 = StructType([StructField("f1", StringType(), True)])
-        >>> struct1 == struct2
-        True
-        >>> struct1 = StructType([StructField("f1", StringType(), True)])
-        >>> struct2 = StructType([StructField("f1", StringType(), True),
-        ...     StructField("f2", IntegerType(), False)])
-        >>> struct1 == struct2
-        False
-        """
         if not fields:
             self.fields = []
             self.names = []
@@ -490,14 +498,31 @@ class StructType(DataType):
 
     def add(self, field, data_type=None, nullable=True, metadata=None):
         """
-        Construct a StructType by adding new elements to it to define the schema. The method accepts
-        either:
+        Construct a StructType by adding new elements to it, to define the schema.
+        The method accepts either:
 
             a) A single parameter which is a StructField object.
             b) Between 2 and 4 parameters as (name, data_type, nullable (optional),
                metadata(optional). The data_type parameter may be either a String or a
                DataType object.
 
+        Parameters
+        ----------
+        field : str or :class:`StructField`
+            Either the name of the field or a StructField object
+        data_type : :class:`DataType`, optional
+            If present, the DataType of the StructField to create
+        nullable : bool, optional
+            Whether the field to add should be nullable (default True)
+        metadata : dict, optional
+            Any additional metadata (default None)
+
+        Returns
+        -------
+        :class:`StructType`
+
+        Examples
+        --------
         >>> struct1 = StructType().add("f1", StringType(), True).add("f2", StringType(), True, None)
         >>> struct2 = StructType([StructField("f1", StringType(), True), \\
         ...     StructField("f2", StringType(), True, None)])
@@ -511,12 +536,6 @@ class StructType(DataType):
         >>> struct2 = StructType([StructField("f1", StringType(), True)])
         >>> struct1 == struct2
         True
-
-        :param field: Either the name of the field or a StructField object
-        :param data_type: If present, the DataType of the StructField to create
-        :param nullable: Whether the field to add should be nullable (default True)
-        :param metadata: Any additional metadata (default None)
-        :return: a new updated StructType
         """
         if isinstance(field, StructField):
             self.fields.append(field)
@@ -580,6 +599,8 @@ class StructType(DataType):
         """
         Returns all field names in a list.
 
+        Examples
+        --------
         >>> struct = StructType([StructField("f1", StringType(), True)])
         >>> struct.fieldNames()
         ['f1']
@@ -611,8 +632,6 @@ class StructType(DataType):
         else:
             if isinstance(obj, dict):
                 return tuple(obj.get(n) for n in self.names)
-            elif isinstance(obj, Row) and getattr(obj, "__from_dict__", False):
-                return tuple(obj[n] for n in self.names)
             elif isinstance(obj, (list, tuple)):
                 return tuple(obj)
             elif hasattr(obj, "__dict__"):
@@ -674,7 +693,7 @@ class UserDefinedType(DataType):
     @classmethod
     def _cachedSqlType(cls):
         """
-        Cache the sqlType() into class, because it's heavy used in `toInternal`.
+        Cache the sqlType() into class, because it's heavily used in `toInternal`.
         """
         if not hasattr(cls, "_cached_sql_type"):
             cls._cached_sql_type = cls.sqlType()
@@ -691,7 +710,7 @@ class UserDefinedType(DataType):
 
     def serialize(self, obj):
         """
-        Converts the a user-type object into a SQL datum.
+        Converts a user-type object into a SQL datum.
         """
         raise NotImplementedError("UDT must implement toInternal().")
 
@@ -758,12 +777,14 @@ _FIXED_DECIMAL = re.compile(r"decimal\(\s*(\d+)\s*,\s*(-?\d+)\s*\)")
 def _parse_datatype_string(s):
     """
     Parses the given data type string to a :class:`DataType`. The data type string format equals
-    to :class:`DataType.simpleString`, except that top level struct type can omit
+    :class:`DataType.simpleString`, except that the top level struct type can omit
     the ``struct<>`` and atomic types use ``typeName()`` as their format, e.g. use ``byte`` instead
     of ``tinyint`` for :class:`ByteType`. We can also use ``int`` as a short name
     for :class:`IntegerType`. Since Spark 2.3, this also supports a schema in a DDL-formatted
     string and case-insensitive strings.
 
+    Examples
+    --------
     >>> _parse_datatype_string("int ")
     IntegerType
     >>> _parse_datatype_string("INT ")
@@ -822,6 +843,9 @@ def _parse_datatype_string(s):
 
 def _parse_datatype_json_string(json_string):
     """Parses the given data type JSON string.
+
+    Examples
+    --------
     >>> import pickle
     >>> def check_datatype(datatype):
     ...     pickled = pickle.loads(pickle.dumps(datatype))
@@ -865,8 +889,6 @@ def _parse_datatype_json_string(json_string):
     >>> complex_maptype = MapType(complex_structtype,
     ...                           complex_arraytype, False)
     >>> check_datatype(complex_maptype)
-    >>> # Decimal with negative scale.
-    >>> check_datatype(DecimalType(1,-1))
     """
     return _parse_datatype_json_value(json.loads(json_string))
 
@@ -904,24 +926,14 @@ _type_mappings = {
     datetime.date: DateType,
     datetime.datetime: TimestampType,
     datetime.time: TimestampType,
+    bytes: BinaryType,
 }
-
-if sys.version < "3":
-    _type_mappings.update({
-        unicode: StringType,
-        long: LongType,
-    })
-
-if sys.version >= "3":
-    _type_mappings.update({
-        bytes: BinaryType,
-    })
 
 # Mapping Python array types to Spark SQL DataType
 # We should be careful here. The size of these types in python depends on C
 # implementation. We need to make sure that this conversion does not lose any
 # precision. Also, JVM only support signed types, when converting unsigned types,
-# keep in mind that it required 1 more bit when stored as singed types.
+# keep in mind that it require 1 more bit when stored as signed types.
 #
 # Reference for C integer size, see:
 # ISO/IEC 9899:201x specification, chapter 5.2.4.2.1 Sizes of integer types <limits.h>.
@@ -959,7 +971,7 @@ def _int_size_to_type(size):
     if size <= 64:
         return LongType
 
-# The list of all supported array typecodes is stored here
+# The list of all supported array typecodes, is stored here
 _array_type_mappings = {
     # Warning: Actual properties for float and double in C is not specified in C.
     # On almost every system supported by both python and JVM, they are IEEE 754
@@ -989,20 +1001,6 @@ for _typecode in _array_unsigned_int_typecode_ctype_mappings.keys():
 # removed in version 4.0. See: https://docs.python.org/3/library/array.html
 if sys.version_info[0] < 4:
     _array_type_mappings['u'] = StringType
-
-# Type code 'c' are only available at python 2
-if sys.version_info[0] < 3:
-    _array_type_mappings['c'] = StringType
-
-# SPARK-21465:
-# In python2, array of 'L' happened to be mistakenly partially supported. To
-# avoid breaking user's code, we should keep this partial support. Below is a
-# dirty hacking to keep this partial support and make the unit test passes
-import platform
-if sys.version_info[0] < 3 and platform.python_implementation() != 'PyPy':
-    if 'L' not in _array_type_mappings.keys():
-        _array_type_mappings['L'] = LongType
-        _array_unsigned_int_typecode_ctype_mappings['L'] = ctypes.c_uint
 
 
 def _infer_type(obj):
@@ -1066,12 +1064,17 @@ def _infer_schema(row, names=None):
     else:
         raise TypeError("Can not infer schema for type: %s" % type(row))
 
-    fields = [StructField(k, _infer_type(v), True) for k, v in items]
+    fields = []
+    for k, v in items:
+        try:
+            fields.append(StructField(k, _infer_type(v), True))
+        except TypeError as e:
+            raise TypeError("Unable to infer the type of the field {}.".format(k)) from e
     return StructType(fields)
 
 
 def _has_nulltype(dt):
-    """ Return whether there is NullType in `dt` or not """
+    """ Return whether there is a NullType in `dt` or not """
     if isinstance(dt, StructType):
         return any(_has_nulltype(f.dataType) for f in dt.fields)
     elif isinstance(dt, ArrayType):
@@ -1187,14 +1190,14 @@ def _create_converter(dataType):
 
 _acceptable_types = {
     BooleanType: (bool,),
-    ByteType: (int, long),
-    ShortType: (int, long),
-    IntegerType: (int, long),
-    LongType: (int, long),
+    ByteType: (int,),
+    ShortType: (int,),
+    IntegerType: (int,),
+    LongType: (int,),
     FloatType: (float,),
     DoubleType: (float,),
     DecimalType: (decimal.Decimal,),
-    StringType: (str, unicode),
+    StringType: (str,),
     BinaryType: (bytearray, bytes),
     DateType: (datetime.date, datetime.datetime),
     TimestampType: (datetime.datetime,),
@@ -1211,8 +1214,10 @@ def _make_type_verifier(dataType, nullable=True, name=None):
 
     This verifier also checks the value of obj against datatype and raises a ValueError if it's not
     within the allowed range, e.g. using 128 as ByteType will overflow. Note that, Python float is
-    not checked, so it will become infinity when cast to Java float if it overflows.
+    not checked, so it will become infinity when cast to Java float, if it overflows.
 
+    Examples
+    --------
     >>> _make_type_verifier(StructType([]))(None)
     >>> _make_type_verifier(StringType())("")
     >>> _make_type_verifier(LongType())(0)
@@ -1376,10 +1381,6 @@ def _make_type_verifier(dataType, nullable=True, name=None):
             if isinstance(obj, dict):
                 for f, verifier in verifiers:
                     verifier(obj.get(f))
-            elif isinstance(obj, Row) and getattr(obj, "__from_dict__", False):
-                # the order in obj could be different than dataType.fields
-                for f, verifier in verifiers:
-                    verifier(obj[f])
             elif isinstance(obj, (tuple, list)):
                 if len(obj) != len(verifiers):
                     raise ValueError(
@@ -1432,14 +1433,20 @@ class Row(tuple):
 
     ``key in row`` will search through row keys.
 
-    Row can be used to create a row object by using named arguments,
-    the fields will be sorted by names. It is not allowed to omit
-    a named argument to represent the value is None or missing. This should be
-    explicitly set to None in this case.
+    Row can be used to create a row object by using named arguments.
+    It is not allowed to omit a named argument to represent that the value is
+    None or missing. This should be explicitly set to None in this case.
 
+    .. versionchanged:: 3.0.0
+        Rows created from named arguments no longer have
+        field names sorted alphabetically and will be ordered in the position as
+        entered.
+
+    Examples
+    --------
     >>> row = Row(name="Alice", age=11)
     >>> row
-    Row(age=11, name='Alice')
+    Row(name='Alice', age=11)
     >>> row['name'], row['age']
     ('Alice', 11)
     >>> row.name, row.age
@@ -1463,43 +1470,50 @@ class Row(tuple):
     Row(name='Alice', age=11)
 
     This form can also be used to create rows as tuple values, i.e. with unnamed
-    fields. Beware that such Row objects have different equality semantics:
+    fields.
 
     >>> row1 = Row("Alice", 11)
     >>> row2 = Row(name="Alice", age=11)
     >>> row1 == row2
-    False
-    >>> row3 = Row(a="Alice", b=11)
-    >>> row1 == row3
     True
     """
 
-    def __new__(self, *args, **kwargs):
+    def __new__(cls, *args, **kwargs):
         if args and kwargs:
             raise ValueError("Can not use both args "
                              "and kwargs to create Row")
         if kwargs:
             # create row objects
-            names = sorted(kwargs.keys())
-            row = tuple.__new__(self, [kwargs[n] for n in names])
-            row.__fields__ = names
-            row.__from_dict__ = True
+            row = tuple.__new__(cls, list(kwargs.values()))
+            row.__fields__ = list(kwargs.keys())
             return row
-
         else:
             # create row class or objects
-            return tuple.__new__(self, args)
+            return tuple.__new__(cls, args)
 
     def asDict(self, recursive=False):
         """
-        Return as an dict
+        Return as a dict
 
-        :param recursive: turns the nested Row as dict (default: False).
+        Parameters
+        ----------
+        recursive : bool, optional
+            turns the nested Rows to dict (default: False).
 
+        Notes
+        -----
+        If a row contains duplicate field names, e.g., the rows of a join
+        between two :class:`DataFrame` that both have the fields of same names,
+        one of the duplicate fields will be selected by ``asDict``. ``__getitem__``
+        will also return one of the duplicate fields, however returned value might
+        be different to ``asDict``.
+
+        Examples
+        --------
         >>> Row(name="Alice", age=11).asDict() == {'name': 'Alice', 'age': 11}
         True
         >>> row = Row(key=1, value=Row(name='a', age=2))
-        >>> row.asDict() == {'key': 1, 'value': Row(age=2, name='a')}
+        >>> row.asDict() == {'key': 1, 'value': Row(name='a', age=2)}
         True
         >>> row.asDict(True) == {'key': 1, 'value': {'name': 'a', 'age': 2}}
         True
@@ -1562,8 +1576,8 @@ class Row(tuple):
             raise AttributeError(item)
 
     def __setattr__(self, key, value):
-        if key != '__fields__' and key != "__from_dict__":
-            raise Exception("Row is read-only")
+        if key != '__fields__':
+            raise RuntimeError("Row is read-only")
         self.__dict__[key] = value
 
     def __reduce__(self):
@@ -1606,267 +1620,6 @@ class DatetimeConverter(object):
 # datetime is a subclass of date, we should register DatetimeConverter first
 register_input_converter(DatetimeConverter())
 register_input_converter(DateConverter())
-
-
-def to_arrow_type(dt):
-    """ Convert Spark data type to pyarrow type
-    """
-    import pyarrow as pa
-    if type(dt) == BooleanType:
-        arrow_type = pa.bool_()
-    elif type(dt) == ByteType:
-        arrow_type = pa.int8()
-    elif type(dt) == ShortType:
-        arrow_type = pa.int16()
-    elif type(dt) == IntegerType:
-        arrow_type = pa.int32()
-    elif type(dt) == LongType:
-        arrow_type = pa.int64()
-    elif type(dt) == FloatType:
-        arrow_type = pa.float32()
-    elif type(dt) == DoubleType:
-        arrow_type = pa.float64()
-    elif type(dt) == DecimalType:
-        arrow_type = pa.decimal128(dt.precision, dt.scale)
-    elif type(dt) == StringType:
-        arrow_type = pa.string()
-    elif type(dt) == BinaryType:
-        arrow_type = pa.binary()
-    elif type(dt) == DateType:
-        arrow_type = pa.date32()
-    elif type(dt) == TimestampType:
-        # Timestamps should be in UTC, JVM Arrow timestamps require a timezone to be read
-        arrow_type = pa.timestamp('us', tz='UTC')
-    elif type(dt) == ArrayType:
-        if type(dt.elementType) in [StructType, TimestampType]:
-            raise TypeError("Unsupported type in conversion to Arrow: " + str(dt))
-        arrow_type = pa.list_(to_arrow_type(dt.elementType))
-    elif type(dt) == StructType:
-        if any(type(field.dataType) == StructType for field in dt):
-            raise TypeError("Nested StructType not supported in conversion to Arrow")
-        fields = [pa.field(field.name, to_arrow_type(field.dataType), nullable=field.nullable)
-                  for field in dt]
-        arrow_type = pa.struct(fields)
-    else:
-        raise TypeError("Unsupported type in conversion to Arrow: " + str(dt))
-    return arrow_type
-
-
-def to_arrow_schema(schema):
-    """ Convert a schema from Spark to Arrow
-    """
-    import pyarrow as pa
-    fields = [pa.field(field.name, to_arrow_type(field.dataType), nullable=field.nullable)
-              for field in schema]
-    return pa.schema(fields)
-
-
-def from_arrow_type(at):
-    """ Convert pyarrow type to Spark data type.
-    """
-    import pyarrow.types as types
-    if types.is_boolean(at):
-        spark_type = BooleanType()
-    elif types.is_int8(at):
-        spark_type = ByteType()
-    elif types.is_int16(at):
-        spark_type = ShortType()
-    elif types.is_int32(at):
-        spark_type = IntegerType()
-    elif types.is_int64(at):
-        spark_type = LongType()
-    elif types.is_float32(at):
-        spark_type = FloatType()
-    elif types.is_float64(at):
-        spark_type = DoubleType()
-    elif types.is_decimal(at):
-        spark_type = DecimalType(precision=at.precision, scale=at.scale)
-    elif types.is_string(at):
-        spark_type = StringType()
-    elif types.is_binary(at):
-        spark_type = BinaryType()
-    elif types.is_date32(at):
-        spark_type = DateType()
-    elif types.is_timestamp(at):
-        spark_type = TimestampType()
-    elif types.is_list(at):
-        if types.is_timestamp(at.value_type):
-            raise TypeError("Unsupported type in conversion from Arrow: " + str(at))
-        spark_type = ArrayType(from_arrow_type(at.value_type))
-    elif types.is_struct(at):
-        if any(types.is_struct(field.type) for field in at):
-            raise TypeError("Nested StructType not supported in conversion from Arrow: " + str(at))
-        return StructType(
-            [StructField(field.name, from_arrow_type(field.type), nullable=field.nullable)
-             for field in at])
-    else:
-        raise TypeError("Unsupported type in conversion from Arrow: " + str(at))
-    return spark_type
-
-
-def from_arrow_schema(arrow_schema):
-    """ Convert schema from Arrow to Spark.
-    """
-    return StructType(
-        [StructField(field.name, from_arrow_type(field.type), nullable=field.nullable)
-         for field in arrow_schema])
-
-
-def _get_local_timezone():
-    """ Get local timezone using pytz with environment variable, or dateutil.
-
-    If there is a 'TZ' environment variable, pass it to pandas to use pytz and use it as timezone
-    string, otherwise use the special word 'dateutil/:' which means that pandas uses dateutil and
-    it reads system configuration to know the system local timezone.
-
-    See also:
-    - https://github.com/pandas-dev/pandas/blob/0.19.x/pandas/tslib.pyx#L1753
-    - https://github.com/dateutil/dateutil/blob/2.6.1/dateutil/tz/tz.py#L1338
-    """
-    import os
-    return os.environ.get('TZ', 'dateutil/:')
-
-
-def _check_series_localize_timestamps(s, timezone):
-    """
-    Convert timezone aware timestamps to timezone-naive in the specified timezone or local timezone.
-
-    If the input series is not a timestamp series, then the same series is returned. If the input
-    series is a timestamp series, then a converted series is returned.
-
-    :param s: pandas.Series
-    :param timezone: the timezone to convert. if None then use local timezone
-    :return pandas.Series that have been converted to tz-naive
-    """
-    from pyspark.sql.utils import require_minimum_pandas_version
-    require_minimum_pandas_version()
-
-    from pandas.api.types import is_datetime64tz_dtype
-    tz = timezone or _get_local_timezone()
-    # TODO: handle nested timestamps, such as ArrayType(TimestampType())?
-    if is_datetime64tz_dtype(s.dtype):
-        return s.dt.tz_convert(tz).dt.tz_localize(None)
-    else:
-        return s
-
-
-def _check_dataframe_localize_timestamps(pdf, timezone):
-    """
-    Convert timezone aware timestamps to timezone-naive in the specified timezone or local timezone
-
-    :param pdf: pandas.DataFrame
-    :param timezone: the timezone to convert. if None then use local timezone
-    :return pandas.DataFrame where any timezone aware columns have been converted to tz-naive
-    """
-    from pyspark.sql.utils import require_minimum_pandas_version
-    require_minimum_pandas_version()
-
-    for column, series in pdf.iteritems():
-        pdf[column] = _check_series_localize_timestamps(series, timezone)
-    return pdf
-
-
-def _check_series_convert_timestamps_internal(s, timezone):
-    """
-    Convert a tz-naive timestamp in the specified timezone or local timezone to UTC normalized for
-    Spark internal storage
-
-    :param s: a pandas.Series
-    :param timezone: the timezone to convert. if None then use local timezone
-    :return pandas.Series where if it is a timestamp, has been UTC normalized without a time zone
-    """
-    from pyspark.sql.utils import require_minimum_pandas_version
-    require_minimum_pandas_version()
-
-    from pandas.api.types import is_datetime64_dtype, is_datetime64tz_dtype
-    # TODO: handle nested timestamps, such as ArrayType(TimestampType())?
-    if is_datetime64_dtype(s.dtype):
-        # When tz_localize a tz-naive timestamp, the result is ambiguous if the tz-naive
-        # timestamp is during the hour when the clock is adjusted backward during due to
-        # daylight saving time (dst).
-        # E.g., for America/New_York, the clock is adjusted backward on 2015-11-01 2:00 to
-        # 2015-11-01 1:00 from dst-time to standard time, and therefore, when tz_localize
-        # a tz-naive timestamp 2015-11-01 1:30 with America/New_York timezone, it can be either
-        # dst time (2015-01-01 1:30-0400) or standard time (2015-11-01 1:30-0500).
-        #
-        # Here we explicit choose to use standard time. This matches the default behavior of
-        # pytz.
-        #
-        # Here are some code to help understand this behavior:
-        # >>> import datetime
-        # >>> import pandas as pd
-        # >>> import pytz
-        # >>>
-        # >>> t = datetime.datetime(2015, 11, 1, 1, 30)
-        # >>> ts = pd.Series([t])
-        # >>> tz = pytz.timezone('America/New_York')
-        # >>>
-        # >>> ts.dt.tz_localize(tz, ambiguous=True)
-        # 0   2015-11-01 01:30:00-04:00
-        # dtype: datetime64[ns, America/New_York]
-        # >>>
-        # >>> ts.dt.tz_localize(tz, ambiguous=False)
-        # 0   2015-11-01 01:30:00-05:00
-        # dtype: datetime64[ns, America/New_York]
-        # >>>
-        # >>> str(tz.localize(t))
-        # '2015-11-01 01:30:00-05:00'
-        tz = timezone or _get_local_timezone()
-        return s.dt.tz_localize(tz, ambiguous=False).dt.tz_convert('UTC')
-    elif is_datetime64tz_dtype(s.dtype):
-        return s.dt.tz_convert('UTC')
-    else:
-        return s
-
-
-def _check_series_convert_timestamps_localize(s, from_timezone, to_timezone):
-    """
-    Convert timestamp to timezone-naive in the specified timezone or local timezone
-
-    :param s: a pandas.Series
-    :param from_timezone: the timezone to convert from. if None then use local timezone
-    :param to_timezone: the timezone to convert to. if None then use local timezone
-    :return pandas.Series where if it is a timestamp, has been converted to tz-naive
-    """
-    from pyspark.sql.utils import require_minimum_pandas_version
-    require_minimum_pandas_version()
-
-    import pandas as pd
-    from pandas.api.types import is_datetime64tz_dtype, is_datetime64_dtype
-    from_tz = from_timezone or _get_local_timezone()
-    to_tz = to_timezone or _get_local_timezone()
-    # TODO: handle nested timestamps, such as ArrayType(TimestampType())?
-    if is_datetime64tz_dtype(s.dtype):
-        return s.dt.tz_convert(to_tz).dt.tz_localize(None)
-    elif is_datetime64_dtype(s.dtype) and from_tz != to_tz:
-        # `s.dt.tz_localize('tzlocal()')` doesn't work properly when including NaT.
-        return s.apply(
-            lambda ts: ts.tz_localize(from_tz, ambiguous=False).tz_convert(to_tz).tz_localize(None)
-            if ts is not pd.NaT else pd.NaT)
-    else:
-        return s
-
-
-def _check_series_convert_timestamps_local_tz(s, timezone):
-    """
-    Convert timestamp to timezone-naive in the specified timezone or local timezone
-
-    :param s: a pandas.Series
-    :param timezone: the timezone to convert to. if None then use local timezone
-    :return pandas.Series where if it is a timestamp, has been converted to tz-naive
-    """
-    return _check_series_convert_timestamps_localize(s, None, timezone)
-
-
-def _check_series_convert_timestamps_tz_local(s, timezone):
-    """
-    Convert timestamp to timezone-naive in the specified timezone or local timezone
-
-    :param s: a pandas.Series
-    :param timezone: the timezone to convert from. if None then use local timezone
-    :return pandas.Series where if it is a timestamp, has been converted to tz-naive
-    """
-    return _check_series_convert_timestamps_localize(s, timezone, None)
 
 
 def _test():

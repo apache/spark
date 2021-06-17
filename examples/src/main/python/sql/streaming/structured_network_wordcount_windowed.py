@@ -39,8 +39,6 @@ r"""
 
  One recommended <window duration>, <slide duration> pair is 10, 5
 """
-from __future__ import print_function
-
 import sys
 
 from pyspark.sql import SparkSession

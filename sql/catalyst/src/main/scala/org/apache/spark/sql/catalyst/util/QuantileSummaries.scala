@@ -173,13 +173,13 @@ class QuantileSummaries(
       // Take the case of the sample `10` from `b`. In the original stream, it could have appeared
       // right after `0` (as expressed by `g=1`) or right before `20`, so `delta=99+0-1=98`.
       // In the GK algorithm's style of working in terms of maximum bounds, one can observe that the
-      // maximum additional uncertainty over samples comming from `b` is `max(g_a + delta_a) =
+      // maximum additional uncertainty over samples coming from `b` is `max(g_a + delta_a) =
       // floor(2 * eps_a * n_a)`. Likewise, additional uncertainty over samples from `a` is
       // `floor(2 * eps_b * n_b)`.
       // Only samples that interleave the other side are affected. That means that samples from
       // one side that are lesser (or greater) than all samples from the other side are just copied
-      // unmodifed.
-      // If the merging instances have different `relativeError`, the resulting instance will cary
+      // unmodified.
+      // If the merging instances have different `relativeError`, the resulting instance will carry
       // the largest one: `eps_ab = max(eps_a, eps_b)`.
       // The main invariant of the GK algorithm is kept:
       // `max(g_ab + delta_ab) <= floor(2 * eps_ab * (n_a + n_b))` since
@@ -223,52 +223,105 @@ class QuantileSummaries(
         otherIdx += 1
       }
 
-      val comp = compressImmut(mergedSampled, 2 * mergedRelativeError * mergedCount)
+      val comp = compressImmut(mergedSampled.toIndexedSeq, 2 * mergedRelativeError * mergedCount)
       new QuantileSummaries(other.compressThreshold, mergedRelativeError, comp, mergedCount, true)
     }
   }
 
   /**
-   * Runs a query for a given quantile.
+   * Finds the approximate quantile for a percentile, starting at a specific index in the summary.
+   * This is a helper method that is called as we are making a pass over the summary and a sorted
+   * sequence of input percentiles.
+   *
+   * @param index The point at which to start scanning the summary for an approximate value.
+   * @param minRankAtIndex The accumulated minimum rank at the given index.
+   * @param targetError Target error from the summary.
+   * @param percentile The percentile whose value is computed.
+   * @return A tuple (i, r, a) where: i is the updated index for the next call, r is the updated
+   *         rank at i, and a is the approximate quantile.
+   */
+  private def findApproxQuantile(
+      index: Int,
+      minRankAtIndex: Long,
+      targetError: Double,
+      percentile: Double): (Int, Long, Double) = {
+    var curSample = sampled(index)
+    val rank = math.ceil(percentile * count).toLong
+    var i = index
+    var minRank = minRankAtIndex
+    while (i < sampled.length - 1) {
+      val maxRank = minRank + curSample.delta
+      if (maxRank - targetError <= rank && rank <= minRank + targetError) {
+        return (i, minRank, curSample.value)
+      } else {
+        i += 1
+        curSample = sampled(i)
+        minRank += curSample.g
+      }
+    }
+    (sampled.length - 1, 0, sampled.last.value)
+  }
+
+  /**
+   * Runs a query for a given sequence of percentiles.
    * The result follows the approximation guarantees detailed above.
    * The query can only be run on a compressed summary: you need to call compress() before using
    * it.
    *
-   * @param quantile the target quantile
-   * @return
+   * @param percentiles the target percentiles
+   * @return the corresponding approximate quantiles, in the same order as the input
    */
-  def query(quantile: Double): Option[Double] = {
-    require(quantile >= 0 && quantile <= 1.0, "quantile should be in the range [0.0, 1.0]")
-    require(headSampled.isEmpty,
+  def query(percentiles: Seq[Double]): Option[Seq[Double]] = {
+    percentiles.foreach(p =>
+      require(p >= 0 && p <= 1.0, "percentile should be in the range [0.0, 1.0]"))
+    require(
+      headSampled.isEmpty,
       "Cannot operate on an uncompressed summary, call compress() first")
 
     if (sampled.isEmpty) return None
 
-    if (quantile <= relativeError) {
-      return Some(sampled.head.value)
-    }
+    val targetError = sampled.foldLeft(Long.MinValue)((currentMax, stats) =>
+      currentMax.max(stats.delta + stats.g)) / 2
 
-    if (quantile >= 1 - relativeError) {
-      return Some(sampled.last.value)
-    }
-
-    // Target rank
-    val rank = math.ceil(quantile * count).toLong
-    val targetError = relativeError * count
+    // Index to track the current sample
+    var index = 0
     // Minimum rank at current sample
-    var minRank = 0L
-    var i = 0
-    while (i < sampled.length - 1) {
-      val curSample = sampled(i)
-      minRank += curSample.g
-      val maxRank = minRank + curSample.delta
-      if (maxRank - targetError <= rank && rank <= minRank + targetError) {
-        return Some(curSample.value)
-      }
-      i += 1
+    var minRank = sampled(0).g
+
+    val sortedPercentiles = percentiles.zipWithIndex.sortBy(_._1)
+    val result = Array.fill(percentiles.length)(0.0)
+    sortedPercentiles.foreach {
+      case (percentile, pos) =>
+        if (percentile <= relativeError) {
+          result(pos) = sampled.head.value
+        } else if (percentile >= 1 - relativeError) {
+          result(pos) = sampled.last.value
+        } else {
+          val (newIndex, newMinRank, approxQuantile) =
+            findApproxQuantile(index, minRank, targetError, percentile)
+          index = newIndex
+          minRank = newMinRank
+          result(pos) = approxQuantile
+        }
     }
-    Some(sampled.last.value)
+    Some(result)
   }
+
+  /**
+   * Runs a query for a given percentile.
+   * The result follows the approximation guarantees detailed above.
+   * The query can only be run on a compressed summary: you need to call compress() before using
+   * it.
+   *
+   * @param percentile the target percentile
+   * @return the corresponding approximate quantile
+   */
+  def query(percentile: Double): Option[Double] =
+    query(Seq(percentile)) match {
+      case Some(approxSeq) if approxSeq.nonEmpty => Some(approxSeq.head)
+      case _ => None
+    }
+
 }
 
 object QuantileSummaries {

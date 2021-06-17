@@ -14,17 +14,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
-import sys
 import os
 
-if sys.version > '3':
-    basestring = str
-
-from pyspark import since, keyword_only, SparkContext
+from pyspark import keyword_only, since, SparkContext
 from pyspark.ml.base import Estimator, Model, Transformer
 from pyspark.ml.param import Param, Params
-from pyspark.ml.util import *
+from pyspark.ml.util import MLReadable, MLWritable, JavaMLWriter, JavaMLReader, \
+    DefaultParamsReader, DefaultParamsWriter, MLWriter, MLReader, JavaMLWritable
 from pyspark.ml.wrapper import JavaParams
 from pyspark.ml.common import inherit_doc
 
@@ -54,21 +50,30 @@ class Pipeline(Estimator, MLReadable, MLWritable):
     stages = Param(Params._dummy(), "stages", "a list of pipeline stages")
 
     @keyword_only
-    def __init__(self, stages=None):
+    def __init__(self, *, stages=None):
         """
-        __init__(self, stages=None)
+        __init__(self, \\*, stages=None)
         """
         super(Pipeline, self).__init__()
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
-    @since("1.3.0")
     def setStages(self, value):
         """
         Set pipeline stages.
 
-        :param value: a list of transformers or estimators
-        :return: the pipeline instance
+        .. versionadded:: 1.3.0
+
+        Parameters
+        ----------
+        value : list
+            of :py:class:`pyspark.ml.Transformer`
+            or :py:class:`pyspark.ml.Estimator`
+
+        Returns
+        -------
+        :py:class:`Pipeline`
+            the pipeline instance
         """
         return self._set(stages=value)
 
@@ -81,9 +86,9 @@ class Pipeline(Estimator, MLReadable, MLWritable):
 
     @keyword_only
     @since("1.3.0")
-    def setParams(self, stages=None):
+    def setParams(self, *, stages=None):
         """
-        setParams(self, stages=None)
+        setParams(self, \\*, stages=None)
         Sets params for Pipeline.
         """
         kwargs = self._input_kwargs
@@ -114,13 +119,21 @@ class Pipeline(Estimator, MLReadable, MLWritable):
                 transformers.append(stage)
         return PipelineModel(transformers)
 
-    @since("1.4.0")
     def copy(self, extra=None):
         """
         Creates a copy of this instance.
 
-        :param extra: extra parameters
-        :returns: new instance
+        .. versionadded:: 1.4.0
+
+        Parameters
+        ----------
+        extra : dict, optional
+            extra parameters
+
+        Returns
+        -------
+        :py:class:`Pipeline`
+            new instance
         """
         if extra is None:
             extra = dict()
@@ -160,7 +173,10 @@ class Pipeline(Estimator, MLReadable, MLWritable):
         """
         Transfer this instance to a Java Pipeline.  Used for ML persistence.
 
-        :return: Java object equivalent to this instance.
+        Returns
+        -------
+        py4j.java_gateway.JavaObject
+            Java object equivalent to this instance.
         """
 
         gateway = SparkContext._gateway
@@ -262,10 +278,11 @@ class PipelineModel(Model, MLReadable, MLWritable):
             dataset = t.transform(dataset)
         return dataset
 
-    @since("1.4.0")
     def copy(self, extra=None):
         """
         Creates a copy of this instance.
+
+        .. versionadded:: 1.4.0
 
         :param extra: extra parameters
         :returns: new instance
@@ -324,8 +341,6 @@ class PipelineModel(Model, MLReadable, MLWritable):
 @inherit_doc
 class PipelineSharedReadWrite():
     """
-    .. note:: DeveloperApi
-
     Functions for :py:class:`MLReader` and :py:class:`MLWriter` shared between
     :py:class:`Pipeline` and :py:class:`PipelineModel`
 
@@ -367,7 +382,10 @@ class PipelineSharedReadWrite():
         """
         Load metadata and stages for a :py:class:`Pipeline` or :py:class:`PipelineModel`
 
-        :return: (UID, list of stages)
+        Returns
+        -------
+        tuple
+            (UID, list of stages)
         """
         stagesDir = os.path.join(path, "stages")
         stageUids = metadata['paramMap']['stageUids']

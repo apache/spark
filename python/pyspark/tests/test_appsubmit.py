@@ -225,7 +225,7 @@ class SparkSubmitTests(unittest.TestCase):
             |sc = SparkContext(conf = conf)
             |try:
             |    if sc._conf.get("spark.test_config") != "1":
-            |        raise Exception("Cannot find spark.test_config in SparkContext's conf.")
+            |        raise RuntimeError("Cannot find spark.test_config in SparkContext's conf.")
             |finally:
             |    sc.stop()
             """)
@@ -238,10 +238,10 @@ class SparkSubmitTests(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.tests.test_appsubmit import *
+    from pyspark.tests.test_appsubmit import *  # noqa: F401
 
     try:
-        import xmlrunner
+        import xmlrunner  # type: ignore[import]
         testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None

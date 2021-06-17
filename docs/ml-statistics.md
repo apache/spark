@@ -50,7 +50,7 @@ correlation methods are currently Pearson's and Spearman's correlation.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
-[`Correlation`](api/scala/index.html#org.apache.spark.ml.stat.Correlation$)
+[`Correlation`](api/scala/org/apache/spark/ml/stat/Correlation$.html)
 computes the correlation matrix for the input Dataset of Vectors using the specified method.
 The output will be a DataFrame that contains the correlation matrix of the column of vectors.
 
@@ -66,7 +66,7 @@ The output will be a DataFrame that contains the correlation matrix of the colum
 </div>
 
 <div data-lang="python" markdown="1">
-[`Correlation`](api/python/pyspark.ml.html#pyspark.ml.stat.Correlation$)
+[`Correlation`](api/python/reference/api/pyspark.ml.stat.Correlation.html)
 computes the correlation matrix for the input Dataset of Vectors using the specified method.
 The output will be a DataFrame that contains the correlation matrix of the column of vectors.
 
@@ -81,13 +81,15 @@ Hypothesis testing is a powerful tool in statistics to determine whether a resul
 significant, whether this result occurred by chance or not. `spark.ml` currently supports Pearson's
 Chi-squared ( $\chi^2$) tests for independence.
 
+### ChiSquareTest
+
 `ChiSquareTest` conducts Pearson's independence test for every feature against the label.
 For each feature, the (feature, label) pairs are converted into a contingency matrix for which
 the Chi-squared statistic is computed. All label and feature values must be categorical.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
-Refer to the [`ChiSquareTest` Scala docs](api/scala/index.html#org.apache.spark.ml.stat.ChiSquareTest$) for details on the API.
+Refer to the [`ChiSquareTest` Scala docs](api/scala/org/apache/spark/ml/stat/ChiSquareTest$.html) for details on the API.
 
 {% include_example scala/org/apache/spark/examples/ml/ChiSquareTestExample.scala %}
 </div>
@@ -99,7 +101,7 @@ Refer to the [`ChiSquareTest` Java docs](api/java/org/apache/spark/ml/stat/ChiSq
 </div>
 
 <div data-lang="python" markdown="1">
-Refer to the [`ChiSquareTest` Python docs](api/python/index.html#pyspark.ml.stat.ChiSquareTest$) for details on the API.
+Refer to the [`ChiSquareTest` Python docs](api/python/reference/api/pyspark.ml.stat.ChiSquareTest.html) for details on the API.
 
 {% include_example python/ml/chi_square_test_example.py %}
 </div>
@@ -114,7 +116,7 @@ as well as the total count.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
-The following example demonstrates using [`Summarizer`](api/scala/index.html#org.apache.spark.ml.stat.Summarizer$)
+The following example demonstrates using [`Summarizer`](api/scala/org/apache/spark/ml/stat/Summarizer$.html)
 to compute the mean and variance for a vector column of the input dataframe, with and without a weight column.
 
 {% include_example scala/org/apache/spark/examples/ml/SummarizerExample.scala %}
@@ -128,7 +130,7 @@ to compute the mean and variance for a vector column of the input dataframe, wit
 </div>
 
 <div data-lang="python" markdown="1">
-Refer to the [`Summarizer` Python docs](api/python/index.html#pyspark.ml.stat.Summarizer$) for details on the API.
+Refer to the [`Summarizer` Python docs](api/python/reference/api/pyspark.ml.stat.Summarizer.html) for details on the API.
 
 {% include_example python/ml/summarizer_example.py %}
 </div>

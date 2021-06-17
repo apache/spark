@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.sources
 
-import java.io.File
+import java.io.{File, IOException}
 import java.sql.Date
 
 import org.apache.hadoop.fs.{FileAlreadyExistsException, FSDataOutputStream, Path, RawLocalFileSystem}
@@ -26,6 +26,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
+import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
 import org.apache.spark.sql.test.SharedSparkSession
@@ -523,15 +524,17 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
 
   test("new partitions should be added to catalog after writing to catalog table") {
     val table = "partitioned_catalog_table"
+    val tempTable = "partitioned_catalog_temp_table"
     val numParts = 210
     withTable(table) {
-      val df = (1 to numParts).map(i => (i, i)).toDF("part", "col1")
-      val tempTable = "partitioned_catalog_temp_table"
-      df.createOrReplaceTempView(tempTable)
-      sql(s"CREATE TABLE $table (part Int, col1 Int) USING parquet PARTITIONED BY (part)")
-      sql(s"INSERT INTO TABLE $table SELECT * from $tempTable")
-      val partitions = spark.sessionState.catalog.listPartitionNames(TableIdentifier(table))
-      assert(partitions.size == numParts)
+      withTempView(tempTable) {
+        val df = (1 to numParts).map(i => (i, i)).toDF("part", "col1")
+        df.createOrReplaceTempView(tempTable)
+        sql(s"CREATE TABLE $table (part Int, col1 Int) USING parquet PARTITIONED BY (part)")
+        sql(s"INSERT INTO TABLE $table SELECT * from $tempTable")
+        val partitions = spark.sessionState.catalog.listPartitionNames(TableIdentifier(table))
+        assert(partitions.size == numParts)
+      }
     }
   }
 
@@ -620,12 +623,12 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         var msg = intercept[AnalysisException] {
           sql("insert into t select 1L, 2")
         }.getMessage
-        assert(msg.contains("Cannot safely cast 'i': LongType to IntegerType"))
+        assert(msg.contains("Cannot safely cast 'i': bigint to int"))
 
         msg = intercept[AnalysisException] {
           sql("insert into t select 1, 2.0")
         }.getMessage
-        assert(msg.contains("Cannot safely cast 'd': DecimalType(2,1) to DoubleType"))
+        assert(msg.contains("Cannot safely cast 'd': decimal(2,1) to double"))
 
         msg = intercept[AnalysisException] {
           sql("insert into t select 1, 2.0D, 3")
@@ -657,18 +660,18 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         var msg = intercept[AnalysisException] {
           sql("insert into t values('a', 'b')")
         }.getMessage
-        assert(msg.contains("Cannot safely cast 'i': StringType to IntegerType") &&
-          msg.contains("Cannot safely cast 'd': StringType to DoubleType"))
+        assert(msg.contains("Cannot safely cast 'i': string to int") &&
+          msg.contains("Cannot safely cast 'd': string to double"))
         msg = intercept[AnalysisException] {
           sql("insert into t values(now(), now())")
         }.getMessage
-        assert(msg.contains("Cannot safely cast 'i': TimestampType to IntegerType") &&
-          msg.contains("Cannot safely cast 'd': TimestampType to DoubleType"))
+        assert(msg.contains("Cannot safely cast 'i': timestamp to int") &&
+          msg.contains("Cannot safely cast 'd': timestamp to double"))
         msg = intercept[AnalysisException] {
           sql("insert into t values(true, false)")
         }.getMessage
-        assert(msg.contains("Cannot safely cast 'i': BooleanType to IntegerType") &&
-          msg.contains("Cannot safely cast 'd': BooleanType to DoubleType"))
+        assert(msg.contains("Cannot safely cast 'i': boolean to int") &&
+          msg.contains("Cannot safely cast 'd': boolean to double"))
       }
     }
   }
@@ -728,13 +731,13 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         var msg = intercept[SparkException] {
           sql(s"insert into t values(${outOfRangeValue1}D)")
         }.getCause.getMessage
-        assert(msg.contains(s"Casting $outOfRangeValue1 to long causes overflow"))
+        assert(msg.contains(s"Casting $outOfRangeValue1 to bigint causes overflow"))
 
         val outOfRangeValue2 = Math.nextDown(Long.MinValue)
         msg = intercept[SparkException] {
           sql(s"insert into t values(${outOfRangeValue2}D)")
         }.getCause.getMessage
-        assert(msg.contains(s"Casting $outOfRangeValue2 to long causes overflow"))
+        assert(msg.contains(s"Casting $outOfRangeValue2 to bigint causes overflow"))
       }
     }
   }
@@ -749,6 +752,47 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           sql(s"insert into t values(${outOfRangeValue})")
         }.getCause.getMessage
         assert(msg.contains("cannot be represented as Decimal(3, 2)"))
+      }
+    }
+  }
+
+  test("SPARK-33354: Throw exceptions on inserting invalid cast with ANSI casting policy") {
+    withSQLConf(
+      SQLConf.STORE_ASSIGNMENT_POLICY.key -> SQLConf.StoreAssignmentPolicy.ANSI.toString) {
+      withTable("t") {
+        sql("CREATE TABLE t(i int, t timestamp) USING parquet")
+        val msg = intercept[AnalysisException] {
+          sql("INSERT INTO t VALUES (TIMESTAMP('2010-09-02 14:10:10'), 1)")
+        }.getMessage
+        assert(msg.contains("Cannot safely cast 'i': timestamp to int"))
+        assert(msg.contains("Cannot safely cast 't': int to timestamp"))
+      }
+
+      withTable("t") {
+        sql("CREATE TABLE t(i int, d date) USING parquet")
+        val msg = intercept[AnalysisException] {
+          sql("INSERT INTO t VALUES (date('2010-09-02'), 1)")
+        }.getMessage
+        assert(msg.contains("Cannot safely cast 'i': date to int"))
+        assert(msg.contains("Cannot safely cast 'd': int to date"))
+      }
+
+      withTable("t") {
+        sql("CREATE TABLE t(b boolean, t timestamp) USING parquet")
+        val msg = intercept[AnalysisException] {
+          sql("INSERT INTO t VALUES (TIMESTAMP('2010-09-02 14:10:10'), true)")
+        }.getMessage
+        assert(msg.contains("Cannot safely cast 'b': timestamp to boolean"))
+        assert(msg.contains("Cannot safely cast 't': boolean to timestamp"))
+      }
+
+      withTable("t") {
+        sql("CREATE TABLE t(b boolean, d date) USING parquet")
+        val msg = intercept[AnalysisException] {
+          sql("INSERT INTO t VALUES (date('2010-09-02'), true)")
+        }.getMessage
+        assert(msg.contains("Cannot safely cast 'b': date to boolean"))
+        assert(msg.contains("Cannot safely cast 'd': boolean to date"))
       }
     }
   }
@@ -780,7 +824,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         .add("s", StringType, false)
       val newTable = CatalogTable(
         identifier = TableIdentifier("test_table", None),
-        tableType = CatalogTableType.EXTERNAL,
+        tableType = CatalogTableType.MANAGED,
         storage = CatalogStorageFormat(
           locationUri = None,
           inputFormat = None,
@@ -802,21 +846,211 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
   }
 
   test("Stop task set if FileAlreadyExistsException was thrown") {
-    withSQLConf("fs.file.impl" -> classOf[FileExistingTestFileSystem].getName,
-        "fs.file.impl.disable.cache" -> "true") {
+    Seq(true, false).foreach { fastFail =>
+      withSQLConf("fs.file.impl" -> classOf[FileExistingTestFileSystem].getName,
+        "fs.file.impl.disable.cache" -> "true",
+        SQLConf.FASTFAIL_ON_FILEFORMAT_OUTPUT.key -> fastFail.toString) {
+        withTable("t") {
+          sql(
+            """
+              |CREATE TABLE t(i INT, part1 INT) USING PARQUET
+              |PARTITIONED BY (part1)
+          """.stripMargin)
+
+          val df = Seq((1, 1)).toDF("i", "part1")
+          val err = intercept[SparkException] {
+            df.write.mode("overwrite").format("parquet").insertInto("t")
+          }
+
+          if (fastFail) {
+            assert(err.getCause.getMessage.contains("can not write to output file: " +
+              "org.apache.hadoop.fs.FileAlreadyExistsException"))
+          } else {
+            assert(err.getCause.getMessage.contains("Task failed while writing rows"))
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-29174 Support LOCAL in INSERT OVERWRITE DIRECTORY to data source") {
+    withTempPath { dir =>
+      val path = dir.toURI.getPath
+      sql(s"""create table tab1 ( a int) using parquet location '$path'""")
+      sql("insert into tab1 values(1)")
+      checkAnswer(sql("select * from tab1"), Seq(1).map(i => Row(i)))
+      sql("create table tab2 ( a int) using parquet")
+      sql("insert into tab2 values(2)")
+      checkAnswer(sql("select * from tab2"), Seq(2).map(i => Row(i)))
+      sql(s"""insert overwrite local directory '$path' using parquet select * from tab2""")
+      sql("refresh table tab1")
+      checkAnswer(sql("select * from tab1"), Seq(2).map(i => Row(i)))
+    }
+  }
+
+  test("SPARK-29174 fail LOCAL in INSERT OVERWRITE DIRECT remote path") {
+    val message = intercept[ParseException] {
+      sql("insert overwrite local directory 'hdfs:/abcd' using parquet select 1")
+    }.getMessage
+    assert(message.contains("LOCAL is supported only with file: scheme"))
+  }
+
+  test("SPARK-32508 " +
+    "Disallow empty part col values in partition spec before static partition writing") {
+    withTable("insertTable") {
+      sql(
+        """
+          |CREATE TABLE insertTable(i int, part1 string, part2 string) USING PARQUET
+          |PARTITIONED BY (part1, part2)
+            """.stripMargin)
+      val msg = "Partition spec is invalid"
+      assert(intercept[AnalysisException] {
+        sql("INSERT INTO TABLE insertTable PARTITION(part1=1, part2='') SELECT 1")
+      }.getMessage.contains(msg))
+      assert(intercept[AnalysisException] {
+        sql("INSERT INTO TABLE insertTable PARTITION(part1='', part2) SELECT 1 ,'' AS part2")
+      }.getMessage.contains(msg))
+
+      sql("INSERT INTO TABLE insertTable PARTITION(part1='1', part2='2') SELECT 1")
+      sql("INSERT INTO TABLE insertTable PARTITION(part1='1', part2) SELECT 1 ,'2' AS part2")
+      sql("INSERT INTO TABLE insertTable PARTITION(part1='1', part2) SELECT 1 ,'' AS part2")
+    }
+  }
+
+  test("SPARK-33294: Add query resolved check before analyze InsertIntoDir") {
+    withTempPath { path =>
+      val msg = intercept[AnalysisException] {
+        sql(
+          s"""
+            |INSERT OVERWRITE DIRECTORY '${path.getAbsolutePath}' USING PARQUET
+            |SELECT * FROM (
+            | SELECT c3 FROM (
+            |  SELECT c1, c2 from values(1,2) t(c1, c2)
+            |  )
+            |)
+          """.stripMargin)
+      }.getMessage
+      assert(msg.contains("cannot resolve 'c3' given input columns"))
+    }
+  }
+
+  test("SPARK-34926: PartitioningUtils.getPathFragment() should respect partition value is null") {
+    withTable("t1", "t2") {
+      sql("CREATE TABLE t1(id INT) USING PARQUET")
+      sql(
+        """
+          |CREATE TABLE t2 (c1 INT, part STRING)
+          |  USING parquet
+          |PARTITIONED BY (part)
+          |""".stripMargin)
+      sql(
+        """
+          |INSERT INTO TABLE t2 PARTITION (part = null)
+          |SELECT * FROM t1 where 1=0""".stripMargin)
+      checkAnswer(spark.table("t2"), Nil)
+    }
+  }
+
+  test("SPARK-35106: insert overwrite with custom partition path") {
+    withTempPath { path =>
+      withTable("t") {
+      sql(
+        """
+          |create table t(i int, part1 int, part2 int) using parquet
+          |partitioned by (part1, part2)
+        """.stripMargin)
+
+        sql(s"alter table t add partition(part1=1, part2=1) location '${path.getAbsolutePath}'")
+        sql(s"insert into t partition(part1=1, part2=1) select 1")
+        checkAnswer(spark.table("t"), Row(1, 1, 1))
+
+        sql("insert overwrite table t partition(part1=1, part2=1) select 2")
+        checkAnswer(spark.table("t"), Row(2, 1, 1))
+
+        sql("insert overwrite table t partition(part1=2, part2) select 2, 2")
+        checkAnswer(spark.table("t"), Row(2, 1, 1) :: Row(2, 2, 2) :: Nil)
+
+        sql("insert overwrite table t partition(part1=1, part2=2) select 3")
+        checkAnswer(spark.table("t"), Row(2, 1, 1) :: Row(2, 2, 2) :: Row(3, 1, 2) :: Nil)
+
+        sql("insert overwrite table t partition(part1=1, part2) select 4, 1")
+        checkAnswer(spark.table("t"), Row(4, 1, 1) :: Row(2, 2, 2) :: Nil)
+      }
+    }
+  }
+
+  test("SPARK-35106: dynamic partition overwrite with custom partition path") {
+    withSQLConf(SQLConf.PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.DYNAMIC.toString) {
+      withTempPath { path =>
+        withTable("t") {
+          sql(
+            """
+              |create table t(i int, part1 int, part2 int) using parquet
+              |partitioned by (part1, part2)
+            """.stripMargin)
+
+          sql(s"insert into t partition(part1=1, part2=1) select 1")
+          checkAnswer(spark.table("t"), Row(1, 1, 1))
+
+          sql(s"alter table t add partition(part1=1, part2=2) location '${path.getAbsolutePath}'")
+
+          // dynamic partition overwrite to empty custom partition
+          sql(s"insert overwrite table t partition(part1=1, part2=2) select 1")
+          checkAnswer(spark.table("t"), Row(1, 1, 1) :: Row(1, 1, 2) :: Nil)
+
+          // dynamic partition overwrite to non-empty custom partition
+          sql("insert overwrite table t partition(part1=1, part2=2) select 2")
+          checkAnswer(spark.table("t"), Row(1, 1, 1) :: Row(2, 1, 2) :: Nil)
+        }
+      }
+    }
+  }
+
+  test("SPARK-35106: Throw exception when rename custom partition paths returns false") {
+    withSQLConf(
+      "fs.file.impl" -> classOf[RenameFromSparkStagingToFinalDirAlwaysTurnsFalseFilesystem].getName,
+      "fs.file.impl.disable.cache" -> "true") {
+      withTempPath { path =>
+        withTable("t") {
+          sql(
+            """
+              |create table t(i int, part1 int, part2 int) using parquet
+              |partitioned by (part1, part2)
+            """.stripMargin)
+
+          sql(s"alter table t add partition(part1=1, part2=1) location '${path.getAbsolutePath}'")
+
+          val e = intercept[SparkException] {
+            sql(s"insert into t partition(part1=1, part2=1) select 1")
+          }.getCause
+          assert(e.isInstanceOf[IOException])
+          assert(e.getMessage.contains("Failed to rename"))
+          assert(e.getMessage.contains("when committing files staged for absolute location"))
+        }
+      }
+    }
+  }
+
+  test("SPARK-35106: Throw exception when rename dynamic partition paths returns false") {
+    withSQLConf(
+      "fs.file.impl" -> classOf[RenameFromSparkStagingToFinalDirAlwaysTurnsFalseFilesystem].getName,
+      "fs.file.impl.disable.cache" -> "true",
+      SQLConf.PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.DYNAMIC.toString) {
+
       withTable("t") {
         sql(
           """
-            |CREATE TABLE t(i INT, part1 INT) USING PARQUET
-            |PARTITIONED BY (part1)
+            |create table t(i int, part1 int, part2 int) using parquet
+            |partitioned by (part1, part2)
           """.stripMargin)
 
-        val df = Seq((1, 1)).toDF("i", "part1")
-        val err = intercept[SparkException] {
-          df.write.mode("overwrite").format("parquet").insertInto("t")
-        }
-        assert(err.getCause.getMessage.contains("can not write to output file: " +
-          "org.apache.hadoop.fs.FileAlreadyExistsException"))
+        val e = intercept[SparkException] {
+          sql(s"insert overwrite table t partition(part1, part2) values (1, 1, 1)")
+        }.getCause
+        assert(e.isInstanceOf[IOException])
+        assert(e.getMessage.contains("Failed to rename"))
+        assert(e.getMessage.contains(
+          "when committing files staged for overwriting dynamic partitions"))
       }
     }
   }
@@ -830,5 +1064,15 @@ class FileExistingTestFileSystem extends RawLocalFileSystem {
       replication: Short,
       blockSize: Long): FSDataOutputStream = {
     throw new FileAlreadyExistsException(s"${f.toString} already exists")
+  }
+}
+
+class RenameFromSparkStagingToFinalDirAlwaysTurnsFalseFilesystem extends RawLocalFileSystem {
+  override def rename(src: Path, dst: Path): Boolean = {
+    (!isSparkStagingDir(src) || isSparkStagingDir(dst)) && super.rename(src, dst)
+  }
+
+  private def isSparkStagingDir(path: Path): Boolean = {
+    path.toString.contains(".spark-staging-")
   }
 }

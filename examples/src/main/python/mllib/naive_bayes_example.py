@@ -22,8 +22,6 @@ Usage:
   `spark-submit --master local[4] examples/src/main/python/mllib/naive_bayes_example.py`
 """
 
-from __future__ import print_function
-
 import shutil
 
 from pyspark import SparkContext

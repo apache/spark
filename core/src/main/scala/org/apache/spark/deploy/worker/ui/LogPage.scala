@@ -83,12 +83,12 @@ private[ui] class LogPage(parent: WorkerWebUI) extends WebUIPage("logPage") with
       </span>
 
     val moreButton =
-      <button type="button" onclick={"loadMore()"} class="log-more-btn btn btn-default">
+      <button type="button" onclick={"loadMore()"} class="log-more-btn btn btn-secondary">
         Load More
       </button>
 
     val newButton =
-      <button type="button" onclick={"loadNew()"} class="log-new-btn btn btn-default">
+      <button type="button" onclick={"loadNew()"} class="log-new-btn btn btn-secondary">
         Load New
       </button>
 

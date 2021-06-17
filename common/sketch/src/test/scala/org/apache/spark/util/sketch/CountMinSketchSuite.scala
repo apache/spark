@@ -22,9 +22,9 @@ import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 import scala.reflect.ClassTag
 import scala.util.Random
 
-import org.scalatest.FunSuite // scalastyle:ignore funsuite
+import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
 
-class CountMinSketchSuite extends FunSuite { // scalastyle:ignore funsuite
+class CountMinSketchSuite extends AnyFunSuite { // scalastyle:ignore funsuite
   private val epsOfTotalCount = 0.01
 
   private val confidence = 0.9

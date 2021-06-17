@@ -16,14 +16,17 @@
  */
 package org.apache.spark.sql.execution.datasources.v2.parquet
 
+import scala.collection.JavaConverters._
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.parquet.hadoop.ParquetInputFormat
 
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.connector.read.PartitionReaderFactory
 import org.apache.spark.sql.execution.datasources.PartitioningAwareFileIndex
-import org.apache.spark.sql.execution.datasources.parquet.{ParquetReadSupport, ParquetWriteSupport}
+import org.apache.spark.sql.execution.datasources.parquet.{ParquetOptions, ParquetReadSupport, ParquetWriteSupport}
 import org.apache.spark.sql.execution.datasources.v2.FileScan
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.Filter
@@ -39,8 +42,9 @@ case class ParquetScan(
     readDataSchema: StructType,
     readPartitionSchema: StructType,
     pushedFilters: Array[Filter],
-    options: CaseInsensitiveStringMap)
-  extends FileScan(sparkSession, fileIndex, readDataSchema, readPartitionSchema) {
+    options: CaseInsensitiveStringMap,
+    partitionFilters: Seq[Expression] = Seq.empty,
+    dataFilters: Seq[Expression] = Seq.empty) extends FileScan {
   override def isSplitable(path: Path): Boolean = true
 
   override def createReaderFactory(): PartitionReaderFactory = {
@@ -74,21 +78,35 @@ case class ParquetScan(
 
     val broadcastedConf = sparkSession.sparkContext.broadcast(
       new SerializableConfiguration(hadoopConf))
-    ParquetPartitionReaderFactory(sparkSession.sessionState.conf, broadcastedConf,
-      dataSchema, readDataSchema, readPartitionSchema, pushedFilters)
+    val sqlConf = sparkSession.sessionState.conf
+    ParquetPartitionReaderFactory(
+      sqlConf,
+      broadcastedConf,
+      dataSchema,
+      readDataSchema,
+      readPartitionSchema,
+      pushedFilters,
+      new ParquetOptions(options.asCaseSensitiveMap.asScala.toMap, sqlConf))
   }
 
   override def equals(obj: Any): Boolean = obj match {
     case p: ParquetScan =>
-      fileIndex == p.fileIndex && dataSchema == p.dataSchema &&
-        readDataSchema == p.readDataSchema && readPartitionSchema == p.readPartitionSchema &&
-        options == p.options && equivalentFilters(pushedFilters, p.pushedFilters)
+      super.equals(p) && dataSchema == p.dataSchema && options == p.options &&
+        equivalentFilters(pushedFilters, p.pushedFilters)
     case _ => false
   }
 
   override def hashCode(): Int = getClass.hashCode()
 
   override def description(): String = {
-    super.description() + ", PushedFilters: " + pushedFilters.mkString("[", ", ", "]")
+    super.description() + ", PushedFilters: " + seqToString(pushedFilters)
   }
+
+  override def getMetaData(): Map[String, String] = {
+    super.getMetaData() ++ Map("PushedFilters" -> seqToString(pushedFilters))
+  }
+
+  override def withFilters(
+      partitionFilters: Seq[Expression], dataFilters: Seq[Expression]): FileScan =
+    this.copy(partitionFilters = partitionFilters, dataFilters = dataFilters)
 }

@@ -131,4 +131,6 @@ class RegressionMetrics @Since("2.0.0") (
       1 - SSerr / SStot
     }
   }
+
+  private[spark] def count: Long = summary.count
 }

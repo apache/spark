@@ -24,7 +24,9 @@ import org.apache.spark.sql.internal.SQLConf
  * Benchmark to measure whole stage codegen performance.
  * To run this benchmark:
  * {{{
- *   1. without sbt: bin/spark-submit --class <this class> <spark sql test jar>
+ *   1. without sbt:
+ *      bin/spark-submit --class <this class>
+ *        --jars <spark core test jar>,<spark catalyst test jar> <sql core test jar>
  *   2. build/sbt "sql/test:runMain <this class>"
  *   3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/test:runMain <this class>"
  *      Results will be written to "benchmarks/MiscBenchmark-results.txt".
@@ -35,7 +37,7 @@ object MiscBenchmark extends SqlBasedBenchmark {
   def filterAndAggregateWithoutGroup(numRows: Long): Unit = {
     runBenchmark("filter & aggregate without group") {
       codegenBenchmark("range/filter/sum", numRows) {
-        spark.range(numRows).filter("(id & 1) = 1").groupBy().sum().collect()
+        spark.range(numRows).filter("(id & 1) = 1").groupBy().sum().noop()
       }
     }
   }
@@ -43,7 +45,7 @@ object MiscBenchmark extends SqlBasedBenchmark {
   def limitAndAggregateWithoutGroup(numRows: Long): Unit = {
     runBenchmark("range/limit/sum") {
       codegenBenchmark("range/limit/sum", numRows) {
-        spark.range(numRows).limit(1000000).groupBy().sum().collect()
+        spark.range(numRows).limit(1000000).groupBy().sum().noop()
       }
     }
   }
@@ -51,11 +53,11 @@ object MiscBenchmark extends SqlBasedBenchmark {
   def sample(numRows: Int): Unit = {
     runBenchmark("sample") {
       codegenBenchmark("sample with replacement", numRows) {
-        spark.range(numRows).sample(withReplacement = true, 0.01).groupBy().sum().collect()
+        spark.range(numRows).sample(withReplacement = true, 0.01).groupBy().sum().noop()
       }
 
       codegenBenchmark("sample without replacement", numRows) {
-        spark.range(numRows).sample(withReplacement = false, 0.01).groupBy().sum().collect()
+        spark.range(numRows).sample(withReplacement = false, 0.01).groupBy().sum().noop()
       }
     }
   }
@@ -95,28 +97,28 @@ object MiscBenchmark extends SqlBasedBenchmark {
         val df = spark.range(numRows).selectExpr(
           "id as key",
           "array(rand(), rand(), rand(), rand(), rand()) as values")
-        df.selectExpr("key", "explode(values) value").count()
+        df.selectExpr("key", "explode(values) value").noop()
       }
 
       codegenBenchmark("generate explode map", numRows) {
         val df = spark.range(numRows).selectExpr(
           "id as key",
           "map('a', rand(), 'b', rand(), 'c', rand(), 'd', rand(), 'e', rand()) pairs")
-        df.selectExpr("key", "explode(pairs) as (k, v)").count()
+        df.selectExpr("key", "explode(pairs) as (k, v)").noop()
       }
 
       codegenBenchmark("generate posexplode array", numRows) {
         val df = spark.range(numRows).selectExpr(
           "id as key",
           "array(rand(), rand(), rand(), rand(), rand()) as values")
-        df.selectExpr("key", "posexplode(values) as (idx, value)").count()
+        df.selectExpr("key", "posexplode(values) as (idx, value)").noop()
       }
 
       codegenBenchmark("generate inline array", numRows) {
         val df = spark.range(numRows).selectExpr(
           "id as key",
           "array((rand(), rand()), (rand(), rand()), (rand(), 0.0d)) as values")
-        df.selectExpr("key", "inline(values) as (r1, r2)").count()
+        df.selectExpr("key", "inline(values) as (r1, r2)").noop()
       }
 
       val M = 60000
@@ -129,7 +131,7 @@ object MiscBenchmark extends SqlBasedBenchmark {
           })))).toDF("col", "arr")
 
         df.selectExpr("*", "explode(arr) as arr_col")
-          .select("col", "arr_col.*").count
+          .select("col", "arr_col.*").noop()
       }
 
       withSQLConf(SQLConf.NESTED_PRUNING_ON_EXPRESSIONS.key -> "true") {
@@ -142,7 +144,7 @@ object MiscBenchmark extends SqlBasedBenchmark {
             })))).toDF("col", "arr")
             .selectExpr("col", "struct(col, arr) as st")
             .selectExpr("col", "st.col as col1", "explode(st.arr) as arr_col")
-          df.collect()
+          df.noop()
         }
       }
     }
@@ -158,7 +160,7 @@ object MiscBenchmark extends SqlBasedBenchmark {
           "id % 5 as t3",
           "id % 7 as t4",
           "id % 13 as t5")
-        df.selectExpr("key", "stack(4, t1, t2, t3, t4, t5)").count()
+        df.selectExpr("key", "stack(4, t1, t2, t3, t4, t5)").noop()
       }
     }
   }

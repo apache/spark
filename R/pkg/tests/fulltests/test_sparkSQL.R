@@ -106,6 +106,15 @@ if (is_windows()) {
   Sys.setenv(TZ = "GMT")
 }
 
+test_that("calling sparkRSQL.init returns existing SQL context", {
+  sqlContext <- suppressWarnings(sparkRSQL.init(sc))
+  expect_equal(suppressWarnings(sparkRSQL.init(sc)), sqlContext)
+})
+
+test_that("calling sparkRSQL.init returns existing SparkSession", {
+  expect_equal(suppressWarnings(sparkRSQL.init(sc)), sparkSession)
+})
+
 test_that("calling sparkR.session returns existing SparkSession", {
   expect_equal(sparkR.session(), sparkSession)
 })
@@ -656,10 +665,10 @@ test_that("test tableNames and tables", {
   expect_true("tableName" %in% colnames(tables()))
   expect_true(all(c("tableName", "database", "isTemporary") %in% colnames(tables())))
 
-  createOrReplaceTempView(df, "table2")
+  suppressWarnings(registerTempTable(df, "table2"))
   tables <- listTables()
   expect_equal(count(tables), count + 2)
-  dropTempView("table1")
+  suppressWarnings(dropTempTable("table1"))
   expect_true(dropTempView("table2"))
 
   tables <- listTables()
@@ -848,24 +857,31 @@ test_that("collect() and take() on a DataFrame return the same number of rows an
 })
 
 test_that("collect() support Unicode characters", {
-  lines <- c("{\"name\":\"안녕하세요\"}",
-             "{\"name\":\"您好\", \"age\":30}",
-             "{\"name\":\"こんにちは\", \"age\":19}",
-             "{\"name\":\"Xin chào\"}")
+  jsonPath <- file.path(
+    Sys.getenv("SPARK_HOME"),
+    "R", "pkg", "tests", "fulltests", "data",
+    "test_utils_utf.json"
+  )
 
-  jsonPath <- tempfile(pattern = "sparkr-test", fileext = ".tmp")
-  writeLines(lines, jsonPath)
+  lines <- readLines(jsonPath, encoding = "UTF-8")
+
+  expected <- regmatches(lines, gregexpr('(?<="name": ").*?(?=")', lines, perl = TRUE))
 
   df <- read.df(jsonPath, "json")
   rdf <- collect(df)
   expect_true(is.data.frame(rdf))
-  expect_equal(rdf$name[1], markUtf8("안녕하세요"))
-  expect_equal(rdf$name[2], markUtf8("您好"))
-  expect_equal(rdf$name[3], markUtf8("こんにちは"))
-  expect_equal(rdf$name[4], markUtf8("Xin chào"))
+  expect_equal(rdf$name[1], expected[[1]])
+  expect_equal(rdf$name[2], expected[[2]])
+  expect_equal(rdf$name[3], expected[[3]])
+  expect_equal(rdf$name[4], expected[[4]])
 
   df1 <- createDataFrame(rdf)
-  expect_equal(collect(where(df1, df1$name == markUtf8("您好")))$name, markUtf8("您好"))
+  expect_equal(
+    collect(
+      where(df1, df1$name == expected[[2]])
+    )$name,
+    expected[[2]]
+  )
 })
 
 test_that("multiple pipeline transformations result in an RDD with the correct values", {
@@ -1375,12 +1391,14 @@ test_that("column operators", {
   c5 <- c2 ^ c3 ^ c4
   c6 <- c2 %<=>% c3
   c7 <- !c6
+  expect_true(TRUE)
 })
 
 test_that("column functions", {
   c <- column("a")
   c1 <- abs(c) + acos(c) + approx_count_distinct(c) + ascii(c) + asin(c) + atan(c)
-  c2 <- avg(c) + base64(c) + bin(c) + bitwiseNOT(c) + cbrt(c) + ceil(c) + cos(c)
+  c2 <- avg(c) + base64(c) + bin(c) + suppressWarnings(bitwiseNOT(c)) +
+    bitwise_not(c) + cbrt(c) + ceil(c) + cos(c)
   c3 <- cosh(c) + count(c) + crc32(c) + hash(c) + exp(c)
   c4 <- explode(c) + expm1(c) + factorial(c) + first(c) + floor(c) + hex(c)
   c5 <- hour(c) + initcap(c) + last(c) + last_day(c) + length(c)
@@ -1388,7 +1406,8 @@ test_that("column functions", {
   c7 <- mean(c) + min(c) + month(c) + negate(c) + posexplode(c) + quarter(c)
   c8 <- reverse(c) + rint(c) + round(c) + rtrim(c) + sha1(c) + monotonically_increasing_id()
   c9 <- signum(c) + sin(c) + sinh(c) + size(c) + stddev(c) + soundex(c) + sqrt(c) + sum(c)
-  c10 <- sumDistinct(c) + tan(c) + tanh(c) + degrees(c) + radians(c)
+  c10 <- suppressWarnings(sumDistinct(c)) + sum_distinct(c) + tan(c) + tanh(c) +
+    degrees(c) + radians(c)
   c11 <- to_date(c) + trim(c) + unbase64(c) + unhex(c) + upper(c)
   c12 <- variance(c) + xxhash64(c) + ltrim(c, "a") + rtrim(c, "b") + trim(c, "c")
   c13 <- lead("col", 1) + lead(c, 1) + lag("col", 1) + lag(c, 1)
@@ -1405,6 +1424,17 @@ test_that("column functions", {
     trunc(c, "month") + trunc(c, "mon") + trunc(c, "mm")
   c24 <- date_trunc("hour", c) + date_trunc("minute", c) + date_trunc("week", c) +
     date_trunc("quarter", c) + current_date() + current_timestamp()
+  c25 <- overlay(c1, c2, c3, c3) + overlay(c1, c2, c3) + overlay(c1, c2, 1) +
+    overlay(c1, c2, 3, 4)
+  c26 <- timestamp_seconds(c1) + vector_to_array(c) +
+    vector_to_array(c, "float32") + vector_to_array(c, "float64") +
+    array_to_vector(c)
+  c27 <- nth_value("x", 1L) + nth_value("y", 2, TRUE) +
+    nth_value(column("v"), 3) + nth_value(column("z"), 4L, FALSE)
+  c28 <- asc_nulls_first(c1) + asc_nulls_last(c1) +
+    desc_nulls_first(c1) + desc_nulls_last(c1)
+  c29 <- acosh(c1) + asinh(c1) + atanh(c1)
+  c30 <- product(c1) + product(c1 * 0.5)
 
   # Test if base::is.nan() is exposed
   expect_equal(is.nan(c("a", "b")), c(FALSE, FALSE))
@@ -1421,7 +1451,7 @@ test_that("column functions", {
   expect_equal(collect(df2)[[3, 2]], TRUE)
 
   # Test that input_file_name()
-  actual_names <- sort(collect(distinct(select(df, input_file_name()))))
+  actual_names <- collect(distinct(select(df, input_file_name())))
   expect_equal(length(actual_names), 1)
   expect_equal(basename(actual_names[1, 1]), basename(jsonPath))
 
@@ -1430,6 +1460,8 @@ test_that("column functions", {
   expect_equal(collect(df3)[[2, 1]], FALSE)
   expect_equal(collect(df3)[[3, 1]], TRUE)
 
+  df4 <- select(df, count_distinct(df$age, df$name))
+  expect_equal(collect(df4)[[1, 1]], 2)
   df4 <- select(df, countDistinct(df$age, df$name))
   expect_equal(collect(df4)[[1, 1]], 2)
 
@@ -1657,9 +1689,9 @@ test_that("column functions", {
 
   df <- as.DataFrame(list(list("col" = "1")))
   c <- collect(select(df, schema_of_csv("Amsterdam,2018")))
-  expect_equal(c[[1]], "struct<_c0:string,_c1:int>")
+  expect_equal(c[[1]], "STRUCT<`_c0`: STRING, `_c1`: INT>")
   c <- collect(select(df, schema_of_csv(lit("Amsterdam,2018"))))
-  expect_equal(c[[1]], "struct<_c0:string,_c1:int>")
+  expect_equal(c[[1]], "STRUCT<`_c0`: STRING, `_c1`: INT>")
 
   # Test to_json(), from_json(), schema_of_json()
   df <- sql("SELECT array(named_struct('name', 'Bob'), named_struct('name', 'Alice')) as people")
@@ -1692,9 +1724,9 @@ test_that("column functions", {
 
   df <- as.DataFrame(list(list("col" = "1")))
   c <- collect(select(df, schema_of_json('{"name":"Bob"}')))
-  expect_equal(c[[1]], "struct<name:string>")
+  expect_equal(c[[1]], "STRUCT<`name`: STRING>")
   c <- collect(select(df, schema_of_json(lit('{"name":"Bob"}'))))
-  expect_equal(c[[1]], "struct<name:string>")
+  expect_equal(c[[1]], "STRUCT<`name`: STRING>")
 
   # Test to_json() supports arrays of primitive types and arrays
   df <- sql("SELECT array(19, 42, 70) as age")
@@ -1762,6 +1794,84 @@ test_that("column functions", {
     collect(select(df, alias(not(df$is_true), "is_false"))),
     data.frame(is_false = c(FALSE, TRUE, NA))
   )
+
+  # Test percentile_approx
+  actual <- lapply(
+    list(
+      percentile_approx(column("foo"), 0.5),
+      percentile_approx(column("bar"), lit(0.25), lit(42L)),
+      percentile_approx(column("bar"), c(0.25, 0.5, 0.75)),
+      percentile_approx(column("foo"), c(0.05, 0.95), 100L),
+      percentile_approx("foo", c(0.5)),
+      percentile_approx("bar", c(0.1, 0.9), 10L)),
+    function(x) SparkR:::callJMethod(x@jc, "toString"))
+
+  expected <- list(
+     "percentile_approx(foo, 0.5, 10000)",
+     "percentile_approx(bar, 0.25, 42)",
+     "percentile_approx(bar, array(0.25, 0.5, 0.75), 10000)",
+     "percentile_approx(foo, array(0.05, 0.95), 100)",
+     "percentile_approx(foo, 0.5, 10000)",
+     "percentile_approx(bar, array(0.1, 0.9), 10)"
+  )
+
+  expect_equal(actual, expected)
+
+  # Test withField
+  lines <- c("{\"Person\": {\"name\":\"Bob\", \"age\":24, \"height\": 170}}")
+  jsonPath <- tempfile(pattern = "sparkr-test", fileext = ".tmp")
+  writeLines(lines, jsonPath)
+  df <- read.df(jsonPath, "json")
+  result <- collect(
+      select(
+          select(df, alias(withField(df$Person, "dummy", lit(42)), "Person")),
+          "Person.dummy"
+      )
+  )
+  expect_equal(result, data.frame(dummy = 42))
+
+  # Test dropFields
+  expect_setequal(
+    colnames(select(
+      withColumn(df, "Person", dropFields(df$Person, "age")),
+      column("Person.*")
+    )),
+    c("name", "height")
+  )
+
+  expect_equal(
+    colnames(select(
+      withColumn(df, "Person", dropFields(df$Person, "height", "name")),
+      column("Person.*")
+    )),
+    "age"
+  )
+})
+
+test_that("avro column functions", {
+  skip_if_not(
+    grepl("spark-avro", sparkR.conf("spark.jars", "")),
+    "spark-avro jar not present"
+  )
+
+  schema <- '{"namespace": "example.avro",
+    "type": "record",
+    "name": "User",
+    "fields": [
+      {"name": "name", "type": "string"},
+      {"name": "favorite_color", "type": ["string", "null"]}
+    ]
+  }'
+
+  c0 <- column("foo")
+  c1 <- from_avro(c0, schema)
+  expect_s4_class(c1, "Column")
+  c2 <- from_avro("foo", schema)
+  expect_s4_class(c2, "Column")
+  c3 <- to_avro(c1)
+  expect_s4_class(c3, "Column")
+  c4 <- to_avro(c1, schema)
+  expect_s4_class(c4, "Column")
 })
 
 test_that("column binary mathfunctions", {
@@ -1782,9 +1892,12 @@ test_that("column binary mathfunctions", {
   expect_equal(collect(select(df, hypot(df$a, df$b)))[3, "HYPOT(a, b)"], sqrt(3^2 + 7^2))
   expect_equal(collect(select(df, hypot(df$a, df$b)))[4, "HYPOT(a, b)"], sqrt(4^2 + 8^2))
   ## nolint end
-  expect_equal(collect(select(df, shiftLeft(df$b, 1)))[4, 1], 16)
-  expect_equal(collect(select(df, shiftRight(df$b, 1)))[4, 1], 4)
-  expect_equal(collect(select(df, shiftRightUnsigned(df$b, 1)))[4, 1], 4)
+  expect_equal(collect(select(df, shiftleft(df$b, 1)))[4, 1], 16)
+  expect_equal(collect(select(df, shiftright(df$b, 1)))[4, 1], 4)
+  expect_equal(collect(select(df, shiftrightunsigned(df$b, 1)))[4, 1], 4)
+  expect_equal(collect(select(df, suppressWarnings(shiftLeft(df$b, 1))))[4, 1], 16)
+  expect_equal(collect(select(df, suppressWarnings(shiftRight(df$b, 1))))[4, 1], 4)
+  expect_equal(collect(select(df, suppressWarnings(shiftRightUnsigned(df$b, 1))))[4, 1], 4)
   expect_equal(class(collect(select(df, rand()))[2, 1]), "numeric")
   expect_equal(collect(select(df, rand(1)))[1, 1], 0.636, tolerance = 0.01)
   expect_equal(class(collect(select(df, randn()))[2, 1]), "numeric")
@@ -1800,7 +1913,8 @@ test_that("string operators", {
   expect_true(first(select(df, endsWith(df$name, "el")))[[1]])
   expect_equal(first(select(df, substr(df$name, 1, 2)))[[1]], "Mi")
   expect_equal(first(select(df, substr(df$name, 4, 6)))[[1]], "hae")
-  if (as.numeric(R.version$major) >= 3 && as.numeric(R.version$minor) >= 3) {
+  version <- packageVersion("base")
+  if (as.numeric(version$major) >= 3 && as.numeric(version$minor) >= 3) {
     expect_true(startsWith("Hello World", "Hello"))
     expect_false(endsWith("Hello World", "a"))
   }
@@ -1905,20 +2019,10 @@ test_that("date functions on a DataFrame", {
   df2 <- createDataFrame(l2)
   expect_equal(collect(select(df2, minute(df2$b)))[, 1], c(34, 24))
   expect_equal(collect(select(df2, second(df2$b)))[, 1], c(0, 34))
-  conf <- callJMethod(sparkSession, "conf")
-  isUtcTimestampFuncEnabled <- callJMethod(conf, "get", "spark.sql.legacy.utcTimestampFunc.enabled")
-  callJMethod(conf, "set", "spark.sql.legacy.utcTimestampFunc.enabled", "true")
-  tryCatch({
-    # Both from_utc_timestamp and to_utc_timestamp are deprecated as of SPARK-25496
-    expect_equal(suppressWarnings(collect(select(df2, from_utc_timestamp(df2$b, "JST"))))[, 1],
-                 c(as.POSIXct("2012-12-13 21:34:00 UTC"), as.POSIXct("2014-12-15 10:24:34 UTC")))
-    expect_equal(suppressWarnings(collect(select(df2, to_utc_timestamp(df2$b, "JST"))))[, 1],
-                 c(as.POSIXct("2012-12-13 03:34:00 UTC"), as.POSIXct("2014-12-14 16:24:34 UTC")))
-  },
-  finally = {
-    # Reverting the conf back
-    callJMethod(conf, "set", "spark.sql.legacy.utcTimestampFunc.enabled", isUtcTimestampFuncEnabled)
-  })
+  expect_equal(collect(select(df2, from_utc_timestamp(df2$b, "JST")))[, 1],
+               c(as.POSIXct("2012-12-13 21:34:00 UTC"), as.POSIXct("2014-12-15 10:24:34 UTC")))
+  expect_equal(collect(select(df2, to_utc_timestamp(df2$b, "JST")))[, 1],
+               c(as.POSIXct("2012-12-13 03:34:00 UTC"), as.POSIXct("2014-12-14 16:24:34 UTC")))
   expect_gt(collect(select(df2, unix_timestamp()))[1, 1], 0)
   expect_gt(collect(select(df2, unix_timestamp(df2$b)))[1, 1], 0)
   expect_gt(collect(select(df2, unix_timestamp(lit("2015-01-01"), "yyyy-MM-dd")))[1, 1], 0)
@@ -1993,6 +2097,84 @@ test_that("when(), otherwise() and ifelse() with column on a DataFrame", {
   expect_equal(collect(select(df, ifelse(df$a > 1 & df$b > 2, lit(0), lit(1))))[, 1], c(1, 0))
 })
 
+test_that("higher order functions", {
+  df <- select(
+    createDataFrame(data.frame(id = 1)),
+    expr("CAST(array(1.0, 2.0, -3.0, -4.0) AS array<double>) xs"),
+    expr("CAST(array(0.0, 3.0, 48.0) AS array<double>) ys"),
+    expr("array('FAILED', 'SUCCEEDED') as vs"),
+    expr("map('foo', 1, 'bar', 2) as mx"),
+    expr("map('foo', 42, 'bar', -1, 'baz', 0) as my")
+  )
+
+  map_to_sorted_array <- function(x) {
+    sort_array(arrays_zip(map_keys(x), map_values(x)))
+  }
+
+  result <- collect(select(
+    df,
+    array_transform("xs", function(x) x + 1) == expr("transform(xs, x -> x + 1)"),
+    array_transform("xs", function(x, i) otherwise(when(i %% 2 == 0, x), -x)) ==
+      expr("transform(xs, (x, i) -> CASE WHEN ((i % 2.0) = 0.0) THEN x ELSE (- x) END)"),
+    array_exists("vs", function(v) rlike(v, "FAILED")) ==
+      expr("exists(vs, v -> (v RLIKE 'FAILED'))"),
+    array_forall("xs", function(x) x > 0) ==
+      expr("forall(xs, x -> x > 0)"),
+    array_filter("xs", function(x, i) x > 0 | i %% 2 == 0) ==
+      expr("filter(xs, (x, i) ->  x > 0 OR i % 2 == 0)"),
+    array_filter("xs", function(x) signum(x) > 0) ==
+      expr("filter(xs, x -> signum(x) > 0)"),
+    array_aggregate("xs", lit(0.0), function(x, y) otherwise(when(x > y, x), y)) ==
+      expr("aggregate(xs, CAST(0.0 AS double), (x, y) -> CASE WHEN x > y THEN x ELSE y END)"),
+    array_aggregate(
+      "xs",
+      struct(
+        alias(lit(0.0), "count"),
+        alias(lit(0.0), "sum")
+      ),
+      function(acc, x) {
+        count <- getItem(acc, "count")
+        sum <- getItem(acc, "sum")
+        struct(alias(count + 1.0, "count"), alias(sum + x, "sum"))
+      },
+      function(acc) getItem(acc, "sum") / getItem(acc, "count")
+    ) == expr(paste0(
+      "aggregate(xs, struct(CAST(0.0 AS double) count, CAST(0.0 AS double) sum), ",
+      "(acc, x) -> ",
+      "struct(cast(acc.count + 1.0 AS double) count, CAST(acc.sum + x AS double) sum), ",
+      "acc -> acc.sum / acc.count)"
+    )),
+    arrays_zip_with("xs", "ys", function(x, y) x + y) ==
+      expr("zip_with(xs, ys, (x, y) -> x + y)"),
+    map_to_sorted_array(transform_keys("mx", function(k, v) upper(k))) ==
+      map_to_sorted_array(expr("transform_keys(mx, (k, v) -> upper(k))")),
+    map_to_sorted_array(transform_values("mx", function(k, v) v * 2)) ==
+      map_to_sorted_array(expr("transform_values(mx, (k, v) -> v * 2)")),
+    map_to_sorted_array(map_filter(column("my"), function(k, v) lower(v) != "foo")) ==
+      map_to_sorted_array(expr("map_filter(my, (k, v) -> lower(v) != 'foo')")),
+    map_to_sorted_array(map_zip_with("mx", "my", function(k, vx, vy) vx * vy)) ==
+      map_to_sorted_array(expr("map_zip_with(mx, my, (k, vx, vy) -> vx * vy)"))
+  ))
+
+  expect_true(all(unlist(result)))
+
+  expect_error(array_transform("xs", function(...) 42))
+})
+
+test_that("SPARK-34794: lambda vars must be resolved properly in nested higher order functions", {
+  df <- sql("SELECT array(1, 2, 3) as numbers, array('a', 'b', 'c') as letters")
+  ret <- first(select(
+    df,
+    array_transform("numbers", function(number) {
+      array_transform("letters", function(latter) {
+        struct(alias(number, "n"), alias(latter, "l"))
+      })
+    })
+  ))
+
+  expect_equal(1, ret[[1]][[1]][[1]][[1]]$n)
+})
+
 test_that("group by, agg functions", {
   df <- read.json(jsonPath)
   df1 <- agg(df, name = "max", age = "sum")
@@ -2017,7 +2199,7 @@ test_that("group by, agg functions", {
   df3 <- agg(gd, age = "stddev")
   expect_is(df3, "SparkDataFrame")
   df3_local <- collect(df3)
-  expect_true(is.nan(df3_local[df3_local$name == "Andy", ][1, 2]))
+  expect_true(is.na(df3_local[df3_local$name == "Andy", ][1, 2]))
 
   df4 <- agg(gd, sumAge = sum(df$age))
   expect_is(df4, "SparkDataFrame")
@@ -2048,7 +2230,7 @@ test_that("group by, agg functions", {
   df7 <- agg(gd2, value = "stddev")
   df7_local <- collect(df7)
   expect_true(abs(df7_local[df7_local$name == "ID1", ][1, 2] - 6.928203) < 1e-6)
-  expect_true(is.nan(df7_local[df7_local$name == "ID2", ][1, 2]))
+  expect_true(is.na(df7_local[df7_local$name == "ID2", ][1, 2]))
 
   mockLines3 <- c("{\"name\":\"Andy\", \"age\":30}",
                   "{\"name\":\"Andy\", \"age\":30}",
@@ -2462,7 +2644,7 @@ test_that("join(), crossJoin() and merge() on a DataFrame", {
   error_msg <- paste("joinType must be one of the following types:",
                  "'inner', 'cross', 'outer', 'full', 'fullouter', 'full_outer',",
                  "'left', 'leftouter', 'left_outer', 'right', 'rightouter', 'right_outer',",
-                 "'semi', 'leftsemi', 'left_semi', 'anti', 'leftanti' or 'left_anti'.")
+                 "'semi', 'leftsemi', 'left_semi', 'anti', 'leftanti', 'left_anti'")
   expect_error(join(df2, df, df2$name == df$name, "invalid"), error_msg)
 
   merged <- merge(df, df2, by.x = "name", by.y = "name", all.x = TRUE, all.y = TRUE)
@@ -2497,8 +2679,8 @@ test_that("join(), crossJoin() and merge() on a DataFrame", {
   writeLines(mockLines3, jsonPath3)
   df3 <- read.json(jsonPath3)
   expect_error(merge(df, df3),
-               paste("The following column name: name_y occurs more than once in the 'DataFrame'.",
-                     "Please use different suffixes for the intersected columns.", sep = ""))
+               paste0("The following column name: name_y occurs more than once in the 'DataFrame'.",
+                      "Please use different suffixes for the intersected columns."))
 
   unlink(jsonPath2)
   unlink(jsonPath3)
@@ -2541,20 +2723,20 @@ test_that("toJSON() on DataFrame", {
 
 test_that("showDF()", {
   df <- read.json(jsonPath)
-  expected <- paste("+----+-------+\n",
-                    "| age|   name|\n",
-                    "+----+-------+\n",
-                    "|null|Michael|\n",
-                    "|  30|   Andy|\n",
-                    "|  19| Justin|\n",
-                    "+----+-------+\n", sep = "")
-  expected2 <- paste("+---+----+\n",
-                     "|age|name|\n",
-                     "+---+----+\n",
-                     "|nul| Mic|\n",
-                     "| 30| And|\n",
-                     "| 19| Jus|\n",
-                     "+---+----+\n", sep = "")
+  expected <- paste("+----+-------+",
+                    "| age|   name|",
+                    "+----+-------+",
+                    "|null|Michael|",
+                    "|  30|   Andy|",
+                    "|  19| Justin|",
+                    "+----+-------+\n", sep = "\n")
+  expected2 <- paste("+---+----+",
+                     "|age|name|",
+                     "+---+----+",
+                     "|nul| Mic|",
+                     "| 30| And|",
+                     "| 19| Jus|",
+                     "+---+----+\n", sep = "\n")
   expect_output(showDF(df), expected)
   expect_output(showDF(df, truncate = 3), expected2)
 })
@@ -2599,6 +2781,19 @@ test_that("union(), unionByName(), rbind(), except(), and intersect() on a DataF
                "Names of input data frames are different.")
   expect_error(rbind(df, df2, df3),
                "Names of input data frames are different.")
+
+
+  df4 <- unionByName(df2, select(df2, "age"), TRUE)
+
+  expect_equal(
+      sum(collect(
+          select(df4, alias(isNull(df4$name), "missing_name")
+      ))$missing_name),
+      3
+  )
+
+  testthat::expect_error(unionByName(df2, select(df2, "age"), FALSE))
+  testthat::expect_error(unionByName(df2, select(df2, "age")))
 
   excepted <- arrange(except(df, df2), desc(df$age))
   expect_is(unioned, "SparkDataFrame")
@@ -2711,6 +2906,15 @@ test_that("mutate(), transform(), rename() and names()", {
   expect_equal(nrow(result), 153)
   expect_equal(ncol(result), 2)
   detach(airquality)
+
+  # ensure long inferred names are handled without error (SPARK-26199)
+  #   test implicitly assumes eval(formals(deparse)$width.cutoff) = 60
+  #   (which has always been true as of 2020-11-15)
+  newDF <- mutate(
+    df,
+    df$age + 12345678901234567890 + 12345678901234567890 + 12345678901234
+  )
+  expect_match(tail(columns(newDF), 1L), "234567890", fixed = TRUE)
 })
 
 test_that("read/write ORC files", {
@@ -3100,6 +3304,12 @@ test_that("attach() on a DataFrame", {
   stat3 <- summary(df[, "age", drop = F])
   expect_equal(collect(stat3)[8, "age"], "30")
   expect_error(age)
+
+  # attach method uses deparse(); ensure no errors from a very long input
+  abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnop <- df # nolint
+  attach(abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnop)
+  expect_true(any(grepl("abcdefghijklmnopqrstuvwxyz", search())))
+  detach("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnop")
 })
 
 test_that("with() on a DataFrame", {
@@ -3495,7 +3705,7 @@ test_that("gapply() and gapplyCollect() on a DataFrame", {
     }
 
     # Computes the arithmetic mean of the second column by grouping
-    # on the first and third columns. Output the groupping value and the average.
+    # on the first and third columns. Output the grouping value and the average.
     schema <-  structType(structField("a", "integer"), structField("c", "string"),
                           structField("avg", "double"))
     df3 <- gapply(
@@ -3793,13 +4003,32 @@ test_that("catalog APIs, listTables, listColumns, listFunctions", {
                paste("Error in listFunctions : analysis error - Database",
                      "'zxwtyswklpf_db' does not exist"))
 
-  # recoverPartitions does not work with tempory view
+  # recoverPartitions does not work with temporary view
   expect_error(recoverPartitions("cars"),
-               "no such table - Table or view 'cars' not found in database 'default'")
+               paste("Error in recoverPartitions : analysis error - cars is a temp view.",
+                     "'recoverPartitions()' expects a table"), fixed = TRUE)
   expect_error(refreshTable("cars"), NA)
   expect_error(refreshByPath("/"), NA)
 
   dropTempView("cars")
+})
+
+test_that("assert_true, raise_error", {
+  df <- read.json(jsonPath)
+  filtered <- filter(df, "age < 20")
+
+  expect_equal(collect(select(filtered, assert_true(filtered$age < 20)))$age, c(NULL))
+  expect_equal(collect(select(filtered, assert_true(filtered$age < 20, "error message")))$age,
+               c(NULL))
+  expect_equal(collect(select(filtered, assert_true(filtered$age < 20, filtered$name)))$age,
+               c(NULL))
+  expect_error(collect(select(df, assert_true(df$age < 20))), "is not true!")
+  expect_error(collect(select(df, assert_true(df$age < 20, "error message"))),
+               "error message")
+  expect_error(collect(select(df, assert_true(df$age < 20, df$name))), "Michael")
+
+  expect_error(collect(select(filtered, raise_error("error message"))), "error message")
+  expect_error(collect(select(filtered, raise_error(filtered$name))), "Justin")
 })
 
 compare_list <- function(list1, list2) {
@@ -3825,14 +4054,14 @@ test_that("No extra files are created in SPARK_HOME by starting session and maki
   # before creating a SparkSession with enableHiveSupport = T at the top of this test file
   # (filesBefore). The test here is to compare that (filesBefore) against the list of files before
   # any test is run in run-all.R (sparkRFilesBefore).
-  # sparkRWhitelistSQLDirs is also defined in run-all.R, and should contain only 2 whitelisted dirs,
+  # sparkRAllowedSQLDirs is also defined in run-all.R, and should contain only 2 allowed dirs,
   # here allow the first value, spark-warehouse, in the diff, everything else should be exactly the
   # same as before any test is run.
-  compare_list(sparkRFilesBefore, setdiff(filesBefore, sparkRWhitelistSQLDirs[[1]]))
+  compare_list(sparkRFilesBefore, setdiff(filesBefore, sparkRAllowedSQLDirs[[1]]))
   # third, ensure only spark-warehouse and metastore_db are created when enableHiveSupport = T
   # note: as the note above, after running all tests in this file while enableHiveSupport = T, we
-  # check the list of files again. This time we allow both whitelisted dirs to be in the diff.
-  compare_list(sparkRFilesBefore, setdiff(filesAfter, sparkRWhitelistSQLDirs))
+  # check the list of files again. This time we allow both dirs to be in the diff.
+  compare_list(sparkRFilesBefore, setdiff(filesAfter, sparkRAllowedSQLDirs))
 })
 
 unlink(parquetPath)

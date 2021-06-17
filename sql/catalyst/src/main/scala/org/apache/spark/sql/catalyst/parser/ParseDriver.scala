@@ -23,17 +23,17 @@ import org.antlr.v4.runtime.tree.TerminalNodeImpl
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, SQLConfHelper, TableIdentifier}
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.Origin
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.errors.QueryParsingErrors
 import org.apache.spark.sql.types.{DataType, StructType}
 
 /**
  * Base SQL parsing infrastructure.
  */
-abstract class AbstractSqlParser(conf: SQLConf) extends ParserInterface with Logging {
+abstract class AbstractSqlParser extends ParserInterface with SQLConfHelper with Logging {
 
   /** Creates/Resolves DataType for a given SQL string. */
   override def parseDataType(sqlText: String): DataType = parse(sqlText) { parser =>
@@ -78,7 +78,7 @@ abstract class AbstractSqlParser(conf: SQLConf) extends ParserInterface with Log
       case plan: LogicalPlan => plan
       case _ =>
         val position = Origin(None, None)
-        throw new ParseException(Option(sqlText), "Unsupported SQL statement", position, position)
+        throw QueryParsingErrors.sqlStatementUnsupportedError(sqlText, position)
     }
   }
 
@@ -91,19 +91,14 @@ abstract class AbstractSqlParser(conf: SQLConf) extends ParserInterface with Log
     val lexer = new SqlBaseLexer(new UpperCaseCharStream(CharStreams.fromString(command)))
     lexer.removeErrorListeners()
     lexer.addErrorListener(ParseErrorListener)
-    lexer.legacy_setops_precedence_enbled = conf.setOpsPrecedenceEnforced
-    lexer.legacy_exponent_literal_as_decimal_enabled = conf.exponentLiteralAsDecimalEnabled
-    lexer.legacy_create_hive_table_by_default_enabled = conf.createHiveTableByDefaultEnabled
-    lexer.SQL_standard_keyword_behavior = conf.ansiEnabled
 
     val tokenStream = new CommonTokenStream(lexer)
     val parser = new SqlBaseParser(tokenStream)
     parser.addParseListener(PostProcessor)
     parser.removeErrorListeners()
     parser.addErrorListener(ParseErrorListener)
-    parser.legacy_setops_precedence_enbled = conf.setOpsPrecedenceEnforced
+    parser.legacy_setops_precedence_enabled = conf.setOpsPrecedenceEnforced
     parser.legacy_exponent_literal_as_decimal_enabled = conf.exponentLiteralAsDecimalEnabled
-    parser.legacy_create_hive_table_by_default_enabled = conf.createHiveTableByDefaultEnabled
     parser.SQL_standard_keyword_behavior = conf.ansiEnabled
 
     try {
@@ -138,14 +133,12 @@ abstract class AbstractSqlParser(conf: SQLConf) extends ParserInterface with Log
 /**
  * Concrete SQL parser for Catalyst-only SQL statements.
  */
-class CatalystSqlParser(conf: SQLConf) extends AbstractSqlParser(conf) {
-  val astBuilder = new AstBuilder(conf)
+class CatalystSqlParser extends AbstractSqlParser {
+  val astBuilder = new AstBuilder
 }
 
 /** For test-only. */
-object CatalystSqlParser extends AbstractSqlParser(SQLConf.get) {
-  val astBuilder = new AstBuilder(SQLConf.get)
-}
+object CatalystSqlParser extends CatalystSqlParser
 
 /**
  * This string stream provides the lexer with upper case characters only. This greatly simplifies
@@ -176,18 +169,7 @@ private[parser] class UpperCaseCharStream(wrapped: CodePointCharStream) extends 
   override def seek(where: Int): Unit = wrapped.seek(where)
   override def size(): Int = wrapped.size
 
-  override def getText(interval: Interval): String = {
-    // ANTLR 4.7's CodePointCharStream implementations have bugs when
-    // getText() is called with an empty stream, or intervals where
-    // the start > end. See
-    // https://github.com/antlr/antlr4/commit/ac9f7530 for one fix
-    // that is not yet in a released ANTLR artifact.
-    if (size() > 0 && (interval.b - interval.a >= 0)) {
-      wrapped.getText(interval)
-    } else {
-      ""
-    }
-  }
+  override def getText(interval: Interval): String = wrapped.getText(interval)
 
   override def LA(i: Int): Int = {
     val la = wrapped.LA(i)
@@ -273,8 +255,7 @@ case object PostProcessor extends SqlBaseBaseListener {
   override def exitErrorIdent(ctx: SqlBaseParser.ErrorIdentContext): Unit = {
     val ident = ctx.getParent.getText
 
-    throw new ParseException(s"Possibly unquoted identifier $ident detected. " +
-      s"Please consider quoting it with back-quotes as `$ident`", ctx)
+    throw QueryParsingErrors.unquotedIdentifierError(ident, ctx)
   }
 
   /** Remove the back ticks from an Identifier. */

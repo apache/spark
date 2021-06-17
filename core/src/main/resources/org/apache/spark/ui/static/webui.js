@@ -15,11 +15,19 @@
  * limitations under the License.
  */
 
+/* global $ */
+/* eslint-disable no-unused-vars */
 var uiRoot = "";
+var appBasePath = "";
 
 function setUIRoot(val) {
-    uiRoot = val;
+  uiRoot = val;
 }
+
+function setAppBasePath(path) {
+  appBasePath = path;
+}
+/* eslint-enable no-unused-vars */
 
 function collapseTablePageLoad(name, table){
   if (window.localStorage.getItem(name) == "true") {
@@ -30,20 +38,20 @@ function collapseTablePageLoad(name, table){
 }
 
 function collapseTable(thisName, table){
-    var status = window.localStorage.getItem(thisName) == "true";
-    status = !status;
+  var status = window.localStorage.getItem(thisName) == "true";
+  status = !status;
 
-    var thisClass = '.' + thisName
+  var thisClass = '.' + thisName;
 
-    // Expand the list of additional metrics.
-    var tableDiv = $(thisClass).parent().find('.' + table);
-    $(tableDiv).toggleClass('collapsed');
+  // Expand the list of additional metrics.
+  var tableDiv = $(thisClass).parent().find('.' + table);
+  $(tableDiv).toggleClass('collapsed');
 
-    // Switch the class of the arrow from open to closed.
-    $(thisClass).find('.collapse-table-arrow').toggleClass('arrow-open');
-    $(thisClass).find('.collapse-table-arrow').toggleClass('arrow-closed');
+  // Switch the class of the arrow from open to closed.
+  $(thisClass).find('.collapse-table-arrow').toggleClass('arrow-open');
+  $(thisClass).find('.collapse-table-arrow').toggleClass('arrow-closed');
 
-    window.localStorage.setItem(thisName, "" + status);
+  window.localStorage.setItem(thisName, "" + status);
 }
 
 // Add a call to collapseTablePageLoad() on each collapsible table
@@ -82,7 +90,8 @@ $(function() {
   collapseTablePageLoad('collapse-aggregated-poolActiveStages','aggregated-poolActiveStages');
   collapseTablePageLoad('collapse-aggregated-tasks','aggregated-tasks');
   collapseTablePageLoad('collapse-aggregated-rdds','aggregated-rdds');
-  collapseTablePageLoad('collapse-aggregated-activeBatches','aggregated-activeBatches');
+  collapseTablePageLoad('collapse-aggregated-waitingBatches','aggregated-waitingBatches');
+  collapseTablePageLoad('collapse-aggregated-runningBatches','aggregated-runningBatches');
   collapseTablePageLoad('collapse-aggregated-completedBatches','aggregated-completedBatches');
   collapseTablePageLoad('collapse-aggregated-runningExecutions','aggregated-runningExecutions');
   collapseTablePageLoad('collapse-aggregated-completedExecutions','aggregated-completedExecutions');
@@ -90,11 +99,13 @@ $(function() {
   collapseTablePageLoad('collapse-aggregated-sessionstat','aggregated-sessionstat');
   collapseTablePageLoad('collapse-aggregated-sqlstat','aggregated-sqlstat');
   collapseTablePageLoad('collapse-aggregated-sqlsessionstat','aggregated-sqlsessionstat');
+  collapseTablePageLoad('collapse-aggregated-activeQueries','aggregated-activeQueries');
+  collapseTablePageLoad('collapse-aggregated-completedQueries','aggregated-completedQueries');
 });
 
 $(function() {
-    // Show/hide full job description on click event.
-    $(".description-input").click(function() {
-        $(this).toggleClass("description-input-full");
-    });
+  // Show/hide full job description on click event.
+  $(".description-input").click(function() {
+    $(this).toggleClass("description-input-full");
+  });
 });

@@ -19,10 +19,12 @@ package org.apache.spark.sql.connector
 
 import java.util
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.sql.connector.catalog.{DelegatingCatalogExtension, Identifier, Table}
+import org.apache.spark.sql.catalyst.catalog.CatalogTableType
+import org.apache.spark.sql.connector.catalog.{DelegatingCatalogExtension, Identifier, Table, TableCatalog, V1Table}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.types.StructType
 
@@ -35,30 +37,31 @@ private[connector] trait TestV2SessionCatalogBase[T <: Table] extends Delegating
 
   protected val tables: util.Map[Identifier, T] = new ConcurrentHashMap[Identifier, T]()
 
+  private val tableCreated: AtomicBoolean = new AtomicBoolean(false)
+
+  private def addTable(ident: Identifier, table: T): Unit = {
+    tableCreated.set(true)
+    tables.put(ident, table)
+  }
+
   protected def newTable(
       name: String,
       schema: StructType,
       partitions: Array[Transform],
       properties: util.Map[String, String]): T
 
-  protected def fullIdentifier(ident: Identifier): Identifier = {
-    if (ident.namespace().isEmpty) {
-      Identifier.of(Array("default"), ident.name())
-    } else {
-      ident
-    }
-  }
-
   override def loadTable(ident: Identifier): Table = {
-    val fullIdent = fullIdentifier(ident)
-    if (tables.containsKey(fullIdent)) {
-      tables.get(fullIdent)
+    if (tables.containsKey(ident)) {
+      tables.get(ident)
     } else {
       // Table was created through the built-in catalog
-      val t = super.loadTable(fullIdent)
-      val table = newTable(t.name(), t.schema(), t.partitioning(), t.properties())
-      tables.put(fullIdent, table)
-      table
+      super.loadTable(ident) match {
+        case v1Table: V1Table if v1Table.v1Table.tableType == CatalogTableType.VIEW => v1Table
+        case t =>
+          val table = newTable(t.name(), t.schema(), t.partitioning(), t.properties())
+          addTable(ident, table)
+          table
+      }
     }
   }
 
@@ -67,16 +70,41 @@ private[connector] trait TestV2SessionCatalogBase[T <: Table] extends Delegating
       schema: StructType,
       partitions: Array[Transform],
       properties: util.Map[String, String]): Table = {
-    val created = super.createTable(ident, schema, partitions, properties)
-    val t = newTable(created.name(), schema, partitions, properties)
-    val fullIdent = fullIdentifier(ident)
-    tables.put(fullIdent, t)
+    val key = TestV2SessionCatalogBase.SIMULATE_ALLOW_EXTERNAL_PROPERTY
+    val propsWithLocation = if (properties.containsKey(key)) {
+      // Always set a location so that CREATE EXTERNAL TABLE won't fail with LOCATION not specified.
+      if (!properties.containsKey(TableCatalog.PROP_LOCATION)) {
+        val newProps = new util.HashMap[String, String]()
+        newProps.putAll(properties)
+        newProps.put(TableCatalog.PROP_LOCATION, "file:/abc")
+        newProps
+      } else {
+        properties
+      }
+    } else {
+      properties
+    }
+    val created = super.createTable(ident, schema, partitions, propsWithLocation)
+    val t = newTable(created.name(), schema, partitions, propsWithLocation)
+    addTable(ident, t)
     t
   }
 
+  override def dropTable(ident: Identifier): Boolean = {
+    tables.remove(ident)
+    super.dropTable(ident)
+  }
+
   def clearTables(): Unit = {
-    assert(!tables.isEmpty, "Tables were empty, maybe didn't use the session catalog code path?")
+    assert(
+      tableCreated.get,
+      "Tables are not created, maybe didn't use the session catalog code path?")
     tables.keySet().asScala.foreach(super.dropTable)
     tables.clear()
+    tableCreated.set(false)
   }
+}
+
+object TestV2SessionCatalogBase {
+  val SIMULATE_ALLOW_EXTERNAL_PROPERTY = "spark.sql.test.simulateAllowExternal"
 }

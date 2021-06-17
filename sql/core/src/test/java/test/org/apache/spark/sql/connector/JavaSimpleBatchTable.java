@@ -17,24 +17,22 @@
 
 package test.org.apache.spark.sql.connector;
 
-import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 
+import org.apache.spark.sql.connector.TestingV2Source;
 import org.apache.spark.sql.connector.catalog.SupportsRead;
 import org.apache.spark.sql.connector.catalog.Table;
 import org.apache.spark.sql.connector.catalog.TableCapability;
 import org.apache.spark.sql.types.StructType;
 
 abstract class JavaSimpleBatchTable implements Table, SupportsRead {
-  private static final Set<TableCapability> CAPABILITIES = new HashSet<>(Arrays.asList(
-      TableCapability.BATCH_READ,
-      TableCapability.BATCH_WRITE,
-      TableCapability.TRUNCATE));
-
+  private static final Set<TableCapability> CAPABILITIES =
+      new HashSet<>(Collections.singletonList(TableCapability.BATCH_READ));
   @Override
   public StructType schema() {
-    return new StructType().add("i", "int").add("j", "int");
+    return TestingV2Source.schema();
   }
 
   @Override

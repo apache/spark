@@ -19,22 +19,27 @@ package org.apache.spark.internal.config
 private[spark] object R {
 
   val R_BACKEND_CONNECTION_TIMEOUT = ConfigBuilder("spark.r.backendConnectionTimeout")
+    .version("2.1.0")
     .intConf
     .createWithDefault(6000)
 
   val R_NUM_BACKEND_THREADS = ConfigBuilder("spark.r.numRBackendThreads")
+    .version("1.4.0")
     .intConf
     .createWithDefault(2)
 
   val R_HEARTBEAT_INTERVAL = ConfigBuilder("spark.r.heartBeatInterval")
+    .version("2.1.0")
     .intConf
     .createWithDefault(100)
 
   val SPARKR_COMMAND = ConfigBuilder("spark.sparkr.r.command")
+    .version("1.5.3")
     .stringConf
     .createWithDefault("Rscript")
 
   val R_COMMAND = ConfigBuilder("spark.r.command")
+    .version("1.5.3")
     .stringConf
     .createOptional
 }

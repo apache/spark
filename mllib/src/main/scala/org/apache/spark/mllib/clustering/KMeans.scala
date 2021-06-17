@@ -209,30 +209,27 @@ class KMeans private (
    */
   @Since("0.8.0")
   def run(data: RDD[Vector]): KMeansModel = {
-    val instances: RDD[(Vector, Double)] = data.map {
-      case (point) => (point, 1.0)
-    }
-    runWithWeight(instances, None)
+    val instances = data.map(point => (point, 1.0))
+    val handlePersistence = data.getStorageLevel == StorageLevel.NONE
+    runWithWeight(instances, handlePersistence, None)
   }
 
   private[spark] def runWithWeight(
-      data: RDD[(Vector, Double)],
+      instances: RDD[(Vector, Double)],
+      handlePersistence: Boolean,
       instr: Option[Instrumentation]): KMeansModel = {
+    val norms = instances.map { case (v, _) => Vectors.norm(v, 2.0) }
+    val vectors = instances.zip(norms)
+      .map { case ((v, w), norm) => new VectorWithNorm(v, norm, w) }
 
-    // Compute squared norms and cache them.
-    val norms = data.map { case (v, _) =>
-      Vectors.norm(v, 2.0)
+    if (handlePersistence) {
+      vectors.persist(StorageLevel.MEMORY_AND_DISK)
+    } else {
+      // Compute squared norms and cache them.
+      norms.persist(StorageLevel.MEMORY_AND_DISK)
     }
-
-    val zippedData = data.zip(norms).map { case ((v, w), norm) =>
-      (new VectorWithNorm(v, norm), w)
-    }
-
-    if (data.getStorageLevel == StorageLevel.NONE) {
-      zippedData.persist(StorageLevel.MEMORY_AND_DISK)
-    }
-    val model = runAlgorithmWithWeight(zippedData, instr)
-    zippedData.unpersist()
+    val model = runAlgorithmWithWeight(vectors, instr)
+    if (handlePersistence) { vectors.unpersist() } else { norms.unpersist() }
 
     model
   }
@@ -241,7 +238,7 @@ class KMeans private (
    * Implementation of K-Means algorithm.
    */
   private def runAlgorithmWithWeight(
-      data: RDD[(VectorWithNorm, Double)],
+      data: RDD[VectorWithNorm],
       instr: Option[Instrumentation]): KMeansModel = {
 
     val sc = data.sparkContext
@@ -250,18 +247,17 @@ class KMeans private (
 
     val distanceMeasureInstance = DistanceMeasure.decodeFromString(this.distanceMeasure)
 
-    val dataVectorWithNorm = data.map(d => d._1)
-
     val centers = initialModel match {
       case Some(kMeansCenters) =>
         kMeansCenters.clusterCenters.map(new VectorWithNorm(_))
       case None =>
         if (initializationMode == KMeans.RANDOM) {
-          initRandom(dataVectorWithNorm)
+          initRandom(data)
         } else {
-          initKMeansParallel(dataVectorWithNorm, distanceMeasureInstance)
+          initKMeansParallel(data, distanceMeasureInstance)
         }
     }
+    val numFeatures = centers.head.vector.size
     val initTimeInSeconds = (System.nanoTime() - initStartTime) / 1e9
     logInfo(f"Initialization with $initializationMode took $initTimeInSeconds%.3f seconds.")
 
@@ -271,34 +267,44 @@ class KMeans private (
 
     val iterationStartTime = System.nanoTime()
 
-    instr.foreach(_.logNumFeatures(centers.head.vector.size))
+    instr.foreach(_.logNumFeatures(numFeatures))
+
+    val shouldDistributed = centers.length * centers.length * numFeatures.toLong > 1000000L
 
     // Execute iterations of Lloyd's algorithm until converged
     while (iteration < maxIterations && !converged) {
-      val costAccum = sc.doubleAccumulator
       val bcCenters = sc.broadcast(centers)
+      val stats = if (shouldDistributed) {
+        distanceMeasureInstance.computeStatisticsDistributedly(sc, bcCenters)
+      } else {
+        distanceMeasureInstance.computeStatistics(centers)
+      }
+      val bcStats = sc.broadcast(stats)
+
+      val costAccum = sc.doubleAccumulator
 
       // Find the new centers
-      val collected = data.mapPartitions { pointsAndWeights =>
-        val thisCenters = bcCenters.value
-        val dims = thisCenters.head.vector.size
+      val collected = data.mapPartitions { points =>
+        val centers = bcCenters.value
+        val stats = bcStats.value
+        val dims = centers.head.vector.size
 
-        val sums = Array.fill(thisCenters.length)(Vectors.zeros(dims))
+        val sums = Array.fill(centers.length)(Vectors.zeros(dims))
 
         // clusterWeightSum is needed to calculate cluster center
         // cluster center =
         //     sample1 * weight1/clusterWeightSum + sample2 * weight2/clusterWeightSum + ...
-        val clusterWeightSum = Array.ofDim[Double](thisCenters.length)
+        val clusterWeightSum = Array.ofDim[Double](centers.length)
 
-        pointsAndWeights.foreach { case (point, weight) =>
-          val (bestCenter, cost) = distanceMeasureInstance.findClosest(thisCenters, point)
-          costAccum.add(cost * weight)
-          distanceMeasureInstance.updateClusterSum(point, sums(bestCenter), weight)
-          clusterWeightSum(bestCenter) += weight
+        points.foreach { point =>
+          val (bestCenter, cost) = distanceMeasureInstance.findClosest(centers, stats, point)
+          costAccum.add(cost * point.weight)
+          distanceMeasureInstance.updateClusterSum(point, sums(bestCenter))
+          clusterWeightSum(bestCenter) += point.weight
         }
 
-        clusterWeightSum.indices.filter(clusterWeightSum(_) > 0)
-          .map(j => (j, (sums(j), clusterWeightSum(j)))).iterator
+        Iterator.tabulate(centers.length)(j => (j, (sums(j), clusterWeightSum(j))))
+          .filter(_._2._2 > 0)
       }.reduceByKey { (sumweight1, sumweight2) =>
         axpy(1.0, sumweight2._1, sumweight1._1)
         (sumweight1._1, sumweight1._2 + sumweight2._2)
@@ -309,15 +315,13 @@ class KMeans private (
         instr.foreach(_.logSumOfWeights(collected.values.map(_._2).sum))
       }
 
-      val newCenters = collected.mapValues { case (sum, weightSum) =>
-        distanceMeasureInstance.centroid(sum, weightSum)
-      }
-
       bcCenters.destroy()
+      bcStats.destroy()
 
       // Update the cluster centers and costs
       converged = true
-      newCenters.foreach { case (j, newCenter) =>
+      collected.foreach { case (j, (sum, weightSum)) =>
+        val newCenter = distanceMeasureInstance.centroid(sum, weightSum)
         if (converged &&
           !distanceMeasureInstance.isCenterConverged(centers(j), newCenter, epsilon)) {
           converged = false
@@ -326,6 +330,7 @@ class KMeans private (
       }
 
       cost = costAccum.value
+      instr.foreach(_.logNamedValue(s"Cost@iter=$iteration", s"$cost"))
       iteration += 1
     }
 
@@ -374,7 +379,7 @@ class KMeans private (
     require(sample.nonEmpty, s"No samples available from $data")
 
     val centers = ArrayBuffer[VectorWithNorm]()
-    var newCenters = Seq(sample.head.toDense)
+    var newCenters = Array(sample.head.toDense)
     centers ++= newCenters
 
     // On each step, sample 2 * k points on average with probability proportional
@@ -406,10 +411,10 @@ class KMeans private (
     costs.unpersist()
     bcNewCentersList.foreach(_.destroy())
 
-    val distinctCenters = centers.map(_.vector).distinct.map(new VectorWithNorm(_))
+    val distinctCenters = centers.map(_.vector).distinct.map(new VectorWithNorm(_)).toArray
 
-    if (distinctCenters.size <= k) {
-      distinctCenters.toArray
+    if (distinctCenters.length <= k) {
+      distinctCenters
     } else {
       // Finally, we might have a set of more than k distinct candidate centers; weight each
       // candidate by the number of points in the dataset mapping to it and run a local k-means++
@@ -422,7 +427,7 @@ class KMeans private (
       bcCenters.destroy()
 
       val myWeights = distinctCenters.indices.map(countMap.getOrElse(_, 0L).toDouble).toArray
-      LocalKMeans.kMeansPlusPlus(0, distinctCenters.toArray, myWeights, k, 30)
+      LocalKMeans.kMeansPlusPlus(0, distinctCenters, myWeights, k, 30)
     }
   }
 }
@@ -511,13 +516,15 @@ object KMeans {
 /**
  * A vector with its norm for fast distance computation.
  */
-private[clustering] class VectorWithNorm(val vector: Vector, val norm: Double)
-    extends Serializable {
+private[clustering] class VectorWithNorm(
+    val vector: Vector,
+    val norm: Double,
+    val weight: Double = 1.0) extends Serializable {
 
   def this(vector: Vector) = this(vector, Vectors.norm(vector, 2.0))
 
   def this(array: Array[Double]) = this(Vectors.dense(array))
 
   /** Converts the vector to a dense vector. */
-  def toDense: VectorWithNorm = new VectorWithNorm(Vectors.dense(vector.toArray), norm)
+  def toDense: VectorWithNorm = new VectorWithNorm(Vectors.dense(vector.toArray), norm, weight)
 }

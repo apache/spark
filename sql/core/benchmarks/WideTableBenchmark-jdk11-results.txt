@@ -2,16 +2,16 @@
 projection on wide table
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 11.0.4+11-LTS on Linux 3.10.0-862.3.2.el7.x86_64
-Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+OpenJDK 64-Bit Server VM 11.0.10+9-LTS on Linux 5.4.0-1043-azure
+Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
 projection on wide table:                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-split threshold 10                                42942          43023         108          0.0       40952.8       1.0X
-split threshold 100                               37236          37310          93          0.0       35510.9       1.2X
-split threshold 1024                              12198          12260          56          0.1       11633.1       3.5X
-split threshold 2048                               9789           9860          76          0.1        9335.2       4.4X
-split threshold 4096                              10120          10161          63          0.1        9651.0       4.2X
-split threshold 8192                               9961           9972           7          0.1        9499.1       4.3X
-split threshold 65536                             58987          59087          95          0.0       56254.5       0.7X
+split threshold 10                                 3882           3963          54          0.3        3702.2       1.0X
+split threshold 100                                1810           1821           8          0.6        1726.1       2.1X
+split threshold 1024                               1435           1457          47          0.7        1368.3       2.7X
+split threshold 2048                               1357           1369          13          0.8        1294.3       2.9X
+split threshold 4096                               1902           1921          24          0.6        1814.1       2.0X
+split threshold 8192                               2700           2719          32          0.4        2574.7       1.4X
+split threshold 65536                             26623          26688         125          0.0       25389.7       0.1X
 
 

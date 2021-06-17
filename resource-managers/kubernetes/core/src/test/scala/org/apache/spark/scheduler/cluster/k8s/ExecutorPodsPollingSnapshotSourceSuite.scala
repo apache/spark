@@ -50,13 +50,16 @@ class ExecutorPodsPollingSnapshotSourceSuite extends SparkFunSuite with BeforeAn
   private var executorRoleLabeledPods: LABELED_PODS = _
 
   @Mock
+  private var activeExecutorPods: LABELED_PODS = _
+
+  @Mock
   private var eventQueue: ExecutorPodsSnapshotsStore = _
 
   private var pollingExecutor: DeterministicScheduler = _
   private var pollingSourceUnderTest: ExecutorPodsPollingSnapshotSource = _
 
   before {
-    MockitoAnnotations.initMocks(this)
+    MockitoAnnotations.openMocks(this).close()
     pollingExecutor = new DeterministicScheduler()
     pollingSourceUnderTest = new ExecutorPodsPollingSnapshotSource(
       sparkConf,
@@ -69,17 +72,20 @@ class ExecutorPodsPollingSnapshotSourceSuite extends SparkFunSuite with BeforeAn
       .thenReturn(appIdLabeledPods)
     when(appIdLabeledPods.withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE))
       .thenReturn(executorRoleLabeledPods)
+    when(executorRoleLabeledPods.withoutLabel(SPARK_EXECUTOR_INACTIVE_LABEL, "true"))
+      .thenReturn(activeExecutorPods)
   }
 
   test("Items returned by the API should be pushed to the event queue") {
-    when(executorRoleLabeledPods.list())
+    val exec1 = runningExecutor(1)
+    val exec2 = runningExecutor(2)
+    when(activeExecutorPods.list())
       .thenReturn(new PodListBuilder()
         .addToItems(
-          runningExecutor(1),
-          runningExecutor(2))
+          exec1,
+          exec2)
         .build())
     pollingExecutor.tick(pollingInterval, TimeUnit.MILLISECONDS)
-    verify(eventQueue).replaceSnapshot(Seq(runningExecutor(1), runningExecutor(2)))
-
+    verify(eventQueue).replaceSnapshot(Seq(exec1, exec2))
   }
 }

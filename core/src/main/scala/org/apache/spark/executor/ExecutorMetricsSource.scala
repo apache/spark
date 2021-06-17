@@ -32,8 +32,7 @@ import org.apache.spark.metrics.source.Source
  * spark.executor.metrics.pollingInterval=<interval in ms>.
  * (2) Procfs metrics are gathered all in one-go and only conditionally:
  * if the /proc filesystem exists
- * and spark.eventLog.logStageExecutorProcessTreeMetrics.enabled=true
- * and spark.eventLog.logStageExecutorMetrics.enabled=true.
+ * and spark.executor.processTreeMetrics.enabled=true.
  */
 private[spark] class ExecutorMetricsSource extends Source {
 
@@ -53,7 +52,7 @@ private[spark] class ExecutorMetricsSource extends Source {
   def register(metricsSystem: MetricsSystem): Unit = {
     val gauges: IndexedSeq[ExecutorMetricGauge] = (0 until ExecutorMetricType.numMetrics).map {
       idx => new ExecutorMetricGauge(idx)
-    }.toIndexedSeq
+    }
 
     ExecutorMetricType.metricToOffset.foreach {
       case (name, idx) =>

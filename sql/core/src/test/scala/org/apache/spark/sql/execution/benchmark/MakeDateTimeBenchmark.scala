@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution.benchmark
 
 import org.apache.spark.benchmark.Benchmark
-import org.apache.spark.sql.SaveMode.Overwrite
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -26,7 +25,8 @@ import org.apache.spark.sql.internal.SQLConf
  * To run this benchmark:
  * {{{
  *   1. without sbt:
- *      bin/spark-submit --class <this class> --jars <spark core test jar> <sql core test jar>
+ *      bin/spark-submit --class <this class>
+ *        --jars <spark core test jar>,<spark catalyst test jar> <sql core test jar>
  *   2. build/sbt "sql/test:runMain <this class>"
  *   3. generate result:
  *      SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/test:runMain <this class>"
@@ -40,10 +40,7 @@ object MakeDateTimeBenchmark extends SqlBasedBenchmark {
       spark
         .range(0, cardinality, 1, 1)
         .selectExpr(exprs: _*)
-        .write
-        .format("noop")
-        .mode(Overwrite)
-        .save()
+        .noop()
     }
   }
 

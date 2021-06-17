@@ -42,6 +42,10 @@ class SQLAppStatusStore(
     store.view(classOf[SQLExecutionUIData]).asScala.toSeq
   }
 
+  def executionsList(offset: Int, length: Int): Seq[SQLExecutionUIData] = {
+    store.view(classOf[SQLExecutionUIData]).skip(offset).max(length).asScala.toSeq
+  }
+
   def execution(executionId: Long): Option[SQLExecutionUIData] = {
     try {
       Some(store.read(classOf[SQLExecutionUIData], executionId))

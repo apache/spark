@@ -24,6 +24,7 @@ import scala.collection.JavaConverters._
 import org.apache.commons.io.FileUtils
 import org.apache.commons.io.filefilter.TrueFileFilter
 import org.scalatest.BeforeAndAfterAll
+import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark.internal.config
 import org.apache.spark.rdd.ShuffledRDD

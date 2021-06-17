@@ -17,14 +17,13 @@
 
 package org.apache.spark.ml.classification
 
-import com.github.fommil.netlib.BLAS.{getInstance => blas}
 import org.json4s.{DefaultFormats, JObject}
 import org.json4s.JsonDSL._
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.feature.Instance
-import org.apache.spark.ml.linalg.{DenseVector, SparseVector, Vector, Vectors}
+import org.apache.spark.ml.linalg.{BLAS, DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.regression.DecisionTreeRegressionModel
 import org.apache.spark.ml.tree._
@@ -197,7 +196,7 @@ class GBTClassifier @Since("1.4.0") (
     instr.logParams(this, labelCol, weightCol, featuresCol, predictionCol, leafCol,
       impurity, lossType, maxDepth, maxBins, maxIter, maxMemoryInMB, minInfoGain,
       minInstancesPerNode, minWeightFractionPerNode, seed, stepSize, subsamplingRate, cacheNodeIds,
-      checkpointInterval, featureSubsetStrategy, validationIndicatorCol, validationTol)
+      checkpointInterval, featureSubsetStrategy, validationIndicatorCol, validationTol, thresholds)
     instr.logNumClasses(numClasses)
 
     val categoricalFeatures = MetadataUtils.getCategoricalFeatures(dataset.schema($(featuresCol)))
@@ -342,9 +341,6 @@ class GBTClassificationModel private[ml](
     }
   }
 
-  /** Number of trees in ensemble */
-  val numTrees: Int = trees.length
-
   @Since("1.4.0")
   override def copy(extra: ParamMap): GBTClassificationModel = {
     copyValues(new GBTClassificationModel(uid, _trees, _treeWeights, numFeatures, numClasses),
@@ -353,7 +349,7 @@ class GBTClassificationModel private[ml](
 
   @Since("1.4.0")
   override def toString: String = {
-    s"GBTClassificationModel: uid = $uid, numTrees=$numTrees, numClasses=$numClasses, " +
+    s"GBTClassificationModel: uid = $uid, numTrees=$getNumTrees, numClasses=$numClasses, " +
       s"numFeatures=$numFeatures"
   }
 
@@ -374,7 +370,7 @@ class GBTClassificationModel private[ml](
   /** Raw prediction for the positive class. */
   private def margin(features: Vector): Double = {
     val treePredictions = _trees.map(_.rootNode.predictImpl(features).prediction)
-    blas.ddot(numTrees, treePredictions, 1, _treeWeights, 1)
+    BLAS.nativeBLAS.ddot(getNumTrees, treePredictions, 1, _treeWeights, 1)
   }
 
   /** (private[ml]) Convert to a model in the old API */

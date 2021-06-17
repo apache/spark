@@ -24,15 +24,15 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, JoinedRow, Literal, SpecificInternalRow, UnsafeProjection, UnsafeRow}
-import org.apache.spark.sql.execution.streaming.{StatefulOperatorStateInfo, StreamingSymmetricHashJoinExec}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, JoinedRow, Literal, SafeProjection, SpecificInternalRow, UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.execution.streaming.StatefulOperatorStateInfo
 import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper._
-import org.apache.spark.sql.execution.streaming.state.SymmetricHashJoinStateManager.KeyToValuePair
 import org.apache.spark.sql.types.{BooleanType, LongType, StructField, StructType}
 import org.apache.spark.util.NextIterator
 
 /**
- * Helper class to manage state required by a single side of [[StreamingSymmetricHashJoinExec]].
+ * Helper class to manage state required by a single side of
+ * [[org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinExec]].
  * The interface of this class is basically that of a multi-map:
  * - Get: Returns an iterator of multiple values for given key
  * - Append: Append a new value to the given key
@@ -44,6 +44,7 @@ import org.apache.spark.util.NextIterator
  * @param stateInfo             Information about how to retrieve the correct version of state
  * @param storeConf             Configuration for the state store.
  * @param hadoopConf            Hadoop configuration for reading state data from storage
+ * @param partitionId           A partition ID of source RDD.
  * @param stateFormatVersion    The version of format for state.
  *
  * Internally, the key -> multiple values is stored in two [[StateStore]]s.
@@ -72,8 +73,8 @@ class SymmetricHashJoinStateManager(
     stateInfo: Option[StatefulOperatorStateInfo],
     storeConf: StateStoreConf,
     hadoopConf: Configuration,
+    partitionId: Int,
     stateFormatVersion: Int) extends Logging {
-
   import SymmetricHashJoinStateManager._
 
   /*
@@ -98,13 +99,20 @@ class SymmetricHashJoinStateManager(
   /**
    * Get all the matched values for given join condition, with marking matched.
    * This method is designed to mark joined rows properly without exposing internal index of row.
+   *
+   * @param excludeRowsAlreadyMatched Do not join with rows already matched previously.
+   *                                  This is used for right side of left semi join in
+   *                                  [[StreamingSymmetricHashJoinExec]] only.
    */
   def getJoinedRows(
       key: UnsafeRow,
       generateJoinedRow: InternalRow => JoinedRow,
-      predicate: JoinedRow => Boolean): Iterator[JoinedRow] = {
+      predicate: JoinedRow => Boolean,
+      excludeRowsAlreadyMatched: Boolean = false): Iterator[JoinedRow] = {
     val numValues = keyToNumValues.get(key)
-    keyWithIndexToValue.getAll(key, numValues).map { keyIdxToValue =>
+    keyWithIndexToValue.getAll(key, numValues).filterNot { keyIdxToValue =>
+      excludeRowsAlreadyMatched && keyIdxToValue.matched
+    }.map { keyIdxToValue =>
       val joinedRow = generateJoinedRow(keyIdxToValue.value)
       if (predicate(joinedRow)) {
         if (!keyIdxToValue.matched) {
@@ -170,7 +178,7 @@ class SymmetricHashJoinStateManager(
         return null
       }
 
-      override def close: Unit = {}
+      override def close(): Unit = {}
     }
   }
 
@@ -261,27 +269,33 @@ class SymmetricHashJoinStateManager(
         // The backing store is arraylike - we as the caller are responsible for filling back in
         // any hole. So we swap the last element into the hole and decrement numValues to shorten.
         // clean
-        if (numValues > 1) {
+        if (index != numValues - 1) {
           val valuePairAtMaxIndex = keyWithIndexToValue.get(currentKey, numValues - 1)
           if (valuePairAtMaxIndex != null) {
             keyWithIndexToValue.put(currentKey, index, valuePairAtMaxIndex.value,
               valuePairAtMaxIndex.matched)
           } else {
-            keyWithIndexToValue.put(currentKey, index, null, false)
+            val projectedKey = getInternalRowOfKeyWithIndex(currentKey)
+            logWarning(s"`keyWithIndexToValue` returns a null value for index ${numValues - 1} " +
+              s"at current key $projectedKey.")
           }
-          keyWithIndexToValue.remove(currentKey, numValues - 1)
-        } else {
-          keyWithIndexToValue.remove(currentKey, 0)
         }
+        keyWithIndexToValue.remove(currentKey, numValues - 1)
         numValues -= 1
         valueRemoved = true
 
         return reusedRet.withNew(currentKey, currentValue.value, currentValue.matched)
       }
 
-      override def close: Unit = {}
+      override def close(): Unit = {}
     }
   }
+
+  // Unsafe row to internal row projection for key of `keyWithIndexToValue`.
+  lazy private val keyProjection = SafeProjection.create(keySchema)
+
+  /** Projects the key of unsafe row to internal row for printable log message. */
+  def getInternalRowOfKeyWithIndex(currentKey: UnsafeRow): InternalRow = keyProjection(currentKey)
 
   /** Commit all the changes to all the state stores */
   def commit(): Unit = {
@@ -305,15 +319,7 @@ class SymmetricHashJoinStateManager(
       keyWithIndexToValueMetrics.numKeys,       // represent each buffered row only once
       keyToNumValuesMetrics.memoryUsedBytes + keyWithIndexToValueMetrics.memoryUsedBytes,
       keyWithIndexToValueMetrics.customMetrics.map {
-        case (s @ StateStoreCustomSumMetric(_, desc), value) =>
-          s.copy(desc = newDesc(desc)) -> value
-        case (s @ StateStoreCustomSizeMetric(_, desc), value) =>
-          s.copy(desc = newDesc(desc)) -> value
-        case (s @ StateStoreCustomTimingMetric(_, desc), value) =>
-          s.copy(desc = newDesc(desc)) -> value
-        case (s, _) =>
-          throw new IllegalArgumentException(
-            s"Unknown state store custom metric is found at metrics: $s")
+        case (metric, value) => (metric.withNewDesc(desc = newDesc(metric.desc)), value)
       }
     )
   }
@@ -356,7 +362,7 @@ class SymmetricHashJoinStateManager(
     /** Get the StateStore with the given schema */
     protected def getStateStore(keySchema: StructType, valueSchema: StructType): StateStore = {
       val storeProviderId = StateStoreProviderId(
-        stateInfo.get, TaskContext.getPartitionId(), getStateStoreName(joinSide, stateStoreType))
+        stateInfo.get, partitionId, getStateStoreName(joinSide, stateStoreType))
       val store = StateStore.get(
         storeProviderId, keySchema, valueSchema, None,
         stateInfo.get.storeVersion, storeConf, hadoopConf)
@@ -450,10 +456,25 @@ class SymmetricHashJoinStateManager(
   }
 
   private trait KeyWithIndexToValueRowConverter {
+    /** Defines the schema of the value row (the value side of K-V in state store). */
     def valueAttributes: Seq[Attribute]
 
+    /**
+     * Convert the value row to (actual value, match) pair.
+     *
+     * NOTE: implementations should ensure the result row is NOT reused during execution, so
+     * that caller can safely read the value in any time.
+     */
     def convertValue(value: UnsafeRow): ValueAndMatchPair
 
+    /**
+     * Build the value row from (actual value, match) pair. This is expected to be called just
+     * before storing to the state store.
+     *
+     * NOTE: depending on the implementation, the result row "may" be reused during execution
+     * (to avoid initialization of object), so the caller should ensure that the logic doesn't
+     * affect by such behavior. Call copy() against the result row if needed.
+     */
     def convertToValueRow(value: UnsafeRow, matched: Boolean): UnsafeRow
   }
 
@@ -492,7 +513,7 @@ class SymmetricHashJoinStateManager(
 
     override def convertValue(value: UnsafeRow): ValueAndMatchPair = {
       if (value != null) {
-        ValueAndMatchPair(valueRowGenerator(value),
+        ValueAndMatchPair(valueRowGenerator(value).copy(),
           value.getBoolean(indexOrdinalInValueWithMatchedRow))
       } else {
         null

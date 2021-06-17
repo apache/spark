@@ -27,8 +27,6 @@ r"""
     `$ bin/spark-submit examples/src/main/python/sql/streaming/structured_network_wordcount.py
     localhost 9999`
 """
-from __future__ import print_function
-
 import sys
 
 from pyspark.sql import SparkSession

@@ -17,6 +17,7 @@
 
 package test.org.apache.spark.sql.connector;
 
+import org.apache.spark.sql.connector.TestingV2Source;
 import org.apache.spark.sql.connector.read.Batch;
 import org.apache.spark.sql.connector.read.PartitionReaderFactory;
 import org.apache.spark.sql.connector.read.Scan;
@@ -37,7 +38,7 @@ abstract class JavaSimpleScanBuilder implements ScanBuilder, Scan, Batch {
 
   @Override
   public StructType readSchema() {
-    return new StructType().add("i", "int").add("j", "int");
+    return TestingV2Source.schema();
   }
 
   @Override

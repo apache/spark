@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.{Expression, UnaryExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.types.{BinaryType, DataType}
 
-case class CatalystDataToAvro(
+private[avro] case class CatalystDataToAvro(
     child: Expression,
     jsonFormatSchema: Option[String]) extends UnaryExpression {
 
@@ -64,4 +64,7 @@ case class CatalystDataToAvro(
     defineCodeGen(ctx, ev, input =>
       s"(byte[]) $expr.nullSafeEval($input)")
   }
+
+  override protected def withNewChildInternal(newChild: Expression): CatalystDataToAvro =
+    copy(child = newChild)
 }

@@ -213,7 +213,7 @@ class InputOutputMetricsSuite extends SparkFunSuite with SharedSparkContext
     }
 
     // Computing the amount of bytes read for a cartesian operation is a little involved.
-    // Cartesian interleaves reads between two partitions eg. p1 and p2.
+    // Cartesian interleaves reads between two partitions e.g. p1 and p2.
     // Here are the steps:
     //  1) First it creates an iterator for p1
     //  2) Creates an iterator for p2

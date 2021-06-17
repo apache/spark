@@ -17,11 +17,12 @@
 
 package org.apache.spark.sql
 
+import java.time.Year
 import java.util.Arrays
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
-import org.apache.spark.sql.catalyst.expressions.{Cast, ExpressionEvalHelper, GenericInternalRow, Literal}
+import org.apache.spark.sql.catalyst.CatalystTypeConverters
+import org.apache.spark.sql.catalyst.expressions.{Cast, ExpressionEvalHelper, Literal}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetTest
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSparkSession
@@ -32,75 +33,22 @@ private[sql] case class MyLabeledPoint(label: Double, features: TestUDT.MyDenseV
   def getFeatures: TestUDT.MyDenseVector = features
 }
 
-// object and classes to test SPARK-19311
+private[sql] case class FooWithDate(year: Year, s: String, i: Int)
 
-// Trait/Interface for base type
-sealed trait IExampleBaseType extends Serializable {
-  def field: Int
-}
+private[sql] class YearUDT extends UserDefinedType[Year] {
+  override def sqlType: DataType = IntegerType
 
-// Trait/Interface for derived type
-sealed trait IExampleSubType extends IExampleBaseType
-
-// a base class
-class ExampleBaseClass(override val field: Int) extends IExampleBaseType
-
-// a derived class
-class ExampleSubClass(override val field: Int)
-  extends ExampleBaseClass(field) with IExampleSubType
-
-// UDT for base class
-class ExampleBaseTypeUDT extends UserDefinedType[IExampleBaseType] {
-
-  override def sqlType: StructType = {
-    StructType(Seq(
-      StructField("intfield", IntegerType, nullable = false)))
+  override def serialize(obj: Year): Int = {
+    obj.getValue
   }
 
-  override def serialize(obj: IExampleBaseType): InternalRow = {
-    val row = new GenericInternalRow(1)
-    row.setInt(0, obj.field)
-    row
+  def deserialize(datum: Any): Year = datum match {
+    case value: Int => Year.of(value)
   }
 
-  override def deserialize(datum: Any): IExampleBaseType = {
-    datum match {
-      case row: InternalRow =>
-        require(row.numFields == 1,
-          "ExampleBaseTypeUDT requires row with length == 1")
-        val field = row.getInt(0)
-        new ExampleBaseClass(field)
-    }
-  }
+  override def userClass: Class[Year] = classOf[Year]
 
-  override def userClass: Class[IExampleBaseType] = classOf[IExampleBaseType]
-}
-
-// UDT for derived class
-private[spark] class ExampleSubTypeUDT extends UserDefinedType[IExampleSubType] {
-
-  override def sqlType: StructType = {
-    StructType(Seq(
-      StructField("intfield", IntegerType, nullable = false)))
-  }
-
-  override def serialize(obj: IExampleSubType): InternalRow = {
-    val row = new GenericInternalRow(1)
-    row.setInt(0, obj.field)
-    row
-  }
-
-  override def deserialize(datum: Any): IExampleSubType = {
-    datum match {
-      case row: InternalRow =>
-        require(row.numFields == 1,
-          "ExampleSubTypeUDT requires row with length == 1")
-        val field = row.getInt(0)
-        new ExampleSubClass(field)
-    }
-  }
-
-  override def userClass: Class[IExampleSubType] = classOf[IExampleSubType]
+  private[spark] override def asNullable: YearUDT = this
 }
 
 class UserDefinedTypeSuite extends QueryTest with SharedSparkSession with ParquetTest
@@ -114,6 +62,24 @@ class UserDefinedTypeSuite extends QueryTest with SharedSparkSession with Parque
   private lazy val pointsRDD2 = Seq(
     MyLabeledPoint(1.0, new TestUDT.MyDenseVector(Array(0.1, 1.0))),
     MyLabeledPoint(0.0, new TestUDT.MyDenseVector(Array(0.3, 3.0)))).toDF()
+
+
+  test("SPARK-32090: equal") {
+    val udt1 = new ExampleBaseTypeUDT
+    val udt2 = new ExampleSubTypeUDT
+    val udt3 = new ExampleSubTypeUDT
+    assert(udt1 !== udt2)
+    assert(udt2 !== udt1)
+    assert(udt2 === udt3)
+    assert(udt3 === udt2)
+  }
+
+  test("SPARK-32090: acceptsType") {
+    val udt1 = new ExampleBaseTypeUDT
+    val udt2 = new ExampleSubTypeUDT
+    assert(udt1.acceptsType(udt2))
+    assert(!udt2.acceptsType(udt1))
+  }
 
   test("register user type: MyDenseVector for MyLabeledPoint") {
     val labels: RDD[Double] = pointsRDD.select('label).rdd.map { case Row(v: Double) => v }
@@ -131,12 +97,14 @@ class UserDefinedTypeSuite extends QueryTest with SharedSparkSession with Parque
   }
 
   test("UDTs and UDFs") {
-    spark.udf.register("testType",
-      (d: TestUDT.MyDenseVector) => d.isInstanceOf[TestUDT.MyDenseVector])
-    pointsRDD.createOrReplaceTempView("points")
-    checkAnswer(
-      sql("SELECT testType(features) from points"),
-      Seq(Row(true), Row(true)))
+    withTempView("points") {
+      spark.udf.register("testType",
+        (d: TestUDT.MyDenseVector) => d.isInstanceOf[TestUDT.MyDenseVector])
+      pointsRDD.createOrReplaceTempView("points")
+      checkAnswer(
+        sql("SELECT testType(features) from points"),
+        Seq(Row(true), Row(true)))
+    }
   }
 
   testStandardAndLegacyModes("UDTs with Parquet") {
@@ -254,11 +222,11 @@ class UserDefinedTypeSuite extends QueryTest with SharedSparkSession with Parque
 
     // this worked already before the fix SPARK-19311:
     // return type of doUDF equals parameter type of doOtherUDF
-    sql("SELECT doOtherUDF(doUDF(41))")
+    checkAnswer(sql("SELECT doOtherUDF(doUDF(41))"), Row(41) :: Nil)
 
     // this one passes only with the fix SPARK-19311:
     // return type of doSubUDF is a subtype of the parameter type of doOtherUDF
-    sql("SELECT doOtherUDF(doSubTypeUDF(42))")
+    checkAnswer(sql("SELECT doOtherUDF(doSubTypeUDF(42))"), Row(42) :: Nil)
   }
 
   test("except on UDT") {
@@ -286,5 +254,21 @@ class UserDefinedTypeSuite extends QueryTest with SharedSparkSession with Parque
       RowFactory.create(new TestUDT.MyDenseVector(Array(1.0, 3.0, 5.0, 7.0, 9.0))))
     checkAnswer(spark.createDataFrame(data, schema).selectExpr("typeof(a)"),
       Seq(Row("array<double>")))
+  }
+
+  test("SPARK-30993: UserDefinedType matched to fixed length SQL type shouldn't be corrupted") {
+    def concatFoo(a: FooWithDate, b: FooWithDate): FooWithDate = {
+      FooWithDate(b.year, a.s + b.s, a.i)
+    }
+
+    UDTRegistration.register(classOf[Year].getName, classOf[YearUDT].getName)
+
+    val year = Year.now()
+    val inputDS = List(FooWithDate(year, "Foo", 1), FooWithDate(year, "Foo", 3),
+      FooWithDate(year, "Foo", 3)).toDS()
+    val agg = inputDS.groupByKey(x => x.i).mapGroups((_, iter) => iter.reduce(concatFoo))
+    val result = agg.collect()
+
+    assert(result.toSet === Set(FooWithDate(year, "FooFoo", 3), FooWithDate(year, "Foo", 1)))
   }
 }

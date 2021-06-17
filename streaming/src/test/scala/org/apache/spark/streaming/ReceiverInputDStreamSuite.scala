@@ -117,7 +117,7 @@ class ReceiverInputDStreamSuite
   private def runTest(enableWAL: Boolean, body: ReceiverInputDStream[_] => Unit): Unit = {
     val conf = new SparkConf()
     conf.setMaster("local[4]").setAppName("ReceiverInputDStreamSuite")
-    conf.set(WriteAheadLogUtils.RECEIVER_WAL_ENABLE_CONF_KEY, enableWAL.toString)
+    conf.set(StreamingConf.RECEIVER_WAL_ENABLE_CONF_KEY.key, enableWAL.toString)
     require(WriteAheadLogUtils.enableReceiverLog(conf) === enableWAL)
     ssc = new StreamingContext(conf, Seconds(1))
     val receiverStream = new ReceiverInputDStream[Int](ssc) {

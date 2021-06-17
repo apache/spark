@@ -21,6 +21,7 @@ import java.nio.charset.StandardCharsets
 
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.functions.{log => logarithm}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
 private object MathFunctionsTestData {
@@ -124,6 +125,11 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
     testOneToOneMathFunction(sinh, math.sinh)
   }
 
+  test("asinh") {
+    testOneToOneMathFunction(asinh,
+      (x: Double) => math.log(x + math.sqrt(x * x + 1)) )
+  }
+
   test("cos") {
     testOneToOneMathFunction(cos, math.cos)
   }
@@ -136,6 +142,11 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
     testOneToOneMathFunction(cosh, math.cosh)
   }
 
+  test("acosh") {
+    testOneToOneMathFunction(acosh,
+      (x: Double) => math.log(x + math.sqrt(x * x - 1)) )
+  }
+
   test("tan") {
     testOneToOneMathFunction(tan, math.tan)
   }
@@ -146,6 +157,11 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
 
   test("tanh") {
     testOneToOneMathFunction(tanh, math.tanh)
+  }
+
+  test("atanh") {
+    testOneToOneMathFunction(atanh,
+      (x: Double) => (0.5 * (math.log1p(x) - math.log1p(-x))) )
   }
 
   test("degrees") {
@@ -187,6 +203,21 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
       df.selectExpr("""conv("9223372036854775807", 36, -16)"""), Row("-1")) // for overflow
   }
 
+  test("SPARK-33428 conv function should trim input string") {
+    val df = Seq(("abc"), ("  abc"), ("abc  "), ("  abc  ")).toDF("num")
+    checkAnswer(df.select(conv('num, 16, 10)),
+      Seq(Row("2748"), Row("2748"), Row("2748"), Row("2748")))
+    checkAnswer(df.select(conv('num, 16, -10)),
+      Seq(Row("2748"), Row("2748"), Row("2748"), Row("2748")))
+  }
+
+  test("SPARK-33428 conv function shouldn't raise error if input string is too big") {
+    val df = Seq((
+      "aaaaaaa0aaaaaaa0aaaaaaa0aaaaaaa0aaaaaaa0aaaaaaa0aaaaaaa0aaaaaaa0aaaaaaa0")).toDF("num")
+    checkAnswer(df.select(conv('num, 16, 10)), Row("18446744073709551615"))
+    checkAnswer(df.select(conv('num, 16, -10)), Row("-1"))
+  }
+
   test("floor") {
     testOneToOneMathFunction(floor, (d: Double) => math.floor(d).toLong)
   }
@@ -218,19 +249,21 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
       Seq(Row(5, 0, 0), Row(55, 60, 100), Row(555, 560, 600))
     )
 
-    val pi = "3.1415"
-    checkAnswer(
-      sql(s"SELECT round($pi, -3), round($pi, -2), round($pi, -1), " +
-        s"round($pi, 0), round($pi, 1), round($pi, 2), round($pi, 3)"),
-      Seq(Row(BigDecimal("0E3"), BigDecimal("0E2"), BigDecimal("0E1"), BigDecimal(3),
-        BigDecimal("3.1"), BigDecimal("3.14"), BigDecimal("3.142")))
-    )
-    checkAnswer(
-      sql(s"SELECT bround($pi, -3), bround($pi, -2), bround($pi, -1), " +
-        s"bround($pi, 0), bround($pi, 1), bround($pi, 2), bround($pi, 3)"),
-      Seq(Row(BigDecimal("0E3"), BigDecimal("0E2"), BigDecimal("0E1"), BigDecimal(3),
-        BigDecimal("3.1"), BigDecimal("3.14"), BigDecimal("3.142")))
-    )
+    withSQLConf(SQLConf.LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED.key -> "true") {
+      val pi = "3.1415"
+      checkAnswer(
+        sql(s"SELECT round($pi, -3), round($pi, -2), round($pi, -1), " +
+          s"round($pi, 0), round($pi, 1), round($pi, 2), round($pi, 3)"),
+        Seq(Row(BigDecimal("0E3"), BigDecimal("0E2"), BigDecimal("0E1"), BigDecimal(3),
+          BigDecimal("3.1"), BigDecimal("3.14"), BigDecimal("3.142")))
+      )
+      checkAnswer(
+        sql(s"SELECT bround($pi, -3), bround($pi, -2), bround($pi, -1), " +
+          s"bround($pi, 0), bround($pi, 1), bround($pi, 2), bround($pi, 3)"),
+        Seq(Row(BigDecimal("0E3"), BigDecimal("0E2"), BigDecimal("0E1"), BigDecimal(3),
+          BigDecimal("3.1"), BigDecimal("3.14"), BigDecimal("3.142")))
+      )
+    }
 
     val bdPi: BigDecimal = BigDecimal(31415925L, 7)
     checkAnswer(
@@ -348,14 +381,14 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
 
     checkAnswer(
       df.select(
-        shiftLeft('a, 1), shiftLeft('b, 1), shiftLeft('c, 1), shiftLeft('d, 1),
-        shiftLeft('f, 1)),
+        shiftleft('a, 1), shiftleft('b, 1), shiftleft('c, 1), shiftleft('d, 1),
+        shiftLeft('f, 1)), // test deprecated one.
         Row(42.toLong, 42, 42.toShort, 42.toByte, null))
 
     checkAnswer(
       df.selectExpr(
-        "shiftLeft(a, 1)", "shiftLeft(b, 1)", "shiftLeft(b, 1)", "shiftLeft(d, 1)",
-        "shiftLeft(f, 1)"),
+        "shiftleft(a, 1)", "shiftleft(b, 1)", "shiftleft(b, 1)", "shiftleft(d, 1)",
+        "shiftleft(f, 1)"),
       Row(42.toLong, 42, 42.toShort, 42.toByte, null))
   }
 
@@ -365,14 +398,14 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
 
     checkAnswer(
       df.select(
-        shiftRight('a, 1), shiftRight('b, 1), shiftRight('c, 1), shiftRight('d, 1),
-        shiftRight('f, 1)),
+        shiftright('a, 1), shiftright('b, 1), shiftright('c, 1), shiftright('d, 1),
+        shiftRight('f, 1)), // test deprecated one.
       Row(21.toLong, 21, 21.toShort, 21.toByte, null))
 
     checkAnswer(
       df.selectExpr(
-        "shiftRight(a, 1)", "shiftRight(b, 1)", "shiftRight(c, 1)", "shiftRight(d, 1)",
-        "shiftRight(f, 1)"),
+        "shiftright(a, 1)", "shiftright(b, 1)", "shiftright(c, 1)", "shiftright(d, 1)",
+        "shiftright(f, 1)"),
       Row(21.toLong, 21, 21.toShort, 21.toByte, null))
   }
 
@@ -382,14 +415,14 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
 
     checkAnswer(
       df.select(
-        shiftRightUnsigned('a, 1), shiftRightUnsigned('b, 1), shiftRightUnsigned('c, 1),
-        shiftRightUnsigned('d, 1), shiftRightUnsigned('f, 1)),
+        shiftrightunsigned('a, 1), shiftrightunsigned('b, 1), shiftrightunsigned('c, 1),
+        shiftrightunsigned('d, 1), shiftRightUnsigned('f, 1)), // test deprecated one.
       Row(9223372036854775787L, 21, 21.toShort, 21.toByte, null))
 
     checkAnswer(
       df.selectExpr(
-        "shiftRightUnsigned(a, 1)", "shiftRightUnsigned(b, 1)", "shiftRightUnsigned(c, 1)",
-        "shiftRightUnsigned(d, 1)", "shiftRightUnsigned(f, 1)"),
+        "shiftrightunsigned(a, 1)", "shiftrightunsigned(b, 1)", "shiftrightunsigned(c, 1)",
+        "shiftrightunsigned(d, 1)", "shiftrightunsigned(f, 1)"),
       Row(9223372036854775787L, 21, 21.toShort, 21.toByte, null))
   }
 

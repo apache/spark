@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.analysis.{FunctionAlreadyExistsException, N
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.connector.catalog.SupportsNamespaces.{PROP_OWNER_NAME, PROP_OWNER_TYPE}
+import org.apache.spark.sql.connector.catalog.SupportsNamespaces.PROP_OWNER
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -144,9 +144,8 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
     // Note: alter properties here because Hive does not support altering other fields
     catalog.alterDatabase(db1.copy(properties = Map("k" -> "v3", "good" -> "true")))
     val newDb1 = catalog.getDatabase("db1")
-    val reversedProperties = Seq(PROP_OWNER_NAME, PROP_OWNER_TYPE)
-    assert((db1.properties -- reversedProperties).isEmpty)
-    assert((newDb1.properties -- reversedProperties).size == 2)
+    assert((db1.properties -- Seq(PROP_OWNER)).isEmpty)
+    assert((newDb1.properties -- Seq(PROP_OWNER)).size == 2)
     assert(newDb1.properties.get("k") == Some("v3"))
     assert(newDb1.properties.get("good") == Some("true"))
   }
@@ -409,8 +408,8 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
       partitionColumnNames = Seq("partCol1", "partCol2"))
     catalog.createTable(table, ignoreIfExists = false)
 
-    val newLocationPart1 = newUriForDatabase()
-    val newLocationPart2 = newUriForDatabase()
+    val newLocationPart1 = newUriForPartition(Seq("p1=1", "p2=2"))
+    val newLocationPart2 = newUriForPartition(Seq("p1=3", "p2=4"))
 
     val partition1 =
       CatalogTablePartition(Map("partCol1" -> "1", "partCol2" -> "2"),
@@ -991,6 +990,11 @@ abstract class CatalogTestUtils {
   def newFunc(): CatalogFunction = newFunc("funcName")
 
   def newUriForDatabase(): URI = new URI(Utils.createTempDir().toURI.toString.stripSuffix("/"))
+
+  def newUriForPartition(parts: Seq[String]): URI = {
+    val path = parts.foldLeft(Utils.createTempDir())(new java.io.File(_, _))
+    new URI(path.toURI.toString.stripSuffix("/"))
+  }
 
   def newDb(name: String): CatalogDatabase = {
     CatalogDatabase(name, name + " description", newUriForDatabase(), Map.empty)

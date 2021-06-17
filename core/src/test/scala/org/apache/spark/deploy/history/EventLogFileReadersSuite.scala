@@ -216,7 +216,7 @@ class SingleFileEventLogFileReaderSuite extends EventLogFileReadersSuite {
     Utils.tryWithResource(new ZipInputStream(
         new ByteArrayInputStream(underlyingStream.toByteArray))) { is =>
 
-      var entry = is.getNextEntry
+      val entry = is.getNextEntry
       assert(entry != null)
       val actual = new String(ByteStreams.toByteArray(is), StandardCharsets.UTF_8)
       val expected = Files.toString(new File(logPath.toString), StandardCharsets.UTF_8)
@@ -288,13 +288,15 @@ class RollingEventLogFilesReaderSuite extends EventLogFileReadersSuite {
     assert(status.isDirectory)
 
     val statusInDir = fileSystem.listStatus(logPath)
-    val eventFiles = statusInDir.filter(isEventLogFile).sortBy { s => getIndex(s.getPath.getName) }
+    val eventFiles = statusInDir.filter(isEventLogFile).sortBy { s =>
+      getEventLogFileIndex(s.getPath.getName)
+    }
     assert(eventFiles.nonEmpty)
     val lastEventFile = eventFiles.last
     val allLen = eventFiles.map(_.getLen).sum
 
     assert(reader.rootPath === fileSystem.makeQualified(logPath))
-    assert(reader.lastIndex === Some(getIndex(lastEventFile.getPath.getName)))
+    assert(reader.lastIndex === Some(getEventLogFileIndex(lastEventFile.getPath.getName)))
     assert(reader.fileSizeForLastIndex === lastEventFile.getLen)
     assert(reader.completed === isCompleted)
     assert(reader.modificationTime === lastEventFile.getModificationTime)

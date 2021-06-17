@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+from pyspark.sql.types import StructType, StructField, IntegerType
 from pyspark.sql.utils import AnalysisException
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
@@ -24,11 +25,11 @@ class CatalogTests(ReusedSQLTestCase):
     def test_current_database(self):
         spark = self.spark
         with self.database("some_db"):
-            self.assertEquals(spark.catalog.currentDatabase(), "default")
+            self.assertEqual(spark.catalog.currentDatabase(), "default")
             spark.sql("CREATE DATABASE some_db")
             spark.catalog.setCurrentDatabase("some_db")
-            self.assertEquals(spark.catalog.currentDatabase(), "some_db")
-            self.assertRaisesRegexp(
+            self.assertEqual(spark.catalog.currentDatabase(), "some_db")
+            self.assertRaisesRegex(
                 AnalysisException,
                 "does_not_exist",
                 lambda: spark.catalog.setCurrentDatabase("does_not_exist"))
@@ -37,56 +38,68 @@ class CatalogTests(ReusedSQLTestCase):
         spark = self.spark
         with self.database("some_db"):
             databases = [db.name for db in spark.catalog.listDatabases()]
-            self.assertEquals(databases, ["default"])
+            self.assertEqual(databases, ["default"])
             spark.sql("CREATE DATABASE some_db")
             databases = [db.name for db in spark.catalog.listDatabases()]
-            self.assertEquals(sorted(databases), ["default", "some_db"])
+            self.assertEqual(sorted(databases), ["default", "some_db"])
 
     def test_list_tables(self):
         from pyspark.sql.catalog import Table
         spark = self.spark
         with self.database("some_db"):
             spark.sql("CREATE DATABASE some_db")
-            with self.table("tab1", "some_db.tab2"):
+            with self.table("tab1", "some_db.tab2", "tab3_via_catalog"):
                 with self.tempView("temp_tab"):
-                    self.assertEquals(spark.catalog.listTables(), [])
-                    self.assertEquals(spark.catalog.listTables("some_db"), [])
+                    self.assertEqual(spark.catalog.listTables(), [])
+                    self.assertEqual(spark.catalog.listTables("some_db"), [])
                     spark.createDataFrame([(1, 1)]).createOrReplaceTempView("temp_tab")
                     spark.sql("CREATE TABLE tab1 (name STRING, age INT) USING parquet")
                     spark.sql("CREATE TABLE some_db.tab2 (name STRING, age INT) USING parquet")
+
+                    schema = StructType([StructField("a", IntegerType(), True)])
+                    description = "this a table created via Catalog.createTable()"
+                    spark.catalog.createTable(
+                        "tab3_via_catalog", schema=schema, description=description)
+
                     tables = sorted(spark.catalog.listTables(), key=lambda t: t.name)
                     tablesDefault = \
                         sorted(spark.catalog.listTables("default"), key=lambda t: t.name)
                     tablesSomeDb = \
                         sorted(spark.catalog.listTables("some_db"), key=lambda t: t.name)
-                    self.assertEquals(tables, tablesDefault)
-                    self.assertEquals(len(tables), 2)
-                    self.assertEquals(len(tablesSomeDb), 2)
-                    self.assertEquals(tables[0], Table(
+                    self.assertEqual(tables, tablesDefault)
+                    self.assertEqual(len(tables), 3)
+                    self.assertEqual(len(tablesSomeDb), 2)
+                    self.assertEqual(tables[0], Table(
                         name="tab1",
                         database="default",
                         description=None,
                         tableType="MANAGED",
                         isTemporary=False))
-                    self.assertEquals(tables[1], Table(
+                    self.assertEqual(tables[1], Table(
+                        name="tab3_via_catalog",
+                        database="default",
+                        description=description,
+                        tableType="MANAGED",
+                        isTemporary=False))
+                    self.assertEqual(tables[2], Table(
                         name="temp_tab",
                         database=None,
                         description=None,
                         tableType="TEMPORARY",
                         isTemporary=True))
-                    self.assertEquals(tablesSomeDb[0], Table(
+                    self.assertEqual(tablesSomeDb[0], Table(
                         name="tab2",
                         database="some_db",
                         description=None,
                         tableType="MANAGED",
                         isTemporary=False))
-                    self.assertEquals(tablesSomeDb[1], Table(
+                    self.assertEqual(tablesSomeDb[1], Table(
                         name="temp_tab",
                         database=None,
                         description=None,
                         tableType="TEMPORARY",
                         isTemporary=True))
-                    self.assertRaisesRegexp(
+                    self.assertRaisesRegex(
                         AnalysisException,
                         "does_not_exist",
                         lambda: spark.catalog.listTables("does_not_exist"))
@@ -106,12 +119,12 @@ class CatalogTests(ReusedSQLTestCase):
             self.assertTrue("to_timestamp" in functions)
             self.assertTrue("to_unix_timestamp" in functions)
             self.assertTrue("current_database" in functions)
-            self.assertEquals(functions["+"], Function(
+            self.assertEqual(functions["+"], Function(
                 name="+",
                 description=None,
                 className="org.apache.spark.sql.catalyst.expressions.Add",
                 isTemporary=True))
-            self.assertEquals(functions, functionsDefault)
+            self.assertEqual(functions, functionsDefault)
 
             with self.function("func1", "some_db.func2"):
                 spark.catalog.registerFunction("temp_func", lambda x: str(x))
@@ -128,7 +141,7 @@ class CatalogTests(ReusedSQLTestCase):
                 self.assertTrue("temp_func" in newFunctionsSomeDb)
                 self.assertTrue("func1" not in newFunctionsSomeDb)
                 self.assertTrue("func2" in newFunctionsSomeDb)
-                self.assertRaisesRegexp(
+                self.assertRaisesRegex(
                     AnalysisException,
                     "does_not_exist",
                     lambda: spark.catalog.listFunctions("does_not_exist"))
@@ -145,16 +158,16 @@ class CatalogTests(ReusedSQLTestCase):
                 columns = sorted(spark.catalog.listColumns("tab1"), key=lambda c: c.name)
                 columnsDefault = \
                     sorted(spark.catalog.listColumns("tab1", "default"), key=lambda c: c.name)
-                self.assertEquals(columns, columnsDefault)
-                self.assertEquals(len(columns), 2)
-                self.assertEquals(columns[0], Column(
+                self.assertEqual(columns, columnsDefault)
+                self.assertEqual(len(columns), 2)
+                self.assertEqual(columns[0], Column(
                     name="age",
                     description=None,
                     dataType="int",
                     nullable=True,
                     isPartition=False,
                     isBucket=False))
-                self.assertEquals(columns[1], Column(
+                self.assertEqual(columns[1], Column(
                     name="name",
                     description=None,
                     dataType="string",
@@ -163,26 +176,26 @@ class CatalogTests(ReusedSQLTestCase):
                     isBucket=False))
                 columns2 = \
                     sorted(spark.catalog.listColumns("tab2", "some_db"), key=lambda c: c.name)
-                self.assertEquals(len(columns2), 2)
-                self.assertEquals(columns2[0], Column(
+                self.assertEqual(len(columns2), 2)
+                self.assertEqual(columns2[0], Column(
                     name="nickname",
                     description=None,
                     dataType="string",
                     nullable=True,
                     isPartition=False,
                     isBucket=False))
-                self.assertEquals(columns2[1], Column(
+                self.assertEqual(columns2[1], Column(
                     name="tolerance",
                     description=None,
                     dataType="float",
                     nullable=True,
                     isPartition=False,
                     isBucket=False))
-                self.assertRaisesRegexp(
+                self.assertRaisesRegex(
                     AnalysisException,
                     "tab2",
                     lambda: spark.catalog.listColumns("tab2"))
-                self.assertRaisesRegexp(
+                self.assertRaisesRegex(
                     AnalysisException,
                     "does_not_exist",
                     lambda: spark.catalog.listColumns("does_not_exist"))
@@ -190,10 +203,10 @@ class CatalogTests(ReusedSQLTestCase):
 
 if __name__ == "__main__":
     import unittest
-    from pyspark.sql.tests.test_catalog import *
+    from pyspark.sql.tests.test_catalog import *  # noqa: F401
 
     try:
-        import xmlrunner
+        import xmlrunner  # type: ignore[import]
         testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None

@@ -23,14 +23,12 @@ license: |
 Spark can run on clusters managed by [Kubernetes](https://kubernetes.io). This feature makes use of native
 Kubernetes scheduler that has been added to Spark.
 
-**The Kubernetes scheduler is currently experimental.
-In future versions, there may be behavioral changes around configuration,
-container images and entrypoints.**
-
 # Security
 
-Security in Spark is OFF by default. This could mean you are vulnerable to attack by default.
-Please see [Spark Security](security.html) and the specific advice below before running Spark.
+Security features like authentication are not enabled by default. When deploying a cluster that is open to the internet
+or an untrusted network, it's important to secure access to the cluster to prevent unauthorized applications
+from running on the cluster.
+Please see [Spark Security](security.html) and the specific security sections in this doc before running Spark.
 
 ## User Identity
 
@@ -77,8 +75,7 @@ logs and remains in "completed" state in the Kubernetes API until it's eventuall
 
 Note that in the completed state, the driver pod does *not* use any computational or memory resources.
 
-The driver and executor pod scheduling is handled by Kubernetes. Communication to the Kubernetes API is done via fabric8, and we are
-currently running <code>kubernetes-client</code> version <code>4.1.0</code>. Make sure that when you are making infrastructure additions that you are aware of said version. It is possible to schedule the
+The driver and executor pod scheduling is handled by Kubernetes. Communication to the Kubernetes API is done via fabric8. It is possible to schedule the
 driver and executor pods on a subset of available nodes through a [node selector](https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#nodeselector)
 using the configuration property for it. It will be possible to use more advanced
 scheduling hints like [node/pod affinities](https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#affinity-and-anti-affinity) in a future release.
@@ -198,6 +195,9 @@ for any reason, these pods will remain in the cluster. The executor processes sh
 driver, so the executor pods should not consume compute resources (cpu and memory) in the cluster after your application
 exits.
 
+You may use `spark.kubernetes.executor.podNamePrefix` to fully control the executor pod names.
+When this property is set, it's highly recommended to make it unique across all jobs in the same namespace.
+
 ### Authentication Parameters
 
 Use the exact prefix `spark.kubernetes.authenticate` for Kubernetes authentication parameters in client mode.
@@ -214,7 +214,7 @@ A typical example of this using S3 is via passing the following options:
 
 ```
 ...
---packages com.amazonaws:aws-java-sdk:1.7.4,org.apache.hadoop:hadoop-aws:2.7.6
+--packages org.apache.hadoop:hadoop-aws:3.2.2
 --conf spark.kubernetes.file.upload.path=s3a://<s3-bucket>/path
 --conf spark.hadoop.fs.s3a.access.key=...
 --conf spark.hadoop.fs.s3a.impl=org.apache.hadoop.fs.s3a.S3AFileSystem
@@ -227,7 +227,7 @@ The app jar file will be uploaded to the S3 and then when the driver is launched
 to the driver pod and will be added to its classpath. Spark will generate a subdir under the upload path with a random name
 to avoid conflicts with spark apps running in parallel. User could manage the subdirs created according to his needs.
 
-The client scheme is supported for the application jar, and dependencies specified by properties `spark.jars` and `spark.files`.
+The client scheme is supported for the application jar, and dependencies specified by properties `spark.jars`, `spark.files` and `spark.archives`.
 
 Important: all client-side dependencies will be uploaded to the given path with a flat directory structure so
 file names must be unique otherwise files will be overwritten. Also make sure in the derived k8s image default ivy dir
@@ -258,7 +258,14 @@ To use a secret through an environment variable use the following options to the
 Kubernetes allows defining pods from [template files](https://kubernetes.io/docs/concepts/workloads/pods/pod-overview/#pod-templates).
 Spark users can similarly use template files to define the driver or executor pod configurations that Spark configurations do not support.
 To do so, specify the spark properties `spark.kubernetes.driver.podTemplateFile` and `spark.kubernetes.executor.podTemplateFile`
-to point to local files accessible to the `spark-submit` process. To allow the driver pod access the executor pod template
+to point to files accessible to the `spark-submit` process.
+
+```
+--conf spark.kubernetes.driver.podTemplateFile=s3a://bucket/driver.yml
+--conf spark.kubernetes.executor.podTemplateFile=s3a://bucket/executor.yml
+```
+
+To allow the driver pod access the executor pod template
 file, the file will be automatically mounted onto a volume in the driver pod when it's created.
 Spark does not do any validation after unmarshalling these template files and relies on the Kubernetes API server for validation.
 
@@ -275,10 +282,11 @@ will be the driver or executor container.
 
 ## Using Kubernetes Volumes
 
-Starting with Spark 2.4.0, users can mount the following types of Kubernetes [volumes](https://kubernetes.io/docs/concepts/storage/volumes/) into the driver and executor pods:
+Users can mount the following types of Kubernetes [volumes](https://kubernetes.io/docs/concepts/storage/volumes/) into the driver and executor pods:
 * [hostPath](https://kubernetes.io/docs/concepts/storage/volumes/#hostpath): mounts a file or directory from the host node’s filesystem into a pod.
 * [emptyDir](https://kubernetes.io/docs/concepts/storage/volumes/#emptydir): an initially empty volume created when a pod is assigned to a node.
-* [persistentVolumeClaim](https://kubernetes.io/docs/concepts/storage/volumes/#persistentvolumeclaim): used to mount a `PersistentVolume` into a pod.
+* [nfs](https://kubernetes.io/docs/concepts/storage/volumes/#nfs): mounts an existing NFS(Network File System) into a pod.
+* [persistentVolumeClaim](https://kubernetes.io/docs/concepts/storage/volumes/#persistentvolumeclaim): mounts a `PersistentVolume` into a pod.
 
 **NB:** Please see the [Security](#security) section of this document for security issues related to volume mounts.
 
@@ -290,7 +298,7 @@ To mount a volume of any of the types above into the driver pod, use the followi
 --conf spark.kubernetes.driver.volumes.[VolumeType].[VolumeName].mount.subPath=<mount subPath>
 ```
 
-Specifically, `VolumeType` can be one of the following values: `hostPath`, `emptyDir`, and `persistentVolumeClaim`. `VolumeName` is the name you want to use for the volume under the `volumes` field in the pod specification.
+Specifically, `VolumeType` can be one of the following values: `hostPath`, `emptyDir`, `nfs` and `persistentVolumeClaim`. `VolumeName` is the name you want to use for the volume under the `volumes` field in the pod specification.
 
 Each supported type of volumes may have some specific configuration options, which can be specified using configuration properties of the following form:
 
@@ -298,13 +306,31 @@ Each supported type of volumes may have some specific configuration options, whi
 spark.kubernetes.driver.volumes.[VolumeType].[VolumeName].options.[OptionName]=<value>
 ```
 
-For example, the claim name of a `persistentVolumeClaim` with volume name `checkpointpvc` can be specified using the following property:
+For example, the server and path of a `nfs` with volume name `images` can be specified using the following properties:
+
+```
+spark.kubernetes.driver.volumes.nfs.images.options.server=example.com
+spark.kubernetes.driver.volumes.nfs.images.options.path=/data
+```
+
+And, the claim name of a `persistentVolumeClaim` with volume name `checkpointpvc` can be specified using the following property:
 
 ```
 spark.kubernetes.driver.volumes.persistentVolumeClaim.checkpointpvc.options.claimName=check-point-pvc-claim
 ```
 
-The configuration properties for mounting volumes into the executor pods use prefix `spark.kubernetes.executor.` instead of `spark.kubernetes.driver.`. For a complete list of available options for each supported type of volumes, please refer to the [Spark Properties](#spark-properties) section below.
+The configuration properties for mounting volumes into the executor pods use prefix `spark.kubernetes.executor.` instead of `spark.kubernetes.driver.`.
+
+For example, you can mount a dynamically-created persistent volume claim per executor by using `OnDemand` as a claim name and `storageClass` and `sizeLimit` options like the following. This is useful in case of [Dynamic Allocation](configuration.html#dynamic-allocation).
+```
+spark.kubernetes.executor.volumes.persistentVolumeClaim.data.options.claimName=OnDemand
+spark.kubernetes.executor.volumes.persistentVolumeClaim.data.options.storageClass=gp
+spark.kubernetes.executor.volumes.persistentVolumeClaim.data.options.sizeLimit=500Gi
+spark.kubernetes.executor.volumes.persistentVolumeClaim.data.mount.path=/data
+spark.kubernetes.executor.volumes.persistentVolumeClaim.data.mount.readOnly=false
+```
+
+For a complete list of available options for each supported type of volumes, please refer to the [Spark Properties](#spark-properties) section below.
 
 ## Local Storage
 
@@ -315,6 +341,15 @@ Spark supports using volumes to spill data during shuffles and other operations.
 --conf spark.kubernetes.driver.volumes.[VolumeType].spark-local-dir-[VolumeName].mount.readOnly=false
 ```
 
+Specifically, you can use persistent volume claims if the jobs require large shuffle and sorting operations in executors.
+
+```
+spark.kubernetes.executor.volumes.persistentVolumeClaim.spark-local-dir-1.options.claimName=OnDemand
+spark.kubernetes.executor.volumes.persistentVolumeClaim.spark-local-dir-1.options.storageClass=gp
+spark.kubernetes.executor.volumes.persistentVolumeClaim.spark-local-dir-1.options.sizeLimit=500Gi
+spark.kubernetes.executor.volumes.persistentVolumeClaim.spark-local-dir-1.mount.path=/data
+spark.kubernetes.executor.volumes.persistentVolumeClaim.spark-local-dir-1.mount.readOnly=false
+```
 
 If no volume is set as local storage, Spark uses temporary scratch space to spill data to disk during shuffles and other operations. When using Kubernetes as the resource manager the pods will be created with an [emptyDir](https://kubernetes.io/docs/concepts/storage/volumes/#emptydir) volume mounted for each directory listed in `spark.local.dir` or the environment variable `SPARK_LOCAL_DIRS` .  If no directories are explicitly specified then a default directory is created and configured appropriately.
 
@@ -495,7 +530,7 @@ See the [configuration page](configuration.html) for information on Spark config
 #### Spark Properties
 
 <table class="table">
-<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr>
 <tr>
   <td><code>spark.kubernetes.context</code></td>
   <td><code>(none)</code></td>
@@ -506,6 +541,15 @@ See the [configuration page](configuration.html) for information on Spark config
     auto-configured settings can be overridden by the use of other Spark
     configuration properties e.g. <code>spark.kubernetes.namespace</code>.
   </td>
+  <td>3.0.0</td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.driver.master</code></td>
+  <td><code>https://kubernetes.default.svc</code></td>
+  <td>
+    The internal Kubernetes master (API server) address to be used for driver to request executors.
+  </td>
+  <td>3.0.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.namespace</code></td>
@@ -513,6 +557,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>
     The namespace that will be used for running the driver and executor pods.
   </td>
+  <td>2.3.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.container.image</code></td>
@@ -523,6 +568,7 @@ See the [configuration page](configuration.html) for information on Spark config
     This configuration is required and must be provided by the user, unless explicit
     images are provided for each different container type.
   </td>
+  <td>2.3.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.driver.container.image</code></td>
@@ -530,6 +576,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>
     Custom container image to use for the driver.
   </td>
+  <td>2.3.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.executor.container.image</code></td>
@@ -537,6 +584,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>
     Custom container image to use for executors.
   </td>
+  <td>2.3.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.container.image.pullPolicy</code></td>
@@ -544,6 +592,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>
     Container image pull policy used when pulling images within Kubernetes.
   </td>
+  <td>2.3.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.container.image.pullSecrets</code></td>
@@ -551,6 +600,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>
     Comma separated list of Kubernetes secrets used to pull images from private image registries.
   </td>
+  <td>2.4.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.allocation.batch.size</code></td>
@@ -558,6 +608,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>
     Number of pods to launch at once in each round of executor pod allocation.
   </td>
+  <td>2.3.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.allocation.batch.delay</code></td>
@@ -566,6 +617,7 @@ See the [configuration page](configuration.html) for information on Spark config
     Time to wait between each round of executor pod allocation. Specifying values less than 1 second may lead to
     excessive CPU usage on the spark driver.
   </td>
+  <td>2.3.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.authenticate.submission.caCertFile</code></td>
@@ -575,6 +627,7 @@ See the [configuration page](configuration.html) for information on Spark config
     must be located on the submitting machine's disk. Specify this as a path as opposed to a URI (i.e. do not provide
     a scheme). In client mode, use <code>spark.kubernetes.authenticate.caCertFile</code> instead.
   </td>
+  <td>2.3.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.authenticate.submission.clientKeyFile</code></td>
@@ -584,6 +637,7 @@ See the [configuration page](configuration.html) for information on Spark config
     must be located on the submitting machine's disk. Specify this as a path as opposed to a URI (i.e. do not provide
     a scheme). In client mode, use <code>spark.kubernetes.authenticate.clientKeyFile</code> instead.
   </td>
+  <td>2.3.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.authenticate.submission.clientCertFile</code></td>
@@ -593,6 +647,7 @@ See the [configuration page](configuration.html) for information on Spark config
     file must be located on the submitting machine's disk. Specify this as a path as opposed to a URI (i.e. do not
     provide a scheme). In client mode, use <code>spark.kubernetes.authenticate.clientCertFile</code> instead.
   </td>
+  <td>2.3.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.authenticate.submission.oauthToken</code></td>
@@ -602,6 +657,7 @@ See the [configuration page](configuration.html) for information on Spark config
     that unlike the other authentication options, this is expected to be the exact string value of the token to use for
     the authentication. In client mode, use <code>spark.kubernetes.authenticate.oauthToken</code> instead.
   </td>
+  <td>2.3.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.authenticate.submission.oauthTokenFile</code></td>
@@ -611,6 +667,7 @@ See the [configuration page](configuration.html) for information on Spark config
     This file must be located on the submitting machine's disk. Specify this as a path as opposed to a URI (i.e. do not
     provide a scheme). In client mode, use <code>spark.kubernetes.authenticate.oauthTokenFile</code> instead.
   </td>
+  <td>2.3.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.authenticate.driver.caCertFile</code></td>
@@ -621,6 +678,7 @@ See the [configuration page](configuration.html) for information on Spark config
     Specify this as a path as opposed to a URI (i.e. do not provide a scheme). In client mode, use
     <code>spark.kubernetes.authenticate.caCertFile</code> instead.
   </td>
+  <td>2.3.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.authenticate.driver.clientKeyFile</code></td>
@@ -631,6 +689,7 @@ See the [configuration page](configuration.html) for information on Spark config
     a Kubernetes secret. Specify this as a path as opposed to a URI (i.e. do not provide a scheme).
     In client mode, use <code>spark.kubernetes.authenticate.clientKeyFile</code> instead.
   </td>
+  <td>2.3.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.authenticate.driver.clientCertFile</code></td>
@@ -641,6 +700,7 @@ See the [configuration page](configuration.html) for information on Spark config
     driver pod as a Kubernetes secret. Specify this as a path as opposed to a URI (i.e. do not provide a scheme).
     In client mode, use <code>spark.kubernetes.authenticate.clientCertFile</code> instead.
   </td>
+  <td>2.3.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.authenticate.driver.oauthToken</code></td>
@@ -651,6 +711,7 @@ See the [configuration page](configuration.html) for information on Spark config
     the token to use for the authentication. This token value is uploaded to the driver pod as a Kubernetes secret.
     In client mode, use <code>spark.kubernetes.authenticate.oauthToken</code> instead.
   </td>
+  <td>2.3.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.authenticate.driver.oauthTokenFile</code></td>
@@ -661,6 +722,7 @@ See the [configuration page](configuration.html) for information on Spark config
     the token to use for the authentication. This token value is uploaded to the driver pod as a secret. In client mode, use
     <code>spark.kubernetes.authenticate.oauthTokenFile</code> instead.
   </td>
+  <td>2.3.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.authenticate.driver.mounted.caCertFile</code></td>
@@ -671,6 +733,7 @@ See the [configuration page](configuration.html) for information on Spark config
     Specify this as a path as opposed to a URI (i.e. do not provide a scheme). In client mode, use
     <code>spark.kubernetes.authenticate.caCertFile</code> instead.
   </td>
+  <td>2.3.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.authenticate.driver.mounted.clientKeyFile</code></td>
@@ -681,6 +744,7 @@ See the [configuration page](configuration.html) for information on Spark config
     Specify this as a path as opposed to a URI (i.e. do not provide a scheme). In client mode, use
     <code>spark.kubernetes.authenticate.clientKeyFile</code> instead.
   </td>
+  <td>2.3.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.authenticate.driver.mounted.clientCertFile</code></td>
@@ -691,6 +755,7 @@ See the [configuration page](configuration.html) for information on Spark config
     Specify this as a path as opposed to a URI (i.e. do not provide a scheme). In client mode, use
     <code>spark.kubernetes.authenticate.clientCertFile</code> instead.
   </td>
+  <td>2.3.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.authenticate.driver.mounted.oauthTokenFile</code></td>
@@ -701,6 +766,7 @@ See the [configuration page](configuration.html) for information on Spark config
     Note that unlike the other authentication options, this file must contain the exact string value of the token to use
     for the authentication. In client mode, use <code>spark.kubernetes.authenticate.oauthTokenFile</code> instead.
   </td>
+  <td>2.3.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.authenticate.driver.serviceAccountName</code></td>
@@ -710,6 +776,7 @@ See the [configuration page](configuration.html) for information on Spark config
     executor pods from the API server. Note that this cannot be specified alongside a CA cert file, client key file,
     client cert file, and/or OAuth token. In client mode, use <code>spark.kubernetes.authenticate.serviceAccountName</code> instead.
   </td>
+  <td>2.3.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.authenticate.caCertFile</code></td>
@@ -718,6 +785,7 @@ See the [configuration page](configuration.html) for information on Spark config
     In client mode, path to the CA cert file for connecting to the Kubernetes API server over TLS when
     requesting executors. Specify this as a path as opposed to a URI (i.e. do not provide a scheme).
   </td>
+  <td>2.4.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.authenticate.clientKeyFile</code></td>
@@ -726,6 +794,7 @@ See the [configuration page](configuration.html) for information on Spark config
     In client mode, path to the client key file for authenticating against the Kubernetes API server
     when requesting executors. Specify this as a path as opposed to a URI (i.e. do not provide a scheme).
   </td>
+  <td>2.4.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.authenticate.clientCertFile</code></td>
@@ -734,6 +803,7 @@ See the [configuration page](configuration.html) for information on Spark config
     In client mode, path to the client cert file for authenticating against the Kubernetes API server
     when requesting executors. Specify this as a path as opposed to a URI (i.e. do not provide a scheme).
   </td>
+  <td>2.4.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.authenticate.oauthToken</code></td>
@@ -743,6 +813,7 @@ See the [configuration page](configuration.html) for information on Spark config
     requesting executors. Note that unlike the other authentication options, this must be the exact string value of
     the token to use for the authentication.
   </td>
+  <td>2.4.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.authenticate.oauthTokenFile</code></td>
@@ -751,6 +822,7 @@ See the [configuration page](configuration.html) for information on Spark config
     In client mode, path to the file containing the OAuth token to use when authenticating against the Kubernetes API
     server when requesting executors.
   </td>
+  <td>2.4.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.driver.label.[LabelName]</code></td>
@@ -761,14 +833,25 @@ See the [configuration page](configuration.html) for information on Spark config
     Note that Spark also adds its own labels to the driver pod
     for bookkeeping purposes.
   </td>
+  <td>2.3.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.driver.annotation.[AnnotationName]</code></td>
   <td>(none)</td>
   <td>
-    Add the annotation specified by <code>AnnotationName</code> to the driver pod.
+    Add the Kubernetes <a href="https://kubernetes.io/docs/concepts/overview/working-with-objects/annotations/">annotation</a> specified by <code>AnnotationName</code> to the driver pod.
     For example, <code>spark.kubernetes.driver.annotation.something=true</code>.
   </td>
+  <td>2.3.0</td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.driver.service.annotation.[AnnotationName]</code></td>
+  <td>(none)</td>
+  <td>
+    Add the Kubernetes <a href="https://kubernetes.io/docs/concepts/overview/working-with-objects/annotations/">annotation</a> specified by <code>AnnotationName</code> to the driver service.
+    For example, <code>spark.kubernetes.driver.service.annotation.something=true</code>.
+  </td>
+  <td>3.0.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.executor.label.[LabelName]</code></td>
@@ -779,14 +862,16 @@ See the [configuration page](configuration.html) for information on Spark config
     Note that Spark also adds its own labels to the executor pod
     for bookkeeping purposes.
   </td>
+  <td>2.3.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.executor.annotation.[AnnotationName]</code></td>
   <td>(none)</td>
   <td>
-    Add the annotation specified by <code>AnnotationName</code> to the executor pods.
+    Add the Kubernetes <a href="https://kubernetes.io/docs/concepts/overview/working-with-objects/annotations/">annotation</a> specified by <code>AnnotationName</code> to the executor pods.
     For example, <code>spark.kubernetes.executor.annotation.something=true</code>.
   </td>
+  <td>2.3.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.driver.pod.name</code></td>
@@ -798,6 +883,15 @@ See the [configuration page](configuration.html) for information on Spark config
     value in client mode allows the driver to become the owner of its executor pods, which in turn allows the executor
     pods to be garbage collected by the cluster.
   </td>
+  <td>2.3.0</td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.executor.podNamePrefix</code></td>
+  <td>(none)</td>
+  <td>
+    Prefix to use in front of the executor pod names.
+  </td>
+  <td>2.3.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.executor.lostCheck.maxAttempts</code></td>
@@ -807,6 +901,7 @@ See the [configuration page](configuration.html) for information on Spark config
     The loss reason is used to ascertain whether the executor failure is due to a framework or an application error
     which in turn decides whether the executor is removed and replaced, or placed into a failed state for debugging.
   </td>
+  <td>2.3.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.submission.waitAppCompletion</code></td>
@@ -815,6 +910,7 @@ See the [configuration page](configuration.html) for information on Spark config
     In cluster mode, whether to wait for the application to finish before exiting the launcher process.  When changed to
     false, the launcher has a "fire-and-forget" behavior when launching the Spark job.
   </td>
+  <td>2.3.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.report.interval</code></td>
@@ -822,6 +918,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>
     Interval between reports of the current Spark job status in cluster mode.
   </td>
+  <td>2.3.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.driver.request.cores</code></td>
@@ -831,6 +928,7 @@ See the [configuration page](configuration.html) for information on Spark config
     Example values include 0.1, 500m, 1.5, 5, etc., with the definition of cpu units documented in <a href="https://kubernetes.io/docs/tasks/configure-pod-container/assign-cpu-resource/#cpu-units">CPU units</a>.
     This takes precedence over <code>spark.driver.cores</code> for specifying the driver pod cpu request if set.
   </td>
+  <td>3.0.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.driver.limit.cores</code></td>
@@ -838,6 +936,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>
     Specify a hard cpu <a href="https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#resource-requests-and-limits-of-pod-and-container">limit</a> for the driver pod.
   </td>
+  <td>2.3.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.executor.request.cores</code></td>
@@ -848,6 +947,7 @@ See the [configuration page](configuration.html) for information on Spark config
     This is distinct from <code>spark.executor.cores</code>: it is only used and takes precedence over <code>spark.executor.cores</code> for specifying the executor pod cpu request if set. Task
     parallelism, e.g., number of tasks an executor can run concurrently is not affected by this.
   </td>
+  <td>2.4.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.executor.limit.cores</code></td>
@@ -855,6 +955,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>
     Specify a hard cpu <a href="https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#resource-requests-and-limits-of-pod-and-container">limit</a> for each executor pod launched for the Spark Application.
   </td>
+  <td>2.3.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.node.selector.[labelKey]</code></td>
@@ -865,6 +966,7 @@ See the [configuration page](configuration.html) for information on Spark config
     will result in the driver pod and executors having a node selector with key <code>identifier</code> and value
      <code>myIdentifier</code>. Multiple node selector keys can be added by setting multiple configurations with this prefix.
   </td>
+  <td>2.3.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.driverEnv.[EnvironmentVariableName]</code></td>
@@ -873,6 +975,7 @@ See the [configuration page](configuration.html) for information on Spark config
     Add the environment variable specified by <code>EnvironmentVariableName</code> to
     the Driver process. The user can specify multiple of these to set multiple environment variables.
   </td>
+  <td>2.3.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.driver.secrets.[SecretName]</code></td>
@@ -881,6 +984,7 @@ See the [configuration page](configuration.html) for information on Spark config
    Add the <a href="https://kubernetes.io/docs/concepts/configuration/secret/">Kubernetes Secret</a> named <code>SecretName</code> to the driver pod on the path specified in the value. For example,
    <code>spark.kubernetes.driver.secrets.spark-secret=/etc/secrets</code>.
   </td>
+  <td>2.3.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.executor.secrets.[SecretName]</code></td>
@@ -889,6 +993,7 @@ See the [configuration page](configuration.html) for information on Spark config
    Add the <a href="https://kubernetes.io/docs/concepts/configuration/secret/">Kubernetes Secret</a> named <code>SecretName</code> to the executor pod on the path specified in the value. For example,
    <code>spark.kubernetes.executor.secrets.spark-secret=/etc/secrets</code>.
   </td>
+  <td>2.3.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.driver.secretKeyRef.[EnvName]</code></td>
@@ -897,6 +1002,7 @@ See the [configuration page](configuration.html) for information on Spark config
    Add as an environment variable to the driver container with name EnvName (case sensitive), the value referenced by key <code> key </code> in the data of the referenced <a href="https://kubernetes.io/docs/concepts/configuration/secret/#using-secrets-as-environment-variables">Kubernetes Secret</a>. For example,
    <code>spark.kubernetes.driver.secretKeyRef.ENV_VAR=spark-secret:key</code>.
   </td>
+  <td>2.4.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.executor.secretKeyRef.[EnvName]</code></td>
@@ -905,6 +1011,7 @@ See the [configuration page](configuration.html) for information on Spark config
    Add as an environment variable to the executor container with name EnvName (case sensitive), the value referenced by key <code> key </code> in the data of the referenced <a href="https://kubernetes.io/docs/concepts/configuration/secret/#using-secrets-as-environment-variables">Kubernetes Secret</a>. For example,
    <code>spark.kubernetes.executor.secrets.ENV_VAR=spark-secret:key</code>.
   </td>
+  <td>2.4.0</td>
 </tr>   
 <tr>
   <td><code>spark.kubernetes.driver.volumes.[VolumeType].[VolumeName].mount.path</code></td>
@@ -913,6 +1020,7 @@ See the [configuration page](configuration.html) for information on Spark config
    Add the <a href="https://kubernetes.io/docs/concepts/storage/volumes/">Kubernetes Volume</a> named <code>VolumeName</code> of the <code>VolumeType</code> type to the driver pod on the path specified in the value. For example,
    <code>spark.kubernetes.driver.volumes.persistentVolumeClaim.checkpointpvc.mount.path=/checkpoint</code>.
   </td>
+  <td>2.4.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.driver.volumes.[VolumeType].[VolumeName].mount.subPath</code></td>
@@ -921,6 +1029,7 @@ See the [configuration page](configuration.html) for information on Spark config
    Specifies a <a href="https://kubernetes.io/docs/concepts/storage/volumes/#using-subpath">subpath</a> to be mounted from the volume into the driver pod.
    <code>spark.kubernetes.driver.volumes.persistentVolumeClaim.checkpointpvc.mount.subPath=checkpoint</code>.
   </td>
+  <td>3.0.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.driver.volumes.[VolumeType].[VolumeName].mount.readOnly</code></td>
@@ -929,6 +1038,7 @@ See the [configuration page](configuration.html) for information on Spark config
    Specify if the mounted volume is read only or not. For example,
    <code>spark.kubernetes.driver.volumes.persistentVolumeClaim.checkpointpvc.mount.readOnly=false</code>.
   </td>
+  <td>2.4.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.driver.volumes.[VolumeType].[VolumeName].options.[OptionName]</code></td>
@@ -937,6 +1047,7 @@ See the [configuration page](configuration.html) for information on Spark config
    Configure <a href="https://kubernetes.io/docs/concepts/storage/volumes/">Kubernetes Volume</a> options passed to the Kubernetes with <code>OptionName</code> as key having specified value, must conform with Kubernetes option format. For example,
    <code>spark.kubernetes.driver.volumes.persistentVolumeClaim.checkpointpvc.options.claimName=spark-pvc-claim</code>.
   </td>
+  <td>2.4.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.executor.volumes.[VolumeType].[VolumeName].mount.path</code></td>
@@ -945,6 +1056,7 @@ See the [configuration page](configuration.html) for information on Spark config
    Add the <a href="https://kubernetes.io/docs/concepts/storage/volumes/">Kubernetes Volume</a> named <code>VolumeName</code> of the <code>VolumeType</code> type to the executor pod on the path specified in the value. For example,
    <code>spark.kubernetes.executor.volumes.persistentVolumeClaim.checkpointpvc.mount.path=/checkpoint</code>.
   </td>
+  <td>2.4.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.executor.volumes.[VolumeType].[VolumeName].mount.subPath</code></td>
@@ -953,6 +1065,7 @@ See the [configuration page](configuration.html) for information on Spark config
    Specifies a <a href="https://kubernetes.io/docs/concepts/storage/volumes/#using-subpath">subpath</a> to be mounted from the volume into the executor pod.
    <code>spark.kubernetes.executor.volumes.persistentVolumeClaim.checkpointpvc.mount.subPath=checkpoint</code>.
   </td>
+  <td>3.0.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.executor.volumes.[VolumeType].[VolumeName].mount.readOnly</code></td>
@@ -961,6 +1074,7 @@ See the [configuration page](configuration.html) for information on Spark config
    Specify if the mounted volume is read only or not. For example,
    <code>spark.kubernetes.executor.volumes.persistentVolumeClaim.checkpointpvc.mount.readOnly=false</code>.
   </td>
+  <td>2.4.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.executor.volumes.[VolumeType].[VolumeName].options.[OptionName]</code></td>
@@ -969,6 +1083,7 @@ See the [configuration page](configuration.html) for information on Spark config
    Configure <a href="https://kubernetes.io/docs/concepts/storage/volumes/">Kubernetes Volume</a> options passed to the Kubernetes with <code>OptionName</code> as key having specified value. For example,
    <code>spark.kubernetes.executor.volumes.persistentVolumeClaim.checkpointpvc.options.claimName=spark-pvc-claim</code>.
   </td>
+  <td>2.4.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.local.dirs.tmpfs</code></td>
@@ -977,21 +1092,27 @@ See the [configuration page](configuration.html) for information on Spark config
    Configure the <code>emptyDir</code> volumes used to back <code>SPARK_LOCAL_DIRS</code> within the Spark driver and executor pods to use <code>tmpfs</code> backing i.e. RAM.  See <a href="#local-storage">Local Storage</a> earlier on this page
    for more discussion of this.
   </td>
+  <td>3.0.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.memoryOverheadFactor</code></td>
   <td><code>0.1</code></td>
   <td>
     This sets the Memory Overhead Factor that will allocate memory to non-JVM memory, which includes off-heap memory allocations, non-JVM tasks, and various systems processes. For JVM-based jobs this value will default to 0.10 and 0.40 for non-JVM jobs.
-    This is done as non-JVM tasks need more non-JVM heap space and such tasks commonly fail with "Memory Overhead Exceeded" errors. This prempts this error with a higher default.
+    This is done as non-JVM tasks need more non-JVM heap space and such tasks commonly fail with "Memory Overhead Exceeded" errors. This preempts this error with a higher default.
   </td>
+  <td>2.4.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.pyspark.pythonVersion</code></td>
   <td><code>"3"</code></td>
   <td>
-   This sets the major Python version of the docker image used to run the driver and executor containers. Can either be 2 or 3.
+   This sets the major Python version of the docker image used to run the driver and executor containers.
+   It can be only "3". This configuration was deprecated from Spark 3.1.0, and is effectively no-op.
+   Users should set 'spark.pyspark.python' and 'spark.pyspark.driver.python' configurations or
+   'PYSPARK_PYTHON' and 'PYSPARK_DRIVER_PYTHON' environment variables.
   </td>
+  <td>2.4.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.kerberos.krb5.path</code></td>
@@ -1000,6 +1121,7 @@ See the [configuration page](configuration.html) for information on Spark config
    Specify the local location of the krb5.conf file to be mounted on the driver and executors for Kerberos interaction.
    It is important to note that the KDC defined needs to be visible from inside the containers.
   </td>
+  <td>3.0.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.kerberos.krb5.configMapName</code></td>
@@ -1009,6 +1131,7 @@ See the [configuration page](configuration.html) for information on Spark config
    for Kerberos interaction. The KDC defined needs to be visible from inside the containers. The ConfigMap must also
    be in the same namespace of the driver and executor pods.
   </td>
+  <td>3.0.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.hadoop.configMapName</code></td>
@@ -1017,6 +1140,7 @@ See the [configuration page](configuration.html) for information on Spark config
     Specify the name of the ConfigMap, containing the HADOOP_CONF_DIR files, to be mounted on the driver
     and executors for custom Hadoop configuration.
   </td>
+  <td>3.0.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.kerberos.tokenSecret.name</code></td>
@@ -1025,6 +1149,7 @@ See the [configuration page](configuration.html) for information on Spark config
     Specify the name of the secret where your existing delegation tokens are stored. This removes the need for the job user
     to provide any kerberos credentials for launching a job.
   </td>
+  <td>3.0.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.kerberos.tokenSecret.itemKey</code></td>
@@ -1033,6 +1158,7 @@ See the [configuration page](configuration.html) for information on Spark config
     Specify the item key of the data where your existing delegation tokens are stored. This removes the need for the job user
     to provide any kerberos credentials for launching a job.
   </td>
+  <td>3.0.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.driver.podTemplateFile</code></td>
@@ -1041,6 +1167,7 @@ See the [configuration page](configuration.html) for information on Spark config
    Specify the local file that contains the driver <a href="#pod-template">pod template</a>. For example
    <code>spark.kubernetes.driver.podTemplateFile=/path/to/driver-pod-template.yaml</code>
   </td>
+  <td>3.0.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.driver.podTemplateContainerName</code></td>
@@ -1049,6 +1176,7 @@ See the [configuration page](configuration.html) for information on Spark config
    Specify the container name to be used as a basis for the driver in the given <a href="#pod-template">pod template</a>.
    For example <code>spark.kubernetes.driver.podTemplateContainerName=spark-driver</code>
   </td>
+  <td>3.0.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.executor.podTemplateFile</code></td>
@@ -1057,6 +1185,7 @@ See the [configuration page](configuration.html) for information on Spark config
    Specify the local file that contains the executor <a href="#pod-template">pod template</a>. For example
    <code>spark.kubernetes.executor.podTemplateFile=/path/to/executor-pod-template.yaml</code>
   </td>
+  <td>3.0.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.executor.podTemplateContainerName</code></td>
@@ -1065,6 +1194,7 @@ See the [configuration page](configuration.html) for information on Spark config
    Specify the container name to be used as a basis for the executor in the given <a href="#pod-template">pod template</a>.
    For example <code>spark.kubernetes.executor.podTemplateContainerName=spark-executor</code>
   </td>
+  <td>3.0.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.executor.deleteOnTermination</code></td>
@@ -1072,6 +1202,15 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>
   Specify whether executor pods should be deleted in case of failure or normal termination.
   </td>
+  <td>3.0.0</td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.executor.checkAllContainers</code></td>
+  <td>false</td>
+  <td>
+  Specify whether executor pods should be check all containers (including sidecars) or only the executor container when determining the pod status.
+  </td>
+  <td>3.1.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.submission.connectionTimeout</code></td>
@@ -1079,6 +1218,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>
     Connection timeout in milliseconds for the kubernetes client to use for starting the driver.
   </td>
+  <td>3.0.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.submission.requestTimeout</code></td>
@@ -1086,6 +1226,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>
     Request timeout in milliseconds for the kubernetes client to use for starting the driver.
   </td>
+  <td>3.0.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.driver.connectionTimeout</code></td>
@@ -1093,6 +1234,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>
     Connection timeout in milliseconds for the kubernetes client in driver to use when requesting executors.
   </td>
+  <td>3.0.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.driver.requestTimeout</code></td>
@@ -1100,6 +1242,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>
     Request timeout in milliseconds for the kubernetes client in driver to use when requesting executors.
   </td>
+  <td>3.0.0</td>
 </tr>
 <tr>  
   <td><code>spark.kubernetes.appKillPodDeletionGracePeriod</code></td>
@@ -1107,15 +1250,17 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>
   Specify the grace period in seconds when deleting a Spark application using spark-submit.
   </td>
+  <td>3.0.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.file.upload.path</code></td>
   <td>(none)</td>
   <td>
     Path to store files at the spark submit side in cluster mode. For example:
-    <code>spark.kubernetes.file.upload.path=s3a://<s3-bucket>/path</code>
+    <code>spark.kubernetes.file.upload.path=s3a://&lt;s3-bucket&gt;/path</code>
     File should specified as <code>file://path/to/file </code> or absolute path.
   </td>
+  <td>3.0.0</td>
 </tr>
 </table>
 
@@ -1240,10 +1385,10 @@ The following affect the driver and executor containers. All other containers in
 </tr>
 <tr>
   <td>name</td>
-  <td>See description.</code></td>
+  <td>See description</td>
   <td>
     The container name will be assigned by spark ("spark-kubernetes-driver" for the driver container, and
-    "executor" for each executor container) if not defined by the pod template. If the container is defined by the
+    "spark-kubernetes-executor" for each executor container) if not defined by the pod template. If the container is defined by the
     template, the template's name will be used.
   </td>
 </tr>
@@ -1277,3 +1422,7 @@ Spark automatically handles translating the Spark configs <code>spark.{driver/ex
 
 Kubernetes does not tell Spark the addresses of the resources allocated to each container. For that reason, the user must specify a discovery script that gets run by the executor on startup to discover what resources are available to that executor. You can find an example scripts in `examples/src/main/scripts/getGpusResources.sh`. The script must have execute permissions set and the user should setup permissions to not allow malicious users to modify it. The script should write to STDOUT a JSON string in the format of the ResourceInformation class. This has the resource name and an array of resource addresses available to just that executor.
 
+### Stage Level Scheduling Overview
+
+Stage level scheduling is supported on Kubernetes when dynamic allocation is enabled. This also requires <code>spark.dynamicAllocation.shuffleTracking.enabled</code> to be enabled since Kubernetes doesn't support an external shuffle service at this time. The order in which containers for different profiles is requested from Kubernetes is not guaranteed. Note that since dynamic allocation on Kubernetes requires the shuffle tracking feature, this means that executors from previous stages that used a different ResourceProfile may not idle timeout due to having shuffle data on them. This could result in using more cluster resources and in the worst case if there are no remaining resources on the Kubernetes cluster then Spark could potentially hang. You may consider looking at config <code>spark.dynamicAllocation.shuffleTracking.timeout</code> to set a timeout, but that could result in data having to be recomputed if the shuffle data is really needed.
+Note, there is a difference in the way pod template resources are handled between the base default profile and custom ResourceProfiles. Any resources specified in the pod template file will only be used with the base default profile. If you create custom ResourceProfiles be sure to include all necessary resources there since the resources from the template file will not be propagated to custom ResourceProfiles.

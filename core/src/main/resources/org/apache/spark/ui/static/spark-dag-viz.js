@@ -51,6 +51,8 @@
  * since it was forked (commit 101503833a8ce5fe369547f6addf3e71172ce10b).
  */
 
+/* global $, appBasePath, d3, dagreD3, graphlibDot, uiRoot */
+
 var VizConstants = {
   svgMarginX: 16,
   svgMarginY: 16,
@@ -166,16 +168,24 @@ function renderDagViz(forJob) {
   }
 
   // Find cached RDDs and mark them as such
-  metadataContainer().selectAll(".cached-rdd").each(function(v) {
+  metadataContainer().selectAll(".cached-rdd").each(function(_ignored_v) {
     var rddId = d3.select(this).text().trim();
     var nodeId = VizConstants.nodePrefix + rddId;
     svg.selectAll("g." + nodeId).classed("cached", true);
   });
 
   metadataContainer().selectAll(".barrier-rdd").each(function() {
-    var rddId = d3.select(this).text().trim()
-    var clusterId = VizConstants.clusterPrefix + rddId
-    svg.selectAll("g." + clusterId).classed("barrier", true)
+    var opId = d3.select(this).text().trim();
+    var opClusterId = VizConstants.clusterPrefix + opId;
+    var stageId = $(this).parents(".stage-metadata").attr("stage-id");
+    var stageClusterId = VizConstants.graphPrefix + stageId;
+    svg.selectAll("g[id=" + stageClusterId + "] g." + opClusterId).classed("barrier", true)
+  });
+
+  metadataContainer().selectAll(".indeterminate-rdd").each(function(_ignored_v) {
+    var rddId = d3.select(this).text().trim();
+    var nodeId = VizConstants.nodePrefix + rddId;
+    svg.selectAll("g." + nodeId).classed("indeterminate", true);
   });
 
   resizeSvg(svg);
@@ -216,7 +226,7 @@ function renderDagVizForJob(svgContainer) {
     var dot = metadata.select(".dot-file").text();
     var stageId = metadata.attr("stage-id");
     var containerId = VizConstants.graphPrefix + stageId;
-    var isSkipped = metadata.attr("skipped") == "true";
+    var isSkipped = metadata.attr("skipped") === "true";
     var container;
     if (isSkipped) {
       container = svgContainer
@@ -225,11 +235,8 @@ function renderDagVizForJob(svgContainer) {
         .attr("skipped", "true");
     } else {
       // Link each graph to the corresponding stage page (TODO: handle stage attempts)
-      // Use the link from the stage table so it also works for the history server
       var attemptId = 0;
-      var stageLink = d3.select("#stage-" + stageId + "-" + attemptId)
-        .select("a.name-link")
-        .attr("href");
+      var stageLink = uiRoot + appBasePath + "/stages/stage/?id=" + stageId + "&attempt=" + attemptId;
       container = svgContainer
         .append("a")
         .attr("xlink:href", stageLink)
@@ -270,7 +277,7 @@ function renderDagVizForJob(svgContainer) {
     // If there are any incoming edges into this graph, keep track of them to render
     // them separately later. Note that we cannot draw them now because we need to
     // put these edges in a separate container that is on top of all stage graphs.
-    metadata.selectAll(".incoming-edge").each(function(v) {
+    metadata.selectAll(".incoming-edge").each(function(_ignored_v) {
       var edge = d3.select(this).text().trim().split(","); // e.g. 3,4 => [3, 4]
       crossStageEdges.push(edge);
     });
@@ -282,11 +289,7 @@ function renderDagVizForJob(svgContainer) {
 
 /* Render the dot file as an SVG in the given container. */
 function renderDot(dot, container, forJob) {
-  var escaped_dot = dot
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, "\"");
-  var g = graphlibDot.read(escaped_dot);
+  var g = graphlibDot.read(dot);
   var renderer = new dagreD3.render();
   preprocessGraphLayout(g, forJob);
   renderer(container, g);
@@ -339,7 +342,7 @@ function preprocessGraphLayout(g, forJob) {
 }
 
 /*
- * Helper function to size the SVG appropriately such that all elements are displyed.
+ * Helper function to size the SVG appropriately such that all elements are displayed.
  * This assumes that all outermost elements are clusters (rectangles).
  */
 function resizeSvg(svg) {
@@ -498,18 +501,11 @@ function connectRDDs(fromRDDId, toRDDId, edgesContainer, svgContainer) {
   edgesContainer.append("path").datum(points).attr("d", line);
 }
 
-/*
- * Replace `/n` with `<br/>`
- */
-function replaceLineBreak(str) {
-    return str.replace("\\n", "<br/>");
-}
-
 /* (Job page only) Helper function to add tooltips for RDDs. */
 function addTooltipsForRDDs(svgContainer) {
   svgContainer.selectAll("g.node").each(function() {
     var node = d3.select(this);
-    var tooltipText = replaceLineBreak(node.attr("name"));
+    var tooltipText = node.attr("name");
     if (tooltipText) {
       node.select("circle")
         .attr("data-toggle", "tooltip")

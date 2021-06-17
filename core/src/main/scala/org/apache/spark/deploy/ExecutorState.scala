@@ -19,9 +19,13 @@ package org.apache.spark.deploy
 
 private[deploy] object ExecutorState extends Enumeration {
 
-  val LAUNCHING, RUNNING, KILLED, FAILED, LOST, EXITED = Value
+  val LAUNCHING, RUNNING, KILLED, FAILED, LOST, EXITED, DECOMMISSIONED = Value
 
   type ExecutorState = Value
 
-  def isFinished(state: ExecutorState): Boolean = Seq(KILLED, FAILED, LOST, EXITED).contains(state)
+  // DECOMMISSIONED isn't listed as finished since we don't want to remove the executor from
+  // the worker and the executor still exists - but we do want to avoid scheduling new tasks on it.
+  private val finishedStates = Seq(KILLED, FAILED, LOST, EXITED)
+
+  def isFinished(state: ExecutorState): Boolean = finishedStates.contains(state)
 }

@@ -24,6 +24,7 @@ import org.apache.spark.sql.execution.datasources.PartitionedFile
 import org.apache.spark.sql.execution.datasources.json.JsonDataSource
 import org.apache.spark.sql.execution.datasources.v2._
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.SerializableConfiguration
 
@@ -36,6 +37,7 @@ import org.apache.spark.util.SerializableConfiguration
  * @param readDataSchema Required schema of JSON files.
  * @param partitionSchema Schema of partitions.
  * @param parsedOptions Options for parsing JSON files.
+ * @param filters The filters pushed down to JSON datasource.
  */
 case class JsonPartitionReaderFactory(
     sqlConf: SQLConf,
@@ -43,12 +45,17 @@ case class JsonPartitionReaderFactory(
     dataSchema: StructType,
     readDataSchema: StructType,
     partitionSchema: StructType,
-    parsedOptions: JSONOptionsInRead) extends FilePartitionReaderFactory {
+    parsedOptions: JSONOptionsInRead,
+    filters: Seq[Filter]) extends FilePartitionReaderFactory {
 
   override def buildReader(partitionedFile: PartitionedFile): PartitionReader[InternalRow] = {
     val actualSchema =
       StructType(readDataSchema.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord))
-    val parser = new JacksonParser(actualSchema, parsedOptions, allowArrayAsStructs = true)
+    val parser = new JacksonParser(
+      actualSchema,
+      parsedOptions,
+      allowArrayAsStructs = true,
+      filters)
     val iter = JsonDataSource(parsedOptions).readFile(
       broadcastedConf.value.value,
       partitionedFile,

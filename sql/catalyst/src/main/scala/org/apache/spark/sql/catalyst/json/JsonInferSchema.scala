@@ -23,12 +23,13 @@ import scala.util.control.Exception.allCatch
 
 import com.fasterxml.jackson.core._
 
-import org.apache.spark.SparkException
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion
 import org.apache.spark.sql.catalyst.expressions.ExprUtils
 import org.apache.spark.sql.catalyst.json.JacksonUtils.nextUntil
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -40,7 +41,9 @@ private[sql] class JsonInferSchema(options: JSONOptions) extends Serializable {
   private val timestampFormatter = TimestampFormatter(
     options.timestampFormat,
     options.zoneId,
-    options.locale)
+    options.locale,
+    legacyFormat = FAST_DATE_FORMAT,
+    isParsing = true)
 
   /**
    * Infer the type of a collection of json records in three stages:
@@ -71,8 +74,7 @@ private[sql] class JsonInferSchema(options: JSONOptions) extends Serializable {
             case DropMalformedMode =>
               None
             case FailFastMode =>
-              throw new SparkException("Malformed records are detected in schema inference. " +
-                s"Parse Mode: ${FailFastMode.name}.", e)
+              throw QueryExecutionErrors.malformedRecordsDetectedInSchemaInferenceError(e)
           }
         }
       }.reduceOption(typeMerger).toIterator
@@ -90,12 +92,10 @@ private[sql] class JsonInferSchema(options: JSONOptions) extends Serializable {
     }
     json.sparkContext.runJob(mergedTypesFromPartitions, foldPartition, mergeResult)
 
-    canonicalizeType(rootType, options) match {
-      case Some(st: StructType) => st
-      case _ =>
-        // canonicalizeType erases all empty structs, including the only one we want to keep
-        StructType(Nil)
-    }
+    canonicalizeType(rootType, options)
+      .find(_.isInstanceOf[StructType])
+      // canonicalizeType erases all empty structs, including the only one we want to keep
+      .getOrElse(StructType(Nil)).asInstanceOf[StructType]
   }
 
   /**
@@ -189,6 +189,9 @@ private[sql] class JsonInferSchema(options: JSONOptions) extends Serializable {
         }
 
       case VALUE_TRUE | VALUE_FALSE => BooleanType
+
+      case _ =>
+        throw QueryExecutionErrors.malformedJSONError()
     }
   }
 
@@ -196,7 +199,8 @@ private[sql] class JsonInferSchema(options: JSONOptions) extends Serializable {
    * Recursively canonicalizes inferred types, e.g., removes StructTypes with no fields,
    * drops NullTypes or converts them to StringType based on provided options.
    */
-  private def canonicalizeType(tpe: DataType, options: JSONOptions): Option[DataType] = tpe match {
+  private[catalyst] def canonicalizeType(
+      tpe: DataType, options: JSONOptions): Option[DataType] = tpe match {
     case at: ArrayType =>
       canonicalizeType(at.elementType, options)
         .map(t => at.copy(elementType = t))
@@ -269,9 +273,7 @@ object JsonInferSchema {
 
     case FailFastMode =>
       // If `other` is not struct type, consider it as malformed one and throws an exception.
-      throw new SparkException("Malformed records are detected in schema inference. " +
-        s"Parse Mode: ${FailFastMode.name}. Reasons: Failed to infer a common schema. " +
-        s"Struct types are expected, but `${other.catalogString}` was found.")
+      throw QueryExecutionErrors.malformedRecordsDetectedInSchemaInferenceError(other)
   }
 
   /**

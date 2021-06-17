@@ -21,6 +21,7 @@ import java.nio.charset.StandardCharsets.UTF_8
 import java.util.concurrent.atomic.AtomicInteger
 
 import scala.reflect.ClassTag
+import scala.util.Try
 
 import org.apache.kafka.clients.producer.ProducerConfig
 import org.apache.kafka.clients.producer.internals.DefaultPartitioner
@@ -313,7 +314,7 @@ class KafkaSinkMicroBatchStreamingSuite extends KafkaSinkStreamingSuiteBase {
     try {
       input.addData("1", "2", "3")
       verifyResult(writer) {
-        assert(writer.lastProgress.sink.numOutputRows == 3L)
+        assert(writer.recentProgress.exists(_.sink.numOutputRows == 3L))
       }
     } finally {
       writer.stop()
@@ -500,7 +501,7 @@ abstract class KafkaSinkBatchSuiteBase extends KafkaSinkSuiteBase {
     TestUtils.assertExceptionMsg(ex, "null topic present in the data")
   }
 
-  protected def testUnsupportedSaveModes(msg: (SaveMode) => String): Unit = {
+  protected def testUnsupportedSaveModes(msg: (SaveMode) => Seq[String]): Unit = {
     val topic = newTopic()
     testUtils.createTopic(topic)
     val df = Seq[(String, String)](null.asInstanceOf[String] -> "1").toDF("topic", "value")
@@ -513,7 +514,10 @@ abstract class KafkaSinkBatchSuiteBase extends KafkaSinkSuiteBase {
           .mode(mode)
           .save()
       }
-      TestUtils.assertExceptionMsg(ex, msg(mode))
+      val errorChecks = msg(mode).map(m => Try(TestUtils.assertExceptionMsg(ex, m)))
+      if (!errorChecks.exists(_.isSuccess)) {
+        fail("Error messages not found in exception trace")
+      }
     }
   }
 
@@ -541,7 +545,7 @@ class KafkaSinkBatchSuiteV1 extends KafkaSinkBatchSuiteBase {
       .set(SQLConf.USE_V1_SOURCE_LIST, "kafka")
 
   test("batch - unsupported save modes") {
-    testUnsupportedSaveModes((mode) => s"Save mode ${mode.name} not allowed for Kafka")
+    testUnsupportedSaveModes((mode) => s"Save mode ${mode.name} not allowed for Kafka" :: Nil)
   }
 }
 
@@ -552,7 +556,8 @@ class KafkaSinkBatchSuiteV2 extends KafkaSinkBatchSuiteBase {
       .set(SQLConf.USE_V1_SOURCE_LIST, "")
 
   test("batch - unsupported save modes") {
-    testUnsupportedSaveModes((mode) => s"cannot be written with ${mode.name} mode")
+    testUnsupportedSaveModes((mode) =>
+      Seq(s"cannot be written with ${mode.name} mode", "does not support truncate"))
   }
 
   test("generic - write big data with small producer buffer") {

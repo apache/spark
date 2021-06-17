@@ -24,15 +24,22 @@ import org.apache.spark.sql.catalyst.plans.physical
 import org.apache.spark.sql.catalyst.plans.physical.SinglePartition
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReaderFactory, Scan, SupportsReportPartitioning}
-import org.apache.spark.sql.execution.LeafExecNode
+import org.apache.spark.sql.execution.{ExplainUtils, LeafExecNode}
 import org.apache.spark.sql.execution.metric.SQLMetrics
+import org.apache.spark.sql.internal.connector.SupportsMetadata
 import org.apache.spark.sql.vectorized.ColumnarBatch
 import org.apache.spark.util.Utils
 
 trait DataSourceV2ScanExecBase extends LeafExecNode {
 
-  override lazy val metrics = Map(
-    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
+  lazy val customMetrics = scan.supportedCustomMetrics().map { customMetric =>
+    customMetric.name() -> SQLMetrics.createV2CustomMetric(sparkContext, customMetric)
+  }.toMap
+
+  override lazy val metrics = {
+    Map("numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows")) ++
+      customMetrics
+  }
 
   def scan: Scan
 
@@ -43,7 +50,32 @@ trait DataSourceV2ScanExecBase extends LeafExecNode {
   override def simpleString(maxFields: Int): String = {
     val result =
       s"$nodeName${truncatedString(output, "[", ", ", "]", maxFields)} ${scan.description()}"
-    Utils.redact(sqlContext.sessionState.conf.stringRedactionPattern, result)
+    redact(result)
+  }
+
+  /**
+   * Shorthand for calling redact() without specifying redacting rules
+   */
+  protected def redact(text: String): String = {
+    Utils.redact(sqlContext.sessionState.conf.stringRedactionPattern, text)
+  }
+
+  override def verboseStringWithOperatorId(): String = {
+    val metaDataStr = scan match {
+      case s: SupportsMetadata =>
+        s.getMetaData().toSeq.sorted.flatMap {
+          case (_, value) if value.isEmpty || value.equals("[]") => None
+          case (key, value) => Some(s"$key: ${redact(value)}")
+          case _ => None
+        }
+      case _ =>
+        Seq(scan.description())
+    }
+    s"""
+       |$formattedNodeName
+       |${ExplainUtils.generateFieldString("Output", output)}
+       |${metaDataStr.mkString("\n")}
+       |""".stripMargin
   }
 
   override def outputPartitioning: physical.Partitioning = scan match {

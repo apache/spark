@@ -17,8 +17,9 @@
 
 package org.apache.spark.ml.impl
 
+import org.apache.spark.ml.linalg.BLAS
 
-private[ml] object Utils {
+private[spark] object Utils {
 
   lazy val EPSILON = {
     var eps = 1.0
@@ -26,5 +27,102 @@ private[ml] object Utils {
       eps /= 2.0
     }
     eps
+  }
+
+  /**
+   * Convert an n * (n + 1) / 2 dimension array representing the upper triangular part of a matrix
+   * into an n * n array representing the full symmetric matrix (column major).
+   *
+   * @param n The order of the n by n matrix.
+   * @param triangularValues The upper triangular part of the matrix packed in an array
+   *                         (column major).
+   * @return A dense matrix which represents the symmetric matrix in column major.
+   */
+  def unpackUpperTriangular(
+      n: Int,
+      triangularValues: Array[Double]): Array[Double] = {
+    val symmetricValues = new Array[Double](n * n)
+    var r = 0
+    var i = 0
+    while (i < n) {
+      var j = 0
+      while (j <= i) {
+        symmetricValues(i * n + j) = triangularValues(r)
+        symmetricValues(j * n + i) = triangularValues(r)
+        r += 1
+        j += 1
+      }
+      i += 1
+    }
+    symmetricValues
+  }
+
+  /**
+   * Indexing in an array representing the upper triangular part of a matrix
+   * into an n * n array representing the full symmetric matrix (column major).
+   *    val symmetricValues = unpackUpperTriangularMatrix(n, triangularValues)
+   *    val matrix = new DenseMatrix(n, n, symmetricValues)
+   *    val index = indexUpperTriangularMatrix(n, i, j)
+   *    then: symmetricValues(index) == matrix(i, j)
+   *
+   * @param n The order of the n by n matrix.
+   */
+  def indexUpperTriangular(
+      n: Int,
+      i: Int,
+      j: Int): Int = {
+    require(i >= 0 && i < n, s"Expected 0 <= i < $n, got i = $i.")
+    require(j >= 0 && j < n, s"Expected 0 <= j < $n, got j = $j.")
+    if (i <= j) {
+      j * (j + 1) / 2 + i
+    } else {
+      i * (i + 1) / 2 + j
+    }
+  }
+
+  /**
+   * When `x` is positive and large, computing `math.log(1 + math.exp(x))` will lead to arithmetic
+   * overflow. This will happen when `x &gt; 709.78` which is not a very large number.
+   * It can be addressed by rewriting the formula into `x + math.log1p(math.exp(-x))`
+   * when `x` is positive.
+   * @param x a floating-point value as input.
+   * @return the result of `math.log(1 + math.exp(x))`.
+   */
+  def log1pExp(x: Double): Double = {
+    if (x > 0) {
+      x + math.log1p(math.exp(-x))
+    } else {
+      math.log1p(math.exp(x))
+    }
+  }
+
+  /**
+   * Perform in-place softmax conversion.
+   */
+  def softmax(values: Array[Double]): Unit = {
+    var maxValue = Double.MinValue
+    var i = 0
+    while (i < values.length) {
+      val value = values(i)
+      if (value.isPosInfinity) {
+        java.util.Arrays.fill(values, 0)
+        values(i) = 1.0
+        return
+      } else if (value > maxValue) {
+        maxValue = value
+      }
+      i += 1
+    }
+
+    var sum = 0.0
+    i = 0
+    while (i < values.length) {
+      val exp = math.exp(values(i) - maxValue)
+      values(i) = exp
+      sum += exp
+      i += 1
+    }
+
+    BLAS.javaBLAS.dscal(values.length, 1.0 / sum, values, 1)
   }
 }

@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql.connector
 
-import org.apache.spark.sql.{DataFrame, SaveMode}
-import org.apache.spark.sql.connector.catalog.{Identifier, Table, TableCatalog}
+import org.apache.spark.sql.{DataFrame, Row, SaveMode}
+import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTable, Table, TableCatalog}
 
 class DataSourceV2SQLSessionCatalogSuite
   extends InsertIntoTests(supportsDynamicOverwrite = true, includeSQLOnlyTests = true)
@@ -47,6 +47,44 @@ class DataSourceV2SQLSessionCatalogSuite
     val v2Catalog = spark.sessionState.catalogManager.currentCatalog
     val nameParts = spark.sessionState.sqlParser.parseMultipartIdentifier(tableName)
     v2Catalog.asInstanceOf[TableCatalog]
-      .loadTable(Identifier.of(Array.empty, nameParts.last))
+      .loadTable(Identifier.of(nameParts.init.toArray, nameParts.last))
+  }
+
+  test("SPARK-30697: catalog.isView doesn't throw an error for specialized identifiers") {
+    val t1 = "tbl"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format")
+
+      def idResolver(id: Identifier): Identifier = Identifier.of(Array("default"), id.name())
+
+      InMemoryTableSessionCatalog.withCustomIdentifierResolver(idResolver) {
+        // The following should not throw AnalysisException.
+        sql(s"DESCRIBE TABLE ignored.$t1")
+      }
+    }
+  }
+
+  test("SPARK-31624: SHOW TBLPROPERTIES working with V2 tables and the session catalog") {
+    val t1 = "tbl"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format TBLPROPERTIES " +
+        "(key='v', key2='v2')")
+
+      checkAnswer(sql(s"SHOW TBLPROPERTIES $t1"), Seq(Row("key", "v"), Row("key2", "v2")))
+
+      checkAnswer(sql(s"SHOW TBLPROPERTIES $t1('key')"), Row("key", "v"))
+
+      checkAnswer(
+        sql(s"SHOW TBLPROPERTIES $t1('keyX')"),
+        Row("keyX", s"Table default.$t1 does not have property: keyX"))
+    }
+  }
+
+  test("SPARK-33651: allow CREATE EXTERNAL TABLE without LOCATION") {
+    withTable("t") {
+      val prop = TestV2SessionCatalogBase.SIMULATE_ALLOW_EXTERNAL_PROPERTY + "=true"
+      // The following should not throw AnalysisException.
+      sql(s"CREATE EXTERNAL TABLE t (i INT) USING $v2Format TBLPROPERTIES($prop)")
+    }
   }
 }

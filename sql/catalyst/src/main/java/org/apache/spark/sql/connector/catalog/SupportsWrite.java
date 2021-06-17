@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.connector.catalog;
 
-import org.apache.spark.annotation.Experimental;
+import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.write.BatchWrite;
 import org.apache.spark.sql.connector.write.LogicalWriteInfo;
 import org.apache.spark.sql.connector.write.WriteBuilder;
@@ -26,8 +26,10 @@ import org.apache.spark.sql.connector.write.WriteBuilder;
  * A mix-in interface of {@link Table}, to indicate that it's writable. This adds
  * {@link #newWriteBuilder(LogicalWriteInfo)} that is used to create a
  * write for batch or streaming.
+ *
+ * @since 3.0.0
  */
-@Experimental
+@Evolving
 public interface SupportsWrite extends Table {
 
   /**

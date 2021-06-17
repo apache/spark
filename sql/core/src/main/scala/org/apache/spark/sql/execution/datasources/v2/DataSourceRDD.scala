@@ -17,10 +17,17 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
+import scala.language.existentials
+
 import org.apache.spark._
+import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory}
+import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.execution.metric.{CustomMetrics, SQLMetric}
+import org.apache.spark.sql.vectorized.ColumnarBatch
 
 class DataSourceRDDPartition(val index: Int, val inputPartition: InputPartition)
   extends Partition with Serializable
@@ -31,7 +38,8 @@ class DataSourceRDD(
     sc: SparkContext,
     @transient private val inputPartitions: Seq[InputPartition],
     partitionReaderFactory: PartitionReaderFactory,
-    columnarReads: Boolean)
+    columnarReads: Boolean,
+    customMetrics: Map[String, SQLMetric])
   extends RDD[InternalRow](sc, Nil) {
 
   override protected def getPartitions: Array[Partition] = {
@@ -42,35 +50,27 @@ class DataSourceRDD(
 
   private def castPartition(split: Partition): DataSourceRDDPartition = split match {
     case p: DataSourceRDDPartition => p
-    case _ => throw new SparkException(s"[BUG] Not a DataSourceRDDPartition: $split")
+    case _ => throw QueryExecutionErrors.notADatasourceRDDPartitionError(split)
   }
 
   override def compute(split: Partition, context: TaskContext): Iterator[InternalRow] = {
     val inputPartition = castPartition(split).inputPartition
-    val reader: PartitionReader[_] = if (columnarReads) {
-      partitionReaderFactory.createColumnarReader(inputPartition)
+    val (iter, reader) = if (columnarReads) {
+      val batchReader = partitionReaderFactory.createColumnarReader(inputPartition)
+      val iter = new MetricsBatchIterator(
+        new PartitionIterator[ColumnarBatch](batchReader, customMetrics))
+      (iter, batchReader)
     } else {
-      partitionReaderFactory.createReader(inputPartition)
+      val rowReader = partitionReaderFactory.createReader(inputPartition)
+      val iter = new MetricsRowIterator(
+        new PartitionIterator[InternalRow](rowReader, customMetrics))
+      (iter, rowReader)
     }
-
-    context.addTaskCompletionListener[Unit](_ => reader.close())
-    val iter = new Iterator[Any] {
-      private[this] var valuePrepared = false
-
-      override def hasNext: Boolean = {
-        if (!valuePrepared) {
-          valuePrepared = reader.next()
-        }
-        valuePrepared
-      }
-
-      override def next(): Any = {
-        if (!hasNext) {
-          throw new java.util.NoSuchElementException("End of stream")
-        }
-        valuePrepared = false
-        reader.get()
-      }
+    context.addTaskCompletionListener[Unit] { _ =>
+      // In case of early stopping before consuming the entire iterator,
+      // we need to do one more metric update at the end of the task.
+      CustomMetrics.updateMetrics(reader.currentMetricsValues, customMetrics)
+      reader.close()
     }
     // TODO: SPARK-25083 remove the type erasure hack in data source scan
     new InterruptibleIterator(context, iter.asInstanceOf[Iterator[InternalRow]])
@@ -78,5 +78,78 @@ class DataSourceRDD(
 
   override def getPreferredLocations(split: Partition): Seq[String] = {
     castPartition(split).inputPartition.preferredLocations()
+  }
+}
+
+private class PartitionIterator[T](
+    reader: PartitionReader[T],
+    customMetrics: Map[String, SQLMetric]) extends Iterator[T] {
+  private[this] var valuePrepared = false
+
+  private var numRow = 0L
+
+  override def hasNext: Boolean = {
+    if (!valuePrepared) {
+      valuePrepared = reader.next()
+    }
+    valuePrepared
+  }
+
+  override def next(): T = {
+    if (!hasNext) {
+      throw QueryExecutionErrors.endOfStreamError()
+    }
+    if (numRow % CustomMetrics.NUM_ROWS_PER_UPDATE == 0) {
+      CustomMetrics.updateMetrics(reader.currentMetricsValues, customMetrics)
+    }
+    numRow += 1
+    valuePrepared = false
+    reader.get()
+  }
+}
+
+private class MetricsHandler extends Logging with Serializable {
+  private val inputMetrics = TaskContext.get().taskMetrics().inputMetrics
+  private val startingBytesRead = inputMetrics.bytesRead
+  private val getBytesRead = SparkHadoopUtil.get.getFSBytesReadOnThreadCallback()
+
+  def updateMetrics(numRows: Int, force: Boolean = false): Unit = {
+    inputMetrics.incRecordsRead(numRows)
+    val shouldUpdateBytesRead =
+      inputMetrics.recordsRead % SparkHadoopUtil.UPDATE_INPUT_METRICS_INTERVAL_RECORDS == 0
+    if (shouldUpdateBytesRead || force) {
+      inputMetrics.setBytesRead(startingBytesRead + getBytesRead())
+    }
+  }
+}
+
+private abstract class MetricsIterator[I](iter: Iterator[I]) extends Iterator[I] {
+  protected val metricsHandler = new MetricsHandler
+
+  override def hasNext: Boolean = {
+    if (iter.hasNext) {
+      true
+    } else {
+      metricsHandler.updateMetrics(0, force = true)
+      false
+    }
+  }
+}
+
+private class MetricsRowIterator(
+    iter: Iterator[InternalRow]) extends MetricsIterator[InternalRow](iter) {
+  override def next(): InternalRow = {
+    val item = iter.next
+    metricsHandler.updateMetrics(1)
+    item
+  }
+}
+
+private class MetricsBatchIterator(
+    iter: Iterator[ColumnarBatch]) extends MetricsIterator[ColumnarBatch](iter) {
+  override def next(): ColumnarBatch = {
+    val batch: ColumnarBatch = iter.next
+    metricsHandler.updateMetrics(batch.numRows)
+    batch
   }
 }

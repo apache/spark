@@ -255,7 +255,7 @@ class KMeansSuite extends MLTest with DefaultReadWriteTest with PMMLReadWriteTes
   }
 
   test("compare with weightCol and without weightCol") {
-    val df1 = spark.createDataFrame(spark.sparkContext.parallelize(Array(
+    val df1 = spark.createDataFrame(spark.sparkContext.parallelize(Seq(
       Vectors.dense(1.0, 1.0),
       Vectors.dense(10.0, 10.0), Vectors.dense(10.0, 10.0),
       Vectors.dense(1.0, 0.5),
@@ -285,7 +285,7 @@ class KMeansSuite extends MLTest with DefaultReadWriteTest with PMMLReadWriteTes
 
     model1.clusterCenters.forall(Vectors.norm(_, 2) == 1.0)
 
-    val df2 = spark.createDataFrame(spark.sparkContext.parallelize(Array(
+    val df2 = spark.createDataFrame(spark.sparkContext.parallelize(Seq(
       (Vectors.dense(1.0, 1.0), 1.0),
       (Vectors.dense(10.0, 10.0), 2.0),
       (Vectors.dense(1.0, 0.5), 1.0),
@@ -322,7 +322,7 @@ class KMeansSuite extends MLTest with DefaultReadWriteTest with PMMLReadWriteTes
 
   test("Two centers with weightCol") {
     // use the same weight for all samples.
-    val df1 = spark.createDataFrame(spark.sparkContext.parallelize(Array(
+    val df1 = spark.createDataFrame(spark.sparkContext.parallelize(Seq(
       (Vectors.dense(0.0, 0.0), 2.0),
       (Vectors.dense(0.0, 0.1), 2.0),
       (Vectors.dense(0.1, 0.0), 2.0),
@@ -366,7 +366,7 @@ class KMeansSuite extends MLTest with DefaultReadWriteTest with PMMLReadWriteTes
     assert(model1.clusterCenters(1) === model1_center2)
 
     // use different weight
-    val df2 = spark.createDataFrame(spark.sparkContext.parallelize(Array(
+    val df2 = spark.createDataFrame(spark.sparkContext.parallelize(Seq(
       (Vectors.dense(0.0, 0.0), 1.0),
       (Vectors.dense(0.0, 0.1), 2.0),
       (Vectors.dense(0.1, 0.0), 3.0),
@@ -412,7 +412,7 @@ class KMeansSuite extends MLTest with DefaultReadWriteTest with PMMLReadWriteTes
 
   test("Four centers with weightCol") {
     // no weight
-    val df1 = spark.createDataFrame(spark.sparkContext.parallelize(Array(
+    val df1 = spark.createDataFrame(spark.sparkContext.parallelize(Seq(
       Vectors.dense(0.1, 0.1),
       Vectors.dense(5.0, 0.2),
       Vectors.dense(10.0, 0.0),
@@ -444,7 +444,7 @@ class KMeansSuite extends MLTest with DefaultReadWriteTest with PMMLReadWriteTes
     model1.clusterCenters.forall(Vectors.norm(_, 2) == 1.0)
 
     // use same weight, should have the same result as no weight
-    val df2 = spark.createDataFrame(spark.sparkContext.parallelize(Array(
+    val df2 = spark.createDataFrame(spark.sparkContext.parallelize(Seq(
       (Vectors.dense(0.1, 0.1), 2.0),
       (Vectors.dense(5.0, 0.2), 2.0),
       (Vectors.dense(10.0, 0.0), 2.0),

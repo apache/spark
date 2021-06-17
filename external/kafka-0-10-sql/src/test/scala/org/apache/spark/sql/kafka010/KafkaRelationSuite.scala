@@ -21,15 +21,10 @@ import java.nio.charset.StandardCharsets.UTF_8
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicInteger
 
-import scala.annotation.tailrec
-import scala.collection.JavaConverters._
-import scala.util.Random
-
 import org.apache.kafka.clients.producer.ProducerRecord
 import org.apache.kafka.common.TopicPartition
 
-import org.apache.spark.SparkConf
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkConf, TestUtils}
 import org.apache.spark.sql.{DataFrameReader, QueryTest}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
@@ -268,10 +263,21 @@ abstract class KafkaRelationSuiteBase extends QueryTest with SharedSparkSession 
     }, topic, 0 to 19)
   }
 
+  test("global timestamp provided for starting and ending") {
+    val (topic, timestamps) = prepareTimestampRelatedUnitTest
+
+    // timestamp both presented: starting "first" ending "finalized"
+    verifyTimestampRelatedQueryResult({ df =>
+      df.option("startingTimestamp", timestamps(1)).option("endingTimestamp", timestamps(2))
+    }, topic, 10 to 19)
+  }
+
   test("no matched offset for timestamp - startingOffsets") {
     val (topic, timestamps) = prepareTimestampRelatedUnitTest
 
-    val e = intercept[SparkException] {
+    // KafkaOffsetReaderConsumer and KafkaOffsetReaderAdmin both throws AssertionError
+    // but the UninterruptibleThread used by KafkaOffsetReaderConsumer wraps it with SparkException
+    val e = intercept[Throwable] {
       verifyTimestampRelatedQueryResult({ df =>
         // partition 2 will make query fail
         val startTopicTimestamps = Map(
@@ -284,19 +290,45 @@ abstract class KafkaRelationSuiteBase extends QueryTest with SharedSparkSession 
       }, topic, Seq.empty)
     }
 
-    @tailrec
-    def assertionErrorInExceptionChain(e: Throwable): Boolean = {
-      if (e.isInstanceOf[AssertionError]) {
-        true
-      } else if (e.getCause == null) {
-        false
-      } else {
-        assertionErrorInExceptionChain(e.getCause)
-      }
-    }
+    TestUtils.assertExceptionMsg(e, "No offset matched from request")
+  }
 
-    assert(assertionErrorInExceptionChain(e),
-      "Cannot find expected AssertionError in chained exceptions")
+  test("preferences on offset related options") {
+    val (topic, timestamps) = prepareTimestampRelatedUnitTest
+
+    /*
+    The test will set both configs differently:
+
+    * global timestamp
+    starting only presented as "third", and ending not presented
+
+    * specific timestamp for partition
+    starting only presented as "second", and ending not presented
+
+    * offsets
+    starting only presented as "earliest", and ending not presented
+
+    The preference goes to global timestamp -> timestamp for partition -> offsets
+     */
+
+    val startTopicTimestamps = Map(
+      (0 to 2).map(new TopicPartition(topic, _) -> timestamps(1)): _*)
+    val startingTimestamps = JsonUtils.partitionTimestamps(startTopicTimestamps)
+
+    // all options are specified: global timestamp
+    verifyTimestampRelatedQueryResult({ df =>
+      df
+        .option("startingTimestamp", timestamps(2))
+        .option("startingOffsetsByTimestamp", startingTimestamps)
+        .option("startingOffsets", "earliest")
+    }, topic, 20 to 29)
+
+    // timestamp for partition and offsets are specified: timestamp for partition
+    verifyTimestampRelatedQueryResult({ df =>
+      df
+        .option("startingOffsetsByTimestamp", startingTimestamps)
+        .option("startingOffsets", "earliest")
+    }, topic, 10 to 29)
   }
 
   test("no matched offset for timestamp - endingOffsets") {
@@ -464,45 +496,10 @@ abstract class KafkaRelationSuiteBase extends QueryTest with SharedSparkSession 
     testBadOptions("subscribePattern" -> "")("pattern to subscribe is empty")
   }
 
-  test("allow group.id prefix") {
-    testGroupId("groupIdPrefix", (expected, actual) => {
-      assert(actual.exists(_.startsWith(expected)) && !actual.exists(_ === expected),
-        "Valid consumer groups don't contain the expected group id - " +
-        s"Valid consumer groups: $actual / expected group id: $expected")
-    })
-  }
-
-  test("allow group.id override") {
-    testGroupId("kafka.group.id", (expected, actual) => {
-      assert(actual.exists(_ === expected), "Valid consumer groups don't " +
-        s"contain the expected group id - Valid consumer groups: $actual / " +
-        s"expected group id: $expected")
-    })
-  }
-
-  private def testGroupId(groupIdKey: String,
-      validateGroupId: (String, Iterable[String]) => Unit): Unit = {
-    // Tests code path KafkaSourceProvider.createRelation(.)
-    val topic = newTopic()
-    testUtils.createTopic(topic, partitions = 3)
-    testUtils.sendMessages(topic, (1 to 10).map(_.toString).toArray, Some(0))
-    testUtils.sendMessages(topic, (11 to 20).map(_.toString).toArray, Some(1))
-    testUtils.sendMessages(topic, (21 to 30).map(_.toString).toArray, Some(2))
-
-    val customGroupId = "id-" + Random.nextInt()
-    val df = createDF(topic, withOptions = Map(groupIdKey -> customGroupId))
-    checkAnswer(df, (1 to 30).map(_.toString).toDF())
-
-    val consumerGroups = testUtils.listConsumerGroups()
-    val validGroups = consumerGroups.valid().get()
-    val validGroupsId = validGroups.asScala.map(_.groupId())
-    validateGroupId(customGroupId, validGroupsId)
-  }
-
   test("read Kafka transactional messages: read_committed") {
     val topic = newTopic()
     testUtils.createTopic(topic)
-    testUtils.withTranscationalProducer { producer =>
+    testUtils.withTransactionalProducer { producer =>
       val df = spark
         .read
         .format("kafka")
@@ -551,7 +548,7 @@ abstract class KafkaRelationSuiteBase extends QueryTest with SharedSparkSession 
   test("read Kafka transactional messages: read_uncommitted") {
     val topic = newTopic()
     testUtils.createTopic(topic)
-    testUtils.withTranscationalProducer { producer =>
+    testUtils.withTransactionalProducer { producer =>
       val df = spark
         .read
         .format("kafka")
@@ -597,6 +594,38 @@ abstract class KafkaRelationSuiteBase extends QueryTest with SharedSparkSession 
       checkAnswer(df, (1 to 15).map(_.toString).toDF)
     }
   }
+
+  test("SPARK-30656: minPartitions") {
+    val topic = newTopic()
+    testUtils.createTopic(topic, partitions = 3)
+    testUtils.sendMessages(topic, (0 to 9).map(_.toString).toArray, Some(0))
+    testUtils.sendMessages(topic, (10 to 19).map(_.toString).toArray, Some(1))
+    testUtils.sendMessages(topic, Array("20"), Some(2))
+
+    // Implicit offset values, should default to earliest and latest
+    val df = createDF(topic, Map("minPartitions" -> "6"))
+    val rdd = df.rdd
+    val partitions = rdd.collectPartitions()
+    assert(partitions.length >= 6)
+    assert(partitions.flatMap(_.map(_.getString(0))).toSet === (0 to 20).map(_.toString).toSet)
+
+    // Because of late binding, reused `rdd` and `df` should see the new data.
+    testUtils.sendMessages(topic, (21 to 30).map(_.toString).toArray)
+    assert(rdd.collectPartitions().flatMap(_.map(_.getString(0))).toSet
+      === (0 to 30).map(_.toString).toSet)
+    assert(df.rdd.collectPartitions().flatMap(_.map(_.getString(0))).toSet
+      === (0 to 30).map(_.toString).toSet)
+  }
+}
+
+class KafkaRelationSuiteWithAdminV1 extends KafkaRelationSuiteV1 {
+  override protected def sparkConf: SparkConf =
+    super.sparkConf.set(SQLConf.USE_DEPRECATED_KAFKA_OFFSET_FETCHING.key, "false")
+}
+
+class KafkaRelationSuiteWithAdminV2 extends KafkaRelationSuiteV2 {
+  override protected def sparkConf: SparkConf =
+    super.sparkConf.set(SQLConf.USE_DEPRECATED_KAFKA_OFFSET_FETCHING.key, "false")
 }
 
 class KafkaRelationSuiteV1 extends KafkaRelationSuiteBase {
@@ -624,7 +653,7 @@ class KafkaRelationSuiteV2 extends KafkaRelationSuiteBase {
     val topic = newTopic()
     val df = createDF(topic)
     assert(df.logicalPlan.collect {
-      case DataSourceV2Relation(_, _, _) => true
+      case _: DataSourceV2Relation => true
     }.nonEmpty)
   }
 }

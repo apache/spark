@@ -59,6 +59,8 @@ private[spark] class Pool(
     }
   }
 
+  override def isSchedulable: Boolean = true
+
   override def addSchedulable(schedulable: Schedulable): Unit = {
     require(schedulable != null)
     schedulableQueue.add(schedulable)
@@ -88,7 +90,11 @@ private[spark] class Pool(
     schedulableQueue.asScala.foreach(_.executorLost(executorId, host, reason))
   }
 
-  override def checkSpeculatableTasks(minTimeToSpeculation: Int): Boolean = {
+  override def executorDecommission(executorId: String): Unit = {
+    schedulableQueue.asScala.foreach(_.executorDecommission(executorId))
+  }
+
+  override def checkSpeculatableTasks(minTimeToSpeculation: Long): Boolean = {
     var shouldRevive = false
     for (schedulable <- schedulableQueue.asScala) {
       shouldRevive |= schedulable.checkSpeculatableTasks(minTimeToSpeculation)
@@ -101,7 +107,7 @@ private[spark] class Pool(
     val sortedSchedulableQueue =
       schedulableQueue.asScala.toSeq.sortWith(taskSetSchedulingAlgorithm.comparator)
     for (schedulable <- sortedSchedulableQueue) {
-      sortedTaskSetQueue ++= schedulable.getSortedTaskSetQueue
+      sortedTaskSetQueue ++= schedulable.getSortedTaskSetQueue.filter(_.isSchedulable)
     }
     sortedTaskSetQueue
   }

@@ -68,7 +68,7 @@ private[spark] object TreePoint {
       if (arity == 0) {
         splits(idx).map(_.asInstanceOf[ContinuousSplit].threshold)
       } else {
-        Array.empty[Double]
+        Array.emptyDoubleArray
       }
     }
     input.map { x =>

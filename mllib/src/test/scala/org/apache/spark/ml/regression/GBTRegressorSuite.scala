@@ -274,9 +274,9 @@ class GBTRegressorSuite extends MLTest with DefaultReadWriteTest {
       gbt.setValidationIndicatorCol(validationIndicatorCol)
       val modelWithValidation = gbt.fit(trainDF.union(validationDF))
 
-      assert(modelWithoutValidation.numTrees === numIter)
+      assert(modelWithoutValidation.getNumTrees === numIter)
       // early stop
-      assert(modelWithValidation.numTrees < numIter)
+      assert(modelWithValidation.getNumTrees < numIter)
 
       val errorWithoutValidation = GradientBoostedTrees.computeWeightedError(
         validationData.map(_.toInstance),
@@ -294,10 +294,10 @@ class GBTRegressorSuite extends MLTest with DefaultReadWriteTest {
           modelWithoutValidation.treeWeights, modelWithoutValidation.getOldLossType,
           OldAlgo.Regression)
       assert(evaluationArray.length === numIter)
-      assert(evaluationArray(modelWithValidation.numTrees) >
-        evaluationArray(modelWithValidation.numTrees - 1))
+      assert(evaluationArray(modelWithValidation.getNumTrees) >
+        evaluationArray(modelWithValidation.getNumTrees - 1))
       var i = 1
-      while (i < modelWithValidation.numTrees) {
+      while (i < modelWithValidation.getNumTrees) {
         assert(evaluationArray(i) <= evaluationArray(i - 1))
         i += 1
       }
@@ -369,6 +369,18 @@ class GBTRegressorSuite extends MLTest with DefaultReadWriteTest {
       TreeTests.setMetadata(rdd, Map.empty[Int, Int], numClasses = 0)
     testEstimatorAndModelReadWrite(gbt, continuousData, allParamSettings,
       allParamSettings, checkModelData)
+  }
+
+  test("SPARK-33398: Load GBTRegressionModel prior to Spark 3.0") {
+    val path = testFile("ml-models/gbtr-2.4.7")
+    val model = GBTRegressionModel.load(path)
+    assert(model.numFeatures === 692)
+    assert(model.totalNumNodes === 6)
+    assert(model.trees.map(_.numNodes) === Array(5, 1))
+
+    val metadata = spark.read.json(s"$path/metadata")
+    val sparkVersionStr = metadata.select("sparkVersion").first().getString(0)
+    assert(sparkVersionStr === "2.4.7")
   }
 }
 

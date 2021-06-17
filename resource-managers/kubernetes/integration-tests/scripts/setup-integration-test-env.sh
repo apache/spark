@@ -23,7 +23,10 @@ IMAGE_TAG_OUTPUT_FILE="$TEST_ROOT_DIR/target/image-tag.txt"
 DEPLOY_MODE="minikube"
 IMAGE_REPO="docker.io/kubespark"
 IMAGE_TAG="N/A"
+JAVA_IMAGE_TAG="8-jre-slim"
 SPARK_TGZ="N/A"
+MVN="$TEST_ROOT_DIR/build/mvn"
+EXCLUDE_TAGS=""
 
 # Parse arguments
 while (( "$#" )); do
@@ -40,6 +43,10 @@ while (( "$#" )); do
       IMAGE_TAG="$2"
       shift
       ;;
+    --java-image-tag)
+      JAVA_IMAGE_TAG="$2"
+      shift
+      ;;
     --image-tag-output-file)
       IMAGE_TAG_OUTPUT_FILE="$2"
       shift
@@ -50,6 +57,10 @@ while (( "$#" )); do
       ;;
     --spark-tgz)
       SPARK_TGZ="$2"
+      shift
+      ;;
+    --test-exclude-tags)
+      EXCLUDE_TAGS="$2"
       shift
       ;;
     *)
@@ -79,14 +90,24 @@ fi
 # If there is a specific Spark image skip building and extraction/copy
 if [[ $IMAGE_TAG == "N/A" ]];
 then
-  IMAGE_TAG=$(uuidgen);
+  VERSION=$("$MVN" help:evaluate -Dexpression=project.version \
+    | grep -v "INFO"\
+    | grep -v "WARNING"\
+    | tail -n 1)
+  IMAGE_TAG=${VERSION}_$(uuidgen)
   cd $SPARK_INPUT_DIR
+
+  # OpenJDK base-image tag (e.g. 8-jre-slim, 11-jre-slim)
+  JAVA_IMAGE_TAG_BUILD_ARG="-b java_image_tag=$JAVA_IMAGE_TAG"
 
   # Build PySpark image
   LANGUAGE_BINDING_BUILD_ARGS="-p $DOCKER_FILE_BASE_PATH/bindings/python/Dockerfile"
 
   # Build SparkR image
-  LANGUAGE_BINDING_BUILD_ARGS="$LANGUAGE_BINDING_BUILD_ARGS -R $DOCKER_FILE_BASE_PATH/bindings/R/Dockerfile"
+  tags=(${EXCLUDE_TAGS//,/ })
+  if [[ ! ${tags[@]} =~ "r" ]]; then
+    LANGUAGE_BINDING_BUILD_ARGS="$LANGUAGE_BINDING_BUILD_ARGS -R $DOCKER_FILE_BASE_PATH/bindings/R/Dockerfile"
+  fi
 
   # Unset SPARK_HOME to let the docker-image-tool script detect SPARK_HOME. Otherwise, it cannot
   # indicate the unpacked directory as its home. See SPARK-28550.
@@ -95,7 +116,7 @@ then
   case $DEPLOY_MODE in
     cloud)
       # Build images
-      $SPARK_INPUT_DIR/bin/docker-image-tool.sh -r $IMAGE_REPO -t $IMAGE_TAG $LANGUAGE_BINDING_BUILD_ARGS build
+      $SPARK_INPUT_DIR/bin/docker-image-tool.sh -r $IMAGE_REPO -t $IMAGE_TAG $JAVA_IMAGE_TAG_BUILD_ARG $LANGUAGE_BINDING_BUILD_ARGS build
 
       # Push images appropriately
       if [[ $IMAGE_REPO == gcr.io* ]] ;
@@ -109,13 +130,13 @@ then
     docker-for-desktop)
        # Only need to build as this will place it in our local Docker repo which is all
        # we need for Docker for Desktop to work so no need to also push
-       $SPARK_INPUT_DIR/bin/docker-image-tool.sh -r $IMAGE_REPO -t $IMAGE_TAG $LANGUAGE_BINDING_BUILD_ARGS build
+       $SPARK_INPUT_DIR/bin/docker-image-tool.sh -r $IMAGE_REPO -t $IMAGE_TAG $JAVA_IMAGE_TAG_BUILD_ARG $LANGUAGE_BINDING_BUILD_ARGS build
        ;;
 
     minikube)
        # Only need to build and if we do this with the -m option for minikube we will
        # build the images directly using the minikube Docker daemon so no need to push
-       $SPARK_INPUT_DIR/bin/docker-image-tool.sh -m -r $IMAGE_REPO -t $IMAGE_TAG $LANGUAGE_BINDING_BUILD_ARGS build
+       $SPARK_INPUT_DIR/bin/docker-image-tool.sh -m -r $IMAGE_REPO -t $IMAGE_TAG $JAVA_IMAGE_TAG_BUILD_ARG $LANGUAGE_BINDING_BUILD_ARGS build
        ;;
     *)
        echo "Unrecognized deploy mode $DEPLOY_MODE" && exit 1

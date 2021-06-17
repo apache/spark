@@ -20,7 +20,6 @@ import java.net.URI
 
 import scala.util.control.NonFatal
 
-import org.apache.avro.Schema
 import org.apache.avro.file.DataFileReader
 import org.apache.avro.generic.{GenericDatumReader, GenericRecord}
 import org.apache.avro.mapred.FsInput
@@ -29,12 +28,13 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.TaskContext
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.avro.{AvroDeserializer, AvroOptions}
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.avro.{AvroDeserializer, AvroOptions, AvroUtils}
+import org.apache.spark.sql.catalyst.{InternalRow, NoopFilters, OrderedFilters}
 import org.apache.spark.sql.connector.read.PartitionReader
-import org.apache.spark.sql.execution.datasources.PartitionedFile
+import org.apache.spark.sql.execution.datasources.{DataSourceUtils, PartitionedFile}
 import org.apache.spark.sql.execution.datasources.v2.{EmptyPartitionReader, FilePartitionReaderFactory, PartitionReaderWithPartitionValues}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.SerializableConfiguration
 
@@ -46,7 +46,7 @@ import org.apache.spark.util.SerializableConfiguration
  * @param dataSchema Schema of AVRO files.
  * @param readDataSchema Required data schema of AVRO files.
  * @param partitionSchema Schema of partitions.
- * @param options Options for parsing AVRO files.
+ * @param parsedOptions Options for parsing AVRO files.
  */
 case class AvroPartitionReaderFactory(
     sqlConf: SQLConf,
@@ -54,12 +54,13 @@ case class AvroPartitionReaderFactory(
     dataSchema: StructType,
     readDataSchema: StructType,
     partitionSchema: StructType,
-    options: Map[String, String]) extends FilePartitionReaderFactory with Logging {
+    parsedOptions: AvroOptions,
+    filters: Seq[Filter]) extends FilePartitionReaderFactory with Logging {
+  private val datetimeRebaseModeInRead = parsedOptions.datetimeRebaseModeInRead
 
   override def buildReader(partitionedFile: PartitionedFile): PartitionReader[InternalRow] = {
     val conf = broadcastedConf.value.value
-    val parsedOptions = new AvroOptions(options, conf)
-    val userProvidedSchema = parsedOptions.schema.map(new Schema.Parser().parse)
+    val userProvidedSchema = parsedOptions.schema
 
     if (parsedOptions.ignoreExtension || partitionedFile.filePath.endsWith(".avro")) {
       val reader = {
@@ -87,35 +88,28 @@ case class AvroPartitionReaderFactory(
       }
 
       reader.sync(partitionedFile.start)
-      val stop = partitionedFile.start + partitionedFile.length
 
-      val deserializer =
-        new AvroDeserializer(userProvidedSchema.getOrElse(reader.getSchema), readDataSchema)
+      val datetimeRebaseMode = DataSourceUtils.datetimeRebaseMode(
+        reader.asInstanceOf[DataFileReader[_]].getMetaString,
+        datetimeRebaseModeInRead)
 
-      val fileReader = new PartitionReader[InternalRow] {
-        private[this] var completed = false
+      val avroFilters = if (SQLConf.get.avroFilterPushDown) {
+        new OrderedFilters(filters, readDataSchema)
+      } else {
+        new NoopFilters
+      }
 
-        override def next(): Boolean = {
-          if (completed) {
-            false
-          } else {
-            val r = reader.hasNext && !reader.pastSync(stop)
-            if (!r) {
-              reader.close()
-              completed = true
-            }
-            r
-          }
-        }
+      val fileReader = new PartitionReader[InternalRow] with AvroUtils.RowReader {
+        override val fileReader = reader
+        override val deserializer = new AvroDeserializer(
+          userProvidedSchema.getOrElse(reader.getSchema),
+          readDataSchema,
+          datetimeRebaseMode,
+          avroFilters)
+        override val stopPosition = partitionedFile.start + partitionedFile.length
 
-        override def get(): InternalRow = {
-          if (!next) {
-            throw new NoSuchElementException("next on empty iterator")
-          }
-          val record = reader.next()
-          deserializer.deserialize(record).asInstanceOf[InternalRow]
-        }
-
+        override def next(): Boolean = hasNextRow
+        override def get(): InternalRow = nextRow
         override def close(): Unit = reader.close()
       }
       new PartitionReaderWithPartitionValues(fileReader, readDataSchema,

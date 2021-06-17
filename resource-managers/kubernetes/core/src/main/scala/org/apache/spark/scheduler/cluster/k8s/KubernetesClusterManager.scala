@@ -17,15 +17,13 @@
 package org.apache.spark.scheduler.cluster.k8s
 
 import java.io.File
-import java.util.concurrent.TimeUnit
 
-import com.google.common.cache.CacheBuilder
 import io.fabric8.kubernetes.client.Config
 
 import org.apache.spark.SparkContext
 import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesUtils, SparkKubernetesClientFactory}
 import org.apache.spark.deploy.k8s.Config._
-import org.apache.spark.deploy.k8s.Constants._
+import org.apache.spark.deploy.k8s.Constants.DEFAULT_EXECUTOR_CONTAINER_NAME
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.{ExternalClusterManager, SchedulerBackend, TaskScheduler, TaskSchedulerImpl}
 import org.apache.spark.util.{SystemClock, ThreadUtils}
@@ -50,10 +48,14 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
       require(sc.conf.get(KUBERNETES_DRIVER_POD_NAME).isDefined,
         "If the application is deployed using spark-submit in cluster mode, the driver pod name " +
           "must be provided.")
+      val serviceAccountToken =
+        Some(new File(Config.KUBERNETES_SERVICE_ACCOUNT_TOKEN_PATH)).filter(_.exists)
+      val serviceAccountCaCrt =
+        Some(new File(Config.KUBERNETES_SERVICE_ACCOUNT_CA_CRT_PATH)).filter(_.exists)
       (KUBERNETES_AUTH_DRIVER_MOUNTED_CONF_PREFIX,
-        KUBERNETES_MASTER_INTERNAL_URL,
-        Some(new File(Config.KUBERNETES_SERVICE_ACCOUNT_TOKEN_PATH)),
-        Some(new File(Config.KUBERNETES_SERVICE_ACCOUNT_CA_CRT_PATH)))
+        sc.conf.get(KUBERNETES_DRIVER_MASTER_URL),
+        serviceAccountToken,
+        serviceAccountCaCrt)
     } else {
       (KUBERNETES_AUTH_CLIENT_MODE_PREFIX,
         KubernetesUtils.parseMasterUrl(masterURL),
@@ -84,25 +86,28 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
     if (sc.conf.get(KUBERNETES_EXECUTOR_PODTEMPLATE_FILE).isDefined) {
       KubernetesUtils.loadPodFromTemplate(
         kubernetesClient,
-        new File(sc.conf.get(KUBERNETES_EXECUTOR_PODTEMPLATE_FILE).get),
-        sc.conf.get(KUBERNETES_EXECUTOR_PODTEMPLATE_CONTAINER_NAME))
+        sc.conf.get(KUBERNETES_EXECUTOR_PODTEMPLATE_FILE).get,
+        sc.conf.get(KUBERNETES_EXECUTOR_PODTEMPLATE_CONTAINER_NAME),
+        sc.conf)
     }
 
     val schedulerExecutorService = ThreadUtils.newDaemonSingleThreadScheduledExecutor(
       "kubernetes-executor-maintenance")
 
+    ExecutorPodsSnapshot.setShouldCheckAllContainers(
+      sc.conf.get(KUBERNETES_EXECUTOR_CHECK_ALL_CONTAINERS))
+    val sparkContainerName = sc.conf.get(KUBERNETES_EXECUTOR_PODTEMPLATE_CONTAINER_NAME)
+      .getOrElse(DEFAULT_EXECUTOR_CONTAINER_NAME)
+    ExecutorPodsSnapshot.setSparkContainerName(sparkContainerName)
     val subscribersExecutor = ThreadUtils
       .newDaemonThreadPoolScheduledExecutor(
         "kubernetes-executor-snapshots-subscribers", 2)
     val snapshotsStore = new ExecutorPodsSnapshotsStoreImpl(subscribersExecutor)
-    val removedExecutorsCache = CacheBuilder.newBuilder()
-      .expireAfterWrite(3, TimeUnit.MINUTES)
-      .build[java.lang.Long, java.lang.Long]()
+
     val executorPodsLifecycleEventHandler = new ExecutorPodsLifecycleManager(
       sc.conf,
       kubernetesClient,
-      snapshotsStore,
-      removedExecutorsCache)
+      snapshotsStore)
 
     val executorPodsAllocator = new ExecutorPodsAllocator(
       sc.conf,

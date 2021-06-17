@@ -55,10 +55,10 @@ other first-order optimizations.
 Quasi-Newton](https://www.microsoft.com/en-us/research/wp-content/uploads/2007/01/andrew07scalable.pdf)
 (OWL-QN) is an extension of L-BFGS that can effectively handle L1 and elastic net regularization.
 
-L-BFGS is used as a solver for [LinearRegression](api/scala/index.html#org.apache.spark.ml.regression.LinearRegression),
-[LogisticRegression](api/scala/index.html#org.apache.spark.ml.classification.LogisticRegression),
-[AFTSurvivalRegression](api/scala/index.html#org.apache.spark.ml.regression.AFTSurvivalRegression)
-and [MultilayerPerceptronClassifier](api/scala/index.html#org.apache.spark.ml.classification.MultilayerPerceptronClassifier).
+L-BFGS is used as a solver for [LinearRegression](api/scala/org/apache/spark/ml/regression/LinearRegression.html),
+[LogisticRegression](api/scala/org/apache/spark/ml/classification/LogisticRegression.html),
+[AFTSurvivalRegression](api/scala/org/apache/spark/ml/regression/AFTSurvivalRegression.html)
+and [MultilayerPerceptronClassifier](api/scala/org/apache/spark/ml/classification/MultilayerPerceptronClassifier.html).
 
 MLlib L-BFGS solver calls the corresponding implementation in [breeze](https://github.com/scalanlp/breeze/blob/master/math/src/main/scala/breeze/optimize/LBFGS.scala).
 
@@ -108,4 +108,4 @@ It solves certain optimization problems iteratively through the following proced
 
 Since it involves solving a weighted least squares (WLS) problem by `WeightedLeastSquares` in each iteration,
 it also requires the number of features to be no more than 4096.
-Currently IRLS is used as the default solver of [GeneralizedLinearRegression](api/scala/index.html#org.apache.spark.ml.regression.GeneralizedLinearRegression).
+Currently IRLS is used as the default solver of [GeneralizedLinearRegression](api/scala/org/apache/spark/ml/regression/GeneralizedLinearRegression.html).

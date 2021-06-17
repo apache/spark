@@ -25,6 +25,8 @@ import org.apache.spark.sql.connector.read.Scan;
 
 /**
  * A {@link SparkDataStream} for streaming queries with micro-batch mode.
+ *
+ * @since 3.0.0
  */
 @Evolving
 public interface MicroBatchStream extends SparkDataStream {

@@ -1,0 +1,161 @@
+== Physical Plan ==
+TakeOrderedAndProject (26)
++- * HashAggregate (25)
+   +- Exchange (24)
+      +- * HashAggregate (23)
+         +- * Project (22)
+            +- * BroadcastHashJoin Inner BuildRight (21)
+               :- * Project (15)
+               :  +- * BroadcastHashJoin Inner BuildRight (14)
+               :     :- * Project (9)
+               :     :  +- * BroadcastHashJoin Inner BuildRight (8)
+               :     :     :- * Filter (3)
+               :     :     :  +- * ColumnarToRow (2)
+               :     :     :     +- Scan parquet default.catalog_sales (1)
+               :     :     +- BroadcastExchange (7)
+               :     :        +- * Filter (6)
+               :     :           +- * ColumnarToRow (5)
+               :     :              +- Scan parquet default.customer (4)
+               :     +- BroadcastExchange (13)
+               :        +- * Filter (12)
+               :           +- * ColumnarToRow (11)
+               :              +- Scan parquet default.customer_address (10)
+               +- BroadcastExchange (20)
+                  +- * Project (19)
+                     +- * Filter (18)
+                        +- * ColumnarToRow (17)
+                           +- Scan parquet default.date_dim (16)
+
+
+(1) Scan parquet default.catalog_sales
+Output [3]: [cs_bill_customer_sk#1, cs_sales_price#2, cs_sold_date_sk#3]
+Batched: true
+Location: InMemoryFileIndex []
+PartitionFilters: [isnotnull(cs_sold_date_sk#3), dynamicpruningexpression(cs_sold_date_sk#3 IN dynamicpruning#4)]
+PushedFilters: [IsNotNull(cs_bill_customer_sk)]
+ReadSchema: struct<cs_bill_customer_sk:int,cs_sales_price:decimal(7,2)>
+
+(2) ColumnarToRow [codegen id : 4]
+Input [3]: [cs_bill_customer_sk#1, cs_sales_price#2, cs_sold_date_sk#3]
+
+(3) Filter [codegen id : 4]
+Input [3]: [cs_bill_customer_sk#1, cs_sales_price#2, cs_sold_date_sk#3]
+Condition : isnotnull(cs_bill_customer_sk#1)
+
+(4) Scan parquet default.customer
+Output [2]: [c_customer_sk#5, c_current_addr_sk#6]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/customer]
+PushedFilters: [IsNotNull(c_customer_sk), IsNotNull(c_current_addr_sk)]
+ReadSchema: struct<c_customer_sk:int,c_current_addr_sk:int>
+
+(5) ColumnarToRow [codegen id : 1]
+Input [2]: [c_customer_sk#5, c_current_addr_sk#6]
+
+(6) Filter [codegen id : 1]
+Input [2]: [c_customer_sk#5, c_current_addr_sk#6]
+Condition : (isnotnull(c_customer_sk#5) AND isnotnull(c_current_addr_sk#6))
+
+(7) BroadcastExchange
+Input [2]: [c_customer_sk#5, c_current_addr_sk#6]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#7]
+
+(8) BroadcastHashJoin [codegen id : 4]
+Left keys [1]: [cs_bill_customer_sk#1]
+Right keys [1]: [c_customer_sk#5]
+Join condition: None
+
+(9) Project [codegen id : 4]
+Output [3]: [cs_sales_price#2, cs_sold_date_sk#3, c_current_addr_sk#6]
+Input [5]: [cs_bill_customer_sk#1, cs_sales_price#2, cs_sold_date_sk#3, c_customer_sk#5, c_current_addr_sk#6]
+
+(10) Scan parquet default.customer_address
+Output [3]: [ca_address_sk#8, ca_state#9, ca_zip#10]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/customer_address]
+PushedFilters: [IsNotNull(ca_address_sk)]
+ReadSchema: struct<ca_address_sk:int,ca_state:string,ca_zip:string>
+
+(11) ColumnarToRow [codegen id : 2]
+Input [3]: [ca_address_sk#8, ca_state#9, ca_zip#10]
+
+(12) Filter [codegen id : 2]
+Input [3]: [ca_address_sk#8, ca_state#9, ca_zip#10]
+Condition : isnotnull(ca_address_sk#8)
+
+(13) BroadcastExchange
+Input [3]: [ca_address_sk#8, ca_state#9, ca_zip#10]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#11]
+
+(14) BroadcastHashJoin [codegen id : 4]
+Left keys [1]: [c_current_addr_sk#6]
+Right keys [1]: [ca_address_sk#8]
+Join condition: ((substr(ca_zip#10, 1, 5) IN (85669,86197,88274,83405,86475,85392,85460,80348,81792) OR ca_state#9 IN (CA,WA,GA)) OR (cs_sales_price#2 > 500.00))
+
+(15) Project [codegen id : 4]
+Output [3]: [cs_sales_price#2, cs_sold_date_sk#3, ca_zip#10]
+Input [6]: [cs_sales_price#2, cs_sold_date_sk#3, c_current_addr_sk#6, ca_address_sk#8, ca_state#9, ca_zip#10]
+
+(16) Scan parquet default.date_dim
+Output [3]: [d_date_sk#12, d_year#13, d_qoy#14]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/date_dim]
+PushedFilters: [IsNotNull(d_qoy), IsNotNull(d_year), EqualTo(d_qoy,2), EqualTo(d_year,2001), IsNotNull(d_date_sk)]
+ReadSchema: struct<d_date_sk:int,d_year:int,d_qoy:int>
+
+(17) ColumnarToRow [codegen id : 3]
+Input [3]: [d_date_sk#12, d_year#13, d_qoy#14]
+
+(18) Filter [codegen id : 3]
+Input [3]: [d_date_sk#12, d_year#13, d_qoy#14]
+Condition : ((((isnotnull(d_qoy#14) AND isnotnull(d_year#13)) AND (d_qoy#14 = 2)) AND (d_year#13 = 2001)) AND isnotnull(d_date_sk#12))
+
+(19) Project [codegen id : 3]
+Output [1]: [d_date_sk#12]
+Input [3]: [d_date_sk#12, d_year#13, d_qoy#14]
+
+(20) BroadcastExchange
+Input [1]: [d_date_sk#12]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#15]
+
+(21) BroadcastHashJoin [codegen id : 4]
+Left keys [1]: [cs_sold_date_sk#3]
+Right keys [1]: [d_date_sk#12]
+Join condition: None
+
+(22) Project [codegen id : 4]
+Output [2]: [cs_sales_price#2, ca_zip#10]
+Input [4]: [cs_sales_price#2, cs_sold_date_sk#3, ca_zip#10, d_date_sk#12]
+
+(23) HashAggregate [codegen id : 4]
+Input [2]: [cs_sales_price#2, ca_zip#10]
+Keys [1]: [ca_zip#10]
+Functions [1]: [partial_sum(UnscaledValue(cs_sales_price#2))]
+Aggregate Attributes [1]: [sum#16]
+Results [2]: [ca_zip#10, sum#17]
+
+(24) Exchange
+Input [2]: [ca_zip#10, sum#17]
+Arguments: hashpartitioning(ca_zip#10, 5), ENSURE_REQUIREMENTS, [id=#18]
+
+(25) HashAggregate [codegen id : 5]
+Input [2]: [ca_zip#10, sum#17]
+Keys [1]: [ca_zip#10]
+Functions [1]: [sum(UnscaledValue(cs_sales_price#2))]
+Aggregate Attributes [1]: [sum(UnscaledValue(cs_sales_price#2))#19]
+Results [2]: [ca_zip#10, MakeDecimal(sum(UnscaledValue(cs_sales_price#2))#19,17,2) AS sum(cs_sales_price)#20]
+
+(26) TakeOrderedAndProject
+Input [2]: [ca_zip#10, sum(cs_sales_price)#20]
+Arguments: 100, [ca_zip#10 ASC NULLS FIRST], [ca_zip#10, sum(cs_sales_price)#20]
+
+===== Subqueries =====
+
+Subquery:1 Hosting operator id = 1 Hosting Expression = cs_sold_date_sk#3 IN dynamicpruning#4
+ReusedExchange (27)
+
+
+(27) ReusedExchange [Reuses operator id: 20]
+Output [1]: [d_date_sk#12]
+
+

@@ -46,6 +46,8 @@ class ArrowPythonRunner(
   extends BasePythonRunner[Iterator[InternalRow], ColumnarBatch](funcs, evalType, argOffsets)
   with PythonArrowOutput {
 
+  override val simplifiedTraceback: Boolean = SQLConf.get.pysparkSimplifiedTraceback
+
   override val bufferSize: Int = SQLConf.get.pandasUDFBufferSize
   require(
     bufferSize >= 4,

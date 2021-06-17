@@ -53,7 +53,7 @@ setClass("DecisionTreeRegressionModel", representation(jobj = "jobj"))
 #' @note DecisionTreeClassificationModel since 2.3.0
 setClass("DecisionTreeClassificationModel", representation(jobj = "jobj"))
 
-# Create the summary of a tree ensemble model (eg. Random Forest, GBT)
+# Create the summary of a tree ensemble model (e.g. Random Forest, GBT)
 summary.treeEnsemble <- function(model) {
   jobj <- model@jobj
   formula <- callJMethod(jobj, "formula")
@@ -73,7 +73,7 @@ summary.treeEnsemble <- function(model) {
        jobj = jobj)
 }
 
-# Prints the summary of tree ensemble models (eg. Random Forest, GBT)
+# Prints the summary of tree ensemble models (e.g. Random Forest, GBT)
 print.summary.treeEnsemble <- function(x) {
   jobj <- x$jobj
   cat("Formula: ", x$formula)
@@ -127,9 +127,9 @@ print.summary.decisionTree <- function(x) {
 #' \code{write.ml}/\code{read.ml} to save/load fitted models.
 #' For more details, see
 # nolint start
-#' \href{http://spark.apache.org/docs/latest/ml-classification-regression.html#gradient-boosted-tree-regression}{
+#' \href{https://spark.apache.org/docs/latest/ml-classification-regression.html#gradient-boosted-tree-regression}{
 #' GBT Regression} and
-#' \href{http://spark.apache.org/docs/latest/ml-classification-regression.html#gradient-boosted-tree-classifier}{
+#' \href{https://spark.apache.org/docs/latest/ml-classification-regression.html#gradient-boosted-tree-classifier}{
 #' GBT Classification}
 # nolint end
 #'
@@ -343,9 +343,9 @@ setMethod("write.ml", signature(object = "GBTClassificationModel", path = "chara
 #' save/load fitted models.
 #' For more details, see
 # nolint start
-#' \href{http://spark.apache.org/docs/latest/ml-classification-regression.html#random-forest-regression}{
+#' \href{https://spark.apache.org/docs/latest/ml-classification-regression.html#random-forest-regression}{
 #' Random Forest Regression} and
-#' \href{http://spark.apache.org/docs/latest/ml-classification-regression.html#random-forest-classifier}{
+#' \href{https://spark.apache.org/docs/latest/ml-classification-regression.html#random-forest-classifier}{
 #' Random Forest Classification}
 # nolint end
 #'
@@ -393,6 +393,7 @@ setMethod("write.ml", signature(object = "GBTClassificationModel", path = "chara
 #'                                         "error" (throw an error), "keep" (put invalid data in
 #'                                         a special additional bucket, at index numLabels). Default
 #'                                         is "error".
+#' @param bootstrap Whether bootstrap samples are used when building trees.
 #' @param ... additional arguments passed to the method.
 #' @aliases spark.randomForest,SparkDataFrame,formula-method
 #' @return \code{spark.randomForest} returns a fitted Random Forest model.
@@ -428,7 +429,8 @@ setMethod("spark.randomForest", signature(data = "SparkDataFrame", formula = "fo
                    featureSubsetStrategy = "auto", seed = NULL, subsamplingRate = 1.0,
                    minInstancesPerNode = 1, minInfoGain = 0.0, checkpointInterval = 10,
                    maxMemoryInMB = 256, cacheNodeIds = FALSE,
-                   handleInvalid = c("error", "keep", "skip")) {
+                   handleInvalid = c("error", "keep", "skip"),
+                   bootstrap = TRUE) {
             type <- match.arg(type)
             formula <- paste(deparse(formula), collapse = "")
             if (!is.null(seed)) {
@@ -445,7 +447,8 @@ setMethod("spark.randomForest", signature(data = "SparkDataFrame", formula = "fo
                                          as.numeric(minInfoGain), as.integer(checkpointInterval),
                                          as.character(featureSubsetStrategy), seed,
                                          as.numeric(subsamplingRate),
-                                         as.integer(maxMemoryInMB), as.logical(cacheNodeIds))
+                                         as.integer(maxMemoryInMB), as.logical(cacheNodeIds),
+                                         as.logical(bootstrap))
                      new("RandomForestRegressionModel", jobj = jobj)
                    },
                    classification = {
@@ -460,7 +463,7 @@ setMethod("spark.randomForest", signature(data = "SparkDataFrame", formula = "fo
                                          as.character(featureSubsetStrategy), seed,
                                          as.numeric(subsamplingRate),
                                          as.integer(maxMemoryInMB), as.logical(cacheNodeIds),
-                                         handleInvalid)
+                                         handleInvalid, as.logical(bootstrap))
                      new("RandomForestClassificationModel", jobj = jobj)
                    }
             )
@@ -565,9 +568,9 @@ setMethod("write.ml", signature(object = "RandomForestClassificationModel", path
 #' save/load fitted models.
 #' For more details, see
 # nolint start
-#' \href{http://spark.apache.org/docs/latest/ml-classification-regression.html#decision-tree-regression}{
+#' \href{https://spark.apache.org/docs/latest/ml-classification-regression.html#decision-tree-regression}{
 #' Decision Tree Regression} and
-#' \href{http://spark.apache.org/docs/latest/ml-classification-regression.html#decision-tree-classifier}{
+#' \href{https://spark.apache.org/docs/latest/ml-classification-regression.html#decision-tree-classifier}{
 #' Decision Tree Classification}
 # nolint end
 #'

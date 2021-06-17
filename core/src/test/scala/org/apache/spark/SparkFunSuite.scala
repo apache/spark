@@ -19,11 +19,17 @@ package org.apache.spark
 
 // scalastyle:off
 import java.io.File
+import java.nio.file.Path
+import java.util.{Locale, TimeZone}
 
 import scala.annotation.tailrec
+import scala.collection.mutable.ArrayBuffer
 
-import org.apache.log4j.{Appender, Level, Logger}
-import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, BeforeAndAfterEach, FunSuite, Outcome}
+import org.apache.commons.io.FileUtils
+import org.apache.log4j.{Appender, AppenderSkeleton, Level, Logger}
+import org.apache.log4j.spi.LoggingEvent
+import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, BeforeAndAfterEach, Failed, Outcome}
+import org.scalatest.funsuite.AnyFunSuite
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.Tests.IS_TESTING
@@ -54,12 +60,23 @@ import org.apache.spark.util.{AccumulatorContext, Utils}
  * }
  */
 abstract class SparkFunSuite
-  extends FunSuite
+  extends AnyFunSuite
   with BeforeAndAfterAll
   with BeforeAndAfterEach
   with ThreadAudit
   with Logging {
 // scalastyle:on
+
+  // Initialize the logger forcibly to let the logger log timestamp
+  // based on the local time zone depending on environments.
+  // The default time zone will be set to America/Los_Angeles later
+  // so this initialization is necessary here.
+  log
+
+  // Timezone is fixed to America/Los_Angeles for those timezone sensitive tests (timestamp_*)
+  TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
+  // Add Locale setting
+  Locale.setDefault(Locale.US)
 
   protected val enableAutoThreadAudit = true
 
@@ -90,6 +107,28 @@ abstract class SparkFunSuite
 
   protected final def getTestResourcePath(file: String): String = {
     getTestResourceFile(file).getCanonicalPath
+  }
+
+  protected final def copyAndGetResourceFile(fileName: String, suffix: String): File = {
+    val url = Thread.currentThread().getContextClassLoader.getResource(fileName)
+    // To avoid illegal accesses to a resource file inside jar
+    // (URISyntaxException might be thrown when accessing it),
+    // copy it into a temporary one for accessing it from the dependent module.
+    val file = File.createTempFile("test-resource", suffix)
+    file.deleteOnExit()
+    FileUtils.copyURLToFile(url, file)
+    file
+  }
+
+  /**
+   * Get a Path relative to the root project. It is assumed that a spark home is set.
+   */
+  protected final def getWorkspaceFilePath(first: String, more: String*): Path = {
+    if (!(sys.props.contains("spark.test.home") || sys.env.contains("SPARK_HOME"))) {
+      fail("spark.test.home or SPARK_HOME is not set.")
+    }
+    val sparkHome = sys.props.getOrElse("spark.test.home", sys.env("SPARK_HOME"))
+    java.nio.file.Paths.get(sparkHome, first +: more: _*)
   }
 
   /**
@@ -133,6 +172,8 @@ abstract class SparkFunSuite
     }
   }
 
+  protected def logForFailedTest(): Unit = {}
+
   /**
    * Log the suite name and the test name before and after each test.
    *
@@ -146,7 +187,13 @@ abstract class SparkFunSuite
     val shortSuiteName = suiteName.replaceAll("org.apache.spark", "o.a.s")
     try {
       logInfo(s"\n\n===== TEST OUTPUT FOR $shortSuiteName: '$testName' =====\n")
-      test()
+      val outcome = test()
+      outcome match {
+        case _: Failed =>
+          logForFailedTest()
+        case _ =>
+      }
+      outcome
     } finally {
       logInfo(s"\n\n===== FINISHED $shortSuiteName: '$testName' =====\n")
     }
@@ -170,20 +217,43 @@ abstract class SparkFunSuite
    */
   protected def withLogAppender(
       appender: Appender,
-      loggerName: Option[String] = None,
+      loggerNames: Seq[String] = Seq.empty,
       level: Option[Level] = None)(
       f: => Unit): Unit = {
-    val logger = loggerName.map(Logger.getLogger).getOrElse(Logger.getRootLogger)
-    val restoreLevel = logger.getLevel
-    logger.addAppender(appender)
-    if (level.isDefined) {
-      logger.setLevel(level.get)
+    val loggers = if (loggerNames.nonEmpty) {
+      loggerNames.map(Logger.getLogger)
+    } else {
+      Seq(Logger.getRootLogger)
     }
-    try f finally {
-      logger.removeAppender(appender)
+    val restoreLevels = loggers.map(_.getLevel)
+    loggers.foreach { logger =>
+      logger.addAppender(appender)
       if (level.isDefined) {
-        logger.setLevel(restoreLevel)
+        logger.setLevel(level.get)
       }
     }
+    try f finally {
+      loggers.foreach(_.removeAppender(appender))
+      if (level.isDefined) {
+        loggers.zipWithIndex.foreach { case (logger, i) =>
+          logger.setLevel(restoreLevels(i))
+        }
+      }
+    }
+  }
+
+  class LogAppender(msg: String = "", maxEvents: Int = 1000) extends AppenderSkeleton {
+    val loggingEvents = new ArrayBuffer[LoggingEvent]()
+
+    override def append(loggingEvent: LoggingEvent): Unit = {
+      if (loggingEvents.size >= maxEvents) {
+        val loggingInfo = if (msg == "") "." else s" while logging $msg."
+        throw new IllegalStateException(
+          s"Number of events reached the limit of $maxEvents$loggingInfo")
+      }
+      loggingEvents.append(loggingEvent)
+    }
+    override def close(): Unit = {}
+    override def requiresLayout(): Boolean = false
   }
 }

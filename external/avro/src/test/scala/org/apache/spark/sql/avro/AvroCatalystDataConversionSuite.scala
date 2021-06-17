@@ -26,11 +26,14 @@ import org.apache.avro.message.{BinaryMessageDecoder, BinaryMessageEncoder}
 
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.{RandomDataGenerator, Row}
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, NoopFilters, OrderedFilters, StructFilters}
 import org.apache.spark.sql.catalyst.expressions.{ExpressionEvalHelper, GenericInternalRow, Literal}
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData, MapData}
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.sources.{EqualTo, Not}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 class AvroCatalystDataConversionSuite extends SparkFunSuite
   with SharedSparkSession
@@ -269,7 +272,26 @@ class AvroCatalystDataConversionSuite extends SparkFunSuite
     val message = intercept[IncompatibleSchemaException] {
       CatalystDataToAvro(Literal("SPADES"), Some("\"long\"")).eval()
     }.getMessage
-    assert(message ==  "Cannot convert Catalyst type StringType to Avro type \"long\".")
+    assert(message === "Cannot convert SQL type STRING to Avro type \"long\".")
+  }
+
+  private def checkDeserialization(
+      schema: Schema,
+      data: GenericData.Record,
+      expected: Option[Any],
+      filters: StructFilters = new NoopFilters): Unit = {
+    val dataType = SchemaConverters.toSqlType(schema).dataType
+    val deserializer = new AvroDeserializer(
+      schema,
+      dataType,
+      SQLConf.LegacyBehaviorPolicy.CORRECTED,
+      filters)
+    val deserialized = deserializer.deserialize(data)
+    expected match {
+      case None => assert(deserialized == None)
+      case Some(d) =>
+        assert(checkResult(d, deserialized.get, dataType, exprNullable = false))
+    }
   }
 
   test("avro array can be generic java collection") {
@@ -287,30 +309,53 @@ class AvroCatalystDataConversionSuite extends SparkFunSuite
         |}
       """.stripMargin
     val avroSchema = new Schema.Parser().parse(jsonFormatSchema)
-    val dataType = SchemaConverters.toSqlType(avroSchema).dataType
-    val deserializer = new AvroDeserializer(avroSchema, dataType)
-
-    def checkDeserialization(data: GenericData.Record, expected: Any): Unit = {
-      assert(checkResult(
-        expected,
-        deserializer.deserialize(data),
-        dataType, exprNullable = false
-      ))
-    }
 
     def validateDeserialization(array: java.util.Collection[Integer]): Unit = {
       val data = new GenericRecordBuilder(avroSchema)
         .set("array", array)
         .build()
       val expected = InternalRow(new GenericArrayData(new util.ArrayList[Any](array)))
-      checkDeserialization(data, expected)
+      checkDeserialization(avroSchema, data, Some(expected))
 
       val reEncoded = new BinaryMessageDecoder[GenericData.Record](new GenericData(), avroSchema)
         .decode(new BinaryMessageEncoder(new GenericData(), avroSchema).encode(data))
-      checkDeserialization(reEncoded, expected)
+      checkDeserialization(avroSchema, reEncoded, Some(expected))
     }
 
     validateDeserialization(Collections.emptySet())
     validateDeserialization(util.Arrays.asList(1, null, 3))
+  }
+
+  test("SPARK-32346: filter pushdown to Avro deserializer") {
+    val schema =
+      """
+        |{
+        |  "type" : "record",
+        |  "name" : "test_schema",
+        |  "fields" : [
+        |    {"name": "Age", "type": "int"},
+        |    {"name": "Name", "type": "string"}
+        |  ]
+        |}
+        """.stripMargin
+    val avroSchema = new Schema.Parser().parse(schema)
+    val sqlSchema = new StructType().add("Age", "int").add("Name", "string")
+    val data = new GenericRecordBuilder(avroSchema)
+      .set("Age", 39)
+      .set("Name", "Maxim")
+      .build()
+    val expectedRow = Some(InternalRow(39, UTF8String.fromString("Maxim")))
+
+    checkDeserialization(avroSchema, data, expectedRow)
+    checkDeserialization(
+      avroSchema,
+      data,
+      expectedRow,
+      new OrderedFilters(Seq(EqualTo("Age", 39)), sqlSchema))
+    checkDeserialization(
+      avroSchema,
+      data,
+      None,
+      new OrderedFilters(Seq(Not(EqualTo("Age", 39))), sqlSchema))
   }
 }

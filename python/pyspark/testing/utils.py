@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+
 import glob
 import os
 import struct
@@ -27,15 +28,15 @@ from pyspark import SparkContext, SparkConf
 have_scipy = False
 have_numpy = False
 try:
-    import scipy.sparse
+    import scipy.sparse  # noqa: F401
     have_scipy = True
-except:
+except ImportError:
     # No SciPy, but that's okay, we'll skip those tests
     pass
 try:
-    import numpy as np
+    import numpy as np  # noqa: F401
     have_numpy = True
-except:
+except ImportError:
     # No NumPy, but that's okay, we'll skip those tests
     pass
 
@@ -56,18 +57,22 @@ def eventually(condition, timeout=30.0, catch_assertions=False):
     Wait a given amount of time for a condition to pass, else fail with an error.
     This is a helper utility for PySpark tests.
 
-    :param condition: Function that checks for termination conditions.
-                      condition() can return:
-                       - True: Conditions met. Return without error.
-                       - other value: Conditions not met yet. Continue. Upon timeout,
-                                      include last such value in error message.
-                      Note that this method may be called at any time during
-                      streaming execution (e.g., even before any results
-                      have been created).
-    :param timeout: Number of seconds to wait.  Default 30 seconds.
-    :param catch_assertions: If False (default), do not catch AssertionErrors.
-                             If True, catch AssertionErrors; continue, but save
-                             error to throw upon timeout.
+    Parameters
+    ----------
+    condition : function
+        Function that checks for termination conditions. condition() can return:
+            - True: Conditions met. Return without error.
+            - other value: Conditions not met yet. Continue. Upon timeout,
+              include last such value in error message.
+              Note that this method may be called at any time during
+              streaming execution (e.g., even before any results
+              have been created).
+    timeout : int
+        Number of seconds to wait.  Default 30 seconds.
+    catch_assertions : bool
+        If False (default), do not catch AssertionErrors.
+        If True, catch AssertionErrors; continue, but save
+        error to throw upon timeout.
     """
     start_time = time()
     lastValue = None
@@ -164,6 +169,6 @@ def search_jar(project_relative_path, sbt_jar_name_prefix, mvn_jar_name_prefix):
     if not jars:
         return None
     elif len(jars) > 1:
-        raise Exception("Found multiple JARs: %s; please remove all but one" % (", ".join(jars)))
+        raise RuntimeError("Found multiple JARs: %s; please remove all but one" % (", ".join(jars)))
     else:
         return jars[0]

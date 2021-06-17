@@ -17,17 +17,19 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
+import java.net.URI
 import java.util
 import java.util.Collections
 
 import scala.collection.JavaConverters._
 
+import org.apache.hadoop.fs.Path
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.connector.catalog.{Identifier, NamespaceChange, SupportsNamespaces, TableChange}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, NamespaceChange, TableCatalog, TableChange, V1Table}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{DoubleType, IntegerType, LongType, StringType, StructField, StructType, TimestampType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -44,7 +46,7 @@ abstract class V2SessionCatalogBaseSuite extends SharedSparkSession with BeforeA
   val testIdent: Identifier = Identifier.of(testNs, "test_table")
 
   def newCatalog(): V2SessionCatalog = {
-    val newCatalog = new V2SessionCatalog(spark.sessionState.catalog, spark.sessionState.conf)
+    val newCatalog = new V2SessionCatalog(spark.sessionState.catalog)
     newCatalog.initialize("test", CaseInsensitiveStringMap.empty())
     newCatalog
   }
@@ -158,6 +160,36 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
     assert(exc.message.contains("already exists"))
 
     assert(catalog.tableExists(testIdent))
+  }
+
+  private def makeQualifiedPathWithWarehouse(path: String): URI = {
+    val p = new Path(spark.sessionState.conf.warehousePath, path)
+    val fs = p.getFileSystem(spark.sessionState.newHadoopConf())
+    fs.makeQualified(p).toUri
+
+  }
+
+  test("createTable: location") {
+    val catalog = newCatalog()
+    val properties = new util.HashMap[String, String]()
+    assert(!catalog.tableExists(testIdent))
+
+    // default location
+    val t1 = catalog.createTable(testIdent, schema, Array.empty, properties).asInstanceOf[V1Table]
+    assert(t1.catalogTable.location ===
+      spark.sessionState.catalog.defaultTablePath(testIdent.asTableIdentifier))
+    catalog.dropTable(testIdent)
+
+    // relative path
+    properties.put(TableCatalog.PROP_LOCATION, "relative/path")
+    val t2 = catalog.createTable(testIdent, schema, Array.empty, properties).asInstanceOf[V1Table]
+    assert(t2.catalogTable.location === makeQualifiedPathWithWarehouse("db.db/relative/path"))
+    catalog.dropTable(testIdent)
+
+    // absolute path
+    properties.put(TableCatalog.PROP_LOCATION, "/absolute/path")
+    val t3 = catalog.createTable(testIdent, schema, Array.empty, properties).asInstanceOf[V1Table]
+    assert(t3.catalogTable.location.toString === "file:/absolute/path")
   }
 
   test("tableExists") {
@@ -391,7 +423,7 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
     assert(updated.schema == expectedSchema)
   }
 
-  test("alterTable: update column data type and nullability") {
+  test("alterTable: update column nullability") {
     val catalog = newCatalog()
 
     val originalSchema = new StructType()
@@ -402,25 +434,10 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
     assert(table.schema == originalSchema)
 
     val updated = catalog.alterTable(testIdent,
-      TableChange.updateColumnType(Array("id"), LongType, true))
+      TableChange.updateColumnNullability(Array("id"), true))
 
-    val expectedSchema = new StructType().add("id", LongType).add("data", StringType)
+    val expectedSchema = new StructType().add("id", IntegerType).add("data", StringType)
     assert(updated.schema == expectedSchema)
-  }
-
-  test("alterTable: update optional column to required fails") {
-    val catalog = newCatalog()
-
-    val table = catalog.createTable(testIdent, schema, Array.empty, emptyProps)
-
-    assert(table.schema == schema)
-
-    val exc = intercept[IllegalArgumentException] {
-      catalog.alterTable(testIdent, TableChange.updateColumnType(Array("id"), LongType, false))
-    }
-
-    assert(exc.getMessage.contains("Cannot change optional column to required"))
-    assert(exc.getMessage.contains("id"))
   }
 
   test("alterTable: update missing column fails") {
@@ -655,6 +672,26 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
     assert(exc.message.contains("not found"))
   }
 
+  test("alterTable: location") {
+    val catalog = newCatalog()
+    assert(!catalog.tableExists(testIdent))
+
+    // default location
+    val t1 = catalog.createTable(testIdent, schema, Array.empty, emptyProps).asInstanceOf[V1Table]
+    assert(t1.catalogTable.location ===
+      spark.sessionState.catalog.defaultTablePath(testIdent.asTableIdentifier))
+
+    // relative path
+    val t2 = catalog.alterTable(testIdent,
+      TableChange.setProperty(TableCatalog.PROP_LOCATION, "relative/path")).asInstanceOf[V1Table]
+    assert(t2.catalogTable.location === makeQualifiedPathWithWarehouse("db.db/relative/path"))
+
+    // absolute path
+    val t3 = catalog.alterTable(testIdent,
+      TableChange.setProperty(TableCatalog.PROP_LOCATION, "/absolute/path")).asInstanceOf[V1Table]
+    assert(t3.catalogTable.location.toString === "file:/absolute/path")
+  }
+
   test("dropTable") {
     val catalog = newCatalog()
 
@@ -757,7 +794,7 @@ class V2SessionCatalogNamespaceSuite extends V2SessionCatalogBaseSuite {
       actual: scala.collection.Map[String, String]): Unit = {
     // remove location and comment that are automatically added by HMS unless they are expected
     val toRemove =
-      SupportsNamespaces.RESERVED_PROPERTIES.asScala.filter(expected.contains)
+      CatalogV2Util.NAMESPACE_RESERVED_PROPERTIES.filter(expected.contains)
     assert(expected -- toRemove === actual)
   }
 
@@ -827,11 +864,15 @@ class V2SessionCatalogNamespaceSuite extends V2SessionCatalogBaseSuite {
 
   test("createNamespace: basic behavior") {
     val catalog = newCatalog()
-    val expectedPath = sqlContext.sessionState.catalog.getDefaultDBPath(testNs(0)).toString
+
+    val sessionCatalog = sqlContext.sessionState.catalog
+    val expectedPath =
+      new Path(spark.sessionState.conf.warehousePath,
+        sessionCatalog.getDefaultDBPath(testNs(0)).toString).toString
 
     catalog.createNamespace(testNs, Map("property" -> "value").asJava)
 
-    assert(expectedPath === spark.catalog.getDatabase(testNs(0)).locationUri.toString)
+    assert(expectedPath === spark.catalog.getDatabase(testNs(0)).locationUri)
 
     assert(catalog.namespaceExists(testNs) === true)
     val metadata = catalog.loadNamespaceMetadata(testNs).asScala
@@ -848,6 +889,23 @@ class V2SessionCatalogNamespaceSuite extends V2SessionCatalogBaseSuite {
     catalog.createNamespace(testNs, Map("location" -> expectedPath).asJava)
 
     assert(expectedPath === spark.catalog.getDatabase(testNs(0)).locationUri.toString)
+
+    assert(catalog.namespaceExists(testNs) === true)
+    val metadata = catalog.loadNamespaceMetadata(testNs).asScala
+    checkMetadata(metadata, Map.empty)
+    assert(expectedPath === metadata("location"))
+
+    catalog.dropNamespace(testNs)
+  }
+
+  test("createNamespace: relative location") {
+    val catalog = newCatalog()
+    val expectedPath =
+      new Path(spark.sessionState.conf.warehousePath, "a/b/c").toString
+
+    catalog.createNamespace(testNs, Map("location" -> "a/b/c").asJava)
+
+    assert(expectedPath === spark.catalog.getDatabase(testNs(0)).locationUri)
 
     assert(catalog.namespaceExists(testNs) === true)
     val metadata = catalog.loadNamespaceMetadata(testNs).asScala
@@ -969,16 +1027,23 @@ class V2SessionCatalogNamespaceSuite extends V2SessionCatalogBaseSuite {
 
   test("alterNamespace: update namespace location") {
     val catalog = newCatalog()
-    val initialPath = sqlContext.sessionState.catalog.getDefaultDBPath(testNs(0)).toString
-    val newPath = "file:/tmp/db.db"
+    val initialPath =
+      new Path(spark.sessionState.conf.warehousePath,
+        spark.sessionState.catalog.getDefaultDBPath(testNs(0)).toString).toString
 
+    val newAbsoluteUri = "file:/tmp/db.db"
     catalog.createNamespace(testNs, emptyProps)
+    assert(initialPath === spark.catalog.getDatabase(testNs(0)).locationUri)
+    catalog.alterNamespace(testNs, NamespaceChange.setProperty("location", newAbsoluteUri))
+    assert(newAbsoluteUri === spark.catalog.getDatabase(testNs(0)).locationUri)
 
-    assert(initialPath === spark.catalog.getDatabase(testNs(0)).locationUri.toString)
+    val newAbsolutePath = "/tmp/newAbsolutePath"
+    catalog.alterNamespace(testNs, NamespaceChange.setProperty("location", newAbsolutePath))
+    assert("file:" + newAbsolutePath === spark.catalog.getDatabase(testNs(0)).locationUri)
 
-    catalog.alterNamespace(testNs, NamespaceChange.setProperty("location", newPath))
-
-    assert(newPath === spark.catalog.getDatabase(testNs(0)).locationUri.toString)
+    val newRelativePath = new Path(spark.sessionState.conf.warehousePath, "relativeP").toString
+    catalog.alterNamespace(testNs, NamespaceChange.setProperty("location", "relativeP"))
+    assert(newRelativePath === spark.catalog.getDatabase(testNs(0)).locationUri)
 
     catalog.dropNamespace(testNs)
   }
@@ -1010,31 +1075,18 @@ class V2SessionCatalogNamespaceSuite extends V2SessionCatalogBaseSuite {
     assert(exc.getMessage.contains(testNs.quoted))
   }
 
-  test("alterNamespace: fail to remove location") {
+  test("alterNamespace: fail to remove reserved properties") {
     val catalog = newCatalog()
 
     catalog.createNamespace(testNs, emptyProps)
 
-    val exc = intercept[UnsupportedOperationException] {
-      catalog.alterNamespace(testNs, NamespaceChange.removeProperty("location"))
+    CatalogV2Util.NAMESPACE_RESERVED_PROPERTIES.foreach { p =>
+      val exc = intercept[UnsupportedOperationException] {
+        catalog.alterNamespace(testNs, NamespaceChange.removeProperty(p))
+      }
+      assert(exc.getMessage.contains(s"Cannot remove reserved property: $p"))
+
     }
-
-    assert(exc.getMessage.contains("Cannot remove reserved property: location"))
-
-    catalog.dropNamespace(testNs)
-  }
-
-  test("alterNamespace: fail to remove comment") {
-    val catalog = newCatalog()
-
-    catalog.createNamespace(testNs, Map("comment" -> "test db").asJava)
-
-    val exc = intercept[UnsupportedOperationException] {
-      catalog.alterNamespace(testNs, NamespaceChange.removeProperty("comment"))
-    }
-
-    assert(exc.getMessage.contains("Cannot remove reserved property: comment"))
-
     catalog.dropNamespace(testNs)
   }
 }

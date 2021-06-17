@@ -53,7 +53,7 @@ abstract class FileTable(
     } else {
       // This is a non-streaming file based datasource.
       val rootPathsSpecified = DataSource.checkAndGlobPathIfNecessary(paths, hadoopConf,
-        checkEmptyGlobPath = true, checkFilesExist = true)
+        checkEmptyGlobPath = true, checkFilesExist = true, enableGlobbing = globPaths)
       val fileStatusCache = FileStatusCache.getOrCreate(sparkSession)
       new InMemoryFileIndex(
         sparkSession, rootPathsSpecified, caseSensitiveMap, userSpecifiedSchema, fileStatusCache)
@@ -79,7 +79,7 @@ abstract class FileTable(
 
   override lazy val schema: StructType = {
     val caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
-    SchemaUtils.checkColumnNameDuplication(dataSchema.fieldNames,
+    SchemaUtils.checkSchemaColumnNameDuplication(dataSchema,
       "in the data schema", caseSensitive)
     dataSchema.foreach { field =>
       if (!supportsDataType(field.dataType)) {
@@ -88,7 +88,7 @@ abstract class FileTable(
       }
     }
     val partitionSchema = fileIndex.partitionSchema
-    SchemaUtils.checkColumnNameDuplication(partitionSchema.fieldNames,
+    SchemaUtils.checkSchemaColumnNameDuplication(partitionSchema,
       "in the partition schema", caseSensitive)
     val partitionNameSet: Set[String] =
       partitionSchema.fields.map(PartitioningUtils.getColName(_, caseSensitive)).toSet
@@ -102,7 +102,7 @@ abstract class FileTable(
     StructType(fields)
   }
 
-  override def partitioning: Array[Transform] = fileIndex.partitionSchema.asTransforms
+  override def partitioning: Array[Transform] = fileIndex.partitionSchema.names.toSeq.asTransforms
 
   override def properties: util.Map[String, String] = options.asCaseSensitiveMap
 
@@ -139,8 +139,16 @@ abstract class FileTable(
    * 2. Catalog support is required, which is still under development for data source V2.
    */
   def fallbackFileFormat: Class[_ <: FileFormat]
+
+  /**
+   * Whether or not paths should be globbed before being used to access files.
+   */
+  private def globPaths: Boolean = {
+    val entry = options.get(DataSource.GLOB_PATHS_KEY)
+    Option(entry).map(_ == "true").getOrElse(true)
+  }
 }
 
 object FileTable {
-  private val CAPABILITIES = Set(BATCH_READ, BATCH_WRITE, TRUNCATE).asJava
+  private val CAPABILITIES = Set(BATCH_READ, BATCH_WRITE).asJava
 }

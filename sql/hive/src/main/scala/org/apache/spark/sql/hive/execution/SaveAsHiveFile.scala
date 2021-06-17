@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.hive.execution
 
-import java.io.{File, IOException}
+import java.io.IOException
 import java.net.URI
 import java.text.SimpleDateFormat
 import java.util.{Date, Locale, Random}
@@ -33,6 +33,7 @@ import org.apache.spark.internal.io.FileCommitProtocol
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.command.DataWritingCommand
 import org.apache.spark.sql.execution.datasources.FileFormatWriter
@@ -175,7 +176,7 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
       fs.deleteOnExit(dirPath)
     } catch {
       case e: IOException =>
-        throw new RuntimeException("Cannot create staging directory: " + dirPath.toString, e)
+        throw QueryExecutionErrors.cannotCreateStagingDirError(dirPath.toString, e)
     }
     dirPath
   }
@@ -246,8 +247,8 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
       fs.deleteOnExit(dir)
     } catch {
       case e: IOException =>
-        throw new RuntimeException(
-          "Cannot create staging directory '" + dir.toString + "': " + e.getMessage, e)
+        throw QueryExecutionErrors.cannotCreateStagingDirError(
+          s"'${dir.toString}': ${e.getMessage}", e)
     }
     dir
   }

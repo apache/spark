@@ -91,7 +91,7 @@ private[clustering] trait PowerIterationClusteringParams extends Params with Has
   @Since("2.4.0")
   def getDstCol: String = $(dstCol)
 
-  setDefault(srcCol -> "src", dstCol -> "dst")
+  setDefault(srcCol -> "src", dstCol -> "dst", k -> 2, maxIter -> 20, initMode -> "random")
 }
 
 /**
@@ -110,11 +110,6 @@ private[clustering] trait PowerIterationClusteringParams extends Params with Has
 class PowerIterationClustering private[clustering] (
     @Since("2.4.0") override val uid: String)
   extends PowerIterationClusteringParams with DefaultParamsWritable {
-
-  setDefault(
-    k -> 2,
-    maxIter -> 20,
-    initMode -> "random")
 
   @Since("2.4.0")
   def this() = this(Identifiable.randomUID("PowerIterationClustering"))

@@ -21,28 +21,40 @@ import java.math.BigDecimal
 import java.sql.{Connection, Date, Timestamp}
 import java.util.Properties
 
-import org.scalatest.Ignore
+import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.types.{BooleanType, ByteType, ShortType, StructType}
 import org.apache.spark.tags.DockerTest
 
-
+/**
+ * To run this test suite for a specific version (e.g., ibmcom/db2:11.5.4.0):
+ * {{{
+ *   ENABLE_DOCKER_INTEGRATION_TESTS=1 DB2_DOCKER_IMAGE_NAME=ibmcom/db2:11.5.4.0
+ *     ./build/sbt -Pdocker-integration-tests
+ *     "testOnly org.apache.spark.sql.jdbc.DB2IntegrationSuite"
+ * }}}
+ */
 @DockerTest
-@Ignore // AMPLab Jenkins needs to be updated before shared memory works on docker
 class DB2IntegrationSuite extends DockerJDBCIntegrationSuite {
   override val db = new DatabaseOnDocker {
-    override val imageName = "lresende/db2express-c:10.5.0.5-3.10.0"
+    override val imageName = sys.env.getOrElse("DB2_DOCKER_IMAGE_NAME", "ibmcom/db2:11.5.4.0")
     override val env = Map(
       "DB2INST1_PASSWORD" -> "rootpass",
-      "LICENSE" -> "accept"
+      "LICENSE" -> "accept",
+      "DBNAME" -> "foo",
+      "ARCHIVE_LOGS" -> "false",
+      "AUTOCONFIG" -> "false"
     )
     override val usesIpc = false
     override val jdbcPort: Int = 50000
+    override val privileged = true
     override def getJdbcUrl(ip: String, port: Int): String =
       s"jdbc:db2://$ip:$port/foo:user=db2inst1;password=rootpass;retrieveMessagesFromServerOnGetMessage=true;" //scalastyle:ignore
-    override def getStartupProcessName: Option[String] = Some("db2start")
   }
+
+  override val connectionTimeout = timeout(3.minutes)
 
   override def dataPreparation(conn: Connection): Unit = {
     conn.prepareStatement("CREATE TABLE tbl (x INTEGER, y VARCHAR(8))").executeUpdate()
@@ -108,17 +120,19 @@ class DB2IntegrationSuite extends DockerJDBCIntegrationSuite {
   }
 
   test("Date types") {
-    val df = sqlContext.read.jdbc(jdbcUrl, "dates", new Properties)
-    val rows = df.collect()
-    assert(rows.length == 1)
-    val types = rows(0).toSeq.map(x => x.getClass.toString)
-    assert(types.length == 3)
-    assert(types(0).equals("class java.sql.Date"))
-    assert(types(1).equals("class java.sql.Timestamp"))
-    assert(types(2).equals("class java.sql.Timestamp"))
-    assert(rows(0).getAs[Date](0).equals(Date.valueOf("1991-11-09")))
-    assert(rows(0).getAs[Timestamp](1).equals(Timestamp.valueOf("1970-01-01 13:31:24")))
-    assert(rows(0).getAs[Timestamp](2).equals(Timestamp.valueOf("2009-02-13 23:31:30")))
+    withDefaultTimeZone(UTC) {
+      val df = sqlContext.read.jdbc(jdbcUrl, "dates", new Properties)
+      val rows = df.collect()
+      assert(rows.length == 1)
+      val types = rows(0).toSeq.map(x => x.getClass.toString)
+      assert(types.length == 3)
+      assert(types(0).equals("class java.sql.Date"))
+      assert(types(1).equals("class java.sql.Timestamp"))
+      assert(types(2).equals("class java.sql.Timestamp"))
+      assert(rows(0).getAs[Date](0).equals(Date.valueOf("1991-11-09")))
+      assert(rows(0).getAs[Timestamp](1).equals(Timestamp.valueOf("1970-01-01 13:31:24")))
+      assert(rows(0).getAs[Timestamp](2).equals(Timestamp.valueOf("2009-02-13 23:31:30")))
+    }
   }
 
   test("String types") {

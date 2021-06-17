@@ -58,11 +58,9 @@ private[spark] class ProcfsMetricsGetter(procfsDir: String = "/proc/") extends L
           logWarning("Exception checking for procfs dir", ioe)
           false
       }
-      val shouldLogStageExecutorMetrics =
-        SparkEnv.get.conf.get(config.EVENT_LOG_STAGE_EXECUTOR_METRICS)
-      val shouldLogStageExecutorProcessTreeMetrics =
-        SparkEnv.get.conf.get(config.EVENT_LOG_PROCESS_TREE_METRICS)
-      procDirExists.get && shouldLogStageExecutorProcessTreeMetrics && shouldLogStageExecutorMetrics
+      val shouldPollProcessTreeMetrics =
+        SparkEnv.get.conf.get(config.EXECUTOR_PROCESS_TREE_METRICS_ENABLED)
+      procDirExists.get && shouldPollProcessTreeMetrics
     }
   }
 
@@ -103,7 +101,8 @@ private[spark] class ProcfsMetricsGetter(procfsDir: String = "/proc/") extends L
     }
   }
 
-  private def computeProcessTree(): Set[Int] = {
+  // Exposed for testing
+  private[executor] def computeProcessTree(): Set[Int] = {
     if (!isAvailable || testing) {
       return Set()
     }
@@ -161,7 +160,8 @@ private[spark] class ProcfsMetricsGetter(procfsDir: String = "/proc/") extends L
     }
   }
 
-  def addProcfsMetricsFromOneProcess(
+  // Exposed for testing
+  private[executor] def addProcfsMetricsFromOneProcess(
       allMetrics: ProcfsMetrics,
       pid: Int): ProcfsMetrics = {
 
@@ -201,7 +201,7 @@ private[spark] class ProcfsMetricsGetter(procfsDir: String = "/proc/") extends L
       case f: IOException =>
         logWarning("There was a problem with reading" +
           " the stat file of the process. ", f)
-        ProcfsMetrics(0, 0, 0, 0, 0, 0)
+        throw f
     }
   }
 
@@ -212,11 +212,16 @@ private[spark] class ProcfsMetricsGetter(procfsDir: String = "/proc/") extends L
     val pids = computeProcessTree
     var allMetrics = ProcfsMetrics(0, 0, 0, 0, 0, 0)
     for (p <- pids) {
-      allMetrics = addProcfsMetricsFromOneProcess(allMetrics, p)
-      // if we had an error getting any of the metrics, we don't want to report partial metrics, as
-      // that would be misleading.
-      if (!isAvailable) {
-        return ProcfsMetrics(0, 0, 0, 0, 0, 0)
+      try {
+        allMetrics = addProcfsMetricsFromOneProcess(allMetrics, p)
+        // if we had an error getting any of the metrics, we don't want to
+        // report partial metrics, as that would be misleading.
+        if (!isAvailable) {
+          return ProcfsMetrics(0, 0, 0, 0, 0, 0)
+        }
+      } catch {
+        case _: IOException =>
+          return ProcfsMetrics(0, 0, 0, 0, 0, 0)
       }
     }
     allMetrics

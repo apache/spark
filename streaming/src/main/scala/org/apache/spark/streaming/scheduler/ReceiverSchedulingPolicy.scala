@@ -128,14 +128,14 @@ private[streaming] class ReceiverSchedulingPolicy {
     }
 
     // Assign idle executors to receivers that have less executors
-    val idleExecutors = numReceiversOnExecutor.filter(_._2 == 0).map(_._1)
+    val idleExecutors = numReceiversOnExecutor.filter(_._2 == 0).keys
     for (executor <- idleExecutors) {
       // Assign an idle executor to the receiver that has least candidate executors.
       val leastScheduledExecutors = scheduledLocations.minBy(_.size)
       leastScheduledExecutors += executor
     }
 
-    receivers.map(_.streamId).zip(scheduledLocations).toMap
+    receivers.map(_.streamId).zip(scheduledLocations.map(_.toSeq)).toMap
   }
 
   /**
@@ -183,7 +183,7 @@ private[streaming] class ReceiverSchedulingPolicy {
 
     val executorWeights: Map[ExecutorCacheTaskLocation, Double] = {
       receiverTrackingInfoMap.values.flatMap(convertReceiverTrackingInfoToExecutorWeights)
-        .groupBy(_._1).mapValues(_.map(_._2).sum) // Sum weights for each executor
+        .groupBy(_._1).mapValues(_.map(_._2).sum).toMap // Sum weights for each executor
     }
 
     val idleExecutors = executors.toSet -- executorWeights.keys

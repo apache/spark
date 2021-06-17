@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst
 
 import java.sql.{Date, Timestamp}
+import java.time.{Instant, LocalDate}
 
 import scala.language.implicitConversions
 
@@ -30,6 +31,7 @@ import org.apache.spark.sql.catalyst.expressions.objects.Invoke
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * A collection of implicit conversions that create a DSL for constructing catalyst data structures.
@@ -101,6 +103,14 @@ package object dsl {
     def like(other: Expression, escapeChar: Char = '\\'): Expression =
       Like(expr, other, escapeChar)
     def rlike(other: Expression): Expression = RLike(expr, other)
+    def likeAll(others: Expression*): Expression =
+      LikeAll(expr, others.map(_.eval(EmptyRow).asInstanceOf[UTF8String]))
+    def notLikeAll(others: Expression*): Expression =
+      NotLikeAll(expr, others.map(_.eval(EmptyRow).asInstanceOf[UTF8String]))
+    def likeAny(others: Expression*): Expression =
+      LikeAny(expr, others.map(_.eval(EmptyRow).asInstanceOf[UTF8String]))
+    def notLikeAny(others: Expression*): Expression =
+      NotLikeAny(expr, others.map(_.eval(EmptyRow).asInstanceOf[UTF8String]))
     def contains(other: Expression): Expression = Contains(expr, other)
     def startsWith(other: Expression): Expression = StartsWith(expr, other)
     def endsWith(other: Expression): Expression = EndsWith(expr, other)
@@ -120,14 +130,16 @@ package object dsl {
       if (expr.resolved && expr.dataType.sameType(to)) {
         expr
       } else {
-        Cast(expr, to)
+        val cast = Cast(expr, to)
+        cast.setTagValue(Cast.USER_SPECIFIED_CAST, true)
+        cast
       }
     }
 
     def asc: SortOrder = SortOrder(expr, Ascending)
-    def asc_nullsLast: SortOrder = SortOrder(expr, Ascending, NullsLast, Set.empty)
+    def asc_nullsLast: SortOrder = SortOrder(expr, Ascending, NullsLast, Seq.empty)
     def desc: SortOrder = SortOrder(expr, Descending)
-    def desc_nullsFirst: SortOrder = SortOrder(expr, Descending, NullsFirst, Set.empty)
+    def desc_nullsFirst: SortOrder = SortOrder(expr, Descending, NullsFirst, Seq.empty)
     def as(alias: String): NamedExpression = Alias(expr, alias)()
     def as(alias: Symbol): NamedExpression = Alias(expr, alias.name)()
   }
@@ -146,10 +158,12 @@ package object dsl {
     implicit def doubleToLiteral(d: Double): Literal = Literal(d)
     implicit def stringToLiteral(s: String): Literal = Literal.create(s, StringType)
     implicit def dateToLiteral(d: Date): Literal = Literal(d)
+    implicit def localDateToLiteral(d: LocalDate): Literal = Literal(d)
     implicit def bigDecimalToLiteral(d: BigDecimal): Literal = Literal(d.underlying())
     implicit def bigDecimalToLiteral(d: java.math.BigDecimal): Literal = Literal(d)
     implicit def decimalToLiteral(d: Decimal): Literal = Literal(d)
     implicit def timestampToLiteral(t: Timestamp): Literal = Literal(t)
+    implicit def instantToLiteral(i: Instant): Literal = Literal(i)
     implicit def binaryToLiteral(a: Array[Byte]): Literal = Literal(a)
 
     implicit def symbolToUnresolvedAttribute(s: Symbol): analysis.UnresolvedAttribute =
@@ -165,20 +179,41 @@ package object dsl {
     }
 
     def rand(e: Long): Expression = Rand(e)
-    def sum(e: Expression): Expression = Sum(e).toAggregateExpression()
-    def sumDistinct(e: Expression): Expression = Sum(e).toAggregateExpression(isDistinct = true)
-    def count(e: Expression): Expression = Count(e).toAggregateExpression()
+    def sum(e: Expression, filter: Option[Expression] = None): Expression =
+      Sum(e).toAggregateExpression(isDistinct = false, filter = filter)
+    def sumDistinct(e: Expression, filter: Option[Expression] = None): Expression =
+      Sum(e).toAggregateExpression(isDistinct = true, filter = filter)
+    def count(e: Expression, filter: Option[Expression] = None): Expression =
+      Count(e).toAggregateExpression(isDistinct = false, filter = filter)
     def countDistinct(e: Expression*): Expression =
       Count(e).toAggregateExpression(isDistinct = true)
-    def approxCountDistinct(e: Expression, rsd: Double = 0.05): Expression =
-      HyperLogLogPlusPlus(e, rsd).toAggregateExpression()
-    def avg(e: Expression): Expression = Average(e).toAggregateExpression()
-    def first(e: Expression): Expression = new First(e).toAggregateExpression()
-    def last(e: Expression): Expression = new Last(e).toAggregateExpression()
-    def min(e: Expression): Expression = Min(e).toAggregateExpression()
-    def minDistinct(e: Expression): Expression = Min(e).toAggregateExpression(isDistinct = true)
-    def max(e: Expression): Expression = Max(e).toAggregateExpression()
-    def maxDistinct(e: Expression): Expression = Max(e).toAggregateExpression(isDistinct = true)
+    def countDistinctWithFilter(filter: Expression, e: Expression*): Expression =
+      Count(e).toAggregateExpression(isDistinct = true, filter = Some(filter))
+    def approxCountDistinct(
+        e: Expression,
+        rsd: Double = 0.05,
+        filter: Option[Expression] = None): Expression =
+      HyperLogLogPlusPlus(e, rsd).toAggregateExpression(isDistinct = false, filter = filter)
+    def avg(e: Expression, filter: Option[Expression] = None): Expression =
+      Average(e).toAggregateExpression(isDistinct = false, filter = filter)
+    def first(e: Expression, filter: Option[Expression] = None): Expression =
+      new First(e).toAggregateExpression(isDistinct = false, filter = filter)
+    def last(e: Expression, filter: Option[Expression] = None): Expression =
+      new Last(e).toAggregateExpression(isDistinct = false, filter = filter)
+    def min(e: Expression, filter: Option[Expression] = None): Expression =
+      Min(e).toAggregateExpression(isDistinct = false, filter = filter)
+    def minDistinct(e: Expression, filter: Option[Expression] = None): Expression =
+      Min(e).toAggregateExpression(isDistinct = true, filter = filter)
+    def max(e: Expression, filter: Option[Expression] = None): Expression =
+      Max(e).toAggregateExpression(isDistinct = false, filter = filter)
+    def maxDistinct(e: Expression, filter: Option[Expression] = None): Expression =
+      Max(e).toAggregateExpression(isDistinct = true, filter = filter)
+    def bitAnd(e: Expression, filter: Option[Expression] = None): Expression =
+      BitAndAgg(e).toAggregateExpression(isDistinct = false, filter = filter)
+    def bitOr(e: Expression, filter: Option[Expression] = None): Expression =
+      BitOrAgg(e).toAggregateExpression(isDistinct = false, filter = filter)
+    def bitXor(e: Expression, filter: Option[Expression] = None): Expression =
+      BitXorAgg(e).toAggregateExpression(isDistinct = false, filter = filter)
     def upper(e: Expression): Expression = Upper(e)
     def lower(e: Expression): Expression = Lower(e)
     def coalesce(args: Expression*): Expression = Coalesce(args)
@@ -214,6 +249,9 @@ package object dsl {
     implicit class DslString(val s: String) extends ImplicitOperators {
       override def expr: Expression = Literal(s)
       def attr: UnresolvedAttribute = analysis.UnresolvedAttribute(s)
+    }
+    implicit class DslAttr(attr: UnresolvedAttribute) extends ImplicitAttribute {
+      def s: String = attr.name
     }
 
     abstract class ImplicitAttribute extends ImplicitOperators {
@@ -258,6 +296,26 @@ package object dsl {
 
       /** Creates a new AttributeReference of type timestamp */
       def timestamp: AttributeReference = AttributeReference(s, TimestampType, nullable = true)()
+
+      /** Creates a new AttributeReference of type timestamp without time zone */
+      def timestampWithoutTZ: AttributeReference =
+        AttributeReference(s, TimestampWithoutTZType, nullable = true)()
+
+      /** Creates a new AttributeReference of the day-time interval type */
+      def dayTimeInterval(startField: Byte, endField: Byte): AttributeReference = {
+        AttributeReference(s, DayTimeIntervalType(startField, endField), nullable = true)()
+      }
+      def dayTimeInterval(): AttributeReference = {
+        AttributeReference(s, DayTimeIntervalType(), nullable = true)()
+      }
+
+      /** Creates a new AttributeReference of the year-month interval type */
+      def yearMonthInterval(startField: Byte, endField: Byte): AttributeReference = {
+        AttributeReference(s, YearMonthIntervalType(startField, endField), nullable = true)()
+      }
+      def yearMonthInterval(): AttributeReference = {
+        AttributeReference(s, YearMonthIntervalType(), nullable = true)()
+      }
 
       /** Creates a new AttributeReference of type binary */
       def binary: AttributeReference = AttributeReference(s, BinaryType, nullable = true)()
@@ -362,6 +420,14 @@ package object dsl {
         Aggregate(groupingExprs, aliasedExprs, logicalPlan)
       }
 
+      def having(
+          groupingExprs: Expression*)(
+          aggregateExprs: Expression*)(
+          havingCondition: Expression): LogicalPlan = {
+        UnresolvedHaving(havingCondition,
+          groupBy(groupingExprs: _*)(aggregateExprs: _*).asInstanceOf[Aggregate])
+      }
+
       def window(
           windowExpressions: Seq[NamedExpression],
           partitionSpec: Seq[Expression],
@@ -394,7 +460,7 @@ package object dsl {
           partition: Map[String, Option[String]] = Map.empty,
           overwrite: Boolean = false,
           ifPartitionNotExists: Boolean = false): LogicalPlan =
-        InsertIntoStatement(table, partition, logicalPlan, overwrite, ifPartitionNotExists)
+        InsertIntoStatement(table, partition, Nil, logicalPlan, overwrite, ifPartitionNotExists)
 
       def as(alias: String): LogicalPlan = SubqueryAlias(alias, logicalPlan)
 
@@ -407,11 +473,24 @@ package object dsl {
       def distribute(exprs: Expression*)(n: Int): LogicalPlan =
         RepartitionByExpression(exprs, logicalPlan, numPartitions = n)
 
-      def analyze: LogicalPlan =
-        EliminateSubqueryAliases(analysis.SimpleAnalyzer.execute(logicalPlan))
+      def analyze: LogicalPlan = {
+        val analyzed = analysis.SimpleAnalyzer.execute(logicalPlan)
+        analysis.SimpleAnalyzer.checkAnalysis(analyzed)
+        EliminateSubqueryAliases(analyzed)
+      }
 
       def hint(name: String, parameters: Any*): LogicalPlan =
         UnresolvedHint(name, parameters, logicalPlan)
+
+      def sample(
+          lowerBound: Double,
+          upperBound: Double,
+          withReplacement: Boolean,
+          seed: Long): LogicalPlan = {
+        Sample(lowerBound, upperBound, withReplacement, seed, logicalPlan)
+      }
+
+      def deduplicate(colNames: Attribute*): LogicalPlan = Deduplicate(colNames, logicalPlan)
     }
   }
 }

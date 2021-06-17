@@ -26,7 +26,7 @@ import org.json4s.DefaultFormats
 import org.json4s.JsonAST.JObject
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.annotation.{DeveloperApi, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.linalg._
@@ -199,8 +199,6 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
     " with estimates of the topic mixture distribution for each document (often called \"theta\"" +
     " in the literature).  Returns a vector of zeros for an empty document.")
 
-  setDefault(topicDistributionCol -> "topicDistribution")
-
   /** @group getParam */
   @Since("1.6.0")
   def getTopicDistributionCol: String = $(topicDistributionCol)
@@ -314,6 +312,11 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
   /** @group expertGetParam */
   @Since("2.0.0")
   def getKeepLastCheckpoint: Boolean = $(keepLastCheckpoint)
+
+  setDefault(maxIter -> 20, k -> 10, optimizer -> "online", checkpointInterval -> 10,
+    learningOffset -> 1024, learningDecay -> 0.51, subsamplingRate -> 0.05,
+    optimizeDocConcentration -> true, keepLastCheckpoint -> true,
+    topicDistributionCol -> "topicDistribution")
 
   /**
    * Validates and transforms the input schema.
@@ -762,8 +765,6 @@ class DistributedLDAModel private[ml] (
   private var _checkpointFiles: Array[String] = oldDistributedModel.checkpointFiles
 
   /**
-   * :: DeveloperApi ::
-   *
    * If using checkpointing and `LDA.keepLastCheckpoint` is set to true, then there may be
    * saved checkpoint files.  This method is provided so that users can manage those files.
    *
@@ -773,18 +774,14 @@ class DistributedLDAModel private[ml] (
    *
    * @return  Checkpoint files from training
    */
-  @DeveloperApi
   @Since("2.0.0")
   def getCheckpointFiles: Array[String] = _checkpointFiles
 
   /**
-   * :: DeveloperApi ::
-   *
    * Remove any remaining checkpoint files from training.
    *
    * @see [[getCheckpointFiles]]
    */
-  @DeveloperApi
   @Since("2.0.0")
   def deleteCheckpointFiles(): Unit = {
     val hadoopConf = sparkSession.sparkContext.hadoopConfiguration
@@ -868,10 +865,6 @@ class LDA @Since("1.6.0") (
 
   @Since("1.6.0")
   def this() = this(Identifiable.randomUID("lda"))
-
-  setDefault(maxIter -> 20, k -> 10, optimizer -> "online", checkpointInterval -> 10,
-    learningOffset -> 1024, learningDecay -> 0.51, subsamplingRate -> 0.05,
-    optimizeDocConcentration -> true, keepLastCheckpoint -> true)
 
   /**
    * The features for LDA should be a `Vector` representing the word counts in a document.

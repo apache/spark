@@ -24,19 +24,18 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, InMemoryCatalog, 
 import org.apache.spark.sql.catalyst.expressions.Alias
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
 class LookupFunctionsSuite extends PlanTest {
 
   test("SPARK-23486: the functionExists for the Persistent function check") {
     val externalCatalog = new CustomInMemoryCatalog
-    val conf = new SQLConf()
-    val catalog = new SessionCatalog(externalCatalog, FunctionRegistry.builtin, conf)
+    val catalog = new SessionCatalog(externalCatalog, FunctionRegistry.builtin)
     val analyzer = {
       catalog.createDatabase(
         CatalogDatabase("default", "", new URI("loc"), Map.empty),
         ignoreIfExists = false)
-      new Analyzer(catalog, conf)
+      new Analyzer(catalog)
     }
 
     def table(ref: String): LogicalPlan = UnresolvedRelation(TableIdentifier(ref))
@@ -51,19 +50,18 @@ class LookupFunctionsSuite extends PlanTest {
 
     assert(externalCatalog.getFunctionExistsCalledTimes == 1)
     assert(analyzer.LookupFunctions.normalizeFuncName
-      (unresolvedPersistentFunc.name).database == Some("default"))
+      (unresolvedPersistentFunc.nameParts.asFunctionIdentifier).database == Some("default"))
   }
 
   test("SPARK-23486: the functionExists for the Registered function check") {
     val externalCatalog = new InMemoryCatalog
-    val conf = new SQLConf()
     val customerFunctionReg = new CustomerFunctionRegistry
-    val catalog = new SessionCatalog(externalCatalog, customerFunctionReg, conf)
+    val catalog = new SessionCatalog(externalCatalog, customerFunctionReg)
     val analyzer = {
       catalog.createDatabase(
         CatalogDatabase("default", "", new URI("loc"), Map.empty),
         ignoreIfExists = false)
-      new Analyzer(catalog, conf)
+      new Analyzer(catalog)
     }
 
     def table(ref: String): LogicalPlan = UnresolvedRelation(TableIdentifier(ref))
@@ -73,9 +71,9 @@ class LookupFunctionsSuite extends PlanTest {
       table("TaBlE"))
     analyzer.LookupFunctions.apply(plan)
 
-    assert(customerFunctionReg.getIsRegisteredFunctionCalledTimes == 2)
+    assert(customerFunctionReg.getIsRegisteredFunctionCalledTimes == 4)
     assert(analyzer.LookupFunctions.normalizeFuncName
-      (unresolvedRegisteredFunc.name).database == Some("default"))
+      (unresolvedRegisteredFunc.nameParts.asFunctionIdentifier).database == Some("default"))
   }
 }
 

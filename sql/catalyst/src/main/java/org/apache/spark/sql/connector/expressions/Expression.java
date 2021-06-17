@@ -17,12 +17,14 @@
 
 package org.apache.spark.sql.connector.expressions;
 
-import org.apache.spark.annotation.Experimental;
+import org.apache.spark.annotation.Evolving;
 
 /**
  * Base class of the public logical expression API.
+ *
+ * @since 3.0.0
  */
-@Experimental
+@Evolving
 public interface Expression {
   /**
    * Format the expression as a human readable SQL-like string.

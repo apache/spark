@@ -18,7 +18,7 @@ package org.apache.spark.deploy.k8s.features
 
 import scala.collection.JavaConverters._
 
-import io.fabric8.kubernetes.api.model.{ContainerBuilder, EnvVarBuilder, HasMetadata}
+import io.fabric8.kubernetes.api.model.{ContainerBuilder, EnvVarBuilder}
 
 import org.apache.spark.deploy.k8s.{KubernetesConf, SparkPod}
 

@@ -96,7 +96,7 @@ class WriteAheadLogBackedBlockRDD[T: ClassTag](
   @transient private val hadoopConfig = sc.hadoopConfiguration
   private val broadcastedHadoopConf = new SerializableConfiguration(hadoopConfig)
 
-  override def isValid(): Boolean = true
+  override def isValid: Boolean = true
 
   override def getPartitions: Array[Partition] = {
     assertValid()

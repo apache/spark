@@ -21,27 +21,23 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.encoders.RowEncoder
-import org.apache.spark.sql.catalyst.expressions.{Attribute, GenericRowWithSchema}
-import org.apache.spark.sql.connector.catalog.{Table, TableCatalog}
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SupportsMetadataColumns, Table}
 
 case class DescribeTableExec(
     output: Seq[Attribute],
     table: Table,
-    isExtended: Boolean) extends V2CommandExec {
-
-  private val encoder = RowEncoder(StructType.fromAttributes(output)).resolveAndBind()
-
+    isExtended: Boolean) extends LeafV2CommandExec {
   override protected def run(): Seq[InternalRow] = {
     val rows = new ArrayBuffer[InternalRow]()
     addSchema(rows)
     addPartitioning(rows)
 
     if (isExtended) {
+      addMetadataColumns(rows)
       addTableDetails(rows)
     }
-    rows
+    rows.toSeq
   }
 
   private def addTableDetails(rows: ArrayBuffer[InternalRow]): Unit = {
@@ -49,14 +45,14 @@ case class DescribeTableExec(
     rows += toCatalystRow("# Detailed Table Information", "", "")
     rows += toCatalystRow("Name", table.name(), "")
 
-    TableCatalog.RESERVED_PROPERTIES.asScala.toList.foreach(propKey => {
+    CatalogV2Util.TABLE_RESERVED_PROPERTIES.foreach(propKey => {
       if (table.properties.containsKey(propKey)) {
         rows += toCatalystRow(propKey.capitalize, table.properties.get(propKey), "")
       }
     })
     val properties =
       table.properties.asScala.toList
-        .filter(kv => !TableCatalog.RESERVED_PROPERTIES.contains(kv._1))
+        .filter(kv => !CatalogV2Util.TABLE_RESERVED_PROPERTIES.contains(kv._1))
         .sortBy(_._1).map {
         case (key, value) => key + "=" + value
       }.mkString("[", ",", "]")
@@ -68,6 +64,19 @@ case class DescribeTableExec(
       toCatalystRow(
         column.name, column.dataType.simpleString, column.getComment().getOrElse(""))
     }
+  }
+
+  private def addMetadataColumns(rows: ArrayBuffer[InternalRow]): Unit = table match {
+    case hasMeta: SupportsMetadataColumns if hasMeta.metadataColumns.nonEmpty =>
+      rows += emptyRow()
+      rows += toCatalystRow("# Metadata Columns", "", "")
+      rows ++= hasMeta.metadataColumns.map { column =>
+        toCatalystRow(
+          column.name,
+          column.dataType.simpleString,
+          Option(column.comment()).getOrElse(""))
+      }
+    case _ =>
   }
 
   private def addPartitioning(rows: ArrayBuffer[InternalRow]): Unit = {
@@ -83,8 +92,4 @@ case class DescribeTableExec(
   }
 
   private def emptyRow(): InternalRow = toCatalystRow("", "", "")
-
-  private def toCatalystRow(strs: String*): InternalRow = {
-    encoder.toRow(new GenericRowWithSchema(strs.toArray, schema)).copy()
-  }
 }

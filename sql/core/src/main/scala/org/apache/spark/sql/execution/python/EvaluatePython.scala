@@ -175,7 +175,7 @@ object EvaluatePython {
       }
 
     case StructType(fields) =>
-      val fieldsFromJava = fields.map(f => makeFromJava(f.dataType)).toArray
+      val fieldsFromJava = fields.map(f => makeFromJava(f.dataType))
 
       (obj: Any) => nullSafeConvert(obj) {
         case c if c.getClass.isArray =>
@@ -198,7 +198,7 @@ object EvaluatePython {
 
     case udt: UserDefinedType[_] => makeFromJava(udt.sqlType)
 
-    case other => (obj: Any) => nullSafeConvert(other)(PartialFunction.empty)
+    case other => (obj: Any) => nullSafeConvert(obj)(PartialFunction.empty)
   }
 
   private def nullSafeConvert(input: Any)(f: PartialFunction[Any, Any]): Any = {

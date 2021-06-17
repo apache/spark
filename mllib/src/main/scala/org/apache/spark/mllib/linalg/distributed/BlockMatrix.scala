@@ -445,7 +445,7 @@ class BlockMatrix @Since("1.3.0") (
 
     val rightCounterpartsHelper = rightMatrix.groupBy(_._1).mapValues(_.map(_._2))
     val leftDestinations = leftMatrix.map { case (rowIndex, colIndex) =>
-      val rightCounterparts = rightCounterpartsHelper.getOrElse(colIndex, Array.empty[Int])
+      val rightCounterparts = rightCounterpartsHelper.getOrElse(colIndex, Array.emptyIntArray)
       val partitions = rightCounterparts.map(b => partitioner.getPartition((rowIndex, b)))
       val midDimSplitIndex = colIndex % midDimSplitNum
       ((rowIndex, colIndex),
@@ -454,7 +454,7 @@ class BlockMatrix @Since("1.3.0") (
 
     val leftCounterpartsHelper = leftMatrix.groupBy(_._2).mapValues(_.map(_._1))
     val rightDestinations = rightMatrix.map { case (rowIndex, colIndex) =>
-      val leftCounterparts = leftCounterpartsHelper.getOrElse(rowIndex, Array.empty[Int])
+      val leftCounterparts = leftCounterpartsHelper.getOrElse(rowIndex, Array.emptyIntArray)
       val partitions = leftCounterparts.map(b => partitioner.getPartition((b, colIndex)))
       val midDimSplitIndex = rowIndex % midDimSplitNum
       ((rowIndex, colIndex),

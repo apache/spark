@@ -1,9 +1,19 @@
+--SET spark.sql.codegen.wholeStage = true
+--SET spark.sql.adaptive.enabled = false
+--SET spark.sql.maxMetadataStringLength = 500
+
 -- Test tables
 CREATE table  explain_temp1 (key int, val int) USING PARQUET;
 CREATE table  explain_temp2 (key int, val int) USING PARQUET;
 CREATE table  explain_temp3 (key int, val int) USING PARQUET;
+CREATE table  explain_temp4 (key int, val string) USING PARQUET;
 
 SET spark.sql.codegen.wholeStage = true;
+
+-- distinct func
+EXPLAIN EXTENDED
+  SELECT sum(distinct val)
+  FROM explain_temp1;
 
 -- single table
 EXPLAIN FORMATTED
@@ -24,7 +34,7 @@ EXPLAIN FORMATTED
 EXPLAIN FORMATTED
   SELECT key, val FROM explain_temp1 WHERE key > 0
   UNION 
-  SELECT key, val FROM explain_temp1 WHERE key > 0;
+  SELECT key, val FROM explain_temp1 WHERE key > 1;
 
 -- Join
 EXPLAIN FORMATTED
@@ -58,7 +68,7 @@ EXPLAIN FORMATTED
                 FROM   explain_temp2 
                 WHERE  val > 0) 
          OR
-         key = (SELECT max(key) 
+         key = (SELECT avg(key)
                 FROM   explain_temp3
                 WHERE  val > 0);
 
@@ -90,7 +100,32 @@ EXPLAIN FORMATTED
   CREATE VIEW explain_view AS
     SELECT key, val FROM explain_temp1;
 
+-- HashAggregate
+EXPLAIN FORMATTED
+  SELECT
+    COUNT(val) + SUM(key) as TOTAL,
+    COUNT(key) FILTER (WHERE val > 1)
+  FROM explain_temp1;
+
+-- ObjectHashAggregate
+EXPLAIN FORMATTED
+  SELECT key, sort_array(collect_set(val))[0]
+  FROM explain_temp4
+  GROUP BY key;
+
+-- SortAggregate
+EXPLAIN FORMATTED
+  SELECT key, MIN(val)
+  FROM explain_temp4
+  GROUP BY key;
+
 -- cleanup
 DROP TABLE explain_temp1;
 DROP TABLE explain_temp2;
 DROP TABLE explain_temp3;
+DROP TABLE explain_temp4;
+
+-- SPARK-35479: Format PartitionFilters IN strings in scan nodes
+CREATE table  t(v array<string>) USING PARQUET;
+EXPLAIN SELECT * FROM t  WHERE v IN (array('a'), null);
+DROP TABLE t;

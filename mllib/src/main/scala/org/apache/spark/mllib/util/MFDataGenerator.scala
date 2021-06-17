@@ -22,12 +22,11 @@ import java.{util => ju}
 import scala.util.Random
 
 import org.apache.spark.SparkContext
-import org.apache.spark.annotation.{DeveloperApi, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.mllib.linalg.{BLAS, DenseMatrix}
 import org.apache.spark.rdd.RDD
 
 /**
- * :: DeveloperApi ::
  * Generate RDD(s) containing data for Matrix Factorization.
  *
  * This method samples training entries according to the oversampling factor
@@ -50,7 +49,6 @@ import org.apache.spark.rdd.RDD
  *   test           (Boolean) Whether to create testing RDD.
  *   testSampFact   (Double) Percentage of training data to use as test data.
  */
-@DeveloperApi
 @Since("0.8.0")
 object MFDataGenerator {
   @Since("0.8.0")

@@ -73,7 +73,8 @@ This page displays the details of a specific job identified by its job ID.
 </p>
 
 * DAG visualization: Visual representation of the directed acyclic graph of this job where vertices represent the RDDs or DataFrames and the edges represent an operation to be applied on RDD.
-
+* An example of DAG visualization for `sc.parallelize(1 to 100).toDF.count()`
+ 
 <p style="text-align: center;">
   <img src="img/JobPageDetail2.png" title="DAG" alt="DAG" width="40%">
 </p>
@@ -98,7 +99,7 @@ This page displays the details of a specific job identified by its job ID.
 The Stages tab displays a summary page that shows the current state of all stages of all jobs in
 the Spark application.
 
-At the beginning of the page is the summary with the count of all stages by status (active, pending, completed, sikipped, and failed)
+At the beginning of the page is the summary with the count of all stages by status (active, pending, completed, skipped, and failed)
 
 <p style="text-align: center;">
   <img src="img/AllStagesPageDetail1.png" title="Stages header" alt="Stages header" width="30%">
@@ -124,6 +125,8 @@ The stage detail page begins with information like total time across all tasks, 
 </p>
 
 There is also a visual representation of the directed acyclic graph (DAG) of this stage, where vertices represent the RDDs or DataFrames and the edges represent an operation to be applied.
+Nodes are grouped by operation scope in the DAG visualization and labelled with the operation scope name (BatchScan, WholeStageCodegen, Exchange, etc).
+Notably, Whole Stage Code Generation operations are also annotated with the code generation id. For stages belonging to Spark DataFrame or SQL execution, this allows to cross-reference Stage execution details to the relevant details in the Web-UI SQL Tab page where SQL plan graphs and execution plans are reported.
 
 <p style="text-align: center;">
   <img src="img/AllStagesPageDetail5.png" title="Stage DAG" alt="Stage DAG" width="50%">
@@ -133,13 +136,14 @@ Summary metrics for all task are represented in a table and in a timeline.
 * **[Tasks deserialization time](configuration.html#compression-and-serialization)**
 * **Duration of tasks**.
 * **GC time** is the total JVM garbage collection time.
-* **Result serialization time** is the time spent serializing the task result on a executor before sending it back to the driver.
+* **Result serialization time** is the time spent serializing the task result on an executor before sending it back to the driver.
 * **Getting result time** is the time that the driver spends fetching task results from workers.
 * **Scheduler delay** is the time the task waits to be scheduled for execution.
 * **Peak execution memory** is the maximum memory used by the internal data structures created during shuffles, aggregations and joins.
 * **Shuffle Read Size / Records**. Total shuffle bytes read, includes both data read locally and data read from remote executors.
 * **Shuffle Read Blocked Time** is the time that tasks spent blocked waiting for shuffle data to be read from remote machines.
 * **Shuffle Remote Reads** is the total shuffle bytes read from remote executors.
+* **Shuffle Write Time** is the time that tasks spent writing shuffle data.
 * **Shuffle spill (memory)** is the size of the deserialized form of the shuffled data in memory.
 * **Shuffle spill (disk)** is the size of the serialized form of the data on disk.
 
@@ -403,10 +407,44 @@ Here is the list of SQL metrics:
 
 </table>
 
-## Streaming Tab
-The web UI includes a Streaming tab if the application uses Spark streaming. This tab displays
-scheduling delay and processing time for each micro-batch in the data stream, which can be useful
-for troubleshooting the streaming application.
+## Structured Streaming Tab
+When running Structured Streaming jobs in micro-batch mode, a Structured Streaming tab will be 
+available on the Web UI. The overview page displays some brief statistics for running and completed
+queries. Also, you can check the latest exception of a failed query. For detailed statistics, please
+click a "run id" in the tables.
+
+<p style="text-align: center;">
+  <img src="img/webui-structured-streaming-detail.png" title="Structured Streaming Query Statistics" alt="Structured Streaming Query Statistics">
+  <img src="img/webui-structured-streaming-detail2.png">
+</p>
+
+The statistics page displays some useful metrics for insight into the status of your streaming 
+queries. Currently, it contains the following metrics.
+
+* **Input Rate.** The aggregate (across all sources) rate of data arriving.
+* **Process Rate.** The aggregate (across all sources) rate at which Spark is processing data.
+* **Input Rows.** The aggregate (across all sources) number of records processed in a trigger.
+* **Batch Duration.** The process duration of each batch. 
+* **Operation Duration.** The amount of time taken to perform various operations in milliseconds.
+The tracked operations are listed as follows.
+    * addBatch: Time taken to read the micro-batch's input data from the sources, process it, and write the batch's output to the sink. This should take the bulk of the micro-batch's time.
+    * getBatch: Time taken to prepare the logical query to read the input of the current micro-batch from the sources.
+    * latestOffset & getOffset: Time taken to query the maximum available offset for this source.
+    * queryPlanning: Time taken to generates the execution plan.
+    * walCommit: Time taken to write the offsets to the metadata log.
+* **Global Watermark Gap.** The gap between batch timestamp and global watermark for the batch.
+* **Aggregated Number Of Total State Rows.** The aggregated number of total state rows.
+* **Aggregated Number Of Updated State Rows.** The aggregated number of updated state rows.
+* **Aggregated State Memory Used In Bytes.** The aggregated state memory used in bytes.
+* **Aggregated Number Of State Rows Dropped By Watermark.** The aggregated number of state rows dropped by watermark.
+    
+As an early-release version, the statistics page is still under development and will be improved in
+future releases.
+
+## Streaming (DStreams) Tab
+The web UI includes a Streaming tab if the application uses Spark Streaming with DStream API.
+This tab displays scheduling delay and processing time for each micro-batch in the data stream,
+which can be useful for troubleshooting the streaming application.
 
 ## JDBC/ODBC Server Tab
 We can see this tab when Spark is running as a [distributed SQL engine](sql-distributed-sql-engine.html). It shows information about sessions and submitted SQL operations.

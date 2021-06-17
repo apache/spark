@@ -250,6 +250,13 @@ sealed trait Vector extends Serializable {
    */
   private[spark] def nonZeroIterator: Iterator[(Int, Double)] =
     activeIterator.filter(_._2 != 0)
+
+  /**
+   * Returns the ratio of number of zeros by total number of values.
+   */
+  private[spark] def sparsity(): Double = {
+    1.0 - numNonzeros.toDouble / size
+  }
 }
 
 /**
@@ -289,6 +296,8 @@ class VectorUDT extends UserDefinedType[Vector] {
         row.setNullAt(2)
         row.update(3, UnsafeArrayData.fromPrimitiveArray(values))
         row
+      case v =>
+        throw new IllegalArgumentException(s"Unknown vector type ${v.getClass}.")
     }
   }
 
@@ -954,7 +963,7 @@ class SparseVector @Since("1.0.0") (
       currentIdx += 1
       i_v
     }.unzip
-    new SparseVector(selectedIndices.length, sliceInds.toArray, sliceVals.toArray)
+    new SparseVector(selectedIndices.length, sliceInds, sliceVals)
   }
 
   @Since("1.6.0")
@@ -984,7 +993,7 @@ class SparseVector @Since("1.0.0") (
 
       override def hasNext: Boolean = i < localSize
 
-      override def next: (Int, Double) = {
+      override def next(): (Int, Double) = {
         val v = if (i == k) {
           j += 1
           k = if (j < localNumActives) localIndices(j) else -1

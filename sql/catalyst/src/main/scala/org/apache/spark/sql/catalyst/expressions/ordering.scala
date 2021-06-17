@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateOrdering
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
 
 
@@ -59,17 +60,17 @@ class InterpretedOrdering(ordering: Seq[SortOrder]) extends BaseOrdering {
           case dt: AtomicType if order.direction == Ascending =>
             dt.ordering.asInstanceOf[Ordering[Any]].compare(left, right)
           case dt: AtomicType if order.direction == Descending =>
-            dt.ordering.asInstanceOf[Ordering[Any]].reverse.compare(left, right)
+            - dt.ordering.asInstanceOf[Ordering[Any]].compare(left, right)
           case a: ArrayType if order.direction == Ascending =>
             a.interpretedOrdering.asInstanceOf[Ordering[Any]].compare(left, right)
           case a: ArrayType if order.direction == Descending =>
-            a.interpretedOrdering.asInstanceOf[Ordering[Any]].reverse.compare(left, right)
+            - a.interpretedOrdering.asInstanceOf[Ordering[Any]].compare(left, right)
           case s: StructType if order.direction == Ascending =>
             s.interpretedOrdering.asInstanceOf[Ordering[Any]].compare(left, right)
           case s: StructType if order.direction == Descending =>
-            s.interpretedOrdering.asInstanceOf[Ordering[Any]].reverse.compare(left, right)
+            - s.interpretedOrdering.asInstanceOf[Ordering[Any]].compare(left, right)
           case other =>
-            throw new IllegalArgumentException(s"Type $other does not support ordered operations")
+            throw QueryExecutionErrors.orderedOperationUnsupportedByDataTypeError(other)
         }
         if (comparison != 0) {
           return comparison
@@ -101,7 +102,6 @@ object RowOrdering extends CodeGeneratorWithInterpretedFallback[Seq[SortOrder], 
   def isOrderable(dataType: DataType): Boolean = dataType match {
     case NullType => true
     case dt: AtomicType => true
-    case CalendarIntervalType => true
     case struct: StructType => struct.fields.forall(f => isOrderable(f.dataType))
     case array: ArrayType => isOrderable(array.elementType)
     case udt: UserDefinedType[_] => isOrderable(udt.sqlType)

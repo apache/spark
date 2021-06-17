@@ -23,7 +23,7 @@ import numpy
 
 from pyspark import RDD, since
 from pyspark.mllib.common import callMLlibFunc, _py2java, _java2py
-from pyspark.mllib.linalg import SparseVector, _convert_to_vector
+from pyspark.mllib.linalg import _convert_to_vector
 from pyspark.mllib.regression import (
     LabeledPoint, LinearModel, _regression_train_wrapper,
     StreamingLinearAlgorithm)
@@ -88,20 +88,27 @@ class LogisticRegressionModel(LinearClassificationModel):
     Classification model trained using Multinomial/Binary Logistic
     Regression.
 
-    :param weights:
-      Weights computed for every feature.
-    :param intercept:
-      Intercept computed for this model. (Only used in Binary Logistic
-      Regression. In Multinomial Logistic Regression, the intercepts will
-      not bea single value, so the intercepts will be part of the
-      weights.)
-    :param numFeatures:
-      The dimension of the features.
-    :param numClasses:
-      The number of possible outcomes for k classes classification problem
-      in Multinomial Logistic Regression. By default, it is binary
-      logistic regression so numClasses will be set to 2.
+    .. versionadded:: 0.9.0
 
+    Parameters
+    ----------
+    weights : :py:class:`pyspark.mllib.linalg.Vector`
+        Weights computed for every feature.
+    intercept : float
+        Intercept computed for this model. (Only used in Binary Logistic
+        Regression. In Multinomial Logistic Regression, the intercepts will
+        not be a single value, so the intercepts will be part of the
+        weights.)
+    numFeatures : int
+        The dimension of the features.
+    numClasses : int
+        The number of possible outcomes for k classes classification problem
+        in Multinomial Logistic Regression. By default, it is binary
+        logistic regression so numClasses will be set to 2.
+
+    Examples
+    --------
+    >>> from pyspark.mllib.linalg import SparseVector
     >>> data = [
     ...     LabeledPoint(0.0, [0.0, 1.0]),
     ...     LabeledPoint(1.0, [1.0, 0.0]),
@@ -158,8 +165,6 @@ class LogisticRegressionModel(LinearClassificationModel):
     1
     >>> mcm.predict([0.0, 0.0, 0.3])
     2
-
-    .. versionadded:: 0.9.0
     """
     def __init__(self, weights, intercept, numFeatures, numClasses):
         super(LogisticRegressionModel, self).__init__(weights, intercept)
@@ -262,58 +267,64 @@ class LogisticRegressionModel(LinearClassificationModel):
 
 class LogisticRegressionWithSGD(object):
     """
+    Train a classification model for Binary Logistic Regression using Stochastic Gradient Descent.
+
     .. versionadded:: 0.9.0
-    .. note:: Deprecated in 2.0.0. Use ml.classification.LogisticRegression or
-            LogisticRegressionWithLBFGS.
+    .. deprecated:: 2.0.0
+        Use ml.classification.LogisticRegression or LogisticRegressionWithLBFGS.
     """
     @classmethod
-    @since('0.9.0')
     def train(cls, data, iterations=100, step=1.0, miniBatchFraction=1.0,
               initialWeights=None, regParam=0.01, regType="l2", intercept=False,
               validateData=True, convergenceTol=0.001):
         """
         Train a logistic regression model on the given data.
 
-        :param data:
-          The training data, an RDD of LabeledPoint.
-        :param iterations:
-          The number of iterations.
-          (default: 100)
-        :param step:
-          The step parameter used in SGD.
-          (default: 1.0)
-        :param miniBatchFraction:
-          Fraction of data to be used for each SGD iteration.
-          (default: 1.0)
-        :param initialWeights:
-          The initial weights.
-          (default: None)
-        :param regParam:
-          The regularizer parameter.
-          (default: 0.01)
-        :param regType:
-          The type of regularizer used for training our model.
-          Supported values:
+        .. versionadded:: 0.9.0
+
+        Parameters
+        ----------
+        data : :py:class:`pyspark.RDD`
+            The training data, an RDD of :py:class:`pyspark.mllib.regression.LabeledPoint`.
+        iterations : int, optional
+            The number of iterations.
+            (default: 100)
+        step : float, optional
+            The step parameter used in SGD.
+            (default: 1.0)
+        miniBatchFraction : float, optional
+            Fraction of data to be used for each SGD iteration.
+            (default: 1.0)
+        initialWeights : :py:class:`pyspark.mllib.linalg.Vector` or convertible, optional
+            The initial weights.
+            (default: None)
+        regParam : float, optional
+            The regularizer parameter.
+            (default: 0.01)
+        regType : str, optional
+            The type of regularizer used for training our model.
+            Supported values:
 
             - "l1" for using L1 regularization
             - "l2" for using L2 regularization (default)
             - None for no regularization
-        :param intercept:
-          Boolean parameter which indicates the use or not of the
-          augmented representation for training data (i.e., whether bias
-          features are activated or not).
-          (default: False)
-        :param validateData:
-          Boolean parameter which indicates if the algorithm should
-          validate data before training.
-          (default: True)
-        :param convergenceTol:
-          A condition which decides iteration termination.
-          (default: 0.001)
+
+        intercept : bool, optional
+            Boolean parameter which indicates the use or not of the
+            augmented representation for training data (i.e., whether bias
+            features are activated or not).
+            (default: False)
+        validateData : bool, optional
+            Boolean parameter which indicates if the algorithm should
+            validate data before training.
+            (default: True)
+        convergenceTol : float, optional
+            A condition which decides iteration termination.
+            (default: 0.001)
         """
         warnings.warn(
             "Deprecated in 2.0.0. Use ml.classification.LogisticRegression or "
-            "LogisticRegressionWithLBFGS.", DeprecationWarning)
+            "LogisticRegressionWithLBFGS.", FutureWarning)
 
         def train(rdd, i):
             return callMLlibFunc("trainLogisticRegressionModelWithSGD", rdd, int(iterations),
@@ -325,55 +336,65 @@ class LogisticRegressionWithSGD(object):
 
 class LogisticRegressionWithLBFGS(object):
     """
+    Train a classification model for Multinomial/Binary Logistic Regression
+    using Limited-memory BFGS.
+
+    Standard feature scaling and L2 regularization are used by default.
     .. versionadded:: 1.2.0
     """
     @classmethod
-    @since('1.2.0')
     def train(cls, data, iterations=100, initialWeights=None, regParam=0.0, regType="l2",
               intercept=False, corrections=10, tolerance=1e-6, validateData=True, numClasses=2):
         """
         Train a logistic regression model on the given data.
 
-        :param data:
-          The training data, an RDD of LabeledPoint.
-        :param iterations:
-          The number of iterations.
-          (default: 100)
-        :param initialWeights:
-          The initial weights.
-          (default: None)
-        :param regParam:
-          The regularizer parameter.
-          (default: 0.0)
-        :param regType:
-          The type of regularizer used for training our model.
-          Supported values:
+        .. versionadded:: 1.2.0
+
+        Parameters
+        ----------
+        data : :py:class:`pyspark.RDD`
+            The training data, an RDD of :py:class:`pyspark.mllib.regression.LabeledPoint`.
+        iterations : int, optional
+            The number of iterations.
+            (default: 100)
+        initialWeights : :py:class:`pyspark.mllib.linalg.Vector` or convertible, optional
+            The initial weights.
+            (default: None)
+        regParam : float, optional
+            The regularizer parameter.
+            (default: 0.01)
+        regType : str, optional
+            The type of regularizer used for training our model.
+            Supported values:
 
             - "l1" for using L1 regularization
             - "l2" for using L2 regularization (default)
             - None for no regularization
-        :param intercept:
-          Boolean parameter which indicates the use or not of the
-          augmented representation for training data (i.e., whether bias
-          features are activated or not).
-          (default: False)
-        :param corrections:
-          The number of corrections used in the LBFGS update.
-          If a known updater is used for binary classification,
-          it calls the ml implementation and this parameter will
-          have no effect. (default: 10)
-        :param tolerance:
-          The convergence tolerance of iterations for L-BFGS.
-          (default: 1e-6)
-        :param validateData:
-          Boolean parameter which indicates if the algorithm should
-          validate data before training.
-          (default: True)
-        :param numClasses:
-          The number of classes (i.e., outcomes) a label can take in
-          Multinomial Logistic Regression.
-          (default: 2)
 
+        intercept : bool, optional
+            Boolean parameter which indicates the use or not of the
+            augmented representation for training data (i.e., whether bias
+            features are activated or not).
+            (default: False)
+        corrections : int, optional
+            The number of corrections used in the LBFGS update.
+            If a known updater is used for binary classification,
+            it calls the ml implementation and this parameter will
+            have no effect. (default: 10)
+        tolerance : float, optional
+            The convergence tolerance of iterations for L-BFGS.
+            (default: 1e-6)
+        validateData : bool, optional
+            Boolean parameter which indicates if the algorithm should
+            validate data before training.
+            (default: True)
+        numClasses : int, optional
+            The number of classes (i.e., outcomes) a label can take in
+            Multinomial Logistic Regression.
+            (default: 2)
+
+        Examples
+        --------
         >>> data = [
         ...     LabeledPoint(0.0, [0.0, 1.0]),
         ...     LabeledPoint(1.0, [1.0, 0.0]),
@@ -405,11 +426,18 @@ class SVMModel(LinearClassificationModel):
     """
     Model for Support Vector Machines (SVMs).
 
-    :param weights:
-      Weights computed for every feature.
-    :param intercept:
-      Intercept computed for this model.
+    .. versionadded:: 0.9.0
 
+    Parameters
+    ----------
+    weights : :py:class:`pyspark.mllib.linalg.Vector`
+        Weights computed for every feature.
+    intercept : float
+        Intercept computed for this model.
+
+    Examples
+    --------
+    >>> from pyspark.mllib.linalg import SparseVector
     >>> data = [
     ...     LabeledPoint(0.0, [0.0]),
     ...     LabeledPoint(1.0, [1.0]),
@@ -449,8 +477,6 @@ class SVMModel(LinearClassificationModel):
     ...    rmtree(path)
     ... except:
     ...    pass
-
-    .. versionadded:: 0.9.0
     """
     def __init__(self, weights, intercept):
         super(SVMModel, self).__init__(weights, intercept)
@@ -499,53 +525,59 @@ class SVMModel(LinearClassificationModel):
 
 class SVMWithSGD(object):
     """
+    Train a Support Vector Machine (SVM) using Stochastic Gradient Descent.
+
     .. versionadded:: 0.9.0
     """
 
     @classmethod
-    @since('0.9.0')
     def train(cls, data, iterations=100, step=1.0, regParam=0.01,
               miniBatchFraction=1.0, initialWeights=None, regType="l2",
               intercept=False, validateData=True, convergenceTol=0.001):
         """
         Train a support vector machine on the given data.
 
-        :param data:
-          The training data, an RDD of LabeledPoint.
-        :param iterations:
-          The number of iterations.
-          (default: 100)
-        :param step:
-          The step parameter used in SGD.
-          (default: 1.0)
-        :param regParam:
-          The regularizer parameter.
-          (default: 0.01)
-        :param miniBatchFraction:
-          Fraction of data to be used for each SGD iteration.
-          (default: 1.0)
-        :param initialWeights:
-          The initial weights.
-          (default: None)
-        :param regType:
-          The type of regularizer used for training our model.
-          Allowed values:
+        .. versionadded:: 0.9.0
+
+        Parameters
+        ----------
+        data : :py:class:`pyspark.RDD`
+            The training data, an RDD of :py:class:`pyspark.mllib.regression.LabeledPoint`.
+        iterations : int, optional
+            The number of iterations.
+            (default: 100)
+        step : float, optional
+            The step parameter used in SGD.
+            (default: 1.0)
+        regParam : float, optional
+            The regularizer parameter.
+            (default: 0.01)
+        miniBatchFraction : float, optional
+            Fraction of data to be used for each SGD iteration.
+            (default: 1.0)
+        initialWeights : :py:class:`pyspark.mllib.linalg.Vector` or convertible, optional
+            The initial weights.
+            (default: None)
+        regType : str, optional
+            The type of regularizer used for training our model.
+            Allowed values:
 
             - "l1" for using L1 regularization
             - "l2" for using L2 regularization (default)
             - None for no regularization
-        :param intercept:
-          Boolean parameter which indicates the use or not of the
-          augmented representation for training data (i.e. whether bias
-          features are activated or not).
-          (default: False)
-        :param validateData:
-          Boolean parameter which indicates if the algorithm should
-          validate data before training.
-          (default: True)
-        :param convergenceTol:
-          A condition which decides iteration termination.
-          (default: 0.001)
+
+        intercept : bool, optional
+            Boolean parameter which indicates the use or not of the
+            augmented representation for training data (i.e. whether bias
+            features are activated or not).
+            (default: False)
+        validateData : bool, optional
+            Boolean parameter which indicates if the algorithm should
+            validate data before training.
+            (default: True)
+        convergenceTol : float, optional
+            A condition which decides iteration termination.
+            (default: 0.001)
         """
         def train(rdd, i):
             return callMLlibFunc("trainSVMModelWithSGD", rdd, int(iterations), float(step),
@@ -561,14 +593,21 @@ class NaiveBayesModel(Saveable, Loader):
     """
     Model for Naive Bayes classifiers.
 
-    :param labels:
-      List of labels.
-    :param pi:
-      Log of class priors, whose dimension is C, number of labels.
-    :param theta:
-      Log of class conditional probabilities, whose dimension is C-by-D,
-      where D is number of features.
+    .. versionadded:: 0.9.0
 
+    Parameters
+    ----------
+    labels : :py:class:`numpy.ndarray`
+        List of labels.
+    pi : :py:class:`numpy.ndarray`
+        Log of class priors, whose dimension is C, number of labels.
+    theta : :py:class:`numpy.ndarray`
+        Log of class conditional probabilities, whose dimension is C-by-D,
+        where D is number of features.
+
+    Examples
+    --------
+    >>> from pyspark.mllib.linalg import SparseVector
     >>> data = [
     ...     LabeledPoint(0.0, [0.0, 0.0]),
     ...     LabeledPoint(0.0, [0.0, 1.0]),
@@ -602,8 +641,6 @@ class NaiveBayesModel(Saveable, Loader):
     ...     rmtree(path)
     ... except OSError:
     ...     pass
-
-    .. versionadded:: 0.9.0
     """
     def __init__(self, labels, pi, theta):
         self.labels = labels
@@ -649,11 +686,12 @@ class NaiveBayesModel(Saveable, Loader):
 
 class NaiveBayes(object):
     """
+    Train a Multinomial Naive Bayes model.
+
     .. versionadded:: 0.9.0
     """
 
     @classmethod
-    @since('0.9.0')
     def train(cls, data, lambda_=1.0):
         """
         Train a Naive Bayes model given an RDD of (label, features)
@@ -666,11 +704,15 @@ class NaiveBayes(object):
         it can also be used as `Bernoulli NB <http://tinyurl.com/p7c96j6>`_.
         The input feature values must be nonnegative.
 
-        :param data:
-          RDD of LabeledPoint.
-        :param lambda_:
-          The smoothing parameter.
-          (default: 1.0)
+        .. versionadded:: 0.9.0
+
+        Parameters
+        ----------
+        data : :py:class:`pyspark.RDD`
+            The training data, an RDD of :py:class:`pyspark.mllib.regression.LabeledPoint`.
+        lambda\\_ : float, optional
+            The smoothing parameter.
+            (default: 1.0)
         """
         first = data.first()
         if not isinstance(first, LabeledPoint):
@@ -691,23 +733,25 @@ class StreamingLogisticRegressionWithSGD(StreamingLinearAlgorithm):
     of features must be constant. An initial weight
     vector must be provided.
 
-    :param stepSize:
-      Step size for each iteration of gradient descent.
-      (default: 0.1)
-    :param numIterations:
-      Number of iterations run for each batch of data.
-      (default: 50)
-    :param miniBatchFraction:
-      Fraction of each batch of data to use for updates.
-      (default: 1.0)
-    :param regParam:
-      L2 Regularization parameter.
-      (default: 0.0)
-    :param convergenceTol:
-      Value used to determine when to terminate iterations.
-      (default: 0.001)
-
     .. versionadded:: 1.5.0
+
+    Parameters
+    ----------
+    stepSize : float, optional
+        Step size for each iteration of gradient descent.
+        (default: 0.1)
+    numIterations : int, optional
+        Number of iterations run for each batch of data.
+        (default: 50)
+    miniBatchFraction : float, optional
+        Fraction of each batch of data to use for updates.
+        (default: 1.0)
+    regParam : float, optional
+        L2 Regularization parameter.
+        (default: 0.0)
+    convergenceTol : float, optional
+        Value used to determine when to terminate iterations.
+        (default: 0.001)
     """
     def __init__(self, stepSize=0.1, numIterations=50, miniBatchFraction=1.0, regParam=0.0,
                  convergenceTol=0.001):

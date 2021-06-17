@@ -21,11 +21,9 @@ import scala.math._
 
 import breeze.linalg.{axpy => brzAxpy, norm => brzNorm, Vector => BV}
 
-import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 
 /**
- * :: DeveloperApi ::
  * Class used to perform steps (weight update) using Gradient Descent methods.
  *
  * For general minimization problems, or for regularized problems of the form
@@ -37,7 +35,6 @@ import org.apache.spark.mllib.linalg.{Vector, Vectors}
  * The updater is responsible to also perform the update coming from the
  * regularization term R(w) (if any regularization is used).
  */
-@DeveloperApi
 abstract class Updater extends Serializable {
   /**
    * Compute an updated value for weights given the gradient, stepSize, iteration number and
@@ -62,11 +59,9 @@ abstract class Updater extends Serializable {
 }
 
 /**
- * :: DeveloperApi ::
  * A simple updater for gradient descent *without* any regularization.
  * Uses a step-size decreasing with the square root of the number of iterations.
  */
-@DeveloperApi
 class SimpleUpdater extends Updater {
   override def compute(
       weightsOld: Vector,
@@ -83,7 +78,6 @@ class SimpleUpdater extends Updater {
 }
 
 /**
- * :: DeveloperApi ::
  * Updater for L1 regularized problems.
  *          R(w) = ||w||_1
  * Uses a step-size decreasing with the square root of the number of iterations.
@@ -101,7 +95,6 @@ class SimpleUpdater extends Updater {
  *
  * Equivalently, set weight component to signum(w) * max(0.0, abs(w) - shrinkageVal)
  */
-@DeveloperApi
 class L1Updater extends Updater {
   override def compute(
       weightsOld: Vector,
@@ -128,12 +121,10 @@ class L1Updater extends Updater {
 }
 
 /**
- * :: DeveloperApi ::
  * Updater for L2 regularized problems.
  *          R(w) = 1/2 ||w||^2
  * Uses a step-size decreasing with the square root of the number of iterations.
  */
-@DeveloperApi
 class SquaredL2Updater extends Updater {
   override def compute(
       weightsOld: Vector,

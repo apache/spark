@@ -18,6 +18,7 @@
 package org.apache.spark.sql.connector.read;
 
 import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.connector.metric.CustomMetric;
 import org.apache.spark.sql.connector.read.streaming.ContinuousStream;
 import org.apache.spark.sql.connector.read.streaming.MicroBatchStream;
 import org.apache.spark.sql.types.StructType;
@@ -34,6 +35,8 @@ import org.apache.spark.sql.connector.catalog.TableCapability;
  * implemented, if the {@link Table} that creates this {@link Scan} returns
  * {@link TableCapability#BATCH_READ} support in its {@link Table#capabilities()}.
  * </p>
+ *
+ * @since 3.0.0
  */
 @Evolving
 public interface Scan {
@@ -99,5 +102,14 @@ public interface Scan {
    */
   default ContinuousStream toContinuousStream(String checkpointLocation) {
     throw new UnsupportedOperationException(description() + ": Continuous scan are not supported");
+  }
+
+  /**
+   * Returns an array of supported custom metrics with name and description.
+   * By default it returns empty array.
+   */
+  default CustomMetric[] supportedCustomMetrics() {
+    CustomMetric[] NO_METRICS = {};
+    return NO_METRICS;
   }
 }

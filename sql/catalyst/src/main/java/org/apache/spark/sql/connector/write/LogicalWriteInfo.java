@@ -24,6 +24,8 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 /**
  * This interface contains logical write information that data sources can use when generating a
  * {@link WriteBuilder}.
+ *
+ * @since 3.0.0
  */
 @Evolving
 public interface LogicalWriteInfo {
@@ -33,7 +35,7 @@ public interface LogicalWriteInfo {
   CaseInsensitiveStringMap options();
 
   /**
-   * `queryId` is a unique string of the query. It's possible that there are many queries
+   * {@code queryId} is a unique string of the query. It's possible that there are many queries
    * running at the same time, or a query is restarted and resumed. {@link BatchWrite} can use
    * this id to identify the query.
    */

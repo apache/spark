@@ -15,12 +15,13 @@
 # limitations under the License.
 #
 
+import sys
+
 from pyspark import keyword_only, since
-from pyspark.rdd import ignore_unicode_prefix
 from pyspark.sql import DataFrame
-from pyspark.ml.util import *
+from pyspark.ml.util import JavaMLWritable, JavaMLReadable
 from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaParams
-from pyspark.ml.param.shared import *
+from pyspark.ml.param.shared import HasPredictionCol, Param, TypeConverters, Params
 
 __all__ = ["FPGrowth", "FPGrowthModel", "PrefixSpan"]
 
@@ -55,6 +56,11 @@ class _FPGrowthParams(HasPredictionCol):
         "minConfidence will not affect the mining for frequent itemsets, " +
         "but will affect the association rules generation.",
         typeConverter=TypeConverters.toFloat)
+
+    def __init__(self, *args):
+        super(_FPGrowthParams, self).__init__(*args)
+        self._setDefault(minSupport=0.3, minConfidence=0.8,
+                         itemsCol="items", predictionCol="prediction")
 
     def getItemsCol(self):
         """
@@ -132,21 +138,39 @@ class FPGrowthModel(JavaModel, _FPGrowthParams, JavaMLWritable, JavaMLReadable):
         return self._call_java("associationRules")
 
 
-@ignore_unicode_prefix
 class FPGrowth(JavaEstimator, _FPGrowthParams, JavaMLWritable, JavaMLReadable):
     r"""
-    A parallel FP-growth algorithm to mine frequent itemsets. The algorithm is described in
-    Li et al., PFP: Parallel FP-Growth for Query Recommendation [LI2008]_.
+    A parallel FP-growth algorithm to mine frequent itemsets.
+
+    .. versionadded:: 2.2.0
+
+    Notes
+    -----
+
+    The algorithm is described in
+    Li et al., PFP: Parallel FP-Growth for Query Recommendation [1]_.
     PFP distributes computation in such a way that each worker executes an
     independent group of mining tasks. The FP-Growth algorithm is described in
-    Han et al., Mining frequent patterns without candidate generation [HAN2000]_
+    Han et al., Mining frequent patterns without candidate generation [2]_
 
-    .. [LI2008] https://doi.org/10.1145/1454008.1454027
-    .. [HAN2000] https://doi.org/10.1145/335191.335372
+    NULL values in the feature column are ignored during `fit()`.
 
-    .. note:: null values in the feature column are ignored during fit().
-    .. note:: Internally `transform` `collects` and `broadcasts` association rules.
+    Internally `transform` `collects` and `broadcasts` association rules.
 
+
+    .. [1] Haoyuan Li, Yi Wang, Dong Zhang, Ming Zhang, and Edward Y. Chang. 2008.
+        Pfp: parallel fp-growth for query recommendation.
+        In Proceedings of the 2008 ACM conference on Recommender systems (RecSys '08).
+        Association for Computing Machinery, New York, NY, USA, 107-114.
+        DOI: https://doi.org/10.1145/1454008.1454027
+    .. [2] Jiawei Han, Jian Pei, and Yiwen Yin. 2000.
+        Mining frequent patterns without candidate generation.
+        SIGMOD Rec. 29, 2 (June 2000), 1-12.
+        DOI: https://doi.org/10.1145/335191.335372
+
+
+    Examples
+    --------
     >>> from pyspark.sql.functions import split
     >>> data = (spark.read
     ...     .text("data/mllib/sample_fpgrowth.txt")
@@ -180,43 +204,44 @@ class FPGrowth(JavaEstimator, _FPGrowthParams, JavaMLWritable, JavaMLReadable):
     only showing top 5 rows
     ...
     >>> fpm.associationRules.show(5)
-    +----------+----------+----------+----+
-    |antecedent|consequent|confidence|lift|
-    +----------+----------+----------+----+
-    |    [t, s]|       [y]|       1.0| 2.0|
-    |    [t, s]|       [x]|       1.0| 1.5|
-    |    [t, s]|       [z]|       1.0| 1.2|
-    |       [p]|       [r]|       1.0| 2.0|
-    |       [p]|       [z]|       1.0| 1.2|
-    +----------+----------+----------+----+
+    +----------+----------+----------+----+------------------+
+    |antecedent|consequent|confidence|lift|           support|
+    +----------+----------+----------+----+------------------+
+    |    [t, s]|       [y]|       1.0| 2.0|0.3333333333333333|
+    |    [t, s]|       [x]|       1.0| 1.5|0.3333333333333333|
+    |    [t, s]|       [z]|       1.0| 1.2|0.3333333333333333|
+    |       [p]|       [r]|       1.0| 2.0|0.3333333333333333|
+    |       [p]|       [z]|       1.0| 1.2|0.3333333333333333|
+    +----------+----------+----------+----+------------------+
     only showing top 5 rows
     ...
     >>> new_data = spark.createDataFrame([(["t", "s"], )], ["items"])
     >>> sorted(fpm.transform(new_data).first().newPrediction)
-    [u'x', u'y', u'z']
-
-    .. versionadded:: 2.2.0
+    ['x', 'y', 'z']
+    >>> model_path = temp_path + "/fpm_model"
+    >>> fpm.save(model_path)
+    >>> model2 = FPGrowthModel.load(model_path)
+    >>> fpm.transform(data).take(1) == model2.transform(data).take(1)
+    True
     """
     @keyword_only
-    def __init__(self, minSupport=0.3, minConfidence=0.8, itemsCol="items",
+    def __init__(self, *, minSupport=0.3, minConfidence=0.8, itemsCol="items",
                  predictionCol="prediction", numPartitions=None):
         """
-        __init__(self, minSupport=0.3, minConfidence=0.8, itemsCol="items", \
+        __init__(self, \\*, minSupport=0.3, minConfidence=0.8, itemsCol="items", \
                  predictionCol="prediction", numPartitions=None)
         """
         super(FPGrowth, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.fpm.FPGrowth", self.uid)
-        self._setDefault(minSupport=0.3, minConfidence=0.8,
-                         itemsCol="items", predictionCol="prediction")
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
     @since("2.2.0")
-    def setParams(self, minSupport=0.3, minConfidence=0.8, itemsCol="items",
+    def setParams(self, *, minSupport=0.3, minConfidence=0.8, itemsCol="items",
                   predictionCol="prediction", numPartitions=None):
         """
-        setParams(self, minSupport=0.3, minConfidence=0.8, itemsCol="items", \
+        setParams(self, \\*, minSupport=0.3, minConfidence=0.8, itemsCol="items", \
                   predictionCol="prediction", numPartitions=None)
         """
         kwargs = self._input_kwargs
@@ -261,13 +286,19 @@ class PrefixSpan(JavaParams):
     A parallel PrefixSpan algorithm to mine frequent sequential patterns.
     The PrefixSpan algorithm is described in J. Pei, et al., PrefixSpan: Mining Sequential Patterns
     Efficiently by Prefix-Projected Pattern Growth
-    (see <a href="https://doi.org/10.1109/ICDE.2001.914830">here</a>).
+    (see `here <https://doi.org/10.1109/ICDE.2001.914830">`_).
     This class is not yet an Estimator/Transformer, use :py:func:`findFrequentSequentialPatterns`
     method to run the PrefixSpan algorithm.
 
-    @see <a href="https://en.wikipedia.org/wiki/Sequential_Pattern_Mining">Sequential Pattern Mining
-    (Wikipedia)</a>
+    .. versionadded:: 2.4.0
 
+    Notes
+    -----
+    See `Sequential Pattern Mining (Wikipedia) \
+      <https://en.wikipedia.org/wiki/Sequential_Pattern_Mining>`_
+
+    Examples
+    --------
     >>> from pyspark.ml.fpm import PrefixSpan
     >>> from pyspark.sql import Row
     >>> df = sc.parallelize([Row(sequence=[[1, 2], [3]]),
@@ -294,8 +325,6 @@ class PrefixSpan(JavaParams):
     |[[3]]     |2   |
     +----------+----+
     ...
-
-    .. versionadded:: 2.4.0
     """
 
     minSupport = Param(Params._dummy(), "minSupport", "The minimal support level of the " +
@@ -320,10 +349,10 @@ class PrefixSpan(JavaParams):
                         typeConverter=TypeConverters.toString)
 
     @keyword_only
-    def __init__(self, minSupport=0.1, maxPatternLength=10, maxLocalProjDBSize=32000000,
+    def __init__(self, *, minSupport=0.1, maxPatternLength=10, maxLocalProjDBSize=32000000,
                  sequenceCol="sequence"):
         """
-        __init__(self, minSupport=0.1, maxPatternLength=10, maxLocalProjDBSize=32000000, \
+        __init__(self, \\*, minSupport=0.1, maxPatternLength=10, maxLocalProjDBSize=32000000, \
                  sequenceCol="sequence")
         """
         super(PrefixSpan, self).__init__()
@@ -335,10 +364,10 @@ class PrefixSpan(JavaParams):
 
     @keyword_only
     @since("2.4.0")
-    def setParams(self, minSupport=0.1, maxPatternLength=10, maxLocalProjDBSize=32000000,
+    def setParams(self, *, minSupport=0.1, maxPatternLength=10, maxLocalProjDBSize=32000000,
                   sequenceCol="sequence"):
         """
-        setParams(self, minSupport=0.1, maxPatternLength=10, maxLocalProjDBSize=32000000, \
+        setParams(self, \\*, minSupport=0.1, maxPatternLength=10, maxLocalProjDBSize=32000000, \
                   sequenceCol="sequence")
         """
         kwargs = self._input_kwargs
@@ -400,19 +429,26 @@ class PrefixSpan(JavaParams):
         """
         return self.getOrDefault(self.sequenceCol)
 
-    @since("2.4.0")
     def findFrequentSequentialPatterns(self, dataset):
         """
         Finds the complete set of frequent sequential patterns in the input sequences of itemsets.
 
-        :param dataset: A dataframe containing a sequence column which is
-                        `ArrayType(ArrayType(T))` type, T is the item type for the input dataset.
-        :return: A `DataFrame` that contains columns of sequence and corresponding frequency.
-                 The schema of it will be:
-                 - `sequence: ArrayType(ArrayType(T))` (T is the item type)
-                 - `freq: Long`
-
         .. versionadded:: 2.4.0
+
+        Parameters
+        ----------
+        dataset : :py:class:`pyspark.sql.DataFrame`
+            A dataframe containing a sequence column which is
+            `ArrayType(ArrayType(T))` type, T is the item type for the input dataset.
+
+        Returns
+        -------
+        :py:class:`pyspark.sql.DataFrame`
+            A `DataFrame` that contains columns of sequence and corresponding frequency.
+            The schema of it will be:
+
+            - `sequence: ArrayType(ArrayType(T))` (T is the item type)
+            - `freq: Long`
         """
 
         self._transfer_params_to_java()

@@ -24,14 +24,15 @@ from functools import reduce
 from itertools import chain
 import platform
 
-from pyspark import SparkConf, SparkContext, RDD
+from pyspark import SparkConf, SparkContext
 from pyspark.streaming import StreamingContext
 from pyspark.testing.streamingutils import PySparkStreamingTestCase
 
 
 @unittest.skipIf(
-    "pypy" in platform.python_implementation().lower() and "COVERAGE_PROCESS_START" in os.environ,
-    "PyPy implementation causes to hang DStream tests forever when Coverage report is used.")
+    "pypy" in platform.python_implementation().lower(),
+    "The tests fail in PyPy3 implementation for an unknown reason. "
+    "With PyPy, it causes to hang DStream tests forever when Coverage report is used.")
 class BasicOperationTests(PySparkStreamingTestCase):
 
     def test_map(self):
@@ -394,8 +395,9 @@ class BasicOperationTests(PySparkStreamingTestCase):
 
 
 @unittest.skipIf(
-    "pypy" in platform.python_implementation().lower() and "COVERAGE_PROCESS_START" in os.environ,
-    "PyPy implementation causes to hang DStream tests forever when Coverage report is used.")
+    "pypy" in platform.python_implementation().lower(),
+    "The tests fail in PyPy3 implementation for an unknown reason. "
+    "With PyPy, it causes to hang DStream tests forever when Coverage report is used.")
 class WindowFunctionTests(PySparkStreamingTestCase):
 
     timeout = 15
@@ -474,8 +476,9 @@ class WindowFunctionTests(PySparkStreamingTestCase):
 
 
 @unittest.skipIf(
-    "pypy" in platform.python_implementation().lower() and "COVERAGE_PROCESS_START" in os.environ,
-    "PyPy implementation causes to hang DStream tests forever when Coverage report is used.")
+    "pypy" in platform.python_implementation().lower(),
+    "The tests fail in PyPy3 implementation for an unknown reason. "
+    "With PyPy, it causes to hang DStream tests forever when Coverage report is used.")
 class CheckpointTests(unittest.TestCase):
 
     setupCalled = False
@@ -559,14 +562,14 @@ class CheckpointTests(unittest.TestCase):
         def check_output(n):
             while not os.listdir(outputd):
                 if self.ssc.awaitTerminationOrTimeout(0.5):
-                    raise Exception("ssc stopped")
+                    raise RuntimeError("ssc stopped")
             time.sleep(1)  # make sure mtime is larger than the previous one
             with open(os.path.join(inputd, str(n)), 'w') as f:
                 f.writelines(["%d\n" % i for i in range(10)])
 
             while True:
                 if self.ssc.awaitTerminationOrTimeout(0.5):
-                    raise Exception("ssc stopped")
+                    raise RuntimeError("ssc stopped")
                 p = os.path.join(outputd, max(os.listdir(outputd)))
                 if '_SUCCESS' not in os.listdir(p):
                     # not finished
@@ -641,10 +644,10 @@ class CheckpointTests(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.streaming.tests.test_dstream import *
+    from pyspark.streaming.tests.test_dstream import *  # noqa: F401
 
     try:
-        import xmlrunner
+        import xmlrunner  # type: ignore[import]
         testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None

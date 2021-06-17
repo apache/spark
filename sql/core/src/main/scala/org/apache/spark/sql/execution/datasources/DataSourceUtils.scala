@@ -17,12 +17,26 @@
 
 package org.apache.spark.sql.execution.datasources
 
+import java.util.Locale
+
+import scala.collection.JavaConverters._
+
 import org.apache.hadoop.fs.Path
 import org.json4s.NoTypeHints
 import org.json4s.jackson.Serialization
 
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.SparkUpgradeException
+import org.apache.spark.sql.{SPARK_LEGACY_DATETIME, SPARK_LEGACY_INT96, SPARK_VERSION_METADATA_KEY}
+import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogUtils}
+import org.apache.spark.sql.catalyst.util.RebaseDateTime
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
+import org.apache.spark.sql.execution.datasources.parquet.ParquetOptions
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
+import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.util.Utils
 
 
 object DataSourceUtils {
@@ -51,8 +65,7 @@ object DataSourceUtils {
   def verifySchema(format: FileFormat, schema: StructType): Unit = {
     schema.foreach { field =>
       if (!format.supportDataType(field.dataType)) {
-        throw new AnalysisException(
-          s"$format data source does not support ${field.dataType.catalogString} data type.")
+        throw QueryCompilationErrors.dataTypeUnsupportedByDataSourceError(format.toString, field)
       }
     }
   }
@@ -64,4 +77,152 @@ object DataSourceUtils {
 
   private[sql] def isDataFile(fileName: String) =
     !(fileName.startsWith("_") || fileName.startsWith("."))
+
+  /**
+   * Returns if the given relation's V1 datasource provider supports nested predicate pushdown.
+   */
+  private[sql] def supportNestedPredicatePushdown(relation: BaseRelation): Boolean =
+    relation match {
+      case hs: HadoopFsRelation =>
+        val supportedDatasources =
+          Utils.stringToSeq(SQLConf.get.getConf(SQLConf.NESTED_PREDICATE_PUSHDOWN_FILE_SOURCE_LIST)
+            .toLowerCase(Locale.ROOT))
+        supportedDatasources.contains(hs.toString)
+      case _ => false
+    }
+
+  def datetimeRebaseMode(
+      lookupFileMeta: String => String,
+      modeByConfig: String): LegacyBehaviorPolicy.Value = {
+    if (Utils.isTesting && SQLConf.get.getConfString("spark.test.forceNoRebase", "") == "true") {
+      return LegacyBehaviorPolicy.CORRECTED
+    }
+    // If there is no version, we return the mode specified by the config.
+    Option(lookupFileMeta(SPARK_VERSION_METADATA_KEY)).map { version =>
+      // Files written by Spark 2.4 and earlier follow the legacy hybrid calendar and we need to
+      // rebase the datetime values.
+      // Files written by Spark 3.0 and latter may also need the rebase if they were written with
+      // the "LEGACY" rebase mode.
+      if (version < "3.0.0" || lookupFileMeta(SPARK_LEGACY_DATETIME) != null) {
+        LegacyBehaviorPolicy.LEGACY
+      } else {
+        LegacyBehaviorPolicy.CORRECTED
+      }
+    }.getOrElse(LegacyBehaviorPolicy.withName(modeByConfig))
+  }
+
+  def int96RebaseMode(
+      lookupFileMeta: String => String,
+      modeByConfig: String): LegacyBehaviorPolicy.Value = {
+    if (Utils.isTesting && SQLConf.get.getConfString("spark.test.forceNoRebase", "") == "true") {
+      return LegacyBehaviorPolicy.CORRECTED
+    }
+    // If there is no version, we return the mode specified by the config.
+    Option(lookupFileMeta(SPARK_VERSION_METADATA_KEY)).map { version =>
+      // Files written by Spark 3.0 and earlier follow the legacy hybrid calendar and we need to
+      // rebase the INT96 timestamp values.
+      // Files written by Spark 3.1 and latter may also need the rebase if they were written with
+      // the "LEGACY" rebase mode.
+      if (version < "3.1.0" || lookupFileMeta(SPARK_LEGACY_INT96) != null) {
+        LegacyBehaviorPolicy.LEGACY
+      } else {
+        LegacyBehaviorPolicy.CORRECTED
+      }
+    }.getOrElse(LegacyBehaviorPolicy.withName(modeByConfig))
+  }
+
+  def newRebaseExceptionInRead(format: String): SparkUpgradeException = {
+    val (config, option) = format match {
+      case "Parquet INT96" =>
+        (SQLConf.PARQUET_INT96_REBASE_MODE_IN_READ.key, ParquetOptions.INT96_REBASE_MODE)
+      case "Parquet" =>
+        (SQLConf.PARQUET_REBASE_MODE_IN_READ.key, ParquetOptions.DATETIME_REBASE_MODE)
+      case "Avro" =>
+        (SQLConf.AVRO_REBASE_MODE_IN_READ.key, "datetimeRebaseMode")
+      case _ => throw QueryExecutionErrors.unrecognizedFileFormatError(format)
+    }
+    QueryExecutionErrors.sparkUpgradeInReadingDatesError(format, config, option)
+  }
+
+  def newRebaseExceptionInWrite(format: String): SparkUpgradeException = {
+    val config = format match {
+      case "Parquet INT96" => SQLConf.PARQUET_INT96_REBASE_MODE_IN_WRITE.key
+      case "Parquet" => SQLConf.PARQUET_REBASE_MODE_IN_WRITE.key
+      case "Avro" => SQLConf.AVRO_REBASE_MODE_IN_WRITE.key
+      case _ => throw QueryExecutionErrors.unrecognizedFileFormatError(format)
+    }
+    QueryExecutionErrors.sparkUpgradeInWritingDatesError(format, config)
+  }
+
+  def creteDateRebaseFuncInRead(
+      rebaseMode: LegacyBehaviorPolicy.Value,
+      format: String): Int => Int = rebaseMode match {
+    case LegacyBehaviorPolicy.EXCEPTION => days: Int =>
+      if (days < RebaseDateTime.lastSwitchJulianDay) {
+        throw DataSourceUtils.newRebaseExceptionInRead(format)
+      }
+      days
+    case LegacyBehaviorPolicy.LEGACY => RebaseDateTime.rebaseJulianToGregorianDays
+    case LegacyBehaviorPolicy.CORRECTED => identity[Int]
+  }
+
+  def creteDateRebaseFuncInWrite(
+      rebaseMode: LegacyBehaviorPolicy.Value,
+      format: String): Int => Int = rebaseMode match {
+    case LegacyBehaviorPolicy.EXCEPTION => days: Int =>
+      if (days < RebaseDateTime.lastSwitchGregorianDay) {
+        throw DataSourceUtils.newRebaseExceptionInWrite(format)
+      }
+      days
+    case LegacyBehaviorPolicy.LEGACY => RebaseDateTime.rebaseGregorianToJulianDays
+    case LegacyBehaviorPolicy.CORRECTED => identity[Int]
+  }
+
+  def creteTimestampRebaseFuncInRead(
+      rebaseMode: LegacyBehaviorPolicy.Value,
+      format: String): Long => Long = rebaseMode match {
+    case LegacyBehaviorPolicy.EXCEPTION => micros: Long =>
+      if (micros < RebaseDateTime.lastSwitchJulianTs) {
+        throw DataSourceUtils.newRebaseExceptionInRead(format)
+      }
+      micros
+    case LegacyBehaviorPolicy.LEGACY => RebaseDateTime.rebaseJulianToGregorianMicros
+    case LegacyBehaviorPolicy.CORRECTED => identity[Long]
+  }
+
+  def creteTimestampRebaseFuncInWrite(
+      rebaseMode: LegacyBehaviorPolicy.Value,
+      format: String): Long => Long = rebaseMode match {
+    case LegacyBehaviorPolicy.EXCEPTION => micros: Long =>
+      if (micros < RebaseDateTime.lastSwitchGregorianTs) {
+        throw DataSourceUtils.newRebaseExceptionInWrite(format)
+      }
+      micros
+    case LegacyBehaviorPolicy.LEGACY => RebaseDateTime.rebaseGregorianToJulianMicros
+    case LegacyBehaviorPolicy.CORRECTED => identity[Long]
+  }
+
+  def generateDatasourceOptions(
+      extraOptions: CaseInsensitiveStringMap, table: CatalogTable): Map[String, String] = {
+    val pathOption = table.storage.locationUri.map("path" -> CatalogUtils.URIToString(_))
+    val options = table.storage.properties ++ pathOption
+    if (!SQLConf.get.getConf(SQLConf.LEGACY_EXTRA_OPTIONS_BEHAVIOR)) {
+      // Check the same key with different values
+      table.storage.properties.foreach { case (k, v) =>
+        if (extraOptions.containsKey(k) && extraOptions.get(k) != v) {
+          throw QueryCompilationErrors.failToResolveDataSourceForTableError(table, k)
+        }
+      }
+      // To keep the original key from table properties, here we filter all case insensitive
+      // duplicate keys out from extra options.
+      val lowerCasedDuplicatedKeys =
+        table.storage.properties.keySet.map(_.toLowerCase(Locale.ROOT))
+          .intersect(extraOptions.keySet.asScala)
+      extraOptions.asCaseSensitiveMap().asScala.filterNot {
+        case (k, _) => lowerCasedDuplicatedKeys.contains(k.toLowerCase(Locale.ROOT))
+      }.toMap ++ options
+    } else {
+      options
+    }
+  }
 }

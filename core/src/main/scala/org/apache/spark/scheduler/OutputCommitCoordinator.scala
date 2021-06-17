@@ -151,7 +151,7 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf, isDriver: Boolean)
         logInfo(s"Task was denied committing, stage: $stage.$stageAttempt, " +
           s"partition: $partition, attempt: $attemptNumber")
       case _ =>
-        // Mark the attempt as failed to blacklist from future commit protocol
+        // Mark the attempt as failed to exclude from future commit protocol
         val taskId = TaskIdentifier(stageAttempt, attemptNumber)
         stageState.failures.getOrElseUpdate(partition, mutable.Set()) += taskId
         if (stageState.authorizedCommitters(partition) == taskId) {

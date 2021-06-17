@@ -16,9 +16,15 @@
  */
 package org.apache.spark.sql.execution
 
+import java.io.File
+
+import scala.collection.mutable
+import scala.util.Random
+
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkConf
+import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd}
 import org.apache.spark.sql.{DataFrame, QueryTest}
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcScan
@@ -113,6 +119,48 @@ class DataSourceScanExecRedactionSuite extends DataSourceScanRedactionTest {
       assert(isIncluded(df.queryExecution, "Location"))
     }
   }
+
+  test("SPARK-31793: FileSourceScanExec metadata should contain limited file paths") {
+    withTempPath { path =>
+      // create a sub-directory with long name so that each root path will always exceed the limit
+      // this is to ensure we always test the case for the path truncation
+      val dataDirName = Random.alphanumeric.take(100).toList.mkString
+      val dataDir = new File(path, dataDirName)
+      dataDir.mkdir()
+
+      val partitionCol = "partitionCol"
+      spark.range(10)
+        .select("id", "id")
+        .toDF("value", partitionCol)
+        .write
+        .partitionBy(partitionCol)
+        .orc(dataDir.getCanonicalPath)
+      val paths = (0 to 9).map(i => new File(dataDir, s"$partitionCol=$i").getCanonicalPath)
+      val plan = spark.read.orc(paths: _*).queryExecution.executedPlan
+      val location = plan collectFirst {
+        case f: FileSourceScanExec => f.metadata("Location")
+      }
+      assert(location.isDefined)
+      // The location metadata should at least contain one path
+      assert(location.get.contains(paths.head))
+
+      // The location metadata should have the number of root paths
+      assert(location.get.contains("(10 paths)"))
+
+      // The location metadata should have bracket wrapping paths
+      assert(location.get.indexOf('[') > -1)
+      assert(location.get.indexOf(']') > -1)
+
+      // extract paths in location metadata (removing classname, brackets, separators)
+      val pathsInLocation = location.get.substring(
+        location.get.indexOf('[') + 1, location.get.indexOf(']')).split(", ").toSeq
+
+      // the only one path should be available
+      assert(pathsInLocation.size == 2)
+      // indicator ("...") should be available
+      assert(pathsInLocation.exists(_.contains("...")))
+    }
+  }
 }
 
 /**
@@ -163,6 +211,35 @@ class DataSourceV2ScanExecRedactionSuite extends DataSourceScanRedactionTest {
             assert(isIncluded(df.queryExecution, "PushedFilters"))
           }
           assert(isIncluded(df.queryExecution, "Location"))
+        }
+      }
+    }
+  }
+
+  test("SPARK-30362: test input metrics for DSV2") {
+    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
+      Seq("json", "orc", "parquet").foreach { format =>
+        withTempPath { path =>
+          val dir = path.getCanonicalPath
+          spark.range(0, 10).write.format(format).save(dir)
+          val df = spark.read.format(format).load(dir)
+          val bytesReads = new mutable.ArrayBuffer[Long]()
+          val recordsRead = new mutable.ArrayBuffer[Long]()
+          val bytesReadListener = new SparkListener() {
+            override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = {
+              bytesReads += taskEnd.taskMetrics.inputMetrics.bytesRead
+              recordsRead += taskEnd.taskMetrics.inputMetrics.recordsRead
+            }
+          }
+          sparkContext.addSparkListener(bytesReadListener)
+          try {
+            df.collect()
+            sparkContext.listenerBus.waitUntilEmpty()
+            assert(bytesReads.sum > 0)
+            assert(recordsRead.sum == 10)
+          } finally {
+            sparkContext.removeSparkListener(bytesReadListener)
+          }
         }
       }
     }

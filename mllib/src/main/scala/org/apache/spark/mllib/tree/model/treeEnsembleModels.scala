@@ -19,15 +19,15 @@ package org.apache.spark.mllib.tree.model
 
 import scala.collection.mutable
 
-import com.github.fommil.netlib.BLAS.{getInstance => blas}
 import org.json4s._
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.SparkContext
-import org.apache.spark.annotation.{DeveloperApi, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.internal.Logging
+import org.apache.spark.ml.linalg.BLAS
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.configuration.Algo
@@ -174,7 +174,6 @@ class GradientBoostedTreesModel @Since("1.2.0") (
 object GradientBoostedTreesModel extends Loader[GradientBoostedTreesModel] {
 
   /**
-   * :: DeveloperApi ::
    * Compute the initial predictions and errors for a dataset for the first
    * iteration of gradient boosting.
    * @param data: training data.
@@ -185,7 +184,6 @@ object GradientBoostedTreesModel extends Loader[GradientBoostedTreesModel] {
    *         corresponding to every sample.
    */
   @Since("1.4.0")
-  @DeveloperApi
   def computeInitialPredictionAndError(
       data: RDD[LabeledPoint],
       initTreeWeight: Double,
@@ -199,7 +197,6 @@ object GradientBoostedTreesModel extends Loader[GradientBoostedTreesModel] {
   }
 
   /**
-   * :: DeveloperApi ::
    * Update a zipped predictionError RDD
    * (as obtained with computeInitialPredictionAndError)
    * @param data: training data.
@@ -211,7 +208,6 @@ object GradientBoostedTreesModel extends Loader[GradientBoostedTreesModel] {
    *         corresponding to each sample.
    */
   @Since("1.4.0")
-  @DeveloperApi
   def updatePredictionError(
     data: RDD[LabeledPoint],
     predictionAndError: RDD[(Double, Double)],
@@ -284,7 +280,7 @@ private[tree] sealed class TreeEnsembleModel(
    */
   private def predictBySumming(features: Vector): Double = {
     val treePredictions = trees.map(_.predict(features))
-    blas.ddot(numTrees, treePredictions, 1, treeWeights, 1)
+    BLAS.nativeBLAS.ddot(numTrees, treePredictions, 1, treeWeights, 1)
   }
 
   /**
@@ -292,7 +288,7 @@ private[tree] sealed class TreeEnsembleModel(
    */
   private def predictByVoting(features: Vector): Double = {
     val votes = mutable.Map.empty[Int, Double]
-    trees.view.zip(treeWeights).foreach { case (tree, weight) =>
+    trees.iterator.zip(treeWeights.iterator).foreach { case (tree, weight) =>
       val prediction = tree.predict(features).toInt
       votes(prediction) = votes.getOrElse(prediction, 0.0) + weight
     }

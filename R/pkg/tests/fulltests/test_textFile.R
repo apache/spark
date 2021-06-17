@@ -75,6 +75,7 @@ test_that("several transformations on RDD created by textFile()", {
   collectRDD(rdd)
 
   unlink(fileName)
+  expect_true(TRUE)
 })
 
 test_that("textFile() followed by a saveAsTextFile() returns the same content", {

@@ -17,19 +17,23 @@
 package org.apache.spark.deploy.k8s.features
 
 import org.apache.spark.deploy.k8s.{KubernetesConf, SparkPod}
-import org.apache.spark.deploy.k8s.Config.KUBERNETES_SERVICE_ACCOUNT_NAME
+import org.apache.spark.deploy.k8s.Config.{KUBERNETES_DRIVER_SERVICE_ACCOUNT_NAME, KUBERNETES_EXECUTOR_SERVICE_ACCOUNT_NAME}
 import org.apache.spark.deploy.k8s.KubernetesUtils.buildPodWithServiceAccount
 
 private[spark] class ExecutorKubernetesCredentialsFeatureStep(kubernetesConf: KubernetesConf)
   extends KubernetesFeatureConfigStep {
-  private lazy val driverServiceAccount = kubernetesConf.get(KUBERNETES_SERVICE_ACCOUNT_NAME)
+
+  private lazy val driverServiceAccount = kubernetesConf.get(KUBERNETES_DRIVER_SERVICE_ACCOUNT_NAME)
+  private lazy val executorServiceAccount =
+    kubernetesConf.get(KUBERNETES_EXECUTOR_SERVICE_ACCOUNT_NAME)
 
   override def configurePod(pod: SparkPod): SparkPod = {
       pod.copy(
-        // if not setup by the pod template fallback to the driver's sa,
-        // last option is the default sa.
+        // if not setup by the pod template, fallback to the executor's sa,
+        // if executor's sa is not setup, the last option is driver's sa.
         pod = if (Option(pod.pod.getSpec.getServiceAccount).isEmpty) {
-          buildPodWithServiceAccount(driverServiceAccount, pod).getOrElse(pod.pod)
+          buildPodWithServiceAccount(executorServiceAccount
+            .orElse(driverServiceAccount), pod).getOrElse(pod.pod)
         } else {
           pod.pod
         })

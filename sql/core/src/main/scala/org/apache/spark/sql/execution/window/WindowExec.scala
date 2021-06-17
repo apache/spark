@@ -17,17 +17,11 @@
 
 package org.apache.spark.sql.execution.window
 
-import scala.collection.mutable
-import scala.collection.mutable.ArrayBuffer
-
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.physical._
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.execution.{ExternalAppendOnlyUnsafeRowArray, SparkPlan, UnaryExecNode}
-import org.apache.spark.sql.types.{CalendarIntervalType, DateType, IntegerType, TimestampType}
+import org.apache.spark.sql.execution.{ExternalAppendOnlyUnsafeRowArray, SparkPlan}
 
 /**
  * This class calculates and outputs (windowed) aggregates over the rows in a single (sorted)
@@ -38,17 +32,29 @@ import org.apache.spark.sql.types.{CalendarIntervalType, DateType, IntegerType, 
  * - Entire partition: The frame is the entire partition, i.e.
  *   UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING. For this case, window function will take all
  *   rows as inputs and be evaluated once.
- * - Growing frame: We only add new rows into the frame, i.e. UNBOUNDED PRECEDING AND ....
+ * - Growing frame: We only add new rows into the frame, Examples are:
+ *     1. UNBOUNDED PRECEDING AND 1 PRECEDING
+ *     2. UNBOUNDED PRECEDING AND CURRENT ROW
+ *     3. UNBOUNDED PRECEDING AND 1 FOLLOWING
  *   Every time we move to a new row to process, we add some rows to the frame. We do not remove
  *   rows from this frame.
- * - Shrinking frame: We only remove rows from the frame, i.e. ... AND UNBOUNDED FOLLOWING.
+ * - Shrinking frame: We only remove rows from the frame, Examples are:
+ *     1. 1 PRECEDING AND UNBOUNDED FOLLOWING
+ *     2. CURRENT ROW AND UNBOUNDED FOLLOWING
+ *     3. 1 FOLLOWING AND UNBOUNDED FOLLOWING
  *   Every time we move to a new row to process, we remove some rows from the frame. We do not add
  *   rows to this frame.
  * - Moving frame: Every time we move to a new row to process, we remove some rows from the frame
  *   and we add some rows to the frame. Examples are:
- *     1 PRECEDING AND CURRENT ROW and 1 FOLLOWING AND 2 FOLLOWING.
+ *     1. 2 PRECEDING AND 1 PRECEDING
+ *     2. 1 PRECEDING AND CURRENT ROW
+ *     3. CURRENT ROW AND 1 FOLLOWING
+ *     4. 1 PRECEDING AND 1 FOLLOWING
+ *     5. 1 FOLLOWING AND 2 FOLLOWING
  * - Offset frame: The frame consist of one row, which is an offset number of rows away from the
- *   current row. Only [[OffsetWindowFunction]]s can be processed in an offset frame.
+ *   current row. Only [[OffsetWindowFunction]]s can be processed in an offset frame. There are
+ *   three implements of offset frame: [[FrameLessOffsetWindowFunctionFrame]],
+ *   [[UnboundedOffsetWindowFunctionFrame]] and [[UnboundedPrecedingOffsetWindowFunctionFrame]].
  *
  * Different frame boundaries can be used in Growing, Shrinking and Moving frames. A frame
  * boundary can be either Row or Range based:
@@ -56,7 +62,7 @@ import org.apache.spark.sql.types.{CalendarIntervalType, DateType, IntegerType, 
  *   An offset indicates the number of rows above or below the current row, the frame for the
  *   current row starts or ends. For instance, given a row based sliding frame with a lower bound
  *   offset of -1 and a upper bound offset of +2. The frame for row with index 5 would range from
- *   index 4 to index 6.
+ *   index 4 to index 7.
  * - Range based: A range based boundary is based on the actual value of the ORDER BY
  *   expression(s). An offset is used to alter the value of the ORDER BY expression, for
  *   instance if the current order by expression has a value of 10 and the lower bound offset
@@ -83,7 +89,7 @@ case class WindowExec(
     partitionSpec: Seq[Expression],
     orderSpec: Seq[SortOrder],
     child: SparkPlan)
-  extends WindowExecBase(windowExpression, partitionSpec, orderSpec, child) {
+  extends WindowExecBase {
 
   override def output: Seq[Attribute] =
     child.output ++ windowExpression.map(_.toAttribute)
@@ -105,7 +111,7 @@ case class WindowExec(
   override def outputPartitioning: Partitioning = child.outputPartitioning
 
   protected override def doExecute(): RDD[InternalRow] = {
-    // Unwrap the expressions and factories from the map.
+    // Unwrap the window expressions and window frame factories from the map.
     val expressions = windowFrameExpressionFactoryPairs.flatMap(_._1)
     val factories = windowFrameExpressionFactoryPairs.map(_._2).toArray
     val inMemoryThreshold = sqlContext.conf.windowExecBufferInMemoryThreshold
@@ -205,4 +211,7 @@ case class WindowExec(
       }
     }
   }
+
+  override protected def withNewChildInternal(newChild: SparkPlan): WindowExec =
+    copy(child = newChild)
 }

@@ -23,7 +23,7 @@ import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
-import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
+import scala.collection.mutable.{HashMap, HashSet}
 import scala.concurrent.duration._
 import scala.io.Source
 import scala.reflect.ClassTag
@@ -31,8 +31,10 @@ import scala.reflect.ClassTag
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
 import org.mockito.Mockito.{mock, when}
-import org.scalatest.{BeforeAndAfter, Matchers, PrivateMethodTester}
+import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
 import org.scalatest.concurrent.Eventually
+import org.scalatest.matchers.must.Matchers
+import org.scalatest.matchers.should.Matchers._
 import other.supplier.{CustomPersistenceEngine, CustomRecoveryModeFactory}
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
@@ -46,6 +48,7 @@ import org.apache.spark.resource.{ResourceInformation, ResourceRequirement}
 import org.apache.spark.resource.ResourceUtils.{FPGA, GPU}
 import org.apache.spark.rpc.{RpcAddress, RpcEndpoint, RpcEndpointRef, RpcEnv}
 import org.apache.spark.serializer
+import org.apache.spark.util.Utils
 
 object MockWorker {
   val counter = new AtomicInteger(10000)
@@ -56,7 +59,7 @@ class MockWorker(master: RpcEndpointRef, conf: SparkConf = new SparkConf) extend
   val id = seq.toString
   override val rpcEnv: RpcEnv = RpcEnv.create("worker", "localhost", seq,
     conf, new SecurityManager(conf))
-  var apps = new mutable.HashMap[String, String]()
+  val apps = new mutable.HashMap[String, String]()
   val driverIdToAppId = new mutable.HashMap[String, String]()
   def newDriver(driverId: String): RpcEndpointRef = {
     val name = s"driver_${drivers.size}"
@@ -70,6 +73,7 @@ class MockWorker(master: RpcEndpointRef, conf: SparkConf = new SparkConf) extend
     })
   }
 
+  var decommissioned = false
   var appDesc = DeployTestUtils.createAppDesc()
   val drivers = mutable.HashSet[String]()
   val driverResources = new mutable.HashMap[String, Map[String, Set[String]]]
@@ -94,6 +98,8 @@ class MockWorker(master: RpcEndpointRef, conf: SparkConf = new SparkConf) extend
         case None =>
       }
       driverIdToAppId.remove(driverId)
+    case DecommissionWorker =>
+      decommissioned = true
   }
 }
 
@@ -129,7 +135,7 @@ class MockExecutorLaunchFailWorker(master: Master, conf: SparkConf = new SparkCo
       assert(master.idToApp.contains(appId))
       appIdsToLaunchExecutor += appId
       failedCnt += 1
-      master.self.send(ExecutorStateChanged(appId, execId, ExecutorState.FAILED, None, None))
+      master.self.askSync(ExecutorStateChanged(appId, execId, ExecutorState.FAILED, None, None))
 
     case otherMsg => super.receive(otherMsg)
   }
@@ -137,6 +143,10 @@ class MockExecutorLaunchFailWorker(master: Master, conf: SparkConf = new SparkCo
 
 class MasterSuite extends SparkFunSuite
   with Matchers with Eventually with PrivateMethodTester with BeforeAndAfter {
+
+  // regex to extract worker links from the master webui HTML
+  // groups represent URL and worker ID
+  val WORKER_LINK_RE = """<a href="(.+?)">\s*(worker-.+?)\s*</a>""".r
 
   private var _master: Master = _
 
@@ -315,17 +325,30 @@ class MasterSuite extends SparkFunSuite
     val conf = new SparkConf()
     val localCluster = new LocalSparkCluster(2, 2, 512, conf)
     localCluster.start()
+    val masterUrl = s"http://localhost:${localCluster.masterWebUIPort}"
     try {
       eventually(timeout(5.seconds), interval(100.milliseconds)) {
-        val json = Source.fromURL(s"http://localhost:${localCluster.masterWebUIPort}/json")
-          .getLines().mkString("\n")
+        val json = Utils
+          .tryWithResource(Source.fromURL(s"$masterUrl/json"))(_.getLines().mkString("\n"))
         val JArray(workers) = (parse(json) \ "workers")
         workers.size should be (2)
         workers.foreach { workerSummaryJson =>
           val JString(workerWebUi) = workerSummaryJson \ "webuiaddress"
-          val workerResponse = parse(Source.fromURL(s"${workerWebUi}/json")
-            .getLines().mkString("\n"))
+          val workerResponse = parse(Utils
+            .tryWithResource(Source.fromURL(s"$workerWebUi/json"))(_.getLines().mkString("\n")))
           (workerResponse \ "cores").extract[Int] should be (2)
+        }
+
+        val html = Utils
+          .tryWithResource(Source.fromURL(s"$masterUrl/"))(_.getLines().mkString("\n"))
+        html should include ("Spark Master at spark://")
+        val workerLinks = (WORKER_LINK_RE findAllMatchIn html).toList
+        workerLinks.size should be (2)
+        workerLinks foreach { case WORKER_LINK_RE(workerUrl, workerId) =>
+          val workerHtml = Utils
+            .tryWithResource(Source.fromURL(workerUrl))(_.getLines().mkString("\n"))
+          workerHtml should include ("Spark Worker at")
+          workerHtml should include ("Running Executors (0)")
         }
       }
     } finally {
@@ -335,29 +358,104 @@ class MasterSuite extends SparkFunSuite
 
   test("master/worker web ui available with reverseProxy") {
     implicit val formats = org.json4s.DefaultFormats
-    val reverseProxyUrl = "http://localhost:8080"
+    val conf = new SparkConf()
+    conf.set(UI_REVERSE_PROXY, true)
+    val localCluster = new LocalSparkCluster(2, 2, 512, conf)
+    localCluster.start()
+    val masterUrl = s"http://localhost:${localCluster.masterWebUIPort}"
+    try {
+      eventually(timeout(5.seconds), interval(100.milliseconds)) {
+        val json = Utils
+          .tryWithResource(Source.fromURL(s"$masterUrl/json"))(_.getLines().mkString("\n"))
+        val JArray(workers) = (parse(json) \ "workers")
+        workers.size should be (2)
+        workers.foreach { workerSummaryJson =>
+          // the webuiaddress intentionally points to the local web ui.
+          // explicitly construct reverse proxy url targeting the master
+          val JString(workerId) = workerSummaryJson \ "id"
+          val url = s"$masterUrl/proxy/${workerId}/json"
+          val workerResponse = parse(
+            Utils.tryWithResource(Source.fromURL(url))(_.getLines().mkString("\n")))
+          (workerResponse \ "cores").extract[Int] should be (2)
+        }
+
+        val html = Utils
+          .tryWithResource(Source.fromURL(s"$masterUrl/"))(_.getLines().mkString("\n"))
+        html should include ("Spark Master at spark://")
+        html should include ("""href="/static""")
+        html should include ("""src="/static""")
+        verifyWorkerUI(html, masterUrl)
+      }
+    } finally {
+      localCluster.stop()
+      System.getProperties().remove("spark.ui.proxyBase")
+    }
+  }
+
+  test("master/worker web ui available behind front-end reverseProxy") {
+    implicit val formats = org.json4s.DefaultFormats
+    val reverseProxyUrl = "http://proxyhost:8080/path/to/spark"
     val conf = new SparkConf()
     conf.set(UI_REVERSE_PROXY, true)
     conf.set(UI_REVERSE_PROXY_URL, reverseProxyUrl)
     val localCluster = new LocalSparkCluster(2, 2, 512, conf)
     localCluster.start()
+    val masterUrl = s"http://localhost:${localCluster.masterWebUIPort}"
     try {
       eventually(timeout(5.seconds), interval(100.milliseconds)) {
-        val json = Source.fromURL(s"http://localhost:${localCluster.masterWebUIPort}/json")
-          .getLines().mkString("\n")
+        val json = Utils
+          .tryWithResource(Source.fromURL(s"$masterUrl/json"))(_.getLines().mkString("\n"))
         val JArray(workers) = (parse(json) \ "workers")
         workers.size should be (2)
         workers.foreach { workerSummaryJson =>
+          // the webuiaddress intentionally points to the local web ui.
+          // explicitly construct reverse proxy url targeting the master
           val JString(workerId) = workerSummaryJson \ "id"
-          val url = s"http://localhost:${localCluster.masterWebUIPort}/proxy/${workerId}/json"
-          val workerResponse = parse(Source.fromURL(url).getLines().mkString("\n"))
+          val url = s"$masterUrl/proxy/${workerId}/json"
+          val workerResponse = parse(Utils
+            .tryWithResource(Source.fromURL(url))(_.getLines().mkString("\n")))
           (workerResponse \ "cores").extract[Int] should be (2)
-          (workerResponse \ "masterwebuiurl").extract[String] should be (reverseProxyUrl)
+          (workerResponse \ "masterwebuiurl").extract[String] should be (reverseProxyUrl + "/")
         }
+
+        System.getProperty("spark.ui.proxyBase") should be (reverseProxyUrl)
+        val html = Utils
+          .tryWithResource(Source.fromURL(s"$masterUrl/"))(_.getLines().mkString("\n"))
+        html should include ("Spark Master at spark://")
+        verifyStaticResourcesServedByProxy(html, reverseProxyUrl)
+        verifyWorkerUI(html, masterUrl, reverseProxyUrl)
       }
     } finally {
       localCluster.stop()
+      System.getProperties().remove("spark.ui.proxyBase")
     }
+  }
+
+  private def verifyWorkerUI(masterHtml: String, masterUrl: String,
+      reverseProxyUrl: String = ""): Unit = {
+    val workerLinks = (WORKER_LINK_RE findAllMatchIn masterHtml).toList
+    workerLinks.size should be (2)
+    workerLinks foreach {
+      case WORKER_LINK_RE(workerUrl, workerId) =>
+        workerUrl should be (s"$reverseProxyUrl/proxy/$workerId")
+        // there is no real front-end proxy as defined in $reverseProxyUrl
+        // construct url directly targeting the master
+        val url = s"$masterUrl/proxy/$workerId/"
+        System.setProperty("spark.ui.proxyBase", workerUrl)
+        val workerHtml = Utils
+          .tryWithResource(Source.fromURL(url))(_.getLines().mkString("\n"))
+        workerHtml should include ("Spark Worker at")
+        workerHtml should include ("Running Executors (0)")
+        verifyStaticResourcesServedByProxy(workerHtml, workerUrl)
+      case _ => fail  // make sure we don't accidentially skip the tests
+    }
+  }
+
+  private def verifyStaticResourcesServedByProxy(html: String, proxyUrl: String): Unit = {
+    html should not include ("""href="/static""")
+    html should include (s"""href="$proxyUrl/static""")
+    html should not include ("""src="/static""")
+    html should include (s"""src="$proxyUrl/static""")
   }
 
   test("basic scheduling - spread out") {
@@ -689,7 +787,16 @@ class MasterSuite extends SparkFunSuite
     val master = makeAliveMaster()
     var worker: MockExecutorLaunchFailWorker = null
     try {
-      worker = new MockExecutorLaunchFailWorker(master)
+      val conf = new SparkConf()
+      // SPARK-32250: When running test on GitHub Action machine, the available processors in JVM
+      // is only 2, while on Jenkins it's 32. For this specific test, 2 available processors, which
+      // also decides number of threads in Dispatcher, is not enough to consume the messages. In
+      // the worst situation, MockExecutorLaunchFailWorker would occupy these 2 threads for
+      // handling messages LaunchDriver, LaunchExecutor at the same time but leave no thread for
+      // the driver to handle the message RegisteredApplication. At the end, it results in the dead
+      // lock situation. Therefore, we need to set more threads to avoid the dead lock.
+      conf.set(Network.RPC_NETTY_DISPATCHER_NUM_THREADS, 6)
+      worker = new MockExecutorLaunchFailWorker(master, conf)
       worker.rpcEnv.setupEndpoint("worker", worker)
       val workerRegMsg = RegisterWorker(
         worker.id,
@@ -723,6 +830,68 @@ class MasterSuite extends SparkFunSuite
         master.rpcEnv.shutdown()
       }
     }
+  }
+
+  def testWorkerDecommissioning(
+      numWorkers: Int,
+      numWorkersExpectedToDecom: Int,
+      hostnames: Seq[String]): Unit = {
+    val conf = new SparkConf()
+    val master = makeAliveMaster(conf)
+    val workers = (1 to numWorkers).map { idx =>
+      val worker = new MockWorker(master.self, conf)
+      worker.rpcEnv.setupEndpoint(s"worker-$idx", worker)
+      val workerReg = RegisterWorker(
+        worker.id,
+        "localhost",
+        worker.self.address.port,
+        worker.self,
+        10,
+        1024,
+        "http://localhost:8080",
+        RpcAddress("localhost", 10000))
+      master.self.send(workerReg)
+      worker
+    }
+
+    eventually(timeout(10.seconds)) {
+      val masterState = master.self.askSync[MasterStateResponse](RequestMasterState)
+      assert(masterState.workers.length === numWorkers)
+      assert(masterState.workers.forall(_.state == WorkerState.ALIVE))
+      assert(masterState.workers.map(_.id).toSet == workers.map(_.id).toSet)
+    }
+
+    val decomWorkersCount = master.self.askSync[Integer](DecommissionWorkersOnHosts(hostnames))
+    assert(decomWorkersCount === numWorkersExpectedToDecom)
+
+    // Decommissioning is actually async ... wait for the workers to actually be decommissioned by
+    // polling the master's state.
+    eventually(timeout(30.seconds)) {
+      val masterState = master.self.askSync[MasterStateResponse](RequestMasterState)
+      assert(masterState.workers.length === numWorkers)
+      val workersActuallyDecomed = masterState.workers
+        .filter(_.state == WorkerState.DECOMMISSIONED).map(_.id)
+      val decommissionedWorkers = workers.filter(w => workersActuallyDecomed.contains(w.id))
+      assert(workersActuallyDecomed.length === numWorkersExpectedToDecom)
+      assert(decommissionedWorkers.forall(_.decommissioned))
+    }
+
+    // Decommissioning a worker again should return the same answer since we want this call to be
+    // idempotent.
+    val decomWorkersCountAgain = master.self.askSync[Integer](DecommissionWorkersOnHosts(hostnames))
+    assert(decomWorkersCountAgain === numWorkersExpectedToDecom)
+  }
+
+  test("All workers on a host should be decommissioned") {
+    testWorkerDecommissioning(2, 2, Seq("LoCalHost", "localHOST"))
+  }
+
+  test("No workers should be decommissioned with invalid host") {
+    testWorkerDecommissioning(2, 0, Seq("NoSuchHost1", "NoSuchHost2"))
+  }
+
+  test("Only worker on host should be decommissioned") {
+    testWorkerDecommissioning(1, 1, Seq("lOcalHost", "NoSuchHost"))
   }
 
   test("SPARK-19900: there should be a corresponding driver for the app after relaunching driver") {

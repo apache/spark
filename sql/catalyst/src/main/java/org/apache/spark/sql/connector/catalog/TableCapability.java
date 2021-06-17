@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.connector.catalog;
 
-import org.apache.spark.annotation.Experimental;
+import org.apache.spark.annotation.Evolving;
 
 /**
  * Capabilities that can be provided by a {@link Table} implementation.
@@ -25,8 +25,10 @@ import org.apache.spark.annotation.Experimental;
  * Tables use {@link Table#capabilities()} to return a set of capabilities. Each capability signals
  * to Spark that the table supports a feature identified by the capability. For example, returning
  * {@link #BATCH_READ} allows Spark to read from the table using a batch scan.
+ *
+ * @since 3.0.0
  */
-@Experimental
+@Evolving
 public enum TableCapability {
   /**
    * Signals that the table supports reads in batch execution mode.
@@ -94,7 +96,7 @@ public enum TableCapability {
   /**
    * Signals that the table supports append writes using the V1 InsertableRelation interface.
    * <p>
-   * Tables that return this capability must create a V1WriteBuilder and may also support additional
+   * Tables that return this capability must create a V1Write and may also support additional
    * write modes, like {@link #TRUNCATE}, and {@link #OVERWRITE_BY_FILTER}, but cannot support
    * {@link #OVERWRITE_DYNAMIC}.
    */

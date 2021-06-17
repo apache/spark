@@ -23,6 +23,7 @@ import org.json4s._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.annotation.Stable
+import org.apache.spark.sql.errors.QueryExecutionErrors
 
 
 /**
@@ -162,13 +163,13 @@ object Metadata {
               builder.putMetadataArray(
                 key, value.asInstanceOf[List[JObject]].map(fromJObject).toArray)
             case other =>
-              throw new RuntimeException(s"Do not support array of type ${other.getClass}.")
+              throw QueryExecutionErrors.unsupportedArrayTypeError(other.getClass)
           }
         }
       case (key, JNull) =>
         builder.putNull(key)
       case (key, other) =>
-        throw new RuntimeException(s"Do not support type ${other.getClass}.")
+        throw QueryExecutionErrors.unsupportedJavaTypeError(other.getClass)
     }
     builder.build()
   }
@@ -195,15 +196,17 @@ object Metadata {
       case x: Metadata =>
         toJsonValue(x.map)
       case other =>
-        throw new RuntimeException(s"Do not support type ${other.getClass}.")
+        throw QueryExecutionErrors.unsupportedJavaTypeError(other.getClass)
     }
   }
 
   /** Computes the hash code for the types we support. */
   private def hash(obj: Any): Int = {
     obj match {
+      // `map.mapValues` return `Map` in Scala 2.12 and return `MapView` in Scala 2.13, call
+      // `toMap` for Scala version compatibility.
       case map: Map[_, _] =>
-        map.mapValues(hash).##
+        map.mapValues(hash).toMap.##
       case arr: Array[_] =>
         // Seq.empty[T] has the same hashCode regardless of T.
         arr.toSeq.map(hash).##
@@ -220,7 +223,7 @@ object Metadata {
       case null =>
         0
       case other =>
-        throw new RuntimeException(s"Do not support type ${other.getClass}.")
+        throw QueryExecutionErrors.unsupportedJavaTypeError(other.getClass)
     }
   }
 }

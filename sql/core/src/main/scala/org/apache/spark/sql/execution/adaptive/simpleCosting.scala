@@ -17,8 +17,9 @@
 
 package org.apache.spark.sql.execution.adaptive
 
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
+import org.apache.spark.sql.execution.exchange.ShuffleExchangeLike
 
 /**
  * A simple implementation of [[Cost]], which takes a number of [[Long]] as the cost value.
@@ -29,19 +30,19 @@ case class SimpleCost(value: Long) extends Cost {
     case SimpleCost(thatValue) =>
       if (value < thatValue) -1 else if (value > thatValue) 1 else 0
     case _ =>
-      throw new IllegalArgumentException(s"Could not compare cost with $that")
+      throw QueryExecutionErrors.cannotCompareCostWithTargetCostError(that.toString)
   }
 }
 
 /**
  * A simple implementation of [[CostEvaluator]], which counts the number of
- * [[ShuffleExchangeExec]] nodes in the plan.
+ * [[ShuffleExchangeLike]] nodes in the plan.
  */
 object SimpleCostEvaluator extends CostEvaluator {
 
   override def evaluateCost(plan: SparkPlan): Cost = {
     val cost = plan.collect {
-      case s: ShuffleExchangeExec => s
+      case s: ShuffleExchangeLike => s
     }.size
     SimpleCost(cost)
   }

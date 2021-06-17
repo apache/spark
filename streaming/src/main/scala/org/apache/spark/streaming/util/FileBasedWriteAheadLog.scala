@@ -146,7 +146,7 @@ private[streaming] class FileBasedWriteAheadLog(
     } else {
       // For performance gains, it makes sense to parallelize the recovery if
       // closeFileAfterWrite = true
-      seqToParIterator(executionContext, logFilesToRead, readFile).asJava
+      seqToParIterator(executionContext, logFilesToRead.toSeq, readFile).asJava
     }
   }
 
@@ -277,10 +277,10 @@ private[streaming] object FileBasedWriteAheadLog {
   }
 
   def getCallerName(): Option[String] = {
-    val blacklist = Seq("WriteAheadLog", "Logging", "java.lang", "scala.")
+    val ignoreList = Seq("WriteAheadLog", "Logging", "java.lang", "scala.")
     Thread.currentThread.getStackTrace()
       .map(_.getClassName)
-      .find { c => !blacklist.exists(c.contains) }
+      .find { c => !ignoreList.exists(c.contains) }
       .flatMap(_.split("\\.").lastOption)
       .flatMap(_.split("\\$\\$").headOption)
   }
@@ -293,7 +293,7 @@ private[streaming] object FileBasedWriteAheadLog {
           val startTime = startTimeStr.toLong
           val stopTime = stopTimeStr.toLong
           Some(LogInfo(startTime, stopTime, file.toString))
-        case None =>
+        case None | Some(_) =>
           None
       }
     }.sortBy { _.startTime }

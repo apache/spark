@@ -1,3 +1,0 @@
--- tests for interval output style with iso_8601 format
---SET spark.sql.intervalOutputStyle = ISO_8601
---IMPORT interval-display.sql

@@ -18,17 +18,19 @@
 package org.apache.spark.ml.evaluation
 
 import org.apache.spark.annotation.Since
+import org.apache.spark.ml.functions.checkNonNegativeWeight
 import org.apache.spark.ml.linalg.{Vector, VectorUDT}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
-import org.apache.spark.ml.util.{DefaultParamsReadable, DefaultParamsWritable, Identifiable, SchemaUtils}
+import org.apache.spark.ml.util.{DefaultParamsReadable, DefaultParamsWritable, Identifiable, MetadataUtils, SchemaUtils}
 import org.apache.spark.mllib.evaluation.BinaryClassificationMetrics
 import org.apache.spark.sql.{Dataset, Row}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.DoubleType
 
 /**
- * Evaluator for binary classification, which expects two input columns: rawPrediction and label.
+ * Evaluator for binary classification, which expects input columns rawPrediction, label and
+ *  an optional weight column.
  * The rawPrediction column can be of type double (binary 0/1 prediction, or probability of label 1)
  * or of type vector (length-2 vector of raw predictions, scores, or label probabilities).
  */
@@ -79,8 +81,6 @@ class BinaryClassificationEvaluator @Since("1.4.0") (@Since("1.4.0") override va
   @Since("3.0.0")
   def setNumBins(value: Int): this.type = set(numBins, value)
 
-  setDefault(numBins -> 1000)
-
   /** @group setParam */
   @Since("1.5.0")
   def setRawPredictionCol(value: String): this.type = set(rawPredictionCol, value)
@@ -93,10 +93,28 @@ class BinaryClassificationEvaluator @Since("1.4.0") (@Since("1.4.0") override va
   @Since("3.0.0")
   def setWeightCol(value: String): this.type = set(weightCol, value)
 
-  setDefault(metricName -> "areaUnderROC")
+  setDefault(metricName -> "areaUnderROC", numBins -> 1000)
 
   @Since("2.0.0")
   override def evaluate(dataset: Dataset[_]): Double = {
+    val metrics = getMetrics(dataset)
+    val metric = $(metricName) match {
+      case "areaUnderROC" => metrics.areaUnderROC()
+      case "areaUnderPR" => metrics.areaUnderPR()
+    }
+    metrics.unpersist()
+    metric
+  }
+
+  /**
+   * Get a BinaryClassificationMetrics, which can be used to get binary classification
+   * metrics such as areaUnderROC and areaUnderPR.
+   *
+   * @param dataset a dataset that contains labels/observations and predictions.
+   * @return BinaryClassificationMetrics
+   */
+  @Since("3.1.0")
+  def getMetrics(dataset: Dataset[_]): BinaryClassificationMetrics = {
     val schema = dataset.schema
     SchemaUtils.checkColumnTypes(schema, $(rawPredictionCol), Seq(DoubleType, new VectorUDT))
     SchemaUtils.checkNumericType(schema, $(labelCol))
@@ -104,25 +122,21 @@ class BinaryClassificationEvaluator @Since("1.4.0") (@Since("1.4.0") override va
       SchemaUtils.checkNumericType(schema, $(weightCol))
     }
 
-    // TODO: When dataset metadata has been implemented, check rawPredictionCol vector length = 2.
+    MetadataUtils.getNumFeatures(schema($(rawPredictionCol)))
+      .foreach(n => require(n == 2, s"rawPredictionCol vectors must have length=2, but got $n"))
+
     val scoreAndLabelsWithWeights =
       dataset.select(
         col($(rawPredictionCol)),
         col($(labelCol)).cast(DoubleType),
         if (!isDefined(weightCol) || $(weightCol).isEmpty) lit(1.0)
-        else col($(weightCol)).cast(DoubleType)).rdd.map {
+        else checkNonNegativeWeight(col($(weightCol)).cast(DoubleType))).rdd.map {
         case Row(rawPrediction: Vector, label: Double, weight: Double) =>
           (rawPrediction(1), label, weight)
         case Row(rawPrediction: Double, label: Double, weight: Double) =>
           (rawPrediction, label, weight)
       }
-    val metrics = new BinaryClassificationMetrics(scoreAndLabelsWithWeights, $(numBins))
-    val metric = $(metricName) match {
-      case "areaUnderROC" => metrics.areaUnderROC()
-      case "areaUnderPR" => metrics.areaUnderPR()
-    }
-    metrics.unpersist()
-    metric
+    new BinaryClassificationMetrics(scoreAndLabelsWithWeights, $(numBins))
   }
 
   @Since("1.5.0")

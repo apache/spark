@@ -16,21 +16,27 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import importlib.util
 import glob
 import os
 import sys
 from setuptools import setup
+from setuptools.command.install import install
 from shutil import copyfile, copytree, rmtree
-
-if sys.version_info < (3, 6):
-    print("Python versions prior to 3.6 are not supported for pip installed PySpark.",
-          file=sys.stderr)
-    sys.exit(-1)
 
 try:
     exec(open('pyspark/version.py').read())
 except IOError:
     print("Failed to load PySpark version file for packaging. You must be in Spark's python dir.",
+          file=sys.stderr)
+    sys.exit(-1)
+try:
+    spec = importlib.util.spec_from_file_location("install", "pyspark/install.py")
+    install_module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(install_module)
+except IOError:
+    print("Failed to load the installing module (pyspark/install.py) which had to be "
+          "packaged together.",
           file=sys.stderr)
     sys.exit(-1)
 VERSION = __version__  # noqa
@@ -101,11 +107,45 @@ if (in_spark):
               file=sys.stderr)
         sys.exit(-1)
 
-# If you are changing the versions here, please also change ./python/pyspark/sql/utils.py
+# If you are changing the versions here, please also change ./python/pyspark/sql/pandas/utils.py
 # For Arrow, you should also check ./pom.xml and ensure there are no breaking changes in the
 # binary format protocol with the Java version, see ARROW_HOME/format/* for specifications.
+# Also don't forget to update python/docs/source/getting_started/install.rst.
 _minimum_pandas_version = "0.23.2"
-_minimum_pyarrow_version = "0.15.1"
+_minimum_pyarrow_version = "1.0.0"
+
+
+class InstallCommand(install):
+    # TODO(SPARK-32837) leverage pip's custom options
+
+    def run(self):
+        install.run(self)
+
+        # Make sure the destination is always clean.
+        spark_dist = os.path.join(self.install_lib, "pyspark", "spark-distribution")
+        rmtree(spark_dist, ignore_errors=True)
+
+        if ("PYSPARK_HADOOP_VERSION" in os.environ) or ("PYSPARK_HIVE_VERSION" in os.environ):
+            # Note that PYSPARK_VERSION environment is just a testing purpose.
+            # PYSPARK_HIVE_VERSION environment variable is also internal for now in case
+            # we support another version of Hive in the future.
+            spark_version, hadoop_version, hive_version = install_module.checked_versions(
+                os.environ.get("PYSPARK_VERSION", VERSION).lower(),
+                os.environ.get("PYSPARK_HADOOP_VERSION", install_module.DEFAULT_HADOOP).lower(),
+                os.environ.get("PYSPARK_HIVE_VERSION", install_module.DEFAULT_HIVE).lower())
+
+            if ("PYSPARK_VERSION" not in os.environ and
+                ((install_module.DEFAULT_HADOOP, install_module.DEFAULT_HIVE) ==
+                    (hadoop_version, hive_version))):
+                # Do not download and install if they are same as default.
+                return
+
+            install_module.install_spark(
+                dest=spark_dist,
+                spark_version=spark_version,
+                hadoop_version=hadoop_version,
+                hive_version=hive_version)
+
 
 try:
     # We copy the shell script to be under pyspark/python/pyspark so that the launcher scripts
@@ -153,25 +193,20 @@ try:
     # will search for SPARK_HOME with Python.
     scripts.append("pyspark/find_spark_home.py")
 
-    # Parse the README markdown file into rst for PyPI
-    long_description = "!!!!! missing pandoc do not upload to PyPI !!!!"
-    try:
-        import pypandoc
-        long_description = pypandoc.convert('README.md', 'rst')
-    except ImportError:
-        print("Could not import pypandoc - required to package PySpark", file=sys.stderr)
-    except OSError:
-        print("Could not convert - pandoc is not installed", file=sys.stderr)
+    with open('README.md') as f:
+        long_description = f.read()
 
     setup(
         name='pyspark',
         version=VERSION,
         description='Apache Spark Python API',
         long_description=long_description,
+        long_description_content_type="text/markdown",
         author='Spark Developers',
         author_email='dev@spark.apache.org',
         url='https://github.com/apache/spark/tree/master/python',
         packages=['pyspark',
+                  'pyspark.cloudpickle',
                   'pyspark.mllib',
                   'pyspark.mllib.linalg',
                   'pyspark.mllib.stat',
@@ -179,14 +214,25 @@ try:
                   'pyspark.ml.linalg',
                   'pyspark.ml.param',
                   'pyspark.sql',
+                  'pyspark.sql.avro',
+                  'pyspark.sql.pandas',
                   'pyspark.streaming',
                   'pyspark.bin',
                   'pyspark.sbin',
                   'pyspark.jars',
+                  'pyspark.pandas',
+                  'pyspark.pandas.data_type_ops',
+                  'pyspark.pandas.indexes',
+                  'pyspark.pandas.missing',
+                  'pyspark.pandas.plot',
+                  'pyspark.pandas.spark',
+                  'pyspark.pandas.typedef',
+                  'pyspark.pandas.usage_logging',
                   'pyspark.python.pyspark',
                   'pyspark.python.lib',
                   'pyspark.data',
                   'pyspark.licenses',
+                  'pyspark.resource',
                   'pyspark.examples.src.main.python'],
         include_package_data=True,
         package_dir={
@@ -210,28 +256,36 @@ try:
             'pyspark.examples.src.main.python': ['*.py', '*/*.py']},
         scripts=scripts,
         license='http://www.apache.org/licenses/LICENSE-2.0',
-        install_requires=['py4j==0.10.8.1'],
-        setup_requires=['pypandoc'],
+        # Don't forget to update python/docs/source/getting_started/install.rst
+        # if you're updating the versions or dependencies.
+        install_requires=['py4j==0.10.9.2'],
         extras_require={
             'ml': ['numpy>=1.7'],
             'mllib': ['numpy>=1.7'],
             'sql': [
                 'pandas>=%s' % _minimum_pandas_version,
                 'pyarrow>=%s' % _minimum_pyarrow_version,
-            ]
+            ],
+            'pandas_on_spark': [
+                'pandas>=%s' % _minimum_pandas_version,
+                'pyarrow>=%s' % _minimum_pyarrow_version,
+                'numpy>=1.14',
+            ],
         },
+        python_requires='>=3.6',
         classifiers=[
             'Development Status :: 5 - Production/Stable',
             'License :: OSI Approved :: Apache Software License',
-            'Programming Language :: Python :: 2.7',
-            'Programming Language :: Python :: 3',
-            'Programming Language :: Python :: 3.4',
-            'Programming Language :: Python :: 3.5',
             'Programming Language :: Python :: 3.6',
             'Programming Language :: Python :: 3.7',
             'Programming Language :: Python :: 3.8',
+            'Programming Language :: Python :: 3.9',
             'Programming Language :: Python :: Implementation :: CPython',
-            'Programming Language :: Python :: Implementation :: PyPy']
+            'Programming Language :: Python :: Implementation :: PyPy',
+            'Typing :: Typed'],
+        cmdclass={
+            'install': InstallCommand,
+        },
     )
 finally:
     # We only cleanup the symlink farm if we were in Spark, otherwise we are installing rather than

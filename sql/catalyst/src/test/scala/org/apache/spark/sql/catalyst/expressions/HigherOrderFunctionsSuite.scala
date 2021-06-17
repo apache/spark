@@ -135,6 +135,11 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
     TransformValues(expr, createLambda(kt, false, vt, vcn, f)).bind(validateBinding)
   }
 
+  def mapFilter(expr: Expression, f: (Expression, Expression) => Expression): Expression = {
+    val MapType(kt, vt, vcn) = expr.dataType
+    MapFilter(expr, createLambda(kt, false, vt, vcn, f)).bind(validateBinding)
+  }
+
   test("ArrayTransform") {
     val ai0 = Literal.create(Seq(1, 2, 3), ArrayType(IntegerType, containsNull = false))
     val ai1 = Literal.create(Seq[Integer](1, null, 3), ArrayType(IntegerType, containsNull = true))
@@ -218,10 +223,6 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
   }
 
   test("MapFilter") {
-    def mapFilter(expr: Expression, f: (Expression, Expression) => Expression): Expression = {
-      val MapType(kt, vt, vcn) = expr.dataType
-      MapFilter(expr, createLambda(kt, false, vt, vcn, f)).bind(validateBinding)
-    }
     val mii0 = Literal.create(Map(1 -> 0, 2 -> 10, 3 -> -1),
       MapType(IntegerType, IntegerType, valueContainsNull = false))
     val mii1 = Literal.create(Map(1 -> null, 2 -> 10, 3 -> null),
@@ -465,8 +466,13 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
     checkEvaluation(
       transformKeys(transformKeys(ai0, plusOne), plusValue),
       create_map(3 -> 1, 5 -> 2, 7 -> 3, 9 -> 4))
-    // Duplicated map keys will be removed w.r.t. the last wins policy.
-    checkEvaluation(transformKeys(ai0, modKey), create_map(1 -> 4, 2 -> 2, 0 -> 3))
+
+    checkExceptionInExpression[RuntimeException](
+      transformKeys(ai0, modKey), "Duplicate map key")
+    withSQLConf(SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.toString) {
+      // Duplicated map keys will be removed w.r.t. the last wins policy.
+      checkEvaluation(transformKeys(ai0, modKey), create_map(1 -> 4, 2 -> 2, 0 -> 3))
+    }
     checkEvaluation(transformKeys(ai1, plusOne), Map.empty[Int, Int])
     checkEvaluation(transformKeys(ai1, plusOne), Map.empty[Int, Int])
     checkEvaluation(
@@ -729,5 +735,101 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
       Seq("[4, 6, 8]", null, null))
     checkEvaluation(zip_with(aai1, aai1, (a1, a2) => Cast(transform(a1, plusOne), StringType)),
       Seq("[2, 3, 4]", null, "[5, 6]"))
+  }
+
+  test("semanticEquals between ArrayAggregate") {
+    val ai0 = Literal.create(Seq(1, 2, 3), ArrayType(IntegerType, containsNull = false))
+    val ai1 = Literal.create(Seq[Integer](1, null, 3), ArrayType(IntegerType, containsNull = true))
+    val ai2 = Literal.create(Seq.empty[Int], ArrayType(IntegerType, containsNull = false))
+    val ain = Literal.create(null, ArrayType(IntegerType, containsNull = false))
+
+    val agg1_1 = aggregate(ai0, 0, (acc, elem) => acc + elem, acc => acc * 10)
+    val agg1_2 = aggregate(ai0, 0, (acc, elem) => acc + elem, acc => Literal(10) * acc)
+    assert(agg1_1.semanticEquals(agg1_2))
+
+    val agg2_1 = aggregate(ai1, 0, (acc, elem) => acc + coalesce(elem, 0), acc => acc * 10)
+    val agg2_2 = aggregate(ai1, 0, (acc, elem) => acc + coalesce(elem, 0), acc => Literal(10) * acc)
+    assert(agg2_1.semanticEquals(agg2_2))
+
+    val agg3_1 = aggregate(ai2, 0, (acc, elem) => acc + elem, acc => acc * 10)
+    val agg3_2 = aggregate(ai2, 0, (acc, elem) => acc + elem, acc => Literal(10) * acc)
+    assert(agg3_1.semanticEquals(agg3_2))
+
+    val agg4_1 = aggregate(ain, 0, (acc, elem) => acc + elem, acc => acc * 10)
+    val agg4_2 = aggregate(ain, 0, (acc, elem) => acc + elem, acc => Literal(10) * acc)
+    assert(agg4_1.semanticEquals(agg4_2))
+
+    assert(!agg1_1.semanticEquals(agg2_1))
+    assert(!agg1_1.semanticEquals(agg3_1))
+    assert(!agg1_1.semanticEquals(agg4_1))
+  }
+
+  test("semanticEquals between ArrayTransform") {
+    val ai0 = Literal.create(Seq(1, 2, 3), ArrayType(IntegerType, containsNull = false))
+    val ai1 = Literal.create(Seq[Integer](1, null, 3), ArrayType(IntegerType, containsNull = true))
+
+    val plusOne_1: Expression => Expression = x => x + 1
+    val plusOne_2: Expression => Expression = x => Literal(1) + x
+    val plusIndex_1: (Expression, Expression) => Expression = (x, i) => x + i
+    val plusIndex_2: (Expression, Expression) => Expression = (x, i) => i + x
+
+    val trans1_1 = transform(ai0, plusOne_1)
+    val trans1_2 = transform(ai0, plusOne_2)
+    val trans1_3 = transform(ai1, plusOne_1)
+    assert(trans1_1.semanticEquals(trans1_2))
+    assert(!trans1_1.semanticEquals(trans1_3))
+
+    val trans2_1 = transform(ai0, plusIndex_1)
+    val trans2_2 = transform(ai0, plusIndex_2)
+    val trans2_3 = transform(ai1, plusIndex_1)
+    assert(trans2_1.semanticEquals(trans2_2))
+    assert(!trans2_1.semanticEquals(trans2_3))
+
+    val trans3_1 = transform(transform(ai0, plusIndex_1), plusOne_1)
+    val trans3_2 = transform(transform(ai0, plusIndex_2), plusOne_2)
+    val trans3_3 = transform(transform(ai1, plusIndex_1), plusOne_1)
+    assert(trans3_1.semanticEquals(trans3_2))
+    assert(!trans3_1.semanticEquals(trans3_3))
+  }
+
+  test("semanticEquals between ArraySort") {
+    val a0 = Literal.create(Seq(2, 1, 3), ArrayType(IntegerType))
+
+    val typeAS = ArrayType(StructType(StructField("a", IntegerType) :: Nil))
+    val arrayStruct = Literal.create(Seq(create_row(2), create_row(1)), typeAS)
+
+    assert(arraySort(a0).semanticEquals(arraySort(a0)))
+    assert(arraySort(arrayStruct).semanticEquals(arraySort(arrayStruct)))
+
+    val sort1_1 = arraySort(a0, (left, right) => UnaryMinus(ArraySort.comparator(left, right)))
+    val sort1_2 = arraySort(a0, (right, left) => UnaryMinus(ArraySort.comparator(right, left)))
+    val sort1_3 = arraySort(a0, (right, left) => UnaryMinus(ArraySort.comparator(left, right)))
+    assert(sort1_1.semanticEquals(sort1_2))
+    assert(!sort1_1.semanticEquals(sort1_3))
+  }
+
+  test("semanticEquals between MapFilter") {
+    val mii0 = Literal.create(Map(1 -> 0, 2 -> 10, 3 -> -1),
+      MapType(IntegerType, IntegerType, valueContainsNull = false))
+    val mii1 = Literal.create(Map(1 -> null, 2 -> 10, 3 -> null),
+      MapType(IntegerType, IntegerType, valueContainsNull = true))
+
+    val kGreaterThanV1: (Expression, Expression) => Expression = (k, v) => k > v
+    val kGreaterThanV2: (Expression, Expression) => Expression = (v, k) => k < v
+    val kGreaterThanV3: (Expression, Expression) => Expression = (k, v) => k < v
+
+    val mapFilter1_1 = mapFilter(mii0, kGreaterThanV1)
+    val mapFilter1_2 = mapFilter(mii0, kGreaterThanV2)
+    val mapFilter1_3 = mapFilter(mii0, kGreaterThanV3)
+    assert(mapFilter1_1.semanticEquals(mapFilter1_2))
+    assert(!mapFilter1_1.semanticEquals(mapFilter1_3))
+
+    val valueIsNull: (Expression, Expression) => Expression = (_, v) => v.isNull
+
+    val mapFilter2_1 = mapFilter(mii0, valueIsNull)
+    val mapFilter2_2 = mapFilter(mii0, valueIsNull)
+    val mapFilter2_3 = mapFilter(mii1, valueIsNull)
+    assert(mapFilter2_1.semanticEquals(mapFilter2_2))
+    assert(!mapFilter2_1.semanticEquals(mapFilter2_3))
   }
 }

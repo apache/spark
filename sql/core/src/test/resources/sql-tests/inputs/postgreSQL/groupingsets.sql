@@ -336,12 +336,11 @@ order by 2,1;
 -- order by 2,1;
 
 -- FILTER queries
--- [SPARK-30276] Support Filter expression allows simultaneous use of DISTINCT
--- select ten, sum(distinct four) filter (where string(four) like '123') from onek a
--- group by rollup(ten);
+select ten, sum(distinct four) filter (where string(four) like '123') from onek a
+group by rollup(ten);
 
 -- More rescan tests
--- [SPARK-27877] ANSI SQL: LATERAL derived table(T491)
+-- [SPARK-35554] Support outer references in Aggregate
 -- select * from (values (1),(2)) v(a) left join lateral (select v.a, four, ten, count(*) from onek group by cube(four,ten)) s on true order by v.a,four,ten;
 -- [SPARK-27878] Support ARRAY(sub-SELECT) expressions
 -- select array(select row(v.a,s1.*) from (select two,four, count(*) from onek group by cube(two,four) order by two,four) s1) from (values (1),(2)) v(a);
@@ -385,7 +384,6 @@ select a, b, grouping(a), grouping(b), sum(v), count(*), max(v)
 --     from gstest1 group by cube(a,b);
 
 -- unsortable cases
--- [SPARK-29708] Different answers in aggregates of multiple grouping sets
 select unsortable_col, count(*)
   from gstest4 group by grouping sets ((unsortable_col),(unsortable_col))
   order by string(unsortable_col);
@@ -501,14 +499,14 @@ SELECT a, b, count(*), max(a), max(b) FROM gstest3 GROUP BY GROUPING SETS(a, b,(
 -- COMMIT;
 
 -- More rescan tests
--- [SPARK-27877] ANSI SQL: LATERAL derived table(T491)
+-- [SPARK-35554] Support outer references in Aggregate
 -- select * from (values (1),(2)) v(a) left join lateral (select v.a, four, ten, count(*) from onek group by cube(four,ten)) s on true order by v.a,four,ten;
 -- [SPARK-27878] Support ARRAY(sub-SELECT) expressions
 -- select array(select row(v.a,s1.*) from (select two,four, count(*) from onek group by cube(two,four) order by two,four) s1) from (values (1),(2)) v(a);
 
 -- Rescan logic changes when there are no empty grouping sets, so test
 -- that too:
--- [SPARK-27877] ANSI SQL: LATERAL derived table(T491)
+-- [SPARK-35554] Support outer references in Aggregate
 -- select * from (values (1),(2)) v(a) left join lateral (select v.a, four, ten, count(*) from onek group by grouping sets(four,ten)) s on true order by v.a,four,ten;
 -- [SPARK-27878] Support ARRAY(sub-SELECT) expressions
 -- select array(select row(v.a,s1.*) from (select two,four, count(*) from onek group by grouping sets(two,four) order by two,four) s1) from (values (1),(2)) v(a);

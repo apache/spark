@@ -26,7 +26,7 @@ import org.apache.spark.internal.Logging
  */
 trait ThreadAudit extends Logging {
 
-  val threadWhiteList = Set(
+  val threadExcludeList = Set(
     /**
      * Netty related internal threads.
      * These are excluded because their lifecycle is handled by the netty itself
@@ -108,7 +108,7 @@ trait ThreadAudit extends Logging {
 
     if (threadNamesSnapshot.nonEmpty) {
       val remainingThreadNames = runningThreadNames().diff(threadNamesSnapshot)
-        .filterNot { s => threadWhiteList.exists(s.matches(_)) }
+        .filterNot { s => threadExcludeList.exists(s.matches(_)) }
       if (remainingThreadNames.nonEmpty) {
         logWarning(s"\n\n===== POSSIBLE THREAD LEAK IN SUITE $shortSuiteName, " +
           s"thread names: ${remainingThreadNames.mkString(", ")} =====\n")

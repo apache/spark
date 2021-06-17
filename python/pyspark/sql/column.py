@@ -17,15 +17,11 @@
 
 import sys
 import json
+import warnings
 
-if sys.version >= '3':
-    basestring = str
-    long = int
-
-from pyspark import copy_func, since
+from pyspark import copy_func
 from pyspark.context import SparkContext
-from pyspark.rdd import ignore_unicode_prefix
-from pyspark.sql.types import *
+from pyspark.sql.types import DataType, StructField, StructType, IntegerType, StringType
 
 __all__ = ["Column"]
 
@@ -43,7 +39,7 @@ def _create_column_from_name(name):
 def _to_java_column(col):
     if isinstance(col, Column):
         jcol = col._jc
-    elif isinstance(col, basestring):
+    elif isinstance(col, str):
         jcol = _create_column_from_name(col)
     else:
         raise TypeError(
@@ -145,7 +141,7 @@ class Column(object):
         df.colName + 1
         1 / df.colName
 
-    .. versionadded:: 1.3
+    .. versionadded:: 1.3.0
     """
 
     def __init__(self, jc):
@@ -179,8 +175,15 @@ class Column(object):
     _eqNullSafe_doc = """
     Equality test that is safe for null values.
 
-    :param other: a value or :class:`Column`
+    .. versionadded:: 2.3.0
 
+    Parameters
+    ----------
+    other
+        a value or :class:`Column`
+
+    Examples
+    --------
     >>> from pyspark.sql import Row
     >>> df1 = spark.createDataFrame([
     ...     Row(id=1, value='foo'),
@@ -223,11 +226,11 @@ class Column(object):
     |            true|          false|           false|
     +----------------+---------------+----------------+
 
-    .. note:: Unlike Pandas, PySpark doesn't consider NaN values to be NULL.
-       See the `NaN Semantics`_ for details.
-    .. _NaN Semantics:
-       https://spark.apache.org/docs/latest/sql-programming-guide.html#nan-semantics
-    .. versionadded:: 2.3.0
+    Notes
+    -----
+    Unlike Pandas, PySpark doesn't consider NaN values to be NULL. See the
+    `NaN Semantics <https://spark.apache.org/docs/latest/sql-ref-datatypes.html#nan-semantics>`_
+    for details.
     """
     eqNullSafe = _bin_op("eqNullSafe", _eqNullSafe_doc)
 
@@ -248,9 +251,14 @@ class Column(object):
     _bitwiseOR_doc = """
     Compute bitwise OR of this expression with another expression.
 
-    :param other: a value or :class:`Column` to calculate bitwise or(|) against
-                  this :class:`Column`.
+    Parameters
+    ----------
+    other
+        a value or :class:`Column` to calculate bitwise or(|) with
+        this :class:`Column`.
 
+    Examples
+    --------
     >>> from pyspark.sql import Row
     >>> df = spark.createDataFrame([Row(a=170, b=75)])
     >>> df.select(df.a.bitwiseOR(df.b)).collect()
@@ -259,9 +267,14 @@ class Column(object):
     _bitwiseAND_doc = """
     Compute bitwise AND of this expression with another expression.
 
-    :param other: a value or :class:`Column` to calculate bitwise and(&) against
-                  this :class:`Column`.
+    Parameters
+    ----------
+    other
+        a value or :class:`Column` to calculate bitwise and(&) with
+        this :class:`Column`.
 
+    Examples
+    --------
     >>> from pyspark.sql import Row
     >>> df = spark.createDataFrame([Row(a=170, b=75)])
     >>> df.select(df.a.bitwiseAND(df.b)).collect()
@@ -270,9 +283,14 @@ class Column(object):
     _bitwiseXOR_doc = """
     Compute bitwise XOR of this expression with another expression.
 
-    :param other: a value or :class:`Column` to calculate bitwise xor(^) against
-                  this :class:`Column`.
+    Parameters
+    ----------
+    other
+        a value or :class:`Column` to calculate bitwise xor(^) with
+        this :class:`Column`.
 
+    Examples
+    --------
     >>> from pyspark.sql import Row
     >>> df = spark.createDataFrame([Row(a=170, b=75)])
     >>> df.select(df.a.bitwiseXOR(df.b)).collect()
@@ -283,12 +301,15 @@ class Column(object):
     bitwiseAND = _bin_op("bitwiseAND", _bitwiseAND_doc)
     bitwiseXOR = _bin_op("bitwiseXOR", _bitwiseXOR_doc)
 
-    @since(1.3)
     def getItem(self, key):
         """
         An expression that gets an item at position ``ordinal`` out of a list,
         or gets an item by key out of a dict.
 
+        .. versionadded:: 1.3.0
+
+        Examples
+        --------
         >>> df = spark.createDataFrame([([1, 2], {"key": "value"})], ["l", "d"])
         >>> df.select(df.l.getItem(0), df.d.getItem("key")).show()
         +----+------+
@@ -296,18 +317,24 @@ class Column(object):
         +----+------+
         |   1| value|
         +----+------+
-
-        .. versionchanged:: 3.0
-           If `key` is a `Column` object, the indexing operator should be used instead.
-           For example, `map_col.getItem(col('id'))` should be replaced with `map_col[col('id')]`.
         """
-        return _bin_op("getItem")(self, key)
+        if isinstance(key, Column):
+            warnings.warn(
+                "A column as 'key' in getItem is deprecated as of Spark 3.0, and will not "
+                "be supported in the future release. Use `column[key]` or `column.key` syntax "
+                "instead.",
+                FutureWarning
+            )
+        return self[key]
 
-    @since(1.3)
     def getField(self, name):
         """
         An expression that gets a field by name in a StructField.
 
+        .. versionadded:: 1.3.0
+
+        Examples
+        --------
         >>> from pyspark.sql import Row
         >>> df = spark.createDataFrame([Row(r=Row(a=1, b="b"))])
         >>> df.select(df.r.getField("b")).show()
@@ -323,12 +350,105 @@ class Column(object):
         |  1|
         +---+
         """
+        if isinstance(name, Column):
+            warnings.warn(
+                "A column as 'name' in getField is deprecated as of Spark 3.0, and will not "
+                "be supported in the future release. Use `column[name]` or `column.name` syntax "
+                "instead.",
+                FutureWarning
+            )
         return self[name]
+
+    def withField(self, fieldName, col):
+        """
+        An expression that adds/replaces a field in :class:`StructType` by name.
+
+        .. versionadded:: 3.1.0
+
+        Examples
+        --------
+        >>> from pyspark.sql import Row
+        >>> from pyspark.sql.functions import lit
+        >>> df = spark.createDataFrame([Row(a=Row(b=1, c=2))])
+        >>> df.withColumn('a', df['a'].withField('b', lit(3))).select('a.b').show()
+        +---+
+        |  b|
+        +---+
+        |  3|
+        +---+
+        >>> df.withColumn('a', df['a'].withField('d', lit(4))).select('a.d').show()
+        +---+
+        |  d|
+        +---+
+        |  4|
+        +---+
+        """
+        if not isinstance(fieldName, str):
+            raise TypeError("fieldName should be a string")
+
+        if not isinstance(col, Column):
+            raise TypeError("col should be a Column")
+
+        return Column(self._jc.withField(fieldName, col._jc))
+
+    def dropFields(self, *fieldNames):
+        """
+        An expression that drops fields in :class:`StructType` by name.
+
+        .. versionadded:: 3.1.0
+
+        Examples
+        --------
+        >>> from pyspark.sql import Row
+        >>> from pyspark.sql.functions import col, lit
+        >>> df = spark.createDataFrame([
+        ...     Row(a=Row(b=1, c=2, d=3, e=Row(f=4, g=5, h=6)))])
+        >>> df.withColumn('a', df['a'].dropFields('b')).show()
+        +-----------------+
+        |                a|
+        +-----------------+
+        |{2, 3, {4, 5, 6}}|
+        +-----------------+
+
+        >>> df.withColumn('a', df['a'].dropFields('b', 'c')).show()
+        +--------------+
+        |             a|
+        +--------------+
+        |{3, {4, 5, 6}}|
+        +--------------+
+
+        This method supports dropping multiple nested fields directly e.g.
+
+        >>> df.withColumn("a", col("a").dropFields("e.g", "e.h")).show()
+        +--------------+
+        |             a|
+        +--------------+
+        |{1, 2, 3, {4}}|
+        +--------------+
+
+        However, if you are going to add/replace multiple nested fields,
+        it is preferred to extract out the nested struct before
+        adding/replacing multiple fields e.g.
+
+        >>> df.select(col("a").withField(
+        ...     "e", col("a.e").dropFields("g", "h")).alias("a")
+        ... ).show()
+        +--------------+
+        |             a|
+        +--------------+
+        |{1, 2, 3, {4}}|
+        +--------------+
+
+        """
+        sc = SparkContext._active_spark_context
+
+        jc = self._jc.dropFields(_to_seq(sc, fieldNames))
+        return Column(jc)
 
     def __getattr__(self, item):
         if item.startswith("__"):
             raise AttributeError(item)
-        return self.getField(item)
+        return self[item]
 
     def __getitem__(self, k):
         if isinstance(k, slice):
@@ -345,68 +465,101 @@ class Column(object):
     _contains_doc = """
     Contains the other element. Returns a boolean :class:`Column` based on a string match.
 
-    :param other: string in line
+    Parameters
+    ----------
+    other
+        string in line. A value as a literal or a :class:`Column`.
 
+    Examples
+    --------
     >>> df.filter(df.name.contains('o')).collect()
-    [Row(age=5, name=u'Bob')]
+    [Row(age=5, name='Bob')]
     """
     _rlike_doc = """
     SQL RLIKE expression (LIKE with Regex). Returns a boolean :class:`Column` based on a regex
     match.
 
-    :param other: an extended regex expression
+    Parameters
+    ----------
+    other : str
+        an extended regex expression
 
+    Examples
+    --------
     >>> df.filter(df.name.rlike('ice$')).collect()
-    [Row(age=2, name=u'Alice')]
+    [Row(age=2, name='Alice')]
     """
     _like_doc = """
     SQL like expression. Returns a boolean :class:`Column` based on a SQL LIKE match.
 
-    :param other: a SQL LIKE pattern
+    Parameters
+    ----------
+    other : str
+        a SQL LIKE pattern
 
-    See :func:`rlike` for a regex version
+    See Also
+    --------
+    pyspark.sql.Column.rlike
 
+    Examples
+    --------
     >>> df.filter(df.name.like('Al%')).collect()
-    [Row(age=2, name=u'Alice')]
+    [Row(age=2, name='Alice')]
     """
     _startswith_doc = """
     String starts with. Returns a boolean :class:`Column` based on a string match.
 
-    :param other: string at start of line (do not use a regex `^`)
+    Parameters
+    ----------
+    other : :class:`Column` or str
+        string at start of line (do not use a regex `^`)
 
+    Examples
+    --------
     >>> df.filter(df.name.startswith('Al')).collect()
-    [Row(age=2, name=u'Alice')]
+    [Row(age=2, name='Alice')]
     >>> df.filter(df.name.startswith('^Al')).collect()
     []
     """
     _endswith_doc = """
     String ends with. Returns a boolean :class:`Column` based on a string match.
 
-    :param other: string at end of line (do not use a regex `$`)
+    Parameters
+    ----------
+    other : :class:`Column` or str
+        string at end of line (do not use a regex `$`)
 
+    Examples
+    --------
     >>> df.filter(df.name.endswith('ice')).collect()
-    [Row(age=2, name=u'Alice')]
+    [Row(age=2, name='Alice')]
     >>> df.filter(df.name.endswith('ice$')).collect()
     []
     """
 
-    contains = ignore_unicode_prefix(_bin_op("contains", _contains_doc))
-    rlike = ignore_unicode_prefix(_bin_op("rlike", _rlike_doc))
-    like = ignore_unicode_prefix(_bin_op("like", _like_doc))
-    startswith = ignore_unicode_prefix(_bin_op("startsWith", _startswith_doc))
-    endswith = ignore_unicode_prefix(_bin_op("endsWith", _endswith_doc))
+    contains = _bin_op("contains", _contains_doc)
+    rlike = _bin_op("rlike", _rlike_doc)
+    like = _bin_op("like", _like_doc)
+    startswith = _bin_op("startsWith", _startswith_doc)
+    endswith = _bin_op("endsWith", _endswith_doc)
 
-    @ignore_unicode_prefix
-    @since(1.3)
     def substr(self, startPos, length):
         """
         Return a :class:`Column` which is a substring of the column.
 
-        :param startPos: start position (int or Column)
-        :param length:  length of the substring (int or Column)
+        .. versionadded:: 1.3.0
 
+        Parameters
+        ----------
+        startPos : :class:`Column` or int
+            start position
+        length : :class:`Column` or int
+            length of the substring
+
+        Examples
+        --------
         >>> df.select(df.name.substr(1, 3).alias("col")).collect()
-        [Row(col=u'Ali'), Row(col=u'Bob')]
+        [Row(col='Ali'), Row(col='Bob')]
         """
         if type(startPos) != type(length):
             raise TypeError(
@@ -424,17 +577,19 @@ class Column(object):
             raise TypeError("Unexpected type: %s" % type(startPos))
         return Column(jc)
 
-    @ignore_unicode_prefix
-    @since(1.5)
     def isin(self, *cols):
         """
         A boolean expression that is evaluated to true if the value of this
         expression is contained by the evaluated values of the arguments.
 
+        .. versionadded:: 1.5.0
+
+        Examples
+        --------
         >>> df[df.name.isin("Bob", "Mike")].collect()
-        [Row(age=5, name=u'Bob')]
+        [Row(age=5, name='Bob')]
         >>> df[df.age.isin([1, 2, 3])].collect()
-        [Row(age=2, name=u'Alice')]
+        [Row(age=2, name='Alice')]
         """
         if len(cols) == 1 and isinstance(cols[0], (list, set)):
             cols = cols[0]
@@ -447,104 +602,136 @@ class Column(object):
     _asc_doc = """
     Returns a sort expression based on ascending order of the column.
 
+    Examples
+    --------
     >>> from pyspark.sql import Row
     >>> df = spark.createDataFrame([('Tom', 80), ('Alice', None)], ["name", "height"])
     >>> df.select(df.name).orderBy(df.name.asc()).collect()
-    [Row(name=u'Alice'), Row(name=u'Tom')]
+    [Row(name='Alice'), Row(name='Tom')]
     """
     _asc_nulls_first_doc = """
     Returns a sort expression based on ascending order of the column, and null values
     return before non-null values.
 
+    .. versionadded:: 2.4.0
+
+    Examples
+    --------
     >>> from pyspark.sql import Row
     >>> df = spark.createDataFrame([('Tom', 80), (None, 60), ('Alice', None)], ["name", "height"])
     >>> df.select(df.name).orderBy(df.name.asc_nulls_first()).collect()
-    [Row(name=None), Row(name=u'Alice'), Row(name=u'Tom')]
+    [Row(name=None), Row(name='Alice'), Row(name='Tom')]
 
-    .. versionadded:: 2.4
     """
     _asc_nulls_last_doc = """
     Returns a sort expression based on ascending order of the column, and null values
     appear after non-null values.
 
+    .. versionadded:: 2.4.0
+
+    Examples
+    --------
     >>> from pyspark.sql import Row
     >>> df = spark.createDataFrame([('Tom', 80), (None, 60), ('Alice', None)], ["name", "height"])
     >>> df.select(df.name).orderBy(df.name.asc_nulls_last()).collect()
-    [Row(name=u'Alice'), Row(name=u'Tom'), Row(name=None)]
+    [Row(name='Alice'), Row(name='Tom'), Row(name=None)]
 
-    .. versionadded:: 2.4
     """
     _desc_doc = """
     Returns a sort expression based on the descending order of the column.
 
+    .. versionadded:: 2.4.0
+
+    Examples
+    --------
     >>> from pyspark.sql import Row
     >>> df = spark.createDataFrame([('Tom', 80), ('Alice', None)], ["name", "height"])
     >>> df.select(df.name).orderBy(df.name.desc()).collect()
-    [Row(name=u'Tom'), Row(name=u'Alice')]
+    [Row(name='Tom'), Row(name='Alice')]
     """
     _desc_nulls_first_doc = """
     Returns a sort expression based on the descending order of the column, and null values
     appear before non-null values.
 
+    .. versionadded:: 2.4.0
+
+    Examples
+    --------
     >>> from pyspark.sql import Row
     >>> df = spark.createDataFrame([('Tom', 80), (None, 60), ('Alice', None)], ["name", "height"])
     >>> df.select(df.name).orderBy(df.name.desc_nulls_first()).collect()
-    [Row(name=None), Row(name=u'Tom'), Row(name=u'Alice')]
+    [Row(name=None), Row(name='Tom'), Row(name='Alice')]
 
-    .. versionadded:: 2.4
     """
     _desc_nulls_last_doc = """
     Returns a sort expression based on the descending order of the column, and null values
     appear after non-null values.
 
+    .. versionadded:: 2.4.0
+
+    Examples
+    --------
     >>> from pyspark.sql import Row
     >>> df = spark.createDataFrame([('Tom', 80), (None, 60), ('Alice', None)], ["name", "height"])
     >>> df.select(df.name).orderBy(df.name.desc_nulls_last()).collect()
-    [Row(name=u'Tom'), Row(name=u'Alice'), Row(name=None)]
-
-    .. versionadded:: 2.4
+    [Row(name='Tom'), Row(name='Alice'), Row(name=None)]
     """
 
-    asc = ignore_unicode_prefix(_unary_op("asc", _asc_doc))
-    asc_nulls_first = ignore_unicode_prefix(_unary_op("asc_nulls_first", _asc_nulls_first_doc))
-    asc_nulls_last = ignore_unicode_prefix(_unary_op("asc_nulls_last", _asc_nulls_last_doc))
-    desc = ignore_unicode_prefix(_unary_op("desc", _desc_doc))
-    desc_nulls_first = ignore_unicode_prefix(_unary_op("desc_nulls_first", _desc_nulls_first_doc))
-    desc_nulls_last = ignore_unicode_prefix(_unary_op("desc_nulls_last", _desc_nulls_last_doc))
+    asc = _unary_op("asc", _asc_doc)
+    asc_nulls_first = _unary_op("asc_nulls_first", _asc_nulls_first_doc)
+    asc_nulls_last = _unary_op("asc_nulls_last", _asc_nulls_last_doc)
+    desc = _unary_op("desc", _desc_doc)
+    desc_nulls_first = _unary_op("desc_nulls_first", _desc_nulls_first_doc)
+    desc_nulls_last = _unary_op("desc_nulls_last", _desc_nulls_last_doc)
 
     _isNull_doc = """
     True if the current expression is null.
 
+    Examples
+    --------
     >>> from pyspark.sql import Row
-    >>> df = spark.createDataFrame([Row(name=u'Tom', height=80), Row(name=u'Alice', height=None)])
+    >>> df = spark.createDataFrame([Row(name='Tom', height=80), Row(name='Alice', height=None)])
     >>> df.filter(df.height.isNull()).collect()
-    [Row(height=None, name=u'Alice')]
+    [Row(name='Alice', height=None)]
     """
     _isNotNull_doc = """
     True if the current expression is NOT null.
 
+    Examples
+    --------
     >>> from pyspark.sql import Row
-    >>> df = spark.createDataFrame([Row(name=u'Tom', height=80), Row(name=u'Alice', height=None)])
+    >>> df = spark.createDataFrame([Row(name='Tom', height=80), Row(name='Alice', height=None)])
     >>> df.filter(df.height.isNotNull()).collect()
-    [Row(height=80, name=u'Tom')]
+    [Row(name='Tom', height=80)]
     """
 
-    isNull = ignore_unicode_prefix(_unary_op("isNull", _isNull_doc))
-    isNotNull = ignore_unicode_prefix(_unary_op("isNotNull", _isNotNull_doc))
+    isNull = _unary_op("isNull", _isNull_doc)
+    isNotNull = _unary_op("isNotNull", _isNotNull_doc)
 
-    @since(1.3)
     def alias(self, *alias, **kwargs):
         """
         Returns this column aliased with a new name or names (in the case of expressions that
         return more than one column, such as explode).
 
-        :param alias: strings of desired column names (collects all positional arguments passed)
-        :param metadata: a dict of information to be stored in ``metadata`` attribute of the
-            corresponding :class: `StructField` (optional, keyword only argument)
+        .. versionadded:: 1.3.0
 
-        .. versionchanged:: 2.2
-           Added optional ``metadata`` argument.
+        Parameters
+        ----------
+        alias : str
+            desired column names (collects all positional arguments passed)
 
+        Other Parameters
+        ----------------
+        metadata: dict
+            a dict of information to be stored in ``metadata`` attribute of the
+            corresponding :class:`StructField <pyspark.sql.types.StructField>` (optional, keyword
+            only argument)
+
+            .. versionchanged:: 2.2.0
+               Added optional ``metadata`` argument.
+
+        Examples
+        --------
         >>> df.select(df.age.alias("age2")).collect()
         [Row(age2=2), Row(age2=5)]
         >>> df.select(df.age.alias("age3", metadata={'max': 99})).schema['age3'].metadata['max']
@@ -569,17 +756,19 @@ class Column(object):
 
     name = copy_func(alias, sinceversion=2.0, doc=":func:`name` is an alias for :func:`alias`.")
 
-    @ignore_unicode_prefix
-    @since(1.3)
     def cast(self, dataType):
         """ Convert the column into type ``dataType``.
 
+        .. versionadded:: 1.3.0
+
+        Examples
+        --------
         >>> df.select(df.age.cast("string").alias('ages')).collect()
-        [Row(ages=u'2'), Row(ages=u'5')]
+        [Row(ages='2'), Row(ages='5')]
         >>> df.select(df.age.cast(StringType()).alias('ages')).collect()
-        [Row(ages=u'2'), Row(ages=u'5')]
+        [Row(ages='2'), Row(ages='5')]
         """
-        if isinstance(dataType, basestring):
+        if isinstance(dataType, str):
             jc = self._jc.cast(dataType)
         elif isinstance(dataType, DataType):
             from pyspark.sql import SparkSession
@@ -592,12 +781,15 @@ class Column(object):
 
     astype = copy_func(cast, sinceversion=1.4, doc=":func:`astype` is an alias for :func:`cast`.")
 
-    @since(1.3)
     def between(self, lowerBound, upperBound):
         """
         A boolean expression that is evaluated to true if the value of this
         expression is between the given columns.
 
+        .. versionadded:: 1.3.0
+
+        Examples
+        --------
         >>> df.select(df.name, df.age.between(2, 4)).show()
         +-----+---------------------------+
         | name|((age >= 2) AND (age <= 4))|
@@ -608,17 +800,22 @@ class Column(object):
         """
         return (self >= lowerBound) & (self <= upperBound)
 
-    @since(1.4)
     def when(self, condition, value):
         """
         Evaluates a list of conditions and returns one of multiple possible result expressions.
         If :func:`Column.otherwise` is not invoked, None is returned for unmatched conditions.
 
-        See :func:`pyspark.sql.functions.when` for example usage.
+        .. versionadded:: 1.4.0
 
-        :param condition: a boolean :class:`Column` expression.
-        :param value: a literal value, or a :class:`Column` expression.
+        Parameters
+        ----------
+        condition : :class:`Column`
+            a boolean :class:`Column` expression.
+        value
+            a literal value, or a :class:`Column` expression.
 
+        Examples
+        --------
         >>> from pyspark.sql import functions as F
         >>> df.select(df.name, F.when(df.age > 4, 1).when(df.age < 3, -1).otherwise(0)).show()
         +-----+------------------------------------------------------------+
@@ -627,6 +824,10 @@ class Column(object):
         |Alice|                                                          -1|
         |  Bob|                                                           1|
         +-----+------------------------------------------------------------+
+
+        See Also
+        --------
+        pyspark.sql.functions.when
         """
         if not isinstance(condition, Column):
             raise TypeError("condition should be a Column")
@@ -634,16 +835,20 @@ class Column(object):
         jc = self._jc.when(condition._jc, v)
         return Column(jc)
 
-    @since(1.4)
     def otherwise(self, value):
         """
         Evaluates a list of conditions and returns one of multiple possible result expressions.
         If :func:`Column.otherwise` is not invoked, None is returned for unmatched conditions.
 
-        See :func:`pyspark.sql.functions.when` for example usage.
+        .. versionadded:: 1.4.0
 
-        :param value: a literal value, or a :class:`Column` expression.
+        Parameters
+        ----------
+        value
+            a literal value, or a :class:`Column` expression.
 
+        Examples
+        --------
         >>> from pyspark.sql import functions as F
         >>> df.select(df.name, F.when(df.age > 3, 1).otherwise(0)).show()
         +-----+-------------------------------------+
@@ -652,25 +857,38 @@ class Column(object):
         |Alice|                                    0|
         |  Bob|                                    1|
         +-----+-------------------------------------+
+
+        See Also
+        --------
+        pyspark.sql.functions.when
         """
         v = value._jc if isinstance(value, Column) else value
         jc = self._jc.otherwise(v)
         return Column(jc)
 
-    @since(1.4)
     def over(self, window):
         """
         Define a windowing column.
 
-        :param window: a :class:`WindowSpec`
-        :return: a Column
+        .. versionadded:: 1.4.0
 
+        Parameters
+        ----------
+        window : :class:`WindowSpec`
+
+        Returns
+        -------
+        :class:`Column`
+
+        Examples
+        --------
         >>> from pyspark.sql import Window
         >>> window = Window.partitionBy("name").orderBy("age") \
                 .rowsBetween(Window.unboundedPreceding, Window.currentRow)
         >>> from pyspark.sql.functions import rank, min
+        >>> from pyspark.sql.functions import desc
         >>> df.withColumn("rank", rank().over(window)) \
-                .withColumn("min", min('age').over(window)).show()
+                .withColumn("min", min('age').over(window)).sort(desc("age")).show()
         +---+-----+----+---+
         |age| name|rank|min|
         +---+-----+----+---+
@@ -690,7 +908,7 @@ class Column(object):
     __bool__ = __nonzero__
 
     def __repr__(self):
-        return 'Column<%s>' % self._jc.toString().encode('utf8')
+        return "Column<'%s'>" % self._jc.toString()
 
 
 def _test():

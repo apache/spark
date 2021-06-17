@@ -23,6 +23,7 @@ import java.util.concurrent.atomic.AtomicLong
 import scala.concurrent.{ExecutionContext, Future}
 
 import org.apache.spark.SparkConf
+import org.apache.spark.streaming.StreamingConf.BACKPRESSURE_ENABLED
 import org.apache.spark.streaming.scheduler.rate.RateEstimator
 import org.apache.spark.util.{ThreadUtils, Utils}
 
@@ -86,5 +87,5 @@ private[streaming] abstract class RateController(val streamUID: Int, rateEstimat
 
 object RateController {
   def isBackPressureEnabled(conf: SparkConf): Boolean =
-    conf.getBoolean("spark.streaming.backpressure.enabled", false)
+    conf.get(BACKPRESSURE_ENABLED)
 }

@@ -26,6 +26,8 @@ import org.apache.spark.sql.connector.read.SupportsReportPartitioning;
  * {@link SupportsReportPartitioning#outputPartitioning()}. Note that this should work
  * like a snapshot. Once created, it should be deterministic and always report the same number of
  * partitions and the same "satisfy" result for a certain distribution.
+ *
+ * @since 3.0.0
  */
 @Evolving
 public interface Partitioning {
@@ -38,7 +40,7 @@ public interface Partitioning {
   /**
    * Returns true if this partitioning can satisfy the given distribution, which means Spark does
    * not need to shuffle the output data of this data source for some certain operations.
-   *
+   * <p>
    * Note that, Spark may add new concrete implementations of {@link Distribution} in new releases.
    * This method should be aware of it and always return false for unrecognized distributions. It's
    * recommended to check every Spark new release and support new distributions if possible, to

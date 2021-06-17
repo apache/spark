@@ -1,22 +1,22 @@
-OpenJDK 64-Bit Server VM 11.0.4+11-LTS on Linux 3.10.0-862.3.2.el7.x86_64
-Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+OpenJDK 64-Bit Server VM 11.0.10+9-LTS on Linux 5.4.0-1043-azure
+Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
 make_date():                              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-prepare make_date()                                2952           3104         224         33.9          29.5       1.0X
-make_date(2019, 9, 16)                             2341           2585         359         42.7          23.4       1.3X
-make_date(*, *, *)                                 4751           4808          53         21.0          47.5       0.6X
+prepare make_date()                                4106           4124          28         24.4          41.1       1.0X
+make_date(2019, 9, 16)                             3151           3190          40         31.7          31.5       1.3X
+make_date(*, *, *)                                 4929           4967          44         20.3          49.3       0.8X
 
-OpenJDK 64-Bit Server VM 11.0.4+11-LTS on Linux 3.10.0-862.3.2.el7.x86_64
-Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
-make_timestamp():                         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
-------------------------------------------------------------------------------------------------------------------------
-prepare make_timestamp()                           3462           3585         143          0.3        3461.8       1.0X
-make_timestamp(2019, 1, 2, 3, 4, 50.123456)            114            120           6          8.7         114.4      30.3X
-make_timestamp(2019, 1, 2, 3, 4, 60.000000)             74             82          13         13.5          74.0      46.8X
-make_timestamp(2019, 12, 31, 23, 59, 60.00)             82             95          11         12.1          82.5      42.0X
-make_timestamp(*, *, *, 3, 4, 50.123456)            293            308          14          3.4         292.9      11.8X
-make_timestamp(*, *, *, *, *, 0)                    278            284           9          3.6         278.1      12.4X
-make_timestamp(*, *, *, *, *, 60.0)                 287            289           2          3.5         287.3      12.0X
-make_timestamp(2019, 1, 2, *, *, *)                3556           3574          21          0.3        3555.7       1.0X
-make_timestamp(*, *, *, *, *, *)                   3578           3590          16          0.3        3577.9       1.0X
+OpenJDK 64-Bit Server VM 11.0.10+9-LTS on Linux 5.4.0-1043-azure
+Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
+make_timestamp():                            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+---------------------------------------------------------------------------------------------------------------------------
+prepare make_timestamp()                              4039           4077          46          0.2        4038.9       1.0X
+make_timestamp(2019, 1, 2, 3, 4, 50.123456)             54             58           6         18.7          53.5      75.5X
+make_timestamp(2019, 1, 2, 3, 4, 60.000000)             51             57           6         19.8          50.6      79.9X
+make_timestamp(2019, 12, 31, 23, 59, 60.00)             50             51           1         19.9          50.4      80.2X
+make_timestamp(*, *, *, 3, 4, 50.123456)               294            309          17          3.4         294.4      13.7X
+make_timestamp(*, *, *, *, *, 0)                       264            291          28          3.8         264.0      15.3X
+make_timestamp(*, *, *, *, *, 60.0)                    272            293          26          3.7         272.1      14.8X
+make_timestamp(2019, 1, 2, *, *, *)                   4472           4498          24          0.2        4471.6       0.9X
+make_timestamp(*, *, *, *, *, *)                      4306           4324          29          0.2        4305.9       0.9X
 

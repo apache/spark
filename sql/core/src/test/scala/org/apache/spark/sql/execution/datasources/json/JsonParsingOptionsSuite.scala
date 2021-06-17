@@ -17,12 +17,12 @@
 
 package org.apache.spark.sql.execution.datasources.json
 
-import org.apache.spark.sql.QueryTest
-import org.apache.spark.sql.catalyst.json.JSONOptions
+import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.{StringType, StructType}
 
 /**
- * Test cases for various [[JSONOptions]].
+ * Test cases for various [[org.apache.spark.sql.catalyst.json.JSONOptions]].
  */
 class JsonParsingOptionsSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
@@ -73,14 +73,14 @@ class JsonParsingOptionsSuite extends QueryTest with SharedSparkSession {
   }
 
   test("allowUnquotedControlChars off") {
-    val str = """{"name": "a\u0001b"}"""
+    val str = "{\"name\": \"a\u0001b\"}"
     val df = spark.read.json(Seq(str).toDS())
 
     assert(df.schema.head.name == "_corrupt_record")
   }
 
   test("allowUnquotedControlChars on") {
-    val str = """{"name": "a\u0001b"}"""
+    val str = "{\"name\": \"a\u0001b\"}"
     val df = spark.read.option("allowUnquotedControlChars", "true").json(Seq(str).toDS())
 
     assert(df.schema.head.name == "name")
@@ -102,21 +102,32 @@ class JsonParsingOptionsSuite extends QueryTest with SharedSparkSession {
     assert(df.first().getLong(0) == 18)
   }
 
-  // The following two tests are not really working - need to look into Jackson's
-  // JsonReadFeature.ALLOW_NON_NUMERIC_NUMBERS.
-  ignore("allowNonNumericNumbers off") {
+  test("allowNonNumericNumbers off") {
     val str = """{"age": NaN}"""
-    val df = spark.read.json(Seq(str).toDS())
+    val df = spark.read.option("allowNonNumericNumbers", false).json(Seq(str).toDS())
 
-    assert(df.schema.head.name == "_corrupt_record")
+    assert(df.schema === new StructType().add("_corrupt_record", StringType))
+    checkAnswer(df, Row(str))
   }
 
-  ignore("allowNonNumericNumbers on") {
-    val str = """{"age": NaN}"""
-    val df = spark.read.option("allowNonNumericNumbers", "true").json(Seq(str).toDS())
+  test("allowNonNumericNumbers on") {
+    val str = """{"c0":NaN, "c1":+INF, "c2":+Infinity, "c3":Infinity, "c4":-INF, "c5":-Infinity}"""
+    val df = spark.read.option("allowNonNumericNumbers", true).json(Seq(str).toDS())
 
-    assert(df.schema.head.name == "age")
-    assert(df.first().getDouble(0).isNaN)
+    assert(df.schema ===
+      new StructType()
+        .add("c0", "double")
+        .add("c1", "double")
+        .add("c2", "double")
+        .add("c3", "double")
+        .add("c4", "double")
+        .add("c5", "double"))
+    checkAnswer(
+      df,
+      Row(
+        Double.NaN,
+        Double.PositiveInfinity, Double.PositiveInfinity, Double.PositiveInfinity,
+        Double.NegativeInfinity, Double.NegativeInfinity))
   }
 
   test("allowBackslashEscapingAnyCharacter off") {

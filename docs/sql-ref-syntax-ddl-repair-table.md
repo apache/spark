@@ -20,50 +20,59 @@ license: |
 ---
 
 ### Description
+
 `MSCK REPAIR TABLE` recovers all the partitions in the directory of a table and updates the Hive metastore. When creating a table using `PARTITIONED BY` clause, partitions are generated and registered in the Hive metastore. However, if the partitioned table is created from existing data, partitions are not registered automatically in the Hive metastore. User needs to run `MSCK REPAIR TABLE` to register the partitions. `MSCK REPAIR TABLE` on a non-existent table or a table without partitions throws an exception. Another way to recover partitions is to use `ALTER TABLE RECOVER PARTITIONS`.
 
+If the table is cached, the command clears cached data of the table and all its dependents that refer to it. The cache will be lazily filled when the next time the table or the dependents are accessed.
+
 ### Syntax
-{% highlight sql %}
-MSCK REPAIR TABLE table_identifier
-{% endhighlight %}
+
+```sql
+MSCK REPAIR TABLE table_identifier [{ADD|DROP|SYNC} PARTITIONS]
+```
 
 ### Parameters
-<dl>
-  <dt><code><em>table_identifier</em></code></dt>
-  <dd>
-    Specifies the name of the table to be repaired. The table name may be optionally qualified with a database name.<br><br>
-    <b>Syntax:</b>
-      <code>
-        [ database_name. ] table_name
-      </code>
-  </dd>
-</dl>
+
+* **table_identifier**
+
+    Specifies the name of the table to be repaired. The table name may be optionally qualified with a database name.
+
+    **Syntax:** `[ database_name. ] table_name`
+
+* **`{ADD|DROP|SYNC} PARTITIONS`**
+
+    Specifies how to recover partitions. If not specified, **ADD** is the default.
+
+    * **ADD**, the command adds new partitions to the session catalog for all sub-folder in the base table folder that don't belong to any table partitions.
+    * **DROP**, the command drops all partitions from the session catalog that have non-existing locations in the file system.
+    * **SYNC** is the combination of **DROP** and **ADD**. 
 
 ### Examples
-{% highlight sql %}
- -- create a partitioned table from existing data /tmp/namesAndAges.parquet
- CREATE TABLE t1 (name STRING, age INT) USING parquet PARTITIONED BY (age)
-     location "/tmp/namesAndAges.parquet";
 
- -- SELECT * FROM t1 does not return results
- SELECT * FROM t1;
+```sql
+-- create a partitioned table from existing data /tmp/namesAndAges.parquet
+CREATE TABLE t1 (name STRING, age INT) USING parquet PARTITIONED BY (age)
+    LOCATION "/tmp/namesAndAges.parquet";
 
- -- run MSCK REPAIR TABLE to recovers all the partitions
- MSCK REPAIR TABLE t1;
+-- SELECT * FROM t1 does not return results
+SELECT * FROM t1;
 
- -- SELECT * FROM t1 returns results
- SELECT * FROM t1;
+-- run MSCK REPAIR TABLE to recovers all the partitions
+MSCK REPAIR TABLE t1;
 
-     + -------------- + ------+
-     | name           | age   |
-     + -------------- + ------+
-     | Michael        | 20    |
-     + -------------- + ------+
-     | Justin         | 19    |
-     + -------------- + ----- +
-     | Andy           | 30    |
-     + -------------- + ----- +
+-- SELECT * FROM t1 returns results
+SELECT * FROM t1;
++-------+---+
+|   name|age|
++-------+---+
+|Michael| 20|
++-------+---+
+| Justin| 19|
++-------+---+
+|   Andy| 30|
++-------+---+
+```
 
-{% endhighlight %}
 ### Related Statements
- * [ALTER TABLE](sql-ref-syntax-ddl-alter-table.html)
+
+* [ALTER TABLE](sql-ref-syntax-ddl-alter-table.html)

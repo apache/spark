@@ -35,8 +35,7 @@ import org.apache.spark.sql.types.LongType
  * To run this benchmark:
  * {{{
  *   1. without sbt: bin/spark-submit --class <this class>
- *        --jars <spark catalyst test jar>,<spark core test jar>,<spark hive jar>
- *        --packages org.spark-project.hive:hive-exec:1.2.1.spark2
+ *        --jars <spark catalyst test jar>,<spark core test jar>,<spark sql test jar>
  *        <spark hive test jar>
  *   2. build/sbt "hive/test:runMain <this class>"
  *   3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "hive/test:runMain <this class>"
@@ -70,13 +69,13 @@ object ObjectHashAggregateExecBenchmark extends SqlBasedBenchmark {
 
     benchmark.addCase("hive udaf w/o group by") { _ =>
       withSQLConf(SQLConf.USE_OBJECT_HASH_AGG.key -> "false") {
-        sql("SELECT hive_percentile_approx(id, 0.5) FROM t").collect()
+        sql("SELECT hive_percentile_approx(id, 0.5) FROM t").noop()
       }
     }
 
     benchmark.addCase("spark af w/o group by") { _ =>
       withSQLConf(SQLConf.USE_OBJECT_HASH_AGG.key -> "true") {
-        sql("SELECT percentile_approx(id, 0.5) FROM t").collect()
+        sql("SELECT percentile_approx(id, 0.5) FROM t").noop()
       }
     }
 
@@ -84,14 +83,14 @@ object ObjectHashAggregateExecBenchmark extends SqlBasedBenchmark {
       withSQLConf(SQLConf.USE_OBJECT_HASH_AGG.key -> "false") {
         sql(
           s"SELECT hive_percentile_approx(id, 0.5) FROM t GROUP BY CAST(id / ${N / 4} AS BIGINT)"
-        ).collect()
+        ).noop()
       }
     }
 
     benchmark.addCase("spark af w/ group by w/o fallback") { _ =>
       withSQLConf(SQLConf.USE_OBJECT_HASH_AGG.key -> "true") {
         sql(s"SELECT percentile_approx(id, 0.5) FROM t GROUP BY CAST(id / ${N / 4} AS BIGINT)")
-          .collect()
+          .noop()
       }
     }
 
@@ -100,7 +99,7 @@ object ObjectHashAggregateExecBenchmark extends SqlBasedBenchmark {
         SQLConf.USE_OBJECT_HASH_AGG.key -> "true",
         SQLConf.OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD.key -> "2") {
         sql(s"SELECT percentile_approx(id, 0.5) FROM t GROUP BY CAST(id / ${N / 4} AS BIGINT)")
-          .collect()
+          .noop()
       }
     }
 
@@ -125,13 +124,13 @@ object ObjectHashAggregateExecBenchmark extends SqlBasedBenchmark {
 
     benchmark.addCase("sort agg w/ group by") { _ =>
       withSQLConf(SQLConf.USE_OBJECT_HASH_AGG.key -> "false") {
-        df.groupBy($"id" < (N / 2)).agg(typed_count($"id")).collect()
+        df.groupBy($"id" < (N / 2)).agg(typed_count($"id")).noop()
       }
     }
 
     benchmark.addCase("object agg w/ group by w/o fallback") { _ =>
       withSQLConf(SQLConf.USE_OBJECT_HASH_AGG.key -> "true") {
-        df.groupBy($"id" < (N / 2)).agg(typed_count($"id")).collect()
+        df.groupBy($"id" < (N / 2)).agg(typed_count($"id")).noop()
       }
     }
 
@@ -139,19 +138,19 @@ object ObjectHashAggregateExecBenchmark extends SqlBasedBenchmark {
       withSQLConf(
         SQLConf.USE_OBJECT_HASH_AGG.key -> "true",
         SQLConf.OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD.key -> "2") {
-        df.groupBy($"id" < (N / 2)).agg(typed_count($"id")).collect()
+        df.groupBy($"id" < (N / 2)).agg(typed_count($"id")).noop()
       }
     }
 
     benchmark.addCase("sort agg w/o group by") { _ =>
       withSQLConf(SQLConf.USE_OBJECT_HASH_AGG.key -> "false") {
-        df.select(typed_count($"id")).collect()
+        df.select(typed_count($"id")).noop()
       }
     }
 
     benchmark.addCase("object agg w/o group by w/o fallback") { _ =>
       withSQLConf(SQLConf.USE_OBJECT_HASH_AGG.key -> "true") {
-        df.select(typed_count($"id")).collect()
+        df.select(typed_count($"id")).noop()
       }
     }
 
@@ -173,13 +172,13 @@ object ObjectHashAggregateExecBenchmark extends SqlBasedBenchmark {
 
     benchmark.addCase("sort agg w/ group by") { _ =>
       withSQLConf(SQLConf.USE_OBJECT_HASH_AGG.key -> "false") {
-        df.groupBy($"id" / (N / 4) cast LongType).agg(percentile_approx($"id", 0.5)).collect()
+        df.groupBy($"id" / (N / 4) cast LongType).agg(percentile_approx($"id", 0.5)).noop()
       }
     }
 
     benchmark.addCase("object agg w/ group by w/o fallback") { _ =>
       withSQLConf(SQLConf.USE_OBJECT_HASH_AGG.key -> "true") {
-        df.groupBy($"id" / (N / 4) cast LongType).agg(percentile_approx($"id", 0.5)).collect()
+        df.groupBy($"id" / (N / 4) cast LongType).agg(percentile_approx($"id", 0.5)).noop()
       }
     }
 
@@ -187,19 +186,19 @@ object ObjectHashAggregateExecBenchmark extends SqlBasedBenchmark {
       withSQLConf(
         SQLConf.USE_OBJECT_HASH_AGG.key -> "true",
         SQLConf.OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD.key -> "2") {
-        df.groupBy($"id" / (N / 4) cast LongType).agg(percentile_approx($"id", 0.5)).collect()
+        df.groupBy($"id" / (N / 4) cast LongType).agg(percentile_approx($"id", 0.5)).noop()
       }
     }
 
     benchmark.addCase("sort agg w/o group by") { _ =>
       withSQLConf(SQLConf.USE_OBJECT_HASH_AGG.key -> "false") {
-        df.select(percentile_approx($"id", 0.5)).collect()
+        df.select(percentile_approx($"id", 0.5)).noop()
       }
     }
 
     benchmark.addCase("object agg w/o group by w/o fallback") { _ =>
       withSQLConf(SQLConf.USE_OBJECT_HASH_AGG.key -> "true") {
-        df.select(percentile_approx($"id", 0.5)).collect()
+        df.select(percentile_approx($"id", 0.5)).noop()
       }
     }
 

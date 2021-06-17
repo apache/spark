@@ -19,6 +19,7 @@ package org.apache.spark.sql.streaming
 
 import java.io.{File, InterruptedIOException, IOException, UncheckedIOException}
 import java.nio.channels.ClosedByInterruptException
+import java.time.ZoneId
 import java.util.concurrent.{CountDownLatch, ExecutionException, TimeUnit}
 
 import scala.concurrent.TimeoutException
@@ -33,10 +34,10 @@ import org.scalatest.time.SpanSugar._
 import org.apache.spark.{SparkConf, SparkContext, TaskContext, TestUtils}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.plans.logical.Range
-import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
+import org.apache.spark.sql.catalyst.plans.logical.{Range, RepartitionByExpression}
+import org.apache.spark.sql.catalyst.streaming.{InternalOutputModes, StreamingRelationV2}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.execution.SimpleMode
+import org.apache.spark.sql.execution.{LocalLimitExec, SimpleMode, SparkPlan}
 import org.apache.spark.sql.execution.command.ExplainCommand
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.sources.{ContinuousMemoryStream, MemorySink}
@@ -45,7 +46,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.StreamSourceProvider
 import org.apache.spark.sql.streaming.util.{BlockOnStopSourceProvider, StreamManualClock}
-import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
+import org.apache.spark.sql.types.{IntegerType, LongType, StructField, StructType}
 import org.apache.spark.util.Utils
 
 class StreamSuite extends StreamTest {
@@ -193,13 +194,15 @@ class StreamSuite extends StreamTest {
   }
 
   test("sql queries") {
-    val inputData = MemoryStream[Int]
-    inputData.toDF().createOrReplaceTempView("stream")
-    val evens = sql("SELECT * FROM stream WHERE value % 2 = 0")
+    withTempView("stream") {
+      val inputData = MemoryStream[Int]
+      inputData.toDF().createOrReplaceTempView("stream")
+      val evens = sql("SELECT * FROM stream WHERE value % 2 = 0")
 
-    testStream(evens)(
-      AddData(inputData, 1, 2, 3, 4),
-      CheckAnswer(2, 4))
+      testStream(evens)(
+        AddData(inputData, 1, 2, 3, 4),
+        CheckAnswer(2, 4))
+    }
   }
 
   test("DataFrame reuse") {
@@ -211,7 +214,9 @@ class StreamSuite extends StreamTest {
             .start(outputDir.getAbsolutePath)
           try {
             query.processAllAvailable()
-            val outputDf = spark.read.parquet(outputDir.getAbsolutePath).as[Long]
+            // Parquet write page-level CRC checksums will change the file size and
+            // affect the data order when reading these files. Please see PARQUET-1746 for details.
+            val outputDf = spark.read.parquet(outputDir.getAbsolutePath).sort('a).as[Long]
             checkDataset[Long](outputDf, (0L to 10L).toArray: _*)
           } finally {
             query.stop()
@@ -976,24 +981,50 @@ class StreamSuite extends StreamTest {
       CheckAnswer(1 to 3: _*))
   }
 
-  test("streaming limit in complete mode") {
+  test("SPARK-30658: streaming limit before agg in complete mode") {
     val inputData = MemoryStream[Int]
     val limited = inputData.toDF().limit(5).groupBy("value").count()
     testStream(limited, OutputMode.Complete())(
       AddData(inputData, 1 to 3: _*),
       CheckAnswer(Row(1, 1), Row(2, 1), Row(3, 1)),
       AddData(inputData, 1 to 9: _*),
-      CheckAnswer(Row(1, 2), Row(2, 2), Row(3, 2), Row(4, 1), Row(5, 1)))
+      CheckAnswer(Row(1, 2), Row(2, 2), Row(3, 1)))
   }
 
-  test("streaming limits in complete mode") {
+  test("SPARK-30658: streaming limits before and after agg in complete mode " +
+    "(after limit < before limit)") {
     val inputData = MemoryStream[Int]
     val limited = inputData.toDF().limit(4).groupBy("value").count().orderBy("value").limit(3)
     testStream(limited, OutputMode.Complete())(
+      StartStream(additionalConfs = Map(SQLConf.SHUFFLE_PARTITIONS.key -> "1")),
       AddData(inputData, 1 to 9: _*),
+      // only 1 to 4 should be allowed to aggregate, and counts for only 1 to 3 should be output
       CheckAnswer(Row(1, 1), Row(2, 1), Row(3, 1)),
       AddData(inputData, 2 to 6: _*),
-      CheckAnswer(Row(1, 1), Row(2, 2), Row(3, 2)))
+      // None of the new values should be allowed to aggregate, same 3 counts should be output
+      CheckAnswer(Row(1, 1), Row(2, 1), Row(3, 1)))
+  }
+
+  test("SPARK-30658: streaming limits before and after agg in complete mode " +
+    "(before limit < after limit)") {
+    val inputData = MemoryStream[Int]
+    val limited = inputData.toDF().limit(2).groupBy("value").count().orderBy("value").limit(3)
+    testStream(limited, OutputMode.Complete())(
+      StartStream(additionalConfs = Map(SQLConf.SHUFFLE_PARTITIONS.key -> "1")),
+      AddData(inputData, 1 to 9: _*),
+      CheckAnswer(Row(1, 1), Row(2, 1)),
+      AddData(inputData, 2 to 6: _*),
+      CheckAnswer(Row(1, 1), Row(2, 1)))
+  }
+
+  test("SPARK-30657: streaming limit after streaming dedup in append mode") {
+    val inputData = MemoryStream[Int]
+    val limited = inputData.toDF().dropDuplicates().limit(1)
+    testStream(limited)(
+      AddData(inputData, 1, 2),
+      CheckAnswer(Row(1)),
+      AddData(inputData, 3, 4),
+      CheckAnswer(Row(1)))
   }
 
   test("streaming limit in update mode") {
@@ -1032,6 +1063,82 @@ class StreamSuite extends StreamTest {
       CheckAnswerRowsByFunc(
         rows => assert(rows.size == 7 && rows.forall(r => r.getInt(0) <= 8)),
         false))
+  }
+
+  test("SPARK-30657: streaming limit should not apply on limits on state subplans") {
+    val streamData = MemoryStream[Int]
+    val streamingDF = streamData.toDF().toDF("value")
+    val staticDF = spark.createDataset(Seq(1)).toDF("value").orderBy("value")
+    testStream(streamingDF.join(staticDF.limit(1), "value"))(
+      AddData(streamData, 1, 2, 3),
+      CheckAnswer(Row(1)),
+      AddData(streamData, 1, 3, 5),
+      CheckAnswer(Row(1), Row(1)))
+  }
+
+  test("SPARK-30657: streaming limit optimization from StreamingLocalLimitExec to LocalLimitExec") {
+    val inputData = MemoryStream[Int]
+    val inputDF = inputData.toDF()
+
+    /** Verify whether the local limit in the plan is a streaming limit or is a simple */
+    def verifyLocalLimit(
+        df: DataFrame,
+        expectStreamingLimit: Boolean,
+      outputMode: OutputMode = OutputMode.Append): Unit = {
+
+      var execPlan: SparkPlan = null
+      testStream(df, outputMode)(
+        AddData(inputData, 1),
+        AssertOnQuery { q =>
+          q.processAllAvailable()
+          execPlan = q.lastExecution.executedPlan
+          true
+        }
+      )
+      require(execPlan != null)
+
+      val localLimits = execPlan.collect {
+        case l: LocalLimitExec => l
+        case l: StreamingLocalLimitExec => l
+      }
+
+      require(
+        localLimits.size == 1,
+        s"Cant verify local limit optimization with this plan:\n$execPlan")
+
+      if (expectStreamingLimit) {
+        assert(
+          localLimits.head.isInstanceOf[StreamingLocalLimitExec],
+          s"Local limit was not StreamingLocalLimitExec:\n$execPlan")
+      } else {
+        assert(
+          localLimits.head.isInstanceOf[LocalLimitExec],
+          s"Local limit was not LocalLimitExec:\n$execPlan")
+      }
+    }
+
+    // Should not be optimized, so StreamingLocalLimitExec should be present
+    verifyLocalLimit(inputDF.dropDuplicates().limit(1), expectStreamingLimit = true)
+
+    // Should be optimized from StreamingLocalLimitExec to LocalLimitExec
+    verifyLocalLimit(inputDF.limit(1), expectStreamingLimit = false)
+    verifyLocalLimit(
+      inputDF.limit(1).groupBy().count(),
+      expectStreamingLimit = false,
+      outputMode = OutputMode.Complete())
+
+    // Should be optimized as repartition is sufficient to ensure that the iterators of
+    // StreamingDeduplicationExec should be consumed completely by the repartition exchange.
+    verifyLocalLimit(inputDF.dropDuplicates().repartition(1).limit(1), expectStreamingLimit = false)
+
+    // Should be LocalLimitExec in the first place, not from optimization of StreamingLocalLimitExec
+    val staticDF = spark.range(2).toDF("value").limit(1)
+    verifyLocalLimit(inputDF.toDF("value").join(staticDF, "value"), expectStreamingLimit = false)
+
+    verifyLocalLimit(
+      inputDF.groupBy("value").count().limit(1),
+      expectStreamingLimit = false,
+      outputMode = OutputMode.Complete())
   }
 
   test("is_continuous_processing property should be false for microbatch processing") {
@@ -1114,7 +1221,8 @@ class StreamSuite extends StreamTest {
     }
 
     var lastTimestamp = System.currentTimeMillis()
-    val currentDate = DateTimeUtils.millisToDays(lastTimestamp)
+    val currentDate = DateTimeUtils.microsToDays(
+      DateTimeUtils.millisToMicros(lastTimestamp), ZoneId.systemDefault)
     testStream(df) (
       AddData(input, 1),
       CheckLastBatch { rows: Seq[Row] =>
@@ -1142,9 +1250,10 @@ class StreamSuite extends StreamTest {
       failAfter(60.seconds) {
         val startTime = System.nanoTime()
         withSQLConf(SQLConf.STREAMING_STOP_TIMEOUT.key -> "2000") {
-          intercept[TimeoutException] {
+          val ex = intercept[TimeoutException] {
             sq.stop()
           }
+          assert(ex.getMessage.contains(sq.id.toString))
         }
         val duration = (System.nanoTime() - startTime) / 1e6
         assert(duration >= 2000,
@@ -1157,10 +1266,41 @@ class StreamSuite extends StreamTest {
       }
     }
   }
+
+  test("SPARK-34482: correct active SparkSession for logicalPlan") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.COALESCE_PARTITIONS_INITIAL_PARTITION_NUM.key -> "10") {
+      val df = spark.readStream.format(classOf[FakeDefaultSource].getName).load()
+      var query: StreamExecution = null
+      try {
+        query =
+          df.repartition($"a")
+            .writeStream
+            .format("memory")
+            .queryName("memory")
+            .start()
+            .asInstanceOf[StreamingQueryWrapper]
+            .streamingQuery
+        query.awaitInitialization(streamingTimeout.toMillis)
+        val plan = query.logicalPlan
+        val numPartition = plan
+          .find { _.isInstanceOf[RepartitionByExpression] }
+          .map(_.asInstanceOf[RepartitionByExpression].numPartitions)
+        // Before the fix of SPARK-34482, the numPartition is the value of
+        // `COALESCE_PARTITIONS_INITIAL_PARTITION_NUM`.
+        assert(numPartition.get === spark.sqlContext.conf.getConf(SQLConf.SHUFFLE_PARTITIONS))
+      } finally {
+        if (query != null) {
+          query.stop()
+        }
+      }
+    }
+  }
 }
 
 abstract class FakeSource extends StreamSourceProvider {
-  private val fakeSchema = StructType(StructField("a", IntegerType) :: Nil)
+  private val fakeSchema = StructType(StructField("a", LongType) :: Nil)
 
   override def sourceSchema(
       spark: SQLContext,
@@ -1182,7 +1322,7 @@ class FakeDefaultSource extends FakeSource {
     new Source {
       private var offset = -1L
 
-      override def schema: StructType = StructType(StructField("a", IntegerType) :: Nil)
+      override def schema: StructType = StructType(StructField("a", LongType) :: Nil)
 
       override def getOffset: Option[Offset] = {
         if (offset >= 10) {

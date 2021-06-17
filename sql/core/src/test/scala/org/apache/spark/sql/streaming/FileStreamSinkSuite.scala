@@ -17,17 +17,18 @@
 
 package org.apache.spark.sql.streaming
 
-import java.io.File
+import java.io.{File, IOException}
 import java.nio.file.Files
 import java.util.Locale
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{FileStatus, Path, RawLocalFileSystem}
 import org.apache.hadoop.mapreduce.JobContext
 
 import org.apache.spark.SparkConf
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.io.FileCommitProtocol
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd}
 import org.apache.spark.sql.{AnalysisException, DataFrame}
@@ -210,7 +211,7 @@ abstract class FileStreamSinkSuite extends StreamTest {
     val inputData = MemoryStream[Long]
     val inputDF = inputData.toDF.toDF("time")
     val outputDf = inputDF
-      .selectExpr("CAST(time AS timestamp) AS timestamp")
+      .selectExpr("timestamp_seconds(time) AS timestamp")
       .withWatermark("timestamp", "10 seconds")
       .groupBy(window($"timestamp", "5 seconds"))
       .count()
@@ -555,10 +556,12 @@ abstract class FileStreamSinkSuite extends StreamTest {
             }
           }
 
-          val fs = new Path(outputDir.getCanonicalPath).getFileSystem(
-            spark.sessionState.newHadoopConf())
-          val sinkLog = new FileStreamSinkLog(FileStreamSinkLog.VERSION, spark,
-            outputDir.getCanonicalPath)
+          val outputDirPath = new Path(outputDir.getCanonicalPath)
+          val hadoopConf = spark.sessionState.newHadoopConf()
+          val fs = outputDirPath.getFileSystem(hadoopConf)
+          val logPath = FileStreamSink.getMetadataLogPath(fs, outputDirPath, conf)
+
+          val sinkLog = new FileStreamSinkLog(FileStreamSinkLog.VERSION, spark, logPath.toString)
 
           val allFiles = sinkLog.allFiles()
           // only files from non-empty partition should be logged
@@ -570,6 +573,30 @@ abstract class FileStreamSinkSuite extends StreamTest {
             .selectExpr("CAST(value AS INT)").as[Int]
           checkDatasetUnorderly(outputDf, 1, 2, 3, 4, 5)
         }
+      }
+    }
+  }
+
+  test("formatCheck fail should not fail the query") {
+    withSQLConf(
+      "fs.file.impl" -> classOf[FailFormatCheckFileSystem].getName,
+      "fs.file.impl.disable.cache" -> "true") {
+      withTempDir { tempDir =>
+        val path = new File(tempDir, "text").getCanonicalPath
+        Seq("foo").toDF.write.format("text").save(path)
+        spark.read.format("text").load(path)
+      }
+    }
+  }
+
+  test("fail to check glob path should not fail the query") {
+    withSQLConf(
+      "fs.file.impl" -> classOf[FailFormatCheckFileSystem].getName,
+      "fs.file.impl.disable.cache" -> "true") {
+      withTempDir { tempDir =>
+        val path = new File(tempDir, "text").getCanonicalPath
+        Seq("foo").toDF.write.format("text").save(path)
+        spark.read.format("text").load(path + "/*")
       }
     }
   }
@@ -657,7 +684,7 @@ class FileStreamSinkV2Suite extends FileStreamSinkSuite {
     // Verify that MetadataLogFileIndex is being used and the correct partitioning schema has
     // been inferred
     val table = df.queryExecution.analyzed.collect {
-      case DataSourceV2Relation(table: FileTable, _, _) => table
+      case DataSourceV2Relation(table: FileTable, _, _, _, _) => table
     }
     assert(table.size === 1)
     assert(table.head.fileIndex.isInstanceOf[MetadataLogFileIndex])
@@ -681,5 +708,21 @@ class FileStreamSinkV2Suite extends FileStreamSinkSuite {
       assert(partitions.flatMap(_.files.map(_.partitionValues)).distinct.size === 3)
     }
     // TODO: test partition pruning when file source V2 supports it.
+  }
+}
+
+/**
+ * A special file system that fails when accessing metadata log directory or using a glob path to
+ * access.
+ */
+class FailFormatCheckFileSystem extends RawLocalFileSystem {
+  override def getFileStatus(f: Path): FileStatus = {
+    if (f.getName == FileStreamSink.metadataDir) {
+      throw new IOException("cannot access metadata log")
+    }
+    if (SparkHadoopUtil.get.isGlobPath(f)) {
+      throw new IOException("fail to access a glob path")
+    }
+    super.getFileStatus(f)
   }
 }

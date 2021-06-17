@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution.benchmark
 import java.time.Instant
 
 import org.apache.spark.benchmark.Benchmark
-import org.apache.spark.sql.SaveMode.Overwrite
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -28,7 +27,8 @@ import org.apache.spark.sql.internal.SQLConf
  * To run this benchmark:
  * {{{
  *   1. without sbt:
- *      bin/spark-submit --class <this class> --jars <spark core test jar> <sql core test jar>
+ *      bin/spark-submit --class <this class>
+ *        --jars <spark core test jar>,<spark catalyst test jar> <sql core test jar>
  *   2. build/sbt "sql/test:runMain <this class>"
  *   3. generate result:
  *      SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/test:runMain <this class>"
@@ -39,14 +39,15 @@ object ExtractBenchmark extends SqlBasedBenchmark {
 
   private def doBenchmark(cardinality: Long, exprs: String*): Unit = {
     val sinceSecond = Instant.parse("2010-01-01T00:00:00Z").getEpochSecond
-    withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true") {
+    withSQLConf(
+      SQLConf.LEGACY_INTERVAL_ENABLED.key -> "true",
+      SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true") {
       spark
         .range(sinceSecond, sinceSecond + cardinality, 1, 1)
         .selectExpr(exprs: _*)
-        .write
-        .format("noop")
-        .mode(Overwrite)
-        .save()
+        .queryExecution
+        .toRdd
+        .foreach(_ => ())
     }
   }
 
@@ -61,10 +62,10 @@ object ExtractBenchmark extends SqlBasedBenchmark {
   }
 
   private def castExpr(from: String): String = from match {
-    case "timestamp" => "cast(id as timestamp)"
-    case "date" => "cast(cast(id as timestamp) as date)"
-    case "interval" => "(cast(cast(id as timestamp) as date) - date'0001-01-01') + " +
-      "(cast(id as timestamp) - timestamp'1000-01-01 01:02:03.123456')"
+    case "timestamp" => "timestamp_seconds(id)"
+    case "date" => "cast(timestamp_seconds(id) as date)"
+    case "interval" => "(cast(timestamp_seconds(id) as date) - date'0001-01-01') + " +
+      "(timestamp_seconds(id) - timestamp'1000-01-01 01:02:03.123456')"
     case other => throw new IllegalArgumentException(
       s"Unsupported column type $other. Valid column types are 'timestamp' and 'date'")
   }
@@ -86,34 +87,22 @@ object ExtractBenchmark extends SqlBasedBenchmark {
     }
   }
 
-  private case class Settings(fields: Seq[String], func: Seq[String], iterNum: Long)
-
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     val N = 10000000L
-    val datetimeFields = Seq(
-      "MILLENNIUM", "CENTURY", "DECADE", "YEAR",
-      "ISOYEAR", "QUARTER", "MONTH", "WEEK",
-      "DAY", "DAYOFWEEK", "DOW", "ISODOW",
-      "DOY", "HOUR", "MINUTE", "SECOND",
-      "MILLISECONDS", "MICROSECONDS", "EPOCH")
-    val intervalFields = Seq(
-      "MILLENNIUM", "CENTURY", "DECADE", "YEAR",
-      "QUARTER", "MONTH", "DAY",
-      "HOUR", "MINUTE", "SECOND",
-      "MILLISECONDS", "MICROSECONDS", "EPOCH")
+    val datetimeFields = Seq("YEAR", "YEAROFWEEK", "QUARTER", "MONTH", "WEEK", "DAY", "DAYOFWEEK",
+      "DOW", "DOW_ISO", "DAYOFWEEK_ISO", "DOY", "HOUR", "MINUTE", "SECOND")
+    val intervalFields = Seq("YEAR", "MONTH", "DAY", "HOUR", "MINUTE", "SECOND")
     val settings = Map(
-      "timestamp" -> Settings(datetimeFields, Seq("extract", "date_part"), N),
-      "date" -> Settings(datetimeFields, Seq("extract", "date_part"), N),
-      "interval" -> Settings(intervalFields, Seq("date_part"), N))
+      "timestamp" -> datetimeFields,
+      "date" -> datetimeFields,
+      "interval" -> intervalFields)
 
-    for {
-      (dataType, Settings(fields, funcs, iterNum)) <- settings
-      func <- funcs} {
+    for {(dataType, fields) <- settings; func <- Seq("extract", "date_part")} {
 
       val benchmark = new Benchmark(s"Invoke $func for $dataType", N, output = output)
 
-      run(benchmark, iterNum, s"cast to $dataType", castExpr(dataType))
-      fields.foreach(run(benchmark, func, iterNum, _, dataType))
+      run(benchmark, N, s"cast to $dataType", castExpr(dataType))
+      fields.foreach(run(benchmark, func, N, _, dataType))
 
       benchmark.run()
     }

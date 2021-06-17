@@ -23,14 +23,14 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.{DataFrame, QueryTest, SaveMode}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, TableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.expressions.Transform
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class DataSourceV2DataFrameSessionCatalogSuite
   extends InsertIntoTests(supportsDynamicOverwrite = true, includeSQLOnlyTests = false)
@@ -85,16 +85,10 @@ class DataSourceV2DataFrameSessionCatalogSuite
     withTable(t1) {
       spark.range(20).write.format(v2Format).option("path", "abc").saveAsTable(t1)
       val cat = spark.sessionState.catalogManager.currentCatalog.asInstanceOf[TableCatalog]
-      val tableInfo = cat.loadTable(Identifier.of(Array.empty, t1))
+      val tableInfo = cat.loadTable(Identifier.of(Array("default"), t1))
       assert(tableInfo.properties().get("location") === "abc")
       assert(tableInfo.properties().get("provider") === v2Format)
     }
-  }
-}
-
-class InMemoryTableProvider extends TableProvider {
-  override def getTable(options: CaseInsensitiveStringMap): Table = {
-    throw new UnsupportedOperationException("D'oh!")
   }
 }
 
@@ -107,9 +101,15 @@ class InMemoryTableSessionCatalog extends TestV2SessionCatalogBase[InMemoryTable
     new InMemoryTable(name, schema, partitions, properties)
   }
 
+  override def loadTable(ident: Identifier): Table = {
+    val identToUse = Option(InMemoryTableSessionCatalog.customIdentifierResolution)
+      .map(_(ident))
+      .getOrElse(ident)
+    super.loadTable(identToUse)
+  }
+
   override def alterTable(ident: Identifier, changes: TableChange*): Table = {
-    val fullIdent = fullIdentifier(ident)
-    Option(tables.get(fullIdent)) match {
+    Option(tables.get(ident)) match {
       case Some(table) =>
         val properties = CatalogV2Util.applyPropertiesChanges(table.properties, changes)
         val schema = CatalogV2Util.applySchemaChanges(table.schema, changes)
@@ -122,11 +122,26 @@ class InMemoryTableSessionCatalog extends TestV2SessionCatalogBase[InMemoryTable
         val newTable = new InMemoryTable(table.name, schema, table.partitioning, properties)
           .withData(table.data)
 
-        tables.put(fullIdent, newTable)
+        tables.put(ident, newTable)
 
         newTable
       case _ =>
-        throw new NoSuchTableException(ident)
+        throw QueryCompilationErrors.noSuchTableError(ident)
+    }
+  }
+}
+
+object InMemoryTableSessionCatalog {
+  private var customIdentifierResolution: Identifier => Identifier = _
+
+  def withCustomIdentifierResolver(
+      resolver: Identifier => Identifier)(
+      f: => Unit): Unit = {
+    try {
+      customIdentifierResolution = resolver
+      f
+    } finally {
+      customIdentifierResolution = null
     }
   }
 }
@@ -140,7 +155,7 @@ private [connector] trait SessionCatalogTest[T <: Table, Catalog <: TestV2Sessio
     spark.sessionState.catalogManager.catalog(name)
   }
 
-  protected val v2Format: String = classOf[InMemoryTableProvider].getName
+  protected val v2Format: String = classOf[FakeV2Provider].getName
 
   protected val catalogClassName: String = classOf[InMemoryTableSessionCatalog].getName
 

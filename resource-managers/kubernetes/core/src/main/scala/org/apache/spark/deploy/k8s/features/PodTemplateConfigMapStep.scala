@@ -22,14 +22,19 @@ import java.nio.charset.StandardCharsets
 import com.google.common.io.Files
 import io.fabric8.kubernetes.api.model.{ConfigMapBuilder, ContainerBuilder, HasMetadata, PodBuilder}
 
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.k8s.{KubernetesConf, SparkPod}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
+import org.apache.spark.util.DependencyUtils.downloadFile
+import org.apache.spark.util.Utils
 
 private[spark] class PodTemplateConfigMapStep(conf: KubernetesConf)
   extends KubernetesFeatureConfigStep {
 
   private val hasTemplate = conf.contains(KUBERNETES_EXECUTOR_PODTEMPLATE_FILE)
+
+  private val configmapName = s"${conf.resourceNamePrefix}-$POD_TEMPLATE_CONFIGMAP"
 
   def configurePod(pod: SparkPod): SparkPod = {
     if (hasTemplate) {
@@ -38,7 +43,7 @@ private[spark] class PodTemplateConfigMapStep(conf: KubernetesConf)
             .addNewVolume()
               .withName(POD_TEMPLATE_VOLUME)
               .withNewConfigMap()
-                .withName(POD_TEMPLATE_CONFIGMAP)
+                .withName(configmapName)
                 .addNewItem()
                   .withKey(POD_TEMPLATE_KEY)
                   .withPath(EXECUTOR_POD_SPEC_TEMPLATE_FILE_NAME)
@@ -73,11 +78,15 @@ private[spark] class PodTemplateConfigMapStep(conf: KubernetesConf)
   override def getAdditionalKubernetesResources(): Seq[HasMetadata] = {
     if (hasTemplate) {
       val podTemplateFile = conf.get(KUBERNETES_EXECUTOR_PODTEMPLATE_FILE).get
-      val podTemplateString = Files.toString(new File(podTemplateFile), StandardCharsets.UTF_8)
+      val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf.sparkConf)
+      val uri = downloadFile(podTemplateFile, Utils.createTempDir(), conf.sparkConf, hadoopConf)
+      val file = new java.net.URI(uri).getPath
+      val podTemplateString = Files.toString(new File(file), StandardCharsets.UTF_8)
       Seq(new ConfigMapBuilder()
           .withNewMetadata()
-            .withName(POD_TEMPLATE_CONFIGMAP)
+            .withName(configmapName)
           .endMetadata()
+          .withImmutable(true)
           .addToData(POD_TEMPLATE_KEY, podTemplateString)
         .build())
     } else {

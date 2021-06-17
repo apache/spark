@@ -181,16 +181,7 @@ class GaussianMixtureSuite extends MLTest with DefaultReadWriteTest {
     }
   }
 
-  test("check distributed decomposition") {
-    val k = 5
-    val d = decompositionData.head.size
-    assert(GaussianMixture.shouldDistributeGaussians(k, d))
-
-    val gmm = new GaussianMixture().setK(k).setSeed(seed).fit(decompositionDataset)
-    assert(gmm.getK === k)
-  }
-
-  test("multivariate data and check againt R mvnormalmixEM") {
+  test("multivariate data and check against R mvnormalmixEM") {
     /*
       Using the following R code to generate data and train the model using mixtools package.
       library(mvtnorm)

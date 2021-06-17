@@ -47,7 +47,7 @@ private[spark] object DatasetUtils {
       case fdt: ArrayType =>
         val transferUDF = fdt.elementType match {
           case _: FloatType => udf(f = (vector: Seq[Float]) => {
-            val inputArray = Array.fill[Double](vector.size)(0.0)
+            val inputArray = Array.ofDim[Double](vector.size)
             vector.indices.foreach(idx => inputArray(idx) = vector(idx).toDouble)
             Vectors.dense(inputArray)
           })

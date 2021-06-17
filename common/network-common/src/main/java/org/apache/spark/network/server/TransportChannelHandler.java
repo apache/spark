@@ -58,6 +58,7 @@ public class TransportChannelHandler extends SimpleChannelInboundHandler<Message
   private final TransportRequestHandler requestHandler;
   private final long requestTimeoutNs;
   private final boolean closeIdleConnections;
+  private final boolean skipChunkFetchRequest;
   private final TransportContext transportContext;
 
   public TransportChannelHandler(
@@ -65,12 +66,14 @@ public class TransportChannelHandler extends SimpleChannelInboundHandler<Message
       TransportResponseHandler responseHandler,
       TransportRequestHandler requestHandler,
       long requestTimeoutMs,
+      boolean skipChunkFetchRequest,
       boolean closeIdleConnections,
       TransportContext transportContext) {
     this.client = client;
     this.responseHandler = responseHandler;
     this.requestHandler = requestHandler;
     this.requestTimeoutNs = requestTimeoutMs * 1000L * 1000;
+    this.skipChunkFetchRequest = skipChunkFetchRequest;
     this.closeIdleConnections = closeIdleConnections;
     this.transportContext = transportContext;
   }
@@ -124,7 +127,7 @@ public class TransportChannelHandler extends SimpleChannelInboundHandler<Message
    */
   @Override
   public boolean acceptInboundMessage(Object msg) throws Exception {
-    if (msg instanceof ChunkFetchRequest) {
+    if (skipChunkFetchRequest && msg instanceof ChunkFetchRequest) {
       return false;
     } else {
       return super.acceptInboundMessage(msg);
@@ -162,8 +165,9 @@ public class TransportChannelHandler extends SimpleChannelInboundHandler<Message
           if (hasInFlightRequests) {
             String address = getRemoteAddress(ctx.channel());
             logger.error("Connection to {} has been quiet for {} ms while there are outstanding " +
-              "requests. Assuming connection is dead; please adjust spark.network.timeout if " +
-              "this is wrong.", address, requestTimeoutNs / 1000 / 1000);
+              "requests. Assuming connection is dead; please adjust" +
+              " spark.{}.io.connectionTimeout if this is wrong.",
+              address, requestTimeoutNs / 1000 / 1000, transportContext.getConf().getModuleName());
             client.timeOut();
             ctx.close();
           } else if (closeIdleConnections) {

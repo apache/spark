@@ -22,8 +22,8 @@ import scala.collection.JavaConverters._
 
 import io.fabric8.kubernetes.api.model.{Pod, SecretBuilder}
 import org.apache.commons.codec.binary.Base64
-import org.apache.commons.io.output.ByteArrayOutputStream
 import org.scalatest.concurrent.Eventually
+import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark.deploy.k8s.integrationtest.KubernetesSuite._
 

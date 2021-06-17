@@ -19,12 +19,11 @@ package org.apache.spark.deploy.yarn
 
 import java.io.File
 import java.nio.ByteBuffer
-import java.util.{Collections, Locale}
+import java.util.Collections
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{HashMap, ListBuffer}
 
-import org.apache.hadoop.HadoopIllegalArgumentException
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.DataOutputBuffer
 import org.apache.hadoop.security.UserGroupInformation
@@ -40,7 +39,7 @@ import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.network.util.JavaUtils
-import org.apache.spark.util.{Utils, YarnContainerInfoHelper}
+import org.apache.spark.util.Utils
 
 private[yarn] class ExecutorRunnable(
     container: Option[Container],
@@ -53,7 +52,8 @@ private[yarn] class ExecutorRunnable(
     executorCores: Int,
     appId: String,
     securityMgr: SecurityManager,
-    localResources: Map[String, LocalResource]) extends Logging {
+    localResources: Map[String, LocalResource],
+    resourceProfileId: Int) extends Logging {
 
   var rpc: YarnRPC = YarnRPC.create(conf)
   var nmClient: NMClient = _
@@ -72,7 +72,7 @@ private[yarn] class ExecutorRunnable(
 
     s"""
     |===============================================================================
-    |YARN executor launch context:
+    |Default YARN executor launch context:
     |  env:
     |${Utils.redact(sparkConf, env.toSeq).map { case (k, v) => s"    $k -> $v\n" }.mkString}
     |  command:
@@ -115,7 +115,9 @@ private[yarn] class ExecutorRunnable(
           // Authentication is not enabled, so just provide dummy metadata
           ByteBuffer.allocate(0)
         }
-      ctx.setServiceData(Collections.singletonMap("spark_shuffle", secretBytes))
+      val serviceName = sparkConf.get(SHUFFLE_SERVICE_NAME)
+      logInfo(s"Initializing service data for shuffle service using name '$serviceName'")
+      ctx.setServiceData(Collections.singletonMap(serviceName, secretBytes))
     }
 
     // Send the start request to the ContainerManager
@@ -207,7 +209,8 @@ private[yarn] class ExecutorRunnable(
         "--executor-id", executorId,
         "--hostname", hostname,
         "--cores", executorCores.toString,
-        "--app-id", appId) ++
+        "--app-id", appId,
+        "--resourceProfileId", resourceProfileId.toString) ++
       userClassPath ++
       Seq(
         s"1>${ApplicationConstants.LOG_DIR_EXPANSION_VAR}/stdout",

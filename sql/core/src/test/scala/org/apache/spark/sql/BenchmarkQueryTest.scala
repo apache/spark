@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.sql.catalyst.expressions.codegen.{ByteCodeStats, CodeFormatter, CodeGenerator}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_SECOND
 import org.apache.spark.sql.execution.{SparkPlan, WholeStageCodegenExec}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.Utils
@@ -36,7 +37,17 @@ abstract class BenchmarkQueryTest extends QueryTest with SharedSparkSession {
   protected override def afterAll(): Unit = {
     try {
       // For debugging dump some statistics about how much time was spent in various optimizer rules
+      // code generation, and compilation.
       logWarning(RuleExecutor.dumpTimeSpent())
+      val codeGenTime = WholeStageCodegenExec.codeGenTime.toDouble / NANOS_PER_SECOND
+      val compileTime = CodeGenerator.compileTime.toDouble / NANOS_PER_SECOND
+      val codegenInfo =
+        s"""
+           |=== Metrics of Whole-stage Codegen ===
+           |Total code generation time: $codeGenTime seconds
+           |Total compile time: $compileTime seconds
+         """.stripMargin
+      logWarning(codegenInfo)
       spark.sessionState.catalog.reset()
     } finally {
       super.afterAll()
@@ -46,15 +57,23 @@ abstract class BenchmarkQueryTest extends QueryTest with SharedSparkSession {
   override def beforeAll(): Unit = {
     super.beforeAll()
     RuleExecutor.resetMetrics()
+    CodeGenerator.resetCompileTime()
+    WholeStageCodegenExec.resetCodeGenTime()
   }
 
   protected def checkGeneratedCode(plan: SparkPlan, checkMethodCodeSize: Boolean = true): Unit = {
     val codegenSubtrees = new collection.mutable.HashSet[WholeStageCodegenExec]()
-    plan foreach {
-      case s: WholeStageCodegenExec =>
-        codegenSubtrees += s
-      case _ =>
+
+    def findSubtrees(plan: SparkPlan): Unit = {
+      plan foreach {
+        case s: WholeStageCodegenExec =>
+          codegenSubtrees += s
+        case s =>
+          s.subqueries.foreach(findSubtrees)
+      }
     }
+
+    findSubtrees(plan)
     codegenSubtrees.toSeq.foreach { subtree =>
       val code = subtree.doCodeGen()._2
       val (_, ByteCodeStats(maxMethodCodeSize, _, _)) = try {

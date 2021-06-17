@@ -21,23 +21,24 @@ import java.util.Locale
 
 import scala.util.control.NonFatal
 
-import com.fasterxml.jackson.core.{JsonGenerator, JsonParser}
-import com.fasterxml.jackson.databind.{DeserializationContext, JsonDeserializer, JsonSerializer, SerializerProvider}
-import com.fasterxml.jackson.databind.`type`.TypeFactory
 import com.fasterxml.jackson.databind.annotation.{JsonDeserialize, JsonSerialize}
 import org.json4s._
 import org.json4s.JsonAST.JValue
 import org.json4s.JsonDSL._
-import org.json4s.jackson.{JValueDeserializer, JValueSerializer}
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.annotation.Stable
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.expressions.{Cast, Expression}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.catalyst.util.DataTypeJsonUtils.{DataTypeJsonDeserializer, DataTypeJsonSerializer}
+import org.apache.spark.sql.catalyst.util.StringUtils.StringConcat
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy.{ANSI, STRICT}
+import org.apache.spark.sql.types.DayTimeIntervalType._
+import org.apache.spark.sql.types.YearMonthIntervalType._
 import org.apache.spark.util.Utils
 
 /**
@@ -125,20 +126,67 @@ abstract class DataType extends AbstractDataType {
 object DataType {
 
   private val FIXED_DECIMAL = """decimal\(\s*(\d+)\s*,\s*(\-?\d+)\s*\)""".r
+  private val CHAR_TYPE = """char\(\s*(\d+)\s*\)""".r
+  private val VARCHAR_TYPE = """varchar\(\s*(\d+)\s*\)""".r
 
   def fromDDL(ddl: String): DataType = {
+    parseTypeWithFallback(
+      ddl,
+      CatalystSqlParser.parseDataType,
+      "Cannot parse the data type: ",
+      fallbackParser = str => CatalystSqlParser.parseTableSchema(str))
+  }
+
+  /**
+   * Parses data type from a string with schema. It calls `parser` for `schema`.
+   * If it fails, calls `fallbackParser`. If the fallback function fails too, combines error message
+   * from `parser` and `fallbackParser`.
+   *
+   * @param schema The schema string to parse by `parser` or `fallbackParser`.
+   * @param parser The function that should be invoke firstly.
+   * @param errorMsg The error message for `parser`.
+   * @param fallbackParser The function that is called when `parser` fails.
+   * @return The data type parsed from the `schema` schema.
+   */
+  def parseTypeWithFallback(
+      schema: String,
+      parser: String => DataType,
+      errorMsg: String,
+      fallbackParser: String => DataType): DataType = {
     try {
-      CatalystSqlParser.parseDataType(ddl)
+      parser(schema)
     } catch {
-      case NonFatal(_) => CatalystSqlParser.parseTableSchema(ddl)
+      case NonFatal(e1) =>
+        try {
+          fallbackParser(schema)
+        } catch {
+          case NonFatal(e2) =>
+            throw new AnalysisException(
+              message = s"$errorMsg${e1.getMessage}\nFailed fallback parsing: ${e2.getMessage}",
+              cause = Some(e1.getCause))
+        }
     }
   }
 
   def fromJson(json: String): DataType = parseDataType(parse(json))
 
-  private val nonDecimalNameToType = {
+  private val otherTypes = {
     Seq(NullType, DateType, TimestampType, BinaryType, IntegerType, BooleanType, LongType,
-      DoubleType, FloatType, ShortType, ByteType, StringType, CalendarIntervalType)
+      DoubleType, FloatType, ShortType, ByteType, StringType, CalendarIntervalType,
+      DayTimeIntervalType(DAY, DAY),
+      DayTimeIntervalType(DAY, HOUR),
+      DayTimeIntervalType(DAY, MINUTE),
+      DayTimeIntervalType(DAY, SECOND),
+      DayTimeIntervalType(HOUR, HOUR),
+      DayTimeIntervalType(HOUR, MINUTE),
+      DayTimeIntervalType(HOUR, SECOND),
+      DayTimeIntervalType(MINUTE, MINUTE),
+      DayTimeIntervalType(MINUTE, SECOND),
+      DayTimeIntervalType(SECOND, SECOND),
+      YearMonthIntervalType(YEAR, YEAR),
+      YearMonthIntervalType(MONTH, MONTH),
+      YearMonthIntervalType(YEAR, MONTH),
+      TimestampWithoutTZType)
       .map(t => t.typeName -> t).toMap
   }
 
@@ -147,7 +195,9 @@ object DataType {
     name match {
       case "decimal" => DecimalType.USER_DEFAULT
       case FIXED_DECIMAL(precision, scale) => DecimalType(precision.toInt, scale.toInt)
-      case other => nonDecimalNameToType.getOrElse(
+      case CHAR_TYPE(length) => CharType(length.toInt)
+      case VARCHAR_TYPE(length) => VarcharType(length.toInt)
+      case other => otherTypes.getOrElse(
         other,
         throw new IllegalArgumentException(
           s"Failed to convert the JSON string '$name' to a data type."))
@@ -156,7 +206,7 @@ object DataType {
 
   private object JSortedObject {
     def unapplySeq(value: JValue): Option[List[(String, JValue)]] = value match {
-      case JObject(seq) => Some(seq.toList.sortBy(_._1))
+      case JObject(seq) => Some(seq.sortBy(_._1))
       case _ => None
     }
   }
@@ -224,16 +274,17 @@ object DataType {
   }
 
   protected[types] def buildFormattedString(
-    dataType: DataType,
-    prefix: String,
-    builder: StringBuilder): Unit = {
+      dataType: DataType,
+      prefix: String,
+      stringConcat: StringConcat,
+      maxDepth: Int): Unit = {
     dataType match {
       case array: ArrayType =>
-        array.buildFormattedString(prefix, builder)
+        array.buildFormattedString(prefix, stringConcat, maxDepth - 1)
       case struct: StructType =>
-        struct.buildFormattedString(prefix, builder)
+        struct.buildFormattedString(prefix, stringConcat, maxDepth - 1)
       case map: MapType =>
-        map.buildFormattedString(prefix, builder)
+        map.buildFormattedString(prefix, stringConcat, maxDepth - 1)
       case _ =>
     }
   }
@@ -272,21 +323,49 @@ object DataType {
    *   of `fromField.nullable` and `toField.nullable` are false.
    */
   private[sql] def equalsIgnoreCompatibleNullability(from: DataType, to: DataType): Boolean = {
+    equalsIgnoreCompatibleNullability(from, to, ignoreName = false)
+  }
+
+  /**
+   * Compares two types, ignoring compatible nullability of ArrayType, MapType, StructType, and
+   * also the field name. It compares based on the position.
+   *
+   * Compatible nullability is defined as follows:
+   *   - If `from` and `to` are ArrayTypes, `from` has a compatible nullability with `to`
+   *   if and only if `to.containsNull` is true, or both of `from.containsNull` and
+   *   `to.containsNull` are false.
+   *   - If `from` and `to` are MapTypes, `from` has a compatible nullability with `to`
+   *   if and only if `to.valueContainsNull` is true, or both of `from.valueContainsNull` and
+   *   `to.valueContainsNull` are false.
+   *   - If `from` and `to` are StructTypes, `from` has a compatible nullability with `to`
+   *   if and only if for all every pair of fields, `to.nullable` is true, or both
+   *   of `fromField.nullable` and `toField.nullable` are false.
+   */
+  private[sql] def equalsIgnoreNameAndCompatibleNullability(
+      from: DataType,
+      to: DataType): Boolean = {
+    equalsIgnoreCompatibleNullability(from, to, ignoreName = true)
+  }
+
+  private def equalsIgnoreCompatibleNullability(
+      from: DataType,
+      to: DataType,
+      ignoreName: Boolean = false): Boolean = {
     (from, to) match {
       case (ArrayType(fromElement, fn), ArrayType(toElement, tn)) =>
-        (tn || !fn) && equalsIgnoreCompatibleNullability(fromElement, toElement)
+        (tn || !fn) && equalsIgnoreCompatibleNullability(fromElement, toElement, ignoreName)
 
       case (MapType(fromKey, fromValue, fn), MapType(toKey, toValue, tn)) =>
         (tn || !fn) &&
-          equalsIgnoreCompatibleNullability(fromKey, toKey) &&
-          equalsIgnoreCompatibleNullability(fromValue, toValue)
+          equalsIgnoreCompatibleNullability(fromKey, toKey, ignoreName) &&
+          equalsIgnoreCompatibleNullability(fromValue, toValue, ignoreName)
 
       case (StructType(fromFields), StructType(toFields)) =>
         fromFields.length == toFields.length &&
           fromFields.zip(toFields).forall { case (fromField, toField) =>
-            fromField.name == toField.name &&
+            (ignoreName || fromField.name == toField.name) &&
               (toField.nullable || !fromField.nullable) &&
-              equalsIgnoreCompatibleNullability(fromField.dataType, toField.dataType)
+              equalsIgnoreCompatibleNullability(fromField.dataType, toField.dataType, ignoreName)
           }
 
       case (fromDataType, toDataType) => fromDataType == toDataType
@@ -329,19 +408,19 @@ object DataType {
       ignoreNullability: Boolean = false): Boolean = {
     (from, to) match {
       case (left: ArrayType, right: ArrayType) =>
-        equalsStructurally(left.elementType, right.elementType) &&
+        equalsStructurally(left.elementType, right.elementType, ignoreNullability) &&
           (ignoreNullability || left.containsNull == right.containsNull)
 
       case (left: MapType, right: MapType) =>
-        equalsStructurally(left.keyType, right.keyType) &&
-          equalsStructurally(left.valueType, right.valueType) &&
+        equalsStructurally(left.keyType, right.keyType, ignoreNullability) &&
+          equalsStructurally(left.valueType, right.valueType, ignoreNullability) &&
           (ignoreNullability || left.valueContainsNull == right.valueContainsNull)
 
       case (StructType(fromFields), StructType(toFields)) =>
         fromFields.length == toFields.length &&
           fromFields.zip(toFields)
             .forall { case (l, r) =>
-              equalsStructurally(l.dataType, r.dataType) &&
+              equalsStructurally(l.dataType, r.dataType, ignoreNullability) &&
                 (ignoreNullability || l.nullable == r.nullable)
             }
 
@@ -458,7 +537,7 @@ object DataType {
 
       case (w: AtomicType, r: AtomicType) if storeAssignmentPolicy == STRICT =>
         if (!Cast.canUpCast(w, r)) {
-          addError(s"Cannot safely cast '$context': $w to $r")
+          addError(s"Cannot safely cast '$context': ${w.catalogString} to ${r.catalogString}")
           false
         } else {
           true
@@ -468,7 +547,7 @@ object DataType {
 
       case (w: AtomicType, r: AtomicType) if storeAssignmentPolicy == ANSI =>
         if (!Cast.canANSIStoreAssign(w, r)) {
-          addError(s"Cannot safely cast '$context': $w to $r")
+          addError(s"Cannot safely cast '$context': ${w.catalogString} to ${r.catalogString}")
           false
         } else {
           true
@@ -478,35 +557,9 @@ object DataType {
         true
 
       case (w, r) =>
-        addError(s"Cannot write '$context': $w is incompatible with $r")
+        addError(s"Cannot write '$context': " +
+          s"${w.catalogString} is incompatible with ${r.catalogString}")
         false
     }
-  }
-}
-
-/**
- * Jackson serializer for [[DataType]]. Internally this delegates to json4s based serialization.
- */
-class DataTypeJsonSerializer extends JsonSerializer[DataType] {
-  private val delegate = new JValueSerializer
-  override def serialize(
-      value: DataType,
-      gen: JsonGenerator,
-      provider: SerializerProvider): Unit = {
-    delegate.serialize(value.jsonValue, gen, provider)
-  }
-}
-
-/**
- * Jackson deserializer for [[DataType]]. Internally this delegates to json4s based deserialization.
- */
-class DataTypeJsonDeserializer extends JsonDeserializer[DataType] {
-  private val delegate = new JValueDeserializer(classOf[Any])
-
-  override def deserialize(
-      jsonParser: JsonParser,
-      deserializationContext: DeserializationContext): DataType = {
-    val json = delegate.deserialize(jsonParser, deserializationContext)
-    DataType.parseDataType(json.asInstanceOf[JValue])
   }
 }

@@ -16,10 +16,6 @@
 #
 
 .First <- function() {
-  if (utils::compareVersion(paste0(R.version$major, ".", R.version$minor), "3.4.0") == -1) {
-    warning("Support for R prior to version 3.4 is deprecated since Spark 3.0.0")
-  }
-
   packageDir <- Sys.getenv("SPARKR_PACKAGE_DIR")
   dirs <- strsplit(packageDir, ",")[[1]]
   .libPaths(c(dirs, .libPaths()))

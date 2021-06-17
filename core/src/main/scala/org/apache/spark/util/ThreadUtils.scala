@@ -18,17 +18,16 @@
 package org.apache.spark.util
 
 import java.util.concurrent._
+import java.util.concurrent.{Future => JFuture}
 import java.util.concurrent.locks.ReentrantLock
 
 import scala.concurrent.{Awaitable, ExecutionContext, ExecutionContextExecutor, Future}
 import scala.concurrent.duration.{Duration, FiniteDuration}
-import scala.language.higherKinds
 import scala.util.control.NonFatal
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder
 
 import org.apache.spark.SparkException
-import org.apache.spark.rpc.RpcAbortException
 
 private[spark] object ThreadUtils {
 
@@ -298,11 +297,27 @@ private[spark] object ThreadUtils {
       // TimeoutException and RpcAbortException is thrown in the current thread, so not need to warp
       // the exception.
       case NonFatal(t)
-          if !t.isInstanceOf[TimeoutException] && !t.isInstanceOf[RpcAbortException] =>
+          if !t.isInstanceOf[TimeoutException] =>
         throw new SparkException("Exception thrown in awaitResult: ", t)
     }
   }
   // scalastyle:on awaitresult
+
+  @throws(classOf[SparkException])
+  def awaitResult[T](future: JFuture[T], atMost: Duration): T = {
+    try {
+      atMost match {
+        case Duration.Inf => future.get()
+        case _ => future.get(atMost._1, atMost._2)
+      }
+    } catch {
+      case e: SparkFatalException =>
+        throw e.throwable
+      case NonFatal(t)
+        if !t.isInstanceOf[TimeoutException] =>
+        throw new SparkException("Exception thrown in awaitResult: ", t)
+    }
+  }
 
   // scalastyle:off awaitready
   /**

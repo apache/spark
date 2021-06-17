@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.columnar
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.CalendarInterval
 
 class ColumnStatsSuite extends SparkFunSuite {
   testColumnStats(classOf[BooleanColumnStats], BOOLEAN, Array(true, false, 0))
@@ -31,7 +30,7 @@ class ColumnStatsSuite extends SparkFunSuite {
   testColumnStats(classOf[DoubleColumnStats], DOUBLE, Array(Double.MaxValue, Double.MinValue, 0))
   testColumnStats(classOf[StringColumnStats], STRING, Array(null, null, 0))
   testDecimalColumnStats(Array(null, null, 0))
-  testIntervalColumnStats(Array(CalendarInterval.MAX_VALUE, CalendarInterval.MIN_VALUE, 0))
+  testIntervalColumnStats(Array(null, null, 0))
 
   def testColumnStats[T <: AtomicType, U <: ColumnStats](
       columnStatsClass: Class[U],
@@ -126,12 +125,8 @@ class ColumnStatsSuite extends SparkFunSuite {
       val rows = Seq.fill(10)(makeRandomRow(columnType)) ++ Seq.fill(10)(makeNullRow(1))
       rows.foreach(columnStats.gatherStats(_, 0))
 
-      val values = rows.take(10).map(_.get(0, columnType.dataType))
-      val ordering = CalendarIntervalType.ordering.asInstanceOf[Ordering[Any]]
       val stats = columnStats.collectedStatistics
 
-      assertResult(values.min(ordering), "Wrong lower bound")(stats(0))
-      assertResult(values.max(ordering), "Wrong upper bound")(stats(1))
       assertResult(10, "Wrong null count")(stats(2))
       assertResult(20, "Wrong row count")(stats(3))
       assertResult(stats(4), "Wrong size in bytes") {

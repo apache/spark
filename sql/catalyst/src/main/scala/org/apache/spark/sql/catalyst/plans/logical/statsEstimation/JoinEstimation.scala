@@ -323,7 +323,7 @@ case class JoinEstimation(join: Join) extends Logging {
         outputAttrStats += a -> newColStat
       }
     }
-    outputAttrStats
+    outputAttrStats.toSeq
   }
 
   private def extractJoinKeysWithColStats(

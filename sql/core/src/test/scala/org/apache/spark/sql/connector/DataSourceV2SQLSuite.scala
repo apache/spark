@@ -17,32 +17,40 @@
 
 package org.apache.spark.sql.connector
 
+import java.sql.Timestamp
+import java.time.LocalDate
+
 import scala.collection.JavaConverters._
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NamespaceAlreadyExistsException, NoSuchDatabaseException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NamespaceAlreadyExistsException, NoSuchDatabaseException, NoSuchNamespaceException, TableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
+import org.apache.spark.sql.connector.catalog.CatalogV2Util.withDefaultOwnership
+import org.apache.spark.sql.execution.columnar.InMemoryRelation
+import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
-import org.apache.spark.sql.internal.SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION
+import org.apache.spark.sql.internal.SQLConf.{PARTITION_OVERWRITE_MODE, PartitionOverwriteMode, V2_SESSION_CATALOG_IMPLEMENTATION}
+import org.apache.spark.sql.internal.connector.SimpleTableProvider
 import org.apache.spark.sql.sources.SimpleScanSource
-import org.apache.spark.sql.types.{BooleanType, LongType, StringType, StructType}
+import org.apache.spark.sql.types.{BooleanType, LongType, MetadataBuilder, StringType, StructField, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.Utils
 
 class DataSourceV2SQLSuite
   extends InsertIntoTests(supportsDynamicOverwrite = true, includeSQLOnlyTests = true)
-  with AlterTableTests {
+  with AlterTableTests with DatasourceV2SQLBase {
 
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
   private val v2Source = classOf[FakeV2Provider].getName
   override protected val v2Format = v2Source
   override protected val catalogAndNamespace = "testcat.ns1.ns2."
-
-  private def catalog(name: String): CatalogPlugin = {
-    spark.sessionState.catalogManager.catalog(name)
-  }
+  private val defaultUser: String = Utils.getCurrentUserName()
 
   protected def doInsert(tableName: String, insert: DataFrame, mode: SaveMode): Unit = {
     val tmpView = "tmp_view"
@@ -64,36 +72,18 @@ class DataSourceV2SQLSuite
     v2Catalog.loadTable(Identifier.of(namespace, nameParts.last))
   }
 
-  before {
-    spark.conf.set("spark.sql.catalog.testcat", classOf[InMemoryTableCatalog].getName)
-    spark.conf.set(
-        "spark.sql.catalog.testcat_atomic", classOf[StagingInMemoryTableCatalog].getName)
-    spark.conf.set("spark.sql.catalog.testcat2", classOf[InMemoryTableCatalog].getName)
-    spark.conf.set(
-      V2_SESSION_CATALOG_IMPLEMENTATION.key, classOf[InMemoryTableSessionCatalog].getName)
-
-    val df = spark.createDataFrame(Seq((1L, "a"), (2L, "b"), (3L, "c"))).toDF("id", "data")
-    df.createOrReplaceTempView("source")
-    val df2 = spark.createDataFrame(Seq((4L, "d"), (5L, "e"), (6L, "f"))).toDF("id", "data")
-    df2.createOrReplaceTempView("source2")
-  }
-
-  after {
-    spark.sessionState.catalog.reset()
-    spark.sessionState.catalogManager.reset()
-    spark.sessionState.conf.clear()
-  }
-
   test("CreateTable: use v2 plan because catalog is set") {
-    spark.sql("CREATE TABLE testcat.table_name (id bigint, data string) USING foo")
+    spark.sql("CREATE TABLE testcat.table_name (id bigint NOT NULL, data string) USING foo")
 
     val testCatalog = catalog("testcat").asTableCatalog
     val table = testCatalog.loadTable(Identifier.of(Array(), "table_name"))
 
     assert(table.name == "testcat.table_name")
     assert(table.partitioning.isEmpty)
-    assert(table.properties == Map("provider" -> "foo").asJava)
-    assert(table.schema == new StructType().add("id", LongType).add("data", StringType))
+    assert(table.properties == withDefaultOwnership(Map("provider" -> "foo")).asJava)
+    assert(table.schema == new StructType()
+      .add("id", LongType, nullable = false)
+      .add("data", StringType))
 
     val rdd = spark.sparkContext.parallelize(table.asInstanceOf[InMemoryTable].rows)
     checkAnswer(spark.internalCreateDataFrame(rdd, table.schema), Seq.empty)
@@ -116,6 +106,11 @@ class DataSourceV2SQLSuite
       Row("", "", ""),
       Row("# Partitioning", "", ""),
       Row("Part 0", "id", "")))
+
+    val e = intercept[AnalysisException] {
+      sql("DESCRIBE TABLE testcat.table_name PARTITION (id = 1)")
+    }
+    assert(e.message.contains("DESCRIBE does not support partition for v2 tables"))
   }
 
   test("DescribeTable with v2 catalog when table does not exist.") {
@@ -146,24 +141,94 @@ class DataSourceV2SQLSuite
       Array("# Partitioning", "", ""),
       Array("Part 0", "id", ""),
       Array("", "", ""),
+      Array("# Metadata Columns", "", ""),
+      Array("index", "int", "Metadata column used to conflict with a data column"),
+      Array("_partition", "string", "Partition key used to store the row"),
+      Array("", "", ""),
       Array("# Detailed Table Information", "", ""),
       Array("Name", "testcat.table_name", ""),
       Array("Comment", "this is a test table", ""),
       Array("Location", "/tmp/testcat/table_name", ""),
       Array("Provider", "foo", ""),
+      Array(TableCatalog.PROP_OWNER.capitalize, defaultUser, ""),
       Array("Table Properties", "[bar=baz]", "")))
+  }
 
+  test("Describe column for v2 catalog") {
+    val t = "testcat.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id bigint, data string COMMENT 'hello') USING foo")
+      val df1 = sql(s"DESCRIBE $t id")
+      assert(df1.schema.map(field => (field.name, field.dataType))
+        === Seq(("info_name", StringType), ("info_value", StringType)))
+      assert(df1.collect === Seq(
+        Row("col_name", "id"),
+        Row("data_type", "bigint"),
+        Row("comment", "NULL")))
+      val df2 = sql(s"DESCRIBE $t data")
+      assert(df2.schema.map(field => (field.name, field.dataType))
+        === Seq(("info_name", StringType), ("info_value", StringType)))
+      assert(df2.collect === Seq(
+        Row("col_name", "data"),
+        Row("data_type", "string"),
+        Row("comment", "hello")))
+
+      assertAnalysisError(
+        s"DESCRIBE $t invalid_col",
+        "cannot resolve 'invalid_col' given input columns: [testcat.tbl.data, testcat.tbl.id]")
+    }
+  }
+
+  test("Describe column for v2 catalog should work with qualified columns") {
+    val t = "testcat.ns.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id bigint) USING foo")
+      Seq("testcat.ns.tbl.id", "ns.tbl.id", "tbl.id", "id").foreach { col =>
+        val df = sql(s"DESCRIBE $t $col")
+        assert(df.schema.map(field => (field.name, field.dataType))
+          === Seq(("info_name", StringType), ("info_value", StringType)))
+        assert(df.collect === Seq(
+          Row("col_name", "id"),
+          Row("data_type", "bigint"),
+          Row("comment", "NULL")))
+      }
+    }
+  }
+
+  test("Describing nested column for v2 catalog is not supported") {
+    val t = "testcat.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (d struct<a: INT, b: INT>) USING foo")
+      assertAnalysisError(
+        s"describe $t d.a",
+        "DESC TABLE COLUMN does not support nested column")
+    }
+  }
+
+  test("SPARK-33004: Describe column should resolve to a temporary view first") {
+    withTable("testcat.ns.t") {
+      withTempView("t") {
+        sql("CREATE TABLE testcat.ns.t (id bigint) USING foo")
+        sql("CREATE TEMPORARY VIEW t AS SELECT 2 as i")
+        sql("USE testcat.ns")
+        checkAnswer(
+          sql("DESCRIBE t i"),
+          Seq(Row("col_name", "i"),
+            Row("data_type", "int"),
+            Row("comment", "NULL")))
+      }
+    }
   }
 
   test("CreateTable: use v2 plan and session catalog when provider is v2") {
     spark.sql(s"CREATE TABLE table_name (id bigint, data string) USING $v2Source")
 
     val testCatalog = catalog(SESSION_CATALOG_NAME).asTableCatalog
-    val table = testCatalog.loadTable(Identifier.of(Array(), "table_name"))
+    val table = testCatalog.loadTable(Identifier.of(Array("default"), "table_name"))
 
     assert(table.name == "default.table_name")
     assert(table.partitioning.isEmpty)
-    assert(table.properties == Map("provider" -> v2Source).asJava)
+    assert(table.properties == withDefaultOwnership(Map("provider" -> v2Source)).asJava)
     assert(table.schema == new StructType().add("id", LongType).add("data", StringType))
 
     val rdd = spark.sparkContext.parallelize(table.asInstanceOf[InMemoryTable].rows)
@@ -178,7 +243,7 @@ class DataSourceV2SQLSuite
     val table = testCatalog.loadTable(Identifier.of(Array(), "table_name"))
     assert(table.name == "testcat.table_name")
     assert(table.partitioning.isEmpty)
-    assert(table.properties == Map("provider" -> "foo").asJava)
+    assert(table.properties == withDefaultOwnership(Map("provider" -> "foo")).asJava)
     assert(table.schema == new StructType().add("id", LongType).add("data", StringType))
 
     // run a second create query that should fail
@@ -192,7 +257,7 @@ class DataSourceV2SQLSuite
     val table2 = testCatalog.loadTable(Identifier.of(Array(), "table_name"))
     assert(table2.name == "testcat.table_name")
     assert(table2.partitioning.isEmpty)
-    assert(table2.properties == Map("provider" -> "foo").asJava)
+    assert(table2.properties == withDefaultOwnership(Map("provider" -> "foo")).asJava)
     assert(table2.schema == new StructType().add("id", LongType).add("data", StringType))
 
     // check that the table is still empty
@@ -209,7 +274,7 @@ class DataSourceV2SQLSuite
 
     assert(table.name == "testcat.table_name")
     assert(table.partitioning.isEmpty)
-    assert(table.properties == Map("provider" -> "foo").asJava)
+    assert(table.properties == withDefaultOwnership(Map("provider" -> "foo")).asJava)
     assert(table.schema == new StructType().add("id", LongType).add("data", StringType))
 
     spark.sql("CREATE TABLE IF NOT EXISTS testcat.table_name (id bigint, data string) USING bar")
@@ -218,7 +283,7 @@ class DataSourceV2SQLSuite
     val table2 = testCatalog.loadTable(Identifier.of(Array(), "table_name"))
     assert(table2.name == "testcat.table_name")
     assert(table2.partitioning.isEmpty)
-    assert(table2.properties == Map("provider" -> "foo").asJava)
+    assert(table2.properties == withDefaultOwnership(Map("provider" -> "foo")).asJava)
     assert(table2.schema == new StructType().add("id", LongType).add("data", StringType))
 
     // check that the table is still empty
@@ -235,12 +300,53 @@ class DataSourceV2SQLSuite
 
     assert(table.name == "testcat.table_name")
     assert(table.partitioning.isEmpty)
-    assert(table.properties == Map("provider" -> "foo").asJava)
+    assert(table.properties == withDefaultOwnership(Map("provider" -> "foo")).asJava)
     assert(table.schema == new StructType().add("id", LongType).add("data", StringType))
 
     // check that the table is empty
     val rdd = spark.sparkContext.parallelize(table.asInstanceOf[InMemoryTable].rows)
     checkAnswer(spark.internalCreateDataFrame(rdd, table.schema), Seq.empty)
+  }
+
+  test("CreateTable: without USING clause") {
+    withSQLConf(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT.key -> "false") {
+      // unset this config to use the default v2 session catalog.
+      spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)
+      val testCatalog = catalog("testcat").asTableCatalog
+
+      sql("CREATE TABLE testcat.t1 (id int)")
+      val t1 = testCatalog.loadTable(Identifier.of(Array(), "t1"))
+      // Spark shouldn't set the default provider for catalog plugins.
+      assert(!t1.properties.containsKey(TableCatalog.PROP_PROVIDER))
+
+      sql("CREATE TABLE t2 (id int)")
+      val t2 = spark.sessionState.catalogManager.v2SessionCatalog.asTableCatalog
+        .loadTable(Identifier.of(Array("default"), "t2")).asInstanceOf[V1Table]
+      // Spark should set the default provider as DEFAULT_DATA_SOURCE_NAME for the session catalog.
+      assert(t2.v1Table.provider == Some(conf.defaultDataSourceName))
+    }
+  }
+
+  test("CreateTable/ReplaceTable: invalid schema if has interval type") {
+    Seq("CREATE", "REPLACE").foreach { action =>
+      val e1 = intercept[AnalysisException](
+        sql(s"$action TABLE table_name (id int, value interval) USING $v2Format"))
+      assert(e1.getMessage.contains(s"Cannot use interval type in the table schema."))
+      val e2 = intercept[AnalysisException](
+        sql(s"$action TABLE table_name (id array<interval>) USING $v2Format"))
+      assert(e2.getMessage.contains(s"Cannot use interval type in the table schema."))
+    }
+  }
+
+  test("CTAS/RTAS: invalid schema if has interval type") {
+    Seq("CREATE", "REPLACE").foreach { action =>
+      val e1 = intercept[AnalysisException](
+        sql(s"$action TABLE table_name USING $v2Format as select interval 1 day"))
+      assert(e1.getMessage.contains(s"Cannot use interval type in the table schema."))
+      val e2 = intercept[AnalysisException](
+        sql(s"$action TABLE table_name USING $v2Format as select array(interval 1 day)"))
+      assert(e2.getMessage.contains(s"Cannot use interval type in the table schema."))
+    }
   }
 
   test("CreateTableAsSelect: use v2 plan because catalog is set") {
@@ -257,7 +363,38 @@ class DataSourceV2SQLSuite
 
         assert(table.name == identifier)
         assert(table.partitioning.isEmpty)
-        assert(table.properties == Map("provider" -> "foo").asJava)
+        assert(table.properties == withDefaultOwnership(Map("provider" -> "foo")).asJava)
+        assert(table.schema == new StructType()
+          .add("id", LongType)
+          .add("data", StringType))
+
+        val rdd = spark.sparkContext.parallelize(table.asInstanceOf[InMemoryTable].rows)
+        checkAnswer(spark.internalCreateDataFrame(rdd, table.schema), spark.table("source"))
+    }
+  }
+
+  test("CreateTableAsSelect: do not double execute on collect(), take() and other queries") {
+    val basicCatalog = catalog("testcat").asTableCatalog
+    val atomicCatalog = catalog("testcat_atomic").asTableCatalog
+    val basicIdentifier = "testcat.table_name"
+    val atomicIdentifier = "testcat_atomic.table_name"
+
+    Seq((basicCatalog, basicIdentifier), (atomicCatalog, atomicIdentifier)).foreach {
+      case (catalog, identifier) =>
+        val df = spark.sql(s"CREATE TABLE $identifier USING foo AS SELECT id, data FROM source")
+
+        df.collect()
+        df.take(5)
+        df.tail(5)
+        df.where("true").collect()
+        df.where("true").take(5)
+        df.where("true").tail(5)
+
+        val table = catalog.loadTable(Identifier.of(Array(), "table_name"))
+
+        assert(table.name == identifier)
+        assert(table.partitioning.isEmpty)
+        assert(table.properties == withDefaultOwnership(Map("provider" -> "foo")).asJava)
         assert(table.schema == new StructType()
           .add("id", LongType)
           .add("data", StringType))
@@ -284,13 +421,50 @@ class DataSourceV2SQLSuite
         assert(replacedTable != originalTable, "Table should have been replaced.")
         assert(replacedTable.name == identifier)
         assert(replacedTable.partitioning.isEmpty)
-        assert(replacedTable.properties == Map("provider" -> "foo").asJava)
+        assert(replacedTable.properties == withDefaultOwnership(Map("provider" -> "foo")).asJava)
         assert(replacedTable.schema == new StructType().add("id", LongType))
 
         val rdd = spark.sparkContext.parallelize(replacedTable.asInstanceOf[InMemoryTable].rows)
         checkAnswer(
           spark.internalCreateDataFrame(rdd, replacedTable.schema),
           spark.table("source").select("id"))
+    }
+  }
+
+  Seq("REPLACE", "CREATE OR REPLACE").foreach { cmd =>
+    test(s"ReplaceTableAsSelect: do not double execute $cmd on collect()") {
+      val basicCatalog = catalog("testcat").asTableCatalog
+      val atomicCatalog = catalog("testcat_atomic").asTableCatalog
+      val basicIdentifier = "testcat.table_name"
+      val atomicIdentifier = "testcat_atomic.table_name"
+
+      Seq((basicCatalog, basicIdentifier), (atomicCatalog, atomicIdentifier)).foreach {
+        case (catalog, identifier) =>
+          spark.sql(s"CREATE TABLE $identifier USING foo AS SELECT id, data FROM source")
+          val originalTable = catalog.loadTable(Identifier.of(Array(), "table_name"))
+
+          val df = spark.sql(s"$cmd TABLE $identifier USING foo AS SELECT id FROM source")
+
+          df.collect()
+          df.take(5)
+          df.tail(5)
+          df.where("true").collect()
+          df.where("true").take(5)
+          df.where("true").tail(5)
+
+          val replacedTable = catalog.loadTable(Identifier.of(Array(), "table_name"))
+
+          assert(replacedTable != originalTable, "Table should have been replaced.")
+          assert(replacedTable.name == identifier)
+          assert(replacedTable.partitioning.isEmpty)
+          assert(replacedTable.properties == withDefaultOwnership(Map("provider" -> "foo")).asJava)
+          assert(replacedTable.schema == new StructType().add("id", LongType))
+
+          val rdd = spark.sparkContext.parallelize(replacedTable.asInstanceOf[InMemoryTable].rows)
+          checkAnswer(
+            spark.internalCreateDataFrame(rdd, replacedTable.schema),
+            spark.table("source").select("id"))
+      }
     }
   }
 
@@ -302,7 +476,7 @@ class DataSourceV2SQLSuite
 
     intercept[Exception] {
       spark.sql("REPLACE TABLE testcat.table_name" +
-        s" USING foo OPTIONS (`${InMemoryTable.SIMULATE_FAILED_WRITE_OPTION}`=true)" +
+        s" USING foo TBLPROPERTIES (`${InMemoryTable.SIMULATE_FAILED_WRITE_OPTION}`=true)" +
         s" AS SELECT id FROM source")
     }
 
@@ -335,7 +509,7 @@ class DataSourceV2SQLSuite
 
     intercept[Exception] {
       spark.sql("REPLACE TABLE testcat_atomic.table_name" +
-        s" USING foo OPTIONS (`${InMemoryTable.SIMULATE_FAILED_WRITE_OPTION}=true)" +
+        s" USING foo TBLPROPERTIES (`${InMemoryTable.SIMULATE_FAILED_WRITE_OPTION}=true)" +
         s" AS SELECT id FROM source")
     }
 
@@ -360,14 +534,14 @@ class DataSourceV2SQLSuite
     val table = testCatalog.loadTable(Identifier.of(Array(), "table_name"))
     assert(table.asInstanceOf[InMemoryTable].rows.nonEmpty)
 
-    spark.sql("REPLACE TABLE testcat.table_name (id bigint) USING foo")
+    spark.sql("REPLACE TABLE testcat.table_name (id bigint NOT NULL) USING foo")
     val replaced = testCatalog.loadTable(Identifier.of(Array(), "table_name"))
 
     assert(replaced.asInstanceOf[InMemoryTable].rows.isEmpty,
         "Replaced table should have no rows after committing.")
     assert(replaced.schema().fields.length === 1,
         "Replaced table should have new schema.")
-    assert(replaced.schema().fields(0).name === "id",
+    assert(replaced.schema().fields(0) === StructField("id", LongType, nullable = false),
       "Replaced table should have new schema.")
   }
 
@@ -418,11 +592,11 @@ class DataSourceV2SQLSuite
     spark.sql(s"CREATE TABLE table_name USING $v2Source AS SELECT id, data FROM source")
 
     val testCatalog = catalog(SESSION_CATALOG_NAME).asTableCatalog
-    val table = testCatalog.loadTable(Identifier.of(Array(), "table_name"))
+    val table = testCatalog.loadTable(Identifier.of(Array("default"), "table_name"))
 
     assert(table.name == "default.table_name")
     assert(table.partitioning.isEmpty)
-    assert(table.properties == Map("provider" -> v2Source).asJava)
+    assert(table.properties == withDefaultOwnership(Map("provider" -> v2Source)).asJava)
     assert(table.schema == new StructType()
         .add("id", LongType)
         .add("data", StringType))
@@ -439,7 +613,7 @@ class DataSourceV2SQLSuite
     val table = testCatalog.loadTable(Identifier.of(Array(), "table_name"))
     assert(table.name == "testcat.table_name")
     assert(table.partitioning.isEmpty)
-    assert(table.properties == Map("provider" -> "foo").asJava)
+    assert(table.properties == withDefaultOwnership(Map("provider" -> "foo")).asJava)
     assert(table.schema == new StructType()
         .add("id", LongType)
         .add("data", StringType))
@@ -459,7 +633,7 @@ class DataSourceV2SQLSuite
     val table2 = testCatalog.loadTable(Identifier.of(Array(), "table_name"))
     assert(table2.name == "testcat.table_name")
     assert(table2.partitioning.isEmpty)
-    assert(table2.properties == Map("provider" -> "foo").asJava)
+    assert(table2.properties == withDefaultOwnership(Map("provider" -> "foo")).asJava)
     assert(table2.schema == new StructType()
         .add("id", LongType)
         .add("data", StringType))
@@ -477,7 +651,7 @@ class DataSourceV2SQLSuite
 
     assert(table.name == "testcat.table_name")
     assert(table.partitioning.isEmpty)
-    assert(table.properties == Map("provider" -> "foo").asJava)
+    assert(table.properties == withDefaultOwnership(Map("provider" -> "foo")).asJava)
     assert(table.schema == new StructType()
         .add("id", LongType)
         .add("data", StringType))
@@ -508,7 +682,7 @@ class DataSourceV2SQLSuite
 
     assert(table.name == "testcat.table_name")
     assert(table.partitioning.isEmpty)
-    assert(table.properties == Map("provider" -> "foo").asJava)
+    assert(table.properties == withDefaultOwnership(Map("provider" -> "foo")).asJava)
     assert(table.schema == new StructType()
         .add("id", LongType)
         .add("data", StringType))
@@ -530,7 +704,7 @@ class DataSourceV2SQLSuite
     // The fact that the following line doesn't throw an exception means, the session catalog
     // can load the table.
     val t = catalog(SESSION_CATALOG_NAME).asTableCatalog
-      .loadTable(Identifier.of(Array.empty, "table_name"))
+      .loadTable(Identifier.of(Array("default"), "table_name"))
     assert(t.isInstanceOf[V1Table], "V1 table wasn't returned as an unresolved table")
   }
 
@@ -548,7 +722,7 @@ class DataSourceV2SQLSuite
 
         assert(table.name == identifier)
         assert(table.partitioning.isEmpty)
-        assert(table.properties == Map("provider" -> "foo").asJava)
+        assert(table.properties == withDefaultOwnership(Map("provider" -> "foo")).asJava)
         assert(table.schema == new StructType().add("i", "int"))
 
         val rdd = spark.sparkContext.parallelize(table.asInstanceOf[InMemoryTable].rows)
@@ -560,28 +734,146 @@ class DataSourceV2SQLSuite
     }
   }
 
-  test("DropTable: basic") {
-    val tableName = "testcat.ns1.ns2.tbl"
-    val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
-    sql(s"CREATE TABLE $tableName USING foo AS SELECT id, data FROM source")
-    assert(catalog("testcat").asTableCatalog.tableExists(ident) === true)
-    sql(s"DROP TABLE $tableName")
-    assert(catalog("testcat").asTableCatalog.tableExists(ident) === false)
+  // TODO: ignored by SPARK-31707, restore the test after create table syntax unification
+  ignore("CreateTableAsSelect: without USING clause") {
+    // unset this config to use the default v2 session catalog.
+    spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)
+    val testCatalog = catalog("testcat").asTableCatalog
+
+    sql("CREATE TABLE testcat.t1 AS SELECT 1 i")
+    val t1 = testCatalog.loadTable(Identifier.of(Array(), "t1"))
+    // Spark shouldn't set the default provider for catalog plugins.
+    assert(!t1.properties.containsKey(TableCatalog.PROP_PROVIDER))
+
+    sql("CREATE TABLE t2 AS SELECT 1 i")
+    val t2 = spark.sessionState.catalogManager.v2SessionCatalog.asTableCatalog
+      .loadTable(Identifier.of(Array("default"), "t2")).asInstanceOf[V1Table]
+    // Spark should set the default provider as DEFAULT_DATA_SOURCE_NAME for the session catalog.
+    assert(t2.v1Table.provider == Some(conf.defaultDataSourceName))
   }
 
-  test("DropTable: table qualified with the session catalog name") {
-    val ident = Identifier.of(Array(), "tbl")
-    sql("CREATE TABLE tbl USING json AS SELECT 1 AS i")
-    assert(catalog("spark_catalog").asTableCatalog.tableExists(ident) === true)
-    sql("DROP TABLE spark_catalog.tbl")
-    assert(catalog("spark_catalog").asTableCatalog.tableExists(ident) === false)
-  }
+  test("SPARK-34039: ReplaceTable (atomic or non-atomic) should invalidate cache") {
+    Seq("testcat.ns.t", "testcat_atomic.ns.t").foreach { t =>
+      val view = "view"
+      withTable(t) {
+        withTempView(view) {
+          sql(s"CREATE TABLE $t USING foo AS SELECT id, data FROM source")
+          sql(s"CACHE TABLE $view AS SELECT id FROM $t")
+          checkAnswer(sql(s"SELECT * FROM $t"), spark.table("source"))
+          checkAnswer(sql(s"SELECT * FROM $view"), spark.table("source").select("id"))
 
-  test("DropTable: if exists") {
-    intercept[NoSuchTableException] {
-      sql(s"DROP TABLE testcat.db.notbl")
+          val oldView = spark.table(view)
+          sql(s"REPLACE TABLE $t (a bigint) USING foo")
+          assert(spark.sharedState.cacheManager.lookupCachedData(oldView).isEmpty)
+        }
+      }
     }
-    sql(s"DROP TABLE IF EXISTS testcat.db.notbl")
+  }
+
+  test("SPARK-33492: ReplaceTableAsSelect (atomic or non-atomic) should invalidate cache") {
+    Seq("testcat.ns.t", "testcat_atomic.ns.t").foreach { t =>
+      val view = "view"
+      withTable(t) {
+        withTempView(view) {
+          sql(s"CREATE TABLE $t USING foo AS SELECT id, data FROM source")
+          sql(s"CACHE TABLE $view AS SELECT id FROM $t")
+          checkAnswer(sql(s"SELECT * FROM $t"), spark.table("source"))
+          checkAnswer(sql(s"SELECT * FROM $view"), spark.table("source").select("id"))
+
+          sql(s"REPLACE TABLE $t USING foo AS SELECT id FROM source")
+          assert(spark.sharedState.cacheManager.lookupCachedData(spark.table(view)).isEmpty)
+        }
+      }
+    }
+  }
+
+  test("SPARK-33492: AppendData should refresh cache") {
+    import testImplicits._
+
+    val t = "testcat.ns.t"
+    val view = "view"
+    withTable(t) {
+      withTempView(view) {
+        Seq((1, "a")).toDF("i", "j").write.saveAsTable(t)
+        sql(s"CACHE TABLE $view AS SELECT i FROM $t")
+        checkAnswer(sql(s"SELECT * FROM $t"), Row(1, "a") :: Nil)
+        checkAnswer(sql(s"SELECT * FROM $view"), Row(1) :: Nil)
+
+        Seq((2, "b")).toDF("i", "j").write.mode(SaveMode.Append).saveAsTable(t)
+
+        assert(spark.sharedState.cacheManager.lookupCachedData(spark.table(view)).isDefined)
+        checkAnswer(sql(s"SELECT * FROM $t"), Row(1, "a") :: Row(2, "b") :: Nil)
+        checkAnswer(sql(s"SELECT * FROM $view"), Row(1) :: Row(2) :: Nil)
+      }
+    }
+  }
+
+  test("SPARK-33492: OverwriteByExpression should refresh cache") {
+    val t = "testcat.ns.t"
+    val view = "view"
+    withTable(t) {
+      withTempView(view) {
+        sql(s"CREATE TABLE $t USING foo AS SELECT id, data FROM source")
+        sql(s"CACHE TABLE $view AS SELECT id FROM $t")
+        checkAnswer(sql(s"SELECT * FROM $t"), spark.table("source"))
+        checkAnswer(sql(s"SELECT * FROM $view"), spark.table("source").select("id"))
+
+        sql(s"INSERT OVERWRITE TABLE $t VALUES (1, 'a')")
+
+        assert(spark.sharedState.cacheManager.lookupCachedData(spark.table(view)).isDefined)
+        checkAnswer(sql(s"SELECT * FROM $t"), Row(1, "a") :: Nil)
+        checkAnswer(sql(s"SELECT * FROM $view"), Row(1) :: Nil)
+      }
+    }
+  }
+
+  test("SPARK-33492: OverwritePartitionsDynamic should refresh cache") {
+    import testImplicits._
+
+    val t = "testcat.ns.t"
+    val view = "view"
+    withTable(t) {
+      withTempView(view) {
+        Seq((1, "a", 1)).toDF("i", "j", "k").write.partitionBy("k") saveAsTable(t)
+        sql(s"CACHE TABLE $view AS SELECT i FROM $t")
+        checkAnswer(sql(s"SELECT * FROM $t"), Row(1, "a", 1) :: Nil)
+        checkAnswer(sql(s"SELECT * FROM $view"), Row(1) :: Nil)
+
+        Seq((2, "b", 1)).toDF("i", "j", "k").writeTo(t).overwritePartitions()
+
+        assert(spark.sharedState.cacheManager.lookupCachedData(spark.table(view)).isDefined)
+        checkAnswer(sql(s"SELECT * FROM $t"), Row(2, "b", 1) :: Nil)
+        checkAnswer(sql(s"SELECT * FROM $view"), Row(2) :: Nil)
+      }
+    }
+  }
+
+  test("SPARK-34947: micro batch streaming write should invalidate cache") {
+    import testImplicits._
+
+    val t = "testcat.ns.t"
+    withTable(t) {
+      withTempDir { checkpointDir =>
+        sql(s"CREATE TABLE $t (id bigint, data string) USING foo")
+        sql(s"INSERT INTO $t VALUES (1L, 'a')")
+        sql(s"CACHE TABLE $t")
+
+        val inputData = MemoryStream[(Long, String)]
+        val df = inputData.toDF().toDF("id", "data")
+        val query = df
+          .writeStream
+          .option("checkpointLocation", checkpointDir.getAbsolutePath)
+          .toTable(t)
+
+        val newData = Seq((2L, "b"))
+        inputData.addData(newData)
+        query.processAllAvailable()
+        query.stop()
+
+        assert(!spark.catalog.isCached("testcat.ns.t"))
+        checkAnswer(sql(s"SELECT * FROM $t"), Row(1L, "a") :: Row(2L, "b") :: Nil)
+      }
+    }
   }
 
   test("Relation: basic") {
@@ -616,8 +908,9 @@ class DataSourceV2SQLSuite
 
   test("Relation: view text") {
     val t1 = "testcat.ns1.ns2.tbl"
+    val v1 = "view1"
     withTable(t1) {
-      withView("view1") { v1: String =>
+      withView(v1) {
         sql(s"CREATE TABLE $t1 USING foo AS SELECT id, data FROM source")
         sql(s"CREATE VIEW $v1 AS SELECT * from $t1")
         checkAnswer(sql(s"TABLE $v1"), spark.table("source"))
@@ -644,6 +937,59 @@ class DataSourceV2SQLSuite
     }
   }
 
+  test("qualified column names for v2 tables") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id bigint, point struct<x: bigint, y: bigint>) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, (10, 20))")
+
+      def check(tbl: String): Unit = {
+        checkAnswer(
+          sql(s"SELECT testcat.ns1.ns2.tbl.id, testcat.ns1.ns2.tbl.point.x FROM $tbl"),
+          Row(1, 10))
+        checkAnswer(sql(s"SELECT ns1.ns2.tbl.id, ns1.ns2.tbl.point.x FROM $tbl"), Row(1, 10))
+        checkAnswer(sql(s"SELECT ns2.tbl.id, ns2.tbl.point.x FROM $tbl"), Row(1, 10))
+        checkAnswer(sql(s"SELECT tbl.id, tbl.point.x FROM $tbl"), Row(1, 10))
+      }
+
+      // Test with qualified table name "testcat.ns1.ns2.tbl".
+      check(t)
+
+      // Test if current catalog and namespace is respected in column resolution.
+      sql("USE testcat.ns1.ns2")
+      check("tbl")
+
+      val ex = intercept[AnalysisException] {
+        sql(s"SELECT ns1.ns2.ns3.tbl.id from $t")
+      }
+      assert(ex.getMessage.contains("cannot resolve 'ns1.ns2.ns3.tbl.id"))
+    }
+  }
+
+  test("qualified column names for v1 tables") {
+    Seq(true, false).foreach { useV1Table =>
+      val format = if (useV1Table) "json" else v2Format
+      if (useV1Table) {
+        // unset this config to use the default v2 session catalog.
+        spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)
+      } else {
+        spark.conf.set(
+          V2_SESSION_CATALOG_IMPLEMENTATION.key, classOf[InMemoryTableSessionCatalog].getName)
+      }
+
+      withTable("t") {
+        sql(s"CREATE TABLE t USING $format AS SELECT 1 AS i")
+        checkAnswer(sql("select i from t"), Row(1))
+        checkAnswer(sql("select t.i from t"), Row(1))
+        checkAnswer(sql("select default.t.i from t"), Row(1))
+        checkAnswer(sql("select spark_catalog.default.t.i from t"), Row(1))
+        checkAnswer(sql("select t.i from spark_catalog.default.t"), Row(1))
+        checkAnswer(sql("select default.t.i from spark_catalog.default.t"), Row(1))
+        checkAnswer(sql("select spark_catalog.default.t.i from spark_catalog.default.t"), Row(1))
+      }
+    }
+  }
+
   test("InsertInto: append - across catalog") {
     val t1 = "testcat.ns1.ns2.tbl"
     val t2 = "testcat2.db.tbl"
@@ -655,172 +1001,22 @@ class DataSourceV2SQLSuite
     }
   }
 
-  test("ShowTables: using v2 catalog") {
-    spark.sql("CREATE TABLE testcat.db.table_name (id bigint, data string) USING foo")
-    spark.sql("CREATE TABLE testcat.n1.n2.db.table_name (id bigint, data string) USING foo")
-
-    runShowTablesSql("SHOW TABLES FROM testcat.db", Seq(Row("db", "table_name")))
-
-    runShowTablesSql(
-      "SHOW TABLES FROM testcat.n1.n2.db",
-      Seq(Row("n1.n2.db", "table_name")))
-  }
-
-  test("ShowTables: using v2 catalog with a pattern") {
-    spark.sql("CREATE TABLE testcat.db.table (id bigint, data string) USING foo")
-    spark.sql("CREATE TABLE testcat.db.table_name_1 (id bigint, data string) USING foo")
-    spark.sql("CREATE TABLE testcat.db.table_name_2 (id bigint, data string) USING foo")
-    spark.sql("CREATE TABLE testcat.db2.table_name_2 (id bigint, data string) USING foo")
-
-    runShowTablesSql(
-      "SHOW TABLES FROM testcat.db",
-      Seq(
-        Row("db", "table"),
-        Row("db", "table_name_1"),
-        Row("db", "table_name_2")))
-
-    runShowTablesSql(
-      "SHOW TABLES FROM testcat.db LIKE '*name*'",
-      Seq(Row("db", "table_name_1"), Row("db", "table_name_2")))
-
-    runShowTablesSql(
-      "SHOW TABLES FROM testcat.db LIKE '*2'",
-      Seq(Row("db", "table_name_2")))
-  }
-
-  test("ShowTables: using v2 catalog, namespace doesn't exist") {
-    runShowTablesSql("SHOW TABLES FROM testcat.unknown", Seq())
-  }
-
-  test("ShowTables: using v1 catalog") {
-    runShowTablesSql(
-      "SHOW TABLES FROM default",
-      Seq(Row("", "source", true), Row("", "source2", true)),
-      expectV2Catalog = false)
-  }
-
-  test("ShowTables: using v1 catalog, db doesn't exist ") {
-    // 'db' below resolves to a database name for v1 catalog because there is no catalog named
-    // 'db' and there is no default catalog set.
-    val exception = intercept[NoSuchDatabaseException] {
-      runShowTablesSql("SHOW TABLES FROM db", Seq(), expectV2Catalog = false)
-    }
-
-    assert(exception.getMessage.contains("Database 'db' not found"))
-  }
-
-  test("ShowTables: using v1 catalog, db name with multipartIdentifier ('a.b') is not allowed.") {
+  test("ShowViews: using v1 catalog, db name with multipartIdentifier ('a.b') is not allowed.") {
     val exception = intercept[AnalysisException] {
-      runShowTablesSql("SHOW TABLES FROM a.b", Seq(), expectV2Catalog = false)
+      sql("SHOW VIEWS FROM a.b")
     }
 
-    assert(exception.getMessage.contains("The database name is not valid: a.b"))
+    assert(exception.getMessage.contains(
+      "Nested databases are not supported by v1 session catalog: a.b"))
   }
 
-  test("ShowTables: using v2 catalog with empty namespace") {
-    spark.sql("CREATE TABLE testcat.table (id bigint, data string) USING foo")
-    runShowTablesSql("SHOW TABLES FROM testcat", Seq(Row("", "table")))
-  }
-
-  test("ShowTables: namespace is not specified and default v2 catalog is set") {
-    spark.conf.set(SQLConf.DEFAULT_CATALOG.key, "testcat")
-    spark.sql("CREATE TABLE testcat.table (id bigint, data string) USING foo")
-
-    // v2 catalog is used where default namespace is empty for TestInMemoryTableCatalog.
-    runShowTablesSql("SHOW TABLES", Seq(Row("", "table")))
-  }
-
-  test("ShowTables: namespace not specified and default v2 catalog not set - fallback to v1") {
-    runShowTablesSql(
-      "SHOW TABLES",
-      Seq(Row("", "source", true), Row("", "source2", true)),
-      expectV2Catalog = false)
-
-    runShowTablesSql(
-      "SHOW TABLES LIKE '*2'",
-      Seq(Row("", "source2", true)),
-      expectV2Catalog = false)
-  }
-
-  test("ShowTables: change current catalog and namespace with USE statements") {
-    sql("CREATE TABLE testcat.ns1.ns2.table (id bigint) USING foo")
-
-    // Initially, the v2 session catalog (current catalog) is used.
-    runShowTablesSql(
-      "SHOW TABLES", Seq(Row("", "source", true), Row("", "source2", true)),
-      expectV2Catalog = false)
-
-    // Update the current catalog, and no table is matched since the current namespace is Array().
-    sql("USE testcat")
-    runShowTablesSql("SHOW TABLES", Seq())
-
-    // Update the current namespace to match ns1.ns2.table.
-    sql("USE testcat.ns1.ns2")
-    runShowTablesSql("SHOW TABLES", Seq(Row("ns1.ns2", "table")))
-  }
-
-  private def runShowTablesSql(
-      sqlText: String,
-      expected: Seq[Row],
-      expectV2Catalog: Boolean = true): Unit = {
-    val schema = if (expectV2Catalog) {
-      new StructType()
-        .add("namespace", StringType, nullable = false)
-        .add("tableName", StringType, nullable = false)
-    } else {
-      new StructType()
-        .add("database", StringType, nullable = false)
-        .add("tableName", StringType, nullable = false)
-        .add("isTemporary", BooleanType, nullable = false)
+  test("ShowViews: using v2 catalog, command not supported.") {
+    val exception = intercept[AnalysisException] {
+      sql("SHOW VIEWS FROM testcat")
     }
 
-    val df = spark.sql(sqlText)
-    assert(df.schema === schema)
-    assert(expected === df.collect())
-  }
-
-  test("SHOW TABLE EXTENDED not valid v1 database") {
-    def testV1CommandNamespace(sqlCommand: String, namespace: String): Unit = {
-      val e = intercept[AnalysisException] {
-        sql(sqlCommand)
-      }
-      assert(e.message.contains(s"The database name is not valid: ${namespace}"))
-    }
-
-    val namespace = "testcat.ns1.ns2"
-    val table = "tbl"
-    withTable(s"$namespace.$table") {
-      sql(s"CREATE TABLE $namespace.$table (id bigint, data string) " +
-        s"USING foo PARTITIONED BY (id)")
-
-      testV1CommandNamespace(s"SHOW TABLE EXTENDED FROM $namespace LIKE 'tb*'",
-        namespace)
-      testV1CommandNamespace(s"SHOW TABLE EXTENDED IN $namespace LIKE 'tb*'",
-        namespace)
-      testV1CommandNamespace("SHOW TABLE EXTENDED " +
-        s"FROM $namespace LIKE 'tb*' PARTITION(id=1)",
-        namespace)
-      testV1CommandNamespace("SHOW TABLE EXTENDED " +
-        s"IN $namespace LIKE 'tb*' PARTITION(id=1)",
-        namespace)
-    }
-  }
-
-  test("SHOW TABLE EXTENDED valid v1") {
-    val expected = Seq(Row("", "source", true), Row("", "source2", true))
-    val schema = new StructType()
-      .add("database", StringType, nullable = false)
-      .add("tableName", StringType, nullable = false)
-      .add("isTemporary", BooleanType, nullable = false)
-      .add("information", StringType, nullable = false)
-
-    val df = sql("SHOW TABLE EXTENDED FROM default LIKE '*source*'")
-    val result = df.collect()
-    val resultWithoutInfo = result.map{ case Row(db, table, temp, _) => Row(db, table, temp)}
-
-    assert(df.schema === schema)
-    assert(resultWithoutInfo === expected)
-    result.foreach{ case Row(_, _, _, info: String) => assert(info.nonEmpty)}
+    assert(exception.getMessage.contains("Catalog testcat doesn't support SHOW VIEWS," +
+      " only SessionCatalog supports this command."))
   }
 
   test("CreateNameSpace: basic tests") {
@@ -861,6 +1057,114 @@ class DataSourceV2SQLSuite
 
       // The following will be no-op since the namespace already exists.
       sql("CREATE NAMESPACE IF NOT EXISTS testcat.ns1")
+    }
+  }
+
+  test("CreateNameSpace: reserved properties") {
+    import SupportsNamespaces._
+    withSQLConf((SQLConf.LEGACY_PROPERTY_NON_RESERVED.key, "false")) {
+      CatalogV2Util.NAMESPACE_RESERVED_PROPERTIES.filterNot(_ == PROP_COMMENT).foreach { key =>
+        val exception = intercept[ParseException] {
+          sql(s"CREATE NAMESPACE testcat.reservedTest WITH DBPROPERTIES('$key'='dummyVal')")
+        }
+        assert(exception.getMessage.contains(s"$key is a reserved namespace property"))
+      }
+    }
+    withSQLConf((SQLConf.LEGACY_PROPERTY_NON_RESERVED.key, "true")) {
+      CatalogV2Util.NAMESPACE_RESERVED_PROPERTIES.filterNot(_ == PROP_COMMENT).foreach { key =>
+        withNamespace("testcat.reservedTest") {
+          sql(s"CREATE NAMESPACE testcat.reservedTest WITH DBPROPERTIES('$key'='foo')")
+          assert(sql("DESC NAMESPACE EXTENDED testcat.reservedTest")
+            .toDF("k", "v")
+            .where("k='Properties'")
+            .isEmpty, s"$key is a reserved namespace property and ignored")
+          val meta =
+            catalog("testcat").asNamespaceCatalog.loadNamespaceMetadata(Array("reservedTest"))
+          assert(meta.get(key) == null || !meta.get(key).contains("foo"),
+            "reserved properties should not have side effects")
+        }
+      }
+    }
+  }
+
+  test("create/replace/alter table - reserved properties") {
+    import TableCatalog._
+    withSQLConf((SQLConf.LEGACY_PROPERTY_NON_RESERVED.key, "false")) {
+      CatalogV2Util.TABLE_RESERVED_PROPERTIES.filterNot(_ == PROP_COMMENT).foreach { key =>
+        Seq("OPTIONS", "TBLPROPERTIES").foreach { clause =>
+          Seq("CREATE", "REPLACE").foreach { action =>
+            val e = intercept[ParseException] {
+              sql(s"$action TABLE testcat.reservedTest (key int) USING foo $clause ('$key'='bar')")
+            }
+            assert(e.getMessage.contains(s"$key is a reserved table property"))
+          }
+        }
+
+        val e1 = intercept[ParseException] {
+          sql(s"ALTER TABLE testcat.reservedTest SET TBLPROPERTIES ('$key'='bar')")
+        }
+        assert(e1.getMessage.contains(s"$key is a reserved table property"))
+
+        val e2 = intercept[ParseException] {
+          sql(s"ALTER TABLE testcat.reservedTest UNSET TBLPROPERTIES ('$key')")
+        }
+        assert(e2.getMessage.contains(s"$key is a reserved table property"))
+      }
+    }
+    withSQLConf((SQLConf.LEGACY_PROPERTY_NON_RESERVED.key, "true")) {
+      CatalogV2Util.TABLE_RESERVED_PROPERTIES.filterNot(_ == PROP_COMMENT).foreach { key =>
+        Seq("OPTIONS", "TBLPROPERTIES").foreach { clause =>
+          withTable("testcat.reservedTest") {
+            Seq("CREATE", "REPLACE").foreach { action =>
+              sql(s"$action TABLE testcat.reservedTest (key int) USING foo $clause ('$key'='bar')")
+              val tableCatalog = catalog("testcat").asTableCatalog
+              val identifier = Identifier.of(Array(), "reservedTest")
+              val originValue = tableCatalog.loadTable(identifier).properties().get(key)
+              assert(originValue != "bar", "reserved properties should not have side effects")
+              sql(s"ALTER TABLE testcat.reservedTest SET TBLPROPERTIES ('$key'='newValue')")
+              assert(tableCatalog.loadTable(identifier).properties().get(key) == originValue,
+                "reserved properties should not have side effects")
+              sql(s"ALTER TABLE testcat.reservedTest UNSET TBLPROPERTIES ('$key')")
+              assert(tableCatalog.loadTable(identifier).properties().get(key) == originValue,
+                "reserved properties should not have side effects")
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("create/replace - path property") {
+    Seq("true", "false").foreach { conf =>
+      withSQLConf((SQLConf.LEGACY_PROPERTY_NON_RESERVED.key, conf)) {
+        withTable("testcat.reservedTest") {
+          Seq("CREATE", "REPLACE").foreach { action =>
+            val e1 = intercept[ParseException] {
+              sql(s"$action TABLE testcat.reservedTest USING foo LOCATION 'foo' OPTIONS" +
+                s" ('path'='bar')")
+            }
+            assert(e1.getMessage.contains(s"Duplicated table paths found: 'foo' and 'bar'"))
+
+            val e2 = intercept[ParseException] {
+              sql(s"$action TABLE testcat.reservedTest USING foo OPTIONS" +
+                s" ('path'='foo', 'PaTh'='bar')")
+            }
+            assert(e2.getMessage.contains(s"Duplicated table paths found: 'foo' and 'bar'"))
+
+            sql(s"$action TABLE testcat.reservedTest USING foo LOCATION 'foo' TBLPROPERTIES" +
+              s" ('path'='bar', 'Path'='noop')")
+            val tableCatalog = catalog("testcat").asTableCatalog
+            val identifier = Identifier.of(Array(), "reservedTest")
+            assert(tableCatalog.loadTable(identifier).properties()
+              .get(TableCatalog.PROP_LOCATION) == "foo",
+              "path as a table property should not have side effects")
+            assert(tableCatalog.loadTable(identifier).properties().get("path") == "bar",
+              "path as a table property should not have side effects")
+            assert(tableCatalog.loadTable(identifier).properties().get("Path") == "noop",
+              "path as a table property should not have side effects")
+          }
+        }
+      }
     }
   }
 
@@ -934,19 +1238,20 @@ class DataSourceV2SQLSuite
       val descriptionDf = sql("DESCRIBE NAMESPACE testcat.ns1.ns2")
       assert(descriptionDf.schema.map(field => (field.name, field.dataType)) ===
         Seq(
-          ("name", StringType),
-          ("value", StringType)
+          ("info_name", StringType),
+          ("info_value", StringType)
         ))
       val description = descriptionDf.collect()
       assert(description === Seq(
         Row("Namespace Name", "ns2"),
-        Row("Description", "test namespace"),
-        Row("Location", "/tmp/ns_test")
-      ))
+        Row(SupportsNamespaces.PROP_COMMENT.capitalize, "test namespace"),
+        Row(SupportsNamespaces.PROP_LOCATION.capitalize, "/tmp/ns_test"),
+        Row(SupportsNamespaces.PROP_OWNER.capitalize, defaultUser))
+      )
     }
   }
 
-  test("AlterNamespaceSetProperties using v2 catalog") {
+  test("ALTER NAMESPACE .. SET PROPERTIES using v2 catalog") {
     withNamespace("testcat.ns1.ns2") {
       sql("CREATE NAMESPACE IF NOT EXISTS testcat.ns1.ns2 COMMENT " +
         "'test namespace' LOCATION '/tmp/ns_test' WITH PROPERTIES ('a'='a','b'='b','c'='c')")
@@ -954,14 +1259,46 @@ class DataSourceV2SQLSuite
       val descriptionDf = sql("DESCRIBE NAMESPACE EXTENDED testcat.ns1.ns2")
       assert(descriptionDf.collect() === Seq(
         Row("Namespace Name", "ns2"),
-        Row("Description", "test namespace"),
-        Row("Location", "/tmp/ns_test"),
-        Row("Properties", "((a,b),(b,a),(c,c))")
-      ))
+        Row(SupportsNamespaces.PROP_COMMENT.capitalize, "test namespace"),
+        Row(SupportsNamespaces.PROP_LOCATION.capitalize, "/tmp/ns_test"),
+        Row(SupportsNamespaces.PROP_OWNER.capitalize, defaultUser),
+        Row("Properties", "((a,b),(b,a),(c,c))"))
+      )
     }
   }
 
-  test("AlterNamespaceSetLocation using v2 catalog") {
+  test("ALTER NAMESPACE .. SET PROPERTIES reserved properties") {
+    import SupportsNamespaces._
+    withSQLConf((SQLConf.LEGACY_PROPERTY_NON_RESERVED.key, "false")) {
+      CatalogV2Util.NAMESPACE_RESERVED_PROPERTIES.filterNot(_ == PROP_COMMENT).foreach { key =>
+        withNamespace("testcat.reservedTest") {
+          sql("CREATE NAMESPACE testcat.reservedTest")
+          val exception = intercept[ParseException] {
+            sql(s"ALTER NAMESPACE testcat.reservedTest SET PROPERTIES ('$key'='dummyVal')")
+          }
+          assert(exception.getMessage.contains(s"$key is a reserved namespace property"))
+        }
+      }
+    }
+    withSQLConf((SQLConf.LEGACY_PROPERTY_NON_RESERVED.key, "true")) {
+      CatalogV2Util.NAMESPACE_RESERVED_PROPERTIES.filterNot(_ == PROP_COMMENT).foreach { key =>
+        withNamespace("testcat.reservedTest") {
+          sql(s"CREATE NAMESPACE testcat.reservedTest")
+          sql(s"ALTER NAMESPACE testcat.reservedTest SET PROPERTIES ('$key'='foo')")
+          assert(sql("DESC NAMESPACE EXTENDED testcat.reservedTest")
+            .toDF("k", "v")
+            .where("k='Properties'")
+            .isEmpty, s"$key is a reserved namespace property and ignored")
+          val meta =
+            catalog("testcat").asNamespaceCatalog.loadNamespaceMetadata(Array("reservedTest"))
+          assert(meta.get(key) == null || !meta.get(key).contains("foo"),
+            "reserved properties should not have side effects")
+        }
+      }
+    }
+  }
+
+  test("ALTER NAMESPACE .. SET LOCATION using v2 catalog") {
     withNamespace("testcat.ns1.ns2") {
       sql("CREATE NAMESPACE IF NOT EXISTS testcat.ns1.ns2 COMMENT " +
         "'test namespace' LOCATION '/tmp/ns_test_1'")
@@ -969,99 +1306,11 @@ class DataSourceV2SQLSuite
       val descriptionDf = sql("DESCRIBE NAMESPACE EXTENDED testcat.ns1.ns2")
       assert(descriptionDf.collect() === Seq(
         Row("Namespace Name", "ns2"),
-        Row("Description", "test namespace"),
-        Row("Location", "/tmp/ns_test_2")
-      ))
+        Row(SupportsNamespaces.PROP_COMMENT.capitalize, "test namespace"),
+        Row(SupportsNamespaces.PROP_LOCATION.capitalize, "/tmp/ns_test_2"),
+        Row(SupportsNamespaces.PROP_OWNER.capitalize, defaultUser))
+      )
     }
-  }
-
-  test("ShowNamespaces: show root namespaces with default v2 catalog") {
-    spark.conf.set(SQLConf.DEFAULT_CATALOG.key, "testcat")
-
-    testShowNamespaces("SHOW NAMESPACES", Seq())
-
-    spark.sql("CREATE TABLE testcat.ns1.table (id bigint) USING foo")
-    spark.sql("CREATE TABLE testcat.ns1.ns1_1.table (id bigint) USING foo")
-    spark.sql("CREATE TABLE testcat.ns2.table (id bigint) USING foo")
-
-    testShowNamespaces("SHOW NAMESPACES", Seq("ns1", "ns2"))
-    testShowNamespaces("SHOW NAMESPACES LIKE '*1*'", Seq("ns1"))
-  }
-
-  test("ShowNamespaces: show namespaces with v2 catalog") {
-    spark.sql("CREATE TABLE testcat.ns1.table (id bigint) USING foo")
-    spark.sql("CREATE TABLE testcat.ns1.ns1_1.table (id bigint) USING foo")
-    spark.sql("CREATE TABLE testcat.ns1.ns1_2.table (id bigint) USING foo")
-    spark.sql("CREATE TABLE testcat.ns2.table (id bigint) USING foo")
-    spark.sql("CREATE TABLE testcat.ns2.ns2_1.table (id bigint) USING foo")
-
-    // Look up only with catalog name, which should list root namespaces.
-    testShowNamespaces("SHOW NAMESPACES IN testcat", Seq("ns1", "ns2"))
-
-    // Look up sub-namespaces.
-    testShowNamespaces("SHOW NAMESPACES IN testcat.ns1", Seq("ns1.ns1_1", "ns1.ns1_2"))
-    testShowNamespaces("SHOW NAMESPACES IN testcat.ns1 LIKE '*2*'", Seq("ns1.ns1_2"))
-    testShowNamespaces("SHOW NAMESPACES IN testcat.ns2", Seq("ns2.ns2_1"))
-
-    // Try to look up namespaces that do not exist.
-    testShowNamespaces("SHOW NAMESPACES IN testcat.ns3", Seq())
-    testShowNamespaces("SHOW NAMESPACES IN testcat.ns1.ns3", Seq())
-  }
-
-  test("ShowNamespaces: default v2 catalog is not set") {
-    spark.sql("CREATE TABLE testcat.ns.table (id bigint) USING foo")
-
-    // The current catalog is resolved to a v2 session catalog.
-    testShowNamespaces("SHOW NAMESPACES", Seq("default"))
-  }
-
-  test("ShowNamespaces: default v2 catalog doesn't support namespace") {
-    spark.conf.set(
-      "spark.sql.catalog.testcat_no_namspace",
-      classOf[BasicInMemoryTableCatalog].getName)
-    spark.conf.set(SQLConf.DEFAULT_CATALOG.key, "testcat_no_namspace")
-
-    val exception = intercept[AnalysisException] {
-      sql("SHOW NAMESPACES")
-    }
-
-    assert(exception.getMessage.contains("does not support namespaces"))
-  }
-
-  test("ShowNamespaces: v2 catalog doesn't support namespace") {
-    spark.conf.set(
-      "spark.sql.catalog.testcat_no_namspace",
-      classOf[BasicInMemoryTableCatalog].getName)
-
-    val exception = intercept[AnalysisException] {
-      sql("SHOW NAMESPACES in testcat_no_namspace")
-    }
-
-    assert(exception.getMessage.contains("does not support namespaces"))
-  }
-
-  test("ShowNamespaces: session catalog is used and namespace doesn't exist") {
-    val exception = intercept[AnalysisException] {
-      sql("SHOW NAMESPACES in dummy")
-    }
-
-    assert(exception.getMessage.contains("Namespace 'dummy' not found"))
-  }
-
-  test("ShowNamespaces: change catalog and namespace with USE statements") {
-    sql("CREATE TABLE testcat.ns1.ns2.table (id bigint) USING foo")
-
-    // Initially, the current catalog is a v2 session catalog.
-    testShowNamespaces("SHOW NAMESPACES", Seq("default"))
-
-    // Update the current catalog to 'testcat'.
-    sql("USE testcat")
-    testShowNamespaces("SHOW NAMESPACES", Seq("ns1"))
-
-    // Update the current namespace to 'ns1'.
-    sql("USE ns1")
-    // 'SHOW NAMESPACES' is not affected by the current namespace and lists root namespaces.
-    testShowNamespaces("SHOW NAMESPACES", Seq("ns1"))
   }
 
   private def testShowNamespaces(
@@ -1128,11 +1377,26 @@ class DataSourceV2SQLSuite
     assert(exception.getMessage.contains("Database 'ns1' not found"))
   }
 
-  test("Use: v2 catalog is used and namespace does not exist") {
-    // Namespaces are not required to exist for v2 catalogs.
-    sql("USE testcat.ns1.ns2")
-    val catalogManager = spark.sessionState.catalogManager
-    assert(catalogManager.currentNamespace === Array("ns1", "ns2"))
+  test("SPARK-31100: Use: v2 catalog that implements SupportsNamespaces is used " +
+      "and namespace not exists") {
+    // Namespaces are required to exist for v2 catalogs that implements SupportsNamespaces.
+    val exception = intercept[NoSuchNamespaceException] {
+      sql("USE testcat.ns1.ns2")
+    }
+    assert(exception.getMessage.contains("Namespace 'ns1.ns2' not found"))
+  }
+
+  test("SPARK-31100: Use: v2 catalog that does not implement SupportsNameSpaces is used " +
+      "and namespace does not exist") {
+    // Namespaces are not required to exist for v2 catalogs
+    // that does not implement SupportsNamespaces.
+    withSQLConf("spark.sql.catalog.dummy" -> classOf[BasicInMemoryTableCatalog].getName) {
+      val catalogManager = spark.sessionState.catalogManager
+
+      sql("USE dummy.ns1")
+      assert(catalogManager.currentCatalog.name() == "dummy")
+      assert(catalogManager.currentNamespace === Array("ns1"))
+    }
   }
 
   test("ShowCurrentNamespace: basic tests") {
@@ -1154,6 +1418,8 @@ class DataSourceV2SQLSuite
 
     sql("USE testcat")
     testShowCurrentNamespace("testcat", "")
+
+    sql("CREATE NAMESPACE testcat.ns1.ns2")
     sql("USE testcat.ns1.ns2")
     testShowCurrentNamespace("testcat", "ns1.ns2")
   }
@@ -1163,7 +1429,12 @@ class DataSourceV2SQLSuite
     val sessionCatalog = catalog(SESSION_CATALOG_NAME).asTableCatalog
 
     def checkPartitioning(cat: TableCatalog, partition: String): Unit = {
-      val table = cat.loadTable(Identifier.of(Array.empty, "tbl"))
+      val namespace = if (cat.name == SESSION_CATALOG_NAME) {
+        Array("default")
+      } else {
+        Array[String]()
+      }
+      val table = cat.loadTable(Identifier.of(namespace, "tbl"))
       val partitions = table.partitioning().map(_.references())
       assert(partitions.length === 1)
       val fieldNames = partitions.flatMap(_.map(_.fieldNames()))
@@ -1199,48 +1470,48 @@ class DataSourceV2SQLSuite
   }
 
   test("tableCreation: duplicate column names in the table definition") {
-    val errorMsg = "Found duplicate column(s) in the table definition of t"
+    val errorMsg = "Found duplicate column(s) in the table definition of"
     Seq((true, ("a", "a")), (false, ("aA", "Aa"))).foreach { case (caseSensitive, (c0, c1)) =>
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
         assertAnalysisError(
           s"CREATE TABLE t ($c0 INT, $c1 INT) USING $v2Source",
-          errorMsg
+          s"$errorMsg default.t"
         )
         assertAnalysisError(
           s"CREATE TABLE testcat.t ($c0 INT, $c1 INT) USING $v2Source",
-          errorMsg
+          s"$errorMsg t"
         )
         assertAnalysisError(
           s"CREATE OR REPLACE TABLE t ($c0 INT, $c1 INT) USING $v2Source",
-          errorMsg
+          s"$errorMsg default.t"
         )
         assertAnalysisError(
           s"CREATE OR REPLACE TABLE testcat.t ($c0 INT, $c1 INT) USING $v2Source",
-          errorMsg
+          s"$errorMsg t"
         )
       }
     }
   }
 
   test("tableCreation: duplicate nested column names in the table definition") {
-    val errorMsg = "Found duplicate column(s) in the table definition of t"
+    val errorMsg = "Found duplicate column(s) in the table definition of"
     Seq((true, ("a", "a")), (false, ("aA", "Aa"))).foreach { case (caseSensitive, (c0, c1)) =>
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
         assertAnalysisError(
           s"CREATE TABLE t (d struct<$c0: INT, $c1: INT>) USING $v2Source",
-          errorMsg
+          s"$errorMsg default.t"
         )
         assertAnalysisError(
           s"CREATE TABLE testcat.t (d struct<$c0: INT, $c1: INT>) USING $v2Source",
-          errorMsg
+          s"$errorMsg t"
         )
         assertAnalysisError(
           s"CREATE OR REPLACE TABLE t (d struct<$c0: INT, $c1: INT>) USING $v2Source",
-          errorMsg
+          s"$errorMsg default.t"
         )
         assertAnalysisError(
           s"CREATE OR REPLACE TABLE testcat.t (d struct<$c0: INT, $c1: INT>) USING $v2Source",
-          errorMsg
+          s"$errorMsg t"
         )
       }
     }
@@ -1274,7 +1545,6 @@ class DataSourceV2SQLSuite
         """
           |CREATE TABLE testcat.t (id int, `a.b` string) USING foo
           |CLUSTERED BY (`a.b`) INTO 4 BUCKETS
-          |OPTIONS ('allow-unsupported-transforms'=true)
         """.stripMargin)
 
       val testCatalog = catalog("testcat").asTableCatalog.asInstanceOf[InMemoryTableCatalog]
@@ -1353,6 +1623,63 @@ class DataSourceV2SQLSuite
     }
   }
 
+  test("SPARK-32990: REFRESH TABLE should resolve to a temporary view first") {
+    withTable("testcat.ns.t") {
+      withTempView("t") {
+        sql("CREATE TABLE testcat.ns.t (id bigint) USING foo")
+        sql("CREATE TEMPORARY VIEW t AS SELECT 2")
+        sql("USE testcat.ns")
+
+        val testCatalog = catalog("testcat").asTableCatalog.asInstanceOf[InMemoryTableCatalog]
+        val identifier = Identifier.of(Array("ns"), "t")
+
+        assert(!testCatalog.isTableInvalidated(identifier))
+        sql("REFRESH TABLE t")
+        assert(!testCatalog.isTableInvalidated(identifier))
+      }
+    }
+  }
+
+  test("SPARK-33435, SPARK-34099: REFRESH TABLE should refresh all caches referencing the table") {
+    val tblName = "testcat.ns.t"
+    withTable(tblName) {
+      withTempView("t") {
+        sql(s"CREATE TABLE $tblName (id bigint) USING foo")
+        sql(s"INSERT INTO $tblName SELECT 0")
+        sql(s"CACHE TABLE t AS SELECT id FROM $tblName")
+        checkAnswer(spark.table(tblName), Row(0))
+        checkAnswer(spark.table("t"), Row(0))
+
+        sql(s"INSERT INTO $tblName SELECT 1")
+
+        assert(spark.sharedState.cacheManager.lookupCachedData(spark.table("t")).isDefined)
+        sql(s"REFRESH TABLE $tblName")
+        assert(spark.sharedState.cacheManager.lookupCachedData(spark.table("t")).isDefined)
+        checkAnswer(spark.table(tblName), Seq(Row(0), Row(1)))
+        checkAnswer(spark.table("t"), Seq(Row(0), Row(1)))
+      }
+    }
+  }
+
+  test("SPARK-33653: REFRESH TABLE should recache the target table itself") {
+    val tblName = "testcat.ns.t"
+    withTable(tblName) {
+      sql(s"CREATE TABLE $tblName (id bigint) USING foo")
+
+      // if the table is not cached, refreshing it should not recache it
+      assert(spark.sharedState.cacheManager.lookupCachedData(spark.table(tblName)).isEmpty)
+      sql(s"REFRESH TABLE $tblName")
+      assert(spark.sharedState.cacheManager.lookupCachedData(spark.table(tblName)).isEmpty)
+
+      sql(s"CACHE TABLE $tblName")
+
+      // after caching & refreshing the table should be recached
+      assert(spark.sharedState.cacheManager.lookupCachedData(spark.table(tblName)).isDefined)
+      sql(s"REFRESH TABLE $tblName")
+      assert(spark.sharedState.cacheManager.lookupCachedData(spark.table(tblName)).isDefined)
+    }
+  }
+
   test("REPLACE TABLE: v1 table") {
     val e = intercept[AnalysisException] {
       sql(s"CREATE OR REPLACE TABLE tbl (a int) USING ${classOf[SimpleScanSource].getName}")
@@ -1417,6 +1744,20 @@ class DataSourceV2SQLSuite
     }
   }
 
+  test("DeleteFrom: delete with unsupported predicates") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id bigint, data string, p int) USING foo")
+      sql(s"INSERT INTO $t VALUES (2L, 'a', 2), (2L, 'b', 3), (3L, 'c', 3)")
+      val exc = intercept[AnalysisException] {
+        sql(s"DELETE FROM $t WHERE id > 3 AND p > 3")
+      }
+
+      assert(spark.table(t).count === 3)
+      assert(exc.getMessage.contains(s"Cannot delete from table $t"))
+    }
+  }
+
   test("DeleteFrom: DELETE is only supported with v2 tables") {
     // unset this config to use the default v2 session catalog.
     spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)
@@ -1429,6 +1770,22 @@ class DataSourceV2SQLSuite
       }
 
       assert(exc.getMessage.contains("DELETE is only supported with v2 tables"))
+    }
+  }
+
+  test("SPARK-33652: DeleteFrom should refresh caches referencing the table") {
+    val t = "testcat.ns1.ns2.tbl"
+    val view = "view"
+    withTable(t) {
+      withTempView(view) {
+        sql(s"CREATE TABLE $t (id bigint, data string, p int) USING foo PARTITIONED BY (id, p)")
+        sql(s"INSERT INTO $t VALUES (2L, 'a', 2), (2L, 'b', 3), (3L, 'c', 3)")
+        sql(s"CACHE TABLE view AS SELECT id FROM $t")
+        assert(spark.table(view).count() == 3)
+
+        sql(s"DELETE FROM $t WHERE id = 2")
+        assert(spark.table(view).count() == 1)
+      }
     }
   }
 
@@ -1548,14 +1905,16 @@ class DataSourceV2SQLSuite
     }
   }
 
-  test("AlterTable: rename table basic test") {
+  test("rename table by ALTER VIEW") {
     withTable("testcat.ns1.new") {
-      sql(s"CREATE TABLE testcat.ns1.ns2.old USING foo AS SELECT id, data FROM source")
-      checkAnswer(sql("SHOW TABLES FROM testcat.ns1.ns2"), Seq(Row("ns1.ns2", "old")))
+      sql("CREATE TABLE testcat.ns1.ns2.old USING foo AS SELECT id, data FROM source")
+      checkAnswer(sql("SHOW TABLES FROM testcat.ns1.ns2"), Seq(Row("ns1.ns2", "old", false)))
 
-      sql(s"ALTER TABLE testcat.ns1.ns2.old RENAME TO ns1.new")
-      checkAnswer(sql("SHOW TABLES FROM testcat.ns1.ns2"), Seq.empty)
-      checkAnswer(sql("SHOW TABLES FROM testcat.ns1"), Seq(Row("ns1", "new")))
+      val e = intercept[AnalysisException] {
+        sql("ALTER VIEW testcat.ns1.ns2.old RENAME TO ns1.new")
+      }
+      assert(e.getMessage.contains(
+        "Cannot rename a table with ALTER VIEW. Please use ALTER TABLE instead"))
     }
   }
 
@@ -1563,15 +1922,16 @@ class DataSourceV2SQLSuite
     val e = intercept[AnalysisException] {
       sql(s"ALTER VIEW testcat.ns.tbl RENAME TO ns.view")
     }
-    assert(e.getMessage.contains("Renaming view is not supported in v2 catalogs"))
+    assert(e.getMessage.contains(
+      "Table or view not found: testcat.ns.tbl"))
   }
 
   test("ANALYZE TABLE") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
       spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo")
-      testV1Command("ANALYZE TABLE", s"$t COMPUTE STATISTICS")
-      testV1Command("ANALYZE TABLE", s"$t COMPUTE STATISTICS FOR ALL COLUMNS")
+      testNotSupportedV2Command("ANALYZE TABLE", s"$t COMPUTE STATISTICS")
+      testNotSupportedV2Command("ANALYZE TABLE", s"$t COMPUTE STATISTICS FOR ALL COLUMNS")
     }
   }
 
@@ -1579,37 +1939,7 @@ class DataSourceV2SQLSuite
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
       spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo")
-      testV1Command("MSCK REPAIR TABLE", t)
-    }
-  }
-
-  test("TRUNCATE TABLE") {
-    val t = "testcat.ns1.ns2.tbl"
-    withTable(t) {
-      sql(
-        s"""
-           |CREATE TABLE $t (id bigint, data string)
-           |USING foo
-           |PARTITIONED BY (id)
-         """.stripMargin)
-
-      testV1Command("TRUNCATE TABLE", t)
-      testV1Command("TRUNCATE TABLE", s"$t PARTITION(id='1')")
-    }
-  }
-
-  test("SHOW PARTITIONS") {
-    val t = "testcat.ns1.ns2.tbl"
-    withTable(t) {
-      sql(
-        s"""
-           |CREATE TABLE $t (id bigint, data string)
-           |USING foo
-           |PARTITIONED BY (id)
-         """.stripMargin)
-
-      testV1Command("SHOW PARTITIONS", t)
-      testV1Command("SHOW PARTITIONS", s"$t PARTITION(id='1')")
+      testNotSupportedV2Command("MSCK REPAIR TABLE", t)
     }
   }
 
@@ -1623,10 +1953,10 @@ class DataSourceV2SQLSuite
            |PARTITIONED BY (id)
          """.stripMargin)
 
-      testV1Command("LOAD DATA", s"INPATH 'filepath' INTO TABLE $t")
-      testV1Command("LOAD DATA", s"LOCAL INPATH 'filepath' INTO TABLE $t")
-      testV1Command("LOAD DATA", s"LOCAL INPATH 'filepath' OVERWRITE INTO TABLE $t")
-      testV1Command("LOAD DATA",
+      testNotSupportedV2Command("LOAD DATA", s"INPATH 'filepath' INTO TABLE $t")
+      testNotSupportedV2Command("LOAD DATA", s"LOCAL INPATH 'filepath' INTO TABLE $t")
+      testNotSupportedV2Command("LOAD DATA", s"LOCAL INPATH 'filepath' OVERWRITE INTO TABLE $t")
+      testNotSupportedV2Command("LOAD DATA",
         s"LOCAL INPATH 'filepath' OVERWRITE INTO TABLE $t PARTITION(id=1)")
     }
   }
@@ -1635,32 +1965,34 @@ class DataSourceV2SQLSuite
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
       spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo")
-      testV1Command("SHOW CREATE TABLE", t)
+      testNotSupportedV2Command("SHOW CREATE TABLE", t)
+      testNotSupportedV2Command("SHOW CREATE TABLE", s"$t AS SERDE")
     }
   }
 
-  test("CACHE TABLE") {
+  test("CACHE/UNCACHE TABLE") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
-      spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo")
-
-      testV1Command("CACHE TABLE", t)
-
-      val e = intercept[AnalysisException] {
-        sql(s"CACHE LAZY TABLE $t")
+      def isCached(table: String): Boolean = {
+        spark.table(table).queryExecution.withCachedData.isInstanceOf[InMemoryRelation]
       }
-      assert(e.message.contains("CACHE TABLE is only supported with v1 tables"))
-    }
-  }
 
-  test("UNCACHE TABLE") {
-    val t = "testcat.ns1.ns2.tbl"
-    withTable(t) {
-      sql(s"CREATE TABLE $t (id bigint, data string) USING foo")
+      spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo")
+      sql(s"CACHE TABLE $t")
+      assert(isCached(t))
 
-      testV1Command("UNCACHE TABLE", t)
-      testV1Command("UNCACHE TABLE", s"IF EXISTS $t")
+      sql(s"UNCACHE TABLE $t")
+      assert(!isCached(t))
     }
+
+    // Test a scenario where a table does not exist.
+    val e = intercept[AnalysisException] {
+      sql(s"UNCACHE TABLE $t")
+    }
+    assert(e.message.contains("Table or view not found: testcat.ns1.ns2.tbl"))
+
+    // If "IF EXISTS" is set, UNCACHE TABLE will not throw an exception.
+    sql(s"UNCACHE TABLE IF EXISTS $t")
   }
 
   test("SHOW COLUMNS") {
@@ -1668,58 +2000,9 @@ class DataSourceV2SQLSuite
     withTable(t) {
       spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo")
 
-      testV1Command("SHOW COLUMNS", s"FROM $t")
-      testV1Command("SHOW COLUMNS", s"IN $t")
-
-      val e3 = intercept[AnalysisException] {
-        sql(s"SHOW COLUMNS FROM tbl IN testcat.ns1.ns2")
-      }
-      assert(e3.message.contains("Namespace name should have " +
-        "only one part if specified: testcat.ns1.ns2"))
-    }
-  }
-
-  test("ALTER TABLE RECOVER PARTITIONS") {
-    val t = "testcat.ns1.ns2.tbl"
-    withTable(t) {
-      spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo")
-      val e = intercept[AnalysisException] {
-        sql(s"ALTER TABLE $t RECOVER PARTITIONS")
-      }
-      assert(e.message.contains("ALTER TABLE RECOVER PARTITIONS is only supported with v1 tables"))
-    }
-  }
-
-  test("ALTER TABLE ADD PARTITION") {
-    val t = "testcat.ns1.ns2.tbl"
-    withTable(t) {
-      spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo PARTITIONED BY (id)")
-      val e = intercept[AnalysisException] {
-        sql(s"ALTER TABLE $t ADD PARTITION (id=1) LOCATION 'loc'")
-      }
-      assert(e.message.contains("ALTER TABLE ADD PARTITION is only supported with v1 tables"))
-    }
-  }
-
-  test("ALTER TABLE RENAME PARTITION") {
-    val t = "testcat.ns1.ns2.tbl"
-    withTable(t) {
-      spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo PARTITIONED BY (id)")
-      val e = intercept[AnalysisException] {
-        sql(s"ALTER TABLE $t PARTITION (id=1) RENAME TO PARTITION (id=2)")
-      }
-      assert(e.message.contains("ALTER TABLE RENAME PARTITION is only supported with v1 tables"))
-    }
-  }
-
-  test("ALTER TABLE DROP PARTITIONS") {
-    val t = "testcat.ns1.ns2.tbl"
-    withTable(t) {
-      spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo PARTITIONED BY (id)")
-      val e = intercept[AnalysisException] {
-        sql(s"ALTER TABLE $t DROP PARTITION (id=1)")
-      }
-      assert(e.message.contains("ALTER TABLE DROP PARTITION is only supported with v1 tables"))
+      testNotSupportedV2Command("SHOW COLUMNS", s"FROM $t")
+      testNotSupportedV2Command("SHOW COLUMNS", s"IN $t")
+      testNotSupportedV2Command("SHOW COLUMNS", "FROM tbl IN testcat.ns1.ns2")
     }
   }
 
@@ -1730,22 +2013,15 @@ class DataSourceV2SQLSuite
       val e = intercept[AnalysisException] {
         sql(s"ALTER TABLE $t SET SERDEPROPERTIES ('columns'='foo,bar', 'field.delim' = ',')")
       }
-      assert(e.message.contains("ALTER TABLE SerDe Properties is only supported with v1 tables"))
+      assert(e.message.contains(
+        "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES] is not supported for v2 tables"))
     }
-  }
-
-  test("ALTER VIEW AS QUERY") {
-    val v = "testcat.ns1.ns2.v"
-    val e = intercept[AnalysisException] {
-      sql(s"ALTER VIEW $v AS SELECT 1")
-    }
-    assert(e.message.contains("ALTER VIEW QUERY is only supported with v1 tables"))
   }
 
   test("CREATE VIEW") {
     val v = "testcat.ns1.ns2.v"
     val e = intercept[AnalysisException] {
-      sql(s"CREATE VIEW $v AS SELECT * FROM tab1")
+      sql(s"CREATE VIEW $v AS SELECT 1")
     }
     assert(e.message.contains("CREATE VIEW is only supported with v1 tables"))
   }
@@ -1753,22 +2029,21 @@ class DataSourceV2SQLSuite
   test("SHOW TBLPROPERTIES: v2 table") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
-      val owner = "andrew"
+      val user = "andrew"
       val status = "new"
       val provider = "foo"
       spark.sql(s"CREATE TABLE $t (id bigint, data string) USING $provider " +
-        s"TBLPROPERTIES ('owner'='$owner', 'status'='$status')")
+        s"TBLPROPERTIES ('user'='$user', 'status'='$status')")
 
-      val properties = sql(s"SHOW TBLPROPERTIES $t")
+      val properties = sql(s"SHOW TBLPROPERTIES $t").orderBy("key")
 
       val schema = new StructType()
         .add("key", StringType, nullable = false)
         .add("value", StringType, nullable = false)
 
       val expected = Seq(
-        Row("owner", owner),
-        Row("provider", provider),
-        Row("status", status))
+        Row("status", status),
+        Row("user", user))
 
       assert(properties.schema === schema)
       assert(expected === properties.collect())
@@ -1778,11 +2053,11 @@ class DataSourceV2SQLSuite
   test("SHOW TBLPROPERTIES(key): v2 table") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
-      val owner = "andrew"
+      val user = "andrew"
       val status = "new"
       val provider = "foo"
       spark.sql(s"CREATE TABLE $t (id bigint, data string) USING $provider " +
-        s"TBLPROPERTIES ('owner'='$owner', 'status'='$status')")
+        s"TBLPROPERTIES ('user'='$user', 'status'='$status')")
 
       val properties = sql(s"SHOW TBLPROPERTIES $t ('status')")
 
@@ -1797,7 +2072,7 @@ class DataSourceV2SQLSuite
     withTable(t) {
       val nonExistingKey = "nonExistingKey"
       spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo " +
-        s"TBLPROPERTIES ('owner'='andrew', 'status'='new')")
+        s"TBLPROPERTIES ('user'='andrew', 'status'='new')")
 
       val properties = sql(s"SHOW TBLPROPERTIES $t ('$nonExistingKey')")
 
@@ -1811,7 +2086,7 @@ class DataSourceV2SQLSuite
     val e = intercept[AnalysisException] {
       sql("DESCRIBE FUNCTION testcat.ns1.ns2.fun")
     }
-    assert(e.message.contains("DESCRIBE FUNCTION is only supported in v1 catalog"))
+    assert(e.message.contains("function is only supported in v1 catalog"))
 
     val e1 = intercept[AnalysisException] {
       sql("DESCRIBE FUNCTION default.ns1.ns2.fun")
@@ -1825,19 +2100,44 @@ class DataSourceV2SQLSuite
     val e = intercept[AnalysisException] {
       sql(s"SHOW FUNCTIONS LIKE $function")
     }
-    assert(e.message.contains("SHOW FUNCTIONS is only supported in v1 catalog"))
+    assert(e.message.contains("function is only supported in v1 catalog"))
   }
 
   test("DROP FUNCTION: only support session catalog") {
     val e = intercept[AnalysisException] {
       sql("DROP FUNCTION testcat.ns1.ns2.fun")
     }
-    assert(e.message.contains("DROP FUNCTION is only supported in v1 catalog"))
+    assert(e.message.contains("function is only supported in v1 catalog"))
 
     val e1 = intercept[AnalysisException] {
-      sql("DESCRIBE FUNCTION default.ns1.ns2.fun")
+      sql("DROP FUNCTION default.ns1.ns2.fun")
     }
     assert(e1.message.contains("Unsupported function name 'default.ns1.ns2.fun'"))
+  }
+
+  test("CREATE FUNCTION: only support session catalog") {
+    val e = intercept[AnalysisException] {
+      sql("CREATE FUNCTION testcat.ns1.ns2.fun as 'f'")
+    }
+    assert(e.message.contains("function is only supported in v1 catalog"))
+
+    val e1 = intercept[AnalysisException] {
+      sql("CREATE FUNCTION default.ns1.ns2.fun as 'f'")
+    }
+    assert(e1.message.contains("Unsupported function name 'default.ns1.ns2.fun'"))
+  }
+
+  test("REFRESH FUNCTION: only support session catalog") {
+    val e = intercept[AnalysisException] {
+      sql("REFRESH FUNCTION testcat.ns1.ns2.fun")
+    }
+    assert(e.message.contains("function is only supported in v1 catalog"))
+
+    val e1 = intercept[AnalysisException] {
+      sql("REFRESH FUNCTION default.ns1.ns2.fun")
+    }
+    assert(e1.message.contains(
+      "Unsupported function name 'default.ns1.ns2.fun'"))
   }
 
   test("global temp view should not be masked by v2 catalog") {
@@ -1871,10 +2171,11 @@ class DataSourceV2SQLSuite
 
     val e = intercept[AnalysisException] {
       // Since the following multi-part name starts with `globalTempDB`, it is resolved to
-      // the session catalog, not the `gloabl_temp` v2 catalog.
+      // the session catalog, not the `global_temp` v2 catalog.
       sql(s"CREATE TABLE $globalTempDB.ns1.ns2.tbl (id bigint, data string) USING json")
     }
-    assert(e.message.contains("global_temp.ns1.ns2.tbl is not a valid TableIdentifier"))
+    assert(e.message.contains(
+      "global_temp.ns1.ns2.tbl is not a valid TableIdentifier as it has more than 2 name parts."))
   }
 
   test("table name same as catalog can be used") {
@@ -1893,23 +2194,78 @@ class DataSourceV2SQLSuite
     withTable("t") {
       sql("CREATE TABLE t USING json AS SELECT 1 AS i")
       checkAnswer(sql("select * from t"), Row(1))
-      checkAnswer(sql("select * from spark_catalog.t"), Row(1))
       checkAnswer(sql("select * from spark_catalog.default.t"), Row(1))
     }
   }
 
+  test("SPARK-30885: v1 table name should be fully qualified") {
+    def assertWrongTableIdent(): Unit = {
+      withTable("t") {
+        sql("CREATE TABLE t USING json AS SELECT 1 AS i")
+
+        val t = "spark_catalog.t"
+
+        def verify(sql: String): Unit = {
+          val e = intercept[AnalysisException](spark.sql(sql))
+          assert(e.message.contains(s"Table or view not found: $t"),
+            s"Error message did not contain expected text while evaluting $sql")
+        }
+
+        def verifyView(sql: String): Unit = {
+          val e = intercept[AnalysisException](spark.sql(sql))
+          assert(e.message.contains(s"View not found: $t"),
+            s"Error message did not contain expected text while evaluting $sql")
+        }
+
+        def verifyTable(sql: String): Unit = {
+          val e = intercept[AnalysisException](spark.sql(sql))
+          assert(e.message.contains(s"Table not found: $t"),
+            s"Error message did not contain expected text while evaluting $sql")
+        }
+
+        def verifyGeneric(sql: String): Unit = {
+          val e = intercept[AnalysisException](spark.sql(sql))
+          assert(e.message.contains(s"not found: $t"),
+            s"Error message did not contain expected text while evaluting $sql")
+        }
+
+        verify(s"select * from $t")
+        // Verify V1 commands that bypass table lookups.
+        verify(s"REFRESH TABLE $t")
+        verify(s"DESCRIBE $t i")
+        verify(s"DROP TABLE $t")
+        verifyView(s"DROP VIEW $t")
+        verifyGeneric(s"ANALYZE TABLE $t COMPUTE STATISTICS")
+        verifyGeneric(s"ANALYZE TABLE $t COMPUTE STATISTICS FOR ALL COLUMNS")
+        verifyTable(s"MSCK REPAIR TABLE $t")
+        verifyTable(s"LOAD DATA INPATH 'filepath' INTO TABLE $t")
+        verifyGeneric(s"SHOW CREATE TABLE $t")
+        verifyGeneric(s"SHOW CREATE TABLE $t AS SERDE")
+        verifyGeneric(s"CACHE TABLE $t")
+        verifyGeneric(s"UNCACHE TABLE $t")
+        verifyGeneric(s"TRUNCATE TABLE $t")
+        verify(s"SHOW COLUMNS FROM $t")
+      }
+    }
+
+    assertWrongTableIdent()
+    // unset this config to use the default v2 session catalog.
+    spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)
+    assertWrongTableIdent()
+  }
+
   test("SPARK-30259: session catalog can be specified in CREATE TABLE AS SELECT command") {
     withTable("tbl") {
-      val ident = Identifier.of(Array(), "tbl")
-      sql("CREATE TABLE spark_catalog.tbl USING json AS SELECT 1 AS i")
+      val ident = Identifier.of(Array("default"), "tbl")
+      sql("CREATE TABLE spark_catalog.default.tbl USING json AS SELECT 1 AS i")
       assert(catalog("spark_catalog").asTableCatalog.tableExists(ident) === true)
     }
   }
 
   test("SPARK-30259: session catalog can be specified in CREATE TABLE command") {
     withTable("tbl") {
-      val ident = Identifier.of(Array(), "tbl")
-      sql("CREATE TABLE spark_catalog.tbl (col string) USING json")
+      val ident = Identifier.of(Array("default"), "tbl")
+      sql("CREATE TABLE spark_catalog.default.tbl (col string) USING json")
       assert(catalog("spark_catalog").asTableCatalog.tableExists(ident) === true)
     }
   }
@@ -1918,7 +2274,7 @@ class DataSourceV2SQLSuite
     // unset this config to use the default v2 session catalog.
     spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)
 
-    withTable("spark_catalog.t", "testcat.ns.t") {
+    withTable("spark_catalog.default.t", "testcat.ns.t") {
       sql("CREATE TABLE t USING parquet AS SELECT 1")
       sql("CREATE TABLE testcat.ns.t USING parquet AS SELECT 2")
 
@@ -1934,23 +2290,25 @@ class DataSourceV2SQLSuite
     spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)
     val sessionCatalogName = CatalogManager.SESSION_CATALOG_NAME
 
+    sql("CREATE NAMESPACE testcat.ns1.ns2")
     sql("USE testcat.ns1.ns2")
     sql("CREATE TABLE t USING foo AS SELECT 1 col")
     checkAnswer(spark.table("t"), Row(1))
 
     withTempView("t") {
       spark.range(10).createTempView("t")
-      withView(s"$sessionCatalogName.v") {
+      withView(s"$sessionCatalogName.default.v") {
         val e = intercept[AnalysisException] {
-          sql(s"CREATE VIEW $sessionCatalogName.v AS SELECT * FROM t")
+          sql(s"CREATE VIEW $sessionCatalogName.default.v AS SELECT * FROM t")
         }
         assert(e.message.contains("referencing a temporary view"))
       }
     }
 
     withTempView("t") {
-      withView(s"$sessionCatalogName.v") {
-        sql(s"CREATE VIEW $sessionCatalogName.v AS SELECT t1.col FROM t t1 JOIN ns1.ns2.t t2")
+      withView(s"$sessionCatalogName.default.v") {
+        sql(s"CREATE VIEW $sessionCatalogName.default.v " +
+          "AS SELECT t1.col FROM t t1 JOIN ns1.ns2.t t2")
         sql(s"USE $sessionCatalogName")
         // The view should read data from table `testcat.ns1.ns2.t` not the temp view.
         spark.range(10).createTempView("t")
@@ -1982,7 +2340,7 @@ class DataSourceV2SQLSuite
       Option(comment).map("'" + _ + "'").getOrElse("NULL"))
     val expectedComment = Option(comment).getOrElse("")
     assert(sql(s"DESC NAMESPACE extended $namespace").toDF("k", "v")
-      .where("k='Description'")
+      .where(s"k='${SupportsNamespaces.PROP_COMMENT.capitalize}'")
       .head().getString(1) === expectedComment)
   }
 
@@ -2012,7 +2370,8 @@ class DataSourceV2SQLSuite
     withTempView("v") {
       sql("create global temp view v as select 1")
       val e = intercept[AnalysisException](sql("COMMENT ON TABLE global_temp.v IS NULL"))
-      assert(e.getMessage.contains("global_temp.v is a temp view not table."))
+      assert(e.getMessage.contains(
+        "global_temp.v is a temp view. 'COMMENT ON TABLE' expects a table"))
     }
   }
 
@@ -2020,15 +2379,454 @@ class DataSourceV2SQLSuite
     sql(s"COMMENT ON TABLE $tableName IS " + Option(comment).map("'" + _ + "'").getOrElse("NULL"))
     val expectedComment = Option(comment).getOrElse("")
     assert(sql(s"DESC extended $tableName").toDF("k", "v", "c")
-      .where("k='Comment'")
+      .where(s"k='${TableCatalog.PROP_COMMENT.capitalize}'")
       .head().getString(1) === expectedComment)
   }
 
-  private def testV1Command(sqlCommand: String, sqlParams: String): Unit = {
+  test("SPARK-30799: temp view name can't contain catalog name") {
+    val sessionCatalogName = CatalogManager.SESSION_CATALOG_NAME
+    withTempView("v") {
+      spark.range(10).createTempView("v")
+      val e1 = intercept[AnalysisException](
+        sql(s"CACHE TABLE $sessionCatalogName.v")
+      )
+      assert(e1.message.contains(
+        "Table or view not found: spark_catalog.v"))
+    }
+    val e2 = intercept[AnalysisException] {
+      sql(s"CREATE TEMP VIEW $sessionCatalogName.v AS SELECT 1")
+    }
+    assert(e2.message.contains("It is not allowed to add database prefix"))
+  }
+
+  test("SPARK-31015: star expression should work for qualified column names for v2 tables") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id bigint, name string) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 'hello')")
+
+      def check(tbl: String): Unit = {
+        checkAnswer(sql(s"SELECT testcat.ns1.ns2.tbl.* FROM $tbl"), Row(1, "hello"))
+        checkAnswer(sql(s"SELECT ns1.ns2.tbl.* FROM $tbl"), Row(1, "hello"))
+        checkAnswer(sql(s"SELECT ns2.tbl.* FROM $tbl"), Row(1, "hello"))
+        checkAnswer(sql(s"SELECT tbl.* FROM $tbl"), Row(1, "hello"))
+      }
+
+      // Test with qualified table name "testcat.ns1.ns2.tbl".
+      check(t)
+
+      // Test if current catalog and namespace is respected in column resolution.
+      sql("USE testcat.ns1.ns2")
+      check("tbl")
+
+      val ex = intercept[AnalysisException] {
+        sql(s"SELECT ns1.ns2.ns3.tbl.* from $t")
+      }
+      assert(ex.getMessage.contains("cannot resolve 'ns1.ns2.ns3.tbl.*"))
+    }
+  }
+
+  test("SPARK-32168: INSERT OVERWRITE - hidden days partition - dynamic mode") {
+    def testTimestamp(daysOffset: Int): Timestamp = {
+      Timestamp.valueOf(LocalDate.of(2020, 1, 1 + daysOffset).atStartOfDay())
+    }
+
+    withSQLConf(PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.DYNAMIC.toString) {
+      val t1 = s"${catalogAndNamespace}tbl"
+      withTable(t1) {
+        val df = spark.createDataFrame(Seq(
+          (testTimestamp(1), "a"),
+          (testTimestamp(2), "b"),
+          (testTimestamp(3), "c"))).toDF("ts", "data")
+        df.createOrReplaceTempView("source_view")
+
+        sql(s"CREATE TABLE $t1 (ts timestamp, data string) " +
+            s"USING $v2Format PARTITIONED BY (days(ts))")
+        sql(s"INSERT INTO $t1 VALUES " +
+            s"(CAST(date_add('2020-01-01', 2) AS timestamp), 'dummy'), " +
+            s"(CAST(date_add('2020-01-01', 4) AS timestamp), 'keep')")
+        sql(s"INSERT OVERWRITE TABLE $t1 SELECT ts, data FROM source_view")
+
+        val expected = spark.createDataFrame(Seq(
+          (testTimestamp(1), "a"),
+          (testTimestamp(2), "b"),
+          (testTimestamp(3), "c"),
+          (testTimestamp(4), "keep"))).toDF("ts", "data")
+
+        verifyTable(t1, expected)
+      }
+    }
+  }
+
+  test("SPARK-31255: Project a metadata column") {
+    val t1 = s"${catalogAndNamespace}table"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format " +
+          "PARTITIONED BY (bucket(4, id), id)")
+      sql(s"INSERT INTO $t1 VALUES (1, 'a'), (2, 'b'), (3, 'c')")
+
+      val sqlQuery = spark.sql(s"SELECT id, data, index, _partition FROM $t1")
+      val dfQuery = spark.table(t1).select("id", "data", "index", "_partition")
+
+      Seq(sqlQuery, dfQuery).foreach { query =>
+        checkAnswer(query, Seq(Row(1, "a", 0, "3/1"), Row(2, "b", 0, "0/2"), Row(3, "c", 0, "1/3")))
+      }
+    }
+  }
+
+  test("SPARK-31255: Projects data column when metadata column has the same name") {
+    val t1 = s"${catalogAndNamespace}table"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (index bigint, data string) USING $v2Format " +
+          "PARTITIONED BY (bucket(4, index), index)")
+      sql(s"INSERT INTO $t1 VALUES (3, 'c'), (2, 'b'), (1, 'a')")
+
+      val sqlQuery = spark.sql(s"SELECT index, data, _partition FROM $t1")
+      val dfQuery = spark.table(t1).select("index", "data", "_partition")
+
+      Seq(sqlQuery, dfQuery).foreach { query =>
+        checkAnswer(query, Seq(Row(3, "c", "1/3"), Row(2, "b", "0/2"), Row(1, "a", "3/1")))
+      }
+    }
+  }
+
+  test("SPARK-31255: * expansion does not include metadata columns") {
+    val t1 = s"${catalogAndNamespace}table"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format " +
+          "PARTITIONED BY (bucket(4, id), id)")
+      sql(s"INSERT INTO $t1 VALUES (3, 'c'), (2, 'b'), (1, 'a')")
+
+      val sqlQuery = spark.sql(s"SELECT * FROM $t1")
+      val dfQuery = spark.table(t1)
+
+      Seq(sqlQuery, dfQuery).foreach { query =>
+        checkAnswer(query, Seq(Row(3, "c"), Row(2, "b"), Row(1, "a")))
+      }
+    }
+  }
+
+  test("SPARK-31255: metadata column should only be produced when necessary") {
+    val t1 = s"${catalogAndNamespace}table"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format " +
+        "PARTITIONED BY (bucket(4, id), id)")
+
+      val sqlQuery = spark.sql(s"SELECT * FROM $t1 WHERE index = 0")
+      val dfQuery = spark.table(t1).filter("index = 0")
+
+      Seq(sqlQuery, dfQuery).foreach { query =>
+        assert(query.schema.fieldNames.toSeq == Seq("id", "data"))
+      }
+    }
+  }
+
+  test("SPARK-34547: metadata columns are resolved last") {
+    val t1 = s"${catalogAndNamespace}tableOne"
+    val t2 = "t2"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format " +
+        "PARTITIONED BY (bucket(4, id), id)")
+      sql(s"INSERT INTO $t1 VALUES (1, 'a'), (2, 'b'), (3, 'c')")
+      withTempView(t2) {
+        sql(s"CREATE TEMPORARY VIEW $t2 AS SELECT * FROM " +
+          s"VALUES (1, -1), (2, -2), (3, -3) AS $t2(id, index)")
+
+        val sqlQuery = spark.sql(s"SELECT $t1.id, $t2.id, data, index, $t1.index, $t2.index FROM " +
+          s"$t1 JOIN $t2 WHERE $t1.id = $t2.id")
+        val t1Table = spark.table(t1)
+        val t2Table = spark.table(t2)
+        val dfQuery = t1Table.join(t2Table, t1Table.col("id") === t2Table.col("id"))
+          .select(s"$t1.id", s"$t2.id", "data", "index", s"$t1.index", s"$t2.index")
+
+        Seq(sqlQuery, dfQuery).foreach { query =>
+          checkAnswer(query,
+            Seq(
+              Row(1, 1, "a", -1, 0, -1),
+              Row(2, 2, "b", -2, 0, -2),
+              Row(3, 3, "c", -3, 0, -3)
+            )
+          )
+        }
+      }
+    }
+  }
+
+  test("SPARK-33505: insert into partitioned table") {
+    val t = "testpart.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"""
+        |CREATE TABLE $t (id bigint, city string, data string)
+        |USING foo
+        |PARTITIONED BY (id, city)""".stripMargin)
+      val partTable = catalog("testpart").asTableCatalog
+        .loadTable(Identifier.of(Array("ns1", "ns2"), "tbl")).asInstanceOf[InMemoryPartitionTable]
+      val expectedPartitionIdent = InternalRow.fromSeq(Seq(1, UTF8String.fromString("NY")))
+      assert(!partTable.partitionExists(expectedPartitionIdent))
+      sql(s"INSERT INTO $t PARTITION(id = 1, city = 'NY') SELECT 'abc'")
+      assert(partTable.partitionExists(expectedPartitionIdent))
+      // Insert into the existing partition must not fail
+      sql(s"INSERT INTO $t PARTITION(id = 1, city = 'NY') SELECT 'def'")
+      assert(partTable.partitionExists(expectedPartitionIdent))
+    }
+  }
+
+  test("View commands are not supported in v2 catalogs") {
+    def validateViewCommand(
+        sql: String,
+        catalogName: String,
+        viewName: String,
+        cmdName: String): Unit = {
+      assertAnalysisError(
+        sql,
+        s"Cannot specify catalog `$catalogName` for view $viewName because view support " +
+          s"in v2 catalog has not been implemented yet. $cmdName expects a view.")
+    }
+
+    validateViewCommand("DROP VIEW testcat.v", "testcat", "v", "DROP VIEW")
+    validateViewCommand(
+      "ALTER VIEW testcat.v SET TBLPROPERTIES ('key' = 'val')",
+      "testcat",
+      "v",
+      "ALTER VIEW ... SET TBLPROPERTIES")
+    validateViewCommand(
+      "ALTER VIEW testcat.v UNSET TBLPROPERTIES ('key')",
+      "testcat",
+      "v",
+      "ALTER VIEW ... UNSET TBLPROPERTIES")
+    validateViewCommand(
+      "ALTER VIEW testcat.v AS SELECT 1",
+      "testcat",
+      "v",
+      "ALTER VIEW ... AS")
+  }
+
+  test("SPARK-33924: INSERT INTO .. PARTITION preserves the partition location") {
+    val t = "testpart.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"""
+        |CREATE TABLE $t (id bigint, city string, data string)
+        |USING foo
+        |PARTITIONED BY (id, city)""".stripMargin)
+      val partTable = catalog("testpart").asTableCatalog
+        .loadTable(Identifier.of(Array("ns1", "ns2"), "tbl")).asInstanceOf[InMemoryPartitionTable]
+
+      val loc = "partition_location"
+      sql(s"ALTER TABLE $t ADD PARTITION (id = 1, city = 'NY') LOCATION '$loc'")
+
+      val ident = InternalRow.fromSeq(Seq(1, UTF8String.fromString("NY")))
+      assert(partTable.loadPartitionMetadata(ident).get("location") === loc)
+
+      sql(s"INSERT INTO $t PARTITION(id = 1, city = 'NY') SELECT 'abc'")
+      assert(partTable.loadPartitionMetadata(ident).get("location") === loc)
+    }
+  }
+
+  test("SPARK-34468: rename table in place when the destination name has single part") {
+    val tbl = s"${catalogAndNamespace}src_tbl"
+    withTable(tbl) {
+      sql(s"CREATE TABLE $tbl (c0 INT) USING $v2Format")
+      sql(s"INSERT INTO $tbl SELECT 0")
+      checkAnswer(sql(s"SHOW TABLES FROM testcat.ns1.ns2 LIKE 'new_tbl'"), Nil)
+      sql(s"ALTER TABLE $tbl RENAME TO new_tbl")
+      checkAnswer(
+        sql(s"SHOW TABLES FROM testcat.ns1.ns2 LIKE 'new_tbl'"),
+        Row("ns1.ns2", "new_tbl", false))
+      checkAnswer(sql(s"SELECT c0 FROM ${catalogAndNamespace}new_tbl"), Row(0))
+    }
+  }
+
+  test("SPARK-34555: Resolve DataFrame metadata column") {
+    val tbl = s"${catalogAndNamespace}table"
+    withTable(tbl) {
+      sql(s"CREATE TABLE $tbl (id bigint, data string) USING $v2Format " +
+        "PARTITIONED BY (bucket(4, id), id)")
+      sql(s"INSERT INTO $tbl VALUES (1, 'a'), (2, 'b'), (3, 'c')")
+      val table = spark.table(tbl)
+      val dfQuery = table.select(
+        table.col("id"),
+        table.col("data"),
+        table.col("index"),
+        table.col("_partition")
+      )
+
+      checkAnswer(
+        dfQuery,
+        Seq(Row(1, "a", 0, "3/1"), Row(2, "b", 0, "0/2"), Row(3, "c", 0, "1/3"))
+      )
+    }
+  }
+
+  test("SPARK-34561: drop/add columns to a dataset of `DESCRIBE TABLE`") {
+    val tbl = s"${catalogAndNamespace}tbl"
+    withTable(tbl) {
+      sql(s"CREATE TABLE $tbl (c0 INT) USING $v2Format")
+      val description = sql(s"DESCRIBE TABLE $tbl")
+      val noCommentDataset = description.drop("comment")
+      val expectedSchema = new StructType()
+        .add(
+          name = "col_name",
+          dataType = StringType,
+          nullable = false,
+          metadata = new MetadataBuilder().putString("comment", "name of the column").build())
+        .add(
+          name = "data_type",
+          dataType = StringType,
+          nullable = false,
+          metadata = new MetadataBuilder().putString("comment", "data type of the column").build())
+      assert(noCommentDataset.schema === expectedSchema)
+      val isNullDataset = noCommentDataset
+        .withColumn("is_null", noCommentDataset("col_name").isNull)
+      assert(isNullDataset.schema === expectedSchema.add("is_null", BooleanType, false))
+    }
+  }
+
+  test("SPARK-34576: drop/add columns to a dataset of `DESCRIBE COLUMN`") {
+    val tbl = s"${catalogAndNamespace}tbl"
+    withTable(tbl) {
+      sql(s"CREATE TABLE $tbl (c0 INT) USING $v2Format")
+      val description = sql(s"DESCRIBE TABLE $tbl c0")
+      val noCommentDataset = description.drop("info_value")
+      val expectedSchema = new StructType()
+        .add(
+          name = "info_name",
+          dataType = StringType,
+          nullable = false,
+          metadata = new MetadataBuilder().putString("comment", "name of the column info").build())
+      assert(noCommentDataset.schema === expectedSchema)
+      val isNullDataset = noCommentDataset
+        .withColumn("is_null", noCommentDataset("info_name").isNull)
+      assert(isNullDataset.schema === expectedSchema.add("is_null", BooleanType, false))
+    }
+  }
+
+  test("SPARK-34577: drop/add columns to a dataset of `DESCRIBE NAMESPACE`") {
+    withNamespace("ns") {
+      sql("CREATE NAMESPACE ns")
+      val description = sql(s"DESCRIBE NAMESPACE ns")
+      val noCommentDataset = description.drop("info_name")
+      val expectedSchema = new StructType()
+        .add(
+          name = "info_value",
+          dataType = StringType,
+          nullable = true,
+          metadata = new MetadataBuilder()
+            .putString("comment", "value of the namespace info").build())
+      assert(noCommentDataset.schema === expectedSchema)
+      val isNullDataset = noCommentDataset
+        .withColumn("is_null", noCommentDataset("info_value").isNull)
+      assert(isNullDataset.schema === expectedSchema.add("is_null", BooleanType, false))
+    }
+  }
+
+  test("SPARK-34923: do not propagate metadata columns through Project") {
+    val t1 = s"${catalogAndNamespace}table"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format " +
+        "PARTITIONED BY (bucket(4, id), id)")
+      sql(s"INSERT INTO $t1 VALUES (1, 'a'), (2, 'b'), (3, 'c')")
+
+      assertThrows[AnalysisException] {
+        sql(s"SELECT index, _partition from (SELECT id, data FROM $t1)")
+      }
+      assertThrows[AnalysisException] {
+        spark.table(t1).select("id", "data").select("index", "_partition")
+      }
+    }
+  }
+
+  test("SPARK-34923: do not propagate metadata columns through View") {
+    val t1 = s"${catalogAndNamespace}table"
+    val view = "view"
+
+    withTable(t1) {
+      withTempView(view) {
+        sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format " +
+          "PARTITIONED BY (bucket(4, id), id)")
+        sql(s"INSERT INTO $t1 VALUES (1, 'a'), (2, 'b'), (3, 'c')")
+        sql(s"CACHE TABLE $view AS SELECT * FROM $t1")
+        assertThrows[AnalysisException] {
+          sql(s"SELECT index, _partition FROM $view")
+        }
+      }
+    }
+  }
+
+  test("SPARK-34923: propagate metadata columns through Filter") {
+    val t1 = s"${catalogAndNamespace}table"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format " +
+        "PARTITIONED BY (bucket(4, id), id)")
+      sql(s"INSERT INTO $t1 VALUES (1, 'a'), (2, 'b'), (3, 'c')")
+
+      val sqlQuery = spark.sql(s"SELECT id, data, index, _partition FROM $t1 WHERE id > 1")
+      val dfQuery = spark.table(t1).where("id > 1").select("id", "data", "index", "_partition")
+
+      Seq(sqlQuery, dfQuery).foreach { query =>
+        checkAnswer(query, Seq(Row(2, "b", 0, "0/2"), Row(3, "c", 0, "1/3")))
+      }
+    }
+  }
+
+  test("SPARK-34923: propagate metadata columns through Sort") {
+    val t1 = s"${catalogAndNamespace}table"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format " +
+        "PARTITIONED BY (bucket(4, id), id)")
+      sql(s"INSERT INTO $t1 VALUES (1, 'a'), (2, 'b'), (3, 'c')")
+
+      val sqlQuery = spark.sql(s"SELECT id, data, index, _partition FROM $t1 ORDER BY id")
+      val dfQuery = spark.table(t1).orderBy("id").select("id", "data", "index", "_partition")
+
+      Seq(sqlQuery, dfQuery).foreach { query =>
+        checkAnswer(query, Seq(Row(1, "a", 0, "3/1"), Row(2, "b", 0, "0/2"), Row(3, "c", 0, "1/3")))
+      }
+    }
+  }
+
+  test("SPARK-34923: propagate metadata columns through RepartitionBy") {
+    val t1 = s"${catalogAndNamespace}table"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format " +
+        "PARTITIONED BY (bucket(4, id), id)")
+      sql(s"INSERT INTO $t1 VALUES (1, 'a'), (2, 'b'), (3, 'c')")
+
+      val sqlQuery = spark.sql(
+        s"SELECT /*+ REPARTITION_BY_RANGE(3, id) */ id, data, index, _partition FROM $t1")
+      val tbl = spark.table(t1)
+      val dfQuery = tbl.repartitionByRange(3, tbl.col("id"))
+        .select("id", "data", "index", "_partition")
+
+      Seq(sqlQuery, dfQuery).foreach { query =>
+        checkAnswer(query, Seq(Row(1, "a", 0, "3/1"), Row(2, "b", 0, "0/2"), Row(3, "c", 0, "1/3")))
+      }
+    }
+  }
+
+  test("SPARK-34923: propagate metadata columns through SubqueryAlias") {
+    val t1 = s"${catalogAndNamespace}table"
+    val sbq = "sbq"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format " +
+        "PARTITIONED BY (bucket(4, id), id)")
+      sql(s"INSERT INTO $t1 VALUES (1, 'a'), (2, 'b'), (3, 'c')")
+
+      val sqlQuery = spark.sql(
+        s"SELECT $sbq.id, $sbq.data, $sbq.index, $sbq._partition FROM $t1 as $sbq")
+      val dfQuery = spark.table(t1).as(sbq).select(
+        s"$sbq.id", s"$sbq.data", s"$sbq.index", s"$sbq._partition")
+
+      Seq(sqlQuery, dfQuery).foreach { query =>
+        checkAnswer(query, Seq(Row(1, "a", 0, "3/1"), Row(2, "b", 0, "0/2"), Row(3, "c", 0, "1/3")))
+      }
+    }
+  }
+
+  private def testNotSupportedV2Command(sqlCommand: String, sqlParams: String): Unit = {
     val e = intercept[AnalysisException] {
       sql(s"$sqlCommand $sqlParams")
     }
-    assert(e.message.contains(s"$sqlCommand is only supported with v1 tables"))
+    assert(e.message.contains(s"$sqlCommand is not supported for v2 tables"))
   }
 
   private def assertAnalysisError(sqlStatement: String, expectedError: String): Unit = {
@@ -2041,7 +2839,7 @@ class DataSourceV2SQLSuite
 
 
 /** Used as a V2 DataSource for V2SessionCatalog DDL */
-class FakeV2Provider extends TableProvider {
+class FakeV2Provider extends SimpleTableProvider {
   override def getTable(options: CaseInsensitiveStringMap): Table = {
     throw new UnsupportedOperationException("Unnecessary for DDL tests")
   }

@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.connector.catalog;
 
-import org.apache.spark.annotation.Experimental;
+import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 
 /**
@@ -26,8 +26,10 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap;
  * some custom logic and call the built-in session catalog at the end. For example, they can
  * implement {@code createTable}, do something else before calling {@code createTable} of the
  * built-in session catalog.
+ *
+ * @since 3.0.0
  */
-@Experimental
+@Evolving
 public interface CatalogExtension extends TableCatalog, SupportsNamespaces {
 
   /**

@@ -74,8 +74,9 @@ class ChiSqSelectorModel @Since("1.3.0") (
     }
   }
 
-  private[spark] def compressSparse(indices: Array[Int],
-                                    values: Array[Double]): (Array[Int], Array[Double]) = {
+  private[spark] def compressSparse(
+      indices: Array[Int],
+      values: Array[Double]): (Array[Int], Array[Double]) = {
     val newValues = new ArrayBuilder.ofDouble
     val newIndices = new ArrayBuilder.ofInt
     var i = 0
@@ -194,7 +195,7 @@ class ChiSqSelector @Since("2.1.0") () extends Serializable {
    * The is the same to call this() and setNumTopFeatures(numTopFeatures)
    */
   @Since("1.3.0")
-  def this(numTopFeatures: Int) {
+  def this(numTopFeatures: Int) = {
     this()
     this.numTopFeatures = numTopFeatures
   }
@@ -282,7 +283,7 @@ class ChiSqSelector @Since("2.1.0") () extends Serializable {
         chiSqTestResult
           .filter { case (res, _) => res.pValue < fwe / chiSqTestResult.length }
       case errorType =>
-        throw new IllegalStateException(s"Unknown ChiSqSelector Type: $errorType")
+        throw new IllegalArgumentException(s"Unknown ChiSqSelector Type: $errorType")
     }
     val indices = features.map { case (_, index) => index }
     new ChiSqSelectorModel(indices)

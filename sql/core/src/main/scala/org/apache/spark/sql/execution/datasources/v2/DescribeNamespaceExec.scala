@@ -21,10 +21,8 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.encoders.RowEncoder
-import org.apache.spark.sql.catalyst.expressions.{Attribute, GenericRowWithSchema}
-import org.apache.spark.sql.connector.catalog.SupportsNamespaces
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SupportsNamespaces}
 
 /**
  * Physical plan node for describing a namespace.
@@ -33,29 +31,24 @@ case class DescribeNamespaceExec(
     output: Seq[Attribute],
     catalog: SupportsNamespaces,
     namespace: Seq[String],
-    isExtended: Boolean) extends V2CommandExec {
-  private val encoder = RowEncoder(StructType.fromAttributes(output)).resolveAndBind()
-
+    isExtended: Boolean) extends LeafV2CommandExec {
   override protected def run(): Seq[InternalRow] = {
     val rows = new ArrayBuffer[InternalRow]()
     val ns = namespace.toArray
     val metadata = catalog.loadNamespaceMetadata(ns)
 
     rows += toCatalystRow("Namespace Name", ns.last)
-    rows += toCatalystRow("Description", metadata.get(SupportsNamespaces.PROP_COMMENT))
-    rows += toCatalystRow("Location", metadata.get(SupportsNamespaces.PROP_LOCATION))
+
+    CatalogV2Util.NAMESPACE_RESERVED_PROPERTIES.foreach { p =>
+      rows ++= Option(metadata.get(p)).map(toCatalystRow(p.capitalize, _))
+    }
+
     if (isExtended) {
-      val properties =
-        metadata.asScala.toSeq.filter(p =>
-          !SupportsNamespaces.RESERVED_PROPERTIES.contains(p._1))
+      val properties = metadata.asScala -- CatalogV2Util.NAMESPACE_RESERVED_PROPERTIES
       if (properties.nonEmpty) {
-        rows += toCatalystRow("Properties", properties.mkString("(", ",", ")"))
+        rows += toCatalystRow("Properties", properties.toSeq.mkString("(", ",", ")"))
       }
     }
-    rows
-  }
-
-  private def toCatalystRow(strs: String*): InternalRow = {
-    encoder.toRow(new GenericRowWithSchema(strs.toArray, schema)).copy()
+    rows.toSeq
   }
 }

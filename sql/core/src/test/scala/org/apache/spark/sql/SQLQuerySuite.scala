@@ -22,41 +22,50 @@ import java.net.{MalformedURLException, URL}
 import java.sql.{Date, Timestamp}
 import java.util.concurrent.atomic.AtomicBoolean
 
-import scala.collection.parallel.immutable.ParVector
+import org.apache.commons.io.FileUtils
 
 import org.apache.spark.{AccumulatorSuite, SparkException}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.expressions.GenericRow
-import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
+import org.apache.spark.sql.catalyst.expressions.aggregate.{Complete, Partial}
+import org.apache.spark.sql.catalyst.optimizer.{ConvertToLocalRelation, NestedColumnAliasingSuite}
+import org.apache.spark.sql.catalyst.plans.logical.{LocalLimit, Project, RepartitionByExpression, Sort}
 import org.apache.spark.sql.catalyst.util.StringUtils
-import org.apache.spark.sql.execution.HiveResult.hiveResultString
+import org.apache.spark.sql.execution.UnionExec
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.command.FunctionsCommand
+import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcScan
 import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
+import org.apache.spark.sql.execution.exchange.ReusedExchangeExec
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, CartesianProductExec, SortMergeJoinExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.{SharedSparkSession, TestSQLContext}
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.test.SQLTestData._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
+import org.apache.spark.util.ResetSystemProperties
 
-class SQLQuerySuite extends QueryTest with SharedSparkSession {
+class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlanHelper
+    with ResetSystemProperties {
   import testImplicits._
 
   setupTestData()
 
   test("SPARK-8010: promote numeric to string") {
-    val df = Seq((1, 1)).toDF("key", "value")
-    df.createOrReplaceTempView("src")
-    val queryCaseWhen = sql("select case when true then 1.0 else '1' end from src ")
-    val queryCoalesce = sql("select coalesce(null, 1, '1') from src ")
+    withTempView("src") {
+      val df = Seq((1, 1)).toDF("key", "value")
+      df.createOrReplaceTempView("src")
+      val queryCaseWhen = sql("select case when true then 1.0 else '1' end from src ")
+      val queryCoalesce = sql("select coalesce(null, 1, '1') from src ")
 
-    checkAnswer(queryCaseWhen, Row("1.0") :: Nil)
-    checkAnswer(queryCoalesce, Row("1") :: Nil)
+      checkAnswer(queryCaseWhen, Row("1.0") :: Nil)
+      checkAnswer(queryCoalesce, Row("1") :: Nil)
+    }
   }
 
   test("show functions") {
@@ -115,117 +124,52 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
     checkKeywordsExist(sql("describe functioN abcadf"), "Function: abcadf not found.")
   }
 
+  test("SPARK-34678: describe functions for table-valued functions") {
+    checkKeywordsExist(sql("describe function range"),
+      "Function: range",
+      "Class: org.apache.spark.sql.catalyst.plans.logical.Range",
+      "range(end: long)"
+    )
+  }
+
   test("SPARK-14415: All functions should have own descriptions") {
     for (f <- spark.sessionState.functionRegistry.listFunction()) {
       if (!Seq("cube", "grouping", "grouping_id", "rollup", "window").contains(f.unquotedString)) {
-        checkKeywordsNotExist(sql(s"describe function `$f`"), "N/A.")
-      }
-    }
-  }
-
-  test("using _FUNC_ instead of function names in examples") {
-    val exampleRe = "(>.*;)".r
-    val setStmtRe = "(?i)^(>\\s+set\\s+).+".r
-    val ignoreSet = Set(
-      // Examples for CaseWhen show simpler syntax:
-      // `CASE WHEN ... THEN ... WHEN ... THEN ... END`
-      "org.apache.spark.sql.catalyst.expressions.CaseWhen",
-      // _FUNC_ is replaced by `locate` but `locate(... IN ...)` is not supported
-      "org.apache.spark.sql.catalyst.expressions.StringLocate",
-      // _FUNC_ is replaced by `%` which causes a parsing error on `SELECT %(2, 1.8)`
-      "org.apache.spark.sql.catalyst.expressions.Remainder",
-      // Examples demonstrate alternative names, see SPARK-20749
-      "org.apache.spark.sql.catalyst.expressions.Length")
-    spark.sessionState.functionRegistry.listFunction().foreach { funcId =>
-      val info = spark.sessionState.catalog.lookupFunctionInfo(funcId)
-      val className = info.getClassName
-      withClue(s"Expression class '$className'") {
-        val exprExamples = info.getOriginalExamples
-        if (!exprExamples.isEmpty && !ignoreSet.contains(className)) {
-          assert(exampleRe.findAllIn(exprExamples).toIterable
-            .filter(setStmtRe.findFirstIn(_).isEmpty) // Ignore SET commands
-            .forall(_.contains("_FUNC_")))
-        }
-      }
-    }
-  }
-
-  test("check outputs of expression examples") {
-    def unindentAndTrim(s: String): String = {
-      s.replaceAll("\n\\s+", "\n").trim
-    }
-    val beginSqlStmtRe = "  > ".r
-    val endSqlStmtRe = ";\n".r
-    def checkExampleSyntax(example: String): Unit = {
-      val beginStmtNum = beginSqlStmtRe.findAllIn(example).length
-      val endStmtNum = endSqlStmtRe.findAllIn(example).length
-      assert(beginStmtNum === endStmtNum,
-        "The number of ` > ` does not match to the number of `;`")
-    }
-    val exampleRe = """^(.+);\n(?s)(.+)$""".r
-    val ignoreSet = Set(
-      // One of examples shows getting the current timestamp
-      "org.apache.spark.sql.catalyst.expressions.UnixTimestamp",
-      // Random output without a seed
-      "org.apache.spark.sql.catalyst.expressions.Rand",
-      "org.apache.spark.sql.catalyst.expressions.Randn",
-      "org.apache.spark.sql.catalyst.expressions.Shuffle",
-      "org.apache.spark.sql.catalyst.expressions.Uuid",
-      // The example calls methods that return unstable results.
-      "org.apache.spark.sql.catalyst.expressions.CallMethodViaReflection")
-
-    withSQLConf(SQLConf.UTC_TIMESTAMP_FUNC_ENABLED.key -> "true") {
-      val parFuncs = new ParVector(spark.sessionState.functionRegistry.listFunction().toVector)
-      parFuncs.foreach { funcId =>
-        // Examples can change settings. We clone the session to prevent tests clashing.
-        val clonedSpark = spark.cloneSession()
-        val info = clonedSpark.sessionState.catalog.lookupFunctionInfo(funcId)
-        val className = info.getClassName
-        if (!ignoreSet.contains(className)) {
-          withClue(s"Function '${info.getName}', Expression class '$className'") {
-            val example = info.getExamples
-            checkExampleSyntax(example)
-            example.split("  > ").toList.foreach(_ match {
-              case exampleRe(sql, output) =>
-                val df = clonedSpark.sql(sql)
-                val actual = unindentAndTrim(
-                  hiveResultString(df.queryExecution.executedPlan).mkString("\n"))
-                val expected = unindentAndTrim(output)
-                assert(actual === expected)
-              case _ =>
-            })
-          }
-        }
+        checkKeywordsNotExist(sql(s"describe function $f"), "N/A.")
       }
     }
   }
 
   test("SPARK-6743: no columns from cache") {
-    Seq(
-      (83, 0, 38),
-      (26, 0, 79),
-      (43, 81, 24)
-    ).toDF("a", "b", "c").createOrReplaceTempView("cachedData")
+    withTempView("cachedData") {
+      Seq(
+        (83, 0, 38),
+        (26, 0, 79),
+        (43, 81, 24)
+      ).toDF("a", "b", "c").createOrReplaceTempView("cachedData")
 
-    spark.catalog.cacheTable("cachedData")
-    withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
-      checkAnswer(
-        sql("SELECT t1.b FROM cachedData, cachedData t1 GROUP BY t1.b"),
-        Row(0) :: Row(81) :: Nil)
+      spark.catalog.cacheTable("cachedData")
+      withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
+        checkAnswer(
+          sql("SELECT t1.b FROM cachedData, cachedData t1 GROUP BY t1.b"),
+          Row(0) :: Row(81) :: Nil)
+      }
     }
   }
 
   test("self join with aliases") {
-    Seq(1, 2, 3).map(i => (i, i.toString)).toDF("int", "str").createOrReplaceTempView("df")
+    withTempView("df") {
+      Seq(1, 2, 3).map(i => (i, i.toString)).toDF("int", "str").createOrReplaceTempView("df")
 
-    checkAnswer(
-      sql(
-        """
-          |SELECT x.str, COUNT(*)
-          |FROM df x JOIN df y ON x.str = y.str
-          |GROUP BY x.str
+      checkAnswer(
+        sql(
+          """
+            |SELECT x.str, COUNT(*)
+            |FROM df x JOIN df y ON x.str = y.str
+            |GROUP BY x.str
         """.stripMargin),
-      Row("1", 1) :: Row("2", 1) :: Row("3", 1) :: Nil)
+        Row("1", 1) :: Row("2", 1) :: Row("3", 1) :: Nil)
+    }
   }
 
   test("support table.star") {
@@ -239,6 +183,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
   }
 
   test("self join with alias in agg") {
+    withTempView("df") {
       Seq(1, 2, 3)
         .map(i => (i, i.toString))
         .toDF("int", "str")
@@ -246,14 +191,15 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
         .agg($"str", count("str").as("strCount"))
         .createOrReplaceTempView("df")
 
-    checkAnswer(
-      sql(
-        """
-          |SELECT x.str, SUM(x.strCount)
-          |FROM df x JOIN df y ON x.str = y.str
-          |GROUP BY x.str
+      checkAnswer(
+        sql(
+          """
+            |SELECT x.str, SUM(x.strCount)
+            |FROM df x JOIN df y ON x.str = y.str
+            |GROUP BY x.str
         """.stripMargin),
-      Row("1", 1) :: Row("2", 1) :: Row("3", 1) :: Nil)
+        Row("1", 1) :: Row("2", 1) :: Row("3", 1) :: Nil)
+    }
   }
 
   test("SPARK-8668 expr function") {
@@ -300,41 +246,47 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
   }
 
   test("grouping on nested fields") {
-    spark.read
-      .json(Seq("""{"nested": {"attribute": 1}, "value": 2}""").toDS())
-     .createOrReplaceTempView("rows")
+    withTempView("rows") {
+      spark.read
+        .json(Seq("""{"nested": {"attribute": 1}, "value": 2}""").toDS())
+       .createOrReplaceTempView("rows")
 
-    checkAnswer(
-      sql(
-        """
-          |select attribute, sum(cnt)
-          |from (
-          |  select nested.attribute, count(*) as cnt
-          |  from rows
-          |  group by nested.attribute) a
-          |group by attribute
+      checkAnswer(
+        sql(
+          """
+            |select attribute, sum(cnt)
+            |from (
+            |  select nested.attribute, count(*) as cnt
+            |  from rows
+            |  group by nested.attribute) a
+            |group by attribute
         """.stripMargin),
-      Row(1, 1) :: Nil)
+        Row(1, 1) :: Nil)
+    }
   }
 
   test("SPARK-6201 IN type conversion") {
-    spark.read
-      .json(Seq("{\"a\": \"1\"}}", "{\"a\": \"2\"}}", "{\"a\": \"3\"}}").toDS())
-      .createOrReplaceTempView("d")
+    withTempView("d") {
+      spark.read
+        .json(Seq("{\"a\": \"1\"}}", "{\"a\": \"2\"}}", "{\"a\": \"3\"}}").toDS())
+        .createOrReplaceTempView("d")
 
-    checkAnswer(
-      sql("select * from d where d.a in (1,2)"),
-      Seq(Row("1"), Row("2")))
+      checkAnswer(
+        sql("select * from d where d.a in (1,2)"),
+        Seq(Row("1"), Row("2")))
+    }
   }
 
   test("SPARK-11226 Skip empty line in json file") {
-    spark.read
-      .json(Seq("{\"a\": \"1\"}}", "{\"a\": \"2\"}}", "{\"a\": \"3\"}}", "").toDS())
-      .createOrReplaceTempView("d")
+    withTempView("d") {
+      spark.read
+        .json(Seq("{\"a\": \"1\"}}", "{\"a\": \"2\"}}", "{\"a\": \"3\"}}", "").toDS())
+        .createOrReplaceTempView("d")
 
-    checkAnswer(
-      sql("select count(1) from d"),
-      Seq(Row(3)))
+      checkAnswer(
+        sql("select count(1) from d"),
+        Seq(Row(3)))
+    }
   }
 
   test("SPARK-8828 sum should return null if all input values are null") {
@@ -496,40 +448,42 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-3173 Timestamp support in the parser") {
-    (0 to 3).map(i => Tuple1(new Timestamp(i))).toDF("time").createOrReplaceTempView("timestamps")
+    withTempView("timestamps") {
+      (0 to 3).map(i => Tuple1(new Timestamp(i))).toDF("time").createOrReplaceTempView("timestamps")
 
-    checkAnswer(sql(
-      "SELECT time FROM timestamps WHERE time='1969-12-31 16:00:00.0'"),
-      Row(Timestamp.valueOf("1969-12-31 16:00:00")))
+      checkAnswer(sql(
+        "SELECT time FROM timestamps WHERE time='1969-12-31 16:00:00.0'"),
+        Row(Timestamp.valueOf("1969-12-31 16:00:00")))
 
-    checkAnswer(sql(
-      "SELECT time FROM timestamps WHERE time=CAST('1969-12-31 16:00:00.001' AS TIMESTAMP)"),
-      Row(Timestamp.valueOf("1969-12-31 16:00:00.001")))
+      checkAnswer(sql(
+        "SELECT time FROM timestamps WHERE time=CAST('1969-12-31 16:00:00.001' AS TIMESTAMP)"),
+        Row(Timestamp.valueOf("1969-12-31 16:00:00.001")))
 
-    checkAnswer(sql(
-      "SELECT time FROM timestamps WHERE time='1969-12-31 16:00:00.001'"),
-      Row(Timestamp.valueOf("1969-12-31 16:00:00.001")))
+      checkAnswer(sql(
+        "SELECT time FROM timestamps WHERE time='1969-12-31 16:00:00.001'"),
+        Row(Timestamp.valueOf("1969-12-31 16:00:00.001")))
 
-    checkAnswer(sql(
-      "SELECT time FROM timestamps WHERE '1969-12-31 16:00:00.001'=time"),
-      Row(Timestamp.valueOf("1969-12-31 16:00:00.001")))
+      checkAnswer(sql(
+        "SELECT time FROM timestamps WHERE '1969-12-31 16:00:00.001'=time"),
+        Row(Timestamp.valueOf("1969-12-31 16:00:00.001")))
 
-    checkAnswer(sql(
-      """SELECT time FROM timestamps WHERE time<'1969-12-31 16:00:00.003'
+      checkAnswer(sql(
+        """SELECT time FROM timestamps WHERE time<'1969-12-31 16:00:00.003'
           AND time>'1969-12-31 16:00:00.001'"""),
-      Row(Timestamp.valueOf("1969-12-31 16:00:00.002")))
+        Row(Timestamp.valueOf("1969-12-31 16:00:00.002")))
 
-    checkAnswer(sql(
-      """
-        |SELECT time FROM timestamps
-        |WHERE time IN ('1969-12-31 16:00:00.001','1969-12-31 16:00:00.002')
+      checkAnswer(sql(
+        """
+          |SELECT time FROM timestamps
+          |WHERE time IN ('1969-12-31 16:00:00.001','1969-12-31 16:00:00.002')
       """.stripMargin),
-      Seq(Row(Timestamp.valueOf("1969-12-31 16:00:00.001")),
-        Row(Timestamp.valueOf("1969-12-31 16:00:00.002"))))
+        Seq(Row(Timestamp.valueOf("1969-12-31 16:00:00.001")),
+          Row(Timestamp.valueOf("1969-12-31 16:00:00.002"))))
 
-    checkAnswer(sql(
-      "SELECT time FROM timestamps WHERE time='123'"),
-      Nil)
+      checkAnswer(sql(
+        "SELECT time FROM timestamps WHERE time='123'"),
+        Nil)
+    }
   }
 
   test("left semi greater than predicate") {
@@ -858,20 +812,22 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-3349 partitioning after limit") {
-    sql("SELECT DISTINCT n FROM lowerCaseData ORDER BY n DESC")
-      .limit(2)
-      .createOrReplaceTempView("subset1")
-    sql("SELECT DISTINCT n FROM lowerCaseData ORDER BY n ASC")
-      .limit(2)
-      .createOrReplaceTempView("subset2")
-    checkAnswer(
-      sql("SELECT * FROM lowerCaseData INNER JOIN subset1 ON subset1.n = lowerCaseData.n"),
-      Row(3, "c", 3) ::
-      Row(4, "d", 4) :: Nil)
-    checkAnswer(
-      sql("SELECT * FROM lowerCaseData INNER JOIN subset2 ON subset2.n = lowerCaseData.n"),
-      Row(1, "a", 1) ::
-      Row(2, "b", 2) :: Nil)
+    withTempView("subset1", "subset2") {
+      sql("SELECT DISTINCT n FROM lowerCaseData ORDER BY n DESC")
+        .limit(2)
+        .createOrReplaceTempView("subset1")
+      sql("SELECT DISTINCT n FROM lowerCaseData ORDER BY n ASC")
+        .limit(2)
+        .createOrReplaceTempView("subset2")
+      checkAnswer(
+        sql("SELECT * FROM lowerCaseData INNER JOIN subset1 ON subset1.n = lowerCaseData.n"),
+        Row(3, "c", 3) ::
+        Row(4, "d", 4) :: Nil)
+      checkAnswer(
+        sql("SELECT * FROM lowerCaseData INNER JOIN subset2 ON subset2.n = lowerCaseData.n"),
+        Row(1, "a", 1) ::
+        Row(2, "b", 2) :: Nil)
+    }
   }
 
   test("mixed-case keywords") {
@@ -1019,179 +975,88 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
       sql("SELECT * FROM lowerCaseData INTERSECT SELECT * FROM upperCaseData"), Nil)
   }
 
-  test("SET commands semantics using sql()") {
-    spark.sessionState.conf.clear()
-    val testKey = "test.key.0"
-    val testVal = "test.val.0"
-    val nonexistentKey = "nonexistent"
-
-    // "set" itself returns all config variables currently specified in SQLConf.
-    assert(sql("SET").collect().size === TestSQLContext.overrideConfs.size)
-    sql("SET").collect().foreach { row =>
-      val key = row.getString(0)
-      val value = row.getString(1)
-      assert(
-        TestSQLContext.overrideConfs.contains(key),
-        s"$key should exist in SQLConf.")
-      assert(
-        TestSQLContext.overrideConfs(key) === value,
-        s"The value of $key should be ${TestSQLContext.overrideConfs(key)} instead of $value.")
-    }
-    val overrideConfs = sql("SET").collect()
-
-    // "set key=val"
-    sql(s"SET $testKey=$testVal")
-    checkAnswer(
-      sql("SET"),
-      overrideConfs ++ Seq(Row(testKey, testVal))
-    )
-
-    sql(s"SET ${testKey + testKey}=${testVal + testVal}")
-    checkAnswer(
-      sql("set"),
-      overrideConfs ++ Seq(Row(testKey, testVal), Row(testKey + testKey, testVal + testVal))
-    )
-
-    // "set key"
-    checkAnswer(
-      sql(s"SET $testKey"),
-      Row(testKey, testVal)
-    )
-    checkAnswer(
-      sql(s"SET $nonexistentKey"),
-      Row(nonexistentKey, "<undefined>")
-    )
-    spark.sessionState.conf.clear()
-  }
-
-  test("SPARK-19218 SET command should show a result in a sorted order") {
-    val overrideConfs = sql("SET").collect()
-    sql(s"SET test.key3=1")
-    sql(s"SET test.key2=2")
-    sql(s"SET test.key1=3")
-    val result = sql("SET").collect()
-    assert(result ===
-      (overrideConfs ++ Seq(
-        Row("test.key1", "3"),
-        Row("test.key2", "2"),
-        Row("test.key3", "1"))).sortBy(_.getString(0))
-    )
-    spark.sessionState.conf.clear()
-  }
-
-  test("SPARK-19218 `SET -v` should not fail with null value configuration") {
-    import SQLConf._
-    val confEntry = buildConf("spark.test").doc("doc").stringConf.createWithDefault(null)
-
-    try {
-      val result = sql("SET -v").collect()
-      assert(result === result.sortBy(_.getString(0)))
-    } finally {
-      SQLConf.unregister(confEntry)
-    }
-  }
-
-  test("SET commands with illegal or inappropriate argument") {
-    spark.sessionState.conf.clear()
-    // Set negative mapred.reduce.tasks for automatically determining
-    // the number of reducers is not supported
-    intercept[IllegalArgumentException](sql(s"SET mapred.reduce.tasks=-1"))
-    intercept[IllegalArgumentException](sql(s"SET mapred.reduce.tasks=-01"))
-    intercept[IllegalArgumentException](sql(s"SET mapred.reduce.tasks=-2"))
-    spark.sessionState.conf.clear()
-  }
-
-  test("SET mapreduce.job.reduces automatically converted to spark.sql.shuffle.partitions") {
-    spark.sessionState.conf.clear()
-    val before = spark.conf.get(SQLConf.SHUFFLE_PARTITIONS.key).toInt
-    val newConf = before + 1
-    sql(s"SET mapreduce.job.reduces=${newConf.toString}")
-    val after = spark.conf.get(SQLConf.SHUFFLE_PARTITIONS.key).toInt
-    assert(before != after)
-    assert(newConf === after)
-    intercept[IllegalArgumentException](sql(s"SET mapreduce.job.reduces=-1"))
-    spark.sessionState.conf.clear()
-  }
-
   test("apply schema") {
-    val schema1 = StructType(
-      StructField("f1", IntegerType, false) ::
-      StructField("f2", StringType, false) ::
-      StructField("f3", BooleanType, false) ::
-      StructField("f4", IntegerType, true) :: Nil)
+    withTempView("applySchema1", "applySchema2", "applySchema3") {
+      val schema1 = StructType(
+        StructField("f1", IntegerType, false) ::
+        StructField("f2", StringType, false) ::
+        StructField("f3", BooleanType, false) ::
+        StructField("f4", IntegerType, true) :: Nil)
 
-    val rowRDD1 = unparsedStrings.map { r =>
-      val values = r.split(",").map(_.trim)
-      val v4 = try values(3).toInt catch {
-        case _: NumberFormatException => null
+      val rowRDD1 = unparsedStrings.map { r =>
+        val values = r.split(",").map(_.trim)
+        val v4 = try values(3).toInt catch {
+          case _: NumberFormatException => null
+        }
+        Row(values(0).toInt, values(1), values(2).toBoolean, v4)
       }
-      Row(values(0).toInt, values(1), values(2).toBoolean, v4)
-    }
 
-    val df1 = spark.createDataFrame(rowRDD1, schema1)
-    df1.createOrReplaceTempView("applySchema1")
-    checkAnswer(
-      sql("SELECT * FROM applySchema1"),
-      Row(1, "A1", true, null) ::
-      Row(2, "B2", false, null) ::
-      Row(3, "C3", true, null) ::
-      Row(4, "D4", true, 2147483644) :: Nil)
+      val df1 = spark.createDataFrame(rowRDD1, schema1)
+      df1.createOrReplaceTempView("applySchema1")
+      checkAnswer(
+        sql("SELECT * FROM applySchema1"),
+        Row(1, "A1", true, null) ::
+        Row(2, "B2", false, null) ::
+        Row(3, "C3", true, null) ::
+        Row(4, "D4", true, 2147483644) :: Nil)
 
-    checkAnswer(
-      sql("SELECT f1, f4 FROM applySchema1"),
-      Row(1, null) ::
-      Row(2, null) ::
-      Row(3, null) ::
-      Row(4, 2147483644) :: Nil)
+      checkAnswer(
+        sql("SELECT f1, f4 FROM applySchema1"),
+        Row(1, null) ::
+        Row(2, null) ::
+        Row(3, null) ::
+        Row(4, 2147483644) :: Nil)
 
-    val schema2 = StructType(
-      StructField("f1", StructType(
-        StructField("f11", IntegerType, false) ::
-        StructField("f12", BooleanType, false) :: Nil), false) ::
-      StructField("f2", MapType(StringType, IntegerType, true), false) :: Nil)
+      val schema2 = StructType(
+        StructField("f1", StructType(
+          StructField("f11", IntegerType, false) ::
+          StructField("f12", BooleanType, false) :: Nil), false) ::
+        StructField("f2", MapType(StringType, IntegerType, true), false) :: Nil)
 
-    val rowRDD2 = unparsedStrings.map { r =>
-      val values = r.split(",").map(_.trim)
-      val v4 = try values(3).toInt catch {
-        case _: NumberFormatException => null
+      val rowRDD2 = unparsedStrings.map { r =>
+        val values = r.split(",").map(_.trim)
+        val v4 = try values(3).toInt catch {
+          case _: NumberFormatException => null
+        }
+        Row(Row(values(0).toInt, values(2).toBoolean), Map(values(1) -> v4))
       }
-      Row(Row(values(0).toInt, values(2).toBoolean), Map(values(1) -> v4))
-    }
 
-    val df2 = spark.createDataFrame(rowRDD2, schema2)
-    df2.createOrReplaceTempView("applySchema2")
-    checkAnswer(
-      sql("SELECT * FROM applySchema2"),
-      Row(Row(1, true), Map("A1" -> null)) ::
-      Row(Row(2, false), Map("B2" -> null)) ::
-      Row(Row(3, true), Map("C3" -> null)) ::
-      Row(Row(4, true), Map("D4" -> 2147483644)) :: Nil)
+      val df2 = spark.createDataFrame(rowRDD2, schema2)
+      df2.createOrReplaceTempView("applySchema2")
+      checkAnswer(
+        sql("SELECT * FROM applySchema2"),
+        Row(Row(1, true), Map("A1" -> null)) ::
+        Row(Row(2, false), Map("B2" -> null)) ::
+        Row(Row(3, true), Map("C3" -> null)) ::
+        Row(Row(4, true), Map("D4" -> 2147483644)) :: Nil)
 
-    checkAnswer(
-      sql("SELECT f1.f11, f2['D4'] FROM applySchema2"),
-      Row(1, null) ::
-      Row(2, null) ::
-      Row(3, null) ::
-      Row(4, 2147483644) :: Nil)
+      checkAnswer(
+        sql("SELECT f1.f11, f2['D4'] FROM applySchema2"),
+        Row(1, null) ::
+        Row(2, null) ::
+        Row(3, null) ::
+        Row(4, 2147483644) :: Nil)
 
-    // The value of a MapType column can be a mutable map.
-    val rowRDD3 = unparsedStrings.map { r =>
-      val values = r.split(",").map(_.trim)
-      val v4 = try values(3).toInt catch {
-        case _: NumberFormatException => null
+      // The value of a MapType column can be a mutable map.
+      val rowRDD3 = unparsedStrings.map { r =>
+        val values = r.split(",").map(_.trim)
+        val v4 = try values(3).toInt catch {
+          case _: NumberFormatException => null
+        }
+        Row(Row(values(0).toInt, values(2).toBoolean),
+          scala.collection.mutable.Map(values(1) -> v4))
       }
-      Row(Row(values(0).toInt, values(2).toBoolean), scala.collection.mutable.Map(values(1) -> v4))
+
+      val df3 = spark.createDataFrame(rowRDD3, schema2)
+      df3.createOrReplaceTempView("applySchema3")
+
+      checkAnswer(
+        sql("SELECT f1.f11, f2['D4'] FROM applySchema3"),
+        Row(1, null) ::
+        Row(2, null) ::
+        Row(3, null) ::
+        Row(4, 2147483644) :: Nil)
     }
-
-    val df3 = spark.createDataFrame(rowRDD3, schema2)
-    df3.createOrReplaceTempView("applySchema3")
-
-    checkAnswer(
-      sql("SELECT f1.f11, f2['D4'] FROM applySchema3"),
-      Row(1, null) ::
-      Row(2, null) ::
-      Row(3, null) ::
-      Row(4, 2147483644) :: Nil)
   }
 
   test("SPARK-3423 BETWEEN") {
@@ -1231,7 +1096,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
             |order by struct.a, struct.b
             |""".stripMargin)
     }
-    assert(error.message contains "cannot resolve '`struct.a`' given input columns: [a, b]")
+    assert(error.message contains "cannot resolve 'struct.a' given input columns: [a, b]")
 
   }
 
@@ -1243,28 +1108,30 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
   }
 
   test("metadata is propagated correctly") {
-    val person: DataFrame = sql("SELECT * FROM person")
-    val schema = person.schema
-    val docKey = "doc"
-    val docValue = "first name"
-    val metadata = new MetadataBuilder()
-      .putString(docKey, docValue)
-      .build()
-    val schemaWithMeta = new StructType(Array(
-      schema("id"), schema("name").copy(metadata = metadata), schema("age")))
-    val personWithMeta = spark.createDataFrame(person.rdd, schemaWithMeta)
-    def validateMetadata(rdd: DataFrame): Unit = {
-      assert(rdd.schema("name").metadata.getString(docKey) == docValue)
+    withTempView("personWithMeta") {
+      val person: DataFrame = sql("SELECT * FROM person")
+      val schema = person.schema
+      val docKey = "doc"
+      val docValue = "first name"
+      val metadata = new MetadataBuilder()
+        .putString(docKey, docValue)
+        .build()
+      val schemaWithMeta = new StructType(Array(
+        schema("id"), schema("name").copy(metadata = metadata), schema("age")))
+      val personWithMeta = spark.createDataFrame(person.rdd, schemaWithMeta)
+      def validateMetadata(rdd: DataFrame): Unit = {
+        assert(rdd.schema("name").metadata.getString(docKey) == docValue)
+      }
+      personWithMeta.createOrReplaceTempView("personWithMeta")
+      validateMetadata(personWithMeta.select($"name"))
+      validateMetadata(personWithMeta.select($"name"))
+      validateMetadata(personWithMeta.select($"id", $"name"))
+      validateMetadata(sql("SELECT * FROM personWithMeta"))
+      validateMetadata(sql("SELECT id, name FROM personWithMeta"))
+      validateMetadata(sql("SELECT * FROM personWithMeta JOIN salary ON id = personId"))
+      validateMetadata(sql(
+        "SELECT name, salary FROM personWithMeta JOIN salary ON id = personId"))
     }
-    personWithMeta.createOrReplaceTempView("personWithMeta")
-    validateMetadata(personWithMeta.select($"name"))
-    validateMetadata(personWithMeta.select($"name"))
-    validateMetadata(personWithMeta.select($"id", $"name"))
-    validateMetadata(sql("SELECT * FROM personWithMeta"))
-    validateMetadata(sql("SELECT id, name FROM personWithMeta"))
-    validateMetadata(sql("SELECT * FROM personWithMeta JOIN salary ON id = personId"))
-    validateMetadata(sql(
-      "SELECT name, salary FROM personWithMeta JOIN salary ON id = personId"))
   }
 
   test("SPARK-3371 Renaming a function expression with group by gives error") {
@@ -1306,10 +1173,12 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-3483 Special chars in column names") {
-    val data = Seq("""{"key?number1": "value1", "key.number2": "value2"}""").toDS()
-    spark.read.json(data).createOrReplaceTempView("records")
-    withSQLConf(SQLConf.SUPPORT_QUOTED_REGEX_COLUMN_NAME.key -> "false") {
-      sql("SELECT `key?number1`, `key.number2` FROM records")
+    withTempView("records") {
+      val data = Seq("""{"key?number1": "value1", "key.number2": "value2"}""").toDS()
+      spark.read.json(data).createOrReplaceTempView("records")
+      withSQLConf(SQLConf.SUPPORT_QUOTED_REGEX_COLUMN_NAME.key -> "false") {
+        sql("SELECT `key?number1`, `key.number2` FROM records")
+      }
     }
   }
 
@@ -1368,7 +1237,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
     )
   }
 
-  test("oder by asc by default when not specify ascending and descending") {
+  test("order by asc by default when not specify ascending and descending") {
     checkAnswer(
       sql("SELECT a, b FROM testData2 ORDER BY a desc, b"),
       Seq(Row(3, 1), Row(3, 2), Row(2, 1), Row(2, 2), Row(1, 1), Row(1, 2))
@@ -1376,138 +1245,152 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
   }
 
   test("Supporting relational operator '<=>' in Spark SQL") {
-    val nullCheckData1 = TestData(1, "1") :: TestData(2, null) :: Nil
-    val rdd1 = sparkContext.parallelize((0 to 1).map(i => nullCheckData1(i)))
-    rdd1.toDF().createOrReplaceTempView("nulldata1")
-    val nullCheckData2 = TestData(1, "1") :: TestData(2, null) :: Nil
-    val rdd2 = sparkContext.parallelize((0 to 1).map(i => nullCheckData2(i)))
-    rdd2.toDF().createOrReplaceTempView("nulldata2")
-    checkAnswer(sql("SELECT nulldata1.key FROM nulldata1 join " +
-      "nulldata2 on nulldata1.value <=> nulldata2.value"),
+    withTempView("nulldata1", "nulldata2") {
+      val nullCheckData1 = TestData(1, "1") :: TestData(2, null) :: Nil
+      val rdd1 = sparkContext.parallelize((0 to 1).map(i => nullCheckData1(i)))
+      rdd1.toDF().createOrReplaceTempView("nulldata1")
+      val nullCheckData2 = TestData(1, "1") :: TestData(2, null) :: Nil
+      val rdd2 = sparkContext.parallelize((0 to 1).map(i => nullCheckData2(i)))
+      rdd2.toDF().createOrReplaceTempView("nulldata2")
+      checkAnswer(sql("SELECT nulldata1.key FROM nulldata1 join " +
+        "nulldata2 on nulldata1.value <=> nulldata2.value"),
         (1 to 2).map(i => Row(i)))
+    }
   }
 
   test("Multi-column COUNT(DISTINCT ...)") {
-    val data = TestData(1, "val_1") :: TestData(2, "val_2") :: Nil
-    val rdd = sparkContext.parallelize((0 to 1).map(i => data(i)))
-    rdd.toDF().createOrReplaceTempView("distinctData")
-    checkAnswer(sql("SELECT COUNT(DISTINCT key,value) FROM distinctData"), Row(2))
+    withTempView("distinctData") {
+      val data = TestData(1, "val_1") :: TestData(2, "val_2") :: Nil
+      val rdd = sparkContext.parallelize((0 to 1).map(i => data(i)))
+      rdd.toDF().createOrReplaceTempView("distinctData")
+      checkAnswer(sql("SELECT COUNT(DISTINCT key,value) FROM distinctData"), Row(2))
+    }
   }
 
   test("SPARK-4699 case sensitivity SQL query") {
-    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
-      val data = TestData(1, "val_1") :: TestData(2, "val_2") :: Nil
-      val rdd = sparkContext.parallelize((0 to 1).map(i => data(i)))
-      rdd.toDF().createOrReplaceTempView("testTable1")
-      checkAnswer(sql("SELECT VALUE FROM TESTTABLE1 where KEY = 1"), Row("val_1"))
+    withTempView("testTable1") {
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+        val data = TestData(1, "val_1") :: TestData(2, "val_2") :: Nil
+        val rdd = sparkContext.parallelize((0 to 1).map(i => data(i)))
+        rdd.toDF().createOrReplaceTempView("testTable1")
+        checkAnswer(sql("SELECT VALUE FROM TESTTABLE1 where KEY = 1"), Row("val_1"))
+      }
     }
   }
 
   test("SPARK-6145: ORDER BY test for nested fields") {
-    spark.read
-      .json(Seq("""{"a": {"b": 1, "a": {"a": 1}}, "c": [{"d": 1}]}""").toDS())
-      .createOrReplaceTempView("nestedOrder")
+    withTempView("nestedOrder") {
+      spark.read
+        .json(Seq("""{"a": {"b": 1, "a": {"a": 1}}, "c": [{"d": 1}]}""").toDS())
+        .createOrReplaceTempView("nestedOrder")
 
-    checkAnswer(sql("SELECT 1 FROM nestedOrder ORDER BY a.b"), Row(1))
-    checkAnswer(sql("SELECT a.b FROM nestedOrder ORDER BY a.b"), Row(1))
-    checkAnswer(sql("SELECT 1 FROM nestedOrder ORDER BY a.a.a"), Row(1))
-    checkAnswer(sql("SELECT a.a.a FROM nestedOrder ORDER BY a.a.a"), Row(1))
-    checkAnswer(sql("SELECT 1 FROM nestedOrder ORDER BY c[0].d"), Row(1))
-    checkAnswer(sql("SELECT c[0].d FROM nestedOrder ORDER BY c[0].d"), Row(1))
+      checkAnswer(sql("SELECT 1 FROM nestedOrder ORDER BY a.b"), Row(1))
+      checkAnswer(sql("SELECT a.b FROM nestedOrder ORDER BY a.b"), Row(1))
+      checkAnswer(sql("SELECT 1 FROM nestedOrder ORDER BY a.a.a"), Row(1))
+      checkAnswer(sql("SELECT a.a.a FROM nestedOrder ORDER BY a.a.a"), Row(1))
+      checkAnswer(sql("SELECT 1 FROM nestedOrder ORDER BY c[0].d"), Row(1))
+      checkAnswer(sql("SELECT c[0].d FROM nestedOrder ORDER BY c[0].d"), Row(1))
+    }
   }
 
   test("SPARK-6145: special cases") {
-    spark.read
-      .json(Seq("""{"a": {"b": [1]}, "b": [{"a": 1}], "_c0": {"a": 1}}""").toDS())
-      .createOrReplaceTempView("t")
+    withTempView("t") {
+      spark.read
+        .json(Seq("""{"a": {"b": [1]}, "b": [{"a": 1}], "_c0": {"a": 1}}""").toDS())
+        .createOrReplaceTempView("t")
 
-    checkAnswer(sql("SELECT a.b[0] FROM t ORDER BY _c0.a"), Row(1))
-    checkAnswer(sql("SELECT b[0].a FROM t ORDER BY _c0.a"), Row(1))
+      checkAnswer(sql("SELECT a.b[0] FROM t ORDER BY _c0.a"), Row(1))
+      checkAnswer(sql("SELECT b[0].a FROM t ORDER BY _c0.a"), Row(1))
+    }
   }
 
   test("SPARK-6898: complete support for special chars in column names") {
-    spark.read
-      .json(Seq("""{"a": {"c.b": 1}, "b.$q": [{"a@!.q": 1}], "q.w": {"w.i&": [1]}}""").toDS())
-      .createOrReplaceTempView("t")
+    withTempView("t") {
+      spark.read
+        .json(Seq("""{"a": {"c.b": 1}, "b.$q": [{"a@!.q": 1}], "q.w": {"w.i&": [1]}}""").toDS())
+        .createOrReplaceTempView("t")
 
-    withSQLConf(SQLConf.SUPPORT_QUOTED_REGEX_COLUMN_NAME.key -> "false") {
-      checkAnswer(sql("SELECT a.`c.b`, `b.$q`[0].`a@!.q`, `q.w`.`w.i&`[0] FROM t"), Row(1, 1, 1))
+      withSQLConf(SQLConf.SUPPORT_QUOTED_REGEX_COLUMN_NAME.key -> "false") {
+        checkAnswer(sql("SELECT a.`c.b`, `b.$q`[0].`a@!.q`, `q.w`.`w.i&`[0] FROM t"), Row(1, 1, 1))
+      }
     }
   }
 
   test("SPARK-6583 order by aggregated function") {
-    Seq("1" -> 3, "1" -> 4, "2" -> 7, "2" -> 8, "3" -> 5, "3" -> 6, "4" -> 1, "4" -> 2)
-      .toDF("a", "b").createOrReplaceTempView("orderByData")
+    withTempView("orderByData") {
+      Seq("1" -> 3, "1" -> 4, "2" -> 7, "2" -> 8, "3" -> 5, "3" -> 6, "4" -> 1, "4" -> 2)
+        .toDF("a", "b").createOrReplaceTempView("orderByData")
 
-    checkAnswer(
-      sql(
-        """
-          |SELECT a
-          |FROM orderByData
-          |GROUP BY a
-          |ORDER BY sum(b)
+      checkAnswer(
+        sql(
+          """
+            |SELECT a
+            |FROM orderByData
+            |GROUP BY a
+            |ORDER BY sum(b)
         """.stripMargin),
-      Row("4") :: Row("1") :: Row("3") :: Row("2") :: Nil)
+        Row("4") :: Row("1") :: Row("3") :: Row("2") :: Nil)
 
-    checkAnswer(
-      sql(
-        """
-          |SELECT sum(b)
-          |FROM orderByData
-          |GROUP BY a
-          |ORDER BY sum(b)
+      checkAnswer(
+        sql(
+          """
+            |SELECT sum(b)
+            |FROM orderByData
+            |GROUP BY a
+            |ORDER BY sum(b)
         """.stripMargin),
-      Row(3) :: Row(7) :: Row(11) :: Row(15) :: Nil)
+        Row(3) :: Row(7) :: Row(11) :: Row(15) :: Nil)
 
-    checkAnswer(
-      sql(
-        """
-          |SELECT sum(b)
-          |FROM orderByData
-          |GROUP BY a
-          |ORDER BY sum(b), max(b)
+      checkAnswer(
+        sql(
+          """
+            |SELECT sum(b)
+            |FROM orderByData
+            |GROUP BY a
+            |ORDER BY sum(b), max(b)
         """.stripMargin),
-      Row(3) :: Row(7) :: Row(11) :: Row(15) :: Nil)
+        Row(3) :: Row(7) :: Row(11) :: Row(15) :: Nil)
 
-    checkAnswer(
-      sql(
-        """
-          |SELECT a, sum(b)
-          |FROM orderByData
-          |GROUP BY a
-          |ORDER BY sum(b)
+      checkAnswer(
+        sql(
+          """
+            |SELECT a, sum(b)
+            |FROM orderByData
+            |GROUP BY a
+            |ORDER BY sum(b)
         """.stripMargin),
-      Row("4", 3) :: Row("1", 7) :: Row("3", 11) :: Row("2", 15) :: Nil)
+        Row("4", 3) :: Row("1", 7) :: Row("3", 11) :: Row("2", 15) :: Nil)
 
-    checkAnswer(
-      sql(
-        """
+      checkAnswer(
+        sql(
+          """
             |SELECT a, sum(b)
             |FROM orderByData
             |GROUP BY a
             |ORDER BY sum(b) + 1
           """.stripMargin),
-      Row("4", 3) :: Row("1", 7) :: Row("3", 11) :: Row("2", 15) :: Nil)
+        Row("4", 3) :: Row("1", 7) :: Row("3", 11) :: Row("2", 15) :: Nil)
 
-    checkAnswer(
-      sql(
-        """
+      checkAnswer(
+        sql(
+          """
             |SELECT count(*)
             |FROM orderByData
             |GROUP BY a
             |ORDER BY count(*)
           """.stripMargin),
-      Row(2) :: Row(2) :: Row(2) :: Row(2) :: Nil)
+        Row(2) :: Row(2) :: Row(2) :: Row(2) :: Nil)
 
-    checkAnswer(
-      sql(
-        """
+      checkAnswer(
+        sql(
+          """
             |SELECT a
             |FROM orderByData
             |GROUP BY a
             |ORDER BY a, count(*), sum(b)
           """.stripMargin),
-      Row("1") :: Row("2") :: Row("3") :: Row("4") :: Nil)
+        Row("1") :: Row("2") :: Row("3") :: Row("4") :: Nil)
+    }
   }
 
   test("SPARK-7952: fix the equality check between boolean and numeric types") {
@@ -1819,137 +1702,141 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
   }
 
   test("Struct Star Expansion") {
-    val structDf = testData2.select("a", "b").as("record")
+    withTempView("structTable", "nestedStructTable", "specialCharacterTable", "nameConflict") {
+      val structDf = testData2.select("a", "b").as("record")
 
-    checkAnswer(
-      structDf.select($"record.a", $"record.b"),
-      Row(1, 1) :: Row(1, 2) :: Row(2, 1) :: Row(2, 2) :: Row(3, 1) :: Row(3, 2) :: Nil)
-
-    checkAnswer(
-      structDf.select($"record.*"),
-      Row(1, 1) :: Row(1, 2) :: Row(2, 1) :: Row(2, 2) :: Row(3, 1) :: Row(3, 2) :: Nil)
-
-    checkAnswer(
-      structDf.select($"record.*", $"record.*"),
-      Row(1, 1, 1, 1) :: Row(1, 2, 1, 2) :: Row(2, 1, 2, 1) :: Row(2, 2, 2, 2) ::
-        Row(3, 1, 3, 1) :: Row(3, 2, 3, 2) :: Nil)
-
-    checkAnswer(
-      sql("select struct(a, b) as r1, struct(b, a) as r2 from testData2").select($"r1.*", $"r2.*"),
-      Row(1, 1, 1, 1) :: Row(1, 2, 2, 1) :: Row(2, 1, 1, 2) :: Row(2, 2, 2, 2) ::
-        Row(3, 1, 1, 3) :: Row(3, 2, 2, 3) :: Nil)
-
-    // Try with a temporary view
-    sql("select struct(a, b) as record from testData2").createOrReplaceTempView("structTable")
-    checkAnswer(
-      sql("SELECT record.* FROM structTable"),
-      Row(1, 1) :: Row(1, 2) :: Row(2, 1) :: Row(2, 2) :: Row(3, 1) :: Row(3, 2) :: Nil)
-
-    checkAnswer(sql(
-      """
-        | SELECT min(struct(record.*)) FROM
-        |   (select struct(a,b) as record from testData2) tmp
-      """.stripMargin),
-      Row(Row(1, 1)) :: Nil)
-
-    // Try with an alias on the select list
-    checkAnswer(sql(
-      """
-        | SELECT max(struct(record.*)) as r FROM
-        |   (select struct(a,b) as record from testData2) tmp
-      """.stripMargin).select($"r.*"),
-      Row(3, 2) :: Nil)
-
-    // With GROUP BY
-    checkAnswer(sql(
-      """
-        | SELECT min(struct(record.*)) FROM
-        |   (select a as a, struct(a,b) as record from testData2) tmp
-        | GROUP BY a
-      """.stripMargin),
-      Row(Row(1, 1)) :: Row(Row(2, 1)) :: Row(Row(3, 1)) :: Nil)
-
-    // With GROUP BY and alias
-    checkAnswer(sql(
-      """
-        | SELECT max(struct(record.*)) as r FROM
-        |   (select a as a, struct(a,b) as record from testData2) tmp
-        | GROUP BY a
-      """.stripMargin).select($"r.*"),
-      Row(1, 2) :: Row(2, 2) :: Row(3, 2) :: Nil)
-
-    // With GROUP BY and alias and additional fields in the struct
-    checkAnswer(sql(
-      """
-        | SELECT max(struct(a, record.*, b)) as r FROM
-        |   (select a as a, b as b, struct(a,b) as record from testData2) tmp
-        | GROUP BY a
-      """.stripMargin).select($"r.*"),
-      Row(1, 1, 2, 2) :: Row(2, 2, 2, 2) :: Row(3, 3, 2, 2) :: Nil)
-
-    // Create a data set that contains nested structs.
-    val nestedStructData = sql(
-      """
-        | SELECT struct(r1, r2) as record FROM
-        |   (SELECT struct(a, b) as r1, struct(b, a) as r2 FROM testData2) tmp
-      """.stripMargin)
-
-    checkAnswer(nestedStructData.select($"record.*"),
-      Row(Row(1, 1), Row(1, 1)) :: Row(Row(1, 2), Row(2, 1)) :: Row(Row(2, 1), Row(1, 2)) ::
-        Row(Row(2, 2), Row(2, 2)) :: Row(Row(3, 1), Row(1, 3)) :: Row(Row(3, 2), Row(2, 3)) :: Nil)
-    checkAnswer(nestedStructData.select($"record.r1"),
-      Row(Row(1, 1)) :: Row(Row(1, 2)) :: Row(Row(2, 1)) :: Row(Row(2, 2)) ::
-        Row(Row(3, 1)) :: Row(Row(3, 2)) :: Nil)
-    checkAnswer(
-      nestedStructData.select($"record.r1.*"),
-      Row(1, 1) :: Row(1, 2) :: Row(2, 1) :: Row(2, 2) :: Row(3, 1) :: Row(3, 2) :: Nil)
-
-    // Try with a temporary view
-    withTempView("nestedStructTable") {
-      nestedStructData.createOrReplaceTempView("nestedStructTable")
       checkAnswer(
-        sql("SELECT record.* FROM nestedStructTable"),
-        nestedStructData.select($"record.*"))
-      checkAnswer(
-        sql("SELECT record.r1 FROM nestedStructTable"),
-        nestedStructData.select($"record.r1"))
-      checkAnswer(
-        sql("SELECT record.r1.* FROM nestedStructTable"),
-        nestedStructData.select($"record.r1.*"))
+        structDf.select($"record.a", $"record.b"),
+        Row(1, 1) :: Row(1, 2) :: Row(2, 1) :: Row(2, 2) :: Row(3, 1) :: Row(3, 2) :: Nil)
 
-      // Try resolving something not there.
-      assert(intercept[AnalysisException](sql("SELECT abc.* FROM nestedStructTable"))
-        .getMessage.contains("cannot resolve"))
-    }
+      checkAnswer(
+        structDf.select($"record.*"),
+        Row(1, 1) :: Row(1, 2) :: Row(2, 1) :: Row(2, 2) :: Row(3, 1) :: Row(3, 2) :: Nil)
 
-    // Create paths with unusual characters
-    withSQLConf(SQLConf.SUPPORT_QUOTED_REGEX_COLUMN_NAME.key -> "false") {
-      val specialCharacterPath = sql(
+      checkAnswer(
+        structDf.select($"record.*", $"record.*"),
+        Row(1, 1, 1, 1) :: Row(1, 2, 1, 2) :: Row(2, 1, 2, 1) :: Row(2, 2, 2, 2) ::
+          Row(3, 1, 3, 1) :: Row(3, 2, 3, 2) :: Nil)
+
+      checkAnswer(
+        sql("select struct(a, b) as r1, struct(b, a) as r2 from testData2")
+          .select($"r1.*", $"r2.*"),
+        Row(1, 1, 1, 1) :: Row(1, 2, 2, 1) :: Row(2, 1, 1, 2) :: Row(2, 2, 2, 2) ::
+          Row(3, 1, 1, 3) :: Row(3, 2, 2, 3) :: Nil)
+
+      // Try with a temporary view
+      sql("select struct(a, b) as record from testData2").createOrReplaceTempView("structTable")
+      checkAnswer(
+        sql("SELECT record.* FROM structTable"),
+        Row(1, 1) :: Row(1, 2) :: Row(2, 1) :: Row(2, 2) :: Row(3, 1) :: Row(3, 2) :: Nil)
+
+      checkAnswer(sql(
         """
-        | SELECT struct(`col$.a_`, `a.b.c.`) as `r&&b.c` FROM
-        |   (SELECT struct(a, b) as `col$.a_`, struct(b, a) as `a.b.c.` FROM testData2) tmp
+          | SELECT min(struct(record.*)) FROM
+          |   (select struct(a,b) as record from testData2) tmp
+      """.stripMargin),
+        Row(Row(1, 1)) :: Nil)
+
+      // Try with an alias on the select list
+      checkAnswer(sql(
+        """
+          | SELECT max(struct(record.*)) as r FROM
+          |   (select struct(a,b) as record from testData2) tmp
+      """.stripMargin).select($"r.*"),
+        Row(3, 2) :: Nil)
+
+      // With GROUP BY
+      checkAnswer(sql(
+        """
+          | SELECT min(struct(record.*)) FROM
+          |   (select a as a, struct(a,b) as record from testData2) tmp
+          | GROUP BY a
+      """.stripMargin),
+        Row(Row(1, 1)) :: Row(Row(2, 1)) :: Row(Row(3, 1)) :: Nil)
+
+      // With GROUP BY and alias
+      checkAnswer(sql(
+        """
+          | SELECT max(struct(record.*)) as r FROM
+          |   (select a as a, struct(a,b) as record from testData2) tmp
+          | GROUP BY a
+      """.stripMargin).select($"r.*"),
+        Row(1, 2) :: Row(2, 2) :: Row(3, 2) :: Nil)
+
+      // With GROUP BY and alias and additional fields in the struct
+      checkAnswer(sql(
+        """
+          | SELECT max(struct(a, record.*, b)) as r FROM
+          |   (select a as a, b as b, struct(a,b) as record from testData2) tmp
+          | GROUP BY a
+      """.stripMargin).select($"r.*"),
+        Row(1, 1, 2, 2) :: Row(2, 2, 2, 2) :: Row(3, 3, 2, 2) :: Nil)
+
+      // Create a data set that contains nested structs.
+      val nestedStructData = sql(
+        """
+          | SELECT struct(r1, r2) as record FROM
+          |   (SELECT struct(a, b) as r1, struct(b, a) as r2 FROM testData2) tmp
       """.stripMargin)
-      withTempView("specialCharacterTable") {
-        specialCharacterPath.createOrReplaceTempView("specialCharacterTable")
+
+      checkAnswer(nestedStructData.select($"record.*"),
+        Row(Row(1, 1), Row(1, 1)) :: Row(Row(1, 2), Row(2, 1)) :: Row(Row(2, 1), Row(1, 2)) ::
+          Row(Row(2, 2), Row(2, 2)) :: Row(Row(3, 1), Row(1, 3)) :: Row(Row(3, 2), Row(2, 3)) ::
+          Nil)
+      checkAnswer(nestedStructData.select($"record.r1"),
+        Row(Row(1, 1)) :: Row(Row(1, 2)) :: Row(Row(2, 1)) :: Row(Row(2, 2)) ::
+          Row(Row(3, 1)) :: Row(Row(3, 2)) :: Nil)
+      checkAnswer(
+        nestedStructData.select($"record.r1.*"),
+        Row(1, 1) :: Row(1, 2) :: Row(2, 1) :: Row(2, 2) :: Row(3, 1) :: Row(3, 2) :: Nil)
+
+      // Try with a temporary view
+      withTempView("nestedStructTable") {
+        nestedStructData.createOrReplaceTempView("nestedStructTable")
         checkAnswer(
-          specialCharacterPath.select($"`r&&b.c`.*"),
+          sql("SELECT record.* FROM nestedStructTable"),
           nestedStructData.select($"record.*"))
         checkAnswer(
-        sql(
-          "SELECT `r&&b.c`.`col$.a_` FROM specialCharacterTable"),
-        nestedStructData.select($"record.r1"))
+          sql("SELECT record.r1 FROM nestedStructTable"),
+          nestedStructData.select($"record.r1"))
         checkAnswer(
-          sql("SELECT `r&&b.c`.`a.b.c.` FROM specialCharacterTable"),
-          nestedStructData.select($"record.r2"))
-        checkAnswer(
-          sql("SELECT `r&&b.c`.`col$.a_`.* FROM specialCharacterTable"),
+          sql("SELECT record.r1.* FROM nestedStructTable"),
           nestedStructData.select($"record.r1.*"))
-      }
-    }
 
-    // Try star expanding a scalar. This should fail.
-    assert(intercept[AnalysisException](sql("select a.* from testData2")).getMessage.contains(
-      "Can only star expand struct data types."))
+        // Try resolving something not there.
+        assert(intercept[AnalysisException](sql("SELECT abc.* FROM nestedStructTable"))
+          .getMessage.contains("cannot resolve"))
+      }
+
+      // Create paths with unusual characters
+      withSQLConf(SQLConf.SUPPORT_QUOTED_REGEX_COLUMN_NAME.key -> "false") {
+        val specialCharacterPath = sql(
+          """
+          | SELECT struct(`col$.a_`, `a.b.c.`) as `r&&b.c` FROM
+          |   (SELECT struct(a, b) as `col$.a_`, struct(b, a) as `a.b.c.` FROM testData2) tmp
+      """.stripMargin)
+        withTempView("specialCharacterTable") {
+          specialCharacterPath.createOrReplaceTempView("specialCharacterTable")
+          checkAnswer(
+            specialCharacterPath.select($"`r&&b.c`.*"),
+            nestedStructData.select($"record.*"))
+          checkAnswer(
+          sql(
+            "SELECT `r&&b.c`.`col$.a_` FROM specialCharacterTable"),
+          nestedStructData.select($"record.r1"))
+          checkAnswer(
+            sql("SELECT `r&&b.c`.`a.b.c.` FROM specialCharacterTable"),
+            nestedStructData.select($"record.r2"))
+          checkAnswer(
+            sql("SELECT `r&&b.c`.`col$.a_`.* FROM specialCharacterTable"),
+            nestedStructData.select($"record.r1.*"))
+        }
+      }
+
+      // Try star expanding a scalar. This should fail.
+      assert(intercept[AnalysisException](sql("select a.* from testData2")).getMessage.contains(
+        "Can only star expand struct data types."))
+    }
   }
 
   test("Struct Star Expansion - Name conflict") {
@@ -2118,6 +2005,26 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
         df.select(hash($"i", $"j")),
         sql("SELECT hash(i, j) from tbl")
       )
+    }
+  }
+
+  test("SPARK-27619: Throw analysis exception when hash and xxhash64 is used on MapType") {
+    Seq("hash", "xxhash64").foreach {
+      case hashExpression =>
+        intercept[AnalysisException] {
+          spark.createDataset(Map(1 -> 10, 2 -> 20) :: Nil).selectExpr(s"$hashExpression(*)")
+        }
+    }
+  }
+
+  test(s"SPARK-27619: When ${SQLConf.LEGACY_ALLOW_HASH_ON_MAPTYPE.key} is true, hash can be " +
+    "used on Maptype") {
+    Seq("hash", "xxhash64").foreach {
+      case hashExpression =>
+        withSQLConf(SQLConf.LEGACY_ALLOW_HASH_ON_MAPTYPE.key -> "true") {
+          val df = spark.createDataset(Map() :: Nil)
+          checkAnswer(df.selectExpr(s"$hashExpression(*)"), sql(s"SELECT $hashExpression(map())"))
+        }
     }
   }
 
@@ -2776,7 +2683,9 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
           sql("SELECT * FROM t, S WHERE c = C")
         }.message
         assert(
-          m.contains("cannot resolve '(default.t.`c` = default.S.`C`)' due to data type mismatch"))
+          m.contains(
+            "cannot resolve '(spark_catalog.default.t.c = " +
+            "spark_catalog.default.S.C)' due to data type mismatch"))
       }
     }
   }
@@ -2788,7 +2697,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
 
       val e = intercept[AnalysisException](sql("SELECT v.i from (SELECT i FROM v)"))
       assert(e.message ==
-        "cannot resolve '`v.i`' given input columns: [__auto_generated_subquery_name.i]")
+        "cannot resolve 'v.i' given input columns: [__auto_generated_subquery_name.i]")
 
       checkAnswer(sql("SELECT __auto_generated_subquery_name.i from (SELECT i FROM v)"), Row(1))
     }
@@ -2824,7 +2733,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("SRARK-22266: the same aggregate function was calculated multiple times") {
+  test("SPARK-22266: the same aggregate function was calculated multiple times") {
     val query = "SELECT a, max(b+1), max(b+1) + 1 FROM testData2 GROUP BY a"
     val df = sql(query)
     val physical = df.queryExecution.sparkPlan
@@ -2842,16 +2751,18 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
       val query = s"SELECT ${funcToResult._1} FILTER (WHERE b > 1) FROM testData2"
       val df = sql(query)
       val physical = df.queryExecution.sparkPlan
-      val aggregateExpressions = physical.collectFirst {
+      val aggregateExpressions = physical.collect {
         case agg: HashAggregateExec => agg.aggregateExpressions
         case agg: ObjectHashAggregateExec => agg.aggregateExpressions
+      }.flatten
+      aggregateExpressions.foreach { expr =>
+        if (expr.mode == Complete || expr.mode == Partial) {
+          assert(expr.filter.isDefined)
+        } else {
+          assert(expr.filter.isEmpty)
+        }
       }
-      assert(aggregateExpressions.isDefined)
-      assert(aggregateExpressions.get.size == 1)
-      aggregateExpressions.get.foreach { expr =>
-        assert(expr.filter.isDefined)
-      }
-      checkAnswer(df, Row(funcToResult._2) :: Nil)
+      checkAnswer(df, Row(funcToResult._2))
     }
   }
 
@@ -2859,15 +2770,17 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
     withSQLConf(SQLConf.USE_OBJECT_HASH_AGG.key -> "false") {
       val df = sql("SELECT PERCENTILE(a, 1) FILTER (WHERE b > 1) FROM testData2")
       val physical = df.queryExecution.sparkPlan
-      val aggregateExpressions = physical.collectFirst {
+      val aggregateExpressions = physical.collect {
         case agg: SortAggregateExec => agg.aggregateExpressions
+      }.flatten
+      aggregateExpressions.foreach { expr =>
+        if (expr.mode == Complete || expr.mode == Partial) {
+          assert(expr.filter.isDefined)
+        } else {
+          assert(expr.filter.isEmpty)
+        }
       }
-      assert(aggregateExpressions.isDefined)
-      assert(aggregateExpressions.get.size == 1)
-      aggregateExpressions.get.foreach { expr =>
-        assert(expr.filter.isDefined)
-      }
-      checkAnswer(df, Row(3) :: Nil)
+      checkAnswer(df, Row(3))
     }
   }
 
@@ -3100,7 +3013,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
           assert(scan.isInstanceOf[ParquetScan])
           assert(scan.asInstanceOf[ParquetScan].pushedFilters === filters)
         case _ =>
-          fail(s"unknow format $format")
+          fail(s"unknown format $format")
       }
     }
 
@@ -3180,38 +3093,40 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
   }
 
   test("string date comparison") {
-    spark.range(1).selectExpr("date '2000-01-01' as d").createOrReplaceTempView("t1")
-    val result = Date.valueOf("2000-01-01")
-    checkAnswer(sql("select * from t1 where d < '2000'"), Nil)
-    checkAnswer(sql("select * from t1 where d < '2001'"), Row(result))
-    checkAnswer(sql("select * from t1 where d < '2000-01'"), Nil)
-    checkAnswer(sql("select * from t1 where d < '2000-01-01'"), Nil)
-    checkAnswer(sql("select * from t1 where d < '2000-1-1'"), Nil)
-    checkAnswer(sql("select * from t1 where d <= '2000-1-1'"), Row(result))
-    checkAnswer(sql("select * from t1 where d <= '1999-12-30'"), Nil)
-    checkAnswer(sql("select * from t1 where d = '2000-1-1'"), Row(result))
-    checkAnswer(sql("select * from t1 where d = '2000-01-01'"), Row(result))
-    checkAnswer(sql("select * from t1 where d = '2000-1-02'"), Nil)
-    checkAnswer(sql("select * from t1 where d > '2000-01-01'"), Nil)
-    checkAnswer(sql("select * from t1 where d > '1999'"), Row(result))
-    checkAnswer(sql("select * from t1 where d >= '2000'"), Row(result))
-    checkAnswer(sql("select * from t1 where d >= '2000-1'"), Row(result))
-    checkAnswer(sql("select * from t1 where d >= '2000-1-1'"), Row(result))
-    checkAnswer(sql("select * from t1 where d >= '2000-1-01'"), Row(result))
-    checkAnswer(sql("select * from t1 where d >= '2000-01-1'"), Row(result))
-    checkAnswer(sql("select * from t1 where d >= '2000-01-01'"), Row(result))
-    checkAnswer(sql("select * from t1 where d >= '2000-01-02'"), Nil)
-    checkAnswer(sql("select * from t1 where '2000' >= d"), Row(result))
-    checkAnswer(sql("select * from t1 where d > '2000-13'"), Nil)
-
-    withSQLConf(SQLConf.LEGACY_CAST_DATETIME_TO_STRING.key -> "true") {
+    withTempView("t1") {
+      spark.range(1).selectExpr("date '2000-01-01' as d").createOrReplaceTempView("t1")
+      val result = Date.valueOf("2000-01-01")
       checkAnswer(sql("select * from t1 where d < '2000'"), Nil)
       checkAnswer(sql("select * from t1 where d < '2001'"), Row(result))
-      checkAnswer(sql("select * from t1 where d < '2000-1-1'"), Row(result))
-      checkAnswer(sql("select * from t1 where d <= '1999'"), Nil)
+      checkAnswer(sql("select * from t1 where d < '2000-01'"), Nil)
+      checkAnswer(sql("select * from t1 where d < '2000-01-01'"), Nil)
+      checkAnswer(sql("select * from t1 where d < '2000-1-1'"), Nil)
+      checkAnswer(sql("select * from t1 where d <= '2000-1-1'"), Row(result))
+      checkAnswer(sql("select * from t1 where d <= '1999-12-30'"), Nil)
+      checkAnswer(sql("select * from t1 where d = '2000-1-1'"), Row(result))
+      checkAnswer(sql("select * from t1 where d = '2000-01-01'"), Row(result))
+      checkAnswer(sql("select * from t1 where d = '2000-1-02'"), Nil)
+      checkAnswer(sql("select * from t1 where d > '2000-01-01'"), Nil)
+      checkAnswer(sql("select * from t1 where d > '1999'"), Row(result))
       checkAnswer(sql("select * from t1 where d >= '2000'"), Row(result))
-      checkAnswer(sql("select * from t1 where d > '1999-13'"), Row(result))
-      checkAnswer(sql("select to_date('2000-01-01') > '1'"), Row(true))
+      checkAnswer(sql("select * from t1 where d >= '2000-1'"), Row(result))
+      checkAnswer(sql("select * from t1 where d >= '2000-1-1'"), Row(result))
+      checkAnswer(sql("select * from t1 where d >= '2000-1-01'"), Row(result))
+      checkAnswer(sql("select * from t1 where d >= '2000-01-1'"), Row(result))
+      checkAnswer(sql("select * from t1 where d >= '2000-01-01'"), Row(result))
+      checkAnswer(sql("select * from t1 where d >= '2000-01-02'"), Nil)
+      checkAnswer(sql("select * from t1 where '2000' >= d"), Row(result))
+      checkAnswer(sql("select * from t1 where d > '2000-13'"), Nil)
+
+      withSQLConf(SQLConf.LEGACY_CAST_DATETIME_TO_STRING.key -> "true") {
+        checkAnswer(sql("select * from t1 where d < '2000'"), Nil)
+        checkAnswer(sql("select * from t1 where d < '2001'"), Row(result))
+        checkAnswer(sql("select * from t1 where d < '2000-1-1'"), Row(result))
+        checkAnswer(sql("select * from t1 where d <= '1999'"), Nil)
+        checkAnswer(sql("select * from t1 where d >= '2000'"), Row(result))
+        checkAnswer(sql("select * from t1 where d > '1999-13'"), Row(result))
+        checkAnswer(sql("select to_date('2000-01-01') > '1'"), Row(true))
+      }
     }
   }
 
@@ -3261,28 +3176,30 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
   test("SPARK-28156: self-join should not miss cached view") {
     withTable("table1") {
       withView("table1_vw") {
-        val df = Seq.tabulate(5) { x => (x, x + 1, x + 2, x + 3) }.toDF("a", "b", "c", "d")
-        df.write.mode("overwrite").format("orc").saveAsTable("table1")
-        sql("drop view if exists table1_vw")
-        sql("create view table1_vw as select * from table1")
+        withTempView("cachedview") {
+          val df = Seq.tabulate(5) { x => (x, x + 1, x + 2, x + 3) }.toDF("a", "b", "c", "d")
+          df.write.mode("overwrite").format("orc").saveAsTable("table1")
+          sql("drop view if exists table1_vw")
+          sql("create view table1_vw as select * from table1")
 
-        val cachedView = sql("select a, b, c, d from table1_vw")
+          val cachedView = sql("select a, b, c, d from table1_vw")
 
-        cachedView.createOrReplaceTempView("cachedview")
-        cachedView.persist()
+          cachedView.createOrReplaceTempView("cachedview")
+          cachedView.persist()
 
-        val queryDf = sql(
-          s"""select leftside.a, leftside.b
-             |from cachedview leftside
-             |join cachedview rightside
-             |on leftside.a = rightside.a
+          val queryDf = sql(
+            s"""select leftside.a, leftside.b
+               |from cachedview leftside
+               |join cachedview rightside
+               |on leftside.a = rightside.a
            """.stripMargin)
 
-        val inMemoryTableScan = queryDf.queryExecution.executedPlan.collect {
-          case i: InMemoryTableScanExec => i
+          val inMemoryTableScan = collect(queryDf.queryExecution.executedPlan) {
+            case i: InMemoryTableScanExec => i
+          }
+          assert(inMemoryTableScan.size == 2)
+          checkAnswer(queryDf, Row(0, 1) :: Row(1, 2) :: Row(2, 3) :: Row(3, 4) :: Row(4, 5) :: Nil)
         }
-        assert(inMemoryTableScan.size == 2)
-        checkAnswer(queryDf, Row(0, 1) :: Row(1, 2) :: Row(2, 3) :: Row(3, 4) :: Row(4, 5) :: Nil)
       }
     }
 
@@ -3371,18 +3288,735 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("SPARK-28670: create function should throw AnalysisException if UDF class not found") {
-    Seq(true, false).foreach { isTemporary =>
-      val exp = intercept[AnalysisException] {
-        sql(
-          s"""
-             |CREATE ${if (isTemporary) "TEMPORARY" else ""} FUNCTION udtf_test
-             |AS 'org.apache.spark.sql.hive.execution.UDFTest'
-             |USING JAR '/var/invalid/invalid.jar'
-        """.stripMargin)
-      }
-      assert(exp.getMessage.contains("Resources not found"))
+  test("SPARK-30447: fix constant propagation inside NOT") {
+    withTempView("t") {
+      Seq[Integer](1, null).toDF("c").createOrReplaceTempView("t")
+      val df = sql("SELECT * FROM t WHERE NOT(c = 1 AND c + 1 = 1)")
+
+      checkAnswer(df, Row(1))
     }
+  }
+
+  test("SPARK-26218: Fix the corner case when casting float to Integer") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      intercept[ArithmeticException](
+        sql("SELECT CAST(CAST(2147483648 as FLOAT) as Integer)").collect()
+      )
+      intercept[ArithmeticException](
+        sql("SELECT CAST(CAST(2147483648 as DOUBLE) as Integer)").collect()
+      )
+    }
+  }
+
+  test("SPARK-30870: Column pruning shouldn't alias a nested column for the whole structure") {
+    withTable("t") {
+      val df = sql(
+        """
+          |SELECT value
+          |FROM VALUES array(named_struct('field', named_struct('a', 1, 'b', 2))) AS (value)
+        """.stripMargin)
+      df.write.format("parquet").saveAsTable("t")
+
+      val df2 = spark.table("t")
+        .limit(100)
+        .select(size(col("value.field")))
+      val projects = df2.queryExecution.optimizedPlan.collect {
+        case p: Project => p
+      }
+      assert(projects.length == 1)
+      val aliases = NestedColumnAliasingSuite.collectGeneratedAliases(projects(0))
+      assert(aliases.length == 0)
+    }
+  }
+
+  test("SPARK-30955: Exclude Generate output when aliasing in nested column pruning") {
+    val df1 = sql(
+      """
+        |SELECT explodedvalue.*
+        |FROM VALUES array(named_struct('nested', named_struct('a', 1, 'b', 2))) AS (value)
+        |LATERAL VIEW explode(value) AS explodedvalue
+      """.stripMargin)
+    checkAnswer(df1, Row(Row(1, 2)) :: Nil)
+
+    val df2 = sql(
+      """
+        |SELECT explodedvalue.nested.a
+        |FROM VALUES array(named_struct('nested', named_struct('a', 1, 'b', 2))) AS (value)
+        |LATERAL VIEW explode(value) AS explodedvalue
+      """.stripMargin)
+    checkAnswer(df2, Row(1) :: Nil)
+  }
+
+  test("SPARK-30279 Support 32 or more grouping attributes for GROUPING_ID()") {
+    withTempView("t") {
+      sql("CREATE TEMPORARY VIEW t AS SELECT * FROM " +
+        s"VALUES(${(0 until 65).map { _ => 1 }.mkString(", ")}, 3) AS " +
+        s"t(${(0 until 65).map { i => s"k$i" }.mkString(", ")}, v)")
+
+      def testGropingIDs(numGroupingSet: Int, expectedIds: Seq[Any] = Nil): Unit = {
+        val groupingCols = (0 until numGroupingSet).map { i => s"k$i" }
+        val df = sql("SELECT GROUPING_ID(), SUM(v) FROM t GROUP BY " +
+          s"GROUPING SETS ((${groupingCols.mkString(",")}), (${groupingCols.init.mkString(",")}))")
+        checkAnswer(df, expectedIds.map { id => Row(id, 3) })
+      }
+
+      withSQLConf(SQLConf.LEGACY_INTEGER_GROUPING_ID.key -> "true") {
+        testGropingIDs(32, Seq(0, 1))
+        val errMsg = intercept[AnalysisException] {
+          testGropingIDs(33)
+        }.getMessage
+        assert(errMsg.contains("Grouping sets size cannot be greater than 32"))
+      }
+
+      withSQLConf(SQLConf.LEGACY_INTEGER_GROUPING_ID.key -> "false") {
+        testGropingIDs(64, Seq(0L, 1L))
+        val errMsg = intercept[AnalysisException] {
+          testGropingIDs(65)
+        }.getMessage
+        assert(errMsg.contains("Grouping sets size cannot be greater than 64"))
+      }
+    }
+  }
+
+  test("SPARK-31166: UNION map<null, null> and other maps should not fail") {
+    checkAnswer(
+      sql("(SELECT map()) UNION ALL (SELECT map(1, 2))"),
+      Seq(Row(Map[Int, Int]()), Row(Map(1 -> 2))))
+  }
+
+  test("SPARK-31242: clone SparkSession should respect sessionInitWithConfigDefaults") {
+    // Note, only the conf explicitly set in SparkConf(e.g. in SharedSparkSessionBase) would cause
+    // problem before the fix.
+    withSQLConf(SQLConf.CODEGEN_FALLBACK.key -> "true") {
+      val cloned = spark.cloneSession()
+      SparkSession.setActiveSession(cloned)
+      assert(SQLConf.get.getConf(SQLConf.CODEGEN_FALLBACK) === true)
+    }
+  }
+
+  test("SPARK-31594: Do not display the seed of rand/randn with no argument in output schema") {
+    def checkIfSeedExistsInExplain(df: DataFrame): Unit = {
+      val output = new java.io.ByteArrayOutputStream()
+      Console.withOut(output) {
+        df.explain()
+      }
+      val projectExplainOutput = output.toString.split("\n").find(_.contains("Project")).get
+      assert(projectExplainOutput.matches(""".*randn?\(-?[0-9]+\).*"""))
+    }
+    val df1 = sql("SELECT rand()")
+    assert(df1.schema.head.name === "rand()")
+    checkIfSeedExistsInExplain(df1)
+    val df2 = sql("SELECT rand(1L)")
+    assert(df2.schema.head.name === "rand(1)")
+    checkIfSeedExistsInExplain(df2)
+    val df3 = sql("SELECT randn()")
+    assert(df3.schema.head.name === "randn()")
+    checkIfSeedExistsInExplain(df1)
+    val df4 = sql("SELECT randn(1L)")
+    assert(df4.schema.head.name === "randn(1)")
+    checkIfSeedExistsInExplain(df2)
+  }
+
+  test("SPARK-31670: Trim unnecessary Struct field alias in Aggregate/GroupingSets") {
+    withTempView("t") {
+      sql(
+        """
+          |CREATE TEMPORARY VIEW t(a, b, c) AS
+          |SELECT * FROM VALUES
+          |('A', 1, NAMED_STRUCT('row_id', 1, 'json_string', '{"i": 1}')),
+          |('A', 2, NAMED_STRUCT('row_id', 2, 'json_string', '{"i": 1}')),
+          |('A', 2, NAMED_STRUCT('row_id', 2, 'json_string', '{"i": 2}')),
+          |('B', 1, NAMED_STRUCT('row_id', 3, 'json_string', '{"i": 1}')),
+          |('C', 3, NAMED_STRUCT('row_id', 4, 'json_string', '{"i": 1}'))
+        """.stripMargin)
+
+      checkAnswer(
+        sql(
+          """
+            |SELECT a, c.json_string, SUM(b)
+            |FROM t
+            |GROUP BY a, c.json_string
+            |""".stripMargin),
+        Row("A", "{\"i\": 1}", 3) :: Row("A", "{\"i\": 2}", 2) ::
+          Row("B", "{\"i\": 1}", 1) :: Row("C", "{\"i\": 1}", 3) :: Nil)
+
+      checkAnswer(
+        sql(
+          """
+            |SELECT a, c.json_string, SUM(b)
+            |FROM t
+            |GROUP BY a, c.json_string
+            |WITH CUBE
+            |""".stripMargin),
+        Row("A", "{\"i\": 1}", 3) :: Row("A", "{\"i\": 2}", 2) :: Row("A", null, 5) ::
+          Row("B", "{\"i\": 1}", 1) :: Row("B", null, 1) ::
+          Row("C", "{\"i\": 1}", 3) :: Row("C", null, 3) ::
+          Row(null, "{\"i\": 1}", 7) :: Row(null, "{\"i\": 2}", 2) :: Row(null, null, 9) :: Nil)
+
+      checkAnswer(
+        sql(
+          """
+            |SELECT a, get_json_object(c.json_string, '$.i'), SUM(b)
+            |FROM t
+            |GROUP BY a, get_json_object(c.json_string, '$.i')
+            |WITH CUBE
+            |""".stripMargin),
+        Row("A", "1", 3) :: Row("A", "2", 2) :: Row("A", null, 5) ::
+          Row("B", "1", 1) :: Row("B", null, 1) ::
+          Row("C", "1", 3) :: Row("C", null, 3) ::
+          Row(null, "1", 7) :: Row(null, "2", 2) :: Row(null, null, 9) :: Nil)
+
+      checkAnswer(
+        sql(
+          """
+            |SELECT a, c.json_string AS json_string, SUM(b)
+            |FROM t
+            |GROUP BY a, c.json_string
+            |WITH CUBE
+            |""".stripMargin),
+        Row("A", null, 5) :: Row("A", "{\"i\": 1}", 3) :: Row("A", "{\"i\": 2}", 2) ::
+          Row("B", null, 1) :: Row("B", "{\"i\": 1}", 1) ::
+          Row("C", null, 3) :: Row("C", "{\"i\": 1}", 3) ::
+          Row(null, null, 9) :: Row(null, "{\"i\": 1}", 7) :: Row(null, "{\"i\": 2}", 2) :: Nil)
+
+      checkAnswer(
+        sql(
+          """
+            |SELECT a, c.json_string as js, SUM(b)
+            |FROM t
+            |GROUP BY a, c.json_string
+            |WITH CUBE
+            |""".stripMargin),
+        Row("A", null, 5) :: Row("A", "{\"i\": 1}", 3) :: Row("A", "{\"i\": 2}", 2) ::
+          Row("B", null, 1) :: Row("B", "{\"i\": 1}", 1) ::
+          Row("C", null, 3) :: Row("C", "{\"i\": 1}", 3) ::
+          Row(null, null, 9) :: Row(null, "{\"i\": 1}", 7) :: Row(null, "{\"i\": 2}", 2) :: Nil)
+
+      checkAnswer(
+        sql(
+          """
+            |SELECT a, c.json_string as js, SUM(b)
+            |FROM t
+            |GROUP BY a, c.json_string
+            |WITH ROLLUP
+            |""".stripMargin),
+        Row("A", null, 5) :: Row("A", "{\"i\": 1}", 3) :: Row("A", "{\"i\": 2}", 2) ::
+          Row("B", null, 1) :: Row("B", "{\"i\": 1}", 1) ::
+          Row("C", null, 3) :: Row("C", "{\"i\": 1}", 3) ::
+          Row(null, null, 9) :: Nil)
+
+      checkAnswer(
+        sql(
+          """
+            |SELECT a, c.json_string, SUM(b)
+            |FROM t
+            |GROUP BY a, c.json_string
+            |GROUPING sets((a),(a, c.json_string))
+            |""".stripMargin),
+        Row("A", null, 5) :: Row("A", "{\"i\": 1}", 3) :: Row("A", "{\"i\": 2}", 2) ::
+          Row("B", null, 1) :: Row("B", "{\"i\": 1}", 1) ::
+          Row("C", null, 3) :: Row("C", "{\"i\": 1}", 3) :: Nil)
+    }
+  }
+
+  test("SPARK-31761: test byte, short, integer overflow for (Divide) integral type") {
+    checkAnswer(sql("Select -2147483648 DIV -1"), Seq(Row(Integer.MIN_VALUE.toLong * -1)))
+    checkAnswer(sql("select CAST(-128 as Byte) DIV CAST (-1 as Byte)"),
+      Seq(Row(Byte.MinValue.toLong * -1)))
+    checkAnswer(sql("select CAST(-32768 as short) DIV CAST (-1 as short)"),
+      Seq(Row(Short.MinValue.toLong * -1)))
+  }
+
+  test("normalize special floating numbers in subquery") {
+    withTempView("v1", "v2", "v3") {
+      Seq(-0.0).toDF("d").createTempView("v1")
+      Seq(0.0).toDF("d").createTempView("v2")
+      spark.range(2).createTempView("v3")
+
+      // non-correlated subquery
+      checkAnswer(sql("SELECT (SELECT v1.d FROM v1 JOIN v2 ON v1.d = v2.d)"), Row(-0.0))
+      // correlated subquery
+      checkAnswer(
+        sql(
+          """
+            |SELECT id FROM v3 WHERE EXISTS
+            |  (SELECT v1.d FROM v1 JOIN v2 ON v1.d = v2.d WHERE id > 0)
+            |""".stripMargin), Row(1))
+    }
+  }
+
+  test("SPARK-31875: remove hints from plan when spark.sql.optimizer.disableHints = true") {
+    withSQLConf(SQLConf.DISABLE_HINTS.key -> "true") {
+      withTempView("t1", "t2") {
+        Seq[Integer](1, 2).toDF("c1").createOrReplaceTempView("t1")
+        Seq[Integer](1, 2).toDF("c1").createOrReplaceTempView("t2")
+        val repartitionHints = Seq(
+          "COALESCE(2)",
+          "REPARTITION(c1)",
+          "REPARTITION(c1, 2)",
+          "REPARTITION_BY_RANGE(c1, 2)",
+          "REPARTITION_BY_RANGE(c1)"
+        )
+        val joinHints = Seq(
+          "BROADCASTJOIN (t1)",
+          "MAPJOIN(t1)",
+          "SHUFFLE_MERGE(t1)",
+          "MERGEJOIN(t1)",
+          "SHUFFLE_REPLICATE_NL(t1)"
+        )
+
+        repartitionHints.foreach { hintName =>
+          val sqlText = s"SELECT /*+ $hintName */ * FROM t1"
+          val sqlTextWithoutHint = "SELECT * FROM t1"
+          val expectedPlan = sql(sqlTextWithoutHint)
+          val actualPlan = sql(sqlText)
+          comparePlans(actualPlan.queryExecution.analyzed, expectedPlan.queryExecution.analyzed)
+        }
+
+        joinHints.foreach { hintName =>
+          val sqlText = s"SELECT /*+ $hintName */ * FROM t1 INNER JOIN t2 ON t1.c1 = t2.c1"
+          val sqlTextWithoutHint = "SELECT * FROM t1 INNER JOIN t2 ON t1.c1 = t2.c1"
+          val expectedPlan = sql(sqlTextWithoutHint)
+          val actualPlan = sql(sqlText)
+          comparePlans(actualPlan.queryExecution.analyzed, expectedPlan.queryExecution.analyzed)
+        }
+      }
+    }
+  }
+
+  test("SPARK-32372: ResolveReferences.dedupRight should only rewrite attributes for ancestor " +
+    "plans of the conflict plan") {
+    sql("SELECT name, avg(age) as avg_age FROM person GROUP BY name")
+      .createOrReplaceTempView("person_a")
+    sql("SELECT p1.name, p2.avg_age FROM person p1 JOIN person_a p2 ON p1.name = p2.name")
+      .createOrReplaceTempView("person_b")
+    sql("SELECT * FROM person_a UNION SELECT * FROM person_b")
+      .createOrReplaceTempView("person_c")
+    checkAnswer(
+      sql("SELECT p1.name, p2.avg_age FROM person_c p1 JOIN person_c p2 ON p1.name = p2.name"),
+      Row("jim", 20.0) :: Row("mike", 30.0) :: Nil)
+  }
+
+  test("SPARK-32280: Avoid duplicate rewrite attributes when there're multiple JOINs") {
+    sql("SELECT 1 AS id").createOrReplaceTempView("A")
+    sql("SELECT id, 'foo' AS kind FROM A").createOrReplaceTempView("B")
+    sql("SELECT l.id as id FROM B AS l LEFT SEMI JOIN B AS r ON l.kind = r.kind")
+      .createOrReplaceTempView("C")
+    checkAnswer(sql("SELECT 0 FROM ( SELECT * FROM B JOIN C USING (id)) " +
+      "JOIN ( SELECT * FROM B JOIN C USING (id)) USING (id)"), Row(0))
+  }
+
+  test("SPARK-32788: non-partitioned table scan should not have partition filter") {
+    withTable("t") {
+      spark.range(1).write.saveAsTable("t")
+      checkAnswer(sql("SELECT id FROM t WHERE (SELECT true)"), Row(0L))
+    }
+  }
+
+  test("SPARK-33306: Timezone is needed when cast Date to String") {
+    withTempView("t1", "t2") {
+      spark.sql("select to_date(concat('2000-01-0', id)) as d from range(1, 2)")
+        .createOrReplaceTempView("t1")
+      spark.sql("select concat('2000-01-0', id) as d from range(1, 2)")
+        .createOrReplaceTempView("t2")
+      val result = Date.valueOf("2000-01-01")
+
+      checkAnswer(sql("select t1.d from t1 join t2 on t1.d = t2.d"), Row(result))
+      withSQLConf(SQLConf.LEGACY_CAST_DATETIME_TO_STRING.key -> "true") {
+        checkAnswer(sql("select t1.d from t1 join t2 on t1.d = t2.d"), Row(result))
+      }
+    }
+  }
+
+  test("SPARK-33338: GROUP BY using literal map should not fail") {
+    withTempDir { dir =>
+      sql(s"CREATE TABLE t USING ORC LOCATION '${dir.toURI}' AS SELECT map('k1', 'v1') m, 'k1' k")
+      Seq(
+        "SELECT map('k1', 'v1')[k] FROM t GROUP BY 1",
+        "SELECT map('k1', 'v1')[k] FROM t GROUP BY map('k1', 'v1')[k]",
+        "SELECT map('k1', 'v1')[k] a FROM t GROUP BY a").foreach { statement =>
+        checkAnswer(sql(statement), Row("v1"))
+      }
+    }
+  }
+
+  test("SPARK-33084: Add jar support Ivy URI in SQL") {
+    val sc = spark.sparkContext
+    val hiveVersion = "2.3.9"
+    // transitive=false, only download specified jar
+    sql(s"ADD JAR ivy://org.apache.hive.hcatalog:hive-hcatalog-core:$hiveVersion?transitive=false")
+    assert(sc.listJars()
+      .exists(_.contains(s"org.apache.hive.hcatalog_hive-hcatalog-core-$hiveVersion.jar")))
+
+    // default transitive=true, test download ivy URL jar return multiple jars
+    sql("ADD JAR ivy://org.scala-js:scalajs-test-interface_2.12:1.2.0")
+    assert(sc.listJars().exists(_.contains("scalajs-library_2.12")))
+    assert(sc.listJars().exists(_.contains("scalajs-test-interface_2.12")))
+
+    sql(s"ADD JAR ivy://org.apache.hive:hive-contrib:$hiveVersion" +
+      "?exclude=org.pentaho:pentaho-aggdesigner-algorithm&transitive=true")
+    assert(sc.listJars().exists(_.contains(s"org.apache.hive_hive-contrib-$hiveVersion.jar")))
+    assert(sc.listJars().exists(_.contains(s"org.apache.hive_hive-exec-$hiveVersion.jar")))
+    assert(!sc.listJars().exists(_.contains("org.pentaho.pentaho_aggdesigner-algorithm")))
+  }
+
+  test("SPARK-33677: LikeSimplification should be skipped if pattern contains any escapeChar") {
+    withTempView("df") {
+      Seq("m@ca").toDF("s").createOrReplaceTempView("df")
+
+      val e = intercept[AnalysisException] {
+        sql("SELECT s LIKE 'm%@ca' ESCAPE '%' FROM df").collect()
+      }
+      assert(e.message.contains("the pattern 'm%@ca' is invalid, " +
+        "the escape character is not allowed to precede '@'"))
+
+      checkAnswer(sql("SELECT s LIKE 'm@@ca' ESCAPE '@' FROM df"), Row(true))
+    }
+  }
+
+  test("limit partition num to 1 when distributing by foldable expressions") {
+    withSQLConf((SQLConf.SHUFFLE_PARTITIONS.key, "5")) {
+      Seq(1, "1, 2", null, "version()").foreach { expr =>
+        val plan = sql(s"select * from values (1), (2), (3) t(a) distribute by $expr")
+          .queryExecution.optimizedPlan
+        val res = plan.collect {
+          case r: RepartitionByExpression if r.numPartitions == 1 => true
+        }
+        assert(res.nonEmpty)
+      }
+    }
+  }
+
+  test("Fold RepartitionExpression num partition should check if partition expression is empty") {
+    withSQLConf((SQLConf.SHUFFLE_PARTITIONS.key, "5")) {
+      val df = spark.range(1).hint("REPARTITION_BY_RANGE")
+      val plan = df.queryExecution.optimizedPlan
+      val res = plan.collect {
+        case r: RepartitionByExpression if r.numPartitions == 5 => true
+      }
+      assert(res.nonEmpty)
+    }
+  }
+
+  test("SPARK-34030: Fold RepartitionExpression num partition should at Optimizer") {
+    withSQLConf((SQLConf.SHUFFLE_PARTITIONS.key, "2")) {
+      Seq(1, "1, 2", null, "version()").foreach { expr =>
+        val plan = sql(s"select * from values (1), (2), (3) t(a) distribute by $expr")
+          .queryExecution.analyzed
+        val res = plan.collect {
+          case r: RepartitionByExpression if r.numPartitions == 2 => true
+        }
+        assert(res.nonEmpty)
+      }
+    }
+  }
+
+  test("SPARK-33591: null as string partition literal value 'null' after setting legacy conf") {
+    withSQLConf(SQLConf.LEGACY_PARSE_NULL_PARTITION_SPEC_AS_STRING_LITERAL.key -> "true") {
+      val t = "tbl"
+      withTable("tbl") {
+        sql(s"CREATE TABLE $t (col1 INT, p1 STRING) USING PARQUET PARTITIONED BY (p1)")
+        sql(s"INSERT INTO TABLE $t PARTITION (p1 = null) SELECT 0")
+        checkAnswer(spark.sql(s"SELECT * FROM $t"), Row(0, "null"))
+      }
+    }
+  }
+
+  test("SPARK-33593: Vector reader got incorrect data with binary partition value") {
+    Seq("false", "true").foreach(value => {
+      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> value) {
+        withTable("t1") {
+          sql(
+            """CREATE TABLE t1(name STRING, id BINARY, part BINARY)
+              |USING PARQUET PARTITIONED BY (part)""".stripMargin)
+          sql("INSERT INTO t1 PARTITION(part = 'Spark SQL') VALUES('a', X'537061726B2053514C')")
+          checkAnswer(sql("SELECT name, cast(id as string), cast(part as string) FROM t1"),
+            Row("a", "Spark SQL", "Spark SQL"))
+        }
+      }
+
+      withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> value) {
+        withTable("t2") {
+          sql(
+            """CREATE TABLE t2(name STRING, id BINARY, part BINARY)
+              |USING ORC PARTITIONED BY (part)""".stripMargin)
+          sql("INSERT INTO t2 PARTITION(part = 'Spark SQL') VALUES('a', X'537061726B2053514C')")
+          checkAnswer(sql("SELECT name, cast(id as string), cast(part as string) FROM t2"),
+            Row("a", "Spark SQL", "Spark SQL"))
+        }
+      }
+    })
+  }
+
+  test("SPARK-33084: Add jar support Ivy URI in SQL -- jar contains udf class") {
+    val sumFuncClass = "org.apache.spark.examples.sql.Spark33084"
+    val functionName = "test_udf"
+    withTempDir { dir =>
+      System.setProperty("ivy.home", dir.getAbsolutePath)
+      val sourceJar = new File(Thread.currentThread().getContextClassLoader
+        .getResource("SPARK-33084.jar").getFile)
+      val targetCacheJarDir = new File(dir.getAbsolutePath +
+        "/local/org.apache.spark/SPARK-33084/1.0/jars/")
+      targetCacheJarDir.mkdir()
+      // copy jar to local cache
+      FileUtils.copyFileToDirectory(sourceJar, targetCacheJarDir)
+      withTempView("v1") {
+        withUserDefinedFunction(
+          s"default.$functionName" -> false,
+          functionName -> true) {
+          // create temporary function without class
+          val e = intercept[AnalysisException] {
+            sql(s"CREATE TEMPORARY FUNCTION $functionName AS '$sumFuncClass'")
+          }.getMessage
+          assert(e.contains("Can not load class 'org.apache.spark.examples.sql.Spark33084"))
+          sql("ADD JAR ivy://org.apache.spark:SPARK-33084:1.0")
+          sql(s"CREATE TEMPORARY FUNCTION $functionName AS '$sumFuncClass'")
+          // create a view using a function in 'default' database
+          sql(s"CREATE TEMPORARY VIEW v1 AS SELECT $functionName(col1) FROM VALUES (1), (2), (3)")
+          // view v1 should still using function defined in `default` database
+          checkAnswer(sql("SELECT * FROM v1"), Seq(Row(2.0)))
+        }
+      }
+    }
+  }
+
+  test("SPARK-33964: Combine distinct unions that have noop project between them") {
+    val df = sql("""
+      |SELECT a, b FROM (
+      |  SELECT a, b FROM testData2
+      |  UNION
+      |  SELECT a, sum(b) FROM testData2 GROUP BY a
+      |  UNION
+      |  SELECT null AS a, sum(b) FROM testData2
+      |)""".stripMargin)
+
+    val unions = df.queryExecution.sparkPlan.collect {
+      case u: UnionExec => u
+    }
+
+    assert(unions.size == 1)
+  }
+
+  test("SPARK-34421: Resolve temporary objects in temporary views with CTEs") {
+    val tempFuncName = "temp_func"
+    withUserDefinedFunction(tempFuncName -> true) {
+      spark.udf.register(tempFuncName, identity[Int](_))
+
+      val tempViewName = "temp_view"
+      withTempView(tempViewName) {
+        sql(s"CREATE TEMPORARY VIEW $tempViewName AS SELECT 1")
+
+        val testViewName = "test_view"
+
+        withTempView(testViewName) {
+          sql(
+            s"""
+              |CREATE TEMPORARY VIEW $testViewName AS
+              |WITH cte AS (
+              |  SELECT $tempFuncName(0)
+              |)
+              |SELECT * FROM cte
+              |""".stripMargin)
+          checkAnswer(sql(s"SELECT * FROM $testViewName"), Row(0))
+        }
+
+        withTempView(testViewName) {
+          sql(
+            s"""
+              |CREATE TEMPORARY VIEW $testViewName AS
+              |WITH cte AS (
+              |  SELECT * FROM $tempViewName
+              |)
+              |SELECT * FROM cte
+              |""".stripMargin)
+          checkAnswer(sql(s"SELECT * FROM $testViewName"), Row(1))
+        }
+      }
+    }
+  }
+
+  test("SPARK-34421: Resolve temporary objects in permanent views with CTEs") {
+    val tempFuncName = "temp_func"
+    withUserDefinedFunction((tempFuncName, true)) {
+      spark.udf.register(tempFuncName, identity[Int](_))
+
+      val tempViewName = "temp_view"
+      withTempView(tempViewName) {
+        sql(s"CREATE TEMPORARY VIEW $tempViewName AS SELECT 1")
+
+        val testViewName = "test_view"
+
+        val e = intercept[AnalysisException] {
+          sql(
+            s"""
+              |CREATE VIEW $testViewName AS
+              |WITH cte AS (
+              |  SELECT * FROM $tempViewName
+              |)
+              |SELECT * FROM cte
+              |""".stripMargin)
+        }
+        assert(e.message.contains("Not allowed to create a permanent view " +
+          s"`default`.`$testViewName` by referencing a temporary view $tempViewName"))
+
+        val e2 = intercept[AnalysisException] {
+          sql(
+            s"""
+              |CREATE VIEW $testViewName AS
+              |WITH cte AS (
+              |  SELECT $tempFuncName(0)
+              |)
+              |SELECT * FROM cte
+              |""".stripMargin)
+        }
+        assert(e2.message.contains("Not allowed to create a permanent view " +
+          s"`default`.`$testViewName` by referencing a temporary function `$tempFuncName`"))
+      }
+    }
+  }
+
+  test("SPARK-26138 Pushdown limit through InnerLike when condition is empty") {
+    withTable("t1", "t2") {
+      spark.range(5).repartition(1).write.saveAsTable("t1")
+      spark.range(5).repartition(1).write.saveAsTable("t2")
+      val df = spark.sql("SELECT * FROM t1 CROSS JOIN t2 LIMIT 3")
+      val pushedLocalLimits = df.queryExecution.optimizedPlan.collect {
+        case l @ LocalLimit(_, _: LogicalRelation) => l
+      }
+      assert(pushedLocalLimits.length === 2)
+      checkAnswer(df, Row(0, 0) :: Row(0, 1) :: Row(0, 2) :: Nil)
+    }
+  }
+
+  test("SPARK-34514: Push down limit through LEFT SEMI and LEFT ANTI join") {
+    withTable("left_table", "nonempty_right_table", "empty_right_table") {
+      spark.range(5).toDF().repartition(1).write.saveAsTable("left_table")
+      spark.range(3).write.saveAsTable("nonempty_right_table")
+      spark.range(0).write.saveAsTable("empty_right_table")
+      Seq("LEFT SEMI", "LEFT ANTI").foreach { joinType =>
+        val joinWithNonEmptyRightDf = spark.sql(
+          s"SELECT * FROM left_table $joinType JOIN nonempty_right_table LIMIT 3")
+        val joinWithEmptyRightDf = spark.sql(
+          s"SELECT * FROM left_table $joinType JOIN empty_right_table LIMIT 3")
+
+        Seq(joinWithNonEmptyRightDf, joinWithEmptyRightDf).foreach { df =>
+          val pushedLocalLimits = df.queryExecution.optimizedPlan.collect {
+            case l @ LocalLimit(_, _: LogicalRelation) => l
+          }
+          assert(pushedLocalLimits.length === 1)
+        }
+
+        val expectedAnswer = Seq(Row(0), Row(1), Row(2))
+        if (joinType == "LEFT SEMI") {
+          checkAnswer(joinWithNonEmptyRightDf, expectedAnswer)
+          checkAnswer(joinWithEmptyRightDf, Seq.empty)
+        } else {
+          checkAnswer(joinWithNonEmptyRightDf, Seq.empty)
+          checkAnswer(joinWithEmptyRightDf, expectedAnswer)
+        }
+      }
+    }
+  }
+
+  test("SPARK-34575 Push down limit through window when partitionSpec is empty") {
+    withTable("t1") {
+      val numRows = 10
+      spark.range(numRows)
+        .selectExpr("if (id % 2 = 0, null, id) AS a", s"$numRows - id AS b")
+        .write
+        .saveAsTable("t1")
+
+      val df1 = spark.sql(
+        """
+          |SELECT a, b, ROW_NUMBER() OVER(ORDER BY a, b) AS rn
+          |FROM t1 LIMIT 3
+          |""".stripMargin)
+      val pushedLocalLimits1 = df1.queryExecution.optimizedPlan.collect {
+        case l @ LocalLimit(_, _: Sort) => l
+      }
+      assert(pushedLocalLimits1.length === 1)
+      checkAnswer(df1, Seq(Row(null, 2, 1), Row(null, 4, 2), Row(null, 6, 3)))
+
+      val df2 = spark.sql(
+        """
+          |SELECT b, RANK() OVER(ORDER BY a, b) AS rk, DENSE_RANK(b) OVER(ORDER BY a, b) AS s
+          |FROM t1 LIMIT 2
+          |""".stripMargin)
+      val pushedLocalLimits2 = df2.queryExecution.optimizedPlan.collect {
+        case l @ LocalLimit(_, _: Sort) => l
+      }
+      assert(pushedLocalLimits2.length === 1)
+      checkAnswer(df2, Seq(Row(2, 1, 1), Row(4, 2, 2)))
+    }
+  }
+
+  test("SPARK-34796: Avoid code-gen compilation error for LIMIT query") {
+    withTable("left_table", "empty_right_table", "output_table") {
+      spark.range(5).toDF("k").write.saveAsTable("left_table")
+      spark.range(0).toDF("k").write.saveAsTable("empty_right_table")
+
+      withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+        spark.sql("CREATE TABLE output_table (k INT) USING parquet")
+        spark.sql(
+          """
+            |INSERT INTO TABLE output_table
+            |SELECT t1.k FROM left_table t1
+            |JOIN empty_right_table t2
+            |ON t1.k = t2.k
+            |LIMIT 3
+          """.stripMargin)
+      }
+    }
+  }
+
+  test("SPARK-33482: Fix FileScan canonicalization") {
+    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
+      withTempPath { path =>
+        spark.range(5).toDF().write.mode("overwrite").parquet(path.toString)
+        withTempView("t") {
+          spark.read.parquet(path.toString).createOrReplaceTempView("t")
+          val df = sql(
+            """
+              |SELECT *
+              |FROM t AS t1
+              |JOIN t AS t2 ON t2.id = t1.id
+              |JOIN t AS t3 ON t3.id = t2.id
+              |""".stripMargin)
+          df.collect()
+          val reusedExchanges = collect(df.queryExecution.executedPlan) {
+            case r: ReusedExchangeExec => r
+          }
+          assert(reusedExchanges.size == 1)
+        }
+      }
+    }
+  }
+
+  test("SPARK-35331: Fix resolving original expression in RepartitionByExpression after aliased") {
+    Seq("CLUSTER", "DISTRIBUTE").foreach { keyword =>
+      Seq("a", "substr(a, 0, 3)").foreach { expr =>
+        val clause = keyword + " by " + expr
+        withClue(clause) {
+          checkAnswer(sql(s"select a b from values('123') t(a) $clause"), Row("123"))
+        }
+      }
+    }
+    checkAnswer(sql(s"select /*+ REPARTITION(3, a) */ a b from values('123') t(a)"), Row("123"))
+  }
+
+  test("SPARK-35737: Parse day-time interval literals to tightest types") {
+    val dayToSecDF = spark.sql("SELECT INTERVAL '13 02:02:10' DAY TO SECOND")
+    assert(dayToSecDF.schema.head.dataType === DayTimeIntervalType(0, 3))
+    val dayToMinuteDF = spark.sql("SELECT INTERVAL '-2 13:00' DAY TO MINUTE")
+    assert(dayToMinuteDF.schema.head.dataType === DayTimeIntervalType(0, 2))
+    val dayToHourDF = spark.sql("SELECT INTERVAL '0 15' DAY TO HOUR")
+    assert(dayToHourDF.schema.head.dataType === DayTimeIntervalType(0, 1))
+    val hourToSecDF = spark.sql("SELECT INTERVAL '00:21:02.03' HOUR TO SECOND")
+    assert(hourToSecDF.schema.head.dataType === DayTimeIntervalType(1, 3))
+    val hourToMinuteDF = spark.sql("SELECT INTERVAL '01:02' HOUR TO MINUTE")
+    assert(hourToMinuteDF.schema.head.dataType === DayTimeIntervalType(1, 2))
+    val minuteToSecDF = spark.sql("SELECT INTERVAL '10:03.775808000' MINUTE TO SECOND")
+    assert(minuteToSecDF.schema.head.dataType === DayTimeIntervalType(2, 3))
   }
 }
 

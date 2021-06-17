@@ -77,7 +77,9 @@ object OrcOptions {
     "uncompressed" -> "NONE",
     "snappy" -> "SNAPPY",
     "zlib" -> "ZLIB",
-    "lzo" -> "LZO")
+    "lzo" -> "LZO",
+    "lz4" -> "LZ4",
+    "zstd" -> "ZSTD")
 
   def getORCCompressionCodecName(name: String): String = shortOrcCompressionCodecNames(name)
 }

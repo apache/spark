@@ -169,4 +169,8 @@ object FileCommitProtocol extends Logging {
         ctor.newInstance(jobId, outputPath)
     }
   }
+
+  def getStagingDir(path: String, jobId: String): Path = {
+    new Path(path, ".spark-staging-" + jobId)
+  }
 }

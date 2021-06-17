@@ -580,3 +580,38 @@ class HasValidationIndicatorCol(Params):
         Gets the value of validationIndicatorCol or its default value.
         """
         return self.getOrDefault(self.validationIndicatorCol)
+
+
+class HasBlockSize(Params):
+    """
+    Mixin for param blockSize: block size for stacking input data in matrices. Data is stacked within partitions. If block size is more than remaining data in a partition then it is adjusted to the size of this data.
+    """
+
+    blockSize = Param(Params._dummy(), "blockSize", "block size for stacking input data in matrices. Data is stacked within partitions. If block size is more than remaining data in a partition then it is adjusted to the size of this data.", typeConverter=TypeConverters.toInt)
+
+    def __init__(self):
+        super(HasBlockSize, self).__init__()
+
+    def getBlockSize(self):
+        """
+        Gets the value of blockSize or its default value.
+        """
+        return self.getOrDefault(self.blockSize)
+
+
+class HasMaxBlockSizeInMB(Params):
+    """
+    Mixin for param maxBlockSizeInMB: maximum memory in MB for stacking input data into blocks. Data is stacked within partitions. If more than remaining data size in a partition then it is adjusted to the data size. Default 0.0 represents choosing optimal value, depends on specific algorithm. Must be >= 0.
+    """
+
+    maxBlockSizeInMB = Param(Params._dummy(), "maxBlockSizeInMB", "maximum memory in MB for stacking input data into blocks. Data is stacked within partitions. If more than remaining data size in a partition then it is adjusted to the data size. Default 0.0 represents choosing optimal value, depends on specific algorithm. Must be >= 0.", typeConverter=TypeConverters.toFloat)
+
+    def __init__(self):
+        super(HasMaxBlockSizeInMB, self).__init__()
+        self._setDefault(maxBlockSizeInMB=0.0)
+
+    def getMaxBlockSizeInMB(self):
+        """
+        Gets the value of maxBlockSizeInMB or its default value.
+        """
+        return self.getOrDefault(self.maxBlockSizeInMB)

@@ -30,8 +30,6 @@ r"""
     localhost 9999`
 """
 
-from __future__ import print_function
-
 import sys
 
 from pyspark import SparkContext

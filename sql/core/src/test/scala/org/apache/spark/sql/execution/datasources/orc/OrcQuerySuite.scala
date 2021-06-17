@@ -136,7 +136,7 @@ abstract class OrcQueryTest extends OrcTest {
       assertResult(10) {
         sql("SELECT name, contacts FROM t where age > 5")
           .rdd
-          .flatMap(_.getAs[Seq[_]]("contacts"))
+          .flatMap(_.getAs[scala.collection.Seq[_]]("contacts"))
           .count()
       }
 
@@ -148,7 +148,7 @@ abstract class OrcQueryTest extends OrcTest {
         val df = sql("SELECT name, contacts FROM t WHERE age > 5 AND age < 8")
         assert(df.count() === 2)
         assertResult(4) {
-          df.rdd.flatMap(_.getAs[Seq[_]]("contacts")).count()
+          df.rdd.flatMap(_.getAs[scala.collection.Seq[_]]("contacts")).count()
         }
       }
 
@@ -160,7 +160,7 @@ abstract class OrcQueryTest extends OrcTest {
         val df = sql("SELECT name, contacts FROM t WHERE age < 2 OR age > 8")
         assert(df.count() === 3)
         assertResult(6) {
-          df.rdd.flatMap(_.getAs[Seq[_]]("contacts")).count()
+          df.rdd.flatMap(_.getAs[scala.collection.Seq[_]]("contacts")).count()
         }
       }
     }
@@ -217,7 +217,6 @@ abstract class OrcQueryTest extends OrcTest {
     }
   }
 
-  // Hive supports zlib, snappy and none for Hive 1.2.1.
   test("Compression options for writing to an ORC file (SNAPPY, ZLIB and NONE)") {
     withTempPath { file =>
       spark.range(0, 10).write
@@ -595,22 +594,22 @@ abstract class OrcQueryTest extends OrcTest {
     }
 
     withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "false") {
-      val m1 = intercept[SparkException] {
+      val e1 = intercept[SparkException] {
         testIgnoreCorruptFiles()
-      }.getMessage
-      assert(m1.contains("Malformed ORC file"))
-      val m2 = intercept[SparkException] {
+      }
+      assert(e1.getMessage.contains("Malformed ORC file"))
+      val e2 = intercept[SparkException] {
         testIgnoreCorruptFilesWithoutSchemaInfer()
-      }.getMessage
-      assert(m2.contains("Malformed ORC file"))
-      val m3 = intercept[SparkException] {
+      }
+      assert(e2.getMessage.contains("Malformed ORC file"))
+      val e3 = intercept[SparkException] {
         testAllCorruptFiles()
-      }.getMessage
-      assert(m3.contains("Could not read footer for file"))
-      val m4 = intercept[SparkException] {
+      }
+      assert(e3.getMessage.contains("Could not read footer for file"))
+      val e4 = intercept[SparkException] {
         testAllCorruptFilesWithoutSchemaInfer()
-      }.getMessage
-      assert(m4.contains("Malformed ORC file"))
+      }
+      assert(e4.getMessage.contains("Malformed ORC file"))
     }
   }
 
@@ -631,7 +630,7 @@ abstract class OrcQueryTest extends OrcTest {
   }
 }
 
-class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
+abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
   import testImplicits._
 
   test("LZO compression options for writing to an ORC file") {
@@ -721,4 +720,11 @@ class OrcV1QuerySuite extends OrcQuerySuite {
     super
       .sparkConf
       .set(SQLConf.USE_V1_SOURCE_LIST, "orc")
+}
+
+class OrcV2QuerySuite extends OrcQuerySuite {
+  override protected def sparkConf: SparkConf =
+    super
+      .sparkConf
+      .set(SQLConf.USE_V1_SOURCE_LIST, "")
 }

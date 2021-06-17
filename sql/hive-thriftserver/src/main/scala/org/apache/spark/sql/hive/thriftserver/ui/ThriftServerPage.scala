@@ -19,11 +19,9 @@ package org.apache.spark.sql.hive.thriftserver.ui
 
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets.UTF_8
-import java.util.Calendar
 import javax.servlet.http.HttpServletRequest
 
-import scala.collection.JavaConverters._
-import scala.xml.{Node, Unparsed}
+import scala.xml.Node
 
 import org.apache.commons.text.StringEscapeUtils
 
@@ -59,7 +57,7 @@ private[ui] class ThriftServerPage(parent: ThriftServerTab) extends WebUIPage(""
   /** Generate basic stats of the thrift server program */
   private def generateBasicStats(): Seq[Node] = {
     val timeSinceStart = System.currentTimeMillis() - startTime.getTime
-    <ul class ="unstyled">
+    <ul class ="list-unstyled">
       <li>
         <strong>Started at: </strong> {formatDate(startTime)}
       </li>
@@ -78,26 +76,8 @@ private[ui] class ThriftServerPage(parent: ThriftServerTab) extends WebUIPage(""
 
       val sqlTableTag = "sqlstat"
 
-      val parameterOtherTable = request.getParameterMap().asScala
-        .filterNot(_._1.startsWith(sqlTableTag))
-        .map { case (name, vals) =>
-          name + "=" + vals(0)
-        }
-
-      val parameterSqlTablePage = request.getParameter(s"$sqlTableTag.page")
-      val parameterSqlTableSortColumn = request.getParameter(s"$sqlTableTag.sort")
-      val parameterSqlTableSortDesc = request.getParameter(s"$sqlTableTag.desc")
-      val parameterSqlPageSize = request.getParameter(s"$sqlTableTag.pageSize")
-
-      val sqlTablePage = Option(parameterSqlTablePage).map(_.toInt).getOrElse(1)
-      val sqlTableSortColumn = Option(parameterSqlTableSortColumn).map { sortColumn =>
-        UIUtils.decodeURLParameter(sortColumn)
-      }.getOrElse("Start Time")
-      val sqlTableSortDesc = Option(parameterSqlTableSortDesc).map(_.toBoolean).getOrElse(
-        // New executions should be shown above old executions by default.
-        sqlTableSortColumn == "Start Time"
-      )
-      val sqlTablePageSize = Option(parameterSqlPageSize).map(_.toInt).getOrElse(100)
+      val sqlTablePage =
+        Option(request.getParameter(s"$sqlTableTag.page")).map(_.toInt).getOrElse(1)
 
       try {
         Some(new SqlStatsPagedTable(
@@ -106,12 +86,7 @@ private[ui] class ThriftServerPage(parent: ThriftServerTab) extends WebUIPage(""
           store.getExecutionList,
           "sqlserver",
           UIUtils.prependBaseUri(request, parent.basePath),
-          parameterOtherTable,
-          sqlTableTag,
-          pageSize = sqlTablePageSize,
-          sortColumn = sqlTableSortColumn,
-          desc = sqlTableSortDesc
-        ).table(sqlTablePage))
+          sqlTableTag).table(sqlTablePage))
       } catch {
         case e@(_: IllegalArgumentException | _: IndexOutOfBoundsException) =>
           Some(<div class="alert alert-error">
@@ -146,26 +121,8 @@ private[ui] class ThriftServerPage(parent: ThriftServerTab) extends WebUIPage(""
 
       val sessionTableTag = "sessionstat"
 
-      val parameterOtherTable = request.getParameterMap().asScala
-        .filterNot(_._1.startsWith(sessionTableTag))
-        .map { case (name, vals) =>
-          name + "=" + vals(0)
-        }
-
-      val parameterSessionTablePage = request.getParameter(s"$sessionTableTag.page")
-      val parameterSessionTableSortColumn = request.getParameter(s"$sessionTableTag.sort")
-      val parameterSessionTableSortDesc = request.getParameter(s"$sessionTableTag.desc")
-      val parameterSessionPageSize = request.getParameter(s"$sessionTableTag.pageSize")
-
-      val sessionTablePage = Option(parameterSessionTablePage).map(_.toInt).getOrElse(1)
-      val sessionTableSortColumn = Option(parameterSessionTableSortColumn).map { sortColumn =>
-        UIUtils.decodeURLParameter(sortColumn)
-      }.getOrElse("Start Time")
-      val sessionTableSortDesc = Option(parameterSessionTableSortDesc).map(_.toBoolean).getOrElse(
-        // New session should be shown above old session by default.
-        (sessionTableSortColumn == "Start Time")
-      )
-      val sessionTablePageSize = Option(parameterSessionPageSize).map(_.toInt).getOrElse(100)
+      val sessionTablePage =
+        Option(request.getParameter(s"$sessionTableTag.page")).map(_.toInt).getOrElse(1)
 
       try {
         Some(new SessionStatsPagedTable(
@@ -174,11 +131,7 @@ private[ui] class ThriftServerPage(parent: ThriftServerTab) extends WebUIPage(""
           store.getSessionList,
           "sqlserver",
           UIUtils.prependBaseUri(request, parent.basePath),
-          parameterOtherTable,
-          sessionTableTag,
-          pageSize = sessionTablePageSize,
-          sortColumn = sessionTableSortColumn,
-          desc = sessionTableSortDesc
+          sessionTableTag
         ).table(sessionTablePage))
       } catch {
         case e@(_: IllegalArgumentException | _: IndexOutOfBoundsException) =>
@@ -216,104 +169,59 @@ private[ui] class SqlStatsPagedTable(
     data: Seq[ExecutionInfo],
     subPath: String,
     basePath: String,
-    parameterOtherTable: Iterable[String],
-    sqlStatsTableTag: String,
-    pageSize: Int,
-    sortColumn: String,
-    desc: Boolean) extends PagedTable[SqlStatsTableRow] {
+    sqlStatsTableTag: String) extends PagedTable[SqlStatsTableRow] {
+
+  private val (sortColumn, desc, pageSize) =
+    getTableParameters(request, sqlStatsTableTag, "Start Time")
+
+  private val encodedSortColumn = URLEncoder.encode(sortColumn, UTF_8.name())
+
+  private val parameterPath =
+    s"$basePath/$subPath/?${getParameterOtherTable(request, sqlStatsTableTag)}"
 
   override val dataSource = new SqlStatsTableDataSource(data, pageSize, sortColumn, desc)
-
-  private val parameterPath = s"$basePath/$subPath/?${parameterOtherTable.mkString("&")}"
 
   override def tableId: String = sqlStatsTableTag
 
   override def tableCssClass: String =
-    "table table-bordered table-condensed table-striped " +
-      "table-head-clickable table-cell-width-limited"
+    "table table-bordered table-sm table-striped table-head-clickable table-cell-width-limited"
 
   override def pageLink(page: Int): String = {
-    val encodedSortColumn = URLEncoder.encode(sortColumn, UTF_8.name())
     parameterPath +
       s"&$pageNumberFormField=$page" +
       s"&$sqlStatsTableTag.sort=$encodedSortColumn" +
       s"&$sqlStatsTableTag.desc=$desc" +
-      s"&$pageSizeFormField=$pageSize"
+      s"&$pageSizeFormField=$pageSize" +
+      s"#$sqlStatsTableTag"
   }
 
   override def pageSizeFormField: String = s"$sqlStatsTableTag.pageSize"
 
   override def pageNumberFormField: String = s"$sqlStatsTableTag.page"
 
-  override def goButtonFormPath: String = {
-    val encodedSortColumn = URLEncoder.encode(sortColumn, UTF_8.name())
-    s"$parameterPath&$sqlStatsTableTag.sort=$encodedSortColumn&$sqlStatsTableTag.desc=$desc"
-  }
+  override def goButtonFormPath: String =
+    s"$parameterPath&$sqlStatsTableTag.sort=$encodedSortColumn" +
+      s"&$sqlStatsTableTag.desc=$desc#$sqlStatsTableTag"
 
   override def headers: Seq[Node] = {
-    val sqlTableHeaders = Seq("User", "JobID", "GroupID", "Start Time", "Finish Time",
-      "Close Time", "Execution Time", "Duration", "Statement", "State", "Detail")
+    val sqlTableHeadersAndTooltips: Seq[(String, Boolean, Option[String])] =
+      Seq(
+        ("User", true, None),
+        ("JobID", true, None),
+        ("GroupID", true, None),
+        ("Start Time", true, None),
+        ("Finish Time", true, Some(THRIFT_SERVER_FINISH_TIME)),
+        ("Close Time", true, Some(THRIFT_SERVER_CLOSE_TIME)),
+        ("Execution Time", true, Some(THRIFT_SERVER_EXECUTION)),
+        ("Duration", true, Some(THRIFT_SERVER_DURATION)),
+        ("Statement", true, None),
+        ("State", true, None),
+        ("Detail", true, None))
 
-    val tooltips = Seq(None, None, None, None, Some(THRIFT_SERVER_FINISH_TIME),
-      Some(THRIFT_SERVER_CLOSE_TIME), Some(THRIFT_SERVER_EXECUTION),
-      Some(THRIFT_SERVER_DURATION), None, None, None)
+    isSortColumnValid(sqlTableHeadersAndTooltips, sortColumn)
 
-    assert(sqlTableHeaders.length == tooltips.length)
-
-    val headerRow: Seq[Node] = {
-      sqlTableHeaders.zip(tooltips).map { case (header, tooltip) =>
-        if (header == sortColumn) {
-          val headerLink = Unparsed(
-            parameterPath +
-              s"&$sqlStatsTableTag.sort=${URLEncoder.encode(header, UTF_8.name())}" +
-              s"&$sqlStatsTableTag.desc=${!desc}" +
-              s"&$sqlStatsTableTag.pageSize=$pageSize" +
-              s"#$sqlStatsTableTag")
-          val arrow = if (desc) "&#x25BE;" else "&#x25B4;" // UP or DOWN
-
-          if (tooltip.nonEmpty) {
-            <th>
-              <a href={headerLink}>
-                <span data-toggle="tooltip" title={tooltip.get}>
-                  {header}&nbsp;{Unparsed(arrow)}
-                </span>
-              </a>
-            </th>
-          } else {
-            <th>
-              <a href={headerLink}>
-                {header}&nbsp;{Unparsed(arrow)}
-              </a>
-            </th>
-          }
-        } else {
-          val headerLink = Unparsed(
-            parameterPath +
-              s"&$sqlStatsTableTag.sort=${URLEncoder.encode(header, UTF_8.name())}" +
-              s"&$sqlStatsTableTag.pageSize=$pageSize" +
-              s"#$sqlStatsTableTag")
-
-          if(tooltip.nonEmpty) {
-            <th>
-              <a href={headerLink}>
-                <span data-toggle="tooltip" title={tooltip.get}>
-                  {header}
-                </span>
-              </a>
-            </th>
-          } else {
-            <th>
-              <a href={headerLink}>
-                {header}
-              </a>
-            </th>
-          }
-        }
-      }
-    }
-    <thead>
-      {headerRow}
-    </thead>
+    headerRow(sqlTableHeadersAndTooltips, desc, pageSize, sortColumn, parameterPath,
+      sqlStatsTableTag, sqlStatsTableTag)
   }
 
   override def row(sqlStatsTableRow: SqlStatsTableRow): Seq[Node] = {
@@ -375,21 +283,7 @@ private[ui] class SqlStatsPagedTable(
       } else {
         errorMessage
       })
-    val details = if (isMultiline) {
-      // scalastyle:off
-      <span onclick="this.parentNode.querySelector('.stacktrace-details').classList.toggle('collapsed')"
-            class="expand-details">
-        + details
-      </span> ++
-        <div class="stacktrace-details collapsed">
-          <pre>
-            {errorMessage}
-          </pre>
-        </div>
-      // scalastyle:on
-    } else {
-      ""
-    }
+    val details = detailsUINode(isMultiline, errorMessage)
     <td>
       {errorSummary}{details}
     </td>
@@ -405,101 +299,55 @@ private[ui] class SessionStatsPagedTable(
     data: Seq[SessionInfo],
     subPath: String,
     basePath: String,
-    parameterOtherTable: Iterable[String],
-    sessionStatsTableTag: String,
-    pageSize: Int,
-    sortColumn: String,
-    desc: Boolean) extends PagedTable[SessionInfo] {
+    sessionStatsTableTag: String) extends PagedTable[SessionInfo] {
+
+  private val (sortColumn, desc, pageSize) =
+    getTableParameters(request, sessionStatsTableTag, "Start Time")
+
+  private val encodedSortColumn = URLEncoder.encode(sortColumn, UTF_8.name())
+
+  private val parameterPath =
+    s"$basePath/$subPath/?${getParameterOtherTable(request, sessionStatsTableTag)}"
 
   override val dataSource = new SessionStatsTableDataSource(data, pageSize, sortColumn, desc)
-
-  private val parameterPath = s"$basePath/$subPath/?${parameterOtherTable.mkString("&")}"
 
   override def tableId: String = sessionStatsTableTag
 
   override def tableCssClass: String =
-    "table table-bordered table-condensed table-striped " +
-      "table-head-clickable table-cell-width-limited"
+    "table table-bordered table-sm table-striped table-head-clickable table-cell-width-limited"
 
   override def pageLink(page: Int): String = {
-    val encodedSortColumn = URLEncoder.encode(sortColumn, UTF_8.name())
     parameterPath +
       s"&$pageNumberFormField=$page" +
       s"&$sessionStatsTableTag.sort=$encodedSortColumn" +
       s"&$sessionStatsTableTag.desc=$desc" +
-      s"&$pageSizeFormField=$pageSize"
+      s"&$pageSizeFormField=$pageSize" +
+      s"#$sessionStatsTableTag"
   }
 
   override def pageSizeFormField: String = s"$sessionStatsTableTag.pageSize"
 
   override def pageNumberFormField: String = s"$sessionStatsTableTag.page"
 
-  override def goButtonFormPath: String = {
-    val encodedSortColumn = URLEncoder.encode(sortColumn, UTF_8.name())
-    s"$parameterPath&$sessionStatsTableTag.sort=$encodedSortColumn&$sessionStatsTableTag.desc=$desc"
-  }
+  override def goButtonFormPath: String =
+    s"$parameterPath&$sessionStatsTableTag.sort=$encodedSortColumn" +
+      s"&$sessionStatsTableTag.desc=$desc#$sessionStatsTableTag"
 
   override def headers: Seq[Node] = {
-    val sessionTableHeaders =
-      Seq("User", "IP", "Session ID", "Start Time", "Finish Time", "Duration", "Total Execute")
+    val sessionTableHeadersAndTooltips: Seq[(String, Boolean, Option[String])] =
+      Seq(
+        ("User", true, None),
+        ("IP", true, None),
+        ("Session ID", true, None),
+        ("Start Time", true, None),
+        ("Finish Time", true, None),
+        ("Duration", true, Some(THRIFT_SESSION_DURATION)),
+        ("Total Execute", true, Some(THRIFT_SESSION_TOTAL_EXECUTE)))
 
-    val tooltips = Seq(None, None, None, None, None, Some(THRIFT_SESSION_DURATION),
-      Some(THRIFT_SESSION_TOTAL_EXECUTE))
-    assert(sessionTableHeaders.length == tooltips.length)
-    val colWidthAttr = s"${100.toDouble / sessionTableHeaders.size}%"
+    isSortColumnValid(sessionTableHeadersAndTooltips, sortColumn)
 
-    val headerRow: Seq[Node] = {
-      sessionTableHeaders.zip(tooltips).map { case (header, tooltip) =>
-        if (header == sortColumn) {
-          val headerLink = Unparsed(
-            parameterPath +
-              s"&$sessionStatsTableTag.sort=${URLEncoder.encode(header, UTF_8.name())}" +
-              s"&$sessionStatsTableTag.desc=${!desc}" +
-              s"&$sessionStatsTableTag.pageSize=$pageSize" +
-              s"#$sessionStatsTableTag")
-          val arrow = if (desc) "&#x25BE;" else "&#x25B4;" // UP or DOWN
-            <th width={colWidthAttr}>
-              <a href={headerLink}>
-                {
-                  if (tooltip.nonEmpty) {
-                    <span data-toggle="tooltip" data-placement="top" title={tooltip.get}>
-                      {header}&nbsp;{Unparsed(arrow)}
-                    </span>
-                  } else {
-                    <span>
-                      {header}&nbsp;{Unparsed(arrow)}
-                    </span>
-                  }
-                }
-              </a>
-            </th>
-
-        } else {
-          val headerLink = Unparsed(
-            parameterPath +
-              s"&$sessionStatsTableTag.sort=${URLEncoder.encode(header, UTF_8.name())}" +
-              s"&$sessionStatsTableTag.pageSize=$pageSize" +
-              s"#$sessionStatsTableTag")
-
-            <th width={colWidthAttr}>
-              <a href={headerLink}>
-                {
-                  if (tooltip.nonEmpty) {
-                    <span data-toggle="tooltip" data-placement="top" title={tooltip.get}>
-                      {header}
-                    </span>
-                  } else {
-                    {header}
-                  }
-                }
-              </a>
-            </th>
-        }
-      }
-    }
-    <thead>
-      {headerRow}
-    </thead>
+    headerRow(sessionTableHeadersAndTooltips, desc, pageSize, sortColumn,
+      parameterPath, sessionStatsTableTag, sessionStatsTableTag)
   }
 
   override def row(session: SessionInfo): Seq[Node] = {
@@ -517,108 +365,94 @@ private[ui] class SessionStatsPagedTable(
   }
 }
 
-  private[ui] class SqlStatsTableRow(
+private[ui] class SqlStatsTableRow(
     val jobId: Seq[String],
     val duration: Long,
     val executionTime: Long,
     val executionInfo: ExecutionInfo,
     val detail: String)
 
-  private[ui] class SqlStatsTableDataSource(
+private[ui] class SqlStatsTableDataSource(
     info: Seq[ExecutionInfo],
     pageSize: Int,
     sortColumn: String,
     desc: Boolean) extends PagedDataSource[SqlStatsTableRow](pageSize) {
 
-    // Convert ExecutionInfo to SqlStatsTableRow which contains the final contents to show in
-    // the table so that we can avoid creating duplicate contents during sorting the data
-    private val data = info.map(sqlStatsTableRow).sorted(ordering(sortColumn, desc))
+  // Convert ExecutionInfo to SqlStatsTableRow which contains the final contents to show in
+  // the table so that we can avoid creating duplicate contents during sorting the data
+  private val data = info.map(sqlStatsTableRow).sorted(ordering(sortColumn, desc))
 
-    private var _slicedStartTime: Set[Long] = null
+  override def dataSize: Int = data.size
 
-    override def dataSize: Int = data.size
+  override def sliceData(from: Int, to: Int): Seq[SqlStatsTableRow] = data.slice(from, to)
 
-    override def sliceData(from: Int, to: Int): Seq[SqlStatsTableRow] = {
-      val r = data.slice(from, to)
-      _slicedStartTime = r.map(_.executionInfo.startTimestamp).toSet
-      r
-    }
+  private def sqlStatsTableRow(executionInfo: ExecutionInfo): SqlStatsTableRow = {
+    val duration = executionInfo.totalTime(executionInfo.closeTimestamp)
+    val executionTime = executionInfo.totalTime(executionInfo.finishTimestamp)
+    val detail = Option(executionInfo.detail).filter(!_.isEmpty)
+      .getOrElse(executionInfo.executePlan)
+    val jobId = executionInfo.jobId.toSeq.sorted
 
-    private def sqlStatsTableRow(executionInfo: ExecutionInfo): SqlStatsTableRow = {
-      val duration = executionInfo.totalTime(executionInfo.closeTimestamp)
-      val executionTime = executionInfo.totalTime(executionInfo.finishTimestamp)
-      val detail = Option(executionInfo.detail).filter(!_.isEmpty)
-        .getOrElse(executionInfo.executePlan)
-      val jobId = executionInfo.jobId.toSeq.sorted
-
-      new SqlStatsTableRow(jobId, duration, executionTime, executionInfo, detail)
-
-    }
-
-    /**
-     * Return Ordering according to sortColumn and desc.
-     */
-    private def ordering(sortColumn: String, desc: Boolean): Ordering[SqlStatsTableRow] = {
-      val ordering: Ordering[SqlStatsTableRow] = sortColumn match {
-        case "User" => Ordering.by(_.executionInfo.userName)
-        case "JobID" => Ordering by (_.jobId.headOption)
-        case "GroupID" => Ordering.by(_.executionInfo.groupId)
-        case "Start Time" => Ordering.by(_.executionInfo.startTimestamp)
-        case "Finish Time" => Ordering.by(_.executionInfo.finishTimestamp)
-        case "Close Time" => Ordering.by(_.executionInfo.closeTimestamp)
-        case "Execution Time" => Ordering.by(_.executionTime)
-        case "Duration" => Ordering.by(_.duration)
-        case "Statement" => Ordering.by(_.executionInfo.statement)
-        case "State" => Ordering.by(_.executionInfo.state)
-        case "Detail" => Ordering.by(_.detail)
-        case unknownColumn => throw new IllegalArgumentException(s"Unknown column: $unknownColumn")
-      }
-      if (desc) {
-        ordering.reverse
-      } else {
-        ordering
-      }
-    }
-
+    new SqlStatsTableRow(jobId, duration, executionTime, executionInfo, detail)
   }
 
-  private[ui] class SessionStatsTableDataSource(
+  /**
+   * Return Ordering according to sortColumn and desc.
+   */
+  private def ordering(sortColumn: String, desc: Boolean): Ordering[SqlStatsTableRow] = {
+    val ordering: Ordering[SqlStatsTableRow] = sortColumn match {
+      case "User" => Ordering.by(_.executionInfo.userName)
+      case "JobID" => Ordering by (_.jobId.headOption)
+      case "GroupID" => Ordering.by(_.executionInfo.groupId)
+      case "Start Time" => Ordering.by(_.executionInfo.startTimestamp)
+      case "Finish Time" => Ordering.by(_.executionInfo.finishTimestamp)
+      case "Close Time" => Ordering.by(_.executionInfo.closeTimestamp)
+      case "Execution Time" => Ordering.by(_.executionTime)
+      case "Duration" => Ordering.by(_.duration)
+      case "Statement" => Ordering.by(_.executionInfo.statement)
+      case "State" => Ordering.by(_.executionInfo.state)
+      case "Detail" => Ordering.by(_.detail)
+      case unknownColumn => throw new IllegalArgumentException(s"Unknown column: $unknownColumn")
+    }
+    if (desc) {
+      ordering.reverse
+    } else {
+      ordering
+    }
+  }
+}
+
+private[ui] class SessionStatsTableDataSource(
     info: Seq[SessionInfo],
     pageSize: Int,
     sortColumn: String,
     desc: Boolean) extends PagedDataSource[SessionInfo](pageSize) {
 
-    // Sorting SessionInfo data
-    private val data = info.sorted(ordering(sortColumn, desc))
+  // Sorting SessionInfo data
+  private val data = info.sorted(ordering(sortColumn, desc))
 
-    private var _slicedStartTime: Set[Long] = null
+  override def dataSize: Int = data.size
 
-    override def dataSize: Int = data.size
+  override def sliceData(from: Int, to: Int): Seq[SessionInfo] = data.slice(from, to)
 
-    override def sliceData(from: Int, to: Int): Seq[SessionInfo] = {
-      val r = data.slice(from, to)
-      _slicedStartTime = r.map(_.startTimestamp).toSet
-      r
+  /**
+   * Return Ordering according to sortColumn and desc.
+   */
+  private def ordering(sortColumn: String, desc: Boolean): Ordering[SessionInfo] = {
+    val ordering: Ordering[SessionInfo] = sortColumn match {
+      case "User" => Ordering.by(_.userName)
+      case "IP" => Ordering.by(_.ip)
+      case "Session ID" => Ordering.by(_.sessionId)
+      case "Start Time" => Ordering by (_.startTimestamp)
+      case "Finish Time" => Ordering.by(_.finishTimestamp)
+      case "Duration" => Ordering.by(_.totalTime)
+      case "Total Execute" => Ordering.by(_.totalExecution)
+      case unknownColumn => throw new IllegalArgumentException(s"Unknown column: $unknownColumn")
     }
-
-    /**
-     * Return Ordering according to sortColumn and desc.
-     */
-    private def ordering(sortColumn: String, desc: Boolean): Ordering[SessionInfo] = {
-      val ordering: Ordering[SessionInfo] = sortColumn match {
-        case "User" => Ordering.by(_.userName)
-        case "IP" => Ordering.by(_.ip)
-        case "Session ID" => Ordering.by(_.sessionId)
-        case "Start Time" => Ordering by (_.startTimestamp)
-        case "Finish Time" => Ordering.by(_.finishTimestamp)
-        case "Duration" => Ordering.by(_.totalTime)
-        case "Total Execute" => Ordering.by(_.totalExecution)
-        case unknownColumn => throw new IllegalArgumentException(s"Unknown column: $unknownColumn")
-      }
-      if (desc) {
-        ordering.reverse
-      } else {
-        ordering
-      }
+    if (desc) {
+      ordering.reverse
+    } else {
+      ordering
     }
   }
+}

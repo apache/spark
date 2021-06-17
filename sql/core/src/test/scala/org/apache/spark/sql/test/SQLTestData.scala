@@ -169,10 +169,10 @@ private[sql] trait SQLTestData { self =>
     rdd
   }
 
-  protected lazy val calenderIntervalData: RDD[IntervalData] = {
+  protected lazy val calendarIntervalData: RDD[IntervalData] = {
     val rdd = spark.sparkContext.parallelize(
       IntervalData(new CalendarInterval(1, 1, 1)) :: Nil)
-    rdd.toDF().createOrReplaceTempView("calenderIntervalData")
+    rdd.toDF().createOrReplaceTempView("calendarIntervalData")
     rdd
   }
 

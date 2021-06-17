@@ -17,6 +17,7 @@
 
 package org.apache.spark.scheduler.cluster
 
+import java.util.Locale
 import java.util.concurrent.Semaphore
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -28,7 +29,7 @@ import org.apache.spark.deploy.client.{StandaloneAppClient, StandaloneAppClientL
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle}
-import org.apache.spark.resource.ResourceUtils
+import org.apache.spark.resource.{ResourceProfile, ResourceUtils}
 import org.apache.spark.rpc.RpcEndpointAddress
 import org.apache.spark.scheduler._
 import org.apache.spark.util.Utils
@@ -44,7 +45,7 @@ private[spark] class StandaloneSchedulerBackend(
   with StandaloneAppClientListener
   with Logging {
 
-  private var client: StandaloneAppClient = null
+  private[spark] var client: StandaloneAppClient = null
   private val stopping = new AtomicBoolean(false)
   private val launcherBackend = new LauncherBackend() {
     override protected def conf: SparkConf = sc.conf
@@ -58,6 +59,7 @@ private[spark] class StandaloneSchedulerBackend(
 
   private val maxCores = conf.get(config.CORES_MAX)
   private val totalExpectedCores = maxCores.getOrElse(0)
+  private val defaultProf = sc.resourceProfileManager.defaultResourceProfile
 
   override def start(): Unit = {
     super.start()
@@ -164,13 +166,27 @@ private[spark] class StandaloneSchedulerBackend(
   }
 
   override def executorRemoved(
-      fullId: String, message: String, exitStatus: Option[Int], workerLost: Boolean): Unit = {
+      fullId: String,
+      message: String,
+      exitStatus: Option[Int],
+      workerHost: Option[String]): Unit = {
     val reason: ExecutorLossReason = exitStatus match {
       case Some(code) => ExecutorExited(code, exitCausedByApp = true, message)
-      case None => SlaveLost(message, workerLost = workerLost)
+      case None => ExecutorProcessLost(message, workerHost)
     }
     logInfo("Executor %s removed: %s".format(fullId, message))
     removeExecutor(fullId.split("/")(1), reason)
+  }
+
+  override def executorDecommissioned(fullId: String,
+      decommissionInfo: ExecutorDecommissionInfo): Unit = {
+    logInfo(s"Asked to decommission executor $fullId")
+    val execId = fullId.split("/")(1)
+    decommissionExecutors(
+      Array((execId, decommissionInfo)),
+      adjustTargetNumExecutors = false,
+      triggeredByExecutor = false)
+    logInfo("Executor %s decommissioned: %s".format(fullId, decommissionInfo))
   }
 
   override def workerRemoved(workerId: String, host: String, message: String): Unit = {
@@ -194,9 +210,13 @@ private[spark] class StandaloneSchedulerBackend(
    *
    * @return whether the request is acknowledged.
    */
-  protected override def doRequestTotalExecutors(requestedTotal: Int): Future[Boolean] = {
+  protected override def doRequestTotalExecutors(
+      resourceProfileToTotalExecs: Map[ResourceProfile, Int]): Future[Boolean] = {
+    // resources profiles not supported
     Option(client) match {
-      case Some(c) => c.requestTotalExecutors(requestedTotal)
+      case Some(c) =>
+        val numExecs = resourceProfileToTotalExecs.getOrElse(defaultProf, 0)
+        c.requestTotalExecutors(numExecs)
       case None =>
         logWarning("Attempted to request executors before driver fully initialized.")
         Future.successful(false)
@@ -214,6 +234,13 @@ private[spark] class StandaloneSchedulerBackend(
         logWarning("Attempted to kill executors before driver fully initialized.")
         Future.successful(false)
     }
+  }
+
+  override def getDriverLogUrls: Option[Map[String, String]] = {
+    val prefix = "SPARK_DRIVER_LOG_URL_"
+    val driverLogUrls = sys.env.filterKeys(_.startsWith(prefix))
+      .map(e => (e._1.substring(prefix.length).toLowerCase(Locale.ROOT), e._2)).toMap
+    if (driverLogUrls.nonEmpty) Some(driverLogUrls) else None
   }
 
   private def waitForRegistration() = {

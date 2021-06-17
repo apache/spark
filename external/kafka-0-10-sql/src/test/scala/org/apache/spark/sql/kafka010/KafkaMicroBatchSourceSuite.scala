@@ -20,7 +20,7 @@ package org.apache.spark.sql.kafka010
 import java.io._
 import java.nio.charset.StandardCharsets.UTF_8
 import java.nio.file.{Files, Paths}
-import java.util.Locale
+import java.util.{Locale, Optional}
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -183,6 +183,18 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
 
   import testImplicits._
 
+  private def waitUntilBatchProcessed(clock: StreamManualClock) = AssertOnQuery { q =>
+    eventually(Timeout(streamingTimeout)) {
+      if (!q.exception.isDefined) {
+        assert(clock.isStreamWaitingAt(clock.getTimeMillis()))
+      }
+    }
+    if (q.exception.isDefined) {
+      throw q.exception.get
+    }
+    true
+  }
+
   test("(de)serialization of initial offsets") {
     val topic = newTopic()
     testUtils.createTopic(topic, partitions = 5)
@@ -257,39 +269,27 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
 
     val clock = new StreamManualClock
 
-    val waitUntilBatchProcessed = AssertOnQuery { q =>
-      eventually(Timeout(streamingTimeout)) {
-        if (!q.exception.isDefined) {
-          assert(clock.isStreamWaitingAt(clock.getTimeMillis()))
-        }
-      }
-      if (q.exception.isDefined) {
-        throw q.exception.get
-      }
-      true
-    }
-
     testStream(mapped)(
       StartStream(Trigger.ProcessingTime(100), clock),
-      waitUntilBatchProcessed,
+      waitUntilBatchProcessed(clock),
       // 1 from smallest, 1 from middle, 8 from biggest
       CheckAnswer(1, 10, 100, 101, 102, 103, 104, 105, 106, 107),
       AdvanceManualClock(100),
-      waitUntilBatchProcessed,
+      waitUntilBatchProcessed(clock),
       // smallest now empty, 1 more from middle, 9 more from biggest
       CheckAnswer(1, 10, 100, 101, 102, 103, 104, 105, 106, 107,
         11, 108, 109, 110, 111, 112, 113, 114, 115, 116
       ),
       StopStream,
       StartStream(Trigger.ProcessingTime(100), clock),
-      waitUntilBatchProcessed,
+      waitUntilBatchProcessed(clock),
       // smallest now empty, 1 more from middle, 9 more from biggest
       CheckAnswer(1, 10, 100, 101, 102, 103, 104, 105, 106, 107,
         11, 108, 109, 110, 111, 112, 113, 114, 115, 116,
         12, 117, 118, 119, 120, 121, 122, 123, 124, 125
       ),
       AdvanceManualClock(100),
-      waitUntilBatchProcessed,
+      waitUntilBatchProcessed(clock),
       // smallest now empty, 1 more from middle, 9 more from biggest
       CheckAnswer(1, 10, 100, 101, 102, 103, 104, 105, 106, 107,
         11, 108, 109, 110, 111, 112, 113, 114, 115, 116,
@@ -297,6 +297,219 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
         13, 126, 127, 128, 129, 130, 131, 132, 133, 134
       )
     )
+
+    // When Trigger.Once() is used, the read limit should be ignored
+    val allData = Seq(1) ++ (10 to 20) ++ (100 to 200)
+    withTempDir { dir =>
+      testStream(mapped)(
+        StartStream(Trigger.Once(), checkpointLocation = dir.getCanonicalPath),
+        AssertOnQuery { q =>
+          q.processAllAvailable()
+          true
+        },
+        CheckAnswer(allData: _*),
+        StopStream,
+
+        AddKafkaData(Set(topic), 1000 to 1010: _*),
+        StartStream(Trigger.Once(), checkpointLocation = dir.getCanonicalPath),
+        AssertOnQuery { q =>
+          q.processAllAvailable()
+          true
+        },
+        CheckAnswer((allData ++ 1000.to(1010)): _*)
+      )
+    }
+  }
+
+  test("minOffsetsPerTrigger") {
+    val topic = newTopic()
+    testUtils.createTopic(topic, partitions = 3)
+    testUtils.sendMessages(topic, (100 to 109).map(_.toString).toArray, Some(0))
+    testUtils.sendMessages(topic, (10 to 14).map(_.toString).toArray, Some(1))
+    testUtils.sendMessages(topic, Array("1"), Some(2))
+
+    val reader = spark
+      .readStream
+      .format("kafka")
+      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+      .option("kafka.metadata.max.age.ms", "1")
+      .option("minOffsetsPerTrigger", 15)
+      .option("maxTriggerDelay", "5s")
+      .option("subscribe", topic)
+      .option("startingOffsets", "earliest")
+    val kafka = reader.load()
+      .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+      .as[(String, String)]
+    val mapped: org.apache.spark.sql.Dataset[_] = kafka.map(kv => kv._2.toInt)
+
+    val clock = new StreamManualClock
+
+    testStream(mapped)(
+      StartStream(Trigger.ProcessingTime(100), clock),
+      waitUntilBatchProcessed(clock),
+      // First Batch is always processed
+      CheckAnswer(1, 10, 100, 101, 102, 103, 104, 105, 106, 107,
+        11, 108, 109, 12, 13, 14),
+      // Adding more data but less than minOffsetsPerTrigger
+      Assert {
+        testUtils.sendMessages(topic, (15 to 20).map(_.toString).toArray, Some(1))
+        true
+      },
+      // No data is processed for next batch as data is less than minOffsetsPerTrigger
+      // and maxTriggerDelay is not expired
+      AdvanceManualClock(100),
+      waitUntilBatchProcessed(clock),
+      CheckNewAnswer(),
+      Assert {
+        testUtils.sendMessages(topic, (110 to 120).map(_.toString).toArray, Some(0))
+        testUtils.sendMessages(topic, Array("2"), Some(2))
+        true
+      },
+      AdvanceManualClock(100),
+      waitUntilBatchProcessed(clock),
+      // Running batch now as number of records is greater than minOffsetsPerTrigger
+      CheckAnswer(1, 10, 100, 101, 102, 103, 104, 105, 106, 107,
+        11, 108, 109, 110, 111, 112, 113, 114, 115, 116,
+        12, 117, 118, 119, 120, 13, 14, 15, 16, 17, 18, 19, 2, 20),
+      // Testing maxTriggerDelay
+      // Adding more data but less than minOffsetsPerTrigger
+      Assert {
+        testUtils.sendMessages(topic, (121 to 125).map(_.toString).toArray, Some(0))
+        testUtils.sendMessages(topic, (21 to 25).map(_.toString).toArray, Some(1))
+        true
+      },
+      // No data is processed for next batch till maxTriggerDelay is expired
+      AdvanceManualClock(100),
+      waitUntilBatchProcessed(clock),
+      CheckNewAnswer(),
+      // Sleeping for 5s to let maxTriggerDelay expire
+      Assert {
+        Thread.sleep(5 * 1000)
+        true
+      },
+      AdvanceManualClock(100),
+      // Running batch as maxTriggerDelay is expired
+      waitUntilBatchProcessed(clock),
+      CheckAnswer(1, 10, 100, 101, 102, 103, 104, 105, 106, 107,
+        11, 108, 109, 110, 111, 112, 113, 114, 115, 116,
+        12, 117, 118, 119, 120, 121, 122, 123, 124, 125,
+        13, 14, 15, 16, 17, 18, 19, 2, 20, 21, 22, 23, 24, 25)
+    )
+    // When Trigger.Once() is used, the read limit should be ignored
+    val allData = Seq(1, 2) ++ (10 to 25) ++ (100 to 125)
+    withTempDir { dir =>
+      testStream(mapped)(
+        StartStream(Trigger.Once(), checkpointLocation = dir.getCanonicalPath),
+        AssertOnQuery { q =>
+          q.processAllAvailable()
+          true
+        },
+        CheckAnswer(allData: _*),
+        StopStream,
+
+        AddKafkaData(Set(topic), 1000 to 1010: _*),
+        StartStream(Trigger.Once(), checkpointLocation = dir.getCanonicalPath),
+        AssertOnQuery { q =>
+          q.processAllAvailable()
+          true
+        },
+        CheckAnswer((allData ++ 1000.to(1010)): _*)
+      )
+    }
+  }
+
+  test("compositeReadLimit") {
+    val topic = newTopic()
+    testUtils.createTopic(topic, partitions = 3)
+    testUtils.sendMessages(topic, (100 to 120).map(_.toString).toArray, Some(0))
+    testUtils.sendMessages(topic, (10 to 20).map(_.toString).toArray, Some(1))
+    testUtils.sendMessages(topic, Array("1"), Some(2))
+
+    val reader = spark
+      .readStream
+      .format("kafka")
+      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+      .option("kafka.metadata.max.age.ms", "1")
+      .option("minOffsetsPerTrigger", 15)
+      .option("maxTriggerDelay", "5s")
+      .option("maxOffsetsPerTrigger", 20)
+      .option("subscribe", topic)
+      .option("startingOffsets", "earliest")
+    val kafka = reader.load()
+      .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+      .as[(String, String)]
+    val mapped: org.apache.spark.sql.Dataset[_] = kafka.map(kv => kv._2.toInt)
+
+    val clock = new StreamManualClock
+
+    testStream(mapped)(
+      StartStream(Trigger.ProcessingTime(100), clock),
+      waitUntilBatchProcessed(clock),
+      // First Batch is always processed but it will process only 20
+      CheckAnswer(1, 10, 100, 101, 102, 103, 104, 105, 106, 107,
+        11, 108, 109, 110, 111,
+        12, 13, 14, 15),
+      // Pending data is less than minOffsetsPerTrigger
+      // No data is processed for next batch as data is less than minOffsetsPerTrigger
+      // and maxTriggerDelay is not expired
+      AdvanceManualClock(100),
+      waitUntilBatchProcessed(clock),
+      CheckNewAnswer(),
+      Assert {
+        testUtils.sendMessages(topic, (121 to 128).map(_.toString).toArray, Some(0))
+        testUtils.sendMessages(topic, (21 to 30).map(_.toString).toArray, Some(1))
+        testUtils.sendMessages(topic, Array("2"), Some(2))
+        true
+      },
+      AdvanceManualClock(100),
+      waitUntilBatchProcessed(clock),
+      // Running batch now as number of new records is greater than minOffsetsPerTrigger
+      // but reading limited data as per maxOffsetsPerTrigger
+      CheckAnswer(1, 10, 100, 101, 102, 103, 104, 105, 106, 107,
+        11, 108, 109, 110, 111, 112, 113, 114, 115, 116,
+        12, 117, 118, 119, 120, 121,
+        13, 14, 15, 16, 17, 18, 19, 2, 20, 21, 22, 23, 24),
+
+      // Testing maxTriggerDelay
+      // No data is processed for next batch till maxTriggerDelay is expired
+      AdvanceManualClock(100),
+      waitUntilBatchProcessed(clock),
+      CheckNewAnswer(),
+      // Sleeping for 5s to let maxTriggerDelay expire
+      Assert {
+        Thread.sleep(5 * 1000)
+        true
+      },
+      AdvanceManualClock(100),
+      // Running batch as maxTriggerDelay is expired
+      waitUntilBatchProcessed(clock),
+      CheckAnswer(1, 10, 100, 101, 102, 103, 104, 105, 106, 107,
+        11, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119,
+        12, 120, 121, 122, 123, 124, 125, 126, 127, 128,
+        13, 14, 15, 16, 17, 18, 19, 2, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30)
+    )
+
+    // When Trigger.Once() is used, the read limit should be ignored
+    val allData = Seq(1, 2) ++ (10 to 30) ++ (100 to 128)
+    withTempDir { dir =>
+      testStream(mapped)(
+        StartStream(Trigger.Once(), checkpointLocation = dir.getCanonicalPath),
+        AssertOnQuery { q =>
+          q.processAllAvailable()
+          true
+        },
+        CheckAnswer(allData: _*),
+        StopStream,
+
+        AddKafkaData(Set(topic), 1000 to 1010: _*),
+        StartStream(Trigger.Once(), checkpointLocation = dir.getCanonicalPath),
+        AssertOnQuery { q =>
+          q.processAllAvailable()
+          true
+        },
+        CheckAnswer((allData ++ 1000.to(1010)): _*)
+      )
+    }
   }
 
   test("input row metrics") {
@@ -340,6 +553,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
       .format("kafka")
       .option("kafka.bootstrap.servers", testUtils.brokerAddress)
       .option("kafka.metadata.max.age.ms", "1")
+      .option("kafka.request.timeout.ms", "3000")
       .option("kafka.default.api.timeout.ms", "3000")
       .option("subscribePattern", s"$topicPrefix-.*")
       .option("failOnDataLoss", "false")
@@ -377,6 +591,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
       .format("kafka")
       .option("kafka.bootstrap.servers", testUtils.brokerAddress)
       .option("kafka.metadata.max.age.ms", "1")
+      .option("kafka.request.timeout.ms", "3000")
       .option("kafka.default.api.timeout.ms", "3000")
       .option("startingOffsets", "earliest")
       .option("subscribePattern", s"$topicPrefix-.*")
@@ -544,7 +759,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
     val rows = spark.table("kafkaWatermark").collect()
     assert(rows.length === 1, s"Unexpected results: ${rows.toList}")
     val row = rows(0)
-    // We cannot check the exact window start time as it depands on the time that messages were
+    // We cannot check the exact window start time as it depends on the time that messages were
     // inserted by the producer. So here we just use a low bound to make sure the internal
     // conversion works.
     assert(
@@ -566,6 +781,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
       .format("kafka")
       .option("kafka.bootstrap.servers", testUtils.brokerAddress)
       .option("kafka.metadata.max.age.ms", "1")
+      .option("kafka.request.timeout.ms", "3000")
       .option("kafka.default.api.timeout.ms", "3000")
       .option("subscribe", topic)
       // If a topic is deleted and we try to poll data starting from offset 0,
@@ -582,7 +798,9 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
     // in executors.
     val query = kafka.map(kv => kv._2.toInt).writeStream.foreach(new ForeachWriter[Int] {
       override def open(partitionId: Long, version: Long): Boolean = {
+        // Re-create topic since Kafka auto topic creation is not supported by Spark
         KafkaSourceSuite.globalTestUtils.deleteTopic(topic)
+        KafkaSourceSuite.globalTestUtils.createTopic(topic)
         true
       }
 
@@ -626,57 +844,51 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
 
     val clock = new StreamManualClock
 
-    val waitUntilBatchProcessed = AssertOnQuery { q =>
-      eventually(Timeout(streamingTimeout)) {
-        if (!q.exception.isDefined) {
-          assert(clock.isStreamWaitingAt(clock.getTimeMillis()))
-        }
-      }
-      if (q.exception.isDefined) {
-        throw q.exception.get
-      }
-      true
-    }
-
     testStream(kafka)(
       StartStream(Trigger.ProcessingTime(100), clock),
-      waitUntilBatchProcessed,
+      waitUntilBatchProcessed(clock),
       // 5 from smaller topic, 5 from bigger one
       CheckLastBatch((0 to 4) ++ (100 to 104): _*),
       AdvanceManualClock(100),
-      waitUntilBatchProcessed,
+      waitUntilBatchProcessed(clock),
       // 5 from smaller topic, 5 from bigger one
       CheckLastBatch((5 to 9) ++ (105 to 109): _*),
       AdvanceManualClock(100),
-      waitUntilBatchProcessed,
+      waitUntilBatchProcessed(clock),
       // smaller topic empty, 5 from bigger one
       CheckLastBatch(110 to 114: _*),
       StopStream,
       StartStream(Trigger.ProcessingTime(100), clock),
-      waitUntilBatchProcessed,
+      waitUntilBatchProcessed(clock),
       // smallest now empty, 5 from bigger one
       CheckLastBatch(115 to 119: _*),
       AdvanceManualClock(100),
-      waitUntilBatchProcessed,
+      waitUntilBatchProcessed(clock),
       // smallest now empty, 5 from bigger one
       CheckLastBatch(120 to 124: _*)
     )
   }
 
   test("allow group.id prefix") {
-    testGroupId("groupIdPrefix", (expected, actual) => {
-      assert(actual.exists(_.startsWith(expected)) && !actual.exists(_ === expected),
-        "Valid consumer groups don't contain the expected group id - " +
-        s"Valid consumer groups: $actual / expected group id: $expected")
-    })
+    // Group ID prefix is only supported by consumer based offset reader
+    if (spark.conf.get(SQLConf.USE_DEPRECATED_KAFKA_OFFSET_FETCHING)) {
+      testGroupId("groupIdPrefix", (expected, actual) => {
+        assert(actual.exists(_.startsWith(expected)) && !actual.exists(_ === expected),
+          "Valid consumer groups don't contain the expected group id - " +
+            s"Valid consumer groups: $actual / expected group id: $expected")
+      })
+    }
   }
 
   test("allow group.id override") {
-    testGroupId("kafka.group.id", (expected, actual) => {
-      assert(actual.exists(_ === expected), "Valid consumer groups don't " +
-        s"contain the expected group id - Valid consumer groups: $actual / " +
-        s"expected group id: $expected")
-    })
+    // Group ID override is only supported by consumer based offset reader
+    if (spark.conf.get(SQLConf.USE_DEPRECATED_KAFKA_OFFSET_FETCHING)) {
+      testGroupId("kafka.group.id", (expected, actual) => {
+        assert(actual.exists(_ === expected), "Valid consumer groups don't " +
+          s"contain the expected group id - Valid consumer groups: $actual / " +
+          s"expected group id: $expected")
+      })
+    }
   }
 
   private def testGroupId(groupIdKey: String,
@@ -810,7 +1022,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
 
     val topicPartition = new TopicPartition(topic, 0)
     // The message values are the same as their offsets to make the test easy to follow
-    testUtils.withTranscationalProducer { producer =>
+    testUtils.withTransactionalProducer { producer =>
       testStream(mapped)(
         StartStream(Trigger.ProcessingTime(100), clock),
         waitUntilBatchProcessed,
@@ -933,7 +1145,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
 
     val topicPartition = new TopicPartition(topic, 0)
     // The message values are the same as their offsets to make the test easy to follow
-    testUtils.withTranscationalProducer { producer =>
+    testUtils.withTransactionalProducer { producer =>
       testStream(mapped)(
         StartStream(Trigger.ProcessingTime(100), clock),
         waitUntilBatchProcessed,
@@ -1024,7 +1236,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
       .load()
       .select($"value".as[String])
 
-    testUtils.withTranscationalProducer { producer =>
+    testUtils.withTransactionalProducer { producer =>
       producer.beginTransaction()
       (0 to 3).foreach { i =>
         producer.send(new ProducerRecord[String, String](topic, i.toString)).get()
@@ -1040,7 +1252,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
         // this case, if we forget to reset `FetchedData._nextOffsetInFetchedData` or
         // `FetchedData._offsetAfterPoll` (See SPARK-25495), the next batch will see incorrect
         // values and return wrong results hence fail the test.
-        testUtils.withTranscationalProducer { producer =>
+        testUtils.withTransactionalProducer { producer =>
           producer.beginTransaction()
           (4 to 7).foreach { i =>
             producer.send(new ProducerRecord[String, String](topic, i.toString)).get()
@@ -1063,8 +1275,51 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
   test("SPARK-27494: read kafka record containing null key/values.") {
     testNullableKeyValue(Trigger.ProcessingTime(100))
   }
+
+  test("SPARK-30656: minPartitions") {
+    val topic = newTopic()
+    testUtils.createTopic(topic, partitions = 3)
+    testUtils.sendMessages(topic, (0 to 9).map(_.toString).toArray, Some(0))
+    testUtils.sendMessages(topic, (10 to 19).map(_.toString).toArray, Some(1))
+    testUtils.sendMessages(topic, Array("20"), Some(2))
+
+    val ds = spark
+      .readStream
+      .format("kafka")
+      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+      .option("kafka.metadata.max.age.ms", "1")
+      .option("subscribe", topic)
+      .option("startingOffsets", "earliest")
+      .option("minPartitions", "6")
+      .load()
+      .select($"value".as[String])
+    val q = ds.writeStream.foreachBatch { (batch: Dataset[String], _: Long) =>
+      val partitions = batch.rdd.collectPartitions()
+      assert(partitions.length >= 6)
+      assert(partitions.flatten.toSet === (0 to 20).map(_.toString).toSet): Unit
+    }.start()
+    try {
+      q.processAllAvailable()
+    } finally {
+      q.stop()
+    }
+  }
 }
 
+
+class KafkaMicroBatchV1SourceWithAdminSuite extends KafkaMicroBatchV1SourceSuite {
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    spark.conf.set(SQLConf.USE_DEPRECATED_KAFKA_OFFSET_FETCHING.key, "false")
+  }
+}
+
+class KafkaMicroBatchV2SourceWithAdminSuite extends KafkaMicroBatchV2SourceSuite {
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    spark.conf.set(SQLConf.USE_DEPRECATED_KAFKA_OFFSET_FETCHING.key, "false")
+  }
+}
 
 class KafkaMicroBatchV1SourceSuite extends KafkaMicroBatchSourceSuiteBase {
   override def beforeAll(): Unit = {
@@ -1123,7 +1378,6 @@ class KafkaMicroBatchV2SourceSuite extends KafkaMicroBatchSourceSuiteBase {
   }
 
   testWithUninterruptibleThread("minPartitions is supported") {
-    import testImplicits._
 
     val topic = newTopic()
     val tp = new TopicPartition(topic, 0)
@@ -1222,6 +1476,112 @@ class KafkaMicroBatchV2SourceSuite extends KafkaMicroBatchSourceSuiteBase {
       CheckNewAnswer(32, 33, 34, 35, 36)
     )
   }
+
+  test("test custom metrics - with rate limit") {
+    import testImplicits._
+
+    val topic = newTopic()
+    val data = 1 to 10
+    testUtils.createTopic(topic, partitions = 2)
+    testUtils.sendMessages(topic, (1 to 5).map(_.toString).toArray, Some(0))
+    testUtils.sendMessages(topic, (6 to 10).map(_.toString).toArray, Some(1))
+
+    val kafka = spark
+      .readStream
+      .format("kafka")
+      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+      .option("subscribe", topic)
+      .option("maxOffsetsPerTrigger", 1)
+      .option(STARTING_OFFSETS_OPTION_KEY, "earliest")
+      .load()
+      .selectExpr("CAST(value AS STRING)")
+      .as[String]
+      .map(_.toInt)
+
+    testStream(kafka)(
+      StartStream(),
+      makeSureGetOffsetCalled,
+      CheckAnswer(data: _*),
+      Execute { query =>
+        // The rate limit is 1, so there must be some delay in offsets per partition.
+        val progressWithDelay = query.recentProgress.map(_.sources.head).reverse.find { progress =>
+          // find the metrics that has non-zero average offsetsBehindLatest greater than 0.
+          !progress.metrics.isEmpty && progress.metrics.get("avgOffsetsBehindLatest").toDouble > 0
+        }
+        assert(progressWithDelay.nonEmpty)
+        val metrics = progressWithDelay.get.metrics
+        assert(metrics.keySet() ===
+          Set("minOffsetsBehindLatest",
+            "maxOffsetsBehindLatest",
+            "avgOffsetsBehindLatest").asJava)
+        assert(metrics.get("minOffsetsBehindLatest").toLong > 0)
+        assert(metrics.get("maxOffsetsBehindLatest").toLong > 0)
+        assert(metrics.get("avgOffsetsBehindLatest").toDouble > 0)
+      }
+    )
+  }
+
+  test("test custom metrics - no rate limit") {
+    import testImplicits._
+
+    val topic = newTopic()
+    val data = 1 to 10
+    testUtils.createTopic(topic, partitions = 2)
+    testUtils.sendMessages(topic, (1 to 5).map(_.toString).toArray, Some(0))
+    testUtils.sendMessages(topic, (6 to 10).map(_.toString).toArray, Some(1))
+
+    val kafka = spark
+      .readStream
+      .format("kafka")
+      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+      .option("subscribe", topic)
+      .option(STARTING_OFFSETS_OPTION_KEY, "earliest")
+      .load()
+      .selectExpr("CAST(value AS STRING)")
+      .as[String]
+      .map(_.toInt)
+
+    testStream(kafka)(
+      StartStream(),
+      makeSureGetOffsetCalled,
+      CheckAnswer(data: _*),
+      Execute { query =>
+        val progress = query.recentProgress.map(_.sources.head).lastOption
+        assert(progress.nonEmpty)
+        val metrics = progress.get.metrics
+        // When there is no rate limit, there shouldn't be any delay in the current stream.
+        assert(metrics.keySet() ===
+          Set("minOffsetsBehindLatest",
+            "maxOffsetsBehindLatest",
+            "avgOffsetsBehindLatest").asJava)
+        assert(metrics.get("minOffsetsBehindLatest").toLong === 0)
+        assert(metrics.get("maxOffsetsBehindLatest").toLong === 0)
+        assert(metrics.get("avgOffsetsBehindLatest").toDouble === 0)
+      }
+    )
+  }
+
+  test("test custom metrics - corner cases") {
+    val topicPartition1 = new TopicPartition(newTopic(), 0)
+    val topicPartition2 = new TopicPartition(newTopic(), 0)
+    val latestOffset = Map[TopicPartition, Long]((topicPartition1, 3L), (topicPartition2, 6L))
+
+    // test empty offset.
+    assert(KafkaMicroBatchStream.metrics(Optional.ofNullable(null), latestOffset).isEmpty)
+
+    // test valid offsetsBehindLatest
+    val offset = KafkaSourceOffset(
+      Map[TopicPartition, Long]((topicPartition1, 1L), (topicPartition2, 2L)))
+    assert(
+      KafkaMicroBatchStream.metrics(Optional.ofNullable(offset), latestOffset) ===
+        Map[String, String](
+          "minOffsetsBehindLatest" -> "2",
+          "maxOffsetsBehindLatest" -> "4",
+          "avgOffsetsBehindLatest" -> "3.0").asJava)
+
+    // test null latestAvailablePartitionOffsets
+    assert(KafkaMicroBatchStream.metrics(Optional.ofNullable(offset), null).isEmpty)
+  }
 }
 
 abstract class KafkaSourceSuiteBase extends KafkaSourceTest {
@@ -1289,6 +1649,16 @@ abstract class KafkaSourceSuiteBase extends KafkaSourceTest {
         "failOnDataLoss" -> failOnDataLoss.toString)
     }
 
+    test(s"assign from global timestamp per topic (failOnDataLoss: $failOnDataLoss)") {
+      val topic = newTopic()
+      testFromGlobalTimestamp(
+        topic,
+        failOnDataLoss = failOnDataLoss,
+        addPartitions = false,
+        "assign" -> assignString(topic, 0 to 4),
+        "failOnDataLoss" -> failOnDataLoss.toString)
+    }
+
     test(s"subscribing topic by name from latest offsets (failOnDataLoss: $failOnDataLoss)") {
       val topic = newTopic()
       testFromLatestOffsets(
@@ -1315,6 +1685,13 @@ abstract class KafkaSourceSuiteBase extends KafkaSourceTest {
     test(s"subscribing topic by name from specific timestamps (failOnDataLoss: $failOnDataLoss)") {
       val topic = newTopic()
       testFromSpecificTimestamps(topic, failOnDataLoss = failOnDataLoss, addPartitions = true,
+        "subscribe" -> topic)
+    }
+
+    test(s"subscribing topic by name from global timestamp per topic" +
+      s" (failOnDataLoss: $failOnDataLoss)") {
+      val topic = newTopic()
+      testFromGlobalTimestamp(topic, failOnDataLoss = failOnDataLoss, addPartitions = true,
         "subscribe" -> topic)
     }
 
@@ -1352,6 +1729,17 @@ abstract class KafkaSourceSuiteBase extends KafkaSourceTest {
       val topicPrefix = newTopic()
       val topic = topicPrefix + "-suffix"
       testFromSpecificTimestamps(
+        topic,
+        failOnDataLoss = failOnDataLoss,
+        addPartitions = true,
+        "subscribePattern" -> s"$topicPrefix-.*")
+    }
+
+    test(s"subscribing topic by pattern from global timestamp per topic " +
+      s"(failOnDataLoss: $failOnDataLoss)") {
+      val topicPrefix = newTopic()
+      val topic = topicPrefix + "-suffix"
+      testFromGlobalTimestamp(
         topic,
         failOnDataLoss = failOnDataLoss,
         addPartitions = true,
@@ -1427,7 +1815,7 @@ abstract class KafkaSourceSuiteBase extends KafkaSourceTest {
       (STARTING_OFFSETS_OPTION_KEY, """{"topic-A":{"0":23}}""",
         SpecificOffsetRangeLimit(Map(new TopicPartition("topic-A", 0) -> 23))))) {
       val offset = getKafkaOffsetRangeLimit(
-        CaseInsensitiveMap[String](Map(optionKey -> optionValue)), "dummy", optionKey,
+        CaseInsensitiveMap[String](Map(optionKey -> optionValue)), "dummy", "dummy", optionKey,
         answer)
       assert(offset === answer)
     }
@@ -1436,7 +1824,7 @@ abstract class KafkaSourceSuiteBase extends KafkaSourceTest {
       (STARTING_OFFSETS_OPTION_KEY, EarliestOffsetRangeLimit),
       (ENDING_OFFSETS_OPTION_KEY, LatestOffsetRangeLimit))) {
       val offset = getKafkaOffsetRangeLimit(
-        CaseInsensitiveMap[String](Map.empty), "dummy", optionKey, answer)
+        CaseInsensitiveMap[String](Map.empty), "dummy", "dummy", optionKey, answer)
       assert(offset === answer)
     }
   }
@@ -1488,8 +1876,8 @@ abstract class KafkaSourceSuiteBase extends KafkaSourceTest {
       makeSureGetOffsetCalled,
       Execute { q =>
         // wait to reach the last offset in every partition
-        q.awaitOffset(
-          0, KafkaSourceOffset(partitionOffsets.mapValues(_ => 3L)), streamingTimeout.toMillis)
+        q.awaitOffset(0,
+          KafkaSourceOffset(partitionOffsets.mapValues(_ => 3L).toMap), streamingTimeout.toMillis)
       },
       CheckAnswer(-20, -21, -22, 0, 1, 2, 11, 12, 22),
       StopStream,
@@ -1506,27 +1894,11 @@ abstract class KafkaSourceSuiteBase extends KafkaSourceTest {
       failOnDataLoss: Boolean,
       addPartitions: Boolean,
       options: (String, String)*): Unit = {
-    def sendMessages(topic: String, msgs: Seq[String], part: Int, ts: Long): Unit = {
-      val records = msgs.map { msg =>
-        new RecordBuilder(topic, msg).partition(part).timestamp(ts).build()
-      }
-      testUtils.sendMessages(records)
-    }
-
     testUtils.createTopic(topic, partitions = 5)
 
     val firstTimestamp = System.currentTimeMillis() - 5000
-    sendMessages(topic, Array(-20).map(_.toString), 0, firstTimestamp)
-    sendMessages(topic, Array(-10).map(_.toString), 1, firstTimestamp)
-    sendMessages(topic, Array(0, 1).map(_.toString), 2, firstTimestamp)
-    sendMessages(topic, Array(10, 11).map(_.toString), 3, firstTimestamp)
-    sendMessages(topic, Array(20, 21, 22).map(_.toString), 4, firstTimestamp)
-
     val secondTimestamp = firstTimestamp + 1000
-    sendMessages(topic, Array(-21, -22).map(_.toString), 0, secondTimestamp)
-    sendMessages(topic, Array(-11, -12).map(_.toString), 1, secondTimestamp)
-    sendMessages(topic, Array(2).map(_.toString), 2, secondTimestamp)
-    sendMessages(topic, Array(12).map(_.toString), 3, secondTimestamp)
+    setupTestMessagesForTestOnTimestampOffsets(topic, firstTimestamp, secondTimestamp)
     // no data after second timestamp for partition 4
 
     require(testUtils.getLatestOffsets(Set(topic)).size === 5)
@@ -1538,18 +1910,8 @@ abstract class KafkaSourceSuiteBase extends KafkaSourceTest {
     ) ++ Map(new TopicPartition(topic, 4) -> firstTimestamp)
     val startingTimestamps = JsonUtils.partitionTimestamps(startPartitionTimestamps)
 
-    val reader = spark
-      .readStream
-      .format("kafka")
-      .option("startingOffsetsByTimestamp", startingTimestamps)
-      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
-      .option("kafka.metadata.max.age.ms", "1")
-      .option("failOnDataLoss", failOnDataLoss.toString)
-    options.foreach { case (k, v) => reader.option(k, v) }
-    val kafka = reader.load()
-      .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
-      .as[(String, String)]
-    val mapped: org.apache.spark.sql.Dataset[_] = kafka.map(kv => kv._2.toInt)
+    val mapped = setupDataFrameForTestOnTimestampOffsets(startingTimestamps, failOnDataLoss,
+      options: _*)
 
     testStream(mapped)(
       makeSureGetOffsetCalled,
@@ -1575,6 +1937,123 @@ abstract class KafkaSourceSuiteBase extends KafkaSourceTest {
       CheckAnswer(-21, -22, -11, -12, 2, 12, 20, 21, 22, 30, 31, 32, 40, 41, 42, 43, 44),
       StopStream
     )
+  }
+
+  private def testFromGlobalTimestamp(
+      topic: String,
+      failOnDataLoss: Boolean,
+      addPartitions: Boolean,
+      options: (String, String)*): Unit = {
+    testUtils.createTopic(topic, partitions = 5)
+
+    val firstTimestamp = System.currentTimeMillis() - 5000
+    val secondTimestamp = firstTimestamp + 1000
+    setupTestMessagesForTestOnTimestampOffsets(topic, firstTimestamp, secondTimestamp)
+    // here we should add records in partition 4 which match with second timestamp
+    // as the query will break if there's no matching records
+    sendMessagesWithTimestamp(topic, Array(23, 24).map(_.toString), 4, secondTimestamp)
+
+    require(testUtils.getLatestOffsets(Set(topic)).size === 5)
+
+    // we intentionally starts from second timestamp for all partitions
+    // via setting global partition
+    val mapped = setupDataFrameForTestOnGlobalTimestamp(secondTimestamp, failOnDataLoss,
+      options: _*)
+    testStream(mapped)(
+      makeSureGetOffsetCalled,
+      Execute { q =>
+        // wait to reach the last offset in every partition
+        val partAndOffsets = (0 to 4).map(new TopicPartition(topic, _)).map { tp =>
+          if (tp.partition() < 4) {
+            tp -> 3L
+          } else {
+            tp -> 5L // we added 2 more records to partition 4
+          }
+        }.toMap
+        q.awaitOffset(0, KafkaSourceOffset(partAndOffsets), streamingTimeout.toMillis)
+      },
+      CheckAnswer(-21, -22, -11, -12, 2, 12, 23, 24),
+      StopStream,
+      StartStream(),
+      CheckAnswer(-21, -22, -11, -12, 2, 12, 23, 24), // Should get the data back on recovery
+      StopStream,
+      AddKafkaData(Set(topic), 30, 31, 32), // Add data when stream is stopped
+      StartStream(),
+      CheckAnswer(-21, -22, -11, -12, 2, 12, 23, 24, 30, 31, 32), // Should get the added data
+      AssertOnQuery("Add partitions") { query: StreamExecution =>
+        if (addPartitions) setTopicPartitions(topic, 10, query)
+        true
+      },
+      AddKafkaData(Set(topic), 40, 41, 42, 43, 44)(ensureDataInMultiplePartition = true),
+      CheckAnswer(-21, -22, -11, -12, 2, 12, 23, 24, 30, 31, 32, 40, 41, 42, 43, 44),
+      StopStream
+    )
+  }
+
+  private def sendMessagesWithTimestamp(
+      topic: String,
+      msgs: Seq[String],
+      part: Int,
+      ts: Long): Unit = {
+    val records = msgs.map { msg =>
+      new RecordBuilder(topic, msg).partition(part).timestamp(ts).build()
+    }
+    testUtils.sendMessages(records)
+  }
+
+  private def setupTestMessagesForTestOnTimestampOffsets(
+      topic: String,
+      firstTimestamp: Long,
+      secondTimestamp: Long): Unit = {
+    sendMessagesWithTimestamp(topic, Array(-20).map(_.toString), 0, firstTimestamp)
+    sendMessagesWithTimestamp(topic, Array(-10).map(_.toString), 1, firstTimestamp)
+    sendMessagesWithTimestamp(topic, Array(0, 1).map(_.toString), 2, firstTimestamp)
+    sendMessagesWithTimestamp(topic, Array(10, 11).map(_.toString), 3, firstTimestamp)
+    sendMessagesWithTimestamp(topic, Array(20, 21, 22).map(_.toString), 4, firstTimestamp)
+
+    sendMessagesWithTimestamp(topic, Array(-21, -22).map(_.toString), 0, secondTimestamp)
+    sendMessagesWithTimestamp(topic, Array(-11, -12).map(_.toString), 1, secondTimestamp)
+    sendMessagesWithTimestamp(topic, Array(2).map(_.toString), 2, secondTimestamp)
+    sendMessagesWithTimestamp(topic, Array(12).map(_.toString), 3, secondTimestamp)
+    // no data after second timestamp for partition 4
+  }
+
+  private def setupDataFrameForTestOnTimestampOffsets(
+      startingTimestamps: String,
+      failOnDataLoss: Boolean,
+      options: (String, String)*): Dataset[_] = {
+    val reader = spark
+      .readStream
+      .format("kafka")
+      .option("startingOffsetsByTimestamp", startingTimestamps)
+      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+      .option("kafka.metadata.max.age.ms", "1")
+      .option("failOnDataLoss", failOnDataLoss.toString)
+    options.foreach { case (k, v) => reader.option(k, v) }
+    val kafka = reader.load()
+      .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+      .as[(String, String)]
+    val mapped: org.apache.spark.sql.Dataset[_] = kafka.map(kv => kv._2.toInt)
+    mapped
+  }
+
+  private def setupDataFrameForTestOnGlobalTimestamp(
+      startingTimestamp: Long,
+      failOnDataLoss: Boolean,
+      options: (String, String)*): Dataset[_] = {
+    val reader = spark
+      .readStream
+      .format("kafka")
+      .option("startingTimestamp", startingTimestamp)
+      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+      .option("kafka.metadata.max.age.ms", "1")
+      .option("failOnDataLoss", failOnDataLoss.toString)
+    options.foreach { case (k, v) => reader.option(k, v) }
+    val kafka = reader.load()
+      .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+      .as[(String, String)]
+    val mapped: org.apache.spark.sql.Dataset[_] = kafka.map(kv => kv._2.toInt)
+    mapped
   }
 
   test("Kafka column types") {
@@ -1724,7 +2203,7 @@ abstract class KafkaSourceSuiteBase extends KafkaSourceTest {
     withTable(table) {
       val topic = newTopic()
       testUtils.createTopic(topic)
-      testUtils.withTranscationalProducer { producer =>
+      testUtils.withTransactionalProducer { producer =>
         val df = spark
           .readStream
           .format("kafka")
@@ -1808,6 +2287,7 @@ class KafkaSourceStressSuite extends KafkaSourceTest {
         .option("kafka.metadata.max.age.ms", "1")
         .option("subscribePattern", "stress.*")
         .option("failOnDataLoss", "false")
+        .option("kafka.request.timeout.ms", "3000")
         .option("kafka.default.api.timeout.ms", "3000")
         .load()
         .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")

@@ -22,7 +22,6 @@ import java.util.ArrayList;
 import java.util.List;
 
 import io.netty.channel.Channel;
-import org.apache.spark.network.server.ChunkFetchRequestHandler;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -33,6 +32,7 @@ import org.apache.commons.lang3.tuple.Pair;
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.protocol.*;
+import org.apache.spark.network.server.ChunkFetchRequestHandler;
 import org.apache.spark.network.server.NoOpRpcHandler;
 import org.apache.spark.network.server.OneForOneStreamManager;
 import org.apache.spark.network.server.RpcHandler;
@@ -68,7 +68,7 @@ public class ChunkFetchRequestHandlerSuite {
     long streamId = streamManager.registerStream("test-app", managedBuffers.iterator(), channel);
     TransportClient reverseClient = mock(TransportClient.class);
     ChunkFetchRequestHandler requestHandler = new ChunkFetchRequestHandler(reverseClient,
-      rpcHandler.getStreamManager(), 2L);
+      rpcHandler.getStreamManager(), 2L, false);
 
     RequestMessage request0 = new ChunkFetchRequest(new StreamChunkId(streamId, 0));
     requestHandler.channelRead(context, request0);

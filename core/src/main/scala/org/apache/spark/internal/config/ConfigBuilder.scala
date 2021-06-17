@@ -104,7 +104,9 @@ private[spark] class TypedConfigBuilder[T](
   /** Checks if the user-provided value for the config matches the validator. */
   def checkValue(validator: T => Boolean, errorMsg: String): TypedConfigBuilder[T] = {
     transform { v =>
-      if (!validator(v)) throw new IllegalArgumentException(errorMsg)
+      if (!validator(v)) {
+        throw new IllegalArgumentException(s"'$v' in ${parent.key} is invalid. $errorMsg")
+      }
       v
     }
   }
@@ -129,7 +131,7 @@ private[spark] class TypedConfigBuilder[T](
   def createOptional: OptionalConfigEntry[T] = {
     val entry = new OptionalConfigEntry[T](parent.key, parent._prependedKey,
       parent._prependSeparator, parent._alternatives, converter, stringConverter, parent._doc,
-      parent._public)
+      parent._public, parent._version)
     parent._onCreate.foreach(_(entry))
     entry
   }
@@ -144,7 +146,7 @@ private[spark] class TypedConfigBuilder[T](
       val transformedDefault = converter(stringConverter(default))
       val entry = new ConfigEntryWithDefault[T](parent.key, parent._prependedKey,
         parent._prependSeparator, parent._alternatives, transformedDefault, converter,
-        stringConverter, parent._doc, parent._public)
+        stringConverter, parent._doc, parent._public, parent._version)
       parent._onCreate.foreach(_(entry))
       entry
     }
@@ -154,7 +156,7 @@ private[spark] class TypedConfigBuilder[T](
   def createWithDefaultFunction(defaultFunc: () => T): ConfigEntry[T] = {
     val entry = new ConfigEntryWithDefaultFunction[T](parent.key, parent._prependedKey,
       parent._prependSeparator, parent._alternatives, defaultFunc, converter, stringConverter,
-      parent._doc, parent._public)
+      parent._doc, parent._public, parent._version)
     parent._onCreate.foreach(_ (entry))
     entry
   }
@@ -166,7 +168,7 @@ private[spark] class TypedConfigBuilder[T](
   def createWithDefaultString(default: String): ConfigEntry[T] = {
     val entry = new ConfigEntryWithDefaultString[T](parent.key, parent._prependedKey,
       parent._prependSeparator, parent._alternatives, default, converter, stringConverter,
-      parent._doc, parent._public)
+      parent._doc, parent._public, parent._version)
     parent._onCreate.foreach(_(entry))
     entry
   }
@@ -186,6 +188,7 @@ private[spark] case class ConfigBuilder(key: String) {
   private[config] var _prependSeparator: String = ""
   private[config] var _public = true
   private[config] var _doc = ""
+  private[config] var _version = ""
   private[config] var _onCreate: Option[ConfigEntry[_] => Unit] = None
   private[config] var _alternatives = List.empty[String]
 
@@ -196,6 +199,11 @@ private[spark] case class ConfigBuilder(key: String) {
 
   def doc(s: String): ConfigBuilder = {
     _doc = s
+    this
+  }
+
+  def version(v: String): ConfigBuilder = {
+    _version = v
     this
   }
 
@@ -255,7 +263,7 @@ private[spark] case class ConfigBuilder(key: String) {
 
   def fallbackConf[T](fallback: ConfigEntry[T]): ConfigEntry[T] = {
     val entry = new FallbackConfigEntry(key, _prependedKey, _prependSeparator, _alternatives, _doc,
-      _public, fallback)
+      _public, _version, fallback)
     _onCreate.foreach(_(entry))
     entry
   }

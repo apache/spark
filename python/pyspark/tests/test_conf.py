@@ -33,10 +33,10 @@ class ConfTests(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.tests.test_conf import *
+    from pyspark.tests.test_conf import *  # noqa: F401
 
     try:
-        import xmlrunner
+        import xmlrunner  # type: ignore[import]
         testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None

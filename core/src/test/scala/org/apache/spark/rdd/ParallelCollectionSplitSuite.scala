@@ -140,7 +140,7 @@ class ParallelCollectionSplitSuite extends SparkFunSuite with Checkers {
       assert(slices(i).isInstanceOf[Range])
       val range = slices(i).asInstanceOf[Range]
       assert(range.start === i * (N / 40), "slice " + i + " start")
-      assert(range.end   === (i + 1) * (N / 40), "slice " + i + " end")
+      assert(range.last  === (i + 1) * (N / 40) - 1, "slice " + i + " end")
       assert(range.step  === 1, "slice " + i + " step")
     }
   }

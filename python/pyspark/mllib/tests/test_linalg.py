@@ -15,7 +15,6 @@
 # limitations under the License.
 #
 
-import sys
 import array as pyarray
 import unittest
 
@@ -23,16 +22,15 @@ from numpy import array, array_equal, zeros, arange, tile, ones, inf
 
 import pyspark.ml.linalg as newlinalg
 from pyspark.serializers import PickleSerializer
-from pyspark.mllib.linalg import Vector, SparseVector, DenseVector, VectorUDT, _convert_to_vector, \
+from pyspark.mllib.linalg import (  # type: ignore[attr-defined]
+    Vector, SparseVector, DenseVector, VectorUDT, _convert_to_vector,
     DenseMatrix, SparseMatrix, Vectors, Matrices, MatrixUDT
-from pyspark.mllib.linalg.distributed import RowMatrix, IndexedRowMatrix
+)
+from pyspark.mllib.linalg.distributed import RowMatrix, IndexedRowMatrix, IndexedRow
 from pyspark.mllib.regression import LabeledPoint
 from pyspark.sql import Row
 from pyspark.testing.mllibutils import MLlibTestCase
 from pyspark.testing.utils import have_scipy
-
-if sys.version >= '3':
-    long = int
 
 
 class VectorTests(MLlibTestCase):
@@ -447,12 +445,23 @@ class VectorUDTTests(MLlibTestCase):
 
     def test_indexed_row_matrix_from_dataframe(self):
         from pyspark.sql.utils import IllegalArgumentException
-        df = self.spark.createDataFrame([Row(long(0), Vectors.dense(1))])
+        df = self.spark.createDataFrame([Row(int(0), Vectors.dense(1))])
         matrix = IndexedRowMatrix(df)
         self.assertEqual(matrix.numRows(), 1)
         self.assertEqual(matrix.numCols(), 1)
         with self.assertRaises(IllegalArgumentException):
             IndexedRowMatrix(df.drop("_1"))
+
+    def test_row_matrix_invalid_type(self):
+        rows = self.sc.parallelize([[1, 2, 3], [4, 5, 6]])
+        invalid_type = ""
+        matrix = RowMatrix(rows)
+        self.assertRaises(TypeError, matrix.multiply, invalid_type)
+
+        irows = self.sc.parallelize([IndexedRow(0, [1, 2, 3]),
+                                     IndexedRow(1, [4, 5, 6])])
+        imatrix = IndexedRowMatrix(irows)
+        self.assertRaises(TypeError, imatrix.multiply, invalid_type)
 
 
 class MatrixUDTTests(MLlibTestCase):
@@ -642,10 +651,10 @@ class SciPyTests(MLlibTestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.mllib.tests.test_linalg import *
+    from pyspark.mllib.tests.test_linalg import *  # noqa: F401
 
     try:
-        import xmlrunner
+        import xmlrunner  # type: ignore[import]
         testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None

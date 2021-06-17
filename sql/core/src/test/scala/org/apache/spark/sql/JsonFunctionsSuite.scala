@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql
 
-import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
 import java.util.Locale
 
@@ -222,33 +221,24 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
       Row("""{"_1":"26/08/2015 18:00"}""") :: Nil)
   }
 
-  test("to_json - key types of map don't matter") {
-    // interval type is invalid for converting to JSON. However, the keys of a map are treated
-    // as strings, so its type doesn't matter.
-    val df = Seq(Tuple1(Tuple1("-3 month 7 hours"))).toDF("a")
-      .select(struct(map($"a._1".cast(CalendarIntervalType), lit("a")).as("col1")).as("c"))
-    checkAnswer(
-      df.select(to_json($"c")),
-      Row("""{"col1":{"-3 months 7 hours":"a"}}""") :: Nil)
-  }
-
-  test("to_json unsupported type") {
+  test("to_json - interval support") {
     val baseDf = Seq(Tuple1(Tuple1("-3 month 7 hours"))).toDF("a")
     val df = baseDf.select(struct($"a._1".cast(CalendarIntervalType).as("a")).as("c"))
-    val e = intercept[AnalysisException]{
-      // Unsupported type throws an exception
-      df.select(to_json($"c")).collect()
-    }
-    assert(e.getMessage.contains(
-      "Unable to convert column a of type interval to JSON."))
+    checkAnswer(
+      df.select(to_json($"c")),
+      Row("""{"a":"-3 months 7 hours"}""") :: Nil)
 
-    // interval type is invalid for converting to JSON. We can't use it as value type of a map.
+    val df1 = baseDf
+      .select(struct(map($"a._1".cast(CalendarIntervalType), lit("a")).as("col1")).as("c"))
+    checkAnswer(
+      df1.select(to_json($"c")),
+      Row("""{"col1":{"-3 months 7 hours":"a"}}""") :: Nil)
+
     val df2 = baseDf
       .select(struct(map(lit("a"), $"a._1".cast(CalendarIntervalType)).as("col1")).as("c"))
-    val e2 = intercept[AnalysisException] {
-      df2.select(to_json($"c")).collect()
-    }
-    assert(e2.getMessage.contains("Unable to convert column col1 of type interval to JSON"))
+    checkAnswer(
+      df2.select(to_json($"c")),
+      Row("""{"col1":{"a":"-3 months 7 hours"}}""") :: Nil)
   }
 
   test("roundtrip in to_json and from_json - struct") {
@@ -322,7 +312,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
     val errMsg1 = intercept[AnalysisException] {
       df3.selectExpr("from_json(value, 1)")
     }
-    assert(errMsg1.getMessage.startsWith("Schema should be specified in DDL format as a string"))
+    assert(errMsg1.getMessage.startsWith("The expression '1' is not a valid schema string"))
     val errMsg2 = intercept[AnalysisException] {
       df3.selectExpr("""from_json(value, 'time InvalidType')""")
     }
@@ -420,7 +410,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
   test("infers schemas using options") {
     val df = spark.range(1)
       .select(schema_of_json(lit("{a:1}"), Map("allowUnquotedFieldNames" -> "true").asJava))
-    checkAnswer(df, Seq(Row("struct<a:bigint>")))
+    checkAnswer(df, Seq(Row("STRUCT<`a`: BIGINT>")))
   }
 
   test("from_json - array of primitive types") {
@@ -438,57 +428,69 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
   }
 
   test("from_json - array of arrays") {
-    val jsonDF = Seq("[[1], [2, 3], [4, 5, 6]]").toDF("a")
-    val schema = new ArrayType(ArrayType(IntegerType, false), false)
-    jsonDF.select(from_json($"a", schema) as "json").createOrReplaceTempView("jsonTable")
+    withTempView("jsonTable") {
+      val jsonDF = Seq("[[1], [2, 3], [4, 5, 6]]").toDF("a")
+      val schema = new ArrayType(ArrayType(IntegerType, false), false)
+      jsonDF.select(from_json($"a", schema) as "json").createOrReplaceTempView("jsonTable")
 
-    checkAnswer(
-      sql("select json[0][0], json[1][1], json[2][2] from jsonTable"),
-      Seq(Row(1, 3, 6)))
+      checkAnswer(
+        sql("select json[0][0], json[1][1], json[2][2] from jsonTable"),
+        Seq(Row(1, 3, 6)))
+    }
   }
 
   test("from_json - array of arrays - malformed row") {
-    val jsonDF = Seq("[[1], [2, 3], 4, 5, 6]]").toDF("a")
-    val schema = new ArrayType(ArrayType(IntegerType, false), false)
-    jsonDF.select(from_json($"a", schema) as "json").createOrReplaceTempView("jsonTable")
+    withTempView("jsonTable") {
+      val jsonDF = Seq("[[1], [2, 3], 4, 5, 6]]").toDF("a")
+      val schema = new ArrayType(ArrayType(IntegerType, false), false)
+      jsonDF.select(from_json($"a", schema) as "json").createOrReplaceTempView("jsonTable")
 
-    checkAnswer(sql("select json[0] from jsonTable"), Seq(Row(null)))
+      checkAnswer(sql("select json[0] from jsonTable"), Seq(Row(null)))
+    }
   }
 
   test("from_json - array of structs") {
-    val jsonDF = Seq("""[{"a":1}, {"a":2}, {"a":3}]""").toDF("a")
-    val schema = new ArrayType(new StructType().add("a", IntegerType), false)
-    jsonDF.select(from_json($"a", schema) as "json").createOrReplaceTempView("jsonTable")
+    withTempView("jsonTable") {
+      val jsonDF = Seq("""[{"a":1}, {"a":2}, {"a":3}]""").toDF("a")
+      val schema = new ArrayType(new StructType().add("a", IntegerType), false)
+      jsonDF.select(from_json($"a", schema) as "json").createOrReplaceTempView("jsonTable")
 
-    checkAnswer(
-      sql("select json[0], json[1], json[2] from jsonTable"),
-      Seq(Row(Row(1), Row(2), Row(3))))
+      checkAnswer(
+        sql("select json[0], json[1], json[2] from jsonTable"),
+        Seq(Row(Row(1), Row(2), Row(3))))
+    }
   }
 
   test("from_json - array of structs - malformed row") {
-    val jsonDF = Seq("""[{"a":1}, {"a:2}, {"a":3}]""").toDF("a")
-    val schema = new ArrayType(new StructType().add("a", IntegerType), false)
-    jsonDF.select(from_json($"a", schema) as "json").createOrReplaceTempView("jsonTable")
+    withTempView("jsonTable") {
+      val jsonDF = Seq("""[{"a":1}, {"a:2}, {"a":3}]""").toDF("a")
+      val schema = new ArrayType(new StructType().add("a", IntegerType), false)
+      jsonDF.select(from_json($"a", schema) as "json").createOrReplaceTempView("jsonTable")
 
-    checkAnswer(sql("select json[0], json[1]from jsonTable"), Seq(Row(null, null)))
+      checkAnswer(sql("select json[0], json[1]from jsonTable"), Seq(Row(null, null)))
+    }
   }
 
   test("from_json - array of maps") {
-    val jsonDF = Seq("""[{"a":1}, {"b":2}]""").toDF("a")
-    val schema = new ArrayType(MapType(StringType, IntegerType, false), false)
-    jsonDF.select(from_json($"a", schema) as "json").createOrReplaceTempView("jsonTable")
+    withTempView("jsonTable") {
+      val jsonDF = Seq("""[{"a":1}, {"b":2}]""").toDF("a")
+      val schema = new ArrayType(MapType(StringType, IntegerType, false), false)
+      jsonDF.select(from_json($"a", schema) as "json").createOrReplaceTempView("jsonTable")
 
-    checkAnswer(
-      sql("""select json[0], json[1] from jsonTable"""),
-      Seq(Row(Map("a" -> 1), Map("b" -> 2))))
+      checkAnswer(
+        sql("""select json[0], json[1] from jsonTable"""),
+        Seq(Row(Map("a" -> 1), Map("b" -> 2))))
+    }
   }
 
   test("from_json - array of maps - malformed row") {
-    val jsonDF = Seq("""[{"a":1} "b":2}]""").toDF("a")
-    val schema = new ArrayType(MapType(StringType, IntegerType, false), false)
-    jsonDF.select(from_json($"a", schema) as "json").createOrReplaceTempView("jsonTable")
+    withTempView("jsonTable") {
+      val jsonDF = Seq("""[{"a":1} "b":2}]""").toDF("a")
+      val schema = new ArrayType(MapType(StringType, IntegerType, false), false)
+      jsonDF.select(from_json($"a", schema) as "json").createOrReplaceTempView("jsonTable")
 
-    checkAnswer(sql("""select json[0] from jsonTable"""), Seq(Row(null)))
+      checkAnswer(sql("""select json[0] from jsonTable"""), Seq(Row(null)))
+    }
   }
 
   test("to_json - array of primitive types") {
@@ -617,24 +619,6 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("special timestamp values") {
-    Seq("now", "today", "epoch", "tomorrow", "yesterday").foreach { specialValue =>
-      val input = Seq(s"""{"t": "$specialValue"}""").toDS()
-      val readback = input.select(from_json($"value", lit("t timestamp"),
-        Map.empty[String, String].asJava)).collect()
-      assert(readback(0).getAs[Row](0).getAs[Timestamp](0).getTime >= 0)
-    }
-  }
-
-  test("special date values") {
-    Seq("now", "today", "epoch", "tomorrow", "yesterday").foreach { specialValue =>
-      val input = Seq(s"""{"d": "$specialValue"}""").toDS()
-      val readback = input.select(from_json($"value", lit("d date"),
-        Map.empty[String, String].asJava)).collect()
-      assert(readback(0).getAs[Row](0).getAs[Date](0).getTime >= 0)
-    }
-  }
-
   test("from_json - timestamp in micros") {
     val df = Seq("""{"time": "1970-01-01T00:00:00.123456"}""").toDS()
     val schema = new StructType().add("time", TimestampType)
@@ -660,6 +644,181 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
         .select('result)
         .as[String].head.length
       assert(json_tuple_result === len)
+    }
+  }
+
+  test("support foldable schema by from_json") {
+    val options = Map[String, String]().asJava
+    val schema = regexp_replace(lit("dpt_org_id INT, dpt_org_city STRING"), "dpt_org_", "")
+    checkAnswer(
+      Seq("""{"id":1,"city":"Moscow"}""").toDS().select(from_json($"value", schema, options)),
+      Row(Row(1, "Moscow")))
+
+    val errMsg = intercept[AnalysisException] {
+      Seq(("""{"i":1}""", "i int")).toDF("json", "schema")
+        .select(from_json($"json", $"schema", options)).collect()
+    }.getMessage
+    assert(errMsg.contains("Schema should be specified in DDL format as a string literal"))
+  }
+
+  test("schema_of_json - infers the schema of foldable JSON string") {
+    val input = regexp_replace(lit("""{"item_id": 1, "item_price": 0.1}"""), "item_", "")
+    checkAnswer(
+      spark.range(1).select(schema_of_json(input)),
+      Seq(Row("STRUCT<`id`: BIGINT, `price`: DOUBLE>")))
+  }
+
+  test("SPARK-31065: schema_of_json - null and empty strings as strings") {
+    Seq("""{"id": null}""", """{"id": ""}""").foreach { input =>
+      checkAnswer(
+        spark.range(1).select(schema_of_json(input)),
+        Seq(Row("STRUCT<`id`: STRING>")))
+    }
+  }
+
+  test("SPARK-31065: schema_of_json - 'dropFieldIfAllNull' option") {
+    val options = Map("dropFieldIfAllNull" -> "true")
+    // Structs
+    checkAnswer(
+      spark.range(1).select(
+        schema_of_json(
+          lit("""{"id": "a", "drop": {"drop": null}}"""),
+          options.asJava)),
+      Seq(Row("STRUCT<`id`: STRING>")))
+
+    // Array of structs
+    checkAnswer(
+      spark.range(1).select(
+        schema_of_json(
+          lit("""[{"id": "a", "drop": {"drop": null}}]"""),
+          options.asJava)),
+      Seq(Row("ARRAY<STRUCT<`id`: STRING>>")))
+
+    // Other types are not affected.
+    checkAnswer(
+      spark.range(1).select(
+        schema_of_json(
+          lit("""null"""),
+          options.asJava)),
+      Seq(Row("STRING")))
+  }
+
+  test("optional datetime parser does not affect json time formatting") {
+    val s = "2015-08-26 12:34:46"
+    def toDF(p: String): DataFrame = sql(
+      s"""
+         |SELECT
+         | to_json(
+         |   named_struct('time', timestamp'$s'), map('timestampFormat', "$p")
+         | )
+         | """.stripMargin)
+    checkAnswer(toDF("yyyy-MM-dd'T'HH:mm:ss.SSSXXX"), toDF("yyyy-MM-dd'T'HH:mm:ss[.SSS][XXX]"))
+  }
+
+  test("SPARK-33134: return partial results only for root JSON objects") {
+    val st = new StructType()
+      .add("c1", LongType)
+      .add("c2", ArrayType(new StructType().add("c3", LongType).add("c4", StringType)))
+    val df1 = Seq("""{"c2": [19], "c1": 123456}""").toDF("c0")
+    checkAnswer(df1.select(from_json($"c0", st)), Row(Row(123456, null)))
+    val df2 = Seq("""{"data": {"c2": [19], "c1": 123456}}""").toDF("c0")
+    checkAnswer(df2.select(from_json($"c0", new StructType().add("data", st))), Row(Row(null)))
+    val df3 = Seq("""[{"c2": [19], "c1": 123456}]""").toDF("c0")
+    checkAnswer(df3.select(from_json($"c0", ArrayType(st))), Row(null))
+    val df4 = Seq("""{"c2": [19]}""").toDF("c0")
+    checkAnswer(df4.select(from_json($"c0", MapType(StringType, st))), Row(null))
+  }
+
+  test("SPARK-33270: infers schema for JSON field with spaces and pass them to from_json") {
+    val in = Seq("""{"a b": 1}""").toDS()
+    val out = in.select(from_json('value, schema_of_json("""{"a b": 100}""")) as "parsed")
+    val expected = new StructType().add("parsed", new StructType().add("a b", LongType))
+    assert(out.schema == expected)
+  }
+
+  test("SPARK-33286: from_json - combined error messages") {
+    val df = Seq("""{"a":1}""").toDF("json")
+    val invalidJsonSchema = """{"fields": [{"a":123}], "type": "struct"}"""
+    val errMsg1 = intercept[AnalysisException] {
+      df.select(from_json($"json", invalidJsonSchema, Map.empty[String, String])).collect()
+    }.getMessage
+    assert(errMsg1.contains("""Failed to convert the JSON string '{"a":123}' to a field"""))
+
+    val invalidDataType = "MAP<INT, cow>"
+    val errMsg2 = intercept[AnalysisException] {
+      df.select(from_json($"json", invalidDataType, Map.empty[String, String])).collect()
+    }.getMessage
+    assert(errMsg2.contains("DataType cow is not supported"))
+
+    val invalidTableSchema = "x INT, a cow"
+    val errMsg3 = intercept[AnalysisException] {
+      df.select(from_json($"json", invalidTableSchema, Map.empty[String, String])).collect()
+    }.getMessage
+    assert(errMsg3.contains("DataType cow is not supported"))
+  }
+
+  test("SPARK-33907: bad json input with json pruning optimization: GetStructField") {
+    Seq("true", "false").foreach { enabled =>
+      withSQLConf(SQLConf.JSON_EXPRESSION_OPTIMIZATION.key -> enabled) {
+        val schema = new StructType()
+          .add("a", IntegerType)
+          .add("b", IntegerType)
+        val badRec = """{"a" 1, "b": 11}"""
+        val df = Seq(badRec, """{"a": 2, "b": 12}""").toDS()
+
+        val exception1 = intercept[SparkException] {
+          df.select(from_json($"value", schema, Map("mode" -> "FAILFAST"))("b")).collect()
+        }.getMessage
+        assert(exception1.contains(
+          "Malformed records are detected in record parsing. Parse Mode: FAILFAST."))
+
+        val exception2 = intercept[SparkException] {
+          df.select(from_json($"value", schema, Map("mode" -> "FAILFAST"))("a")).collect()
+        }.getMessage
+        assert(exception2.contains(
+          "Malformed records are detected in record parsing. Parse Mode: FAILFAST."))
+      }
+    }
+  }
+
+  test("SPARK-33907: bad json input with json pruning optimization: GetArrayStructFields") {
+    Seq("true", "false").foreach { enabled =>
+      withSQLConf(SQLConf.JSON_EXPRESSION_OPTIMIZATION.key -> enabled) {
+        val schema = ArrayType(new StructType()
+          .add("a", IntegerType)
+          .add("b", IntegerType))
+        val badRec = """{"a" 1, "b": 11}"""
+        val df = Seq(s"""[$badRec, {"a": 2, "b": 12}]""").toDS()
+
+        val exception1 = intercept[SparkException] {
+          df.select(from_json($"value", schema, Map("mode" -> "FAILFAST"))("b")).collect()
+        }.getMessage
+        assert(exception1.contains(
+          "Malformed records are detected in record parsing. Parse Mode: FAILFAST."))
+
+        val exception2 = intercept[SparkException] {
+          df.select(from_json($"value", schema, Map("mode" -> "FAILFAST"))("a")).collect()
+        }.getMessage
+        assert(exception2.contains(
+          "Malformed records are detected in record parsing. Parse Mode: FAILFAST."))
+      }
+    }
+  }
+
+  test("SPARK-33907: json pruning optimization with corrupt record field") {
+    Seq("true", "false").foreach { enabled =>
+      withSQLConf(SQLConf.JSON_EXPRESSION_OPTIMIZATION.key -> enabled) {
+        val schema = new StructType()
+          .add("a", IntegerType)
+          .add("b", IntegerType)
+        val badRec = """{"a" 1, "b": 11}"""
+
+        val df = Seq(badRec, """{"a": 2, "b": 12}""").toDS()
+          .selectExpr("from_json(value, 'a int, b int, _corrupt_record string') as parsed")
+          .selectExpr("parsed._corrupt_record")
+
+        checkAnswer(df, Seq(Row("""{"a" 1, "b": 11}"""), Row(null)))
+      }
     }
   }
 }

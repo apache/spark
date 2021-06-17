@@ -18,7 +18,8 @@ package org.apache.spark.status.api.v1
 
 import javax.ws.rs.WebApplicationException
 
-import org.scalatest.Matchers
+import org.scalatest.matchers.must.Matchers
+import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark.SparkFunSuite
 

@@ -16,10 +16,6 @@
 #
 
 .First <- function() {
-  if (utils::compareVersion(paste0(R.version$major, ".", R.version$minor), "3.4.0") == -1) {
-    warning("Support for R prior to version 3.4 is deprecated since Spark 3.0.0")
-  }
-
   home <- Sys.getenv("SPARK_HOME")
   .libPaths(c(file.path(home, "R", "lib"), .libPaths()))
   Sys.setenv(NOAWT = 1)
@@ -47,5 +43,7 @@
   cat("      /_/", "\n")
   cat("\n")
 
-  cat("\nSparkSession available as 'spark'.\n")
+  cat("\nSparkSession Web UI available at", SparkR::sparkR.uiWebUrl())
+  cat("\nSparkSession available as 'spark'(master = ", unlist(SparkR::sparkR.conf("spark.master")),
+    ", app id = ", unlist(SparkR::sparkR.conf("spark.app.id")), ").", "\n", sep = "")
 }

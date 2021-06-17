@@ -21,12 +21,20 @@ private[spark] sealed trait KubernetesVolumeSpecificConf
 private[spark] case class KubernetesHostPathVolumeConf(hostPath: String)
   extends KubernetesVolumeSpecificConf
 
-private[spark] case class KubernetesPVCVolumeConf(claimName: String)
+private[spark] case class KubernetesPVCVolumeConf(
+    claimName: String,
+    storageClass: Option[String] = None,
+    size: Option[String] = None)
   extends KubernetesVolumeSpecificConf
 
 private[spark] case class KubernetesEmptyDirVolumeConf(
     medium: Option[String],
     sizeLimit: Option[String])
+  extends KubernetesVolumeSpecificConf
+
+private[spark] case class KubernetesNFSVolumeConf(
+    path: String,
+    server: String)
   extends KubernetesVolumeSpecificConf
 
 private[spark] case class KubernetesVolumeSpec(

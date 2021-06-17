@@ -19,6 +19,7 @@ package org.apache.spark.deploy.k8s.integrationtest
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.TimeUnit
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 import scala.io.Source
 
@@ -32,21 +33,26 @@ object ProcessUtils extends Logging {
   def executeProcess(
       fullCommand: Array[String],
       timeout: Long,
-      dumpErrors: Boolean = false): Seq[String] = {
+      dumpOutput: Boolean = true,
+      dumpErrors: Boolean = true,
+      env: Map[String, String] = Map.empty[String, String]): Seq[String] = {
     val pb = new ProcessBuilder().command(fullCommand: _*)
+    pb.environment().putAll(env.asJava)
     pb.redirectErrorStream(true)
     val proc = pb.start()
     val outputLines = new ArrayBuffer[String]
     Utils.tryWithResource(proc.getInputStream)(
       Source.fromInputStream(_, StandardCharsets.UTF_8.name()).getLines().foreach { line =>
-        logInfo(line)
+        if (dumpOutput) {
+          logInfo(line)
+        }
         outputLines += line
       })
     assert(proc.waitFor(timeout, TimeUnit.SECONDS),
       s"Timed out while executing ${fullCommand.mkString(" ")}")
     assert(proc.exitValue == 0,
-      s"Failed to execute ${fullCommand.mkString(" ")}" +
+      s"Failed to execute -- ${fullCommand.mkString(" ")} --" +
         s"${if (dumpErrors) "\n" + outputLines.mkString("\n")}")
-    outputLines
+    outputLines.toSeq
   }
 }

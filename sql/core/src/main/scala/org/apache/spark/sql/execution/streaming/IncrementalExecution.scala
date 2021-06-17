@@ -21,14 +21,14 @@ import java.util.UUID
 import java.util.concurrent.atomic.AtomicInteger
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{AnalysisException, SparkSession, Strategy}
+import org.apache.spark.sql.{SparkSession, Strategy}
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.expressions.{CurrentBatchTimestamp, ExpressionWithRandomSeed}
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistribution, HashPartitioning, SinglePartition}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.execution.{QueryExecution, SparkPlan, SparkPlanner, UnaryExecNode}
-import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
+import org.apache.spark.sql.catalyst.trees.TreePattern._
+import org.apache.spark.sql.execution.{LocalLimitExec, QueryExecution, SparkPlan, SparkPlanner, UnaryExecNode}
+import org.apache.spark.sql.execution.exchange.ShuffleExchangeLike
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.util.Utils
@@ -50,8 +50,7 @@ class IncrementalExecution(
 
   // Modified planner with stateful operations.
   override val planner: SparkPlanner = new SparkPlanner(
-      sparkSession.sparkContext,
-      sparkSession.sessionState.conf,
+      sparkSession,
       sparkSession.sessionState.experimentalMethods) {
     override def strategies: Seq[Strategy] =
       extraPlanningStrategies ++
@@ -76,9 +75,10 @@ class IncrementalExecution(
    * with the desired literal
    */
   override
-  lazy val optimizedPlan: LogicalPlan = tracker.measurePhase(QueryPlanningTracker.OPTIMIZATION) {
+  lazy val optimizedPlan: LogicalPlan = executePhase(QueryPlanningTracker.OPTIMIZATION) {
     sparkSession.sessionState.optimizer.executeAndTrack(withCachedData,
-      tracker) transformAllExpressions {
+      tracker).transformAllExpressionsWithPruning(
+      _.containsAnyPattern(CURRENT_LIKE, EXPRESSION_WITH_RANDOM_SEED)) {
       case ts @ CurrentBatchTimestamp(timestamp, _, _) =>
         logInfo(s"Current batch timestamp = $timestamp")
         ts.toLiteral
@@ -104,6 +104,32 @@ class IncrementalExecution(
 
   /** Locates save/restore pairs surrounding aggregation. */
   val state = new Rule[SparkPlan] {
+
+    /**
+     * Ensures that this plan DOES NOT have any stateful operation in it whose pipelined execution
+     * depends on this plan. In other words, this function returns true if this plan does
+     * have a narrow dependency on a stateful subplan.
+     */
+    private def hasNoStatefulOp(plan: SparkPlan): Boolean = {
+      var statefulOpFound = false
+
+      def findStatefulOp(planToCheck: SparkPlan): Unit = {
+        planToCheck match {
+          case s: StatefulOperator =>
+            statefulOpFound = true
+
+          case e: ShuffleExchangeLike =>
+            // Don't search recursively any further as any child stateful operator as we
+            // are only looking for stateful subplans that this plan has narrow dependencies on.
+
+          case p: SparkPlan =>
+            p.children.foreach(findStatefulOp)
+        }
+      }
+
+      findStatefulOp(plan)
+      !statefulOpFound
+    }
 
     override def apply(plan: SparkPlan): SparkPlan = plan transform {
       case StateStoreSaveExec(keys, None, None, None, stateFormatVersion,
@@ -149,6 +175,12 @@ class IncrementalExecution(
         l.copy(
           stateInfo = Some(nextStatefulOperationStateInfo),
           outputMode = Some(outputMode))
+
+      case StreamingLocalLimitExec(limit, child) if hasNoStatefulOp(child) =>
+        // Optimize limit execution by replacing StreamingLocalLimitExec (consumes the iterator
+        // completely) to LocalLimitExec (does not consume the iterator) when the child plan has
+        // no stateful operator (i.e., consuming the iterator is not needed).
+        LocalLimitExec(limit, child)
     }
   }
 

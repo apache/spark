@@ -27,6 +27,7 @@ import org.apache.spark.{SparkConf, TaskState}
 import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
 import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.internal.config.Status._
+import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.scheduler._
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.metric.SQLMetricInfo
@@ -38,7 +39,8 @@ import org.apache.spark.util.kvstore.InMemoryStore
  * Benchmark for metrics aggregation in the SQL listener.
  * {{{
  *   To run this benchmark:
- *   1. without sbt: bin/spark-submit --class <this class> --jars <core test jar>
+ *   1. without sbt:
+ *      bin/spark-submit --class <this class> --jars <core test jar> <spark sql test jar>
  *   2. build/sbt "core/test:runMain <this class>"
  *   3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "core/test:runMain <this class>"
  *      Results will be written to "benchmarks/MetricsAggregationBenchmark-results.txt".
@@ -89,7 +91,8 @@ object MetricsAggregationBenchmark extends BenchmarkBase {
 
     val taskEventsTime = (0 until numStages).map { _ =>
       val stageInfo = new StageInfo(idgen.incrementAndGet(), 0, getClass().getName(),
-        numTasks, Nil, Nil, getClass().getName())
+        numTasks, Nil, Nil, getClass().getName(),
+        resourceProfileId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
 
       val jobId = idgen.incrementAndGet()
       val jobStart = SparkListenerJobStart(

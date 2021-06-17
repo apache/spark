@@ -20,11 +20,11 @@ context("JVM API")
 sparkSession <- sparkR.session(master = sparkRTestMaster, enableHiveSupport = FALSE)
 
 test_that("Create and call methods on object", {
-  jarr <- sparkR.newJObject("java.util.ArrayList")
+  jarray <- sparkR.newJObject("java.util.ArrayList")
   # Add an element to the array
-  sparkR.callJMethod(jarr, "add", 1L)
+  sparkR.callJMethod(jarray, "add", 1L)
   # Check if get returns the same element
-  expect_equal(sparkR.callJMethod(jarr, "get", 0L), 1L)
+  expect_equal(sparkR.callJMethod(jarray, "get", 0L), 1L)
 })
 
 test_that("Call static methods", {

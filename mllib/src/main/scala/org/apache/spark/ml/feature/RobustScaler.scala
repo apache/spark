@@ -50,8 +50,6 @@ private[feature] trait RobustScalerParams extends Params with HasInputCol with H
   /** @group getParam */
   def getLower: Double = $(lower)
 
-  setDefault(lower -> 0.25)
-
   /**
    * Upper quantile to calculate quantile range, shared by all features
    * Default: 0.75
@@ -63,8 +61,6 @@ private[feature] trait RobustScalerParams extends Params with HasInputCol with H
 
   /** @group getParam */
   def getUpper: Double = $(upper)
-
-  setDefault(upper -> 0.75)
 
   /**
    * Whether to center the data with median before scaling.
@@ -78,8 +74,6 @@ private[feature] trait RobustScalerParams extends Params with HasInputCol with H
   /** @group getParam */
   def getWithCentering: Boolean = $(withCentering)
 
-  setDefault(withCentering -> false)
-
   /**
    * Whether to scale the data to quantile range.
    * Default: true
@@ -91,7 +85,7 @@ private[feature] trait RobustScalerParams extends Params with HasInputCol with H
   /** @group getParam */
   def getWithScaling: Boolean = $(withScaling)
 
-  setDefault(withScaling -> true)
+  setDefault(withScaling -> true, lower -> 0.25, upper -> 0.75, withCentering -> false)
 
   /** Validates and transforms the input schema. */
   protected def validateAndTransformSchema(schema: StructType): StructType = {
@@ -120,7 +114,7 @@ private[feature] trait RobustScalerParams extends Params with HasInputCol with H
  * Note that NaN values are ignored in the computation of medians and ranges.
  */
 @Since("3.0.0")
-class RobustScaler (override val uid: String)
+class RobustScaler @Since("3.0.0") (@Since("3.0.0") override val uid: String)
   extends Estimator[RobustScalerModel] with RobustScalerParams with DefaultParamsWritable {
 
   import RobustScaler._
@@ -186,7 +180,7 @@ class RobustScaler (override val uid: String)
 object RobustScaler extends DefaultParamsReadable[RobustScaler] {
 
   // compute QuantileSummaries for each feature
-  private[spark] def computeSummaries(
+  private[ml] def computeSummaries(
       vectors: RDD[Vector],
       numFeatures: Int,
       relativeError: Double): RDD[(Int, QuantileSummaries)] = {
@@ -201,7 +195,7 @@ object RobustScaler extends DefaultParamsReadable[RobustScaler] {
           }
           Iterator.tabulate(numFeatures)(i => (i, summaries(i).compress))
         } else Iterator.empty
-      }.reduceByKey { case (s1, s2) => s1.merge(s2) }
+      }.reduceByKey { (s1, s2) => s1.merge(s2) }
     } else {
       val scale = math.max(math.ceil(math.sqrt(vectors.getNumPartitions)).toInt, 2)
       vectors.mapPartitionsWithIndex { case (pid, iter) =>
@@ -214,7 +208,7 @@ object RobustScaler extends DefaultParamsReadable[RobustScaler] {
         seqOp = (s, v) => s.insert(v),
         combOp = (s1, s2) => s1.compress.merge(s2.compress)
       ).map { case ((_, i), s) => (i, s)
-      }.reduceByKey { case (s1, s2) => s1.compress.merge(s2.compress) }
+      }.reduceByKey { (s1, s2) => s1.compress.merge(s2.compress) }
     }
   }
 
@@ -229,9 +223,9 @@ object RobustScaler extends DefaultParamsReadable[RobustScaler] {
  */
 @Since("3.0.0")
 class RobustScalerModel private[ml] (
-    override val uid: String,
-    val range: Vector,
-    val median: Vector)
+    @Since("3.0.0") override val uid: String,
+    @Since("3.0.0") val range: Vector,
+    @Since("3.0.0") val median: Vector)
   extends Model[RobustScalerModel] with RobustScalerParams with MLWritable {
 
   import RobustScalerModel._

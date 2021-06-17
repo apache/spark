@@ -67,7 +67,7 @@ mkdir -p "$FWDIR"/lib
     exit 1
 }
 
-mkdir target
+mkdir -p target
 $java_cmd -jar "$rat_jar" -E "$FWDIR"/dev/.rat-excludes -d "$FWDIR" > target/rat-results.txt
 
 if [ $? -ne 0 ]; then

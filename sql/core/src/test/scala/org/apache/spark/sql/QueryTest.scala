@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import java.util.{Locale, TimeZone}
+import java.util.TimeZone
 
 import scala.collection.JavaConverters._
 
@@ -34,11 +34,6 @@ import org.apache.spark.storage.StorageLevel
 abstract class QueryTest extends PlanTest {
 
   protected def spark: SparkSession
-
-  // Timezone is fixed to America/Los_Angeles for those timezone sensitive tests (timestamp_*)
-  TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
-  // Add Locale setting
-  Locale.setDefault(Locale.US)
 
   /**
    * Runs the plan and makes sure the answer contains all of the keywords.
@@ -423,7 +418,7 @@ object QueryTest extends Assertions {
   }
 
   def checkAnswer(df: DataFrame, expectedAnswer: java.util.List[Row]): Unit = {
-    getErrorMessageInCheckAnswer(df, expectedAnswer.asScala) match {
+    getErrorMessageInCheckAnswer(df, expectedAnswer.asScala.toSeq) match {
       case Some(errorMessage) => Assert.fail(errorMessage)
       case None =>
     }

@@ -52,7 +52,7 @@ private[sql] class ExternalAppendOnlyUnsafeRowArray(
     numRowsInMemoryBufferThreshold: Int,
     numRowsSpillThreshold: Int) extends Logging {
 
-  def this(numRowsInMemoryBufferThreshold: Int, numRowsSpillThreshold: Int) {
+  def this(numRowsInMemoryBufferThreshold: Int, numRowsSpillThreshold: Int) = {
     this(
       TaskContext.get().taskMemoryManager(),
       SparkEnv.get.blockManager,
@@ -87,7 +87,7 @@ private[sql] class ExternalAppendOnlyUnsafeRowArray(
   def isEmpty: Boolean = numRows == 0
 
   /**
-   * Clears up resources (eg. memory) held by the backing storage
+   * Clears up resources (e.g. memory) held by the backing storage
    */
   def clear(): Unit = {
     if (spillableArray != null) {

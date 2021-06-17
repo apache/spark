@@ -87,9 +87,9 @@ private[deploy] class Master(
   Utils.checkHost(address.host)
 
   private val masterMetricsSystem =
-    MetricsSystem.createMetricsSystem(MetricsSystemInstances.MASTER, conf, securityMgr)
+    MetricsSystem.createMetricsSystem(MetricsSystemInstances.MASTER, conf)
   private val applicationMetricsSystem =
-    MetricsSystem.createMetricsSystem(MetricsSystemInstances.APPLICATIONS, conf, securityMgr)
+    MetricsSystem.createMetricsSystem(MetricsSystemInstances.APPLICATIONS, conf)
   private val masterSource = new MasterSource(this)
 
   // After onStart, webUi will be set
@@ -143,9 +143,15 @@ private[deploy] class Master(
     logInfo(s"Running Spark version ${org.apache.spark.SPARK_VERSION}")
     webUi = new MasterWebUI(this, webUiPort)
     webUi.bind()
-    masterWebUiUrl = s"${webUi.scheme}$masterPublicAddress:${webUi.boundPort}"
+    masterWebUiUrl = webUi.webUrl
     if (reverseProxy) {
-      masterWebUiUrl = conf.get(UI_REVERSE_PROXY_URL).orElse(Some(masterWebUiUrl)).get
+      val uiReverseProxyUrl = conf.get(UI_REVERSE_PROXY_URL).map(_.stripSuffix("/"))
+      if (uiReverseProxyUrl.nonEmpty) {
+        System.setProperty("spark.ui.proxyBase", uiReverseProxyUrl.get)
+        // If the master URL has a path component, it must end with a slash.
+        // Otherwise the browser generates incorrect relative links
+        masterWebUiUrl = uiReverseProxyUrl.get + "/"
+      }
       webUi.addProxy()
       logInfo(s"Spark Master is acting as a reverse proxy. Master, Workers and " +
        s"Applications UIs are available at $masterWebUiUrl")
@@ -243,6 +249,27 @@ private[deploy] class Master(
       logError("Leadership has been revoked -- master shutting down.")
       System.exit(0)
 
+    case WorkerDecommissioning(id, workerRef) =>
+      if (state == RecoveryState.STANDBY) {
+        workerRef.send(MasterInStandby)
+      } else {
+        // We use foreach since get gives us an option and we can skip the failures.
+        idToWorker.get(id).foreach(decommissionWorker)
+      }
+
+    case DecommissionWorkers(ids) =>
+      // The caller has already checked the state when handling DecommissionWorkersOnHosts,
+      // so it should not be the STANDBY
+      assert(state != RecoveryState.STANDBY)
+      ids.foreach ( id =>
+        // We use foreach since get gives us an option and we can skip the failures.
+        idToWorker.get(id).foreach { w =>
+          decommissionWorker(w)
+          // Also send a message to the worker node to notify.
+          w.endpoint.send(DecommissionWorker)
+        }
+      )
+
     case RegisterWorker(
       id, workerHost, workerPort, workerRef, cores, memory, workerWebUiUrl,
       masterAddress, resources) =>
@@ -281,52 +308,6 @@ private[deploy] class Master(
         persistenceEngine.addApplication(app)
         driver.send(RegisteredApplication(app.id, self))
         schedule()
-      }
-
-    case ExecutorStateChanged(appId, execId, state, message, exitStatus) =>
-      val execOption = idToApp.get(appId).flatMap(app => app.executors.get(execId))
-      execOption match {
-        case Some(exec) =>
-          val appInfo = idToApp(appId)
-          val oldState = exec.state
-          exec.state = state
-
-          if (state == ExecutorState.RUNNING) {
-            assert(oldState == ExecutorState.LAUNCHING,
-              s"executor $execId state transfer from $oldState to RUNNING is illegal")
-            appInfo.resetRetryCount()
-          }
-
-          exec.application.driver.send(ExecutorUpdated(execId, state, message, exitStatus, false))
-
-          if (ExecutorState.isFinished(state)) {
-            // Remove this executor from the worker and app
-            logInfo(s"Removing executor ${exec.fullId} because it is $state")
-            // If an application has already finished, preserve its
-            // state to display its information properly on the UI
-            if (!appInfo.isFinished) {
-              appInfo.removeExecutor(exec)
-            }
-            exec.worker.removeExecutor(exec)
-
-            val normalExit = exitStatus == Some(0)
-            // Only retry certain number of times so we don't go into an infinite loop.
-            // Important note: this code path is not exercised by tests, so be very careful when
-            // changing this `if` condition.
-            if (!normalExit
-                && appInfo.incrementRetryCount() >= maxExecutorRetries
-                && maxExecutorRetries >= 0) { // < 0 disables this application-killing path
-              val execs = appInfo.executors.values
-              if (!execs.exists(_.state == ExecutorState.RUNNING)) {
-                logError(s"Application ${appInfo.desc.name} with ID ${appInfo.id} failed " +
-                  s"${appInfo.retryCount} times; removing it")
-                removeApplication(appInfo, ApplicationState.FAILED)
-              }
-            }
-          }
-          schedule()
-        case None =>
-          logWarning(s"Got status update for unknown executor $appId/$execId")
       }
 
     case DriverStateChanged(driverId, state, exception) =>
@@ -514,6 +495,62 @@ private[deploy] class Master(
     case KillExecutors(appId, executorIds) =>
       val formattedExecutorIds = formatExecutorIds(executorIds)
       context.reply(handleKillExecutors(appId, formattedExecutorIds))
+
+    case DecommissionWorkersOnHosts(hostnames) =>
+      if (state != RecoveryState.STANDBY) {
+        context.reply(decommissionWorkersOnHosts(hostnames))
+      } else {
+        context.reply(0)
+      }
+
+    case ExecutorStateChanged(appId, execId, state, message, exitStatus) =>
+      val execOption = idToApp.get(appId).flatMap(app => app.executors.get(execId))
+      execOption match {
+        case Some(exec) =>
+          val appInfo = idToApp(appId)
+          val oldState = exec.state
+          exec.state = state
+
+          if (state == ExecutorState.RUNNING) {
+            assert(oldState == ExecutorState.LAUNCHING,
+              s"executor $execId state transfer from $oldState to RUNNING is illegal")
+            appInfo.resetRetryCount()
+          }
+
+          exec.application.driver.send(ExecutorUpdated(execId, state, message, exitStatus, None))
+
+          if (ExecutorState.isFinished(state)) {
+            // Remove this executor from the worker and app
+            logInfo(s"Removing executor ${exec.fullId} because it is $state")
+            // If an application has already finished, preserve its
+            // state to display its information properly on the UI
+            if (!appInfo.isFinished) {
+              appInfo.removeExecutor(exec)
+            }
+            exec.worker.removeExecutor(exec)
+
+            val normalExit = exitStatus == Some(0)
+            // Only retry certain number of times so we don't go into an infinite loop.
+            // Important note: this code path is not exercised by tests, so be very careful when
+            // changing this `if` condition.
+            // We also don't count failures from decommissioned workers since they are "expected."
+            if (!normalExit
+              && oldState != ExecutorState.DECOMMISSIONED
+              && appInfo.incrementRetryCount() >= maxExecutorRetries
+              && maxExecutorRetries >= 0) { // < 0 disables this application-killing path
+              val execs = appInfo.executors.values
+              if (!execs.exists(_.state == ExecutorState.RUNNING)) {
+                logError(s"Application ${appInfo.desc.name} with ID ${appInfo.id} failed " +
+                  s"${appInfo.retryCount} times; removing it")
+                removeApplication(appInfo, ApplicationState.FAILED)
+              }
+            }
+          }
+          schedule()
+        case None =>
+          logWarning(s"Got status update for unknown executor $appId/$execId")
+      }
+      context.reply(true)
   }
 
   override def onDisconnected(address: RpcAddress): Unit = {
@@ -704,7 +741,9 @@ private[deploy] class Master(
         val usableWorkers = workers.toArray.filter(_.state == WorkerState.ALIVE)
           .filter(canLaunchExecutor(_, app.desc))
           .sortBy(_.coresFree).reverse
-        if (waitingApps.length == 1 && usableWorkers.isEmpty) {
+        val appMayHang = waitingApps.length == 1 &&
+          waitingApps.head.executors.isEmpty && usableWorkers.isEmpty
+        if (appMayHang) {
           logWarning(s"App ${app.id} requires more resource than any of Workers could have.")
         }
         val assignedCores = scheduleExecutorsOnWorkers(app, usableWorkers, spreadOutApps)
@@ -850,6 +889,55 @@ private[deploy] class Master(
     true
   }
 
+  /**
+   * Decommission all workers that are active on any of the given hostnames. The decommissioning is
+   * asynchronously done by enqueueing WorkerDecommission messages to self. No checks are done about
+   * the prior state of the worker. So an already decommissioned worker will match as well.
+   *
+   * @param hostnames: A list of hostnames without the ports. Like "localhost", "foo.bar.com" etc
+   *
+   * Returns the number of workers that matched the hostnames.
+   */
+  private def decommissionWorkersOnHosts(hostnames: Seq[String]): Integer = {
+    val hostnamesSet = hostnames.map(_.toLowerCase(Locale.ROOT)).toSet
+    val workersToRemove = addressToWorker
+      .filterKeys(addr => hostnamesSet.contains(addr.host.toLowerCase(Locale.ROOT)))
+      .values
+
+    val workersToRemoveHostPorts = workersToRemove.map(_.hostPort)
+    logInfo(s"Decommissioning the workers with host:ports ${workersToRemoveHostPorts}")
+
+    // The workers are removed async to avoid blocking the receive loop for the entire batch
+    self.send(DecommissionWorkers(workersToRemove.map(_.id).toSeq))
+
+    // Return the count of workers actually removed
+    workersToRemove.size
+  }
+
+  private def decommissionWorker(worker: WorkerInfo): Unit = {
+    if (worker.state != WorkerState.DECOMMISSIONED) {
+      logInfo("Decommissioning worker %s on %s:%d".format(worker.id, worker.host, worker.port))
+      worker.setState(WorkerState.DECOMMISSIONED)
+      for (exec <- worker.executors.values) {
+        logInfo("Telling app of decommission executors")
+        exec.application.driver.send(ExecutorUpdated(
+          exec.id, ExecutorState.DECOMMISSIONED,
+          Some("worker decommissioned"), None,
+          // worker host is being set here to let the driver know that the host (aka. worker)
+          // is also being decommissioned. So the driver can unregister all the shuffle map
+          // statues located at this host when it receives the executor lost event.
+          Some(worker.host)))
+        exec.state = ExecutorState.DECOMMISSIONED
+        exec.application.removeExecutor(exec)
+      }
+      // On recovery do not add a decommissioned executor
+      persistenceEngine.removeWorker(worker)
+    } else {
+      logWarning("Skipping decommissioning worker %s on %s:%d as worker is already decommissioned".
+        format(worker.id, worker.host, worker.port))
+    }
+  }
+
   private def removeWorker(worker: WorkerInfo, msg: String): Unit = {
     logInfo("Removing worker " + worker.id + " on " + worker.host + ":" + worker.port)
     worker.setState(WorkerState.DEAD)
@@ -859,7 +947,7 @@ private[deploy] class Master(
     for (exec <- worker.executors.values) {
       logInfo("Telling app of lost executor: " + exec.id)
       exec.application.driver.send(ExecutorUpdated(
-        exec.id, ExecutorState.LOST, Some("worker lost"), None, workerLost = true))
+        exec.id, ExecutorState.LOST, Some("worker lost"), None, Some(worker.host)))
       exec.state = ExecutorState.LOST
       exec.application.removeExecutor(exec)
     }

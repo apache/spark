@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.json
 
 import com.fasterxml.jackson.core.{JsonParser, JsonToken}
 
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
 
 object JacksonUtils {
@@ -34,8 +35,7 @@ object JacksonUtils {
 
   def verifyType(name: String, dataType: DataType): Unit = {
     dataType match {
-      case NullType | BooleanType | ByteType | ShortType | IntegerType | LongType | FloatType |
-           DoubleType | StringType | TimestampType | DateType | BinaryType | _: DecimalType =>
+      case NullType | _: AtomicType | CalendarIntervalType =>
 
       case st: StructType => st.foreach(field => verifyType(field.name, field.dataType))
 
@@ -48,8 +48,7 @@ object JacksonUtils {
       case udt: UserDefinedType[_] => verifyType(name, udt.sqlType)
 
       case _ =>
-        throw new UnsupportedOperationException(
-          s"Unable to convert column $name of type ${dataType.catalogString} to JSON.")
+        throw QueryExecutionErrors.cannotConvertColumnToJSONError(name, dataType)
     }
   }
 

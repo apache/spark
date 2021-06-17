@@ -31,7 +31,6 @@ import scala.Product2;
 import scala.Tuple2;
 import scala.collection.Iterator;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.google.common.io.Closeables;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -130,7 +129,7 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
         .createMapOutputWriter(shuffleId, mapId, numPartitions);
     try {
       if (!records.hasNext()) {
-        partitionLengths = mapOutputWriter.commitAllPartitions();
+        partitionLengths = mapOutputWriter.commitAllPartitions().getPartitionLengths();
         mapStatus = MapStatus$.MODULE$.apply(
           blockManager.shuffleServerId(), partitionLengths, mapId);
         return;
@@ -178,8 +177,8 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     }
   }
 
-  @VisibleForTesting
-  long[] getPartitionLengths() {
+  @Override
+  public long[] getPartitionLengths() {
     return partitionLengths;
   }
 
@@ -219,7 +218,7 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       }
       partitionWriters = null;
     }
-    return mapOutputWriter.commitAllPartitions();
+    return mapOutputWriter.commitAllPartitions().getPartitionLengths();
   }
 
   private void writePartitionedDataWithChannel(

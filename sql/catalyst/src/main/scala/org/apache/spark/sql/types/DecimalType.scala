@@ -24,6 +24,7 @@ import scala.reflect.runtime.universe.typeTag
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * The data type representing `java.math.BigDecimal` values.
@@ -40,6 +41,8 @@ import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
  */
 @Stable
 case class DecimalType(precision: Int, scale: Int) extends FractionalType {
+
+  DecimalType.checkNegativeScale(scale)
 
   if (scale > precision) {
     throw new AnalysisException(
@@ -141,18 +144,24 @@ object DecimalType extends AbstractDataType {
   }
 
   private[sql] def fromLiteral(literal: Literal): DecimalType = literal.value match {
-    case v: Short => fromBigDecimal(BigDecimal(v))
-    case v: Int => fromBigDecimal(BigDecimal(v))
-    case v: Long => fromBigDecimal(BigDecimal(v))
+    case v: Short => fromDecimal(Decimal(BigDecimal(v)))
+    case v: Int => fromDecimal(Decimal(BigDecimal(v)))
+    case v: Long => fromDecimal(Decimal(BigDecimal(v)))
     case _ => forType(literal.dataType)
   }
 
-  private[sql] def fromBigDecimal(d: BigDecimal): DecimalType = {
-    DecimalType(Math.max(d.precision, d.scale), d.scale)
-  }
+  private[sql] def fromDecimal(d: Decimal): DecimalType = DecimalType(d.precision, d.scale)
 
   private[sql] def bounded(precision: Int, scale: Int): DecimalType = {
     DecimalType(min(precision, MAX_PRECISION), min(scale, MAX_SCALE))
+  }
+
+  private[sql] def checkNegativeScale(scale: Int): Unit = {
+    if (scale < 0 && !SQLConf.get.allowNegativeScaleOfDecimalEnabled) {
+      throw new AnalysisException(s"Negative scale is not allowed: $scale. " +
+        s"You can use spark.sql.legacy.allowNegativeScaleOfDecimal=true " +
+        s"to enable legacy mode to allow it.")
+    }
   }
 
   /**
@@ -164,7 +173,8 @@ object DecimalType extends AbstractDataType {
    * This method is used only when `spark.sql.decimalOperations.allowPrecisionLoss` is set to true.
    */
   private[sql] def adjustPrecisionScale(precision: Int, scale: Int): DecimalType = {
-    // Assumption:
+    // Assumptions:
+    checkNegativeScale(scale)
     assert(precision >= scale)
 
     if (precision <= MAX_PRECISION) {

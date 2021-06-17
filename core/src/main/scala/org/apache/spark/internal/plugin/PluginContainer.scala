@@ -20,20 +20,27 @@ package org.apache.spark.internal.plugin
 import scala.collection.JavaConverters._
 import scala.util.{Either, Left, Right}
 
-import org.apache.spark.{SparkContext, SparkEnv}
+import org.apache.spark.{SparkContext, SparkEnv, TaskFailedReason}
 import org.apache.spark.api.plugin._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
+import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.util.Utils
 
 sealed abstract class PluginContainer {
 
   def shutdown(): Unit
   def registerMetrics(appId: String): Unit
+  def onTaskStart(): Unit
+  def onTaskSucceeded(): Unit
+  def onTaskFailed(failureReason: TaskFailedReason): Unit
 
 }
 
-private class DriverPluginContainer(sc: SparkContext, plugins: Seq[SparkPlugin])
+private class DriverPluginContainer(
+    sc: SparkContext,
+    resources: java.util.Map[String, ResourceInformation],
+    plugins: Seq[SparkPlugin])
   extends PluginContainer with Logging {
 
   private val driverPlugins: Seq[(String, DriverPlugin, PluginContextImpl)] = plugins.flatMap { p =>
@@ -41,7 +48,7 @@ private class DriverPluginContainer(sc: SparkContext, plugins: Seq[SparkPlugin])
     if (driverPlugin != null) {
       val name = p.getClass().getName()
       val ctx = new PluginContextImpl(name, sc.env.rpcEnv, sc.env.metricsSystem, sc.conf,
-        sc.env.executorId)
+        sc.env.executorId, resources)
 
       val extraConf = driverPlugin.init(sc, ctx)
       if (extraConf != null) {
@@ -81,9 +88,23 @@ private class DriverPluginContainer(sc: SparkContext, plugins: Seq[SparkPlugin])
     }
   }
 
+  override def onTaskStart(): Unit = {
+    throw new IllegalStateException("Should not be called for the driver container.")
+  }
+
+  override def onTaskSucceeded(): Unit = {
+    throw new IllegalStateException("Should not be called for the driver container.")
+  }
+
+  override def onTaskFailed(failureReason: TaskFailedReason): Unit = {
+    throw new IllegalStateException("Should not be called for the driver container.")
+  }
 }
 
-private class ExecutorPluginContainer(env: SparkEnv, plugins: Seq[SparkPlugin])
+private class ExecutorPluginContainer(
+    env: SparkEnv,
+    resources: java.util.Map[String, ResourceInformation],
+    plugins: Seq[SparkPlugin])
   extends PluginContainer with Logging {
 
   private val executorPlugins: Seq[(String, ExecutorPlugin)] = {
@@ -100,7 +121,7 @@ private class ExecutorPluginContainer(env: SparkEnv, plugins: Seq[SparkPlugin])
           .toMap
           .asJava
         val ctx = new PluginContextImpl(name, env.rpcEnv, env.metricsSystem, env.conf,
-          env.executorId)
+          env.executorId, resources)
         executorPlugin.init(ctx, extraConf)
         ctx.registerMetrics()
 
@@ -127,23 +148,67 @@ private class ExecutorPluginContainer(env: SparkEnv, plugins: Seq[SparkPlugin])
       }
     }
   }
+
+  override def onTaskStart(): Unit = {
+    executorPlugins.foreach { case (name, plugin) =>
+      try {
+        plugin.onTaskStart()
+      } catch {
+        case t: Throwable =>
+          logInfo(s"Exception while calling onTaskStart on plugin $name.", t)
+      }
+    }
+  }
+
+  override def onTaskSucceeded(): Unit = {
+    executorPlugins.foreach { case (name, plugin) =>
+      try {
+        plugin.onTaskSucceeded()
+      } catch {
+        case t: Throwable =>
+          logInfo(s"Exception while calling onTaskSucceeded on plugin $name.", t)
+      }
+    }
+  }
+
+  override def onTaskFailed(failureReason: TaskFailedReason): Unit = {
+    executorPlugins.foreach { case (name, plugin) =>
+      try {
+        plugin.onTaskFailed(failureReason)
+      } catch {
+        case t: Throwable =>
+          logInfo(s"Exception while calling onTaskFailed on plugin $name.", t)
+      }
+    }
+  }
 }
 
 object PluginContainer {
 
   val EXTRA_CONF_PREFIX = "spark.plugins.internal.conf."
 
-  def apply(sc: SparkContext): Option[PluginContainer] = PluginContainer(Left(sc))
+  def apply(
+      sc: SparkContext,
+      resources: java.util.Map[String, ResourceInformation]): Option[PluginContainer] = {
+    PluginContainer(Left(sc), resources)
+  }
 
-  def apply(env: SparkEnv): Option[PluginContainer] = PluginContainer(Right(env))
+  def apply(
+      env: SparkEnv,
+      resources: java.util.Map[String, ResourceInformation]): Option[PluginContainer] = {
+    PluginContainer(Right(env), resources)
+  }
 
-  private def apply(ctx: Either[SparkContext, SparkEnv]): Option[PluginContainer] = {
+
+  private def apply(
+      ctx: Either[SparkContext, SparkEnv],
+      resources: java.util.Map[String, ResourceInformation]): Option[PluginContainer] = {
     val conf = ctx.fold(_.conf, _.conf)
     val plugins = Utils.loadExtensions(classOf[SparkPlugin], conf.get(PLUGINS).distinct, conf)
     if (plugins.nonEmpty) {
       ctx match {
-        case Left(sc) => Some(new DriverPluginContainer(sc, plugins))
-        case Right(env) => Some(new ExecutorPluginContainer(env, plugins))
+        case Left(sc) => Some(new DriverPluginContainer(sc, resources, plugins))
+        case Right(env) => Some(new ExecutorPluginContainer(env, resources, plugins))
       }
     } else {
       None

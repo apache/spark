@@ -35,7 +35,7 @@ public class JavaResourceProfileSuite {
     ExecutorResourceRequests execReqFpga =
       new ExecutorResourceRequests().resource(FPGAResource, 3, "myfpgascript", "nvidia");
 
-    ResourceProfile rprof = new ResourceProfile();
+    ResourceProfileBuilder rprof = new ResourceProfileBuilder();
     rprof.require(execReqGpu);
     rprof.require(execReqFpga);
     TaskResourceRequests taskReq1 = new TaskResourceRequests().resource(GpuResource, 1);

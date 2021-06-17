@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.sources
 
+import java.time.ZoneId
+
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.datasources.DataSource
@@ -27,7 +29,7 @@ class ResolvedDataSourceSuite extends SharedSparkSession {
     DataSource(
       sparkSession = spark,
       className = name,
-      options = Map(DateTimeUtils.TIMEZONE_OPTION -> DateTimeUtils.defaultTimeZone().getID)
+      options = Map(DateTimeUtils.TIMEZONE_OPTION -> ZoneId.systemDefault().getId)
     ).providingClass
 
   test("jdbc") {

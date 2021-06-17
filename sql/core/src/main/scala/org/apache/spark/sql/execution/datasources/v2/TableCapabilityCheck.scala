@@ -17,12 +17,13 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic}
-import org.apache.spark.sql.connector.catalog.{SupportsWrite, Table}
+import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
+import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.connector.catalog.TableCapability._
-import org.apache.spark.sql.execution.streaming.{StreamingRelation, StreamingRelationV2}
+import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.execution.streaming.StreamingRelation
 import org.apache.spark.sql.types.BooleanType
 
 /**
@@ -31,8 +32,6 @@ import org.apache.spark.sql.types.BooleanType
 object TableCapabilityCheck extends (LogicalPlan => Unit) {
   import DataSourceV2Implicits._
 
-  private def failAnalysis(msg: String): Unit = throw new AnalysisException(msg)
-
   private def supportsBatchWrite(table: Table): Boolean = {
     table.supportsAny(BATCH_WRITE, V1_BATCH_WRITE)
   }
@@ -40,33 +39,31 @@ object TableCapabilityCheck extends (LogicalPlan => Unit) {
   override def apply(plan: LogicalPlan): Unit = {
     plan foreach {
       case r: DataSourceV2Relation if !r.table.supports(BATCH_READ) =>
-        failAnalysis(s"Table ${r.table.name()} does not support batch scan.")
+        throw QueryCompilationErrors.unsupportedBatchReadError(r.table)
 
       case r: StreamingRelationV2 if !r.table.supportsAny(MICRO_BATCH_READ, CONTINUOUS_READ) =>
-        throw new AnalysisException(s"Table ${r.table.name()} does not support either " +
-          "micro-batch or continuous scan.")
+        throw QueryCompilationErrors.unsupportedMicroBatchOrContinuousScanError(r.table)
 
       // TODO: check STREAMING_WRITE capability. It's not doable now because we don't have a
       //       a logical plan for streaming write.
-      case AppendData(r: DataSourceV2Relation, _, _, _) if !supportsBatchWrite(r.table) =>
-        failAnalysis(s"Table ${r.table.name()} does not support append in batch mode.")
+      case AppendData(r: DataSourceV2Relation, _, _, _, _) if !supportsBatchWrite(r.table) =>
+        throw QueryCompilationErrors.unsupportedAppendInBatchModeError(r.table)
 
-      case OverwritePartitionsDynamic(r: DataSourceV2Relation, _, _, _)
+      case OverwritePartitionsDynamic(r: DataSourceV2Relation, _, _, _, _)
         if !r.table.supports(BATCH_WRITE) || !r.table.supports(OVERWRITE_DYNAMIC) =>
-        failAnalysis(s"Table ${r.table.name()} does not support dynamic overwrite in batch mode.")
+        throw QueryCompilationErrors.unsupportedDynamicOverwriteInBatchModeError(r.table)
 
-      case OverwriteByExpression(r: DataSourceV2Relation, expr, _, _, _) =>
+      case OverwriteByExpression(r: DataSourceV2Relation, expr, _, _, _, _) =>
         expr match {
           case Literal(true, BooleanType) =>
             if (!supportsBatchWrite(r.table) ||
                 !r.table.supportsAny(TRUNCATE, OVERWRITE_BY_FILTER)) {
-              failAnalysis(
-                s"Table ${r.table.name()} does not support truncate in batch mode.")
+              throw QueryCompilationErrors.unsupportedTruncateInBatchModeError(r.table)
             }
           case _ =>
             if (!supportsBatchWrite(r.table) || !r.table.supports(OVERWRITE_BY_FILTER)) {
-              failAnalysis(s"Table ${r.table.name()} does not support " +
-                "overwrite by filter in batch mode.")
+              throw QueryCompilationErrors.unsupportedOverwriteByFilterInBatchModeError(
+                r.table)
             }
         }
 
@@ -92,10 +89,8 @@ object TableCapabilityCheck extends (LogicalPlan => Unit) {
           streamingSources.filter(_.supports(MICRO_BATCH_READ)).map(_.name()) ++
             v1StreamingRelations.map(_.sourceName)
         val continuousSources = streamingSources.filter(_.supports(CONTINUOUS_READ)).map(_.name())
-        throw new AnalysisException(
-          "The streaming sources in a query do not have a common supported execution mode.\n" +
-            "Sources support micro-batch: " + microBatchSources.mkString(", ") + "\n" +
-            "Sources support continuous: " + continuousSources.mkString(", "))
+        throw QueryCompilationErrors.streamingSourcesDoNotSupportCommonExecutionModeError(
+          microBatchSources, continuousSources)
       }
     }
   }

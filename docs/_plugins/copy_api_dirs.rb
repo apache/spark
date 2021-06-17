@@ -116,6 +116,15 @@ if not (ENV['SKIP_API'] == '1')
   if not (ENV['SKIP_PYTHONDOC'] == '1')
     # Build Sphinx docs for Python
 
+    puts "Moving to project root and building API docs."
+    cd("..")
+
+    puts "Running 'build/sbt clean package -Phive' from " + pwd + "; this may take a few minutes..."
+    system("build/sbt clean package -Phive") || raise("PySpark doc generation failed")
+
+    puts "Moving back into docs dir."
+    cd("docs")
+
     puts "Moving to python/docs directory and building sphinx."
     cd("../python/docs")
     system("make html") || raise("Python doc generation failed")
@@ -126,8 +135,8 @@ if not (ENV['SKIP_API'] == '1')
     puts "Making directory api/python"
     mkdir_p "api/python"
 
-    puts "cp -r ../python/docs/_build/html/. api/python"
-    cp_r("../python/docs/_build/html/.", "api/python")
+    puts "cp -r ../python/docs/build/html/. api/python"
+    cp_r("../python/docs/build/html/.", "api/python")
   end
 
   if not (ENV['SKIP_RDOC'] == '1')
@@ -153,15 +162,18 @@ if not (ENV['SKIP_API'] == '1')
   if not (ENV['SKIP_SQLDOC'] == '1')
     # Build SQL API docs
 
-    puts "Moving to project root and building API docs."
-    curr_dir = pwd
-    cd("..")
+    if ENV['SKIP_PYTHONDOC'] == '1'
+      # SQL documentation build requires the full build to run queries.
+      # If the build was not done in PySpark documentation generation, we should build it here.
+      puts "Moving to project root and building API docs."
+      cd("..")
 
-    puts "Running 'build/sbt clean package' from " + pwd + "; this may take a few minutes..."
-    system("build/sbt clean package") || raise("SQL doc generation failed")
+      puts "Running 'build/sbt clean package -Phive' from " + pwd + "; this may take a few minutes..."
+      system("build/sbt clean package -Phive") || raise("SQL doc generation failed")
 
-    puts "Moving back into docs dir."
-    cd("docs")
+      puts "Moving back into docs dir."
+      cd("docs")
+    end
 
     puts "Moving to SQL directory and building docs."
     cd("../sql")

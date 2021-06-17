@@ -18,21 +18,26 @@
 package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 
 /**
  * Physical plan node for dropping a table.
  */
-case class DropTableExec(catalog: TableCatalog, ident: Identifier, ifExists: Boolean)
-  extends V2CommandExec {
+case class DropTableExec(
+    catalog: TableCatalog,
+    ident: Identifier,
+    ifExists: Boolean,
+    purge: Boolean,
+    invalidateCache: () => Unit) extends LeafV2CommandExec {
 
   override def run(): Seq[InternalRow] = {
     if (catalog.tableExists(ident)) {
-      catalog.dropTable(ident)
+      invalidateCache()
+      if (purge) catalog.purgeTable(ident) else catalog.dropTable(ident)
     } else if (!ifExists) {
-      throw new NoSuchTableException(ident)
+      throw QueryCompilationErrors.noSuchTableError(ident)
     }
 
     Seq.empty

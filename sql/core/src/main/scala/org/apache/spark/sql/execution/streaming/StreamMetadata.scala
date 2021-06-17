@@ -31,14 +31,14 @@ import org.json4s.jackson.Serialization
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.execution.streaming.CheckpointFileManager.CancellableFSDataOutputStream
-import org.apache.spark.sql.streaming.StreamingQuery
 
 /**
- * Contains metadata associated with a [[StreamingQuery]]. This information is written
- * in the checkpoint location the first time a query is started and recovered every time the query
- * is restarted.
+ * Contains metadata associated with a [[org.apache.spark.sql.streaming.StreamingQuery]].
+ * This information is written in the checkpoint location the first time a query is started
+ * and recovered every time the query is restarted.
  *
- * @param id  unique id of the [[StreamingQuery]] that needs to be persisted across restarts
+ * @param id  unique id of the [[org.apache.spark.sql.streaming.StreamingQuery]]
+ *            that needs to be persisted across restarts
  */
 case class StreamMetadata(id: String) {
   def json: String = Serialization.write(this)(StreamMetadata.format)
@@ -49,11 +49,12 @@ object StreamMetadata extends Logging {
 
   /** Read the metadata from file if it exists */
   def read(metadataFile: Path, hadoopConf: Configuration): Option[StreamMetadata] = {
-    val fs = metadataFile.getFileSystem(hadoopConf)
-    if (fs.exists(metadataFile)) {
+    val fileManager = CheckpointFileManager.create(metadataFile.getParent, hadoopConf)
+
+    if (fileManager.exists(metadataFile)) {
       var input: FSDataInputStream = null
       try {
-        input = fs.open(metadataFile)
+        input = fileManager.open(metadataFile)
         val reader = new InputStreamReader(input, StandardCharsets.UTF_8)
         val metadata = Serialization.read[StreamMetadata](reader)
         Some(metadata)

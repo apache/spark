@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.connector.catalog;
 
-import org.apache.spark.annotation.Experimental;
+import org.apache.spark.annotation.Evolving;
 
 /**
  * NamespaceChange subclasses represent requested changes to a namespace. These are passed to
@@ -30,8 +30,10 @@ import org.apache.spark.annotation.Experimental;
  *       removeProperty("other_prop")
  *     )
  * </pre>
+ *
+ * @since 3.0.0
  */
-@Experimental
+@Evolving
 public interface NamespaceChange {
   /**
    * Create a NamespaceChange for setting a namespace property.

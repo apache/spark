@@ -65,7 +65,7 @@ class LocalDiskShuffleMapOutputWriterSuite extends SparkFunSuite with BeforeAndA
   }
 
   override def beforeEach(): Unit = {
-    MockitoAnnotations.initMocks(this)
+    MockitoAnnotations.openMocks(this).close()
     tempDir = Utils.createTempDir()
     mergedOutputFile = File.createTempFile("mergedoutput", "", tempDir)
     tempFile = File.createTempFile("tempfile", "", tempDir)
@@ -136,7 +136,7 @@ class LocalDiskShuffleMapOutputWriterSuite extends SparkFunSuite with BeforeAndA
   }
 
   private def verifyWrittenRecords(): Unit = {
-    val committedLengths = mapOutputWriter.commitAllPartitions()
+    val committedLengths = mapOutputWriter.commitAllPartitions().getPartitionLengths
     assert(partitionSizesInMergedFile === partitionLengths)
     assert(committedLengths === partitionLengths)
     assert(mergedOutputFile.length() === partitionLengths.sum)

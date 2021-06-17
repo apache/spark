@@ -18,9 +18,9 @@
 package org.apache.spark.sql.execution.datasources.parquet;
 
 import java.io.IOException;
+import java.time.ZoneId;
 import java.util.Arrays;
 import java.util.List;
-import java.util.TimeZone;
 
 import org.apache.hadoop.mapreduce.InputSplit;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
@@ -86,7 +86,17 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
    * The timezone that timestamp INT96 values should be converted to. Null if no conversion. Here to
    * workaround incompatibilities between different engines when writing timestamp values.
    */
-  private TimeZone convertTz = null;
+  private final ZoneId convertTz;
+
+  /**
+   * The mode of rebasing date/timestamp from Julian to Proleptic Gregorian calendar.
+   */
+  private final String datetimeRebaseMode;
+
+  /**
+   * The mode of rebasing INT96 timestamp from Julian to Proleptic Gregorian calendar.
+   */
+  private final String int96RebaseMode;
 
   /**
    * columnBatch object that is used for batch decoding. This is created on first use and triggers
@@ -116,10 +126,22 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
    */
   private final MemoryMode MEMORY_MODE;
 
-  public VectorizedParquetRecordReader(TimeZone convertTz, boolean useOffHeap, int capacity) {
+  public VectorizedParquetRecordReader(
+      ZoneId convertTz,
+      String datetimeRebaseMode,
+      String int96RebaseMode,
+      boolean useOffHeap,
+      int capacity) {
     this.convertTz = convertTz;
+    this.datetimeRebaseMode = datetimeRebaseMode;
+    this.int96RebaseMode = int96RebaseMode;
     MEMORY_MODE = useOffHeap ? MemoryMode.OFF_HEAP : MemoryMode.ON_HEAP;
     this.capacity = capacity;
+  }
+
+  // For test only.
+  public VectorizedParquetRecordReader(boolean useOffHeap, int capacity) {
+    this(null, "CORRECTED", "LEGACY", useOffHeap, capacity);
   }
 
   /**
@@ -298,7 +320,7 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
 
   private void checkEndOfRowGroup() throws IOException {
     if (rowsReturned != totalCountLoadedSoFar) return;
-    PageReadStore pages = reader.readNextRowGroup();
+    PageReadStore pages = reader.readNextFilteredRowGroup();
     if (pages == null) {
       throw new IOException("expecting more rows but reached last block. Read "
           + rowsReturned + " out of " + totalRowCount);
@@ -308,8 +330,13 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
     columnReaders = new VectorizedColumnReader[columns.size()];
     for (int i = 0; i < columns.size(); ++i) {
       if (missingColumns[i]) continue;
-      columnReaders[i] = new VectorizedColumnReader(columns.get(i), types.get(i).getOriginalType(),
-        pages.getPageReader(columns.get(i)), convertTz);
+      columnReaders[i] = new VectorizedColumnReader(
+        columns.get(i),
+        types.get(i).getLogicalTypeAnnotation(),
+        pages.getPageReader(columns.get(i)),
+        convertTz,
+        datetimeRebaseMode,
+        int96RebaseMode);
     }
     totalCountLoadedSoFar += pages.getRowCount();
   }

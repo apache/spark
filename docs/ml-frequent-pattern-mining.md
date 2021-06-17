@@ -75,7 +75,7 @@ The `FPGrowthModel` provides:
 <div class="codetabs">
 
 <div data-lang="scala" markdown="1">
-Refer to the [Scala API docs](api/scala/index.html#org.apache.spark.ml.fpm.FPGrowth) for more details.
+Refer to the [Scala API docs](api/scala/org/apache/spark/ml/fpm/FPGrowth.html) for more details.
 
 {% include_example scala/org/apache/spark/examples/ml/FPGrowthExample.scala %}
 </div>
@@ -87,7 +87,7 @@ Refer to the [Java API docs](api/java/org/apache/spark/ml/fpm/FPGrowth.html) for
 </div>
 
 <div data-lang="python" markdown="1">
-Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.fpm.FPGrowth) for more details.
+Refer to the [Python API docs](api/python/reference/api/pyspark.ml.fpm.FPGrowth.html) for more details.
 
 {% include_example python/ml/fpgrowth_example.py %}
 </div>
@@ -128,7 +128,7 @@ pattern mining problem.
 <div class="codetabs">
 
 <div data-lang="scala" markdown="1">
-Refer to the [Scala API docs](api/scala/index.html#org.apache.spark.ml.fpm.PrefixSpan) for more details.
+Refer to the [Scala API docs](api/scala/org/apache/spark/ml/fpm/PrefixSpan.html) for more details.
 
 {% include_example scala/org/apache/spark/examples/ml/PrefixSpanExample.scala %}
 </div>
@@ -140,7 +140,7 @@ Refer to the [Java API docs](api/java/org/apache/spark/ml/fpm/PrefixSpan.html) f
 </div>
 
 <div data-lang="python" markdown="1">
-Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.fpm.PrefixSpan) for more details.
+Refer to the [Python API docs](api/python/reference/api/pyspark.ml.fpm.PrefixSpan) for more details.
 
 {% include_example python/ml/prefixspan_example.py %}
 </div>

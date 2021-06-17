@@ -24,28 +24,30 @@ import com.amazonaws.auth.BasicAWSCredentials
 import com.amazonaws.services.s3.AmazonS3Client
 import io.fabric8.kubernetes.api.model._
 import io.fabric8.kubernetes.api.model.apps.StatefulSetBuilder
+import org.apache.hadoop.util.VersionInfo
 import org.scalatest.concurrent.{Eventually, PatienceConfiguration}
 import org.scalatest.time.{Minutes, Span}
 
 import org.apache.spark.SparkException
 import org.apache.spark.deploy.k8s.integrationtest.DepsTestsSuite.{DEPS_TIMEOUT, FILE_CONTENTS, HOST_PATH}
 import org.apache.spark.deploy.k8s.integrationtest.KubernetesSuite.{INTERVAL, MinikubeTag, TIMEOUT}
+import org.apache.spark.deploy.k8s.integrationtest.Utils.getExamplesJarName
 import org.apache.spark.deploy.k8s.integrationtest.backend.minikube.Minikube
+import org.apache.spark.internal.config.{ARCHIVES, PYSPARK_DRIVER_PYTHON, PYSPARK_PYTHON}
 
 private[spark] trait DepsTestsSuite { k8sSuite: KubernetesSuite =>
   import KubernetesSuite.k8sTestTag
 
-  val cName = "ceph-nano"
+  val cName = "minio"
   val svcName = s"$cName-s3"
-  val bucket = "spark"
+  val BUCKET = "spark"
+  val ACCESS_KEY = "minio"
+  val SECRET_KEY = "miniostorage"
 
-  private def getCephContainer(): Container = {
-    val envVars = Map ( "NETWORK_AUTO_DETECT" -> "4",
-      "RGW_FRONTEND_PORT" -> "8000",
-      "SREE_PORT" -> "5001",
-      "CEPH_DEMO_UID" -> "nano",
-      "CEPH_DAEMON" -> "demo",
-      "DEBUG" -> "verbose"
+  private def getMinioContainer(): Container = {
+    val envVars = Map (
+      "MINIO_ACCESS_KEY" -> ACCESS_KEY,
+      "MINIO_SECRET_KEY" -> SECRET_KEY
     ).map( envV =>
       new EnvVarBuilder()
         .withName(envV._1)
@@ -54,22 +56,19 @@ private[spark] trait DepsTestsSuite { k8sSuite: KubernetesSuite =>
     ).toArray
 
     val resources = Map(
-      "cpu" -> new QuantityBuilder()
-        .withAmount("1")
-        .build(),
-      "memory" -> new QuantityBuilder()
-        .withAmount("512M")
-        .build()
+      "cpu" -> new Quantity("1"),
+      "memory" -> new Quantity("512M")
     ).asJava
 
     new ContainerBuilder()
-      .withImage("ceph/daemon:latest")
+      .withImage("minio/minio:latest")
       .withImagePullPolicy("Always")
       .withName(cName)
+      .withArgs("server", "/data")
       .withPorts(new ContainerPortBuilder()
           .withName(svcName)
           .withProtocol("TCP")
-          .withContainerPort(8000)
+          .withContainerPort(9000)
         .build()
       )
       .withResources(new ResourceRequirementsBuilder()
@@ -81,10 +80,9 @@ private[spark] trait DepsTestsSuite { k8sSuite: KubernetesSuite =>
       .build()
   }
 
-  // Based on https://github.com/ceph/cn
-  private def setupCephStorage(): Unit = {
-    val labels = Map("app" -> "ceph", "daemon" -> "nano").asJava
-    val cephService = new ServiceBuilder()
+  private def setupMinioStorage(): Unit = {
+    val labels = Map("app" -> "minio").asJava
+    val minioService = new ServiceBuilder()
       .withNewMetadata()
         .withName(svcName)
       .withLabels(labels)
@@ -92,9 +90,9 @@ private[spark] trait DepsTestsSuite { k8sSuite: KubernetesSuite =>
       .withNewSpec()
         .withPorts(new ServicePortBuilder()
           .withName("https")
-          .withPort(8000)
+          .withPort(9000)
           .withProtocol("TCP")
-          .withTargetPort(new IntOrString(8000))
+          .withTargetPort(new IntOrString(9000))
           .build()
         )
         .withType("NodePort")
@@ -102,7 +100,7 @@ private[spark] trait DepsTestsSuite { k8sSuite: KubernetesSuite =>
       .endSpec()
       .build()
 
-    val cephStatefulSet = new StatefulSetBuilder()
+    val minioStatefulSet = new StatefulSetBuilder()
       .withNewMetadata()
         .withName(cName)
         .withLabels(labels)
@@ -110,7 +108,7 @@ private[spark] trait DepsTestsSuite { k8sSuite: KubernetesSuite =>
       .withNewSpec()
         .withReplicas(1)
         .withNewSelector()
-          .withMatchLabels(Map("app" -> "ceph").asJava)
+          .withMatchLabels(Map("app" -> "minio").asJava)
         .endSelector()
         .withServiceName(cName)
         .withNewTemplate()
@@ -119,94 +117,140 @@ private[spark] trait DepsTestsSuite { k8sSuite: KubernetesSuite =>
             .withLabels(labels)
            .endMetadata()
           .withNewSpec()
-            .withContainers(getCephContainer())
+            .withContainers(getMinioContainer())
           .endSpec()
         .endTemplate()
       .endSpec()
       .build()
 
-    kubernetesTestComponents
+    // try until the service from a previous test is deleted
+    Eventually.eventually(TIMEOUT, INTERVAL) (kubernetesTestComponents
       .kubernetesClient
       .services()
-      .create(cephService)
+      .create(minioService))
 
-    kubernetesTestComponents
+    // try until the stateful set of a previous test is deleted
+    Eventually.eventually(TIMEOUT, INTERVAL) (kubernetesTestComponents
       .kubernetesClient
       .apps()
       .statefulSets()
-      .create(cephStatefulSet)
+      .create(minioStatefulSet))
   }
 
- private def deleteCephStorage(): Unit = {
+  private def deleteMinioStorage(): Unit = {
     kubernetesTestComponents
       .kubernetesClient
       .apps()
       .statefulSets()
       .withName(cName)
+      .withGracePeriod(0)
       .delete()
 
     kubernetesTestComponents
       .kubernetesClient
       .services()
       .withName(svcName)
+      .withGracePeriod(0)
       .delete()
   }
 
   test("Launcher client dependencies", k8sTestTag, MinikubeTag) {
-    val fileName = Utils.createTempFile(FILE_CONTENTS, HOST_PATH)
-    try {
-      setupCephStorage()
-      val cephUrlStr = getServiceUrl(svcName)
-      val cephUrl = new URL(cephUrlStr)
-      val cephHost = cephUrl.getHost
-      val cephPort = cephUrl.getPort
-      val examplesJar = Utils.getExamplesJarAbsolutePath(sparkHomeDir)
-      val (accessKey, secretKey) = getCephCredentials()
-      sparkAppConf
-        .set("spark.hadoop.fs.s3a.access.key", accessKey)
-        .set("spark.hadoop.fs.s3a.secret.key", secretKey)
-        .set("spark.hadoop.fs.s3a.connection.ssl.enabled", "false")
-        .set("spark.hadoop.fs.s3a.endpoint", s"$cephHost:$cephPort")
-        .set("spark.kubernetes.file.upload.path", s"s3a://$bucket")
-        .set("spark.files", s"$HOST_PATH/$fileName")
-        .set("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem")
-        .set("spark.jars.packages", "com.amazonaws:aws-java-sdk:" +
-          "1.7.4,org.apache.hadoop:hadoop-aws:2.7.6")
-        .set("spark.driver.extraJavaOptions", "-Divy.cache.dir=/tmp -Divy.home=/tmp")
-      createS3Bucket(accessKey, secretKey, cephUrlStr)
+    tryDepsTest({
+      val fileName = Utils.createTempFile(FILE_CONTENTS, HOST_PATH)
+      sparkAppConf.set("spark.files", s"$HOST_PATH/$fileName")
+      val examplesJar = Utils.getTestFileAbsolutePath(getExamplesJarName(), sparkHomeDir)
       runSparkRemoteCheckAndVerifyCompletion(appResource = examplesJar,
         appArgs = Array(fileName),
         timeout = Option(DEPS_TIMEOUT))
-    } finally {
-      // make sure this always runs
-      deleteCephStorage()
+    })
+  }
+
+  test("SPARK-33615: Launcher client archives", k8sTestTag, MinikubeTag) {
+    tryDepsTest {
+      val fileName = Utils.createTempFile(FILE_CONTENTS, HOST_PATH)
+      Utils.createTarGzFile(s"$HOST_PATH/$fileName", s"$HOST_PATH/$fileName.tar.gz")
+      sparkAppConf.set(ARCHIVES.key, s"$HOST_PATH/$fileName.tar.gz#test_tar_gz")
+      val examplesJar = Utils.getTestFileAbsolutePath(getExamplesJarName(), sparkHomeDir)
+      runSparkRemoteCheckAndVerifyCompletion(appResource = examplesJar,
+        appArgs = Array(s"test_tar_gz/$fileName"),
+        timeout = Option(DEPS_TIMEOUT))
     }
   }
 
-  // There isn't a cleaner way to get the credentials
-  // when ceph-nano runs on k8s
-  private def getCephCredentials(): (String, String) = {
-    Eventually.eventually(TIMEOUT, INTERVAL) {
-      val cephPod = kubernetesTestComponents
-        .kubernetesClient
-        .pods()
-        .withName(s"$cName-0")
-        .get()
-      implicit val podName: String = cephPod.getMetadata.getName
-      implicit val components: KubernetesTestComponents = kubernetesTestComponents
-      val contents = Utils.executeCommand("cat", "/nano_user_details")
-    (extractS3Key(contents, "access_key"), extractS3Key(contents, "secret_key"))
-    }
+  test(
+    "SPARK-33748: Launcher python client respecting PYSPARK_PYTHON", k8sTestTag, MinikubeTag) {
+    val fileName = Utils.createTempFile(
+      """
+        |#!/usr/bin/env bash
+        |export IS_CUSTOM_PYTHON=1
+        |python3 "$@"
+      """.stripMargin, HOST_PATH)
+    Utils.createTarGzFile(s"$HOST_PATH/$fileName", s"$HOST_PATH/$fileName.tgz")
+    sparkAppConf.set(ARCHIVES.key, s"$HOST_PATH/$fileName.tgz#test_env")
+    val pySparkFiles = Utils.getTestFileAbsolutePath("python_executable_check.py", sparkHomeDir)
+    testPython(pySparkFiles,
+      Seq(
+        s"PYSPARK_PYTHON: ./test_env/$fileName",
+        s"PYSPARK_DRIVER_PYTHON: ./test_env/$fileName",
+        "Custom Python used on executor: True",
+        "Custom Python used on driver: True"),
+      env = Map("PYSPARK_PYTHON" -> s"./test_env/$fileName"))
   }
 
-  private def extractS3Key(data: String, key: String): String = {
-    data.split("\n")
-      .filter(_.contains(key))
-      .head
-      .split(":")
-      .last
-      .trim
-      .replaceAll("[,|\"]", "")
+  test(
+    "SPARK-33748: Launcher python client respecting " +
+      s"${PYSPARK_PYTHON.key} and ${PYSPARK_DRIVER_PYTHON.key}", k8sTestTag, MinikubeTag) {
+    val fileName = Utils.createTempFile(
+      """
+        |#!/usr/bin/env bash
+        |export IS_CUSTOM_PYTHON=1
+        |python3 "$@"
+      """.stripMargin, HOST_PATH)
+    Utils.createTarGzFile(s"$HOST_PATH/$fileName", s"$HOST_PATH/$fileName.tgz")
+    sparkAppConf.set(ARCHIVES.key, s"$HOST_PATH/$fileName.tgz#test_env")
+    sparkAppConf.set(PYSPARK_PYTHON.key, s"./test_env/$fileName")
+    sparkAppConf.set(PYSPARK_DRIVER_PYTHON.key, "python3")
+    val pySparkFiles = Utils.getTestFileAbsolutePath("python_executable_check.py", sparkHomeDir)
+    testPython(pySparkFiles,
+      Seq(
+        s"PYSPARK_PYTHON: ./test_env/$fileName",
+        "PYSPARK_DRIVER_PYTHON: python3",
+        "Custom Python used on executor: True",
+        "Custom Python used on driver: False"))
+  }
+
+  test("Launcher python client dependencies using a zip file", k8sTestTag, MinikubeTag) {
+    val pySparkFiles = Utils.getTestFileAbsolutePath("pyfiles.py", sparkHomeDir)
+    val inDepsFile = Utils.getTestFileAbsolutePath("py_container_checks.py", sparkHomeDir)
+    val outDepsFile = s"${inDepsFile.substring(0, inDepsFile.lastIndexOf("."))}.zip"
+    Utils.createZipFile(inDepsFile, outDepsFile)
+    testPython(
+      pySparkFiles,
+      Seq(
+        "Python runtime version check is: True",
+        "Python environment version check is: True",
+        "Python runtime version check for executor is: True"),
+      Some(outDepsFile))
+  }
+
+  private def testPython(
+      pySparkFiles: String,
+      expectedDriverLogs: Seq[String],
+      depsFile: Option[String] = None,
+      env: Map[String, String] = Map.empty[String, String]): Unit = {
+    tryDepsTest {
+      setPythonSparkConfProperties(sparkAppConf)
+      runSparkApplicationAndVerifyCompletion(
+        appResource = pySparkFiles,
+        mainClass = "",
+        expectedDriverLogOnCompletion = expectedDriverLogs,
+        appArgs = Array("python3"),
+        driverPodChecker = doBasicDriverPyPodCheck,
+        executorPodChecker = doBasicExecutorPyPodCheck,
+        isJVM = false,
+        pyFiles = depsFile,
+        env = env)
+    }
   }
 
   private def createS3Bucket(accessKey: String, secretKey: String, endPoint: String): Unit = {
@@ -215,10 +259,10 @@ private[spark] trait DepsTestsSuite { k8sSuite: KubernetesSuite =>
         val credentials = new BasicAWSCredentials(accessKey, secretKey)
         val s3client = new AmazonS3Client(credentials)
         s3client.setEndpoint(endPoint)
-        s3client.createBucket(bucket)
+        s3client.createBucket(BUCKET)
       } catch {
         case e: Exception =>
-          throw new SparkException(s"Failed to create bucket $bucket.", e)
+          throw new SparkException(s"Failed to create bucket $BUCKET.", e)
       }
     }
   }
@@ -238,6 +282,47 @@ private[spark] trait DepsTestsSuite { k8sSuite: KubernetesSuite =>
           rawUrl
       }
       url
+    }
+  }
+
+  private def getServiceHostAndPort(minioUrlStr : String) : (String, Int) = {
+    val minioUrl = new URL(minioUrlStr)
+    (minioUrl.getHost, minioUrl.getPort)
+  }
+
+  private def setCommonSparkConfPropertiesForS3Access(
+      conf: SparkAppConf,
+      minioUrlStr: String): Unit = {
+    val (minioHost, minioPort) = getServiceHostAndPort(minioUrlStr)
+    val packages = if (Utils.isHadoop3) {
+      s"org.apache.hadoop:hadoop-aws:${VersionInfo.getVersion}"
+    } else {
+      "com.amazonaws:aws-java-sdk:1.7.4,org.apache.hadoop:hadoop-aws:2.7.6"
+    }
+    conf.set("spark.hadoop.fs.s3a.access.key", ACCESS_KEY)
+      .set("spark.hadoop.fs.s3a.secret.key", SECRET_KEY)
+      .set("spark.hadoop.fs.s3a.connection.ssl.enabled", "false")
+      .set("spark.hadoop.fs.s3a.endpoint", s"$minioHost:$minioPort")
+      .set("spark.kubernetes.file.upload.path", s"s3a://$BUCKET")
+      .set("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem")
+      .set("spark.jars.packages", packages)
+      .set("spark.driver.extraJavaOptions", "-Divy.cache.dir=/tmp -Divy.home=/tmp")
+  }
+
+  private def setPythonSparkConfProperties(conf: SparkAppConf): Unit = {
+    sparkAppConf.set("spark.kubernetes.container.image", pyImage)
+  }
+
+  private def tryDepsTest(runTest: => Unit): Unit = {
+    try {
+      setupMinioStorage()
+      val minioUrlStr = getServiceUrl(svcName)
+      createS3Bucket(ACCESS_KEY, SECRET_KEY, minioUrlStr)
+      setCommonSparkConfPropertiesForS3Access(sparkAppConf, minioUrlStr)
+      runTest
+    } finally {
+      // make sure this always runs
+      deleteMinioStorage()
     }
   }
 }

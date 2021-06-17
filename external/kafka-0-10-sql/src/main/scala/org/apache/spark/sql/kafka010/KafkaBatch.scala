@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.kafka010
 
-import org.apache.kafka.common.TopicPartition
-
 import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.Network.NETWORK_TIMEOUT
@@ -50,42 +48,18 @@ private[kafka010] class KafkaBatch(
     // id. Hence, we should generate a unique id for each query.
     val uniqueGroupId = KafkaSourceProvider.batchUniqueGroupId(sourceOptions)
 
-    val kafkaOffsetReader = new KafkaOffsetReader(
+    val kafkaOffsetReader = KafkaOffsetReader.build(
       strategy,
       KafkaSourceProvider.kafkaParamsForDriver(specifiedKafkaParams),
       sourceOptions,
       driverGroupIdPrefix = s"$uniqueGroupId-driver")
 
     // Leverage the KafkaReader to obtain the relevant partition offsets
-    val (fromPartitionOffsets, untilPartitionOffsets) = {
-      try {
-        (kafkaOffsetReader.fetchPartitionOffsets(startingOffsets, isStartingOffsets = true),
-          kafkaOffsetReader.fetchPartitionOffsets(endingOffsets, isStartingOffsets = false))
-      } finally {
-        kafkaOffsetReader.close()
-      }
+    val offsetRanges: Seq[KafkaOffsetRange] = try {
+      kafkaOffsetReader.getOffsetRangesFromUnresolvedOffsets(startingOffsets, endingOffsets)
+    } finally {
+      kafkaOffsetReader.close()
     }
-
-    // Obtain topicPartitions in both from and until partition offset, ignoring
-    // topic partitions that were added and/or deleted between the two above calls.
-    if (fromPartitionOffsets.keySet != untilPartitionOffsets.keySet) {
-      implicit val topicOrdering: Ordering[TopicPartition] = Ordering.by(t => t.topic())
-      val fromTopics = fromPartitionOffsets.keySet.toList.sorted.mkString(",")
-      val untilTopics = untilPartitionOffsets.keySet.toList.sorted.mkString(",")
-      throw new IllegalStateException("different topic partitions " +
-        s"for starting offsets topics[${fromTopics}] and " +
-        s"ending offsets topics[${untilTopics}]")
-    }
-
-    // Calculate offset ranges
-    val offsetRanges = untilPartitionOffsets.keySet.map { tp =>
-      val fromOffset = fromPartitionOffsets.getOrElse(tp,
-        // This should not happen since topicPartitions contains all partitions not in
-        // fromPartitionOffsets
-        throw new IllegalStateException(s"$tp doesn't have a from offset"))
-      val untilOffset = untilPartitionOffsets(tp)
-      KafkaOffsetRange(tp, fromOffset, untilOffset, None)
-    }.toArray
 
     val executorKafkaParams =
       KafkaSourceProvider.kafkaParamsForExecutors(specifiedKafkaParams, uniqueGroupId)

@@ -28,7 +28,7 @@ import org.apache.spark.ui.{SparkUI, SparkUITab}
 private[spark] class StreamingTab(val ssc: StreamingContext, sparkUI: SparkUI)
   extends SparkUITab(sparkUI, "streaming") with Logging {
 
-  private val STATIC_RESOURCE_DIR = "org/apache/spark/streaming/ui/static"
+  private val STATIC_RESOURCE_DIR = "org/apache/spark/ui/static"
 
   val parent = sparkUI
   val listener = ssc.progressListener

@@ -32,7 +32,7 @@ import org.apache.spark.memory.MemoryMode
 import org.apache.spark.sql.{RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapBuilder, DateTimeUtils, GenericArrayData}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapBuilder, DateTimeUtils, GenericArrayData, MapData}
 import org.apache.spark.sql.execution.RowToColumnConverter
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.ArrowUtils
@@ -447,13 +447,6 @@ class ColumnarBatchSuite extends SparkFunSuite {
       Platform.putFloat(buffer, Platform.BYTE_ARRAY_OFFSET, 2.234f)
       Platform.putFloat(buffer, Platform.BYTE_ARRAY_OFFSET + 4, 1.123f)
 
-      if (ByteOrder.nativeOrder().equals(ByteOrder.BIG_ENDIAN)) {
-        // Ensure array contains Little Endian floats
-        val bb = ByteBuffer.wrap(buffer).order(ByteOrder.LITTLE_ENDIAN)
-        Platform.putFloat(buffer, Platform.BYTE_ARRAY_OFFSET, bb.getFloat(0))
-        Platform.putFloat(buffer, Platform.BYTE_ARRAY_OFFSET + 4, bb.getFloat(4))
-      }
-
       column.putFloats(idx, 1, buffer, 4)
       column.putFloats(idx + 1, 1, buffer, 0)
       reference += 1.123f
@@ -463,6 +456,57 @@ class ColumnarBatchSuite extends SparkFunSuite {
       column.putFloats(idx, 2, buffer, 0)
       reference += 2.234f
       reference += 1.123f
+      idx += 2
+
+      while (idx < column.capacity) {
+        val single = random.nextBoolean()
+        if (single) {
+          val v = random.nextFloat()
+          column.putFloat(idx, v)
+          reference += v
+          idx += 1
+        } else {
+          val n = math.min(random.nextInt(column.capacity / 20), column.capacity - idx)
+          val v = random.nextFloat()
+          column.putFloats(idx, n, v)
+          var i = 0
+          while (i < n) {
+            reference += v
+            i += 1
+          }
+          idx += n
+        }
+      }
+
+      reference.zipWithIndex.foreach { v =>
+        assert(v._1 == column.getFloat(v._2),
+          "Seed = " + seed + " VectorType=" + column.getClass.getSimpleName)
+      }
+  }
+
+  testVector("[SPARK-31703] Float API - Little Endian", 1024, FloatType) {
+    column =>
+      val seed = System.currentTimeMillis()
+      val random = new Random(seed)
+      val reference = mutable.ArrayBuffer.empty[Float]
+
+      var idx = 0
+
+      val littleEndian = ByteBuffer.allocate(8).order(ByteOrder.LITTLE_ENDIAN)
+      littleEndian.putFloat(0, 1.357f)
+      littleEndian.putFloat(4, 2.468f)
+      val arr = new Array[Byte](littleEndian.remaining)
+      littleEndian.get(arr)
+
+      column.putFloatsLittleEndian(idx, 1, arr, 4)
+      column.putFloatsLittleEndian(idx + 1, 1, arr, 0)
+      reference += 2.468f
+      reference += 1.357f
+      idx += 2
+
+      column.putFloatsLittleEndian(idx, 2, arr, 0)
+      reference += 1.357f
+      reference += 2.468f
       idx += 2
 
       while (idx < column.capacity) {
@@ -531,13 +575,6 @@ class ColumnarBatchSuite extends SparkFunSuite {
       Platform.putDouble(buffer, Platform.BYTE_ARRAY_OFFSET, 2.234)
       Platform.putDouble(buffer, Platform.BYTE_ARRAY_OFFSET + 8, 1.123)
 
-      if (ByteOrder.nativeOrder().equals(ByteOrder.BIG_ENDIAN)) {
-        // Ensure array contains Little Endian doubles
-        val bb = ByteBuffer.wrap(buffer).order(ByteOrder.LITTLE_ENDIAN)
-        Platform.putDouble(buffer, Platform.BYTE_ARRAY_OFFSET, bb.getDouble(0))
-        Platform.putDouble(buffer, Platform.BYTE_ARRAY_OFFSET + 8, bb.getDouble(8))
-      }
-
       column.putDoubles(idx, 1, buffer, 8)
       column.putDoubles(idx + 1, 1, buffer, 0)
       reference += 1.123
@@ -547,6 +584,57 @@ class ColumnarBatchSuite extends SparkFunSuite {
       column.putDoubles(idx, 2, buffer, 0)
       reference += 2.234
       reference += 1.123
+      idx += 2
+
+      while (idx < column.capacity) {
+        val single = random.nextBoolean()
+        if (single) {
+          val v = random.nextDouble()
+          column.putDouble(idx, v)
+          reference += v
+          idx += 1
+        } else {
+          val n = math.min(random.nextInt(column.capacity / 20), column.capacity - idx)
+          val v = random.nextDouble()
+          column.putDoubles(idx, n, v)
+          var i = 0
+          while (i < n) {
+            reference += v
+            i += 1
+          }
+          idx += n
+        }
+      }
+
+      reference.zipWithIndex.foreach { v =>
+        assert(v._1 == column.getDouble(v._2),
+          "Seed = " + seed + " VectorType=" + column.getClass.getSimpleName)
+      }
+  }
+
+  testVector("[SPARK-31703] Double API - Little Endian", 1024, DoubleType) {
+    column =>
+      val seed = System.currentTimeMillis()
+      val random = new Random(seed)
+      val reference = mutable.ArrayBuffer.empty[Double]
+
+      var idx = 0
+
+      val littleEndian = ByteBuffer.allocate(16).order(ByteOrder.LITTLE_ENDIAN)
+      littleEndian.putDouble(0, 1.357)
+      littleEndian.putDouble(8, 2.468)
+      val arr = new Array[Byte](littleEndian.remaining)
+      littleEndian.get(arr)
+
+      column.putDoublesLittleEndian(idx, 1, arr, 8)
+      column.putDoublesLittleEndian(idx + 1, 1, arr, 0)
+      reference += 2.468
+      reference += 1.357
+      idx += 2
+
+      column.putDoublesLittleEndian(idx, 2, arr, 0)
+      reference += 1.357
+      reference += 2.468
       idx += 2
 
       while (idx < column.capacity) {
@@ -807,6 +895,16 @@ class ColumnarBatchSuite extends SparkFunSuite {
       assert(a2.asScala == Map(1 -> 2, 2 -> 4))
       assert(a4.asScala == Map())
       assert(a5.asScala == Map(3 -> 6, 4 -> 8, 5 -> 10))
+
+      def toScalaMap(mapData: MapData): Map[Int, Int] = {
+        val keys = mapData.keyArray().toSeq[Int](IntegerType)
+        val values = mapData.valueArray().toSeq[Int](IntegerType)
+        (keys zip values).toMap
+      }
+      assert(toScalaMap(column.getMap(0).copy()) === Map(0 -> 0))
+      assert(toScalaMap(column.getMap(1).copy()) === Map(1 -> 2, 2 -> 4))
+      assert(toScalaMap(column.getMap(3).copy()) === Map())
+      assert(toScalaMap(column.getMap(4).copy()) === Map(3 -> 6, 4 -> 8, 5 -> 10))
 
       column.close()
     }

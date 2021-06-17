@@ -43,38 +43,59 @@ class KinesisUtils(object):
         Create an input stream that pulls messages from a Kinesis stream. This uses the
         Kinesis Client Library (KCL) to pull messages from Kinesis.
 
-        .. note:: The given AWS credentials will get saved in DStream checkpoints if checkpointing
-            is enabled. Make sure that your checkpoint directory is secure.
+        Parameters
+        ----------
+        ssc : :class:`StreamingContext`
+            StreamingContext object
+        kinesisAppName : str
+            Kinesis application name used by the Kinesis Client Library (KCL) to
+            update DynamoDB
+        streamName : str
+            Kinesis stream name
+        endpointUrl : str
+            Url of Kinesis service (e.g., https://kinesis.us-east-1.amazonaws.com)
+        regionName : str
+            Name of region used by the Kinesis Client Library (KCL) to update
+            DynamoDB (lease coordination and checkpointing) and CloudWatch (metrics)
+        initialPositionInStream : int
+            In the absence of Kinesis checkpoint info, this is the
+            worker's initial starting position in the stream. The
+            values are either the beginning of the stream per Kinesis'
+            limit of 24 hours (InitialPositionInStream.TRIM_HORIZON) or
+            the tip of the stream (InitialPositionInStream.LATEST).
+        checkpointInterval : int
+            Checkpoint interval(in seconds) for Kinesis checkpointing. See the Kinesis
+            Spark Streaming documentation for more details on the different
+            types of checkpoints.
+        storageLevel : :class:`pyspark.StorageLevel`, optional
+            Storage level to use for storing the received objects (default is
+            StorageLevel.MEMORY_AND_DISK_2)
+        awsAccessKeyId : str, optional
+            AWS AccessKeyId (default is None. If None, will use
+            DefaultAWSCredentialsProviderChain)
+        awsSecretKey : str, optional
+            AWS SecretKey (default is None. If None, will use
+            DefaultAWSCredentialsProviderChain)
+        decoder : function, optional
+            A function used to decode value (default is utf8_decoder)
+        stsAssumeRoleArn : str, optional
+            ARN of IAM role to assume when using STS sessions to read from
+            the Kinesis stream (default is None).
+        stsSessionName : str, optional
+            Name to uniquely identify STS sessions used to read from Kinesis
+            stream, if STS is being used (default is None).
+        stsExternalId : str, optional
+            External ID that can be used to validate against the assumed IAM
+            role's trust policy, if STS is being used (default is None).
 
-        :param ssc:  StreamingContext object
-        :param kinesisAppName:  Kinesis application name used by the Kinesis Client Library (KCL) to
-                                update DynamoDB
-        :param streamName:  Kinesis stream name
-        :param endpointUrl:  Url of Kinesis service (e.g., https://kinesis.us-east-1.amazonaws.com)
-        :param regionName:  Name of region used by the Kinesis Client Library (KCL) to update
-                            DynamoDB (lease coordination and checkpointing) and CloudWatch (metrics)
-        :param initialPositionInStream:  In the absence of Kinesis checkpoint info, this is the
-                                         worker's initial starting position in the stream. The
-                                         values are either the beginning of the stream per Kinesis'
-                                         limit of 24 hours (InitialPositionInStream.TRIM_HORIZON) or
-                                         the tip of the stream (InitialPositionInStream.LATEST).
-        :param checkpointInterval:  Checkpoint interval for Kinesis checkpointing. See the Kinesis
-                                    Spark Streaming documentation for more details on the different
-                                    types of checkpoints.
-        :param storageLevel:  Storage level to use for storing the received objects (default is
-                              StorageLevel.MEMORY_AND_DISK_2)
-        :param awsAccessKeyId:  AWS AccessKeyId (default is None. If None, will use
-                                DefaultAWSCredentialsProviderChain)
-        :param awsSecretKey:  AWS SecretKey (default is None. If None, will use
-                              DefaultAWSCredentialsProviderChain)
-        :param decoder:  A function used to decode value (default is utf8_decoder)
-        :param stsAssumeRoleArn: ARN of IAM role to assume when using STS sessions to read from
-                                 the Kinesis stream (default is None).
-        :param stsSessionName: Name to uniquely identify STS sessions used to read from Kinesis
-                               stream, if STS is being used (default is None).
-        :param stsExternalId: External ID that can be used to validate against the assumed IAM
-                              role's trust policy, if STS is being used (default is None).
-        :return: A DStream object
+        Returns
+        -------
+        A DStream object
+
+        Notes
+        -----
+        The given AWS credentials will get saved in DStream checkpoints if checkpointing
+        is enabled. Make sure that your checkpoint directory is secure.
         """
         jlevel = ssc._sc._getJavaStorageLevel(storageLevel)
         jduration = ssc._jduration(checkpointInterval)

@@ -19,9 +19,11 @@ package org.apache.spark.ui.env
 
 import javax.servlet.http.HttpServletRequest
 
+import scala.collection.mutable.StringBuilder
 import scala.xml.Node
 
 import org.apache.spark.SparkConf
+import org.apache.spark.resource.{ExecutorResourceRequest, TaskResourceRequest}
 import org.apache.spark.status.AppStatusStore
 import org.apache.spark.ui._
 import org.apache.spark.util.Utils
@@ -38,6 +40,37 @@ private[ui] class EnvironmentPage(
       "Java Home" -> appEnv.runtime.javaHome,
       "Scala Version" -> appEnv.runtime.scalaVersion)
 
+    def constructExecutorRequestString(execReqs: Map[String, ExecutorResourceRequest]): String = {
+      execReqs.map {
+        case (_, execReq) =>
+          val execStr = new StringBuilder(s"\t${execReq.resourceName}: [amount: ${execReq.amount}")
+          if (execReq.discoveryScript.nonEmpty) {
+            execStr ++= s", discovery: ${execReq.discoveryScript}"
+          }
+          if (execReq.vendor.nonEmpty) {
+            execStr ++= s", vendor: ${execReq.vendor}"
+          }
+          execStr ++= "]"
+          execStr.toString()
+      }.mkString("\n")
+    }
+
+    def constructTaskRequestString(taskReqs: Map[String, TaskResourceRequest]): String = {
+      taskReqs.map {
+        case (_, taskReq) => s"\t${taskReq.resourceName}: [amount: ${taskReq.amount}]"
+      }.mkString("\n")
+    }
+
+    val resourceProfileInfo = store.resourceProfileInfo().map { rinfo =>
+      val einfo = constructExecutorRequestString(rinfo.executorResources)
+      val tinfo = constructTaskRequestString(rinfo.taskResources)
+      val res = s"Executor Reqs:\n$einfo\nTask Reqs:\n$tinfo"
+      (rinfo.id.toString, res)
+    }.toMap
+
+    val resourceProfileInformationTable = UIUtils.listingTable(resourceProfileHeader,
+      jvmRowDataPre, resourceProfileInfo.toSeq.sortWith(_._1.toInt < _._1.toInt),
+      fixedWidth = true, headerClasses = headerClassesNoSortValues)
     val runtimeInformationTable = UIUtils.listingTable(
       propertyHeader, jvmRow, jvmInformation.toSeq.sorted, fixedWidth = true,
       headerClasses = headerClasses)
@@ -77,6 +110,17 @@ private[ui] class EnvironmentPage(
         <div class="aggregated-sparkProperties collapsible-table">
           {sparkPropertiesTable}
         </div>
+        <span class="collapse-aggregated-execResourceProfileInformation collapse-table"
+              onClick="collapseTable('collapse-aggregated-execResourceProfileInformation',
+            'aggregated-execResourceProfileInformation')">
+          <h4>
+            <span class="collapse-table-arrow arrow-open"></span>
+            <a>Resource Profiles</a>
+          </h4>
+        </span>
+        <div class="aggregated-execResourceProfileInformation collapsible-table">
+          {resourceProfileInformationTable}
+        </div>
         <span class="collapse-aggregated-hadoopProperties collapse-table"
               onClick="collapseTable('collapse-aggregated-hadoopProperties',
             'aggregated-hadoopProperties')">
@@ -115,10 +159,14 @@ private[ui] class EnvironmentPage(
     UIUtils.headerSparkPage(request, "Environment", content, parent)
   }
 
+  private def resourceProfileHeader = Seq("Resource Profile Id", "Resource Profile Contents")
   private def propertyHeader = Seq("Name", "Value")
   private def classPathHeader = Seq("Resource", "Source")
   private def headerClasses = Seq("sorttable_alpha", "sorttable_alpha")
+  private def headerClassesNoSortValues = Seq("sorttable_numeric", "sorttable_nosort")
 
+  private def jvmRowDataPre(kv: (String, String)) =
+    <tr><td>{kv._1}</td><td><pre>{kv._2}</pre></td></tr>
   private def jvmRow(kv: (String, String)) = <tr><td>{kv._1}</td><td>{kv._2}</td></tr>
   private def propertyRow(kv: (String, String)) = <tr><td>{kv._1}</td><td>{kv._2}</td></tr>
   private def classPathRow(data: (String, String)) = <tr><td>{data._1}</td><td>{data._2}</td></tr>

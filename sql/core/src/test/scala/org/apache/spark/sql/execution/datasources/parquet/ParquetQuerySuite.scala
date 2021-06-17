@@ -28,7 +28,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.expressions.SpecificInternalRow
 import org.apache.spark.sql.execution.FileSourceScanExec
-import org.apache.spark.sql.execution.datasources.SQLHadoopMapReduceCommitProtocol
+import org.apache.spark.sql.execution.datasources.{SchemaColumnConvertNotSupportedException, SQLHadoopMapReduceCommitProtocol}
 import org.apache.spark.sql.execution.datasources.parquet.TestingUDT.{NestedStruct, NestedStructUDT, SingleElement}
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
@@ -141,24 +141,6 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
     }
   }
 
-  test("SPARK-10634 timestamp written and read as INT64 - TIMESTAMP_MILLIS") {
-    val data = (1 to 10).map(i => Row(i, new java.sql.Timestamp(i)))
-    val schema = StructType(List(StructField("d", IntegerType, false),
-      StructField("time", TimestampType, false)).toArray)
-    withSQLConf(SQLConf.PARQUET_INT64_AS_TIMESTAMP_MILLIS.key -> "true") {
-      withTempPath { file =>
-        val df = spark.createDataFrame(sparkContext.parallelize(data), schema)
-        df.write.parquet(file.getCanonicalPath)
-        ("true" :: "false" :: Nil).foreach { vectorized =>
-          withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorized) {
-            val df2 = spark.read.parquet(file.getCanonicalPath)
-            checkAnswer(df2, df.collect().toSeq)
-          }
-        }
-      }
-    }
-  }
-
   test("SPARK-10634 timestamp written and read as INT64 - truncation") {
     withTable("ts") {
       sql("create table ts (c1 int, c2 timestamp) using parquet")
@@ -171,45 +153,6 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
         (3, "1965-01-01 10:11:12.123456"))
         .toDS().select('_1, $"_2".cast("timestamp"))
       checkAnswer(sql("select * from ts"), expected)
-    }
-
-    // The microsecond portion is truncated when written as TIMESTAMP_MILLIS.
-    withTable("ts") {
-      withSQLConf(SQLConf.PARQUET_INT64_AS_TIMESTAMP_MILLIS.key -> "true") {
-        sql("create table ts (c1 int, c2 timestamp) using parquet")
-        sql("insert into ts values (1, timestamp'2016-01-01 10:11:12.123456')")
-        sql("insert into ts values (2, null)")
-        sql("insert into ts values (3, timestamp'1965-01-01 10:11:12.125456')")
-        sql("insert into ts values (4, timestamp'1965-01-01 10:11:12.125')")
-        sql("insert into ts values (5, timestamp'1965-01-01 10:11:12.1')")
-        sql("insert into ts values (6, timestamp'1965-01-01 10:11:12.123456789')")
-        sql("insert into ts values (7, timestamp'0001-01-01 00:00:00.000000')")
-        val expected = Seq(
-          (1, "2016-01-01 10:11:12.123"),
-          (2, null),
-          (3, "1965-01-01 10:11:12.125"),
-          (4, "1965-01-01 10:11:12.125"),
-          (5, "1965-01-01 10:11:12.1"),
-          (6, "1965-01-01 10:11:12.123"),
-          (7, "0001-01-01 00:00:00.000"))
-          .toDS().select('_1, $"_2".cast("timestamp"))
-        checkAnswer(sql("select * from ts"), expected)
-
-        // Read timestamps that were encoded as TIMESTAMP_MILLIS annotated as INT64
-        // with PARQUET_INT64_AS_TIMESTAMP_MILLIS set to false.
-        withSQLConf(SQLConf.PARQUET_INT64_AS_TIMESTAMP_MILLIS.key -> "false") {
-          val expected = Seq(
-            (1, "2016-01-01 10:11:12.123"),
-            (2, null),
-            (3, "1965-01-01 10:11:12.125"),
-            (4, "1965-01-01 10:11:12.125"),
-            (5, "1965-01-01 10:11:12.1"),
-            (6, "1965-01-01 10:11:12.123"),
-            (7, "0001-01-01 00:00:00.000"))
-            .toDS().select('_1, $"_2".cast("timestamp"))
-          checkAnswer(sql("select * from ts"), expected)
-        }
-      }
     }
   }
 
@@ -225,11 +168,9 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
       withTempPath { file =>
         val df = spark.createDataFrame(sparkContext.parallelize(data), schema)
         df.write.parquet(file.getCanonicalPath)
-        ("true" :: "false" :: Nil).foreach { vectorized =>
-          withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorized) {
-            val df2 = spark.read.parquet(file.getCanonicalPath)
-            checkAnswer(df2, df.collect().toSeq)
-          }
+        withAllParquetReaders {
+          val df2 = spark.read.parquet(file.getCanonicalPath)
+          checkAnswer(df2, df.collect().toSeq)
         }
       }
     }
@@ -848,15 +789,13 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
   }
 
   test("SPARK-26677: negated null-safe equality comparison should not filter matched row groups") {
-    (true :: false :: Nil).foreach { vectorized =>
-      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorized.toString) {
-        withTempPath { path =>
-          // Repeated values for dictionary encoding.
-          Seq(Some("A"), Some("A"), None).toDF.repartition(1)
-            .write.parquet(path.getAbsolutePath)
-          val df = spark.read.parquet(path.getAbsolutePath)
-          checkAnswer(stripSparkFilter(df.where("NOT (value <=> 'A')")), df)
-        }
+    withAllParquetReaders {
+      withTempPath { path =>
+        // Repeated values for dictionary encoding.
+        Seq(Some("A"), Some("A"), None).toDF.repartition(1)
+          .write.parquet(path.getAbsolutePath)
+        val df = spark.read.parquet(path.getAbsolutePath)
+        checkAnswer(stripSparkFilter(df.where("NOT (value <=> 'A')")), df)
       }
     }
   }
@@ -878,10 +817,8 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
         withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> toTsType) {
           write(df2.write.mode(SaveMode.Append))
         }
-        Seq("true", "false").foreach { vectorized =>
-          withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorized) {
-            checkAnswer(readback, df1.unionAll(df2))
-          }
+        withAllParquetReaders {
+          checkAnswer(readback, df1.unionAll(df2))
         }
       }
 
@@ -903,6 +840,67 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
     testMigration(fromTsType = "INT96", toTsType = "TIMESTAMP_MICROS")
     testMigration(fromTsType = "TIMESTAMP_MICROS", toTsType = "INT96")
   }
+
+  test("SPARK-34212 Parquet should read decimals correctly") {
+    def readParquet(schema: String, path: File): DataFrame = {
+      spark.read.schema(schema).parquet(path.toString)
+    }
+
+    withTempPath { path =>
+      // a is int-decimal (4 bytes), b is long-decimal (8 bytes), c is binary-decimal (16 bytes)
+      val df = sql("SELECT 1.0 a, CAST(1.23 AS DECIMAL(17, 2)) b, CAST(1.23 AS DECIMAL(36, 2)) c")
+      df.write.parquet(path.toString)
+
+      withAllParquetReaders {
+        // We can read the decimal parquet field with a larger precision, if scale is the same.
+        val schema = "a DECIMAL(9, 1), b DECIMAL(18, 2), c DECIMAL(38, 2)"
+        checkAnswer(readParquet(schema, path), df)
+      }
+
+      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
+        val schema1 = "a DECIMAL(3, 2), b DECIMAL(18, 3), c DECIMAL(37, 3)"
+        checkAnswer(readParquet(schema1, path), df)
+        val schema2 = "a DECIMAL(3, 0), b DECIMAL(18, 1), c DECIMAL(37, 1)"
+        checkAnswer(readParquet(schema2, path), Row(1, 1.2, 1.2))
+      }
+
+      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true") {
+        Seq("a DECIMAL(3, 2)", "b DECIMAL(18, 1)", "c DECIMAL(37, 1)").foreach { schema =>
+          val e = intercept[SparkException] {
+            readParquet(schema, path).collect()
+          }.getCause.getCause
+          assert(e.isInstanceOf[SchemaColumnConvertNotSupportedException])
+        }
+      }
+    }
+
+    // tests for parquet types without decimal metadata.
+    withTempPath { path =>
+      val df = sql(s"SELECT 1 a, 123456 b, ${Int.MaxValue.toLong * 10} c, CAST('1.2' AS BINARY) d")
+      df.write.parquet(path.toString)
+
+      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
+        checkAnswer(readParquet("a DECIMAL(3, 2)", path), sql("SELECT 1.00"))
+        checkAnswer(readParquet("b DECIMAL(3, 2)", path), Row(null))
+        checkAnswer(readParquet("b DECIMAL(11, 1)", path), sql("SELECT 123456.0"))
+        checkAnswer(readParquet("c DECIMAL(11, 1)", path), Row(null))
+        checkAnswer(readParquet("c DECIMAL(13, 0)", path), df.select("c"))
+        val e = intercept[SparkException] {
+          readParquet("d DECIMAL(3, 2)", path).collect()
+        }.getCause
+        assert(e.getMessage.contains("Please read this column/field as Spark BINARY type"))
+      }
+
+      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true") {
+        Seq("a DECIMAL(3, 2)", "c DECIMAL(18, 1)", "d DECIMAL(37, 1)").foreach { schema =>
+          val e = intercept[SparkException] {
+            readParquet(schema, path).collect()
+          }.getCause.getCause
+          assert(e.isInstanceOf[SchemaColumnConvertNotSupportedException])
+        }
+      }
+    }
+  }
 }
 
 class ParquetV1QuerySuite extends ParquetQuerySuite {
@@ -920,7 +918,7 @@ class ParquetV1QuerySuite extends ParquetQuerySuite {
         val df = spark.range(10).select(Seq.tabulate(11) {i => ('id + i).as(s"c$i")} : _*)
         df.write.mode(SaveMode.Overwrite).parquet(path)
 
-        // donot return batch, because whole stage codegen is disabled for wide table (>200 columns)
+        // do not return batch - whole stage codegen is disabled for wide table (>200 columns)
         val df2 = spark.read.parquet(path)
         val fileScan2 = df2.queryExecution.sparkPlan.find(_.isInstanceOf[FileSourceScanExec]).get
         assert(!fileScan2.asInstanceOf[FileSourceScanExec].supportsColumnar)
@@ -953,7 +951,7 @@ class ParquetV2QuerySuite extends ParquetQuerySuite {
         val df = spark.range(10).select(Seq.tabulate(11) {i => ('id + i).as(s"c$i")} : _*)
         df.write.mode(SaveMode.Overwrite).parquet(path)
 
-        // donot return batch, because whole stage codegen is disabled for wide table (>200 columns)
+        // do not return batch - whole stage codegen is disabled for wide table (>200 columns)
         val df2 = spark.read.parquet(path)
         val fileScan2 = df2.queryExecution.sparkPlan.find(_.isInstanceOf[BatchScanExec]).get
         val parquetScan2 = fileScan2.asInstanceOf[BatchScanExec].scan.asInstanceOf[ParquetScan]

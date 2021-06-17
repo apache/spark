@@ -20,13 +20,17 @@ package org.apache.spark.sql
 import org.scalatest.concurrent.TimeLimits
 import org.scalatest.time.SpanSugar._
 
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.columnar.{InMemoryRelation, InMemoryTableScanExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.storage.StorageLevel
 
 
-class DatasetCacheSuite extends QueryTest with SharedSparkSession with TimeLimits {
+class DatasetCacheSuite extends QueryTest
+  with SharedSparkSession
+  with TimeLimits
+  with AdaptiveSparkPlanHelper {
   import testImplicits._
 
   /**
@@ -36,7 +40,8 @@ class DatasetCacheSuite extends QueryTest with SharedSparkSession with TimeLimit
     val plan = df.queryExecution.withCachedData
     assert(plan.isInstanceOf[InMemoryRelation])
     val internalPlan = plan.asInstanceOf[InMemoryRelation].cacheBuilder.cachedPlan
-    assert(internalPlan.find(_.isInstanceOf[InMemoryTableScanExec]).size == numOfCachesDependedUpon)
+    assert(find(internalPlan)(_.isInstanceOf[InMemoryTableScanExec]).size
+      == numOfCachesDependedUpon)
   }
 
   test("get storage level") {
@@ -97,18 +102,19 @@ class DatasetCacheSuite extends QueryTest with SharedSparkSession with TimeLimit
   test("persist and then groupBy columns asKey, map") {
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
     val grouped = ds.groupByKey(_._1)
-    val agged = grouped.mapGroups { (g, iter) => (g, iter.map(_._2).sum) }
-    agged.persist()
+    val aggregated = grouped.mapGroups { (g, iter) => (g, iter.map(_._2).sum) }
+    aggregated.persist()
 
     checkDataset(
-      agged.filter(_._1 == "b"),
+      aggregated.filter(_._1 == "b"),
       ("b", 3))
-    assertCached(agged.filter(_._1 == "b"))
+    assertCached(aggregated.filter(_._1 == "b"))
 
     ds.unpersist(blocking = true)
     assert(ds.storageLevel == StorageLevel.NONE, "The Dataset ds should not be cached.")
-    agged.unpersist(blocking = true)
-    assert(agged.storageLevel == StorageLevel.NONE, "The Dataset agged should not be cached.")
+    aggregated.unpersist(blocking = true)
+    assert(aggregated.storageLevel == StorageLevel.NONE,
+           "The Dataset aggregated should not be cached.")
   }
 
   test("persist and then withColumn") {

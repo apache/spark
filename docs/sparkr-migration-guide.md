@@ -28,8 +28,7 @@ Please refer [Migration Guide: SQL, Datasets and DataFrame](sql-migration-guide.
 
 ## Upgrading from SparkR 2.4 to 3.0
 
- - The deprecated methods `sparkR.init`, `sparkRSQL.init`, `sparkRHive.init` have been removed. Use `sparkR.session` instead.
- - The deprecated methods `parquetFile`, `saveAsParquetFile`, `jsonFile`, `registerTempTable`, `createExternalTable`, and `dropTempTable` have been removed. Use `read.parquet`, `write.parquet`, `read.json`, `createOrReplaceTempView`, `createTable`, `dropTempView`, `union` instead.
+ - The deprecated methods `parquetFile`, `saveAsParquetFile`, `jsonFile`, `jsonRDD` have been removed. Use `read.parquet`, `write.parquet`, `read.json` instead.
 
 ## Upgrading from SparkR 2.3 to 2.4
 

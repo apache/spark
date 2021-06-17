@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.streaming
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, AttributeReference, Expression, Literal, SortOrder, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, Expression, SortOrder, UnsafeRow}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, Distribution}
 import org.apache.spark.sql.execution._
@@ -54,7 +54,7 @@ case class FlatMapGroupsWithStateExec(
     outputMode: OutputMode,
     timeoutConf: GroupStateTimeout,
     batchTimestampMs: Option[Long],
-    override val eventTimeWatermark: Option[Long],
+    eventTimeWatermark: Option[Long],
     child: SparkPlan
   ) extends UnaryExecNode with ObjectProducerExec with StateStoreWriter with WatermarkSupport {
 
@@ -122,7 +122,7 @@ case class FlatMapGroupsWithStateExec(
           // If timeout is based on event time, then filter late data based on watermark
           val filteredIter = watermarkPredicateForData match {
             case Some(predicate) if timeoutConf == EventTimeTimeout =>
-              iter.filter(row => !predicate.eval(row))
+              applyRemovingRowsOlderThanWatermark(iter, predicate)
             case _ =>
               iter
           }
@@ -246,4 +246,7 @@ case class FlatMapGroupsWithStateExec(
       CompletionIterator[InternalRow, Iterator[InternalRow]](mappedIterator, onIteratorCompletion)
     }
   }
+
+  override protected def withNewChildInternal(newChild: SparkPlan): FlatMapGroupsWithStateExec =
+    copy(child = newChild)
 }

@@ -56,7 +56,7 @@ class StatCounter(object):
     # Merge another StatCounter into this one, adding up the internal statistics.
     def mergeStats(self, other):
         if not isinstance(other, StatCounter):
-            raise Exception("Can only merge Statcounters!")
+            raise TypeError("Can only merge StatCounter but got %s" % type(other))
 
         if other is self:  # reference equality holds
             self.merge(copy.deepcopy(other))  # Avoid overwriting fields in a weird order
@@ -134,6 +134,8 @@ class StatCounter(object):
     def asDict(self, sample=False):
         """Returns the :class:`StatCounter` members as a ``dict``.
 
+        Examples
+        --------
         >>> sc.parallelize([1., 2., 3., 4.]).stats().asDict()
         {'count': 4L,
          'max': 4.0,

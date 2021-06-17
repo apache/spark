@@ -24,13 +24,15 @@ import org.apache.spark.annotation.Evolving;
 /**
  * A serializable representation of an input partition returned by
  * {@link Batch#planInputPartitions()} and the corresponding ones in streaming .
- *
+ * <p>
  * Note that {@link InputPartition} will be serialized and sent to executors, then
  * {@link PartitionReader} will be created by
  * {@link PartitionReaderFactory#createReader(InputPartition)} or
  * {@link PartitionReaderFactory#createColumnarReader(InputPartition)} on executors to do
  * the actual reading. So {@link InputPartition} must be serializable while {@link PartitionReader}
  * doesn't need to be.
+ *
+ * @since 3.0.0
  */
 @Evolving
 public interface InputPartition extends Serializable {
@@ -40,11 +42,11 @@ public interface InputPartition extends Serializable {
    * faster, but Spark does not guarantee to run the input partition reader on these locations.
    * The implementations should make sure that it can be run on any location.
    * The location is a string representing the host name.
-   *
+   * <p>
    * Note that if a host name cannot be recognized by Spark, it will be ignored as it was not in
    * the returned locations. The default return value is empty string array, which means this
    * input partition's reader has no location preference.
-   *
+   * <p>
    * If this method fails (by throwing an exception), the action will fail and no Spark job will be
    * submitted.
    */

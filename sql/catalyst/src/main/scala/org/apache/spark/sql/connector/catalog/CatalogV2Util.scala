@@ -21,17 +21,47 @@ import java.util
 import java.util.Collections
 
 import scala.collection.JavaConverters._
-import scala.collection.mutable
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{NamedRelation, NoSuchDatabaseException, NoSuchNamespaceException, NoSuchTableException, UnresolvedV2Relation}
-import org.apache.spark.sql.catalyst.plans.logical.AlterTable
+import org.apache.spark.sql.catalyst.plans.logical.{AlterTable, CreateTableAsSelectStatement, CreateTableStatement, ReplaceTableAsSelectStatement, ReplaceTableStatement, SerdeInfo}
 import org.apache.spark.sql.connector.catalog.TableChange._
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
-import org.apache.spark.sql.types.{ArrayType, MapType, StructField, StructType}
+import org.apache.spark.sql.types.{ArrayType, DataType, MapType, NullType, StructField, StructType}
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.util.Utils
 
 private[sql] object CatalogV2Util {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+
+  /**
+   * The list of reserved table properties, which can not be removed or changed directly by
+   * the syntax:
+   * {{
+   *   ALTER TABLE ... SET TBLPROPERTIES ...
+   * }}
+   *
+   * They need specific syntax to modify
+   */
+  val TABLE_RESERVED_PROPERTIES =
+    Seq(TableCatalog.PROP_COMMENT,
+      TableCatalog.PROP_LOCATION,
+      TableCatalog.PROP_PROVIDER,
+      TableCatalog.PROP_OWNER)
+
+  /**
+   * The list of reserved namespace properties, which can not be removed or changed directly by
+   * the syntax:
+   * {{
+   *   ALTER NAMESPACE ... SET PROPERTIES ...
+   * }}
+   *
+   * They need specific syntax to modify
+   */
+  val NAMESPACE_RESERVED_PROPERTIES =
+    Seq(SupportsNamespaces.PROP_COMMENT,
+      SupportsNamespaces.PROP_LOCATION,
+      SupportsNamespaces.PROP_OWNER)
 
   /**
    * Apply properties changes to a map and return the result.
@@ -126,11 +156,12 @@ private[sql] object CatalogV2Util {
 
         case update: UpdateColumnType =>
           replace(schema, update.fieldNames, field => {
-            if (!update.isNullable && field.nullable) {
-              throw new IllegalArgumentException(
-                s"Cannot change optional column to required: $field.name")
-            }
-            Some(StructField(field.name, update.newDataType, update.isNullable, field.metadata))
+            Some(field.copy(dataType = update.newDataType))
+          })
+
+        case update: UpdateColumnNullability =>
+          replace(schema, update.fieldNames, field => {
+            Some(field.copy(nullable = update.nullable))
           })
 
         case update: UpdateColumnComment =>
@@ -256,53 +287,74 @@ private[sql] object CatalogV2Util {
     }
 
   def loadRelation(catalog: CatalogPlugin, ident: Identifier): Option[NamedRelation] = {
-    loadTable(catalog, ident).map(DataSourceV2Relation.create)
+    loadTable(catalog, ident).map(DataSourceV2Relation.create(_, Some(catalog), Some(ident)))
   }
 
   def isSessionCatalog(catalog: CatalogPlugin): Boolean = {
     catalog.name().equalsIgnoreCase(CatalogManager.SESSION_CATALOG_NAME)
   }
 
-  def convertTableProperties(
+  def convertTableProperties(c: CreateTableStatement): Map[String, String] = {
+    convertTableProperties(
+      c.properties, c.options, c.serde, c.location, c.comment, c.provider, c.external)
+  }
+
+  def convertTableProperties(c: CreateTableAsSelectStatement): Map[String, String] = {
+    convertTableProperties(
+      c.properties, c.options, c.serde, c.location, c.comment, c.provider, c.external)
+  }
+
+  def convertTableProperties(r: ReplaceTableStatement): Map[String, String] = {
+    convertTableProperties(r.properties, r.options, r.serde, r.location, r.comment, r.provider)
+  }
+
+  def convertTableProperties(r: ReplaceTableAsSelectStatement): Map[String, String] = {
+    convertTableProperties(r.properties, r.options, r.serde, r.location, r.comment, r.provider)
+  }
+
+  private def convertTableProperties(
       properties: Map[String, String],
       options: Map[String, String],
+      serdeInfo: Option[SerdeInfo],
       location: Option[String],
       comment: Option[String],
-      provider: String): Map[String, String] = {
-    if (options.contains("path") && location.isDefined) {
-      throw new AnalysisException(
-        "LOCATION and 'path' in OPTIONS are both used to indicate the custom table path, " +
-          "you can only specify one of them.")
+      provider: Option[String],
+      external: Boolean = false): Map[String, String] = {
+    properties ++
+      options ++ // to make the transition to the "option." prefix easier, add both
+      options.map { case (key, value) => TableCatalog.OPTION_PREFIX + key -> value } ++
+      convertToProperties(serdeInfo) ++
+      (if (external) Some(TableCatalog.PROP_EXTERNAL -> "true") else None) ++
+      provider.map(TableCatalog.PROP_PROVIDER -> _) ++
+      comment.map(TableCatalog.PROP_COMMENT -> _) ++
+      location.map(TableCatalog.PROP_LOCATION -> _)
+  }
+
+  /**
+   * Converts Hive Serde info to table properties. The mapped property keys are:
+   *  - INPUTFORMAT/OUTPUTFORMAT: hive.input/output-format
+   *  - STORED AS: hive.stored-as
+   *  - ROW FORMAT SERDE: hive.serde
+   *  - SERDEPROPERTIES: add "option." prefix
+   */
+  private def convertToProperties(serdeInfo: Option[SerdeInfo]): Map[String, String] = {
+    serdeInfo match {
+      case Some(s) =>
+        s.formatClasses.map { f =>
+          Map("hive.input-format" -> f.input, "hive.output-format" -> f.output)
+        }.getOrElse(Map.empty) ++
+        s.storedAs.map("hive.stored-as" -> _) ++
+        s.serde.map("hive.serde" -> _) ++
+        s.serdeProperties.map {
+          case (key, value) => TableCatalog.OPTION_PREFIX + key -> value
+        }
+      case None =>
+        Map.empty
     }
+  }
 
-    if ((options.contains(TableCatalog.PROP_COMMENT)
-      || properties.contains(TableCatalog.PROP_COMMENT)) && comment.isDefined) {
-      throw new AnalysisException(
-        s"COMMENT and option/property '${TableCatalog.PROP_COMMENT}' " +
-          s"are both used to set the table comment, you can only specify one of them.")
-    }
-
-    if (options.contains(TableCatalog.PROP_PROVIDER)
-      || properties.contains(TableCatalog.PROP_PROVIDER)) {
-      throw new AnalysisException(
-        "USING and option/property 'provider' are both used to set the provider implementation, " +
-          "you can only specify one of them.")
-    }
-
-    val filteredOptions = options.filterKeys(_ != "path")
-
-    // create table properties from TBLPROPERTIES and OPTIONS clauses
-    val tableProperties = new mutable.HashMap[String, String]()
-    tableProperties ++= properties
-    tableProperties ++= filteredOptions
-
-    // convert USING, LOCATION, and COMMENT clauses to table properties
-    tableProperties += (TableCatalog.PROP_PROVIDER -> provider)
-    comment.map(text => tableProperties += (TableCatalog.PROP_COMMENT -> text))
-    location.orElse(options.get("path")).map(
-      loc => tableProperties += (TableCatalog.PROP_LOCATION -> loc))
-
-    tableProperties.toMap
+  def withDefaultOwnership(properties: Map[String, String]): Map[String, String] = {
+    properties ++ Map(TableCatalog.PROP_OWNER -> Utils.getCurrentUserName())
   }
 
   def createAlterTable(
@@ -314,5 +366,33 @@ private[sql] object CatalogV2Util {
     val ident = tableName.asIdentifier
     val unresolved = UnresolvedV2Relation(originalNameParts, tableCatalog, ident)
     AlterTable(tableCatalog, ident, unresolved, changes)
+  }
+
+  def getTableProviderCatalog(
+      provider: SupportsCatalogOptions,
+      catalogManager: CatalogManager,
+      options: CaseInsensitiveStringMap): TableCatalog = {
+    Option(provider.extractCatalog(options))
+      .map(catalogManager.catalog)
+      .getOrElse(catalogManager.v2SessionCatalog)
+      .asTableCatalog
+  }
+
+  def failNullType(dt: DataType): Unit = {
+    def containsNullType(dt: DataType): Boolean = dt match {
+      case ArrayType(et, _) => containsNullType(et)
+      case MapType(kt, vt, _) => containsNullType(kt) || containsNullType(vt)
+      case StructType(fields) => fields.exists(f => containsNullType(f.dataType))
+      case _ => dt.isInstanceOf[NullType]
+    }
+    if (containsNullType(dt)) {
+      throw QueryCompilationErrors.cannotCreateTablesWithNullTypeError()
+    }
+  }
+
+  def assertNoNullTypeInSchema(schema: StructType): Unit = {
+    schema.foreach { f =>
+      failNullType(f.dataType)
+    }
   }
 }

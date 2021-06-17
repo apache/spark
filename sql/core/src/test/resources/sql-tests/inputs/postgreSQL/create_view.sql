@@ -41,7 +41,7 @@ DROP TABLE emp;
 -- These views are left around mainly to exercise special cases in pg_dump.
 
 -- [SPARK-19842] Informational Referential Integrity Constraints Support in Spark
-CREATE TABLE view_base_table (key int /* PRIMARY KEY */, data varchar(20));
+CREATE TABLE view_base_table (key int /* PRIMARY KEY */, data varchar(20)) USING PARQUET;
 --
 CREATE VIEW key_dependent_view AS
    SELECT * FROM view_base_table GROUP BY key;
@@ -636,7 +636,7 @@ DESC TABLE vv6;
 -- Check cases involving dropped/altered columns in a function's rowtype result
 --
 
--- Skip the tests below because Spark does't support PostgreSQL-specific UDFs/transactions
+-- Skip the tests below because Spark doesn't support PostgreSQL-specific UDFs/transactions
 -- create table tt14t (f1 text, f2 text, f3 text, f4 text);
 -- insert into tt14t values('foo', 'bar', 'baz', '42');
 --

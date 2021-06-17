@@ -28,13 +28,14 @@ import org.apache.spark.sql.types._
 class ImputerSuite extends MLTest with DefaultReadWriteTest {
 
   test("Imputer for Double with default missing Value NaN") {
-    val df = spark.createDataFrame( Seq(
-      (0, 1.0, 4.0, 1.0, 1.0, 4.0, 4.0),
-      (1, 11.0, 12.0, 11.0, 11.0, 12.0, 12.0),
-      (2, 3.0, Double.NaN, 3.0, 3.0, 10.0, 12.0),
-      (3, Double.NaN, 14.0, 5.0, 3.0, 14.0, 14.0)
-    )).toDF("id", "value1", "value2", "expected_mean_value1", "expected_median_value1",
-      "expected_mean_value2", "expected_median_value2")
+    val df = spark.createDataFrame(Seq(
+      (0, 1.0, 4.0, 1.0, 1.0, 1.0, 4.0, 4.0, 4.0),
+      (1, 11.0, 12.0, 11.0, 11.0, 11.0, 12.0, 12.0, 12.0),
+      (2, 3.0, Double.NaN, 3.0, 3.0, 3.0, 10.0, 12.0, 4.0),
+      (3, Double.NaN, 14.0, 5.0, 3.0, 1.0, 14.0, 14.0, 14.0)
+    )).toDF("id", "value1", "value2",
+      "expected_mean_value1", "expected_median_value1", "expected_mode_value1",
+      "expected_mean_value2", "expected_median_value2", "expected_mode_value2")
     val imputer = new Imputer()
       .setInputCols(Array("value1", "value2"))
       .setOutputCols(Array("out1", "out2"))
@@ -42,23 +43,25 @@ class ImputerSuite extends MLTest with DefaultReadWriteTest {
   }
 
   test("Single Column: Imputer for Double with default missing Value NaN") {
-    val df1 = spark.createDataFrame( Seq(
-      (0, 1.0, 1.0, 1.0),
-      (1, 11.0, 11.0, 11.0),
-      (2, 3.0, 3.0, 3.0),
-      (3, Double.NaN, 5.0, 3.0)
-    )).toDF("id", "value", "expected_mean_value", "expected_median_value")
+    val df1 = spark.createDataFrame(Seq(
+      (0, 1.0, 1.0, 1.0, 1.0),
+      (1, 11.0, 11.0, 11.0, 11.0),
+      (2, 3.0, 3.0, 3.0, 3.0),
+      (3, Double.NaN, 5.0, 3.0, 1.0)
+    )).toDF("id", "value",
+      "expected_mean_value", "expected_median_value", "expected_mode_value")
     val imputer1 = new Imputer()
       .setInputCol("value")
       .setOutputCol("out")
     ImputerSuite.iterateStrategyTest(false, imputer1, df1)
 
-    val df2 = spark.createDataFrame( Seq(
-      (0, 4.0, 4.0, 4.0),
-      (1, 12.0, 12.0, 12.0),
-      (2, Double.NaN, 10.0, 12.0),
-      (3, 14.0, 14.0, 14.0)
-    )).toDF("id", "value", "expected_mean_value", "expected_median_value")
+    val df2 = spark.createDataFrame(Seq(
+      (0, 4.0, 4.0, 4.0, 4.0),
+      (1, 12.0, 12.0, 12.0, 12.0),
+      (2, Double.NaN, 10.0, 12.0, 4.0),
+      (3, 14.0, 14.0, 14.0, 14.0)
+    )).toDF("id", "value",
+      "expected_mean_value", "expected_median_value", "expected_mode_value")
     val imputer2 = new Imputer()
       .setInputCol("value")
       .setOutputCol("out")
@@ -66,12 +69,13 @@ class ImputerSuite extends MLTest with DefaultReadWriteTest {
   }
 
   test("Imputer should handle NaNs when computing surrogate value, if missingValue is not NaN") {
-    val df = spark.createDataFrame( Seq(
-      (0, 1.0, 1.0, 1.0),
-      (1, 3.0, 3.0, 3.0),
-      (2, Double.NaN, Double.NaN, Double.NaN),
-      (3, -1.0, 2.0, 1.0)
-    )).toDF("id", "value", "expected_mean_value", "expected_median_value")
+    val df = spark.createDataFrame(Seq(
+      (0, 1.0, 1.0, 1.0, 1.0),
+      (1, 3.0, 3.0, 3.0, 3.0),
+      (2, Double.NaN, Double.NaN, Double.NaN, Double.NaN),
+      (3, -1.0, 2.0, 1.0, 1.0)
+    )).toDF("id", "value",
+      "expected_mean_value", "expected_median_value", "expected_mode_value")
     val imputer = new Imputer().setInputCols(Array("value")).setOutputCols(Array("out"))
       .setMissingValue(-1.0)
     ImputerSuite.iterateStrategyTest(true, imputer, df)
@@ -79,64 +83,69 @@ class ImputerSuite extends MLTest with DefaultReadWriteTest {
 
   test("Single Column: Imputer should handle NaNs when computing surrogate value," +
     " if missingValue is not NaN") {
-    val df = spark.createDataFrame( Seq(
-      (0, 1.0, 1.0, 1.0),
-      (1, 3.0, 3.0, 3.0),
-      (2, Double.NaN, Double.NaN, Double.NaN),
-      (3, -1.0, 2.0, 1.0)
-    )).toDF("id", "value", "expected_mean_value", "expected_median_value")
+    val df = spark.createDataFrame(Seq(
+      (0, 1.0, 1.0, 1.0, 1.0),
+      (1, 3.0, 3.0, 3.0, 3.0),
+      (2, Double.NaN, Double.NaN, Double.NaN, Double.NaN),
+      (3, -1.0, 2.0, 1.0, 1.0)
+    )).toDF("id", "value",
+      "expected_mean_value", "expected_median_value", "expected_mode_value")
     val imputer = new Imputer().setInputCol("value").setOutputCol("out")
       .setMissingValue(-1.0)
     ImputerSuite.iterateStrategyTest(false, imputer, df)
   }
 
   test("Imputer for Float with missing Value -1.0") {
-    val df = spark.createDataFrame( Seq(
-      (0, 1.0F, 1.0F, 1.0F),
-      (1, 3.0F, 3.0F, 3.0F),
-      (2, 10.0F, 10.0F, 10.0F),
-      (3, 10.0F, 10.0F, 10.0F),
-      (4, -1.0F, 6.0F, 3.0F)
-    )).toDF("id", "value", "expected_mean_value", "expected_median_value")
+    val df = spark.createDataFrame(Seq(
+      (0, 1.0F, 1.0F, 1.0F, 1.0F),
+      (1, 3.0F, 3.0F, 3.0F, 3.0F),
+      (2, 10.0F, 10.0F, 10.0F, 10.0F),
+      (3, 10.0F, 10.0F, 10.0F, 10.0F),
+      (4, -1.0F, 6.0F, 3.0F, 10.0F)
+    )).toDF("id", "value",
+      "expected_mean_value", "expected_median_value", "expected_mode_value")
     val imputer = new Imputer().setInputCols(Array("value")).setOutputCols(Array("out"))
       .setMissingValue(-1)
     ImputerSuite.iterateStrategyTest(true, imputer, df)
   }
 
   test("Single Column: Imputer for Float with missing Value -1.0") {
-    val df = spark.createDataFrame( Seq(
-      (0, 1.0F, 1.0F, 1.0F),
-      (1, 3.0F, 3.0F, 3.0F),
-      (2, 10.0F, 10.0F, 10.0F),
-      (3, 10.0F, 10.0F, 10.0F),
-      (4, -1.0F, 6.0F, 3.0F)
-    )).toDF("id", "value", "expected_mean_value", "expected_median_value")
+    val df = spark.createDataFrame(Seq(
+      (0, 1.0F, 1.0F, 1.0F, 1.0F),
+      (1, 3.0F, 3.0F, 3.0F, 3.0F),
+      (2, 10.0F, 10.0F, 10.0F, 10.0F),
+      (3, 10.0F, 10.0F, 10.0F, 10.0F),
+      (4, -1.0F, 6.0F, 3.0F, 10.0F)
+    )).toDF("id", "value",
+      "expected_mean_value", "expected_median_value", "expected_mode_value")
     val imputer = new Imputer().setInputCol("value").setOutputCol("out")
       .setMissingValue(-1)
     ImputerSuite.iterateStrategyTest(false, imputer, df)
   }
 
   test("Imputer should impute null as well as 'missingValue'") {
-    val rawDf = spark.createDataFrame( Seq(
-      (0, 4.0, 4.0, 4.0),
-      (1, 10.0, 10.0, 10.0),
-      (2, 10.0, 10.0, 10.0),
-      (3, Double.NaN, 8.0, 10.0),
-      (4, -1.0, 8.0, 10.0)
-    )).toDF("id", "rawValue", "expected_mean_value", "expected_median_value")
+    val rawDf = spark.createDataFrame(Seq(
+      (0, 4.0, 4.0, 4.0, 4.0),
+      (1, 10.0, 10.0, 10.0, 10.0),
+      (2, 10.0, 10.0, 10.0, 10.0),
+      (3, Double.NaN, 8.0, 10.0, 10.0),
+      (4, -1.0, 8.0, 10.0, 10.0)
+    )).toDF("id", "rawValue",
+      "expected_mean_value", "expected_median_value", "expected_mode_value")
     val df = rawDf.selectExpr("*", "IF(rawValue=-1.0, null, rawValue) as value")
     val imputer = new Imputer().setInputCols(Array("value")).setOutputCols(Array("out"))
     ImputerSuite.iterateStrategyTest(true, imputer, df)
   }
 
   test("Single Column: Imputer should impute null as well as 'missingValue'") {
-    val rawDf = spark.createDataFrame( Seq(
-      (0, 4.0, 4.0, 4.0),
-      (1, 10.0, 10.0, 10.0),
-      (2, 10.0, 10.0, 10.0),
-      (3, Double.NaN, 8.0, 10.0),
-      (4, -1.0, 8.0, 10.0)
-    )).toDF("id", "rawValue", "expected_mean_value", "expected_median_value")
+    val rawDf = spark.createDataFrame(Seq(
+      (0, 4.0, 4.0, 4.0, 4.0),
+      (1, 10.0, 10.0, 10.0, 10.0),
+      (2, 10.0, 10.0, 10.0, 10.0),
+      (3, Double.NaN, 8.0, 10.0, 10.0),
+      (4, -1.0, 8.0, 10.0, 10.0)
+    )).toDF("id", "rawValue",
+      "expected_mean_value", "expected_median_value", "expected_mode_value")
     val df = rawDf.selectExpr("*", "IF(rawValue=-1.0, null, rawValue) as value")
     val imputer = new Imputer().setInputCol("value").setOutputCol("out")
     ImputerSuite.iterateStrategyTest(false, imputer, df)
@@ -187,7 +196,7 @@ class ImputerSuite extends MLTest with DefaultReadWriteTest {
   }
 
   test("Imputer throws exception when surrogate cannot be computed") {
-    val df = spark.createDataFrame( Seq(
+    val df = spark.createDataFrame(Seq(
       (0, Double.NaN, 1.0, 1.0),
       (1, Double.NaN, 3.0, 3.0),
       (2, Double.NaN, Double.NaN, Double.NaN)
@@ -205,12 +214,13 @@ class ImputerSuite extends MLTest with DefaultReadWriteTest {
   }
 
   test("Single Column: Imputer throws exception when surrogate cannot be computed") {
-    val df = spark.createDataFrame( Seq(
-      (0, Double.NaN, 1.0, 1.0),
-      (1, Double.NaN, 3.0, 3.0),
-      (2, Double.NaN, Double.NaN, Double.NaN)
-    )).toDF("id", "value", "expected_mean_value", "expected_median_value")
-    Seq("mean", "median").foreach { strategy =>
+    val df = spark.createDataFrame(Seq(
+      (0, Double.NaN, 1.0, 1.0, 1.0),
+      (1, Double.NaN, 3.0, 3.0, 3.0),
+      (2, Double.NaN, Double.NaN, Double.NaN, Double.NaN)
+    )).toDF("id", "value",
+      "expected_mean_value", "expected_median_value", "expected_mode_value")
+    Seq("mean", "median", "mode").foreach { strategy =>
       val imputer = new Imputer().setInputCol("value").setOutputCol("out")
         .setStrategy(strategy)
       withClue("Imputer should fail all the values are invalid") {
@@ -223,12 +233,12 @@ class ImputerSuite extends MLTest with DefaultReadWriteTest {
   }
 
   test("Imputer input & output column validation") {
-    val df = spark.createDataFrame( Seq(
+    val df = spark.createDataFrame(Seq(
       (0, 1.0, 1.0, 1.0),
       (1, Double.NaN, 3.0, 3.0),
       (2, Double.NaN, Double.NaN, Double.NaN)
     )).toDF("id", "value1", "value2", "value3")
-    Seq("mean", "median").foreach { strategy =>
+    Seq("mean", "median", "mode").foreach { strategy =>
       withClue("Imputer should fail if inputCols and outputCols are different length") {
         val e: IllegalArgumentException = intercept[IllegalArgumentException] {
           val imputer = new Imputer().setStrategy(strategy)
@@ -306,13 +316,13 @@ class ImputerSuite extends MLTest with DefaultReadWriteTest {
   }
 
   test("Imputer for IntegerType with default missing value null") {
-
-    val df = spark.createDataFrame(Seq[(Integer, Integer, Integer)](
-      (1, 1, 1),
-      (11, 11, 11),
-      (3, 3, 3),
-      (null, 5, 3)
-    )).toDF("value1", "expected_mean_value1", "expected_median_value1")
+    val df = spark.createDataFrame(Seq[(Integer, Integer, Integer, Integer)](
+      (1, 1, 1, 1),
+      (11, 11, 11, 11),
+      (3, 3, 3, 3),
+      (null, 5, 3, 1)
+    )).toDF("value1",
+      "expected_mean_value1", "expected_median_value1", "expected_mode_value1")
 
     val imputer = new Imputer()
       .setInputCols(Array("value1"))
@@ -327,12 +337,13 @@ class ImputerSuite extends MLTest with DefaultReadWriteTest {
   }
 
   test("Single Column Imputer for IntegerType with default missing value null") {
-    val df = spark.createDataFrame(Seq[(Integer, Integer, Integer)](
-      (1, 1, 1),
-      (11, 11, 11),
-      (3, 3, 3),
-      (null, 5, 3)
-    )).toDF("value", "expected_mean_value", "expected_median_value")
+    val df = spark.createDataFrame(Seq[(Integer, Integer, Integer, Integer)](
+      (1, 1, 1, 1),
+      (11, 11, 11, 11),
+      (3, 3, 3, 3),
+      (null, 5, 3, 1)
+    )).toDF("value",
+      "expected_mean_value", "expected_median_value", "expected_mode_value")
 
     val imputer = new Imputer()
       .setInputCol("value")
@@ -347,13 +358,13 @@ class ImputerSuite extends MLTest with DefaultReadWriteTest {
   }
 
   test("Imputer for IntegerType with missing value -1") {
-
-    val df = spark.createDataFrame(Seq[(Integer, Integer, Integer)](
-      (1, 1, 1),
-      (11, 11, 11),
-      (3, 3, 3),
-      (-1, 5, 3)
-    )).toDF("value1", "expected_mean_value1", "expected_median_value1")
+    val df = spark.createDataFrame(Seq[(Integer, Integer, Integer, Integer)](
+      (1, 1, 1, 1),
+      (11, 11, 11, 11),
+      (3, 3, 3, 3),
+      (-1, 5, 3, 1)
+    )).toDF("value1",
+      "expected_mean_value1", "expected_median_value1", "expected_mode_value1")
 
     val imputer = new Imputer()
       .setInputCols(Array("value1"))
@@ -369,12 +380,13 @@ class ImputerSuite extends MLTest with DefaultReadWriteTest {
   }
 
   test("Single Column: Imputer for IntegerType with missing value -1") {
-    val df = spark.createDataFrame(Seq[(Integer, Integer, Integer)](
-      (1, 1, 1),
-      (11, 11, 11),
-      (3, 3, 3),
-      (-1, 5, 3)
-    )).toDF("value", "expected_mean_value", "expected_median_value")
+    val df = spark.createDataFrame(Seq[(Integer, Integer, Integer, Integer)](
+      (1, 1, 1, 1),
+      (11, 11, 11, 11),
+      (3, 3, 3, 3),
+      (-1, 5, 3, 1)
+    )).toDF("value",
+      "expected_mean_value", "expected_median_value", "expected_mode_value")
 
     val imputer = new Imputer()
       .setInputCol("value")
@@ -402,13 +414,13 @@ class ImputerSuite extends MLTest with DefaultReadWriteTest {
   }
 
   test("Compare single/multiple column(s) Imputer in pipeline") {
-    val df = spark.createDataFrame( Seq(
+    val df = spark.createDataFrame(Seq(
       (0, 1.0, 4.0),
       (1, 11.0, 12.0),
       (2, 3.0, Double.NaN),
       (3, Double.NaN, 14.0)
     )).toDF("id", "value1", "value2")
-    Seq("mean", "median").foreach { strategy =>
+    Seq("mean", "median", "mode").foreach { strategy =>
       val multiColsImputer = new Imputer()
         .setInputCols(Array("value1", "value2"))
         .setOutputCols(Array("result1", "result2"))
@@ -450,11 +462,12 @@ class ImputerSuite extends MLTest with DefaultReadWriteTest {
 object ImputerSuite {
 
   /**
-   * Imputation strategy. Available options are ["mean", "median"].
-   * @param df DataFrame with columns "id", "value", "expected_mean", "expected_median"
+   * Imputation strategy. Available options are ["mean", "median", "mode"].
+   * @param df DataFrame with columns "id", "value", "expected_mean", "expected_median",
+   *           "expected_mode".
    */
   def iterateStrategyTest(isMultiCol: Boolean, imputer: Imputer, df: DataFrame): Unit = {
-    Seq("mean", "median").foreach { strategy =>
+    Seq("mean", "median", "mode").foreach { strategy =>
       imputer.setStrategy(strategy)
       val model = imputer.fit(df)
       val resultDF = model.transform(df)

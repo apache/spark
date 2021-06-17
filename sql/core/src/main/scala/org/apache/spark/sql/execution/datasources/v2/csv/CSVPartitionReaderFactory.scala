@@ -24,6 +24,7 @@ import org.apache.spark.sql.execution.datasources.PartitionedFile
 import org.apache.spark.sql.execution.datasources.csv.CSVDataSource
 import org.apache.spark.sql.execution.datasources.v2._
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.SerializableConfiguration
 
@@ -43,7 +44,8 @@ case class CSVPartitionReaderFactory(
     dataSchema: StructType,
     readDataSchema: StructType,
     partitionSchema: StructType,
-    parsedOptions: CSVOptions) extends FilePartitionReaderFactory {
+    parsedOptions: CSVOptions,
+    filters: Seq[Filter]) extends FilePartitionReaderFactory {
   private val columnPruning = sqlConf.csvColumnPruning
 
   override def buildReader(file: PartitionedFile): PartitionReader[InternalRow] = {
@@ -55,7 +57,8 @@ case class CSVPartitionReaderFactory(
     val parser = new UnivocityParser(
       actualDataSchema,
       actualReadDataSchema,
-      parsedOptions)
+      parsedOptions,
+      filters)
     val schema = if (columnPruning) actualReadDataSchema else actualDataSchema
     val isStartOfFile = file.start == 0
     val headerChecker = new CSVHeaderChecker(

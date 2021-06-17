@@ -38,7 +38,9 @@ import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
-import org.apache.spark.sql.execution.{ProjectExec, SortExec, SparkPlan, SQLExecution}
+import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.execution.{ProjectExec, SortExec, SparkPlan, SQLExecution, UnsafeExternalRowSorter}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StringType
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.{SerializableConfiguration, Utils}
@@ -66,7 +68,15 @@ object FileFormatWriter extends Logging {
            |}""".stripMargin
       })
     }
+
+    override protected def withNewChildInternal(newChild: Expression): Empty2Null =
+      copy(child = newChild)
   }
+
+  /** Describes how concurrent output writers should be executed. */
+  case class ConcurrentOutputWriterSpec(
+      maxWriters: Int,
+      createSorter: () => UnsafeExternalRowSorter)
 
   /**
    * Basic work flow of this command is:
@@ -132,7 +142,7 @@ object FileFormatWriter extends Logging {
       fileFormat.prepareWrite(sparkSession, job, caseInsensitiveOptions, dataSchema)
 
     val description = new WriteJobDescription(
-      uuid = UUID.randomUUID().toString,
+      uuid = UUID.randomUUID.toString,
       serializableHadoopConf = new SerializableConfiguration(job.getConfiguration),
       outputWriterFactory = outputWriterFactory,
       allColumns = outputSpec.outputColumns,
@@ -163,23 +173,36 @@ object FileFormatWriter extends Logging {
 
     SQLExecution.checkSQLExecutionId(sparkSession)
 
+    // propagate the description UUID into the jobs, so that committers
+    // get an ID guaranteed to be unique.
+    job.getConfiguration.set("spark.sql.sources.writeJobUUID", description.uuid)
+
     // This call shouldn't be put into the `try` block below because it only initializes and
     // prepares the job, any exception thrown from here shouldn't cause abortJob() to be called.
     committer.setupJob(job)
 
     try {
-      val rdd = if (orderingMatched) {
-        empty2NullPlan.execute()
+      val (rdd, concurrentOutputWriterSpec) = if (orderingMatched) {
+        (empty2NullPlan.execute(), None)
       } else {
         // SPARK-21165: the `requiredOrdering` is based on the attributes from analyzed plan, and
         // the physical plan may have different attribute ids due to optimizer removing some
         // aliases. Here we bind the expression ahead to avoid potential attribute ids mismatch.
         val orderingExpr = bindReferences(
           requiredOrdering.map(SortOrder(_, Ascending)), outputSpec.outputColumns)
-        SortExec(
+        val sortPlan = SortExec(
           orderingExpr,
           global = false,
-          child = empty2NullPlan).execute()
+          child = empty2NullPlan)
+
+        val maxWriters = sparkSession.sessionState.conf.maxConcurrentOutputFileWriters
+        val concurrentWritersEnabled = maxWriters > 0 && sortColumns.isEmpty
+        if (concurrentWritersEnabled) {
+          (empty2NullPlan.execute(),
+            Some(ConcurrentOutputWriterSpec(maxWriters, () => sortPlan.createSorter())))
+        } else {
+          (sortPlan.execute(), None)
+        }
       }
 
       // SPARK-23271 If we are attempting to write a zero partition rdd, create a dummy single
@@ -202,7 +225,8 @@ object FileFormatWriter extends Logging {
             sparkPartitionId = taskContext.partitionId(),
             sparkAttemptNumber = taskContext.taskAttemptId().toInt & Integer.MAX_VALUE,
             committer,
-            iterator = iter)
+            iterator = iter,
+            concurrentOutputWriterSpec = concurrentOutputWriterSpec)
         },
         rddWithNonEmptyPartitions.partitions.indices,
         (index, res: WriteTaskResult) => {
@@ -212,8 +236,9 @@ object FileFormatWriter extends Logging {
 
       val commitMsgs = ret.map(_.commitMsg)
 
-      committer.commitJob(job, commitMsgs)
-      logInfo(s"Write Job ${description.uuid} committed.")
+      logInfo(s"Start to commit write Job ${description.uuid}.")
+      val (_, duration) = Utils.timeTakenMs { committer.commitJob(job, commitMsgs) }
+      logInfo(s"Write Job ${description.uuid} committed. Elapsed time: $duration ms.")
 
       processStats(description.statsTrackers, ret.map(_.summary.stats))
       logInfo(s"Finished processing stats for write job ${description.uuid}.")
@@ -223,7 +248,7 @@ object FileFormatWriter extends Logging {
     } catch { case cause: Throwable =>
       logError(s"Aborting job ${description.uuid}.", cause)
       committer.abortJob(job)
-      throw new SparkException("Job aborted.", cause)
+      throw QueryExecutionErrors.jobAbortedError(cause)
     }
   }
 
@@ -235,7 +260,8 @@ object FileFormatWriter extends Logging {
       sparkPartitionId: Int,
       sparkAttemptNumber: Int,
       committer: FileCommitProtocol,
-      iterator: Iterator[InternalRow]): WriteTaskResult = {
+      iterator: Iterator[InternalRow],
+      concurrentOutputWriterSpec: Option[ConcurrentOutputWriterSpec]): WriteTaskResult = {
 
     val jobId = SparkHadoopWriterUtils.createJobID(new Date(jobIdInstant), sparkStageId)
     val taskId = new TaskID(jobId, TaskType.MAP, sparkPartitionId)
@@ -263,15 +289,19 @@ object FileFormatWriter extends Logging {
       } else if (description.partitionColumns.isEmpty && description.bucketIdExpression.isEmpty) {
         new SingleDirectoryDataWriter(description, taskAttemptContext, committer)
       } else {
-        new DynamicPartitionDataWriter(description, taskAttemptContext, committer)
+        concurrentOutputWriterSpec match {
+          case Some(spec) =>
+            new DynamicPartitionDataConcurrentWriter(
+              description, taskAttemptContext, committer, spec)
+          case _ =>
+            new DynamicPartitionDataSingleWriter(description, taskAttemptContext, committer)
+        }
       }
 
     try {
       Utils.tryWithSafeFinallyAndFailureCallbacks(block = {
         // Execute the task to write rows out and commit the task.
-        while (iterator.hasNext) {
-          dataWriter.write(iterator.next())
-        }
+        dataWriter.writeWithIterator(iterator)
         dataWriter.commit()
       })(catchBlock = {
         // If there is an error, abort the task
@@ -283,12 +313,12 @@ object FileFormatWriter extends Logging {
     } catch {
       case e: FetchFailedException =>
         throw e
-      case f: FileAlreadyExistsException =>
+      case f: FileAlreadyExistsException if SQLConf.get.fastFailFileFormatOutput =>
         // If any output file to write already exists, it does not make sense to re-run this task.
         // We throw the exception and let Executor throw ExceptionFailure to abort the job.
         throw new TaskOutputFileAlreadyExistException(f)
       case t: Throwable =>
-        throw new SparkException("Task failed while writing rows.", t)
+        throw QueryExecutionErrors.taskFailedWhileWritingRowsError(t)
     }
   }
 

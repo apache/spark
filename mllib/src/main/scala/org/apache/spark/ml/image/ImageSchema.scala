@@ -133,7 +133,7 @@ object ImageSchema {
     val img = try {
       ImageIO.read(new ByteArrayInputStream(bytes))
     } catch {
-      // Catch runtime exception because `ImageIO` may throw unexcepted `RuntimeException`.
+      // Catch runtime exception because `ImageIO` may throw unexpected `RuntimeException`.
       // But do not catch the declared `IOException` (regarded as FileSystem failure)
       case _: RuntimeException => null
     }

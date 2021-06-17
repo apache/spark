@@ -24,8 +24,7 @@
 #    Moved functools import to the top of the file.
 #    Changed assert to a ValueError.
 #    Changed iter[items|keys] to [items|keys], for python 3
-#     compatibility. I don't think it matters for python 2 these are
-#     now lists instead of iterables.
+#     compatibility.
 #    Copy the input so as to leave it unmodified.
 #    Renamed function from toposort2 to toposort.
 #    Handle empty input.

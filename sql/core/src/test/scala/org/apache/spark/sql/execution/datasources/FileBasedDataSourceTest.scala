@@ -22,8 +22,10 @@ import java.io.File
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 
-import org.apache.spark.sql.{DataFrame, SaveMode}
+import org.apache.spark.sql.{DataFrame, Row, SaveMode}
+import org.apache.spark.sql.functions.struct
 import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.sql.types.StructType
 
 /**
  * A helper trait that provides convenient facilities for file-based data source testing.
@@ -102,5 +104,41 @@ private[sql] trait FileBasedDataSourceTest extends SQLTestUtils {
   protected def makeDataSourceFile[T <: Product : ClassTag : TypeTag](
       df: DataFrame, path: File): Unit = {
     df.write.mode(SaveMode.Overwrite).format(dataSourceName).save(path.getCanonicalPath)
+  }
+
+  /**
+   * Takes single level `inputDF` dataframe to generate multi-level nested
+   * dataframes as new test data. It tests both non-nested and nested dataframes
+   * which are written and read back with specified datasource.
+   */
+  protected def withNestedDataFrame(inputDF: DataFrame): Seq[(DataFrame, String, Any => Any)] = {
+    assert(inputDF.schema.fields.length == 1)
+    assert(!inputDF.schema.fields.head.dataType.isInstanceOf[StructType])
+    val df = inputDF.toDF("temp")
+    Seq(
+      (
+        df.withColumnRenamed("temp", "a"),
+        "a", // zero nesting
+        (x: Any) => x),
+      (
+        df.withColumn("a", struct(df("temp") as "b")).drop("temp"),
+        "a.b", // one level nesting
+        (x: Any) => Row(x)),
+      (
+        df.withColumn("a", struct(struct(df("temp") as "c") as "b")).drop("temp"),
+        "a.b.c", // two level nesting
+        (x: Any) => Row(Row(x))
+      ),
+      (
+        df.withColumnRenamed("temp", "a.b"),
+        "`a.b`", // zero nesting with column name containing `dots`
+        (x: Any) => x
+      ),
+      (
+        df.withColumn("a.b", struct(df("temp") as "c.d") ).drop("temp"),
+        "`a.b`.`c.d`", // one level nesting with column names containing `dots`
+        (x: Any) => Row(x)
+      )
+    )
   }
 }

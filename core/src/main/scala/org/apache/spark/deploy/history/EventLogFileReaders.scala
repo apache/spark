@@ -116,7 +116,7 @@ object EventLogFileReader {
 
   def apply(fs: FileSystem, status: FileStatus): Option[EventLogFileReader] = {
     if (isSingleEventLog(status)) {
-      Some(new SingleFileEventLogFileReader(fs, status.getPath))
+      Some(new SingleFileEventLogFileReader(fs, status.getPath, Option(status)))
     } else if (isRollingEventLogs(status)) {
       Some(new RollingEventLogFilesFileReader(fs, status.getPath))
     } else {
@@ -164,16 +164,20 @@ object EventLogFileReader {
  * FileNotFoundException could occur if the log file is renamed before getting the
  * status of log file.
  */
-class SingleFileEventLogFileReader(
+private[history] class SingleFileEventLogFileReader(
     fs: FileSystem,
-    path: Path) extends EventLogFileReader(fs, path) {
-  private lazy val status = fileSystem.getFileStatus(rootPath)
+    path: Path,
+    maybeStatus: Option[FileStatus]) extends EventLogFileReader(fs, path) {
+  private lazy val status = maybeStatus.getOrElse(fileSystem.getFileStatus(rootPath))
+
+  def this(fs: FileSystem, path: Path) = this(fs, path, None)
 
   override def lastIndex: Option[Long] = None
 
   override def fileSizeForLastIndex: Long = status.getLen
 
-  override def completed: Boolean = !rootPath.getName.endsWith(EventLogFileWriter.IN_PROGRESS)
+  override def completed: Boolean = !rootPath.getName.stripSuffix(EventLogFileWriter.COMPACTED)
+    .endsWith(EventLogFileWriter.IN_PROGRESS)
 
   override def fileSizeForLastIndexForDFS: Option[Long] = {
     if (completed) {
@@ -202,7 +206,7 @@ class SingleFileEventLogFileReader(
  * This reader lists the files only once; if caller would like to play with updated list,
  * it needs to create another reader instance.
  */
-class RollingEventLogFilesFileReader(
+private[history] class RollingEventLogFilesFileReader(
     fs: FileSystem,
     path: Path) extends EventLogFileReader(fs, path) {
   import RollingEventLogFilesWriter._
@@ -218,15 +222,23 @@ class RollingEventLogFilesFileReader(
 
   private lazy val eventLogFiles: Seq[FileStatus] = {
     val eventLogFiles = files.filter(isEventLogFile).sortBy { status =>
-      getIndex(status.getPath.getName)
+      val filePath = status.getPath
+      var idx = getEventLogFileIndex(filePath.getName).toDouble
+      // trick to place compacted file later than normal file if index is same.
+      if (EventLogFileWriter.isCompacted(filePath)) {
+        idx += 0.1
+      }
+      idx
     }
-    val indices = eventLogFiles.map { file => getIndex(file.getPath.getName) }.sorted
+    val filesToRead = dropBeforeLastCompactFile(eventLogFiles)
+    val indices = filesToRead.map { file => getEventLogFileIndex(file.getPath.getName) }
     require((indices.head to indices.last) == indices, "Found missing event log file, expected" +
-      s" indices: ${(indices.head to indices.last)}, actual: ${indices}")
-    eventLogFiles
+      s" indices: ${indices.head to indices.last}, actual: ${indices}")
+    filesToRead
   }
 
-  override def lastIndex: Option[Long] = Some(getIndex(lastEventLogFile.getPath.getName))
+  override def lastIndex: Option[Long] = Some(
+    getEventLogFileIndex(lastEventLogFile.getPath.getName))
 
   override def fileSizeForLastIndex: Long = lastEventLogFile.getLen
 
@@ -261,4 +273,11 @@ class RollingEventLogFilesFileReader(
   override def totalSize: Long = eventLogFiles.map(_.getLen).sum
 
   private def lastEventLogFile: FileStatus = eventLogFiles.last
+
+  private def dropBeforeLastCompactFile(eventLogFiles: Seq[FileStatus]): Seq[FileStatus] = {
+    val lastCompactedFileIdx = eventLogFiles.lastIndexWhere { fs =>
+      EventLogFileWriter.isCompacted(fs.getPath)
+    }
+    eventLogFiles.drop(lastCompactedFileIdx)
+  }
 }

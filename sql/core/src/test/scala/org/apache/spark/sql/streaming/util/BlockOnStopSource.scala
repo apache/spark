@@ -25,11 +25,12 @@ import scala.collection.JavaConverters._
 import org.apache.zookeeper.KeeperException.UnimplementedException
 
 import org.apache.spark.sql.{DataFrame, Row, SparkSession, SQLContext}
-import org.apache.spark.sql.connector.catalog.{SupportsRead, Table, TableCapability, TableProvider}
+import org.apache.spark.sql.connector.catalog.{SupportsRead, Table, TableCapability}
 import org.apache.spark.sql.connector.catalog.TableCapability.CONTINUOUS_READ
 import org.apache.spark.sql.connector.read.{streaming, InputPartition, Scan, ScanBuilder}
 import org.apache.spark.sql.connector.read.streaming.{ContinuousPartitionReaderFactory, ContinuousStream, PartitionOffset}
 import org.apache.spark.sql.execution.streaming.{LongOffset, Offset, Source}
+import org.apache.spark.sql.internal.connector.SimpleTableProvider
 import org.apache.spark.sql.sources.StreamSourceProvider
 import org.apache.spark.sql.types.{LongType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -54,7 +55,7 @@ object BlockOnStopSourceProvider {
   }
 }
 
-class BlockOnStopSourceProvider extends StreamSourceProvider with TableProvider {
+class BlockOnStopSourceProvider extends StreamSourceProvider with SimpleTableProvider {
   override def getTable(options: CaseInsensitiveStringMap): Table = {
     new BlockOnStopSourceTable(BlockOnStopSourceProvider._latch)
   }

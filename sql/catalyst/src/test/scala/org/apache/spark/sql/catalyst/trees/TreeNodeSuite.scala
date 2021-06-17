@@ -31,6 +31,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.{AliasIdentifier, FunctionIdentifier, InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.dsl.expressions.DslString
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.plans.{LeftOuter, NaturalJoin, SQLHelper}
@@ -46,6 +47,8 @@ case class Dummy(optKey: Option[Expression]) extends Expression with CodegenFall
   override def dataType: NullType = NullType
   override lazy val resolved = true
   override def eval(input: InternalRow): Any = null.asInstanceOf[Any]
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
+    copy(optKey = if (optKey.isDefined) Some(newChildren(0)) else None)
 }
 
 case class ComplexPlan(exprs: Seq[Seq[Expression]])
@@ -58,6 +61,8 @@ case class ExpressionInMap(map: Map[String, Expression]) extends Unevaluable {
   override def nullable: Boolean = true
   override def dataType: NullType = NullType
   override lazy val resolved = true
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
+    super.legacyWithNewChildren(newChildren)
 }
 
 case class SeqTupleExpression(sons: Seq[(Expression, Expression)],
@@ -66,6 +71,9 @@ case class SeqTupleExpression(sons: Seq[(Expression, Expression)],
   override def nullable: Boolean = true
   override def dataType: NullType = NullType
   override lazy val resolved = true
+
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
+    super.legacyWithNewChildren(newChildren)
 }
 
 case class JsonTestTreeNode(arg: Any) extends LeafNode {
@@ -86,6 +94,8 @@ case class FakeLeafPlan(child: LogicalPlan)
   extends org.apache.spark.sql.catalyst.plans.logical.LeafNode {
   override def output: Seq[Attribute] = child.output
 }
+
+case class FakeCurryingProduct(x: Expression)(val y: Int)
 
 class TreeNodeSuite extends SparkFunSuite with SQLHelper {
   test("top node changed") {
@@ -433,10 +443,11 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
 
     // Converts AliasIdentifier to JSON
     assertJSON(
-      AliasIdentifier("alias"),
+      AliasIdentifier("alias", Seq("ns1", "ns2")),
       JObject(
         "product-class" -> JString(classOf[AliasIdentifier].getName),
-          "identifier" -> "alias"))
+          "name" -> "alias",
+          "qualifier" -> "[ns1, ns2]"))
 
     // Converts SubqueryAlias to JSON
     assertJSON(
@@ -445,8 +456,9 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
         JObject(
           "class" -> classOf[SubqueryAlias].getName,
           "num-children" -> 1,
-          "name" -> JObject("product-class" -> JString(classOf[AliasIdentifier].getName),
-            "identifier" -> "t1"),
+          "identifier" -> JObject("product-class" -> JString(classOf[AliasIdentifier].getName),
+            "name" -> "t1",
+            "qualifier" -> JArray(Nil)),
           "child" -> 0),
         JObject(
           "class" -> classOf[JsonTestTreeNode].getName,
@@ -580,7 +592,9 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
         JObject(
           "class" -> classOf[Union].getName,
           "num-children" -> 2,
-          "children" -> List(0, 1)),
+          "children" -> List(0, 1),
+          "byName" -> JBool(false),
+          "allowMissingCol" -> JBool(false)),
         JObject(
           "class" -> classOf[JsonTestTreeNode].getName,
           "num-children" -> 0,
@@ -589,10 +603,47 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
           "class" -> classOf[JsonTestTreeNode].getName,
           "num-children" -> 0,
           "arg" -> "1")))
+
+    // Convert Seq of Product contains TreeNode to JSON.
+    assertJSON(
+      Seq(("a", JsonTestTreeNode("0")), ("b", JsonTestTreeNode("1"))),
+      List(
+        JObject(
+          "product-class" -> "scala.Tuple2",
+          "_1" -> "a",
+          "_2" -> List(JObject(
+            "class" -> classOf[JsonTestTreeNode].getName,
+            "num-children" -> 0,
+            "arg" -> "0"
+          ))),
+        JObject(
+          "product-class" -> "scala.Tuple2",
+          "_1" -> "b",
+          "_2" -> List(JObject(
+            "class" -> classOf[JsonTestTreeNode].getName,
+            "num-children" -> 0,
+            "arg" -> "1"
+          )))))
+
+    // Convert currying product contains TreeNode to JSON.
+    assertJSON(
+      FakeCurryingProduct(Literal(1))(1),
+      JObject(
+        "product-class" -> classOf[FakeCurryingProduct].getName,
+        "x" -> List(
+          JObject(
+            "class" -> JString(classOf[Literal].getName),
+            "num-children" -> 0,
+            "value" -> "1",
+            "dataType" -> "integer")),
+        "y" -> 1
+      )
+    )
   }
 
   test("toJSON should not throws java.lang.StackOverflowError") {
-    val udf = ScalaUDF(SelfReferenceUDF(), BooleanType, Seq("col1".attr), false :: Nil)
+    val udf = ScalaUDF(SelfReferenceUDF(), BooleanType, Seq("col1".attr),
+      Option(ExpressionEncoder[String]()) :: Nil)
     // Should not throw java.lang.StackOverflowError
     udf.toJSON
   }
@@ -729,5 +780,34 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
     val leafCloned = leaf.clone()
     assertDifferentInstance(leaf, leafCloned)
     assert(leaf.child.eq(leafCloned.asInstanceOf[FakeLeafPlan].child))
+  }
+
+  object MalformedClassObject extends Serializable {
+    case class MalformedNameExpression(child: Expression) extends TaggingExpression {
+      override protected def withNewChildInternal(newChild: Expression): Expression =
+        copy(child = newChild)
+    }
+  }
+
+  test("SPARK-32999: TreeNode.nodeName should not throw malformed class name error") {
+    val testTriggersExpectedError = try {
+      classOf[MalformedClassObject.MalformedNameExpression].getSimpleName
+      false
+    } catch {
+      case ex: java.lang.InternalError if ex.getMessage.contains("Malformed class name") =>
+        true
+      case ex: Throwable => throw ex
+    }
+    // This test case only applies on older JDK versions (e.g. JDK8u), and doesn't trigger the
+    // issue on newer JDK versions (e.g. JDK11u).
+    assume(testTriggersExpectedError, "the test case didn't trigger malformed class name error")
+
+    val expr = MalformedClassObject.MalformedNameExpression(Literal(1))
+    try {
+      expr.nodeName
+    } catch {
+      case ex: java.lang.InternalError if ex.getMessage.contains("Malformed class name") =>
+        fail("TreeNode.nodeName should not throw malformed class name error")
+    }
   }
 }

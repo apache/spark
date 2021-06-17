@@ -17,11 +17,14 @@
 
 import os
 import pydoc
+import shutil
+import tempfile
 import time
 import unittest
 
 from pyspark.sql import SparkSession, Row
-from pyspark.sql.types import *
+from pyspark.sql.types import StringType, IntegerType, DoubleType, StructType, StructField, \
+    BooleanType, DateType, TimestampType, FloatType
 from pyspark.sql.utils import AnalysisException, IllegalArgumentException
 from pyspark.testing.sqlutils import ReusedSQLTestCase, SQLTestUtils, have_pyarrow, have_pandas, \
     pandas_requirement_message, pyarrow_requirement_message
@@ -316,7 +319,7 @@ class DataFrameTests(ReusedSQLTestCase):
         self.assertTupleEqual(row, (u'Alice', 20, None))
 
         # should fail if subset is not list, tuple or None
-        with self.assertRaises(ValueError):
+        with self.assertRaises(TypeError):
             self.spark.createDataFrame(
                 [(u'Alice', 10, 80.1)], schema).replace({10: 11}, subset=1).first()
 
@@ -326,7 +329,7 @@ class DataFrameTests(ReusedSQLTestCase):
                 [(u'Alice', 10, 80.1)], schema).replace(["Alice", "Bob"], ["Eve"]).first()
 
         # should fail if when received unexpected type
-        with self.assertRaises(ValueError):
+        with self.assertRaises(TypeError):
             from datetime import datetime
             self.spark.createDataFrame(
                 [(u'Alice', 10, 80.1)], schema).replace(datetime.now(), datetime.now()).first()
@@ -340,7 +343,7 @@ class DataFrameTests(ReusedSQLTestCase):
             self.spark.createDataFrame(
                 [(u'Alice', 10, 80.1)], schema).replace({u"Alice": u"Bob", 10: 20}).first()
 
-        with self.assertRaisesRegexp(
+        with self.assertRaisesRegex(
                 TypeError,
                 'value argument is required when to_replace is not a dictionary.'):
             self.spark.createDataFrame(
@@ -377,8 +380,6 @@ class DataFrameTests(ReusedSQLTestCase):
 
     # add tests for SPARK-23647 (test more types for hint)
     def test_extended_hint_types(self):
-        from pyspark.sql import DataFrame
-
         df = self.spark.range(10e10).toDF("id")
         such_a_nice_list = ["itworks1", "itworks2", "itworks3"]
         hinted_df = df.hint("my awesome hint", 1.2345, "what", such_a_nice_list)
@@ -389,7 +390,7 @@ class DataFrameTests(ReusedSQLTestCase):
         self.assertEqual(3, logical_plan.toString().count("itworks"))
 
     def test_sample(self):
-        self.assertRaisesRegexp(
+        self.assertRaisesRegex(
             TypeError,
             "should be a bool, float and number",
             lambda: self.spark.range(1).sample())
@@ -425,12 +426,12 @@ class DataFrameTests(ReusedSQLTestCase):
         self.assertEqual(df.collect(), data)
 
         # number of fields must match.
-        self.assertRaisesRegexp(Exception, "Length of object",
-                                lambda: rdd.toDF("key: int").collect())
+        self.assertRaisesRegex(Exception, "Length of object",
+                               lambda: rdd.toDF("key: int").collect())
 
         # field types mismatch will cause exception at runtime.
-        self.assertRaisesRegexp(Exception, "FloatType can not accept",
-                                lambda: rdd.toDF("key: float, value: string").collect())
+        self.assertRaisesRegex(Exception, "FloatType can not accept",
+                               lambda: rdd.toDF("key: float, value: string").collect())
 
         # flat schema values will be wrapped into row.
         df = rdd.map(lambda row: row.key).toDF("int")
@@ -490,15 +491,15 @@ class DataFrameTests(ReusedSQLTestCase):
             spark.catalog.clearCache()
             self.assertFalse(spark.catalog.isCached("tab1"))
             self.assertFalse(spark.catalog.isCached("tab2"))
-            self.assertRaisesRegexp(
+            self.assertRaisesRegex(
                 AnalysisException,
                 "does_not_exist",
                 lambda: spark.catalog.isCached("does_not_exist"))
-            self.assertRaisesRegexp(
+            self.assertRaisesRegex(
                 AnalysisException,
                 "does_not_exist",
                 lambda: spark.catalog.cacheTable("does_not_exist"))
-            self.assertRaisesRegexp(
+            self.assertRaisesRegex(
                 AnalysisException,
                 "does_not_exist",
                 lambda: spark.catalog.uncacheTable("does_not_exist"))
@@ -517,25 +518,58 @@ class DataFrameTests(ReusedSQLTestCase):
         df = self.spark.createDataFrame(data, schema)
         return df.toPandas()
 
-    @unittest.skipIf(not have_pandas, pandas_requirement_message)
+    @unittest.skipIf(not have_pandas, pandas_requirement_message)  # type: ignore
     def test_to_pandas(self):
         import numpy as np
         pdf = self._to_pandas()
         types = pdf.dtypes
-        self.assertEquals(types[0], np.int32)
-        self.assertEquals(types[1], np.object)
-        self.assertEquals(types[2], np.bool)
-        self.assertEquals(types[3], np.float32)
-        self.assertEquals(types[4], np.object)  # datetime.date
-        self.assertEquals(types[5], 'datetime64[ns]')
+        self.assertEqual(types[0], np.int32)
+        self.assertEqual(types[1], np.object)
+        self.assertEqual(types[2], np.bool)
+        self.assertEqual(types[3], np.float32)
+        self.assertEqual(types[4], np.object)  # datetime.date
+        self.assertEqual(types[5], 'datetime64[ns]')
+
+    @unittest.skipIf(not have_pandas, pandas_requirement_message)  # type: ignore
+    def test_to_pandas_with_duplicated_column_names(self):
+        import numpy as np
+
+        sql = "select 1 v, 1 v"
+        for arrowEnabled in [False, True]:
+            with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": arrowEnabled}):
+                df = self.spark.sql(sql)
+                pdf = df.toPandas()
+                types = pdf.dtypes
+                self.assertEqual(types.iloc[0], np.int32)
+                self.assertEqual(types.iloc[1], np.int32)
+
+    @unittest.skipIf(not have_pandas, pandas_requirement_message)  # type: ignore
+    def test_to_pandas_on_cross_join(self):
+        import numpy as np
+
+        sql = """
+        select t1.*, t2.* from (
+          select explode(sequence(1, 3)) v
+        ) t1 left join (
+          select explode(sequence(1, 3)) v
+        ) t2
+        """
+        for arrowEnabled in [False, True]:
+            with self.sql_conf({"spark.sql.crossJoin.enabled": True,
+                                "spark.sql.execution.arrow.pyspark.enabled": arrowEnabled}):
+                df = self.spark.sql(sql)
+                pdf = df.toPandas()
+                types = pdf.dtypes
+                self.assertEqual(types.iloc[0], np.int32)
+                self.assertEqual(types.iloc[1], np.int32)
 
     @unittest.skipIf(have_pandas, "Required Pandas was found.")
     def test_to_pandas_required_pandas_not_found(self):
         with QuietTest(self.sc):
-            with self.assertRaisesRegexp(ImportError, 'Pandas >= .* must be installed'):
+            with self.assertRaisesRegex(ImportError, 'Pandas >= .* must be installed'):
                 self._to_pandas()
 
-    @unittest.skipIf(not have_pandas, pandas_requirement_message)
+    @unittest.skipIf(not have_pandas, pandas_requirement_message)  # type: ignore
     def test_to_pandas_avoid_astype(self):
         import numpy as np
         schema = StructType().add("a", IntegerType()).add("b", StringType())\
@@ -543,76 +577,79 @@ class DataFrameTests(ReusedSQLTestCase):
         data = [(1, "foo", 16777220), (None, "bar", None)]
         df = self.spark.createDataFrame(data, schema)
         types = df.toPandas().dtypes
-        self.assertEquals(types[0], np.float64)  # doesn't convert to np.int32 due to NaN value.
-        self.assertEquals(types[1], np.object)
-        self.assertEquals(types[2], np.float64)
-
-    @unittest.skipIf(not have_pandas, pandas_requirement_message)
-    def test_to_pandas_from_empty_dataframe(self):
-        # SPARK-29188 test that toPandas() on an empty dataframe has the correct dtypes
-        import numpy as np
-        sql = """
-        SELECT CAST(1 AS TINYINT) AS tinyint,
-        CAST(1 AS SMALLINT) AS smallint,
-        CAST(1 AS INT) AS int,
-        CAST(1 AS BIGINT) AS bigint,
-        CAST(0 AS FLOAT) AS float,
-        CAST(0 AS DOUBLE) AS double,
-        CAST(1 AS BOOLEAN) AS boolean,
-        CAST('foo' AS STRING) AS string,
-        CAST('2019-01-01' AS TIMESTAMP) AS timestamp
-        """
-        dtypes_when_nonempty_df = self.spark.sql(sql).toPandas().dtypes
-        dtypes_when_empty_df = self.spark.sql(sql).filter("False").toPandas().dtypes
-        self.assertTrue(np.all(dtypes_when_empty_df == dtypes_when_nonempty_df))
-
-    @unittest.skipIf(not have_pandas, pandas_requirement_message)
-    def test_to_pandas_from_null_dataframe(self):
-        # SPARK-29188 test that toPandas() on a dataframe with only nulls has correct dtypes
-        import numpy as np
-        sql = """
-        SELECT CAST(NULL AS TINYINT) AS tinyint,
-        CAST(NULL AS SMALLINT) AS smallint,
-        CAST(NULL AS INT) AS int,
-        CAST(NULL AS BIGINT) AS bigint,
-        CAST(NULL AS FLOAT) AS float,
-        CAST(NULL AS DOUBLE) AS double,
-        CAST(NULL AS BOOLEAN) AS boolean,
-        CAST(NULL AS STRING) AS string,
-        CAST(NULL AS TIMESTAMP) AS timestamp
-        """
-        pdf = self.spark.sql(sql).toPandas()
-        types = pdf.dtypes
-        self.assertEqual(types[0], np.float64)
-        self.assertEqual(types[1], np.float64)
+        self.assertEqual(types[0], np.float64)  # doesn't convert to np.int32 due to NaN value.
+        self.assertEqual(types[1], np.object)
         self.assertEqual(types[2], np.float64)
-        self.assertEqual(types[3], np.float64)
-        self.assertEqual(types[4], np.float32)
-        self.assertEqual(types[5], np.float64)
-        self.assertEqual(types[6], np.object)
-        self.assertEqual(types[7], np.object)
-        self.assertTrue(np.can_cast(np.datetime64, types[8]))
 
-    @unittest.skipIf(not have_pandas, pandas_requirement_message)
+    @unittest.skipIf(not have_pandas, pandas_requirement_message)  # type: ignore
+    def test_to_pandas_from_empty_dataframe(self):
+        with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": False}):
+            # SPARK-29188 test that toPandas() on an empty dataframe has the correct dtypes
+            import numpy as np
+            sql = """
+            SELECT CAST(1 AS TINYINT) AS tinyint,
+            CAST(1 AS SMALLINT) AS smallint,
+            CAST(1 AS INT) AS int,
+            CAST(1 AS BIGINT) AS bigint,
+            CAST(0 AS FLOAT) AS float,
+            CAST(0 AS DOUBLE) AS double,
+            CAST(1 AS BOOLEAN) AS boolean,
+            CAST('foo' AS STRING) AS string,
+            CAST('2019-01-01' AS TIMESTAMP) AS timestamp
+            """
+            dtypes_when_nonempty_df = self.spark.sql(sql).toPandas().dtypes
+            dtypes_when_empty_df = self.spark.sql(sql).filter("False").toPandas().dtypes
+            self.assertTrue(np.all(dtypes_when_empty_df == dtypes_when_nonempty_df))
+
+    @unittest.skipIf(not have_pandas, pandas_requirement_message)  # type: ignore
+    def test_to_pandas_from_null_dataframe(self):
+        with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": False}):
+            # SPARK-29188 test that toPandas() on a dataframe with only nulls has correct dtypes
+            import numpy as np
+            sql = """
+            SELECT CAST(NULL AS TINYINT) AS tinyint,
+            CAST(NULL AS SMALLINT) AS smallint,
+            CAST(NULL AS INT) AS int,
+            CAST(NULL AS BIGINT) AS bigint,
+            CAST(NULL AS FLOAT) AS float,
+            CAST(NULL AS DOUBLE) AS double,
+            CAST(NULL AS BOOLEAN) AS boolean,
+            CAST(NULL AS STRING) AS string,
+            CAST(NULL AS TIMESTAMP) AS timestamp
+            """
+            pdf = self.spark.sql(sql).toPandas()
+            types = pdf.dtypes
+            self.assertEqual(types[0], np.float64)
+            self.assertEqual(types[1], np.float64)
+            self.assertEqual(types[2], np.float64)
+            self.assertEqual(types[3], np.float64)
+            self.assertEqual(types[4], np.float32)
+            self.assertEqual(types[5], np.float64)
+            self.assertEqual(types[6], np.object)
+            self.assertEqual(types[7], np.object)
+            self.assertTrue(np.can_cast(np.datetime64, types[8]))
+
+    @unittest.skipIf(not have_pandas, pandas_requirement_message)  # type: ignore
     def test_to_pandas_from_mixed_dataframe(self):
-        # SPARK-29188 test that toPandas() on a dataframe with some nulls has correct dtypes
-        import numpy as np
-        sql = """
-        SELECT CAST(col1 AS TINYINT) AS tinyint,
-        CAST(col2 AS SMALLINT) AS smallint,
-        CAST(col3 AS INT) AS int,
-        CAST(col4 AS BIGINT) AS bigint,
-        CAST(col5 AS FLOAT) AS float,
-        CAST(col6 AS DOUBLE) AS double,
-        CAST(col7 AS BOOLEAN) AS boolean,
-        CAST(col8 AS STRING) AS string,
-        CAST(col9 AS TIMESTAMP) AS timestamp
-        FROM VALUES (1, 1, 1, 1, 1, 1, 1, 1, 1),
-                    (NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL)
-        """
-        pdf_with_some_nulls = self.spark.sql(sql).toPandas()
-        pdf_with_only_nulls = self.spark.sql(sql).filter('tinyint is null').toPandas()
-        self.assertTrue(np.all(pdf_with_only_nulls.dtypes == pdf_with_some_nulls.dtypes))
+        with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": False}):
+            # SPARK-29188 test that toPandas() on a dataframe with some nulls has correct dtypes
+            import numpy as np
+            sql = """
+            SELECT CAST(col1 AS TINYINT) AS tinyint,
+            CAST(col2 AS SMALLINT) AS smallint,
+            CAST(col3 AS INT) AS int,
+            CAST(col4 AS BIGINT) AS bigint,
+            CAST(col5 AS FLOAT) AS float,
+            CAST(col6 AS DOUBLE) AS double,
+            CAST(col7 AS BOOLEAN) AS boolean,
+            CAST(col8 AS STRING) AS string,
+            timestamp_seconds(col9) AS timestamp
+            FROM VALUES (1, 1, 1, 1, 1, 1, 1, 1, 1),
+                        (NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL)
+            """
+            pdf_with_some_nulls = self.spark.sql(sql).toPandas()
+            pdf_with_only_nulls = self.spark.sql(sql).filter('tinyint is null').toPandas()
+            self.assertTrue(np.all(pdf_with_only_nulls.dtypes == pdf_with_some_nulls.dtypes))
 
     def test_create_dataframe_from_array_of_long(self):
         import array
@@ -620,7 +657,7 @@ class DataFrameTests(ReusedSQLTestCase):
         df = self.spark.createDataFrame(data)
         self.assertEqual(df.first(), Row(longarray=[-9223372036854775808, 0, 9223372036854775807]))
 
-    @unittest.skipIf(not have_pandas, pandas_requirement_message)
+    @unittest.skipIf(not have_pandas, pandas_requirement_message)  # type: ignore
     def test_create_dataframe_from_pandas_with_timestamp(self):
         import pandas as pd
         from datetime import datetime
@@ -638,7 +675,7 @@ class DataFrameTests(ReusedSQLTestCase):
     @unittest.skipIf(have_pandas, "Required Pandas was found.")
     def test_create_dataframe_required_pandas_not_found(self):
         with QuietTest(self.sc):
-            with self.assertRaisesRegexp(
+            with self.assertRaisesRegex(
                     ImportError,
                     "(Pandas >= .* must be installed|No module named '?pandas'?)"):
                 import pandas as pd
@@ -648,10 +685,10 @@ class DataFrameTests(ReusedSQLTestCase):
                 self.spark.createDataFrame(pdf)
 
     # Regression test for SPARK-23360
-    @unittest.skipIf(not have_pandas, pandas_requirement_message)
+    @unittest.skipIf(not have_pandas, pandas_requirement_message)  # type: ignore
     def test_create_dataframe_from_pandas_with_dst(self):
         import pandas as pd
-        from pandas.util.testing import assert_frame_equal
+        from pandas.testing import assert_frame_equal
         from datetime import datetime
 
         pdf = pd.DataFrame({'time': [datetime(2015, 10, 31, 22, 30)]})
@@ -687,7 +724,7 @@ class DataFrameTests(ReusedSQLTestCase):
                 ||22222|22222|
                 |+-----+-----+
                 |"""
-            self.assertEquals(re.sub(pattern, '', expected1), df.__repr__())
+            self.assertEqual(re.sub(pattern, '', expected1), df.__repr__())
             with self.sql_conf({"spark.sql.repl.eagerEval.truncate": 3}):
                 expected2 = """+---+-----+
                 ||key|value|
@@ -696,7 +733,7 @@ class DataFrameTests(ReusedSQLTestCase):
                 ||222|  222|
                 |+---+-----+
                 |"""
-                self.assertEquals(re.sub(pattern, '', expected2), df.__repr__())
+                self.assertEqual(re.sub(pattern, '', expected2), df.__repr__())
                 with self.sql_conf({"spark.sql.repl.eagerEval.maxNumRows": 1}):
                     expected3 = """+---+-----+
                     ||key|value|
@@ -705,7 +742,7 @@ class DataFrameTests(ReusedSQLTestCase):
                     |+---+-----+
                     |only showing top 1 row
                     |"""
-                    self.assertEquals(re.sub(pattern, '', expected3), df.__repr__())
+                    self.assertEqual(re.sub(pattern, '', expected3), df.__repr__())
 
         # test when eager evaluation is enabled and _repr_html_ will be called
         with self.sql_conf({"spark.sql.repl.eagerEval.enabled": True}):
@@ -715,7 +752,7 @@ class DataFrameTests(ReusedSQLTestCase):
                 |<tr><td>22222</td><td>22222</td></tr>
                 |</table>
                 |"""
-            self.assertEquals(re.sub(pattern, '', expected1), df._repr_html_())
+            self.assertEqual(re.sub(pattern, '', expected1), df._repr_html_())
             with self.sql_conf({"spark.sql.repl.eagerEval.truncate": 3}):
                 expected2 = """<table border='1'>
                     |<tr><th>key</th><th>value</th></tr>
@@ -723,7 +760,7 @@ class DataFrameTests(ReusedSQLTestCase):
                     |<tr><td>222</td><td>222</td></tr>
                     |</table>
                     |"""
-                self.assertEquals(re.sub(pattern, '', expected2), df._repr_html_())
+                self.assertEqual(re.sub(pattern, '', expected2), df._repr_html_())
                 with self.sql_conf({"spark.sql.repl.eagerEval.maxNumRows": 1}):
                     expected3 = """<table border='1'>
                         |<tr><th>key</th><th>value</th></tr>
@@ -731,19 +768,19 @@ class DataFrameTests(ReusedSQLTestCase):
                         |</table>
                         |only showing top 1 row
                         |"""
-                    self.assertEquals(re.sub(pattern, '', expected3), df._repr_html_())
+                    self.assertEqual(re.sub(pattern, '', expected3), df._repr_html_())
 
         # test when eager evaluation is disabled and _repr_html_ will be called
         with self.sql_conf({"spark.sql.repl.eagerEval.enabled": False}):
             expected = "DataFrame[key: bigint, value: string]"
-            self.assertEquals(None, df._repr_html_())
-            self.assertEquals(expected, df.__repr__())
+            self.assertEqual(None, df._repr_html_())
+            self.assertEqual(expected, df.__repr__())
             with self.sql_conf({"spark.sql.repl.eagerEval.truncate": 3}):
-                self.assertEquals(None, df._repr_html_())
-                self.assertEquals(expected, df.__repr__())
+                self.assertEqual(None, df._repr_html_())
+                self.assertEqual(expected, df.__repr__())
                 with self.sql_conf({"spark.sql.repl.eagerEval.maxNumRows": 1}):
-                    self.assertEquals(None, df._repr_html_())
-                    self.assertEquals(expected, df.__repr__())
+                    self.assertEqual(None, df._repr_html_())
+                    self.assertEqual(expected, df.__repr__())
 
     def test_to_local_iterator(self):
         df = self.spark.range(8, numPartitions=4)
@@ -778,6 +815,45 @@ class DataFrameTests(ReusedSQLTestCase):
                 if i == 7:
                     break
             self.assertEqual(df.take(8), result)
+
+    def test_same_semantics_error(self):
+        with QuietTest(self.sc):
+            with self.assertRaisesRegex(TypeError, "should be of DataFrame.*int"):
+                self.spark.range(10).sameSemantics(1)
+
+    def test_input_files(self):
+        tpath = tempfile.mkdtemp()
+        shutil.rmtree(tpath)
+        try:
+            self.spark.range(1, 100, 1, 10).write.parquet(tpath)
+            # read parquet file and get the input files list
+            input_files_list = self.spark.read.parquet(tpath).inputFiles()
+
+            # input files list should contain 10 entries
+            self.assertEqual(len(input_files_list), 10)
+            # all file paths in list must contain tpath
+            for file_path in input_files_list:
+                self.assertTrue(tpath in file_path)
+        finally:
+            shutil.rmtree(tpath)
+
+    def test_df_show(self):
+        # SPARK-35408: ensure better diagnostics if incorrect parameters are passed
+        # to DataFrame.show
+
+        df = self.spark.createDataFrame([('foo',)])
+        df.show(5)
+        df.show(5, True)
+        df.show(5, 1, True)
+        df.show(n=5, truncate='1', vertical=False)
+        df.show(n=5, truncate=1.5, vertical=False)
+
+        with self.assertRaisesRegex(TypeError, "Parameter 'n'"):
+            df.show(True)
+        with self.assertRaisesRegex(TypeError, "Parameter 'vertical'"):
+            df.show(vertical='foo')
+        with self.assertRaisesRegex(TypeError, "Parameter 'truncate=foo'"):
+            df.show(truncate='foo')
 
 
 class QueryExecutionListenerTests(unittest.TestCase, SQLTestUtils):
@@ -831,7 +907,7 @@ class QueryExecutionListenerTests(unittest.TestCase, SQLTestUtils):
 
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
-        pandas_requirement_message or pyarrow_requirement_message)
+        pandas_requirement_message or pyarrow_requirement_message)  # type: ignore
     def test_query_execution_listener_on_collect_with_arrow(self):
         with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": True}):
             self.assertFalse(
@@ -846,10 +922,10 @@ class QueryExecutionListenerTests(unittest.TestCase, SQLTestUtils):
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.test_dataframe import *
+    from pyspark.sql.tests.test_dataframe import *  # noqa: F401
 
     try:
-        import xmlrunner
+        import xmlrunner  # type: ignore
         testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None

@@ -34,7 +34,7 @@ getInternalType <- function(x) {
          Date = "date",
          POSIXlt = "timestamp",
          POSIXct = "timestamp",
-         stop(paste("Unsupported type for SparkDataFrame:", class(x))))
+         stop("Unsupported type for SparkDataFrame: ", class(x)))
 }
 
 #' return the SparkSession
@@ -110,10 +110,11 @@ sparkR.conf <- function(key, defaultValue) {
     value <- if (missing(defaultValue)) {
       tryCatch(callJMethod(conf, "get", key),
               error = function(e) {
-                if (any(grep("java.util.NoSuchElementException", as.character(e)))) {
-                  stop(paste0("Config '", key, "' is not set"))
+                estr <- as.character(e)
+                if (any(grepl("java.util.NoSuchElementException", estr, fixed = TRUE))) {
+                  stop("Config '", key, "' is not set")
                 } else {
-                  stop(paste0("Unknown error: ", as.character(e)))
+                  stop("Unknown error: ", estr)
                 }
               })
     } else {
@@ -202,12 +203,12 @@ getSchema <- function(schema, firstRow = NULL, rdd = NULL) {
       })
     }
 
-    # SPAKR-SQL does not support '.' in column name, so replace it with '_'
+    # SPARK-SQL does not support '.' in column name, so replace it with '_'
     # TODO(davies): remove this once SPARK-2775 is fixed
     names <- lapply(names, function(n) {
-      nn <- gsub("[.]", "_", n)
+      nn <- gsub(".", "_", n, fixed = TRUE)
       if (nn != n) {
-        warning(paste("Use", nn, "instead of", n, "as column name"))
+        warning("Use ", nn, " instead of ", n, " as column name")
       }
       nn
     })
@@ -289,10 +290,9 @@ createDataFrame <- function(data, schema = NULL, samplingRatio = 1.0,
         TRUE
       },
       error = function(e) {
-        warning(paste0("createDataFrame attempted Arrow optimization because ",
-                       "'spark.sql.execution.arrow.sparkr.enabled' is set to true; however, ",
-                       "failed, attempting non-optimization. Reason: ",
-                       e))
+        warning("createDataFrame attempted Arrow optimization because ",
+                "'spark.sql.execution.arrow.sparkr.enabled' is set to true; however, ",
+                "failed, attempting non-optimization. Reason: ", e)
         FALSE
       })
     }
@@ -325,7 +325,7 @@ createDataFrame <- function(data, schema = NULL, samplingRatio = 1.0,
   } else if (inherits(data, "RDD")) {
     rdd <- data
   } else {
-    stop(paste("unexpected type:", class(data)))
+    stop("unexpected type: ", class(data))
   }
 
   schema <- getSchema(schema, firstRow, rdd)
@@ -374,13 +374,17 @@ setMethod("toDF", signature(x = "RDD"),
 #' Create a SparkDataFrame from a JSON file.
 #'
 #' Loads a JSON file, returning the result as a SparkDataFrame
-#' By default, (\href{http://jsonlines.org/}{JSON Lines text format or newline-delimited JSON}
+#' By default, (\href{https://jsonlines.org/}{JSON Lines text format or newline-delimited JSON}
 #' ) is supported. For JSON (one record per file), set a named property \code{multiLine} to
 #' \code{TRUE}.
 #' It goes through the entire dataset once to determine the schema.
 #'
 #' @param path Path of file to read. A vector of multiple paths is allowed.
 #' @param ... additional external data source specific named properties.
+#'            You can find the JSON-specific options for reading JSON files in
+#'            \url{
+#'            https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option}{
+#'            Data Source Option} in the version you use.
 #' @return SparkDataFrame
 #' @rdname read.json
 #' @examples
@@ -409,6 +413,10 @@ read.json <- function(path, ...) {
 #'
 #' @param path Path of file to read.
 #' @param ... additional external data source specific named properties.
+#'            You can find the ORC-specific options for reading ORC files in
+#'            \url{
+#'            https://spark.apache.org/docs/latest/sql-data-sources-orc.html#data-source-option}{
+#'            Data Source Option} in the version you use.
 #' @return SparkDataFrame
 #' @rdname read.orc
 #' @name read.orc
@@ -430,6 +438,10 @@ read.orc <- function(path, ...) {
 #'
 #' @param path path of file to read. A vector of multiple paths is allowed.
 #' @param ... additional data source specific named properties.
+#'            You can find the Parquet-specific options for reading Parquet files in
+#'            \url{
+#'            https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#data-source-option
+#'            }{Data Source Option} in the version you use.
 #' @return SparkDataFrame
 #' @rdname read.parquet
 #' @name read.parquet
@@ -455,6 +467,10 @@ read.parquet <- function(path, ...) {
 #'
 #' @param path Path of file to read. A vector of multiple paths is allowed.
 #' @param ... additional external data source specific named properties.
+#'            You can find the text-specific options for reading text files in
+#'            \url{
+#'            https://spark.apache.org/docs/latest/sql-data-sources-text.html#data-source-option}{
+#'            Data Source Option} in the version you use.
 #' @return SparkDataFrame
 #' @rdname read.text
 #' @examples
@@ -556,7 +572,6 @@ tableToDF <- function(tableName) {
 #' stringSchema <- "name STRING, info MAP<STRING, DOUBLE>"
 #' df4 <- read.df(mapTypeJsonPath, "json", stringSchema, multiLine = TRUE)
 #' }
-#' @name read.df
 #' @note read.df since 1.4.0
 read.df <- function(path = NULL, source = NULL, schema = NULL, na.strings = "NA", ...) {
   if (!is.null(path) && !is.character(path)) {
@@ -603,6 +618,9 @@ loadDF <- function(path = NULL, source = NULL, schema = NULL, ...) {
 #' Create a SparkDataFrame representing the database table accessible via JDBC URL
 #'
 #' Additional JDBC database connection properties can be set (...)
+#' You can find the JDBC-specific option and parameter documentation for reading tables via JDBC in
+#' \url{https://spark.apache.org/docs/latest/sql-data-sources-jdbc.html#data-source-option}{
+#' Data Source Option} in the version you use.
 #'
 #' Only one of partitionColumn or predicates should be set. Partitions of the table will be
 #' retrieved in parallel based on the \code{numPartitions} or by the predicates.
@@ -687,7 +705,6 @@ read.jdbc <- function(url, tableName,
 #' stringSchema <- "name STRING, info MAP<STRING, DOUBLE>"
 #' df1 <- read.stream("json", path = jsonDir, schema = stringSchema, maxFilesPerTrigger = 1)
 #' }
-#' @name read.stream
 #' @note read.stream since 2.2.0
 #' @note experimental
 read.stream <- function(source = NULL, schema = NULL, ...) {

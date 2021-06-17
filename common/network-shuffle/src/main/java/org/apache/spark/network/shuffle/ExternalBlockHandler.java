@@ -32,6 +32,7 @@ import com.codahale.metrics.MetricSet;
 import com.codahale.metrics.Timer;
 import com.codahale.metrics.Counter;
 import com.google.common.annotations.VisibleForTesting;
+import org.apache.spark.network.client.StreamCallbackWithID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -41,7 +42,6 @@ import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.server.OneForOneStreamManager;
 import org.apache.spark.network.server.RpcHandler;
 import org.apache.spark.network.server.StreamManager;
-import org.apache.spark.network.shuffle.ExternalShuffleBlockResolver.AppExecId;
 import org.apache.spark.network.shuffle.protocol.*;
 import static org.apache.spark.network.util.NettyUtils.getRemoteAddress;
 import org.apache.spark.network.util.TransportConf;
@@ -61,11 +61,21 @@ public class ExternalBlockHandler extends RpcHandler {
   final ExternalShuffleBlockResolver blockManager;
   private final OneForOneStreamManager streamManager;
   private final ShuffleMetrics metrics;
+  private final MergedShuffleFileManager mergeManager;
 
   public ExternalBlockHandler(TransportConf conf, File registeredExecutorFile)
     throws IOException {
     this(new OneForOneStreamManager(),
-      new ExternalShuffleBlockResolver(conf, registeredExecutorFile));
+      new ExternalShuffleBlockResolver(conf, registeredExecutorFile),
+      new NoOpMergedShuffleFileManager(conf));
+  }
+
+  public ExternalBlockHandler(
+      TransportConf conf,
+      File registeredExecutorFile,
+      MergedShuffleFileManager mergeManager) throws IOException {
+    this(new OneForOneStreamManager(),
+      new ExternalShuffleBlockResolver(conf, registeredExecutorFile), mergeManager);
   }
 
   @VisibleForTesting
@@ -78,15 +88,40 @@ public class ExternalBlockHandler extends RpcHandler {
   public ExternalBlockHandler(
       OneForOneStreamManager streamManager,
       ExternalShuffleBlockResolver blockManager) {
+    this(streamManager, blockManager, new NoOpMergedShuffleFileManager(null));
+  }
+
+  /** Enables mocking out the StreamManager, BlockManager, and MergeManager. */
+  @VisibleForTesting
+  public ExternalBlockHandler(
+      OneForOneStreamManager streamManager,
+      ExternalShuffleBlockResolver blockManager,
+      MergedShuffleFileManager mergeManager) {
     this.metrics = new ShuffleMetrics();
     this.streamManager = streamManager;
     this.blockManager = blockManager;
+    this.mergeManager = mergeManager;
   }
 
   @Override
   public void receive(TransportClient client, ByteBuffer message, RpcResponseCallback callback) {
     BlockTransferMessage msgObj = BlockTransferMessage.Decoder.fromByteBuffer(message);
     handleMessage(msgObj, client, callback);
+  }
+
+  @Override
+  public StreamCallbackWithID receiveStream(
+      TransportClient client,
+      ByteBuffer messageHeader,
+      RpcResponseCallback callback) {
+    BlockTransferMessage msgObj = BlockTransferMessage.Decoder.fromByteBuffer(messageHeader);
+    if (msgObj instanceof PushBlockStream) {
+      PushBlockStream message = (PushBlockStream) msgObj;
+      checkAuth(client, message.appId);
+      return mergeManager.receiveBlockDataAsStream(message);
+    } else {
+      throw new UnsupportedOperationException("Unexpected message with #receiveStream: " + msgObj);
+    }
   }
 
   protected void handleMessage(
@@ -139,6 +174,7 @@ public class ExternalBlockHandler extends RpcHandler {
         RegisterExecutor msg = (RegisterExecutor) msgObj;
         checkAuth(client, msg.appId);
         blockManager.registerExecutor(msg.appId, msg.execId, msg.executorInfo);
+        mergeManager.registerExecutor(msg.appId, msg.executorInfo);
         callback.onSuccess(ByteBuffer.wrap(new byte[0]));
       } finally {
         responseDelayContext.stop();
@@ -156,6 +192,20 @@ public class ExternalBlockHandler extends RpcHandler {
       Map<String, String[]> localDirs = blockManager.getLocalDirs(msg.appId, msg.execIds);
       callback.onSuccess(new LocalDirsForExecutors(localDirs).toByteBuffer());
 
+    } else if (msgObj instanceof FinalizeShuffleMerge) {
+      final Timer.Context responseDelayContext =
+          metrics.finalizeShuffleMergeLatencyMillis.time();
+      FinalizeShuffleMerge msg = (FinalizeShuffleMerge) msgObj;
+      try {
+        checkAuth(client, msg.appId);
+        MergeStatuses statuses = mergeManager.finalizeShuffleMerge(msg);
+        callback.onSuccess(statuses.toByteBuffer());
+      } catch(IOException e) {
+        throw new RuntimeException(String.format("Error while finalizing shuffle merge "
+          + "for application %s shuffle %d", msg.appId, msg.shuffleId), e);
+      } finally {
+        responseDelayContext.stop();
+      }
     } else {
       throw new UnsupportedOperationException("Unexpected message: " + msgObj);
     }
@@ -181,6 +231,7 @@ public class ExternalBlockHandler extends RpcHandler {
    */
   public void applicationRemoved(String appId, boolean cleanupLocalDirs) {
     blockManager.applicationRemoved(appId, cleanupLocalDirs);
+    mergeManager.applicationRemoved(appId, cleanupLocalDirs);
   }
 
   /**
@@ -188,20 +239,6 @@ public class ExternalBlockHandler extends RpcHandler {
    */
   public void executorRemoved(String executorId, String appId) {
     blockManager.executorRemoved(executorId, appId);
-  }
-
-  /**
-   * Register an (application, executor) with the given shuffle info.
-   *
-   * The "re-" is meant to highlight the intended use of this method -- when this service is
-   * restarted, this is used to restore the state of executors from before the restart.  Normal
-   * registration will happen via a message handled in receive()
-   *
-   * @param appExecId
-   * @param executorInfo
-   */
-  public void reregisterExecutor(AppExecId appExecId, ExecutorShuffleInfo executorInfo) {
-    blockManager.registerExecutor(appExecId.appId, appExecId.execId, executorInfo);
   }
 
   public void close() {
@@ -225,12 +262,12 @@ public class ExternalBlockHandler extends RpcHandler {
     private final Timer openBlockRequestLatencyMillis = new Timer();
     // Time latency for executor registration latency in ms
     private final Timer registerExecutorRequestLatencyMillis = new Timer();
+    // Time latency for processing finalize shuffle merge request latency in ms
+    private final Timer finalizeShuffleMergeLatencyMillis = new Timer();
     // Block transfer rate in byte per second
     private final Meter blockTransferRateBytes = new Meter();
     // Number of active connections to the shuffle service
     private Counter activeConnections = new Counter();
-    // Number of registered connections to the shuffle service
-    private Counter registeredConnections = new Counter();
     // Number of exceptions caught in connections to the shuffle service
     private Counter caughtExceptions = new Counter();
 
@@ -238,11 +275,11 @@ public class ExternalBlockHandler extends RpcHandler {
       allMetrics = new HashMap<>();
       allMetrics.put("openBlockRequestLatencyMillis", openBlockRequestLatencyMillis);
       allMetrics.put("registerExecutorRequestLatencyMillis", registerExecutorRequestLatencyMillis);
+      allMetrics.put("finalizeShuffleMergeLatencyMillis", finalizeShuffleMergeLatencyMillis);
       allMetrics.put("blockTransferRateBytes", blockTransferRateBytes);
       allMetrics.put("registeredExecutorsSize",
                      (Gauge<Integer>) () -> blockManager.getRegisteredExecutorsSize());
       allMetrics.put("numActiveConnections", activeConnections);
-      allMetrics.put("numRegisteredConnections", registeredConnections);
       allMetrics.put("numCaughtExceptions", caughtExceptions);
     }
 
@@ -373,6 +410,56 @@ public class ExternalBlockHandler extends RpcHandler {
       }
       metrics.blockTransferRateBytes.mark(block != null ? block.size() : 0);
       return block;
+    }
+  }
+
+  /**
+   * Dummy implementation of merged shuffle file manager. Suitable for when push-based shuffle
+   * is not enabled.
+   *
+   * @since 3.1.0
+   */
+  public static class NoOpMergedShuffleFileManager implements MergedShuffleFileManager {
+
+    // This constructor is needed because we use this constructor to instantiate an implementation
+    // of MergedShuffleFileManager using reflection.
+    // See YarnShuffleService#newMergedShuffleFileManagerInstance.
+    public NoOpMergedShuffleFileManager(TransportConf transportConf) {}
+
+    @Override
+    public StreamCallbackWithID receiveBlockDataAsStream(PushBlockStream msg) {
+      throw new UnsupportedOperationException("Cannot handle shuffle block merge");
+    }
+
+    @Override
+    public MergeStatuses finalizeShuffleMerge(FinalizeShuffleMerge msg) throws IOException {
+      throw new UnsupportedOperationException("Cannot handle shuffle block merge");
+    }
+
+    @Override
+    public void registerExecutor(String appId, ExecutorShuffleInfo executorInfo) {
+      // No-Op. Do nothing.
+    }
+
+    @Override
+    public void applicationRemoved(String appId, boolean cleanupLocalDirs) {
+      // No-Op. Do nothing.
+    }
+
+    @Override
+    public ManagedBuffer getMergedBlockData(
+        String appId, int shuffleId, int reduceId, int chunkId) {
+      throw new UnsupportedOperationException("Cannot handle shuffle block merge");
+    }
+
+    @Override
+    public MergedBlockMeta getMergedBlockMeta(String appId, int shuffleId, int reduceId) {
+      throw new UnsupportedOperationException("Cannot handle shuffle block merge");
+    }
+
+    @Override
+    public String[] getMergedBlockDirs(String appId) {
+      throw new UnsupportedOperationException("Cannot handle shuffle block merge");
     }
   }
 

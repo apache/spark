@@ -54,7 +54,7 @@ WORKDIR=
 IMGTAG=latest
 JAVA=
 RELEASE_STEP=
-while getopts "d:hj:ns:t:" opt; do
+while getopts ":d:hj:ns:t:" opt; do
   case $opt in
     d) WORKDIR="$OPTARG" ;;
     n) DRY_RUN=1 ;;
@@ -62,7 +62,7 @@ while getopts "d:hj:ns:t:" opt; do
     j) JAVA="$OPTARG" ;;
     s) RELEASE_STEP="$OPTARG" ;;
     h) usage ;;
-    ?) error "Invalid option. Run with -h for help." ;;
+    \?) error "Invalid option. Run with -h for help." ;;
   esac
 done
 
@@ -91,9 +91,14 @@ for f in "$SELF"/*; do
   fi
 done
 
+# Add the fallback version of Gemfile, Gemfile.lock and .bundle/config to the local directory.
+cp "$SELF/../../docs/Gemfile" "$WORKDIR"
+cp "$SELF/../../docs/Gemfile.lock" "$WORKDIR"
+cp -r "$SELF/../../docs/.bundle" "$WORKDIR"
+
 GPG_KEY_FILE="$WORKDIR/gpg.key"
 fcreate_secure "$GPG_KEY_FILE"
-$GPG --export-secret-key --armor "$GPG_KEY" > "$GPG_KEY_FILE"
+$GPG --export-secret-key --armor --pinentry-mode loopback --passphrase "$GPG_PASSPHRASE" "$GPG_KEY" > "$GPG_KEY_FILE"
 
 run_silent "Building spark-rm image with tag $IMGTAG..." "docker-build.log" \
   docker build -t "spark-rm:$IMGTAG" --build-arg UID=$UID "$SELF/spark-rm"

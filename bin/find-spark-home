@@ -33,9 +33,9 @@ elif [ ! -f "$FIND_SPARK_HOME_PYTHON_SCRIPT" ]; then
   export SPARK_HOME="$(cd "$(dirname "$0")"/..; pwd)"
 else
   # We are pip installed, use the Python script to resolve a reasonable SPARK_HOME
-  # Default to standard python interpreter unless told otherwise
+  # Default to standard python3 interpreter unless told otherwise
   if [[ -z "$PYSPARK_DRIVER_PYTHON" ]]; then
-     PYSPARK_DRIVER_PYTHON="${PYSPARK_PYTHON:-"python"}"
+     PYSPARK_DRIVER_PYTHON="${PYSPARK_PYTHON:-"python3"}"
   fi
   export SPARK_HOME=$($PYSPARK_DRIVER_PYTHON "$FIND_SPARK_HOME_PYTHON_SCRIPT")
 fi

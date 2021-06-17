@@ -22,9 +22,10 @@ import java.util
 import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.connector.catalog.{SupportsWrite, Table, TableCapability, TableProvider}
-import org.apache.spark.sql.connector.write.{BatchWrite, DataWriter, DataWriterFactory, LogicalWriteInfo, PhysicalWriteInfo, SupportsTruncate, WriteBuilder, WriterCommitMessage}
+import org.apache.spark.sql.connector.catalog.{SupportsWrite, Table, TableCapability}
+import org.apache.spark.sql.connector.write.{BatchWrite, DataWriter, DataWriterFactory, LogicalWriteInfo, PhysicalWriteInfo, SupportsTruncate, Write, WriteBuilder, WriterCommitMessage}
 import org.apache.spark.sql.connector.write.streaming.{StreamingDataWriterFactory, StreamingWrite}
+import org.apache.spark.sql.internal.connector.{SimpleTableProvider, SupportsStreamingUpdateAsAppend}
 import org.apache.spark.sql.sources.DataSourceRegister
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -33,7 +34,7 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
  * This is no-op datasource. It does not do anything besides consuming its input.
  * This can be useful for benchmarking or to cache data without any additional overhead.
  */
-class NoopDataSource extends TableProvider with DataSourceRegister {
+class NoopDataSource extends SimpleTableProvider with DataSourceRegister {
   override def shortName(): String = "noop"
   override def getTable(options: CaseInsensitiveStringMap): Table = NoopTable
 }
@@ -51,15 +52,21 @@ private[noop] object NoopTable extends Table with SupportsWrite {
   }
 }
 
-private[noop] object NoopWriteBuilder extends WriteBuilder with SupportsTruncate {
+private[noop] object NoopWriteBuilder extends WriteBuilder
+  with SupportsTruncate with SupportsStreamingUpdateAsAppend {
   override def truncate(): WriteBuilder = this
-  override def buildForBatch(): BatchWrite = NoopBatchWrite
-  override def buildForStreaming(): StreamingWrite = NoopStreamingWrite
+  override def build(): Write = NoopWrite
+}
+
+private[noop] object NoopWrite extends Write {
+  override def toBatch: BatchWrite = NoopBatchWrite
+  override def toStreaming: StreamingWrite = NoopStreamingWrite
 }
 
 private[noop] object NoopBatchWrite extends BatchWrite {
   override def createBatchWriterFactory(info: PhysicalWriteInfo): DataWriterFactory =
     NoopWriterFactory
+  override def useCommitCoordinator(): Boolean = false
   override def commit(messages: Array[WriterCommitMessage]): Unit = {}
   override def abort(messages: Array[WriterCommitMessage]): Unit = {}
 }

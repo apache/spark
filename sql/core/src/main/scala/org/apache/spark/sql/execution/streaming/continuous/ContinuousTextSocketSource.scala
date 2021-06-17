@@ -173,6 +173,7 @@ class TextSocketContinuousStream(
       setDaemon(true)
 
       override def run(): Unit = {
+        val toRow = encoder.createSerializer()
         try {
           while (true) {
             val line = reader.readLine()
@@ -187,7 +188,7 @@ class TextSocketContinuousStream(
                 Timestamp.valueOf(
                   TextSocketReader.DATE_FORMAT.format(Calendar.getInstance().getTime()))
               )
-              buckets(currentOffset % numPartitions) += encoder.toRow(newData)
+              buckets(currentOffset % numPartitions) += toRow(newData)
                 .copy().asInstanceOf[UnsafeRow]
             }
           }

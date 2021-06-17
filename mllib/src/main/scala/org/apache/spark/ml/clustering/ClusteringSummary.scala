@@ -45,7 +45,7 @@ class ClusteringSummary private[clustering] (
    * Size of (number of data points in) each cluster.
    */
   lazy val clusterSizes: Array[Long] = {
-    val sizes = Array.fill[Long](k)(0)
+    val sizes = Array.ofDim[Long](k)
     cluster.groupBy(predictionCol).count().select(predictionCol, "count").collect().foreach {
       case Row(cluster: Int, count: Long) => sizes(cluster) = count
     }
