@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.execution.exchange.{Exchange, ReusedExchangeExec}
 import org.apache.spark.sql.functions.col
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
 class ReuseExchangeAndSubquerySuite extends SparkPlanTest with SharedSparkSession {
@@ -26,85 +27,89 @@ class ReuseExchangeAndSubquerySuite extends SparkPlanTest with SharedSparkSessio
   val tableFormat: String = "parquet"
 
   test("SPARK-32041: No reuse interference inside ReuseExchange") {
-    withTable("df1", "df2") {
-      spark.range(100)
-        .select(col("id"), col("id").as("k"))
-        .write
-        .partitionBy("k")
-        .format(tableFormat)
-        .mode("overwrite")
-        .saveAsTable("df1")
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      withTable("df1", "df2") {
+        spark.range(100)
+          .select(col("id"), col("id").as("k"))
+          .write
+          .partitionBy("k")
+          .format(tableFormat)
+          .mode("overwrite")
+          .saveAsTable("df1")
 
-      spark.range(10)
-        .select(col("id"), col("id").as("k"))
-        .write
-        .format(tableFormat)
-        .mode("overwrite")
-        .saveAsTable("df2")
+        spark.range(10)
+          .select(col("id"), col("id").as("k"))
+          .write
+          .format(tableFormat)
+          .mode("overwrite")
+          .saveAsTable("df2")
 
-      val df = sql(
-        """
-          |WITH t AS (
-          |  SELECT df1.id, df2.k
-          |  FROM df1 JOIN df2 ON df1.k = df2.k
-          |  WHERE df2.id < 2
-          |)
-          |SELECT * FROM t AS a JOIN t AS b ON a.id = b.id
-          |""".stripMargin)
+        val df = sql(
+          """
+            |WITH t AS (
+            |  SELECT df1.id, df2.k
+            |  FROM df1 JOIN df2 ON df1.k = df2.k
+            |  WHERE df2.id < 2
+            |)
+            |SELECT * FROM t AS a JOIN t AS b ON a.id = b.id
+            |""".stripMargin)
 
-      val plan = df.queryExecution.executedPlan
+        val plan = df.queryExecution.executedPlan
 
-      val exchangeIds = plan.collectWithSubqueries { case e: Exchange => e.id }
-      val reusedExchangeIds = plan.collectWithSubqueries {
-        case re: ReusedExchangeExec => re.child.id
+        val exchangeIds = plan.collectWithSubqueries { case e: Exchange => e.id }
+        val reusedExchangeIds = plan.collectWithSubqueries {
+          case re: ReusedExchangeExec => re.child.id
+        }
+
+        assert(reusedExchangeIds.forall(exchangeIds.contains(_)),
+          "ReusedExchangeExec should reuse an existing exchange")
       }
-
-      assert(reusedExchangeIds.forall(exchangeIds.contains(_)),
-        "ReusedExchangeExec should reuse an existing exchange")
     }
   }
 
   test("SPARK-32041: No reuse interference between ReuseExchange and ReuseSubquery") {
-    withTable("df1", "df2") {
-      spark.range(100)
-        .select(col("id"), col("id").as("k"))
-        .write
-        .partitionBy("k")
-        .format(tableFormat)
-        .mode("overwrite")
-        .saveAsTable("df1")
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      withTable("df1", "df2") {
+        spark.range(100)
+          .select(col("id"), col("id").as("k"))
+          .write
+          .partitionBy("k")
+          .format(tableFormat)
+          .mode("overwrite")
+          .saveAsTable("df1")
 
-      spark.range(10)
-        .select(col("id"), col("id").as("k"))
-        .write
-        .format(tableFormat)
-        .mode("overwrite")
-        .saveAsTable("df2")
+        spark.range(10)
+          .select(col("id"), col("id").as("k"))
+          .write
+          .format(tableFormat)
+          .mode("overwrite")
+          .saveAsTable("df2")
 
-      val df = sql(
-        """
-          |WITH t AS (
-          |  SELECT df1.id, df2.k
-          |  FROM df1 JOIN df2 ON df1.k = df2.k
-          |  WHERE df2.id < 2
-          |),
-          |t2 AS (
-          |  SELECT * FROM t
-          |  UNION
-          |  SELECT * FROM t
-          |)
-          |SELECT * FROM t2 AS a JOIN t2 AS b ON a.id = b.id
-          |""".stripMargin)
+        val df = sql(
+          """
+            |WITH t AS (
+            |  SELECT df1.id, df2.k
+            |  FROM df1 JOIN df2 ON df1.k = df2.k
+            |  WHERE df2.id < 2
+            |),
+            |t2 AS (
+            |  SELECT * FROM t
+            |  UNION
+            |  SELECT * FROM t
+            |)
+            |SELECT * FROM t2 AS a JOIN t2 AS b ON a.id = b.id
+            |""".stripMargin)
 
-      val plan = df.queryExecution.executedPlan
+        val plan = df.queryExecution.executedPlan
 
-      val exchangeIds = plan.collectWithSubqueries { case e: Exchange => e.id }
-      val reusedExchangeIds = plan.collectWithSubqueries {
-        case re: ReusedExchangeExec => re.child.id
+        val exchangeIds = plan.collectWithSubqueries { case e: Exchange => e.id }
+        val reusedExchangeIds = plan.collectWithSubqueries {
+          case re: ReusedExchangeExec => re.child.id
+        }
+
+        assert(reusedExchangeIds.forall(exchangeIds.contains(_)),
+          "ReusedExchangeExec should reuse an existing exchange")
       }
-
-      assert(reusedExchangeIds.forall(exchangeIds.contains(_)),
-        "ReusedExchangeExec should reuse an existing exchange")
     }
   }
 }
