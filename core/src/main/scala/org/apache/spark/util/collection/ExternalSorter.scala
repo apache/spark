@@ -151,11 +151,7 @@ private[spark] class ExternalSorter[K, V, C](
   }
 
   def getChecksums: Array[Long] = {
-    if (checksumEnabled) {
-      partitionChecksums.map(_.getValue)
-    } else {
-      Array.empty
-    }
+    partitionChecksums.map(_.getValue)
   }
 
   // A comparator for keys K that orders them within a partition to allow aggregation or sorting.
