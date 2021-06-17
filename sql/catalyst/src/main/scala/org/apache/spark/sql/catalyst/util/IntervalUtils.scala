@@ -891,6 +891,10 @@ object IntervalUtils {
    * @return The total length of the duration in microseconds
    * @throws ArithmeticException If numeric overflow occurs
    */
+  def durationToMicros(duration: Duration): Long = {
+    durationToMicros(duration, DayTimeIntervalType.DAY, DayTimeIntervalType.SECOND)
+  }
+
   def durationToMicros(
       duration: Duration,
       startField: Byte = DayTimeIntervalType.DAY,
