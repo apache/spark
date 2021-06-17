@@ -932,7 +932,7 @@ object IntervalUtils {
     val monthsInYears = Math.multiplyExact(period.getYears, MONTHS_PER_YEAR)
     val months = Math.addExact(monthsInYears, period.getMonths)
     if (endField == YearMonthIntervalType.YEAR) {
-      Math.multiplyExact(Math.floorDiv(months, MONTHS_PER_YEAR), MONTHS_PER_YEAR)
+      months - months % MONTHS_PER_YEAR
     } else {
       months
     }
