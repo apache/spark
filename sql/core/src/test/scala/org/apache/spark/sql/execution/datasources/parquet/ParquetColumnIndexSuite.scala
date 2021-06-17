@@ -41,7 +41,7 @@ class ParquetColumnIndexSuite extends QueryTest with ParquetTest with SharedSpar
 
       val parquetDf = spark.read.parquet(file.getCanonicalPath)
 
-      actions.foreach{ action =>
+      actions.foreach { action =>
         checkAnswer(action(parquetDf), action(ds.toDF()))
       }
     })
@@ -116,7 +116,7 @@ class ParquetColumnIndexSuite extends QueryTest with ParquetTest with SharedSpar
         parquetDf.filter(singleValueFilterExpr),
         df.filter(singleValueFilterExpr)
       )
-      val rangeFilterExpr = "_1 > 500 "
+      val rangeFilterExpr = "_1 > 500"
       checkAnswer(
         parquetDf.filter(rangeFilterExpr),
         df.filter(rangeFilterExpr)
