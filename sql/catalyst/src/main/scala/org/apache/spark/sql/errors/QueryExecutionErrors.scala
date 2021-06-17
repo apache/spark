@@ -1499,8 +1499,7 @@ object QueryExecutionErrors {
   }
 
   def notUDFError(name: String, userClass: String): Throwable = {
-    new SparkException(
-      s"$name is not an UserDefinedType. Please make sure registering " +
+    new SparkException(s"$name is not an UserDefinedType. Please make sure registering " +
         s"an UserDefinedType for ${userClass}")
   }
 

@@ -33,7 +33,7 @@ import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, UnboundFunction}
 import org.apache.spark.sql.connector.expressions.{NamedReference, Transform}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.SQLConf.LEGACY_CTE_PRECEDENCE_POLICY
+import org.apache.spark.sql.internal.SQLConf.{LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED, LEGACY_CTE_PRECEDENCE_POLICY}
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types._
@@ -1668,7 +1668,7 @@ private[spark] object QueryCompilationErrors {
 
   def negativeScaleNotAllowedError(scale: Int): Throwable = {
     new AnalysisException(s"Negative scale is not allowed: $scale. " +
-      s"You can use spark.sql.legacy.allowNegativeScaleOfDecimal=true " +
+      s"You can use ${LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED.key}=true " +
       s"to enable legacy mode to allow it.")
   }
 
@@ -1680,8 +1680,7 @@ private[spark] object QueryCompilationErrors {
       specKeys: String,
       partitionColumnNames: Seq[String],
       tableName: String): Throwable = {
-    new AnalysisException(
-      s"Partition spec is invalid. The spec ($specKeys) must match " +
+    new AnalysisException(s"Partition spec is invalid. The spec ($specKeys) must match " +
         s"the partition spec (${partitionColumnNames.mkString(", ")}) defined in " +
         s"table '$tableName'")
   }
