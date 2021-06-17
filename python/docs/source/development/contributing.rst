@@ -218,6 +218,7 @@ Note that:
 
 PySpark leverages linters such as `pycodestyle <https://pycodestyle.pycqa.org/en/latest/>`_ and `flake8 <https://flake8.pycqa.org/en/latest/>`_, which ``dev/lint-python`` runs. Therefore, make sure to run that script to double check.
 
+PySpark also uses `black <https://github.com/psf/black>`_ for pandas API on Spark (``pyspark.pandas``) which automatically reformats your codes to comply the code conversions used in the project. To reformat your codes with black, you can run ``dev/reformat-python`` script.
 
 Docstring Conventions
 ~~~~~~~~~~~~~~~~~~~~~
