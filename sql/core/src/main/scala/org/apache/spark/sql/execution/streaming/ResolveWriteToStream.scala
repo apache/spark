@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.analysis.UnsupportedOperationChecker
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.streaming.{WriteToStream, WriteToStreamStatement}
-import org.apache.spark.sql.catalyst.trees.TreePattern.PARSE_STATEMENT
+import org.apache.spark.sql.catalyst.trees.TreePattern.WRITE_TO_STREAM_STATEMENT
 import org.apache.spark.sql.connector.catalog.SupportsWrite
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
@@ -40,7 +40,7 @@ import org.apache.spark.util.Utils
  */
 object ResolveWriteToStream extends Rule[LogicalPlan] with SQLConfHelper {
   def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
-    _.containsPattern(PARSE_STATEMENT), ruleId) {
+    _.containsPattern(WRITE_TO_STREAM_STATEMENT), ruleId) {
     case s: WriteToStreamStatement =>
       val (resolvedCheckpointLocation, deleteCheckpointOnStop) = resolveCheckpointLocation(s)
 
