@@ -27,7 +27,7 @@ import scala.util.control.NonFatal
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.millisToMicros
 import org.apache.spark.sql.catalyst.util.IntervalStringStyles.{ANSI_STYLE, HIVE_STYLE, IntervalStyle}
-import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DayTimeIntervalType, Decimal, YearMonthIntervalType}
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
@@ -931,15 +931,10 @@ object IntervalUtils {
   def periodToMonths(period: Period, startField: Byte, endField: Byte): Int = {
     val monthsInYears = Math.multiplyExact(period.getYears, MONTHS_PER_YEAR)
     val months = Math.addExact(monthsInYears, period.getMonths)
-    (startField, endField) match {
-      case (YearMonthIntervalType.YEAR, YearMonthIntervalType.YEAR) =>
-        Math.multiplyExact(Math.floorDiv(months, MONTHS_PER_YEAR), MONTHS_PER_YEAR)
-      case (YearMonthIntervalType.YEAR, YearMonthIntervalType.MONTH) => months
-      case (YearMonthIntervalType.MONTH, YearMonthIntervalType.MONTH) => months
-      case _ =>
-        throw QueryCompilationErrors.invalidDayTimeIntervalType(
-          YearMonthIntervalType.fieldToString(startField),
-          YearMonthIntervalType.fieldToString(endField))
+    if (endField == YearMonthIntervalType.YEAR) {
+      Math.multiplyExact(Math.floorDiv(months, MONTHS_PER_YEAR), MONTHS_PER_YEAR)
+    } else {
+      months
     }
   }
 
