@@ -176,17 +176,55 @@ object IntervalUtils {
       }
     }
 
+    def truncatedDay(day: String): String = {
+      if (startField > DayTimeIntervalType.DAY) {
+        "0"
+      } else {
+        day
+      }
+    }
+
+    def truncatedHour(hour: String): String = {
+      if (startField > DayTimeIntervalType.HOUR || endField < DayTimeIntervalType.HOUR) {
+        "0"
+      } else {
+        hour
+      }
+    }
+
+    def truncatedMinute(minute: String): String = {
+      if (startField > DayTimeIntervalType.MINUTE || endField < DayTimeIntervalType.MINUTE) {
+        "0"
+      } else {
+        minute
+      }
+    }
+
+    def truncatedSecond(second: String): String = {
+      if (endField < DayTimeIntervalType.SECOND) {
+        "0"
+      } else {
+        second
+      }
+    }
+
     input.trimAll().toString match {
       case daySecondRegex("-", day, hour, minute, second, micro) =>
-        toDTInterval(day, hour, minute, secondAndMicro(second, micro), -1)
+        toDTInterval(truncatedDay(day), truncatedHour(hour), truncatedMinute(minute),
+          truncatedSecond(secondAndMicro(second, micro)), -1)
       case daySecondRegex(_, day, hour, minute, second, micro) =>
-        toDTInterval(day, hour, minute, secondAndMicro(second, micro), 1)
+        toDTInterval(truncatedDay(day), truncatedHour(hour), truncatedMinute(minute),
+          truncatedSecond(secondAndMicro(second, micro)), 1)
       case daySecondLiteralRegex(firstSign, secondSign, day, hour, minute, second, micro) =>
         (firstSign, secondSign) match {
-          case ("-", "-") => toDTInterval(day, hour, minute, secondAndMicro(second, micro), 1)
-          case ("-", _) => toDTInterval(day, hour, minute, secondAndMicro(second, micro), -1)
-          case (_, "-") => toDTInterval(day, hour, minute, secondAndMicro(second, micro), -1)
-          case (_, _) => toDTInterval(day, hour, minute, secondAndMicro(second, micro), 1)
+          case ("-", "-") => toDTInterval(truncatedDay(day), truncatedHour(hour),
+            truncatedMinute(minute), truncatedSecond(secondAndMicro(second, micro)), 1)
+          case ("-", _) => toDTInterval(truncatedDay(day), truncatedHour(hour),
+            truncatedMinute(minute), truncatedSecond(secondAndMicro(second, micro)), -1)
+          case (_, "-") => toDTInterval(truncatedDay(day), truncatedHour(hour),
+            truncatedMinute(minute), truncatedSecond(secondAndMicro(second, micro)), -1)
+          case (_, _) => toDTInterval(truncatedDay(day), truncatedHour(hour),
+            truncatedMinute(minute), truncatedSecond(secondAndMicro(second, micro)), 1)
         }
       case _ =>
         throw new IllegalArgumentException(

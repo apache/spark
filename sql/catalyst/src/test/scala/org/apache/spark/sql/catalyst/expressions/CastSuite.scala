@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.DayTimeIntervalType.{DAY, HOUR, MINUTE, SECOND}
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -607,6 +608,27 @@ class CastSuite extends CastSuiteBase {
           Duration.of(duration, ChronoUnit.MICROS),
           DayTimeIntervalType())
         checkEvaluation(cast(cast(interval, StringType), DayTimeIntervalType()), duration)
+      }
+  }
+
+  test("SPARK-35735: Take into account day-time interval fields in cast") {
+    Seq(DayTimeIntervalType(DAY, DAY) -> 86400000000L,
+      DayTimeIntervalType(DAY, HOUR) -> 93600000000L,
+      DayTimeIntervalType(DAY, MINUTE) -> 93780000000L,
+      DayTimeIntervalType(DAY, SECOND) -> 93784000000L,
+      DayTimeIntervalType(HOUR, HOUR) -> 7200000000L,
+      DayTimeIntervalType(HOUR, MINUTE) -> 7380000000L,
+      DayTimeIntervalType(HOUR, SECOND) -> 7384000000L,
+      DayTimeIntervalType(MINUTE, MINUTE) -> 180000000L,
+      DayTimeIntervalType(MINUTE, SECOND) -> 184000000L,
+      DayTimeIntervalType(SECOND, SECOND) -> 4000000L)
+      .foreach { case (dataType, value) =>
+        checkEvaluation(
+          cast(Literal.create("1 2:03:04"), dataType), value)
+        checkEvaluation(
+          cast(Literal.create("-1 2:03:04"), dataType), -value)
+        checkEvaluation(
+          cast(Literal.create("INTERVAL '1 2:03:04' DAY TO SECOND"), dataType), value)
       }
   }
 
