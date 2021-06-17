@@ -223,8 +223,8 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     final SpillInfo[] spills = sorter.closeAndGetSpills();
     try {
       partitionLengths = mergeSpills(spills);
-      sorter = null;
     } finally {
+      sorter = null;
       for (SpillInfo spill : spills) {
         if (spill.file.exists() && !spill.file.delete()) {
           logger.error("Error while deleting spill file {}", spill.file.getPath());
