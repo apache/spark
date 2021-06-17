@@ -588,7 +588,7 @@ object View {
     // For temporary view, we always use captured sql configs
     if (activeConf.useCurrentSQLConfigsForView && !isTempView) return activeConf
 
-    val sqlConf = new SQLConf()
+    val sqlConf = activeConf
     for ((k, v) <- configs) {
       sqlConf.settings.put(k, v)
     }
