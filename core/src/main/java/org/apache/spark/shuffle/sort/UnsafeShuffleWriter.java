@@ -223,7 +223,6 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     final SpillInfo[] spills = sorter.closeAndGetSpills();
     try {
       partitionLengths = mergeSpills(spills);
-      sorter.getChecksums();
       sorter = null;
     } finally {
       for (SpillInfo spill : spills) {
