@@ -895,10 +895,7 @@ object IntervalUtils {
     durationToMicros(duration, DayTimeIntervalType.DAY, DayTimeIntervalType.SECOND)
   }
 
-  def durationToMicros(
-      duration: Duration,
-      startField: Byte = DayTimeIntervalType.DAY,
-      endField: Byte = DayTimeIntervalType.SECOND): Long = {
+  def durationToMicros(duration: Duration, startField: Byte, endField: Byte): Long = {
 
     def secondsToMicros(seconds: Long): Long = {
       if (seconds == minDurationSeconds) {
