@@ -447,13 +447,20 @@ object DateTimeUtils {
    *       the value of timestamp without time zone.
    */
   def stringToTimestampWithoutTimeZone(s: UTF8String): Option[Long] = {
-    val (segments, _, justTime) = parseTimestampString(s)
+    val (segments, tz, justTime) = parseTimestampString(s)
     // If the input string can't be parsed as a timestamp, or it contains only the time part of a
     // timestamp and we can't determine its date, return None.
     if (segments.isEmpty || justTime) {
       return None
     }
     try {
+      // We need to validate the time zone if exists
+      tz match {
+        case None => ""
+        case Some("+") => ZoneOffset.ofHoursMinutes(segments(7), segments(8))
+        case Some("-") => ZoneOffset.ofHoursMinutes(-segments(7), -segments(8))
+        case Some(zoneName: String) => getZoneId(zoneName.trim)
+      }
       val nanoseconds = MICROSECONDS.toNanos(segments(6))
       val localTime = LocalTime.of(segments(3), segments(4), segments(5), nanoseconds.toInt)
       val localDate = LocalDate.of(segments(0), segments(1), segments(2))

@@ -403,7 +403,12 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
   }
 
   test("SPARK-35720: cast invalid string input to timestamp without time zone") {
-    Seq("00:00:00", "a", "123", "a2021-06-17", "2021-06-17abc").foreach { invalidInput =>
+    Seq("00:00:00",
+      "a",
+      "123",
+      "a2021-06-17",
+      "2021-06-17abc",
+      "2021-06-17 00:00:00ABC").foreach { invalidInput =>
       checkExceptionInExpression[DateTimeException](
         cast(invalidInput, TimestampWithoutTZType),
         s"Cannot cast $invalidInput to TimestampWithoutTZType")
