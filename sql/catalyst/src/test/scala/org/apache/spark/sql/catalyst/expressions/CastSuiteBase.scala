@@ -939,9 +939,9 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       // The result is independent of timezone
       outstandingZoneIds.foreach { zoneId =>
         checkEvaluation(cast(s + zoneId.toString, TimestampWithoutTZType), expectedTs)
-        val tsWithNanoSeconds = s + ".123456"
-        val expectedTsWithNanoSeconds = LocalDateTime.parse(tsWithNanoSeconds)
-        checkEvaluation(cast(tsWithNanoSeconds + zoneId.toString, TimestampWithoutTZType),
+        val tsWithMicros = s + ".123456"
+        val expectedTsWithNanoSeconds = LocalDateTime.parse(tsWithMicros)
+        checkEvaluation(cast(tsWithMicros + zoneId.toString, TimestampWithoutTZType),
           expectedTsWithNanoSeconds)
       }
     }
