@@ -915,35 +915,16 @@ object IntervalUtils {
       Math.multiplyExact(Math.floorDiv(seconds, constant), constant)
     }
 
-    def subtractEqualOrGreatThanConstant(seconds: Long, constant: Long): Long = {
-      Math.subtractExact(seconds, extractEqualConstant(seconds, constant))
-    }
-
     val seconds = duration.getSeconds
-    (startField, endField) match {
-      case (DayTimeIntervalType.DAY, DayTimeIntervalType.DAY) =>
+    endField match {
+      case DayTimeIntervalType.DAY =>
         secondsToMicros(extractEqualConstant(seconds, SECONDS_PER_DAY))
-      case (DayTimeIntervalType.DAY, DayTimeIntervalType.HOUR) =>
+      case DayTimeIntervalType.HOUR =>
         secondsToMicros(extractEqualConstant(seconds, SECONDS_PER_HOUR))
-      case (DayTimeIntervalType.DAY, DayTimeIntervalType.MINUTE) =>
+      case DayTimeIntervalType.MINUTE =>
         secondsToMicros(extractEqualConstant(seconds, SECONDS_PER_MINUTE))
-      case (DayTimeIntervalType.DAY, DayTimeIntervalType.SECOND) =>
+      case DayTimeIntervalType.SECOND =>
         secondsToMicros(seconds)
-      case (DayTimeIntervalType.HOUR, DayTimeIntervalType.HOUR) =>
-        val subtractGreatThanHours = subtractEqualOrGreatThanConstant(seconds, SECONDS_PER_DAY)
-        secondsToMicros(extractEqualConstant(subtractGreatThanHours, SECONDS_PER_HOUR))
-      case (DayTimeIntervalType.HOUR, DayTimeIntervalType.MINUTE) =>
-        val subtractGreatThanHours = subtractEqualOrGreatThanConstant(seconds, SECONDS_PER_DAY)
-        secondsToMicros(extractEqualConstant(subtractGreatThanHours, SECONDS_PER_MINUTE))
-      case (DayTimeIntervalType.HOUR, DayTimeIntervalType.SECOND) =>
-        secondsToMicros(subtractEqualOrGreatThanConstant(seconds, SECONDS_PER_DAY))
-      case (DayTimeIntervalType.MINUTE, DayTimeIntervalType.MINUTE) =>
-        val subtractGreatThanHours = subtractEqualOrGreatThanConstant(seconds, SECONDS_PER_HOUR)
-        secondsToMicros(extractEqualConstant(subtractGreatThanHours, SECONDS_PER_MINUTE))
-      case (DayTimeIntervalType.MINUTE, DayTimeIntervalType.SECOND) =>
-        secondsToMicros(subtractEqualOrGreatThanConstant(seconds, SECONDS_PER_HOUR))
-      case (DayTimeIntervalType.SECOND, DayTimeIntervalType.SECOND) =>
-        secondsToMicros(subtractEqualOrGreatThanConstant(seconds, SECONDS_PER_MINUTE))
     }
   }
 
