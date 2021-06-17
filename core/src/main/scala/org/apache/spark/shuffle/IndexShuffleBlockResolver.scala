@@ -144,24 +144,18 @@ private[spark] class IndexShuffleBlockResolver(
    */
   def removeDataByMap(shuffleId: Int, mapId: Long): Unit = {
     var file = getDataFile(shuffleId, mapId)
-    if (file.exists()) {
-      if (!file.delete()) {
-        logWarning(s"Error deleting data ${file.getPath()}")
-      }
+    if (file.exists() && !file.delete()) {
+      logWarning(s"Error deleting data ${file.getPath()}")
     }
 
     file = getIndexFile(shuffleId, mapId)
-    if (file.exists()) {
-      if (!file.delete()) {
-        logWarning(s"Error deleting index ${file.getPath()}")
-      }
+    if (file.exists() && !file.delete()) {
+      logWarning(s"Error deleting index ${file.getPath()}")
     }
 
     file = getChecksumFile(shuffleId, mapId)
-    if (file.exists()) {
-      if (!file.delete()) {
-        logWarning(s"Error deleting checksum ${file.getPath()}")
-      }
+    if (file.exists() && !file.delete()) {
+      logWarning(s"Error deleting checksum ${file.getPath()}")
     }
   }
 
