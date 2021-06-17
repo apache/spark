@@ -38,7 +38,8 @@ final class ParquetReadState {
   /** Maximum definition level */
   final int maxDefinitionLevel;
 
-  /** The current row index to read */
+  /** The current index overall all rows within the column chunk. This is used to check if the
+   * current row should be skipped by comparing the index against the row ranges. */
   long rowId;
 
   /** The offset in the current batch to put the next value */

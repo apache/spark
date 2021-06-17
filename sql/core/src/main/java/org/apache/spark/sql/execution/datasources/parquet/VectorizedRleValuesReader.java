@@ -188,11 +188,11 @@ public final class VectorizedRleValuesReader extends ValuesReader
       } else if (rowId > rangeEnd) {
         state.nextRange();
       } else {
-        // the range [rowId, rowId + n] overlaps with the current row range in state
+        // the range [rowId, rowId + n) overlaps with the current row range in state
         long start = Math.max(rangeStart, rowId);
         long end = Math.min(rangeEnd, rowId + n - 1);
 
-        // first, skip the part [rowId, start)
+        // skip the part [rowId, start)
         int toSkip = (int) (start - rowId);
         if (toSkip > 0) {
           updater.skipBatch(toSkip, valueReader);
@@ -201,7 +201,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
           leftInPage -= toSkip;
         }
 
-        // second, read the part [start, end]
+        // read the part [start, end]
         n = (int) (end - start + 1);
 
         switch (mode) {
@@ -262,11 +262,11 @@ public final class VectorizedRleValuesReader extends ValuesReader
       } else if (rowId > rangeEnd) {
         state.nextRange();
       } else {
-        // the range [rowId, rowId + n] overlaps with the current row range in state
+        // the range [rowId, rowId + n) overlaps with the current row range in state
         long start = Math.max(rangeStart, rowId);
         long end = Math.min(rangeEnd, rowId + n - 1);
 
-        // first, skip the part [rowId, start)
+        // skip the part [rowId, start)
         int toSkip = (int) (start - rowId);
         if (toSkip > 0) {
           data.skipIntegers(toSkip);
@@ -275,7 +275,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
           leftInPage -= toSkip;
         }
 
-        // second, read the part [start, end]
+        // read the part [start, end]
         n = (int) (end - start + 1);
 
         switch (mode) {
