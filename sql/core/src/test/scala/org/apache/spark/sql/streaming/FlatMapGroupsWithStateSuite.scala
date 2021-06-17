@@ -54,7 +54,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
   import GroupStateImpl._
   import GroupStateTimeout._
 
-  test("GroupState - TestGroupState creates instances the same as prod") {
+  test("SPARK-35800: ensure TestGroupState creates instances the same as prod") {
     val testState = TestGroupState.create[Int](
       Optional.of(5), EventTimeTimeout, 1L, Optional.of(1L), hasTimedOut = false)
 
@@ -296,7 +296,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
     }
   }
 
-  test("GroupState - illegal params to create") {
+  test("SPARK-35800: illegal params to create") {
     // eventTimeWatermarkMs >= 0 if present
     var illegalArgument = intercept[IllegalArgumentException] {
       TestGroupState.create[Int](
