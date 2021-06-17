@@ -1013,6 +1013,20 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
     assert(err.getMessage.contains("Cannot put a null value"))
   }
 
+  test("SPARK-35763: StateStoreCustomMetric withNewDesc and createSQLMetric") {
+    val metric = StateStoreCustomSizeMetric(name = "m1", desc = "desc1")
+    val metricNew = metric.withNewDesc("new desc")
+    assert(metricNew.desc === "new desc", "incorrect description in copied instance")
+    assert(metricNew.name === "m1", "incorrect name in copied instance")
+
+    val conf = new SparkConf().setMaster("local").setAppName("SPARK-35763").set(RPC_NUM_RETRIES, 1)
+    withSpark(new SparkContext(conf)) { sc =>
+      val sqlMetric = metric.createSQLMetric(sc)
+      assert(sqlMetric != null)
+      assert(sqlMetric.name === Some("desc1"))
+    }
+  }
+
   /** Return a new provider with a random id */
   def newStoreProvider(): ProviderClass
 
