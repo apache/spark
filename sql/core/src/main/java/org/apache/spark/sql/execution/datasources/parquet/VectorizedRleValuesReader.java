@@ -406,9 +406,12 @@ public final class VectorizedRleValuesReader extends ValuesReader
 
   @Override
   public void skipIntegers(int total) {
-    for (int i = 0; i < total; i++) {
-      // TODO: optimize this
-      readInteger();
+    int left = total;
+    while (left > 0) {
+      if (this.currentCount == 0) this.readNextGroup();
+      int n = Math.min(left, this.currentCount);
+      advance(n);
+      left -= n;
     }
   }
 
