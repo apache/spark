@@ -283,11 +283,11 @@ Input [19]: [ca_state#22, cd_gender#26, cd_marital_status#27, cd_dep_count#28, c
 Keys [6]: [ca_state#22, cd_gender#26, cd_marital_status#27, cd_dep_count#28, cd_dep_employed_count#29, cd_dep_college_count#30]
 Functions [10]: [count(1), min(cd_dep_count#28), max(cd_dep_count#28), avg(cd_dep_count#28), min(cd_dep_employed_count#29), max(cd_dep_employed_count#29), avg(cd_dep_employed_count#29), min(cd_dep_college_count#30), max(cd_dep_college_count#30), avg(cd_dep_college_count#30)]
 Aggregate Attributes [10]: [count(1)#59, min(cd_dep_count#28)#60, max(cd_dep_count#28)#61, avg(cd_dep_count#28)#62, min(cd_dep_employed_count#29)#63, max(cd_dep_employed_count#29)#64, avg(cd_dep_employed_count#29)#65, min(cd_dep_college_count#30)#66, max(cd_dep_college_count#30)#67, avg(cd_dep_college_count#30)#68]
-Results [18]: [ca_state#22, cd_gender#26, cd_marital_status#27, count(1)#59 AS cnt1#69, min(cd_dep_count#28)#60 AS min(cd_dep_count)#70, max(cd_dep_count#28)#61 AS max(cd_dep_count)#71, avg(cd_dep_count#28)#62 AS avg(cd_dep_count)#72, cd_dep_employed_count#29, count(1)#59 AS cnt2#73, min(cd_dep_employed_count#29)#63 AS min(cd_dep_employed_count)#74, max(cd_dep_employed_count#29)#64 AS max(cd_dep_employed_count)#75, avg(cd_dep_employed_count#29)#65 AS avg(cd_dep_employed_count)#76, cd_dep_college_count#30, count(1)#59 AS cnt3#77, min(cd_dep_college_count#30)#66 AS min(cd_dep_college_count)#78, max(cd_dep_college_count#30)#67 AS max(cd_dep_college_count)#79, avg(cd_dep_college_count#30)#68 AS avg(cd_dep_college_count)#80, cd_dep_count#28 AS aggOrder#81]
+Results [18]: [ca_state#22, cd_gender#26, cd_marital_status#27, count(1)#59 AS cnt1#69, min(cd_dep_count#28)#60 AS min(cd_dep_count)#70, max(cd_dep_count#28)#61 AS max(cd_dep_count)#71, avg(cd_dep_count#28)#62 AS avg(cd_dep_count)#72, cd_dep_employed_count#29, count(1)#59 AS cnt2#73, min(cd_dep_employed_count#29)#63 AS min(cd_dep_employed_count)#74, max(cd_dep_employed_count#29)#64 AS max(cd_dep_employed_count)#75, avg(cd_dep_employed_count#29)#65 AS avg(cd_dep_employed_count)#76, cd_dep_college_count#30, count(1)#59 AS cnt3#77, min(cd_dep_college_count#30)#66 AS min(cd_dep_college_count)#78, max(cd_dep_college_count#30)#67 AS max(cd_dep_college_count)#79, avg(cd_dep_college_count#30)#68 AS avg(cd_dep_college_count)#80, cd_dep_count#28]
 
 (53) TakeOrderedAndProject
-Input [18]: [ca_state#22, cd_gender#26, cd_marital_status#27, cnt1#69, min(cd_dep_count)#70, max(cd_dep_count)#71, avg(cd_dep_count)#72, cd_dep_employed_count#29, cnt2#73, min(cd_dep_employed_count)#74, max(cd_dep_employed_count)#75, avg(cd_dep_employed_count)#76, cd_dep_college_count#30, cnt3#77, min(cd_dep_college_count)#78, max(cd_dep_college_count)#79, avg(cd_dep_college_count)#80, aggOrder#81]
-Arguments: 100, [ca_state#22 ASC NULLS FIRST, cd_gender#26 ASC NULLS FIRST, cd_marital_status#27 ASC NULLS FIRST, aggOrder#81 ASC NULLS FIRST, cd_dep_employed_count#29 ASC NULLS FIRST, cd_dep_college_count#30 ASC NULLS FIRST], [ca_state#22, cd_gender#26, cd_marital_status#27, cnt1#69, min(cd_dep_count)#70, max(cd_dep_count)#71, avg(cd_dep_count)#72, cd_dep_employed_count#29, cnt2#73, min(cd_dep_employed_count)#74, max(cd_dep_employed_count)#75, avg(cd_dep_employed_count)#76, cd_dep_college_count#30, cnt3#77, min(cd_dep_college_count)#78, max(cd_dep_college_count)#79, avg(cd_dep_college_count)#80]
+Input [18]: [ca_state#22, cd_gender#26, cd_marital_status#27, cnt1#69, min(cd_dep_count)#70, max(cd_dep_count)#71, avg(cd_dep_count)#72, cd_dep_employed_count#29, cnt2#73, min(cd_dep_employed_count)#74, max(cd_dep_employed_count)#75, avg(cd_dep_employed_count)#76, cd_dep_college_count#30, cnt3#77, min(cd_dep_college_count)#78, max(cd_dep_college_count)#79, avg(cd_dep_college_count)#80, cd_dep_count#28]
+Arguments: 100, [ca_state#22 ASC NULLS FIRST, cd_gender#26 ASC NULLS FIRST, cd_marital_status#27 ASC NULLS FIRST, cd_dep_count#28 ASC NULLS FIRST, cd_dep_employed_count#29 ASC NULLS FIRST, cd_dep_college_count#30 ASC NULLS FIRST], [ca_state#22, cd_gender#26, cd_marital_status#27, cnt1#69, min(cd_dep_count)#70, max(cd_dep_count)#71, avg(cd_dep_count)#72, cd_dep_employed_count#29, cnt2#73, min(cd_dep_employed_count)#74, max(cd_dep_employed_count)#75, avg(cd_dep_employed_count)#76, cd_dep_college_count#30, cnt3#77, min(cd_dep_college_count)#78, max(cd_dep_college_count)#79, avg(cd_dep_college_count)#80]
 
 ===== Subqueries =====
 
@@ -300,26 +300,26 @@ BroadcastExchange (58)
 
 
 (54) Scan parquet default.date_dim
-Output [3]: [d_date_sk#10, d_year#82, d_qoy#83]
+Output [3]: [d_date_sk#10, d_year#81, d_qoy#82]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
 PushedFilters: [IsNotNull(d_year), IsNotNull(d_qoy), EqualTo(d_year,2002), LessThan(d_qoy,4), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_year:int,d_qoy:int>
 
 (55) ColumnarToRow [codegen id : 1]
-Input [3]: [d_date_sk#10, d_year#82, d_qoy#83]
+Input [3]: [d_date_sk#10, d_year#81, d_qoy#82]
 
 (56) Filter [codegen id : 1]
-Input [3]: [d_date_sk#10, d_year#82, d_qoy#83]
-Condition : ((((isnotnull(d_year#82) AND isnotnull(d_qoy#83)) AND (d_year#82 = 2002)) AND (d_qoy#83 < 4)) AND isnotnull(d_date_sk#10))
+Input [3]: [d_date_sk#10, d_year#81, d_qoy#82]
+Condition : ((((isnotnull(d_year#81) AND isnotnull(d_qoy#82)) AND (d_year#81 = 2002)) AND (d_qoy#82 < 4)) AND isnotnull(d_date_sk#10))
 
 (57) Project [codegen id : 1]
 Output [1]: [d_date_sk#10]
-Input [3]: [d_date_sk#10, d_year#82, d_qoy#83]
+Input [3]: [d_date_sk#10, d_year#81, d_qoy#82]
 
 (58) BroadcastExchange
 Input [1]: [d_date_sk#10]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#84]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#83]
 
 Subquery:2 Hosting operator id = 14 Hosting Expression = ws_sold_date_sk#13 IN dynamicpruning#9
 

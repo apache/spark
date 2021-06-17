@@ -198,15 +198,15 @@ Input [2]: [ca_zip#13, count#19]
 Keys [1]: [ca_zip#13]
 Functions [1]: [count(1)]
 Aggregate Attributes [1]: [count(1)#21]
-Results [2]: [substr(ca_zip#13, 1, 5) AS ca_zip#22, count(1)#21 AS count(1)#23]
+Results [2]: [substr(ca_zip#13, 1, 5) AS ca_zip#22, count(1)#21 AS cnt#23]
 
 (34) Filter [codegen id : 10]
-Input [2]: [ca_zip#22, count(1)#23]
-Condition : (count(1)#23 > 10)
+Input [2]: [ca_zip#22, cnt#23]
+Condition : (cnt#23 > 10)
 
 (35) Project [codegen id : 10]
 Output [1]: [ca_zip#22]
-Input [2]: [ca_zip#22, count(1)#23]
+Input [2]: [ca_zip#22, cnt#23]
 
 (36) BroadcastExchange
 Input [1]: [ca_zip#22]

@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils.millisToMicros
 import org.apache.spark.sql.catalyst.util.IntervalStringStyles.{ANSI_STYLE, HIVE_STYLE, IntervalStyle}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{DayTimeIntervalType, Decimal}
+import org.apache.spark.sql.types.{DayTimeIntervalType, Decimal, YearMonthIntervalType}
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 // The style of textual representation of intervals
@@ -862,6 +862,19 @@ object IntervalUtils {
     new CalendarInterval(totalMonths, totalDays, micros)
   }
 
+  def makeDayTimeInterval(
+      days: Int,
+      hours: Int,
+      mins: Int,
+      secs: Decimal): Long = {
+    assert(secs.scale == 6, "Seconds fractional must have 6 digits for microseconds")
+    var micros = secs.toUnscaledLong
+    micros = Math.addExact(micros, Math.multiplyExact(days, MICROS_PER_DAY))
+    micros = Math.addExact(micros, Math.multiplyExact(hours, MICROS_PER_HOUR))
+    micros = Math.addExact(micros, Math.multiplyExact(mins, MICROS_PER_MINUTE))
+    micros
+  }
+
   // The amount of seconds that can cause overflow in the conversion to microseconds
   private final val minDurationSeconds = Math.floorDiv(Long.MinValue, MICROS_PER_SECOND)
 
@@ -945,7 +958,6 @@ object IntervalUtils {
   def toYearMonthIntervalString(
       months: Int,
       style: IntervalStyle,
-      // TODO(SPARK-35771): Format year-month intervals using type fields
       startField: Byte,
       endField: Byte): String = {
     var sign = ""
@@ -954,10 +966,22 @@ object IntervalUtils {
       sign = "-"
       absMonths = -absMonths
     }
-    val payload = s"$sign${absMonths / MONTHS_PER_YEAR}-${absMonths % MONTHS_PER_YEAR}"
+    val year = s"$sign${absMonths / MONTHS_PER_YEAR}"
+    val month = s"${absMonths % MONTHS_PER_YEAR}"
+    val yearAndMonth = s"$year-$month"
     style match {
-      case ANSI_STYLE => s"INTERVAL '$payload' YEAR TO MONTH"
-      case HIVE_STYLE => payload
+      case ANSI_STYLE =>
+        val formatBuilder = new StringBuilder("INTERVAL '")
+        if (startField == endField) {
+          startField match {
+            case YearMonthIntervalType.YEAR => formatBuilder.append(s"$year' YEAR")
+            case YearMonthIntervalType.MONTH => formatBuilder.append(s"$month' MONTH")
+          }
+        } else {
+          formatBuilder.append(s"$yearAndMonth' YEAR TO MONTH")
+        }
+        formatBuilder.toString
+      case HIVE_STYLE => s"$yearAndMonth"
     }
   }
 

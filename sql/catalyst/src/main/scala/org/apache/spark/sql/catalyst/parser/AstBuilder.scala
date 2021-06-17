@@ -2514,8 +2514,13 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   override def visitYearMonthIntervalDataType(ctx: YearMonthIntervalDataTypeContext): DataType = {
-    // TODO(SPARK-35774): Parse any year-month interval types in SQL
-    YearMonthIntervalType()
+    val start = YearMonthIntervalType.stringToField(ctx.from.getText.toLowerCase(Locale.ROOT))
+    val end = if (ctx.to != null) {
+      YearMonthIntervalType.stringToField(ctx.to.getText.toLowerCase(Locale.ROOT))
+    } else {
+      start
+    }
+    YearMonthIntervalType(start, end)
   }
 
   override def visitDayTimeIntervalDataType(ctx: DayTimeIntervalDataTypeContext): DataType = {
