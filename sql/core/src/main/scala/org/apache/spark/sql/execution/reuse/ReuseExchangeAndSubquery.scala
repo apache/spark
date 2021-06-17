@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.reuse
 
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.execution.{BaseSubqueryExec, ExecSubqueryExpression, ReusedSubqueryExec, SparkPlan}
 import org.apache.spark.sql.execution.exchange.{Exchange, ReusedExchangeExec}
 import org.apache.spark.sql.util.ReuseMap
@@ -33,20 +34,22 @@ case object ReuseExchangeAndSubquery extends Rule[SparkPlan] {
       val exchanges = new ReuseMap[Exchange, SparkPlan]()
       val subqueries = new ReuseMap[BaseSubqueryExec, SparkPlan]()
 
-      def reuse(plan: SparkPlan): SparkPlan = plan.transformUp {
-        case exchange: Exchange if conf.exchangeReuseEnabled =>
-          exchanges.reuseOrElseAdd(exchange, ReusedExchangeExec(exchange.output, _))
+      def reuse(plan: SparkPlan): SparkPlan = {
+        plan.transformUpWithPruning(_.containsAnyPattern(EXCHANGE, PLAN_EXPRESSION)) {
+          case exchange: Exchange if conf.exchangeReuseEnabled =>
+            exchanges.reuseOrElseAdd(exchange, ReusedExchangeExec(exchange.output, _))
 
-        case other => other.transformExpressionsUp {
-          case sub: ExecSubqueryExpression =>
-            val subquery = reuse(sub.plan).asInstanceOf[BaseSubqueryExec]
-            sub.withNewPlan(
-              if (conf.subqueryReuseEnabled) {
-                subqueries.reuseOrElseAdd(subquery, ReusedSubqueryExec(_))
-              } else {
-                subquery
-              }
-            )
+          case other =>
+            other.transformExpressionsUpWithPruning(_.containsPattern(PLAN_EXPRESSION)) {
+              case sub: ExecSubqueryExpression =>
+                val subquery = reuse(sub.plan).asInstanceOf[BaseSubqueryExec]
+                sub.withNewPlan(
+                  if (conf.subqueryReuseEnabled) {
+                    subqueries.reuseOrElseAdd(subquery, ReusedSubqueryExec(_))
+                  } else {
+                    subquery
+                  })
+            }
         }
       }
 
