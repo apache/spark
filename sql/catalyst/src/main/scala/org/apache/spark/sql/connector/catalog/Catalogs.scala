@@ -54,7 +54,7 @@ private[sql] object Catalogs {
     try {
       val pluginClass = loader.loadClass(pluginClassName)
       if (!classOf[CatalogPlugin].isAssignableFrom(pluginClass)) {
-        throw QueryExecutionErrors.catalogPluginClassNotImplementError(pluginClassName)
+        throw QueryExecutionErrors.catalogPluginClassNotImplementError(name, pluginClassName)
       }
       val plugin = pluginClass.getDeclaredConstructor().newInstance().asInstanceOf[CatalogPlugin]
       plugin.initialize(name, catalogOptions(name, conf))

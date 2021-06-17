@@ -1429,9 +1429,9 @@ object QueryExecutionErrors {
       s"Catalog '$name' plugin class not found: spark.sql.catalog.$name is not defined")
   }
 
-  def catalogPluginClassNotImplementError(name: String): Throwable = {
+  def catalogPluginClassNotImplementError(name: String, pluginClassName: String): Throwable = {
     new SparkException(
-      s"Plugin class for catalog '$name' does not implement CatalogPlugin: $name")
+      s"Plugin class for catalog '$name' does not implement CatalogPlugin: $pluginClassName")
   }
 
   def catalogPluginClassNotFindForCatalogError(name: String, pluginClassName: String): Throwable = {
