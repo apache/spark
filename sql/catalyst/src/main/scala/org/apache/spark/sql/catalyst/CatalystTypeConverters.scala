@@ -435,7 +435,7 @@ object CatalystTypeConverters {
   private case class DurationConverter(startField: Byte, endField: Byte)
       extends CatalystTypeConverter[Duration, Duration, Any] {
     override def toCatalystImpl(scalaValue: Duration): Long = {
-      IntervalUtils.durationToMicros(scalaValue, startField, endField)
+      IntervalUtils.durationToMicros(scalaValue, endField)
     }
     override def toScala(catalystValue: Any): Duration = {
       if (catalystValue == null) null

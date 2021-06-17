@@ -892,10 +892,10 @@ object IntervalUtils {
    * @throws ArithmeticException If numeric overflow occurs
    */
   def durationToMicros(duration: Duration): Long = {
-    durationToMicros(duration, DayTimeIntervalType.DAY, DayTimeIntervalType.SECOND)
+    durationToMicros(duration, DayTimeIntervalType.SECOND)
   }
 
-  def durationToMicros(duration: Duration, startField: Byte, endField: Byte): Long = {
+  def durationToMicros(duration: Duration, endField: Byte): Long = {
 
     def secondsToMicros(seconds: Long): Long = {
       if (seconds == minDurationSeconds) {
