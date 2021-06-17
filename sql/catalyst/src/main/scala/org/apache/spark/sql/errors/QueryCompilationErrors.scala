@@ -1747,4 +1747,85 @@ private[spark] object QueryCompilationErrors {
     new AnalysisException("Analyzing column statistics is not supported for column " +
       s"$name of data type: $dataType.")
   }
+
+  def tableAlreadyExistsError(table: String, guide: String): Throwable = {
+    new AnalysisException(s"Table $table already exists." + guide)
+  }
+
+  def createTableAsSelectCanNotCreateTableOnNonEmptyDirError(tablePath: String): Throwable = {
+    new AnalysisException(
+      s"CREATE-TABLE-AS-SELECT cannot create table with location to a non-empty directory " +
+        s"${tablePath} . To allow overwriting the existing non-empty directory, " +
+        s"set '${SQLConf.ALLOW_NON_EMPTY_LOCATION_IN_CTAS.key}' to true.")
+  }
+
+  def tableOrViewNotFoundError(table: String): Throwable = {
+    new AnalysisException(s"Table or view not found: $table")
+  }
+
+  def unsetNonExistentPropertyError(property: String, table: TableIdentifier): Throwable = {
+    new AnalysisException("Attempted to unset non-existent property '$property' in table '$table'")
+  }
+
+  def alterTableChangeColumnNotSupportForTypeError(
+      originColumn: StructField,
+      newColumn: StructField): Throwable = {
+    new AnalysisException(
+      "ALTER TABLE CHANGE COLUMN is not supported for changing column " +
+        s"'${originColumn.name}' with type '${originColumn.dataType}' to " +
+        s"'${newColumn.name}' with type '${newColumn.dataType}'")
+  }
+
+  def cannotFindColumnError(name: String, fieldNames: Array[String]): Throwable = {
+    new AnalysisException(
+      s"Can't find column `$name` given table data columns " +
+        s"${fieldNames.mkString("[`", "`, `", "`]")}")
+  }
+
+  def alterTableSetSerdeForSpecificPartitionNotSupportedError(): Throwable = {
+    new AnalysisException("Operation not allowed: ALTER TABLE SET " +
+      "[SERDE | SERDEPROPERTIES] for a specific partition is not supported " +
+      "for tables created with the datasource API")
+  }
+
+  def alterTableSetSerdeNotSupportedError(): Throwable = {
+    new AnalysisException("Operation not allowed: ALTER TABLE SET SERDE is " +
+      "not supported for tables created with the datasource API")
+  }
+
+  def cmdOnlyWorksOnPartitionedTables(cmd: String, tableIdentWithDB: String): Throwable = {
+    throw new AnalysisException(
+      s"Operation not allowed: $cmd only works on partitioned tables: $tableIdentWithDB")
+  }
+
+  def cmdOnlyWorksOnTables(cmd: String, tableIdentWithDB: String): Throwable = {
+    new AnalysisException(s"Operation not allowed: $cmd only works on table with " +
+      s"location provided: $tableIdentWithDB")
+  }
+
+  def actionNotAllowedOnTableSinceFilesourcePartitionManagementDisableError(
+      action: String,
+      tableName: String): Throwable = {
+    new AnalysisException(
+      s"$action is not allowed on $tableName since filesource partition management is " +
+        "disabled (spark.sql.hive.manageFilesourcePartitions = false).")
+  }
+
+  def actionNotAllowedOnTableSincePartitionMetadataNotStoredError(
+     action: String,
+     tableName: String): Throwable = {
+    new AnalysisException(
+      s"$action is not allowed on $tableName since its partition metadata is not stored in " +
+        "the Hive metastore. To import this information into the metastore, run " +
+        s"`msck repair table $tableName`")
+  }
+
+  def cannotAlterViewWithAlterTableError(): Throwable = {
+    new AnalysisException(
+      "Cannot alter a view with ALTER TABLE. Please use ALTER VIEW instead")
+  }
+
+  def cannotOverwritePathIsReadError(): Throwable = {
+    new AnalysisException("Cannot overwrite a path that is also being read from.")
+  }
 }
