@@ -27,7 +27,7 @@ import scala.util.control.NonFatal
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.millisToMicros
 import org.apache.spark.sql.catalyst.util.IntervalStringStyles.{ANSI_STYLE, HIVE_STYLE, IntervalStyle}
-import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DayTimeIntervalType, Decimal, YearMonthIntervalType}
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
@@ -924,9 +924,22 @@ object IntervalUtils {
    * @return The total number of months in the period, may be negative
    * @throws ArithmeticException If numeric overflow occurs
    */
-  def periodToMonths(period: Period): Int = {
-    val monthsInYears = Math.multiplyExact(period.getYears, MONTHS_PER_YEAR)
-    Math.addExact(monthsInYears, period.getMonths)
+  def periodToMonths(
+      period: Period,
+      startField: Byte = YearMonthIntervalType.YEAR,
+      endField: Byte = YearMonthIntervalType.MONTH): Int = {
+    (startField, endField) match {
+      case (YearMonthIntervalType.YEAR, YearMonthIntervalType.YEAR) =>
+        Math.multiplyExact(period.getYears, MONTHS_PER_YEAR)
+      case (YearMonthIntervalType.YEAR, YearMonthIntervalType.MONTH) =>
+        val monthsInYears = Math.multiplyExact(period.getYears, MONTHS_PER_YEAR)
+        Math.addExact(monthsInYears, period.getMonths)
+      case (YearMonthIntervalType.MONTH, YearMonthIntervalType.MONTH) => period.getMonths
+      case _ =>
+        throw QueryCompilationErrors.invalidDayTimeIntervalType(
+          YearMonthIntervalType.fieldToString(startField),
+          YearMonthIntervalType.fieldToString(endField))
+    }
   }
 
   /**
