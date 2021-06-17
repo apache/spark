@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.text.ParseException
-import java.time.{DateTimeException, LocalDate, LocalDateTime, ZoneId}
+import java.time.{DateTimeException, LocalDate, LocalDateTime, ZoneId, ZoneOffset}
 import java.time.format.DateTimeParseException
 import java.util.Locale
 
@@ -995,6 +995,61 @@ case class UnixTimestamp(
     copy(timeExp = newLeft, format = newRight)
 }
 
+case class ToTimestampWithoutTZ(
+    left: Expression,
+    right: Expression,
+    timeZoneId: Option[String] = None,
+    failOnError: Boolean = SQLConf.get.ansiEnabled) extends ToTimestamp {
+
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(TypeCollection(StringType, DateType, TimestampType), StringType)
+
+  override def eval(input: InternalRow): Any = {
+    val t = left.eval(input)
+    if (t == null) {
+      null
+    } else {
+      left.dataType match {
+        case DateType =>
+          daysToMicros(t.asInstanceOf[Int], ZoneOffset.UTC)
+        case TimestampType =>
+          convertTz(t.asInstanceOf[Long], ZoneOffset.UTC, zoneId)
+        case StringType =>
+          val fmt = right.eval(input)
+          if (fmt == null) {
+            null
+          } else {
+            val formatter = formatterOption.getOrElse(getFormatter(fmt.toString))
+            try {
+              val ts = formatter.parse(t.asInstanceOf[UTF8String].toString)
+              convertTz(ts, ZoneOffset.UTC, zoneId)
+            } catch {
+              case e if isParseError(e) =>
+                if (failOnError) {
+                  throw e
+                } else {
+                  null
+                }
+            }
+          }
+      }
+    }
+  }
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = ???
+
+  override def dataType: DataType = LongType
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): Expression =
+    this.copy(left = newLeft, right = newRight)
+
+  override protected def downScaleFactor: Long = 1
+
+  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
+    copy(timeZoneId = Some(timeZoneId))
+}
+
 abstract class ToTimestamp
   extends BinaryExpression with TimestampFormatterHelper with ExpectsInputTypes {
 
@@ -1013,7 +1068,7 @@ abstract class ToTimestamp
   override def dataType: DataType = LongType
   override def nullable: Boolean = if (failOnError) children.exists(_.nullable) else true
 
-  private def isParseError(e: Throwable): Boolean = e match {
+  protected def isParseError(e: Throwable): Boolean = e match {
     case _: DateTimeParseException |
          _: DateTimeException |
          _: ParseException => true
