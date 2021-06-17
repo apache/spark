@@ -17,16 +17,32 @@
 
 package org.apache.spark.sql.execution.adaptive
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.util.Utils
 
 /**
- * Represents the cost of a plan.
+ * An interface to represent the cost of a plan.
  */
 trait Cost extends Ordered[Cost]
 
 /**
- * Evaluates the cost of a physical plan.
+ * An interface to evaluate the cost of a physical plan.
  */
 trait CostEvaluator {
   def evaluateCost(plan: SparkPlan): Cost
+}
+
+object CostEvaluator extends Logging {
+
+  /**
+   * Instantiates a [[CostEvaluator]] using the given className.
+   */
+  def instantiate(className: String): CostEvaluator = {
+    logDebug(s"Creating CostEvaluator $className")
+    val clazz = Utils.classForName[CostEvaluator](className)
+    // Use the default no-argument constructor.
+    val ctor = clazz.getDeclaredConstructor()
+    ctor.newInstance()
+  }
 }

@@ -38,7 +38,7 @@ case class SimpleCost(value: Long) extends Cost {
  * A simple implementation of [[CostEvaluator]], which counts the number of
  * [[ShuffleExchangeLike]] nodes in the plan.
  */
-object SimpleCostEvaluator extends CostEvaluator {
+case class SimpleCostEvaluator() extends CostEvaluator {
 
   override def evaluateCost(plan: SparkPlan): Cost = {
     val cost = plan.collect {
