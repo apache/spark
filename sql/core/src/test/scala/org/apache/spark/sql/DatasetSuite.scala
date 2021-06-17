@@ -1911,6 +1911,24 @@ class DatasetSuite extends QueryTest
       }
     }
   }
+
+  test("SPARK-35652: joinWith on two table generated from same one performing a cartesian join," +
+    " which should be inner join") {
+    val df = Seq(1, 2, 3).toDS()
+
+    val joined = df.joinWith(df, df("value") === df("value"), "inner")
+
+    val expectedSchema = StructType(Seq(
+      StructField("_1", IntegerType, nullable = false),
+      StructField("_2", IntegerType, nullable = false)
+    ))
+
+    assert(joined.schema === expectedSchema)
+
+    checkDataset(
+      joined,
+      (1, 1), (2, 2), (3, 3))
+  }
 }
 
 object AssertExecutionId {

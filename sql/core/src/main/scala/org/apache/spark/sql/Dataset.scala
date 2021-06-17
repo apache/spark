@@ -1040,6 +1040,25 @@ class Dataset[T] private[sql](
   def join(right: Dataset[_], joinExprs: Column): DataFrame = join(right, joinExprs, "inner")
 
   /**
+   * find the trivially true predicates and automatically resolves them to both sides.
+   */
+  private def resolveSelfJoinCondition(plan: Join): Join = {
+    val cond = plan.condition.map { _.transform {
+      case catalyst.expressions.EqualTo(a: AttributeReference, b: AttributeReference)
+        if a.sameRef(b) =>
+        catalyst.expressions.EqualTo(
+          withPlan(plan.left).resolve(a.name),
+          withPlan(plan.right).resolve(b.name))
+      case catalyst.expressions.EqualNullSafe(a: AttributeReference, b: AttributeReference)
+        if a.sameRef(b) =>
+        catalyst.expressions.EqualNullSafe(
+          withPlan(plan.left).resolve(a.name),
+          withPlan(plan.right).resolve(b.name))
+    }}
+    plan.copy(condition = cond)
+  }
+
+  /**
    * Join with another `DataFrame`, using the given join expression. The following performs
    * a full outer join between `df1` and `df2`.
    *
@@ -1093,21 +1112,9 @@ class Dataset[T] private[sql](
     // Otherwise, find the trivially true predicates and automatically resolves them to both sides.
     // By the time we get here, since we have already run analysis, all attributes should've been
     // resolved and become AttributeReference.
-    val cond = plan.condition.map { _.transform {
-      case catalyst.expressions.EqualTo(a: AttributeReference, b: AttributeReference)
-          if a.sameRef(b) =>
-        catalyst.expressions.EqualTo(
-          withPlan(plan.left).resolve(a.name),
-          withPlan(plan.right).resolve(b.name))
-      case catalyst.expressions.EqualNullSafe(a: AttributeReference, b: AttributeReference)
-        if a.sameRef(b) =>
-        catalyst.expressions.EqualNullSafe(
-          withPlan(plan.left).resolve(a.name),
-          withPlan(plan.right).resolve(b.name))
-    }}
 
     withPlan {
-      plan.copy(condition = cond)
+      resolveSelfJoinCondition(plan)
     }
   }
 
@@ -1149,7 +1156,7 @@ class Dataset[T] private[sql](
   def joinWith[U](other: Dataset[U], condition: Column, joinType: String): Dataset[(T, U)] = {
     // Creates a Join node and resolve it first, to get join condition resolved, self-join resolved,
     // etc.
-    val joined = sparkSession.sessionState.executePlan(
+    var joined = sparkSession.sessionState.executePlan(
       Join(
         this.logicalPlan,
         other.logicalPlan,
@@ -1159,6 +1166,11 @@ class Dataset[T] private[sql](
 
     if (joined.joinType == LeftSemi || joined.joinType == LeftAnti) {
       throw new AnalysisException("Invalid join type in joinWith: " + joined.joinType.sql)
+    }
+
+    // If auto self join alias is enable
+    if (sqlContext.conf.dataFrameSelfJoinAutoResolveAmbiguity) {
+      joined = resolveSelfJoinCondition(joined)
     }
 
     implicit val tuple2Encoder: Encoder[(T, U)] =
