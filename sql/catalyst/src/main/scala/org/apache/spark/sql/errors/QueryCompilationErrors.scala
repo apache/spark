@@ -21,8 +21,9 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, QualifiedTableName, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NamespaceAlreadyExistsException, NoSuchNamespaceException, NoSuchTableException, ResolvedNamespace, ResolvedTable, ResolvedView, TableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NamespaceAlreadyExistsException, NoSuchNamespaceException, NoSuchPartitionException, NoSuchTableException, ResolvedNamespace, ResolvedTable, ResolvedView, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable, InvalidUDFClassException}
+import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, AttributeSet, CreateMap, Expression, GroupingID, NamedExpression, SpecifiedWindowFrame, WindowFrame, WindowFunction, WindowSpecDefinition}
 import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoStatement, Join, LogicalPlan, SerdeInfo, Window}
@@ -1693,5 +1694,57 @@ private[spark] object QueryCompilationErrors {
   def foundDuplicateColumnError(colType: String, duplicateCol: Seq[String]): Throwable = {
     new AnalysisException(
       s"Found duplicate column(s) $colType: ${duplicateCol.sorted.mkString(", ")}")
+  }
+
+  def noSuchTableError(db: String, table: String): Throwable = {
+    new NoSuchTableException(db = db, table = table)
+  }
+
+  def tempViewNotCachedForAnalyzingColError(tableIdent: TableIdentifier): Throwable = {
+    new AnalysisException(
+      s"Temporary view $tableIdent is not cached for analyzing columns.")
+  }
+
+  def colNotExistError(col: String): Throwable = {
+    new AnalysisException(s"Column $col does not exist.")
+  }
+
+  def colTypeNotSupportStatisticsCollectionError(
+    name: String,
+    tableIdent: TableIdentifier,
+    dataType: DataType): Throwable = {
+    new AnalysisException(
+      s"Column $name in table $tableIdent is of type $dataType, " +
+        "and Spark does not support statistics collection on this column type.")
+  }
+
+  def analyzeTableNotSupportedOnViewsError(): Throwable = {
+    new AnalysisException("ANALYZE TABLE is not supported on views.")
+  }
+
+  def notGetExpectedPrefixColError(
+    table: String,
+    database: String,
+    schemaColumns: String,
+    specColumns: String): Throwable = {
+    new AnalysisException("The list of partition columns with values " +
+      s"in partition specification for table '${table}' " +
+      s"in database '${database}' is not a prefix of the list of " +
+      "partition columns defined in the table schema. " +
+      s"Expected a prefix of [${schemaColumns}], but got [${specColumns}].")
+  }
+
+  def noSuchPartitionError(
+    db: String,
+    table: String,
+    partition: TablePartitionSpec): Throwable = {
+    new NoSuchPartitionException(db, table, partition)
+  }
+
+  def analyzingColStatisticsNotSupportedOfDataTypeError(
+    name: String,
+    dataType: DataType): Throwable = {
+    new AnalysisException("Analyzing column statistics is not supported for column " +
+      s"$name of data type: $dataType.")
   }
 }
