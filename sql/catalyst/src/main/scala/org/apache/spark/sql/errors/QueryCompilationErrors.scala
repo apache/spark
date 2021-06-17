@@ -1654,19 +1654,16 @@ private[spark] object QueryCompilationErrors {
   }
 
   def failedFallbackParsingError(msg: String, e1: Throwable, e2: Throwable): Throwable = {
-    new AnalysisException(
-      message = s"$msg${e1.getMessage}\nFailed fallback parsing: ${e2.getMessage}",
+    new AnalysisException(s"$msg${e1.getMessage}\nFailed fallback parsing: ${e2.getMessage}",
       cause = Some(e1.getCause))
   }
 
   def decimalCannotGreaterThanPrecisionError(scale: Int, precision: Int): Throwable = {
-    new AnalysisException(
-      s"Decimal scale ($scale) cannot be greater than precision ($precision).")
+    new AnalysisException(s"Decimal scale ($scale) cannot be greater than precision ($precision).")
   }
 
   def decimalOnlySupportPrecisionUptoError(decimalType: String, precision: Int): Throwable = {
-    new AnalysisException(
-      s"$decimalType can only support precision up to $precision")
+    new AnalysisException(s"$decimalType can only support precision up to $precision")
   }
 
   def negativeScaleNotAllowedError(scale: Int): Throwable = {
@@ -1680,9 +1677,9 @@ private[spark] object QueryCompilationErrors {
   }
 
   def partitionSpecNotValidError(
-    specKeys: String,
-    partitionColumnNames: Seq[String],
-    tableName: String): Throwable = {
+      specKeys: String,
+      partitionColumnNames: Seq[String],
+      tableName: String): Throwable = {
     new AnalysisException(
       s"Partition spec is invalid. The spec ($specKeys) must match " +
         s"the partition spec (${partitionColumnNames.mkString(", ")}) defined in " +

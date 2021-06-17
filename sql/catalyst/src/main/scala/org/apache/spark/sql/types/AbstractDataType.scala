@@ -105,8 +105,8 @@ protected[sql] object AnyDataType extends AbstractDataType with Serializable {
 
   // Note that since AnyDataType matches any concrete types, defaultConcreteType should never
   // be invoked.
-  override private[sql] def defaultConcreteType:
-  DataType = throw QueryExecutionErrors.unsupportedOperationExceptionError()
+  override private[sql] def defaultConcreteType: DataType =
+    throw QueryExecutionErrors.unsupportedOperationExceptionError()
 
   override private[sql] def simpleString: String = "any"
 

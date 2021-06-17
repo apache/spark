@@ -1435,38 +1435,37 @@ object QueryExecutionErrors {
   }
 
   def catalogPluginClassNotFindForCatalogError(name: String, pluginClassName: String): Throwable = {
-    new SparkException(
-      s"Cannot find catalog plugin class for catalog '$name': $pluginClassName")
+    new SparkException(s"Cannot find catalog plugin class for catalog '$name': $pluginClassName")
   }
 
   def catalogFailToFindPublicNoArgConstructorError(
-    name: String,
-    pluginClassName: String,
-    e: Exception): Throwable = {
+      name: String,
+      pluginClassName: String,
+      e: Exception): Throwable = {
     new SparkException(
       s"Failed to find public no-arg constructor for catalog '$name': $pluginClassName)", e)
   }
 
   def catalogFailToCallPublicNoArgConstructorError(
-    name: String,
-    pluginClassName: String,
-    e: Exception): Throwable = {
+      name: String,
+      pluginClassName: String,
+      e: Exception): Throwable = {
     new SparkException(
       s"Failed to call public no-arg constructor for catalog '$name': $pluginClassName)", e)
   }
 
   def catalogCannotInstantiateAbstractPluginClassError(
-    name: String,
-    pluginClassName: String,
-    e: Exception): Throwable = {
+      name: String,
+      pluginClassName: String,
+      e: Exception): Throwable = {
     new SparkException("Cannot instantiate abstract catalog plugin class for " +
       s"catalog '$name': $pluginClassName", e.getCause)
   }
 
   def failInstantiatingConstructorError(
-    name: String,
-    pluginClassName: String,
-    e: Exception): Throwable = {
+      name: String,
+      pluginClassName: String,
+      e: Exception): Throwable = {
     new SparkException("Failed during instantiating constructor for catalog " +
       s"'$name': $pluginClassName", e.getCause)
   }
@@ -1496,19 +1495,17 @@ object QueryExecutionErrors {
   }
 
   def nullLiteralsCannotCastToError(name: String): Throwable = {
-    new UnsupportedOperationException(
-      s"null literals can't be casted to $name")
+    new UnsupportedOperationException(s"null literals can't be casted to $name")
   }
 
   def notUDFError(name: String, userClass: String): Throwable = {
     new SparkException(
-      s"${name} is not an UserDefinedType. Please make sure registering " +
+      s"$name is not an UserDefinedType. Please make sure registering " +
         s"an UserDefinedType for ${userClass}")
   }
 
   def cannotLoadUDFError(name: String, userClass: String): Throwable = {
-    new SparkException(
-      s"Can not load in UserDefinedType ${name} for user class ${userClass}.")
+    new SparkException(s"Can not load in UserDefinedType ${name} for user class ${userClass}.")
   }
 
   def timestampTypeMustSupplyTZidError(): Throwable = {
@@ -1518,8 +1515,7 @@ object QueryExecutionErrors {
 
   def notPublicClassError(name: String): Throwable = {
     new UnsupportedOperationException(
-      s"$name is not a public class. " +
-        "Only public classes are supported.")
+      s"$name is not a public class. Only public classes are supported.")
   }
 
   def primitiveTypesNotSupportedError(): Throwable = {

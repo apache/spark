@@ -63,17 +63,16 @@ private[sql] object Catalogs {
       case _: ClassNotFoundException =>
         throw QueryExecutionErrors.catalogPluginClassNotFindForCatalogError(name, pluginClassName)
       case e: NoSuchMethodException =>
-        throw QueryExecutionErrors
-          .catalogFailToFindPublicNoArgConstructorError(name, pluginClassName, e)
+        throw QueryExecutionErrors.catalogFailToFindPublicNoArgConstructorError(
+          name, pluginClassName, e)
       case e: IllegalAccessException =>
-        throw QueryExecutionErrors
-          .catalogFailToCallPublicNoArgConstructorError(name, pluginClassName, e)
+        throw QueryExecutionErrors.catalogFailToCallPublicNoArgConstructorError(
+          name, pluginClassName, e)
       case e: InstantiationException =>
-        throw QueryExecutionErrors
-          .catalogCannotInstantiateAbstractPluginClassError(name, pluginClassName, e)
+        throw QueryExecutionErrors.catalogCannotInstantiateAbstractPluginClassError(
+          name, pluginClassName, e)
       case e: InvocationTargetException =>
-        throw QueryExecutionErrors
-          .failInstantiatingConstructorError(name, pluginClassName, e)
+        throw QueryExecutionErrors.failInstantiatingConstructorError(name, pluginClassName, e)
     }
   }
 
