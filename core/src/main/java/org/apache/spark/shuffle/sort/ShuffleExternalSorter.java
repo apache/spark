@@ -111,7 +111,7 @@ final class ShuffleExternalSorter extends MemoryConsumer {
   @Nullable private MemoryBlock currentPage = null;
   private long pageCursor = -1;
 
-  private boolean checksumEnabled;
+  private final boolean checksumEnabled;
   private Checksum[] partitionChecksums;
 
   ShuffleExternalSorter(
@@ -144,8 +144,8 @@ final class ShuffleExternalSorter extends MemoryConsumer {
     this.peakMemoryUsedBytes = getMemoryUsage();
     this.diskWriteBufferSize =
         (int) (long) conf.get(package$.MODULE$.SHUFFLE_DISK_WRITE_BUFFER_SIZE());
-    if ((boolean) conf.get(package$.MODULE$.SHUFFLE_CHECKSUM())) {
-      this.checksumEnabled = true;
+    this.checksumEnabled = (boolean) conf.get(package$.MODULE$.SHUFFLE_CHECKSUM());
+    if (this.checksumEnabled) {
       this.partitionChecksums = new Adler32[numPartitions];
       for (int i = 0; i < numPartitions; i ++) {
         this.partitionChecksums[i] = new Adler32();

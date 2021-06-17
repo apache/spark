@@ -96,7 +96,7 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
   @Nullable private MapStatus mapStatus;
   private long[] partitionLengths;
   private Checksum[] partitionChecksums;
-  private boolean checksumEnabled;
+  private final boolean checksumEnabled;
 
   /**
    * Are we in the process of stopping? Because map tasks can call stop() with success = true
@@ -124,8 +124,8 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     this.writeMetrics = writeMetrics;
     this.serializer = dep.serializer();
     this.shuffleExecutorComponents = shuffleExecutorComponents;
-    if ((boolean) conf.get(package$.MODULE$.SHUFFLE_CHECKSUM())) {
-      this.checksumEnabled = true;
+    this.checksumEnabled = (boolean) conf.get(package$.MODULE$.SHUFFLE_CHECKSUM());
+    if (this.checksumEnabled) {
       this.partitionChecksums = new Adler32[numPartitions];
       for (int i = 0; i < numPartitions; i ++) {
         this.partitionChecksums[i] = new Adler32();
