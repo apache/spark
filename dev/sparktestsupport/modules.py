@@ -19,7 +19,7 @@ from functools import total_ordering
 import itertools
 import os
 import re
-import glob
+import unittest
 
 from sparktestsupport import SPARK_HOME
 
@@ -27,18 +27,38 @@ all_modules = []
 
 
 def _discover_python_unittests(paths):
+    """
+    Discover the python module which contains unittests under paths.
+
+    Such as:
+    ['pyspark/tests'], it will return the set of module name under the path of pyspark/tests, like
+    {'pyspark.tests.test_appsubmit', 'pyspark.tests.test_broadcast', ...}
+
+    :param paths: paths of module to be discovered.
+    :return: A set of complete test module name discovered udner the paths
+    """
+
+    def add_suite(suite, modules):
+        """Gather the suite module names"""
+        if hasattr(suite, '__iter__'):
+            for test_case in suite:
+                add_suite(test_case, modules)
+        else:
+            modules.add(suite.__module__)
+
     if not paths:
         return set([])
-    tests = set([])
+    modules = set([])
     pyspark_path = os.path.join(SPARK_HOME, "python")
     for path in paths:
-        # Discover the test*.py in every path
-        files = glob.glob(os.path.join(pyspark_path, path, "test_*.py"))
-        for f in files:
-            # Convert 'pyspark_path/pyspark/tests/test_abc.py' to 'pyspark.tests.test_abc'
-            file2module = os.path.relpath(f, pyspark_path)[:-3].replace("/", ".")
-            tests.add(file2module)
-    return tests
+        # Discover the unittest in every path
+        suite = unittest.defaultTestLoader.discover(
+            os.path.join(pyspark_path, path),
+            top_level_dir=pyspark_path
+        )
+        add_suite(suite, modules)
+
+    return modules
 
 
 @total_ordering
@@ -455,8 +475,6 @@ pyspark_resource = Module(
         "python/pyspark/resource"
     ],
     python_test_goals=[
-        # unittests
-        "pyspark.resource.tests.test_resources",
     ],
     python_test_paths=[
         "pyspark/resource/tests"
