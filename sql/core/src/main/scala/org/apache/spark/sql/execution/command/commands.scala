@@ -72,7 +72,7 @@ case class ExecutedCommandExec(cmd: RunnableCommand) extends LeafExecNode {
    */
   protected[sql] lazy val sideEffectResult: Seq[InternalRow] = {
     val converter = CatalystTypeConverters.createToCatalystConverter(schema)
-    cmd.run(sqlContext.sparkSession).map(converter(_).asInstanceOf[InternalRow])
+    cmd.run(session).map(converter(_).asInstanceOf[InternalRow])
   }
 
   override def innerChildren: Seq[QueryPlan[_]] = cmd :: Nil
@@ -92,7 +92,7 @@ case class ExecutedCommandExec(cmd: RunnableCommand) extends LeafExecNode {
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
-    sqlContext.sparkContext.parallelize(sideEffectResult, 1)
+    sparkContext.parallelize(sideEffectResult, 1)
   }
 }
 
@@ -110,7 +110,7 @@ case class DataWritingCommandExec(cmd: DataWritingCommand, child: SparkPlan)
 
   protected[sql] lazy val sideEffectResult: Seq[InternalRow] = {
     val converter = CatalystTypeConverters.createToCatalystConverter(schema)
-    val rows = cmd.run(sqlContext.sparkSession, child)
+    val rows = cmd.run(session, child)
 
     rows.map(converter(_).asInstanceOf[InternalRow])
   }
@@ -133,7 +133,7 @@ case class DataWritingCommandExec(cmd: DataWritingCommand, child: SparkPlan)
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
-    sqlContext.sparkContext.parallelize(sideEffectResult, 1)
+    sparkContext.parallelize(sideEffectResult, 1)
   }
 
   override protected def withNewChildInternal(newChild: SparkPlan): DataWritingCommandExec =

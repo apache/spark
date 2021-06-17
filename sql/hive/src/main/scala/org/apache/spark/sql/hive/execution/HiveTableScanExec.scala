@@ -202,11 +202,11 @@ case class HiveTableScanExec(
     // Using dummyCallSite, as getCallSite can turn out to be expensive with
     // multiple partitions.
     val rdd = if (!relation.isPartitioned) {
-      Utils.withDummyCallSite(sqlContext.sparkContext) {
+      Utils.withDummyCallSite(sparkContext) {
         hadoopReader.makeRDDForTable(hiveQlTable)
       }
     } else {
-      Utils.withDummyCallSite(sqlContext.sparkContext) {
+      Utils.withDummyCallSite(sparkContext) {
         hadoopReader.makeRDDForPartitionedTable(prunedPartitions)
       }
     }

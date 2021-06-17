@@ -74,7 +74,7 @@ case class SubqueryBroadcastExec(
     Future {
       // This will run in another thread. Set the execution id so that we can connect these jobs
       // with the correct execution.
-      SQLExecution.withExecutionId(sqlContext.sparkSession, executionId) {
+      SQLExecution.withExecutionId(session, executionId) {
         val beforeCollect = System.nanoTime()
 
         val broadcastRelation = child.executeBroadcast[HashedRelation]().value

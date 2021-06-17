@@ -133,7 +133,7 @@ case class InSubqueryExec(
     } else {
       rows.map(_.get(0, child.dataType))
     }
-    resultBroadcast = plan.sqlContext.sparkContext.broadcast(result)
+    resultBroadcast = plan.session.sparkContext.broadcast(result)
   }
 
   def values(): Option[Array[Any]] = Option(resultBroadcast).map(_.value)
