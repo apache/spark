@@ -31,44 +31,18 @@ class DistributionSuite extends SparkFunSuite {
     if (inputPartitioning.satisfies(requiredDistribution) != satisfied) {
       fail(
         s"""
-        |== Input Partitioning ==
-        |$inputPartitioning
-        |== Required Distribution ==
-        |$requiredDistribution
-        |== Does input partitioning satisfy required distribution? ==
-        |Expected $satisfied got ${inputPartitioning.satisfies(requiredDistribution)}
+           |== Input Partitioning ==
+           |$inputPartitioning
+
+           |== Required Distri
+
+           |$requiredDistribution
+
+           |== Does input partitioning satisfy require
+           ution? ==
+           |Expected $satisfied got ${inputPartitioning.satisfies(requiredDistribution)}
         """.stripMargin)
     }
-  }
-
-  protected def checkCompatible(
-      left: Partitioning,
-      right: Partitioning,
-      compatible: Boolean,
-      leftDistribution: Distribution = UnspecifiedDistribution,
-      rightDistribution: Distribution = UnspecifiedDistribution): Unit = {
-    val actual = left.isCompatibleWith(leftDistribution, right, rightDistribution)
-    if (actual != compatible) {
-      fail(
-        s"""
-           |== Left Partitioning ==
-           |$left
-           |== Right Partitioning ==
-           |$right
-           |== Is left partitioning compatible with right partitioning? ==
-           |Expected $compatible but got $actual
-           |""".stripMargin)
-    }
-  }
-
-  protected def checkPartitionCollectionCompatible(
-      left: Partitioning,
-      right: Partitioning,
-      compatible: Boolean,
-      leftDistribution: Distribution = UnspecifiedDistribution,
-      rightDistribution: Distribution = UnspecifiedDistribution): Unit = {
-    checkCompatible(left, right, compatible, leftDistribution, rightDistribution)
-    checkCompatible(right, left, compatible, rightDistribution, leftDistribution)
   }
 
   test("UnspecifiedDistribution and AllTuples") {
@@ -294,158 +268,5 @@ class DistributionSuite extends SparkFunSuite {
       RangePartitioning(Seq($"a".asc, $"b".asc, $"c".asc), 10),
       ClusteredDistribution(Seq($"a", $"b", $"c"), Some(5)),
       false)
-  }
-
-  test("Compatibility: SinglePartition and HashPartitioning") {
-    checkCompatible(
-      SinglePartition,
-      SinglePartition,
-      compatible = true)
-
-    checkCompatible(
-      HashPartitioning(Seq($"a", $"b", $"c"), 4),
-      HashPartitioning(Seq($"a", $"b", $"c"), 4),
-      compatible = true,
-      ClusteredDistribution(Seq($"a", $"b", $"c")),
-      ClusteredDistribution(Seq($"a", $"b", $"c")))
-
-    checkCompatible(
-      HashPartitioning(Seq($"a", $"c"), 4),
-      HashPartitioning(Seq($"a", $"c"), 8),
-      compatible = true,
-      ClusteredDistribution(Seq($"a", $"b", $"c")),
-      ClusteredDistribution(Seq($"a", $"b", $"c")))
-
-    checkCompatible(
-      HashPartitioning(Seq($"a", $"b"), 4),
-      HashPartitioning(Seq($"b", $"a"), 8),
-      compatible = true,
-      ClusteredDistribution(Seq($"a", $"b")),
-      ClusteredDistribution(Seq($"b", $"a")))
-
-    checkCompatible(
-      HashPartitioning(Seq($"a", $"b"), 4),
-      HashPartitioning(Seq($"b", $"a"), 8),
-      compatible = true,
-      ClusteredDistribution(Seq($"c", $"a", $"b")),
-      ClusteredDistribution(Seq($"d", $"b", $"a")))
-
-    checkCompatible(
-      HashPartitioning(Seq($"a", $"b"), 4),
-      HashPartitioning(Seq($"a", $"b"), 8),
-      compatible = true,
-      ClusteredDistribution(Seq($"a", $"a", $"b")),
-      ClusteredDistribution(Seq($"a", $"a", $"b")))
-
-    // negative cases
-
-    checkCompatible(
-      HashPartitioning(Seq($"a"), 4),
-      HashPartitioning(Seq($"b"), 4),
-      compatible = false,
-      ClusteredDistribution(Seq($"a", $"b")),
-      ClusteredDistribution(Seq($"a", $"b")))
-
-    checkCompatible(
-      HashPartitioning(Seq($"a", $"b"), 4),
-      HashPartitioning(Seq($"b", $"b"), 4),
-      compatible = false,
-      ClusteredDistribution(Seq($"a", $"b")),
-      ClusteredDistribution(Seq($"b", $"a")))
-
-    checkCompatible(
-      HashPartitioning(Seq($"a", $"b"), 4),
-      HashPartitioning(Seq($"a", $"b"), 4),
-      compatible = false,
-      ClusteredDistribution(Seq($"a", $"a", $"b")),
-      ClusteredDistribution(Seq($"a", $"b", $"b")))
-  }
-
-  test("Compatibility: PartitionCollection") {
-    checkPartitionCollectionCompatible(
-      HashPartitioning(Seq($"a"), 4),
-      PartitioningCollection(Seq(HashPartitioning(Seq($"a"), 4))),
-      compatible = true,
-      ClusteredDistribution(Seq($"a")),
-      ClusteredDistribution(Seq($"a")))
-
-    checkPartitionCollectionCompatible(
-      HashPartitioning(Seq($"a"), 4),
-      PartitioningCollection(Seq(HashPartitioning(Seq($"b"), 4), HashPartitioning(Seq($"a"), 4))),
-      compatible = true,
-      ClusteredDistribution(Seq($"a")),
-      ClusteredDistribution(Seq($"a", $"b")))
-
-    checkPartitionCollectionCompatible(
-      PartitioningCollection(Seq(HashPartitioning(Seq($"a"), 4))),
-      PartitioningCollection(Seq(HashPartitioning(Seq($"a"), 4))),
-      compatible = true,
-      ClusteredDistribution(Seq($"a")),
-      ClusteredDistribution(Seq($"a")))
-
-    checkPartitionCollectionCompatible(
-      PartitioningCollection(Seq(HashPartitioning(Seq($"a"), 4), HashPartitioning(Seq($"b"), 4))),
-      PartitioningCollection(Seq(HashPartitioning(Seq($"a"), 4), HashPartitioning(Seq($"b"), 4))),
-      compatible = true,
-      ClusteredDistribution(Seq($"a", $"b")),
-      ClusteredDistribution(Seq($"a", $"b")))
-
-    checkPartitionCollectionCompatible(
-      PartitioningCollection(Seq(HashPartitioning(Seq($"a"), 4), HashPartitioning(Seq($"b"), 4))),
-      PartitioningCollection(Seq(HashPartitioning(Seq($"b"), 4), HashPartitioning(Seq($"a"), 4))),
-      compatible = true,
-      ClusteredDistribution(Seq($"a", $"b")),
-      ClusteredDistribution(Seq($"a", $"b")))
-
-    checkPartitionCollectionCompatible(
-      PartitioningCollection(Seq(HashPartitioning(Seq($"a"), 4))),
-      PartitioningCollection(Seq(HashPartitioning(Seq($"a"), 4), HashPartitioning(Seq($"b"), 4))),
-      compatible = true,
-      ClusteredDistribution(Seq($"a")),
-      ClusteredDistribution(Seq($"a", $"b")))
-
-    checkPartitionCollectionCompatible(
-      PartitioningCollection(Seq(HashPartitioning(Seq($"b"), 4), HashPartitioning(Seq($"a"), 4))),
-      PartitioningCollection(Seq(HashPartitioning(Seq($"a"), 4), HashPartitioning(Seq($"c"), 4))),
-      compatible = true,
-      ClusteredDistribution(Seq($"b", $"a")),
-      ClusteredDistribution(Seq($"a", $"c")))
-
-    // negative cases
-
-    checkPartitionCollectionCompatible(
-      HashPartitioning(Seq($"a"), 4),
-      PartitioningCollection(Seq(HashPartitioning(Seq($"b"), 4))),
-      compatible = false,
-      ClusteredDistribution(Seq($"a", $"b")),
-      ClusteredDistribution(Seq($"a", $"b")))
-
-    checkCompatible(
-      PartitioningCollection(Seq(HashPartitioning(Seq($"a"), 4), HashPartitioning(Seq($"b"), 4))),
-      PartitioningCollection(Seq(HashPartitioning(Seq($"c"), 4))),
-      compatible = false,
-      ClusteredDistribution(Seq($"a", $"b", $"c")),
-      ClusteredDistribution(Seq($"a", $"b", $"c")))
-  }
-
-  test("Compatibility: Others") {
-    val partitionings: Seq[Partitioning] = Seq(UnknownPartitioning(1),
-      BroadcastPartitioning(IdentityBroadcastMode),
-      RoundRobinPartitioning(10),
-      RangePartitioning(Seq($"a".asc), 10),
-      PartitioningCollection(Seq(UnknownPartitioning(1)))
-    )
-
-    for (i <- partitionings.indices) {
-      for (j <- partitionings.indices) {
-        checkCompatible(partitionings(i), partitionings(j), compatible = false)
-      }
-    }
-
-    // should always return false when comparing with `HashPartitioning` or `SinglePartition`
-    partitionings.foreach { p =>
-      checkCompatible(p, HashPartitioning(Seq($"a"), 10), compatible = false)
-      checkCompatible(p, SinglePartition, compatible = false)
-    }
   }
 }

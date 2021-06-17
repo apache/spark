@@ -149,22 +149,17 @@ trait Partitioning {
   }
 
   /**
-   * Returns true iff this partitioning is compatible with `other`. If two [[Partitioning]]s can
-   * satisfy their respective required distribution (via [[satisfies]]), and are compatible with
-   * each other, then their partitions are considered to be co-partitioned, which will allow Spark
-   * to eliminate data shuffle whenever necessary.
-   *
-   * Note: implementor should make sure the method satisfies the equivalence relation, that is,
-   * the implementation should be reflexive, symmetric and transitive.
+   * Only return non-empty if the requirement can be used to repartition another side to match
+   * the distribution of this side.
    */
-  final def isCompatibleWith(
-      distribution: Distribution,
-      other: Partitioning,
-      otherDistribution: Distribution): Boolean = other match {
-    case PartitioningCollection(others) =>
-      others.exists(_.isCompatibleWith(otherDistribution, this, distribution))
-    case _ => isCompatibleWith0(distribution, other, otherDistribution)
-  }
+  final def createRequirement(distribution: Distribution): Option[Requirement] =
+    distribution match {
+      case clustered: ClusteredDistribution =>
+        createRequirement0(clustered)
+      case _ =>
+        throw new IllegalStateException(s"Unexpected distribution: " +
+            s"${distribution.getClass.getSimpleName}")
+    }
 
   /**
    * The actual method that defines whether this [[Partitioning]] can satisfy the given
@@ -180,14 +175,8 @@ trait Partitioning {
     case _ => false
   }
 
-  /**
-   * The actual method that defines whether this [[Partitioning]] is compatible with `other`. In
-   * default this always return false.
-   */
-  protected def isCompatibleWith0(
-      distribution: Distribution,
-      other: Partitioning,
-      otherDistribution: Distribution): Boolean = false
+  protected def createRequirement0(distribution: ClusteredDistribution): Option[Requirement] =
+    None
 }
 
 case class UnknownPartitioning(numPartitions: Int) extends Partitioning
@@ -207,13 +196,8 @@ case object SinglePartition extends Partitioning {
     case _ => true
   }
 
-  override def isCompatibleWith0(
-      distribution: Distribution,
-      other: Partitioning,
-      otherDistribution: Distribution): Boolean = other match {
-    case SinglePartition => true
-    case _ => false
-  }
+  override protected def createRequirement0(
+      distribution: ClusteredDistribution): Option[Requirement] = Some(SinglePartitionRequirement)
 }
 
 /**
@@ -238,43 +222,8 @@ case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
     }
   }
 
-  override def isCompatibleWith0(
-      distribution: Distribution,
-      other: Partitioning,
-      otherDistribution: Distribution): Boolean = (distribution, otherDistribution) match {
-    case (thisDist: ClusteredDistribution, thatDist: ClusteredDistribution) =>
-      // For each expression in the `HashPartitioning` that has occurrences in
-      // `ClusteredDistribution`, returns a mapping from its index in the partitioning to the
-      // indexes where it appears in the distribution.
-      // For instance, if `partitioning` is `[a, b]` and `distribution is `[a, a, b]`, then the
-      // result mapping could be `{ 0 -> (0, 1), 1 -> (2) }`.
-      def indexMap(
-          distribution: ClusteredDistribution,
-          partitioning: HashPartitioning): mutable.Map[Int, mutable.BitSet] = {
-        val result = mutable.Map.empty[Int, mutable.BitSet]
-        val expressionToIndex = partitioning.expressions.zipWithIndex.toMap
-        distribution.clustering.zipWithIndex.foreach { case (distKey, distKeyIdx) =>
-          expressionToIndex.find { case (partKey, _) => partKey.semanticEquals(distKey) }.forall {
-            case (_, partIdx) =>
-              result.getOrElseUpdate(partIdx, mutable.BitSet.empty).add(distKeyIdx)
-          }
-        }
-        result
-      }
-
-      other match {
-        case that @ HashPartitioning(_, _) =>
-          // we need to check:
-          //  1. both partitioning have the same number of expressions
-          //  2. each corresponding expression in both partitioning is used in the same positions
-          //     of the corresponding distribution.
-          this.expressions.length == that.expressions.length &&
-            indexMap(thisDist, this) == indexMap(thatDist, that)
-        case _ =>
-          false
-      }
-    case _ =>
-      false
+  override def createRequirement0(distribution: ClusteredDistribution): Option[Requirement] = {
+    Some(HashRequirement(this, distribution))
   }
 
   /**
@@ -377,11 +326,16 @@ case class PartitioningCollection(partitionings: Seq[Partitioning])
   override def satisfies0(required: Distribution): Boolean =
     partitionings.exists(_.satisfies(required))
 
-  override def isCompatibleWith0(
-      distribution: Distribution,
-      other: Partitioning,
-      otherDistribution: Distribution): Boolean =
-    partitionings.exists(_.isCompatibleWith(distribution, other, otherDistribution))
+  override def createRequirement0(distribution: ClusteredDistribution): Option[Requirement] = {
+    val eligible = partitionings
+        .filter(_.satisfies(distribution))
+        .flatMap(_.createRequirement(distribution))
+    if (eligible.nonEmpty) {
+      Some(RequirementCollection(eligible))
+    } else {
+      None
+    }
+  }
 
   override def toString: String = {
     partitionings.map(_.toString).mkString("(", " or ", ")")
@@ -403,5 +357,138 @@ case class BroadcastPartitioning(mode: BroadcastMode) extends Partitioning {
     case UnspecifiedDistribution => true
     case BroadcastDistribution(m) if m == mode => true
     case _ => false
+  }
+}
+
+// ---------------------------------------------------------
+// ------------------ Requirements -------------------------
+// ---------------------------------------------------------
+
+/**
+ * This specifies that, when a operator has more than one children where each of which has
+ * its own partitioning and required distribution, the requirement for the other children to be
+ * co-partitioned with the current child.
+ */
+trait Requirement extends Ordered[Requirement] {
+  /**
+   * Returns true iff this requirement is compatible with the other [[Partitioning]] and
+   * clustering expressions (e.g., from [[ClusteredDistribution]]).
+   *
+   * If compatible, then it means that the data partitioning from the requirement can be seen as
+   * co-partitioned with the `otherPartitioning`, and therefore no shuffle is required when
+   * joining the two sides.
+   */
+  def isCompatibleWith(otherPartitioning: Partitioning, otherClustering: Seq[Expression]): Boolean
+
+  /**
+   * Create a partitioning that can be used to re-partitioned the other side whose required
+   * distribution is specified via `clustering`.
+   *
+   * Note: this will only be called after `isCompatibleWith` returns true on the side where the
+   * `clustering` is returned from.
+   */
+  def createPartitioning(clustering: Seq[Expression]): Partitioning
+}
+
+case object SinglePartitionRequirement extends Requirement {
+  override def isCompatibleWith(
+      otherPartitioning: Partitioning,
+      otherClustering: Seq[Expression]): Boolean = {
+    otherPartitioning.numPartitions == 1
+  }
+
+  override def createPartitioning(clustering: Seq[Expression]): Partitioning =
+    SinglePartition
+
+  override def compare(that: Requirement): Int = that match {
+    case SinglePartitionRequirement =>
+      0
+    case HashRequirement(partitioning, _) =>
+      1.compare(partitioning.numPartitions)
+    case RequirementCollection(requirements) =>
+      requirements.map(compare).min
+  }
+}
+
+case class HashRequirement(
+    partitioning: HashPartitioning,
+    distribution: ClusteredDistribution) extends Requirement {
+  private lazy val matchingIndexes = indexMap(distribution.clustering, partitioning.expressions)
+
+  override def isCompatibleWith(
+      otherPartitioning: Partitioning,
+      otherClustering: Seq[Expression]): Boolean = otherPartitioning match {
+    case SinglePartition =>
+      partitioning.numPartitions == 1
+    case HashPartitioning(expressions, _) =>
+      // we need to check:
+      //  1. both partitioning have the same number of expressions
+      //  2. each corresponding expression in both partitioning is used in the same positions
+      //     of the corresponding distribution.
+      partitioning.expressions.length == expressions.length &&
+          matchingIndexes == indexMap(otherClustering, expressions)
+    case PartitioningCollection(partitionings) =>
+      partitionings.exists(isCompatibleWith(_, otherClustering))
+    case _ =>
+      false
+  }
+
+  override def createPartitioning(clustering: Seq[Expression]): Partitioning = {
+    val exprs = clustering
+        .zipWithIndex
+        .filter(x => matchingIndexes.keySet.contains(x._2))
+        .map(_._1)
+    HashPartitioning(exprs, partitioning.numPartitions)
+  }
+
+  override def compare(that: Requirement): Int = that match {
+    case SinglePartitionRequirement =>
+      partitioning.numPartitions.compare(1)
+    case HashRequirement(otherPartitioning, _) =>
+      if (partitioning.numPartitions != otherPartitioning.numPartitions) {
+        partitioning.numPartitions.compare(otherPartitioning.numPartitions)
+      } else {
+        partitioning.expressions.length.compare(otherPartitioning.expressions.length)
+      }
+    case RequirementCollection(requirements) =>
+      // pick the best requirement in the other collection
+      requirements.map(compare).min
+  }
+
+  // For each expression in the `HashPartitioning` that has occurrences in
+  // `ClusteredDistribution`, returns a mapping from its index in the partitioning to the
+  // indexes where it appears in the distribution.
+  // For instance, if `partitioning` is `[a, b]` and `distribution is `[a, a, b]`, then the
+  // result mapping could be `{ 0 -> (0, 1), 1 -> (2) }`.
+  private def indexMap(
+      clustering: Seq[Expression],
+      expressions: Seq[Expression]): mutable.Map[Int, mutable.BitSet] = {
+    val result = mutable.Map.empty[Int, mutable.BitSet]
+    val expressionToIndex = expressions.zipWithIndex.toMap
+    clustering.zipWithIndex.foreach { case (distKey, distKeyIdx) =>
+      expressionToIndex.find { case (partKey, _) => partKey.semanticEquals(distKey) }.forall {
+        case (_, partIdx) =>
+          result.getOrElseUpdate(partIdx, mutable.BitSet.empty).add(distKeyIdx)
+      }
+    }
+    result
+  }
+}
+
+case class RequirementCollection(requirements: Seq[Requirement]) extends Requirement {
+  override def isCompatibleWith(
+      otherPartitioning: Partitioning,
+      otherClustering: Seq[Expression]): Boolean = {
+    requirements.exists(_.isCompatibleWith(otherPartitioning, otherClustering))
+  }
+
+  override def createPartitioning(clustering: Seq[Expression]): Partitioning = {
+    // choose the best requirement (e.g., maximum shuffle parallelism, min shuffle data size, etc)
+    // from the collection and use that to repartition the other sides
+    requirements.max.createPartitioning(clustering)
+  }
+
+  override def compare(that: Requirement): Int = {
+    requirements.map(_.compare(that)).max
   }
 }

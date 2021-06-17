@@ -73,33 +73,41 @@ case class EnsureRequirements(
       case _ => true
     }.map(_._2)
 
-    // Assuming equivalence relation in partitioning compatibility check
-    val allCompatible = childrenIndexes
-        .map(i => (children(i).outputPartitioning, requiredChildDistributions(i)))
-        .sliding(2).map {
-      case Seq(_) => true
-      case Seq((ap, ad), (bp, bd)) => ap.isCompatibleWith(ad, bp, bd)
-    }.forall(_ == true)
+    // If there are more than one children, we'll need to check partitioning & distribution of them
+    // and see if we need to insert extra shuffle.
+    if (childrenIndexes.length > 1 && childrenIndexes.map(requiredChildDistributions(_))
+        .forall(_.isInstanceOf[ClusteredDistribution])) {
+      val childrenWithDistribution = childrenIndexes
+          .map(i => (children(i).outputPartitioning,
+              requiredChildDistributions(i).asInstanceOf[ClusteredDistribution]))
+      val requirements = childrenWithDistribution.flatMap(pd => pd._1.createRequirement(pd._2))
 
-    if (!allCompatible) {
-      // insert shuffle for all children that are not compatible
       children = children.zip(requiredChildDistributions).zipWithIndex.map {
         case ((child, _), idx) if !childrenIndexes.contains(idx) =>
           child
         case ((child, dist), _) =>
-          val numPartitions = dist.requiredNumPartitions.getOrElse(conf.numShufflePartitions)
-          val defaultPartitioning = dist.createPartitioning(numPartitions)
-          // check if the child's partitioning is already the same as default partitioning, and
-          // skip the shuffle if so.
-          // TODO: we should find the "least common" partitioning for all children and use that
-          if (!child.outputPartitioning.isCompatibleWith(dist, defaultPartitioning, dist)) {
-            child match {
-              case ShuffleExchangeExec(_, c, so) => ShuffleExchangeExec(defaultPartitioning, c, so)
-              case _ => ShuffleExchangeExec(defaultPartitioning, child)
-            }
+          val partitioningOpt = if (requirements.isEmpty) {
+            // all the children need to be re-shuffled
+            val numPartitions = dist.requiredNumPartitions.getOrElse(conf.numShufflePartitions)
+            Some(dist.createPartitioning(numPartitions))
           } else {
-            child
+            // pick the best candidate from the requirements and use that to re-shuffle other
+            // children if necessary
+            val best = requirements.max
+            val clustering = dist.asInstanceOf[ClusteredDistribution].clustering
+            if (best.isCompatibleWith(child.outputPartitioning, clustering)) {
+              None
+            } else {
+              Some(requirements.max.createPartitioning(clustering))
+            }
           }
+
+          partitioningOpt.map { p =>
+            child match {
+              case ShuffleExchangeExec(_, c, so) => ShuffleExchangeExec(p, c, so)
+              case _ => ShuffleExchangeExec(p, child)
+            }
+          }.getOrElse(child)
       }
     }
 
