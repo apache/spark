@@ -19,7 +19,6 @@ package org.apache.spark.sql
 
 import java.util.UUID
 import java.util.concurrent.TimeUnit
-import java.util.concurrent.locks.{Condition, Lock, ReentrantLock}
 
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.util.QueryExecutionListener
@@ -31,17 +30,14 @@ import org.apache.spark.sql.util.QueryExecutionListener
  */
 class Observation(name: String) {
 
-  private val lock: Lock = new ReentrantLock()
-  private val completed: Condition = lock.newCondition()
   private val listener: ObservationListener = ObservationListener(this)
 
   private var sparkSession: Option[SparkSession] = None
 
-  @transient private var row: Option[Row] = None
+  @volatile private var row: Option[Row] = None
 
   /**
    * Attach this observation to the given Dataset.
-   * Remember to call `close()` when the observation is done.
    *
    * @param ds dataset
    * @tparam T dataset type
@@ -71,36 +67,35 @@ class Observation(name: String) {
    * Only the result of the first action is available. Subsequent actions do not modify the result.
    */
   def get: Row = {
-    waitCompleted(None, TimeUnit.SECONDS)
+    assert(waitCompleted(None, TimeUnit.SECONDS), "waitCompleted without timeout returned false")
+    assert(row.isDefined, "waitCompleted without timeout returned while result is still None")
     row.get
   }
 
   private def waitCompleted(time: Option[Long], unit: TimeUnit): Boolean = {
-    lock.lock()
-    try {
+    synchronized {
       if (row.isEmpty) {
         if (time.isDefined) {
-          completed.await(time.get, unit)
+          this.wait(unit.toMillis(time.get))
         } else {
-          completed.await()
+          this.wait()
         }
       }
       row.isDefined
-    } finally {
-      lock.unlock()
     }
   }
 
-  private def getMetricRow(metrics: Map[String, Row]): Option[Row] =
-    metrics
-      .find { case (metricName, _) => metricName.equals(name) }
-      .map { case (_, row) => row }
-
   private def register(sparkSession: SparkSession): Unit = {
-    if (this.sparkSession.isDefined) {
-      throw new IllegalStateException("An Observation can be used with a Dataset only once")
+    // makes this class thread-safe:
+    // only the first thread entering this block can set sparkSession
+    // all other threads will see the exception, because it is only allowed to do this once
+    synchronized {
+      if (this.sparkSession.isDefined) {
+        throw new IllegalStateException("An Observation can be used with a Dataset only once")
+      }
+      this.sparkSession = Some(sparkSession)
     }
-    this.sparkSession = Some(sparkSession)
+
     sparkSession.listenerManager.register(listener)
   }
 
@@ -109,12 +104,9 @@ class Observation(name: String) {
   }
 
   private[spark] def onFinish(funcName: String, qe: QueryExecution): Unit = {
-    lock.lock()
-    try {
-      this.row = getMetricRow(qe.observedMetrics)
-      if (this.row.isDefined) completed.signalAll()
-    } finally {
-      lock.unlock()
+    synchronized {
+      this.row = qe.observedMetrics.get(name)
+      if (this.row.isDefined) this.notifyAll()
     }
     unregister()
   }
