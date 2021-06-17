@@ -257,6 +257,7 @@ class DataTypeSuite extends SparkFunSuite {
   checkDataTypeFromDDL(VarcharType(11))
 
   dayTimeIntervalTypes.foreach(checkDataTypeFromJson)
+  yearMonthIntervalTypes.foreach(checkDataTypeFromJson)
 
   yearMonthIntervalTypes.foreach(checkDataTypeFromDDL)
   dayTimeIntervalTypes.foreach(checkDataTypeFromDDL)

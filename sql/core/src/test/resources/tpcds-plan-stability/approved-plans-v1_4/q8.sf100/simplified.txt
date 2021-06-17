@@ -59,8 +59,8 @@ TakeOrderedAndProject [s_store_name,sum(ss_net_profit)]
                                               BroadcastExchange #7
                                                 WholeStageCodegen (10)
                                                   Project [ca_zip]
-                                                    Filter [count(1)]
-                                                      HashAggregate [ca_zip,count] [count(1),ca_zip,count(1),count]
+                                                    Filter [cnt]
+                                                      HashAggregate [ca_zip,count] [count(1),ca_zip,cnt,count]
                                                         InputAdapter
                                                           Exchange [ca_zip] #8
                                                             WholeStageCodegen (9)

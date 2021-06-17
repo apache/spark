@@ -38,6 +38,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy.{ANSI, STRICT}
 import org.apache.spark.sql.types.DayTimeIntervalType._
+import org.apache.spark.sql.types.YearMonthIntervalType._
 import org.apache.spark.util.Utils
 
 /**
@@ -182,8 +183,10 @@ object DataType {
       DayTimeIntervalType(MINUTE, MINUTE),
       DayTimeIntervalType(MINUTE, SECOND),
       DayTimeIntervalType(SECOND, SECOND),
-      // TODO(SPARK-35770): Parse YearMonthIntervalType from JSON
-      YearMonthIntervalType(), TimestampWithoutTZType)
+      YearMonthIntervalType(YEAR, YEAR),
+      YearMonthIntervalType(MONTH, MONTH),
+      YearMonthIntervalType(YEAR, MONTH),
+      TimestampWithoutTZType)
       .map(t => t.typeName -> t).toMap
   }
 
