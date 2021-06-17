@@ -165,7 +165,6 @@ object IntervalUtils {
 
   def castStringToDTInterval(
       input: UTF8String,
-      // TODO(SPARK-35735): Take into account day-time interval fields in cast
       startField: Byte,
       endField: Byte): Long = {
     def secondAndMicro(second: String, micro: String): String = {
@@ -176,55 +175,31 @@ object IntervalUtils {
       }
     }
 
-    def truncatedDay(day: String): String = {
-      if (startField > DayTimeIntervalType.DAY) {
-        "0"
-      } else {
-        day
-      }
-    }
-
-    def truncatedHour(hour: String): String = {
-      if (startField > DayTimeIntervalType.HOUR || endField < DayTimeIntervalType.HOUR) {
-        "0"
-      } else {
-        hour
-      }
-    }
-
-    def truncatedMinute(minute: String): String = {
-      if (startField > DayTimeIntervalType.MINUTE || endField < DayTimeIntervalType.MINUTE) {
-        "0"
-      } else {
-        minute
-      }
-    }
-
-    def truncatedSecond(second: String): String = {
-      if (endField < DayTimeIntervalType.SECOND) {
-        "0"
-      } else {
-        second
-      }
-    }
+    def truncate(value: String, field: Byte): String = if (endField < field) "0" else value
 
     input.trimAll().toString match {
       case daySecondRegex("-", day, hour, minute, second, micro) =>
-        toDTInterval(truncatedDay(day), truncatedHour(hour), truncatedMinute(minute),
-          truncatedSecond(secondAndMicro(second, micro)), -1)
+        toDTInterval(day, truncate(hour, DayTimeIntervalType.HOUR),
+          truncate(minute, DayTimeIntervalType.MINUTE),
+          truncate(secondAndMicro(second, micro), DayTimeIntervalType.SECOND), -1)
       case daySecondRegex(_, day, hour, minute, second, micro) =>
-        toDTInterval(truncatedDay(day), truncatedHour(hour), truncatedMinute(minute),
-          truncatedSecond(secondAndMicro(second, micro)), 1)
+        toDTInterval(day, truncate(hour, DayTimeIntervalType.HOUR),
+          truncate(minute, DayTimeIntervalType.MINUTE),
+          truncate(secondAndMicro(second, micro), DayTimeIntervalType.SECOND), 1)
       case daySecondLiteralRegex(firstSign, secondSign, day, hour, minute, second, micro) =>
         (firstSign, secondSign) match {
-          case ("-", "-") => toDTInterval(truncatedDay(day), truncatedHour(hour),
-            truncatedMinute(minute), truncatedSecond(secondAndMicro(second, micro)), 1)
-          case ("-", _) => toDTInterval(truncatedDay(day), truncatedHour(hour),
-            truncatedMinute(minute), truncatedSecond(secondAndMicro(second, micro)), -1)
-          case (_, "-") => toDTInterval(truncatedDay(day), truncatedHour(hour),
-            truncatedMinute(minute), truncatedSecond(secondAndMicro(second, micro)), -1)
-          case (_, _) => toDTInterval(truncatedDay(day), truncatedHour(hour),
-            truncatedMinute(minute), truncatedSecond(secondAndMicro(second, micro)), 1)
+          case ("-", "-") => toDTInterval(day, truncate(hour, DayTimeIntervalType.HOUR),
+            truncate(minute, DayTimeIntervalType.MINUTE),
+            truncate(secondAndMicro(second, micro), DayTimeIntervalType.SECOND), 1)
+          case ("-", _) => toDTInterval(day, truncate(hour, DayTimeIntervalType.HOUR),
+            truncate(minute, DayTimeIntervalType.MINUTE),
+            truncate(secondAndMicro(second, micro), DayTimeIntervalType.SECOND), -1)
+          case (_, "-") => toDTInterval(day, truncate(hour, DayTimeIntervalType.HOUR),
+            truncate(minute, DayTimeIntervalType.MINUTE),
+            truncate(secondAndMicro(second, micro), DayTimeIntervalType.SECOND), -1)
+          case (_, _) => toDTInterval(day, truncate(hour, DayTimeIntervalType.HOUR),
+            truncate(minute, DayTimeIntervalType.MINUTE),
+            truncate(secondAndMicro(second, micro), DayTimeIntervalType.SECOND), 1)
         }
       case _ =>
         throw new IllegalArgumentException(

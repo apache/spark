@@ -616,12 +616,12 @@ class CastSuite extends CastSuiteBase {
       DayTimeIntervalType(DAY, HOUR) -> 93600000000L,
       DayTimeIntervalType(DAY, MINUTE) -> 93780000000L,
       DayTimeIntervalType(DAY, SECOND) -> 93784000000L,
-      DayTimeIntervalType(HOUR, HOUR) -> 7200000000L,
-      DayTimeIntervalType(HOUR, MINUTE) -> 7380000000L,
-      DayTimeIntervalType(HOUR, SECOND) -> 7384000000L,
-      DayTimeIntervalType(MINUTE, MINUTE) -> 180000000L,
-      DayTimeIntervalType(MINUTE, SECOND) -> 184000000L,
-      DayTimeIntervalType(SECOND, SECOND) -> 4000000L)
+      DayTimeIntervalType(HOUR, HOUR) -> 93600000000L,
+      DayTimeIntervalType(HOUR, MINUTE) -> 93780000000L,
+      DayTimeIntervalType(HOUR, SECOND) -> 93784000000L,
+      DayTimeIntervalType(MINUTE, MINUTE) -> 93780000000L,
+      DayTimeIntervalType(MINUTE, SECOND) -> 93784000000L,
+      DayTimeIntervalType(SECOND, SECOND) -> 93784000000L)
       .foreach { case (dataType, value) =>
         checkEvaluation(
           cast(Literal.create("1 2:03:04"), dataType), value)
