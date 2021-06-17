@@ -29,7 +29,7 @@ import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTableCatalog}
 import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
 import org.apache.spark.sql.connector.expressions.{Expression, FieldReference, NullOrdering, SortDirection, SortOrder}
 import org.apache.spark.sql.connector.expressions.LogicalExpressions._
-import org.apache.spark.sql.execution.{CommandResultExec, QueryExecution, SortExec, SparkPlan}
+import org.apache.spark.sql.execution.{QueryExecution, SortExec, SparkPlan}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.datasources.v2.V2TableWriteExec
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeLike
@@ -778,8 +778,7 @@ class WriteDistributionAndOrderingSuite
 
     sparkContext.listenerBus.waitUntilEmpty()
 
-    assert(executedPlan.isInstanceOf[CommandResultExec])
-    executedPlan.asInstanceOf[CommandResultExec].commandPhysicalPlan match {
+    executedPlan match {
       case w: V2TableWriteExec =>
         stripAQEPlan(w.query)
       case _ =>
