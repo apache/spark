@@ -1710,9 +1710,9 @@ private[spark] object QueryCompilationErrors {
   }
 
   def colTypeNotSupportStatisticsCollectionError(
-    name: String,
-    tableIdent: TableIdentifier,
-    dataType: DataType): Throwable = {
+      name: String,
+      tableIdent: TableIdentifier,
+      dataType: DataType): Throwable = {
     new AnalysisException(
       s"Column $name in table $tableIdent is of type $dataType, " +
         "and Spark does not support statistics collection on this column type.")
@@ -1723,10 +1723,10 @@ private[spark] object QueryCompilationErrors {
   }
 
   def notGetExpectedPrefixColError(
-    table: String,
-    database: String,
-    schemaColumns: String,
-    specColumns: String): Throwable = {
+      table: String,
+      database: String,
+      schemaColumns: String,
+      specColumns: String): Throwable = {
     new AnalysisException("The list of partition columns with values " +
       s"in partition specification for table '${table}' " +
       s"in database '${database}' is not a prefix of the list of " +
@@ -1735,15 +1735,15 @@ private[spark] object QueryCompilationErrors {
   }
 
   def noSuchPartitionError(
-    db: String,
-    table: String,
-    partition: TablePartitionSpec): Throwable = {
+      db: String,
+      table: String,
+      partition: TablePartitionSpec): Throwable = {
     new NoSuchPartitionException(db, table, partition)
   }
 
   def analyzingColStatisticsNotSupportedOfDataTypeError(
-    name: String,
-    dataType: DataType): Throwable = {
+      name: String,
+      dataType: DataType): Throwable = {
     new AnalysisException("Analyzing column statistics is not supported for column " +
       s"$name of data type: $dataType.")
   }
@@ -1794,7 +1794,7 @@ private[spark] object QueryCompilationErrors {
   }
 
   def cmdOnlyWorksOnPartitionedTables(cmd: String, tableIdentWithDB: String): Throwable = {
-    throw new AnalysisException(
+    new AnalysisException(
       s"Operation not allowed: $cmd only works on partitioned tables: $tableIdentWithDB")
   }
 
