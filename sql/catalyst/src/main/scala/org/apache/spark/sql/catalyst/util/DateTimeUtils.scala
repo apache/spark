@@ -248,7 +248,9 @@ object DateTimeUtils {
    * @return timestamp segments, time zone id and whether the input is just time without a date. If
    *         the input string can't be parsed as timestamp, the result timestamp segments are empty.
    */
-  private def parseTimestampString(s: UTF8String): (Array[Int], Option[String], Boolean) = {
+  private def parseTimestampString(
+      s: UTF8String,
+      timeZoneId: Option[ZoneId]): (Array[Int], Option[ZoneId], Boolean) = {
     if (s == null) {
       return (Array.empty, None, false)
     }
@@ -354,7 +356,13 @@ object DateTimeUtils {
       segments(6) /= 10
       digitsMilli -= 1
     }
-    (segments, tz, justTime)
+    val zoneId = tz match {
+      case None => timeZoneId
+      case Some("+") => Some(ZoneOffset.ofHoursMinutes(segments(7), segments(8)))
+      case Some("-") => Some(ZoneOffset.ofHoursMinutes(-segments(7), -segments(8)))
+      case Some(zoneName: String) => Some(getZoneId(zoneName.trim))
+    }
+    (segments, zoneId, justTime)
   }
 
   /**
@@ -384,26 +392,21 @@ object DateTimeUtils {
    *  - Region-based zone IDs in the form `area/city`, such as `Europe/Paris`
    */
   def stringToTimestamp(s: UTF8String, timeZoneId: ZoneId): Option[Long] = {
-    val (segments, tz, justTime) = parseTimestampString(s)
-    if (segments.isEmpty) {
-      return None
-    }
     try {
-      val zoneId = tz match {
-        case None => timeZoneId
-        case Some("+") => ZoneOffset.ofHoursMinutes(segments(7), segments(8))
-        case Some("-") => ZoneOffset.ofHoursMinutes(-segments(7), -segments(8))
-        case Some(zoneName: String) => getZoneId(zoneName.trim)
+      val (segments, zoneId, justTime) = parseTimestampString(s, Some(timeZoneId))
+      if (segments.isEmpty) {
+        return None
       }
+      assert(zoneId.isDefined)
       val nanoseconds = MICROSECONDS.toNanos(segments(6))
       val localTime = LocalTime.of(segments(3), segments(4), segments(5), nanoseconds.toInt)
       val localDate = if (justTime) {
-        LocalDate.now(zoneId)
+        LocalDate.now(zoneId.get)
       } else {
         LocalDate.of(segments(0), segments(1), segments(2))
       }
       val localDateTime = LocalDateTime.of(localDate, localTime)
-      val zonedDateTime = ZonedDateTime.of(localDateTime, zoneId)
+      val zonedDateTime = ZonedDateTime.of(localDateTime, zoneId.get)
       val instant = Instant.from(zonedDateTime)
       Some(instantToMicros(instant))
     } catch {
@@ -447,19 +450,10 @@ object DateTimeUtils {
    *       the value of timestamp without time zone.
    */
   def stringToTimestampWithoutTimeZone(s: UTF8String): Option[Long] = {
-    val (segments, tz, justTime) = parseTimestampString(s)
-    // If the input string can't be parsed as a timestamp, or it contains only the time part of a
-    // timestamp and we can't determine its date, return None.
-    if (segments.isEmpty || justTime) {
-      return None
-    }
     try {
-      // We need to validate the time zone if exists
-      tz match {
-        case None => ""
-        case Some("+") => ZoneOffset.ofHoursMinutes(segments(7), segments(8))
-        case Some("-") => ZoneOffset.ofHoursMinutes(-segments(7), -segments(8))
-        case Some(zoneName: String) => getZoneId(zoneName.trim)
+      val (segments, _, justTime) = parseTimestampString(s, None)
+      if (segments.isEmpty || justTime) {
+        return None
       }
       val nanoseconds = MICROSECONDS.toNanos(segments(6))
       val localTime = LocalTime.of(segments(3), segments(4), segments(5), nanoseconds.toInt)
