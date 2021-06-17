@@ -21,7 +21,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, QualifiedTableName, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NamespaceAlreadyExistsException, NoSuchNamespaceException, NoSuchPartitionException, NoSuchTableException, ResolvedNamespace, ResolvedTable, ResolvedView, TableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NamespaceAlreadyExistsException, NoSuchFunctionException, NoSuchNamespaceException, NoSuchPartitionException, NoSuchTableException, ResolvedNamespace, ResolvedTable, ResolvedView, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable, InvalidUDFClassException}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, AttributeSet, CreateMap, Expression, GroupingID, NamedExpression, SpecifiedWindowFrame, WindowFrame, WindowFunction, WindowSpecDefinition}
@@ -1827,5 +1827,39 @@ private[spark] object QueryCompilationErrors {
 
   def cannotOverwritePathIsReadError(): Throwable = {
     new AnalysisException("Cannot overwrite a path that is also being read from.")
+  }
+
+  def createFuncWithBothIfNotExistsAndReplaceError(): Throwable = {
+    new AnalysisException("CREATE FUNCTION with both IF NOT EXISTS and REPLACE is not allowed.")
+  }
+
+  def defineTempFuncWithIfExistsError(): Throwable = {
+    new AnalysisException("It is not allowed to define a TEMPORARY function with IF NOT EXISTS.")
+  }
+
+  def specifyingDBInCreateTempFuncError(databaseName: String): Throwable = {
+    new AnalysisException(
+      s"Specifying a database in CREATE TEMPORARY FUNCTION is not allowed: '$databaseName'")
+  }
+
+  def specifyingDBInDropTempFuncError(databaseName: String): Throwable = {
+    new AnalysisException(
+      s"Specifying a database in DROP TEMPORARY FUNCTION is not allowed: '$databaseName'")
+  }
+
+  def cannotDropNativeFuncError(functionName: String): Throwable = {
+    new AnalysisException(s"Cannot drop native function '$functionName'")
+  }
+
+  def cannotRefreshBuiltInFuncError(functionName: String): Throwable = {
+    new AnalysisException(s"Cannot refresh built-in function $functionName")
+  }
+
+  def cannotRefreshTempFuncError(functionName: String): Throwable = {
+    new AnalysisException(s"Cannot refresh temporary function $functionName")
+  }
+
+  def noSuchFunctionError(identifier: FunctionIdentifier): Throwable = {
+    new NoSuchFunctionException(identifier.database.get, identifier.funcName)
   }
 }
