@@ -928,13 +928,13 @@ object IntervalUtils {
       period: Period,
       startField: Byte = YearMonthIntervalType.YEAR,
       endField: Byte = YearMonthIntervalType.MONTH): Int = {
+    val monthsInYears = Math.multiplyExact(period.getYears, MONTHS_PER_YEAR)
+    val months = Math.addExact(monthsInYears, period.getMonths)
     (startField, endField) match {
       case (YearMonthIntervalType.YEAR, YearMonthIntervalType.YEAR) =>
-        Math.multiplyExact(period.getYears, MONTHS_PER_YEAR)
-      case (YearMonthIntervalType.YEAR, YearMonthIntervalType.MONTH) =>
-        val monthsInYears = Math.multiplyExact(period.getYears, MONTHS_PER_YEAR)
-        Math.addExact(monthsInYears, period.getMonths)
-      case (YearMonthIntervalType.MONTH, YearMonthIntervalType.MONTH) => period.getMonths
+        Math.multiplyExact(Math.floorDiv(months, MONTHS_PER_YEAR), MONTHS_PER_YEAR)
+      case (YearMonthIntervalType.YEAR, YearMonthIntervalType.MONTH) => months
+      case (YearMonthIntervalType.MONTH, YearMonthIntervalType.MONTH) => months
       case _ =>
         throw QueryCompilationErrors.invalidDayTimeIntervalType(
           YearMonthIntervalType.fieldToString(startField),
