@@ -356,6 +356,7 @@ object DateTimeUtils {
       segments(6) /= 10
       digitsMilli -= 1
     }
+    // This step also validates time zone part
     val zoneId = tz match {
       case None => timeZoneId
       case Some("+") => Some(ZoneOffset.ofHoursMinutes(segments(7), segments(8)))
@@ -452,6 +453,8 @@ object DateTimeUtils {
   def stringToTimestampWithoutTimeZone(s: UTF8String): Option[Long] = {
     try {
       val (segments, _, justTime) = parseTimestampString(s, None)
+      // If the input string can't be parsed as a timestamp, or it contains only the time part of a
+      // timestamp and we can't determine its date, return None.
       if (segments.isEmpty || justTime) {
         return None
       }
