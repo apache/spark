@@ -480,6 +480,7 @@ private[joins] object UnsafeHashedRelation {
           // scalastyle:on throwerror
         }
       } else if (isNullAware) {
+        binaryMap.free()
         return HashedRelationWithAllNullKeys
       }
     }
@@ -1064,6 +1065,7 @@ private[joins] object LongHashedRelation {
         val key = rowKey.getLong(0)
         map.append(key, unsafeRow)
       } else if (isNullAware) {
+        map.free()
         return HashedRelationWithAllNullKeys
       }
     }
