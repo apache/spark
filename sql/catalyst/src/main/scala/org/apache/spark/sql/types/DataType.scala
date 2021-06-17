@@ -37,6 +37,7 @@ import org.apache.spark.sql.catalyst.util.StringUtils.StringConcat
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy.{ANSI, STRICT}
+import org.apache.spark.sql.types.YearMonthIntervalType._
 import org.apache.spark.util.Utils
 
 /**
@@ -173,8 +174,10 @@ object DataType {
       DoubleType, FloatType, ShortType, ByteType, StringType, CalendarIntervalType,
       // TODO(SPARK-35732): Parse DayTimeIntervalType from JSON
       DayTimeIntervalType(),
-      // TODO(SPARK-35770): Parse YearMonthIntervalType from JSON
-      YearMonthIntervalType(), TimestampWithoutTZType)
+      YearMonthIntervalType(YEAR, YEAR),
+      YearMonthIntervalType(MONTH, MONTH),
+      YearMonthIntervalType(YEAR, MONTH),
+      TimestampWithoutTZType)
       .map(t => t.typeName -> t).toMap
   }
 
