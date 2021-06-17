@@ -862,6 +862,19 @@ object IntervalUtils {
     new CalendarInterval(totalMonths, totalDays, micros)
   }
 
+  def makeDayTimeInterval(
+      days: Int,
+      hours: Int,
+      mins: Int,
+      secs: Decimal): Long = {
+    assert(secs.scale == 6, "Seconds fractional must have 6 digits for microseconds")
+    var micros = secs.toUnscaledLong
+    micros = Math.addExact(micros, Math.multiplyExact(days, MICROS_PER_DAY))
+    micros = Math.addExact(micros, Math.multiplyExact(hours, MICROS_PER_HOUR))
+    micros = Math.addExact(micros, Math.multiplyExact(mins, MICROS_PER_MINUTE))
+    micros
+  }
+
   // The amount of seconds that can cause overflow in the conversion to microseconds
   private final val minDurationSeconds = Math.floorDiv(Long.MinValue, MICROS_PER_SECOND)
 
