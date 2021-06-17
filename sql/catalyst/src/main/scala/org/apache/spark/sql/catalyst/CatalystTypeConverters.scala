@@ -76,7 +76,7 @@ object CatalystTypeConverters {
       case LongType => LongConverter
       case FloatType => FloatConverter
       case DoubleType => DoubleConverter
-      case DayTimeIntervalType(startField, endField) => DurationConverter(startField, endField)
+      case DayTimeIntervalType(endField) => DurationConverter(startField, endField)
       // TODO(SPARK-35769): Truncate java.time.Period by fields of year-month interval type
       case _: YearMonthIntervalType => PeriodConverter
       case dataType: DataType => IdentityConverter(dataType)
@@ -432,7 +432,7 @@ object CatalystTypeConverters {
     override def toScalaImpl(row: InternalRow, column: Int): Double = row.getDouble(column)
   }
 
-  private case class DurationConverter(startField: Byte, endField: Byte)
+  private case class DurationConverter(endField: Byte)
       extends CatalystTypeConverter[Duration, Duration, Any] {
     override def toCatalystImpl(scalaValue: Duration): Long = {
       IntervalUtils.durationToMicros(scalaValue, endField)
