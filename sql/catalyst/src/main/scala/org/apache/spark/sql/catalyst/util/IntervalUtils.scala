@@ -105,21 +105,26 @@ object IntervalUtils {
   private val yearMonthRegex = (s"^$yearMonthPatternString$$").r
   private val yearMonthLiteralRegex =
     (s"(?i)^INTERVAL\\s+([+|-])?'$yearMonthPatternString'\\s+YEAR\\s+TO\\s+MONTH$$").r
+  private val yearYearLiteralRegex =
+    (s"(?i)^INTERVAL\\s+([+|-])?'$yearMonthPatternString'\\s+YEAR\\s+TO\\s+MONTH$$").r
+  private val monthMonthLiteralRegex =
+    (s"(?i)^INTERVAL\\s+([+|-])?'$yearMonthPatternString'\\s+YEAR\\s+TO\\s+MONTH$$").r
 
   def castStringToYMInterval(
       input: UTF8String,
-      // TODO(SPARK-35768): Take into account year-month interval fields in cast
       startField: Byte,
       endField: Byte): Int = {
     input.trimAll().toString match {
       case yearMonthRegex("-", year, month) => toYMInterval(year, month, -1)
       case yearMonthRegex(_, year, month) => toYMInterval(year, month, 1)
       case yearMonthLiteralRegex(firstSign, secondSign, year, month) =>
+        val truncatedYear = if (startField == YearMonthIntervalType.MONTH) "0" else year
+        val truncatedMonth = if (endField == YearMonthIntervalType.YEAR) "0" else month
         (firstSign, secondSign) match {
-          case ("-", "-") => toYMInterval(year, month, 1)
-          case ("-", _) => toYMInterval(year, month, -1)
-          case (_, "-") => toYMInterval(year, month, -1)
-          case (_, _) => toYMInterval(year, month, 1)
+          case ("-", "-") => toYMInterval(truncatedYear, truncatedMonth, 1)
+          case ("-", _) => toYMInterval(truncatedYear, truncatedMonth, -1)
+          case (_, "-") => toYMInterval(truncatedYear, truncatedMonth, -1)
+          case (_, _) => toYMInterval(truncatedYear, truncatedMonth, 1)
         }
       case _ => throw new IllegalArgumentException(
         s"Interval string does not match year-month format of `[+|-]y-m` " +

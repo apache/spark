@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.YearMonthIntervalType._
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -650,5 +651,42 @@ class CastSuite extends CastSuiteBase {
         val interval = Literal.create(Period.ofMonths(period), YearMonthIntervalType())
         checkEvaluation(cast(cast(interval, StringType), YearMonthIntervalType()), period)
       }
+  }
+
+  test("SPARK-35768: Take into account year-month interval fields in cast") {
+    checkEvaluation(cast(Literal.create("INTERVAL '1-1' YEAR TO MONTH"),
+      YearMonthIntervalType(YEAR, YEAR)), 12)
+    checkEvaluation(cast(Literal.create("INTERVAL '1-1' YEAR TO MONTH"),
+      YearMonthIntervalType(YEAR, MONTH)), 13)
+    checkEvaluation(cast(Literal.create("INTERVAL '1-1' YEAR TO MONTH"),
+      YearMonthIntervalType(MONTH, MONTH)), 1)
+
+    checkEvaluation(cast(Literal.create("INTERVAL '-1-1' YEAR TO MONTH"),
+      YearMonthIntervalType(YEAR, YEAR)), -12)
+    checkEvaluation(cast(Literal.create("INTERVAL '-1-1' YEAR TO MONTH"),
+      YearMonthIntervalType(YEAR, MONTH)), -13)
+    checkEvaluation(cast(Literal.create("INTERVAL '-1-1' YEAR TO MONTH"),
+      YearMonthIntervalType(MONTH, MONTH)), -1)
+
+    checkEvaluation(cast(Literal.create("INTERVAL -'-1-1' YEAR TO MONTH"),
+      YearMonthIntervalType(YEAR, YEAR)), 12)
+    checkEvaluation(cast(Literal.create("INTERVAL -'-1-1' YEAR TO MONTH"),
+      YearMonthIntervalType(YEAR, MONTH)), 13)
+    checkEvaluation(cast(Literal.create("INTERVAL -'-1-1' YEAR TO MONTH"),
+      YearMonthIntervalType(MONTH, MONTH)), 1)
+
+    checkEvaluation(cast(Literal.create("INTERVAL +'-1-1' YEAR TO MONTH"),
+      YearMonthIntervalType(YEAR, YEAR)), -12)
+    checkEvaluation(cast(Literal.create("INTERVAL +'-1-1' YEAR TO MONTH"),
+      YearMonthIntervalType(YEAR, MONTH)), -13)
+    checkEvaluation(cast(Literal.create("INTERVAL +'-1-1' YEAR TO MONTH"),
+      YearMonthIntervalType(MONTH, MONTH)), -1)
+
+    checkEvaluation(cast(Literal.create("INTERVAL +'+1-1' YEAR TO MONTH"),
+      YearMonthIntervalType(YEAR, YEAR)), 12)
+    checkEvaluation(cast(Literal.create("INTERVAL +'+1-1' YEAR TO MONTH"),
+      YearMonthIntervalType(YEAR, MONTH)), 13)
+    checkEvaluation(cast(Literal.create(" interval +'+1-1' YEAR  TO MONTH "),
+      YearMonthIntervalType(MONTH, MONTH)), 1)
   }
 }
