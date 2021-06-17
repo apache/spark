@@ -204,7 +204,7 @@ class PandasOnSparkFrameMethods(object):
         )
 
     def apply_batch(
-        self, func: Callable[..., Union[pd.DataFrame, pd.Series]], args: Tuple = (), **kwds: Any
+        self, func: Callable[..., pd.DataFrame], args: Tuple = (), **kwds: Any
     ) -> "DataFrame":
         """
         Apply a function that takes pandas DataFrame and outputs pandas DataFrame. The pandas
