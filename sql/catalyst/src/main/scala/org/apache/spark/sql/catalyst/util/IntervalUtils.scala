@@ -911,18 +911,14 @@ object IntervalUtils {
       }
     }
 
-    def extractEqualConstant(seconds: Long, constant: Long): Long = {
-      Math.multiplyExact(Math.floorDiv(seconds, constant), constant)
-    }
-
     val seconds = duration.getSeconds
     endField match {
       case DayTimeIntervalType.DAY =>
-        secondsToMicros(extractEqualConstant(seconds, SECONDS_PER_DAY))
+        secondsToMicros(seconds - seconds % SECONDS_PER_DAY)
       case DayTimeIntervalType.HOUR =>
-        secondsToMicros(extractEqualConstant(seconds, SECONDS_PER_HOUR))
+        secondsToMicros(seconds - seconds % SECONDS_PER_HOUR)
       case DayTimeIntervalType.MINUTE =>
-        secondsToMicros(extractEqualConstant(seconds, SECONDS_PER_MINUTE))
+        secondsToMicros(seconds - seconds % SECONDS_PER_MINUTE)
       case DayTimeIntervalType.SECOND =>
         secondsToMicros(seconds)
     }

@@ -523,7 +523,7 @@ object CatalystTypeConverters {
         map,
         (key: Any) => convertToCatalyst(key),
         (value: Any) => convertToCatalyst(value))
-    case d: Duration => DurationConverter(DAY, SECOND).toCatalyst(d)
+    case d: Duration => DurationConverter(SECOND).toCatalyst(d)
     case p: Period => PeriodConverter.toCatalyst(p)
     case other => other
   }
