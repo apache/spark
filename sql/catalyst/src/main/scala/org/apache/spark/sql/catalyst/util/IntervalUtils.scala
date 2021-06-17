@@ -891,18 +891,59 @@ object IntervalUtils {
    * @return The total length of the duration in microseconds
    * @throws ArithmeticException If numeric overflow occurs
    */
-  def durationToMicros(duration: Duration): Long = {
+  def durationToMicros(
+      duration: Duration,
+      startField: Byte = DayTimeIntervalType.DAY,
+      endField: Byte = DayTimeIntervalType.SECOND): Long = {
+
+    def secondsToMicros(seconds: Long): Long = {
+      if (seconds == minDurationSeconds) {
+        val microsInSeconds = (minDurationSeconds + 1) * MICROS_PER_SECOND
+        val nanoAdjustment = duration.getNano
+        assert(0 <= nanoAdjustment && nanoAdjustment < NANOS_PER_SECOND,
+          "Duration.getNano() must return the adjustment to the seconds field " +
+            "in the range from 0 to 999999999 nanoseconds, inclusive.")
+        Math.addExact(microsInSeconds, (nanoAdjustment - NANOS_PER_SECOND) / NANOS_PER_MICROS)
+      } else {
+        val microsInSeconds = Math.multiplyExact(seconds, MICROS_PER_SECOND)
+        Math.addExact(microsInSeconds, duration.getNano / NANOS_PER_MICROS)
+      }
+    }
+
+    def extractEqualConstant(seconds: Long, constant: Long): Long = {
+      Math.multiplyExact(Math.floorDiv(seconds, constant), constant)
+    }
+
+    def subtractEqualOrGreatThanConstant(seconds: Long, constant: Long): Long = {
+      Math.subtractExact(seconds, extractEqualConstant(seconds, constant))
+    }
+
     val seconds = duration.getSeconds
-    if (seconds == minDurationSeconds) {
-      val microsInSeconds = (minDurationSeconds + 1) * MICROS_PER_SECOND
-      val nanoAdjustment = duration.getNano
-      assert(0 <= nanoAdjustment && nanoAdjustment < NANOS_PER_SECOND,
-        "Duration.getNano() must return the adjustment to the seconds field " +
-        "in the range from 0 to 999999999 nanoseconds, inclusive.")
-      Math.addExact(microsInSeconds, (nanoAdjustment - NANOS_PER_SECOND) / NANOS_PER_MICROS)
-    } else {
-      val microsInSeconds = Math.multiplyExact(seconds, MICROS_PER_SECOND)
-      Math.addExact(microsInSeconds, duration.getNano / NANOS_PER_MICROS)
+    (startField, endField) match {
+      case (DayTimeIntervalType.DAY, DayTimeIntervalType.DAY) =>
+        println(Math.floorDiv(seconds, SECONDS_PER_DAY))
+        secondsToMicros(extractEqualConstant(seconds, SECONDS_PER_DAY))
+      case (DayTimeIntervalType.DAY, DayTimeIntervalType.HOUR) =>
+        secondsToMicros(extractEqualConstant(seconds, SECONDS_PER_HOUR))
+      case (DayTimeIntervalType.DAY, DayTimeIntervalType.MINUTE) =>
+        secondsToMicros(extractEqualConstant(seconds, SECONDS_PER_MINUTE))
+      case (DayTimeIntervalType.DAY, DayTimeIntervalType.SECOND) =>
+        secondsToMicros(seconds)
+      case (DayTimeIntervalType.HOUR, DayTimeIntervalType.HOUR) =>
+        val subtractGreatThanHours = subtractEqualOrGreatThanConstant(seconds, SECONDS_PER_DAY)
+        secondsToMicros(extractEqualConstant(subtractGreatThanHours, SECONDS_PER_HOUR))
+      case (DayTimeIntervalType.HOUR, DayTimeIntervalType.MINUTE) =>
+        val subtractGreatThanHours = subtractEqualOrGreatThanConstant(seconds, SECONDS_PER_DAY)
+        secondsToMicros(extractEqualConstant(subtractGreatThanHours, SECONDS_PER_MINUTE))
+      case (DayTimeIntervalType.HOUR, DayTimeIntervalType.SECOND) =>
+        secondsToMicros(subtractEqualOrGreatThanConstant(seconds, SECONDS_PER_DAY))
+      case (DayTimeIntervalType.MINUTE, DayTimeIntervalType.MINUTE) =>
+        val subtractGreatThanHours = subtractEqualOrGreatThanConstant(seconds, SECONDS_PER_HOUR)
+        secondsToMicros(extractEqualConstant(subtractGreatThanHours, SECONDS_PER_MINUTE))
+      case (DayTimeIntervalType.MINUTE, DayTimeIntervalType.SECOND) =>
+        secondsToMicros(subtractEqualOrGreatThanConstant(seconds, SECONDS_PER_HOUR))
+      case (DayTimeIntervalType.SECOND, DayTimeIntervalType.SECOND) =>
+        secondsToMicros(subtractEqualOrGreatThanConstant(seconds, SECONDS_PER_MINUTE))
     }
   }
 

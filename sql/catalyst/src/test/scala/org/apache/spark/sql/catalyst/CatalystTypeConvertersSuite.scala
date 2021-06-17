@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.util.{DateTimeConstants, DateTimeUtils, GenericArrayData, IntervalUtils}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.DayTimeIntervalType._
 import org.apache.spark.unsafe.types.UTF8String
 
 class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
@@ -272,6 +273,24 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
     }.getMessage
     assert(errMsg.contains("long overflow"))
   }
+
+  test("SPARK-35726: Truncate java.time.Duration by fields of day-time interval type") {
+    val duration = Duration.ofSeconds(90061)
+    Seq(DayTimeIntervalType(DAY, DAY) -> 86400000000L,
+      DayTimeIntervalType(DAY, HOUR) -> 90000000000L,
+      DayTimeIntervalType(DAY, MINUTE) -> 90060000000L,
+      DayTimeIntervalType(DAY, SECOND) -> 90061000000L,
+      DayTimeIntervalType(HOUR, HOUR) -> 3600000000L,
+      DayTimeIntervalType(HOUR, MINUTE) -> 3660000000L,
+      DayTimeIntervalType(HOUR, SECOND) -> 3661000000L,
+      DayTimeIntervalType(MINUTE, MINUTE) -> 60000000L,
+      DayTimeIntervalType(MINUTE, SECOND) -> 61000000L,
+      DayTimeIntervalType(SECOND, SECOND) -> 1000000L)
+      .foreach { case (dt, value) =>
+        assert(CatalystTypeConverters.createToCatalystConverter(dt)(duration) == value)
+      }
+  }
+
 
   test("SPARK-34605: converting DayTimeIntervalType to java.time.Duration") {
     Seq(
