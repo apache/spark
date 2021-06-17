@@ -914,10 +914,6 @@ object IntervalUtils {
    */
   def microsToDuration(micros: Long): Duration = Duration.of(micros, ChronoUnit.MICROS)
 
-  def periodToMonths(period: Period): Int = {
-    periodToMonths(period, YearMonthIntervalType.YEAR, YearMonthIntervalType.MONTH)
-  }
-
   /**
    * Gets the total number of months in this period.
    * <p>
@@ -928,6 +924,10 @@ object IntervalUtils {
    * @return The total number of months in the period, may be negative
    * @throws ArithmeticException If numeric overflow occurs
    */
+  def periodToMonths(period: Period): Int = {
+    periodToMonths(period, YearMonthIntervalType.YEAR, YearMonthIntervalType.MONTH)
+  }
+
   def periodToMonths(period: Period, startField: Byte, endField: Byte): Int = {
     val monthsInYears = Math.multiplyExact(period.getYears, MONTHS_PER_YEAR)
     val months = Math.addExact(monthsInYears, period.getMonths)
