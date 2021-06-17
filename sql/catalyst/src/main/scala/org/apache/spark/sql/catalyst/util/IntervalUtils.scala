@@ -922,7 +922,6 @@ object IntervalUtils {
     val seconds = duration.getSeconds
     (startField, endField) match {
       case (DayTimeIntervalType.DAY, DayTimeIntervalType.DAY) =>
-        println(Math.floorDiv(seconds, SECONDS_PER_DAY))
         secondsToMicros(extractEqualConstant(seconds, SECONDS_PER_DAY))
       case (DayTimeIntervalType.DAY, DayTimeIntervalType.HOUR) =>
         secondsToMicros(extractEqualConstant(seconds, SECONDS_PER_HOUR))
