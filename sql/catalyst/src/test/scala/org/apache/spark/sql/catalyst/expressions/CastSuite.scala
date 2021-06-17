@@ -624,9 +624,9 @@ class CastSuite extends CastSuiteBase {
       YearMonthIntervalType()), 12)
     checkEvaluation(cast(Literal.create("INTERVAL +'1-0' YEAR TO MONTH"),
       YearMonthIntervalType()), 12)
-    checkEvaluation(cast(Literal.create(" interval +'1-0' YEAR  TO MONTH "),
+    checkEvaluation(cast(Literal.create("INTERVAL +'1-0' YEAR  TO MONTH "),
       YearMonthIntervalType()), 12)
-    checkEvaluation(cast(Literal.create(" -1-0 "), YearMonthIntervalType()), -12)
+    checkEvaluation(cast(Literal.create("-1-0"), YearMonthIntervalType()), -12)
     checkEvaluation(cast(Literal.create("-1-0"), YearMonthIntervalType()), -12)
     checkEvaluation(cast(Literal.create(null, StringType), YearMonthIntervalType()), null)
 
@@ -654,6 +654,19 @@ class CastSuite extends CastSuiteBase {
   }
 
   test("SPARK-35768: Take into account year-month interval fields in cast") {
+    checkEvaluation(cast(Literal.create("1-1"),
+      YearMonthIntervalType(YEAR, YEAR)), 12)
+    checkEvaluation(cast(Literal.create("1-1"),
+      YearMonthIntervalType(YEAR, MONTH)), 13)
+    checkEvaluation(cast(Literal.create("1-1"),
+      YearMonthIntervalType(MONTH, MONTH)), 1)
+    checkEvaluation(cast(Literal.create("-1-1"),
+      YearMonthIntervalType(YEAR, YEAR)), -12)
+    checkEvaluation(cast(Literal.create("-1-1"),
+      YearMonthIntervalType(YEAR, MONTH)), -13)
+    checkEvaluation(cast(Literal.create("-1-1"),
+      YearMonthIntervalType(MONTH, MONTH)), -1)
+
     checkEvaluation(cast(Literal.create("INTERVAL '1-1' YEAR TO MONTH"),
       YearMonthIntervalType(YEAR, YEAR)), 12)
     checkEvaluation(cast(Literal.create("INTERVAL '1-1' YEAR TO MONTH"),
