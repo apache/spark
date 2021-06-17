@@ -50,6 +50,11 @@ sealed trait TimestampFormatter extends Serializable {
   @throws(classOf[DateTimeException])
   def parse(s: String): Long
 
+  @throws(classOf[ParseException])
+  @throws(classOf[DateTimeParseException])
+  @throws(classOf[DateTimeException])
+  def parseWithoutTimeZone(s: String): Long
+
   def format(us: Long): String
   def format(ts: Timestamp): String
   def format(instant: Instant): String
@@ -81,6 +86,15 @@ class Iso8601TimestampFormatter(
       val microsOfSecond = zonedDateTime.get(MICRO_OF_SECOND)
 
       Math.addExact(Math.multiplyExact(epochSeconds, MICROS_PER_SECOND), microsOfSecond)
+    } catch checkParsedDiff(s, legacyFormatter.parse)
+  }
+
+  override def parseWithoutTimeZone(s: String): Long = {
+    try {
+      val parsed = formatter.parse(s)
+      val localDate = toLocalDate(parsed)
+      val localTime = toLocalTime(parsed)
+      DateTimeUtils.localDateTimeToMicros(LocalDateTime.of(localDate, localTime))
     } catch checkParsedDiff(s, legacyFormatter.parse)
   }
 
@@ -216,6 +230,9 @@ class LegacyFastTimestampFormatter(
     rebaseJulianToGregorianMicros(julianMicros)
   }
 
+  override def parseWithoutTimeZone(s: String): Long =
+    DateTimeUtils.convertTz(parse(s), ZoneOffset.UTC, zoneId)
+
   override def format(timestamp: Long): String = {
     val julianMicros = rebaseGregorianToJulianMicros(timestamp)
     cal.setTimeInMillis(Math.floorDiv(julianMicros, MICROS_PER_SECOND) * MILLIS_PER_SECOND)
@@ -253,6 +270,9 @@ class LegacySimpleTimestampFormatter(
   override def parse(s: String): Long = {
     fromJavaTimestamp(new Timestamp(sdf.parse(s).getTime))
   }
+
+  override def parseWithoutTimeZone(s: String): Long =
+    DateTimeUtils.convertTz(parse(s), ZoneOffset.UTC, zoneId)
 
   override def format(us: Long): String = {
     sdf.format(toJavaTimestamp(us))

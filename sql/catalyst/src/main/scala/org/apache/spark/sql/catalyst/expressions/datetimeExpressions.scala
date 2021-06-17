@@ -1004,6 +1004,11 @@ case class ToTimestampWithoutTZ(
   override def inputTypes: Seq[AbstractDataType] =
     Seq(TypeCollection(StringType, DateType, TimestampType), StringType)
 
+  override def dataType: DataType = TimestampWithoutTZType
+
+  // The class name of `DateTimeUtils`
+  private def dateTimeUtilsCls: String = DateTimeUtils.getClass.getName.stripSuffix("$")
+
   override def eval(input: InternalRow): Any = {
     val t = left.eval(input)
     if (t == null) {
@@ -1021,8 +1026,7 @@ case class ToTimestampWithoutTZ(
           } else {
             val formatter = formatterOption.getOrElse(getFormatter(fmt.toString))
             try {
-              val ts = formatter.parse(t.asInstanceOf[UTF8String].toString)
-              convertTz(ts, ZoneOffset.UTC, zoneId)
+              formatter.parseWithoutTimeZone(t.asInstanceOf[UTF8String].toString)
             } catch {
               case e if isParseError(e) =>
                 if (failOnError) {
@@ -1036,9 +1040,71 @@ case class ToTimestampWithoutTZ(
     }
   }
 
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = ???
-
-  override def dataType: DataType = LongType
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val javaType = CodeGenerator.javaType(dataType)
+    val parseErrorBranch = if (failOnError) "throw e;" else s"${ev.isNull} = true;"
+    left.dataType match {
+      case StringType => formatterOption.map { fmt =>
+        val df = classOf[TimestampFormatter].getName
+        val formatterName = ctx.addReferenceObj("formatter", fmt, df)
+        nullSafeCodeGen(ctx, ev, (datetimeStr, _) =>
+          s"""
+             |try {
+             |  ${ev.value} = $formatterName.parseWithoutTimeZone($datetimeStr.toString());
+             |} catch (java.time.DateTimeException e) {
+             |  $parseErrorBranch
+             |} catch (java.time.format.DateTimeParseException e) {
+             |  $parseErrorBranch
+             |} catch (java.text.ParseException e) {
+             |  $parseErrorBranch
+             |}
+             |""".stripMargin)
+      }.getOrElse {
+        val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
+        val tf = TimestampFormatter.getClass.getName.stripSuffix("$")
+        val ldf = LegacyDateFormats.getClass.getName.stripSuffix("$")
+        val timestampFormatter = ctx.freshName("timestampFormatter")
+        nullSafeCodeGen(ctx, ev, (string, format) =>
+          s"""
+             |$tf $timestampFormatter = $tf$$.MODULE$$.apply(
+             |  $format.toString(),
+             |  $zid,
+             |  $ldf$$.MODULE$$.SIMPLE_DATE_FORMAT(),
+             |  true);
+             |try {
+             |  ${ev.value} = $timestampFormatter.parseWithoutTimeZone($string.toString());
+             |} catch (java.time.format.DateTimeParseException e) {
+             |    $parseErrorBranch
+             |} catch (java.time.DateTimeException e) {
+             |    $parseErrorBranch
+             |} catch (java.text.ParseException e) {
+             |    $parseErrorBranch
+             |}
+             |""".stripMargin)
+      }
+      case TimestampType =>
+        val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
+        val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+        val eval1 = left.genCode(ctx)
+        ev.copy(code = code"""
+          ${eval1.code}
+          boolean ${ev.isNull} = ${eval1.isNull};
+          $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+          if (!${ev.isNull}) {
+            ${ev.value} = $dtu.convertTz(${eval1.value}, java.time.ZoneOffset.UTC, $zid);
+          }""")
+      case DateType =>
+        val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+        val eval1 = left.genCode(ctx)
+        ev.copy(code = code"""
+          ${eval1.code}
+          boolean ${ev.isNull} = ${eval1.isNull};
+          $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+          if (!${ev.isNull}) {
+            ${ev.value} = $dtu.daysToMicros(${eval1.value}, java.time.ZoneOffset.UTC);
+          }""")
+    }
+  }
 
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): Expression =
