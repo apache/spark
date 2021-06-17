@@ -105,34 +105,25 @@ object IntervalUtils {
   private val yearMonthRegex = (s"^$yearMonthPatternString$$").r
   private val yearMonthLiteralRegex =
     (s"(?i)^INTERVAL\\s+([+|-])?'$yearMonthPatternString'\\s+YEAR\\s+TO\\s+MONTH$$").r
-  private val yearYearLiteralRegex =
-    (s"(?i)^INTERVAL\\s+([+|-])?'$yearMonthPatternString'\\s+YEAR\\s+TO\\s+MONTH$$").r
-  private val monthMonthLiteralRegex =
-    (s"(?i)^INTERVAL\\s+([+|-])?'$yearMonthPatternString'\\s+YEAR\\s+TO\\s+MONTH$$").r
 
   def castStringToYMInterval(
       input: UTF8String,
       startField: Byte,
       endField: Byte): Int = {
-    def truncatedYear(year: String): String = {
-      if (startField == YearMonthIntervalType.MONTH) "0" else year
-    }
 
     def truncatedMonth(month: String) : String = {
       if (endField == YearMonthIntervalType.YEAR) "0" else month
     }
 
     input.trimAll().toString match {
-      case yearMonthRegex("-", year, month) =>
-        toYMInterval(truncatedYear(year), truncatedMonth(month), -1)
-      case yearMonthRegex(_, year, month) =>
-        toYMInterval(truncatedYear(year), truncatedMonth(month), 1)
+      case yearMonthRegex("-", year, month) => toYMInterval(year, truncatedMonth(month), -1)
+      case yearMonthRegex(_, year, month) => toYMInterval(year, truncatedMonth(month), 1)
       case yearMonthLiteralRegex(firstSign, secondSign, year, month) =>
         (firstSign, secondSign) match {
-          case ("-", "-") => toYMInterval(truncatedYear(year), truncatedMonth(month), 1)
-          case ("-", _) => toYMInterval(truncatedYear(year), truncatedMonth(month), -1)
-          case (_, "-") => toYMInterval(truncatedYear(year), truncatedMonth(month), -1)
-          case (_, _) => toYMInterval(truncatedYear(year), truncatedMonth(month), 1)
+          case ("-", "-") => toYMInterval(year, truncatedMonth(month), 1)
+          case ("-", _) => toYMInterval(year, truncatedMonth(month), -1)
+          case (_, "-") => toYMInterval(year, truncatedMonth(month), -1)
+          case (_, _) => toYMInterval(year, truncatedMonth(month), 1)
         }
       case _ => throw new IllegalArgumentException(
         s"Interval string does not match year-month format of `[+|-]y-m` " +

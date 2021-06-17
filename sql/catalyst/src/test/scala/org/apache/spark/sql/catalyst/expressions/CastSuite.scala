@@ -659,47 +659,47 @@ class CastSuite extends CastSuiteBase {
     checkEvaluation(cast(Literal.create("1-1"),
       YearMonthIntervalType(YEAR, MONTH)), 13)
     checkEvaluation(cast(Literal.create("1-1"),
-      YearMonthIntervalType(MONTH, MONTH)), 1)
+      YearMonthIntervalType(MONTH, MONTH)), 13)
     checkEvaluation(cast(Literal.create("-1-1"),
       YearMonthIntervalType(YEAR, YEAR)), -12)
     checkEvaluation(cast(Literal.create("-1-1"),
       YearMonthIntervalType(YEAR, MONTH)), -13)
     checkEvaluation(cast(Literal.create("-1-1"),
-      YearMonthIntervalType(MONTH, MONTH)), -1)
+      YearMonthIntervalType(MONTH, MONTH)), -13)
 
     checkEvaluation(cast(Literal.create("INTERVAL '1-1' YEAR TO MONTH"),
       YearMonthIntervalType(YEAR, YEAR)), 12)
     checkEvaluation(cast(Literal.create("INTERVAL '1-1' YEAR TO MONTH"),
       YearMonthIntervalType(YEAR, MONTH)), 13)
     checkEvaluation(cast(Literal.create("INTERVAL '1-1' YEAR TO MONTH"),
-      YearMonthIntervalType(MONTH, MONTH)), 1)
+      YearMonthIntervalType(MONTH, MONTH)), 13)
 
     checkEvaluation(cast(Literal.create("INTERVAL '-1-1' YEAR TO MONTH"),
       YearMonthIntervalType(YEAR, YEAR)), -12)
     checkEvaluation(cast(Literal.create("INTERVAL '-1-1' YEAR TO MONTH"),
       YearMonthIntervalType(YEAR, MONTH)), -13)
     checkEvaluation(cast(Literal.create("INTERVAL '-1-1' YEAR TO MONTH"),
-      YearMonthIntervalType(MONTH, MONTH)), -1)
+      YearMonthIntervalType(MONTH, MONTH)), -13)
 
     checkEvaluation(cast(Literal.create("INTERVAL -'-1-1' YEAR TO MONTH"),
       YearMonthIntervalType(YEAR, YEAR)), 12)
     checkEvaluation(cast(Literal.create("INTERVAL -'-1-1' YEAR TO MONTH"),
       YearMonthIntervalType(YEAR, MONTH)), 13)
     checkEvaluation(cast(Literal.create("INTERVAL -'-1-1' YEAR TO MONTH"),
-      YearMonthIntervalType(MONTH, MONTH)), 1)
+      YearMonthIntervalType(MONTH, MONTH)), 13)
 
     checkEvaluation(cast(Literal.create("INTERVAL +'-1-1' YEAR TO MONTH"),
       YearMonthIntervalType(YEAR, YEAR)), -12)
     checkEvaluation(cast(Literal.create("INTERVAL +'-1-1' YEAR TO MONTH"),
       YearMonthIntervalType(YEAR, MONTH)), -13)
     checkEvaluation(cast(Literal.create("INTERVAL +'-1-1' YEAR TO MONTH"),
-      YearMonthIntervalType(MONTH, MONTH)), -1)
+      YearMonthIntervalType(MONTH, MONTH)), -13)
 
     checkEvaluation(cast(Literal.create("INTERVAL +'+1-1' YEAR TO MONTH"),
       YearMonthIntervalType(YEAR, YEAR)), 12)
     checkEvaluation(cast(Literal.create("INTERVAL +'+1-1' YEAR TO MONTH"),
       YearMonthIntervalType(YEAR, MONTH)), 13)
     checkEvaluation(cast(Literal.create(" interval +'+1-1' YEAR  TO MONTH "),
-      YearMonthIntervalType(MONTH, MONTH)), 1)
+      YearMonthIntervalType(MONTH, MONTH)), 13)
   }
 }
