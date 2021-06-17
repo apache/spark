@@ -27,7 +27,9 @@ import java.util.zip.Checksum
 class MutableCheckedOutputStream(out: OutputStream) extends OutputStream {
   private var checksum: Checksum = _
 
-  def setChecksum(c: Checksum): Unit = this.checksum = c
+  def setChecksum(c: Checksum): Unit = {
+    this.checksum = c
+  }
 
   override def write(b: Int): Unit = {
     assert(checksum != null, "Checksum is not set.")
