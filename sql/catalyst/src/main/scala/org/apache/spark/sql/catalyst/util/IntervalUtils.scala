@@ -925,10 +925,10 @@ object IntervalUtils {
    * @throws ArithmeticException If numeric overflow occurs
    */
   def periodToMonths(period: Period): Int = {
-    periodToMonths(period, YearMonthIntervalType.YEAR, YearMonthIntervalType.MONTH)
+    periodToMonths(period, YearMonthIntervalType.MONTH)
   }
 
-  def periodToMonths(period: Period, startField: Byte, endField: Byte): Int = {
+  def periodToMonths(period: Period, endField: Byte): Int = {
     val monthsInYears = Math.multiplyExact(period.getYears, MONTHS_PER_YEAR)
     val months = Math.addExact(monthsInYears, period.getMonths)
     if (endField == YearMonthIntervalType.YEAR) {

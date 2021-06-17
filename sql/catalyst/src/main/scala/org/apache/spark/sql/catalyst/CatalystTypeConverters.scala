@@ -447,7 +447,7 @@ object CatalystTypeConverters {
   private case class PeriodConverter(startField: Byte, endField: Byte)
       extends CatalystTypeConverter[Period, Period, Any] {
     override def toCatalystImpl(scalaValue: Period): Int = {
-      IntervalUtils.periodToMonths(scalaValue, startField, endField)
+      IntervalUtils.periodToMonths(scalaValue, endField)
     }
     override def toScala(catalystValue: Any): Period = {
       if (catalystValue == null) null
