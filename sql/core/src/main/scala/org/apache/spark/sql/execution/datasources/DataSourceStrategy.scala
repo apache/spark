@@ -40,7 +40,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.connector.catalog.SupportsRead
 import org.apache.spark.sql.connector.catalog.TableCapability._
-import org.apache.spark.sql.connector.expressions.{AggregateFunc, Count, FieldReference, Max, Min}
+import org.apache.spark.sql.connector.expressions.{AggregateFunc, Count, FieldReference, LiteralValue, Max, Min}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.{RowDataSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.command._
@@ -684,12 +684,14 @@ object DataSourceStrategy
       case max @ aggregate.Max(pushableColumn(name)) =>
         Some(Max(FieldReference(Seq(name)), max.dataType))
       case count: aggregate.Count =>
-        val columnName = count.children.head match {
+        count.children.head match {
           // SELECT COUNT(*) FROM table is translated to SELECT 1 FROM table
-          case Literal(_, _) => "1"
-          case pushableColumn(name) => name
+          case Literal(_, _) =>
+            Some(Count(LiteralValue(1, LongType), LongType, aggregates.isDistinct))
+          case pushableColumn(name) =>
+            Some(Count(FieldReference(Seq(name)), LongType, aggregates.isDistinct))
+          case _ => None
         }
-        Some(Count(FieldReference(Seq(columnName)), count.dataType, aggregates.isDistinct))
       case _ => None
     }
   }

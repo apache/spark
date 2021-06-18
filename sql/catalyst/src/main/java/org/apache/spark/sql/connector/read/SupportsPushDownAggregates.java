@@ -46,9 +46,4 @@ public interface SupportsPushDownAggregates extends ScanBuilder {
    * Indicate if the data source only supports global aggregated push down
    */
   boolean supportsGlobalAggregatePushDownOnly();
-
-  /**
-   * Indicate if the data source supports push down aggregates along with filters
-   */
-  boolean supportsPushDownAggregateWithFilter();
 }

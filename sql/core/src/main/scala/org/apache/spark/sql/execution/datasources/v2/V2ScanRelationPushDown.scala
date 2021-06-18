@@ -74,11 +74,10 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with AliasHelper
     // update the scan builder with agg pushdown and return a new plan with agg pushed
     case aggNode @ Aggregate(groupingExpressions, resultExpressions, child) =>
       child match {
-        case ScanOperation(project, _, sHolder: ScanBuilderHolder) =>
+        case ScanOperation(project, filters, sHolder: ScanBuilderHolder) =>
           sHolder.builder match {
             case r: SupportsPushDownAggregates =>
-              if (sHolder.builder.asInstanceOf[SupportsPushDownFilters].pushedFilters().length <= 0
-                || r.supportsPushDownAggregateWithFilter()) {
+              if (filters.length == 0) {  // can't push down aggregate if postScanFilters exist
                 if (r.supportsGlobalAggregatePushDownOnly() && groupingExpressions.nonEmpty) {
                   aggNode // return original plan node
                 } else {

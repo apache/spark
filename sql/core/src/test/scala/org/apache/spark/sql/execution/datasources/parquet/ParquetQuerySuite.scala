@@ -956,7 +956,7 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
                 "Min(_1,IntegerType), " +
                 "Max(_1,IntegerType), " +
                 "Max(_1,IntegerType), " +
-                "Count(`1`,LongType,false), " +
+                "Count(1,LongType,false), " +
                 "Count(_1,LongType,false), " +
                 "Count(_2,LongType,false), " +
                 "Count(_3,LongType,false)]"
@@ -1043,10 +1043,6 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
         SQLConf.PARQUET_AGGREGATE_PUSHDOWN_ENABLED.key -> "true",
         vectorizedReaderEnabledKey -> testVectorizedReader) {
         withTempPath { file =>
-          val df1 = spark.createDataFrame(rdd, schema)
-          df1.write.parquet(file.getCanonicalPath)
-          val df2 = spark.read.parquet(file.getCanonicalPath)
-          df2.createOrReplaceTempView("test")
 
           val testMinWithTS = sql("SELECT min(StringCol), min(BooleanCol), min(ByteCol), " +
             "min(BinaryCol), min(ShortCol), min(IntegerCol), min(LongCol), min(FloatCol), " +

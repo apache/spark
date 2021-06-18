@@ -32,7 +32,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.SpecificInternalRow
-import org.apache.spark.sql.connector.expressions.{Aggregation, Count, Max, Min}
+import org.apache.spark.sql.connector.expressions.{Aggregation, Count, FieldReference, LiteralValue, Max, Min}
 import org.apache.spark.sql.execution.datasources.DataSourceUtils
 import org.apache.spark.sql.execution.vectorized.{OffHeapColumnVector, OnHeapColumnVector}
 import org.apache.spark.sql.types.{BinaryType, ByteType, DateType, Decimal, DecimalType, IntegerType, LongType, ShortType, StringType, StructType}
@@ -318,30 +318,40 @@ object ParquetUtils {
       blocks.forEach { block =>
         val blockMetaData = block.getColumns()
         aggregation.aggregateExpressions(i) match {
-          case Max(col, _) =>
-            index = dataSchema.fieldNames.toList.indexOf(col.fieldNames.head)
-            val currentMax = getCurrentBlockMaxOrMin(blockMetaData, index, true)
-            if (currentMax != None &&
-              (value == None || currentMax.asInstanceOf[Comparable[Any]].compareTo(value) > 0)) {
-              value = currentMax
-            }
-
-          case Min(col, _) =>
-            index = dataSchema.fieldNames.toList.indexOf(col.fieldNames.head)
-            val currentMin = getCurrentBlockMaxOrMin(blockMetaData, index, false)
-            if (currentMin != None &&
-              (value == None || currentMin.asInstanceOf[Comparable[Any]].compareTo(value) < 0)) {
-              value = currentMin
-            }
-
+          case Max(col, _) => col match {
+            case ref: FieldReference =>
+              index = dataSchema.fieldNames.toList.indexOf(ref.fieldNames.head)
+              val currentMax = getCurrentBlockMaxOrMin(blockMetaData, index, true)
+              if (currentMax != None &&
+                (value == None || currentMax.asInstanceOf[Comparable[Any]].compareTo(value) > 0)) {
+                value = currentMax
+              }
+            case _ =>
+              throw new SparkException(s"Expression $col is not currently supported.")
+          }
+          case Min(col, _) => col match {
+            case ref: FieldReference =>
+              index = dataSchema.fieldNames.toList.indexOf(ref.fieldNames.head)
+              val currentMin = getCurrentBlockMaxOrMin(blockMetaData, index, false)
+              if (currentMin != None &&
+                (value == None || currentMin.asInstanceOf[Comparable[Any]].compareTo(value) < 0)) {
+                value = currentMin
+              }
+            case _ =>
+              throw new SparkException("Expression $col is not currently supported.")
+          }
           case Count(col, _, _) =>
-            index = dataSchema.fieldNames.toList.indexOf(col.fieldNames.head)
             rowCount += block.getRowCount
-            if (!col.fieldNames.head.equals("1")) {  // "1" is for count(*)
-              rowCount -= getNumNulls(blockMetaData, index)
-            }
             isCount = true
-
+            col match {
+              case ref: FieldReference =>
+                index = dataSchema.fieldNames.toList.indexOf(ref.fieldNames.head)
+                // Count(*) includes the null values, but Count (colName) doesn't.
+                rowCount -= getNumNulls(blockMetaData, index)
+              case LiteralValue(1, _) =>  // Count(*)
+              case _ =>
+                throw new SparkException("Expression $col is not currently supported.")
+            }
           case _ =>
         }
       }

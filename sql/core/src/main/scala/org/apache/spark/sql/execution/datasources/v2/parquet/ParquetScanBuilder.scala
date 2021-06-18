@@ -19,8 +19,9 @@ package org.apache.spark.sql.execution.datasources.v2.parquet
 
 import scala.collection.JavaConverters._
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.connector.expressions.{Aggregation, Count, Max, Min}
+import org.apache.spark.sql.connector.expressions.{Aggregation, Count, FieldReference, LiteralValue, Max, Min}
 import org.apache.spark.sql.connector.read.{Scan, SupportsPushDownAggregates, SupportsPushDownFilters}
 import org.apache.spark.sql.execution.datasources.PartitioningAwareFileIndex
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetFilters, SparkToParquetSchemaConverter}
@@ -76,26 +77,35 @@ case class ParquetScanBuilder(
 
   override def pushAggregation(aggregation: Aggregation): Boolean = {
     if (!sparkSession.sessionState.conf.parquetAggregatePushDown ||
-      aggregation.groupByColumns.nonEmpty) {
+      aggregation.groupByColumns.nonEmpty || pushedParquetFilters.length > 0) {
       return false
     }
 
     aggregation.aggregateExpressions.foreach {
-      case Max(col, _) =>
-        dataSchema.fields(dataSchema.fieldNames.toList.indexOf(col.fieldNames.head))
-          .dataType match {
-          // not push down nested column and Timestamp (INT96 sort order is undefined, parquet
-          // doesn't return statistics for INT96)
-          case StructType(_) | ArrayType(_, _) | MapType(_, _, _) | TimestampType => return false
-          case _ =>
-        }
-      case Min(col, _) =>
-        dataSchema.fields(dataSchema.fieldNames.toList.indexOf(col.fieldNames.head))
-          .dataType match {
-          // not push down nested column
-          case StructType(_) | ArrayType(_, _) | MapType(_, _, _) | TimestampType => return false
-          case _ =>
-        }
+      case Max(col, _) => col match {
+        case ref: FieldReference =>
+          dataSchema.fields(dataSchema.fieldNames.toList.indexOf(ref.fieldNames.head))
+            .dataType match {
+            // not push down nested column and Timestamp (INT96 sort order is undefined, parquet
+            // doesn't return statistics for INT96)
+            case StructType(_) | ArrayType(_, _) | MapType(_, _, _) | TimestampType => return false
+            case _ =>
+          }
+        case _ =>
+          throw new SparkException("Expression $col is not currently supported.")
+      }
+      case Min(col, _) => col match {
+        case ref: FieldReference =>
+          dataSchema.fields(dataSchema.fieldNames.toList.indexOf(ref.fieldNames.head))
+            .dataType match {
+            // not push down nested column and Timestamp (INT96 sort order is undefined, parquet
+            // doesn't return statistics for INT96)
+            case StructType(_) | ArrayType(_, _) | MapType(_, _, _) | TimestampType => return false
+            case _ =>
+          }
+        case _ =>
+          throw new SparkException("Expression $col is not currently supported.")
+      }
       // not push down distinct count
       case Count(_, _, false) =>
       case _ => return false
@@ -106,24 +116,33 @@ case class ParquetScanBuilder(
 
   override def supportsGlobalAggregatePushDownOnly(): Boolean = true
 
-  override def supportsPushDownAggregateWithFilter(): Boolean = false
-
   override def getPushDownAggSchema: StructType = {
     var schema = new StructType()
     pushedAggregations.aggregateExpressions.foreach {
-      case Max(col, _) =>
-        val field = dataSchema.fields(dataSchema.fieldNames.toList.indexOf(col.fieldNames.head))
-        schema = schema.add(field.copy("max(" + field.name + ")"))
-      case Min(col, _) =>
-        val field = dataSchema.fields(dataSchema.fieldNames.toList.indexOf(col.fieldNames.head))
-        schema = schema.add(field.copy("min(" + field.name + ")"))
-      case Count(col, _, _) =>
-        if (col.fieldNames.head.equals("1")) {
-          schema = schema.add(new StructField("count(*)", LongType))
-        } else {
-          schema = schema.add(new StructField("count(" + col + ")", LongType))
-        }
+      case Max(col, _) => col match {
+        case ref: FieldReference =>
+          val field = dataSchema.fields(dataSchema.fieldNames.toList.indexOf(ref.fieldNames.head))
+          schema = schema.add(field.copy("max(" + field.name + ")"))
+        case _ =>
+          throw new SparkException("Expression $col is not currently supported.")
+      }
+      case Min(col, _) => col match {
+        case ref: FieldReference =>
+          val field = dataSchema.fields(dataSchema.fieldNames.toList.indexOf(ref.fieldNames.head))
+          schema = schema.add(field.copy("min(" + field.name + ")"))
+        case _ =>
+          throw new SparkException("Expression $col is not currently supported.")
+      }
+      case Count(col, _, _) => col match {
+        case _: FieldReference =>
+          schema = schema.add(StructField("count(" + col + ")", LongType))
+        case LiteralValue(1, _) =>
+          schema = schema.add(StructField("count(*)", LongType))
+        case _ =>
+          throw new SparkException("Expression $col is not currently supported.")
+      }
       case _ =>
+        throw new SparkException("Pushed down aggregate is not supported.")
     }
     schema
   }

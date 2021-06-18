@@ -23,18 +23,18 @@ import org.apache.spark.sql.types.DataType
 // e.g. SELECT COUNT(EmployeeID), Max(salary), deptID FROM dept GROUP BY deptID
 // aggregateExpressions are (COUNT(EmployeeID), Max(salary)), groupByColumns are (deptID)
 case class Aggregation(aggregateExpressions: Seq[AggregateFunc],
-                       groupByColumns: Seq[FieldReference])
+                       groupByColumns: Seq[Expression])
 
 abstract class AggregateFunc
 
-case class Min(column: FieldReference, dataType: DataType) extends AggregateFunc
-case class Max(column: FieldReference, dataType: DataType) extends AggregateFunc
-case class Sum(column: FieldReference, dataType: DataType, isDistinct: Boolean)
+case class Min(column: Expression, dataType: DataType) extends AggregateFunc
+case class Max(column: Expression, dataType: DataType) extends AggregateFunc
+case class Sum(column: Expression, dataType: DataType, isDistinct: Boolean)
   extends AggregateFunc
-case class Count(column: FieldReference, dataType: DataType, isDistinct: Boolean)
+case class Count(column: Expression, dataType: DataType, isDistinct: Boolean)
   extends AggregateFunc
 
 object Aggregation {
   // Returns an empty Aggregate
-  def empty: Aggregation = Aggregation(Seq.empty[AggregateFunc], Seq.empty[FieldReference])
+  def empty: Aggregation = Aggregation(Seq.empty[AggregateFunc], Seq.empty[Expression])
 }
