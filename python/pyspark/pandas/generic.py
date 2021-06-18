@@ -2115,7 +2115,7 @@ class Frame(object, metaclass=ABCMeta):
     # should be updated when it's supported.
     def groupby(
         self,
-        by: Union[Any, Tuple, Series, List[Union[Any, Tuple, Series]]],
+        by: Union[Any, Tuple, "Series", List[Union[Any, Tuple, "Series"]]],
         axis: Union[int, str] = 0,
         as_index: bool = True,
         dropna: bool = True,
@@ -2739,7 +2739,7 @@ class Frame(object, metaclass=ABCMeta):
             # The case of Series is simple.
             # If Series has only a single value, just return it as a scalar.
             # Otherwise, there is no change.
-            self_top_two = self.head(2)
+            self_top_two = cast("Series", self).head(2)
             has_single_value = len(self_top_two) == 1
             return cast(Union[Scalar, ps.Series], self_top_two[0] if has_single_value else self)
 
@@ -3148,9 +3148,6 @@ class Frame(object, metaclass=ABCMeta):
             "The truth value of a {0} is ambiguous. "
             "Use a.empty, a.bool(), a.item(), a.any() or a.all().".format(self.__class__.__name__)
         )
-
-    def __len__(self) -> int:
-        pass
 
     @staticmethod
     def _count_expr(spark_column: Column, spark_type: DataType) -> Column:
