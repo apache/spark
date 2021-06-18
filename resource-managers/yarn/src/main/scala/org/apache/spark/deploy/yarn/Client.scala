@@ -1484,17 +1484,15 @@ private[spark] object Client extends Logging {
   def getUserClasspathUrls(conf: SparkConf, useClusterPath: Boolean): Array[URL] = {
     Client.getUserClasspath(conf).map { uri =>
       val inputPath = uri.getPath
-      val localPath = if (Utils.isLocalUri(uri.toString)) {
-        val localPath = if (useClusterPath) {
-          Client.getClusterPath(conf, inputPath)
-        } else {
-          inputPath
-        }
-        Paths.get(localPath)
+      val replacedFilePath = if (Utils.isLocalUri(uri.toString) && useClusterPath) {
+        Client.getClusterPath(conf, inputPath)
       } else {
-        new File(inputPath).toPath.toAbsolutePath
+        // Any other URI schemes should have been resolved by this point
+        assert(uri.getScheme == null || uri.getScheme == "file" || Utils.isLocalUri(uri.toString),
+          "getUserClasspath should only return 'file' or 'local' URIs but found: " + uri)
+        inputPath
       }
-      localPath.toUri.toURL
+      Paths.get(replacedFilePath).toAbsolutePath.toUri.toURL
     }
   }
 

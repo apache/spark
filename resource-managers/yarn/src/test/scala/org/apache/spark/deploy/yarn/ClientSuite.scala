@@ -585,28 +585,37 @@ class ClientSuite extends SparkFunSuite with Matchers {
   }
 
   test("SPARK-35672: test Client.getUserClasspathUrls") {
+    val gatewayRootPath = "/local/matching/replace"
+    val replacementRootPath = "/replaced/path"
     val conf = new SparkConf()
         .set(SECONDARY_JARS, Seq(
-          "local:/local/matching/replace/foo.jar",
+          s"local:$gatewayRootPath/foo.jar",
           "local:/local/not/matching/replace/foo.jar",
           "file:/absolute/file/path/foo.jar",
-          "relative/file/path/foo.jar"
+          s"$gatewayRootPath/but-not-actually-local/foo.jar",
+          "/absolute/path/foo.jar",
+          "relative/path/foo.jar"
         ))
-        .set(GATEWAY_ROOT_PATH, "/local/matching/replace")
-        .set(REPLACEMENT_ROOT_PATH, "/replaced/path")
+        .set(GATEWAY_ROOT_PATH, gatewayRootPath)
+        .set(REPLACEMENT_ROOT_PATH, replacementRootPath)
 
-    def assertUserClasspathUrls(cluster: Boolean, gatewayReplacementPath: String): Unit = {
+    def assertUserClasspathUrls(cluster: Boolean, expectedReplacementPath: String): Unit = {
       val expectedUrls = Seq(
         Paths.get(APP_JAR_NAME).toAbsolutePath.toUri.toString,
-        s"file:$gatewayReplacementPath/foo.jar",
+        s"file:$expectedReplacementPath/foo.jar",
         "file:/local/not/matching/replace/foo.jar",
         "file:/absolute/file/path/foo.jar",
-        Paths.get("relative/file/path/foo.jar").toAbsolutePath.toUri.toString
+        // since this path wasn't a local URI, it should never be replaced
+        s"file:$gatewayRootPath/but-not-actually-local/foo.jar",
+        "file:/absolute/path/foo.jar",
+        Paths.get("relative/path/foo.jar").toAbsolutePath.toUri.toString
       ).map(URI.create(_).toURL).toArray
       assert(Client.getUserClasspathUrls(conf, cluster) === expectedUrls)
     }
-    assertUserClasspathUrls(cluster = false, "/local/matching/replace")
-    assertUserClasspathUrls(cluster = true, "/replaced/path")
+    // assert that no replacement happens when cluster = false by expecting the replacement
+    // path to be the same as the original path
+    assertUserClasspathUrls(cluster = false, gatewayRootPath)
+    assertUserClasspathUrls(cluster = true, replacementRootPath)
   }
 
   private val matching = Seq(
