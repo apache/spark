@@ -141,8 +141,7 @@ private[spark] class Client(
       createdDriverPod = kubernetesClient.pods().create(resolvedDriverPod)
     } catch {
       case NonFatal(e) =>
-        logError("Fail to create driver pod, you may use wrong master URL or permission denied." +
-          "please check the network connection and permission.")
+        logError("Please check \"kubectl auth can-i create pod\" first. It should be yes.")
         throw e
     }
     try {
