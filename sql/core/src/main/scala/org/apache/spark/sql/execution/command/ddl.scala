@@ -909,7 +909,7 @@ object DDLUtils {
         case CatalogTableType.VIEW if !isView =>
           throw QueryCompilationErrors.cannotAlterViewWithAlterTableError()
         case o if o != CatalogTableType.VIEW && isView =>
-          throw QueryCompilationErrors.cannotAlterViewWithAlterTableError()
+          throw QueryCompilationErrors.cannotAlterTableWithAlterViewError()
         case _ =>
       }
     }

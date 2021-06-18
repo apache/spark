@@ -1827,6 +1827,11 @@ private[spark] object QueryCompilationErrors {
       "Cannot alter a view with ALTER TABLE. Please use ALTER VIEW instead")
   }
 
+  def cannotAlterTableWithAlterViewError(): Throwable = {
+    new AnalysisException(
+      "Cannot alter a table with ALTER VIEW. Please use ALTER TABLE instead")
+  }
+
   def cannotOverwritePathIsReadError(): Throwable = {
     new AnalysisException("Cannot overwrite a path that is also being read from.")
   }
