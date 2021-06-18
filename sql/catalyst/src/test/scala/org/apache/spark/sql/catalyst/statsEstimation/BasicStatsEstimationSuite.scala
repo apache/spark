@@ -291,12 +291,20 @@ class BasicStatsEstimationSuite extends PlanTest with StatsEstimationTestBase {
 
   test("SPARK-34121: Intersect operator missing rowCount when enable CBO") {
     val intersect = Intersect(plan, plan, false)
-    val childrenSize = intersect.children.size
     val sizeInBytes = plan.size.get
     val rowCount = Some(plan.rowCount)
     checkStats(
       intersect,
       expectedStatsCboOn = Statistics(sizeInBytes = sizeInBytes, rowCount = rowCount),
+      expectedStatsCboOff = Statistics(sizeInBytes = sizeInBytes))
+  }
+
+  test("SPARK-35185: Improve Distinct statistics estimation") {
+    val distinct = Distinct(plan)
+    val sizeInBytes = plan.size.get
+    checkStats(
+      distinct,
+      expectedStatsCboOn = Statistics(sizeInBytes, Some(plan.rowCount), plan.attributeStats),
       expectedStatsCboOff = Statistics(sizeInBytes = sizeInBytes))
   }
 

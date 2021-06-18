@@ -929,4 +929,24 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       verifyCastFailure(cast(timestampWithoutTZLiteral, numericType), Some(errorMsg))
     }
   }
+
+  test("SPARK-35720: cast string to timestamp without timezone") {
+    specialTs.foreach { s =>
+      val expectedTs = LocalDateTime.parse(s)
+      checkEvaluation(cast(s, TimestampWithoutTZType), expectedTs)
+      // Trim spaces before casting
+      checkEvaluation(cast("  " + s + "   ", TimestampWithoutTZType), expectedTs)
+      // The result is independent of timezone
+      outstandingZoneIds.foreach { zoneId =>
+        checkEvaluation(cast(s + zoneId.toString, TimestampWithoutTZType), expectedTs)
+        val tsWithMicros = s + ".123456"
+        val expectedTsWithNanoSeconds = LocalDateTime.parse(tsWithMicros)
+        checkEvaluation(cast(tsWithMicros + zoneId.toString, TimestampWithoutTZType),
+          expectedTsWithNanoSeconds)
+      }
+    }
+    // The input string can contain date only
+    checkEvaluation(cast("2021-06-17", TimestampWithoutTZType),
+      LocalDateTime.of(2021, 6, 17, 0, 0))
+  }
 }

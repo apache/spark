@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.util.{DateTimeConstants, DateTimeUtils, GenericArrayData, IntervalUtils}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.YearMonthIntervalType._
 import org.apache.spark.unsafe.types.UTF8String
 
 class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
@@ -307,6 +308,15 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
       IntervalUtils.periodToMonths(Period.of(Int.MaxValue, Int.MaxValue, Int.MaxValue))
     }.getMessage
     assert(errMsg.contains("integer overflow"))
+  }
+
+  test("SPARK-35769: Truncate java.time.Period by fields of year-month interval type") {
+    Seq(YearMonthIntervalType(YEAR, YEAR) -> 12,
+      YearMonthIntervalType(YEAR, MONTH) -> 13,
+      YearMonthIntervalType(MONTH, MONTH) -> 13)
+      .foreach { case (ym, value) =>
+        assert(CatalystTypeConverters.createToCatalystConverter(ym)(Period.of(1, 1, 0)) == value)
+      }
   }
 
   test("SPARK-34615: converting YearMonthIntervalType to java.time.Period") {
