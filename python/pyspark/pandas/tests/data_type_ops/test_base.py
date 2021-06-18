@@ -15,16 +15,11 @@
 # limitations under the License.
 #
 
-from pyspark.pandas.typedef.typehints import extension_object_dtypes_available
+import unittest
 
-if extension_object_dtypes_available:
-    from pandas import BooleanDtype
 from pandas.api.types import CategoricalDtype
 from pandas.api.extensions import ExtensionDtype
 
-from pyspark.pandas.typedef.typehints import (
-    extension_object_dtypes_available,
-)
 from pyspark.pandas.data_type_ops.base import DataTypeOps
 from pyspark.pandas.data_type_ops.binary_ops import BinaryOps
 from pyspark.pandas.data_type_ops.boolean_ops import BooleanOps, BooleanExtensionOps
@@ -36,7 +31,6 @@ from pyspark.pandas.data_type_ops.null_ops import NullOps
 from pyspark.pandas.data_type_ops.num_ops import IntegralOps, FractionalOps
 from pyspark.pandas.data_type_ops.string_ops import StringOps
 from pyspark.pandas.data_type_ops.udt_ops import UDTOps
-from pyspark.pandas.tests.data_type_ops.testing_utils import TestCasesUtils
 from pyspark.sql.types import (
     ArrayType,
     BinaryType,
@@ -52,10 +46,9 @@ from pyspark.sql.types import (
     TimestampType,
     UserDefinedType,
 )
-from pyspark.testing.pandasutils import PandasOnSparkTestCase
 
 
-class BaseTest(PandasOnSparkTestCase, TestCasesUtils):
+class BaseTest(unittest.TestCase):
     def test_data_type_ops(self):
         _mock_spark_type = DataType()
         _mock_dtype = ExtensionDtype()
@@ -81,7 +74,23 @@ class BaseTest(PandasOnSparkTestCase, TestCasesUtils):
         self.assertRaises(TypeError, DataTypeOps, BooleanType(), _unknow_spark_type)
 
     def test_bool_ext_ops(self):
+        from pyspark.pandas.typedef.typehints import extension_object_dtypes_available
+
         if extension_object_dtypes_available:
+            from pandas import BooleanDtype
+
             self.assertIsInstance(DataTypeOps(BooleanDtype(), BooleanType()), BooleanExtensionOps)
         else:
             self.assertIsInstance(DataTypeOps(ExtensionDtype(), BooleanType()), BooleanOps)
+
+
+if __name__ == "__main__":
+    from pyspark.pandas.tests.data_type_ops.test_base import *  # noqa: F401
+
+    try:
+        import xmlrunner  # type: ignore[import]
+
+        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
+    except ImportError:
+        testRunner = None
+    unittest.main(testRunner=testRunner, verbosity=2)
