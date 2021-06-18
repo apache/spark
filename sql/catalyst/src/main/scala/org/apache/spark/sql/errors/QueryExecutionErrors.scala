@@ -27,6 +27,7 @@ import java.util.ConcurrentModificationException
 
 import com.fasterxml.jackson.core.JsonToken
 import org.apache.hadoop.fs.{FileAlreadyExistsException, FileStatus, Path}
+import org.apache.hadoop.fs.permission.FsPermission
 import org.codehaus.commons.compiler.{CompileException, InternalCompilerException}
 
 import org.apache.spark.{Partition, SparkException, SparkUpgradeException}
@@ -1535,5 +1536,22 @@ object QueryExecutionErrors {
 
   def valueIsNullError(index: Int): Throwable = {
     new NullPointerException(s"Value at index $index is null")
+  }
+
+  def onlyDataSourcesProvidingFileFormatSupportedError(providingClass: String): Throwable = {
+    new SparkException("Only Data Sources providing FileFormat are supported: " + providingClass)
+  }
+
+  def failSetOriginalPermissionBackError(
+      permission: FsPermission,
+      path: Path,
+      e: Throwable): Throwable = {
+    new SecurityException(s"Failed to set original permission $permission back to " +
+        s"the created path: $path. Exception: ${e.getMessage}")
+  }
+
+  def failToSetOriginalACLBackError(aclEntries: String, path: Path, e: Throwable): Throwable = {
+    throw new SecurityException(s"Failed to set original ACL $aclEntries back to " +
+        s"the created path: $path. Exception: ${e.getMessage}")
   }
 }

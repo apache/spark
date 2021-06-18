@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.errors
 
+import scala.collection.mutable
+
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.AnalysisException
@@ -1764,7 +1766,7 @@ private[spark] object QueryCompilationErrors {
   }
 
   def unsetNonExistentPropertyError(property: String, table: TableIdentifier): Throwable = {
-    new AnalysisException("Attempted to unset non-existent property '$property' in table '$table'")
+    new AnalysisException(s"Attempted to unset non-existent property '$property' in table '$table'")
   }
 
   def alterTableChangeColumnNotSupportForTypeError(
@@ -1861,5 +1863,124 @@ private[spark] object QueryCompilationErrors {
 
   def noSuchFunctionError(identifier: FunctionIdentifier): Throwable = {
     new NoSuchFunctionException(identifier.database.get, identifier.funcName)
+  }
+
+  def alterAddColNotSupportViewError(table: TableIdentifier): Throwable = {
+    new AnalysisException(s"""
+         ALTER ADD COLUMNS does not support views.
+         You must drop and re-create the views for adding the new columns. Views: $table
+         """)
+  }
+
+  def alterAddColNotSupportDatasourceTableError(
+      tableType: Any,
+      table: TableIdentifier): Throwable = {
+    new AnalysisException(s"""
+         ALTER ADD COLUMNS does not support datasource table with type $tableType.
+         You must drop and re-create the table for adding the new columns. Tables: $table
+         """)
+  }
+
+  def loadDataNotSupportedForDatasourceTablesError(tableIdentWithDB: String): Throwable = {
+    new AnalysisException(s"LOAD DATA is not supported for datasource tables: $tableIdentWithDB")
+  }
+
+  def loadDataNoPartitionSpecProvidedError(tableIdentWithDB: String): Throwable = {
+    new AnalysisException(s"LOAD DATA target table $tableIdentWithDB is partitioned, " +
+      s"but no partition spec is provided")
+  }
+
+  def loadDataNumberColsNotMatchError(
+      tableIdentWithDB: String,
+      partitionSize: Int,
+      targetTableSize: Int): Throwable = {
+    new AnalysisException(s"LOAD DATA target table $tableIdentWithDB is partitioned, " +
+      s"but number of columns in provided partition spec ($partitionSize) " +
+      s"do not match number of partitioned columns in table " +
+      s"($targetTableSize)")
+  }
+
+  def loadDataButPartitionSpecWasProvidedError(tableIdentWithDB: String): Throwable = {
+    new AnalysisException(s"LOAD DATA target table $tableIdentWithDB is not " +
+      s"partitioned, but a partition spec was provided.")
+  }
+
+  def loadDataInputPathNotExistError(path: String): Throwable = {
+    new AnalysisException(s"LOAD DATA input path does not exist: $path")
+  }
+
+  def truncateTableOnExternalTablesError(tableIdentWithDB: String): Throwable = {
+    new AnalysisException(
+      s"Operation not allowed: TRUNCATE TABLE on external tables: $tableIdentWithDB")
+  }
+
+  def truncateTablePartitionNotSupportedOnTableNotPartitionedError(
+      tableIdentWithDB: String): Throwable = {
+    new AnalysisException(s"Operation not allowed: TRUNCATE TABLE ... PARTITION is not supported" +
+      s" for tables that are not partitioned: $tableIdentWithDB")
+  }
+
+  def failToTruncateTableWhenRemovingDataError(
+      tableIdentWithDB: String,
+      path: Path,
+      e: Throwable): Throwable = {
+    new AnalysisException(s"Failed to truncate table $tableIdentWithDB when " +
+        s"removing data of the path: $path because of ${e.toString}")
+  }
+
+  def descPartitionNotAllowedOnTempView(table: String): Throwable = {
+    new AnalysisException(
+      s"DESC PARTITION is not allowed on a temporary view: $table")
+  }
+
+  def showPartitionNotAllowedOnTableNotPartitionedError(tableIdentWithDB: String): Throwable = {
+    new AnalysisException(
+      s"SHOW PARTITIONS is not allowed on a table that is not partitioned: $tableIdentWithDB")
+  }
+
+  def showCreateTableNotSupportedOnTempView(table: String): Throwable = {
+    new AnalysisException(s"SHOW CREATE TABLE is not supported on a temporary view: $table")
+  }
+
+  def showCreateTableFailToExecuteUnsupportedFeatureError(table: CatalogTable): Throwable = {
+    new AnalysisException("Failed to execute SHOW CREATE TABLE against table " +
+      s"${table.identifier}, which is created by Hive and uses the " +
+      s"following unsupported feature(s)\n" +
+      table.unsupportedFeatures.map(" - " + _).mkString("\n") + ". " +
+      s"Please use `SHOW CREATE TABLE ${table.identifier} AS SERDE` to show Hive DDL instead.")
+  }
+
+  def showCreateTableNotSupportTransactionalHiveTableError(table: CatalogTable): Throwable = {
+    new AnalysisException("SHOW CREATE TABLE doesn't support transactional Hive table. " +
+      s"Please use `SHOW CREATE TABLE ${table.identifier} AS SERDE` " +
+      "to show Hive DDL instead.")
+  }
+
+  def showCreateTableFailToExecuteUnsupportedConfError(
+      table: TableIdentifier,
+      builder: mutable.StringBuilder): Throwable = {
+    new AnalysisException("Failed to execute SHOW CREATE TABLE against table " +
+        s"${table.identifier}, which is created by Hive and uses the " +
+        "following unsupported serde configuration\n" +
+        builder.toString()
+    )
+  }
+
+  def descPartitionNotAllowedOnViewError(table: String): Throwable = {
+    new AnalysisException(s"DESC PARTITION is not allowed on a view: $table")
+  }
+
+  def isSparkDataSourceTableError(table: TableIdentifier): Throwable = {
+    throw new AnalysisException(
+      s"$table is a Spark data source table. Use `SHOW CREATE TABLE` without `AS SERDE` instead.")
+  }
+
+  def showCreateTableOrViewFailToExecuteUnsupportedFeatureError(
+      table: CatalogTable,
+      features: Seq[String]): Throwable = {
+    new AnalysisException(
+      s"Failed to execute SHOW CREATE TABLE against table/view ${table.identifier}, " +
+        "which is created by Hive and uses the following unsupported feature(s)\n" +
+        features.map(" - " + _).mkString("\n"))
   }
 }
