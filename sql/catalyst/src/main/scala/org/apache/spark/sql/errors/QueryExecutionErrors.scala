@@ -1439,14 +1439,13 @@ object QueryExecutionErrors {
     new SQLFeatureNotSupportedException(s"$className.getParentLogger is not yet implemented.")
   }
 
-  def cannotCreateParquetConverterForTypeError(
-      t: DecimalType, parquetType: String): Throwable = {
+  def cannotCreateParquetConverterForTypeError(t: DecimalType, parquetType: String): Throwable = {
     new RuntimeException(
       s"""
          |Unable to create Parquet converter for ${t.typeName}
          |whose Parquet type is $parquetType without decimal metadata. Please read this
          |column/field as Spark BINARY type.
-       """.stripMargin.split("\n").mkString(" "))
+       """.stripMargin.replaceAll("\n", " "))
   }
 
   def cannotCreateParquetConverterForDecimalTypeError(
@@ -1456,14 +1455,13 @@ object QueryExecutionErrors {
          |Unable to create Parquet converter for decimal type ${t.json} whose Parquet type is
          |$parquetType.  Parquet DECIMAL type can only be backed by INT32, INT64,
          |FIXED_LEN_BYTE_ARRAY, or BINARY.
-       """.stripMargin.split("\n").mkString(" "))
+       """.stripMargin.replaceAll("\n", " "))
   }
 
   def cannotCreateParquetConverterForDataTypeError(
       t: DataType, parquetType: String): Throwable = {
-    new RuntimeException(
-      s"Unable to create Parquet converter for data type ${t.json} " +
-        s"whose Parquet type is $parquetType")
+    new RuntimeException(s"Unable to create Parquet converter for data type ${t.json} " +
+      s"whose Parquet type is $parquetType")
   }
 
   def cannotAddMultiPartitionsOnNonatomicPartitionTableError(tableName: String): Throwable = {

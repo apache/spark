@@ -1666,9 +1666,11 @@ private[spark] object QueryCompilationErrors {
 
   def invalidPartitionColumnTypeError(column: StructField): Throwable = {
     new AnalysisException(
-      s"Partition column type should be ${NumericType.simpleString}, " +
-        s"${DateType.catalogString}, or ${TimestampType.catalogString}, but " +
-        s"${column.dataType.catalogString} found.")
+      s"""
+         |Partition column type should be ${NumericType.simpleString},
+         |${DateType.catalogString}, or ${TimestampType.catalogString}, but
+         |${column.dataType.catalogString} found.
+       """.stripMargin.replaceAll("\n", " "))
   }
 
   def tableOrViewAlreadyExistsError(name: String): Throwable = {
@@ -1678,9 +1680,10 @@ private[spark] object QueryCompilationErrors {
 
   def columnNameContainsInvalidCharactersError(name: String): Throwable = {
     new AnalysisException(
-      s"""Column name "$name" contains invalid character(s).
+      s"""
+         |Column name "$name" contains invalid character(s).
          |Please use alias to rename it.
-           """.stripMargin.split("\n").mkString(" ").trim)
+       """.stripMargin.replaceAll("\n", " "))
   }
 
   def textDataSourceWithMultiColumnsError(schema: StructType): Throwable = {
@@ -1801,8 +1804,7 @@ private[spark] object QueryCompilationErrors {
 
   def writeWithSaveModeUnsupportedBySourceError(source: String, createMode: String): Throwable = {
     new AnalysisException(s"TableProvider implementation $source cannot be " +
-      s"written with $createMode mode, please use Append or Overwrite " +
-      "modes instead.")
+      s"written with $createMode mode, please use Append or Overwrite modes instead.")
   }
 
   def partitionByDoesNotAllowedWhenUsingInsertIntoError(): Throwable = {
