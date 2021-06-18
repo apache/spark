@@ -7,6 +7,9 @@ displayTitle: Spark SQL Upgrading Guide
 * Table of contents
 {:toc}
 
+## Upgrading from Spark SQL 2.4.3 to 2.4.3.1 (branch 2.4.3.1-kl)
+  - Since Spark 2.4.3.1, the `from_json` functions supports two modes - `PERMISSIVE` and `FAILFAST`. The modes can be set via the `mode` option. The default mode became `PERMISSIVE`. In previous versions, behavior of `from_json` did not conform to either `PERMISSIVE` nor `FAILFAST`, especially in processing of malformed JSON records. For example, the JSON string `{"a" 1}` with the schema `a INT` is converted to `null` by previous versions but Spark 2.4.3.1 converts it to `Row(null)`.
+
 ## Upgrading from Spark SQL 2.4 to 2.4.1
 
   - The value of `spark.executor.heartbeatInterval`, when specified without units like "30" rather than "30s", was

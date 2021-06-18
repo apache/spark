@@ -19,14 +19,17 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
+  
   <parent>
     <groupId>org.apache</groupId>
     <artifactId>apache</artifactId>
     <version>18</version>
   </parent>
+  
   <groupId>org.apache.spark</groupId>
   <artifactId>spark-parent_2.11</artifactId>
   <version>2.4.3</version>
+  
   <packaging>pom</packaging>
   <name>Spark Project Parent POM</name>
   <url>http://spark.apache.org/</url>
@@ -109,6 +112,8 @@
   </modules>
 
   <properties>
+    <spark.base.version>2.4.3</spark.base.version>
+    <spark.fix.version>2.4.3.1-SNAPSHOT</spark.fix.version>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
     <java.version>1.8</java.version>
@@ -2530,6 +2535,7 @@
         <artifactId>scalastyle-maven-plugin</artifactId>
         <version>1.0.0</version>
         <configuration>
+          <skip>true</skip>
           <verbose>false</verbose>
           <failOnViolation>true</failOnViolation>
           <includeTestSourceDirectory>false</includeTestSourceDirectory>
@@ -2554,6 +2560,7 @@
         <artifactId>maven-checkstyle-plugin</artifactId>
         <version>2.17</version>
         <configuration>
+          <skip>true</skip>
           <failOnViolation>false</failOnViolation>
           <includeTestSourceDirectory>true</includeTestSourceDirectory>
           <sourceDirectories>${basedir}/src/main/java,${basedir}/src/main/scala</sourceDirectories>
@@ -2885,4 +2892,16 @@
       <id>sparkr</id>
     </profile>
   </profiles>
+
+  <distributionManagement>
+    <repository>
+      <id>aws-nexus</id>
+      <url>https://nexus.wisers.com.cn/repository/devops-maven-releases/</url>
+    </repository>
+    <snapshotRepository>
+      <id>aws-nexus</id>
+      <url>https://nexus.wisers.com.cn/repository/devops-maven-snapshots/</url>
+    </snapshotRepository>
+  </distributionManagement>
+  
 </project>

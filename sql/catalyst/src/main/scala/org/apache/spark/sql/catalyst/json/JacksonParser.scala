@@ -38,7 +38,8 @@ import org.apache.spark.util.Utils
  */
 class JacksonParser(
     schema: DataType,
-    val options: JSONOptions) extends Logging {
+    val options: JSONOptions,
+    allowArrayAsStructs: Boolean) extends Logging {
 
   import JacksonUtils._
   import com.fasterxml.jackson.core.JsonToken._
@@ -84,7 +85,7 @@ class JacksonParser(
         // List([str_a_1,null])
         // List([str_a_2,null], [null,str_b_3])
         //
-      case START_ARRAY =>
+      case START_ARRAY if allowArrayAsStructs =>
         val array = convertArray(parser, elementConverter)
         // Here, as we support reading top level JSON arrays and take every element
         // in such an array as a row, this case is possible.
@@ -93,6 +94,8 @@ class JacksonParser(
         } else {
           array.toArray[InternalRow](schema).toSeq
         }
+      case START_ARRAY =>
+        throw new RuntimeException("Parsing JSON arrays as structs is forbidden.")
     }
   }
 
@@ -175,7 +178,8 @@ class JacksonParser(
             case "Infinity" => Float.PositiveInfinity
             case "-Infinity" => Float.NegativeInfinity
             case other => throw new RuntimeException(
-              s"Cannot parse $other as ${FloatType.catalogString}.")
+              s"Cannot parse fieldName: [${parser.getCurrentName}], fieldValue: [${parser.getText}], " +
+                s"[${VALUE_STRING}] as target spark dataType: [${dataType}].")
           }
       }
 
@@ -191,7 +195,10 @@ class JacksonParser(
             case "Infinity" => Double.PositiveInfinity
             case "-Infinity" => Double.NegativeInfinity
             case other =>
-              throw new RuntimeException(s"Cannot parse $other as ${DoubleType.catalogString}.")
+              throw new RuntimeException(
+                s"Cannot parse fieldName: [${parser.getCurrentName}], fieldValue: [${parser.getText}], " +
+                  s"[${VALUE_STRING}] as target spark dataType: [${dataType}]."
+              )
           }
       }
 
@@ -325,7 +332,9 @@ class JacksonParser(
       // We cannot parse this token based on the given data type. So, we throw a
       // RuntimeException and this exception will be caught by `parse` method.
       throw new RuntimeException(
-        s"Failed to parse a value for data type ${dataType.catalogString} (current token: $token).")
+        s"Failed to parse fieldName: [${parser.getCurrentName}], fieldValue: [${parser.getText}], " +
+          s"[${token.toString}] to target spark dataType: [${dataType}]."
+      )
   }
 
   /**
