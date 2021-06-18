@@ -68,7 +68,6 @@ class Observation(name: String) {
    */
   def get: Row = {
     assert(waitCompleted(None, TimeUnit.SECONDS), "waitCompleted without timeout returned false")
-    assert(row.isDefined, "waitCompleted without timeout returned while result is still None")
     row.get
   }
 
@@ -106,7 +105,8 @@ class Observation(name: String) {
   private[spark] def onFinish(funcName: String, qe: QueryExecution): Unit = {
     synchronized {
       this.row = qe.observedMetrics.get(name)
-      if (this.row.isDefined) this.notifyAll()
+      assert(this.row.isDefined, "No metric provided by QueryExecutionListener")
+      this.notifyAll()
     }
     unregister()
   }
