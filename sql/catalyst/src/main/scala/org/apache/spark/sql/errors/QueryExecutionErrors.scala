@@ -749,7 +749,7 @@ object QueryExecutionErrors {
          |Could not execute broadcast in $timeout secs. You can increase the timeout
          |for broadcasts via ${SQLConf.BROADCAST_TIMEOUT.key} or disable broadcast join
          |by setting ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key} to -1
-       """.stripMargin.replaceAll("\n", " "), ex.get)
+       """.stripMargin.replaceAll("\n", " "), ex.getOrElse(null))
   }
 
   def cannotCompareCostWithTargetCostError(cost: String): Throwable = {
