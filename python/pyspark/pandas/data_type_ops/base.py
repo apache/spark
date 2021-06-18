@@ -304,10 +304,6 @@ class DataTypeOps(object, metaclass=ABCMeta):
         return col.replace({np.nan: None})
 
     def isnull(self, index_ops: Union["Index", "Series"]) -> Union["Series", "Index"]:
-        from pyspark.pandas.indexes import MultiIndex
-
-        if isinstance(index_ops, MultiIndex):
-            raise NotImplementedError("isna is not defined for MultiIndex")
         return index_ops._with_new_scol(index_ops.spark.column.isNull())
 
     def astype(

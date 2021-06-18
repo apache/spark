@@ -16,6 +16,7 @@
 #
 
 import decimal as d
+import unittest
 
 import numpy as np
 import pandas as pd
@@ -52,3 +53,16 @@ class DecimalOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         self.assertEqual(self.float_psser._dtype_op.pretty_name, "fractions")
         self.assert_eq(self.decimal_pser.isnull(), self.decimal_psser.isnull())
         self.assert_eq(self.float_pser.isnull(), self.float_psser.isnull())
+
+
+if __name__ == "__main__":
+
+    from pyspark.pandas.tests.data_type_ops.test_decimal_ops import *  # noqa: F401
+
+    try:
+        import xmlrunner  # type: ignore[import]
+
+        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
+    except ImportError:
+        testRunner = None
+    unittest.main(testRunner=testRunner, verbosity=2)

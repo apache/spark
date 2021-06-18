@@ -878,6 +878,10 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         >>> ser.rename("a").to_frame().set_index("a").index.isna()
         Index([False, False, True], dtype='object', name='a')
         """
+        from pyspark.pandas.indexes import MultiIndex
+
+        if isinstance(self, MultiIndex):
+            raise NotImplementedError("isna is not defined for MultiIndex")
 
         return self._dtype_op.isnull(self)
 
