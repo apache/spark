@@ -26,7 +26,6 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, Bucket, Days, Hours
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CreateTableAsSelectStatement, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelectStatement}
 import org.apache.spark.sql.connector.expressions.{LogicalExpressions, NamedReference, Transform}
 import org.apache.spark.sql.errors.QueryCompilationErrors
-
 import org.apache.spark.sql.types.IntegerType
 
 /**
