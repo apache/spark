@@ -212,6 +212,7 @@ public class TransportClient implements Closeable {
   public void sendMergedBlockMetaReq(
       String appId,
       int shuffleId,
+      int shuffleSequenceId,
       int reduceId,
       MergedBlockMetaResponseCallback callback) {
     long requestId = requestId();
@@ -222,7 +223,7 @@ public class TransportClient implements Closeable {
     handler.addRpcRequest(requestId, callback);
     RpcChannelListener listener = new RpcChannelListener(requestId, callback);
     channel.writeAndFlush(
-      new MergedBlockMetaRequest(requestId, appId, shuffleId, reduceId)).addListener(listener);
+      new MergedBlockMetaRequest(requestId, appId, shuffleId, shuffleSequenceId, reduceId)).addListener(listener);
   }
 
   /**

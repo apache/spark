@@ -152,14 +152,14 @@ public class TransportRequestHandlerSuite {
     TransportClient reverseClient = mock(TransportClient.class);
     TransportRequestHandler requestHandler = new TransportRequestHandler(channel, reverseClient,
       rpcHandler, 2L, null);
-    MergedBlockMetaRequest validMetaReq = new MergedBlockMetaRequest(19, "app1", 0, 0);
+    MergedBlockMetaRequest validMetaReq = new MergedBlockMetaRequest(19, "app1", 0, 0, 0);
     requestHandler.handle(validMetaReq);
     assertEquals(1, responseAndPromisePairs.size());
     assertTrue(responseAndPromisePairs.get(0).getLeft() instanceof MergedBlockMetaSuccess);
     assertEquals(2,
       ((MergedBlockMetaSuccess) (responseAndPromisePairs.get(0).getLeft())).getNumChunks());
 
-    MergedBlockMetaRequest invalidMetaReq = new MergedBlockMetaRequest(21, "app1", -1, 1);
+    MergedBlockMetaRequest invalidMetaReq = new MergedBlockMetaRequest(21, "app1", -1, 0, 1);
     requestHandler.handle(invalidMetaReq);
     assertEquals(2, responseAndPromisePairs.size());
     assertTrue(responseAndPromisePairs.get(1).getLeft() instanceof RpcFailure);

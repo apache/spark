@@ -96,11 +96,12 @@ private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
       dataFile: File,
       partitionLengths: Array[Long],
       dep: ShuffleDependency[_, _, _],
-      mapIndex: Int): Unit = {
+      mapIndex: Int,
+      shuffleSequenceId: Int): Unit = {
     val numPartitions = dep.partitioner.numPartitions
     val transportConf = SparkTransportConf.fromSparkConf(conf, "shuffle")
     val requests = prepareBlockPushRequests(numPartitions, mapIndex, dep.shuffleId, dataFile,
-      partitionLengths, dep.getMergerLocs, transportConf)
+      partitionLengths, dep.getMergerLocs, transportConf, shuffleSequenceId)
     // Randomize the orders of the PushRequest, so different mappers pushing blocks at the same
     // time won't be pushing the same ranges of shuffle partitions.
     pushRequests ++= Utils.randomize(requests)
@@ -350,7 +351,8 @@ private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
       dataFile: File,
       partitionLengths: Array[Long],
       mergerLocs: Seq[BlockManagerId],
-      transportConf: TransportConf): Seq[PushRequest] = {
+      transportConf: TransportConf,
+      shuffleSequenceId: Int): Seq[PushRequest] = {
     var offset = 0L
     var currentReqSize = 0
     var currentReqOffset = 0L
@@ -361,7 +363,8 @@ private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
     for (reduceId <- 0 until numPartitions) {
       val blockSize = partitionLengths(reduceId)
       logDebug(
-        s"Block ${ShufflePushBlockId(shuffleId, partitionId, reduceId)} is of size $blockSize")
+        s"Block ${ShufflePushBlockId(shuffleId, partitionId, shuffleSequenceId,
+          reduceId)} is of size $blockSize")
       // Skip 0-length blocks and blocks that are large enough
       if (blockSize > 0) {
         val mergerId = math.min(math.floor(reduceId * 1.0 / numPartitions * numMergers),
@@ -394,7 +397,8 @@ private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
         // Only push blocks under the size limit
         if (blockSize <= maxBlockSizeToPush) {
           val blockSizeInt = blockSize.toInt
-          blocks += ((ShufflePushBlockId(shuffleId, partitionId, reduceId), blockSizeInt))
+          blocks += ((ShufflePushBlockId(shuffleId, shuffleSequenceId, partitionId,
+            reduceId), blockSizeInt))
           // Only update currentReqOffset if the current block is the first in the request
           if (currentReqOffset == -1) {
             currentReqOffset = offset

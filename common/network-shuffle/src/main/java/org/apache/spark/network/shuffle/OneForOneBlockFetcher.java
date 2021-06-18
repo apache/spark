@@ -142,7 +142,8 @@ public class OneForOneBlockFetcher {
       boolean areMergedChunks) {
     String[] firstBlock = splitBlockId(blockIds[0]);
     int shuffleId = Integer.parseInt(firstBlock[1]);
-    boolean batchFetchEnabled = firstBlock.length == 5;
+    int shuffleSequenceId = Integer.parseInt(firstBlock[2]);
+    boolean batchFetchEnabled = firstBlock.length == 6;
 
     // In case of FetchShuffleBlocks, primaryId is mapId. For FetchShuffleBlockChunks, primaryId
     // is reduceId.
@@ -155,24 +156,24 @@ public class OneForOneBlockFetcher {
       }
       Number primaryId;
       if (!areMergedChunks) {
-        primaryId = Long.parseLong(blockIdParts[2]);
+        primaryId = Long.parseLong(blockIdParts[3]);
       } else {
-        primaryId = Integer.parseInt(blockIdParts[2]);
+        primaryId = Integer.parseInt(blockIdParts[3]);
       }
       BlocksInfo blocksInfoByPrimaryId = primaryIdToBlocksInfo.computeIfAbsent(primaryId,
         id -> new BlocksInfo());
       blocksInfoByPrimaryId.blockIds.add(blockId);
-      // If blockId is a regular shuffle block, then blockIdParts[3] = reduceId. If blockId is a
-      // shuffleChunk block, then blockIdParts[3] = chunkId
-      blocksInfoByPrimaryId.ids.add(Integer.parseInt(blockIdParts[3]));
+      // If blockId is a regular shuffle block, then blockIdParts[4] = reduceId. If blockId is a
+      // shuffleChunk block, then blockIdParts[4] = chunkId
+      blocksInfoByPrimaryId.ids.add(Integer.parseInt(blockIdParts[4]));
       if (batchFetchEnabled) {
         // It comes here only if the blockId is a regular shuffle block not a shuffleChunk block.
         // When we read continuous shuffle blocks in batch, we will reuse reduceIds in
         // FetchShuffleBlocks to store the start and end reduce id for range
         // [startReduceId, endReduceId).
-        assert(blockIdParts.length == 5);
+        assert(blockIdParts.length == 6);
         // blockIdParts[4] is the end reduce id for the batch range
-        blocksInfoByPrimaryId.ids.add(Integer.parseInt(blockIdParts[4]));
+        blocksInfoByPrimaryId.ids.add(Integer.parseInt(blockIdParts[5]));
       }
     }
     // In case of FetchShuffleBlocks, secondaryIds are reduceIds. For FetchShuffleBlockChunks,
@@ -198,25 +199,25 @@ public class OneForOneBlockFetcher {
         appId, execId, shuffleId, mapIds, secondaryIdsArray, batchFetchEnabled);
     } else {
       int[] reduceIds = Ints.toArray(primaryIds);
-      return new FetchShuffleBlockChunks(appId, execId, shuffleId, reduceIds, secondaryIdsArray);
+      return new FetchShuffleBlockChunks(appId, execId, shuffleId, shuffleSequenceId, reduceIds, secondaryIdsArray);
     }
   }
 
-  /** Split the shuffleBlockId and return shuffleId, mapId and reduceIds. */
+  /** Split the shuffleBlockId and return shuffleId, shuffleSequenceId, mapId and reduceIds. */
   private String[] splitBlockId(String blockId) {
     String[] blockIdParts = blockId.split("_");
-    // For batch block id, the format contains shuffleId, mapId, begin reduceId, end reduceId.
-    // For single block id, the format contains shuffleId, mapId, educeId.
-    // For single block chunk id, the format contains shuffleId, reduceId, chunkId.
-    if (blockIdParts.length < 4 || blockIdParts.length > 5) {
+    // For batch block id, the format contains shuffleId, shuffleSequenceId, mapId, begin reduceId, end reduceId.
+    // For single block id, the format contains shuffleId, shuffleSequenceId, mapId, reduceId.
+    // For single block chunk id, the format contains shuffleId, shuffleSequenceId, reduceId, chunkId.
+    if (blockIdParts.length < 5 || blockIdParts.length > 6) {
       throw new IllegalArgumentException(
         "Unexpected shuffle block id format: " + blockId);
     }
-    if (blockIdParts.length == 5 && !blockIdParts[0].equals("shuffle")) {
+    if (blockIdParts.length == 6 && !blockIdParts[0].equals("shuffle")) {
       throw new IllegalArgumentException(
         "Unexpected shuffle block id format: " + blockId);
     }
-    if (blockIdParts.length == 4 &&
+    if (blockIdParts.length == 5 &&
       !(blockIdParts[0].equals("shuffle") || blockIdParts[0].equals("shuffleChunk"))) {
       throw new IllegalArgumentException(
         "Unexpected shuffle block id format: " + blockId);

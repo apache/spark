@@ -37,14 +37,18 @@ public class FetchShuffleBlockChunks extends AbstractFetchShuffleBlocks {
   public final int[] reduceIds;
   // The i-th int[] in chunkIds contains all the chunks for the i-th reduceId in reduceIds.
   public final int[][] chunkIds;
+  // shuffleSequenceId is to uniquely identify a stage attempt of a shuffle ID.
+  public final int shuffleSequenceId;
 
   public FetchShuffleBlockChunks(
       String appId,
       String execId,
       int shuffleId,
+      int shuffleSequenceId,
       int[] reduceIds,
       int[][] chunkIds) {
     super(appId, execId, shuffleId);
+    this.shuffleSequenceId = shuffleSequenceId
     this.reduceIds = reduceIds;
     this.chunkIds = chunkIds;
     assert(reduceIds.length == chunkIds.length);
@@ -56,6 +60,7 @@ public class FetchShuffleBlockChunks extends AbstractFetchShuffleBlocks {
   @Override
   public String toString() {
     return toStringHelper()
+      .append("shuffleSequenceId", shuffleSequenceId)
       .append("reduceIds", Arrays.toString(reduceIds))
       .append("chunkIds", Arrays.deepToString(chunkIds))
       .toString();
@@ -68,13 +73,13 @@ public class FetchShuffleBlockChunks extends AbstractFetchShuffleBlocks {
 
     FetchShuffleBlockChunks that = (FetchShuffleBlockChunks) o;
     if (!super.equals(that)) return false;
-    if (!Arrays.equals(reduceIds, that.reduceIds)) return false;
+    if (shuffleSequenceId != that.shuffleSequenceId || !Arrays.equals(reduceIds, that.reduceIds)) return false;
     return Arrays.deepEquals(chunkIds, that.chunkIds);
   }
 
   @Override
   public int hashCode() {
-    int result = super.hashCode();
+    int result = super.hashCode() + shuffleSequenceId;
     result = 31 * result + Arrays.hashCode(reduceIds);
     result = 31 * result + Arrays.deepHashCode(chunkIds);
     return result;
@@ -82,7 +87,7 @@ public class FetchShuffleBlockChunks extends AbstractFetchShuffleBlocks {
 
   @Override
   public int encodedLength() {
-    int encodedLengthOfChunkIds = 0;
+    int encodedLengthOfChunkIds = 4; // encoded length of shuffleSequenceId
     for (int[] ids: chunkIds) {
       encodedLengthOfChunkIds += Encoders.IntArrays.encodedLength(ids);
     }
@@ -95,6 +100,7 @@ public class FetchShuffleBlockChunks extends AbstractFetchShuffleBlocks {
   @Override
   public void encode(ByteBuf buf) {
     super.encode(buf);
+    buf.writeInt(shuffleSequenceId);
     Encoders.IntArrays.encode(buf, reduceIds);
     // Even though reduceIds.length == chunkIds.length, we are explicitly setting the length in the
     // interest of forward compatibility.
@@ -117,12 +123,13 @@ public class FetchShuffleBlockChunks extends AbstractFetchShuffleBlocks {
     String appId = Encoders.Strings.decode(buf);
     String execId = Encoders.Strings.decode(buf);
     int shuffleId = buf.readInt();
+    int shuffleSequenceId = buf.readInt();
     int[] reduceIds = Encoders.IntArrays.decode(buf);
     int chunkIdsLen = buf.readInt();
     int[][] chunkIds = new int[chunkIdsLen][];
     for (int i = 0; i < chunkIdsLen; i++) {
       chunkIds[i] = Encoders.IntArrays.decode(buf);
     }
-    return new FetchShuffleBlockChunks(appId, execId, shuffleId, reduceIds, chunkIds);
+    return new FetchShuffleBlockChunks(appId, execId, shuffleId, shuffleSequenceId, reduceIds, chunkIds);
   }
 }

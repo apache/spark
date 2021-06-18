@@ -98,7 +98,7 @@ class ShuffleBlockPusherSuite extends SparkFunSuite with BeforeAndAfterEach {
     val largeBlockSize = 2 * 1024 * 1024
     val pushRequests = blockPusher.prepareBlockPushRequests(5, 0, 0,
       mock(classOf[File]), Array(2, 2, 2, largeBlockSize, largeBlockSize), mergerLocs,
-      mock(classOf[TransportConf]))
+      mock(classOf[TransportConf]), 0)
     assert(pushRequests.length == 3)
     verifyPushRequests(pushRequests, Seq(6, largeBlockSize, largeBlockSize))
   }
@@ -108,7 +108,7 @@ class ShuffleBlockPusherSuite extends SparkFunSuite with BeforeAndAfterEach {
     val blockPusher = new TestShuffleBlockPusher(conf)
     val mergerLocs = dependency.getMergerLocs.map(loc => BlockManagerId("", loc.host, loc.port))
     val pushRequests = blockPusher.prepareBlockPushRequests(5, 0, 0,
-      mock(classOf[File]), Array(2, 2, 2, 1028, 1024), mergerLocs, mock(classOf[TransportConf]))
+      mock(classOf[File]), Array(2, 2, 2, 1028, 1024), mergerLocs, mock(classOf[TransportConf]), 0)
     assert(pushRequests.length == 2)
     verifyPushRequests(pushRequests, Seq(6, 1024))
   }
@@ -118,7 +118,7 @@ class ShuffleBlockPusherSuite extends SparkFunSuite with BeforeAndAfterEach {
     val blockPusher = new TestShuffleBlockPusher(conf)
     val mergerLocs = dependency.getMergerLocs.map(loc => BlockManagerId("", loc.host, loc.port))
     val pushRequests = blockPusher.prepareBlockPushRequests(5, 0, 0,
-      mock(classOf[File]), Array(2, 2, 2, 2, 2), mergerLocs, mock(classOf[TransportConf]))
+      mock(classOf[File]), Array(2, 2, 2, 2, 2), mergerLocs, mock(classOf[TransportConf]), 0)
     assert(pushRequests.length == 5)
     verifyPushRequests(pushRequests, Seq(2, 2, 2, 2, 2))
   }
@@ -127,7 +127,7 @@ class ShuffleBlockPusherSuite extends SparkFunSuite with BeforeAndAfterEach {
     interceptPushedBlocksForSuccess()
     val blockPusher = new TestShuffleBlockPusher(conf)
     blockPusher.initiateBlockPush(mock(classOf[File]),
-      Array.fill(dependency.partitioner.numPartitions) { 2 }, dependency, 0)
+      Array.fill(dependency.partitioner.numPartitions) { 2 }, dependency, 0, 0)
     blockPusher.runPendingTasks()
     verify(shuffleClient, times(1))
       .pushBlocks(any(), any(), any(), any(), any())
@@ -140,7 +140,7 @@ class ShuffleBlockPusherSuite extends SparkFunSuite with BeforeAndAfterEach {
     interceptPushedBlocksForSuccess()
     val pusher = new TestShuffleBlockPusher(conf)
     pusher.initiateBlockPush(
-      mock(classOf[File]), Array(2, 2, 2, 2, 2, 2, 2, 1100), dependency, 0)
+      mock(classOf[File]), Array(2, 2, 2, 2, 2, 2, 2, 1100), dependency, 0, 0)
     pusher.runPendingTasks()
     verify(shuffleClient, times(1))
       .pushBlocks(any(), any(), any(), any(), any())
@@ -153,7 +153,7 @@ class ShuffleBlockPusherSuite extends SparkFunSuite with BeforeAndAfterEach {
     interceptPushedBlocksForSuccess()
     val pusher = new TestShuffleBlockPusher(conf)
     pusher.initiateBlockPush(
-      mock(classOf[File]), Array.fill(dependency.partitioner.numPartitions) { 2 }, dependency, 0)
+      mock(classOf[File]), Array.fill(dependency.partitioner.numPartitions) { 2 }, dependency, 0, 0)
     pusher.runPendingTasks()
     verify(shuffleClient, times(8))
       .pushBlocks(any(), any(), any(), any(), any())
@@ -187,7 +187,7 @@ class ShuffleBlockPusherSuite extends SparkFunSuite with BeforeAndAfterEach {
       })
     val pusher = new TestShuffleBlockPusher(conf)
     pusher.initiateBlockPush(
-      mock(classOf[File]), Array.fill(dependency.partitioner.numPartitions) { 2 }, dependency, 0)
+      mock(classOf[File]), Array.fill(dependency.partitioner.numPartitions) { 2 }, dependency, 0, 0)
     pusher.runPendingTasks()
     verify(shuffleClient, times(1))
       .pushBlocks(any(), any(), any(), any(), any())
@@ -207,7 +207,7 @@ class ShuffleBlockPusherSuite extends SparkFunSuite with BeforeAndAfterEach {
     interceptPushedBlocksForSuccess()
     val pusher = new TestShuffleBlockPusher(conf)
     pusher.initiateBlockPush(mock(classOf[File]),
-      Array.fill(dependency.partitioner.numPartitions) { 512 * 1024 }, dependency, 0)
+      Array.fill(dependency.partitioner.numPartitions) { 512 * 1024 }, dependency, 0, 0)
     pusher.runPendingTasks()
     verify(shuffleClient, times(4))
       .pushBlocks(any(), any(), any(), any(), any())
@@ -263,7 +263,7 @@ class ShuffleBlockPusherSuite extends SparkFunSuite with BeforeAndAfterEach {
         })
       })
     pusher.initiateBlockPush(
-      mock(classOf[File]), Array.fill(dependency.partitioner.numPartitions) { 2 }, dependency, 0)
+      mock(classOf[File]), Array.fill(dependency.partitioner.numPartitions) { 2 }, dependency, 0, 0)
     pusher.runPendingTasks()
     verify(shuffleClient, times(8))
       .pushBlocks(any(), any(), any(), any(), any())
@@ -292,7 +292,7 @@ class ShuffleBlockPusherSuite extends SparkFunSuite with BeforeAndAfterEach {
         })
       })
     pusher.initiateBlockPush(
-      mock(classOf[File]), Array.fill(dependency.partitioner.numPartitions) { 2 }, dependency, 0)
+      mock(classOf[File]), Array.fill(dependency.partitioner.numPartitions) { 2 }, dependency, 0, 0)
     pusher.runPendingTasks()
     verify(shuffleClient, times(1))
       .pushBlocks(any(), any(), any(), any(), any())
@@ -315,7 +315,7 @@ class ShuffleBlockPusherSuite extends SparkFunSuite with BeforeAndAfterEach {
       })
     val pusher = new TestShuffleBlockPusher(conf)
     pusher.initiateBlockPush(
-      mock(classOf[File]), Array.fill(dependency.partitioner.numPartitions) { 2 }, dependency, 0)
+      mock(classOf[File]), Array.fill(dependency.partitioner.numPartitions) { 2 }, dependency, 0, 0)
     pusher.runPendingTasks()
     verify(shuffleClient, times(2))
       .pushBlocks(any(), any(), any(), any(), any())

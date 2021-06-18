@@ -197,7 +197,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
   }
 
   @Override
-  public MergedBlockMeta getMergedBlockMeta(String appId, int shuffleId, int reduceId) {
+  public MergedBlockMeta getMergedBlockMeta(String appId, int shuffleId, int shuffleSequenceId, int reduceId) {
     AppShuffleInfo appShuffleInfo = validateAndGetAppShuffleInfo(appId);
     File indexFile =
       appShuffleInfo.getMergedShuffleIndexFile(shuffleId, reduceId);
@@ -222,7 +222,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
 
   @SuppressWarnings("UnstableApiUsage")
   @Override
-  public ManagedBuffer getMergedBlockData(String appId, int shuffleId, int reduceId, int chunkId) {
+  public ManagedBuffer getMergedBlockData(String appId, int shuffleId, int shuffleSequenceId, int reduceId, int chunkId) {
     AppShuffleInfo appShuffleInfo = validateAndGetAppShuffleInfo(appId);
     File dataFile = appShuffleInfo.getMergedShuffleDataFile(shuffleId, reduceId);
     if (!dataFile.exists()) {
@@ -415,7 +415,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     MergeStatuses mergeStatuses;
     if (shufflePartitions == null || shufflePartitions.isEmpty()) {
       mergeStatuses =
-        new MergeStatuses(msg.shuffleId, new RoaringBitmap[0], new int[0], new long[0]);
+        new MergeStatuses(msg.shuffleId, msg.shuffleSequenceId, new RoaringBitmap[0], new int[0], new long[0]);
     } else {
       List<RoaringBitmap> bitmaps = new ArrayList<>(shufflePartitions.size());
       List<Integer> reduceIds = new ArrayList<>(shufflePartitions.size());
@@ -436,7 +436,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
           }
         }
       }
-      mergeStatuses = new MergeStatuses(msg.shuffleId,
+      mergeStatuses = new MergeStatuses(msg.shuffleId, msg.shuffleSequenceId,
         bitmaps.toArray(new RoaringBitmap[bitmaps.size()]), Ints.toArray(reduceIds),
         Longs.toArray(sizes));
     }

@@ -38,7 +38,7 @@ import org.apache.spark.io.CompressionCodec
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpoint, RpcEndpointRef, RpcEnv}
 import org.apache.spark.scheduler.{MapStatus, MergeStatus, ShuffleOutputStatus}
 import org.apache.spark.shuffle.MetadataFetchFailedException
-import org.apache.spark.storage.{BlockId, BlockManagerId, ShuffleBlockId}
+import org.apache.spark.storage.{BlockId, BlockManagerId, ShuffleBlockId, ShufflePushMergeBlockId}
 import org.apache.spark.util._
 
 /**
@@ -1453,8 +1453,8 @@ private[spark] object MapOutputTracker extends Logging {
             // ShuffleBlockId with mapId being SHUFFLE_PUSH_MAP_ID to indicate this is
             // a merged shuffle block.
             splitsByAddress.getOrElseUpdate(mergeStatus.location, ListBuffer()) +=
-              ((ShuffleBlockId(shuffleId, SHUFFLE_PUSH_MAP_ID, partId), mergeStatus.totalSize,
-                SHUFFLE_PUSH_MAP_ID))
+              ((ShufflePushMergeBlockId(shuffleId, mergeStatus.shuffleSequenceId,
+                SHUFFLE_PUSH_MAP_ID, partId), mergeStatus.totalSize, -1))
             // For the "holes" in this pre-merged shuffle partition, i.e., unmerged mapper
             // shuffle partition blocks, fetch the original map produced shuffle partition blocks
             val mapStatusesWithIndex = mapStatuses.zipWithIndex

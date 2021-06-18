@@ -32,13 +32,20 @@ public class MergedBlockMetaRequest extends AbstractMessage implements RequestMe
   public final long requestId;
   public final String appId;
   public final int shuffleId;
+  public final int shuffleSequenceId;
   public final int reduceId;
 
-  public MergedBlockMetaRequest(long requestId, String appId, int shuffleId, int reduceId) {
+  public MergedBlockMetaRequest(
+      long requestId,
+      String appId,
+      int shuffleId,
+      int shuffleSequenceId,
+      int reduceId) {
     super(null, false);
     this.requestId = requestId;
     this.appId = appId;
     this.shuffleId = shuffleId;
+    this.shuffleSequenceId = shuffleSequenceId;
     this.reduceId = reduceId;
   }
 
@@ -49,7 +56,7 @@ public class MergedBlockMetaRequest extends AbstractMessage implements RequestMe
 
   @Override
   public int encodedLength() {
-    return 8 + Encoders.Strings.encodedLength(appId) + 4 + 4;
+    return 8 + Encoders.Strings.encodedLength(appId) + 4 + 4 + 4;
   }
 
   @Override
@@ -57,6 +64,7 @@ public class MergedBlockMetaRequest extends AbstractMessage implements RequestMe
     buf.writeLong(requestId);
     Encoders.Strings.encode(buf, appId);
     buf.writeInt(shuffleId);
+    buf.writeInt(shuffleSequenceId);
     buf.writeInt(reduceId);
   }
 
@@ -64,8 +72,9 @@ public class MergedBlockMetaRequest extends AbstractMessage implements RequestMe
     long requestId = buf.readLong();
     String appId = Encoders.Strings.decode(buf);
     int shuffleId = buf.readInt();
+    int shuffleSequenceId = buf.readInt();
     int reduceId = buf.readInt();
-    return new MergedBlockMetaRequest(requestId, appId, shuffleId, reduceId);
+    return new MergedBlockMetaRequest(requestId, appId, shuffleId, shuffleSequenceId, reduceId);
   }
 
   @Override

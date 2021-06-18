@@ -172,12 +172,13 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
       String host,
       int port,
       int shuffleId,
+      int shuffleSequenceId,
       MergeFinalizerListener listener) {
     checkInit();
     try {
       TransportClient client = clientFactory.createClient(host, port);
       ByteBuffer finalizeShuffleMerge =
-        new FinalizeShuffleMerge(appId, conf.appAttemptId(), shuffleId).toByteBuffer();
+        new FinalizeShuffleMerge(appId, conf.appAttemptId(), shuffleId, shuffleSequenceId).toByteBuffer();
       client.sendRpc(finalizeShuffleMerge, new RpcResponseCallback() {
         @Override
         public void onSuccess(ByteBuffer response) {
@@ -202,6 +203,7 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
       String host,
       int port,
       int shuffleId,
+      int shuffleSequenceId,
       int reduceId,
       MergedBlocksMetaListener listener) {
     checkInit();
@@ -209,7 +211,7 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
       shuffleId, reduceId);
     try {
       TransportClient client = clientFactory.createClient(host, port);
-      client.sendMergedBlockMetaReq(appId, shuffleId, reduceId,
+      client.sendMergedBlockMetaReq(appId, shuffleId, shuffleSequenceId, reduceId,
         new MergedBlockMetaResponseCallback() {
           @Override
           public void onSuccess(int numChunks, ManagedBuffer buffer) {

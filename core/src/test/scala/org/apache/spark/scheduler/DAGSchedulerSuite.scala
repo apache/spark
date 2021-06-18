@@ -3843,8 +3843,8 @@ object DAGSchedulerSuite {
     BlockManagerId(host + "-exec", host, 12345)
   }
 
-  def makeMergeStatus(host: String, size: Long = 1000): MergeStatus =
-    MergeStatus(makeBlockManagerId(host), mock(classOf[RoaringBitmap]), size)
+  def makeMergeStatus(host: String, shuffleSequenceId: Int = 0, size: Long = 1000): MergeStatus =
+    MergeStatus(makeBlockManagerId(host), shuffleSequenceId, mock(classOf[RoaringBitmap]), size)
 
   def addMergerLocs(locs: Seq[String]): Unit = {
     locs.foreach { loc => mergerLocs.append(makeBlockManagerId(loc)) }
