@@ -995,7 +995,7 @@ case class UnixTimestamp(
     copy(timeExp = newLeft, format = newRight)
 }
 
-case class ToTimestampWithoutTZ(
+case class GetTimestampWithoutTZ(
     left: Expression,
     right: Expression,
     timeZoneId: Option[String] = None,
@@ -1106,14 +1106,63 @@ case class ToTimestampWithoutTZ(
     }
   }
 
-  override protected def withNewChildrenInternal(
-      newLeft: Expression, newRight: Expression): Expression =
-    this.copy(left = newLeft, right = newRight)
-
   override protected def downScaleFactor: Long = 1
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Some(timeZoneId))
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression,
+      newRight: Expression): Expression =
+    copy(left = newLeft, right = newRight)
+}
+
+
+/**
+ * Parses a column to a timestamp without time zone based on the supplied format.
+ */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """
+    _FUNC_(timestamp_str[, fmt]) - Parses the `timestamp_str` expression with the `fmt` expression
+      to a timestamp. Returns null with invalid input. By default, it follows casting rules to
+      a timestamp if the `fmt` is omitted.
+  """,
+  arguments = """
+    Arguments:
+      * timestamp_str - A string to be parsed to timestamp.
+      * fmt - Timestamp format pattern to follow. See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Datetime Patterns</a> for valid
+              date and time format patterns.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('2016-12-31 00:12:00');
+       2016-12-31 00:12:00
+      > SELECT _FUNC_('2016-12-31', 'yyyy-MM-dd');
+       2016-12-31 00:00:00
+  """,
+  group = "datetime_funcs",
+  since = "2.2.0")
+// scalastyle:on line.size.limit
+case class ParseToTimestampWithoutTZ(
+    left: Expression,
+    format: Option[Expression],
+    child: Expression) extends RuntimeReplaceable {
+
+  def this(left: Expression, format: Expression) = {
+    this(left, Option(format), GetTimestampWithoutTZ(left, format))
+  }
+
+  def this(left: Expression) = this(left, None, Cast(left, TimestampWithoutTZType))
+
+  override def flatArguments: Iterator[Any] = Iterator(left, format)
+  override def exprsReplaced: Seq[Expression] = left +: format.toSeq
+
+  override def prettyName: String = "to_timestamp_ntz"
+  override def dataType: DataType = TimestampWithoutTZType
+
+  override protected def withNewChildInternal(newChild: Expression): ParseToTimestampWithoutTZ =
+    copy(child = newChild)
 }
 
 abstract class ToTimestamp
