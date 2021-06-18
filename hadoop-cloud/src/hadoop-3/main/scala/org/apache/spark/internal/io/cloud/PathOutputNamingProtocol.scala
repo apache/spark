@@ -50,7 +50,8 @@ class PathOutputNamingProtocol(
           d => new Path(workDir, d)
         }.getOrElse(workDir)
         val file = new Path(parent, filename)
-        logTrace(s"Creating task file $file for dir $dir and ext $ext")
+        logTrace(s"Creating task file $file for dir ${fileContext.relativeDir} and ext " +
+          s"${fileContext.ext}")
         file.toString
     }
   }
