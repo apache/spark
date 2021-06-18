@@ -151,6 +151,21 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     assert(toDate("1999 08").isEmpty)
   }
 
+  test("SPARK-35780: support full range of date string") {
+    assert(toDate("02015-03-18").get === days(2015, 3, 18))
+    assert(toDate("015-03-18").get === days(15, 3, 18))
+    assert(toDate("015").get === days(15, 1, 1))
+    assert(toDate("02015").get === days(2015, 1, 1))
+    assert(toDate("-02015").get === days(-2015, 1, 1))
+    assert(toDate("999999-1-28").get === days(999999, 1, 28))
+    assert(toDate("-999999-1-28").get === days(-999999, 1, 28))
+    assert(toDate("1-1-28").get === days(1, 1, 28))
+    assert(toDate("5881580-7-11").get === days(5881580, 7, 11))
+    assert(toDate("5881580-7-12").isEmpty)
+    assert(toDate("-5877641-6-23").get === days(-5877641, 6, 23))
+    assert(toDate("-5877641-6-22").isEmpty)
+  }
+
   private def toTimestamp(str: String, zoneId: ZoneId): Option[Long] = {
     stringToTimestamp(UTF8String.fromString(str), zoneId)
   }
@@ -281,6 +296,22 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       expected = Option(date(2015, 3, 18, 12, 3, 17, 123456, zid = zoneId))
       checkStringToTimestamp("2015-03-18T12:03:17.123456 Europe/Moscow", expected)
     }
+  }
+
+  test("SPARK-35780: support full range of timestamp string") {
+    def checkStringToTimestamp(str: String, expected: Option[Long]): Unit = {
+      assert(toTimestamp(str, UTC) === expected)
+    }
+
+    checkStringToTimestamp("-1969-12-31 16:00:00", Option(date(-1969, 12, 31, 16, zid = UTC)))
+    checkStringToTimestamp("02015-03-18 16:00:00", Option(date(2015, 3, 18, 16, zid = UTC)))
+    checkStringToTimestamp("015-03-18 16:00:00", Option(date(15, 3, 18, 16, zid = UTC)))
+    checkStringToTimestamp("000001", Option(date(1, 1, 1, 0, zid = UTC)))
+    checkStringToTimestamp("-000001", Option(date(-1, 1, 1, 0, zid = UTC)))
+    checkStringToTimestamp("99999-03-18T12:03:17",
+      Option(date(99999, 3, 18, 12, 3, 17, zid = UTC)))
+    checkStringToTimestamp("-99999-03-18T12:03:17",
+      Option(date(-99999, 3, 18, 12, 3, 17, zid = UTC)))
   }
 
   test("SPARK-15379: special invalid date string") {

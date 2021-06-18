@@ -260,6 +260,11 @@ object DateTimeUtils {
     var j = 0
     var digitsMilli = 0
     var justTime = false
+    var sign = 1
+    if (bytes(j) == '-' || bytes(j) == '+') {
+      sign = if (bytes(j) == '-') -1 else 1
+      j += 1
+    }
     while (j < bytes.length) {
       val b = bytes(j)
       val parsedValue = b - '0'.toByte
@@ -269,10 +274,6 @@ object DateTimeUtils {
           i += 3
         } else if (i < 2) {
           if (b == '-') {
-            if (i == 0 && j != 4) {
-              // year should have exact four digits
-              return (Array.empty, None, false)
-            }
             segments(i) = currentSegmentValue
             currentSegmentValue = 0
             i += 1
@@ -339,10 +340,6 @@ object DateTimeUtils {
     }
 
     segments(i) = currentSegmentValue
-    if (!justTime && i == 0 && j != 4) {
-      // year should have exact four digits
-      return (Array.empty, None, false)
-    }
 
     while (digitsMilli < 6) {
       segments(6) *= 10
@@ -401,7 +398,7 @@ object DateTimeUtils {
       val localDate = if (justTime) {
         LocalDate.now(zoneId)
       } else {
-        LocalDate.of(segments(0), segments(1), segments(2))
+        LocalDate.of(sign * segments(0), segments(1), segments(2))
       }
       val localDateTime = LocalDateTime.of(localDate, localTime)
       val zonedDateTime = ZonedDateTime.of(localDateTime, zoneId)
@@ -530,17 +527,18 @@ object DateTimeUtils {
       return None
     }
     val segments: Array[Int] = Array[Int](1, 1, 1)
+    var sign = 1
     var i = 0
     var currentSegmentValue = 0
     val bytes = s.trimAll().getBytes
     var j = 0
+    if (bytes(j) == '-' || bytes(j) == '+') {
+      sign = if (bytes(j) == '-') -1 else 1
+      j += 1
+    }
     while (j < bytes.length && (i < 3 && !(bytes(j) == ' ' || bytes(j) == 'T'))) {
       val b = bytes(j)
       if (i < 2 && b == '-') {
-        if (i == 0 && j != 4) {
-          // year should have exact four digits
-          return None
-        }
         segments(i) = currentSegmentValue
         currentSegmentValue = 0
         i += 1
@@ -554,17 +552,13 @@ object DateTimeUtils {
       }
       j += 1
     }
-    if (i == 0 && j != 4) {
-      // year should have exact four digits
-      return None
-    }
     if (i < 2 && j < bytes.length) {
       // For the `yyyy` and `yyyy-[m]m` formats, entire input must be consumed.
       return None
     }
     segments(i) = currentSegmentValue
     try {
-      val localDate = LocalDate.of(segments(0), segments(1), segments(2))
+      val localDate = LocalDate.of(sign * segments(0), segments(1), segments(2))
       Some(localDateToDays(localDate))
     } catch {
       case NonFatal(_) => None
