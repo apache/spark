@@ -654,52 +654,36 @@ class CastSuite extends CastSuiteBase {
   }
 
   test("SPARK-35768: Take into account year-month interval fields in cast") {
-    checkEvaluation(cast(Literal.create("1-1"),
-      YearMonthIntervalType(YEAR, YEAR)), 12)
-    checkEvaluation(cast(Literal.create("1-1"),
-      YearMonthIntervalType(YEAR, MONTH)), 13)
-    checkEvaluation(cast(Literal.create("1-1"),
-      YearMonthIntervalType(MONTH, MONTH)), 13)
-    checkEvaluation(cast(Literal.create("-1-1"),
-      YearMonthIntervalType(YEAR, YEAR)), -12)
-    checkEvaluation(cast(Literal.create("-1-1"),
-      YearMonthIntervalType(YEAR, MONTH)), -13)
-    checkEvaluation(cast(Literal.create("-1-1"),
-      YearMonthIntervalType(MONTH, MONTH)), -13)
+    Seq(("1-1", YearMonthIntervalType(YEAR, YEAR), 12),
+      ("1-1", YearMonthIntervalType(YEAR, MONTH), 13),
+      ("1-1", YearMonthIntervalType(MONTH, MONTH), 13),
+      ("-1-1", YearMonthIntervalType(YEAR, YEAR), -12),
+      ("-1-1", YearMonthIntervalType(YEAR, MONTH), -13),
+      ("-1-1", YearMonthIntervalType(MONTH, MONTH), -13))
+      .foreach { case (str, dataType, value) =>
+        checkEvaluation(cast(Literal.create(str), dataType), value)
+        checkEvaluation(cast(Literal.create(s"INTERVAL '$str' YEAR TO MONTH"), dataType), value)
+        checkEvaluation(cast(Literal.create(s"INTERVAL -'$str' YEAR TO MONTH"), dataType), -value)
+      }
 
-    checkEvaluation(cast(Literal.create("INTERVAL '1-1' YEAR TO MONTH"),
-      YearMonthIntervalType(YEAR, YEAR)), 12)
-    checkEvaluation(cast(Literal.create("INTERVAL '1-1' YEAR TO MONTH"),
-      YearMonthIntervalType(YEAR, MONTH)), 13)
-    checkEvaluation(cast(Literal.create("INTERVAL '1-1' YEAR TO MONTH"),
-      YearMonthIntervalType(MONTH, MONTH)), 13)
+    Seq(("1-1", YearMonthIntervalType(YEAR, YEAR), 12),
+      ("1-1", YearMonthIntervalType(YEAR, MONTH), 12),
+      ("1-1", YearMonthIntervalType(MONTH, MONTH), 12),
+      ("-1-1", YearMonthIntervalType(YEAR, YEAR), -12),
+      ("-1-1", YearMonthIntervalType(YEAR, MONTH), -12),
+      ("-1-1", YearMonthIntervalType(MONTH, MONTH), -12))
+      .foreach { case (str, dataType, value) =>
+        checkEvaluation(cast(Literal.create(s"INTERVAL '$str' YEAR"), dataType), value)
+      }
 
-    checkEvaluation(cast(Literal.create("INTERVAL '-1-1' YEAR TO MONTH"),
-      YearMonthIntervalType(YEAR, YEAR)), -12)
-    checkEvaluation(cast(Literal.create("INTERVAL '-1-1' YEAR TO MONTH"),
-      YearMonthIntervalType(YEAR, MONTH)), -13)
-    checkEvaluation(cast(Literal.create("INTERVAL '-1-1' YEAR TO MONTH"),
-      YearMonthIntervalType(MONTH, MONTH)), -13)
-
-    checkEvaluation(cast(Literal.create("INTERVAL -'-1-1' YEAR TO MONTH"),
-      YearMonthIntervalType(YEAR, YEAR)), 12)
-    checkEvaluation(cast(Literal.create("INTERVAL -'-1-1' YEAR TO MONTH"),
-      YearMonthIntervalType(YEAR, MONTH)), 13)
-    checkEvaluation(cast(Literal.create("INTERVAL -'-1-1' YEAR TO MONTH"),
-      YearMonthIntervalType(MONTH, MONTH)), 13)
-
-    checkEvaluation(cast(Literal.create("INTERVAL +'-1-1' YEAR TO MONTH"),
-      YearMonthIntervalType(YEAR, YEAR)), -12)
-    checkEvaluation(cast(Literal.create("INTERVAL +'-1-1' YEAR TO MONTH"),
-      YearMonthIntervalType(YEAR, MONTH)), -13)
-    checkEvaluation(cast(Literal.create("INTERVAL +'-1-1' YEAR TO MONTH"),
-      YearMonthIntervalType(MONTH, MONTH)), -13)
-
-    checkEvaluation(cast(Literal.create("INTERVAL +'+1-1' YEAR TO MONTH"),
-      YearMonthIntervalType(YEAR, YEAR)), 12)
-    checkEvaluation(cast(Literal.create("INTERVAL +'+1-1' YEAR TO MONTH"),
-      YearMonthIntervalType(YEAR, MONTH)), 13)
-    checkEvaluation(cast(Literal.create(" interval +'+1-1' YEAR  TO MONTH "),
-      YearMonthIntervalType(MONTH, MONTH)), 13)
+    Seq(("1-1", YearMonthIntervalType(YEAR, YEAR), 12),
+      ("1-1", YearMonthIntervalType(YEAR, MONTH), 13),
+      ("1-1", YearMonthIntervalType(MONTH, MONTH), 13),
+      ("-1-1", YearMonthIntervalType(YEAR, YEAR), -12),
+      ("-1-1", YearMonthIntervalType(YEAR, MONTH), -13),
+      ("-1-1", YearMonthIntervalType(MONTH, MONTH), -13))
+      .foreach { case (str, dataType, value) =>
+        checkEvaluation(cast(Literal.create(s"INTERVAL '$str' MONTH"), dataType), value)
+      }
   }
 }
