@@ -18,7 +18,6 @@
 package org.apache.spark.sql
 
 import java.nio.ByteBuffer
-import java.time.Period
 import java.util.Arrays
 
 import scala.util.Random
@@ -29,7 +28,6 @@ import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.DataTypeTestUtils.{dayTimeIntervalTypes, yearMonthIntervalTypes}
-import org.apache.spark.sql.types.YearMonthIntervalType.YEAR
 
 /**
  * Tests of [[RandomDataGenerator]].
@@ -156,15 +154,7 @@ class RandomDataGeneratorSuite extends SparkFunSuite with SQLHelper {
         val data = generator.apply()
         val catalyst = toCatalyst(data)
         val convertedBack = toScala(catalyst)
-        dt match {
-          case YearMonthIntervalType(_, YEAR) =>
-            assert(Period.ofYears(data.asInstanceOf[Period].normalized().getYears).normalized()
-              == convertedBack)
-          case YearMonthIntervalType(_, _) =>
-            assert(data == convertedBack)
-          case _ =>
-            assert(data == convertedBack)
-        }
+        assert(data == convertedBack)
       }
     }
   }
