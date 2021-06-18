@@ -15,7 +15,15 @@
 # limitations under the License.
 #
 from functools import partial
-from typing import Any, Union, TYPE_CHECKING, Callable, List, cast, Optional
+from typing import (  # noqa: F401 (SPARK-34943)
+    Any,
+    Union,
+    TYPE_CHECKING,
+    Callable,
+    List,
+    cast,
+    Optional,
+)
 
 from pyspark.sql import Window
 from pyspark.sql import functions as F
