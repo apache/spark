@@ -288,6 +288,7 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
       DayTimeIntervalType(SECOND, SECOND) -> 90061000000L)
       .foreach { case (dt, value) =>
         assert(CatalystTypeConverters.createToCatalystConverter(dt)(duration) == value)
+        assert(CatalystTypeConverters.createToCatalystConverter(dt)(duration.negated()) == -value)
       }
   }
 
