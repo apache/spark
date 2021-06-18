@@ -102,7 +102,7 @@ class Observation(name: String) {
     this.sparkSession.foreach(_.listenerManager.unregister(listener))
   }
 
-  private[spark] def onFinish(funcName: String, qe: QueryExecution): Unit = {
+  private[spark] def onFinish(qe: QueryExecution): Unit = {
     synchronized {
       this.row = qe.observedMetrics.get(name)
       assert(this.row.isDefined, "No metric provided by QueryExecutionListener")
@@ -117,10 +117,10 @@ private[sql] case class ObservationListener(observation: Observation)
   extends QueryExecutionListener {
 
   override def onSuccess(funcName: String, qe: QueryExecution, durationNs: Long): Unit =
-    observation.onFinish(funcName, qe)
+    observation.onFinish(qe)
 
   override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit =
-    observation.onFinish(funcName, qe)
+    observation.onFinish(qe)
 
 }
 
