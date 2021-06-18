@@ -266,7 +266,6 @@ abstract class BaseDynamicPartitionDataWriter(
       description.customPartitionLocations.get(PartitioningUtils.parsePathFragment(dir))
     }
     val currentPath = if (customPath.isDefined) {
-      committer.newTaskTempFileAbsPath(taskAttemptContext, customPath.get, ext)
       // Include a UUID here to prevent file collisions for one task writing to different dirs.
       val relativePath = UUID.randomUUID().toString + "-" +
         namingProtocol.getTaskTempPath(taskAttemptContext, FileContext(ext, None, None))
