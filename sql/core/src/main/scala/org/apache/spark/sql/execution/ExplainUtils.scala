@@ -38,10 +38,6 @@ object ExplainUtils extends AdaptiveSparkPlanHelper {
    *
    * @param plan Input query plan to process
    * @param append function used to append the explain output
-   *
-   * @return The last generated operation id for this input plan. This is to ensure we
-   *         always assign incrementing unique id to each operator.
-   *
    */
   private def processPlanSkippingSubqueries[T <: QueryPlan[T]](
       plan: T,
