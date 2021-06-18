@@ -22,6 +22,7 @@ import java.util.UUID
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce.TaskAttemptContext
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.io.{FileCommitProtocol, FileContext, HadoopMapReduceNamingProtocol}
 
 /**
@@ -31,7 +32,7 @@ class PathOutputNamingProtocol(
     jobId: String,
     dest: String,
     commitProtocol: FileCommitProtocol)
-  extends HadoopMapReduceNamingProtocol(jobId, dest, commitProtocol) {
+  extends HadoopMapReduceNamingProtocol(jobId, dest, commitProtocol) with Logging {
 
   require(commitProtocol.isInstanceOf[PathOutputCommitProtocol])
 
