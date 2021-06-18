@@ -294,7 +294,6 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
       }
   }
 
-
   test("SPARK-34605: converting DayTimeIntervalType to java.time.Duration") {
     Seq(
       0L,
