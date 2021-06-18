@@ -275,7 +275,32 @@ This feature coalesces the post shuffle partitions based on the map output stati
  </table>
  
 ### Converting sort-merge join to broadcast join
-AQE converts sort-merge join to broadcast hash join when the runtime statistics of any join side is smaller than the broadcast hash join threshold. This is not as efficient as planning a broadcast hash join in the first place, but it's better than keep doing the sort-merge join, as we can save the sorting of both the join sides, and read shuffle files locally to save network traffic(if `spark.sql.adaptive.localShuffleReader.enabled` is true)
+AQE converts sort-merge join to broadcast hash join when the runtime statistics of any join side is smaller than the adaptive broadcast hash join threshold. This is not as efficient as planning a broadcast hash join in the first place, but it's better than keep doing the sort-merge join, as we can save the sorting of both the join sides, and read shuffle files locally to save network traffic(if `spark.sql.adaptive.localShuffleReader.enabled` is true)
+  <table class="table">
+     <tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr>
+     <tr>
+       <td><code>spark.sql.adaptive.autoBroadcastJoinThreshold</code></td>
+       <td>(none)</td>
+       <td>
+         Configures the maximum size in bytes for a table that will be broadcast to all worker nodes when performing a join. By setting this value to -1 broadcasting can be disabled. The default value is same with <code>spark.sql.autoBroadcastJoinThreshold</code>. Note that, this config is used only in adaptive framework.
+       </td>
+       <td>3.2.0</td>
+     </tr>
+  </table>
+
+### Converting sort-merge join to shuffled hash join
+AQE converts sort-merge join to shuffled hash join when all reduce partitions size are small enough, the max threshold can see the config `spark.sql.adaptive.maxShuffledHashJoinLocalMapThreshold`.
+  <table class="table">
+     <tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr>
+     <tr>
+       <td><code>spark.sql.adaptive.maxShuffledHashJoinLocalMapThreshold</code></td>
+       <td>0</td>
+       <td>
+         Configures the maximum size in bytes per partition that can be allowed to build local hash map. If this value is not smaller than <code>spark.sql.adaptive.advisoryPartitionSizeInBytes</code> and all the partition size are not larger than this config, join selection prefer to use shuffled hash join instead of sort merge join regardless of the value of <code>spark.sql.join.preferSortMergeJoin</code>.
+       </td>
+       <td>3.2.0</td>
+     </tr>
+  </table>
 
 ### Optimizing Skew Join
 Data skew can severely downgrade the performance of join queries. This feature dynamically handles skew in sort-merge join by splitting (and replicating if needed) skewed tasks into roughly evenly sized tasks. It takes effect when both `spark.sql.adaptive.enabled` and `spark.sql.adaptive.skewJoin.enabled` configurations are enabled.
