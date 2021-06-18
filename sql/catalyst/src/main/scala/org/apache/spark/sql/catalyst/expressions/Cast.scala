@@ -70,6 +70,7 @@ object Cast {
     case (_: NumericType, TimestampType) => true
     case (TimestampWithoutTZType, TimestampType) => true
 
+    case (StringType, TimestampWithoutTZType) => true
     case (DateType, TimestampWithoutTZType) => true
     case (TimestampType, TimestampWithoutTZType) => true
 
@@ -513,6 +514,14 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
   }
 
   private[this] def castToTimestampWithoutTZ(from: DataType): Any => Any = from match {
+    case StringType =>
+      buildCast[UTF8String](_, utfs => {
+        if (ansiEnabled) {
+          DateTimeUtils.stringToTimestampWithoutTimeZoneAnsi(utfs)
+        } else {
+          DateTimeUtils.stringToTimestampWithoutTimeZone(utfs).orNull
+        }
+      })
     case DateType =>
       buildCast[Int](_, d => daysToMicros(d, ZoneOffset.UTC))
     case TimestampType =>
@@ -1410,6 +1419,24 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
   private[this] def castToTimestampWithoutTZCode(
       from: DataType,
       ctx: CodegenContext): CastFunction = from match {
+    case StringType =>
+      val longOpt = ctx.freshVariable("longOpt", classOf[Option[Long]])
+      (c, evPrim, evNull) =>
+        if (ansiEnabled) {
+          code"""
+            $evPrim =
+              $dateTimeUtilsCls.stringToTimestampWithoutTimeZoneAnsi($c);
+           """
+        } else {
+          code"""
+            scala.Option<Long> $longOpt = $dateTimeUtilsCls.stringToTimestampWithoutTimeZone($c);
+            if ($longOpt.isDefined()) {
+              $evPrim = ((Long) $longOpt.get()).longValue();
+            } else {
+              $evNull = true;
+            }
+           """
+        }
     case DateType =>
       (c, evPrim, evNull) =>
         code"$evPrim = $dateTimeUtilsCls.daysToMicros($c, java.time.ZoneOffset.UTC);"
@@ -2016,6 +2043,7 @@ object AnsiCast {
     case (DateType, TimestampType) => true
     case (TimestampWithoutTZType, TimestampType) => true
 
+    case (StringType, TimestampWithoutTZType) => true
     case (DateType, TimestampWithoutTZType) => true
     case (TimestampType, TimestampWithoutTZType) => true
 

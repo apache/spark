@@ -296,8 +296,15 @@ private[spark] class CoarseGrainedExecutorBackend(
     logInfo(msg)
     try {
       decommissioned = true
-      if (env.conf.get(STORAGE_DECOMMISSION_ENABLED)) {
+      val migrationEnabled = env.conf.get(STORAGE_DECOMMISSION_ENABLED) &&
+        (env.conf.get(STORAGE_DECOMMISSION_RDD_BLOCKS_ENABLED) ||
+          env.conf.get(STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED))
+      if (migrationEnabled) {
         env.blockManager.decommissionBlockManager()
+      } else if (env.conf.get(STORAGE_DECOMMISSION_ENABLED)) {
+        logError(s"Storage decommissioning attempted but neither " +
+          s"${STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED.key} or " +
+          s"${STORAGE_DECOMMISSION_RDD_BLOCKS_ENABLED.key} is enabled ")
       }
       if (executor != null) {
         executor.decommission()
@@ -324,7 +331,7 @@ private[spark] class CoarseGrainedExecutorBackend(
           while (true) {
             logInfo("Checking to see if we can shutdown.")
             if (executor == null || executor.numRunningTasks == 0) {
-              if (env.conf.get(STORAGE_DECOMMISSION_ENABLED)) {
+              if (migrationEnabled) {
                 logInfo("No running tasks, checking migrations")
                 val (migrationTime, allBlocksMigrated) = env.blockManager.lastMigrationInfo()
                 // We can only trust allBlocksMigrated boolean value if there were no tasks running
@@ -340,7 +347,7 @@ private[spark] class CoarseGrainedExecutorBackend(
                 exitExecutor(0, ExecutorLossMessage.decommissionFinished, notifyDriver = true)
               }
             } else {
-              logInfo("Blocked from shutdown by running ${executor.numRunningtasks} tasks")
+              logInfo(s"Blocked from shutdown by ${executor.numRunningTasks} running tasks")
               // If there is a running task it could store blocks, so make sure we wait for a
               // migration loop to complete after the last task is done.
               // Note: this is only advanced if there is a running task, if there
