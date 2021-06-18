@@ -62,10 +62,8 @@ trait FileWrite extends Write {
       sparkSession.sessionState.conf.fileCommitProtocolClass,
       jobId = jobId,
       outputPath = paths.head)
-    val namingProtocolClass = sparkSession.sessionState.conf.fileNamingProtocolClass
-      .getOrElse(FileNamingProtocol.getMappedProtocolClassName(committer))
     val namingProtocol = FileNamingProtocol.instantiate(
-      namingProtocolClass,
+      sparkSession.sessionState.conf.fileNamingProtocolClass,
       jobId = jobId,
       outputPath = paths.head,
       commitProtocol = committer)

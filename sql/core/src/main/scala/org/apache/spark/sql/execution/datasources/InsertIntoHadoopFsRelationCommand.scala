@@ -111,10 +111,8 @@ case class InsertIntoHadoopFsRelationCommand(
       outputPath = outputPath.toString,
       dynamicPartitionOverwrite = dynamicPartitionOverwrite)
 
-    val namingProtocolClass = sparkSession.sessionState.conf.fileNamingProtocolClass
-      .getOrElse(FileNamingProtocol.getMappedProtocolClassName(committer))
     val namingProtocol = FileNamingProtocol.instantiate(
-      namingProtocolClass,
+      sparkSession.sessionState.conf.fileNamingProtocolClass,
       jobId = jobId,
       outputPath = outputPath.toString,
       commitProtocol = committer)

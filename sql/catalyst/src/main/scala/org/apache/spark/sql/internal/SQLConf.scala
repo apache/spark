@@ -1194,10 +1194,14 @@ object SQLConf {
 
   val FILE_NAMING_PROTOCOL_CLASS =
     buildConf("spark.sql.sources.namingProtocolClass")
+      .doc("The class name for output file naming protocol. This is used together with " +
+        s"${FILE_COMMIT_PROTOCOL_CLASS.key} for output file commit. The class should " +
+        "implement org.apache.spark.internal.io.FileNamingProtocol.")
       .version("3.2.0")
       .internal()
       .stringConf
-      .createOptional
+      .createWithDefault(
+        "org.apache.spark.internal.io.HadoopMapReduceNamingProtocol")
 
   val PARALLEL_PARTITION_DISCOVERY_THRESHOLD =
     buildConf("spark.sql.sources.parallelPartitionDiscovery.threshold")
@@ -1711,10 +1715,13 @@ object SQLConf {
 
   val STREAMING_FILE_NAMING_PROTOCOL_CLASS =
     buildConf("spark.sql.streaming.namingProtocolClass")
+      .doc("The class name for streaming output file naming protocol. This is used together " +
+        s"with ${STREAMING_FILE_COMMIT_PROTOCOL_CLASS.key} for output file commit. The class " +
+        "should implement org.apache.spark.internal.io.FileNamingProtocol.")
       .version("3.2.0")
       .internal()
       .stringConf
-      .createOptional
+      .createWithDefault("org.apache.spark.sql.execution.streaming.ManifestFileNamingProtocol")
 
   val STREAMING_MULTIPLE_WATERMARK_POLICY =
     buildConf("spark.sql.streaming.multipleWatermarkPolicy")
@@ -3439,7 +3446,7 @@ class SQLConf extends Serializable with Logging {
 
   def streamingFileCommitProtocolClass: String = getConf(STREAMING_FILE_COMMIT_PROTOCOL_CLASS)
 
-  def streamingFileNamingProtocolClass: Option[String] =
+  def streamingFileNamingProtocolClass: String =
     getConf(SQLConf.STREAMING_FILE_NAMING_PROTOCOL_CLASS)
 
   def fileSinkLogDeletion: Boolean = getConf(FILE_SINK_LOG_DELETION)
@@ -3702,7 +3709,7 @@ class SQLConf extends Serializable with Logging {
 
   def fileCommitProtocolClass: String = getConf(SQLConf.FILE_COMMIT_PROTOCOL_CLASS)
 
-  def fileNamingProtocolClass: Option[String] = getConf(SQLConf.FILE_NAMING_PROTOCOL_CLASS)
+  def fileNamingProtocolClass: String = getConf(SQLConf.FILE_NAMING_PROTOCOL_CLASS)
 
   def parallelPartitionDiscoveryThreshold: Int =
     getConf(SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD)

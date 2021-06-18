@@ -81,29 +81,17 @@ object FileNamingProtocol extends Logging {
       classOf[String], classOf[String], classOf[FileCommitProtocol])
     ctor.newInstance(jobId, outputPath, commitProtocol)
   }
-
-  /**
-   * Gets the mapped [[FileNamingProtocol]] class name for a given [[FileCommitProtocol]].
-   * This is used to get a [[FileNamingProtocol]] to use anyway when caller does not specify
-   * [[FileNamingProtocol]] in configuration.
-   */
-  def getMappedProtocolClassName(commitProtocol: FileCommitProtocol): String = {
-    commitProtocol match {
-      case _: HadoopMapReduceCommitProtocol => classOf[HadoopMapReduceNamingProtocol].getName
-      case _ => classOf[DefaultNamingProtocol].getName
-    }
-  }
 }
 
 /**
  * The context for Spark output file. This is used by [[FileNamingProtocol]] to create file path.
  *
- * @param ext Extension of file.
+ * @param ext Source specific file extension, e.g. ".snappy.parquet".
  * @param relativeDir Relative directory of file. Can be used for writing dynamic partitions.
  *                    E.g., "a=1/b=2" is directory for partition (a=1, b=2).
  * @param absoluteDir Absolute directory of file. Can be used for writing to custom location in
  *                    file system.
- * @param prefix Prefix of file.
+ * @param prefix file prefix.
  */
 final case class FileContext(
   ext: String,

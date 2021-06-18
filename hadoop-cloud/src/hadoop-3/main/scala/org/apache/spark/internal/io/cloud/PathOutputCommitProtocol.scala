@@ -117,28 +117,9 @@ class PathOutputCommitProtocol(
     committer
   }
 
-  /**
-   * Create a temporary file for a task.
-   *
-   * @param taskContext task context
-   * @param dir         optional subdirectory
-   * @param ext         file extension
-   * @return a path as a string
-   */
-  override def newTaskTempFile(
-      taskContext: TaskAttemptContext,
-      dir: Option[String],
-      ext: String): String = {
-
-    val workDir = committer.getWorkPath
-    val parent = dir.map {
-      d => new Path(workDir, d)
-    }.getOrElse(workDir)
-    val file = new Path(parent, getFilename(taskContext, ext))
-    logTrace(s"Creating task file $file for dir $dir and ext $ext")
-    file.toString
+  def getCommitter: PathOutputCommitter = {
+    committer
   }
-
 }
 
 object PathOutputCommitProtocol {

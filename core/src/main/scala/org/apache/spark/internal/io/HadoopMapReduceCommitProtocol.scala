@@ -116,36 +116,14 @@ class HadoopMapReduceCommitProtocol(
     format.getOutputCommitter(context)
   }
 
-  @deprecated("use newTaskFile", "3.2.0")
-  override def newTaskTempFile(
-      taskContext: TaskAttemptContext, dir: Option[String], ext: String): String = {
-    throw new UnsupportedOperationException
-  }
-
-  @deprecated("use newTaskFile", "3.2.0")
-  override def newTaskTempFileAbsPath(
-      taskContext: TaskAttemptContext, absoluteDir: String, ext: String): String = {
-    throw new UnsupportedOperationException
-  }
-
-  @deprecated("use newTaskFile", "3.2.0")
-  protected def getFilename(taskContext: TaskAttemptContext, ext: String): String = {
-    // The file name looks like part-00000-2dd664f9-d2c4-4ffe-878f-c6c70c1fb0cb_00003-c000.parquet
-    // Note that %05d does not truncate the split number, so if we have more than 100000 tasks,
-    // the file name is fine and won't overflow.
-    val split = taskContext.getTaskAttemptID.getTaskID.getId
-    f"part-$split%05d-$jobId$ext"
-  }
-
   override def newTaskFile(
-      taskContext:
-      TaskAttemptContext,
+      taskContext: TaskAttemptContext,
       stagingPath: String,
       finalPath: Option[String],
       stagingDir: Option[String]): Unit = {
     finalPath match {
       case Some(path) => addedAbsPathFiles(stagingPath) = path
-      case None =>
+      case _ =>
         (committer, stagingDir) match {
           case (_: FileOutputCommitter, Some(dir)) if dynamicPartitionOverwrite =>
             partitionPaths += dir

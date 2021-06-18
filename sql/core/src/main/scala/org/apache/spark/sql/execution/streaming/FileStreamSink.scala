@@ -153,10 +153,8 @@ class FileStreamSink(
         case _ =>  // Do nothing
       }
 
-      val namingProtocolClass = sparkSession.sessionState.conf.streamingFileNamingProtocolClass
-        .getOrElse(FileNamingProtocol.getMappedProtocolClassName(committer))
       val namingProtocol = FileNamingProtocol.instantiate(
-        namingProtocolClass,
+        sparkSession.sessionState.conf.streamingFileNamingProtocolClass,
         jobId = batchId.toString,
         outputPath = path,
         commitProtocol = committer)

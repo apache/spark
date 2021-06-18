@@ -86,10 +86,8 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
       jobId = jobId,
       outputPath = outputLocation)
 
-    val namingProtocolClass = sparkSession.sessionState.conf.fileNamingProtocolClass
-      .getOrElse(FileNamingProtocol.getMappedProtocolClassName(committer))
     val namingProtocol = FileNamingProtocol.instantiate(
-      namingProtocolClass,
+      sparkSession.sessionState.conf.fileNamingProtocolClass,
       jobId = jobId,
       outputPath = outputLocation,
       commitProtocol = committer)

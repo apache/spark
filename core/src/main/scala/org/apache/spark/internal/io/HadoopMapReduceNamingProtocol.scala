@@ -66,7 +66,7 @@ class HadoopMapReduceNamingProtocol(
     new Path(fileContext.absoluteDir.get, filename).toString
   }
 
-  private def getFilename(taskContext: TaskAttemptContext, fileContext: FileContext): String = {
+  protected def getFilename(taskContext: TaskAttemptContext, fileContext: FileContext): String = {
     // The file name looks like part-00000-2dd664f9-d2c4-4ffe-878f-c6c70c1fb0cb_00003-c000.parquet
     // Note that %05d does not truncate the split number, so if we have more than 100000 tasks,
     // the file name is fine and won't overflow.

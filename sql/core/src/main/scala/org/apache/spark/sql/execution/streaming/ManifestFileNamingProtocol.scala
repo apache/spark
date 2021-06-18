@@ -15,38 +15,46 @@
  * limitations under the License.
  */
 
-package org.apache.spark.internal.io
+package org.apache.spark.sql.execution.streaming
 
+import java.util.UUID
+
+import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce.TaskAttemptContext
 
+import org.apache.spark.internal.io.{FileCommitProtocol, FileContext, FileNamingProtocol}
+import org.apache.spark.sql.errors.QueryExecutionErrors
+
 /**
- * An [[FileNamingProtocol]] implementation by default for custom [[FileCommitProtocol]]
- * implementations.
- *
- * This delegates to call [[FileCommitProtocol.newTaskTempFile]] and
- * [[FileCommitProtocol.newTaskTempFileAbsPath()]] to be backward compatible with
- * custom [[FileCommitProtocol]] implementation before Spark 3.2.0. Newer implementation of
- * [[FileCommitProtocol]] after Spark 3.2.0 should create own implementation of
- * [[FileNamingProtocol]], instead of using this.
+ * An [[FileNamingProtocol]] implementation for [[ManifestFileCommitProtocol]].
  */
-class DefaultNamingProtocol(
+class ManifestFileNamingProtocol(
     jobId: String,
     path: String,
     commitProtocol: FileCommitProtocol)
   extends FileNamingProtocol with Serializable {
 
+  require(commitProtocol.isInstanceOf[ManifestFileCommitProtocol])
+
   override def getTaskStagingPath(
       taskContext: TaskAttemptContext, fileContext: FileContext): String = {
-    fileContext.absoluteDir match {
-      case Some(dir) => commitProtocol.newTaskTempFileAbsPath(
-        taskContext, dir, fileContext.ext)
-      case _ => commitProtocol.newTaskTempFile(
-        taskContext, fileContext.relativeDir, fileContext.ext)
+    // The file name looks like part-r-00000-2dd664f9-d2c4-4ffe-878f-c6c70c1fb0cb_00003.gz.parquet
+    // Note that %05d does not truncate the split number, so if we have more than 100000 tasks,
+    // the file name is fine and won't overflow.
+    val split = taskContext.getTaskAttemptID.getTaskID.getId
+    val uuid = UUID.randomUUID.toString
+    val ext = fileContext.ext
+    val filename = f"part-$split%05d-$uuid$ext"
+
+    fileContext.relativeDir.map { d =>
+      new Path(new Path(path, d), filename).toString
+    }.getOrElse {
+      new Path(path, filename).toString
     }
   }
 
   override def getTaskFinalPath(
       taskContext: TaskAttemptContext, fileContext: FileContext): String = {
-    ""
+    throw QueryExecutionErrors.addFilesWithAbsolutePathUnsupportedError(this.toString)
   }
 }

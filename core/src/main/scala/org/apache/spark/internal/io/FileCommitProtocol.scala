@@ -70,42 +70,6 @@ abstract class FileCommitProtocol extends Logging {
   def setupTask(taskContext: TaskAttemptContext): Unit
 
   /**
-   * Notifies the commit protocol to add a new file, and gets back the full path that should be
-   * used. Must be called on the executors when running tasks.
-   *
-   * Note that the returned temp file may have an arbitrary path. The commit protocol only
-   * promises that the file will be at the location specified by the arguments after job commit.
-   *
-   * A full file path consists of the following parts:
-   *  1. the base path
-   *  2. some sub-directory within the base path, used to specify partitioning
-   *  3. file prefix, usually some unique job id with the task id
-   *  4. bucket id
-   *  5. source specific file extension, e.g. ".snappy.parquet"
-   *
-   * The "dir" parameter specifies 2, and "ext" parameter specifies both 4 and 5, and the rest
-   * are left to the commit protocol implementation to decide.
-   *
-   * Important: it is the caller's responsibility to add uniquely identifying content to "ext"
-   * if a task is going to write out multiple files to the same dir. The file commit protocol only
-   * guarantees that files written by different tasks will not conflict.
-   */
-  @deprecated("use newTaskFile", "3.2.0")
-  def newTaskTempFile(taskContext: TaskAttemptContext, dir: Option[String], ext: String): String
-
-  /**
-   * Similar to newTaskTempFile(), but allows files to committed to an absolute output location.
-   * Depending on the implementation, there may be weaker guarantees around adding files this way.
-   *
-   * Important: it is the caller's responsibility to add uniquely identifying content to "ext"
-   * if a task is going to write out multiple files to the same dir. The file commit protocol only
-   * guarantees that files written by different tasks will not conflict.
-   */
-  @deprecated("use newTaskFile", "3.2.0")
-  def newTaskTempFileAbsPath(
-      taskContext: TaskAttemptContext, absoluteDir: String, ext: String): String
-
-  /**
    * Notifies the commit protocol that a new file is added. Must be called on the executors when
    * running tasks.
    *
@@ -117,17 +81,14 @@ abstract class FileCommitProtocol extends Logging {
    *
    * Important: it is the caller's responsibility to add uniquely identifying content to
    * `stagingPath` and `finalPath`. The file commit protocol only guarantees that files written by
-   * different tasks will not conflict. This API should be preferred to use instead of deprecated
-   * [[newTaskTempFile]] and [[newTaskTempFileAbsPath]].
+   * different tasks will not conflict. This API should be used instead of deprecated
+   * `newTaskTempFile` and `newTaskTempFileAbsPath`.
    */
   def newTaskFile(
       taskContext: TaskAttemptContext,
       stagingPath: String,
       finalPath: Option[String],
-      stagingDir: Option[String]): Unit = {
-    // No-op as default implementation to be backward compatible with custom [[FileCommitProtocol]]
-    // implementations before Spark 3.2.0.
-  }
+      stagingDir: Option[String]): Unit
 
   /**
    * Commits a task after the writes succeed. Must be called on the executors when running tasks.
