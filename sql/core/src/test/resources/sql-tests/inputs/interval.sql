@@ -38,6 +38,23 @@ select make_interval(1, 2, 3, 4, 5, 6, 7.008009);
 select make_interval(1, 2, 3, 4, 0, 0, 123456789012.123456);
 select make_interval(0, 0, 0, 0, 0, 0, 1234567890123456789);
 
+-- make_dt_interval
+select make_dt_interval(1);
+select make_dt_interval(1, 2);
+select make_dt_interval(1, 2, 3);
+select make_dt_interval(1, 2, 3, 4.005006);
+select make_dt_interval(1, 0, 0, 123456789012.123456);
+select make_dt_interval(2147483647);
+
+-- make_ym_interval
+select make_ym_interval(1);
+select make_ym_interval(1, 2);
+select make_ym_interval(0, 1);
+select make_ym_interval(178956970, 7);
+select make_ym_interval(178956970, 8);
+select make_ym_interval(-178956970, -8);
+select make_ym_interval(-178956970, -9);
+
 -- cast string to intervals
 select cast('1 second' as interval);
 select cast('+1 second' as interval);

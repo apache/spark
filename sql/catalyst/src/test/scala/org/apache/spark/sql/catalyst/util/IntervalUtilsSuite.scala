@@ -503,6 +503,7 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("SPARK-35016: format year-month intervals") {
+    import org.apache.spark.sql.types.YearMonthIntervalType._
     Seq(
       0 -> ("0-0", "INTERVAL '0-0' YEAR TO MONTH"),
       -11 -> ("-0-11", "INTERVAL '-0-11' YEAR TO MONTH"),
@@ -514,8 +515,8 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
       Int.MinValue -> ("-178956970-8", "INTERVAL '-178956970-8' YEAR TO MONTH"),
       Int.MaxValue -> ("178956970-7", "INTERVAL '178956970-7' YEAR TO MONTH")
     ).foreach { case (months, (hiveIntervalStr, ansiIntervalStr)) =>
-      assert(toYearMonthIntervalString(months, ANSI_STYLE) === ansiIntervalStr)
-      assert(toYearMonthIntervalString(months, HIVE_STYLE) === hiveIntervalStr)
+      assert(toYearMonthIntervalString(months, ANSI_STYLE, YEAR, MONTH) === ansiIntervalStr)
+      assert(toYearMonthIntervalString(months, HIVE_STYLE, YEAR, MONTH) === hiveIntervalStr)
     }
   }
 
@@ -616,6 +617,32 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
         assert(toDayTimeIntervalString(micros, ANSI_STYLE, HOUR, HOUR) === hour)
         assert(toDayTimeIntervalString(micros, ANSI_STYLE, MINUTE, MINUTE) === minute)
         assert(toDayTimeIntervalString(micros, ANSI_STYLE, SECOND, SECOND) === sec)
+    }
+  }
+
+  test("SPARK-35771: Format year-month intervals using type fields") {
+    import org.apache.spark.sql.types.YearMonthIntervalType._
+    Seq(
+      0 ->
+        ("INTERVAL '0-0' YEAR TO MONTH", "INTERVAL '0' YEAR", "INTERVAL '0' MONTH"),
+      -11 -> ("INTERVAL '-0-11' YEAR TO MONTH", "INTERVAL '-0' YEAR", "INTERVAL '11' MONTH"),
+      11 -> ("INTERVAL '0-11' YEAR TO MONTH", "INTERVAL '0' YEAR", "INTERVAL '11' MONTH"),
+      -13 -> ("INTERVAL '-1-1' YEAR TO MONTH", "INTERVAL '-1' YEAR", "INTERVAL '1' MONTH"),
+      13 -> ("INTERVAL '1-1' YEAR TO MONTH", "INTERVAL '1' YEAR", "INTERVAL '1' MONTH"),
+      -24 -> ("INTERVAL '-2-0' YEAR TO MONTH", "INTERVAL '-2' YEAR", "INTERVAL '0' MONTH"),
+      24 -> ("INTERVAL '2-0' YEAR TO MONTH", "INTERVAL '2' YEAR", "INTERVAL '0' MONTH"),
+      Int.MinValue ->
+        ("INTERVAL '-178956970-8' YEAR TO MONTH",
+          "INTERVAL '-178956970' YEAR",
+          "INTERVAL '8' MONTH"),
+      Int.MaxValue ->
+        ("INTERVAL '178956970-7' YEAR TO MONTH",
+          "INTERVAL '178956970' YEAR",
+          "INTERVAL '7' MONTH")
+    ).foreach { case (months, (yearToMonth, year, month)) =>
+      assert(toYearMonthIntervalString(months, ANSI_STYLE, YEAR, MONTH) === yearToMonth)
+      assert(toYearMonthIntervalString(months, ANSI_STYLE, YEAR, YEAR) === year)
+      assert(toYearMonthIntervalString(months, ANSI_STYLE, MONTH, MONTH) === month)
     }
   }
 }

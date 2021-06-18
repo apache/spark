@@ -839,9 +839,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
     def checkMixedReferencesInsideAggregateExpr(expr: Expression): Unit = {
       expr.foreach {
         case a: AggregateExpression if containsOuter(a) =>
-          val outer = a.collect { case OuterReference(e) => e.toAttribute }
-          val local = a.references -- outer
-          if (local.nonEmpty) {
+          if (a.references.nonEmpty) {
             throw QueryCompilationErrors.mixedRefsInAggFunc(a.sql)
           }
         case _ =>

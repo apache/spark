@@ -54,8 +54,8 @@ case class ContinuousScanExec(
       .askSync[Unit](SetReaderPartitions(partitions.size))
     new ContinuousDataSourceRDD(
       sparkContext,
-      sqlContext.conf.continuousStreamingExecutorQueueSize,
-      sqlContext.conf.continuousStreamingExecutorPollIntervalMs,
+      conf.continuousStreamingExecutorQueueSize,
+      conf.continuousStreamingExecutorPollIntervalMs,
       partitions,
       schema,
       readerFactory.asInstanceOf[ContinuousPartitionReaderFactory],

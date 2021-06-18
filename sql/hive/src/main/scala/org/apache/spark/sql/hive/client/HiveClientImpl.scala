@@ -61,7 +61,7 @@ import org.apache.spark.sql.hive.{HiveExternalCatalog, HiveUtils}
 import org.apache.spark.sql.hive.HiveExternalCatalog.DATASOURCE_SCHEMA
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.util.{CircularBuffer, ShutdownHookManager, Utils, VersionUtils}
+import org.apache.spark.util.{CircularBuffer, Utils, VersionUtils}
 
 /**
  * A class that wraps the HiveClient and converts its responses to externally visible classes.
@@ -154,25 +154,6 @@ private[hive] class HiveClientImpl(
       }
     }
   }
-
-  private def closeState(): Unit = withHiveState {
-    // These temp files are registered in o.a.h.u.ShutdownHookManager too during state start.
-    // The state.close() will delete them if they are not null and try remove them from the
-    // o.a.h.u.ShutdownHookManager which causes undesirable IllegalStateException.
-    // We delete them ahead with a high priority hook here and set them to null to bypass the
-    // deletion in state.close().
-    if (state.getTmpOutputFile != null) {
-      state.getTmpOutputFile.delete()
-      state.setTmpOutputFile(null)
-    }
-    if (state.getTmpErrOutputFile != null) {
-      state.getTmpErrOutputFile.delete()
-      state.setTmpErrOutputFile(null)
-    }
-    state.close()
-  }
-
-  ShutdownHookManager.addShutdownHook(() => closeState())
 
   // Log the default warehouse location.
   logInfo(
@@ -885,6 +866,10 @@ private[hive] class HiveClientImpl(
             |======================
           """.stripMargin)
         throw e
+    } finally {
+      if (state != null) {
+        state.close()
+      }
     }
   }
 

@@ -117,8 +117,8 @@ object HiveResult {
       struct.toSeq.zip(fields).map { case (v, t) =>
         s""""${t.name}":${toHiveString((v, t.dataType), true, formatters)}"""
       }.mkString("{", ",", "}")
-    case (period: Period, YearMonthIntervalType) =>
-      toYearMonthIntervalString(periodToMonths(period), HIVE_STYLE)
+    case (period: Period, YearMonthIntervalType(startField, endField)) =>
+      toYearMonthIntervalString(periodToMonths(period), HIVE_STYLE, startField, endField)
     case (duration: Duration, DayTimeIntervalType(startField, endField)) =>
       toDayTimeIntervalString(durationToMicros(duration), HIVE_STYLE, startField, endField)
     case (other, _: UserDefinedType[_]) => other.toString

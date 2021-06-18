@@ -158,7 +158,8 @@ abstract class HashMapGenerator(
 
     dataType match {
       case BooleanType => hashInt(s"$input ? 1 : 0")
-      case ByteType | ShortType | IntegerType | DateType | YearMonthIntervalType => hashInt(input)
+      case ByteType | ShortType | IntegerType | DateType | _: YearMonthIntervalType =>
+        hashInt(input)
       case LongType | TimestampType | _: DayTimeIntervalType => hashLong(input)
       case FloatType => hashInt(s"Float.floatToIntBits($input)")
       case DoubleType => hashLong(s"Double.doubleToLongBits($input)")

@@ -81,9 +81,9 @@ object BasicStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
     ProjectEstimation.estimate(p).getOrElse(fallback(p))
   }
 
-  override def visitRepartition(p: Repartition): Statistics = default(p)
+  override def visitRepartition(p: Repartition): Statistics = fallback(p)
 
-  override def visitRepartitionByExpr(p: RepartitionByExpression): Statistics = default(p)
+  override def visitRepartitionByExpr(p: RepartitionByExpression): Statistics = fallback(p)
 
   override def visitSample(p: Sample): Statistics = fallback(p)
 
