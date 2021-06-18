@@ -25,6 +25,7 @@ import scala.concurrent.duration._
 import org.apache.spark.SparkContext
 import org.apache.spark.scheduler.AccumulableInfo
 import org.apache.spark.sql.connector.metric.CustomMetric
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.ui.SparkListenerDriverAccumUpdates
 import org.apache.spark.util.{AccumulatorContext, AccumulatorV2, Utils}
 
@@ -54,8 +55,8 @@ class SQLMetric(val metricType: String, initValue: Long = 0L) extends Accumulato
     case o: SQLMetric =>
       if (_value < 0) _value = 0
       if (o.value > 0) _value += o.value
-    case _ => throw new UnsupportedOperationException(
-      s"Cannot merge ${this.getClass.getName} with ${other.getClass.getName}")
+    case _ => throw QueryExecutionErrors.cannotMergeClassWithOtherClassError(
+      this.getClass.getName, other.getClass.getName)
   }
 
   override def isZero(): Boolean = _value == _zeroValue

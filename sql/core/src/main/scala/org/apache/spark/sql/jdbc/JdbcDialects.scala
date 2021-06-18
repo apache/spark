@@ -30,6 +30,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, TimestampFormatter}
 import org.apache.spark.sql.connector.catalog.TableChange
 import org.apache.spark.sql.connector.catalog.TableChange._
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -240,7 +241,7 @@ abstract class JdbcDialect extends Serializable with Logging{
           val name = updateNull.fieldNames
           updateClause += getUpdateColumnNullabilityQuery(tableName, name(0), updateNull.nullable())
         case _ =>
-          throw new AnalysisException(s"Unsupported TableChange $change in JDBC catalog.")
+          throw QueryCompilationErrors.unsupportedTableChangeInJDBCCatalogError(change)
       }
     }
     updateClause.result()

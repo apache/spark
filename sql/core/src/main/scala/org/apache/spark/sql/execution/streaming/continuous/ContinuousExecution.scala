@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.streaming.{StreamingRelationV2, WriteToStre
 import org.apache.spark.sql.catalyst.trees.TreePattern.CURRENT_LIKE
 import org.apache.spark.sql.connector.catalog.{SupportsRead, SupportsWrite, TableCapability}
 import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, Offset => OffsetV2, PartitionOffset, ReadLimit}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2Relation
 import org.apache.spark.sql.execution.streaming._
@@ -64,8 +65,7 @@ class ContinuousExecution(
       case s @ StreamingRelationV2(ds, sourceName, table: SupportsRead, options, output, _, _, _) =>
         val dsStr = if (ds.nonEmpty) s"[${ds.get}]" else ""
         if (!table.supports(TableCapability.CONTINUOUS_READ)) {
-          throw new UnsupportedOperationException(
-            s"Data source $sourceName does not support continuous processing.")
+          throw QueryExecutionErrors.continuousProcessingUnsupportedByDataSourceError(sourceName)
         }
 
         v2ToRelationMap.getOrElseUpdate(s, {

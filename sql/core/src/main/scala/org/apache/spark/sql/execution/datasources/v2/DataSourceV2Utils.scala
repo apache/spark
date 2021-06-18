@@ -21,6 +21,7 @@ import java.util.regex.Pattern
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.connector.catalog.{SessionConfigSupport, Table, TableProvider}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -72,8 +73,7 @@ private[sql] object DataSourceV2Utils extends Logging {
             provider.inferPartitioning(options),
             options.asCaseSensitiveMap())
         } else {
-          throw new UnsupportedOperationException(
-            s"${provider.getClass.getSimpleName} source does not support user-specified schema.")
+          throw QueryExecutionErrors.userSpecifiedSchemaUnsupportedByDataSourceError(provider)
         }
 
       case None =>

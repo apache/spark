@@ -34,6 +34,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, CaseInsensitiveMap, DateTimeUtils, GenericArrayData}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.DataSourceUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
@@ -322,16 +323,13 @@ private[parquet] class ParquetRowConverter(
             new ParquetBinaryDictionaryAwareDecimalConverter(
               decimalType.getPrecision, decimalType.getScale, updater)
           case _ =>
-            throw new RuntimeException(s"Unable to create Parquet converter for ${t.typeName} " +
-              s"whose Parquet type is $parquetType without decimal metadata. Please read this " +
-              "column/field as Spark BINARY type." )
+            throw QueryExecutionErrors.cannotCreateParquetConverterForTypeError(
+              t, parquetType.toString)
         }
 
       case t: DecimalType =>
-        throw new RuntimeException(
-          s"Unable to create Parquet converter for decimal type ${t.json} whose Parquet type is " +
-            s"$parquetType.  Parquet DECIMAL type can only be backed by INT32, INT64, " +
-            "FIXED_LEN_BYTE_ARRAY, or BINARY.")
+        throw QueryExecutionErrors.cannotCreateParquetConverterForDecimalTypeError(
+          t, parquetType.toString)
 
       case StringType =>
         new ParquetStringConverter(updater)
@@ -431,9 +429,8 @@ private[parquet] class ParquetRowConverter(
           wrappedUpdater)
 
       case t =>
-        throw new RuntimeException(
-          s"Unable to create Parquet converter for data type ${t.json} " +
-            s"whose Parquet type is $parquetType")
+        throw QueryExecutionErrors.cannotCreateParquetConverterForDataTypeError(
+          t, parquetType.toString)
     }
   }
 

@@ -25,7 +25,7 @@ import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors
 /**
  * Physical plan node for dropping a namespace.
  */
-case class DropNamespaceExec(
+case class DropNamespaceEx1ec(
     catalog: CatalogPlugin,
     namespace: Seq[String],
     ifExists: Boolean,

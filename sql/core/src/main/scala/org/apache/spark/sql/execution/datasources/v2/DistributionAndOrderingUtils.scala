@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Descending, Expression, NamedExpression, NullOrdering, NullsFirst, NullsLast, SortDirection, SortOrder}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, RepartitionByExpression, Sort}
@@ -82,7 +81,7 @@ object DistributionAndOrderingUtils {
     def resolve(ref: FieldReference): NamedExpression = {
       query.resolve(ref.parts, resolver) match {
         case Some(attr) => attr
-        case None => throw new AnalysisException(s"Cannot resolve '$ref' using ${query.output}")
+        case None => throw QueryCompilationErrors.cannotResolveFieldReferenceError(ref, query)
       }
     }
 
@@ -95,7 +94,7 @@ object DistributionAndOrderingUtils {
       case ref: FieldReference =>
         resolve(ref)
       case _ =>
-        throw new AnalysisException(s"$expr is not currently supported")
+        throw QueryCompilationErrors.v2ExpressionUnsupportedError(expr)
     }
   }
 

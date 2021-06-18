@@ -21,8 +21,8 @@ import java.util.{Locale, TimeZone}
 
 import org.apache.hadoop.fs.{FileStatus, GlobFilter}
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -91,9 +91,7 @@ object ModifiedDateFilter {
     val timeZone: TimeZone = DateTimeUtils.getTimeZone(timeZoneId)
     val ts = UTF8String.fromString(timeString)
     DateTimeUtils.stringToTimestamp(ts, timeZone.toZoneId).getOrElse {
-      throw new AnalysisException(
-        s"The timestamp provided for the '$strategy' option is invalid. The expected format " +
-          s"is 'YYYY-MM-DDTHH:mm:ss', but the provided timestamp: $timeString")
+      throw QueryCompilationErrors.invalidTimestampProvidedForStrategyError(strategy, timeString)
     }
   }
 }

@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.SQLFeatureNotSupportedException
 import java.util.Locale
 
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -108,7 +108,7 @@ private object MsSqlServerDialect extends JdbcDialect {
       tableName: String,
       columnName: String,
       isNullable: Boolean): String = {
-    throw new SQLFeatureNotSupportedException(s"UpdateColumnNullability is not supported")
+    throw QueryExecutionErrors.unsupportedUpdateColumnNullabilityError()
   }
 
   // scalastyle:off line.size.limit
@@ -116,6 +116,6 @@ private object MsSqlServerDialect extends JdbcDialect {
   // scalastyle:on line.size.limit
   // need to use the stored procedure called sp_addextendedproperty to add comments to tables
   override def getTableCommentQuery(table: String, comment: String): String = {
-    throw new SQLFeatureNotSupportedException(s"comment on table is not supported")
+    throw QueryExecutionErrors.commentOnTableUnsupportedError()
   }
 }

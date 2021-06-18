@@ -25,12 +25,12 @@ import scala.concurrent.duration.NANOSECONDS
 import scala.util.control.NonFatal
 
 import org.apache.spark.{broadcast, SparkException}
-import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.plans.logical.Statistics
 import org.apache.spark.sql.catalyst.plans.physical.{BroadcastMode, BroadcastPartitioning, Partitioning}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.{SparkPlan, SQLExecution}
 import org.apache.spark.sql.execution.joins.HashedRelation
 import org.apache.spark.sql.execution.metric.SQLMetrics
@@ -118,8 +118,8 @@ case class BroadcastExchangeExec(
             val (numRows, input) = child.executeCollectIterator()
             longMetric("numOutputRows") += numRows
             if (numRows >= MAX_BROADCAST_TABLE_ROWS) {
-              throw new SparkException(
-                s"Cannot broadcast the table over $MAX_BROADCAST_TABLE_ROWS rows: $numRows rows")
+              throw QueryExecutionErrors.cannotBroadcastExceedMaxTableRowsError(
+                MAX_BROADCAST_TABLE_ROWS, numRows)
             }
 
             val beforeBuild = System.nanoTime()
@@ -140,9 +140,8 @@ case class BroadcastExchangeExec(
 
             longMetric("dataSize") += dataSize
             if (dataSize >= MAX_BROADCAST_TABLE_BYTES) {
-              throw new SparkException(
-                s"Cannot broadcast the table that is larger than" +
-                  s" ${MAX_BROADCAST_TABLE_BYTES >> 30}GB: ${dataSize >> 30} GB")
+              throw QueryExecutionErrors.cannotBroadcastExceedMaxTableBytesError(
+                MAX_BROADCAST_TABLE_BYTES, dataSize)
             }
 
             val beforeBroadcast = System.nanoTime()
@@ -162,11 +161,7 @@ case class BroadcastExchangeExec(
             // will catch this exception and re-throw the wrapped fatal throwable.
             case oe: OutOfMemoryError =>
               val ex = new SparkFatalException(
-                new OutOfMemoryError("Not enough memory to build and broadcast the table to all " +
-                  "worker nodes. As a workaround, you can either disable broadcast by setting " +
-                  s"${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key} to -1 or increase the spark " +
-                  s"driver memory by setting ${SparkLauncher.DRIVER_MEMORY} to a higher value.")
-                  .initCause(oe.getCause))
+                QueryExecutionErrors.notEnoughMemoryToBuildAndBroadcastTableError(oe))
               promise.tryFailure(ex)
               throw ex
             case e if !NonFatal(e) =>
@@ -186,8 +181,7 @@ case class BroadcastExchangeExec(
   }
 
   override protected def doExecute(): RDD[InternalRow] = {
-    throw new UnsupportedOperationException(
-      "BroadcastExchange does not support the execute() code path.")
+    throw QueryExecutionErrors.executeUnsupportedByExecError("BroadcastExchange")
   }
 
   override protected[sql] def doExecuteBroadcast[T](): broadcast.Broadcast[T] = {
@@ -200,10 +194,7 @@ case class BroadcastExchangeExec(
           sparkContext.cancelJobGroup(runId.toString)
           relationFuture.cancel(true)
         }
-        throw new SparkException(s"Could not execute broadcast in $timeout secs. " +
-          s"You can increase the timeout for broadcasts via ${SQLConf.BROADCAST_TIMEOUT.key} or " +
-          s"disable broadcast join by setting ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key} to -1",
-          ex)
+        throw QueryExecutionErrors.executeBroadcastTimeoutError(timeout, Some(ex))
     }
   }
 

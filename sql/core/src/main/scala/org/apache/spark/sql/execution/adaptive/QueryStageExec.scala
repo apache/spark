@@ -229,7 +229,7 @@ case class BroadcastQueryStageExec(
     val promise = Promise[Any]()
     val fail = BroadcastQueryStageExec.scheduledExecutor.schedule(new Runnable() {
       override def run(): Unit = {
-        promise.tryFailure(QueryExecutionErrors.executeBroadcastTimeoutError(timeout))
+        promise.tryFailure(QueryExecutionErrors.executeBroadcastTimeoutError(timeout, None))
       }
     }, timeout, TimeUnit.SECONDS)
     broadcastFuture.onComplete(_ => fail.cancel(false))(AdaptiveSparkPlanExec.executionContext)

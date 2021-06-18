@@ -23,11 +23,12 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.IO_WARNING_LARGEFILETHRESHOLD
-import org.apache.spark.sql.{AnalysisException, SparkSession}
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions.{AttributeSet, Expression, ExpressionSet}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.connector.read.{Batch, InputPartition, Scan, Statistics, SupportsReportStatistics}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.PartitionedFileUtil
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.internal.connector.SupportsMetadata
@@ -140,8 +141,8 @@ trait FileScan extends Scan
     val attributeMap = partitionAttributes.map(a => normalizeName(a.name) -> a).toMap
     val readPartitionAttributes = readPartitionSchema.map { readField =>
       attributeMap.get(normalizeName(readField.name)).getOrElse {
-        throw new AnalysisException(s"Can't find required partition column ${readField.name} " +
-          s"in partition schema ${fileIndex.partitionSchema}")
+        throw QueryCompilationErrors.cannotFindPartitionColumnInPartitionSchemaError(
+          readField, fileIndex.partitionSchema)
       }
     }
     lazy val partitionValueProject =
