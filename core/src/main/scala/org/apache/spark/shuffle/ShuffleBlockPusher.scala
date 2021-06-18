@@ -17,7 +17,7 @@
 
 package org.apache.spark.shuffle
 
-import java.io.File
+import java.io.{File, FileNotFoundException}
 import java.net.ConnectException
 import java.nio.ByteBuffer
 import java.util.concurrent.ExecutorService
@@ -71,6 +71,12 @@ private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
       // blocks to just that host and continue push blocks to other hosts. So, here push of
       // all blocks will only stop when it is "Too Late". Also see updateStateAndCheckIfPushMore.
       override def shouldRetryError(t: Throwable): Boolean = {
+        // If it is a FileNotFound exception originating from the client while pushing the shuffle
+        // blocks to the server, then we stop pushing all the blocks because this indicates the
+        // shuffle files are deleted because subsequent block push will also fail.
+        if (t.getCause != null && t.getCause.isInstanceOf[FileNotFoundException]) {
+          return false
+        }
         // If the block is too late, there is no need to retry it
         !Throwables.getStackTraceAsString(t).contains(BlockPushErrorHandler.TOO_LATE_MESSAGE_SUFFIX)
       }
@@ -100,7 +106,15 @@ private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
     pushRequests ++= Utils.randomize(requests)
 
     submitTask(() => {
-      pushUpToMax()
+      try {
+        pushUpToMax()
+      } catch {
+        case e: FileNotFoundException =>
+          logWarning("The shuffle files got deleted when this task was reading from them" +
+            "which could happen when the job finishes and the driver instructs the executor to " +
+            "cleanup the shuffle. In this case, push of the blocks belonging to this shuffle" +
+            "will stop.", e)
+      }
     })
   }
 
@@ -297,7 +311,8 @@ private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
       }
     }
     if (pushResult.failure != null && !errorHandler.shouldRetryError(pushResult.failure)) {
-      logDebug(s"Received after merge is finalized from $address. Not pushing any more blocks.")
+      logDebug(s"Encountered an exception from $address that indicates that push needs to " +
+        s"stop.")
       return false
     } else {
       remainingBlocks.isEmpty && (pushRequests.nonEmpty || deferredPushRequests.nonEmpty)
