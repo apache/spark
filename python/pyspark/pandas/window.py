@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 from functools import partial
-from typing import Any, Union, TYPE_CHECKING, Callable, List, cast
+from typing import Any, Union, TYPE_CHECKING, Callable, List, cast, Optional
 
 from pyspark.sql import Window
 from pyspark.sql import functions as F
@@ -134,7 +134,7 @@ class Rolling(RollingAndExpanding):
         self,
         psdf_or_psser: Union["Series", "DataFrame"],
         window: int,
-        min_periods: int = None,
+        min_periods: Optional[int] = None,
     ):
         from pyspark.pandas import DataFrame, Series
 
@@ -642,7 +642,7 @@ class RollingGroupby(Rolling):
         self,
         groupby: Union["SeriesGroupBy", "DataFrameGroupBy"],
         window: int,
-        min_periods: int = None,
+        min_periods: Optional[int] = None,
     ):
         from pyspark.pandas.groupby import SeriesGroupBy
         from pyspark.pandas.groupby import DataFrameGroupBy
