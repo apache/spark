@@ -364,11 +364,10 @@ case class DataSource(
       // `spark.sql.streaming.fileStreamSink.metadata.ignored` can be enabled to ignore the
       // metadata log.
       case (format: FileFormat, _)
-          if !sparkSession.sessionState.conf.fileStreamSinkMetadataIgnored &&
-            FileStreamSink.hasMetadata(
-              caseInsensitiveOptions.get("path").toSeq ++ paths,
-              newHadoopConfiguration(),
-              sparkSession.sessionState.conf) =>
+          if FileStreamSink.hasMetadata(
+            caseInsensitiveOptions.get("path").toSeq ++ paths,
+            newHadoopConfiguration(),
+            sparkSession.sessionState.conf) =>
         val basePath = new Path((caseInsensitiveOptions.get("path").toSeq ++ paths).head)
         val fileCatalog = new MetadataLogFileIndex(sparkSession, basePath,
           caseInsensitiveOptions, userSpecifiedSchema)

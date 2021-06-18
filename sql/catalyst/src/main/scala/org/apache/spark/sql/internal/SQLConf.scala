@@ -1569,7 +1569,7 @@ object SQLConf {
       .createWithDefault(true)
 
   val FILESTREAM_SINK_METADATA_IGNORED =
-    buildConf("spark.sql.streaming.fileStreamSink.metadata.ignored")
+    buildConf("spark.sql.streaming.fileStreamSink.ignoreMetadata")
       .internal()
       .doc("If this is enabled, when Spark reads from the results of a streaming query written " +
         "by `FileStreamSink`, Spark will ignore the metadata log and treat it as normal path to " +

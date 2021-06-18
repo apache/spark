@@ -243,9 +243,6 @@ class FileStreamSource(
   @volatile private[sql] var sourceHasMetadata: Option[Boolean] =
     if (SparkHadoopUtil.get.isGlobPath(new Path(path))) Some(false) else None
 
-  // Whether ignoring metadata directory.
-  private val ignoreMetadata = sparkSession.sessionState.conf.fileStreamSinkMetadataIgnored
-
   private def allFilesUsingInMemoryFileIndex() = {
     val globbedPaths = SparkHadoopUtil.get.globPathIfNecessary(fs, qualifiedBasePath)
     val fileIndex = new InMemoryFileIndex(sparkSession, globbedPaths, options, Some(new StructType))
@@ -278,10 +275,6 @@ class FileStreamSource(
 
     var allFiles: Seq[FileStatus] = null
     sourceHasMetadata match {
-      case _ if ignoreMetadata =>
-        logWarning(s"`spark.sql.streaming.fileStreamSink.metadata.ignored` is enabled, ignoring " +
-          "metadata directory and using `InMemoryFileIndex`.")
-        allFiles = allFilesUsingInMemoryFileIndex()
       case None =>
         if (FileStreamSink.hasMetadata(Seq(path), hadoopConf, sparkSession.sessionState.conf)) {
           setSourceHasMetadata(Some(true))
