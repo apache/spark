@@ -26,7 +26,7 @@ import scala.collection.mutable
 import scala.util.{Random, Try}
 
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
-import org.apache.spark.sql.catalyst.util.DateTimeConstants.{MICROS_PER_MILLIS, MILLIS_PER_DAY}
+import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -286,7 +286,7 @@ object RandomDataGenerator {
       })
       case _: DayTimeIntervalType => Some(() => Duration.of(rand.nextLong(), ChronoUnit.MICROS))
       case YearMonthIntervalType(_, YEAR) =>
-        Some(() => Period.ofYears(rand.nextInt() / 12).normalized())
+        Some(() => Period.ofYears(rand.nextInt() / MONTHS_PER_YEAR).normalized())
       case YearMonthIntervalType(_, _) => Some(() => Period.ofMonths(rand.nextInt()).normalized())
       case DecimalType.Fixed(precision, scale) => Some(
         () => BigDecimal.apply(
