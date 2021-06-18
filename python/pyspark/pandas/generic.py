@@ -436,7 +436,7 @@ class Frame(object, metaclass=ABCMeta):
             dtypes = list(self.dtypes)
         return pd.Series(dict(Counter([d.name for d in dtypes])))
 
-    def pipe(self: T, func: Callable[..., T], *args: Any, **kwargs: Any) -> T:
+    def pipe(self, func: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
         r"""
         Apply func(self, \*args, \*\*kwargs).
 
