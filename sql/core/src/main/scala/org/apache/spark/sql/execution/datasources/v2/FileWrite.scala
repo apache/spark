@@ -25,7 +25,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce.Job
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat
 
-import org.apache.spark.internal.io.{FileCommitProtocol, FileNamingProtocol}
+import org.apache.spark.internal.io.{BatchFileNamingProtocol, FileCommitProtocol}
 import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
@@ -62,11 +62,7 @@ trait FileWrite extends Write {
       sparkSession.sessionState.conf.fileCommitProtocolClass,
       jobId = jobId,
       outputPath = paths.head)
-    val namingProtocol = FileNamingProtocol.instantiate(
-      sparkSession.sessionState.conf.fileNamingProtocolClass,
-      jobId = jobId,
-      outputPath = paths.head,
-      commitProtocol = committer)
+    val namingProtocol = new BatchFileNamingProtocol(jobId)
     lazy val description =
       createWriteJobDescription(sparkSession, hadoopConf, job, paths.head, options.asScala.toMap)
 

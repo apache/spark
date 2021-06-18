@@ -29,7 +29,7 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.hive.common.FileUtils
 import org.apache.hadoop.hive.ql.exec.TaskRunner
 
-import org.apache.spark.internal.io.{FileCommitProtocol, FileNamingProtocol}
+import org.apache.spark.internal.io.{BatchFileNamingProtocol, FileCommitProtocol}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.Attribute
@@ -85,12 +85,7 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
       sparkSession.sessionState.conf.fileCommitProtocolClass,
       jobId = jobId,
       outputPath = outputLocation)
-
-    val namingProtocol = FileNamingProtocol.instantiate(
-      sparkSession.sessionState.conf.fileNamingProtocolClass,
-      jobId = jobId,
-      outputPath = outputLocation,
-      commitProtocol = committer)
+    val namingProtocol = new BatchFileNamingProtocol(jobId)
 
     FileFormatWriter.write(
       sparkSession = sparkSession,

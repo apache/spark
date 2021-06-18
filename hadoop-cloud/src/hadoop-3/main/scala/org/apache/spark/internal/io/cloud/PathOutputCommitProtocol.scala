@@ -117,8 +117,17 @@ class PathOutputCommitProtocol(
     committer
   }
 
-  def getPathOutputCommitter: PathOutputCommitter = {
-    committer
+  /**
+   * Create a temporary file for a task.
+   *
+   * @param taskContext task context
+   * @param relativePath relative path as a string for file
+   * @return the full path as a string for file
+   */
+  override def newTaskTempFile(taskContext: TaskAttemptContext, relativePath: String): String = {
+    val file = new Path(committer.getWorkPath, relativePath)
+    logTrace(s"Creating task file $file with relative path $dir")
+    file.toString
   }
 }
 

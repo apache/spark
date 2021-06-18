@@ -22,21 +22,14 @@ import java.util.UUID
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce.TaskAttemptContext
 
-import org.apache.spark.internal.io.{FileCommitProtocol, FileContext, FileNamingProtocol}
-import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.internal.io.{FileContext, FileNamingProtocol}
 
 /**
- * An [[FileNamingProtocol]] implementation for [[ManifestFileCommitProtocol]].
+ * A [[FileNamingProtocol]] implementation to write output data in streaming processing.
  */
-class ManifestFileNamingProtocol(
-    jobId: String,
-    path: String,
-    commitProtocol: FileCommitProtocol)
-  extends FileNamingProtocol with Serializable {
+class StreamingFileNamingProtocol(jobId: String) extends FileNamingProtocol with Serializable {
 
-  require(commitProtocol.isInstanceOf[ManifestFileCommitProtocol])
-
-  override def getTaskStagingPath(
+  override def getTaskTempPath(
       taskContext: TaskAttemptContext, fileContext: FileContext): String = {
     // The file name looks like part-r-00000-2dd664f9-d2c4-4ffe-878f-c6c70c1fb0cb_00003.gz.parquet
     // Note that %05d does not truncate the split number, so if we have more than 100000 tasks,
@@ -47,14 +40,7 @@ class ManifestFileNamingProtocol(
     val filename = f"part-$split%05d-$uuid$ext"
 
     fileContext.relativeDir.map { d =>
-      new Path(new Path(path, d), filename).toString
-    }.getOrElse {
-      new Path(path, filename).toString
-    }
-  }
-
-  override def getTaskFinalPath(
-      taskContext: TaskAttemptContext, fileContext: FileContext): String = {
-    throw QueryExecutionErrors.addFilesWithAbsolutePathUnsupportedError(this.toString)
+      new Path(d, filename).toString
+    }.getOrElse(filename)
   }
 }

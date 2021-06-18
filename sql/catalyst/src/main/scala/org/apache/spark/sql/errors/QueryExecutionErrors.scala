@@ -1405,9 +1405,9 @@ object QueryExecutionErrors {
       s"Multiple streaming queries are concurrently using $path", e)
   }
 
-  def addFilesWithAbsolutePathUnsupportedError(commitProtocol: String): Throwable = {
+  def addFilesWithAbsolutePathUnsupportedError(protocol: String): Throwable = {
     new UnsupportedOperationException(
-      s"$commitProtocol does not support adding files with an absolute path")
+      s"$protocol does not support adding files with an absolute path")
   }
 
   def microBatchUnsupportedByDataSourceError(srcName: String): Throwable = {

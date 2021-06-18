@@ -38,15 +38,9 @@ private class OnlyDetectCustomPathFileCommitProtocol(jobId: String, path: String
   extends SQLHadoopMapReduceCommitProtocol(jobId, path)
     with Serializable with Logging {
 
-  override def newTaskFile(
-      taskContext: TaskAttemptContext,
-      stagingPath: String,
-      finalPath: Option[String],
-      stagingDir: Option[String]): Unit = {
-    finalPath match {
-      case Some(_) => throw new Exception("there should be no custom partition path")
-      case _ => super.newTaskFile(taskContext, stagingPath, finalPath, stagingDir)
-    }
+  override def newTaskTempFileAbsPath(
+      taskContext: TaskAttemptContext, relativePath: String, finalPath: String): String = {
+    throw new Exception("there should be no custom partition path")
   }
 }
 

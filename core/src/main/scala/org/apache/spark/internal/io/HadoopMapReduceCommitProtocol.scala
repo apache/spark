@@ -104,7 +104,7 @@ class HadoopMapReduceCommitProtocol(
    * The staging directory of this write job. Spark uses it to deal with files with absolute output
    * path, or writing data into partitioned directory with dynamicPartitionOverwrite=true.
    */
-  def stagingDir: Path = getStagingDir(path, jobId)
+  protected def stagingDir: Path = getStagingDir(path, jobId)
 
   protected def setupCommitter(context: TaskAttemptContext): OutputCommitter = {
     val format = context.getOutputFormatClass.getConstructor().newInstance()
@@ -116,20 +116,28 @@ class HadoopMapReduceCommitProtocol(
     format.getOutputCommitter(context)
   }
 
-  override def newTaskFile(
-      taskContext: TaskAttemptContext,
-      stagingPath: String,
-      finalPath: Option[String],
-      stagingDir: Option[String]): Unit = {
-    finalPath match {
-      case Some(path) => addedAbsPathFiles(stagingPath) = path
-      case _ =>
-        (committer, stagingDir) match {
-          case (_: FileOutputCommitter, Some(dir)) if dynamicPartitionOverwrite =>
-            partitionPaths += dir
-          case _ =>
+  override def newTaskTempFile(taskContext: TaskAttemptContext, relativePath: String): String = {
+    val stagingDir: Path = committer match {
+      // For FileOutputCommitter it has its own staging path called "work path".
+      case f: FileOutputCommitter =>
+        if (dynamicPartitionOverwrite) {
+          val dir = new Path(relativePath).getParent.toString
+          assert(dir.nonEmpty,
+            "The dataset to be written must be partitioned when dynamicPartitionOverwrite is true.")
+          partitionPaths += dir
         }
+        new Path(Option(f.getWorkPath).map(_.toString).getOrElse(path))
+      case _ => new Path(path)
     }
+
+    new Path(stagingDir, relativePath).toString
+  }
+
+  override def newTaskTempFileAbsPath(
+      taskContext: TaskAttemptContext, relativePath: String, finalPath: String): String = {
+    val tmpOutputPath = new Path(stagingDir, relativePath).toString
+    addedAbsPathFiles(tmpOutputPath) = finalPath
+    tmpOutputPath
   }
 
   override def setupJob(jobContext: JobContext): Unit = {
@@ -266,9 +274,5 @@ class HadoopMapReduceCommitProtocol(
       case e: IOException =>
         logWarning(s"Exception while aborting ${taskContext.getTaskAttemptID}", e)
     }
-  }
-
-  def getCommitter: OutputCommitter = {
-    committer
   }
 }

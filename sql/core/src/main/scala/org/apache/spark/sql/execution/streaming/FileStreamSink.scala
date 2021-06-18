@@ -24,7 +24,7 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.io.{FileCommitProtocol, FileNamingProtocol}
+import org.apache.spark.internal.io.FileCommitProtocol
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -152,12 +152,7 @@ class FileStreamSink(
           manifestCommitter.setupManifestOptions(fileLog, batchId)
         case _ =>  // Do nothing
       }
-
-      val namingProtocol = FileNamingProtocol.instantiate(
-        sparkSession.sessionState.conf.streamingFileNamingProtocolClass,
-        jobId = batchId.toString,
-        outputPath = path,
-        commitProtocol = committer)
+      val namingProtocol = new StreamingFileNamingProtocol(batchId.toString)
 
       // Get the actual partition columns as attributes after matching them by name with
       // the given columns names.

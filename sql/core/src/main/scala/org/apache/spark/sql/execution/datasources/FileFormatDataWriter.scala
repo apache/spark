@@ -16,6 +16,8 @@
  */
 package org.apache.spark.sql.execution.datasources
 
+import java.util.UUID
+
 import scala.collection.mutable
 
 import org.apache.hadoop.fs.Path
@@ -136,9 +138,9 @@ class SingleDirectoryDataWriter(
 
     val ext = f"-c$fileCounter%03d" +
       description.outputWriterFactory.getFileExtension(taskAttemptContext)
-    val fileContext = FileContext(ext, None, None, None)
-    val currentPath = namingProtocol.getTaskStagingPath(taskAttemptContext, fileContext)
-    committer.newTaskFile(taskAttemptContext, currentPath, None, None)
+    val currentPath = committer.newTaskTempFile(
+      taskAttemptContext,
+      namingProtocol.getTaskTempPath(taskAttemptContext, FileContext(ext, None, None)))
 
     currentWriter = description.outputWriterFactory.newInstance(
       path = currentPath,
@@ -263,16 +265,18 @@ abstract class BaseDynamicPartitionDataWriter(
     val customPath = partDir.flatMap { dir =>
       description.customPartitionLocations.get(PartitioningUtils.parsePathFragment(dir))
     }
-    val (currentPath, finalPath, currentDir) = if (customPath.isDefined) {
-      val fileContext = FileContext(ext, None, Some(customPath.get), None)
-      (namingProtocol.getTaskStagingPath(taskAttemptContext, fileContext),
-        Some(namingProtocol.getTaskFinalPath(taskAttemptContext, fileContext)),
-        None)
+    val currentPath = if (customPath.isDefined) {
+      committer.newTaskTempFileAbsPath(taskAttemptContext, customPath.get, ext)
+      // Include a UUID here to prevent file collisions for one task writing to different dirs.
+      val relativePath = UUID.randomUUID().toString + "-" +
+        namingProtocol.getTaskTempPath(taskAttemptContext, FileContext(ext, None, None))
+      val finalPath = new Path(customPath.get, relativePath).toString
+      committer.newTaskTempFileAbsPath(taskAttemptContext, relativePath, finalPath)
     } else {
-      val fileContext = FileContext(ext, partDir, None, None)
-      (namingProtocol.getTaskStagingPath(taskAttemptContext, fileContext), None, partDir)
+      val relativePath = namingProtocol.getTaskTempPath(
+        taskAttemptContext, FileContext(ext, partDir, None))
+      committer.newTaskTempFile(taskAttemptContext, relativePath)
     }
-    committer.newTaskFile(taskAttemptContext, currentPath, finalPath, currentDir)
 
     currentWriter = description.outputWriterFactory.newInstance(
       path = currentPath,

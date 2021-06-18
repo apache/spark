@@ -70,25 +70,34 @@ abstract class FileCommitProtocol extends Logging {
   def setupTask(taskContext: TaskAttemptContext): Unit
 
   /**
-   * Notifies the commit protocol that a new file is added. Must be called on the executors when
-   * running tasks.
+   * Notifies the commit protocol to add a new file, and gets back the full path that should be
+   * used. Must be called on the executors when running tasks.
    *
-   * The "stagingPath" parameter is the current path of new file. The "finalPath" parameter if
-   * specified, is the final path of file. The "finalPath" parameter is optional here because
-   * caller can leave up to file commit protocol to decide the final path. The "stagingDir"
-   * parameter if specified, is the sub-directory used to specify dynamic partitioning. The
-   * "stagingDir" parameter is optional here for non-dynamic partitioning.
+   * Note that "relativePath" parameter specifies the relative path of returned temp file. The full
+   * path is left to the commit protocol to decide. The commit protocol only promises that the file
+   * will be at the location specified by the relative path after job commits.
    *
    * Important: it is the caller's responsibility to add uniquely identifying content to
-   * `stagingPath` and `finalPath`. The file commit protocol only guarantees that files written by
-   * different tasks will not conflict. This API should be used instead of deprecated
-   * `newTaskTempFile` and `newTaskTempFileAbsPath`.
+   * "relativePath" if a task is going to write out multiple files to the same directory. The file
+   * commit protocol only guarantees that files written by different tasks will not conflict.
    */
-  def newTaskFile(
-      taskContext: TaskAttemptContext,
-      stagingPath: String,
-      finalPath: Option[String],
-      stagingDir: Option[String]): Unit
+  def newTaskTempFile(taskContext: TaskAttemptContext, relativePath: String): String
+
+  /**
+   * Similar to newTaskTempFile(), but allows files to committed to an absolute output location.
+   * Depending on the implementation, there may be weaker guarantees around adding files this way.
+   *
+   * "relativePath" parameter specifies the relative path of returned temp file, and "finalPath"
+   * parameter specifies the full path of file after job commit. The commit protocol promises that
+   * the file will be at the location specified by the "finalPath" after job commits.
+   *
+   * Important: it is the caller's responsibility to add uniquely identifying content to
+   * "relativePath" and "finalPath" if a task is going to write out multiple files to the same
+   * directory. The file commit protocol only guarantees that files written by different tasks will
+   * not conflict.
+   */
+  def newTaskTempFileAbsPath(
+      taskContext: TaskAttemptContext, relativePath: String, finalPath: String): String
 
   /**
    * Commits a task after the writes succeed. Must be called on the executors when running tasks.
