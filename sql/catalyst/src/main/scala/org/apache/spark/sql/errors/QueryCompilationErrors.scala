@@ -1988,4 +1988,66 @@ private[spark] object QueryCompilationErrors {
         "which is created by Hive and uses the following unsupported feature(s)\n" +
         features.map(" - " + _).mkString("\n"))
   }
+
+  def createViewWithBothIfNotExistsAndReplaceError(): Throwable = {
+    new AnalysisException("CREATE VIEW with both IF NOT EXISTS and REPLACE is not allowed.")
+  }
+
+  def defineTempViewWithIfExistsError(): Throwable = {
+    new AnalysisException("It is not allowed to define a TEMPORARY view with IF NOT EXISTS.")
+  }
+
+  def notAllowToAddDBPrefixForTempViewError(database: String): Throwable = {
+    new AnalysisException(
+      s"It is not allowed to add database prefix `$database` for the TEMPORARY view name.")
+  }
+
+  def logicalPlanNotAnalyzedError(): Throwable = {
+    new AnalysisException("The logical plan that represents the view is not analyzed.")
+  }
+
+  def numberColNotMatchError(
+      analyzedPlanLength: Int,
+      userSpecifiedColumnsLength: Int): Throwable = {
+    new AnalysisException(s"The number of columns produced by the SELECT clause " +
+      s"(num: `$analyzedPlanLength`) does not match the number of column names " +
+      s"specified by CREATE VIEW (num: `$userSpecifiedColumnsLength`).")
+  }
+
+  def notViewError(name: TableIdentifier): Throwable = {
+    new AnalysisException(s"$name is not a view")
+  }
+
+  def viewAlreadyExistsError(name: TableIdentifier): Throwable = {
+    new AnalysisException(
+      s"View $name already exists. If you want to update the view definition, " +
+        "please use ALTER VIEW AS or CREATE OR REPLACE VIEW AS")
+  }
+
+  def createPersistedViewNotAllowError(): Throwable = {
+    new AnalysisException(
+      "It is not allowed to create a persisted view from the Dataset API")
+  }
+
+  def recursiveViewDetectedError(
+      viewIdent: TableIdentifier,
+      newPath: Seq[TableIdentifier]): Throwable = {
+    new AnalysisException(s"Recursive view $viewIdent detected " +
+      s"(cycle: ${newPath.mkString(" -> ")})")
+  }
+
+  def notAllowedToCreatePermanentViewByReferTempViewError(
+      name: TableIdentifier,
+      nameParts: String): Throwable = {
+    new AnalysisException(s"Not allowed to create a permanent view $name by " +
+      s"referencing a temporary view $nameParts. " +
+      "Please create a temp view instead by CREATE TEMP VIEW")
+  }
+
+  def notAllowedToCreatePermanentViewByReferTempFuncError(
+      name: TableIdentifier,
+      funcName: String): Throwable = {
+    new AnalysisException(s"Not allowed to create a permanent view $name by " +
+      s"referencing a temporary function `$funcName`")
+  }
 }

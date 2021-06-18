@@ -23,7 +23,7 @@ import org.json4s.JsonAST.{JArray, JString}
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
+import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, SQLConfHelper, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, PersistedView, ViewType}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, SessionCatalog, TemporaryViewRelation}
@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, SubqueryExpr
 import org.apache.spark.sql.catalyst.plans.logical.{AnalysisOnlyCommand, LogicalPlan, Project, View}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.NamespaceHelper
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.types.{MetadataBuilder, StructType}
 import org.apache.spark.sql.util.SchemaUtils
@@ -86,35 +87,32 @@ case class CreateViewCommand(
   }
 
   if (allowExisting && replace) {
-    throw new AnalysisException("CREATE VIEW with both IF NOT EXISTS and REPLACE is not allowed.")
+    throw QueryCompilationErrors.createViewWithBothIfNotExistsAndReplaceError()
   }
 
   private def isTemporary = viewType == LocalTempView || viewType == GlobalTempView
 
   // Disallows 'CREATE TEMPORARY VIEW IF NOT EXISTS' to be consistent with 'CREATE TEMPORARY TABLE'
   if (allowExisting && isTemporary) {
-    throw new AnalysisException(
-      "It is not allowed to define a TEMPORARY view with IF NOT EXISTS.")
+    throw QueryCompilationErrors.defineTempViewWithIfExistsError()
   }
 
   // Temporary view names should NOT contain database prefix like "database.table"
   if (isTemporary && name.database.isDefined) {
     val database = name.database.get
-    throw new AnalysisException(
-      s"It is not allowed to add database prefix `$database` for the TEMPORARY view name.")
+    throw QueryCompilationErrors.notAllowToAddDBPrefixForTempViewError(database)
   }
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     if (!isAnalyzed) {
-      throw new AnalysisException("The logical plan that represents the view is not analyzed.")
+      throw QueryCompilationErrors.logicalPlanNotAnalyzedError()
     }
     val analyzedPlan = plan
 
     if (userSpecifiedColumns.nonEmpty &&
         userSpecifiedColumns.length != analyzedPlan.output.length) {
-      throw new AnalysisException(s"The number of columns produced by the SELECT clause " +
-        s"(num: `${analyzedPlan.output.length}`) does not match the number of column names " +
-        s"specified by CREATE VIEW (num: `${userSpecifiedColumns.length}`).")
+      throw QueryCompilationErrors.numberColNotMatchError(
+        analyzedPlan.output.length, userSpecifiedColumns.length)
     }
 
     val catalog = sparkSession.sessionState.catalog
@@ -153,7 +151,7 @@ case class CreateViewCommand(
         // Handles `CREATE VIEW IF NOT EXISTS v0 AS SELECT ...`. Does nothing when the target view
         // already exists.
       } else if (tableMetadata.tableType != CatalogTableType.VIEW) {
-        throw new AnalysisException(s"$name is not a view")
+        throw QueryCompilationErrors.notViewError(name)
       } else if (replace) {
         // Detect cyclic view reference on CREATE OR REPLACE VIEW.
         val viewIdent = tableMetadata.identifier
@@ -170,9 +168,7 @@ case class CreateViewCommand(
       } else {
         // Handles `CREATE VIEW v0 AS SELECT ...`. Throws exception when the target view already
         // exists.
-        throw new AnalysisException(
-          s"View $name already exists. If you want to update the view definition, " +
-            "please use ALTER VIEW AS or CREATE OR REPLACE VIEW AS")
+        throw QueryCompilationErrors.viewAlreadyExistsError(name)
       }
     } else {
       // Create the view if it doesn't exist.
@@ -206,8 +202,7 @@ case class CreateViewCommand(
    */
   private def prepareTable(session: SparkSession, analyzedPlan: LogicalPlan): CatalogTable = {
     if (originalText.isEmpty) {
-      throw new AnalysisException(
-        "It is not allowed to create a persisted view from the Dataset API")
+      throw QueryCompilationErrors.createPersistedViewNotAllowError()
     }
     val aliasedSchema = CharVarcharUtils.getRawSchema(
       aliasPlan(session, analyzedPlan).schema)
@@ -513,8 +508,7 @@ object ViewHelper extends SQLConfHelper with Logging {
         // If the table identifier equals to the `viewIdent`, current view node is the same with
         // the altered view. We detect a view reference cycle, should throw an AnalysisException.
         if (ident == viewIdent) {
-          throw new AnalysisException(s"Recursive view $viewIdent detected " +
-            s"(cycle: ${newPath.mkString(" -> ")})")
+          throw QueryCompilationErrors.recursiveViewDetectedError(viewIdent, newPath)
         } else {
           v.children.foreach { child =>
             checkCyclicViewReference(child, newPath, viewIdent)
@@ -547,13 +541,12 @@ object ViewHelper extends SQLConfHelper with Logging {
     if (!isTemporary) {
       val (tempViews, tempFunctions) = collectTemporaryObjects(catalog, child)
       tempViews.foreach { nameParts =>
-        throw new AnalysisException(s"Not allowed to create a permanent view $name by " +
-          s"referencing a temporary view ${nameParts.quoted}. " +
-          "Please create a temp view instead by CREATE TEMP VIEW")
+        throw QueryCompilationErrors.notAllowedToCreatePermanentViewByReferTempViewError(
+          name, nameParts.quoted)
       }
       tempFunctions.foreach { funcName =>
-        throw new AnalysisException(s"Not allowed to create a permanent view $name by " +
-          s"referencing a temporary function `${funcName}`")
+        throw QueryCompilationErrors.notAllowedToCreatePermanentViewByReferTempFuncError(
+          name, funcName)
       }
     }
   }
