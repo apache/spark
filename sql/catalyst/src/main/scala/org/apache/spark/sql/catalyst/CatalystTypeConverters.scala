@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.YearMonthIntervalType._
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -75,8 +76,9 @@ object CatalystTypeConverters {
       case LongType => LongConverter
       case FloatType => FloatConverter
       case DoubleType => DoubleConverter
-      case DayTimeIntervalType => DurationConverter
-      case YearMonthIntervalType => PeriodConverter
+      // TODO(SPARK-35726): Truncate java.time.Duration by fields of day-time interval type
+      case _: DayTimeIntervalType => DurationConverter
+      case YearMonthIntervalType(_, endField) => PeriodConverter(endField)
       case dataType: DataType => IdentityConverter(dataType)
     }
     converter.asInstanceOf[CatalystTypeConverter[Any, Any, Any]]
@@ -442,9 +444,10 @@ object CatalystTypeConverters {
       IntervalUtils.microsToDuration(row.getLong(column))
   }
 
-  private object PeriodConverter extends CatalystTypeConverter[Period, Period, Any] {
+  private case class PeriodConverter(endField: Byte)
+      extends CatalystTypeConverter[Period, Period, Any] {
     override def toCatalystImpl(scalaValue: Period): Int = {
-      IntervalUtils.periodToMonths(scalaValue)
+      IntervalUtils.periodToMonths(scalaValue, endField)
     }
     override def toScala(catalystValue: Any): Period = {
       if (catalystValue == null) null
@@ -521,7 +524,7 @@ object CatalystTypeConverters {
         (key: Any) => convertToCatalyst(key),
         (value: Any) => convertToCatalyst(value))
     case d: Duration => DurationConverter.toCatalyst(d)
-    case p: Period => PeriodConverter.toCatalyst(p)
+    case p: Period => PeriodConverter(MONTH).toCatalyst(p)
     case other => other
   }
 

@@ -791,4 +791,20 @@ class AnalysisErrorSuite extends AnalysisTest {
       assertAnalysisError(plan, s"Correlated column is not allowed in predicate ($msg)" :: Nil)
     }
   }
+
+  test("SPARK-35673: fail if the plan still contains UnresolvedHint after analysis") {
+    val hintName = "some_random_hint_that_does_not_exist"
+    val plan = UnresolvedHint(hintName, Seq.empty,
+      Project(Alias(Literal(1), "x")() :: Nil, OneRowRelation())
+    )
+    assert(plan.resolved)
+
+    val error = intercept[AnalysisException] {
+      SimpleAnalyzer.checkAnalysis(plan)
+    }
+    assert(error.message.contains(s"Hint not found: ${hintName}"))
+
+    // UnresolvedHint be removed by batch `Remove Unresolved Hints`
+    assertAnalysisSuccess(plan, true)
+  }
 }

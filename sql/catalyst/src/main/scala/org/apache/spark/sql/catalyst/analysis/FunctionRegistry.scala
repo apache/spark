@@ -552,6 +552,8 @@ object FunctionRegistry {
     expression[MakeDate]("make_date"),
     expression[MakeTimestamp]("make_timestamp"),
     expression[MakeInterval]("make_interval"),
+    expression[MakeDTInterval]("make_dt_interval"),
+    expression[MakeYMInterval]("make_ym_interval"),
     expression[DatePart]("date_part"),
     expression[Extract]("extract"),
     expression[DateFromUnixDate]("date_from_unix_date"),

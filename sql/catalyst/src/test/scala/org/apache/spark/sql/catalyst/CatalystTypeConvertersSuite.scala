@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.util.{DateTimeConstants, DateTimeUtils, GenericArrayData, IntervalUtils}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.YearMonthIntervalType._
 import org.apache.spark.unsafe.types.UTF8String
 
 class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
@@ -283,7 +284,8 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
       Seq(1L, -1L).foreach { sign =>
         val us = sign * input
         val duration = IntervalUtils.microsToDuration(us)
-        assert(CatalystTypeConverters.createToScalaConverter(DayTimeIntervalType)(us) === duration)
+        assert(CatalystTypeConverters.createToScalaConverter(DayTimeIntervalType())(us)
+          === duration)
       }
     }
   }
@@ -308,6 +310,15 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
     assert(errMsg.contains("integer overflow"))
   }
 
+  test("SPARK-35769: Truncate java.time.Period by fields of year-month interval type") {
+    Seq(YearMonthIntervalType(YEAR, YEAR) -> 12,
+      YearMonthIntervalType(YEAR, MONTH) -> 13,
+      YearMonthIntervalType(MONTH, MONTH) -> 13)
+      .foreach { case (ym, value) =>
+        assert(CatalystTypeConverters.createToCatalystConverter(ym)(Period.of(1, 1, 0)) == value)
+      }
+  }
+
   test("SPARK-34615: converting YearMonthIntervalType to java.time.Period") {
     Seq(
       0,
@@ -319,7 +330,7 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
         val months = sign * input
         val period = IntervalUtils.monthsToPeriod(months)
         assert(
-          CatalystTypeConverters.createToScalaConverter(YearMonthIntervalType)(months) === period)
+          CatalystTypeConverters.createToScalaConverter(YearMonthIntervalType())(months) === period)
       }
     }
   }

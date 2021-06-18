@@ -23,12 +23,13 @@ import java.time.temporal.ChronoUnit
 import scala.language.implicitConversions
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.analysis.TypeCoercion
 import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, IntervalUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.IntervalUtils.{safeStringToInterval, stringToInterval}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DayTimeIntervalType, Decimal, DecimalType, YearMonthIntervalType}
-import org.apache.spark.sql.types.DataTypeTestUtils.numericTypes
+import org.apache.spark.sql.types.DataTypeTestUtils.{dayTimeIntervalTypes, numericTypes, yearMonthIntervalTypes}
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
@@ -279,6 +280,52 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("SPARK-35130: make day time interval") {
+    def check(
+        days: Int = 0,
+        hours: Int = 0,
+        minutes: Int = 0,
+        seconds: Int = 0,
+        millis: Int = 0,
+        micros: Int = 0): Unit = {
+      val secFrac = DateTimeTestUtils.secFrac(seconds, millis, micros)
+      val durationExpr = MakeDTInterval(Literal(days), Literal(hours), Literal(minutes),
+        Literal(Decimal(secFrac, Decimal.MAX_LONG_DIGITS, 6)))
+      val expected = secFrac + minutes * MICROS_PER_MINUTE + hours * MICROS_PER_HOUR +
+          days * MICROS_PER_DAY
+      checkEvaluation(durationExpr, expected)
+    }
+
+    def checkException(
+        days: Int = 0,
+        hours: Int = 0,
+        minutes: Int = 0,
+        seconds: Int = 0,
+        millis: Int = 0,
+        micros: Int = 0): Unit = {
+      val secFrac = DateTimeTestUtils.secFrac(seconds, millis, micros)
+      val durationExpr = MakeDTInterval(Literal(days), Literal(hours), Literal(minutes),
+        Literal(Decimal(secFrac, Decimal.MAX_LONG_DIGITS, 6)))
+      checkExceptionInExpression[ArithmeticException](durationExpr, EmptyRow, "")
+    }
+
+    check(millis = -123)
+    check(31, 23, 59, 59, 999, 999)
+    check(31, 123, 159, 159, 1999, 1999)
+    check(days = 10000, micros = -1)
+    check(-31, -23, -59, -59, -999, -999)
+    check(days = -10000, micros = 1)
+    check(
+      hours = Int.MaxValue,
+      minutes = Int.MaxValue,
+      seconds = Int.MaxValue,
+      millis = Int.MaxValue,
+      micros = Int.MaxValue)
+
+    checkException(days = Int.MaxValue)
+  }
+
+  // TODO(SPARK-35778): Check multiply/divide of year-month intervals of any fields by numeric
   test("SPARK-34824: multiply year-month interval by numeric") {
     Seq(
       (Period.ofYears(-123), Literal(null, DecimalType.USER_DEFAULT)) -> null,
@@ -306,12 +353,15 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
 
     numericTypes.foreach { numType =>
-      checkConsistencyBetweenInterpretedAndCodegenAllowingException(
-        (interval: Expression, num: Expression) => MultiplyYMInterval(interval, num),
-        YearMonthIntervalType, numType)
+      yearMonthIntervalTypes.foreach { it =>
+        checkConsistencyBetweenInterpretedAndCodegenAllowingException(
+          (interval: Expression, num: Expression) => MultiplyYMInterval(interval, num),
+          it, numType)
+      }
     }
   }
 
+  // TODO(SPARK-35728): Check multiply/divide of day-time intervals of any fields by numeric
   test("SPARK-34850: multiply day-time interval by numeric") {
     Seq(
       (Duration.ofHours(-123), Literal(null, DecimalType.USER_DEFAULT)) -> null,
@@ -339,12 +389,15 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
 
     numericTypes.foreach { numType =>
-      checkConsistencyBetweenInterpretedAndCodegenAllowingException(
-        (interval: Expression, num: Expression) => MultiplyDTInterval(interval, num),
-        DayTimeIntervalType, numType)
+      dayTimeIntervalTypes.foreach { it =>
+        checkConsistencyBetweenInterpretedAndCodegenAllowingException(
+          (interval: Expression, num: Expression) => MultiplyDTInterval(interval, num),
+          it, numType)
+      }
     }
   }
 
+  // TODO(SPARK-35778): Check multiply/divide of year-month intervals of any fields by numeric
   test("SPARK-34868: divide year-month interval by numeric") {
     Seq(
       (Period.ofYears(-123), Literal(null, DecimalType.USER_DEFAULT)) -> null,
@@ -372,12 +425,15 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
 
     numericTypes.foreach { numType =>
-      checkConsistencyBetweenInterpretedAndCodegenAllowingException(
-        (interval: Expression, num: Expression) => DivideYMInterval(interval, num),
-        YearMonthIntervalType, numType)
+      yearMonthIntervalTypes.foreach { it =>
+        checkConsistencyBetweenInterpretedAndCodegenAllowingException(
+          (interval: Expression, num: Expression) => DivideYMInterval(interval, num),
+          it, numType)
+      }
     }
   }
 
+  // TODO(SPARK-35728): Check multiply/divide of day-time intervals of any fields by numeric
   test("SPARK-34875: divide day-time interval by numeric") {
     Seq(
       (Duration.ofDays(-123), Literal(null, DecimalType.USER_DEFAULT)) -> null,
@@ -405,9 +461,11 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
 
     numericTypes.foreach { numType =>
-      checkConsistencyBetweenInterpretedAndCodegenAllowingException(
-        (interval: Expression, num: Expression) => DivideDTInterval(interval, num),
-        DayTimeIntervalType, numType)
+      dayTimeIntervalTypes.foreach { it =>
+        checkConsistencyBetweenInterpretedAndCodegenAllowingException(
+          (interval: Expression, num: Expression) => DivideDTInterval(interval, num),
+          it, numType)
+      }
     }
   }
 
@@ -422,8 +480,8 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(ExtractANSIIntervalMonths(Literal(p)),
         IntervalUtils.getMonths(p.toTotalMonths.toInt))
     }
-    checkEvaluation(ExtractANSIIntervalYears(Literal(null, YearMonthIntervalType)), null)
-    checkEvaluation(ExtractANSIIntervalMonths(Literal(null, YearMonthIntervalType)), null)
+    checkEvaluation(ExtractANSIIntervalYears(Literal(null, YearMonthIntervalType())), null)
+    checkEvaluation(ExtractANSIIntervalMonths(Literal(null, YearMonthIntervalType())), null)
   }
 
   test("ANSI: extract days, hours, minutes and seconds") {
@@ -441,9 +499,40 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(ExtractANSIIntervalSeconds(Literal(d)),
         IntervalUtils.getSeconds(IntervalUtils.durationToMicros(d)))
     }
-    checkEvaluation(ExtractANSIIntervalDays(Literal(null, DayTimeIntervalType)), null)
-    checkEvaluation(ExtractANSIIntervalHours(Literal(null, DayTimeIntervalType)), null)
-    checkEvaluation(ExtractANSIIntervalMinutes(Literal(null, DayTimeIntervalType)), null)
-    checkEvaluation(ExtractANSIIntervalSeconds(Literal(null, DayTimeIntervalType)), null)
+    checkEvaluation(ExtractANSIIntervalDays(
+      Literal(null, DayTimeIntervalType())), null)
+    checkEvaluation(ExtractANSIIntervalHours(
+      Literal(null, DayTimeIntervalType())), null)
+    checkEvaluation(ExtractANSIIntervalMinutes(
+      Literal(null, DayTimeIntervalType())), null)
+    checkEvaluation(ExtractANSIIntervalSeconds(
+      Literal(null, DayTimeIntervalType())), null)
+  }
+
+  test("SPARK-35129: make_ym_interval") {
+    checkEvaluation(MakeYMInterval(Literal(0), Literal(10)), 10)
+    checkEvaluation(MakeYMInterval(Literal(1), Literal(10)), 22)
+    checkEvaluation(MakeYMInterval(Literal(1), Literal(0)), 12)
+    checkEvaluation(MakeYMInterval(Literal(1), Literal(-1)), 11)
+    checkEvaluation(MakeYMInterval(Literal(-2), Literal(-1)), -25)
+
+    checkEvaluation(MakeYMInterval(Literal(178956970), Literal(7)), Int.MaxValue)
+    checkEvaluation(MakeYMInterval(Literal(-178956970), Literal(-8)), Int.MinValue)
+
+    Seq(MakeYMInterval(Literal(178956970), Literal(8)),
+      MakeYMInterval(Literal(-178956970), Literal(-9)))
+      .foreach { ym =>
+        checkExceptionInExpression[ArithmeticException](ym, "integer overflow")
+      }
+
+    def checkImplicitEvaluation(expr: Expression, value: Any): Unit = {
+      val resolvedExpr = TypeCoercion.ImplicitTypeCasts.transform(expr)
+      checkEvaluation(resolvedExpr, value)
+    }
+
+    // Check implicit casts.
+    checkImplicitEvaluation(MakeYMInterval(Literal(1L), Literal(-1L)), 11)
+    checkImplicitEvaluation(MakeYMInterval(Literal(1d), Literal(-1L)), 11)
+    checkImplicitEvaluation(MakeYMInterval(Literal(1.1), Literal(-1L)), 11)
   }
 }
