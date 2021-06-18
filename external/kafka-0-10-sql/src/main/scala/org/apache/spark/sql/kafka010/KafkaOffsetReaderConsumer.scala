@@ -273,9 +273,12 @@ private[kafka010] class KafkaOffsetReaderConsumer(
         if (isStartingOffsets) {
           strategyOnNoMatchStartingOffset match {
             case StrategyOnNoMatchStartingOffset.ERROR =>
-              throw new IllegalArgumentException("No offset " +
+              // This is to match the old behavior - we used assert to check the condition.
+              // scalastyle:off throwerror
+              throw new AssertionError("No offset " +
                 s"matched from request of topic-partition $tp and timestamp " +
                 s"${partitionTimestampFn(tp)}.")
+              // scalastyle:on throwerror
 
             case StrategyOnNoMatchStartingOffset.LATEST =>
               KafkaOffsetRangeLimit.LATEST
