@@ -286,8 +286,7 @@ object RandomDataGenerator {
       })
       case _: DayTimeIntervalType => Some(() => Duration.of(rand.nextLong(), ChronoUnit.MICROS))
       case YearMonthIntervalType(_, YEAR) =>
-        val period = Period.ofMonths(rand.nextInt()).normalized()
-        Some(() => Period.ofYears(period.getYears).normalized())
+        Some(() => Period.ofYears(rand.nextInt() / 12).normalized())
       case YearMonthIntervalType(_, _) => Some(() => Period.ofMonths(rand.nextInt()).normalized())
       case DecimalType.Fixed(precision, scale) => Some(
         () => BigDecimal.apply(
