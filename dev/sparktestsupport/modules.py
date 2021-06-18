@@ -20,35 +20,54 @@ import itertools
 import os
 import re
 import unittest
+import sys
 
 from sparktestsupport import SPARK_HOME
 
 all_modules = []
 
 
-def _discover_python_unittests(paths):
-    """
-    Discover the python module which contains unittests under paths.
+def _get_module_from_name(name):
+    __import__(name)
+    return sys.modules[name]
+
+
+def _discover_python_unittests(*paths, discover_slow=False):
+    """Discover the python module which contains unittests under paths.
 
     Such as:
     ['pyspark/tests'], it will return the set of module name under the path of pyspark/tests, like
     {'pyspark.tests.test_appsubmit', 'pyspark.tests.test_broadcast', ...}
 
-    :param paths: paths of module to be discovered.
-    :return: A set of complete test module name discovered udner the paths
+    Parameters
+    ----------
+    paths : str
+        Paths of modules to be discovered.
+    discover_slow : bool
+        If True, will only discover slow tests
+        If False, will discover all tests except slow tests
+
+    Returns
+    -------
+    A set of complete test module name discovered under specified paths
     """
 
-    def add_suite(suite, modules):
+    def add_suite(testcases, modules, slow):
         """Gather the suite module names"""
-        if hasattr(suite, '__iter__'):
-            for test_case in suite:
-                add_suite(test_case, modules)
+        if hasattr(testcases, '__iter__'):
+            for test_case in testcases:
+                add_suite(test_case, modules, slow)
         else:
-            modules.add(suite.__module__)
+            name = testcases.__module__
+            module = _get_module_from_name(name)
+            if slow and hasattr(module, '_slow_test'):
+                modules.add(name)
+            if not slow and not hasattr(module, '_slow_test'):
+                modules.add(name)
 
     if not paths:
-        return set([])
-    modules = set([])
+        return []
+    _modules = set()
     pyspark_path = os.path.join(SPARK_HOME, "python")
     for path in paths:
         # Discover the unittest in every path
@@ -56,9 +75,9 @@ def _discover_python_unittests(paths):
             os.path.join(pyspark_path, path),
             top_level_dir=pyspark_path
         )
-        add_suite(suite, modules)
+        add_suite(suite, _modules, discover_slow)
 
-    return modules
+    return sorted(list(_modules))
 
 
 @total_ordering
@@ -73,9 +92,10 @@ class Module(object):
     def __init__(self, name, dependencies, source_file_regexes, build_profile_flags=(),
                  environ=None, sbt_test_goals=(), python_test_goals=(),
                  excluded_python_implementations=(), test_tags=(), should_run_r_tests=False,
-                 should_run_build_tests=False, python_test_paths=(), python_excluded_tests=()):
+                 should_run_build_tests=False):
         """
         Define a new module.
+
         :param name: A short module name, for display in logging and error messages.
         :param dependencies: A set of dependencies for this module. This should only include direct
             dependencies; transitive dependencies are resolved automatically.
@@ -95,8 +115,6 @@ class Module(object):
             is not explicitly changed.
         :param should_run_r_tests: If true, changes in this module will trigger all R tests.
         :param should_run_build_tests: If true, changes in this module will trigger build tests.
-        :param python_test_paths: A set of python test paths to be discovered
-        :param python_excluded_tests: A set of excluded Python tests
         """
         self.name = name
         self.dependencies = dependencies
@@ -104,10 +122,7 @@ class Module(object):
         self.sbt_test_goals = sbt_test_goals
         self.build_profile_flags = build_profile_flags
         self.environ = environ or {}
-        discovered_goals = _discover_python_unittests(python_test_paths)
-        # Final goals = Manual specified goals + Discoverd goals - Excluded goals
-        all_goals = set(python_test_goals) | set(discovered_goals)
-        self.python_test_goals = sorted(list(set(all_goals) - set(python_excluded_tests)))
+        self.python_test_goals = python_test_goals
         self.excluded_python_implementations = excluded_python_implementations
         self.test_tags = test_tags
         self.should_run_r_tests = should_run_r_tests
@@ -424,10 +439,7 @@ pyspark_core = Module(
         "pyspark.profiler",
         "pyspark.shuffle",
         "pyspark.util",
-    ],
-    python_test_paths=[
-        "pyspark/tests"
-    ],
+    ] + _discover_python_unittests("pyspark/tests"),
 )
 
 pyspark_sql = Module(
@@ -459,10 +471,7 @@ pyspark_sql = Module(
         "pyspark.sql.pandas.serializers",
         "pyspark.sql.pandas.typehints",
         "pyspark.sql.pandas.utils",
-    ],
-    python_test_paths=[
-        "pyspark/sql/tests"
-    ],
+    ] + _discover_python_unittests("pyspark/sql/tests"),
 )
 
 
@@ -474,11 +483,7 @@ pyspark_resource = Module(
     source_file_regexes=[
         "python/pyspark/resource"
     ],
-    python_test_goals=[
-    ],
-    python_test_paths=[
-        "pyspark/resource/tests"
-    ],
+    python_test_goals=_discover_python_unittests("pyspark/resource/tests"),
 )
 
 
@@ -495,10 +500,7 @@ pyspark_streaming = Module(
     python_test_goals=[
         # doctests
         "pyspark.streaming.util",
-    ],
-    python_test_paths=[
-        "pyspark/streaming/tests"
-    ],
+    ] + _discover_python_unittests("pyspark/streaming/tests"),
 )
 
 
@@ -524,12 +526,9 @@ pyspark_mllib = Module(
         "pyspark.mllib.stat.KernelDensity",
         "pyspark.mllib.tree",
         "pyspark.mllib.util",
-    ],
+    ] + _discover_python_unittests("pyspark/mllib/tests"),
     excluded_python_implementations=[
         "PyPy"  # Skip these tests under PyPy since they require numpy and it isn't available there
-    ],
-    python_test_paths=[
-        "pyspark/mllib/tests"
     ],
 )
 
@@ -554,27 +553,12 @@ pyspark_ml = Module(
         "pyspark.ml.regression",
         "pyspark.ml.stat",
         "pyspark.ml.tuning",
-    ],
+    ] + _discover_python_unittests("pyspark/ml/tests"),
     excluded_python_implementations=[
         "PyPy"  # Skip these tests under PyPy since they require numpy and it isn't available there
     ],
-    python_test_paths=[
-        "pyspark/ml/tests"
-    ],
 )
 
-pyspark_pandas_slow_unittests = [
-    # unittests
-    "pyspark.pandas.tests.indexes.test_base",
-    "pyspark.pandas.tests.indexes.test_datetime",
-    "pyspark.pandas.tests.test_dataframe",
-    "pyspark.pandas.tests.test_groupby",
-    "pyspark.pandas.tests.test_indexing",
-    "pyspark.pandas.tests.test_ops_on_diff_frames",
-    "pyspark.pandas.tests.test_ops_on_diff_frames_groupby",
-    "pyspark.pandas.tests.test_series",
-    "pyspark.pandas.tests.test_stats",
-]
 
 pyspark_pandas = Module(
     name="pyspark-pandas",
@@ -610,19 +594,18 @@ pyspark_pandas = Module(
         "pyspark.pandas.spark.accessors",
         "pyspark.pandas.spark.utils",
         "pyspark.pandas.typedef.typehints",
-    ],
+    ] + _discover_python_unittests(
+        "pyspark/pandas/tests",
+        "pyspark/pandas/tests/data_type_ops",
+        "pyspark/pandas/tests/indexes",
+        "pyspark/pandas/tests/plot"
+    ),
     excluded_python_implementations=[
         "PyPy"  # Skip these tests under PyPy since they require numpy, pandas, and pyarrow and
         # they aren't available there
     ],
-    python_test_paths=[
-        "pyspark/pandas/tests",
-        "pyspark/pandas/tests/data_type_ops",
-        "pyspark/pandas/tests/indexes",
-        "pyspark/pandas/tests/plot",
-    ],
-    python_excluded_tests=pyspark_pandas_slow_unittests,
 )
+
 
 pyspark_pandas_slow = Module(
     name="pyspark-pandas-slow",
@@ -635,7 +618,13 @@ pyspark_pandas_slow = Module(
         "pyspark.pandas.frame",
         "pyspark.pandas.generic",
         "pyspark.pandas.series",
-    ] + pyspark_pandas_slow_unittests,
+    ] + _discover_python_unittests(
+        "pyspark/pandas/tests",
+        "pyspark/pandas/tests/data_type_ops",
+        "pyspark/pandas/tests/indexes",
+        "pyspark/pandas/tests/plot",
+        discover_slow=True
+    ),
     excluded_python_implementations=[
         "PyPy"  # Skip these tests under PyPy since they require numpy, pandas, and pyarrow and
         # they aren't available there

@@ -27,6 +27,11 @@ from pyspark.pandas.exceptions import SparkPandasIndexingError
 from pyspark.testing.pandasutils import ComparisonTestBase, PandasOnSparkTestCase, compare_both
 
 
+# This is used in run-tests.py to discover the slow test. See more in the doc of
+# _discover_python_unittests of dev/sparktestsupport/modules.py
+_slow_test = True
+
+
 class BasicIndexingTest(ComparisonTestBase):
     @property
     def pdf(self):

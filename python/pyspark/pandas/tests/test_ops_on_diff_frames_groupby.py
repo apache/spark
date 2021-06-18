@@ -25,6 +25,11 @@ from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 
 
+# This is used in run-tests.py to discover the slow test. See more in the doc of
+# _discover_python_unittests of dev/sparktestsupport/modules.py
+_slow_test = True
+
+
 class OpsOnDiffFramesGroupByTest(PandasOnSparkTestCase, SQLTestUtils):
     @classmethod
     def setUpClass(cls):

@@ -31,6 +31,11 @@ from pyspark.testing.pandasutils import PandasOnSparkTestCase, SPARK_CONF_ARROW_
 from pyspark.testing.sqlutils import SQLTestUtils
 
 
+# This is used in run-tests.py to discover the slow test. See more in the doc of
+# _discover_python_unittests of dev/sparktestsupport/modules.py
+_slow_test = True
+
+
 class StatsTest(PandasOnSparkTestCase, SQLTestUtils):
     def _test_stat_functions(self, pdf_or_pser, psdf_or_psser):
         functions = ["max", "min", "mean", "sum", "count"]

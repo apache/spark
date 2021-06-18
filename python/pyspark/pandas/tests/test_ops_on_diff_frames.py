@@ -35,6 +35,11 @@ from pyspark.pandas.typedef.typehints import (
 )
 
 
+# This is used in run-tests.py to discover the slow test. See more in the doc of
+# _discover_python_unittests of dev/sparktestsupport/modules.py
+_slow_test = True
+
+
 class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
     @classmethod
     def setUpClass(cls):
