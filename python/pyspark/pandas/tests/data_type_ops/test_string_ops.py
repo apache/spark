@@ -155,6 +155,9 @@ class StringOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         self.assert_eq(pser, psser.to_pandas())
         self.assert_eq(ps.from_pandas(pser), psser)
 
+    def test_isnull(self):
+        self.assert_eq(self.pser.isnull(), self.psser.isnull())
+
     def test_astype(self):
         pser = pd.Series(["1", "2", "3"])
         psser = ps.from_pandas(pser)

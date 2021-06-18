@@ -274,7 +274,7 @@ class IntegralOps(NumericOps):
 class FractionalOps(NumericOps):
     """
     The class for binary operations of pandas-on-Spark objects with spark types:
-    FloatType, DoubleType and DecimalType.
+    FloatType, DoubleType.
     """
 
     @property
@@ -367,6 +367,11 @@ class FractionalOps(NumericOps):
         right = transform_boolean_operand_to_numeric(right, left.spark.data_type)
         return numpy_column_op(rfloordiv)(left, right)
 
+    def isnull(self, index_ops: Union["Index", "Series"]) -> Union["Series", "Index"]:
+        return index_ops._with_new_scol(
+            index_ops.spark.column.isNull() | F.isnan(index_ops.spark.column)
+        )
+
     def astype(
         self, index_ops: Union["Index", "Series"], dtype: Union[str, type, Dtype]
     ) -> Union["Index", "Series"]:
@@ -395,3 +400,17 @@ class FractionalOps(NumericOps):
             return _as_string_type(index_ops, dtype, null_str=str(np.nan))
         else:
             return _as_other_type(index_ops, dtype, spark_type)
+
+
+class DecimalOps(FractionalOps):
+    """
+    The class for decimal operations of pandas-on-Spark objects with spark type:
+    DecimalType.
+    """
+
+    @property
+    def pretty_name(self) -> str:
+        return "decimal"
+
+    def isnull(self, index_ops: Union["Index", "Series"]) -> Union["Series", "Index"]:
+        return index_ops._with_new_scol(index_ops.spark.column.isNull())
