@@ -191,6 +191,32 @@ object AvroReadBenchmark extends SqlBasedBenchmark {
     }
   }
 
+  private def wideColumnsBenchmark(values: Int, width: Int, files: Int): Unit = {
+    val benchmark =
+      new Benchmark(s"Wide Column Scan from $width columns", values, output = output)
+
+    withTempPath { dir =>
+      withTempTable("t1", "avroTable") {
+        import spark.implicits._
+        val middle = width / 2
+        val selectExpr = (1 to width).map(i => s"value as c$i")
+        spark.range(values).map(_ => Random.nextLong).toDF()
+          .selectExpr(selectExpr: _*)
+          .repartition(files) // ensure at least `files` number of splits (but maybe more)
+          .createOrReplaceTempView("t1")
+
+        prepareTable(dir, spark.sql("SELECT * FROM t1"))
+
+        benchmark.addCase("Select of all columns") { _ =>
+          spark.sql(s"SELECT * FROM avroTable").noop()
+        }
+
+        benchmark.run()
+      }
+    }
+
+  }
+
   private def filtersPushdownBenchmark(rowsNum: Int, numIters: Int): Unit = {
     val benchmark = new Benchmark("Filters pushdown", rowsNum, output = output)
     val colsNum = 100
@@ -265,6 +291,11 @@ object AvroReadBenchmark extends SqlBasedBenchmark {
         stringWithNullsScanBenchmark(1024 * 1024 * 10, fractionOfNulls)
       }
     }
+
+    runBenchmark("Select All From Wide Columns") {
+      wideColumnsBenchmark(500000, 1000, 20)
+    }
+
     runBenchmark("Single Column Scan From Wide Columns") {
       columnsBenchmark(1024 * 1024 * 1, 100)
       columnsBenchmark(1024 * 1024 * 1, 200)

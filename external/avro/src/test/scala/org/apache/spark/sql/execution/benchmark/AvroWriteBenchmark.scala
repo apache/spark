@@ -17,6 +17,11 @@
 
 package org.apache.spark.sql.execution.benchmark
 
+import scala.util.Random
+
+import org.apache.spark.benchmark.Benchmark
+import org.apache.spark.storage.StorageLevel
+
 /**
  * Benchmark to measure Avro data sources write performance.
  * To run this benchmark:
@@ -31,7 +36,34 @@ package org.apache.spark.sql.execution.benchmark
  *  }}}
  */
 object AvroWriteBenchmark extends DataSourceWriteBenchmark {
+  private def wideColumnsBenchmark: Unit = {
+    import spark.implicits._
+
+    withTempPath { dir =>
+      withTempTable("t1") {
+        val width = 6000
+        val values = 25000
+        val files = 10
+        val selectExpr = (1 to width).map(i => s"value as c$i")
+        // repartition to ensure we will write multiple files
+        val df = spark.range(values)
+          .map(_ => Random.nextInt).selectExpr(selectExpr: _*).repartition(files)
+          .persist(StorageLevel.DISK_ONLY)
+        // cache the data to ensure we are not benchmarking range or repartition
+        df.filter("(c1*c2) = 12").collect
+        df.createOrReplaceTempView("t1")
+        val benchmark = new Benchmark(s"Write wide rows into $files files", values)
+        benchmark.addCase("Write") { _ =>
+          spark.sql("SELECT * FROM t1").
+            write.format("avro").save(s"${dir.getCanonicalPath}/${Random.nextLong.abs}")
+        }
+        benchmark.run()
+      }
+    }
+  }
+
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     runDataSourceBenchmark("Avro")
+    wideColumnsBenchmark
   }
 }
