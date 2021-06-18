@@ -26,10 +26,11 @@ import scala.collection.mutable
 import scala.util.{Random, Try}
 
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
-import org.apache.spark.sql.catalyst.util.DateTimeConstants.{MICROS_PER_MILLIS, MILLIS_PER_DAY}
+import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.YearMonthIntervalType.YEAR
 import org.apache.spark.unsafe.types.CalendarInterval
 /**
  * Random data generators for Spark SQL DataTypes. These generators do not generate uniformly random
@@ -284,7 +285,9 @@ object RandomDataGenerator {
         new CalendarInterval(months, days, ns)
       })
       case _: DayTimeIntervalType => Some(() => Duration.of(rand.nextLong(), ChronoUnit.MICROS))
-      case _: YearMonthIntervalType => Some(() => Period.ofMonths(rand.nextInt()).normalized())
+      case YearMonthIntervalType(_, YEAR) =>
+        Some(() => Period.ofYears(rand.nextInt() / MONTHS_PER_YEAR).normalized())
+      case YearMonthIntervalType(_, _) => Some(() => Period.ofMonths(rand.nextInt()).normalized())
       case DecimalType.Fixed(precision, scale) => Some(
         () => BigDecimal.apply(
           rand.nextLong() % math.pow(10, precision).toLong,

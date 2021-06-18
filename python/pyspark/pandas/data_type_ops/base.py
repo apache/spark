@@ -31,6 +31,7 @@ from pyspark.sql.types import (
     BooleanType,
     DataType,
     DateType,
+    DecimalType,
     FractionalType,
     IntegralType,
     MapType,
@@ -194,12 +195,14 @@ class DataTypeOps(object, metaclass=ABCMeta):
         from pyspark.pandas.data_type_ops.date_ops import DateOps
         from pyspark.pandas.data_type_ops.datetime_ops import DatetimeOps
         from pyspark.pandas.data_type_ops.null_ops import NullOps
-        from pyspark.pandas.data_type_ops.num_ops import IntegralOps, FractionalOps
+        from pyspark.pandas.data_type_ops.num_ops import IntegralOps, FractionalOps, DecimalOps
         from pyspark.pandas.data_type_ops.string_ops import StringOps
         from pyspark.pandas.data_type_ops.udt_ops import UDTOps
 
         if isinstance(dtype, CategoricalDtype):
             return object.__new__(CategoricalOps)
+        elif isinstance(spark_type, DecimalType):
+            return object.__new__(DecimalOps)
         elif isinstance(spark_type, FractionalType):
             return object.__new__(FractionalOps)
         elif isinstance(spark_type, IntegralType):
@@ -299,6 +302,9 @@ class DataTypeOps(object, metaclass=ABCMeta):
     def prepare(self, col: pd.Series) -> pd.Series:
         """Prepare column when from_pandas."""
         return col.replace({np.nan: None})
+
+    def isnull(self, index_ops: Union["Index", "Series"]) -> Union["Series", "Index"]:
+        return index_ops._with_new_scol(index_ops.spark.column.isNull())
 
     def astype(
         self, index_ops: Union["Index", "Series"], dtype: Union[str, type, Dtype]

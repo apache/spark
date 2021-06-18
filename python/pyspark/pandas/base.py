@@ -882,10 +882,8 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
 
         if isinstance(self, MultiIndex):
             raise NotImplementedError("isna is not defined for MultiIndex")
-        if isinstance(self.spark.data_type, (FloatType, DoubleType)):
-            return self._with_new_scol(self.spark.column.isNull() | F.isnan(self.spark.column))
-        else:
-            return self._with_new_scol(self.spark.column.isNull())
+
+        return self._dtype_op.isnull(self)
 
     isna = isnull
 

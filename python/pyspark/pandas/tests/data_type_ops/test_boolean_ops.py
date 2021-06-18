@@ -288,6 +288,9 @@ class BooleanOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         self.assert_eq(True | pser, True | psser)
         self.assert_eq(False | pser, False | psser)
 
+    def test_isnull(self):
+        self.assert_eq(self.pser.isnull(), self.psser.isnull())
+
     def test_astype(self):
         pser = self.pser
         psser = self.psser
@@ -593,6 +596,9 @@ class BooleanExtensionOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         psser = ps.Series(data)
         self.assert_eq(pser, psser.to_pandas())
         self.assert_eq(ps.from_pandas(pser), psser)
+
+    def test_isnull(self):
+        self.assert_eq(self.pser.isnull(), self.psser.isnull())
 
     def test_astype(self):
         pser = self.pser
