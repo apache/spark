@@ -46,7 +46,7 @@ class PathOutputNamingProtocol(
         new Path(pathOutputCommitProtocol.stagingDir, UUID.randomUUID().toString + "-" + filename)
           .toString
       case _ =>
-        val workDir = pathOutputCommitProtocol.getCommitter.getWorkPath
+        val workDir = pathOutputCommitProtocol.getPathOutputCommitter.getWorkPath
         val parent = fileContext.relativeDir.map {
           d => new Path(workDir, d)
         }.getOrElse(workDir)

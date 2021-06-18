@@ -117,7 +117,7 @@ class PathOutputCommitProtocol(
     committer
   }
 
-  def getCommitter: PathOutputCommitter = {
+  def getPathOutputCommitter: PathOutputCommitter = {
     committer
   }
 }
