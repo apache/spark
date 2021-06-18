@@ -896,31 +896,24 @@ object IntervalUtils {
   }
 
   def durationToMicros(duration: Duration, endField: Byte): Long = {
-
-    def secondsToMicros(seconds: Long): Long = {
-      if (seconds == minDurationSeconds) {
-        val microsInSeconds = (minDurationSeconds + 1) * MICROS_PER_SECOND
-        val nanoAdjustment = duration.getNano
-        assert(0 <= nanoAdjustment && nanoAdjustment < NANOS_PER_SECOND,
-          "Duration.getNano() must return the adjustment to the seconds field " +
-            "in the range from 0 to 999999999 nanoseconds, inclusive.")
-        Math.addExact(microsInSeconds, (nanoAdjustment - NANOS_PER_SECOND) / NANOS_PER_MICROS)
-      } else {
-        val microsInSeconds = Math.multiplyExact(seconds, MICROS_PER_SECOND)
-        Math.addExact(microsInSeconds, duration.getNano / NANOS_PER_MICROS)
-      }
+    val seconds = duration.getSeconds
+    val micros = if (seconds == minDurationSeconds) {
+      val microsInSeconds = (minDurationSeconds + 1) * MICROS_PER_SECOND
+      val nanoAdjustment = duration.getNano
+      assert(0 <= nanoAdjustment && nanoAdjustment < NANOS_PER_SECOND,
+        "Duration.getNano() must return the adjustment to the seconds field " +
+          "in the range from 0 to 999999999 nanoseconds, inclusive.")
+      Math.addExact(microsInSeconds, (nanoAdjustment - NANOS_PER_SECOND) / NANOS_PER_MICROS)
+    } else {
+      val microsInSeconds = Math.multiplyExact(seconds, MICROS_PER_SECOND)
+      Math.addExact(microsInSeconds, duration.getNano / NANOS_PER_MICROS)
     }
 
-    val seconds = duration.getSeconds
     endField match {
-      case DayTimeIntervalType.DAY =>
-        secondsToMicros(seconds - seconds % SECONDS_PER_DAY)
-      case DayTimeIntervalType.HOUR =>
-        secondsToMicros(seconds - seconds % SECONDS_PER_HOUR)
-      case DayTimeIntervalType.MINUTE =>
-        secondsToMicros(seconds - seconds % SECONDS_PER_MINUTE)
-      case DayTimeIntervalType.SECOND =>
-        secondsToMicros(seconds)
+      case DayTimeIntervalType.DAY => micros - micros % MICROS_PER_DAY
+      case DayTimeIntervalType.HOUR => micros - micros % MICROS_PER_HOUR
+      case DayTimeIntervalType.MINUTE => micros - micros % MICROS_PER_MINUTE
+      case DayTimeIntervalType.SECOND => micros
     }
   }
 
