@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.text.ParseException
-import java.time.{DateTimeException, LocalDate, LocalDateTime, ZoneId, ZoneOffset}
+import java.time.{DateTimeException, LocalDate, LocalDateTime, ZoneId}
 import java.time.format.DateTimeParseException
 import java.util.Locale
 
@@ -34,6 +34,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.SIMPLE_DATE_FORMAT
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy.LEGACY
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
@@ -1001,47 +1002,38 @@ case class GetTimestampWithoutTZ(
     timeZoneId: Option[String] = None,
     failOnError: Boolean = SQLConf.get.ansiEnabled) extends ToTimestamp {
 
-  override def inputTypes: Seq[AbstractDataType] =
-    Seq(TypeCollection(StringType, DateType, TimestampType), StringType)
+  assert(SQLConf.get.legacyTimeParserPolicy != LEGACY,
+    "Legacy time parser is not supported in SQL function to_timestamp_ntz")
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType)
 
   override def dataType: DataType = TimestampWithoutTZType
-
-  // The class name of `DateTimeUtils`
-  private def dateTimeUtilsCls: String = DateTimeUtils.getClass.getName.stripSuffix("$")
 
   override def eval(input: InternalRow): Any = {
     val t = left.eval(input)
     if (t == null) {
       null
     } else {
-      left.dataType match {
-        case DateType =>
-          daysToMicros(t.asInstanceOf[Int], ZoneOffset.UTC)
-        case TimestampType =>
-          convertTz(t.asInstanceOf[Long], ZoneOffset.UTC, zoneId)
-        case StringType =>
-          val fmt = right.eval(input)
-          if (fmt == null) {
-            null
-          } else {
-            val formatter = formatterOption.getOrElse(getFormatter(fmt.toString))
-            try {
-              formatter.parseWithoutTimeZone(t.asInstanceOf[UTF8String].toString)
-            } catch {
-              case e if isParseError(e) =>
-                if (failOnError) {
-                  throw e
-                } else {
-                  null
-                }
+      val fmt = right.eval(input)
+      if (fmt == null) {
+        null
+      } else {
+        val formatter = formatterOption.getOrElse(getFormatter(fmt.toString))
+        try {
+          formatter.parseWithoutTimeZone(t.asInstanceOf[UTF8String].toString)
+        } catch {
+          case e if isParseError(e) =>
+            if (failOnError) {
+              throw e
+            } else {
+              null
             }
-          }
+        }
       }
     }
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val javaType = CodeGenerator.javaType(dataType)
     val parseErrorBranch = if (failOnError) "throw e;" else s"${ev.isNull} = true;"
     left.dataType match {
       case StringType => formatterOption.map { fmt =>
@@ -1082,27 +1074,6 @@ case class GetTimestampWithoutTZ(
              |}
              |""".stripMargin)
       }
-      case TimestampType =>
-        val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
-        val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-        val eval1 = left.genCode(ctx)
-        ev.copy(code = code"""
-          ${eval1.code}
-          boolean ${ev.isNull} = ${eval1.isNull};
-          $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
-          if (!${ev.isNull}) {
-            ${ev.value} = $dtu.convertTz(${eval1.value}, java.time.ZoneOffset.UTC, $zid);
-          }""")
-      case DateType =>
-        val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-        val eval1 = left.genCode(ctx)
-        ev.copy(code = code"""
-          ${eval1.code}
-          boolean ${ev.isNull} = ${eval1.isNull};
-          $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
-          if (!${ev.isNull}) {
-            ${ev.value} = $dtu.daysToMicros(${eval1.value}, java.time.ZoneOffset.UTC);
-          }""")
     }
   }
 

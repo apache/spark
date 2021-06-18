@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.{LegacyDateFormat, LENIENT_SIMPLE_DATE_FORMAT}
 import org.apache.spark.sql.catalyst.util.RebaseDateTime._
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy._
 import org.apache.spark.sql.types.Decimal
@@ -50,10 +51,22 @@ sealed trait TimestampFormatter extends Serializable {
   @throws(classOf[DateTimeException])
   def parse(s: String): Long
 
+  /**
+   * Parses a timestamp in a string and converts it to microseconds since Unix Epoch in local time.
+   *
+   * @param s - string with timestamp to parse
+   * @return microseconds since epoch.
+   * @throws ParseException can be thrown by legacy parser
+   * @throws DateTimeParseException can be thrown by new parser
+   * @throws DateTimeException unable to obtain local date or time
+   * @throws UnsupportedOperationException cannot use legacy formatter for the parsing
+   */
   @throws(classOf[ParseException])
   @throws(classOf[DateTimeParseException])
   @throws(classOf[DateTimeException])
-  def parseWithoutTimeZone(s: String): Long
+  @throws(classOf[UnsupportedOperationException])
+  def parseWithoutTimeZone(s: String): Long =
+    throw QueryExecutionErrors.cannotUseLegacyFormatterToParseTimestampWithoutTZ();
 
   def format(us: Long): String
   def format(ts: Timestamp): String
@@ -230,9 +243,6 @@ class LegacyFastTimestampFormatter(
     rebaseJulianToGregorianMicros(julianMicros)
   }
 
-  override def parseWithoutTimeZone(s: String): Long =
-    DateTimeUtils.convertTz(parse(s), ZoneOffset.UTC, zoneId)
-
   override def format(timestamp: Long): String = {
     val julianMicros = rebaseGregorianToJulianMicros(timestamp)
     cal.setTimeInMillis(Math.floorDiv(julianMicros, MICROS_PER_SECOND) * MILLIS_PER_SECOND)
@@ -270,9 +280,6 @@ class LegacySimpleTimestampFormatter(
   override def parse(s: String): Long = {
     fromJavaTimestamp(new Timestamp(sdf.parse(s).getTime))
   }
-
-  override def parseWithoutTimeZone(s: String): Long =
-    DateTimeUtils.convertTz(parse(s), ZoneOffset.UTC, zoneId)
 
   override def format(us: Long): String = {
     sdf.format(toJavaTimestamp(us))
