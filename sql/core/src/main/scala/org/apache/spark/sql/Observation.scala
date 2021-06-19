@@ -43,7 +43,7 @@ class Observation(name: String) {
    * @tparam T dataset type
    * @return observed dataset
    */
-  def on[T](ds: Dataset[T])(expr: Column, exprs: Column*): Dataset[T] = {
+  def on[T](ds: Dataset[T], expr: Column, exprs: Column*): Dataset[T] = {
     if (ds.isStreaming) {
       throw new IllegalArgumentException("Observation does not support streaming Datasets")
     }

@@ -1948,7 +1948,7 @@ class Dataset[T] private[sql](
   }
 
   def observe(observation: Observation, expr: Column, exprs: Column*): Dataset[T] = {
-    observation.on(this)(expr, exprs: _*)
+    observation.on(this, expr, exprs: _*)
   }
 
   /**
