@@ -24,9 +24,32 @@ import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.util.QueryExecutionListener
 
 /**
- * Not thread-safe.
- * @param name
- * @param sparkSession
+ * Helper class to simplify usage of [[Dataset.observe(String, Column, Column*)]]:
+ *
+ * {{{
+ *   // Observe row count (rows) and highest id (maxid) in the Dataset while writing it
+ *   val observation = Observation("my_metrics")
+ *   val observed_ds = ds.observe(observation, count(lit(1)).as("rows"), max($"id").as("maxid"))
+ *   observed_ds.write.parquet("ds.parquet")
+ *   val metrics = observation.get
+ * }}}
+ *
+ * This collects the metrics while the first action is executed on the obseerved dataset. Subsequent
+ * actions do not modify the metrics returned by [[org.apache.spark.sql.Observation.get]]. Retrieval
+ * of the metric via [[org.apache.spark.sql.Observation.get]] blocks until the first action has
+ * finished and metrics become available. You can add a timeout to that blocking via
+ * [[org.apache.spark.sql.Observation.waitCompleted]]:
+ *
+ * {{{
+ *   if (observation.waitCompleted(100, TimeUnit.MILLISECONDS)) {
+ *     observation.get
+ *   }
+ * }}}
+ *
+ * This class does not support streaming datasets.
+ *
+ * @param name name of the metric
+ * @since 3.2.0
  */
 class Observation(name: String) {
 
@@ -37,11 +60,14 @@ class Observation(name: String) {
   @volatile private var row: Option[Row] = None
 
   /**
-   * Attach this observation to the given Dataset.
+   * Attaches this observation to the given [[Dataset]] to observe aggregation expressions.
    *
    * @param ds dataset
+   * @param expr first aggregation expression
+   * @param exprs more aggregation expressions
    * @tparam T dataset type
    * @return observed dataset
+   * @throws IllegalArgumentException If this is a streaming Dataset (ds.isStreaming == true)
    */
   def on[T](ds: Dataset[T], expr: Column, exprs: Column*): Dataset[T] = {
     if (ds.isStreaming) {
@@ -52,19 +78,24 @@ class Observation(name: String) {
   }
 
   /**
-   * Wait for the first action on the observed dataset to complete and returns true.
-   * This method times out after the given amount of time and returns false.
+   * Waits for the first action on the observed dataset to complete and returns true.
+   * The result is then available through the get method.
+   * This method times out after the given amount of time returning false.
    *
    * @param time timeout
    * @param unit timeout time unit
-   * @return true if action complete within timeout, false on timeout
+   * @return true if action completed within timeout, false otherwise
+   * @throws InterruptedException interrupted while waiting
    */
   def waitCompleted(time: Long, unit: TimeUnit): Boolean = waitCompleted(Some(time), unit)
 
   /**
-   * Get the observation results. This waits until the observed dataset finishes its first action.
-   * If you want to wait for the result and provide a timeout, use waitCompleted.
-   * Only the result of the first action is available. Subsequent actions do not modify the result.
+   * Get the observed metrics. This waits until the observed dataset finishes its first action.
+   * If you want to wait for the result and provide a timeout, use [[waitCompleted]]. Only the
+   * result of the first action is available. Subsequent actions do not modify the result.
+   *
+   * @return the observed metrics as a [[Row]]
+   * @throws InterruptedException interrupted while waiting
    */
   def get: Row = {
     assert(waitCompleted(None, TimeUnit.SECONDS), "waitCompleted without timeout returned false")
