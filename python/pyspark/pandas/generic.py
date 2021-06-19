@@ -76,7 +76,7 @@ if TYPE_CHECKING:
     from pyspark.pandas.series import Series  # noqa: F401 (SPARK-34943)
 
 
-T = TypeVar("T", bound="Frame")
+T_Frame = TypeVar("T_Frame", bound="Frame")
 bool_type = bool
 
 
@@ -96,8 +96,8 @@ class Frame(object, metaclass=ABCMeta):
 
     @abstractmethod
     def _apply_series_op(
-        self: T, op: Callable[["Series"], "Series"], should_resolve: bool = False
-    ) -> T:
+        self: T_Frame, op: Callable[["Series"], "Series"], should_resolve: bool = False
+    ) -> T_Frame:
         pass
 
     @abstractmethod
@@ -126,7 +126,7 @@ class Frame(object, metaclass=ABCMeta):
         pass
 
     @abstractmethod
-    def copy(self: T) -> T:
+    def copy(self: T_Frame) -> T_Frame:
         pass
 
     @abstractmethod
@@ -134,11 +134,11 @@ class Frame(object, metaclass=ABCMeta):
         pass
 
     @abstractmethod
-    def head(self: T, n: int = 5) -> T:
+    def head(self: T_Frame, n: int = 5) -> T_Frame:
         pass
 
     # TODO: add 'axis' parameter
-    def cummin(self: T, skipna: bool = True) -> T:
+    def cummin(self: T_Frame, skipna: bool = True) -> T_Frame:
         """
         Return cumulative minimum over a DataFrame or Series axis.
 
@@ -198,7 +198,7 @@ class Frame(object, metaclass=ABCMeta):
         return self._apply_series_op(lambda psser: psser._cum(F.min, skipna), should_resolve=True)
 
     # TODO: add 'axis' parameter
-    def cummax(self: T, skipna: bool = True) -> T:
+    def cummax(self: T_Frame, skipna: bool = True) -> T_Frame:
         """
         Return cumulative maximum over a DataFrame or Series axis.
 
@@ -259,7 +259,7 @@ class Frame(object, metaclass=ABCMeta):
         return self._apply_series_op(lambda psser: psser._cum(F.max, skipna), should_resolve=True)
 
     # TODO: add 'axis' parameter
-    def cumsum(self: T, skipna: bool = True) -> T:
+    def cumsum(self: T_Frame, skipna: bool = True) -> T_Frame:
         """
         Return cumulative sum over a DataFrame or Series axis.
 
@@ -322,7 +322,7 @@ class Frame(object, metaclass=ABCMeta):
     # TODO: add 'axis' parameter
     # TODO: use pandas_udf to support negative values and other options later
     #  other window except unbounded ones is supported as of Spark 3.0.
-    def cumprod(self: T, skipna: bool = True) -> T:
+    def cumprod(self: T_Frame, skipna: bool = True) -> T_Frame:
         """
         Return cumulative product over a DataFrame or Series axis.
 
@@ -2059,7 +2059,7 @@ class Frame(object, metaclass=ABCMeta):
         else:
             return len(self) * num_columns  # type: ignore
 
-    def abs(self: T) -> T:
+    def abs(self: T_Frame) -> T_Frame:
         """
         Return a Series/DataFrame with absolute numeric value of each element.
 
@@ -2952,22 +2952,22 @@ class Frame(object, metaclass=ABCMeta):
 
     @abstractmethod
     def fillna(
-        self: T,
+        self: T_Frame,
         value: Optional[Any] = None,
         method: Optional[str] = None,
         axis: Optional[Union[int, str]] = None,
         inplace: bool_type = False,
         limit: Optional[int] = None,
-    ) -> T:
+    ) -> T_Frame:
         pass
 
     # TODO: add 'downcast' when value parameter exists
     def bfill(
-        self: T,
+        self: T_Frame,
         axis: Optional[Union[int, str]] = None,
         inplace: bool_type = False,
         limit: Optional[int] = None,
-    ) -> T:
+    ) -> T_Frame:
         """
         Synonym for `DataFrame.fillna()` or `Series.fillna()` with ``method=`bfill```.
 
@@ -3042,11 +3042,11 @@ class Frame(object, metaclass=ABCMeta):
 
     # TODO: add 'downcast' when value parameter exists
     def ffill(
-        self: T,
+        self: T_Frame,
         axis: Optional[Union[int, str]] = None,
         inplace: bool_type = False,
         limit: Optional[int] = None,
-    ) -> T:
+    ) -> T_Frame:
         """
         Synonym for `DataFrame.fillna()` or `Series.fillna()` with ``method=`ffill```.
 
