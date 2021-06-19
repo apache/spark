@@ -67,8 +67,11 @@ private[spark] class ExecutorPodsAllocator(
 
   private val namespace = conf.get(KUBERNETES_NAMESPACE)
 
-  private val kubernetesDriverPodName = conf
-    .get(KUBERNETES_DRIVER_POD_NAME)
+  private val kubernetesDriverPodName = if (conf.get(KUBERNETES_DRIVER_SUBMIT_CHECK)) {
+    conf.get(KUBERNETES_DRIVER_POD_NAME)
+  } else {
+    None
+  }
 
   private val shouldDeleteExecutors = conf.get(KUBERNETES_DELETE_EXECUTORS)
 

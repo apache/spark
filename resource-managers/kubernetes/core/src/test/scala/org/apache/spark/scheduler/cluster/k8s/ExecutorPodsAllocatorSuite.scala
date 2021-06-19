@@ -58,6 +58,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
   private val conf = new SparkConf()
     .set(KUBERNETES_DRIVER_POD_NAME, driverPodName)
     .set(DYN_ALLOCATION_EXECUTOR_IDLE_TIMEOUT.key, "10s")
+    .set(KUBERNETES_DRIVER_SUBMIT_CHECK, true)
 
   private val defaultProfile: ResourceProfile = ResourceProfile.getOrCreateDefaultProfile(conf)
   private val podAllocationSize = conf.get(KUBERNETES_ALLOCATION_BATCH_SIZE)
@@ -655,7 +656,9 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
 
   test("print the pod name instead of Some(name) if pod is absent") {
     val nonexistentPod = "i-do-not-exist"
-    val conf = new SparkConf().set(KUBERNETES_DRIVER_POD_NAME, nonexistentPod)
+    val conf = new SparkConf()
+      .set(KUBERNETES_DRIVER_POD_NAME, nonexistentPod)
+      .set(KUBERNETES_DRIVER_SUBMIT_CHECK, true)
     when(kubernetesClient.pods()).thenReturn(podOperations)
     when(podOperations.withName(nonexistentPod)).thenReturn(driverPodOperations)
     when(driverPodOperations.get()).thenReturn(null)
@@ -663,6 +666,17 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
       conf, secMgr, executorBuilder, kubernetesClient, snapshotsStore, waitForExecutorPodsClock))
     assert(e.getMessage.contains("No pod was found named i-do-not-exist in the cluster in the" +
       " namespace default"))
+  }
+
+  test("SPARK-35828: Skip retrieving the non-exist driver pod for client mode") {
+    val conf = new SparkConf()
+      .set(KUBERNETES_DRIVER_POD_NAME, "SPARK-35828")
+      .set(KUBERNETES_DRIVER_SUBMIT_CHECK, false)
+    val alloc = new ExecutorPodsAllocator(
+      conf, secMgr, executorBuilder, kubernetesClient, snapshotsStore, waitForExecutorPodsClock)
+    val kubernetesDriverPodName = PrivateMethod[Option[String]](Symbol("kubernetesDriverPodName"))()
+    assert(alloc.invokePrivate(kubernetesDriverPodName).isEmpty)
+    assert(alloc.driverPod.isEmpty)
   }
 
   private def executorPodAnswer(): Answer[KubernetesExecutorSpec] =
