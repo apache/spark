@@ -2605,8 +2605,8 @@
             </args>
             <jvmArgs>
               <jvmArg>-Xss128m</jvmArg>
-              <jvmArg>-Xms1024m</jvmArg>
-              <jvmArg>-Xmx1024m</jvmArg>
+              <jvmArg>-Xms2048m</jvmArg>
+              <jvmArg>-Xmx2048m</jvmArg>
               <jvmArg>-XX:ReservedCodeCacheSize=${CodeCacheSize}</jvmArg>
             </jvmArgs>
             <javacArgs>
