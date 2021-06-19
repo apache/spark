@@ -35,6 +35,8 @@ object GraphXUtils {
       classOf[Edge[Object]],
       classOf[(VertexId, Object)],
       classOf[EdgePartition[Object, Object]],
+      classOf[ShippableVertexPartition],
+      classOf[RoutingTablePartition],
       classOf[BitSet],
       classOf[VertexIdToIndexMap],
       classOf[VertexAttributeBlock[Object]],
