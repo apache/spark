@@ -25,6 +25,7 @@ from pyspark.pandas.base import column_op, IndexOpsMixin, numpy_column_op
 from pyspark.pandas.data_type_ops.base import (
     is_valid_operand_for_numeric_arithmetic,
     DataTypeOps,
+    T_IndexOps,
     transform_boolean_operand_to_numeric,
     _as_bool_type,
     _as_categorical_type,
@@ -256,9 +257,7 @@ class IntegralOps(NumericOps):
         right = transform_boolean_operand_to_numeric(right, left.spark.data_type)
         return numpy_column_op(rfloordiv)(left, right)
 
-    def astype(
-        self, index_ops: Union["Index", "Series"], dtype: Union[str, type, Dtype]
-    ) -> Union["Index", "Series"]:
+    def astype(self, index_ops: T_IndexOps, dtype: Union[str, type, Dtype]) -> T_IndexOps:
         dtype, spark_type = pandas_on_spark_type(dtype)
 
         if isinstance(dtype, CategoricalDtype):
@@ -367,14 +366,12 @@ class FractionalOps(NumericOps):
         right = transform_boolean_operand_to_numeric(right, left.spark.data_type)
         return numpy_column_op(rfloordiv)(left, right)
 
-    def isnull(self, index_ops: Union["Index", "Series"]) -> Union["Series", "Index"]:
+    def isnull(self, index_ops: T_IndexOps) -> T_IndexOps:
         return index_ops._with_new_scol(
             index_ops.spark.column.isNull() | F.isnan(index_ops.spark.column)
         )
 
-    def astype(
-        self, index_ops: Union["Index", "Series"], dtype: Union[str, type, Dtype]
-    ) -> Union["Index", "Series"]:
+    def astype(self, index_ops: T_IndexOps, dtype: Union[str, type, Dtype]) -> T_IndexOps:
         dtype, spark_type = pandas_on_spark_type(dtype)
 
         if isinstance(dtype, CategoricalDtype):
@@ -412,5 +409,5 @@ class DecimalOps(FractionalOps):
     def pretty_name(self) -> str:
         return "decimal"
 
-    def isnull(self, index_ops: Union["Index", "Series"]) -> Union["Series", "Index"]:
+    def isnull(self, index_ops: T_IndexOps) -> T_IndexOps:
         return index_ops._with_new_scol(index_ops.spark.column.isNull())

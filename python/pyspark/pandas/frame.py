@@ -2153,7 +2153,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         0     1     3
         1     2     4
 
-        >>> df1_transposed = df1.T.sort_index()  # doctest: +SKIP
+        >>> df1_transposed = df1.T_IndexOps.sort_index()  # doctest: +SKIP
         >>> df1_transposed  # doctest: +SKIP
               0  1
         col1  1  2
@@ -2182,7 +2182,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         0    9.5     0   12
         1    8.0     0   22
 
-        >>> df2_transposed = df2.T.sort_index()  # doctest: +SKIP
+        >>> df2_transposed = df2.T_IndexOps.sort_index()  # doctest: +SKIP
         >>> df2_transposed  # doctest: +SKIP
                   0     1
         age    12.0  22.0

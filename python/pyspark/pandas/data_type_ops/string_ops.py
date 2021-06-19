@@ -25,6 +25,7 @@ from pyspark.sql.types import IntegralType, StringType
 from pyspark.pandas.base import column_op, IndexOpsMixin
 from pyspark.pandas.data_type_ops.base import (
     DataTypeOps,
+    T_IndexOps,
     _as_categorical_type,
     _as_other_type,
     _as_string_type,
@@ -111,9 +112,7 @@ class StringOps(DataTypeOps):
     def rmod(self, left, right):
         raise TypeError("modulo can not be applied on string series or literals.")
 
-    def astype(
-        self, index_ops: Union["Index", "Series"], dtype: Union[str, type, Dtype]
-    ) -> Union["Index", "Series"]:
+    def astype(self, index_ops: T_IndexOps, dtype: Union[str, type, Dtype]) -> T_IndexOps:
         dtype, spark_type = pandas_on_spark_type(dtype)
 
         if isinstance(dtype, CategoricalDtype):
