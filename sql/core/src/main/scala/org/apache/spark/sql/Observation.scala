@@ -87,7 +87,7 @@ class Observation(name: String) {
    * @return true if action completed within timeout, false otherwise
    * @throws InterruptedException interrupted while waiting
    */
-  def waitCompleted(time: Long, unit: TimeUnit): Boolean = waitCompleted(Some(time), unit)
+  def waitCompleted(time: Long, unit: TimeUnit): Boolean = waitCompleted(Some(unit.toMillis(time)))
 
   /**
    * Get the observed metrics. This waits until the observed dataset finishes its first action.
@@ -98,15 +98,15 @@ class Observation(name: String) {
    * @throws InterruptedException interrupted while waiting
    */
   def get: Row = {
-    assert(waitCompleted(None, TimeUnit.SECONDS), "waitCompleted without timeout returned false")
+    assert(waitCompleted(None), "waitCompleted without timeout returned false")
     row.get
   }
 
-  private def waitCompleted(time: Option[Long], unit: TimeUnit): Boolean = {
+  private def waitCompleted(millis: Option[Long]): Boolean = {
     synchronized {
       if (row.isEmpty) {
-        if (time.isDefined) {
-          this.wait(unit.toMillis(time.get))
+        if (millis.isDefined) {
+          this.wait(millis.get)
         } else {
           this.wait()
         }
