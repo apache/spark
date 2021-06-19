@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.YearMonthIntervalType._
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -661,5 +662,15 @@ class CastSuite extends CastSuiteBase {
       "2021-06-17 00:00:00ABC").foreach { invalidInput =>
       checkEvaluation(cast(invalidInput, TimestampWithoutTZType), null)
     }
+  }
+
+  test("SPARK-35819: Support cast YearMonthIntervalType in different fields") {
+    val ym = cast(Literal.create("1-1"), YearMonthIntervalType(YEAR, MONTH))
+    Seq(YearMonthIntervalType(YEAR, YEAR) -> 12,
+      YearMonthIntervalType(YEAR, MONTH) -> 13,
+      YearMonthIntervalType(MONTH, MONTH) -> 13)
+      .foreach { case (dt, value) =>
+        checkEvaluation(cast(ym, dt), value)
+      }
   }
 }
