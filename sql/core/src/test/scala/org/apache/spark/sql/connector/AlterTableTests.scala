@@ -403,8 +403,24 @@ trait AlterTableTests extends SharedSparkSession {
     val t = s"${catalogAndNamespace}table_name"
     withTable(t) {
       sql(s"CREATE TABLE $t (id int) USING $v2Format")
-      val e = intercept[AnalysisException](sql(s"ALTER TABLE $t ALTER COLUMN id TYPE interval"))
-      assert(e.getMessage.contains("id to interval type"))
+      Seq(
+        "interval",
+        "interval year",
+        "interval month",
+        "interval year to month",
+        "interval day",
+        "interval hour",
+        "interval minute",
+        "interval second",
+        "interval day to second",
+        "interval day to minute",
+        "interval day to hour",
+        "interval hour to second",
+        "interval hour to minute",
+        "interval minute to second").foreach { case dtype =>
+        val e = intercept[AnalysisException](sql(s"ALTER TABLE $t ALTER COLUMN id TYPE $dtype"))
+        assert(e.getMessage.contains("id to interval type"))
+      }
     }
   }
 
