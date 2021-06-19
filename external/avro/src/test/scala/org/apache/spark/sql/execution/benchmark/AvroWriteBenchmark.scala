@@ -52,7 +52,7 @@ object AvroWriteBenchmark extends DataSourceWriteBenchmark {
         // cache the data to ensure we are not benchmarking range or repartition
         df.filter("(c1*c2) = 12").collect
         df.createOrReplaceTempView("t1")
-        val benchmark = new Benchmark(s"Write wide rows into $files files", values)
+        val benchmark = new Benchmark(s"Write wide rows into $files files", values, output = output)
         benchmark.addCase("Write wide rows") { _ =>
           spark.sql("SELECT * FROM t1").
             write.format("avro").save(s"${dir.getCanonicalPath}/${Random.nextLong.abs}")
