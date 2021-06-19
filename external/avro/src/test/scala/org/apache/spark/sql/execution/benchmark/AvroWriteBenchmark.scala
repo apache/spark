@@ -41,9 +41,9 @@ object AvroWriteBenchmark extends DataSourceWriteBenchmark {
 
     withTempPath { dir =>
       withTempTable("t1") {
-        val width = 6000
-        val values = 25000
-        val files = 10
+        val width = 1000
+        val values = 500000
+        val files = 20
         val selectExpr = (1 to width).map(i => s"value as c$i")
         // repartition to ensure we will write multiple files
         val df = spark.range(values)
@@ -53,7 +53,7 @@ object AvroWriteBenchmark extends DataSourceWriteBenchmark {
         df.filter("(c1*c2) = 12").collect
         df.createOrReplaceTempView("t1")
         val benchmark = new Benchmark(s"Write wide rows into $files files", values)
-        benchmark.addCase("Write") { _ =>
+        benchmark.addCase("Write wide rows") { _ =>
           spark.sql("SELECT * FROM t1").
             write.format("avro").save(s"${dir.getCanonicalPath}/${Random.nextLong.abs}")
         }
