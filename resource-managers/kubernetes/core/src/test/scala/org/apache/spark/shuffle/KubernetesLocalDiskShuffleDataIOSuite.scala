@@ -210,7 +210,7 @@ class KubernetesLocalDiskShuffleDataIOSuite extends SparkFunSuite with LocalSpar
         assert(master.shuffleStatuses(1).mapStatuses.forall(_ == null))
       }
       sc.parallelize(Seq((1, 1)), 2).groupByKey().collect()
-      eventually(timeout(10.second), interval(1.seconds)) {
+      eventually(timeout(60.second), interval(1.seconds)) {
         assert(master.shuffleStatuses(0).mapStatuses.map(_.mapId).toSet == Set(0, 1, 2))
         assert(master.shuffleStatuses(1).mapStatuses.map(_.mapId).toSet == Set(6, 7, 8))
       }
