@@ -665,26 +665,6 @@ class CastSuite extends CastSuiteBase {
         checkEvaluation(cast(Literal.create(s"INTERVAL '$str' YEAR TO MONTH"), dataType), value)
         checkEvaluation(cast(Literal.create(s"INTERVAL -'$str' YEAR TO MONTH"), dataType), -value)
       }
-
-    Seq(("1-1", YearMonthIntervalType(YEAR, YEAR), 12),
-      ("1-1", YearMonthIntervalType(YEAR, MONTH), 12),
-      ("1-1", YearMonthIntervalType(MONTH, MONTH), 12),
-      ("-1-1", YearMonthIntervalType(YEAR, YEAR), -12),
-      ("-1-1", YearMonthIntervalType(YEAR, MONTH), -12),
-      ("-1-1", YearMonthIntervalType(MONTH, MONTH), -12))
-      .foreach { case (str, dataType, value) =>
-        checkEvaluation(cast(Literal.create(s"INTERVAL '$str' YEAR"), dataType), value)
-      }
-
-    Seq(("1-1", YearMonthIntervalType(YEAR, YEAR), 12),
-      ("1-1", YearMonthIntervalType(YEAR, MONTH), 13),
-      ("1-1", YearMonthIntervalType(MONTH, MONTH), 13),
-      ("-1-1", YearMonthIntervalType(YEAR, YEAR), -12),
-      ("-1-1", YearMonthIntervalType(YEAR, MONTH), -13),
-      ("-1-1", YearMonthIntervalType(MONTH, MONTH), -13))
-      .foreach { case (str, dataType, value) =>
-        checkEvaluation(cast(Literal.create(s"INTERVAL '$str' MONTH"), dataType), value)
-      }
   }
 
   test("SPARK-35720: cast invalid string input to timestamp without time zone") {
