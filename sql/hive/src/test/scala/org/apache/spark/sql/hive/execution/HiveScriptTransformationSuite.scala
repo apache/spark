@@ -32,6 +32,7 @@ import org.apache.spark.sql.execution._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.YearMonthIntervalType._
 import org.apache.spark.unsafe.types.CalendarInterval
 
 class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with TestHiveSingleton {
@@ -546,11 +547,38 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
             AttributeReference("a", DayTimeIntervalType())(),
             AttributeReference("b", DayTimeIntervalType())(),
             AttributeReference("c", DayTimeIntervalType())(),
-            // TODO(SPARK-35772): Check all year-month interval types in HiveInspectors tests
             AttributeReference("d", YearMonthIntervalType())()),
           child = child,
           ioschema = hiveIOSchema),
         df.select($"a", $"b", $"c", $"d").collect())
+    }
+  }
+
+  test("SPARK-35722: HiveInspectors supports all type of YearMonthIntervalType") {
+    assume(TestUtils.testCommandAvailable("/bin/bash"))
+    withTempView("v") {
+      val schema = StructType(Seq(
+        StructField("a", YearMonthIntervalType(YEAR, YEAR)),
+        StructField("b", YearMonthIntervalType(YEAR, MONTH)),
+        StructField("c", YearMonthIntervalType(MONTH, MONTH))
+      ))
+      val df = spark.createDataFrame(sparkContext.parallelize(Seq(
+        Row(Period.ofMonths(13), Period.ofMonths(13), Period.ofMonths(13))
+      )), schema)
+
+      df.show(10, 100)
+      df.printSchema
+      checkAnswer(
+        df,
+        (child: SparkPlan) => createScriptTransformationExec(
+          script = "cat",
+          output = Seq(
+            AttributeReference("a", YearMonthIntervalType(YEAR, YEAR))(),
+            AttributeReference("b", YearMonthIntervalType(YEAR, MONTH))(),
+            AttributeReference("c", YearMonthIntervalType(MONTH, MONTH))()),
+          child = child,
+          ioschema = hiveIOSchema),
+        df.select($"a", $"b", $"c").collect())
     }
   }
 
