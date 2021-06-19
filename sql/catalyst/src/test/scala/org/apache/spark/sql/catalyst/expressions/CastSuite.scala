@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.DayTimeIntervalType._
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -661,5 +662,28 @@ class CastSuite extends CastSuiteBase {
       "2021-06-17 00:00:00ABC").foreach { invalidInput =>
       checkEvaluation(cast(invalidInput, TimestampWithoutTZType), null)
     }
+  }
+
+  test("SPARK-35820: Support cast DayTimeIntervalType in different fields") {
+    val ymPositive = Literal.create(
+      Duration.ofSeconds(12345678L, 123456789),
+      DayTimeIntervalType(DAY, SECOND))
+    val ymNegative = Literal.create(
+      Duration.ofSeconds(-12345678L, -123456789),
+      DayTimeIntervalType(DAY, SECOND))
+    Seq((DayTimeIntervalType(DAY, DAY), 12268800000000L, -12268800000000L),
+      (DayTimeIntervalType(DAY, HOUR), 12344400000000L, -12344400000000L),
+      (DayTimeIntervalType(DAY, MINUTE), 12345660000000L, -12345660000000L),
+      (DayTimeIntervalType(DAY, SECOND), 12345678123456L, -12345678123457L),
+      (DayTimeIntervalType(HOUR, HOUR), 12344400000000L, -12344400000000L),
+      (DayTimeIntervalType(HOUR, MINUTE), 12345660000000L, -12345660000000L),
+      (DayTimeIntervalType(HOUR, SECOND), 12345678123456L, -12345678123457L),
+      (DayTimeIntervalType(MINUTE, MINUTE), 12345660000000L, -12345660000000L),
+      (DayTimeIntervalType(MINUTE, SECOND), 12345678123456L, -12345678123457L),
+      (DayTimeIntervalType(SECOND, SECOND), 12345678123456L, -12345678123457L))
+      .foreach { case (dt, positive, negative) =>
+        checkEvaluation(cast(ymPositive, dt), positive)
+        checkEvaluation(cast(ymNegative, dt), negative)
+      }
   }
 }
