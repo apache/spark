@@ -126,7 +126,7 @@ class PathOutputCommitProtocol(
    */
   override def newTaskTempFile(taskContext: TaskAttemptContext, relativePath: String): String = {
     val file = new Path(committer.getWorkPath, relativePath)
-    logTrace(s"Creating task file $file with relative path $dir")
+    logTrace(s"Creating task file $file with relative path $relativePath")
     file.toString
   }
 }
