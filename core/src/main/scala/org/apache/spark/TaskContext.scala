@@ -88,11 +88,13 @@ abstract class TaskContext extends Serializable {
 
   /**
    * Returns true if the task has completed.
+   * 如果任务完成了 就返回true
    */
   def isCompleted(): Boolean
 
   /**
    * Returns true if the task has been killed.
+   * 如果任务被kill就返回true
    */
   def isInterrupted(): Boolean
 
