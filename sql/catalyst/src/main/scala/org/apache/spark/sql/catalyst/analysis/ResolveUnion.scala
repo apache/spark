@@ -107,6 +107,15 @@ object ResolveUnion extends Rule[LogicalPlan] {
             // in `foundAttr`.
             aliased += foundAttr
             Alias(addFields(foundAttr, target), foundAttr.name)()
+          case (source: StructType, target: StructType)
+            if !allowMissingCol && !source.sameType(target) &&
+              target.toAttributes.map(x => x.name).sorted
+                == source.toAttributes.map(x => x.name).sorted =>
+            // Having an output with same name, but different struct type.
+            // We will sort columns in the struct expression to make sure two sides of
+            // union have consistent schema.
+            aliased += foundAttr
+            Alias(addFields(foundAttr, target), foundAttr.name)()
           case _ =>
             // We don't need/try to add missing fields if:
             // 1. The attributes of left and right side are the same struct type
