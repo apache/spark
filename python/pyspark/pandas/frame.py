@@ -4819,7 +4819,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         See :meth:`pyspark.pandas.DataFrame.spark.to_spark_io`.
 
         .. deprecated:: 3.2.0
-            Use :func:`spark.to_spark_io` instead.
+            Use :func:`DataFrame.spark.to_spark_io` instead.
         """
         warnings.warn("Deprecated in 3.2, Use spark.to_spark_io instead.", FutureWarning)
         return self.spark.to_spark_io(path, format, mode, partition_cols, index_col, **options)
