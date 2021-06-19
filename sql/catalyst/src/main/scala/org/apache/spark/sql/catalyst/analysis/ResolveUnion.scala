@@ -109,7 +109,7 @@ object ResolveUnion extends Rule[LogicalPlan] {
             Alias(addFields(foundAttr, target), foundAttr.name)()
           case (source: StructType, target: StructType)
             if !allowMissingCol && !source.sameType(target) &&
-              target.toAttributes.map(x => x.name).sorted
+              target.toAttributes.map(attr => attr.name).sorted
                 == source.toAttributes.map(x => x.name).sorted =>
             // Having an output with same name, but different struct type.
             // We will sort columns in the struct expression to make sure two sides of
@@ -150,8 +150,12 @@ object ResolveUnion extends Rule[LogicalPlan] {
     val rightChild = Project(rightProjectList ++ notFoundAttrs, right)
 
     // Builds a project for `logicalPlan` based on `right` output names, if allowing
-    // missing columns.
-    val leftChild = if (allowMissingCol) {
+    // missing columns is true and also in case of allowing missing columns is false and
+    // if in the case for struct present at the right output and sequence
+    // of right hand side is changed
+    val leftChild = if (allowMissingCol ||
+      (rightChild != right &&
+        rightChild.output.exists(attr => attr.dataType.isInstanceOf[StructType]))) {
       // Add missing (nested) fields to left plan.
       val (leftProjectList, _) = compareAndAddFields(rightChild, left, allowMissingCol)
       if (leftProjectList.map(_.toAttribute) != left.output) {
