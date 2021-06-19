@@ -282,7 +282,7 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
       ctx.withSubExprEliminationExprs(subExprs.states) {
         exprs.map(_.genCode(ctx))
       }
-      val subExprsCode = subExprs.codes.mkString("\n")
+      val subExprsCode = ctx.evaluateSubExprEliminationState(subExprs.codes)
 
       val codeBody = s"""
         public java.lang.Object generate(Object[] references) {

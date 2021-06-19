@@ -72,7 +72,7 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
       val genVars = ctx.withSubExprEliminationExprs(subExprs.states) {
         exprs.map(_.genCode(ctx))
       }
-      (subExprs.codes.mkString("\n"), genVars, subExprs.exprCodesNeedEvaluate)
+      (ctx.evaluateSubExprEliminationState(subExprs.codes), genVars, subExprs.exprCodesNeedEvaluate)
     } else {
       ("", exprs.map(_.genCode(ctx)), Seq.empty)
     }
