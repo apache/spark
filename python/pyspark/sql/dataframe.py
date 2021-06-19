@@ -29,7 +29,6 @@ from pyspark.storagelevel import StorageLevel
 from pyspark.traceback_utils import SCCallSiteSync
 from pyspark.sql.types import _parse_datatype_json_string
 from pyspark.sql.column import Column, _to_seq, _to_list, _to_java_column
-from pyspark.sql.observation import Observation
 from pyspark.sql.readwriter import DataFrameWriter, DataFrameWriterV2
 from pyspark.sql.streaming import DataStreamWriter
 from pyspark.sql.types import StructType, StructField, StringType, IntegerType
@@ -1832,10 +1831,12 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         return self.groupBy().agg(*exprs)
 
     @since(3.2)
-    def observe(self, observation: Observation, *exprs: Column) -> DataFrame:
+    def observe(self, observation, *exprs):
         """
         Observe (named) metrics through an :class:`Observation` instance.
         This method does not support streaming datasets.
+
+        .. versionadded:: 3.2.0
 
         A user can retrieve the metrics by accessing `Observation.get`.
 
@@ -1849,6 +1850,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         :param exprs: aggregation expressions
         :return: observed :class:`DataFrame`
         """
+        from pyspark.sql.observation import Observation
         assert isinstance(observation, Observation), "observation should be Observation"
         return observation.on(self, *exprs)
 
