@@ -72,7 +72,8 @@ private[sql] object Catalogs {
         throw QueryExecutionErrors.cannotInstantiateAbstractCatalogPluginClassError(
           name, pluginClassName, e)
       case e: InvocationTargetException =>
-        throw QueryExecutionErrors.failedToInstantiateConstructorForCatalogError(name, pluginClassName, e)
+        throw QueryExecutionErrors.failedToInstantiateConstructorForCatalogError(
+          name, pluginClassName, e)
     }
   }
 
