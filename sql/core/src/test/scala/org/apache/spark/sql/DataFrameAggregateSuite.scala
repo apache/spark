@@ -1190,9 +1190,9 @@ class DataFrameAggregateSuite extends QueryTest
       (Period.ofMonths(10), Duration.ofDays(10)))
       .toDF("year-month", "day-time")
 
-    val avgDF = df.select(avg($"year-month"), avg($"day-time"))
+    val avgDF = df.select(avg($"year-month"), avg($"year"), avg($"month"), avg($"day-time"))
     checkAnswer(avgDF,
-      Row(Period.ofMonths(7), Period.of(5, 7, 0), Period.ofMonths(2), Duration.ofDays(0)))
+      Row(Period.ofMonths(7), Period.of(5, 7, 0), Period.ofMonths(3), Duration.ofDays(0)))
     assert(find(avgDF.queryExecution.executedPlan)(_.isInstanceOf[HashAggregateExec]).isDefined)
     assert(avgDF.schema == StructType(Seq(
       StructField("avg(year-month)", YearMonthIntervalType()),
@@ -1201,11 +1201,12 @@ class DataFrameAggregateSuite extends QueryTest
       // TODO(SPARK-35729): Check all day-time interval types in aggregate expressions
       StructField("avg(day-time)", DayTimeIntervalType()))))
 
-    val avgDF2 = df.groupBy($"class").agg(avg($"year-month"), avg($"day-time"))
+    val avgDF2 =
+      df.groupBy($"class").agg(avg($"year-month"), avg($"year"), avg($"month"), avg($"day-time"))
     checkAnswer(avgDF2,
       Row(1, Period.ofMonths(10), Period.ofYears(8), Period.ofMonths(10), Duration.ofDays(10)) ::
       Row(2, Period.ofMonths(1), Period.ofYears(1), Period.ofMonths(1), Duration.ofDays(1)) ::
-      Row(3, Period.ofMonths(9), Period.of(6, 4, 0), Period.ofMonths(0),
+      Row(3, Period.ofMonths(9), Period.of(6, 4, 0), Period.ofMonths(1),
         Duration.ofDays(-5).plusHours(-12)) :: Nil)
     assert(find(avgDF2.queryExecution.executedPlan)(_.isInstanceOf[HashAggregateExec]).isDefined)
     assert(avgDF2.schema == StructType(Seq(StructField("class", IntegerType, false),
