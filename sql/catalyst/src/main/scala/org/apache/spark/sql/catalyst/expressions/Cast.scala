@@ -83,6 +83,7 @@ object Cast {
     case (StringType, _: YearMonthIntervalType) => true
 
     case (_: DayTimeIntervalType, _: DayTimeIntervalType) => true
+    case (_: YearMonthIntervalType, _: YearMonthIntervalType) => true
 
     case (StringType, _: NumericType) => true
     case (BooleanType, _: NumericType) => true
@@ -584,6 +585,8 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       it: YearMonthIntervalType): Any => Any = from match {
     case StringType => buildCast[UTF8String](_, s =>
       IntervalUtils.castStringToYMInterval(s, it.startField, it.endField))
+    case _: YearMonthIntervalType => buildCast[Int](_, s =>
+      IntervalUtils.periodToMonths(IntervalUtils.monthsToPeriod(s), it.endField))
   }
 
   // LongConverter
@@ -1491,6 +1494,12 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
         code"""
           $evPrim = $util.castStringToYMInterval($c, (byte)${it.startField}, (byte)${it.endField});
         """
+    case _: YearMonthIntervalType =>
+      val util = IntervalUtils.getClass.getCanonicalName.stripSuffix("$")
+      (c, evPrim, _) =>
+        code"""
+          $evPrim = $util.periodToMonths($util.monthsToPeriod($c), (byte)${it.endField});
+        """
   }
 
   private[this] def decimalToTimestampCode(d: ExprValue): Block = {
@@ -2062,6 +2071,7 @@ object AnsiCast {
     case (StringType, _: YearMonthIntervalType) => true
 
     case (_: DayTimeIntervalType, _: DayTimeIntervalType) => true
+    case (_: YearMonthIntervalType, _: YearMonthIntervalType) => true
 
     case (StringType, DateType) => true
     case (TimestampType, DateType) => true

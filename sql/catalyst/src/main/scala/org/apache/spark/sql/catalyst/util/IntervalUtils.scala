@@ -987,15 +987,14 @@ object IntervalUtils {
       absMonths = -absMonths
     }
     val year = s"$sign${absMonths / MONTHS_PER_YEAR}"
-    val month = s"${absMonths % MONTHS_PER_YEAR}"
-    val yearAndMonth = s"$year-$month"
+    val yearAndMonth = s"$year-${absMonths % MONTHS_PER_YEAR}"
     style match {
       case ANSI_STYLE =>
         val formatBuilder = new StringBuilder("INTERVAL '")
         if (startField == endField) {
           startField match {
             case YearMonthIntervalType.YEAR => formatBuilder.append(s"$year' YEAR")
-            case YearMonthIntervalType.MONTH => formatBuilder.append(s"$month' MONTH")
+            case YearMonthIntervalType.MONTH => formatBuilder.append(s"$months' MONTH")
           }
         } else {
           formatBuilder.append(s"$yearAndMonth' YEAR TO MONTH")
