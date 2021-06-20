@@ -175,6 +175,8 @@ object Cast {
 
     case (from: UserDefinedType[_], to: UserDefinedType[_]) if to.acceptsType(from) => true
 
+    case (_: YearMonthIntervalType, _: YearMonthIntervalType) => true
+
     case _ => false
   }
 

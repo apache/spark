@@ -42,6 +42,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.test.SQLTestData._
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.YearMonthIntervalType._
 import org.apache.spark.sql.util.QueryExecutionListener
 
 private case class FunctionResult(f1: String, f2: String)
@@ -904,25 +905,43 @@ class UDFSuite extends QueryTest with SharedSparkSession {
 
   test("SPARK-34663: using java.time.Period in UDF") {
     // Regular case
-    val input = Seq(java.time.Period.ofMonths(11)).toDF("p")
+    val input = Seq(java.time.Period.ofMonths(13)).toDF("p")
+      .select($"p", $"p".cast(YearMonthIntervalType(YEAR, YEAR)).as("p_y"),
+        $"p".cast(YearMonthIntervalType(MONTH, MONTH)).as("p_m"))
     val incMonth = udf((p: java.time.Period) => p.plusMonths(1))
-    val result = input.select(incMonth($"p").as("new_p"))
-    checkAnswer(result, Row(java.time.Period.ofYears(1)) :: Nil)
-    // TODO(SPARK-35777): Check all year-month interval types in UDF
-    assert(result.schema === new StructType().add("new_p", YearMonthIntervalType()))
+    val result = input.select(incMonth($"p").as("new_p"),
+      incMonth($"p_y").as("new_p_y"),
+      incMonth($"p_m").as("new_p_m"))
+    checkAnswer(result, Row(java.time.Period.ofMonths(14).normalized(),
+      java.time.Period.ofMonths(13).normalized(),
+      java.time.Period.ofMonths(14).normalized()) :: Nil)
+    assert(result.schema === new StructType()
+      .add("new_p", YearMonthIntervalType(YEAR, MONTH))
+      .add("new_p_y", YearMonthIntervalType(YEAR, MONTH))
+      .add("new_p_m", YearMonthIntervalType(YEAR, MONTH)))
     // UDF produces `null`
     val nullFunc = udf((_: java.time.Period) => null.asInstanceOf[java.time.Period])
-    val nullResult = input.select(nullFunc($"p").as("null_p"))
-    checkAnswer(nullResult, Row(null) :: Nil)
-    // TODO(SPARK-35777): Check all year-month interval types in UDF
-    assert(nullResult.schema === new StructType().add("null_p", YearMonthIntervalType()))
+    val nullResult = input.select(nullFunc($"p").as("null_p"),
+      nullFunc($"p_y").as("null_p_y"), nullFunc($"p_m").as("null_p_m"))
+    checkAnswer(nullResult, Row(null, null, null) :: Nil)
+    assert(nullResult.schema === new StructType()
+      .add("null_p", YearMonthIntervalType(YEAR, MONTH))
+      .add("null_p_y", YearMonthIntervalType(YEAR, MONTH))
+      .add("null_p_m", YearMonthIntervalType(YEAR, MONTH)))
     // Input parameter of UDF is null
     val nullInput = Seq(null.asInstanceOf[java.time.Period]).toDF("null_p")
+      .select($"null_p",
+        $"null_p".cast(YearMonthIntervalType(YEAR, YEAR)).as("null_p_y"),
+        $"null_p".cast(YearMonthIntervalType(MONTH, MONTH)).as("null_p_m"))
     val constPeriod = udf((_: java.time.Period) => java.time.Period.ofYears(10))
-    val constResult = nullInput.select(constPeriod($"null_p").as("10_years"))
-    checkAnswer(constResult, Row(java.time.Period.ofYears(10)) :: Nil)
-    // TODO(SPARK-35777): Check all year-month interval types in UDF
-    assert(constResult.schema === new StructType().add("10_years", YearMonthIntervalType()))
+    val constResult = nullInput.select(constPeriod($"null_p").as("10_years"),
+      constPeriod($"null_p_y").as("p_y_10_years"), constPeriod($"null_p_m").as("pm_10_years"))
+    checkAnswer(constResult, Row(java.time.Period.ofYears(10),
+      java.time.Period.ofYears(10), java.time.Period.ofYears(10)) :: Nil)
+    assert(constResult.schema === new StructType()
+      .add("10_years", YearMonthIntervalType())
+      .add("p_y_10_years", YearMonthIntervalType(YEAR, MONTH))
+      .add("pm_10_years", YearMonthIntervalType(YEAR, MONTH)))
     // Error in the conversion of UDF result to the internal representation of year-month interval
     val overflowFunc = udf((p: java.time.Period) => p.plusYears(Long.MaxValue))
     val e = intercept[SparkException] {
