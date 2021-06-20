@@ -115,7 +115,7 @@ object ResolveUnion extends Rule[LogicalPlan] {
             // We will sort columns in the struct expression to make sure two sides of
             // union have consistent schema.
             aliased += foundAttr
-            Alias(addFields(foundAttr, target), foundAttr.name)()
+            Alias(sortStructFields(foundAttr), foundAttr.name)()
           case _ =>
             // We don't need/try to add missing fields if:
             // 1. The attributes of left and right side are the same struct type

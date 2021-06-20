@@ -924,22 +924,37 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-35756: unionByName support struct having same col names but different sequence") {
-    val df1 = Seq((1, Struct1(1, 2))).toDF("a", "b")
-    val df2 = Seq((1, Struct2(1, 2))).toDF("a", "b")
+    var df1 = Seq((1, Struct1(1, 2))).toDF("a", "b")
+    var df2 = Seq((1, Struct2(1, 2))).toDF("a", "b")
     val unionDF = df1.unionByName(df2)
     val expected = Row(1, Row(1, 2)) :: Row(1, Row(2, 1)) :: Nil
     val schema = "`a` INT,`b` STRUCT<`c1`: INT, `c2`: INT>"
     assert(unionDF.schema.toDDL === schema)
     checkAnswer(unionDF, expected)
+
+    // nested struct, inner struct having different col name
+    df1 = Seq((1, 2, UnionClass1d(1, 2, Struct3(1)))).toDF("a", "b", "c")
+    df2 = Seq((1, 2, UnionClass1e(1, 2, Struct4(1)))).toDF("a", "b", "c")
+    val errMsg = intercept[AnalysisException] {
+      df1.unionByName(df2)
+    }.getMessage
+    assert(errMsg.contains(
+      "Union can only be performed on tables with the compatible column types." +
+        " struct<c1:int,c2:int,c3:struct<c4:int>> <> struct<c1:int,c2:int,c3:struct<c3:int>>" +
+        " at the third column of the second table"))
   }
 }
 
 case class UnionClass1a(a: Int, b: Long, nested: UnionClass2)
 case class UnionClass1b(a: Int, b: Long, nested: UnionClass3)
 case class UnionClass1c(a: Int, b: Long, nested: UnionClass4)
+case class UnionClass1d(c1: Int, c2: Int, c3: Struct3)
+case class UnionClass1e(c2: Int, c1: Int, c3: Struct4)
 
 case class UnionClass2(a: Int, c: String)
 case class UnionClass3(a: Int, b: Long)
 case class UnionClass4(A: Int, b: Long)
 case class Struct1(c1: Int, c2: Int)
 case class Struct2(c2: Int, c1: Int)
+case class Struct3(c3: Int)
+case class Struct4(c4: Int)
