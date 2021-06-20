@@ -1111,6 +1111,7 @@ class SparkContext(object):
         --------
         >>> import threading
         >>> from time import sleep
+        >>> from pyspark import InheritableThread
         >>> result = "Not Set"
         >>> lock = threading.Lock()
         >>> def map_func(x):
@@ -1128,8 +1129,8 @@ class SparkContext(object):
         ...     sleep(5)
         ...     sc.cancelJobGroup("job_to_cancel")
         >>> suppress = lock.acquire()
-        >>> suppress = threading.Thread(target=start_job, args=(10,)).start()
-        >>> suppress = threading.Thread(target=stop_job).start()
+        >>> suppress = InheritableThread(target=start_job, args=(10,)).start()
+        >>> suppress = InheritableThread(target=stop_job).start()
         >>> suppress = lock.acquire()
         >>> print(result)
         Cancelled
