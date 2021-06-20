@@ -2914,9 +2914,8 @@ class DataFrameSuite extends QueryTest
         ("true", "false"),
         ("false", "true"),
         ("false", "false"),
-        ("true", "true"),
+        ("true", "true")
       ).foreach { case (subExprEliminationEnabled, codegenEnabled) =>
-
         withSQLConf(
           SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> subExprEliminationEnabled,
           SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegenEnabled,
