@@ -141,7 +141,7 @@
     <jetty.version>9.4.40.v20210413</jetty.version>
     <jakartaservlet.version>4.0.3</jakartaservlet.version>
     <chill.version>0.9.5</chill.version>
-    <ivy.version>2.4.0</ivy.version>
+    <ivy.version>2.5.0</ivy.version>
     <oro.version>2.0.8</oro.version>
     <!--
     If you changes codahale.metrics.version, you also need to change
