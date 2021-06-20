@@ -2909,7 +2909,7 @@ class DataFrameSuite extends QueryTest
   }
 
   test("SPARK-35688: subexpressions should be lazy evaluation in GeneratePredicate") {
-    withTempPath(dir => {
+    withTempPath { dir =>
       Seq(
         ("true", "false"),
         ("false", "true"),
@@ -2935,7 +2935,7 @@ class DataFrameSuite extends QueryTest
           )
         }
       }
-    })
+    }
   }
 }
 
