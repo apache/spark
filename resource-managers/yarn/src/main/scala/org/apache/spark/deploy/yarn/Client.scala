@@ -406,7 +406,7 @@ private[spark] class Client(
       } catch {
         // HADOOP-16878 changes the behavior to throw exceptions when src equals to dest
         case e: PathOperationException
-            if force && srcFs.makeQualified(srcPath).equals(destFs.makeQualified(destPath)) =>
+            if srcFs.makeQualified(srcPath).equals(destFs.makeQualified(destPath)) =>
       }
       destFs.setReplication(destPath, replication)
       destFs.setPermission(destPath, new FsPermission(APP_FILE_PERMISSION))
