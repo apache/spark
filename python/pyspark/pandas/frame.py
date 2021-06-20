@@ -4815,8 +4815,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         index_col: Optional[Union[str, List[str]]] = None,
         **options
     ) -> None:
-        """An alias for :func:`spark.to_spark_io`.
-        See :meth:`pyspark.pandas.DataFrame.spark.to_spark_io`.
+        """An alias for :func:`DataFrame.spark.to_spark_io`.
+        See :meth:`pyspark.pandas.spark.accessors.SparkFrameMethods.to_spark_io`.
 
         .. deprecated:: 3.2.0
             Use :func:`DataFrame.spark.to_spark_io` instead.
