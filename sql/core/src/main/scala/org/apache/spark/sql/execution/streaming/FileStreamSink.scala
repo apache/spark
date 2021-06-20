@@ -27,6 +27,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.io.FileCommitProtocol
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.{BasicWriteJobStatsTracker, FileFormat, FileFormatWriter}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.{SerializableConfiguration, Utils}
@@ -40,6 +41,11 @@ object FileStreamSink extends Logging {
    * be read.
    */
   def hasMetadata(path: Seq[String], hadoopConf: Configuration, sqlConf: SQLConf): Boolean = {
+    // User explicitly configs to ignore sink metadata.
+    if (sqlConf.fileStreamSinkMetadataIgnored) {
+      return false
+    }
+
     path match {
       case Seq(singlePath) =>
         val hdfsPath = new Path(singlePath)
@@ -82,23 +88,7 @@ object FileStreamSink extends Logging {
             false
         }
       if (legacyMetadataPathExists) {
-        throw new SparkException(
-          s"""Error: we detected a possible problem with the location of your "_spark_metadata"
-             |directory and you likely need to move it before restarting this query.
-             |
-             |Earlier version of Spark incorrectly escaped paths when writing out the
-             |"_spark_metadata" directory for structured streaming. While this was corrected in
-             |Spark 3.0, it appears that your query was started using an earlier version that
-             |incorrectly handled the "_spark_metadata" path.
-             |
-             |Correct "_spark_metadata" Directory: $metadataPath
-             |Incorrect "_spark_metadata" Directory: $legacyMetadataPath
-             |
-             |Please move the data from the incorrect directory to the correct one, delete the
-             |incorrect directory, and then restart this query. If you believe you are receiving
-             |this message in error, you can disable it with the SQL conf
-             |${SQLConf.STREAMING_CHECKPOINT_ESCAPED_PATH_CHECK_ENABLED.key}."""
-            .stripMargin)
+        throw QueryExecutionErrors.legacyMetadataPathExistsError(metadataPath, legacyMetadataPath)
       }
     }
   }
@@ -173,7 +163,7 @@ class FileStreamSink(
       val partitionColumns: Seq[Attribute] = partitionColumnNames.map { col =>
         val nameEquality = data.sparkSession.sessionState.conf.resolver
         data.logicalPlan.output.find(f => nameEquality(f.name, col)).getOrElse {
-          throw new RuntimeException(s"Partition column $col not found in schema ${data.schema}")
+          throw QueryExecutionErrors.partitionColumnNotFoundInSchemaError(col, data.schema)
         }
       }
       val qe = data.queryExecution

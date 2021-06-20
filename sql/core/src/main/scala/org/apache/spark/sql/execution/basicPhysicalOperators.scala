@@ -413,7 +413,7 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
   val start: Long = range.start
   val end: Long = range.end
   val step: Long = range.step
-  val numSlices: Int = range.numSlices.getOrElse(sqlContext.sparkSession.leafNodeDefaultParallelism)
+  val numSlices: Int = range.numSlices.getOrElse(session.leafNodeDefaultParallelism)
   val numElements: BigInt = range.numElements
   val isEmptyRange: Boolean = start == end || (start < end ^ 0 < step)
 
@@ -442,9 +442,9 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
 
   override def inputRDDs(): Seq[RDD[InternalRow]] = {
     val rdd = if (isEmptyRange) {
-      new EmptyRDD[InternalRow](sqlContext.sparkContext)
+      new EmptyRDD[InternalRow](sparkContext)
     } else {
-      sqlContext.sparkContext.parallelize(0 until numSlices, numSlices).map(i => InternalRow(i))
+      sparkContext.parallelize(0 until numSlices, numSlices).map(i => InternalRow(i))
     }
     rdd :: Nil
   }
@@ -608,10 +608,9 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
     if (isEmptyRange) {
-      new EmptyRDD[InternalRow](sqlContext.sparkContext)
+      new EmptyRDD[InternalRow](sparkContext)
     } else {
-      sqlContext
-        .sparkContext
+      sparkContext
         .parallelize(0 until numSlices, numSlices)
         .mapPartitionsWithIndex { (i, _) =>
           val partitionStart = (i * numElements) / numSlices * step + start
@@ -724,12 +723,13 @@ case class CoalesceExec(numPartitions: Int, child: SparkPlan) extends UnaryExecN
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
-    if (numPartitions == 1 && child.execute().getNumPartitions < 1) {
+    val rdd = child.execute()
+    if (numPartitions == 1 && rdd.getNumPartitions < 1) {
       // Make sure we don't output an RDD with 0 partitions, when claiming that we have a
       // `SinglePartition`.
       new CoalesceExec.EmptyRDDWithPartitions(sparkContext, numPartitions)
     } else {
-      child.execute().coalesce(numPartitions, shuffle = false)
+      rdd.coalesce(numPartitions, shuffle = false)
     }
   }
 
@@ -813,11 +813,11 @@ case class SubqueryExec(name: String, child: SparkPlan, maxNumRows: Option[Int] 
     // relationFuture is used in "doExecute". Therefore we can get the execution id correctly here.
     val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
     SQLExecution.withThreadLocalCaptured[Array[InternalRow]](
-      sqlContext.sparkSession,
+      session,
       SubqueryExec.executionContext) {
       // This will run in another thread. Set the execution id so that we can connect these jobs
       // with the correct execution.
-      SQLExecution.withExecutionId(sqlContext.sparkSession, executionId) {
+      SQLExecution.withExecutionId(session, executionId) {
         val beforeCollect = System.nanoTime()
         // Note that we use .executeCollect() because we don't want to convert data to Scala types
         val rows: Array[InternalRow] = if (maxNumRows.isDefined) {

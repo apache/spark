@@ -24,7 +24,7 @@ from multiprocessing.pool import ThreadPool
 
 import numpy as np
 
-from pyspark import keyword_only, since, SparkContext
+from pyspark import keyword_only, since, SparkContext, inheritable_thread_target
 from pyspark.ml import Estimator, Transformer, Model
 from pyspark.ml.common import inherit_doc, _py2java, _java2py
 from pyspark.ml.evaluation import Evaluator
@@ -729,7 +729,9 @@ class CrossValidator(Estimator, _CrossValidatorParams, HasParallelism, HasCollec
             validation = datasets[i][1].cache()
             train = datasets[i][0].cache()
 
-            tasks = _parallelFitTasks(est, train, eva, validation, epm, collectSubModelsParam)
+            tasks = map(
+                inheritable_thread_target,
+                _parallelFitTasks(est, train, eva, validation, epm, collectSubModelsParam))
             for j, metric, subModel in pool.imap_unordered(lambda f: f(), tasks):
                 metrics[j] += (metric / nFolds)
                 if collectSubModelsParam:
@@ -1261,7 +1263,9 @@ class TrainValidationSplit(Estimator, _TrainValidationSplitParams, HasParallelis
         if collectSubModelsParam:
             subModels = [None for i in range(numModels)]
 
-        tasks = _parallelFitTasks(est, train, eva, validation, epm, collectSubModelsParam)
+        tasks = map(
+            inheritable_thread_target,
+            _parallelFitTasks(est, train, eva, validation, epm, collectSubModelsParam))
         pool = ThreadPool(processes=min(self.getParallelism(), numModels))
         metrics = [None] * numModels
         for j, metric, subModel in pool.imap_unordered(lambda f: f(), tasks):

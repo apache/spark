@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import java.util.Locale
 
-import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
+import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.LocalTempView
 import org.apache.spark.sql.catalyst.expressions.Attribute
@@ -36,8 +36,6 @@ trait BaseCacheTableExec extends LeafV2CommandExec {
   def isLazy: Boolean
   def options: Map[String, String]
 
-  protected val sparkSession: SparkSession = sqlContext.sparkSession
-
   override def run(): Seq[InternalRow] = {
     val storageLevelKey = "storagelevel"
     val storageLevelValue =
@@ -48,14 +46,14 @@ trait BaseCacheTableExec extends LeafV2CommandExec {
     }
 
     if (storageLevelValue.nonEmpty) {
-      sparkSession.sharedState.cacheManager.cacheQuery(
-        sparkSession,
+      session.sharedState.cacheManager.cacheQuery(
+        session,
         planToCache,
         Some(relationName),
         StorageLevel.fromString(storageLevelValue.get))
     } else {
-      sparkSession.sharedState.cacheManager.cacheQuery(
-        sparkSession,
+      session.sharedState.cacheManager.cacheQuery(
+        session,
         planToCache,
         Some(relationName))
     }
@@ -81,7 +79,7 @@ case class CacheTableExec(
   override lazy val planToCache: LogicalPlan = relation
 
   override lazy val dataFrameForCachedPlan: DataFrame = {
-    Dataset.ofRows(sparkSession, planToCache)
+    Dataset.ofRows(session, planToCache)
   }
 }
 
@@ -105,13 +103,13 @@ case class CacheTableAsSelectExec(
       replace = false,
       viewType = LocalTempView,
       isAnalyzed = true
-    ).run(sparkSession)
+    ).run(session)
 
     dataFrameForCachedPlan.logicalPlan
   }
 
   override lazy val dataFrameForCachedPlan: DataFrame = {
-    sparkSession.table(tempViewName)
+    session.table(tempViewName)
   }
 }
 
@@ -119,8 +117,7 @@ case class UncacheTableExec(
     relation: LogicalPlan,
     cascade: Boolean) extends LeafV2CommandExec {
   override def run(): Seq[InternalRow] = {
-    val sparkSession = sqlContext.sparkSession
-    sparkSession.sharedState.cacheManager.uncacheQuery(sparkSession, relation, cascade)
+    session.sharedState.cacheManager.uncacheQuery(session, relation, cascade)
     Seq.empty
   }
 

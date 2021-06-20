@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils.millisToMicros
 import org.apache.spark.sql.catalyst.util.IntervalStringStyles.{ANSI_STYLE, HIVE_STYLE, IntervalStyle}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{DayTimeIntervalType, Decimal}
+import org.apache.spark.sql.types.{DayTimeIntervalType, Decimal, YearMonthIntervalType}
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 // The style of textual representation of intervals
@@ -106,7 +106,11 @@ object IntervalUtils {
   private val yearMonthLiteralRegex =
     (s"(?i)^INTERVAL\\s+([+|-])?'$yearMonthPatternString'\\s+YEAR\\s+TO\\s+MONTH$$").r
 
-  def castStringToYMInterval(input: UTF8String): Int = {
+  def castStringToYMInterval(
+      input: UTF8String,
+      // TODO(SPARK-35768): Take into account year-month interval fields in cast
+      startField: Byte,
+      endField: Byte): Int = {
     input.trimAll().toString match {
       case yearMonthRegex("-", year, month) => toYMInterval(year, month, -1)
       case yearMonthRegex(_, year, month) => toYMInterval(year, month, 1)
@@ -858,6 +862,19 @@ object IntervalUtils {
     new CalendarInterval(totalMonths, totalDays, micros)
   }
 
+  def makeDayTimeInterval(
+      days: Int,
+      hours: Int,
+      mins: Int,
+      secs: Decimal): Long = {
+    assert(secs.scale == 6, "Seconds fractional must have 6 digits for microseconds")
+    var micros = secs.toUnscaledLong
+    micros = Math.addExact(micros, Math.multiplyExact(days, MICROS_PER_DAY))
+    micros = Math.addExact(micros, Math.multiplyExact(hours, MICROS_PER_HOUR))
+    micros = Math.addExact(micros, Math.multiplyExact(mins, MICROS_PER_MINUTE))
+    micros
+  }
+
   // The amount of seconds that can cause overflow in the conversion to microseconds
   private final val minDurationSeconds = Math.floorDiv(Long.MinValue, MICROS_PER_SECOND)
 
@@ -875,17 +892,28 @@ object IntervalUtils {
    * @throws ArithmeticException If numeric overflow occurs
    */
   def durationToMicros(duration: Duration): Long = {
+    durationToMicros(duration, DayTimeIntervalType.SECOND)
+  }
+
+  def durationToMicros(duration: Duration, endField: Byte): Long = {
     val seconds = duration.getSeconds
-    if (seconds == minDurationSeconds) {
+    val micros = if (seconds == minDurationSeconds) {
       val microsInSeconds = (minDurationSeconds + 1) * MICROS_PER_SECOND
       val nanoAdjustment = duration.getNano
       assert(0 <= nanoAdjustment && nanoAdjustment < NANOS_PER_SECOND,
         "Duration.getNano() must return the adjustment to the seconds field " +
-        "in the range from 0 to 999999999 nanoseconds, inclusive.")
+          "in the range from 0 to 999999999 nanoseconds, inclusive.")
       Math.addExact(microsInSeconds, (nanoAdjustment - NANOS_PER_SECOND) / NANOS_PER_MICROS)
     } else {
       val microsInSeconds = Math.multiplyExact(seconds, MICROS_PER_SECOND)
       Math.addExact(microsInSeconds, duration.getNano / NANOS_PER_MICROS)
+    }
+
+    endField match {
+      case DayTimeIntervalType.DAY => micros - micros % MICROS_PER_DAY
+      case DayTimeIntervalType.HOUR => micros - micros % MICROS_PER_HOUR
+      case DayTimeIntervalType.MINUTE => micros - micros % MICROS_PER_MINUTE
+      case DayTimeIntervalType.SECOND => micros
     }
   }
 
@@ -908,8 +936,17 @@ object IntervalUtils {
    * @throws ArithmeticException If numeric overflow occurs
    */
   def periodToMonths(period: Period): Int = {
+    periodToMonths(period, YearMonthIntervalType.MONTH)
+  }
+
+  def periodToMonths(period: Period, endField: Byte): Int = {
     val monthsInYears = Math.multiplyExact(period.getYears, MONTHS_PER_YEAR)
-    Math.addExact(monthsInYears, period.getMonths)
+    val months = Math.addExact(monthsInYears, period.getMonths)
+    if (endField == YearMonthIntervalType.YEAR) {
+      months - months % MONTHS_PER_YEAR
+    } else {
+      months
+    }
   }
 
   /**
@@ -934,19 +971,36 @@ object IntervalUtils {
    *
    * @param months The number of months, positive or negative
    * @param style The style of textual representation of the interval
+   * @param startField The start field (YEAR or MONTH) which the interval comprises of.
+   * @param endField The end field (YEAR or MONTH) which the interval comprises of.
    * @return Year-month interval string
    */
-  def toYearMonthIntervalString(months: Int, style: IntervalStyle): String = {
+  def toYearMonthIntervalString(
+      months: Int,
+      style: IntervalStyle,
+      startField: Byte,
+      endField: Byte): String = {
     var sign = ""
     var absMonths: Long = months
     if (months < 0) {
       sign = "-"
       absMonths = -absMonths
     }
-    val payload = s"$sign${absMonths / MONTHS_PER_YEAR}-${absMonths % MONTHS_PER_YEAR}"
+    val year = s"$sign${absMonths / MONTHS_PER_YEAR}"
+    val yearAndMonth = s"$year-${absMonths % MONTHS_PER_YEAR}"
     style match {
-      case ANSI_STYLE => s"INTERVAL '$payload' YEAR TO MONTH"
-      case HIVE_STYLE => payload
+      case ANSI_STYLE =>
+        val formatBuilder = new StringBuilder("INTERVAL '")
+        if (startField == endField) {
+          startField match {
+            case YearMonthIntervalType.YEAR => formatBuilder.append(s"$year' YEAR")
+            case YearMonthIntervalType.MONTH => formatBuilder.append(s"$months' MONTH")
+          }
+        } else {
+          formatBuilder.append(s"$yearAndMonth' YEAR TO MONTH")
+        }
+        formatBuilder.toString
+      case HIVE_STYLE => s"$yearAndMonth"
     }
   }
 
@@ -956,6 +1010,8 @@ object IntervalUtils {
    *
    * @param micros The number of microseconds, positive or negative
    * @param style The style of textual representation of the interval
+   * @param startField The start field (DAY, HOUR, MINUTE, SECOND) which the interval comprises of.
+   * @param endField The end field (DAY, HOUR, MINUTE, SECOND) which the interval comprises of.
    * @return Day-time interval string
    */
   def toDayTimeIntervalString(

@@ -908,18 +908,21 @@ class UDFSuite extends QueryTest with SharedSparkSession {
     val incMonth = udf((p: java.time.Period) => p.plusMonths(1))
     val result = input.select(incMonth($"p").as("new_p"))
     checkAnswer(result, Row(java.time.Period.ofYears(1)) :: Nil)
-    assert(result.schema === new StructType().add("new_p", YearMonthIntervalType))
+    // TODO(SPARK-35777): Check all year-month interval types in UDF
+    assert(result.schema === new StructType().add("new_p", YearMonthIntervalType()))
     // UDF produces `null`
     val nullFunc = udf((_: java.time.Period) => null.asInstanceOf[java.time.Period])
     val nullResult = input.select(nullFunc($"p").as("null_p"))
     checkAnswer(nullResult, Row(null) :: Nil)
-    assert(nullResult.schema === new StructType().add("null_p", YearMonthIntervalType))
+    // TODO(SPARK-35777): Check all year-month interval types in UDF
+    assert(nullResult.schema === new StructType().add("null_p", YearMonthIntervalType()))
     // Input parameter of UDF is null
     val nullInput = Seq(null.asInstanceOf[java.time.Period]).toDF("null_p")
     val constPeriod = udf((_: java.time.Period) => java.time.Period.ofYears(10))
     val constResult = nullInput.select(constPeriod($"null_p").as("10_years"))
     checkAnswer(constResult, Row(java.time.Period.ofYears(10)) :: Nil)
-    assert(constResult.schema === new StructType().add("10_years", YearMonthIntervalType))
+    // TODO(SPARK-35777): Check all year-month interval types in UDF
+    assert(constResult.schema === new StructType().add("10_years", YearMonthIntervalType()))
     // Error in the conversion of UDF result to the internal representation of year-month interval
     val overflowFunc = udf((p: java.time.Period) => p.plusYears(Long.MaxValue))
     val e = intercept[SparkException] {

@@ -76,13 +76,6 @@ abstract class SubqueryExpression(
     AttributeSet.fromAttributeSets(outerAttrs.map(_.references))
   override def children: Seq[Expression] = outerAttrs ++ joinCond
   override def withNewPlan(plan: LogicalPlan): SubqueryExpression
-  override def semanticEquals(o: Expression): Boolean = o match {
-    case p: SubqueryExpression =>
-      this.getClass.getName.equals(p.getClass.getName) && plan.sameResult(p.plan) &&
-        children.length == p.children.length &&
-        children.zip(p.children).forall(p => p._1.semanticEquals(p._2))
-    case _ => false
-  }
 }
 
 object SubqueryExpression {
@@ -199,9 +192,7 @@ object SubExprUtils extends PredicateHelper {
     val outerExpressions = ArrayBuffer.empty[Expression]
     def collectOutRefs(input: Expression): Unit = input match {
       case a: AggregateExpression if containsOuter(a) =>
-        val outer = a.collect { case OuterReference(e) => e.toAttribute }
-        val local = a.references -- outer
-        if (local.nonEmpty) {
+        if (a.references.nonEmpty) {
           throw QueryCompilationErrors.mixedRefsInAggFunc(a.sql)
         } else {
           // Collect and update the sub-tree so that outer references inside this aggregate

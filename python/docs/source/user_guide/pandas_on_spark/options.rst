@@ -3,7 +3,7 @@ Options and settings
 ====================
 .. currentmodule:: pyspark.pandas
 
-Pandas APIs on Spark have an options system that lets you customize some aspects of its behaviour,
+Pandas API on Spark has an options system that lets you customize some aspects of its behaviour,
 display-related options being those the user is most likely to adjust.
 
 Options have a full "dotted-style", case-insensitive name (e.g. ``display.max_rows``).
@@ -92,7 +92,7 @@ are restored automatically when you exit the `with` block:
 Operations on different DataFrames
 ----------------------------------
 
-Pandas APIs on Spark disallow the operations on different DataFrames (or Series) by default to prevent expensive
+Pandas API on Spark disallows the operations on different DataFrames (or Series) by default to prevent expensive
 operations. It internally performs a join operation which can be expensive in general.
 
 This can be enabled by setting `compute.ops_on_diff_frames` to `True` to allow such cases.
@@ -134,8 +134,8 @@ See the examples below.
 Default Index type
 ------------------
 
-In pandas APIs on Spark, the default index is used in several cases, for instance,
-when Spark DataFrame is converted into pandas-on-Spark DataFrame. In this case, internally pandas APIs on Spark attache a
+In pandas API on Spark, the default index is used in several cases, for instance,
+when Spark DataFrame is converted into pandas-on-Spark DataFrame. In this case, internally pandas API on Spark attaches a
 default index into pandas-on-Spark DataFrame.
 
 There are several types of the default index that can be configured by `compute.default_index_type` as below:

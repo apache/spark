@@ -1,48 +1,47 @@
 == Physical Plan ==
-TakeOrderedAndProject (44)
-+- * Project (43)
-   +- * Filter (42)
-      +- * HashAggregate (41)
-         +- Exchange (40)
-            +- * HashAggregate (39)
-               +- * Project (38)
-                  +- * BroadcastHashJoin Inner BuildRight (37)
-                     :- * Project (22)
-                     :  +- * BroadcastHashJoin Inner BuildRight (21)
-                     :     :- * Project (15)
-                     :     :  +- * BroadcastHashJoin Inner BuildRight (14)
-                     :     :     :- * Project (9)
-                     :     :     :  +- * BroadcastHashJoin Inner BuildRight (8)
-                     :     :     :     :- * Filter (3)
-                     :     :     :     :  +- * ColumnarToRow (2)
-                     :     :     :     :     +- Scan parquet default.customer_address (1)
-                     :     :     :     +- BroadcastExchange (7)
-                     :     :     :        +- * Filter (6)
-                     :     :     :           +- * ColumnarToRow (5)
-                     :     :     :              +- Scan parquet default.customer (4)
-                     :     :     +- BroadcastExchange (13)
-                     :     :        +- * Filter (12)
-                     :     :           +- * ColumnarToRow (11)
-                     :     :              +- Scan parquet default.store_sales (10)
-                     :     +- BroadcastExchange (20)
-                     :        +- * Project (19)
-                     :           +- * Filter (18)
-                     :              +- * ColumnarToRow (17)
-                     :                 +- Scan parquet default.date_dim (16)
-                     +- BroadcastExchange (36)
-                        +- * Project (35)
-                           +- * Filter (34)
-                              +- * BroadcastHashJoin LeftOuter BuildRight (33)
-                                 :- * Filter (25)
-                                 :  +- * ColumnarToRow (24)
-                                 :     +- Scan parquet default.item (23)
-                                 +- BroadcastExchange (32)
-                                    +- * HashAggregate (31)
-                                       +- Exchange (30)
-                                          +- * HashAggregate (29)
-                                             +- * Filter (28)
-                                                +- * ColumnarToRow (27)
-                                                   +- Scan parquet default.item (26)
+TakeOrderedAndProject (43)
++- * Filter (42)
+   +- * HashAggregate (41)
+      +- Exchange (40)
+         +- * HashAggregate (39)
+            +- * Project (38)
+               +- * BroadcastHashJoin Inner BuildRight (37)
+                  :- * Project (22)
+                  :  +- * BroadcastHashJoin Inner BuildRight (21)
+                  :     :- * Project (15)
+                  :     :  +- * BroadcastHashJoin Inner BuildRight (14)
+                  :     :     :- * Project (9)
+                  :     :     :  +- * BroadcastHashJoin Inner BuildRight (8)
+                  :     :     :     :- * Filter (3)
+                  :     :     :     :  +- * ColumnarToRow (2)
+                  :     :     :     :     +- Scan parquet default.customer_address (1)
+                  :     :     :     +- BroadcastExchange (7)
+                  :     :     :        +- * Filter (6)
+                  :     :     :           +- * ColumnarToRow (5)
+                  :     :     :              +- Scan parquet default.customer (4)
+                  :     :     +- BroadcastExchange (13)
+                  :     :        +- * Filter (12)
+                  :     :           +- * ColumnarToRow (11)
+                  :     :              +- Scan parquet default.store_sales (10)
+                  :     +- BroadcastExchange (20)
+                  :        +- * Project (19)
+                  :           +- * Filter (18)
+                  :              +- * ColumnarToRow (17)
+                  :                 +- Scan parquet default.date_dim (16)
+                  +- BroadcastExchange (36)
+                     +- * Project (35)
+                        +- * Filter (34)
+                           +- * BroadcastHashJoin LeftOuter BuildRight (33)
+                              :- * Filter (25)
+                              :  +- * ColumnarToRow (24)
+                              :     +- Scan parquet default.item (23)
+                              +- BroadcastExchange (32)
+                                 +- * HashAggregate (31)
+                                    +- Exchange (30)
+                                       +- * HashAggregate (29)
+                                          +- * Filter (28)
+                                             +- * ColumnarToRow (27)
+                                                +- Scan parquet default.item (26)
 
 
 (1) Scan parquet default.customer_address
@@ -237,73 +236,69 @@ Input [2]: [ca_state#2, count#31]
 Keys [1]: [ca_state#2]
 Functions [1]: [count(1)]
 Aggregate Attributes [1]: [count(1)#33]
-Results [4]: [ca_state#2 AS state#34, count(1)#33 AS cnt#35, count(1)#33 AS count(1)#36, ca_state#2]
+Results [3]: [ca_state#2 AS state#34, count(1)#33 AS cnt#35, ca_state#2]
 
 (42) Filter [codegen id : 8]
-Input [4]: [state#34, cnt#35, count(1)#36, ca_state#2]
-Condition : (count(1)#36 >= 10)
+Input [3]: [state#34, cnt#35, ca_state#2]
+Condition : (cnt#35 >= 10)
 
-(43) Project [codegen id : 8]
-Output [3]: [state#34, cnt#35, ca_state#2]
-Input [4]: [state#34, cnt#35, count(1)#36, ca_state#2]
-
-(44) TakeOrderedAndProject
+(43) TakeOrderedAndProject
 Input [3]: [state#34, cnt#35, ca_state#2]
 Arguments: 100, [cnt#35 ASC NULLS FIRST, ca_state#2 ASC NULLS FIRST], [state#34, cnt#35]
 
 ===== Subqueries =====
 
 Subquery:1 Hosting operator id = 10 Hosting Expression = ss_sold_date_sk#8 IN dynamicpruning#9
-ReusedExchange (45)
+ReusedExchange (44)
 
 
-(45) ReusedExchange [Reuses operator id: 20]
+(44) ReusedExchange [Reuses operator id: 20]
 Output [1]: [d_date_sk#11]
 
 Subquery:2 Hosting operator id = 18 Hosting Expression = Subquery scalar-subquery#13, [id=#14]
-* HashAggregate (52)
-+- Exchange (51)
-   +- * HashAggregate (50)
-      +- * Project (49)
-         +- * Filter (48)
-            +- * ColumnarToRow (47)
-               +- Scan parquet default.date_dim (46)
+* HashAggregate (51)
++- Exchange (50)
+   +- * HashAggregate (49)
+      +- * Project (48)
+         +- * Filter (47)
+            +- * ColumnarToRow (46)
+               +- Scan parquet default.date_dim (45)
 
 
-(46) Scan parquet default.date_dim
-Output [3]: [d_month_seq#37, d_year#38, d_moy#39]
+(45) Scan parquet default.date_dim
+Output [3]: [d_month_seq#36, d_year#37, d_moy#38]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
 PushedFilters: [IsNotNull(d_year), IsNotNull(d_moy), EqualTo(d_year,2000), EqualTo(d_moy,1)]
 ReadSchema: struct<d_month_seq:int,d_year:int,d_moy:int>
 
-(47) ColumnarToRow [codegen id : 1]
-Input [3]: [d_month_seq#37, d_year#38, d_moy#39]
+(46) ColumnarToRow [codegen id : 1]
+Input [3]: [d_month_seq#36, d_year#37, d_moy#38]
 
-(48) Filter [codegen id : 1]
-Input [3]: [d_month_seq#37, d_year#38, d_moy#39]
-Condition : (((isnotnull(d_year#38) AND isnotnull(d_moy#39)) AND (d_year#38 = 2000)) AND (d_moy#39 = 1))
+(47) Filter [codegen id : 1]
+Input [3]: [d_month_seq#36, d_year#37, d_moy#38]
+Condition : (((isnotnull(d_year#37) AND isnotnull(d_moy#38)) AND (d_year#37 = 2000)) AND (d_moy#38 = 1))
 
-(49) Project [codegen id : 1]
-Output [1]: [d_month_seq#37]
-Input [3]: [d_month_seq#37, d_year#38, d_moy#39]
+(48) Project [codegen id : 1]
+Output [1]: [d_month_seq#36]
+Input [3]: [d_month_seq#36, d_year#37, d_moy#38]
 
-(50) HashAggregate [codegen id : 1]
-Input [1]: [d_month_seq#37]
-Keys [1]: [d_month_seq#37]
+(49) HashAggregate [codegen id : 1]
+Input [1]: [d_month_seq#36]
+Keys [1]: [d_month_seq#36]
 Functions: []
 Aggregate Attributes: []
-Results [1]: [d_month_seq#37]
+Results [1]: [d_month_seq#36]
 
-(51) Exchange
-Input [1]: [d_month_seq#37]
-Arguments: hashpartitioning(d_month_seq#37, 5), ENSURE_REQUIREMENTS, [id=#40]
+(50) Exchange
+Input [1]: [d_month_seq#36]
+Arguments: hashpartitioning(d_month_seq#36, 5), ENSURE_REQUIREMENTS, [id=#39]
 
-(52) HashAggregate [codegen id : 2]
-Input [1]: [d_month_seq#37]
-Keys [1]: [d_month_seq#37]
+(51) HashAggregate [codegen id : 2]
+Input [1]: [d_month_seq#36]
+Keys [1]: [d_month_seq#36]
 Functions: []
 Aggregate Attributes: []
-Results [1]: [d_month_seq#37]
+Results [1]: [d_month_seq#36]
 
 

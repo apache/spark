@@ -325,8 +325,6 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
    */
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithPruning(
     _.containsPattern(PLAN_EXPRESSION)) {
-    case f @ Filter(_, a: Aggregate) =>
-      rewriteSubQueries(f, Seq(a, a.child))
     case j: LateralJoin =>
       val newPlan = rewriteSubQueries(j, j.children)
       // Since a lateral join's output depends on its left child output and its lateral subquery's
