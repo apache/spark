@@ -1505,6 +1505,22 @@ abstract class DynamicPartitionPruningSuiteBase
       checkAnswer(df, Row(15, 15) :: Nil)
     }
   }
+
+  test("SPARK-35568: Fix UnsupportedOperationException when enabling both AQE and DPP") {
+    val df = sql(
+      """
+        |SELECT s.store_id, f.product_id
+        |FROM (SELECT DISTINCT * FROM fact_sk) f
+        |  JOIN (SELECT
+        |          *,
+        |          ROW_NUMBER() OVER (PARTITION BY store_id ORDER BY state_province DESC) AS rn
+        |        FROM dim_store) s
+        |   ON f.store_id = s.store_id
+        |WHERE s.country = 'DE' AND s.rn = 1
+        |""".stripMargin)
+
+    checkAnswer(df, Row(3, 2) :: Row(3, 2) :: Row(3, 2) :: Row(3, 2) :: Nil)
+  }
 }
 
 class DynamicPartitionPruningSuiteAEOff extends DynamicPartitionPruningSuiteBase

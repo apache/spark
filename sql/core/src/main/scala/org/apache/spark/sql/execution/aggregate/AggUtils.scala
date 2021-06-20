@@ -63,7 +63,7 @@ object AggUtils {
         resultExpressions = resultExpressions,
         child = child)
     } else {
-      val objectHashEnabled = child.sqlContext.conf.useObjectHashAggregation
+      val objectHashEnabled = child.conf.useObjectHashAggregation
       val useObjectHash = Aggregate.supportsObjectHashAggregate(aggregateExpressions)
 
       if (objectHashEnabled && useObjectHash) {

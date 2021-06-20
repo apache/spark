@@ -184,8 +184,6 @@ abstract class TypeCoercionBase {
         }
       }
     }
-
-    override val ruleName: String = rules.map(_.ruleName).mkString("Combined[", ", ", "]")
   }
 
   /**
@@ -1157,21 +1155,20 @@ trait TypeCoercionRule extends Rule[LogicalPlan] with Logging {
    */
   def apply(plan: LogicalPlan): LogicalPlan = {
     val typeCoercionFn = transform
-    def rewrite(plan: LogicalPlan): LogicalPlan = {
-      val withNewChildren = plan.mapChildren(rewrite)
-      if (!withNewChildren.childrenResolved) {
-        withNewChildren
-      } else {
-        // Only propagate types if the children have changed.
-        val withPropagatedTypes = if (withNewChildren ne plan) {
-          propagateTypes(withNewChildren)
+    plan.transformUpWithBeforeAndAfterRuleOnChildren(!_.analyzed, ruleId) {
+      case (beforeMapChildren, afterMapChildren) =>
+        if (!afterMapChildren.childrenResolved) {
+          afterMapChildren
         } else {
-          plan
+          // Only propagate types if the children have changed.
+          val withPropagatedTypes = if (beforeMapChildren ne afterMapChildren) {
+            propagateTypes(afterMapChildren)
+          } else {
+            beforeMapChildren
+          }
+          withPropagatedTypes.transformExpressionsUp(typeCoercionFn)
         }
-        withPropagatedTypes.transformExpressionsUp(typeCoercionFn)
-      }
     }
-    rewrite(plan)
   }
 
   def transform: PartialFunction[Expression, Expression]

@@ -380,7 +380,7 @@ public abstract class DBIteratorSuite {
 
   @Test
   public void testRefWithIntNaturalKey() throws Exception {
-    LevelDBSuite.IntKeyType i = new LevelDBSuite.IntKeyType();
+    IntKeyType i = new IntKeyType();
     i.key = 1;
     i.id = "1";
     i.values = Arrays.asList("1");

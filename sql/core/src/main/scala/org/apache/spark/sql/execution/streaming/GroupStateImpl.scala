@@ -22,6 +22,7 @@ import java.util.concurrent.TimeUnit
 
 import org.apache.spark.sql.catalyst.plans.logical.{EventTimeTimeout, ProcessingTimeTimeout}
 import org.apache.spark.sql.catalyst.util.IntervalUtils
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.streaming.GroupStateImpl._
 import org.apache.spark.sql.streaming.{GroupState, GroupStateTimeout}
 import org.apache.spark.unsafe.types.UTF8String
@@ -59,7 +60,7 @@ private[sql] class GroupStateImpl[S] private(
     if (defined) {
       value
     } else {
-      throw new NoSuchElementException("State is either not defined or has already been removed")
+      throw QueryExecutionErrors.stateNotDefinedOrAlreadyRemovedError()
     }
   }
 
@@ -89,9 +90,7 @@ private[sql] class GroupStateImpl[S] private(
 
   override def setTimeoutDuration(durationMs: Long): Unit = {
     if (timeoutConf != ProcessingTimeTimeout) {
-      throw new UnsupportedOperationException(
-        "Cannot set timeout duration without enabling processing time timeout in " +
-          "[map|flatMap]GroupsWithState")
+      throw QueryExecutionErrors.cannotSetTimeoutDurationError()
     }
     if (durationMs <= 0) {
       throw new IllegalArgumentException("Timeout duration must be positive")
@@ -133,9 +132,7 @@ private[sql] class GroupStateImpl[S] private(
 
   override def getCurrentWatermarkMs(): Long = {
     if (!watermarkPresent) {
-      throw new UnsupportedOperationException(
-        "Cannot get event time watermark timestamp without setting watermark before " +
-          "[map|flatMap]GroupsWithState")
+      throw QueryExecutionErrors.cannotGetEventTimeWatermarkError()
     }
     eventTimeWatermarkMs
   }
@@ -170,9 +167,7 @@ private[sql] class GroupStateImpl[S] private(
 
   private def checkTimeoutTimestampAllowed(): Unit = {
     if (timeoutConf != EventTimeTimeout) {
-      throw new UnsupportedOperationException(
-        "Cannot set timeout timestamp without enabling event time timeout in " +
-          "[map|flatMapGroupsWithState")
+      throw QueryExecutionErrors.cannotSetTimeoutTimestampError()
     }
   }
 }

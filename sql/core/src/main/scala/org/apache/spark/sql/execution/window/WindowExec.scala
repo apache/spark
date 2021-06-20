@@ -114,8 +114,8 @@ case class WindowExec(
     // Unwrap the window expressions and window frame factories from the map.
     val expressions = windowFrameExpressionFactoryPairs.flatMap(_._1)
     val factories = windowFrameExpressionFactoryPairs.map(_._2).toArray
-    val inMemoryThreshold = sqlContext.conf.windowExecBufferInMemoryThreshold
-    val spillThreshold = sqlContext.conf.windowExecBufferSpillThreshold
+    val inMemoryThreshold = conf.windowExecBufferInMemoryThreshold
+    val spillThreshold = conf.windowExecBufferSpillThreshold
 
     // Start processing.
     child.execute().mapPartitions { stream =>

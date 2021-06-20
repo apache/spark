@@ -46,8 +46,8 @@ case class UpdatingSessionsExec(
     groupingWithoutSessionExpression.map(_.toAttribute)
 
   override protected def doExecute(): RDD[InternalRow] = {
-    val inMemoryThreshold = sqlContext.conf.sessionWindowBufferInMemoryThreshold
-    val spillThreshold = sqlContext.conf.sessionWindowBufferSpillThreshold
+    val inMemoryThreshold = conf.sessionWindowBufferInMemoryThreshold
+    val spillThreshold = conf.sessionWindowBufferSpillThreshold
 
     child.execute().mapPartitions { iter =>
       new UpdatingSessionsIterator(iter, groupingExpression, sessionExpression,

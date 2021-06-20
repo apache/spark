@@ -109,8 +109,8 @@ case class FlatMapGroupsWithStateExec(
       groupingAttributes.toStructType,
       stateManager.stateSchema,
       indexOrdinal = None,
-      sqlContext.sessionState,
-      Some(sqlContext.streams.stateStoreCoordinator)) { case (store, iter) =>
+      session.sessionState,
+      Some(session.streams.stateStoreCoordinator)) { case (store, iter) =>
         val allUpdatesTimeMs = longMetric("allUpdatesTimeMs")
         val commitTimeMs = longMetric("commitTimeMs")
 

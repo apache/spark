@@ -688,11 +688,11 @@ class DatetimeIndex(Index):
 
         psdf = self.to_frame()[[]]
         id_column_name = verify_temp_column_name(psdf, "__id_column__")
-        psdf = psdf.koalas.attach_id_column("distributed-sequence", id_column_name)
+        psdf = psdf.pandas_on_spark.attach_id_column("distributed-sequence", id_column_name)
         with ps.option_context("compute.default_index_type", "distributed"):
             # The attached index in the statement below will be dropped soon,
             # so we enforce “distributed” default index type
-            psdf = psdf.koalas.apply_batch(pandas_between_time)
+            psdf = psdf.pandas_on_spark.apply_batch(pandas_between_time)
         return ps.Index(first_series(psdf).rename(self.name))
 
     def indexer_at_time(self, time: Union[datetime.time, str], asof: bool = False) -> Index:
@@ -734,11 +734,11 @@ class DatetimeIndex(Index):
 
         psdf = self.to_frame()[[]]
         id_column_name = verify_temp_column_name(psdf, "__id_column__")
-        psdf = psdf.koalas.attach_id_column("distributed-sequence", id_column_name)
+        psdf = psdf.pandas_on_spark.attach_id_column("distributed-sequence", id_column_name)
         with ps.option_context("compute.default_index_type", "distributed"):
             # The attached index in the statement below will be dropped soon,
             # so we enforce “distributed” default index type
-            psdf = psdf.koalas.apply_batch(pandas_at_time)
+            psdf = psdf.pandas_on_spark.apply_batch(pandas_at_time)
         return ps.Index(first_series(psdf).rename(self.name))
 
 

@@ -724,17 +724,17 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
     val (_, compiledCodeStats) = try {
       CodeGenerator.compile(cleanedSource)
     } catch {
-      case NonFatal(_) if !Utils.isTesting && sqlContext.conf.codegenFallback =>
+      case NonFatal(_) if !Utils.isTesting && conf.codegenFallback =>
         // We should already saw the error message
         logWarning(s"Whole-stage codegen disabled for plan (id=$codegenStageId):\n $treeString")
         return child.execute()
     }
 
     // Check if compiled code has a too large function
-    if (compiledCodeStats.maxMethodCodeSize > sqlContext.conf.hugeMethodLimit) {
+    if (compiledCodeStats.maxMethodCodeSize > conf.hugeMethodLimit) {
       logInfo(s"Found too long generated codes and JIT optimization might not work: " +
         s"the bytecode size (${compiledCodeStats.maxMethodCodeSize}) is above the limit " +
-        s"${sqlContext.conf.hugeMethodLimit}, and the whole-stage codegen was disabled " +
+        s"${conf.hugeMethodLimit}, and the whole-stage codegen was disabled " +
         s"for this plan (id=$codegenStageId). To avoid this, you can raise the limit " +
         s"`${SQLConf.WHOLESTAGE_HUGE_METHOD_LIMIT.key}`:\n$treeString")
       return child.execute()
@@ -932,6 +932,10 @@ case class CollapseCodegenStages(
         plan.withNewChildren(plan.children.map(insertWholeStageCodegen))
       case plan: LocalTableScanExec =>
         // Do not make LogicalTableScanExec the root of WholeStageCodegen
+        // to support the fast driver-local collect/take paths.
+        plan
+      case plan: CommandResultExec =>
+        // Do not make CommandResultExec the root of WholeStageCodegen
         // to support the fast driver-local collect/take paths.
         plan
       case plan: CodegenSupport if supportCodegen(plan) =>

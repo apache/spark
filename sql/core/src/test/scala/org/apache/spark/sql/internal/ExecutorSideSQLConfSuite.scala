@@ -192,8 +192,7 @@ class ExecutorSideSQLConfSuite extends SparkFunSuite with SQLTestUtils {
 
 case class SQLConfAssertPlan(confToCheck: Seq[(String, String)]) extends LeafExecNode {
   override protected def doExecute(): RDD[InternalRow] = {
-    sqlContext
-      .sparkContext
+    sparkContext
       .parallelize(0 until 2, 2)
       .mapPartitions { it =>
         val confs = SQLConf.get
