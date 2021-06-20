@@ -15,20 +15,32 @@
  * limitations under the License.
  */
 
-package org.apache.spark.network.client;
+package org.apache.spark.network.shuffle;
 
-import java.nio.ByteBuffer;
+import java.util.EventListener;
 
 /**
- * Callback for the result of a single RPC. This will be invoked once with either success or
- * failure.
+ * Listener for receiving success or failure events when fetching meta of merged blocks.
+ *
+ * @since 3.2.0
  */
-public interface RpcResponseCallback extends BaseResponseCallback {
+public interface MergedBlocksMetaListener extends EventListener {
+
   /**
-   * Successful serialized result from server.
+   * Called after successfully receiving the meta of a merged block.
    *
-   * After `onSuccess` returns, `response` will be recycled and its content will become invalid.
-   * Please copy the content of `response` if you want to use it after `onSuccess` returns.
+   * @param shuffleId shuffle id.
+   * @param reduceId reduce id.
+   * @param meta contains meta information of a merged block.
    */
-  void onSuccess(ByteBuffer response);
+  void onSuccess(int shuffleId, int reduceId, MergedBlockMeta meta);
+
+  /**
+   * Called when there is an exception while fetching the meta of a merged block.
+   *
+   * @param shuffleId shuffle id.
+   * @param reduceId reduce id.
+   * @param exception exception getting chunk counts.
+   */
+  void onFailure(int shuffleId, int reduceId, Throwable exception);
 }
