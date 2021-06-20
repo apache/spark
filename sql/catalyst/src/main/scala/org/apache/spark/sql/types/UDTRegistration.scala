@@ -77,10 +77,10 @@ object UDTRegistration extends Serializable with Logging {
         if (classOf[UserDefinedType[_]].isAssignableFrom(udtClass)) {
           udtClass
         } else {
-          throw QueryExecutionErrors.notUDFError(udtClass.getName, userClass)
+          throw QueryExecutionErrors.notUserDefinedTypeError(udtClass.getName, userClass)
         }
       } else {
-        throw QueryExecutionErrors.cannotLoadUDFError(udtClassName, userClass)
+        throw QueryExecutionErrors.cannotLoadUserDefinedTypeError(udtClassName, userClass)
       }
     }
   }

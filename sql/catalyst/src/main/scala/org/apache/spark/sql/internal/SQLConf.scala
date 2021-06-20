@@ -217,7 +217,7 @@ object SQLConf {
         if (conf != null) {
           conf
         } else if (Utils.isTesting) {
-          throw QueryExecutionErrors.cannotGetSQLCOnfInSchedulerEventLoopThread()
+          throw QueryExecutionErrors.cannotGetSQLConfInSchedulerEventLoopThreadError()
         } else {
           confGetter.get()()
         }
@@ -4132,7 +4132,7 @@ class SQLConf extends Serializable with Logging {
     SQLConf.removedSQLConfigs.get(key).foreach {
       case RemovedConfig(configName, version, defaultValue, comment) =>
         if (value != defaultValue) {
-          throw QueryCompilationErrors.configRemovedInVersion(configName, version, comment)
+          throw QueryCompilationErrors.configRemovedInVersionError(configName, version, comment)
         }
     }
   }

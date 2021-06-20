@@ -1648,7 +1648,10 @@ private[spark] object QueryCompilationErrors {
     new AnalysisException(s"'interval $startFieldName to $endFieldName' is invalid.")
   }
 
-  def configRemovedInVersion(configName: String, version: String, comment: String): Throwable = {
+  def configRemovedInVersionError(
+      configName: String,
+      version: String,
+      comment: String): Throwable = {
     new AnalysisException(
       s"The SQL config '$configName' was removed in the version $version. $comment")
   }
@@ -1675,11 +1678,11 @@ private[spark] object QueryCompilationErrors {
        """.stripMargin.replaceAll("\n", " "))
   }
 
-  def keyNotValidColumnInTableError(key: String, tblName: String): Throwable = {
+  def invalidPartitionColumnKeyInTableError(key: String, tblName: String): Throwable = {
     new AnalysisException(s"$key is not a valid partition column in table $tblName.")
   }
 
-  def partitionSpecNotValidError(
+  def invalidPartitionSpecError(
       specKeys: String,
       partitionColumnNames: Seq[String],
       tableName: String): Throwable = {
@@ -1691,7 +1694,7 @@ private[spark] object QueryCompilationErrors {
       """.stripMargin.replaceAll("\n", " "))
   }
 
-  def foundDuplicateColError(colType: String, duplicateCol: Seq[String]): Throwable = {
+  def foundDuplicateColumnError(colType: String, duplicateCol: Seq[String]): Throwable = {
     new AnalysisException(
       s"Found duplicate column(s) $colType: ${duplicateCol.sorted.mkString(", ")}")
   }

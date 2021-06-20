@@ -54,14 +54,14 @@ private[sql] object Catalogs {
     try {
       val pluginClass = loader.loadClass(pluginClassName)
       if (!classOf[CatalogPlugin].isAssignableFrom(pluginClass)) {
-        throw QueryExecutionErrors.catalogPluginClassNotImplementError(name, pluginClassName)
+        throw QueryExecutionErrors.catalogPluginClassNotImplementedError(name, pluginClassName)
       }
       val plugin = pluginClass.getDeclaredConstructor().newInstance().asInstanceOf[CatalogPlugin]
       plugin.initialize(name, catalogOptions(name, conf))
       plugin
     } catch {
       case _: ClassNotFoundException =>
-        throw QueryExecutionErrors.catalogPluginClassNotFindForCatalogError(name, pluginClassName)
+        throw QueryExecutionErrors.catalogPluginClassNotFoundForCatalogError(name, pluginClassName)
       case e: NoSuchMethodException =>
         throw QueryExecutionErrors.catalogFailToFindPublicNoArgConstructorError(
           name, pluginClassName, e)
@@ -69,10 +69,10 @@ private[sql] object Catalogs {
         throw QueryExecutionErrors.catalogFailToCallPublicNoArgConstructorError(
           name, pluginClassName, e)
       case e: InstantiationException =>
-        throw QueryExecutionErrors.catalogCannotInstantiateAbstractPluginClassError(
+        throw QueryExecutionErrors.cannotInstantiateAbstractCatalogPluginClassError(
           name, pluginClassName, e)
       case e: InvocationTargetException =>
-        throw QueryExecutionErrors.failInstantiatingConstructorError(name, pluginClassName, e)
+        throw QueryExecutionErrors.failedToInstantiateConstructorForCatalogError(name, pluginClassName, e)
     }
   }
 

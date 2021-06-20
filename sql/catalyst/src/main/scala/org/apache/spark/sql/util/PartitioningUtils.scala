@@ -42,7 +42,7 @@ private[sql] object PartitioningUtils {
     val rawSchema = CharVarcharUtils.getRawSchema(partCols)
     val normalizedPartSpec = partitionSpec.toSeq.map { case (key, value) =>
       val normalizedFiled = rawSchema.find(f => resolver(f.name, key)).getOrElse {
-        throw QueryCompilationErrors.keyNotValidColumnInTableError(key, tblName)
+        throw QueryCompilationErrors.invalidPartitionColumnKeyInTableError(key, tblName)
       }
 
       val normalizedVal =
@@ -92,7 +92,7 @@ private[sql] object PartitioningUtils {
       partitionColumnNames: Seq[String]): Unit = {
     val defined = partitionColumnNames.sorted
     if (spec.keys.toSeq.sorted != defined) {
-      throw QueryCompilationErrors.partitionSpecNotValidError(spec.keys.mkString(", "),
+      throw QueryCompilationErrors.invalidPartitionSpecError(spec.keys.mkString(", "),
         partitionColumnNames, tableName)
     }
   }

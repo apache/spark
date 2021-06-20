@@ -1429,12 +1429,14 @@ object QueryExecutionErrors {
       s"Catalog '$name' plugin class not found: spark.sql.catalog.$name is not defined")
   }
 
-  def catalogPluginClassNotImplementError(name: String, pluginClassName: String): Throwable = {
+  def catalogPluginClassNotImplementedError(name: String, pluginClassName: String): Throwable = {
     new SparkException(
       s"Plugin class for catalog '$name' does not implement CatalogPlugin: $pluginClassName")
   }
 
-  def catalogPluginClassNotFindForCatalogError(name: String, pluginClassName: String): Throwable = {
+  def catalogPluginClassNotFoundForCatalogError(
+      name: String,
+      pluginClassName: String): Throwable = {
     new SparkException(s"Cannot find catalog plugin class for catalog '$name': $pluginClassName")
   }
 
@@ -1454,7 +1456,7 @@ object QueryExecutionErrors {
       s"Failed to call public no-arg constructor for catalog '$name': $pluginClassName)", e)
   }
 
-  def catalogCannotInstantiateAbstractPluginClassError(
+  def cannotInstantiateAbstractCatalogPluginClassError(
       name: String,
       pluginClassName: String,
       e: Exception): Throwable = {
@@ -1462,7 +1464,7 @@ object QueryExecutionErrors {
       s"catalog '$name': $pluginClassName", e.getCause)
   }
 
-  def failInstantiatingConstructorError(
+  def failedToInstantiateConstructorForCatalogError(
       name: String,
       pluginClassName: String,
       e: Exception): Throwable = {
@@ -1482,11 +1484,11 @@ object QueryExecutionErrors {
     new UnsupportedOperationException("Cannot mutate ReadOnlySQLConf.")
   }
 
-  def cannotCloneCopyReadOnlySQLConfError(): Throwable = {
+  def cannotCloneOrCopyReadOnlySQLConfError(): Throwable = {
     new UnsupportedOperationException("Cannot clone/copy ReadOnlySQLConf.")
   }
 
-  def cannotGetSQLCOnfInSchedulerEventLoopThread(): Throwable = {
+  def cannotGetSQLConfInSchedulerEventLoopThreadError(): Throwable = {
     new RuntimeException("Cannot get SQLConf inside scheduler event loop thread.")
   }
 
@@ -1494,20 +1496,20 @@ object QueryExecutionErrors {
     new UnsupportedOperationException
   }
 
-  def nullLiteralsCannotCastToError(name: String): Throwable = {
+  def nullLiteralsCannotBeCastedError(name: String): Throwable = {
     new UnsupportedOperationException(s"null literals can't be casted to $name")
   }
 
-  def notUDFError(name: String, userClass: String): Throwable = {
+  def notUserDefinedTypeError(name: String, userClass: String): Throwable = {
     new SparkException(s"$name is not an UserDefinedType. Please make sure registering " +
         s"an UserDefinedType for ${userClass}")
   }
 
-  def cannotLoadUDFError(name: String, userClass: String): Throwable = {
+  def cannotLoadUserDefinedTypeError(name: String, userClass: String): Throwable = {
     new SparkException(s"Can not load in UserDefinedType ${name} for user class ${userClass}.")
   }
 
-  def timestampTypeMustSupplyTZidError(): Throwable = {
+  def timeZoneIdNotSpecifiedForTimestampTypeError(): Throwable = {
     new UnsupportedOperationException(
       s"${TimestampType.catalogString} must supply timeZoneId parameter")
   }

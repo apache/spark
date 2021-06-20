@@ -54,11 +54,11 @@ class ReadOnlySQLConf(context: TaskContext) extends SQLConf {
   }
 
   override def clone(): SQLConf = {
-    throw QueryExecutionErrors.cannotCloneCopyReadOnlySQLConfError()
+    throw QueryExecutionErrors.cannotCloneOrCopyReadOnlySQLConfError()
   }
 
   override def copy(entries: (ConfigEntry[_], Any)*): SQLConf = {
-    throw QueryExecutionErrors.cannotCloneCopyReadOnlySQLConfError()
+    throw QueryExecutionErrors.cannotCloneOrCopyReadOnlySQLConfError()
   }
 }
 

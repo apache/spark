@@ -119,7 +119,7 @@ private[spark] object SchemaUtils {
       val duplicateColumns = names.groupBy(identity).collect {
         case (x, ys) if ys.length > 1 => s"`$x`"
       }
-      throw QueryCompilationErrors.foundDuplicateColError(colType, duplicateColumns.toSeq)
+      throw QueryCompilationErrors.foundDuplicateColumnError(colType, duplicateColumns.toSeq)
     }
   }
 
