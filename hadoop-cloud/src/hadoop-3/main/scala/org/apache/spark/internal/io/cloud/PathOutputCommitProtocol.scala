@@ -134,7 +134,7 @@ class PathOutputCommitProtocol(
     val parent = dir.map {
       d => new Path(workDir, d)
     }.getOrElse(workDir)
-    val file = new Path(parent, getFilename(taskContext, ext))
+    val file = new Path(parent, getFilename(ext))
     logTrace(s"Creating task file $file for dir $dir and ext $ext")
     file.toString
   }

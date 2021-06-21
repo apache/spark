@@ -29,6 +29,7 @@ import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.output.FileOutputCommitter
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 
+import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.mapred.SparkHadoopMapRedUtil
 
@@ -118,7 +119,7 @@ class HadoopMapReduceCommitProtocol(
 
   override def newTaskTempFile(
       taskContext: TaskAttemptContext, dir: Option[String], ext: String): String = {
-    val filename = getFilename(taskContext, ext)
+    val filename = getFilename(ext)
 
     val stagingDir: Path = committer match {
       // For FileOutputCommitter it has its own staging path called "work path".
@@ -141,7 +142,7 @@ class HadoopMapReduceCommitProtocol(
 
   override def newTaskTempFileAbsPath(
       taskContext: TaskAttemptContext, absoluteDir: String, ext: String): String = {
-    val filename = getFilename(taskContext, ext)
+    val filename = getFilename(ext)
     val absOutputPath = new Path(absoluteDir, filename).toString
 
     // Include a UUID here to prevent file collisions for one task writing to different dirs.
@@ -152,12 +153,21 @@ class HadoopMapReduceCommitProtocol(
     tmpOutputPath
   }
 
-  protected def getFilename(taskContext: TaskAttemptContext, ext: String): String = {
-    // The file name looks like part-00000-2dd664f9-d2c4-4ffe-878f-c6c70c1fb0cb_00003-c000.parquet
-    // Note that %05d does not truncate the split number, so if we have more than 100000 tasks,
+  protected def getFilename(ext: String): String = {
+    // Use the Spark task attempt ID which is unique within the write job, so that file writes never
+    // collide if the file name also includes job ID. The Hadoop task id is equivalent to Spark's
+    // partitionId, which is not unique within the write job, for cases like task retry or
+    // speculative tasks.
+    // NOTE: this is not necessary for certain Hadoop output committers, as they will create a
+    // unique staging directory for each task attempt, so we don't need to worry about file name
+    // collision between different task attempts, and using Hadoop task ID/Spark partition ID is
+    // also fine. For extra safety and consistency with the streaming side, we always use the
+    // Spark task attempt ID here.
+    val taskId = TaskContext.get.taskAttemptId()
+    // The file name looks like part-00000-2dd664f9-d2c4-4ffe-878f-c6c70c1fb0cb_00003.gz.parquet
+    // Note that %05d does not truncate the taskId, so if we have more than 100000 tasks,
     // the file name is fine and won't overflow.
-    val split = taskContext.getTaskAttemptID.getTaskID.getId
-    f"part-$split%05d-$jobId$ext"
+    f"part-$taskId%05d-$jobId$ext"
   }
 
   override def setupJob(jobContext: JobContext): Unit = {

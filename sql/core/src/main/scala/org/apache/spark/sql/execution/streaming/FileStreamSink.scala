@@ -147,9 +147,13 @@ class FileStreamSink(
     if (batchId <= fileLog.getLatestBatchId().getOrElse(-1L)) {
       logInfo(s"Skipping already committed batch $batchId")
     } else {
+      // To avoid file name collision, we should generate a new job ID for every write job, instead
+      // of using batchId, as we may use the same batchId to write files again, if the streaming job
+      // fails and we restore from the checkpoint.
+      val jobId = java.util.UUID.randomUUID().toString
       val committer = FileCommitProtocol.instantiate(
         className = sparkSession.sessionState.conf.streamingFileCommitProtocolClass,
-        jobId = batchId.toString,
+        jobId = jobId,
         outputPath = path)
 
       committer match {
