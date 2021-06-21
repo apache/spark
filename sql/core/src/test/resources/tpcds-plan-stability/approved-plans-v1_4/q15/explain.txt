@@ -1,10 +1,10 @@
 == Physical Plan ==
-TakeOrderedAndProject (26)
-+- * HashAggregate (25)
-   +- Exchange (24)
-      +- * HashAggregate (23)
-         +- * Project (22)
-            +- * BroadcastHashJoin Inner BuildRight (21)
+TakeOrderedAndProject (22)
++- * HashAggregate (21)
+   +- Exchange (20)
+      +- * HashAggregate (19)
+         +- * Project (18)
+            +- * BroadcastHashJoin Inner BuildRight (17)
                :- * Project (15)
                :  +- * BroadcastHashJoin Inner BuildRight (14)
                :     :- * Project (9)
@@ -20,11 +20,7 @@ TakeOrderedAndProject (26)
                :        +- * Filter (12)
                :           +- * ColumnarToRow (11)
                :              +- Scan parquet default.customer_address (10)
-               +- BroadcastExchange (20)
-                  +- * Project (19)
-                     +- * Filter (18)
-                        +- * ColumnarToRow (17)
-                           +- Scan parquet default.date_dim (16)
+               +- ReusedExchange (16)
 
 
 (1) Scan parquet default.catalog_sales
@@ -96,66 +92,70 @@ Join condition: ((substr(ca_zip#10, 1, 5) IN (85669,86197,88274,83405,86475,8539
 Output [3]: [cs_sales_price#2, cs_sold_date_sk#3, ca_zip#10]
 Input [6]: [cs_sales_price#2, cs_sold_date_sk#3, c_current_addr_sk#6, ca_address_sk#8, ca_state#9, ca_zip#10]
 
-(16) Scan parquet default.date_dim
-Output [3]: [d_date_sk#12, d_year#13, d_qoy#14]
+(16) ReusedExchange [Reuses operator id: 27]
+Output [1]: [d_date_sk#12]
+
+(17) BroadcastHashJoin [codegen id : 4]
+Left keys [1]: [cs_sold_date_sk#3]
+Right keys [1]: [d_date_sk#12]
+Join condition: None
+
+(18) Project [codegen id : 4]
+Output [2]: [cs_sales_price#2, ca_zip#10]
+Input [4]: [cs_sales_price#2, cs_sold_date_sk#3, ca_zip#10, d_date_sk#12]
+
+(19) HashAggregate [codegen id : 4]
+Input [2]: [cs_sales_price#2, ca_zip#10]
+Keys [1]: [ca_zip#10]
+Functions [1]: [partial_sum(UnscaledValue(cs_sales_price#2))]
+Aggregate Attributes [1]: [sum#13]
+Results [2]: [ca_zip#10, sum#14]
+
+(20) Exchange
+Input [2]: [ca_zip#10, sum#14]
+Arguments: hashpartitioning(ca_zip#10, 5), ENSURE_REQUIREMENTS, [id=#15]
+
+(21) HashAggregate [codegen id : 5]
+Input [2]: [ca_zip#10, sum#14]
+Keys [1]: [ca_zip#10]
+Functions [1]: [sum(UnscaledValue(cs_sales_price#2))]
+Aggregate Attributes [1]: [sum(UnscaledValue(cs_sales_price#2))#16]
+Results [2]: [ca_zip#10, MakeDecimal(sum(UnscaledValue(cs_sales_price#2))#16,17,2) AS sum(cs_sales_price)#17]
+
+(22) TakeOrderedAndProject
+Input [2]: [ca_zip#10, sum(cs_sales_price)#17]
+Arguments: 100, [ca_zip#10 ASC NULLS FIRST], [ca_zip#10, sum(cs_sales_price)#17]
+
+===== Subqueries =====
+
+Subquery:1 Hosting operator id = 1 Hosting Expression = cs_sold_date_sk#3 IN dynamicpruning#4
+BroadcastExchange (27)
++- * Project (26)
+   +- * Filter (25)
+      +- * ColumnarToRow (24)
+         +- Scan parquet default.date_dim (23)
+
+
+(23) Scan parquet default.date_dim
+Output [3]: [d_date_sk#12, d_year#18, d_qoy#19]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
 PushedFilters: [IsNotNull(d_qoy), IsNotNull(d_year), EqualTo(d_qoy,2), EqualTo(d_year,2001), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_year:int,d_qoy:int>
 
-(17) ColumnarToRow [codegen id : 3]
-Input [3]: [d_date_sk#12, d_year#13, d_qoy#14]
+(24) ColumnarToRow [codegen id : 1]
+Input [3]: [d_date_sk#12, d_year#18, d_qoy#19]
 
-(18) Filter [codegen id : 3]
-Input [3]: [d_date_sk#12, d_year#13, d_qoy#14]
-Condition : ((((isnotnull(d_qoy#14) AND isnotnull(d_year#13)) AND (d_qoy#14 = 2)) AND (d_year#13 = 2001)) AND isnotnull(d_date_sk#12))
+(25) Filter [codegen id : 1]
+Input [3]: [d_date_sk#12, d_year#18, d_qoy#19]
+Condition : ((((isnotnull(d_qoy#19) AND isnotnull(d_year#18)) AND (d_qoy#19 = 2)) AND (d_year#18 = 2001)) AND isnotnull(d_date_sk#12))
 
-(19) Project [codegen id : 3]
+(26) Project [codegen id : 1]
 Output [1]: [d_date_sk#12]
-Input [3]: [d_date_sk#12, d_year#13, d_qoy#14]
+Input [3]: [d_date_sk#12, d_year#18, d_qoy#19]
 
-(20) BroadcastExchange
+(27) BroadcastExchange
 Input [1]: [d_date_sk#12]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#15]
-
-(21) BroadcastHashJoin [codegen id : 4]
-Left keys [1]: [cs_sold_date_sk#3]
-Right keys [1]: [d_date_sk#12]
-Join condition: None
-
-(22) Project [codegen id : 4]
-Output [2]: [cs_sales_price#2, ca_zip#10]
-Input [4]: [cs_sales_price#2, cs_sold_date_sk#3, ca_zip#10, d_date_sk#12]
-
-(23) HashAggregate [codegen id : 4]
-Input [2]: [cs_sales_price#2, ca_zip#10]
-Keys [1]: [ca_zip#10]
-Functions [1]: [partial_sum(UnscaledValue(cs_sales_price#2))]
-Aggregate Attributes [1]: [sum#16]
-Results [2]: [ca_zip#10, sum#17]
-
-(24) Exchange
-Input [2]: [ca_zip#10, sum#17]
-Arguments: hashpartitioning(ca_zip#10, 5), ENSURE_REQUIREMENTS, [id=#18]
-
-(25) HashAggregate [codegen id : 5]
-Input [2]: [ca_zip#10, sum#17]
-Keys [1]: [ca_zip#10]
-Functions [1]: [sum(UnscaledValue(cs_sales_price#2))]
-Aggregate Attributes [1]: [sum(UnscaledValue(cs_sales_price#2))#19]
-Results [2]: [ca_zip#10, MakeDecimal(sum(UnscaledValue(cs_sales_price#2))#19,17,2) AS sum(cs_sales_price)#20]
-
-(26) TakeOrderedAndProject
-Input [2]: [ca_zip#10, sum(cs_sales_price)#20]
-Arguments: 100, [ca_zip#10 ASC NULLS FIRST], [ca_zip#10, sum(cs_sales_price)#20]
-
-===== Subqueries =====
-
-Subquery:1 Hosting operator id = 1 Hosting Expression = cs_sold_date_sk#3 IN dynamicpruning#4
-ReusedExchange (27)
-
-
-(27) ReusedExchange [Reuses operator id: 20]
-Output [1]: [d_date_sk#12]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#20]
 
 

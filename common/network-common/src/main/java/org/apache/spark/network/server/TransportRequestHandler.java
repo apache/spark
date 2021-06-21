@@ -113,6 +113,8 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
       processStreamRequest((StreamRequest) request);
     } else if (request instanceof UploadStream) {
       processStreamUpload((UploadStream) request);
+    } else if (request instanceof MergedBlockMetaRequest) {
+      processMergedBlockMetaRequest((MergedBlockMetaRequest) request);
     } else {
       throw new IllegalArgumentException("Unknown request type: " + request);
     }
@@ -257,6 +259,30 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
       logger.error("Error while invoking RpcHandler#receive() for one-way message.", e);
     } finally {
       req.body().release();
+    }
+  }
+
+  private void processMergedBlockMetaRequest(final MergedBlockMetaRequest req) {
+    try {
+      rpcHandler.getMergedBlockMetaReqHandler().receiveMergeBlockMetaReq(reverseClient, req,
+        new MergedBlockMetaResponseCallback() {
+
+          @Override
+          public void onSuccess(int numChunks, ManagedBuffer buffer) {
+            logger.trace("Sending meta for request {} numChunks {}", req, numChunks);
+            respond(new MergedBlockMetaSuccess(req.requestId, numChunks, buffer));
+          }
+
+          @Override
+          public void onFailure(Throwable e) {
+            logger.trace("Failed to send meta for {}", req);
+            respond(new RpcFailure(req.requestId, Throwables.getStackTraceAsString(e)));
+          }
+      });
+    } catch (Exception e) {
+      logger.error("Error while invoking receiveMergeBlockMetaReq() for appId {} shuffleId {} "
+        + "reduceId {}", req.appId, req.shuffleId, req.appId, e);
+      respond(new RpcFailure(req.requestId, Throwables.getStackTraceAsString(e)));
     }
   }
 

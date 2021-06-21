@@ -42,7 +42,13 @@ TakeOrderedAndProject [channel,id,sales,returns,profit]
                                                                                   InputAdapter
                                                                                     Scan parquet default.store_sales [ss_item_sk,ss_store_sk,ss_promo_sk,ss_ticket_number,ss_ext_sales_price,ss_net_profit,ss_sold_date_sk]
                                                                                       SubqueryBroadcast [d_date_sk] #1
-                                                                                        ReusedExchange [d_date_sk] #5
+                                                                                        BroadcastExchange #5
+                                                                                          WholeStageCodegen (1)
+                                                                                            Project [d_date_sk]
+                                                                                              Filter [d_date,d_date_sk]
+                                                                                                ColumnarToRow
+                                                                                                  InputAdapter
+                                                                                                    Scan parquet default.date_dim [d_date_sk,d_date]
                                                                   InputAdapter
                                                                     WholeStageCodegen (4)
                                                                       Sort [sr_item_sk,sr_ticket_number]
@@ -55,13 +61,7 @@ TakeOrderedAndProject [channel,id,sales,returns,profit]
                                                                                     InputAdapter
                                                                                       Scan parquet default.store_returns [sr_item_sk,sr_ticket_number,sr_return_amt,sr_net_loss,sr_returned_date_sk]
                                                               InputAdapter
-                                                                BroadcastExchange #5
-                                                                  WholeStageCodegen (5)
-                                                                    Project [d_date_sk]
-                                                                      Filter [d_date,d_date_sk]
-                                                                        ColumnarToRow
-                                                                          InputAdapter
-                                                                            Scan parquet default.date_dim [d_date_sk,d_date]
+                                                                ReusedExchange [d_date_sk] #5
                                                           InputAdapter
                                                             BroadcastExchange #7
                                                               WholeStageCodegen (6)
@@ -195,13 +195,13 @@ TakeOrderedAndProject [channel,id,sales,returns,profit]
                             HashAggregate [channel,sales,returns,profit] [sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty]
                               HashAggregate [channel,id,sum,isEmpty,sum,isEmpty,sum,isEmpty] [sum(sales),sum(returns),sum(profit),sales,returns,profit,sum,isEmpty,sum,isEmpty,sum,isEmpty]
                                 InputAdapter
-                                  ReusedExchange [channel,id,sum,isEmpty,sum,isEmpty,sum,isEmpty] #19
+                                  ReusedExchange [channel,id,sum,isEmpty,sum,isEmpty,sum,isEmpty] #2
                   WholeStageCodegen (98)
                     HashAggregate [sum,isEmpty,sum,isEmpty,sum,isEmpty] [sum(sales),sum(returns),sum(profit),channel,id,sales,returns,profit,sum,isEmpty,sum,isEmpty,sum,isEmpty]
                       InputAdapter
-                        Exchange #20
+                        Exchange #19
                           WholeStageCodegen (97)
                             HashAggregate [sales,returns,profit] [sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty]
                               HashAggregate [channel,id,sum,isEmpty,sum,isEmpty,sum,isEmpty] [sum(sales),sum(returns),sum(profit),sales,returns,profit,sum,isEmpty,sum,isEmpty,sum,isEmpty]
                                 InputAdapter
-                                  ReusedExchange [channel,id,sum,isEmpty,sum,isEmpty,sum,isEmpty] #19
+                                  ReusedExchange [channel,id,sum,isEmpty,sum,isEmpty,sum,isEmpty] #2

@@ -14,7 +14,13 @@ TakeOrderedAndProject [ext_price,brand_id,brand]
                           InputAdapter
                             Scan parquet default.store_sales [ss_item_sk,ss_ext_sales_price,ss_sold_date_sk]
                               SubqueryBroadcast [d_date_sk] #1
-                                ReusedExchange [d_date_sk] #2
+                                BroadcastExchange #2
+                                  WholeStageCodegen (1)
+                                    Project [d_date_sk]
+                                      Filter [d_moy,d_year,d_date_sk]
+                                        ColumnarToRow
+                                          InputAdapter
+                                            Scan parquet default.date_dim [d_date_sk,d_year,d_moy]
                       InputAdapter
                         BroadcastExchange #3
                           WholeStageCodegen (1)
@@ -24,10 +30,4 @@ TakeOrderedAndProject [ext_price,brand_id,brand]
                                   InputAdapter
                                     Scan parquet default.item [i_item_sk,i_brand_id,i_brand,i_manager_id]
                   InputAdapter
-                    BroadcastExchange #2
-                      WholeStageCodegen (2)
-                        Project [d_date_sk]
-                          Filter [d_moy,d_year,d_date_sk]
-                            ColumnarToRow
-                              InputAdapter
-                                Scan parquet default.date_dim [d_date_sk,d_year,d_moy]
+                    ReusedExchange [d_date_sk] #2

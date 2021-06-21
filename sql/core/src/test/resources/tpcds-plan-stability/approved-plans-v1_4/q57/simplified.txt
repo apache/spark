@@ -43,14 +43,14 @@ TakeOrderedAndProject [sum_sales,avg_monthly_sales,cc_name,i_category,i_brand,d_
                                                                             InputAdapter
                                                                               Scan parquet default.catalog_sales [cs_call_center_sk,cs_item_sk,cs_sales_price,cs_sold_date_sk]
                                                                                 SubqueryBroadcast [d_date_sk] #1
-                                                                                  ReusedExchange [d_date_sk,d_year,d_moy] #5
+                                                                                  BroadcastExchange #5
+                                                                                    WholeStageCodegen (1)
+                                                                                      Filter [d_year,d_moy,d_date_sk]
+                                                                                        ColumnarToRow
+                                                                                          InputAdapter
+                                                                                            Scan parquet default.date_dim [d_date_sk,d_year,d_moy]
                                                               InputAdapter
-                                                                BroadcastExchange #5
-                                                                  WholeStageCodegen (2)
-                                                                    Filter [d_year,d_moy,d_date_sk]
-                                                                      ColumnarToRow
-                                                                        InputAdapter
-                                                                          Scan parquet default.date_dim [d_date_sk,d_year,d_moy]
+                                                                ReusedExchange [d_date_sk,d_year,d_moy] #5
                                                           InputAdapter
                                                             BroadcastExchange #6
                                                               WholeStageCodegen (3)
@@ -71,9 +71,9 @@ TakeOrderedAndProject [sum_sales,avg_monthly_sales,cc_name,i_category,i_brand,d_
                                 WholeStageCodegen (13)
                                   HashAggregate [i_category,i_brand,cc_name,d_year,d_moy,sum] [sum(UnscaledValue(cs_sales_price)),sum_sales,sum]
                                     InputAdapter
-                                      ReusedExchange [i_category,i_brand,cc_name,d_year,d_moy,sum] #9
+                                      ReusedExchange [i_category,i_brand,cc_name,d_year,d_moy,sum] #3
         InputAdapter
-          BroadcastExchange #10
+          BroadcastExchange #9
             WholeStageCodegen (22)
               Project [i_category,i_brand,cc_name,sum_sales,rn]
                 InputAdapter

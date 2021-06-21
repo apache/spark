@@ -401,7 +401,13 @@ private[spark] class Client(
     if (force || !compareFs(srcFs, destFs) || "file".equals(srcFs.getScheme)) {
       destPath = new Path(destDir, destName.getOrElse(srcPath.getName()))
       logInfo(s"Uploading resource $srcPath -> $destPath")
-      FileUtil.copy(srcFs, srcPath, destFs, destPath, false, hadoopConf)
+      try {
+        FileUtil.copy(srcFs, srcPath, destFs, destPath, false, hadoopConf)
+      } catch {
+        // HADOOP-16878 changes the behavior to throw exceptions when src equals to dest
+        case e: PathOperationException
+            if srcFs.makeQualified(srcPath).equals(destFs.makeQualified(destPath)) =>
+      }
       destFs.setReplication(destPath, replication)
       destFs.setPermission(destPath, new FsPermission(APP_FILE_PERMISSION))
     } else {

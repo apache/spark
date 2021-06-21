@@ -21,25 +21,28 @@ import scala.concurrent.duration._
 
 import org.scalatest.concurrent.Eventually.{eventually, interval, timeout}
 
-import org.apache.spark.{LocalSparkContext, MapOutputTrackerMaster, SparkConf, SparkContext, SparkFunSuite, TestUtils}
+import org.apache.spark.{LocalRootDirsTest, MapOutputTrackerMaster, SparkContext, SparkFunSuite, TestUtils}
 import org.apache.spark.LocalSparkContext.withSpark
 import org.apache.spark.deploy.k8s.Config.KUBERNETES_DRIVER_REUSE_PVC
 import org.apache.spark.internal.config._
 import org.apache.spark.scheduler.cluster.StandaloneSchedulerBackend
 
-class KubernetesLocalDiskShuffleDataIOSuite extends SparkFunSuite with LocalSparkContext {
+class KubernetesLocalDiskShuffleDataIOSuite extends SparkFunSuite with LocalRootDirsTest {
 
-  val conf = new SparkConf()
-    .setAppName("ShuffleExecutorComponentsSuite")
-    .setMaster("local-cluster[1,1,1024]")
-    .set(UI.UI_ENABLED, false)
-    .set(DYN_ALLOCATION_ENABLED, true)
-    .set(DYN_ALLOCATION_SHUFFLE_TRACKING_ENABLED, true)
-    .set(DYN_ALLOCATION_INITIAL_EXECUTORS, 1)
-    .set(DYN_ALLOCATION_MIN_EXECUTORS, 1)
-    .set(IO_ENCRYPTION_ENABLED, false)
-    .set(KUBERNETES_DRIVER_REUSE_PVC, true)
-    .set(SHUFFLE_IO_PLUGIN_CLASS, classOf[KubernetesLocalDiskShuffleDataIO].getName)
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    conf
+      .setAppName("ShuffleExecutorComponentsSuite")
+      .setMaster("local-cluster[1,1,1024]")
+      .set(UI.UI_ENABLED, false)
+      .set(DYN_ALLOCATION_ENABLED, true)
+      .set(DYN_ALLOCATION_SHUFFLE_TRACKING_ENABLED, true)
+      .set(DYN_ALLOCATION_INITIAL_EXECUTORS, 1)
+      .set(DYN_ALLOCATION_MIN_EXECUTORS, 1)
+      .set(IO_ENCRYPTION_ENABLED, false)
+      .set(KUBERNETES_DRIVER_REUSE_PVC, true)
+      .set(SHUFFLE_IO_PLUGIN_CLASS, classOf[KubernetesLocalDiskShuffleDataIO].getName)
+  }
 
   test("recompute is not blocked by the recovery") {
     sc = new SparkContext(conf)
@@ -192,7 +195,7 @@ class KubernetesLocalDiskShuffleDataIOSuite extends SparkFunSuite with LocalSpar
       val rdd3 = rdd2.reduceByKey(_ + _)
       val rdd4 = rdd3.sortByKey()
 
-      assert(rdd4.count() === 3)
+      assert(rdd4.count() === 2)
       assert(master.shuffleStatuses.keys.toSet == Set(0, 1))
       assert(master.shuffleStatuses(0).mapStatuses.map(_.mapId).toSet == Set(0, 1, 2))
       assert(master.shuffleStatuses(1).mapStatuses.map(_.mapId).toSet == Set(6, 7, 8))
@@ -210,7 +213,7 @@ class KubernetesLocalDiskShuffleDataIOSuite extends SparkFunSuite with LocalSpar
         assert(master.shuffleStatuses(1).mapStatuses.forall(_ == null))
       }
       sc.parallelize(Seq((1, 1)), 2).groupByKey().collect()
-      eventually(timeout(10.second), interval(1.seconds)) {
+      eventually(timeout(60.second), interval(1.seconds)) {
         assert(master.shuffleStatuses(0).mapStatuses.map(_.mapId).toSet == Set(0, 1, 2))
         assert(master.shuffleStatuses(1).mapStatuses.map(_.mapId).toSet == Set(6, 7, 8))
       }

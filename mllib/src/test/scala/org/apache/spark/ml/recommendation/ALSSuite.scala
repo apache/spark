@@ -26,7 +26,6 @@ import scala.collection.mutable.{ArrayBuffer, WrappedArray}
 
 import org.apache.commons.io.FileUtils
 import org.apache.commons.io.filefilter.TrueFileFilter
-import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark._
 import org.apache.spark.internal.Logging
@@ -969,19 +968,7 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
   }
 }
 
-class ALSCleanerSuite extends SparkFunSuite with BeforeAndAfterEach {
-  override def beforeEach(): Unit = {
-    super.beforeEach()
-    // Once `Utils.getOrCreateLocalRootDirs` is called, it is cached in `Utils.localRootDirs`.
-    // Unless this is manually cleared before and after a test, it returns the same directory
-    // set before even if 'spark.local.dir' is configured afterwards.
-    Utils.clearLocalRootDirs()
-  }
-
-  override def afterEach(): Unit = {
-    Utils.clearLocalRootDirs()
-    super.afterEach()
-  }
+class ALSCleanerSuite extends SparkFunSuite with LocalRootDirsTest {
 
   test("ALS shuffle cleanup in algorithm") {
     val conf = new SparkConf()

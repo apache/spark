@@ -1635,8 +1635,7 @@ abstract class KafkaSourceSuiteBase extends KafkaSourceTest {
       testFromSpecificOffsets(
         topic,
         failOnDataLoss = failOnDataLoss,
-        "assign" -> assignString(topic, 0 to 4),
-        "failOnDataLoss" -> failOnDataLoss.toString)
+        "assign" -> assignString(topic, 0 to 4))
     }
 
     test(s"assign from specific timestamps (failOnDataLoss: $failOnDataLoss)") {
@@ -1645,8 +1644,7 @@ abstract class KafkaSourceSuiteBase extends KafkaSourceTest {
         topic,
         failOnDataLoss = failOnDataLoss,
         addPartitions = false,
-        "assign" -> assignString(topic, 0 to 4),
-        "failOnDataLoss" -> failOnDataLoss.toString)
+        "assign" -> assignString(topic, 0 to 4))
     }
 
     test(s"assign from global timestamp per topic (failOnDataLoss: $failOnDataLoss)") {
@@ -1655,8 +1653,7 @@ abstract class KafkaSourceSuiteBase extends KafkaSourceTest {
         topic,
         failOnDataLoss = failOnDataLoss,
         addPartitions = false,
-        "assign" -> assignString(topic, 0 to 4),
-        "failOnDataLoss" -> failOnDataLoss.toString)
+        "assign" -> assignString(topic, 0 to 4))
     }
 
     test(s"subscribing topic by name from latest offsets (failOnDataLoss: $failOnDataLoss)") {
@@ -1744,6 +1741,137 @@ abstract class KafkaSourceSuiteBase extends KafkaSourceTest {
         failOnDataLoss = failOnDataLoss,
         addPartitions = true,
         "subscribePattern" -> s"$topicPrefix-.*")
+    }
+  }
+
+  test("subscribing topic by name from specific timestamps with non-matching starting offset") {
+    val topic = newTopic()
+    testFromSpecificTimestampsWithNoMatchingStartingOffset(topic, "subscribe" -> topic)
+  }
+
+  test("subscribing topic by name from global timestamp per topic with " +
+    "non-matching starting offset") {
+    val topic = newTopic()
+    testFromGlobalTimestampWithNoMatchingStartingOffset(topic, "subscribe" -> topic)
+  }
+
+  test("subscribing topic by pattern from specific timestamps with " +
+    "non-matching starting offset") {
+    val topicPrefix = newTopic()
+    val topic = topicPrefix + "-suffix"
+    testFromSpecificTimestampsWithNoMatchingStartingOffset(topic,
+      "subscribePattern" -> s"$topicPrefix-.*")
+  }
+
+  test("subscribing topic by pattern from global timestamp per topic with " +
+    "non-matching starting offset") {
+    val topicPrefix = newTopic()
+    val topic = topicPrefix + "-suffix"
+    testFromGlobalTimestampWithNoMatchingStartingOffset(topic,
+      "subscribePattern" -> s"$topicPrefix-.*")
+  }
+
+  private def testFromSpecificTimestampsWithNoMatchingStartingOffset(
+      topic: String,
+      options: (String, String)*): Unit = {
+    testUtils.createTopic(topic, partitions = 5)
+
+    val firstTimestamp = System.currentTimeMillis() - 5000
+    val secondTimestamp = firstTimestamp + 1000
+    setupTestMessagesForTestOnTimestampOffsets(topic, firstTimestamp, secondTimestamp)
+    // no data after second timestamp for partition 4
+
+    require(testUtils.getLatestOffsets(Set(topic)).size === 5)
+
+    // here we starts from second timestamp for all partitions, whereas we know there's
+    // no data in partition 4 matching second timestamp
+    val startPartitionTimestamps: Map[TopicPartition, Long] =
+    (0 to 4).map(new TopicPartition(topic, _) -> secondTimestamp).toMap
+    val startingTimestamps = JsonUtils.partitionTimestamps(startPartitionTimestamps)
+
+    val mapped = setupDataFrameForTestOnTimestampOffsets(startingTimestamps, failOnDataLoss = true,
+      options: _*)
+    assertQueryFailOnStartOffsetStrategyAsError(mapped)
+
+    val mapped2 = setupDataFrameForTestOnTimestampOffsets(startingTimestamps, failOnDataLoss = true,
+      options :+ ("startingoffsetsbytimestampstrategy", "error"): _*)
+    assertQueryFailOnStartOffsetStrategyAsError(mapped2)
+
+    val mapped3 = setupDataFrameForTestOnTimestampOffsets(startingTimestamps, failOnDataLoss = true,
+      options :+ ("startingoffsetsbytimestampstrategy", "latest"): _*)
+
+    testStream(mapped3)(
+      makeSureGetOffsetCalled,
+      Execute { q =>
+        val partitions = (0 to 4).map(new TopicPartition(topic, _))
+        // wait to reach the last offset in every partition
+        q.awaitOffset(
+          0, KafkaSourceOffset(partitions.map(tp => tp -> 3L).toMap), streamingTimeout.toMillis)
+      },
+      CheckAnswer(-21, -22, -11, -12, 2, 12),
+      Execute { q =>
+        sendMessagesWithTimestamp(topic, Array(23, 24, 25).map(_.toString), 4, secondTimestamp)
+        // wait to reach the new last offset in every partition
+        val partitions = (0 to 3).map(new TopicPartition(topic, _)).map(tp => tp -> 3L) ++
+          Seq(new TopicPartition(topic, 4) -> 6L)
+        q.awaitOffset(
+          0, KafkaSourceOffset(partitions.toMap), streamingTimeout.toMillis)
+      },
+      CheckNewAnswer(23, 24, 25)
+    )
+  }
+
+  private def testFromGlobalTimestampWithNoMatchingStartingOffset(
+      topic: String,
+      options: (String, String)*): Unit = {
+    testUtils.createTopic(topic, partitions = 5)
+
+    val firstTimestamp = System.currentTimeMillis() - 5000
+    val secondTimestamp = firstTimestamp + 1000
+    setupTestMessagesForTestOnTimestampOffsets(topic, firstTimestamp, secondTimestamp)
+
+    require(testUtils.getLatestOffsets(Set(topic)).size === 5)
+
+    // here we starts from second timestamp for all partitions, whereas we know there's
+    // no data in partition 4 matching second timestamp
+
+    val mapped = setupDataFrameForTestOnGlobalTimestamp(secondTimestamp, failOnDataLoss = true,
+      options: _*)
+    assertQueryFailOnStartOffsetStrategyAsError(mapped)
+
+    val mapped2 = setupDataFrameForTestOnGlobalTimestamp(secondTimestamp, failOnDataLoss = true,
+      options :+ ("startingoffsetsbytimestampstrategy", "error"): _*)
+    assertQueryFailOnStartOffsetStrategyAsError(mapped2)
+
+    val mapped3 = setupDataFrameForTestOnGlobalTimestamp(secondTimestamp, failOnDataLoss = true,
+      options :+ ("startingoffsetsbytimestampstrategy", "latest"): _*)
+
+    testStream(mapped3)(
+      makeSureGetOffsetCalled,
+      Execute { q =>
+        val partitions = (0 to 4).map(new TopicPartition(topic, _))
+        // wait to reach the last offset in every partition
+        q.awaitOffset(
+          0, KafkaSourceOffset(partitions.map(tp => tp -> 3L).toMap), streamingTimeout.toMillis)
+      },
+      CheckAnswer(-21, -22, -11, -12, 2, 12),
+      Execute { q =>
+        sendMessagesWithTimestamp(topic, Array(23, 24, 25).map(_.toString), 4, secondTimestamp)
+        // wait to reach the new last offset in every partition
+        val partitions = (0 to 3).map(new TopicPartition(topic, _)).map(tp => tp -> 3L) ++
+          Seq(new TopicPartition(topic, 4) -> 6L)
+        q.awaitOffset(
+          0, KafkaSourceOffset(partitions.toMap), streamingTimeout.toMillis)
+      },
+      CheckNewAnswer(23, 24, 25)
+    )
+  }
+
+  private def assertQueryFailOnStartOffsetStrategyAsError(df: Dataset[_]): Unit = {
+    // In continuous mode, the origin exception is not caught here unfortunately, so we have to
+    // stick with checking general exception instead of verifying IllegalArgumentException.
+    intercept[Exception] {
+      testStream(df)(makeSureGetOffsetCalled)
     }
   }
 

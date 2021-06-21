@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.DayTimeIntervalType._
 import org.apache.spark.sql.types.YearMonthIntervalType.YEAR
 import org.apache.spark.unsafe.types.CalendarInterval
 /**
@@ -284,7 +285,17 @@ object RandomDataGenerator {
         val ns = rand.nextLong()
         new CalendarInterval(months, days, ns)
       })
-      case _: DayTimeIntervalType => Some(() => Duration.of(rand.nextLong(), ChronoUnit.MICROS))
+      case DayTimeIntervalType(_, DAY) =>
+        val mircoSeconds = rand.nextLong()
+        Some(() => Duration.of(mircoSeconds - mircoSeconds % MICROS_PER_DAY, ChronoUnit.MICROS))
+      case DayTimeIntervalType(_, HOUR) =>
+        val mircoSeconds = rand.nextLong()
+        Some(() => Duration.of(mircoSeconds - mircoSeconds % MICROS_PER_HOUR, ChronoUnit.MICROS))
+      case DayTimeIntervalType(_, MINUTE) =>
+        val mircoSeconds = rand.nextLong()
+        Some(() => Duration.of(mircoSeconds - mircoSeconds % MICROS_PER_MINUTE, ChronoUnit.MICROS))
+      case DayTimeIntervalType(_, SECOND) =>
+        Some(() => Duration.of(rand.nextLong(), ChronoUnit.MICROS))
       case YearMonthIntervalType(_, YEAR) =>
         Some(() => Period.ofYears(rand.nextInt() / MONTHS_PER_YEAR).normalized())
       case YearMonthIntervalType(_, _) => Some(() => Period.ofMonths(rand.nextInt()).normalized())
