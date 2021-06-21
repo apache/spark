@@ -379,6 +379,7 @@ object SparkExecuteStatementOperation {
         case CalendarIntervalType => StringType.catalogString
         case _: YearMonthIntervalType => "interval_year_month"
         case _: DayTimeIntervalType => "interval_day_time"
+        case _: TimestampWithoutTZType => "timestamp"
         case other => other.catalogString
       }
       new FieldSchema(field.name, attrTypeString, field.getComment.getOrElse(""))
