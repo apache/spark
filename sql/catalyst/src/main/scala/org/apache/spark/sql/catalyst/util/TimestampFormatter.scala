@@ -31,7 +31,6 @@ import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.{LegacyDateFormat, LENIENT_SIMPLE_DATE_FORMAT}
 import org.apache.spark.sql.catalyst.util.RebaseDateTime._
-import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy._
 import org.apache.spark.sql.types.Decimal
@@ -67,8 +66,9 @@ sealed trait TimestampFormatter extends Serializable {
   @throws(classOf[DateTimeException])
   @throws(classOf[IllegalStateException])
   def parseWithoutTimeZone(s: String): Long =
-    throw QueryExecutionErrors.missingMethodForTimestampWithoutTZ(
-      "parseWithoutTimeZone(s: String)");
+    throw new IllegalStateException(
+      s"The method `parseWithoutTimeZone(s: String)` should be implemented in the formatter " +
+        "of timestamp without time zone")
 
   def format(us: Long): String
   def format(ts: Timestamp): String
@@ -76,8 +76,9 @@ sealed trait TimestampFormatter extends Serializable {
 
   @throws(classOf[IllegalStateException])
   def format(localDateTime: LocalDateTime): String =
-    throw QueryExecutionErrors.missingMethodForTimestampWithoutTZ(
-      "format(localDateTime: LocalDateTime)");
+    throw new IllegalStateException(
+      s"The method `format(localDateTime: LocalDateTime)` should be implemented in the formatter " +
+        "of timestamp without time zone")
 
   def validatePatternString(): Unit
 }

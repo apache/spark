@@ -1225,12 +1225,6 @@ object QueryExecutionErrors {
     new RuntimeException("Remote operations not supported")
   }
 
-  def missingMethodForTimestampWithoutTZ(method: String): Throwable = {
-    new IllegalStateException(
-      s"The method `$method` should be implemented in the formatter of timestamp " +
-        "without time zone")
-  }
-
   def invalidKerberosConfigForHiveServer2Error(): Throwable = {
     new IOException(
       "HiveServer2 Kerberos principal or keytab is not correctly configured")
