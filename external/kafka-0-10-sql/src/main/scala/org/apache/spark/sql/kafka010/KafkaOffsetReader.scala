@@ -24,6 +24,7 @@ import org.apache.kafka.common.TopicPartition
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.kafka010.KafkaSourceProvider.StrategyOnNoMatchStartingOffset
 
 /**
  * Base trait to fetch offsets from Kafka. The implementations are
@@ -66,30 +67,40 @@ private[kafka010] trait KafkaOffsetReader {
   /**
    * Resolves the specific offsets based on timestamp per topic-partition.
    * The returned offset for each partition is the earliest offset whose timestamp is greater
-   * than or equal to the given timestamp in the corresponding partition. If the matched offset
-   * doesn't exist, depending on `failsOnNoMatchingOffset` parameter, the offset will be set to
-   * latest or this method throws an error.
+   * than or equal to the given timestamp in the corresponding partition.
+   *
+   * If the matched offset doesn't exist, the behavior depends on the destination and the option:
+   *
+   * - isStartingOffsets = false => implementation should provide the offset same as 'latest'
+   * - isStartingOffsets = true  => implementation should follow the strategy on non-matching
+   *                                starting offset, passed as `strategyOnNoMatchStartingOffset`
    *
    * @param partitionTimestamps the timestamp per topic-partition.
-   * @param failsOnNoMatchingOffset whether to fail the query when no matched offset can be found.
    */
   def fetchSpecificTimestampBasedOffsets(
       partitionTimestamps: Map[TopicPartition, Long],
-      failsOnNoMatchingOffset: Boolean): KafkaSourceOffset
+      isStartingOffsets: Boolean,
+      strategyOnNoMatchStartingOffset: StrategyOnNoMatchStartingOffset.Value)
+    : KafkaSourceOffset
 
   /**
    * Resolves the specific offsets based on timestamp per all topic-partitions being subscribed.
    * The returned offset for each partition is the earliest offset whose timestamp is greater
-   * than or equal to the given timestamp in the corresponding partition. If the matched offset
-   * doesn't exist, depending on `failsOnNoMatchingOffset` parameter, the offset will be set to
-   * latest or this method throws an error.
+   * than or equal to the given timestamp in the corresponding partition.
+   *
+   * If the matched offset doesn't exist, the behavior depends on the destination and the option:
+   *
+   * - isStartingOffsets = false => implementation should provide the offset same as 'latest'
+   * - isStartingOffsets = true  => implementation should follow the strategy on non-matching
+   *                                starting offset, passed as `strategyOnNoMatchStartingOffset`
    *
    * @param timestamp the timestamp.
-   * @param failsOnNoMatchingOffset whether to fail the query when no matched offset can be found.
    */
   def fetchGlobalTimestampBasedOffsets(
       timestamp: Long,
-      failsOnNoMatchingOffset: Boolean): KafkaSourceOffset
+      isStartingOffsets: Boolean,
+      strategyOnNoMatchingStartingOffset: StrategyOnNoMatchStartingOffset.Value)
+    : KafkaSourceOffset
 
   /**
    * Fetch the earliest offsets for the topic partitions that are indicated
