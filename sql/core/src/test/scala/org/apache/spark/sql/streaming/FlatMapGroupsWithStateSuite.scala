@@ -364,8 +364,8 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
 
   test("GroupState - getCurrentWatermarkMs") {
     def streamingState(
-      timeoutConf: GroupStateTimeout,
-      watermark: Optional[Long]): GroupState[Int] = {
+        timeoutConf: GroupStateTimeout,
+        watermark: Optional[Long]): GroupState[Int] = {
       TestGroupState.create[Int](
         Optional.empty[Int], timeoutConf, 1000, watermark, hasTimedOut = false)
     }
