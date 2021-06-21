@@ -687,9 +687,9 @@ class CastSuite extends CastSuiteBase {
 
   test("SPARK-35819: Support cast YearMonthIntervalType in different fields") {
     val ym = cast(Literal.create("1-1"), YearMonthIntervalType(YEAR, MONTH))
-    Seq(YearMonthIntervalType(YEAR, YEAR) -> 12,
+    Seq(YearMonthIntervalType(YEAR) -> 12,
       YearMonthIntervalType(YEAR, MONTH) -> 13,
-      YearMonthIntervalType(MONTH, MONTH) -> 13)
+      YearMonthIntervalType(MONTH) -> 13)
       .foreach { case (dt, value) =>
         checkEvaluation(cast(ym, dt), value)
       }
