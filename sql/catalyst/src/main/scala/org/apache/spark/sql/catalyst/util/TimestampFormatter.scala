@@ -66,11 +66,16 @@ sealed trait TimestampFormatter extends Serializable {
   @throws(classOf[DateTimeException])
   @throws(classOf[UnsupportedOperationException])
   def parseWithoutTimeZone(s: String): Long =
-    throw QueryExecutionErrors.cannotUseLegacyFormatterToParseTimestampWithoutTZ();
+    throw QueryExecutionErrors.cannotUseLegacyFormatterForTimestampWithoutTZ();
 
   def format(us: Long): String
   def format(ts: Timestamp): String
   def format(instant: Instant): String
+
+  @throws(classOf[UnsupportedOperationException])
+  def format(localDateTime: LocalDateTime): String =
+    throw QueryExecutionErrors.cannotUseLegacyFormatterForTimestampWithoutTZ();
+
   def validatePatternString(): Unit
 }
 
@@ -125,6 +130,10 @@ class Iso8601TimestampFormatter(
 
   override def format(ts: Timestamp): String = {
     legacyFormatter.format(ts)
+  }
+
+  override def format(localDateTime: LocalDateTime): String = {
+    localDateTime.format(formatter)
   }
 
   override def validatePatternString(): Unit = {

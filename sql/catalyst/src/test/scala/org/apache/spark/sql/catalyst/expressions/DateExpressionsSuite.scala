@@ -1293,10 +1293,17 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     outstandingZoneIds.foreach { zoneId =>
       withDefaultTimeZone(zoneId) {
         specialTs.foreach { s =>
+          val input = s.replace("T", " ")
           val expectedTs = LocalDateTime.parse(s)
           checkEvaluation(
-            GetTimestampWithoutTZ(Literal(s.replace("T", " ")), Literal("yyyy-MM-dd HH:mm:ss")),
-            expectedTs)
+            GetTimestampWithoutTZ(Literal(input), Literal("yyyy-MM-dd HH:mm:ss")), expectedTs)
+          Seq(".123456", ".123456PST", ".123456CST", ".123456UTC").foreach { segment =>
+            val input2 = input + segment
+            val expectedTs2 = LocalDateTime.parse(s + ".123456")
+            checkEvaluation(
+              GetTimestampWithoutTZ(Literal(input2), Literal("yyyy-MM-dd HH:mm:ss.SSSSSS[zzz]")),
+              expectedTs2)
+          }
         }
       }
     }
