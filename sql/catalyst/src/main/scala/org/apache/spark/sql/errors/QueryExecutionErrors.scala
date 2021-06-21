@@ -1225,11 +1225,6 @@ object QueryExecutionErrors {
     new RuntimeException("Remote operations not supported")
   }
 
-  def cannotUseLegacyFormatterForTimestampWithoutTZ(): Throwable = {
-    new UnsupportedOperationException(
-      "Can't use a legacy timestamp formatter to parse/format timestamp without time zone type")
-  }
-
   def invalidKerberosConfigForHiveServer2Error(): Throwable = {
     new IOException(
       "HiveServer2 Kerberos principal or keytab is not correctly configured")

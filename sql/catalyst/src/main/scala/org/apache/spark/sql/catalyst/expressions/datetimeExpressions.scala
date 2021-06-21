@@ -1006,7 +1006,7 @@ case class GetTimestampWithoutTZ(
     timeZoneId: Option[String] = None,
     failOnError: Boolean = SQLConf.get.ansiEnabled) extends ToTimestamp {
 
-  override lazy val forTimestampWithoutTZ: Boolean = true
+  override val forTimestampWithoutTZ: Boolean = true
 
   override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType)
 
@@ -1089,7 +1089,7 @@ abstract class ToTimestamp
   override def dataType: DataType = LongType
   override def nullable: Boolean = if (failOnError) children.exists(_.nullable) else true
 
-  protected def isParseError(e: Throwable): Boolean = e match {
+  private def isParseError(e: Throwable): Boolean = e match {
     case _: DateTimeParseException |
          _: DateTimeException |
          _: ParseException => true

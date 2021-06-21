@@ -59,22 +59,21 @@ sealed trait TimestampFormatter extends Serializable {
    * @throws ParseException can be thrown by legacy parser
    * @throws DateTimeParseException can be thrown by new parser
    * @throws DateTimeException unable to obtain local date or time
-   * @throws UnsupportedOperationException cannot use legacy formatter for the parsing
+   * @throws IllegalStateException The formatter for timestamp without time zone should always
+   *                               implement this method. The exception should never be hit.
    */
   @throws(classOf[ParseException])
   @throws(classOf[DateTimeParseException])
   @throws(classOf[DateTimeException])
-  @throws(classOf[UnsupportedOperationException])
-  def parseWithoutTimeZone(s: String): Long =
-    throw QueryExecutionErrors.cannotUseLegacyFormatterForTimestampWithoutTZ();
+  @throws(classOf[IllegalStateException])
+  def parseWithoutTimeZone(s: String): Long = throw new IllegalStateException();
 
   def format(us: Long): String
   def format(ts: Timestamp): String
   def format(instant: Instant): String
 
   @throws(classOf[UnsupportedOperationException])
-  def format(localDateTime: LocalDateTime): String =
-    throw QueryExecutionErrors.cannotUseLegacyFormatterForTimestampWithoutTZ();
+  def format(localDateTime: LocalDateTime): String = throw new IllegalStateException();
 
   def validatePatternString(): Unit
 }
