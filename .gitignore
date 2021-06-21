@@ -15,10 +15,10 @@
 .ensime_cache/
 .ensime_lucene
 .generated-mima*
-# The star is required for further !.idea/ to work, see https://git-scm.com/docs/gitignore
-.idea/*
+# All the files under .idea/ are ignore. To add new files under ./idea that are not in the VCS yet, please use `git add -f`
+.idea/
+# SPARK-35223: Add IssueNavigationLink to make IDEA support hyperlink on JIRA Ticket and GitHub PR on Git plugin.
 !.idea/vcs.xml
-python/.idea
 .idea_modules/
 .project
 .pydevproject
