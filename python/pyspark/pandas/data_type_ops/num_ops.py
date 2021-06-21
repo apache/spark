@@ -19,6 +19,7 @@ import numbers
 from typing import TYPE_CHECKING, Union
 
 import numpy as np
+import pandas as pd
 from pandas.api.types import CategoricalDtype
 
 from pyspark.pandas.base import column_op, IndexOpsMixin, numpy_column_op
@@ -414,3 +415,31 @@ class DecimalOps(FractionalOps):
 
     def isnull(self, index_ops: Union["Index", "Series"]) -> Union["Series", "Index"]:
         return index_ops._with_new_scol(index_ops.spark.column.isNull())
+
+
+class IntegralExtensionOps(IntegralOps):
+    """
+    The class for binary operations of pandas-on-Spark objects with one of the
+    - spark types:
+        LongType, IntegerType, ByteType and ShortType
+    - dtypes:
+        Int8Dtype, Int16Dtype, Int32Dtype, Int64Dtype
+    """
+
+    def restore(self, col: pd.Series) -> pd.Series:
+        """Restore column when to_pandas."""
+        return col.astype(self.dtype)
+
+
+class FractionalExtensionOps(FractionalOps):
+    """
+    The class for binary operations of pandas-on-Spark objects with one of the
+    - spark types:
+        FloatType, DoubleType and DecimalType
+    - dtypes:
+        Float32Dtype, Float64Dtype
+    """
+
+    def restore(self, col: pd.Series) -> pd.Series:
+        """Restore column when to_pandas."""
+        return col.astype(self.dtype)

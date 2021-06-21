@@ -16,6 +16,7 @@
 #
 
 import datetime
+import unittest
 from distutils.version import LooseVersion
 
 import pandas as pd
@@ -25,6 +26,10 @@ from pandas.api.types import CategoricalDtype
 from pyspark import pandas as ps
 from pyspark.pandas.config import option_context
 from pyspark.pandas.tests.data_type_ops.testing_utils import TestCasesUtils
+from pyspark.pandas.typedef.typehints import (
+    extension_dtypes_available,
+    extension_float_dtypes_available,
+)
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 
 
@@ -313,8 +318,33 @@ class NumOpsTest(PandasOnSparkTestCase, TestCasesUtils):
             self.assert_eq(pser.astype(cat_type), psser.astype(cat_type))
 
 
+@unittest.skipIf(not extension_dtypes_available, "pandas extension dtypes are not available")
+class IntegralExtensionOpsTest(PandasOnSparkTestCase, TestCasesUtils):
+    def test_from_to_pandas(self):
+        data = [1, 2, 3, None]
+        dtypes = ["Int8", "Int16", "Int32", "Int64"]
+        for dtype in dtypes:
+            pser = pd.Series(data, dtype=dtype)
+            psser = ps.Series(data, dtype=dtype)
+            self.check_extension(pser, psser.to_pandas())
+            self.check_extension(ps.from_pandas(pser), psser)
+
+
+@unittest.skipIf(
+    not extension_float_dtypes_available, "pandas extension float dtypes are not available"
+)
+class FractionalExtensionOpsTest(PandasOnSparkTestCase, TestCasesUtils):
+    def test_from_to_pandas(self):
+        data = [0.1, 0.2, 0.3, None]
+        dtypes = ["Float32", "Float64"]
+        for dtype in dtypes:
+            pser = pd.Series(data, dtype=dtype)
+            psser = ps.Series(data, dtype=dtype)
+            self.check_extension(pser, psser.to_pandas())
+            self.check_extension(ps.from_pandas(pser), psser)
+
+
 if __name__ == "__main__":
-    import unittest
     from pyspark.pandas.tests.data_type_ops.test_num_ops import *  # noqa: F401
 
     try:
