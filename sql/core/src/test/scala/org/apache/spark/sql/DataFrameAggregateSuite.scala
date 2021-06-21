@@ -34,6 +34,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.test.SQLTestData.DecimalData
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.YearMonthIntervalType.{MONTH, YEAR}
 
 case class Fact(date: Int, hour: Int, minute: Int, room_name: String, temp: Double)
 
@@ -1125,8 +1126,8 @@ class DataFrameAggregateSuite extends QueryTest
       .select(
         $"class",
         $"year-month",
-        $"year" cast YearMonthIntervalType(0, 0) as "year",
-        $"month" cast YearMonthIntervalType(1, 1) as "month",
+        $"year" cast YearMonthIntervalType(YEAR, YEAR) as "year",
+        $"month" cast YearMonthIntervalType(MONTH, MONTH) as "month",
         $"day-time")
 
     val df2 = Seq((Period.ofMonths(Int.MaxValue), Duration.ofDays(106751991)),
@@ -1139,8 +1140,8 @@ class DataFrameAggregateSuite extends QueryTest
     assert(find(sumDF.queryExecution.executedPlan)(_.isInstanceOf[HashAggregateExec]).isDefined)
     assert(sumDF.schema == StructType(Seq(
       StructField("sum(year-month)", YearMonthIntervalType()),
-      StructField("sum(year)", YearMonthIntervalType(0, 0)),
-      StructField("sum(month)", YearMonthIntervalType(1, 1)),
+      StructField("sum(year)", YearMonthIntervalType(YEAR, YEAR)),
+      StructField("sum(month)", YearMonthIntervalType(MONTH, MONTH)),
       // TODO(SPARK-35729): Check all day-time interval types in aggregate expressions
       StructField("sum(day-time)", DayTimeIntervalType()))))
 
@@ -1154,8 +1155,8 @@ class DataFrameAggregateSuite extends QueryTest
     assert(find(sumDF2.queryExecution.executedPlan)(_.isInstanceOf[HashAggregateExec]).isDefined)
     assert(sumDF2.schema == StructType(Seq(StructField("class", IntegerType, false),
       StructField("sum(year-month)", YearMonthIntervalType()),
-      StructField("sum(year)", YearMonthIntervalType(0, 0)),
-      StructField("sum(month)", YearMonthIntervalType(1, 1)),
+      StructField("sum(year)", YearMonthIntervalType(YEAR, YEAR)),
+      StructField("sum(month)", YearMonthIntervalType(MONTH, MONTH)),
       // TODO(SPARK-35729): Check all day-time interval types in aggregate expressions
       StructField("sum(day-time)", DayTimeIntervalType()))))
 
@@ -1182,8 +1183,8 @@ class DataFrameAggregateSuite extends QueryTest
       .select(
         $"class",
         $"year-month",
-        $"year" cast YearMonthIntervalType(0, 0) as "year",
-        $"month" cast YearMonthIntervalType(1, 1) as "month",
+        $"year" cast YearMonthIntervalType(YEAR, YEAR) as "year",
+        $"month" cast YearMonthIntervalType(MONTH, MONTH) as "month",
         $"day-time")
 
     val df2 = Seq((Period.ofMonths(Int.MaxValue), Duration.ofDays(106751991)),
