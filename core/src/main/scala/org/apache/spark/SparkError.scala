@@ -33,14 +33,13 @@ import org.apache.spark.util.Utils
  * Information associated with an error class.
  *
  * @param sqlState SQLSTATE associated with this class.
- * @param messageFormatLines C-style message format compatible with printf.
- *                           The error message is constructed by concatenating the lines with
- *                           linebreaks.
+ * @param message C-style message format compatible with printf.
+ *                The error message is constructed by concatenating the lines with newlines.
  */
-case class ErrorInfo(sqlState: Option[String], messageFormatLines: Seq[String]) {
+case class ErrorInfo(sqlState: Option[String], message: Seq[String]) {
   // For compatibility with multi-line error messages
   @JsonIgnore
-  val messageFormat: String = messageFormatLines.mkString("\n")
+  val messageFormat: String = message.mkString("\n")
 }
 
 /**

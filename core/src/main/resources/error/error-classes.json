@@ -1,22 +1,22 @@
 {
   "DIVIDE_BY_ZERO_ERROR" : {
     "sqlState" : "22012",
-    "messageFormatLines" : [ "divide by zero" ]
+    "message" : [ "divide by zero" ]
   },
   "DUPLICATE_KEY_ERROR" : {
     "sqlState" : "23000",
-    "messageFormatLines" : [ "Found duplicate keys '%s'" ]
+    "message" : [ "Found duplicate keys '%s'" ]
   },
   "MISSING_COLUMN_ERROR" : {
     "sqlState" : "42000",
-    "messageFormatLines" : [ "cannot resolve '%s' given input columns: [%s]" ]
+    "message" : [ "cannot resolve '%s' given input columns: [%s]" ]
   },
   "SECOND_FUNCTION_ARGUMENT_NOT_INTEGER_ERROR" : {
     "sqlState" : "22023",
-    "messageFormatLines" : [ "The second argument of '%s' function needs to be an integer." ]
+    "message" : [ "The second argument of '%s' function needs to be an integer." ]
   },
   "WRITING_JOB_ABORTED_ERROR" : {
     "sqlState" : "40000",
-    "messageFormatLines" : [ "Writing job aborted" ]
+    "message" : [ "Writing job aborted" ]
   }
 }

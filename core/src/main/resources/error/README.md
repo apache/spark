@@ -1,7 +1,7 @@
 # Guidelines
 
-To throw a standardized exception, developers should use an error class and message parameters
-rather than an arbitrary error message.
+To throw a standardized user-facing exception, developers should specify the error class and
+message parameters rather than an arbitrary error message.
 
 ## Usage
 
@@ -28,7 +28,7 @@ Throw exception:
 
     "PROBLEM_BECAUSE": {
       "sqlState": "XXXXX", 
-      "messageFormatLines": ["Problem %s because %s"]
+      "message": ["Problem %s because %s"]
     }
 
 `SparkException.scala`
@@ -59,12 +59,15 @@ To access error fields, catch exceptions that extend `org.apache.spark.SparkErro
 
 ## Fields
 
-All fields, excluding error messages, should be consistent across releases.
-
 ### Error class
 
-Error classes are a succinct, unique representation of the error category.
-They should be sorted in alphabetical order.
+Error classes are a succinct, human-readable representation of the error category.
+
+Invariants:
+
+- Unique
+- Consistent across releases
+- Sorted alphabetically
 
 ### SQLSTATE
 
@@ -72,8 +75,15 @@ SQLSTATE is a portable error identifier across SQL engines.
 For consistency, Spark only sets SQLSTATE as defined in the ANSI/ISO standard.
 Spark does not define its own classes or subclasses.
 
-### Message format
+Invariants:
 
-Error messages should be unique.
-The error message format should be written to accept parameters via the C-style printf syntax.
-The parameters are Strings for simplicity.
+- Consistent across releases
+
+### Message
+
+Error messages provide a descriptive, human-readable representation of the error.
+The message format is written to accept string parameters via the C-style printf syntax.
+
+Invariants:
+
+- Unique
