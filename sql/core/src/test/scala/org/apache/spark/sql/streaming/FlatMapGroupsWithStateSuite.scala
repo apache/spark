@@ -436,9 +436,9 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
     var intState = TestGroupState.create[Int](
       Optional.empty[Int],
       NoTimeout,
-     1000,
-     Optional.empty[Long],
-     hasTimedOut = false)
+      1000,
+      Optional.empty[Long],
+      hasTimedOut = false)
     intercept[NoSuchElementException] {
       intState.get
     }
