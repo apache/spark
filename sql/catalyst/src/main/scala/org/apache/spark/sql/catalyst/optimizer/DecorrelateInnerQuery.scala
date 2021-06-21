@@ -258,13 +258,7 @@ object DecorrelateInnerQuery extends PredicateHelper {
   def apply(
       innerPlan: LogicalPlan,
       outerPlan: LogicalPlan): (LogicalPlan, Seq[Expression]) = {
-    apply(innerPlan, Seq(outerPlan))
-  }
-
-  def apply(
-      innerPlan: LogicalPlan,
-      outerPlans: Seq[LogicalPlan]): (LogicalPlan, Seq[Expression]) = {
-    val outputSet = AttributeSet(outerPlans.flatMap(_.outputSet))
+    val outputPlanInputAttrs = outerPlan.inputSet
 
     // The return type of the recursion.
     // The first parameter is a new logical plan with correlation eliminated.
@@ -486,7 +480,7 @@ object DecorrelateInnerQuery extends PredicateHelper {
       }
     }
     val (newChild, joinCond, _) = decorrelate(BooleanSimplification(innerPlan), AttributeSet.empty)
-    val (plan, conditions) = deduplicate(newChild, joinCond, outputSet)
+    val (plan, conditions) = deduplicate(newChild, joinCond, outputPlanInputAttrs)
     (plan, stripOuterReferences(conditions))
   }
 }
