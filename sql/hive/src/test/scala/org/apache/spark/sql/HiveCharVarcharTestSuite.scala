@@ -17,7 +17,9 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.catalyst.catalog.ExternalCatalogWithListener
 import org.apache.spark.sql.execution.command.CharVarcharDDLTestBase
+import org.apache.spark.sql.hive.HiveExternalCatalog
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 
 class HiveCharVarcharTestSuite extends CharVarcharTestSuite with TestHiveSingleton {
@@ -48,6 +50,20 @@ class HiveCharVarcharTestSuite extends CharVarcharTestSuite with TestHiveSinglet
       val rest = sql("SHOW CREATE TABLE t AS SERDE").head().getString(0)
       assert(rest.contains("VARCHAR(3)"))
       assert(rest.contains("CHAR(5)"))
+    }
+  }
+
+  test("SPARK-35700: Read char/varchar orc table with created and written by external systems") {
+    val hiveClient = spark.sharedState
+      .externalCatalog.asInstanceOf[ExternalCatalogWithListener]
+      .unwrapped
+      .asInstanceOf[HiveExternalCatalog].client
+
+    withTable("t") {
+      hiveClient.runSqlHive("CREATE TABLE t(c CHAR(5), v VARCHAR(7)) STORED AS ORC")
+      hiveClient.runSqlHive("INSERT INTO t VALUES('Spark', 'kyuubi'))")
+      checkAnswer(sql("SELECT c, v from t"), Row("Spark", "kyuubi"))
+      checkAnswer(sql("SELECT id from t where id = 'kyuubi'"), Row("kyuubi"))
     }
   }
 }
