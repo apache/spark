@@ -34,7 +34,6 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.SIMPLE_DATE_FORMAT
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy.LEGACY
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
@@ -1002,80 +1001,9 @@ case class GetTimestampWithoutTZ(
     timeZoneId: Option[String] = None,
     failOnError: Boolean = SQLConf.get.ansiEnabled) extends ToTimestamp {
 
-  assert(SQLConf.get.legacyTimeParserPolicy != LEGACY,
-    "Legacy time parser is not supported in SQL function to_timestamp_ntz")
-
   override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType)
 
   override def dataType: DataType = TimestampWithoutTZType
-
-  override def eval(input: InternalRow): Any = {
-    val t = left.eval(input)
-    if (t == null) {
-      null
-    } else {
-      val fmt = right.eval(input)
-      if (fmt == null) {
-        null
-      } else {
-        val formatter = formatterOption.getOrElse(getFormatter(fmt.toString))
-        try {
-          formatter.parseWithoutTimeZone(t.asInstanceOf[UTF8String].toString)
-        } catch {
-          case e if isParseError(e) =>
-            if (failOnError) {
-              throw e
-            } else {
-              null
-            }
-        }
-      }
-    }
-  }
-
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val parseErrorBranch = if (failOnError) "throw e;" else s"${ev.isNull} = true;"
-    left.dataType match {
-      case StringType => formatterOption.map { fmt =>
-        val df = classOf[TimestampFormatter].getName
-        val formatterName = ctx.addReferenceObj("formatter", fmt, df)
-        nullSafeCodeGen(ctx, ev, (datetimeStr, _) =>
-          s"""
-             |try {
-             |  ${ev.value} = $formatterName.parseWithoutTimeZone($datetimeStr.toString());
-             |} catch (java.time.DateTimeException e) {
-             |  $parseErrorBranch
-             |} catch (java.time.format.DateTimeParseException e) {
-             |  $parseErrorBranch
-             |} catch (java.text.ParseException e) {
-             |  $parseErrorBranch
-             |}
-             |""".stripMargin)
-      }.getOrElse {
-        val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
-        val tf = TimestampFormatter.getClass.getName.stripSuffix("$")
-        val ldf = LegacyDateFormats.getClass.getName.stripSuffix("$")
-        val timestampFormatter = ctx.freshName("timestampFormatter")
-        nullSafeCodeGen(ctx, ev, (string, format) =>
-          s"""
-             |$tf $timestampFormatter = $tf$$.MODULE$$.apply(
-             |  $format.toString(),
-             |  $zid,
-             |  $ldf$$.MODULE$$.SIMPLE_DATE_FORMAT(),
-             |  true);
-             |try {
-             |  ${ev.value} = $timestampFormatter.parseWithoutTimeZone($string.toString());
-             |} catch (java.time.format.DateTimeParseException e) {
-             |    $parseErrorBranch
-             |} catch (java.time.DateTimeException e) {
-             |    $parseErrorBranch
-             |} catch (java.text.ParseException e) {
-             |    $parseErrorBranch
-             |}
-             |""".stripMargin)
-      }
-    }
-  }
 
   override protected def downScaleFactor: Long = 1
 
@@ -1145,6 +1073,10 @@ abstract class ToTimestamp
   // For example if the factor is 1000000, the result of the expression is in seconds.
   protected def downScaleFactor: Long
 
+  // Whether the expression is for converting String to TimestampWithoutTZType.
+  private lazy val stringToTimestampWithoutTZ: Boolean =
+    dataType == TimestampWithoutTZType
+
   override protected def formatString: Expression = right
   override protected def isParsing = true
 
@@ -1178,7 +1110,11 @@ abstract class ToTimestamp
           } else {
             val formatter = formatterOption.getOrElse(getFormatter(fmt.toString))
             try {
-              formatter.parse(t.asInstanceOf[UTF8String].toString) / downScaleFactor
+              if (stringToTimestampWithoutTZ) {
+                formatter.parseWithoutTimeZone(t.asInstanceOf[UTF8String].toString)
+              } else {
+                formatter.parse(t.asInstanceOf[UTF8String].toString) / downScaleFactor
+              }
             } catch {
               case e if isParseError(e) =>
                 if (failOnError) {
@@ -1195,6 +1131,17 @@ abstract class ToTimestamp
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val javaType = CodeGenerator.javaType(dataType)
     val parseErrorBranch = if (failOnError) "throw e;" else s"${ev.isNull} = true;"
+    val parseMethod = if (stringToTimestampWithoutTZ) {
+      "parseWithoutTimeZone"
+    } else {
+      "parse"
+    }
+    val downScaleCode = if (stringToTimestampWithoutTZ) {
+      ""
+    } else {
+      s"/ $downScaleFactor"
+    }
+
     left.dataType match {
       case StringType => formatterOption.map { fmt =>
         val df = classOf[TimestampFormatter].getName
@@ -1202,7 +1149,7 @@ abstract class ToTimestamp
         nullSafeCodeGen(ctx, ev, (datetimeStr, _) =>
           s"""
              |try {
-             |  ${ev.value} = $formatterName.parse($datetimeStr.toString()) / $downScaleFactor;
+             |  ${ev.value} = $formatterName.$parseMethod($datetimeStr.toString()) $downScaleCode;
              |} catch (java.time.DateTimeException e) {
              |  $parseErrorBranch
              |} catch (java.time.format.DateTimeParseException e) {
@@ -1224,7 +1171,7 @@ abstract class ToTimestamp
              |  $ldf$$.MODULE$$.SIMPLE_DATE_FORMAT(),
              |  true);
              |try {
-             |  ${ev.value} = $timestampFormatter.parse($string.toString()) / $downScaleFactor;
+             |  ${ev.value} = $timestampFormatter.$parseMethod($string.toString()) $downScaleCode;
              |} catch (java.time.format.DateTimeParseException e) {
              |    $parseErrorBranch
              |} catch (java.time.DateTimeException e) {
