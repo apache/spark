@@ -56,8 +56,6 @@ class ShuffleBlockPusherSuite extends SparkFunSuite with BeforeAndAfterEach {
     when(dependency.partitioner).thenReturn(new HashPartitioner(8))
     when(dependency.serializer).thenReturn(new JavaSerializer(conf))
     when(dependency.getMergerLocs).thenReturn(Seq(BlockManagerId("test-client", "test-client", 1)))
-    conf.set("spark.shuffle.push.based.enabled", "true")
-    conf.set("spark.shuffle.service.enabled", "true")
     // Set the env because the shuffler writer gets the shuffle client instance from the env.
     val mockEnv = mock(classOf[SparkEnv])
     when(mockEnv.conf).thenReturn(conf)
