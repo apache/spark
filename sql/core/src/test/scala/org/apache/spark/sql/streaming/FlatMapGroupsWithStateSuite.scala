@@ -24,8 +24,8 @@ import org.apache.commons.io.FileUtils
 import org.scalatest.exceptions.TestFailedException
 
 import org.apache.spark.SparkException
-import org.apache.spark.api.java.function.FlatMapGroupsWithStateFunction
 import org.apache.spark.api.java.Optional
+import org.apache.spark.api.java.function.FlatMapGroupsWithStateFunction
 import org.apache.spark.sql.{DataFrame, Encoder}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection, UnsafeRow}
@@ -63,8 +63,8 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
 
     assert(testState.isInstanceOf[GroupStateImpl[Int]])
 
-    assert(testState.hasRemoved === prodState.hasRemoved)
-    assert(testState.hasUpdated === prodState.hasUpdated)
+    assert(testState.isRemoved === prodState.isRemoved)
+    assert(testState.isUpdated === prodState.isUpdated)
     assert(testState.exists === prodState.exists)
     assert(testState.get === prodState.get)
     assert(testState.getTimeoutTimestampMs === prodState.getTimeoutTimestampMs)
@@ -74,14 +74,14 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
 
     testState.update(6)
     prodState.update(6)
-    assert(testState.hasUpdated === prodState.hasUpdated)
+    assert(testState.isUpdated === prodState.isUpdated)
     assert(testState.exists === prodState.exists)
     assert(testState.get === prodState.get)
 
     testState.remove()
     prodState.remove()
     assert(testState.exists === prodState.exists)
-    assert(testState.hasRemoved === prodState.hasRemoved)
+    assert(testState.isRemoved === prodState.isRemoved)
   }
 
   test("GroupState - get, exists, update, remove") {
@@ -101,8 +101,8 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
         }
       }
       assert(state.getOption === expectedData)
-      assert(state.hasUpdated === shouldBeUpdated)
-      assert(state.hasRemoved === shouldBeRemoved)
+      assert(state.isUpdated === shouldBeUpdated)
+      assert(state.isRemoved === shouldBeRemoved)
     }
 
     // === Tests for state in streaming queries ===
@@ -302,12 +302,14 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
       TestGroupState.create[Int](
         Optional.of(5), EventTimeTimeout, 100L, Optional.of(-1000), hasTimedOut = false)
     }
-    assert(illegalArgument.getMessage.contains("eventTimeWatermarkMs must be 0 or positive if present"))
+    assert(
+      illegalArgument.getMessage.contains("eventTimeWatermarkMs must be 0 or positive if present"))
     illegalArgument = intercept[IllegalArgumentException] {
       GroupStateImpl.createForStreaming[Int](
         Some(5), 100L, -1000L, EventTimeTimeout, false, true)
     }
-    assert(illegalArgument.getMessage.contains("eventTimeWatermarkMs must be 0 or positive if present"))
+    assert(
+      illegalArgument.getMessage.contains("eventTimeWatermarkMs must be 0 or positive if present"))
 
     // batchProcessingTimeMs must be positive
     illegalArgument = intercept[IllegalArgumentException] {
@@ -327,13 +329,15 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
         Optional.of(5), NoTimeout, 100L, Optional.empty[Long], hasTimedOut = true)
     }
     assert(
-      unsupportedOperation.getMessage.contains("hasTimedOut is true however there's no timeout configured"))
+      unsupportedOperation
+        .getMessage.contains("hasTimedOut is true however there's no timeout configured"))
     unsupportedOperation = intercept[UnsupportedOperationException] {
       GroupStateImpl.createForStreaming[Int](
         Some(5), 100L, NO_TIMESTAMP, NoTimeout, true, false)
     }
     assert(
-      unsupportedOperation.getMessage.contains("hasTimedOut is true however there's no timeout configured"))
+      unsupportedOperation
+        .getMessage.contains("hasTimedOut is true however there's no timeout configured"))
   }
 
   test("GroupState - hasTimedOut") {
@@ -359,7 +363,9 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
   }
 
   test("GroupState - getCurrentWatermarkMs") {
-    def streamingState(timeoutConf: GroupStateTimeout, watermark: Optional[Long]): GroupState[Int] = {
+    def streamingState(
+      timeoutConf: GroupStateTimeout,
+      watermark: Optional[Long]): GroupState[Int] = {
       TestGroupState.create[Int](
         Optional.empty[Int], timeoutConf, 1000, watermark, hasTimedOut = false)
     }
@@ -376,7 +382,9 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
 
     for (timeoutConf <- Seq(NoTimeout, EventTimeTimeout, ProcessingTimeTimeout)) {
       // Tests for getCurrentWatermarkMs in streaming queries
-      assertWrongTimeoutError { streamingState(timeoutConf, Optional.empty[Long]).getCurrentWatermarkMs() }
+      assertWrongTimeoutError {
+        streamingState(timeoutConf, Optional.empty[Long]).getCurrentWatermarkMs()
+      }
       assert(streamingState(timeoutConf, Optional.of(1000)).getCurrentWatermarkMs() === 1000)
       assert(streamingState(timeoutConf, Optional.of(2000)).getCurrentWatermarkMs() === 2000)
       assert(batchState(EventTimeTimeout, watermarkPresent = true).getCurrentWatermarkMs() === -1)
@@ -425,13 +433,24 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
 
 
   test("GroupState - primitive type") {
-    var intState = TestGroupState.create[Int](Optional.empty[Int], NoTimeout, 1000, Optional.empty[Long], hasTimedOut = false)
+    var intState = TestGroupState.create[Int](
+      Optional.empty[Int],
+      NoTimeout,
+     1000,
+     Optional.empty[Long],
+     hasTimedOut = false)
     intercept[NoSuchElementException] {
       intState.get
     }
     assert(intState.getOption === None)
 
-    intState = TestGroupState.create[Int](Optional.of(10), NoTimeout, 1000, Optional.empty[Long], hasTimedOut = false)
+    intState = TestGroupState.create[Int](
+      Optional.of(10),
+      NoTimeout,
+      1000,
+      Optional.empty[Long],
+      hasTimedOut = false)
+
     assert(intState.get == 10)
     intState.update(0)
     assert(intState.get == 0)

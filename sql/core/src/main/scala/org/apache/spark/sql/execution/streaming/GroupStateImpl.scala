@@ -147,9 +147,9 @@ private[sql] class GroupStateImpl[S] private(
 
   // ========= Internal API =========
 
-  override def hasRemoved: Boolean = removed
+  override def isRemoved: Boolean = removed
 
-  override def hasUpdated: Boolean = updated
+  override def isUpdated: Boolean = updated
 
   override def getTimeoutTimestampMs: Optional[Long] = {
     if (timeoutTimestamp != NO_TIMESTAMP) {

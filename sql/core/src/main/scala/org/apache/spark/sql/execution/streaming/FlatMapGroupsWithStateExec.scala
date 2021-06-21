@@ -226,13 +226,13 @@ case class FlatMapGroupsWithStateExec(
 
       // When the iterator is consumed, then write changes to state
       def onIteratorCompletion: Unit = {
-        if (groupState.hasRemoved && !groupState.getTimeoutTimestampMs.isPresent()) {
+        if (groupState.isRemoved && !groupState.getTimeoutTimestampMs.isPresent()) {
           stateManager.removeState(store, stateData.keyRow)
           numUpdatedStateRows += 1
         } else {
           val currentTimeoutTimestamp = groupState.getTimeoutTimestampMs.orElse(NO_TIMESTAMP)
           val hasTimeoutChanged = currentTimeoutTimestamp != stateData.timeoutTimestamp
-          val shouldWriteState = groupState.hasUpdated || groupState.hasRemoved || hasTimeoutChanged
+          val shouldWriteState = groupState.isUpdated || groupState.isRemoved || hasTimeoutChanged
 
           if (shouldWriteState) {
             val updatedStateObj = if (groupState.exists) groupState.get else null
