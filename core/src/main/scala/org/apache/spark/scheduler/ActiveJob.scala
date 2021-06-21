@@ -1,19 +1,3 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The ASF licenses this file to You under the Apache License, Version 2.0
- * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
 
 package org.apache.spark.scheduler
 
@@ -27,7 +11,9 @@ import org.apache.spark.util.CallSite
  * ShuffleMapStage before any downstream stages are submitted. The latter is used for adaptive
  * query planning, to look at map output statistics before submitting later stages. We distinguish
  * between these two types of jobs using the finalStage field of this class.
- *
+ * DAGScheduler 中正在运行的作业。 作业可以有两种类型：结果作业，它计算 ResultStage 以执行操作，或地图阶段作业，它在提交任何下游阶段之前计算 ShuffleMapStage 的地图输出。
+ *后者用于自适应查询规划，在提交后期阶段之前查看地图输出统计信息。
+ *我们使用此类的 finalStage 字段来区分这两种类型的作业。
  * Jobs are only tracked for "leaf" stages that clients directly submitted, through DAGScheduler's
  * submitJob or submitMapStage methods. However, either type of job may cause the execution of
  * other earlier stages (for RDDs in the DAG it depends on), and multiple jobs may share some of

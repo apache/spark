@@ -1,19 +1,3 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The ASF licenses this file to You under the Apache License, Version 2.0
- * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
 
 package org.apache.spark.scheduler
 
@@ -25,11 +9,16 @@ import org.apache.spark.util.AccumulatorV2
 /**
  * Low-level task scheduler interface, currently implemented exclusively by
  * [[org.apache.spark.scheduler.TaskSchedulerImpl]].
+ * 低级任务调度器接口，目前由 [[org.apache.spark.scheduler.TaskSchedulerImpl]] 独家实现。
  * This interface allows plugging in different task schedulers. Each TaskScheduler schedules tasks
  * for a single SparkContext. These schedulers get sets of tasks submitted to them from the
  * DAGScheduler for each stage, and are responsible for sending the tasks to the cluster, running
  * them, retrying if there are failures, and mitigating stragglers. They return events to the
  * DAGScheduler.
+ * 该接口允许插入不同的任务调度程序。
+ *每个 TaskScheduler 为单个 SparkContext 安排任务。
+ *这些调度程序从每个阶段的 DAGScheduler 获取提交给它们的任务集，并负责将任务发送到集群、运行它们、在出现故障时重试并减少落后者。
+ *他们将事件返回给 DAGScheduler。
  */
 private[spark] trait TaskScheduler {
 

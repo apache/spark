@@ -1,19 +1,3 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The ASF licenses this file to You under the Apache License, Version 2.0
- * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
 
 package org.apache.spark.scheduler
 
@@ -53,7 +37,8 @@ import org.apache.spark.util._
  * TaskScheduler implementation that runs them on the cluster. A TaskSet contains fully independent
  * tasks that can run right away based on the data that's already on the cluster (e.g. map output
  * files from previous stages), though it may fail if this data becomes unavailable.
- *
+ * 实现面向阶段调度的高级调度层。它为每个作业计算阶段的 DAG，跟踪实现了哪些 RDD 和阶段输出，并找到运行作业的最小时间表。
+然后它将阶段作为任务集提交给在集群上运行它们的底层 TaskScheduler 实现.TaskSet 包含完全独立的任务，可以根据集群上已有的数据立即运行（例如，前一阶段的映射输出文件），但如果这些数据不可用，它可能会失败。
  * Spark stages are created by breaking the RDD graph at shuffle boundaries. RDD operations with
  * "narrow" dependencies, like map() and filter(), are pipelined together into one set of tasks
  * in each stage, but operations with shuffle dependencies require multiple stages (one to write a
@@ -68,7 +53,9 @@ import org.apache.spark.util._
  * lost, in which case old stages may need to be resubmitted. Failures *within* a stage that are
  * not caused by shuffle file loss are handled by the TaskScheduler, which will retry each task
  * a small number of times before cancelling the whole stage.
- *
+ * 除了提出阶段的 DAG 之外，DAGScheduler 还根据当前缓存状态确定运行每个任务的首选位置，并将这些传递给低级 TaskScheduler。
+ *此外，它处理由于 shuffle 输出文件丢失而导致的失败，在这种情况下，可能需要重新提交旧阶段。
+ *不是由 shuffle 文件丢失引起的 * 阶段内的失败由 TaskScheduler 处理，它会在取消整个阶段之前对每个任务进行少量重试。
  * When looking through this code, there are several key concepts:
  *
  *  - Jobs (represented by [[ActiveJob]]) are the top-level work items submitted to the scheduler.
