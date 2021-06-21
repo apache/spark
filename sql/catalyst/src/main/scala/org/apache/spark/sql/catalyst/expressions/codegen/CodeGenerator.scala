@@ -76,22 +76,16 @@ object ExprCode {
 /**
  * State used for subexpression elimination.
  *
- * @param code The sequence of statements required to evaluate the subexpression.
- * @param isNull A term that holds a boolean value representing whether the expression evaluated
- *               to null.
- * @param value A term for a value of a common sub-expression. Not valid if `isNull`
- *              is set to `true`.
- * @param childrenSubExprs The sequence of subexpressions as the children expressions. Before
- *                         evaluating this subexpression, we should evaluate all children
- *                         subexpressions first. This is used if we want to selectively evaluate
- *                         particular subexpressions, instead of all at once. In the case, we need
- *                         to make sure we evaluate all children subexpressions too.
+ * @param eval The source code for evaluating the subexpression.
+ * @param children The sequence of subexpressions as the children expressions. Before
+ *                 evaluating this subexpression, we should evaluate all children
+ *                 subexpressions first. This is used if we want to selectively evaluate
+ *                 particular subexpressions, instead of all at once. In the case, we need
+ *                 to make sure we evaluate all children subexpressions too.
  */
 case class SubExprEliminationState(
-  var code: Block,
-  isNull: ExprValue,
-  value: ExprValue,
-  childrenSubExprs: Seq[SubExprEliminationState] = Seq.empty)
+  eval: ExprCode,
+  children: Seq[SubExprEliminationState] = Seq.empty)
 
 /**
  * Codes and common subexpressions mapping used for subexpression elimination.
@@ -1046,20 +1040,47 @@ class CodegenContext extends Logging {
     val code = new StringBuilder()
 
     subExprStates.foreach { state =>
-      val currentCode = evaluateSubExprEliminationState(state.childrenSubExprs) + "\n" + state.code
+      val currentCode = evaluateSubExprEliminationState(state.children) + "\n" + state.eval.code
       code.append(currentCode + "\n")
-      state.code = EmptyBlock
+      state.eval.code = EmptyBlock
     }
 
     code.toString()
   }
 
   /**
-   * Checks and sets up the state and codegen for subexpression elimination. This finds the
-   * common subexpressions, generates the code snippets that evaluate those expressions and
-   * populates the mapping of common subexpressions to the generated code snippets. The generated
-   * code snippets will be returned and should be inserted into generated codes before these
-   * common subexpressions actually are used first time.
+   * Checks and sets up the state and codegen for subexpression elimination in whole-stage codegen.
+   *
+   * This finds the common subexpressions, generates the code snippets that evaluate those
+   * expressions and populates the mapping of common subexpressions to the generated code snippets.
+   *
+   * The generated code snippet for subexpression is wrapped in `SubExprEliminationState`, which
+   * contains a `ExprCode` and the children `SubExprEliminationState` if any. The `ExprCode`
+   * includes java source code, result variable name and is-null variable name of the subexpression.
+   *
+   * Besides, this also returns a sequences of `ExprCode` which are expression codes that need to
+   * be evaluated (as their input parameters) before evaluating subexpressions.
+   *
+   * To evaluate the returned subexpressions, please call `evaluateSubExprEliminationState` with
+   * the `SubExprEliminationState`s to be evaluated. During generating the code, it will cleanup
+   * the states to avoid duplicate evaluation.
+   *
+   * The details of subexpression generation:
+   *   1. Gets subexpression set. See `EquivalentExpressions`.
+   *   2. Generate code of subexpressions as a whole block of code (non-split case)
+   *   3. Check if the total length of the above block is larger than the split-threshold. If so,
+   *      try to split it in step 4, otherwise returning the non-split code block.
+   *   4. Check if parameter lengths of all subexpressions satisfy the JVM limitation, if so,
+   *      try to split, otherwise returning the non-split code block.
+   *   5. For each subexpression, generating a function and put the code into it. To evaluate the
+   *      subexpression, just call the function.
+   *
+   * The explanation of subexpression codegen:
+   *   1. Wrapping in `withSubExprEliminationExprs` call with current subexpression map. Each
+   *      subexpression may depends on other subexpressions (children). So when generating code
+   *      for subexpressions, we iterate over each subexpression and put the mapping between
+   *      (subexpression -> `SubExprEliminationState`) into the map. So in next subexpression
+   *      evaluation, we can look for generated subexpressions and do replacement.
    */
   def subexpressionEliminationForWholeStageCodegen(expressions: Seq[Expression]): SubExprCodes = {
     // Create a clear EquivalentExpressions and SubExprEliminationState mapping
@@ -1086,8 +1107,7 @@ class CodegenContext extends Logging {
               childrenSubExprs += subExprEliminationExprs(e)
             case _ =>
           }
-          val state = SubExprEliminationState(eval.code, eval.isNull, eval.value,
-            childrenSubExprs.toSeq.reverse)
+          val state = SubExprEliminationState(eval, childrenSubExprs.toSeq.reverse)
           exprs.foreach(localSubExprEliminationExprsForNonSplit.put(_, state))
           allStates += state
           Seq(eval)
@@ -1105,7 +1125,7 @@ class CodegenContext extends Logging {
       (inputVars.toSeq, exprCodes.toSeq)
     }.unzip
 
-    val needSplit = nonSplitCode.map(_.code.length).sum > SQLConf.get.methodSplitThreshold
+    val needSplit = nonSplitCode.map(_.eval.code.length).sum > SQLConf.get.methodSplitThreshold
     val (subExprsMap, exprCodes) = if (needSplit) {
       if (inputVarsForAllFuncs.map(calculateParamLengthFromExprValues).forall(isValidParamLength)) {
         val localSubExprEliminationExprs =
@@ -1154,7 +1174,8 @@ class CodegenContext extends Logging {
 
           val inputVariables = inputVars.map(_.variableName).mkString(", ")
           val code = code"${addNewFunction(fnName, fn)}($inputVariables);"
-          val state = SubExprEliminationState(code, isNull, JavaCode.global(value, expr.dataType),
+          val state = SubExprEliminationState(
+            ExprCode(code, isNull, JavaCode.global(value, expr.dataType)),
             childrenSubExprs.toSeq.reverse)
           exprs.foreach(localSubExprEliminationExprs.put(_, state))
         }
@@ -1219,9 +1240,9 @@ class CodegenContext extends Logging {
       val subExprCode = s"${addNewFunction(fnName, fn)}($INPUT_ROW);"
       subexprFunctions += s"${addNewFunction(fnName, fn)}($INPUT_ROW);"
       val state = SubExprEliminationState(
-        code"$subExprCode",
-        JavaCode.isNullGlobal(isNull),
-        JavaCode.global(value, expr.dataType))
+        ExprCode(code"$subExprCode",
+          JavaCode.isNullGlobal(isNull),
+          JavaCode.global(value, expr.dataType)))
       subExprEliminationExprs ++= e.map(_ -> state).toMap
     }
   }
@@ -1820,9 +1841,8 @@ object CodeGenerator extends Logging {
     while (stack.nonEmpty) {
       stack.pop() match {
         case e if subExprs.contains(e) =>
-          val SubExprEliminationState(_, isNull, value, _) = subExprs(e)
-          collectLocalVariable(value)
-          collectLocalVariable(isNull)
+          collectLocalVariable(subExprs(e).eval.value)
+          collectLocalVariable(subExprs(e).eval.isNull)
 
         case ref: BoundReference if ctx.currentVars != null &&
             ctx.currentVars(ref.ordinal) != null =>

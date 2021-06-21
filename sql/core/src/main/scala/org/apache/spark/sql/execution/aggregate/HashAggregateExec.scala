@@ -258,7 +258,9 @@ case class HashAggregateExec(
       aggBufferUpdatingExprs: Seq[Seq[Expression]],
       aggCodeBlocks: Seq[Block],
       subExprs: Map[Expression, SubExprEliminationState]): Option[Seq[String]] = {
-    val exprValsInSubExprs = subExprs.flatMap { case (_, s) => s.value :: s.isNull :: Nil }
+    val exprValsInSubExprs = subExprs.flatMap { case (_, s) =>
+      s.eval.value :: s.eval.isNull :: Nil
+    }
     if (exprValsInSubExprs.exists(_.isInstanceOf[SimpleExprValue])) {
       // `SimpleExprValue`s cannot be used as an input variable for split functions, so
       // we give up splitting functions if it exists in `subExprs`.
