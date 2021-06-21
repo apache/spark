@@ -1147,8 +1147,8 @@ class CodegenContext extends Logging {
           // Collects other subexpressions from the children.
           val childrenSubExprs = mutable.ArrayBuffer.empty[SubExprEliminationState]
           exprs.head.foreach {
-            case e if subExprEliminationExprs.contains(e) =>
-              childrenSubExprs += subExprEliminationExprs(e)
+            case e if localSubExprEliminationExprs.contains(e) =>
+              childrenSubExprs += localSubExprEliminationExprs(e)
             case _ =>
           }
 
