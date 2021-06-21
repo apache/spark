@@ -334,7 +334,12 @@ class DataTypeOps(object, metaclass=ABCMeta):
         return col.replace({np.nan: None})
 
     def isnull(self, index_ops: Union["Index", "Series"]) -> Union["Series", "Index"]:
-        return index_ops._with_new_scol(index_ops.spark.column.isNull())
+        return index_ops._with_new_scol(
+            index_ops.spark.column.isNull(),
+            field=index_ops._internal.data_fields[0].copy(
+                dtype=np.dtype("bool"), spark_type=BooleanType(), nullable=False
+            ),
+        )
 
     def astype(
         self, index_ops: Union["Index", "Series"], dtype: Union[str, type, Dtype]

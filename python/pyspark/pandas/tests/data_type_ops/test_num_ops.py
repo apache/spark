@@ -320,28 +320,54 @@ class NumOpsTest(PandasOnSparkTestCase, TestCasesUtils):
 
 @unittest.skipIf(not extension_dtypes_available, "pandas extension dtypes are not available")
 class IntegralExtensionOpsTest(PandasOnSparkTestCase, TestCasesUtils):
-    def test_from_to_pandas(self):
-        data = [1, 2, 3, None]
+    @property
+    def intergral_extension_psers(self):
         dtypes = ["Int8", "Int16", "Int32", "Int64"]
-        for dtype in dtypes:
-            pser = pd.Series(data, dtype=dtype)
-            psser = ps.Series(data, dtype=dtype)
+        return [pd.Series([1, 2, 3, None], dtype=dtype) for dtype in dtypes]
+
+    @property
+    def intergral_extension_pssers(self):
+        return [ps.from_pandas(pser) for pser in self.intergral_extension_psers]
+
+    @property
+    def intergral_extension_pser_psser_pairs(self):
+        return zip(self.intergral_extension_psers, self.intergral_extension_pssers)
+
+    def test_from_to_pandas(self):
+        for pser, psser in self.intergral_extension_pser_psser_pairs:
             self.check_extension(pser, psser.to_pandas())
             self.check_extension(ps.from_pandas(pser), psser)
+
+    def test_isnull(self):
+        for pser, psser in self.intergral_extension_pser_psser_pairs:
+            self.check_extension(pser.isnull(), psser.isnull())
 
 
 @unittest.skipIf(
     not extension_float_dtypes_available, "pandas extension float dtypes are not available"
 )
 class FractionalExtensionOpsTest(PandasOnSparkTestCase, TestCasesUtils):
-    def test_from_to_pandas(self):
-        data = [0.1, 0.2, 0.3, None]
+    @property
+    def fractional_extension_psers(self):
         dtypes = ["Float32", "Float64"]
-        for dtype in dtypes:
-            pser = pd.Series(data, dtype=dtype)
-            psser = ps.Series(data, dtype=dtype)
+        return [pd.Series([0.1, 0.2, 0.3, None], dtype=dtype) for dtype in dtypes]
+
+    @property
+    def fractional_extension_pssers(self):
+        return [ps.from_pandas(pser) for pser in self.fractional_extension_psers]
+
+    @property
+    def fractional_extension_pser_psser_pairs(self):
+        return zip(self.fractional_extension_psers, self.fractional_extension_pssers)
+
+    def test_from_to_pandas(self):
+        for pser, psser in self.fractional_extension_pser_psser_pairs:
             self.check_extension(pser, psser.to_pandas())
             self.check_extension(ps.from_pandas(pser), psser)
+
+    def test_isnull(self):
+        for pser, psser in self.fractional_extension_pser_psser_pairs:
+            self.check_extension(pser.isnull(), psser.isnull())
 
 
 if __name__ == "__main__":
