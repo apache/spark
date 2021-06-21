@@ -24,7 +24,7 @@ import org.apache.spark.sql.{Dataset, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Alias, Literal}
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, IdentityBroadcastMode, SinglePartition}
-import org.apache.spark.sql.execution.exchange._
+import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, Exchange, ReusedExchangeExec, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.joins.HashedRelationBroadcastMode
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -47,6 +47,8 @@ case class ColumnarExchange(child: SparkPlan) extends Exchange {
 
 class ExchangeSuite extends SparkPlanTest with SharedSparkSession {
   import testImplicits._
+
+  setupTestData()
 
   test("shuffling UnsafeRows in exchange") {
     val input = (1 to 1000).map(Tuple1.apply)
@@ -158,5 +160,49 @@ class ExchangeSuite extends SparkPlanTest with SharedSparkSession {
     val projection1 = cached.select("_1", "_2").queryExecution.executedPlan
     val projection2 = cached.select("_1", "_3").queryExecution.executedPlan
     assert(!projection1.sameResult(projection2))
+  }
+
+  test("Exchange reuse across the whole plan") {
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      val df = sql(
+        """
+          |SELECT
+          |  (SELECT max(a.key) FROM testData AS a JOIN testData AS b ON b.key = a.key),
+          |  a.key
+          |FROM testData AS a
+          |JOIN testData AS b ON b.key = a.key
+      """.stripMargin)
+
+      val plan = df.queryExecution.executedPlan
+
+      val exchangeIds = plan.collectWithSubqueries { case e: Exchange => e.id }
+      val reusedExchangeIds = plan.collectWithSubqueries {
+        case re: ReusedExchangeExec => re.child.id
+      }
+
+      assert(exchangeIds.size == 2, "Whole plan exchange reusing not working correctly")
+      assert(reusedExchangeIds.size == 3, "Whole plan exchange reusing not working correctly")
+      assert(reusedExchangeIds.forall(exchangeIds.contains(_)),
+        "ReusedExchangeExec should reuse an existing exchange")
+
+      val df2 = sql(
+        """
+          |SELECT
+          |  (SELECT min(a.key) FROM testData AS a JOIN testData AS b ON b.key = a.key),
+          |  (SELECT max(a.key) FROM testData AS a JOIN testData2 AS b ON b.a = a.key)
+      """.stripMargin)
+
+      val plan2 = df2.queryExecution.executedPlan
+
+      val exchangeIds2 = plan2.collectWithSubqueries { case e: Exchange => e.id }
+      val reusedExchangeIds2 = plan2.collectWithSubqueries {
+        case re: ReusedExchangeExec => re.child.id
+      }
+
+      assert(exchangeIds2.size == 4, "Whole plan exchange reusing not working correctly")
+      assert(reusedExchangeIds2.size == 2, "Whole plan exchange reusing not working correctly")
+      assert(reusedExchangeIds2.forall(exchangeIds2.contains(_)),
+        "ReusedExchangeExec should reuse an existing exchange")
+    }
   }
 }

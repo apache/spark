@@ -1836,4 +1836,44 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         Row(0, 1, 0) :: Row(1, 1, 8) :: Nil)
     }
   }
+
+  test("Subquery reuse across the whole plan") {
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      val df = sql(
+        """
+          |SELECT (SELECT avg(key) FROM testData), (SELECT (SELECT avg(key) FROM testData))
+          |FROM testData
+          |LIMIT 1
+      """.stripMargin)
+
+      // scalastyle:off
+      // CollectLimit 1
+      // +- *(1) Project [Subquery scalar-subquery#240, [id=#112] AS scalarsubquery()#248, Subquery scalar-subquery#242, [id=#183] AS scalarsubquery()#249]
+      //    :  :- Subquery scalar-subquery#240, [id=#112]
+      //    :  :  +- *(2) HashAggregate(keys=[], functions=[avg(cast(key#13 as bigint))])
+      //    :  :     +- Exchange SinglePartition, true, [id=#108]
+      //    :  :        +- *(1) HashAggregate(keys=[], functions=[partial_avg(cast(key#13 as bigint))])
+      //    :  :           +- *(1) SerializeFromObject [knownnotnull(assertnotnull(input[0, org.apache.spark.sql.test.SQLTestData$TestData, true])).key AS key#13]
+      //    :  :              +- Scan[obj#12]
+      //    :  +- Subquery scalar-subquery#242, [id=#183]
+      //    :     +- *(1) Project [ReusedSubquery Subquery scalar-subquery#240, [id=#112] AS scalarsubquery()#247]
+      //    :        :  +- ReusedSubquery Subquery scalar-subquery#240, [id=#112]
+      //    :        +- *(1) Scan OneRowRelation[]
+      //    +- *(1) SerializeFromObject
+      //      +- Scan[obj#12]
+      // scalastyle:on
+
+      val plan = df.queryExecution.executedPlan
+
+      val subqueryIds = plan.collectWithSubqueries { case s: SubqueryExec => s.id }
+      val reusedSubqueryIds = plan.collectWithSubqueries {
+        case rs: ReusedSubqueryExec => rs.child.id
+      }
+
+      assert(subqueryIds.size == 2, "Whole plan subquery reusing not working correctly")
+      assert(reusedSubqueryIds.size == 1, "Whole plan subquery reusing not working correctly")
+      assert(reusedSubqueryIds.forall(subqueryIds.contains(_)),
+        "ReusedSubqueryExec should reuse an existing subquery")
+    }
+  }
 }

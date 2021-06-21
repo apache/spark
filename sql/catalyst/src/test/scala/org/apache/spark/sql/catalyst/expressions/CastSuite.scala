@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.DayTimeIntervalType._
 import org.apache.spark.sql.types.YearMonthIntervalType._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -664,11 +665,31 @@ class CastSuite extends CastSuiteBase {
     }
   }
 
+  test("SPARK-35820: Support cast DayTimeIntervalType in different fields") {
+    val duration = Duration.ofSeconds(12345678L, 123456789)
+    Seq((DayTimeIntervalType(DAY, DAY), 12268800000000L, -12268800000000L),
+      (DayTimeIntervalType(DAY, HOUR), 12344400000000L, -12344400000000L),
+      (DayTimeIntervalType(DAY, MINUTE), 12345660000000L, -12345660000000L),
+      (DayTimeIntervalType(DAY, SECOND), 12345678123456L, -12345678123457L),
+      (DayTimeIntervalType(HOUR, HOUR), 12344400000000L, -12344400000000L),
+      (DayTimeIntervalType(HOUR, MINUTE), 12345660000000L, -12345660000000L),
+      (DayTimeIntervalType(HOUR, SECOND), 12345678123456L, -12345678123457L),
+      (DayTimeIntervalType(MINUTE, MINUTE), 12345660000000L, -12345660000000L),
+      (DayTimeIntervalType(MINUTE, SECOND), 12345678123456L, -12345678123457L),
+      (DayTimeIntervalType(SECOND, SECOND), 12345678123456L, -12345678123457L))
+      .foreach { case (dt, positive, negative) =>
+        checkEvaluation(
+          cast(Literal.create(duration, DayTimeIntervalType(DAY, SECOND)), dt), positive)
+        checkEvaluation(
+          cast(Literal.create(duration.negated(), DayTimeIntervalType(DAY, SECOND)), dt), negative)
+      }
+  }
+
   test("SPARK-35819: Support cast YearMonthIntervalType in different fields") {
     val ym = cast(Literal.create("1-1"), YearMonthIntervalType(YEAR, MONTH))
-    Seq(YearMonthIntervalType(YEAR, YEAR) -> 12,
+    Seq(YearMonthIntervalType(YEAR) -> 12,
       YearMonthIntervalType(YEAR, MONTH) -> 13,
-      YearMonthIntervalType(MONTH, MONTH) -> 13)
+      YearMonthIntervalType(MONTH) -> 13)
       .foreach { case (dt, value) =>
         checkEvaluation(cast(ym, dt), value)
       }

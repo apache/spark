@@ -51,15 +51,15 @@ TakeOrderedAndProject [item_sk,d_date,web_sales,store_sales,web_cumulative,store
                                                                                                     InputAdapter
                                                                                                       Scan parquet default.web_sales [ws_item_sk,ws_sales_price,ws_sold_date_sk]
                                                                                                         SubqueryBroadcast [d_date_sk] #1
-                                                                                                          ReusedExchange [d_date_sk,d_date] #6
+                                                                                                          BroadcastExchange #6
+                                                                                                            WholeStageCodegen (1)
+                                                                                                              Project [d_date_sk,d_date]
+                                                                                                                Filter [d_month_seq,d_date_sk]
+                                                                                                                  ColumnarToRow
+                                                                                                                    InputAdapter
+                                                                                                                      Scan parquet default.date_dim [d_date_sk,d_date,d_month_seq]
                                                                                                 InputAdapter
-                                                                                                  BroadcastExchange #6
-                                                                                                    WholeStageCodegen (1)
-                                                                                                      Project [d_date_sk,d_date]
-                                                                                                        Filter [d_month_seq,d_date_sk]
-                                                                                                          ColumnarToRow
-                                                                                                            InputAdapter
-                                                                                                              Scan parquet default.date_dim [d_date_sk,d_date,d_month_seq]
+                                                                                                  ReusedExchange [d_date_sk,d_date] #6
                                                       InputAdapter
                                                         WholeStageCodegen (12)
                                                           Sort [item_sk]
@@ -72,11 +72,11 @@ TakeOrderedAndProject [item_sk,d_date,web_sales,store_sales,web_cumulative,store
                                                                         WholeStageCodegen (10)
                                                                           Sort [ws_item_sk,d_date]
                                                                             InputAdapter
-                                                                              ReusedExchange [item_sk,d_date,sumws,ws_item_sk] #8
+                                                                              ReusedExchange [item_sk,d_date,sumws,ws_item_sk] #4
                                     WholeStageCodegen (28)
                                       Sort [item_sk,d_date]
                                         InputAdapter
-                                          Exchange [item_sk,d_date] #9
+                                          Exchange [item_sk,d_date] #8
                                             WholeStageCodegen (27)
                                               HashAggregate [item_sk,d_date,sumss,sum,isEmpty] [sum(sumss),cume_sales,sum,isEmpty]
                                                 HashAggregate [item_sk,d_date,sumss,sumss] [sum,isEmpty,sum,isEmpty]
@@ -86,7 +86,7 @@ TakeOrderedAndProject [item_sk,d_date,web_sales,store_sales,web_cumulative,store
                                                         WholeStageCodegen (20)
                                                           Sort [item_sk]
                                                             InputAdapter
-                                                              Exchange [item_sk] #10
+                                                              Exchange [item_sk] #9
                                                                 WholeStageCodegen (19)
                                                                   Project [item_sk,d_date,sumss,rk]
                                                                     InputAdapter
@@ -94,11 +94,11 @@ TakeOrderedAndProject [item_sk,d_date,web_sales,store_sales,web_cumulative,store
                                                                         WholeStageCodegen (18)
                                                                           Sort [ss_item_sk,d_date]
                                                                             InputAdapter
-                                                                              Exchange [ss_item_sk] #11
+                                                                              Exchange [ss_item_sk] #10
                                                                                 WholeStageCodegen (17)
                                                                                   HashAggregate [ss_item_sk,d_date,sum] [sum(UnscaledValue(ss_sales_price)),item_sk,sumss,sum]
                                                                                     InputAdapter
-                                                                                      Exchange [ss_item_sk,d_date] #12
+                                                                                      Exchange [ss_item_sk,d_date] #11
                                                                                         WholeStageCodegen (16)
                                                                                           HashAggregate [ss_item_sk,d_date,ss_sales_price] [sum,sum]
                                                                                             Project [ss_item_sk,ss_sales_price,d_date]
@@ -114,7 +114,7 @@ TakeOrderedAndProject [item_sk,d_date,web_sales,store_sales,web_cumulative,store
                                                         WholeStageCodegen (26)
                                                           Sort [item_sk]
                                                             InputAdapter
-                                                              Exchange [item_sk] #13
+                                                              Exchange [item_sk] #12
                                                                 WholeStageCodegen (25)
                                                                   Project [item_sk,sumss,rk]
                                                                     InputAdapter
@@ -122,7 +122,7 @@ TakeOrderedAndProject [item_sk,d_date,web_sales,store_sales,web_cumulative,store
                                                                         WholeStageCodegen (24)
                                                                           Sort [ss_item_sk,d_date]
                                                                             InputAdapter
-                                                                              ReusedExchange [item_sk,d_date,sumss,ss_item_sk] #14
+                                                                              ReusedExchange [item_sk,d_date,sumss,ss_item_sk] #10
               InputAdapter
                 WholeStageCodegen (61)
                   Project [item_sk,web_sales,store_sales,rk]
@@ -131,4 +131,4 @@ TakeOrderedAndProject [item_sk,d_date,web_sales,store_sales,web_cumulative,store
                         WholeStageCodegen (60)
                           Sort [item_sk,d_date]
                             InputAdapter
-                              ReusedExchange [item_sk,d_date,web_sales,store_sales] #15
+                              ReusedExchange [item_sk,d_date,web_sales,store_sales] #1

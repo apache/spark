@@ -36,14 +36,14 @@ TakeOrderedAndProject [customer_first_name,customer_id,customer_last_name]
                                                                       InputAdapter
                                                                         Scan parquet default.store_sales [ss_customer_sk,ss_net_paid,ss_sold_date_sk]
                                                                           SubqueryBroadcast [d_date_sk] #1
-                                                                            ReusedExchange [d_date_sk,d_year] #4
+                                                                            BroadcastExchange #4
+                                                                              WholeStageCodegen (1)
+                                                                                Filter [d_year,d_date_sk]
+                                                                                  ColumnarToRow
+                                                                                    InputAdapter
+                                                                                      Scan parquet default.date_dim [d_date_sk,d_year]
                                                                   InputAdapter
-                                                                    BroadcastExchange #4
-                                                                      WholeStageCodegen (1)
-                                                                        Filter [d_year,d_date_sk]
-                                                                          ColumnarToRow
-                                                                            InputAdapter
-                                                                              Scan parquet default.date_dim [d_date_sk,d_year]
+                                                                    ReusedExchange [d_date_sk,d_year] #4
                                                   InputAdapter
                                                     WholeStageCodegen (5)
                                                       Sort [c_customer_sk]
@@ -80,14 +80,14 @@ TakeOrderedAndProject [customer_first_name,customer_id,customer_last_name]
                                                                     InputAdapter
                                                                       Scan parquet default.store_sales [ss_customer_sk,ss_net_paid,ss_sold_date_sk]
                                                                         SubqueryBroadcast [d_date_sk] #2
-                                                                          ReusedExchange [d_date_sk,d_year] #9
+                                                                          BroadcastExchange #9
+                                                                            WholeStageCodegen (1)
+                                                                              Filter [d_year,d_date_sk]
+                                                                                ColumnarToRow
+                                                                                  InputAdapter
+                                                                                    Scan parquet default.date_dim [d_date_sk,d_year]
                                                                 InputAdapter
-                                                                  BroadcastExchange #9
-                                                                    WholeStageCodegen (9)
-                                                                      Filter [d_year,d_date_sk]
-                                                                        ColumnarToRow
-                                                                          InputAdapter
-                                                                            Scan parquet default.date_dim [d_date_sk,d_year]
+                                                                  ReusedExchange [d_date_sk,d_year] #9
                                                 InputAdapter
                                                   WholeStageCodegen (13)
                                                     Sort [c_customer_sk]

@@ -32,15 +32,15 @@ TakeOrderedAndProject [lochierarchy,i_category,rank_within_parent,gross_margin,i
                                                               InputAdapter
                                                                 Scan parquet default.store_sales [ss_item_sk,ss_store_sk,ss_ext_sales_price,ss_net_profit,ss_sold_date_sk]
                                                                   SubqueryBroadcast [d_date_sk] #1
-                                                                    ReusedExchange [d_date_sk] #4
+                                                                    BroadcastExchange #4
+                                                                      WholeStageCodegen (1)
+                                                                        Project [d_date_sk]
+                                                                          Filter [d_year,d_date_sk]
+                                                                            ColumnarToRow
+                                                                              InputAdapter
+                                                                                Scan parquet default.date_dim [d_date_sk,d_year]
                                                           InputAdapter
-                                                            BroadcastExchange #4
-                                                              WholeStageCodegen (1)
-                                                                Project [d_date_sk]
-                                                                  Filter [d_year,d_date_sk]
-                                                                    ColumnarToRow
-                                                                      InputAdapter
-                                                                        Scan parquet default.date_dim [d_date_sk,d_year]
+                                                            ReusedExchange [d_date_sk] #4
                                                       InputAdapter
                                                         BroadcastExchange #5
                                                           WholeStageCodegen (2)
@@ -64,13 +64,13 @@ TakeOrderedAndProject [lochierarchy,i_category,rank_within_parent,gross_margin,i
                                             HashAggregate [i_category,ss_net_profit,ss_ext_sales_price] [sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty]
                                               HashAggregate [i_category,i_class,sum,sum] [sum(UnscaledValue(ss_net_profit)),sum(UnscaledValue(ss_ext_sales_price)),ss_net_profit,ss_ext_sales_price,sum,sum]
                                                 InputAdapter
-                                                  ReusedExchange [i_category,i_class,sum,sum] #8
+                                                  ReusedExchange [i_category,i_class,sum,sum] #3
                                   WholeStageCodegen (17)
                                     HashAggregate [sum,isEmpty,sum,isEmpty] [sum(ss_net_profit),sum(ss_ext_sales_price),gross_margin,i_category,i_class,t_category,t_class,lochierarchy,sum,isEmpty,sum,isEmpty]
                                       InputAdapter
-                                        Exchange #9
+                                        Exchange #8
                                           WholeStageCodegen (16)
                                             HashAggregate [ss_net_profit,ss_ext_sales_price] [sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty]
                                               HashAggregate [i_category,i_class,sum,sum] [sum(UnscaledValue(ss_net_profit)),sum(UnscaledValue(ss_ext_sales_price)),ss_net_profit,ss_ext_sales_price,sum,sum]
                                                 InputAdapter
-                                                  ReusedExchange [i_category,i_class,sum,sum] #8
+                                                  ReusedExchange [i_category,i_class,sum,sum] #3
