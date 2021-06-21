@@ -566,8 +566,6 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
         Row(Period.ofMonths(13), Period.ofMonths(13), Period.ofMonths(13))
       )), schema)
 
-      df.show(10, 100)
-      df.printSchema
       checkAnswer(
         df,
         (child: SparkPlan) => createScriptTransformationExec(
