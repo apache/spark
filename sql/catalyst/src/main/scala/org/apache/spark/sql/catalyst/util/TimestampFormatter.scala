@@ -72,7 +72,7 @@ sealed trait TimestampFormatter extends Serializable {
   def format(ts: Timestamp): String
   def format(instant: Instant): String
 
-  @throws(classOf[UnsupportedOperationException])
+  @throws(classOf[IllegalStateException])
   def format(localDateTime: LocalDateTime): String = throw new IllegalStateException();
 
   def validatePatternString(): Unit
