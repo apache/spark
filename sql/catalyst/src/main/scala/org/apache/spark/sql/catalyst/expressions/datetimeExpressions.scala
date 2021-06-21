@@ -1096,12 +1096,12 @@ case class GetTimestampWithoutTZ(
 @ExpressionDescription(
   usage = """
     _FUNC_(timestamp_str[, fmt]) - Parses the `timestamp_str` expression with the `fmt` expression
-      to a timestamp. Returns null with invalid input. By default, it follows casting rules to
+      to a timestamp without time zone. Returns null with invalid input. By default, it follows casting rules to
       a timestamp if the `fmt` is omitted.
   """,
   arguments = """
     Arguments:
-      * timestamp_str - A string to be parsed to timestamp.
+      * timestamp_str - A string to be parsed to timestamp without time zone.
       * fmt - Timestamp format pattern to follow. See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Datetime Patterns</a> for valid
               date and time format patterns.
   """,
@@ -1113,7 +1113,7 @@ case class GetTimestampWithoutTZ(
        2016-12-31 00:00:00
   """,
   group = "datetime_funcs",
-  since = "2.2.0")
+  since = "3.2.0")
 // scalastyle:on line.size.limit
 case class ParseToTimestampWithoutTZ(
     left: Expression,
