@@ -1126,8 +1126,8 @@ class DataFrameAggregateSuite extends QueryTest
       .select(
         $"class",
         $"year-month",
-        $"year" cast YearMonthIntervalType(YEAR, YEAR) as "year",
-        $"month" cast YearMonthIntervalType(MONTH, MONTH) as "month",
+        $"year" cast YearMonthIntervalType(YEAR) as "year",
+        $"month" cast YearMonthIntervalType(MONTH) as "month",
         $"day-time")
 
     val df2 = Seq((Period.ofMonths(Int.MaxValue), Duration.ofDays(106751991)),
@@ -1140,8 +1140,8 @@ class DataFrameAggregateSuite extends QueryTest
     assert(find(sumDF.queryExecution.executedPlan)(_.isInstanceOf[HashAggregateExec]).isDefined)
     assert(sumDF.schema == StructType(Seq(
       StructField("sum(year-month)", YearMonthIntervalType()),
-      StructField("sum(year)", YearMonthIntervalType(YEAR, YEAR)),
-      StructField("sum(month)", YearMonthIntervalType(MONTH, MONTH)),
+      StructField("sum(year)", YearMonthIntervalType(YEAR)),
+      StructField("sum(month)", YearMonthIntervalType(MONTH)),
       // TODO(SPARK-35729): Check all day-time interval types in aggregate expressions
       StructField("sum(day-time)", DayTimeIntervalType()))))
 
@@ -1155,8 +1155,8 @@ class DataFrameAggregateSuite extends QueryTest
     assert(find(sumDF2.queryExecution.executedPlan)(_.isInstanceOf[HashAggregateExec]).isDefined)
     assert(sumDF2.schema == StructType(Seq(StructField("class", IntegerType, false),
       StructField("sum(year-month)", YearMonthIntervalType()),
-      StructField("sum(year)", YearMonthIntervalType(YEAR, YEAR)),
-      StructField("sum(month)", YearMonthIntervalType(MONTH, MONTH)),
+      StructField("sum(year)", YearMonthIntervalType(YEAR)),
+      StructField("sum(month)", YearMonthIntervalType(MONTH)),
       // TODO(SPARK-35729): Check all day-time interval types in aggregate expressions
       StructField("sum(day-time)", DayTimeIntervalType()))))
 
@@ -1183,8 +1183,8 @@ class DataFrameAggregateSuite extends QueryTest
       .select(
         $"class",
         $"year-month",
-        $"year" cast YearMonthIntervalType(YEAR, YEAR) as "year",
-        $"month" cast YearMonthIntervalType(MONTH, MONTH) as "month",
+        $"year" cast YearMonthIntervalType(YEAR) as "year",
+        $"month" cast YearMonthIntervalType(MONTH) as "month",
         $"day-time")
 
     val df2 = Seq((Period.ofMonths(Int.MaxValue), Duration.ofDays(106751991)),
