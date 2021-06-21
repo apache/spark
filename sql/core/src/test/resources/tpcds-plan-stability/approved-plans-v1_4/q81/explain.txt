@@ -1,56 +1,52 @@
 == Physical Plan ==
-TakeOrderedAndProject (52)
-+- * Project (51)
-   +- * BroadcastHashJoin Inner BuildRight (50)
-      :- * Project (45)
-      :  +- * BroadcastHashJoin Inner BuildRight (44)
-      :     :- * Project (39)
-      :     :  +- * BroadcastHashJoin Inner BuildRight (38)
-      :     :     :- * Filter (20)
-      :     :     :  +- * HashAggregate (19)
-      :     :     :     +- Exchange (18)
-      :     :     :        +- * HashAggregate (17)
-      :     :     :           +- * Project (16)
-      :     :     :              +- * BroadcastHashJoin Inner BuildRight (15)
-      :     :     :                 :- * Project (10)
-      :     :     :                 :  +- * BroadcastHashJoin Inner BuildRight (9)
+TakeOrderedAndProject (48)
++- * Project (47)
+   +- * BroadcastHashJoin Inner BuildRight (46)
+      :- * Project (41)
+      :  +- * BroadcastHashJoin Inner BuildRight (40)
+      :     :- * Project (35)
+      :     :  +- * BroadcastHashJoin Inner BuildRight (34)
+      :     :     :- * Filter (16)
+      :     :     :  +- * HashAggregate (15)
+      :     :     :     +- Exchange (14)
+      :     :     :        +- * HashAggregate (13)
+      :     :     :           +- * Project (12)
+      :     :     :              +- * BroadcastHashJoin Inner BuildRight (11)
+      :     :     :                 :- * Project (6)
+      :     :     :                 :  +- * BroadcastHashJoin Inner BuildRight (5)
       :     :     :                 :     :- * Filter (3)
       :     :     :                 :     :  +- * ColumnarToRow (2)
       :     :     :                 :     :     +- Scan parquet default.catalog_returns (1)
-      :     :     :                 :     +- BroadcastExchange (8)
-      :     :     :                 :        +- * Project (7)
-      :     :     :                 :           +- * Filter (6)
-      :     :     :                 :              +- * ColumnarToRow (5)
-      :     :     :                 :                 +- Scan parquet default.date_dim (4)
-      :     :     :                 +- BroadcastExchange (14)
-      :     :     :                    +- * Filter (13)
-      :     :     :                       +- * ColumnarToRow (12)
-      :     :     :                          +- Scan parquet default.customer_address (11)
-      :     :     +- BroadcastExchange (37)
-      :     :        +- * Filter (36)
-      :     :           +- * HashAggregate (35)
-      :     :              +- Exchange (34)
-      :     :                 +- * HashAggregate (33)
-      :     :                    +- * HashAggregate (32)
-      :     :                       +- Exchange (31)
-      :     :                          +- * HashAggregate (30)
-      :     :                             +- * Project (29)
-      :     :                                +- * BroadcastHashJoin Inner BuildRight (28)
-      :     :                                   :- * Project (26)
-      :     :                                   :  +- * BroadcastHashJoin Inner BuildRight (25)
-      :     :                                   :     :- * Filter (23)
-      :     :                                   :     :  +- * ColumnarToRow (22)
-      :     :                                   :     :     +- Scan parquet default.catalog_returns (21)
-      :     :                                   :     +- ReusedExchange (24)
-      :     :                                   +- ReusedExchange (27)
-      :     +- BroadcastExchange (43)
-      :        +- * Filter (42)
-      :           +- * ColumnarToRow (41)
-      :              +- Scan parquet default.customer (40)
-      +- BroadcastExchange (49)
-         +- * Filter (48)
-            +- * ColumnarToRow (47)
-               +- Scan parquet default.customer_address (46)
+      :     :     :                 :     +- ReusedExchange (4)
+      :     :     :                 +- BroadcastExchange (10)
+      :     :     :                    +- * Filter (9)
+      :     :     :                       +- * ColumnarToRow (8)
+      :     :     :                          +- Scan parquet default.customer_address (7)
+      :     :     +- BroadcastExchange (33)
+      :     :        +- * Filter (32)
+      :     :           +- * HashAggregate (31)
+      :     :              +- Exchange (30)
+      :     :                 +- * HashAggregate (29)
+      :     :                    +- * HashAggregate (28)
+      :     :                       +- Exchange (27)
+      :     :                          +- * HashAggregate (26)
+      :     :                             +- * Project (25)
+      :     :                                +- * BroadcastHashJoin Inner BuildRight (24)
+      :     :                                   :- * Project (22)
+      :     :                                   :  +- * BroadcastHashJoin Inner BuildRight (21)
+      :     :                                   :     :- * Filter (19)
+      :     :                                   :     :  +- * ColumnarToRow (18)
+      :     :                                   :     :     +- Scan parquet default.catalog_returns (17)
+      :     :                                   :     +- ReusedExchange (20)
+      :     :                                   +- ReusedExchange (23)
+      :     +- BroadcastExchange (39)
+      :        +- * Filter (38)
+      :           +- * ColumnarToRow (37)
+      :              +- Scan parquet default.customer (36)
+      +- BroadcastExchange (45)
+         +- * Filter (44)
+            +- * ColumnarToRow (43)
+               +- Scan parquet default.customer_address (42)
 
 
 (1) Scan parquet default.catalog_returns
@@ -68,245 +64,249 @@ Input [4]: [cr_returning_customer_sk#1, cr_returning_addr_sk#2, cr_return_amt_in
 Input [4]: [cr_returning_customer_sk#1, cr_returning_addr_sk#2, cr_return_amt_inc_tax#3, cr_returned_date_sk#4]
 Condition : (isnotnull(cr_returning_addr_sk#2) AND isnotnull(cr_returning_customer_sk#1))
 
-(4) Scan parquet default.date_dim
-Output [2]: [d_date_sk#6, d_year#7]
-Batched: true
-Location [not included in comparison]/{warehouse_dir}/date_dim]
-PushedFilters: [IsNotNull(d_year), EqualTo(d_year,2000), IsNotNull(d_date_sk)]
-ReadSchema: struct<d_date_sk:int,d_year:int>
-
-(5) ColumnarToRow [codegen id : 1]
-Input [2]: [d_date_sk#6, d_year#7]
-
-(6) Filter [codegen id : 1]
-Input [2]: [d_date_sk#6, d_year#7]
-Condition : ((isnotnull(d_year#7) AND (d_year#7 = 2000)) AND isnotnull(d_date_sk#6))
-
-(7) Project [codegen id : 1]
+(4) ReusedExchange [Reuses operator id: 53]
 Output [1]: [d_date_sk#6]
-Input [2]: [d_date_sk#6, d_year#7]
 
-(8) BroadcastExchange
-Input [1]: [d_date_sk#6]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#8]
-
-(9) BroadcastHashJoin [codegen id : 3]
+(5) BroadcastHashJoin [codegen id : 3]
 Left keys [1]: [cr_returned_date_sk#4]
 Right keys [1]: [d_date_sk#6]
 Join condition: None
 
-(10) Project [codegen id : 3]
+(6) Project [codegen id : 3]
 Output [3]: [cr_returning_customer_sk#1, cr_returning_addr_sk#2, cr_return_amt_inc_tax#3]
 Input [5]: [cr_returning_customer_sk#1, cr_returning_addr_sk#2, cr_return_amt_inc_tax#3, cr_returned_date_sk#4, d_date_sk#6]
 
-(11) Scan parquet default.customer_address
-Output [2]: [ca_address_sk#9, ca_state#10]
+(7) Scan parquet default.customer_address
+Output [2]: [ca_address_sk#7, ca_state#8]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer_address]
 PushedFilters: [IsNotNull(ca_address_sk), IsNotNull(ca_state)]
 ReadSchema: struct<ca_address_sk:int,ca_state:string>
 
-(12) ColumnarToRow [codegen id : 2]
-Input [2]: [ca_address_sk#9, ca_state#10]
+(8) ColumnarToRow [codegen id : 2]
+Input [2]: [ca_address_sk#7, ca_state#8]
 
-(13) Filter [codegen id : 2]
-Input [2]: [ca_address_sk#9, ca_state#10]
-Condition : (isnotnull(ca_address_sk#9) AND isnotnull(ca_state#10))
+(9) Filter [codegen id : 2]
+Input [2]: [ca_address_sk#7, ca_state#8]
+Condition : (isnotnull(ca_address_sk#7) AND isnotnull(ca_state#8))
 
-(14) BroadcastExchange
-Input [2]: [ca_address_sk#9, ca_state#10]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#11]
+(10) BroadcastExchange
+Input [2]: [ca_address_sk#7, ca_state#8]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#9]
 
-(15) BroadcastHashJoin [codegen id : 3]
+(11) BroadcastHashJoin [codegen id : 3]
 Left keys [1]: [cr_returning_addr_sk#2]
-Right keys [1]: [ca_address_sk#9]
+Right keys [1]: [ca_address_sk#7]
 Join condition: None
 
-(16) Project [codegen id : 3]
-Output [3]: [cr_returning_customer_sk#1, cr_return_amt_inc_tax#3, ca_state#10]
-Input [5]: [cr_returning_customer_sk#1, cr_returning_addr_sk#2, cr_return_amt_inc_tax#3, ca_address_sk#9, ca_state#10]
+(12) Project [codegen id : 3]
+Output [3]: [cr_returning_customer_sk#1, cr_return_amt_inc_tax#3, ca_state#8]
+Input [5]: [cr_returning_customer_sk#1, cr_returning_addr_sk#2, cr_return_amt_inc_tax#3, ca_address_sk#7, ca_state#8]
 
-(17) HashAggregate [codegen id : 3]
-Input [3]: [cr_returning_customer_sk#1, cr_return_amt_inc_tax#3, ca_state#10]
-Keys [2]: [cr_returning_customer_sk#1, ca_state#10]
+(13) HashAggregate [codegen id : 3]
+Input [3]: [cr_returning_customer_sk#1, cr_return_amt_inc_tax#3, ca_state#8]
+Keys [2]: [cr_returning_customer_sk#1, ca_state#8]
 Functions [1]: [partial_sum(UnscaledValue(cr_return_amt_inc_tax#3))]
-Aggregate Attributes [1]: [sum#12]
-Results [3]: [cr_returning_customer_sk#1, ca_state#10, sum#13]
+Aggregate Attributes [1]: [sum#10]
+Results [3]: [cr_returning_customer_sk#1, ca_state#8, sum#11]
 
-(18) Exchange
-Input [3]: [cr_returning_customer_sk#1, ca_state#10, sum#13]
-Arguments: hashpartitioning(cr_returning_customer_sk#1, ca_state#10, 5), ENSURE_REQUIREMENTS, [id=#14]
+(14) Exchange
+Input [3]: [cr_returning_customer_sk#1, ca_state#8, sum#11]
+Arguments: hashpartitioning(cr_returning_customer_sk#1, ca_state#8, 5), ENSURE_REQUIREMENTS, [id=#12]
 
-(19) HashAggregate [codegen id : 11]
-Input [3]: [cr_returning_customer_sk#1, ca_state#10, sum#13]
-Keys [2]: [cr_returning_customer_sk#1, ca_state#10]
+(15) HashAggregate [codegen id : 11]
+Input [3]: [cr_returning_customer_sk#1, ca_state#8, sum#11]
+Keys [2]: [cr_returning_customer_sk#1, ca_state#8]
 Functions [1]: [sum(UnscaledValue(cr_return_amt_inc_tax#3))]
-Aggregate Attributes [1]: [sum(UnscaledValue(cr_return_amt_inc_tax#3))#15]
-Results [3]: [cr_returning_customer_sk#1 AS ctr_customer_sk#16, ca_state#10 AS ctr_state#17, MakeDecimal(sum(UnscaledValue(cr_return_amt_inc_tax#3))#15,17,2) AS ctr_total_return#18]
+Aggregate Attributes [1]: [sum(UnscaledValue(cr_return_amt_inc_tax#3))#13]
+Results [3]: [cr_returning_customer_sk#1 AS ctr_customer_sk#14, ca_state#8 AS ctr_state#15, MakeDecimal(sum(UnscaledValue(cr_return_amt_inc_tax#3))#13,17,2) AS ctr_total_return#16]
 
-(20) Filter [codegen id : 11]
-Input [3]: [ctr_customer_sk#16, ctr_state#17, ctr_total_return#18]
-Condition : isnotnull(ctr_total_return#18)
+(16) Filter [codegen id : 11]
+Input [3]: [ctr_customer_sk#14, ctr_state#15, ctr_total_return#16]
+Condition : isnotnull(ctr_total_return#16)
 
-(21) Scan parquet default.catalog_returns
-Output [4]: [cr_returning_customer_sk#19, cr_returning_addr_sk#20, cr_return_amt_inc_tax#21, cr_returned_date_sk#22]
+(17) Scan parquet default.catalog_returns
+Output [4]: [cr_returning_customer_sk#17, cr_returning_addr_sk#18, cr_return_amt_inc_tax#19, cr_returned_date_sk#20]
 Batched: true
 Location: InMemoryFileIndex []
-PartitionFilters: [isnotnull(cr_returned_date_sk#22), dynamicpruningexpression(cr_returned_date_sk#22 IN dynamicpruning#5)]
+PartitionFilters: [isnotnull(cr_returned_date_sk#20), dynamicpruningexpression(cr_returned_date_sk#20 IN dynamicpruning#5)]
 PushedFilters: [IsNotNull(cr_returning_addr_sk)]
 ReadSchema: struct<cr_returning_customer_sk:int,cr_returning_addr_sk:int,cr_return_amt_inc_tax:decimal(7,2)>
 
-(22) ColumnarToRow [codegen id : 6]
-Input [4]: [cr_returning_customer_sk#19, cr_returning_addr_sk#20, cr_return_amt_inc_tax#21, cr_returned_date_sk#22]
+(18) ColumnarToRow [codegen id : 6]
+Input [4]: [cr_returning_customer_sk#17, cr_returning_addr_sk#18, cr_return_amt_inc_tax#19, cr_returned_date_sk#20]
 
-(23) Filter [codegen id : 6]
-Input [4]: [cr_returning_customer_sk#19, cr_returning_addr_sk#20, cr_return_amt_inc_tax#21, cr_returned_date_sk#22]
-Condition : isnotnull(cr_returning_addr_sk#20)
+(19) Filter [codegen id : 6]
+Input [4]: [cr_returning_customer_sk#17, cr_returning_addr_sk#18, cr_return_amt_inc_tax#19, cr_returned_date_sk#20]
+Condition : isnotnull(cr_returning_addr_sk#18)
 
-(24) ReusedExchange [Reuses operator id: 8]
-Output [1]: [d_date_sk#23]
+(20) ReusedExchange [Reuses operator id: 53]
+Output [1]: [d_date_sk#21]
 
-(25) BroadcastHashJoin [codegen id : 6]
-Left keys [1]: [cr_returned_date_sk#22]
-Right keys [1]: [d_date_sk#23]
+(21) BroadcastHashJoin [codegen id : 6]
+Left keys [1]: [cr_returned_date_sk#20]
+Right keys [1]: [d_date_sk#21]
 Join condition: None
 
-(26) Project [codegen id : 6]
-Output [3]: [cr_returning_customer_sk#19, cr_returning_addr_sk#20, cr_return_amt_inc_tax#21]
-Input [5]: [cr_returning_customer_sk#19, cr_returning_addr_sk#20, cr_return_amt_inc_tax#21, cr_returned_date_sk#22, d_date_sk#23]
+(22) Project [codegen id : 6]
+Output [3]: [cr_returning_customer_sk#17, cr_returning_addr_sk#18, cr_return_amt_inc_tax#19]
+Input [5]: [cr_returning_customer_sk#17, cr_returning_addr_sk#18, cr_return_amt_inc_tax#19, cr_returned_date_sk#20, d_date_sk#21]
 
-(27) ReusedExchange [Reuses operator id: 14]
-Output [2]: [ca_address_sk#24, ca_state#25]
+(23) ReusedExchange [Reuses operator id: 10]
+Output [2]: [ca_address_sk#22, ca_state#23]
 
-(28) BroadcastHashJoin [codegen id : 6]
-Left keys [1]: [cr_returning_addr_sk#20]
-Right keys [1]: [ca_address_sk#24]
+(24) BroadcastHashJoin [codegen id : 6]
+Left keys [1]: [cr_returning_addr_sk#18]
+Right keys [1]: [ca_address_sk#22]
 Join condition: None
 
-(29) Project [codegen id : 6]
-Output [3]: [cr_returning_customer_sk#19, cr_return_amt_inc_tax#21, ca_state#25]
-Input [5]: [cr_returning_customer_sk#19, cr_returning_addr_sk#20, cr_return_amt_inc_tax#21, ca_address_sk#24, ca_state#25]
+(25) Project [codegen id : 6]
+Output [3]: [cr_returning_customer_sk#17, cr_return_amt_inc_tax#19, ca_state#23]
+Input [5]: [cr_returning_customer_sk#17, cr_returning_addr_sk#18, cr_return_amt_inc_tax#19, ca_address_sk#22, ca_state#23]
 
-(30) HashAggregate [codegen id : 6]
-Input [3]: [cr_returning_customer_sk#19, cr_return_amt_inc_tax#21, ca_state#25]
-Keys [2]: [cr_returning_customer_sk#19, ca_state#25]
-Functions [1]: [partial_sum(UnscaledValue(cr_return_amt_inc_tax#21))]
-Aggregate Attributes [1]: [sum#26]
-Results [3]: [cr_returning_customer_sk#19, ca_state#25, sum#27]
+(26) HashAggregate [codegen id : 6]
+Input [3]: [cr_returning_customer_sk#17, cr_return_amt_inc_tax#19, ca_state#23]
+Keys [2]: [cr_returning_customer_sk#17, ca_state#23]
+Functions [1]: [partial_sum(UnscaledValue(cr_return_amt_inc_tax#19))]
+Aggregate Attributes [1]: [sum#24]
+Results [3]: [cr_returning_customer_sk#17, ca_state#23, sum#25]
 
-(31) Exchange
-Input [3]: [cr_returning_customer_sk#19, ca_state#25, sum#27]
-Arguments: hashpartitioning(cr_returning_customer_sk#19, ca_state#25, 5), ENSURE_REQUIREMENTS, [id=#28]
+(27) Exchange
+Input [3]: [cr_returning_customer_sk#17, ca_state#23, sum#25]
+Arguments: hashpartitioning(cr_returning_customer_sk#17, ca_state#23, 5), ENSURE_REQUIREMENTS, [id=#26]
 
-(32) HashAggregate [codegen id : 7]
-Input [3]: [cr_returning_customer_sk#19, ca_state#25, sum#27]
-Keys [2]: [cr_returning_customer_sk#19, ca_state#25]
-Functions [1]: [sum(UnscaledValue(cr_return_amt_inc_tax#21))]
-Aggregate Attributes [1]: [sum(UnscaledValue(cr_return_amt_inc_tax#21))#29]
-Results [2]: [ca_state#25 AS ctr_state#17, MakeDecimal(sum(UnscaledValue(cr_return_amt_inc_tax#21))#29,17,2) AS ctr_total_return#18]
+(28) HashAggregate [codegen id : 7]
+Input [3]: [cr_returning_customer_sk#17, ca_state#23, sum#25]
+Keys [2]: [cr_returning_customer_sk#17, ca_state#23]
+Functions [1]: [sum(UnscaledValue(cr_return_amt_inc_tax#19))]
+Aggregate Attributes [1]: [sum(UnscaledValue(cr_return_amt_inc_tax#19))#27]
+Results [2]: [ca_state#23 AS ctr_state#15, MakeDecimal(sum(UnscaledValue(cr_return_amt_inc_tax#19))#27,17,2) AS ctr_total_return#16]
 
-(33) HashAggregate [codegen id : 7]
-Input [2]: [ctr_state#17, ctr_total_return#18]
-Keys [1]: [ctr_state#17]
-Functions [1]: [partial_avg(ctr_total_return#18)]
-Aggregate Attributes [2]: [sum#30, count#31]
-Results [3]: [ctr_state#17, sum#32, count#33]
+(29) HashAggregate [codegen id : 7]
+Input [2]: [ctr_state#15, ctr_total_return#16]
+Keys [1]: [ctr_state#15]
+Functions [1]: [partial_avg(ctr_total_return#16)]
+Aggregate Attributes [2]: [sum#28, count#29]
+Results [3]: [ctr_state#15, sum#30, count#31]
 
-(34) Exchange
-Input [3]: [ctr_state#17, sum#32, count#33]
-Arguments: hashpartitioning(ctr_state#17, 5), ENSURE_REQUIREMENTS, [id=#34]
+(30) Exchange
+Input [3]: [ctr_state#15, sum#30, count#31]
+Arguments: hashpartitioning(ctr_state#15, 5), ENSURE_REQUIREMENTS, [id=#32]
 
-(35) HashAggregate [codegen id : 8]
-Input [3]: [ctr_state#17, sum#32, count#33]
-Keys [1]: [ctr_state#17]
-Functions [1]: [avg(ctr_total_return#18)]
-Aggregate Attributes [1]: [avg(ctr_total_return#18)#35]
-Results [2]: [CheckOverflow((promote_precision(avg(ctr_total_return#18)#35) * 1.200000), DecimalType(24,7), true) AS (avg(ctr_total_return) * 1.2)#36, ctr_state#17 AS ctr_state#17#37]
+(31) HashAggregate [codegen id : 8]
+Input [3]: [ctr_state#15, sum#30, count#31]
+Keys [1]: [ctr_state#15]
+Functions [1]: [avg(ctr_total_return#16)]
+Aggregate Attributes [1]: [avg(ctr_total_return#16)#33]
+Results [2]: [CheckOverflow((promote_precision(avg(ctr_total_return#16)#33) * 1.200000), DecimalType(24,7), true) AS (avg(ctr_total_return) * 1.2)#34, ctr_state#15 AS ctr_state#15#35]
 
-(36) Filter [codegen id : 8]
-Input [2]: [(avg(ctr_total_return) * 1.2)#36, ctr_state#17#37]
-Condition : isnotnull((avg(ctr_total_return) * 1.2)#36)
+(32) Filter [codegen id : 8]
+Input [2]: [(avg(ctr_total_return) * 1.2)#34, ctr_state#15#35]
+Condition : isnotnull((avg(ctr_total_return) * 1.2)#34)
 
-(37) BroadcastExchange
-Input [2]: [(avg(ctr_total_return) * 1.2)#36, ctr_state#17#37]
-Arguments: HashedRelationBroadcastMode(List(input[1, string, true]),false), [id=#38]
+(33) BroadcastExchange
+Input [2]: [(avg(ctr_total_return) * 1.2)#34, ctr_state#15#35]
+Arguments: HashedRelationBroadcastMode(List(input[1, string, true]),false), [id=#36]
 
-(38) BroadcastHashJoin [codegen id : 11]
-Left keys [1]: [ctr_state#17]
-Right keys [1]: [ctr_state#17#37]
-Join condition: (cast(ctr_total_return#18 as decimal(24,7)) > (avg(ctr_total_return) * 1.2)#36)
+(34) BroadcastHashJoin [codegen id : 11]
+Left keys [1]: [ctr_state#15]
+Right keys [1]: [ctr_state#15#35]
+Join condition: (cast(ctr_total_return#16 as decimal(24,7)) > (avg(ctr_total_return) * 1.2)#34)
 
-(39) Project [codegen id : 11]
-Output [2]: [ctr_customer_sk#16, ctr_total_return#18]
-Input [5]: [ctr_customer_sk#16, ctr_state#17, ctr_total_return#18, (avg(ctr_total_return) * 1.2)#36, ctr_state#17#37]
+(35) Project [codegen id : 11]
+Output [2]: [ctr_customer_sk#14, ctr_total_return#16]
+Input [5]: [ctr_customer_sk#14, ctr_state#15, ctr_total_return#16, (avg(ctr_total_return) * 1.2)#34, ctr_state#15#35]
 
-(40) Scan parquet default.customer
-Output [6]: [c_customer_sk#39, c_customer_id#40, c_current_addr_sk#41, c_salutation#42, c_first_name#43, c_last_name#44]
+(36) Scan parquet default.customer
+Output [6]: [c_customer_sk#37, c_customer_id#38, c_current_addr_sk#39, c_salutation#40, c_first_name#41, c_last_name#42]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer]
 PushedFilters: [IsNotNull(c_customer_sk), IsNotNull(c_current_addr_sk)]
 ReadSchema: struct<c_customer_sk:int,c_customer_id:string,c_current_addr_sk:int,c_salutation:string,c_first_name:string,c_last_name:string>
 
-(41) ColumnarToRow [codegen id : 9]
-Input [6]: [c_customer_sk#39, c_customer_id#40, c_current_addr_sk#41, c_salutation#42, c_first_name#43, c_last_name#44]
+(37) ColumnarToRow [codegen id : 9]
+Input [6]: [c_customer_sk#37, c_customer_id#38, c_current_addr_sk#39, c_salutation#40, c_first_name#41, c_last_name#42]
 
-(42) Filter [codegen id : 9]
-Input [6]: [c_customer_sk#39, c_customer_id#40, c_current_addr_sk#41, c_salutation#42, c_first_name#43, c_last_name#44]
-Condition : (isnotnull(c_customer_sk#39) AND isnotnull(c_current_addr_sk#41))
+(38) Filter [codegen id : 9]
+Input [6]: [c_customer_sk#37, c_customer_id#38, c_current_addr_sk#39, c_salutation#40, c_first_name#41, c_last_name#42]
+Condition : (isnotnull(c_customer_sk#37) AND isnotnull(c_current_addr_sk#39))
 
-(43) BroadcastExchange
-Input [6]: [c_customer_sk#39, c_customer_id#40, c_current_addr_sk#41, c_salutation#42, c_first_name#43, c_last_name#44]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#45]
+(39) BroadcastExchange
+Input [6]: [c_customer_sk#37, c_customer_id#38, c_current_addr_sk#39, c_salutation#40, c_first_name#41, c_last_name#42]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#43]
 
-(44) BroadcastHashJoin [codegen id : 11]
-Left keys [1]: [ctr_customer_sk#16]
-Right keys [1]: [c_customer_sk#39]
+(40) BroadcastHashJoin [codegen id : 11]
+Left keys [1]: [ctr_customer_sk#14]
+Right keys [1]: [c_customer_sk#37]
 Join condition: None
 
-(45) Project [codegen id : 11]
-Output [6]: [ctr_total_return#18, c_customer_id#40, c_current_addr_sk#41, c_salutation#42, c_first_name#43, c_last_name#44]
-Input [8]: [ctr_customer_sk#16, ctr_total_return#18, c_customer_sk#39, c_customer_id#40, c_current_addr_sk#41, c_salutation#42, c_first_name#43, c_last_name#44]
+(41) Project [codegen id : 11]
+Output [6]: [ctr_total_return#16, c_customer_id#38, c_current_addr_sk#39, c_salutation#40, c_first_name#41, c_last_name#42]
+Input [8]: [ctr_customer_sk#14, ctr_total_return#16, c_customer_sk#37, c_customer_id#38, c_current_addr_sk#39, c_salutation#40, c_first_name#41, c_last_name#42]
 
-(46) Scan parquet default.customer_address
-Output [12]: [ca_address_sk#46, ca_street_number#47, ca_street_name#48, ca_street_type#49, ca_suite_number#50, ca_city#51, ca_county#52, ca_state#53, ca_zip#54, ca_country#55, ca_gmt_offset#56, ca_location_type#57]
+(42) Scan parquet default.customer_address
+Output [12]: [ca_address_sk#44, ca_street_number#45, ca_street_name#46, ca_street_type#47, ca_suite_number#48, ca_city#49, ca_county#50, ca_state#51, ca_zip#52, ca_country#53, ca_gmt_offset#54, ca_location_type#55]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer_address]
 PushedFilters: [IsNotNull(ca_state), EqualTo(ca_state,GA), IsNotNull(ca_address_sk)]
 ReadSchema: struct<ca_address_sk:int,ca_street_number:string,ca_street_name:string,ca_street_type:string,ca_suite_number:string,ca_city:string,ca_county:string,ca_state:string,ca_zip:string,ca_country:string,ca_gmt_offset:decimal(5,2),ca_location_type:string>
 
-(47) ColumnarToRow [codegen id : 10]
-Input [12]: [ca_address_sk#46, ca_street_number#47, ca_street_name#48, ca_street_type#49, ca_suite_number#50, ca_city#51, ca_county#52, ca_state#53, ca_zip#54, ca_country#55, ca_gmt_offset#56, ca_location_type#57]
+(43) ColumnarToRow [codegen id : 10]
+Input [12]: [ca_address_sk#44, ca_street_number#45, ca_street_name#46, ca_street_type#47, ca_suite_number#48, ca_city#49, ca_county#50, ca_state#51, ca_zip#52, ca_country#53, ca_gmt_offset#54, ca_location_type#55]
 
-(48) Filter [codegen id : 10]
-Input [12]: [ca_address_sk#46, ca_street_number#47, ca_street_name#48, ca_street_type#49, ca_suite_number#50, ca_city#51, ca_county#52, ca_state#53, ca_zip#54, ca_country#55, ca_gmt_offset#56, ca_location_type#57]
-Condition : ((isnotnull(ca_state#53) AND (ca_state#53 = GA)) AND isnotnull(ca_address_sk#46))
+(44) Filter [codegen id : 10]
+Input [12]: [ca_address_sk#44, ca_street_number#45, ca_street_name#46, ca_street_type#47, ca_suite_number#48, ca_city#49, ca_county#50, ca_state#51, ca_zip#52, ca_country#53, ca_gmt_offset#54, ca_location_type#55]
+Condition : ((isnotnull(ca_state#51) AND (ca_state#51 = GA)) AND isnotnull(ca_address_sk#44))
 
-(49) BroadcastExchange
-Input [12]: [ca_address_sk#46, ca_street_number#47, ca_street_name#48, ca_street_type#49, ca_suite_number#50, ca_city#51, ca_county#52, ca_state#53, ca_zip#54, ca_country#55, ca_gmt_offset#56, ca_location_type#57]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#58]
+(45) BroadcastExchange
+Input [12]: [ca_address_sk#44, ca_street_number#45, ca_street_name#46, ca_street_type#47, ca_suite_number#48, ca_city#49, ca_county#50, ca_state#51, ca_zip#52, ca_country#53, ca_gmt_offset#54, ca_location_type#55]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#56]
 
-(50) BroadcastHashJoin [codegen id : 11]
-Left keys [1]: [c_current_addr_sk#41]
-Right keys [1]: [ca_address_sk#46]
+(46) BroadcastHashJoin [codegen id : 11]
+Left keys [1]: [c_current_addr_sk#39]
+Right keys [1]: [ca_address_sk#44]
 Join condition: None
 
-(51) Project [codegen id : 11]
-Output [16]: [c_customer_id#40, c_salutation#42, c_first_name#43, c_last_name#44, ca_street_number#47, ca_street_name#48, ca_street_type#49, ca_suite_number#50, ca_city#51, ca_county#52, ca_state#53, ca_zip#54, ca_country#55, ca_gmt_offset#56, ca_location_type#57, ctr_total_return#18]
-Input [18]: [ctr_total_return#18, c_customer_id#40, c_current_addr_sk#41, c_salutation#42, c_first_name#43, c_last_name#44, ca_address_sk#46, ca_street_number#47, ca_street_name#48, ca_street_type#49, ca_suite_number#50, ca_city#51, ca_county#52, ca_state#53, ca_zip#54, ca_country#55, ca_gmt_offset#56, ca_location_type#57]
+(47) Project [codegen id : 11]
+Output [16]: [c_customer_id#38, c_salutation#40, c_first_name#41, c_last_name#42, ca_street_number#45, ca_street_name#46, ca_street_type#47, ca_suite_number#48, ca_city#49, ca_county#50, ca_state#51, ca_zip#52, ca_country#53, ca_gmt_offset#54, ca_location_type#55, ctr_total_return#16]
+Input [18]: [ctr_total_return#16, c_customer_id#38, c_current_addr_sk#39, c_salutation#40, c_first_name#41, c_last_name#42, ca_address_sk#44, ca_street_number#45, ca_street_name#46, ca_street_type#47, ca_suite_number#48, ca_city#49, ca_county#50, ca_state#51, ca_zip#52, ca_country#53, ca_gmt_offset#54, ca_location_type#55]
 
-(52) TakeOrderedAndProject
-Input [16]: [c_customer_id#40, c_salutation#42, c_first_name#43, c_last_name#44, ca_street_number#47, ca_street_name#48, ca_street_type#49, ca_suite_number#50, ca_city#51, ca_county#52, ca_state#53, ca_zip#54, ca_country#55, ca_gmt_offset#56, ca_location_type#57, ctr_total_return#18]
-Arguments: 100, [c_customer_id#40 ASC NULLS FIRST, c_salutation#42 ASC NULLS FIRST, c_first_name#43 ASC NULLS FIRST, c_last_name#44 ASC NULLS FIRST, ca_street_number#47 ASC NULLS FIRST, ca_street_name#48 ASC NULLS FIRST, ca_street_type#49 ASC NULLS FIRST, ca_suite_number#50 ASC NULLS FIRST, ca_city#51 ASC NULLS FIRST, ca_county#52 ASC NULLS FIRST, ca_state#53 ASC NULLS FIRST, ca_zip#54 ASC NULLS FIRST, ca_country#55 ASC NULLS FIRST, ca_gmt_offset#56 ASC NULLS FIRST, ca_location_type#57 ASC NULLS FIRST, ctr_total_return#18 ASC NULLS FIRST], [c_customer_id#40, c_salutation#42, c_first_name#43, c_last_name#44, ca_street_number#47, ca_street_name#48, ca_street_type#49, ca_suite_number#50, ca_city#51, ca_county#52, ca_state#53, ca_zip#54, ca_country#55, ca_gmt_offset#56, ca_location_type#57, ctr_total_return#18]
+(48) TakeOrderedAndProject
+Input [16]: [c_customer_id#38, c_salutation#40, c_first_name#41, c_last_name#42, ca_street_number#45, ca_street_name#46, ca_street_type#47, ca_suite_number#48, ca_city#49, ca_county#50, ca_state#51, ca_zip#52, ca_country#53, ca_gmt_offset#54, ca_location_type#55, ctr_total_return#16]
+Arguments: 100, [c_customer_id#38 ASC NULLS FIRST, c_salutation#40 ASC NULLS FIRST, c_first_name#41 ASC NULLS FIRST, c_last_name#42 ASC NULLS FIRST, ca_street_number#45 ASC NULLS FIRST, ca_street_name#46 ASC NULLS FIRST, ca_street_type#47 ASC NULLS FIRST, ca_suite_number#48 ASC NULLS FIRST, ca_city#49 ASC NULLS FIRST, ca_county#50 ASC NULLS FIRST, ca_state#51 ASC NULLS FIRST, ca_zip#52 ASC NULLS FIRST, ca_country#53 ASC NULLS FIRST, ca_gmt_offset#54 ASC NULLS FIRST, ca_location_type#55 ASC NULLS FIRST, ctr_total_return#16 ASC NULLS FIRST], [c_customer_id#38, c_salutation#40, c_first_name#41, c_last_name#42, ca_street_number#45, ca_street_name#46, ca_street_type#47, ca_suite_number#48, ca_city#49, ca_county#50, ca_state#51, ca_zip#52, ca_country#53, ca_gmt_offset#54, ca_location_type#55, ctr_total_return#16]
 
 ===== Subqueries =====
 
 Subquery:1 Hosting operator id = 1 Hosting Expression = cr_returned_date_sk#4 IN dynamicpruning#5
-ReusedExchange (53)
+BroadcastExchange (53)
++- * Project (52)
+   +- * Filter (51)
+      +- * ColumnarToRow (50)
+         +- Scan parquet default.date_dim (49)
 
 
-(53) ReusedExchange [Reuses operator id: 8]
+(49) Scan parquet default.date_dim
+Output [2]: [d_date_sk#6, d_year#57]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/date_dim]
+PushedFilters: [IsNotNull(d_year), EqualTo(d_year,2000), IsNotNull(d_date_sk)]
+ReadSchema: struct<d_date_sk:int,d_year:int>
+
+(50) ColumnarToRow [codegen id : 1]
+Input [2]: [d_date_sk#6, d_year#57]
+
+(51) Filter [codegen id : 1]
+Input [2]: [d_date_sk#6, d_year#57]
+Condition : ((isnotnull(d_year#57) AND (d_year#57 = 2000)) AND isnotnull(d_date_sk#6))
+
+(52) Project [codegen id : 1]
 Output [1]: [d_date_sk#6]
+Input [2]: [d_date_sk#6, d_year#57]
 
-Subquery:2 Hosting operator id = 21 Hosting Expression = cr_returned_date_sk#22 IN dynamicpruning#5
+(53) BroadcastExchange
+Input [1]: [d_date_sk#6]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#58]
+
+Subquery:2 Hosting operator id = 17 Hosting Expression = cr_returned_date_sk#20 IN dynamicpruning#5
 
 
