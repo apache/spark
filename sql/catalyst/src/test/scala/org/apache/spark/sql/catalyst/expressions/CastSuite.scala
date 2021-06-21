@@ -666,7 +666,7 @@ class CastSuite extends CastSuiteBase {
   }
 
   test("SPARK-35820: Support cast DayTimeIntervalType in different fields") {
-    val ym = Duration.ofSeconds(12345678L, 123456789)
+    val dt = Duration.ofSeconds(12345678L, 123456789)
     Seq((DayTimeIntervalType(DAY, DAY), 12268800000000L, -12268800000000L),
       (DayTimeIntervalType(DAY, HOUR), 12344400000000L, -12344400000000L),
       (DayTimeIntervalType(DAY, MINUTE), 12345660000000L, -12345660000000L),
@@ -678,9 +678,9 @@ class CastSuite extends CastSuiteBase {
       (DayTimeIntervalType(MINUTE, SECOND), 12345678123456L, -12345678123457L),
       (DayTimeIntervalType(SECOND, SECOND), 12345678123456L, -12345678123457L))
       .foreach { case (dt, positive, negative) =>
-        checkEvaluation(cast(Literal.create(ym, DayTimeIntervalType(DAY, SECOND)), dt), positive)
+        checkEvaluation(cast(Literal.create(dt, DayTimeIntervalType(DAY, SECOND)), dt), positive)
         checkEvaluation(
-          cast(Literal.create(ym.negated(), DayTimeIntervalType(DAY, SECOND)), dt), negative)
+          cast(Literal.create(dt.negated(), DayTimeIntervalType(DAY, SECOND)), dt), negative)
       }
   }
 
