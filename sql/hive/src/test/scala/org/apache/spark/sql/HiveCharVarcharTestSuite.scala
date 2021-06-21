@@ -63,7 +63,7 @@ class HiveCharVarcharTestSuite extends CharVarcharTestSuite with TestHiveSinglet
       hiveClient.runSqlHive("CREATE TABLE t(c CHAR(5), v VARCHAR(7)) STORED AS ORC")
       hiveClient.runSqlHive("INSERT INTO t VALUES('Spark', 'kyuubi'))")
       checkAnswer(sql("SELECT c, v from t"), Row("Spark", "kyuubi"))
-      checkAnswer(sql("SELECT id from t where id = 'kyuubi'"), Row("kyuubi"))
+      checkAnswer(sql("SELECT id from t where c = 'Spark' and v = 'kyuubi'"), Row("kyuubi"))
     }
   }
 }
