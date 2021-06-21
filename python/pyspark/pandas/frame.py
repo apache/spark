@@ -4824,6 +4824,13 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         index_col: Optional[Union[str, List[str]]] = None,
         **options
     ) -> None:
+        """An alias for :func:`DataFrame.spark.to_spark_io`.
+        See :meth:`pyspark.pandas.spark.accessors.SparkFrameMethods.to_spark_io`.
+
+        .. deprecated:: 3.2.0
+            Use :func:`DataFrame.spark.to_spark_io` instead.
+        """
+        warnings.warn("Deprecated in 3.2, Use spark.to_spark_io instead.", FutureWarning)
         return self.spark.to_spark_io(path, format, mode, partition_cols, index_col, **options)
 
     to_spark_io.__doc__ = SparkFrameMethods.to_spark_io.__doc__
