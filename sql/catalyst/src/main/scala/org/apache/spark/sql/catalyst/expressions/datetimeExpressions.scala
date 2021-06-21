@@ -66,6 +66,10 @@ trait TimestampFormatterHelper extends TimeZoneAwareExpression {
 
   protected def isParsing: Boolean
 
+  // Whether the timestamp formatter is for TimestampWithoutTZType.
+  // If yes, the formatter is always `Iso8601TimestampFormatter`.
+  protected def forTimestampWithoutTZ: Boolean = false
+
   @transient final protected lazy val formatterOption: Option[TimestampFormatter] =
     if (formatString.foldable) {
       Option(formatString.eval()).map(fmt => getFormatter(fmt.toString))
@@ -76,7 +80,8 @@ trait TimestampFormatterHelper extends TimeZoneAwareExpression {
       format = fmt,
       zoneId = zoneId,
       legacyFormat = SIMPLE_DATE_FORMAT,
-      isParsing = isParsing)
+      isParsing = isParsing,
+      forTimestampWithoutTZ = forTimestampWithoutTZ)
   }
 }
 
@@ -1001,6 +1006,8 @@ case class GetTimestampWithoutTZ(
     timeZoneId: Option[String] = None,
     failOnError: Boolean = SQLConf.get.ansiEnabled) extends ToTimestamp {
 
+  override lazy val forTimestampWithoutTZ: Boolean = true
+
   override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType)
 
   override def dataType: DataType = TimestampWithoutTZType
@@ -1073,10 +1080,6 @@ abstract class ToTimestamp
   // For example if the factor is 1000000, the result of the expression is in seconds.
   protected def downScaleFactor: Long
 
-  // Whether the expression is for converting String to TimestampWithoutTZType.
-  private lazy val stringToTimestampWithoutTZ: Boolean =
-    dataType == TimestampWithoutTZType
-
   override protected def formatString: Expression = right
   override protected def isParsing = true
 
@@ -1110,7 +1113,7 @@ abstract class ToTimestamp
           } else {
             val formatter = formatterOption.getOrElse(getFormatter(fmt.toString))
             try {
-              if (stringToTimestampWithoutTZ) {
+              if (forTimestampWithoutTZ) {
                 formatter.parseWithoutTimeZone(t.asInstanceOf[UTF8String].toString)
               } else {
                 formatter.parse(t.asInstanceOf[UTF8String].toString) / downScaleFactor
@@ -1131,12 +1134,12 @@ abstract class ToTimestamp
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val javaType = CodeGenerator.javaType(dataType)
     val parseErrorBranch = if (failOnError) "throw e;" else s"${ev.isNull} = true;"
-    val parseMethod = if (stringToTimestampWithoutTZ) {
+    val parseMethod = if (forTimestampWithoutTZ) {
       "parseWithoutTimeZone"
     } else {
       "parse"
     }
-    val downScaleCode = if (stringToTimestampWithoutTZ) {
+    val downScaleCode = if (forTimestampWithoutTZ) {
       ""
     } else {
       s"/ $downScaleFactor"

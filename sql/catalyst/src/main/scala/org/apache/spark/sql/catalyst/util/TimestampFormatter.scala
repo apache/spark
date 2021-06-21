@@ -322,9 +322,10 @@ object TimestampFormatter {
       zoneId: ZoneId,
       locale: Locale = defaultLocale,
       legacyFormat: LegacyDateFormat = LENIENT_SIMPLE_DATE_FORMAT,
-      isParsing: Boolean): TimestampFormatter = {
+      isParsing: Boolean,
+      forTimestampWithoutTZ: Boolean = false): TimestampFormatter = {
     val pattern = format.getOrElse(defaultPattern)
-    val formatter = if (SQLConf.get.legacyTimeParserPolicy == LEGACY) {
+    val formatter = if (SQLConf.get.legacyTimeParserPolicy == LEGACY && !forTimestampWithoutTZ) {
       getLegacyFormatter(pattern, zoneId, locale, legacyFormat)
     } else {
       new Iso8601TimestampFormatter(
@@ -364,6 +365,16 @@ object TimestampFormatter {
       legacyFormat: LegacyDateFormat,
       isParsing: Boolean): TimestampFormatter = {
     getFormatter(Some(format), zoneId, defaultLocale, legacyFormat, isParsing)
+  }
+
+  def apply(
+      format: String,
+      zoneId: ZoneId,
+      legacyFormat: LegacyDateFormat,
+      isParsing: Boolean,
+      forTimestampWithoutTZ: Boolean): TimestampFormatter = {
+    getFormatter(Some(format), zoneId, defaultLocale, legacyFormat, isParsing,
+      forTimestampWithoutTZ)
   }
 
   def apply(
