@@ -876,7 +876,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
             )
 
         values = values.tolist() if isinstance(values, np.ndarray) else list(values)
-        return self._with_new_scol(self.spark.column.isin(values))
+        return self._with_new_scol(self.spark.column.isin([SF.lit(v) for v in values]))
 
     def isnull(self: T_IndexOps) -> T_IndexOps:
         """
