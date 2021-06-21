@@ -1150,7 +1150,7 @@ class CodegenContext extends Logging {
    */
   private def subexpressionElimination(
       expressions: Seq[Expression],
-      lazyEval: Boolean = false): Unit = {
+      lazyEvaluation: Boolean = false): Unit = {
     // Add each expression tree and compute the common subexpressions.
     expressions.foreach(equivalentExpressions.addExprTree(_))
 
@@ -1163,15 +1163,15 @@ class CodegenContext extends Logging {
       val eval = expr.genCode(this)
 
       val subExprValue = addMutableState(javaType(expr.dataType), "subExprValue")
-      val subExprValueisNull = addMutableState(JAVA_BOOLEAN, "subExprIsNull")
+      val subExprValueIsNull = addMutableState(JAVA_BOOLEAN, "subExprIsNull")
       val evalSubExprValueFnName = freshName("evalSubExprValue")
 
-      if (!lazyEval) {
+      if (!lazyEvaluation) {
         val fn =
           s"""
              |private void $evalSubExprValueFnName(InternalRow $INPUT_ROW) {
              |  ${eval.code}
-             |  $subExprValueisNull = ${eval.isNull};
+             |  $subExprValueIsNull = ${eval.isNull};
              |  $subExprValue = ${eval.value};
              |}
            """.stripMargin
@@ -1192,12 +1192,12 @@ class CodegenContext extends Logging {
 
         subexprFunctions += s"${addNewFunction(evalSubExprValueFnName, fn)}($INPUT_ROW);"
         val state = SubExprEliminationState(
-          JavaCode.isNullGlobal(subExprValueisNull),
+          JavaCode.isNullGlobal(subExprValueIsNull),
           JavaCode.global(subExprValue, expr.dataType))
         subExprEliminationExprs ++= e.map(_ -> state).toMap
       } else {
 
-        // the variable to check if a subexpression is evaulated
+        // the variable to check if a subexpression is evaluated or not.
         val isSubExprEval = addMutableState(JAVA_BOOLEAN, "isSubExprEval")
 
         val evalSubExprValueFnName = freshName("evalSubExprValue")
@@ -1205,18 +1205,22 @@ class CodegenContext extends Logging {
           s"""
              |private void $evalSubExprValueFnName(InternalRow ${INPUT_ROW}) {
              |  ${eval.code}
-             |  $subExprValueisNull = ${eval.isNull};
+             |  $subExprValueIsNull = ${eval.isNull};
              |  $subExprValue = ${eval.value};
              |  $isSubExprEval = true;
              |}
              |""".stripMargin
+
+        val splitEvalSubExprValueFnName = splitExpressions(Seq(
+          s"${addNewFunction(evalSubExprValueFnName, evalSubExprValueFn)}($INPUT_ROW)"),
+          s"${evalSubExprValueFnName}_split", Seq("InternalRow" -> INPUT_ROW))
 
         val getSubExprValueFnName = freshName("getSubExprValue")
         val getSubExprValueFn =
           s"""
              |private ${boxedType(expr.dataType)} $getSubExprValueFnName(InternalRow ${INPUT_ROW}) {
              |  if (!$isSubExprEval) {
-             |    $evalSubExprValueFnName($INPUT_ROW);
+             |    $splitEvalSubExprValueFnName;
              |  }
              |  return ${subExprValue};
              |}
@@ -1227,9 +1231,9 @@ class CodegenContext extends Logging {
           s"""
              |private boolean ${getSubExprValueIsNullFnName}(InternalRow ${INPUT_ROW}) {
              |  if (!$isSubExprEval) {
-             |    $evalSubExprValueFnName($INPUT_ROW);
+             |    $splitEvalSubExprValueFnName;
              |  }
-             |  return $subExprValueisNull;
+             |  return $subExprValueIsNull;
              |}
              |""".stripMargin
 
@@ -1242,7 +1246,6 @@ class CodegenContext extends Logging {
              |}
              |""".stripMargin
 
-        addNewFunction(evalSubExprValueFnName, evalSubExprValueFn)
         subexprResetFunctions += s"${addNewFunction(resetFnName, resetFn)}();"
 
         val splitIsNull = splitExpressions(Seq(

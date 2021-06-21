@@ -535,8 +535,10 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
         Add(BoundReference(colIndex, DoubleType, true),
           BoundReference(numOfExprs + colIndex, DoubleType, true))))
     // these should not fail to compile due to 64K limit
-    GenerateUnsafeProjection.generate(exprs, true)
-    GenerateMutableProjection.generate(exprs, true)
+    GenerateUnsafeProjection.generate(exprs, true, false)
+    GenerateMutableProjection.generate(exprs, true, false)
+    GenerateUnsafeProjection.generate(exprs, true, true)
+    GenerateMutableProjection.generate(exprs, true, true)
   }
 
   test("SPARK-32624: Use CodeGenerator.typeName() to fix byte[] compile issue") {

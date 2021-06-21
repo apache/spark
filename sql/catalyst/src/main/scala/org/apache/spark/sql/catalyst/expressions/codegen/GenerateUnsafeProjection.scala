@@ -286,8 +286,9 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
   def createCode(
       ctx: CodegenContext,
       expressions: Seq[Expression],
-      useSubexprElimination: Boolean = false): ExprCode = {
-    val exprEvals = ctx.generateExpressions(expressions, useSubexprElimination)
+      useSubexprElimination: Boolean = false,
+      lazyEvaluation: Boolean = false): ExprCode = {
+    val exprEvals = ctx.generateExpressions(expressions, useSubexprElimination, lazyEvaluation)
     val exprSchemas = expressions.map(e => Schema(e.dataType, e.nullable))
 
     val numVarLenFields = exprSchemas.count {
@@ -323,19 +324,21 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
 
   def generate(
       expressions: Seq[Expression],
-      subexpressionEliminationEnabled: Boolean): UnsafeProjection = {
-    create(canonicalize(expressions), subexpressionEliminationEnabled)
+      subexpressionEliminationEnabled: Boolean,
+      lazyEvaluation: Boolean = false): UnsafeProjection = {
+    create(canonicalize(expressions), subexpressionEliminationEnabled, lazyEvaluation)
   }
 
   protected def create(references: Seq[Expression]): UnsafeProjection = {
-    create(references, subexpressionEliminationEnabled = false)
+    create(references, subexpressionEliminationEnabled = false, lazyEvaluation = false)
   }
 
   private def create(
       expressions: Seq[Expression],
-      subexpressionEliminationEnabled: Boolean): UnsafeProjection = {
+      subexpressionEliminationEnabled: Boolean,
+      lazyEvaluation: Boolean): UnsafeProjection = {
     val ctx = newCodeGenContext()
-    val eval = createCode(ctx, expressions, subexpressionEliminationEnabled)
+    val eval = createCode(ctx, expressions, subexpressionEliminationEnabled, false)
 
     val codeBody =
       s"""

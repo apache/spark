@@ -42,26 +42,31 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], MutableP
       expressions: Seq[Expression],
       inputSchema: Seq[Attribute],
       useSubexprElimination: Boolean): MutableProjection = {
-    create(canonicalize(bind(expressions, inputSchema)), useSubexprElimination)
+    create(canonicalize(bind(expressions, inputSchema)), useSubexprElimination, false)
   }
 
-  def generate(expressions: Seq[Expression], useSubexprElimination: Boolean): MutableProjection = {
-    create(canonicalize(expressions), useSubexprElimination)
+  def generate(
+      expressions: Seq[Expression],
+      useSubexprElimination: Boolean,
+      lazyEvaluation: Boolean = false): MutableProjection = {
+    create(canonicalize(expressions), useSubexprElimination, lazyEvaluation)
   }
 
   protected def create(expressions: Seq[Expression]): MutableProjection = {
-    create(expressions, false)
+    create(expressions, false, false)
   }
 
   private def create(
       expressions: Seq[Expression],
-      useSubexprElimination: Boolean): MutableProjection = {
+      useSubexprElimination: Boolean,
+      lazyEvaluation: Boolean): MutableProjection = {
     val ctx = newCodeGenContext()
     val validExpr = expressions.zipWithIndex.filter {
       case (NoOp, _) => false
       case _ => true
     }
-    val exprVals = ctx.generateExpressions(validExpr.map(_._1), useSubexprElimination)
+    val exprVals = ctx.generateExpressions(validExpr.map(_._1), useSubexprElimination,
+      lazyEvaluation)
 
     // 4-tuples: (code for projection, isNull variable name, value variable name, column index)
     val projectionCodes: Seq[(String, String)] = validExpr.zip(exprVals).map {
