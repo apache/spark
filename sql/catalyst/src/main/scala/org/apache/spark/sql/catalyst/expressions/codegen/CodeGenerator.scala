@@ -96,15 +96,12 @@ case class SubExprEliminationState(
 /**
  * Codes and common subexpressions mapping used for subexpression elimination.
  *
- * @param codes all `SubExprEliminationState` representing the codes that evaluate common
- *              subexpressions.
  * @param states Foreach expression that is participating in subexpression elimination,
  *               the state to use.
  * @param exprCodesNeedEvaluate Some expression codes that need to be evaluated before
  *                              calling common subexpressions.
  */
 case class SubExprCodes(
-  codes: Seq[SubExprEliminationState],
   states: Map[Expression, SubExprEliminationState],
   exprCodesNeedEvaluate: Seq[ExprCode])
 
@@ -1045,7 +1042,7 @@ class CodegenContext extends Logging {
    * evaluating a subexpression, this method will clean up the code block to avoid duplicate
    * evaluation.
    */
-  def evaluateSubExprEliminationState(subExprStates: Seq[SubExprEliminationState]): String = {
+  def evaluateSubExprEliminationState(subExprStates: Iterable[SubExprEliminationState]): String = {
     val code = new StringBuilder()
 
     subExprStates.foreach { state =>
@@ -1109,12 +1106,12 @@ class CodegenContext extends Logging {
     }.unzip
 
     val needSplit = nonSplitCode.map(_.code.length).sum > SQLConf.get.methodSplitThreshold
-    val (codes, subExprsMap, exprCodes) = if (needSplit) {
+    val (subExprsMap, exprCodes) = if (needSplit) {
       if (inputVarsForAllFuncs.map(calculateParamLengthFromExprValues).forall(isValidParamLength)) {
         val localSubExprEliminationExprs =
           mutable.HashMap.empty[Expression, SubExprEliminationState]
 
-        val splitCodes = commonExprs.zipWithIndex.map { case (exprs, i) =>
+        commonExprs.zipWithIndex.foreach { case (exprs, i) =>
           val expr = exprs.head
           val eval = withSubExprEliminationExprs(localSubExprEliminationExprs.toMap) {
             Seq(expr.genCode(this))
@@ -1160,21 +1157,20 @@ class CodegenContext extends Logging {
           val state = SubExprEliminationState(code, isNull, JavaCode.global(value, expr.dataType),
             childrenSubExprs.toSeq.reverse)
           exprs.foreach(localSubExprEliminationExprs.put(_, state))
-          state
         }
-        (splitCodes, localSubExprEliminationExprs, exprCodesNeedEvaluate)
+        (localSubExprEliminationExprs, exprCodesNeedEvaluate)
       } else {
         if (Utils.isTesting) {
           throw QueryExecutionErrors.failedSplitSubExpressionError(MAX_JVM_METHOD_PARAMS_LENGTH)
         } else {
           logInfo(QueryExecutionErrors.failedSplitSubExpressionMsg(MAX_JVM_METHOD_PARAMS_LENGTH))
-          (nonSplitCode, localSubExprEliminationExprsForNonSplit, Seq.empty)
+          (localSubExprEliminationExprsForNonSplit, Seq.empty)
         }
       }
     } else {
-      (nonSplitCode, localSubExprEliminationExprsForNonSplit, Seq.empty)
+      (localSubExprEliminationExprsForNonSplit, Seq.empty)
     }
-    SubExprCodes(codes, subExprsMap.toMap, exprCodes.flatten)
+    SubExprCodes(subExprsMap.toMap, exprCodes.flatten)
   }
 
   /**
