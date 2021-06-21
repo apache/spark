@@ -66,8 +66,8 @@ object DataTypeTestUtils {
 
   val yearMonthIntervalTypes: Seq[YearMonthIntervalType] = Seq(
     YearMonthIntervalType(YEAR, MONTH),
-    YearMonthIntervalType(YEAR, YEAR),
-    YearMonthIntervalType(MONTH, MONTH))
+    YearMonthIntervalType(YEAR),
+    YearMonthIntervalType(MONTH))
 
   /**
    * Instances of all [[NumericType]]s and [[CalendarIntervalType]]

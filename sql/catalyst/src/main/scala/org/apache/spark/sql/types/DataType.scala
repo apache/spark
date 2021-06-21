@@ -183,8 +183,8 @@ object DataType {
       DayTimeIntervalType(MINUTE, MINUTE),
       DayTimeIntervalType(MINUTE, SECOND),
       DayTimeIntervalType(SECOND, SECOND),
-      YearMonthIntervalType(YEAR, YEAR),
-      YearMonthIntervalType(MONTH, MONTH),
+      YearMonthIntervalType(YEAR),
+      YearMonthIntervalType(MONTH),
       YearMonthIntervalType(YEAR, MONTH),
       TimestampWithoutTZType)
       .map(t => t.typeName -> t).toMap
