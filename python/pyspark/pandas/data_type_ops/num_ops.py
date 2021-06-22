@@ -40,8 +40,6 @@ from pyspark.sql import functions as F
 from pyspark.sql.column import Column
 from pyspark.sql.types import (
     BooleanType,
-    DoubleType,
-    FloatType,
     StringType,
     TimestampType,
 )
@@ -381,15 +379,10 @@ class FractionalOps(NumericOps):
             if isinstance(dtype, extension_dtypes):
                 scol = index_ops.spark.column.cast(spark_type)
             else:
-                if isinstance(index_ops.spark.data_type, (FloatType, DoubleType)):
-                    scol = F.when(
-                        index_ops.spark.column.isNull() | F.isnan(index_ops.spark.column),
-                        F.lit(True),
-                    ).otherwise(index_ops.spark.column.cast(spark_type))
-                else:  # DecimalType
-                    scol = F.when(index_ops.spark.column.isNull(), F.lit(False)).otherwise(
-                        index_ops.spark.column.cast(spark_type)
-                    )
+                scol = F.when(
+                    index_ops.spark.column.isNull() | F.isnan(index_ops.spark.column),
+                    F.lit(True),
+                ).otherwise(index_ops.spark.column.cast(spark_type))
             return index_ops._with_new_scol(
                 scol.alias(index_ops._internal.data_spark_column_names[0]),
                 field=InternalField(dtype=dtype),
@@ -412,6 +405,18 @@ class DecimalOps(FractionalOps):
 
     def isnull(self, index_ops: T_IndexOps) -> T_IndexOps:
         return index_ops._with_new_scol(index_ops.spark.column.isNull())
+
+    def astype(self, index_ops: T_IndexOps, dtype: Union[str, type, Dtype]) -> T_IndexOps:
+        dtype, spark_type = pandas_on_spark_type(dtype)
+
+        if isinstance(dtype, CategoricalDtype):
+            return _as_categorical_type(index_ops, dtype, spark_type)
+        elif isinstance(spark_type, BooleanType):
+            return _as_bool_type(index_ops, dtype)
+        elif isinstance(spark_type, StringType):
+            return _as_string_type(index_ops, dtype, null_str=str(np.nan))
+        else:
+            return _as_other_type(index_ops, dtype, spark_type)
 
 
 class IntegralExtensionOps(IntegralOps):
