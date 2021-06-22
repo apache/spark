@@ -203,17 +203,21 @@ private[sql] object AvroUtils extends Logging {
     }
   }
 
+  /**
+   * Wraps an Avro Schema object so that field lookups are faster.
+   *
+   * @param avroSchema The schema in which to search for fields. Must be of type RECORD.
+   * @param avroPath The seq of parent field names leading to `avroSchema`.
+   */
   class AvroSchemaHelper(avroSchema: Schema, avroPath: Seq[String]) {
     if (avroSchema.getType != Schema.Type.RECORD) {
       throw new IncompatibleSchemaException(
         s"Attempting to treat ${avroSchema.getName} as a RECORD, but it was: ${avroSchema.getType}")
     }
 
-    val schemaMap = avroSchema.getFields.asScala.groupBy { f =>
-        f.name.toLowerCase(Locale.ROOT)
-      }.map { case (k, v) =>
-      (k, v.toSeq) // needed for scala 2.13
-    }
+    private[this] val fieldMap = avroSchema.getFields.asScala
+      .groupBy(_.name.toLowerCase(Locale.ROOT))
+      .mapValues(_.toSeq) // toSeq needed for scala 2.13
 
     /**
      * Extract a single field from the contained avro schema which has the desired field name,
@@ -225,7 +229,7 @@ private[sql] object AvroUtils extends Logging {
     def getFieldByName(name: String): Option[Schema.Field] = {
 
       // get candidates, ignoring case of field name
-      val candidates = schemaMap.get(name.toLowerCase(Locale.ROOT))
+      val candidates = fieldMap.get(name.toLowerCase(Locale.ROOT))
         .getOrElse(Seq.empty[Schema.Field])
 
       // search candidates, taking into account case sensitivity settings

@@ -22,8 +22,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 
-class AvroSchemaHelperSuite extends SQLTestUtils
-  with SharedSparkSession {
+class AvroSchemaHelperSuite extends SQLTestUtils with SharedSparkSession {
 
   test("ensure schema is a record") {
     val jsonSchema = s"""
@@ -37,7 +36,7 @@ class AvroSchemaHelperSuite extends SQLTestUtils
       }
     """
 
-    val avroSchema = Schema.parse(jsonSchema).getField("date").schema()
+    val avroSchema = (new Schema.Parser()).parse(jsonSchema).getField("date").schema()
     val msg = intercept[IncompatibleSchemaException] {
       new AvroUtils.AvroSchemaHelper(avroSchema, Seq(""))
     }.getMessage

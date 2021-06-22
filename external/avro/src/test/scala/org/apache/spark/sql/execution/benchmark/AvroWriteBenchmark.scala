@@ -50,7 +50,7 @@ object AvroWriteBenchmark extends DataSourceWriteBenchmark {
           .map(_ => Random.nextInt).selectExpr(selectExpr: _*).repartition(files)
           .persist(StorageLevel.DISK_ONLY)
         // cache the data to ensure we are not benchmarking range or repartition
-        df.filter("(c1*c2) = 12").collect
+        df.noop()
         df.createOrReplaceTempView("t1")
         val benchmark = new Benchmark(s"Write wide rows into $files files", values, output = output)
         benchmark.addCase("Write wide rows") { _ =>

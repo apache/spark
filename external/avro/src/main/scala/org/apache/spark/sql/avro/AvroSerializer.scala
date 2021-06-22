@@ -254,8 +254,7 @@ private[sql] class AvroSerializer(
 
     val (avroIndices: Array[Int], fieldConverters: Array[Converter]) =
       catalystStruct.map { catalystField =>
-        val avroField = avroSchemaHelper
-            .getFieldByName(catalystField.name) match {
+        val avroField = avroSchemaHelper.getFieldByName(catalystField.name) match {
           case Some(f) => f
           case None => throw new IncompatibleSchemaException(s"Cannot find " +
               s"${toFieldStr(catalystPath :+ catalystField.name)} in Avro schema at $avroPathStr")
