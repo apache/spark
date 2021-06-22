@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils.millisToMicros
 import org.apache.spark.sql.catalyst.util.IntervalStringStyles.{ANSI_STYLE, HIVE_STYLE, IntervalStyle}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{DayTimeIntervalType, Decimal, YearMonthIntervalType}
+import org.apache.spark.sql.types.{DayTimeIntervalType => DT, Decimal, YearMonthIntervalType => YM}
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 // The style of textual representation of intervals
@@ -892,7 +892,7 @@ object IntervalUtils {
    * @throws ArithmeticException If numeric overflow occurs
    */
   def durationToMicros(duration: Duration): Long = {
-    durationToMicros(duration, DayTimeIntervalType.SECOND)
+    durationToMicros(duration, DT.SECOND)
   }
 
   def durationToMicros(duration: Duration, endField: Byte): Long = {
@@ -910,10 +910,10 @@ object IntervalUtils {
     }
 
     endField match {
-      case DayTimeIntervalType.DAY => micros - micros % MICROS_PER_DAY
-      case DayTimeIntervalType.HOUR => micros - micros % MICROS_PER_HOUR
-      case DayTimeIntervalType.MINUTE => micros - micros % MICROS_PER_MINUTE
-      case DayTimeIntervalType.SECOND => micros
+      case DT.DAY => micros - micros % MICROS_PER_DAY
+      case DT.HOUR => micros - micros % MICROS_PER_HOUR
+      case DT.MINUTE => micros - micros % MICROS_PER_MINUTE
+      case DT.SECOND => micros
     }
   }
 
@@ -936,13 +936,13 @@ object IntervalUtils {
    * @throws ArithmeticException If numeric overflow occurs
    */
   def periodToMonths(period: Period): Int = {
-    periodToMonths(period, YearMonthIntervalType.MONTH)
+    periodToMonths(period, YM.MONTH)
   }
 
   def periodToMonths(period: Period, endField: Byte): Int = {
     val monthsInYears = Math.multiplyExact(period.getYears, MONTHS_PER_YEAR)
     val months = Math.addExact(monthsInYears, period.getMonths)
-    if (endField == YearMonthIntervalType.YEAR) {
+    if (endField == YM.YEAR) {
       months - months % MONTHS_PER_YEAR
     } else {
       months
@@ -993,8 +993,8 @@ object IntervalUtils {
         val formatBuilder = new StringBuilder("INTERVAL '")
         if (startField == endField) {
           startField match {
-            case YearMonthIntervalType.YEAR => formatBuilder.append(s"$year' YEAR")
-            case YearMonthIntervalType.MONTH => formatBuilder.append(s"$months' MONTH")
+            case YM.YEAR => formatBuilder.append(s"$year' YEAR")
+            case YM.MONTH => formatBuilder.append(s"$months' MONTH")
           }
         } else {
           formatBuilder.append(s"$yearAndMonth' YEAR TO MONTH")
@@ -1021,8 +1021,8 @@ object IntervalUtils {
       endField: Byte): String = {
     var sign = ""
     var rest = micros
-    val from = DayTimeIntervalType.fieldToString(startField).toUpperCase
-    val to = DayTimeIntervalType.fieldToString(endField).toUpperCase
+    val from = DT.fieldToString(startField).toUpperCase
+    val to = DT.fieldToString(endField).toUpperCase
     val prefix = "INTERVAL '"
     val postfix = s"' ${if (startField == endField) from else s"$from TO $to"}"
 
@@ -1035,23 +1035,23 @@ object IntervalUtils {
         val minIntervalString = style match {
           case ANSI_STYLE =>
             val firstStr = startField match {
-              case DayTimeIntervalType.DAY => "-106751991"
-              case DayTimeIntervalType.HOUR => "-2562047788"
-              case DayTimeIntervalType.MINUTE => "-153722867280"
-              case DayTimeIntervalType.SECOND => "-9223372036854.775808"
+              case DT.DAY => "-106751991"
+              case DT.HOUR => "-2562047788"
+              case DT.MINUTE => "-153722867280"
+              case DT.SECOND => "-9223372036854.775808"
             }
             val followingStr = if (startField == endField) {
               ""
             } else {
               val substrStart = startField match {
-                case DayTimeIntervalType.DAY => 10
-                case DayTimeIntervalType.HOUR => 13
-                case DayTimeIntervalType.MINUTE => 16
+                case DT.DAY => 10
+                case DT.HOUR => 13
+                case DT.MINUTE => 16
               }
               val substrEnd = endField match {
-                case DayTimeIntervalType.HOUR => 13
-                case DayTimeIntervalType.MINUTE => 16
-                case DayTimeIntervalType.SECOND => 26
+                case DT.HOUR => 13
+                case DT.MINUTE => 16
+                case DT.SECOND => 26
               }
               baseStr.substring(substrStart, substrEnd)
             }
@@ -1069,42 +1069,40 @@ object IntervalUtils {
       case ANSI_STYLE =>
         val formatBuilder = new mutable.StringBuilder(sign)
         val formatArgs = new mutable.ArrayBuffer[Long]()
-        if (startField == DayTimeIntervalType.SECOND) {
-          val leadZero = if (rest < 10 * MICROS_PER_SECOND) "0" else ""
-          formatBuilder.append(
-            s"$leadZero${java.math.BigDecimal.valueOf(rest, 6).stripTrailingZeros.toPlainString}")
-        } else {
-          startField match {
-            case DayTimeIntervalType.DAY =>
-              formatBuilder.append(rest / MICROS_PER_DAY)
-              rest %= MICROS_PER_DAY
-            case DayTimeIntervalType.HOUR =>
-              formatBuilder.append("%02d")
-              formatArgs.append(rest / MICROS_PER_HOUR)
-              rest %= MICROS_PER_HOUR
-            case DayTimeIntervalType.MINUTE =>
-              formatBuilder.append("%02d")
-              formatArgs.append(rest / MICROS_PER_MINUTE)
-              rest %= MICROS_PER_MINUTE
-          }
+        startField match {
+          case DT.DAY =>
+            formatBuilder.append(rest / MICROS_PER_DAY)
+            rest %= MICROS_PER_DAY
+          case DT.HOUR =>
+            formatBuilder.append("%02d")
+            formatArgs.append(rest / MICROS_PER_HOUR)
+            rest %= MICROS_PER_HOUR
+          case DT.MINUTE =>
+            formatBuilder.append("%02d")
+            formatArgs.append(rest / MICROS_PER_MINUTE)
+            rest %= MICROS_PER_MINUTE
+          case DT.SECOND =>
+            val leadZero = if (rest < 10 * MICROS_PER_SECOND) "0" else ""
+            formatBuilder.append(s"$leadZero" +
+              s"${java.math.BigDecimal.valueOf(rest, 6).stripTrailingZeros.toPlainString}")
         }
 
-        if (startField < DayTimeIntervalType.HOUR && DayTimeIntervalType.HOUR <= endField) {
+        if (startField < DT.HOUR && DT.HOUR <= endField) {
           formatBuilder.append(" %02d")
           formatArgs.append(rest / MICROS_PER_HOUR)
           rest %= MICROS_PER_HOUR
         }
-        if (startField < DayTimeIntervalType.MINUTE && DayTimeIntervalType.MINUTE <= endField) {
+        if (startField < DT.MINUTE && DT.MINUTE <= endField) {
           formatBuilder.append(":%02d")
           formatArgs.append(rest / MICROS_PER_MINUTE)
           rest %= MICROS_PER_MINUTE
         }
-        if (startField < DayTimeIntervalType.SECOND && DayTimeIntervalType.SECOND <= endField) {
+        if (startField < DT.SECOND && DT.SECOND <= endField) {
           val leadZero = if (rest < 10 * MICROS_PER_SECOND) "0" else ""
           formatBuilder.append(
             s":$leadZero${java.math.BigDecimal.valueOf(rest, 6).stripTrailingZeros.toPlainString}")
         }
-        s"$prefix${formatBuilder.format(formatArgs.toSeq: _*)}$postfix"
+        s"$prefix${formatBuilder.toString.format(formatArgs.toSeq: _*)}$postfix"
       case HIVE_STYLE =>
         val secondsWithFraction = rest % MICROS_PER_MINUTE
         rest /= MICROS_PER_MINUTE
