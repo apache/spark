@@ -340,7 +340,7 @@ class IntegralExtensionOpsTest(PandasOnSparkTestCase, TestCasesUtils):
 
     def test_isnull(self):
         for pser, psser in self.intergral_extension_pser_psser_pairs:
-            self.check_extension(pser.isnull(), psser.isnull())
+            self.assert_eq(pser.isnull(), psser.isnull())
 
 
 @unittest.skipIf(
@@ -367,7 +367,7 @@ class FractionalExtensionOpsTest(PandasOnSparkTestCase, TestCasesUtils):
 
     def test_isnull(self):
         for pser, psser in self.fractional_extension_pser_psser_pairs:
-            self.check_extension(pser.isnull(), psser.isnull())
+            self.assert_eq(pser.isnull(), psser.isnull())
 
 
 if __name__ == "__main__":
