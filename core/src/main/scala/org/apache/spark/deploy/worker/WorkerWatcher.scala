@@ -19,13 +19,8 @@ package org.apache.spark.deploy.worker
 
 import java.util.concurrent.atomic.AtomicBoolean
 
-import scala.concurrent.ExecutionContext.Implicits.global
-import scala.concurrent.Future
-import scala.concurrent.duration._
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.rpc._
-import org.apache.spark.util.ThreadUtils
 
 /**
  * Endpoint which connects to a worker process and terminates the JVM if the
@@ -58,11 +53,9 @@ private[spark] class WorkerWatcher(
   private def exitNonZero() =
     if (isTesting) {
       isShutDown = true
-    } else {
+    } else if (isChildProcessStopping.compareAndSet(false, true)) {
       // SPARK-35714: avoid the duplicate call of `System.exit` to avoid the dead lock
-      if (isChildProcessStopping.compareAndSet(false, true)) {
-        System.exit(-1)
-      }
+      System.exit(-1)
     }
 
   override def receive: PartialFunction[Any, Unit] = {
