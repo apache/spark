@@ -23,39 +23,44 @@ import org.apache.spark.sql.execution.streaming.GroupStateImpl
 import org.apache.spark.sql.execution.streaming.GroupStateImpl._
 
 /**
+ * :: Experimental ::
+ *
  * The extended version of [[GroupState]] interface with extra getters of state machine fields
  * to improve testability of the [[GroupState]] implementations
  * which inherit from the extended interface.
  *
  * Scala example of using `TestGroupState`:
  * {{{
+ * // Please refer to ScalaDoc of `GroupState` for the Scala definition of `mappingFunction()`
+ *
  * import org.apache.spark.api.java.Optional
+ * import org.apache.spark.sql.streaming.GroupStateTimeout
  * import org.apache.spark.sql.streaming.TestGroupState
  * // other imports
  *
  * // test class setups
  *
- * test("Structured Streaming state update function") {
+ * test("MapGroupsWithState state transition function") {
  *   // Creates the prevState input for the state transition function
- *   // with desired configs. The create() API would guarantee that
+ *   // with desired configs. The `create()` API would guarantee that
  *   // the generated instance has the same behavior as the one built by
  *   // engine with the same configs.
- *   var prevState = TestGroupState.create[UserStatus](
- *     optionalState = Optional.empty[UserStatus],
- *     timeoutConf = EventTimeTimeout,
+ *   val prevState = TestGroupState.create[Int](
+ *     optionalState = Optional.empty[Int],
+ *     timeoutConf = NoTimeout,
  *     batchProcessingTimeMs = 1L,
  *     eventTimeWatermarkMs = Optional.of(1L),
  *     hasTimedOut = false)
  *
- *   val userId: String = ...
- *   val actions: Iterator[UserAction] = ...
+ *   val key: String = ...
+ *   val values: Iterator[Int] = ...
  *
  *   // Asserts the prevState is in init state without updates.
  *   assert(!prevState.isUpdated)
  *
  *   // Calls the state transition function with the test previous state
- *   //  with desired configs.
- *   updateState(userId, actions, prevState)
+ *   // with desired configs.
+ *   mappingFunction(key, values, prevState)
  *
  *   // Asserts the test GroupState object has been updated after calling
  *   // the state transition function
@@ -65,6 +70,8 @@ import org.apache.spark.sql.execution.streaming.GroupStateImpl._
  *
  * Java example of using `TestGroupSate`:
  * {{{
+ * // Please refer to ScalaDoc of `GroupState` for the Java definition of `mappingFunction()`
+ *
  * import org.apache.spark.api.java.Optional;
  * import org.apache.spark.sql.streaming.GroupStateTimeout;
  * import org.apache.spark.sql.streaming.TestGroupState;
@@ -72,28 +79,28 @@ import org.apache.spark.sql.execution.streaming.GroupStateImpl._
  *
  * // test class setups
  *
- * // test `flatMapGroupsWithState` state transition function `updateState()`
- * public void testUpdateState() {
+ * // test `MapGroupsWithState` state transition function `mappingFunction()`
+ * public void testMappingFunctionWithTestGroupState() {
  *   // Creates the prevState input for the state transition function
- *   // with desired configs. The create() API would guarantee that
+ *   // with desired configs. The `create()` API would guarantee that
  *   // the generated instance has the same behavior as the one built by
  *   // engine with the same configs.
- *   TestGroupState<UserStatus> prevState = TestGroupState.create(
+ *   TestGroupState<Int> prevState = TestGroupState.create(
  *     Optional.empty(),
- *     GroupStateTimeout.EventTimeTimeout(),
+ *     GroupStateTimeout.NoTimeout(),
  *     1L,
  *     Optional.of(1L),
  *     false);
  *
- *   String userId = ...;
- *   UserAction[] actions = ...;
+ *   String key = ...;
+ *   Integer[] values = ...;
  *
  *   // Asserts the prevState is in init state without updates.
  *   Assert.assertTrue(!prevState.isUpdated());
  *
  *   // Calls the state transition function with the test previous state
- *   //  with desired configs.
- *   updateState(userId, Arrays.asList(actions).iterator(), prevState);
+ *   // with desired configs.
+ *   mappingFunction(key, Arrays.asList(values).iterator(), prevState);
  *
  *   // Asserts the test GroupState object has been updated after calling
  *   // the state transition function
