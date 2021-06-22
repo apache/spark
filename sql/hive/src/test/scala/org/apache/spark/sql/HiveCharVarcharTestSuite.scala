@@ -54,10 +54,6 @@ class HiveCharVarcharTestSuite extends CharVarcharTestSuite with TestHiveSinglet
   }
 
   test("SPARK-35700: Read char/varchar orc table with created and written by external systems") {
-    val hiveClient = spark.sharedState
-      .externalCatalog.asInstanceOf[ExternalCatalogWithListener]
-      .unwrapped
-      .asInstanceOf[HiveExternalCatalog].client
 
     withTable("t") {
       hiveClient.runSqlHive("CREATE TABLE t(c CHAR(5), v VARCHAR(7)) STORED AS ORC")
