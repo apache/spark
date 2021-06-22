@@ -42,7 +42,7 @@ import org.apache.spark.sql.types.YearMonthIntervalType.{MONTH, YEAR}
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
- * Test suite base for both [[Cast]] and [[AnsiCast]] expressions.
+ * Common test suite for [[Cast]], [[AnsiCast]] and [[TryCast]] expressions.
  */
 abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
 
@@ -73,7 +73,9 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
-  protected def isAlwaysNullable: Boolean = false
+  // Whether the test suite is for TryCast. If yes, there is no exceptions and the result is
+  // always nullable.
+  protected def isTryCast: Boolean = false
 
   protected def setConfigurationHint: String = ""
 
@@ -273,8 +275,8 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("cast from string") {
-    assert(cast("abcdef", StringType).nullable === isAlwaysNullable)
-    assert(cast("abcdef", BinaryType).nullable === isAlwaysNullable)
+    assert(cast("abcdef", StringType).nullable === isTryCast)
+    assert(cast("abcdef", BinaryType).nullable === isTryCast)
     assert(cast("abcdef", BooleanType).nullable)
     assert(cast("abcdef", TimestampType).nullable)
     assert(cast("abcdef", LongType).nullable)
@@ -982,12 +984,14 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
         DayTimeIntervalType()), StringType), ansiInterval)
     }
 
-    Seq("INTERVAL '-106751991 04:00:54.775809' YEAR TO MONTH",
-      "INTERVAL '106751991 04:00:54.775808' YEAR TO MONTH").foreach { interval =>
-      val e = intercept[IllegalArgumentException] {
-        cast(Literal.create(interval), DayTimeIntervalType()).eval()
-      }.getMessage
-      assert(e.contains("Interval string must match day-time format of"))
+    if (!isTryCast) {
+      Seq("INTERVAL '-106751991 04:00:54.775809' YEAR TO MONTH",
+        "INTERVAL '106751991 04:00:54.775808' YEAR TO MONTH").foreach { interval =>
+        val e = intercept[IllegalArgumentException] {
+          cast(Literal.create(interval), DayTimeIntervalType()).eval()
+        }.getMessage
+        assert(e.contains("Interval string must match day-time format of"))
+      }
     }
 
     Seq(Byte.MaxValue, Short.MaxValue, Int.MaxValue, Long.MaxValue, Long.MinValue + 1,
@@ -1026,13 +1030,15 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
         YearMonthIntervalType()), StringType), ansiInterval)
     }
 
-    Seq("INTERVAL '-178956970-9' YEAR TO MONTH", "INTERVAL '178956970-8' YEAR TO MONTH")
-      .foreach { interval =>
-        val e = intercept[IllegalArgumentException] {
-          cast(Literal.create(interval), YearMonthIntervalType()).eval()
-        }.getMessage
-        assert(e.contains("Error parsing interval year-month string: integer overflow"))
-      }
+    if (!isTryCast) {
+      Seq("INTERVAL '-178956970-9' YEAR TO MONTH", "INTERVAL '178956970-8' YEAR TO MONTH")
+        .foreach { interval =>
+          val e = intercept[IllegalArgumentException] {
+            cast(Literal.create(interval), YearMonthIntervalType()).eval()
+          }.getMessage
+          assert(e.contains("Error parsing interval year-month string: integer overflow"))
+        }
+    }
 
     Seq(Byte.MaxValue, Short.MaxValue, Int.MaxValue, Int.MinValue + 1, Int.MinValue)
       .foreach { period =>
