@@ -409,9 +409,7 @@ class DecimalOps(FractionalOps):
     def isnull(self, index_ops: Union["Index", "Series"]) -> Union["Series", "Index"]:
         return index_ops._with_new_scol(index_ops.spark.column.isNull())
 
-    def astype(
-        self, index_ops: Union["Index", "Series"], dtype: Union[str, type, Dtype]
-    ) -> Union["Index", "Series"]:
+    def astype(self, index_ops: T_IndexOps, dtype: Union[str, type, Dtype]) -> T_IndexOps:
         dtype, spark_type = pandas_on_spark_type(dtype)
 
         if isinstance(dtype, CategoricalDtype):
