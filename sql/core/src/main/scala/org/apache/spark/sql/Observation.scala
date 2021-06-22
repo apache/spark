@@ -55,7 +55,7 @@ class Observation(name: String) {
 
   private val listener: ObservationListener = ObservationListener(this)
 
-  private var sparkSession: Option[SparkSession] = None
+  @volatile private var sparkSession: Option[SparkSession] = None
 
   @volatile private var row: Option[Row] = None
 
