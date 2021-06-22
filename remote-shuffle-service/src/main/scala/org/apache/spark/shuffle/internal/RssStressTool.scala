@@ -142,7 +142,7 @@ class RssStressTool extends Logging {
     sparkContext = new SparkContext(sparkConf)
 
     mapOutputTrackerMaster = SparkEnv.get.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster]
-    mapOutputTrackerMaster.registerShuffle(appShuffleId.getShuffleId, numMaps)
+    mapOutputTrackerMaster.registerShuffle(appShuffleId.getShuffleId, numMaps, numPartitions)
 
     val rdd = sparkContext.parallelize(1 to 100, numMaps)
       .map(t => (t.toString -> t.toString))

@@ -36,6 +36,12 @@ This command creates `remote-shuffle-service_xxx.jar` file for remote shuffle se
 under `jars` directory in the generated Spark distribution. Now you could use this Spark 
 distribution to run your Spark application with remote shuffle service.
 
+If you want to build a Spark docker image, you could unzip the Spark distribution tgz file, and run command like following:
+
+```
+./bin/docker-image-tool.sh -t spark-with-remote-shuffle-service build
+```
+
 ## How to Run Spark Application With Remote Shuffle Service in Kubernetes
 
 ### Build Server Side Docker Image

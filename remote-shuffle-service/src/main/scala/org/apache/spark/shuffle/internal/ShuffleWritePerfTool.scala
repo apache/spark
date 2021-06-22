@@ -105,7 +105,7 @@ abstract class ShuffleWritePerfTool extends Logging {
     sparkContext = new SparkContext(sparkConf)
 
     mapOutputTrackerMaster = SparkEnv.get.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster]
-    mapOutputTrackerMaster.registerShuffle(appShuffleId.getShuffleId, numMaps)
+    mapOutputTrackerMaster.registerShuffle(appShuffleId.getShuffleId, numMaps, numPartitions)
 
     val rdd = sparkContext.parallelize(1 to numMaps, numMaps)
       .map(t => (t.toString.getBytes(StandardCharsets.UTF_8)
