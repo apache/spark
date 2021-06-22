@@ -69,7 +69,7 @@ class Observation(name: String) {
    * @return observed dataset
    * @throws IllegalArgumentException If this is a streaming Dataset (ds.isStreaming == true)
    */
-  def on[T](ds: Dataset[T], expr: Column, exprs: Column*): Dataset[T] = {
+  private[spark] def on[T](ds: Dataset[T], expr: Column, exprs: Column*): Dataset[T] = {
     if (ds.isStreaming) {
       throw new IllegalArgumentException("Observation does not support streaming Datasets")
     }
@@ -104,11 +104,12 @@ class Observation(name: String) {
 
   private def waitCompleted(millis: Option[Long]): Boolean = {
     synchronized {
-      if (row.isEmpty) {
-        if (millis.isDefined) {
-          this.wait(millis.get)
-        } else {
-          this.wait()
+      // millis might be 0 or negative, calling this.wait(0) waits forever
+      // while we may want to wait 0 ms if millis is set to 0
+      if (millis.forall(_ > 0)) {
+        if (row.isEmpty) {
+          // if millis is None, we want to wait forever, hence wait(0)
+          this.wait(millis.getOrElse(0))
         }
       }
       row.isDefined
@@ -135,8 +136,10 @@ class Observation(name: String) {
 
   private[spark] def onFinish(qe: QueryExecution): Unit = {
     synchronized {
-      this.row = qe.observedMetrics.get(name)
-      assert(this.row.isDefined, "No metric provided by QueryExecutionListener")
+      if (this.row.isEmpty) {
+        this.row = qe.observedMetrics.get(name)
+        assert(this.row.isDefined, "No metric provided by QueryExecutionListener")
+      }
       this.notifyAll()
     }
     unregister()
