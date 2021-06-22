@@ -2893,15 +2893,4 @@
     </profile>
   </profiles>
 
-  <distributionManagement>
-    <repository>
-      <id>aws-nexus</id>
-      <url>https://nexus.wisers.com.cn/repository/devops-maven-releases/</url>
-    </repository>
-    <snapshotRepository>
-      <id>aws-nexus</id>
-      <url>https://nexus.wisers.com.cn/repository/devops-maven-snapshots/</url>
-    </snapshotRepository>
-  </distributionManagement>
-  
 </project>
