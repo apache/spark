@@ -17,6 +17,8 @@
 
 package org.apache.spark.deploy.worker
 
+import java.util.concurrent.atomic.AtomicBoolean
+
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
 import scala.concurrent.duration._
@@ -31,7 +33,10 @@ import org.apache.spark.util.ThreadUtils
  * Provides fate sharing between a worker and its associated child processes.
  */
 private[spark] class WorkerWatcher(
-    override val rpcEnv: RpcEnv, workerUrl: String, isTesting: Boolean = false)
+    override val rpcEnv: RpcEnv,
+    workerUrl: String,
+    isTesting: Boolean = false,
+    isChildProcessStopping: AtomicBoolean = new AtomicBoolean(false))
   extends RpcEndpoint with Logging {
 
   logInfo(s"Connecting to worker $workerUrl")
@@ -54,9 +59,10 @@ private[spark] class WorkerWatcher(
     if (isTesting) {
       isShutDown = true
     } else {
-      ThreadUtils.awaitResult(Future {
+      // SPARK-35714: avoid the duplicate call of `System.exit` to avoid the dead lock
+      if (isChildProcessStopping.compareAndSet(false, true)) {
         System.exit(-1)
-      }, 5.seconds)
+      }
     }
 
   override def receive: PartialFunction[Any, Unit] = {
