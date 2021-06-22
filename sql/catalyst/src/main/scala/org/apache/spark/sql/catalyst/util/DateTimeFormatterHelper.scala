@@ -184,7 +184,7 @@ trait DateTimeFormatterHelper {
       } catch {
         case _: Throwable => throw e
       }
-      throw QueryExecutionErrors.failToRecognizePatternInDateTimeFormatterError(pattern, e)
+      throw QueryExecutionErrors.failToRecognizePatternAfterUpgradeError(pattern, e)
   }
 
   protected def checkInvalidPattern(pattern: String): PartialFunction[Throwable, Nothing] = {

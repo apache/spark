@@ -919,8 +919,7 @@ object QueryExecutionErrors {
        """.stripMargin.replaceAll("\n", " "), e)
   }
 
-  def failToRecognizePatternInDateTimeFormatterError(
-      pattern: String, e: Throwable): Throwable = {
+  def failToRecognizePatternAfterUpgradeError(pattern: String, e: Throwable): Throwable = {
     new SparkUpgradeException("3.0", s"Fail to recognize '$pattern' pattern in the" +
       s" DateTimeFormatter. 1) You can set ${SQLConf.LEGACY_TIME_PARSER_POLICY.key} to LEGACY" +
       s" to restore the behavior before Spark 3.0. 2) You can form a valid datetime pattern" +
@@ -928,8 +927,7 @@ object QueryExecutionErrors {
       e)
   }
 
-  def failToRecognizePatternError(
-      pattern: String, e: Throwable): Throwable = {
+  def failToRecognizePatternError(pattern: String, e: Throwable): Throwable = {
     new RuntimeException(s"Fail to recognize '$pattern' pattern in the" +
       " DateTimeFormatter. You can form a valid datetime pattern" +
       " with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html",
