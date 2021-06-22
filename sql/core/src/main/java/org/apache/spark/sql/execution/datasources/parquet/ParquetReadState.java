@@ -22,9 +22,9 @@ package org.apache.spark.sql.execution.datasources.parquet;
  */
 final class ParquetReadState {
   /** Maximum definition level */
-  int maxDefinitionLevel;
+  final int maxDefinitionLevel;
 
-  /** The offset to add the next value in the current batch */
+  /** The offset in the current batch to put the next value */
   int offset;
 
   /** The remaining number of values to read in the current page */
