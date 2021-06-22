@@ -1671,11 +1671,9 @@ private[spark] object QueryCompilationErrors {
 
   def negativeScaleNotAllowedError(scale: Int): Throwable = {
     new AnalysisException(
-      s"""
-         |Negative scale is not allowed: $scale.
+      s"""|Negative scale is not allowed: $scale.
          |You can use ${LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED.key}=true
-         |to enable legacy mode to allow it.
-       """.stripMargin.replaceAll("\n", " "))
+         |to enable legacy mode to allow it.""".stripMargin.replaceAll("\n", " "))
   }
 
   def invalidPartitionColumnKeyInTableError(key: String, tblName: String): Throwable = {
@@ -1687,11 +1685,9 @@ private[spark] object QueryCompilationErrors {
       partitionColumnNames: Seq[String],
       tableName: String): Throwable = {
     new AnalysisException(
-      s"""
-        |Partition spec is invalid. The spec ($specKeys) must match
+      s"""|Partition spec is invalid. The spec ($specKeys) must match
         |the partition spec (${partitionColumnNames.mkString(", ")}) defined in
-        |table '$tableName'
-      """.stripMargin.replaceAll("\n", " "))
+        |table '$tableName'""".stripMargin.replaceAll("\n", " "))
   }
 
   def foundDuplicateColumnError(colType: String, duplicateCol: Seq[String]): Throwable = {
