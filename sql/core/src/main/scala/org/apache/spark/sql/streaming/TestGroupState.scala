@@ -29,6 +29,7 @@ import org.apache.spark.sql.execution.streaming.GroupStateImpl._
  *
  * Scala example of using `TestGroupState`:
  * {{{
+ * import org.apache.spark.api.java.Optional
  * import org.apache.spark.sql.streaming.TestGroupState
  * // other imports
  *
@@ -50,7 +51,7 @@ import org.apache.spark.sql.execution.streaming.GroupStateImpl._
  *   val actions: Iterator[UserAction] = ...
  *
  *   // Asserts the prevState is in init state without updates.
- *   assert(!prevState.hasUpdated)
+ *   assert(!prevState.isUpdated)
  *
  *   // Calls the state transition function with the test previous state
  *   //  with desired configs.
@@ -58,12 +59,14 @@ import org.apache.spark.sql.execution.streaming.GroupStateImpl._
  *
  *   // Asserts the test GroupState object has been updated after calling
  *   // the state transition function
- *   assert(prevState.hasUpdated)
+ *   assert(prevState.isUpdated)
  * }
  * }}}
  *
  * Java example of using `TestGroupSate`:
  * {{{
+ * import org.apache.spark.api.java.Optional;
+ * import org.apache.spark.sql.streaming.GroupStateTimeout;
  * import org.apache.spark.sql.streaming.TestGroupState;
  * // other imports
  *
@@ -75,26 +78,26 @@ import org.apache.spark.sql.execution.streaming.GroupStateImpl._
  *   // with desired configs. The create() API would guarantee that
  *   // the generated instance has the same behavior as the one built by
  *   // engine with the same configs.
- *   TestGroupState prevState = new TestGroupState<UserStatus>().create(
- *     optionalState = Optional.<UserStatus>empty(),
- *     timeoutConf = EventTimeTimeout,
- *     batchProcessingTimeMs = 1L,
- *     eventTimeWatermarkMs = Optional.of(1L),
- *     hasTimedOut = false);
+ *   TestGroupState<UserStatus> prevState = TestGroupState.create(
+ *     Optional.empty(),
+ *     GroupStateTimeout.EventTimeTimeout(),
+ *     1L,
+ *     Optional.of(1L),
+ *     false);
  *
  *   String userId = ...;
- *   ArrayList<UserAction> actions = ...;
+ *   UserAction[] actions = ...;
  *
  *   // Asserts the prevState is in init state without updates.
- *   assertTrue(!prevState.hasUpdated());
+ *   Assert.assertTrue(!prevState.isUpdated());
  *
  *   // Calls the state transition function with the test previous state
  *   //  with desired configs.
- *   updateState(userId, actions, prevState);
+ *   updateState(userId, Arrays.asList(actions).iterator(), prevState);
  *
  *   // Asserts the test GroupState object has been updated after calling
  *   // the state transition function
- *   assertTrue(prevState.hasUpdated());
+ *   Assert.assertTrue(prevState.isUpdated());
  * }
  * }}}
  *
@@ -112,11 +115,11 @@ trait TestGroupState[S] extends GroupState[S] {
   def isUpdated: Boolean
 
   /**
-   * Returns the timestamp if setTimeoutTimestamp is called.
-   * Or, batch processing time + the duration will be returned when
-   * setTimeoutDuration is called.
+   * Returns the timestamp if `setTimeoutTimestamp()` is called.
+   * Or, returns batch processing time + the duration when
+   * `setTimeoutDuration()` is called.
    *
-   * Otherwise, returns Optional.empty if not set.
+   * Otherwise, returns `Optional.empty` if not set.
    */
   def getTimeoutTimestampMs: Optional[Long]
 }
@@ -131,17 +134,17 @@ object TestGroupState {
    *                              will be supported.
    * @param batchProcessingTimeMs Processing time of current batch, used to calculate timestamp
    *                              for processing time timeouts.
-   * @param eventTimeWatermarkMs  Optional value of event time watermark in ms. Set as None if
-   *                              watermark is not present. Otherwise, event time watermark
-   *                              should be a positive long and the timestampMs
-   *                              set through setTimeoutTimestamp.
-   *                              cannot be less than the set eventTimeWatermarkMs.
+   * @param eventTimeWatermarkMs  Optional value of event time watermark in ms. Set as
+   *                              `Optional.empty` if watermark is not present.
+   *                              Otherwise, event time watermark should be a positive long
+   *                              and the timestampMs set through `setTimeoutTimestamp()`
+   *                              cannot be less than `eventTimeWatermarkMs`.
    * @param hasTimedOut           Whether the key for which this state wrapped is being created is
    *                              getting timed out or not.
-   * @return a [[TestGroupState]] instance that's built with the user specified configs.
+   * @return a [[TestGroupState]] instance built with the user specified configs.
    */
-  @throws[IllegalArgumentException]("if 'batchProcessingTimeMs' is not positive")
-  @throws[IllegalArgumentException]("if 'eventTimeWatermarkMs' present but is not 0 or positive")
+  @throws[IllegalArgumentException]("if 'batchProcessingTimeMs' is less than 0")
+  @throws[IllegalArgumentException]("if 'eventTimeWatermarkMs' is present but less than 0")
   @throws[UnsupportedOperationException](
     "if 'hasTimedOut' is true however there's no timeout configured")
   def create[S](

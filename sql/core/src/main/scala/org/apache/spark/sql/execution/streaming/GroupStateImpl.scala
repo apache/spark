@@ -187,14 +187,15 @@ private[sql] object GroupStateImpl {
       timeoutConf: GroupStateTimeout,
       hasTimedOut: Boolean,
       watermarkPresent: Boolean): GroupStateImpl[S] = {
-    if (batchProcessingTimeMs <= 0) {
-      throw new IllegalArgumentException("batchProcessingTimeMs must be positive")
+    if (batchProcessingTimeMs < 0) {
+      throw new IllegalArgumentException("batchProcessingTimeMs must be 0 or positive")
     }
     if (watermarkPresent && eventTimeWatermarkMs < 0) {
       throw new IllegalArgumentException("eventTimeWatermarkMs must be 0 or positive if present")
     }
     if (hasTimedOut && timeoutConf == NoTimeout) {
-      throw new UnsupportedOperationException("hasTimedOut is true however there's no timeout configured")
+      throw new UnsupportedOperationException(
+        "hasTimedOut is true however there's no timeout configured")
     }
 
     new GroupStateImpl[S](

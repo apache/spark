@@ -316,12 +316,12 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
       TestGroupState.create[Int](
         Optional.of(5), EventTimeTimeout, -100L, Optional.of(1000), hasTimedOut = false)
     }
-    assert(illegalArgument.getMessage.contains("batchProcessingTimeMs must be positive"))
+    assert(illegalArgument.getMessage.contains("batchProcessingTimeMs must be 0 or positive"))
     illegalArgument = intercept[IllegalArgumentException] {
       GroupStateImpl.createForStreaming[Int](
         Some(5), -100L, 1000L, EventTimeTimeout, false, true)
     }
-    assert(illegalArgument.getMessage.contains("batchProcessingTimeMs must be positive"))
+    assert(illegalArgument.getMessage.contains("batchProcessingTimeMs must be 0 or positive"))
 
     // hasTimedOut cannot be true if there's no timeout configured
     var unsupportedOperation = intercept[UnsupportedOperationException] {
@@ -385,6 +385,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
       assertWrongTimeoutError {
         streamingState(timeoutConf, Optional.empty[Long]).getCurrentWatermarkMs()
       }
+      assert(streamingState(timeoutConf, Optional.of(0)).getCurrentWatermarkMs() === 0)
       assert(streamingState(timeoutConf, Optional.of(1000)).getCurrentWatermarkMs() === 1000)
       assert(streamingState(timeoutConf, Optional.of(2000)).getCurrentWatermarkMs() === 2000)
       assert(batchState(EventTimeTimeout, watermarkPresent = true).getCurrentWatermarkMs() === -1)
@@ -419,6 +420,8 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
         // Tests for getCurrentProcessingTimeMs in streaming queries
         // No negative processing time is allowed, and
         // illegal input validation has been added in the separate test
+        assert(streamingState(timeoutConf, 0, watermarkPresent)
+          .getCurrentProcessingTimeMs() === 0)
         assert(streamingState(timeoutConf, 1000, watermarkPresent)
           .getCurrentProcessingTimeMs() === 1000)
         assert(streamingState(timeoutConf, 2000, watermarkPresent)
