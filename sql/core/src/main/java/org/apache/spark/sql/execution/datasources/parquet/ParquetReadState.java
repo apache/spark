@@ -53,13 +53,6 @@ final class ParquetReadState {
   }
 
   /**
-   * Returns whether there are more values to read in the current page.
-   */
-  boolean hasMoreInPage(int newOffset) {
-    return newOffset - offset < valuesToReadInPage && newOffset - offset < valuesToReadInBatch;
-  }
-
-  /**
    * Advance the current offset to the new values.
    */
   void advanceOffset(int newOffset) {

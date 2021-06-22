@@ -175,11 +175,11 @@ public final class VectorizedRleValuesReader extends ValuesReader
       VectorizedValuesReader valueReader,
       ParquetVectorUpdater updater) throws IOException {
     int offset = state.offset;
+    int left = Math.min(state.valuesToReadInBatch, state.valuesToReadInPage);
 
-    while (state.hasMoreInPage(offset)) {
+    while (left > 0) {
       if (this.currentCount == 0) this.readNextGroup();
-      int n = Math.min(state.valuesToReadInBatch + state.offset - offset, this.currentCount);
-      n = Math.min(state.valuesToReadInPage + state.offset - offset, n);
+      int n = Math.min(left, this.currentCount);
 
       switch (mode) {
         case RLE:
@@ -200,6 +200,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
           break;
       }
       offset += n;
+      left -= n;
       currentCount -= n;
     }
 
@@ -216,11 +217,11 @@ public final class VectorizedRleValuesReader extends ValuesReader
       WritableColumnVector nulls,
       VectorizedValuesReader data) throws IOException {
     int offset = state.offset;
+    int left = Math.min(state.valuesToReadInBatch, state.valuesToReadInPage);
 
-    while (state.hasMoreInPage(offset)) {
+    while (left > 0) {
       if (this.currentCount == 0) this.readNextGroup();
-      int n = Math.min(state.valuesToReadInBatch + state.offset - offset, this.currentCount);
-      n = Math.min(state.valuesToReadInPage + state.offset - offset, n);
+      int n = Math.min(left, this.currentCount);
 
       switch (mode) {
         case RLE:
@@ -241,6 +242,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
           break;
       }
       offset += n;
+      left -= n;
       currentCount -= n;
     }
 
