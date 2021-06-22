@@ -137,7 +137,11 @@ object IntervalUtils {
       case yearMonthIndividualLiteralRegex(firstSign, secondSign, value, suffix) =>
         suffix match {
           case "YEAR" => toYMInterval(value, "0", getSigh(firstSign, secondSign))
-          case "MONTH" => toYMInterval("0", value, getSigh(firstSign, secondSign))
+          case _ =>
+            val months = value.toLong
+            val year = (months / 12).toString
+            val month = (months % 12).toString
+            toYMInterval(year, truncatedMonth(month), getSigh(firstSign, secondSign))
         }
       case _ => throw new IllegalArgumentException(
         s"Interval string does not match year-month format of `[+|-]y-m` " +
