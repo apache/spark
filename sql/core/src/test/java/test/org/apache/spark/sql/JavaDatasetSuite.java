@@ -217,16 +217,16 @@ public class JavaDatasetSuite implements Serializable {
     TestGroupState<Integer> prevState = TestGroupState.create(
       Optional.empty(), GroupStateTimeout.EventTimeTimeout(), 0L, Optional.of(1000L), false);
 
-    Assert.assertTrue(!prevState.isUpdated());
-    Assert.assertTrue(!prevState.isRemoved());
-    Assert.assertTrue(!prevState.exists());
+    Assert.assertFalse(prevState.isUpdated());
+    Assert.assertFalse(prevState.isRemoved());
+    Assert.assertFalse(prevState.exists());
     Assert.assertEquals(Optional.empty(), prevState.getTimeoutTimestampMs());
 
     Integer[] values = {1, 3, 5};
     mappingFunction.call(1, Arrays.asList(values).iterator(), prevState);
 
     Assert.assertTrue(prevState.isUpdated());
-    Assert.assertTrue(!prevState.isRemoved());
+    Assert.assertFalse(prevState.isRemoved());
     Assert.assertTrue(prevState.exists());
     Assert.assertEquals(new Integer(9), prevState.get());
     Assert.assertEquals(0L, prevState.getCurrentProcessingTimeMs());
@@ -236,7 +236,7 @@ public class JavaDatasetSuite implements Serializable {
     mappingFunction.call(1, Arrays.asList(values).iterator(), prevState);
 
     Assert.assertTrue(prevState.isUpdated());
-    Assert.assertTrue(!prevState.isRemoved());
+    Assert.assertFalse(prevState.isRemoved());
     Assert.assertTrue(prevState.exists());
     Assert.assertEquals(new Integer(18), prevState.get());
 
@@ -245,9 +245,9 @@ public class JavaDatasetSuite implements Serializable {
 
     mappingFunction.call(1, Arrays.asList(values).iterator(), prevState);
 
-    Assert.assertTrue(!prevState.isUpdated());
+    Assert.assertFalse(prevState.isUpdated());
     Assert.assertTrue(prevState.isRemoved());
-    Assert.assertTrue(!prevState.exists());
+    Assert.assertFalse(prevState.exists());
   }
 
   @Test

@@ -62,9 +62,10 @@ import org.apache.spark.sql.execution.streaming.GroupStateImpl._
  *   // with desired configs.
  *   mappingFunction(key, values, prevState)
  *
- *   // Asserts the test GroupState object has been updated after calling
- *   // the state transition function
+ *   // Asserts the test GroupState object has been updated but not removed
+ *   // after calling the state transition function
  *   assert(prevState.isUpdated)
+ *   assert(!prevState.isRemoved)
  * }
  * }}}
  *
@@ -96,15 +97,16 @@ import org.apache.spark.sql.execution.streaming.GroupStateImpl._
  *   Integer[] values = ...;
  *
  *   // Asserts the prevState is in init state without updates.
- *   Assert.assertTrue(!prevState.isUpdated());
+ *   Assert.assertFalse(prevState.isUpdated());
  *
  *   // Calls the state transition function with the test previous state
  *   // with desired configs.
  *   mappingFunction.call(key, Arrays.asList(values).iterator(), prevState);
  *
- *   // Asserts the test GroupState object has been updated after calling
- *   // the state transition function
+ *   // Asserts the test GroupState object has been updated but not removed
+ *   // after calling the state transition function
  *   Assert.assertTrue(prevState.isUpdated());
+ *   Assert.assertFalse(prevState.isRemoved());
  * }
  * }}}
  *
