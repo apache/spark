@@ -135,13 +135,13 @@ class MergingSessionsIterator(
 
     // Now, we will start to find all rows belonging to this group.
     // We create a variable to track if we see the next group.
-    var findNextPartition = false
+    var findNextGroup = false
     // firstRowInNextGroup is the first row of this group. We first process it.
     processRow(sortBasedAggregationBuffer, firstRowInNextGroup)
 
     // The search will stop when we see the next group or there is no
     // input row left in the iter.
-    while (!findNextPartition && inputIterator.hasNext) {
+    while (!findNextGroup && inputIterator.hasNext) {
       // Get the grouping key.
       val currentRow = inputIterator.next()
       val groupingKey = groupingWithoutSessionProjection(currentRow)
@@ -161,26 +161,28 @@ class MergingSessionsIterator(
           expandEndOfCurrentSession(sessionEnd)
           processRow(sortBasedAggregationBuffer, currentRow)
         } else {
-          // We find a new group.
-          findNextPartition = true
+          // We find a new session window in the same group.
+          findNextGroup = true
           startNewSession(currentRow, groupingKey, sessionStruct)
         }
       } else {
         // We find a new group.
-        findNextPartition = true
+        findNextGroup = true
         startNewSession(currentRow, groupingKey, sessionStruct)
       }
     }
 
     // We have not seen a new group. It means that there is no new row in the input
     // iter. The current group is the last group of the iter.
-    if (!findNextPartition) {
+    if (!findNextGroup) {
       sortedInputHasNewGroup = false
     }
   }
 
-  private def startNewSession(currentRow: InternalRow, groupingKey: UnsafeRow,
-                              sessionStruct: UnsafeRow): Unit = {
+  private def startNewSession(
+      currentRow: InternalRow,
+      groupingKey: UnsafeRow,
+      sessionStruct: UnsafeRow): Unit = {
     nextGroupingKey = groupingKey.copy()
     nextGroupingSession = sessionStruct.copy()
     firstRowInNextGroup = currentRow.copy()
@@ -194,13 +196,9 @@ class MergingSessionsIterator(
     sessionStruct.getLong(1)
   }
 
-  def updateSessionEnd(sessionStruct: UnsafeRow, sessionEnd: Long): Unit = {
-    sessionStruct.setLong(1, sessionEnd)
-  }
-
   private def expandEndOfCurrentSession(sessionEnd: Long): Unit = {
     if (sessionEnd > getSessionEnd(currentSession)) {
-      updateSessionEnd(currentSession, sessionEnd)
+      currentSession.setLong(1, sessionEnd)
     }
   }
 
@@ -220,7 +218,6 @@ class MergingSessionsIterator(
       // Process the current group.
       processCurrentSortedGroup()
       // Generate output row for the current group.
-
       val groupingKey = generateGroupingKey()
 
       val outputRow = generateOutput(groupingKey, sortBasedAggregationBuffer)
