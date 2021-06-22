@@ -2298,7 +2298,9 @@ class GroupBy(object, metaclass=ABCMeta):
         Series.groupby
         DataFrame.groupby
         """
-        return RollingGroupby(self, window, min_periods=min_periods)
+        return RollingGroupby(
+            cast(Union[SeriesGroupBy, DataFrameGroupBy], self), window, min_periods=min_periods
+        )
 
     def expanding(self, min_periods=1) -> ExpandingGroupby:
         """
@@ -2320,7 +2322,9 @@ class GroupBy(object, metaclass=ABCMeta):
         Series.groupby
         DataFrame.groupby
         """
-        return ExpandingGroupby(self, min_periods=min_periods)
+        return ExpandingGroupby(
+            cast(Union[SeriesGroupBy, DataFrameGroupBy], self), min_periods=min_periods
+        )
 
     def get_group(self, name) -> Union[DataFrame, Series]:
         """

@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.util.{DateTimeConstants, DateTimeUtils, GenericArrayData, IntervalUtils}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.DayTimeIntervalType._
 import org.apache.spark.sql.types.YearMonthIntervalType._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -274,6 +275,25 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
     assert(errMsg.contains("long overflow"))
   }
 
+  test("SPARK-35726: Truncate java.time.Duration by fields of day-time interval type") {
+    val duration = Duration.ofSeconds(90061, 1000000023)
+    Seq((DayTimeIntervalType(DAY), 86400000000L, -86400000000L),
+      (DayTimeIntervalType(DAY, HOUR), 90000000000L, -90000000000L),
+      (DayTimeIntervalType(DAY, MINUTE), 90060000000L, -90060000000L),
+      (DayTimeIntervalType(DAY, SECOND), 90062000000L, -90062000001L),
+      (DayTimeIntervalType(HOUR), 90000000000L, -90000000000L),
+      (DayTimeIntervalType(HOUR, MINUTE), 90060000000L, -90060000000L),
+      (DayTimeIntervalType(HOUR, SECOND), 90062000000L, -90062000001L),
+      (DayTimeIntervalType(MINUTE), 90060000000L, -90060000000L),
+      (DayTimeIntervalType(MINUTE, SECOND), 90062000000L, -90062000001L),
+      (DayTimeIntervalType(SECOND), 90062000000L, -90062000001L))
+      .foreach { case (dt, positive, negative) =>
+        assert(CatalystTypeConverters.createToCatalystConverter(dt)(duration) == positive)
+        assert(
+          CatalystTypeConverters.createToCatalystConverter(dt)(duration.negated()) == negative)
+      }
+  }
+
   test("SPARK-34605: converting DayTimeIntervalType to java.time.Duration") {
     Seq(
       0L,
@@ -311,9 +331,9 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("SPARK-35769: Truncate java.time.Period by fields of year-month interval type") {
-    Seq(YearMonthIntervalType(YEAR, YEAR) -> 12,
+    Seq(YearMonthIntervalType(YEAR) -> 12,
       YearMonthIntervalType(YEAR, MONTH) -> 13,
-      YearMonthIntervalType(MONTH, MONTH) -> 13)
+      YearMonthIntervalType(MONTH) -> 13)
       .foreach { case (ym, value) =>
         assert(CatalystTypeConverters.createToCatalystConverter(ym)(Period.of(1, 1, 0)) == value)
       }

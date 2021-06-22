@@ -625,20 +625,20 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
     Seq(
       0 ->
         ("INTERVAL '0-0' YEAR TO MONTH", "INTERVAL '0' YEAR", "INTERVAL '0' MONTH"),
-      -11 -> ("INTERVAL '-0-11' YEAR TO MONTH", "INTERVAL '-0' YEAR", "INTERVAL '11' MONTH"),
+      -11 -> ("INTERVAL '-0-11' YEAR TO MONTH", "INTERVAL '-0' YEAR", "INTERVAL '-11' MONTH"),
       11 -> ("INTERVAL '0-11' YEAR TO MONTH", "INTERVAL '0' YEAR", "INTERVAL '11' MONTH"),
-      -13 -> ("INTERVAL '-1-1' YEAR TO MONTH", "INTERVAL '-1' YEAR", "INTERVAL '1' MONTH"),
-      13 -> ("INTERVAL '1-1' YEAR TO MONTH", "INTERVAL '1' YEAR", "INTERVAL '1' MONTH"),
-      -24 -> ("INTERVAL '-2-0' YEAR TO MONTH", "INTERVAL '-2' YEAR", "INTERVAL '0' MONTH"),
-      24 -> ("INTERVAL '2-0' YEAR TO MONTH", "INTERVAL '2' YEAR", "INTERVAL '0' MONTH"),
+      -13 -> ("INTERVAL '-1-1' YEAR TO MONTH", "INTERVAL '-1' YEAR", "INTERVAL '-13' MONTH"),
+      13 -> ("INTERVAL '1-1' YEAR TO MONTH", "INTERVAL '1' YEAR", "INTERVAL '13' MONTH"),
+      -24 -> ("INTERVAL '-2-0' YEAR TO MONTH", "INTERVAL '-2' YEAR", "INTERVAL '-24' MONTH"),
+      24 -> ("INTERVAL '2-0' YEAR TO MONTH", "INTERVAL '2' YEAR", "INTERVAL '24' MONTH"),
       Int.MinValue ->
         ("INTERVAL '-178956970-8' YEAR TO MONTH",
           "INTERVAL '-178956970' YEAR",
-          "INTERVAL '8' MONTH"),
+          "INTERVAL '-2147483648' MONTH"),
       Int.MaxValue ->
         ("INTERVAL '178956970-7' YEAR TO MONTH",
           "INTERVAL '178956970' YEAR",
-          "INTERVAL '7' MONTH")
+          "INTERVAL '2147483647' MONTH")
     ).foreach { case (months, (yearToMonth, year, month)) =>
       assert(toYearMonthIntervalString(months, ANSI_STYLE, YEAR, MONTH) === yearToMonth)
       assert(toYearMonthIntervalString(months, ANSI_STYLE, YEAR, YEAR) === year)

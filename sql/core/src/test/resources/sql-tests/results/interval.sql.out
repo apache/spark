@@ -290,6 +290,7 @@ struct<>
 java.lang.ArithmeticException
 long overflow
 
+
 -- !query
 select make_ym_interval(1)
 -- !query schema
