@@ -87,6 +87,7 @@ case class AdaptiveSparkPlanExec(
   private def queryStagePreparationRules: Seq[Rule[SparkPlan]] = Seq(
     RemoveRedundantProjects,
     EnsureRequirements,
+    RemarkShuffleOrigin,
     RemoveRedundantSorts,
     DisableUnnecessaryBucketedScan
   ) ++ context.session.sessionState.queryStagePrepRules
