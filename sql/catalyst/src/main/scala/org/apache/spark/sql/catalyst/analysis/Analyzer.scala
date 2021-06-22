@@ -2352,20 +2352,20 @@ class Analyzer(override val catalogManager: CatalogManager)
      * (2) Any aggregate expression(s) that reference outer attributes are pushed down to
      *     outer plan to get evaluated.
      */
-    private def resolveSubQueries(plan: LogicalPlan): LogicalPlan = {
+    private def resolveSubQueries(plan: LogicalPlan, outer: LogicalPlan): LogicalPlan = {
       plan.transformAllExpressionsWithPruning(_.containsPattern(PLAN_EXPRESSION), ruleId) {
         case s @ ScalarSubquery(sub, _, exprId, _) if !sub.resolved =>
-          resolveSubQuery(s, plan)(ScalarSubquery(_, _, exprId))
+          resolveSubQuery(s, outer)(ScalarSubquery(_, _, exprId))
         case e @ Exists(sub, _, exprId, _) if !sub.resolved =>
-          resolveSubQuery(e, plan)(Exists(_, _, exprId))
+          resolveSubQuery(e, outer)(Exists(_, _, exprId))
         case InSubquery(values, l @ ListQuery(_, _, exprId, _, _))
             if values.forall(_.resolved) && !l.resolved =>
-          val expr = resolveSubQuery(l, plan)((plan, exprs) => {
+          val expr = resolveSubQuery(l, outer)((plan, exprs) => {
             ListQuery(plan, exprs, exprId, plan.output)
           })
           InSubquery(values, expr.asInstanceOf[ListQuery])
         case s @ LateralSubquery(sub, _, exprId, _) if !sub.resolved =>
-          resolveSubQuery(s, plan)(LateralSubquery(_, _, exprId))
+          resolveSubQuery(s, outer)(LateralSubquery(_, _, exprId))
       }
     }
 
@@ -2375,14 +2375,17 @@ class Analyzer(override val catalogManager: CatalogManager)
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
       _.containsPattern(PLAN_EXPRESSION), ruleId) {
       case j: LateralJoin if j.left.resolved =>
-        resolveSubQueries(j)
+        // We can't pass `LateralJoin` as the outer plan, as its right child is not resolved yet
+        // and we can't call `LateralJoin.resolveChildren` to resolve outer references. Here we
+        // create a fake Project node as the outer plan.
+        resolveSubQueries(j, Project(Nil, j.left))
       // Only a few unary nodes (Project/Filter/Aggregate) can contain subqueries.
       case q: UnaryNode if q.childrenResolved =>
-        resolveSubQueries(q)
+        resolveSubQueries(q, q)
       case j: Join if j.childrenResolved && j.duplicateResolved =>
-        resolveSubQueries(j)
+        resolveSubQueries(j, j)
       case s: SupportsSubquery if s.childrenResolved =>
-        resolveSubQueries(s)
+        resolveSubQueries(s, s)
     }
   }
 
