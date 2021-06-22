@@ -22,7 +22,6 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
 class RemarkShuffleOriginSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
-
   import testImplicits._
 
   test("remark shuffle origin with join") {
@@ -52,8 +51,7 @@ class RemarkShuffleOriginSuite extends SharedSparkSession with AdaptiveSparkPlan
   }
 
   test("remark shuffle origin with agg") {
-    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
-      SQLConf.SHUFFLE_PARTITIONS.key -> "5",
+    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "5",
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
       val df = Seq((1, 2)).toDF("c1", "c2")
       import org.apache.spark.sql.functions._
