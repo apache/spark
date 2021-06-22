@@ -11,8 +11,6 @@ import org.apache.spark.sql.test.SharedSparkSession
  *
  * from_json 测试类运行准备：
  * 1. git checkout 2.4.3.1-kl (该版本合入了 spark3.0.0 的 from_json FAILFAST 功能 )
- * 可选，mvn clean install -U
- * https://stackoverflow.com/a/26819686/9633499
  *
  * 2. 在项目路径下打开 git cmd，执行命令： 
  * ./build/spark-build-info ./core/target/extra-resources 2.4.3
