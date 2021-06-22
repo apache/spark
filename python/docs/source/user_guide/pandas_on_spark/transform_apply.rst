@@ -7,8 +7,8 @@ Transform and apply a function
 .. currentmodule:: pyspark.pandas
 
 There are many APIs that allow users to apply a function against pandas-on-Spark DataFrame such as
-:func:`DataFrame.transform`, :func:`DataFrame.apply`, :func:`DataFrame.koalas.transform_batch`,
-:func:`DataFrame.koalas.apply_batch`, :func:`Series.koalas.transform_batch`, etc. Each has a distinct
+:func:`DataFrame.transform`, :func:`DataFrame.apply`, :func:`DataFrame.pandas_on_spark.transform_batch`,
+:func:`DataFrame.pandas_on_spark.apply_batch`, :func:`Series.pandas_on_spark.transform_batch`, etc. Each has a distinct
 purpose and works differently internally. This section describes the differences among
 them where users are confused often.
 
@@ -65,7 +65,7 @@ Please refer the API documentations.
 ``koalas.transform_batch`` and ``koalas.apply_batch``
 -----------------------------------------------------
 
-In :func:`DataFrame.koalas.transform_batch`, :func:`DataFrame.koalas.apply_batch`, :func:`Series.koalas.transform_batch`, etc., the ``batch``
+In :func:`DataFrame.pandas_on_spark.transform_batch`, :func:`DataFrame.pandas_on_spark.apply_batch`, :func:`Series.pandas_on_spark.transform_batch`, etc., the ``batch``
 postfix means each chunk in pandas-on-Spark DataFrame or Series. The APIs slice the pandas-on-Spark DataFrame or Series, and
 then applies the given function with pandas DataFrame or Series as input and output. See the examples below:
 
@@ -75,7 +75,7 @@ then applies the given function with pandas DataFrame or Series as input and out
    >>> def pandas_plus(pdf):
    ...     return pdf + 1  # should always return the same length as input.
    ...
-   >>> psdf.koalas.transform_batch(pandas_plus)
+   >>> psdf.pandas_on_spark.transform_batch(pandas_plus)
 
 .. code-block:: python
 
@@ -83,15 +83,15 @@ then applies the given function with pandas DataFrame or Series as input and out
    >>> def pandas_plus(pdf):
    ...     return pdf[pdf.a > 1]  # allow arbitrary length
    ...
-   >>> psdf.koalas.apply_batch(pandas_plus)
+   >>> psdf.pandas_on_spark.apply_batch(pandas_plus)
 
 The functions in both examples take a pandas DataFrame as a chunk of pandas-on-Spark DataFrame, and output a pandas DataFrame.
 Pandas API on Spark combines the pandas DataFrames as a pandas-on-Spark DataFrame.
 
-Note that :func:`DataFrame.koalas.transform_batch` has the length restriction - the length of input and output should be
-the same whereas :func:`DataFrame.koalas.apply_batch` does not.  However, it is important to know that
-the output belongs to the same DataFrame when :func:`DataFrame.koalas.transform_batch` returns a Series, and
-you can avoid a shuffle by the operations between different DataFrames. In case of :func:`DataFrame.koalas.apply_batch`, its output is always
+Note that :func:`DataFrame.pandas_on_spark.transform_batch` has the length restriction - the length of input and output should be
+the same whereas :func:`DataFrame.pandas_on_spark.apply_batch` does not.  However, it is important to know that
+the output belongs to the same DataFrame when :func:`DataFrame.pandas_on_spark.transform_batch` returns a Series, and
+you can avoid a shuffle by the operations between different DataFrames. In case of :func:`DataFrame.pandas_on_spark.apply_batch`, its output is always
 treated that it belongs to a new different DataFrame. See also
 `Operations on different DataFrames <options.rst#operations-on-different-dataframes>`_ for more details.
 
@@ -100,7 +100,7 @@ treated that it belongs to a new different DataFrame. See also
   :align: center
   :width: 650
 
-In case of :func:`Series.koalas.transform_batch`, it is also similar with :func:`DataFrame.koalas.transform_batch`; however, it takes
+In case of :func:`Series.pandas_on_spark.transform_batch`, it is also similar with :func:`DataFrame.pandas_on_spark.transform_batch`; however, it takes
 a pandas Series as a chunk of pandas-on-Spark Series.
 
 .. code-block:: python
@@ -109,7 +109,7 @@ a pandas Series as a chunk of pandas-on-Spark Series.
    >>> def pandas_plus(pser):
    ...     return pser + 1  # should always return the same length as input.
    ...
-   >>> psdf.a.koalas.transform_batch(pandas_plus)
+   >>> psdf.a.pandas_on_spark.transform_batch(pandas_plus)
 
 Under the hood, each batch of pandas-on-Spark Series is split to multiple pandas Series, and each function computes on that as below:
 
