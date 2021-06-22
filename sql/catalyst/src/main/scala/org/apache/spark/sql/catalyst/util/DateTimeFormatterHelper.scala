@@ -186,6 +186,11 @@ trait DateTimeFormatterHelper {
       }
       throw QueryExecutionErrors.failToRecognizePatternInDateTimeFormatterError(pattern, e)
   }
+
+  protected def checkInvalidPattern(pattern: String): PartialFunction[Throwable, Nothing] = {
+    case e: IllegalArgumentException =>
+      throw QueryExecutionErrors.failToRecognizePatternError(pattern, e)
+  }
 }
 
 private object DateTimeFormatterHelper {

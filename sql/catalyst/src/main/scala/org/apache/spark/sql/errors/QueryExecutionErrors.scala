@@ -928,6 +928,14 @@ object QueryExecutionErrors {
       e)
   }
 
+  def failToRecognizePatternError(
+      pattern: String, e: Throwable): Throwable = {
+    new RuntimeException(s"Fail to recognize '$pattern' pattern in the" +
+      " DateTimeFormatter. You can form a valid datetime pattern" +
+      " with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html",
+      e)
+  }
+
   def cannotCastUTF8StringToDataTypeError(s: UTF8String, to: DataType): Throwable = {
     new DateTimeException(s"Cannot cast $s to $to.")
   }
