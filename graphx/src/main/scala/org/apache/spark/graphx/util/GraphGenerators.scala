@@ -111,7 +111,7 @@ object GraphGenerators extends Logging {
 
     while (X >= maxVal) {
       val Z = rand.nextGaussian()
-      X = math.exp(mu + sigma*Z)
+      X = math.exp(m + s*Z)
     }
     math.floor(X).toInt
   }
