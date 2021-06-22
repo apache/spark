@@ -102,9 +102,9 @@ See the examples below.
 
     >>> import pyspark.pandas as ks
     >>> ks.set_option('compute.ops_on_diff_frames', True)
-    >>> kdf1 = ks.range(5)
-    >>> kdf2 = ks.DataFrame({'id': [5, 4, 3]})
-    >>> (kdf1 - kdf2).sort_index()
+    >>> psdf1 = ks.range(5)
+    >>> psdf2 = ps.DataFrame({'id': [5, 4, 3]})
+    >>> (psdf1 - psdf2).sort_index()
         id
     0 -5.0
     1 -3.0
@@ -117,11 +117,11 @@ See the examples below.
 
     >>> import pyspark.pandas as ks
     >>> ks.set_option('compute.ops_on_diff_frames', True)
-    >>> kdf = ks.range(5)
-    >>> kser_a = ks.Series([1, 2, 3, 4])
-    >>> # 'kser_a' is not from 'kdf' DataFrame. So it is considered as a Series not from 'kdf'.
-    >>> kdf['new_col'] = kser_a
-    >>> kdf
+    >>> psdf = ks.range(5)
+    >>> psser_a = ps.Series([1, 2, 3, 4])
+    >>> # 'psser_a' is not from 'psdf' DataFrame. So it is considered as a Series not from 'psdf'.
+    >>> psdf['new_col'] = psser_a
+    >>> psdf
        id  new_col
     0   0      1.0
     1   1      2.0
@@ -148,9 +148,9 @@ This index type should be avoided when the data is large. This is default. See t
 
     >>> import pyspark.pandas as ks
     >>> ks.set_option('compute.default_index_type', 'sequence')
-    >>> kdf = ks.range(3)
+    >>> psdf = ks.range(3)
     >>> ks.reset_option('compute.default_index_type')
-    >>> kdf.index
+    >>> psdf.index
     Int64Index([0, 1, 2], dtype='int64')
 
 This is conceptually equivalent to the PySpark example as below:
@@ -176,9 +176,9 @@ then it does not guarantee the sequential index. See the example below:
 
     >>> import pyspark.pandas as ks
     >>> ks.set_option('compute.default_index_type', 'distributed-sequence')
-    >>> kdf = ks.range(3)
+    >>> psdf = ks.range(3)
     >>> ks.reset_option('compute.default_index_type')
-    >>> kdf.index
+    >>> psdf.index
     Int64Index([0, 1, 2], dtype='int64')
 
 This is conceptually equivalent to the PySpark example as below:
@@ -200,9 +200,9 @@ have any penalty comparing to other index types. See the example below:
 
     >>> import pyspark.pandas as ks
     >>> ks.set_option('compute.default_index_type', 'distributed')
-    >>> kdf = ks.range(3)
+    >>> psdf = ks.range(3)
     >>> ks.reset_option('compute.default_index_type')
-    >>> kdf.index
+    >>> psdf.index
     Int64Index([25769803776, 60129542144, 94489280512], dtype='int64')
 
 This is conceptually equivalent to the PySpark example as below:

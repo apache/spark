@@ -20,19 +20,19 @@ to return the same length of the input and the latter does not require this. See
 
 .. code-block:: python
 
-   >>> kdf = ks.DataFrame({'a': [1,2,3], 'b':[4,5,6]})
+   >>> psdf = ps.DataFrame({'a': [1,2,3], 'b':[4,5,6]})
    >>> def pandas_plus(pser):
    ...     return pser + 1  # should always return the same length as input.
    ...
-   >>> kdf.transform(pandas_plus)
+   >>> psdf.transform(pandas_plus)
 
 .. code-block:: python
 
-   >>> kdf = ks.DataFrame({'a': [1,2,3], 'b':[5,6,7]})
+   >>> psdf = ps.DataFrame({'a': [1,2,3], 'b':[5,6,7]})
    >>> def pandas_plus(pser):
    ...     return pser[pser % 2 == 1]  # allows an arbitrary length
    ...
-   >>> kdf.apply(pandas_plus)
+   >>> psdf.apply(pandas_plus)
 
 In this case, each function takes a pandas Series, and pandas API on Spark computes the functions in a distributed manner as below.
 
@@ -45,11 +45,11 @@ In case of 'column' axis, the function takes each row as a pandas Series.
 
 .. code-block:: python
 
-   >>> kdf = ks.DataFrame({'a': [1,2,3], 'b':[4,5,6]})
+   >>> psdf = ps.DataFrame({'a': [1,2,3], 'b':[4,5,6]})
    >>> def pandas_plus(pser):
    ...     return sum(pser)  # allows an arbitrary length
    ...
-   >>> kdf.apply(pandas_plus, axis='columns')
+   >>> psdf.apply(pandas_plus, axis='columns')
 
 The example above calculates the summation of each row as a pandas Series. See below:
 
@@ -71,19 +71,19 @@ then applies the given function with pandas DataFrame or Series as input and out
 
 .. code-block:: python
 
-   >>> kdf = ks.DataFrame({'a': [1,2,3], 'b':[4,5,6]})
+   >>> psdf = ps.DataFrame({'a': [1,2,3], 'b':[4,5,6]})
    >>> def pandas_plus(pdf):
    ...     return pdf + 1  # should always return the same length as input.
    ...
-   >>> kdf.koalas.transform_batch(pandas_plus)
+   >>> psdf.koalas.transform_batch(pandas_plus)
 
 .. code-block:: python
 
-   >>> kdf = ks.DataFrame({'a': [1,2,3], 'b':[4,5,6]})
+   >>> psdf = ps.DataFrame({'a': [1,2,3], 'b':[4,5,6]})
    >>> def pandas_plus(pdf):
    ...     return pdf[pdf.a > 1]  # allow arbitrary length
    ...
-   >>> kdf.koalas.apply_batch(pandas_plus)
+   >>> psdf.koalas.apply_batch(pandas_plus)
 
 The functions in both examples take a pandas DataFrame as a chunk of pandas-on-Spark DataFrame, and output a pandas DataFrame.
 Pandas API on Spark combines the pandas DataFrames as a pandas-on-Spark DataFrame.
@@ -105,11 +105,11 @@ a pandas Series as a chunk of pandas-on-Spark Series.
 
 .. code-block:: python
 
-   >>> kdf = ks.DataFrame({'a': [1,2,3], 'b':[4,5,6]})
+   >>> psdf = ps.DataFrame({'a': [1,2,3], 'b':[4,5,6]})
    >>> def pandas_plus(pser):
    ...     return pser + 1  # should always return the same length as input.
    ...
-   >>> kdf.a.koalas.transform_batch(pandas_plus)
+   >>> psdf.a.koalas.transform_batch(pandas_plus)
 
 Under the hood, each batch of pandas-on-Spark Series is split to multiple pandas Series, and each function computes on that as below:
 

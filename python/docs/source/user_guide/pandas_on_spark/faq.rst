@@ -23,7 +23,7 @@ As a workaround, you can use Koalas APIs with `foreachBatch` in Structured Strea
 .. code-block:: python
 
    >>> def func(batch_df, batch_id):
-   ...     koalas_df = ks.DataFrame(batch_df)
+   ...     koalas_df = ps.DataFrame(batch_df)
    ...     koalas_df['a'] = 1
    ...     print(koalas_df)
 

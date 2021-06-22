@@ -54,9 +54,9 @@ before the actual computation since pandas API on Spark is based on lazy executi
 .. code-block:: python
 
    >>> import pyspark.pandas as ks
-   >>> kdf = ks.DataFrame({'id': range(10)})
-   >>> kdf = kdf[kdf.id > 5]
-   >>> kdf.spark.explain()
+   >>> psdf = ps.DataFrame({'id': range(10)})
+   >>> psdf = psdf[psdf.id > 5]
+   >>> psdf.spark.explain()
    == Physical Plan ==
    *(1) Filter (id#1L > 5)
    +- *(1) Scan ExistingRDD[__index_level_0__#0L,id#1L]
@@ -79,11 +79,11 @@ or ``DataFrame.spark.local_checkpoint()`` would be helpful.
 .. code-block:: python
 
    >>> import pyspark.pandas as ks
-   >>> kdf = ks.DataFrame({'id': range(10)})
-   >>> kdf = kdf[kdf.id > 5]
-   >>> kdf['id'] = kdf['id'] + (10 * kdf['id'] + kdf['id'])
-   >>> kdf = kdf.groupby('id').head(2)
-   >>> kdf.spark.explain()
+   >>> psdf = ps.DataFrame({'id': range(10)})
+   >>> psdf = psdf[psdf.id > 5]
+   >>> psdf['id'] = psdf['id'] + (10 * psdf['id'] + psdf['id'])
+   >>> psdf = psdf.groupby('id').head(2)
+   >>> psdf.spark.explain()
    == Physical Plan ==
    *(3) Project [__index_level_0__#0L, id#31L]
    +- *(3) Filter (isnotnull(__row_number__#44) AND (__row_number__#44 <= 2))
@@ -95,8 +95,8 @@ or ``DataFrame.spark.local_checkpoint()`` would be helpful.
                      +- *(1) Filter (id#1L > 5)
                         +- *(1) Scan ExistingRDD[__index_level_0__#0L,id#1L]
 
-   >>> kdf = kdf.spark.local_checkpoint()  # or kdf.spark.checkpoint()
-   >>> kdf.spark.explain()
+   >>> psdf = psdf.spark.local_checkpoint()  # or psdf.spark.checkpoint()
+   >>> psdf.spark.explain()
    == Physical Plan ==
    *(1) Project [__index_level_0__#0L, id#31L]
    +- *(1) Scan ExistingRDD[__index_level_0__#0L,id#31L,__natural_order__#59L]
@@ -116,8 +116,8 @@ and exchange the data across multiple nodes via networks. See the example below.
 .. code-block:: python
 
    >>> import pyspark.pandas as ks
-   >>> kdf = ks.DataFrame({'id': range(10)}).sort_values(by="id")
-   >>> kdf.spark.explain()
+   >>> psdf = ps.DataFrame({'id': range(10)}).sort_values(by="id")
+   >>> psdf.spark.explain()
    == Physical Plan ==
    *(2) Sort [id#9L ASC NULLS LAST], true, 0
    +- Exchange rangepartitioning(id#9L ASC NULLS LAST, 200), true, [id=#18]
@@ -138,8 +138,8 @@ Such APIs should be avoided very large dataset.
 .. code-block:: python
 
    >>> import pyspark.pandas as ks
-   >>> kdf = ks.DataFrame({'id': range(10)})
-   >>> kdf.rank().spark.explain()
+   >>> psdf = ps.DataFrame({'id': range(10)})
+   >>> psdf.rank().spark.explain()
    == Physical Plan ==
    *(4) Project [__index_level_0__#16L, id#24]
    +- Window [avg(cast(_w0#26 as bigint)) windowspecdefinition(id#17L, specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS id#24], [id#17L]
@@ -170,8 +170,8 @@ this behavior. For instance, see below:
 .. code-block:: python
 
    >>> import pyspark.pandas as ks
-   >>> kdf = ks.DataFrame({'a': [1, 2], 'b':[3, 4]})
-   >>> kdf.columns = ["a", "a"]
+   >>> psdf = ps.DataFrame({'a': [1, 2], 'b':[3, 4]})
+   >>> psdf.columns = ["a", "a"]
    ...
    Reference 'a' is ambiguous, could be: a, a.;
 
@@ -180,7 +180,7 @@ Additionally, it is strongly discouraged to use case sensitive column names. Pan
 .. code-block:: python
 
    >>> import pyspark.pandas as ks
-   >>> kdf = ks.DataFrame({'a': [1, 2], 'A':[3, 4]})
+   >>> psdf = ps.DataFrame({'a': [1, 2], 'A':[3, 4]})
    ...
    Reference 'a' is ambiguous, could be: a, a.;
 
@@ -194,8 +194,8 @@ However, you can turn on ``spark.sql.caseSensitive`` in Spark configuration to e
    >>> builder.getOrCreate()
 
    >>> import pyspark.pandas as ks
-   >>> kdf = ks.DataFrame({'a': [1, 2], 'A':[3, 4]})
-   >>> kdf
+   >>> psdf = ps.DataFrame({'a': [1, 2], 'A':[3, 4]})
+   >>> psdf
       a  A
    0  1  3
    1  2  4
@@ -262,11 +262,11 @@ The examples above can be converted as below:
 .. code-block:: python
 
    >>> import pyspark.pandas as ks
-   >>> ks.Series([1, 2, 3]).max()
+   >>> ps.Series([1, 2, 3]).max()
    3
-   >>> ks.Series([1, 2, 3]).min()
+   >>> ps.Series([1, 2, 3]).min()
    1
-   >>> ks.Series([1, 2, 3]).sum()
+   >>> ps.Series([1, 2, 3]).sum()
    6
 
 Another common pattern from pandas users might be to rely on list comprehension or generator expression.
@@ -299,14 +299,14 @@ The example above can be also changed to directly using pandas-on-Spark APIs as 
    >>> import pyspark.pandas as ks
    >>> import numpy as np
    >>> countries = ['London', 'New York', 'Helsinki']
-   >>> kser = ks.Series([20., 21., 12.], index=countries)
+   >>> psser = ps.Series([20., 21., 12.], index=countries)
    >>> def square(temperature) -> np.float64:
    ...     assert temperature > 0
    ...     if temperature > 1000:
    ...         temperature = None
    ...     return temperature ** 2
    ...
-   >>> kser.apply(square)
+   >>> psser.apply(square)
    London      400.0
    New York    441.0
    Helsinki    144.0

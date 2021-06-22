@@ -35,11 +35,11 @@ it as a Spark schema. As an example, you can specify the return type hint as bel
 
 .. code-block:: python
 
-    >>> def pandas_div(pdf) -> ks.DataFrame[float, float]:
+    >>> def pandas_div(pdf) -> ps.DataFrame[float, float]:
     ...    # pdf is a pandas DataFrame.
     ...    return pdf[['B', 'C']] / pdf[['B', 'C']]
     ...
-    >>> df = ks.DataFrame({'A': ['a', 'a', 'b'], 'B': [1, 2, 3], 'C': [4, 6, 5]})
+    >>> df = ps.DataFrame({'A': ['a', 'a', 'b'], 'B': [1, 2, 3], 'C': [4, 6, 5]})
     >>> df.groupby('A').apply(pandas_div)
 
 The function ``pandas_div`` actually takes and outputs a pandas DataFrame instead of pandas-on-Spark :class:`DataFrame`.
@@ -53,7 +53,7 @@ From pandas-on-Spark 1.0 with Python 3.7+, now you can specify the type hints by
     ...    # pdf is a pandas DataFrame.
     ...    return pdf[['B', 'C']] / pdf[['B', 'C']]
     ...
-    >>> df = ks.DataFrame({'A': ['a', 'a', 'b'], 'B': [1, 2, 3], 'C': [4, 6, 5]})
+    >>> df = ps.DataFrame({'A': ['a', 'a', 'b'], 'B': [1, 2, 3], 'C': [4, 6, 5]})
     >>> df.groupby('A').apply(pandas_div)
 
 Likewise, pandas Series can be also used as a type hints:
@@ -63,7 +63,7 @@ Likewise, pandas Series can be also used as a type hints:
     >>> def sqrt(x) -> pd.Series[float]:
     ...     return np.sqrt(x)
     ...
-    >>> df = ks.DataFrame([[4, 9]] * 3, columns=['A', 'B'])
+    >>> df = ps.DataFrame([[4, 9]] * 3, columns=['A', 'B'])
     >>> df.apply(sqrt, axis=0)
 
 Currently, both pandas API on Spark and pandas instances can be used to specify the type hints; however, pandas-on-Spark
@@ -124,7 +124,7 @@ programmatically generate the return type and schema.
     >>> def transform(pdf) -> pd.DataFrame[zip(pdf.columns, pdf.dtypes)]:
     ...    return pdf + 1
     ...
-    >>> kdf.koalas.apply_batch(transform)
+    >>> psdf.koalas.apply_batch(transform)
 
 Likewise, ``dtype`` instances from pandas DataFrame can be used alone and let pandas API on Spark generate column names.
 
@@ -133,4 +133,4 @@ Likewise, ``dtype`` instances from pandas DataFrame can be used alone and let pa
     >>> def transform(pdf) -> pd.DataFrame[pdf.dtypes]:
     ...     return pdf + 1
     ...
-    >>> kdf.koalas.apply_batch(transform)
+    >>> psdf.koalas.apply_batch(transform)

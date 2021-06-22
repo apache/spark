@@ -25,8 +25,8 @@ as below:
 
    >>> import pyspark.pandas as ks
    >>>
-   >>> kdf = ks.range(10)
-   >>> pdf = kdf.to_pandas()
+   >>> psdf = ks.range(10)
+   >>> pdf = psdf.to_pandas()
    >>> pdf.values
    array([[0],
           [1],
@@ -73,8 +73,8 @@ as below:
 
    >>> import pyspark.pandas as ks
    >>>
-   >>> kdf = ks.range(10)
-   >>> sdf = kdf.to_spark().filter("id > 5")
+   >>> psdf = ks.range(10)
+   >>> sdf = psdf.to_spark().filter("id > 5")
    >>> sdf.show()
    +---+
    | id|
@@ -103,9 +103,9 @@ to use as an index when possible.
 .. code-block:: python
 
    >>> # Create a pandas-on-Spark DataFrame with an explicit index.
-   ... kdf = ks.DataFrame({'id': range(10)}, index=range(10))
+   ... psdf = ps.DataFrame({'id': range(10)}, index=range(10))
    >>> # Keep the explicit index.
-   ... sdf = kdf.to_spark(index_col='index')
+   ... sdf = psdf.to_spark(index_col='index')
    >>> # Call Spark APIs
    ... sdf = sdf.filter("id > 5")
    >>> # Uses the explicit index to avoid to create default index.
