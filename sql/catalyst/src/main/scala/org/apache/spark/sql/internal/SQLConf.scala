@@ -2615,39 +2615,39 @@ object SQLConf {
       .checkValue(bit => bit >= 10 && bit <= 30, "The bit value must be in [10, 30].")
       .createWithDefault(16)
 
-
-  val SKIP_PARTIAL_AGGREGATE_MINROWS =
-  buildConf("spark.sql.aggregate.skipPartialAggregate.minNumRows")
+  val SKIP_PARTIAL_AGGREGATE_MIN_ROWS =
+    buildConf("spark.sql.aggregate.skipPartialAggregate.minNumRows")
       .internal()
-      .doc("Number of records after which aggregate operator checks if " +
-        "partial aggregation phase can be avoided")
-      .version("3.1.0")
+      .doc("The minimal number of input rows processed before hash aggregate checks if it can be" +
+        " skipped. Only applies to partial hash aggregate.")
+      .version("3.1.2")
       .longConf
+      .checkValue(minNumRows => minNumRows > 0, "Invalid value for " +
+        "spark.sql.aggregate.skipPartialAggregate.minNumRows. Valid value needs" +
+        " to be greater than 0" )
       .createWithDefault(100000)
 
-  val SKIP_PARTIAL_AGGREGATE_AGGREGATE_RATIO =
-  buildConf("spark.sql.aggregate.skipPartialAggregate.aggregateRatio")
+  val SKIP_PARTIAL_AGGREGATE_MIN_RATIO =
+    buildConf("spark.sql.aggregate.skipPartialAggregate.minRatio")
       .internal()
-      .doc("Ratio beyond which the partial aggregation is skipped." +
-        "This is computed by taking the ratio of number of records present" +
-        " in map of Aggregate operator to the total number of records processed" +
-        " by the Aggregate operator.")
-      .version("3.1.0")
+      .doc("The minimal ratio between input and output rows for partial hash aggregate allows it" +
+        " to be skipped")
+      .version("3.1.2")
       .doubleConf
       .checkValue(ratio => ratio > 0 && ratio < 1, "Invalid value for " +
-        "spark.sql.aggregate.skipPartialAggregate.aggregateRatio. Valid value needs" +
+        "spark.sql.aggregate.skipPartialAggregate.minRatio. Valid value needs" +
         " to be between 0 and 1" )
       .createWithDefault(0.5)
 
   val SKIP_PARTIAL_AGGREGATE_ENABLED =
-    buildConf("spark.sql.aggregate.skipPartialAggregate")
+    buildConf("spark.sql.aggregate.skipPartialAggregate.enabled")
       .internal()
-      .doc("When enabled, the partial aggregation is skipped when the following" +
-        "two conditions are met. 1. When the total number of records processed is greater" +
-        s"than threshold defined by ${SKIP_PARTIAL_AGGREGATE_MINROWS.key} 2. When the ratio" +
+      .doc("When enabled, the partial aggregation is skipped when the following " +
+        "two conditions are met. 1. When the total number of records processed is greater " +
+        s"than threshold defined by ${SKIP_PARTIAL_AGGREGATE_MIN_ROWS.key} 2. When the ratio " +
         "of record count in map to the total records is less that value defined by " +
-        s"${SKIP_PARTIAL_AGGREGATE_AGGREGATE_RATIO.key}")
-      .version("3.1.0")
+        s"${SKIP_PARTIAL_AGGREGATE_MIN_RATIO.key}")
+      .version("3.1.2")
       .booleanConf
       .createWithDefault(true)
 
@@ -3643,9 +3643,9 @@ class SQLConf extends Serializable with Logging {
 
   def skipPartialAggregate: Boolean = getConf(SKIP_PARTIAL_AGGREGATE_ENABLED)
 
-  def skipPartialAggregateThreshold: Long = getConf(SKIP_PARTIAL_AGGREGATE_MINROWS)
+  def skipPartialAggregateThreshold: Long = getConf(SKIP_PARTIAL_AGGREGATE_MIN_ROWS)
 
-  def skipPartialAggregateRatio: Double = getConf(SKIP_PARTIAL_AGGREGATE_AGGREGATE_RATIO)
+  def skipPartialAggregateRatio: Double = getConf(SKIP_PARTIAL_AGGREGATE_MIN_RATIO)
 
   def datetimeJava8ApiEnabled: Boolean = getConf(DATETIME_JAVA8API_ENABLED)
 
