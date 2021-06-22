@@ -32,7 +32,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{SPARK_VERSION_METADATA_KEY, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.caseSensitiveResolution
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.catalyst.util.quoteIdentifier
+import org.apache.spark.sql.catalyst.util.{quoteIdentifier, CharVarcharUtils}
 import org.apache.spark.sql.execution.datasources.SchemaMergeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.util.{ThreadUtils, Utils}
@@ -81,6 +81,13 @@ object OrcUtils extends Logging {
     }
   }
 
+  private def toCatalystSchema(schema: TypeDescription): StructType = {
+    // The Spark query engine has not completely supported CHAR/VARCHAR type yet, and here we
+    // replace the orc CHAR/VARCHAR with STRING type.
+    CharVarcharUtils.replaceCharVarcharWithStringInSchema(
+      CatalystSqlParser.parseDataType(schema.toString).asInstanceOf[StructType])
+  }
+
   def readSchema(sparkSession: SparkSession, files: Seq[FileStatus], options: Map[String, String])
       : Option[StructType] = {
     val ignoreCorruptFiles = sparkSession.sessionState.conf.ignoreCorruptFiles
@@ -88,7 +95,7 @@ object OrcUtils extends Logging {
     files.toIterator.map(file => readSchema(file.getPath, conf, ignoreCorruptFiles)).collectFirst {
       case Some(schema) =>
         logDebug(s"Reading schema from file $files, got Hive schema string: $schema")
-        CatalystSqlParser.parseDataType(schema.toString).asInstanceOf[StructType]
+        toCatalystSchema(schema)
     }
   }
 
@@ -97,8 +104,7 @@ object OrcUtils extends Logging {
       conf: Configuration,
       ignoreCorruptFiles: Boolean): Option[StructType] = {
     readSchema(file, conf, ignoreCorruptFiles) match {
-      case Some(schema) =>
-        Some(CatalystSqlParser.parseDataType(schema.toString).asInstanceOf[StructType])
+      case Some(schema) => Some(toCatalystSchema(schema))
 
       case None =>
         // Field names is empty or `FileFormatException` was thrown but ignoreCorruptFiles is true.
@@ -113,8 +119,7 @@ object OrcUtils extends Logging {
   def readOrcSchemasInParallel(
     files: Seq[FileStatus], conf: Configuration, ignoreCorruptFiles: Boolean): Seq[StructType] = {
     ThreadUtils.parmap(files, "readingOrcSchemas", 8) { currentFile =>
-      OrcUtils.readSchema(currentFile.getPath, conf, ignoreCorruptFiles)
-        .map(s => CatalystSqlParser.parseDataType(s.toString).asInstanceOf[StructType])
+      OrcUtils.readSchema(currentFile.getPath, conf, ignoreCorruptFiles).map(toCatalystSchema)
     }.flatten
   }
 
