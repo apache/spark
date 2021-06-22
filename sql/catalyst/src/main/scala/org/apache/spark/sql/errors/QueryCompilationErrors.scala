@@ -1650,11 +1650,11 @@ private[spark] object QueryCompilationErrors {
         |Since Spark 2.3, the queries from raw JSON/CSV files are disallowed when the
         |referenced columns only include the internal corrupt record column
         |(named _corrupt_record by default). For example:
-        |spark.read.schema(schema).csv(file).filter($\"_corrupt_record\".isNotNull).count()
-        |and spark.read.schema(schema).csv(file).select(\"_corrupt_record\").show().
+        |spark.read.schema(schema).csv(file).filter($"_corrupt_record".isNotNull).count()
+        |and spark.read.schema(schema).csv(file).select("_corrupt_record").show().
         |Instead, you can cache or save the parsed results and then send the same query.
         |For example, val df = spark.read.schema(schema).csv(file).cache() and then
-        |df.filter($\"_corrupt_record\".isNotNull).count().
+        |df.filter($"_corrupt_record".isNotNull).count().
       """.stripMargin)
   }
 
