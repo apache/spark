@@ -2907,6 +2907,15 @@ class DataFrameSuite extends QueryTest
       }
     }
   }
+
+  test("isLocal should consider CommandResult and LocalRelation") {
+    withTable("t1") {
+      val df = sql("CREATE TABLE t USING PARQUET AS SELECT 1 as a")
+      assert(df.isLocal)
+    }
+    val df = (1 to 10).toDF()
+    assert(df.isLocal)
+  }
 }
 
 case class GroupByKey(a: Int, b: Int)
