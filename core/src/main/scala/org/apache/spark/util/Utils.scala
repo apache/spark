@@ -284,16 +284,12 @@ private[spark] object Utils extends Logging {
    */
   def createDirectory(dir: File): Boolean = {
     try {
-      // This sporadically fails - not sure why ... !dir.exists() && !dir.mkdirs()
-      // So attempting to create and then check if directory was created or not.
-      dir.mkdirs()
-      if ( !dir.exists() || !dir.isDirectory) {
-        logError(s"Failed to create directory " + dir)
-      }
-      dir.isDirectory
+      // SPARK-35907 Instead of File#mkdirs, Files#createDirectories is expected.
+      Files.createDirectories(dir.toPath)
+      true
     } catch {
       case e: Exception =>
-        logError(s"Failed to create directory " + dir, e)
+        logError(s"Failed to create directory $dir", e)
         false
     }
   }
@@ -309,15 +305,17 @@ private[spark] object Utils extends Logging {
     while (dir == null) {
       attempts += 1
       if (attempts > maxAttempts) {
-        throw new IOException("Failed to create a temp directory (under " + root + ") after " +
-          maxAttempts + " attempts!")
+        throw new IOException(s"Failed to create a temp directory (under $root) after " +
+           s"$maxAttempts attempts!")
       }
       try {
         dir = new File(root, namePrefix + "-" + UUID.randomUUID.toString)
-        if (dir.exists() || !dir.mkdirs()) {
-          dir = null
-        }
-      } catch { case e: SecurityException => dir = null; }
+        // SPARK-35907 Instead of File#mkdirs, Files#createDirectories is expected.
+        Files.createDirectories(dir.toPath)
+      } catch { case e: Exception =>
+        logError(s"Failed to create directory $dir", e)
+        dir = null
+      }
     }
 
     dir.getCanonicalFile
