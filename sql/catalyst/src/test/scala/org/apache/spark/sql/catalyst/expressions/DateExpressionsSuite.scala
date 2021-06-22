@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.{Date, Timestamp}
 import java.text.{ParseException, SimpleDateFormat}
-import java.time.{DateTimeException, Duration, Instant, LocalDate, Period, ZoneId}
+import java.time.{DateTimeException, Duration, Instant, LocalDate, LocalDateTime, Period, ZoneId}
 import java.time.format.DateTimeParseException
 import java.time.temporal.ChronoUnit
 import java.util.{Calendar, Locale, TimeZone}
@@ -1281,6 +1281,33 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         (end: Expression, start: Expression) => SubtractDates(end, start, ansiIntervals),
         DateType, DateType)
     }
+  }
+
+  test("to_timestamp_ntz") {
+    val specialTs = Seq(
+      "0001-01-01T00:00:00", // the fist timestamp of Common Era
+      "1582-10-15T23:59:59", // the cutover date from Julian to Gregorian calendar
+      "1970-01-01T00:00:00", // the epoch timestamp
+      "9999-12-31T23:59:59"  // the last supported timestamp according to SQL standard
+    )
+    outstandingZoneIds.foreach { zoneId =>
+      withDefaultTimeZone(zoneId) {
+        specialTs.foreach { s =>
+          val input = s.replace("T", " ")
+          val expectedTs = LocalDateTime.parse(s)
+          checkEvaluation(
+            GetTimestampWithoutTZ(Literal(input), Literal("yyyy-MM-dd HH:mm:ss")), expectedTs)
+          Seq(".123456", ".123456PST", ".123456CST", ".123456UTC").foreach { segment =>
+            val input2 = input + segment
+            val expectedTs2 = LocalDateTime.parse(s + ".123456")
+            checkEvaluation(
+              GetTimestampWithoutTZ(Literal(input2), Literal("yyyy-MM-dd HH:mm:ss.SSSSSS[zzz]")),
+              expectedTs2)
+          }
+        }
+      }
+    }
+
   }
 
   test("to_timestamp exception mode") {
