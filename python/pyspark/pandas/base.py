@@ -1129,7 +1129,11 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         return self._shift(periods, fill_value).spark.analyzed
 
     def _shift(
-        self: T_IndexOps, periods: int, fill_value: Any, *, part_cols: Sequence[str] = ()
+        self: T_IndexOps,
+        periods: int,
+        fill_value: Any,
+        *,
+        part_cols: Sequence[Union[str, Column]] = ()
     ) -> T_IndexOps:
         if not isinstance(periods, int):
             raise TypeError("periods should be an int; however, got [%s]" % type(periods).__name__)
