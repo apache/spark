@@ -133,7 +133,8 @@ class BlockManagerInfoSuite extends SparkFunSuite {
     assert(bmInfo.blocks.asScala === Map(rddId1 -> BlockStatus(StorageLevel.DISK_ONLY, 0, 200)))
     assert(bmInfo.remainingMem === 30000)
     if (svcEnabled) {
-      assert(getEssBlockStatus(bmInfo, rddId1) === Some(BlockStatus(StorageLevel.DISK_ONLY, 0, 200)))
+      assert(getEssBlockStatus(bmInfo, rddId1) ===
+        Some(BlockStatus(StorageLevel.DISK_ONLY, 0, 200)))
     }
 
     bmInfo.removeBlock(rddId1)
@@ -147,7 +148,8 @@ class BlockManagerInfoSuite extends SparkFunSuite {
     assert(bmInfo.blocks.asScala === Map(rddId2 -> BlockStatus(StorageLevel.DISK_ONLY, 0, 200)))
     assert(bmInfo.remainingMem === 30000)
     if (svcEnabled) {
-      assert(getEssBlockStatus(bmInfo, rddId2) === Some(BlockStatus(StorageLevel.DISK_ONLY, 0, 200)))
+      assert(getEssBlockStatus(bmInfo, rddId2) ===
+        Some(BlockStatus(StorageLevel.DISK_ONLY, 0, 200)))
     }
   }
 }
