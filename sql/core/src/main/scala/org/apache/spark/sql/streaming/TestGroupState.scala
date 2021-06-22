@@ -70,7 +70,7 @@ import org.apache.spark.sql.execution.streaming.GroupStateImpl._
  * // test class setups
  *
  * // test `flatMapGroupsWithState` state transition function `updateState()`
- * public void testAdd() {
+ * public void testUpdateState() {
  *   // Creates the prevState input for the state transition function
  *   // with desired configs. The create() API would guarantee that
  *   // the generated instance has the same behavior as the one built by

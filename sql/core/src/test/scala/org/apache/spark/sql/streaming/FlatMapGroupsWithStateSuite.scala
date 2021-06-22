@@ -1024,9 +1024,11 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
         additionalConfs = Map(SQLConf.FLATMAPGROUPSWITHSTATE_STATE_FORMAT_VERSION.key -> "2")),
       /*
       Note: The checkpoint was generated using the following input in Spark version 2.3.1
+
       AddData(inputData, ("a", 11), ("a", 13), ("a", 15)),
       // Max event time = 15. Timeout timestamp for "a" = 15 + 5 = 20. Watermark = 15 - 10 = 5.
       CheckNewAnswer(("a", 15)),  // Output = max event time of a
+
       AddData(inputData, ("a", 4)),       // Add data older than watermark for "a"
       CheckNewAnswer(),                   // No output as data should get filtered by watermark
       */
