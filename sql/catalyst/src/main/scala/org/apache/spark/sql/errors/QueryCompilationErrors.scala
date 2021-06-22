@@ -1655,7 +1655,7 @@ private[spark] object QueryCompilationErrors {
         |Instead, you can cache or save the parsed results and then send the same query.
         |For example, val df = spark.read.schema(schema).csv(file).cache() and then
         |df.filter($\"_corrupt_record\".isNotNull).count().
-      """.stripMargin('#'))
+      """.stripMargin)
   }
 
   def userDefinedPartitionNotFoundInJDBCRelationError(
