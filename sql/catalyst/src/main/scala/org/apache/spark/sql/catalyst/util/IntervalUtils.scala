@@ -103,12 +103,10 @@ object IntervalUtils {
 
   private val yearMonthPatternString = "([+|-])?(\\d+)-(\\d+)"
   private val yearMonthRegex = (s"^$yearMonthPatternString$$").r
-  private val yearYearLiteralRegex =
-    (s"(?i)^INTERVAL\\s+([+|-])?'$yearMonthPatternString'\\s+YEAR$$").r
   private val yearMonthLiteralRegex =
-    (s"(?i)^INTERVAL\\s+([+|-])?'$yearMonthPatternString'\\s+YEAR\\s+TO\\s+MONTH$$").r
-  private val monthMonthLiteralRegex =
-    (s"(?i)^INTERVAL\\s+([+|-])?'$yearMonthPatternString'\\s+MONTH$$").r
+    (s"(?i)^INTERVAL\\s+([+|-])?'$yearMonthPatternString'\\s+(YEAR|YEAR\\s+TO\\s+MONTH|MONTH)$$").r
+  private val yearMonthIndividualLiteralRegex =
+    (s"(?i)^INTERVAL\\s+([+|-])?'([+|-])?(\\d+)'\\s+(YEAR|MONTH)$$").r
 
   def castStringToYMInterval(
       input: UTF8String,
@@ -131,12 +129,16 @@ object IntervalUtils {
     input.trimAll().toString match {
       case yearMonthRegex("-", year, month) => toYMInterval(year, truncatedMonth(month), -1)
       case yearMonthRegex(_, year, month) => toYMInterval(year, truncatedMonth(month), 1)
-      case yearYearLiteralRegex(firstSign, secondSign, year, _) =>
-        toYMInterval(year, "0", getSigh(firstSign, secondSign))
-      case yearMonthLiteralRegex(firstSign, secondSign, year, month) =>
-        toYMInterval(year, truncatedMonth(month), getSigh(firstSign, secondSign))
-      case monthMonthLiteralRegex(firstSign, secondSign, year, month) =>
-        toYMInterval(year, truncatedMonth(month), getSigh(firstSign, secondSign))
+      case yearMonthLiteralRegex(firstSign, secondSign, year, month, prefix) =>
+        prefix match {
+          case "YEAR" => toYMInterval(year, "0", getSigh(firstSign, secondSign))
+          case _ => toYMInterval(year, truncatedMonth(month), getSigh(firstSign, secondSign))
+        }
+      case yearMonthIndividualLiteralRegex(firstSign, secondSign, value, suffix) =>
+        suffix match {
+          case "YEAR" => toYMInterval(value, "0", getSigh(firstSign, secondSign))
+          case "MONTH" => toYMInterval("0", value, getSigh(firstSign, secondSign))
+        }
       case _ => throw new IllegalArgumentException(
         s"Interval string does not match year-month format of `[+|-]y-m` " +
           s", `INTERVAL [+|-]'[+|-]y-m' YEAR`, `INTERVAL [+|-]'[+|-]y-m' YEAR TO MONTH` " +
