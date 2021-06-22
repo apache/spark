@@ -100,7 +100,7 @@ import org.apache.spark.sql.execution.streaming.GroupStateImpl._
  *
  *   // Calls the state transition function with the test previous state
  *   // with desired configs.
- *   mappingFunction(key, Arrays.asList(values).iterator(), prevState);
+ *   mappingFunction.call(key, Arrays.asList(values).iterator(), prevState);
  *
  *   // Asserts the test GroupState object has been updated after calling
  *   // the state transition function
