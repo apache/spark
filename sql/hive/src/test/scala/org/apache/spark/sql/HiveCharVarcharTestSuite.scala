@@ -19,7 +19,6 @@ package org.apache.spark.sql
 
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogWithListener
 import org.apache.spark.sql.execution.command.CharVarcharDDLTestBase
-import org.apache.spark.sql.hive.HiveExternalCatalog
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 
 class HiveCharVarcharTestSuite extends CharVarcharTestSuite with TestHiveSingleton {
