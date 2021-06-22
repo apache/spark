@@ -2560,7 +2560,7 @@
         <plugin>
           <groupId>net.alchim31.maven</groupId>
           <artifactId>scala-maven-plugin</artifactId>
-          <version>4.3.0</version>
+          <version>4.5.3</version>
           <executions>
             <execution>
               <id>eclipse-add-source</id>
