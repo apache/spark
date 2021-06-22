@@ -27,7 +27,7 @@ import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * Test suite base for both [[Cast]] expression with ANSI mode enabled and [[AnsiCast]] expression.
- * Note: for new test cases that works for both [[Cast]] and [[AnsiCast]], please add them
+ * Note: for new test cases that work for both [[Cast]] and [[AnsiCast]], please add them
  *       in `CastSuiteBase` instead of this file to ensure the test coverage.
  */
 abstract class AnsiCastSuiteBase extends CastSuiteBase {
