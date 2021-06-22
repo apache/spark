@@ -36,22 +36,31 @@ import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
 private[this] sealed trait PathInstruction
+
 private[this] object PathInstruction {
   private[expressions] case object Subscript extends PathInstruction
+
   private[expressions] case object Wildcard extends PathInstruction
+
   private[expressions] case object Key extends PathInstruction
+
   private[expressions] case class Index(index: Long) extends PathInstruction
+
   private[expressions] case class Named(name: String) extends PathInstruction
 }
 
 private[this] sealed trait WriteStyle
+
 private[this] object WriteStyle {
   private[expressions] case object RawStyle extends WriteStyle
+
   private[expressions] case object QuotedStyle extends WriteStyle
+
   private[expressions] case object FlattenStyle extends WriteStyle
 }
 
 private[this] object JsonPathParser extends RegexParsers {
+
   import PathInstruction._
 
   def root: Parser[Char] = '$'
@@ -113,7 +122,8 @@ private[this] object SharedFactory {
  */
 @ExpressionDescription(
   usage = "_FUNC_(json_txt, path) - Extracts a json object from `path`.",
-  examples = """
+  examples =
+    """
     Examples:
       > SELECT _FUNC_('{"a":"b"}', '$.a');
        b
@@ -128,10 +138,15 @@ case class GetJsonObject(json: Expression, path: Expression)
   import WriteStyle._
 
   override def left: Expression = json
+
   override def right: Expression = path
+
   override def inputTypes: Seq[DataType] = Seq(StringType, StringType)
+
   override def dataType: DataType = StringType
+
   override def nullable: Boolean = true
+
   override def prettyName: String = "get_json_object"
 
   @transient private lazy val parsedPath = parsePath(path.eval().asInstanceOf[UTF8String])
@@ -210,10 +225,10 @@ case class GetJsonObject(json: Expression, path: Expression)
    * have been written to the generator
    */
   private def evaluatePath(
-      p: JsonParser,
-      g: JsonGenerator,
-      style: WriteStyle,
-      path: List[PathInstruction]): Boolean = {
+    p: JsonParser,
+    g: JsonGenerator,
+    style: WriteStyle,
+    path: List[PathInstruction]): Boolean = {
     (p.getCurrentToken, path) match {
       case (VALUE_STRING, Nil) if style == RawStyle =>
         // there is no array wildcard or slice parent, emit this string without quotes
@@ -288,7 +303,7 @@ case class GetJsonObject(json: Expression, path: Expression)
           g.writeRawValue(buf.toString)
         } else if (dirty == 1) {
           // remove outer array tokens
-          g.writeRawValue(buf.substring(1, buf.length()-1))
+          g.writeRawValue(buf.substring(1, buf.length() - 1))
         } // else do not write anything
 
         dirty > 0
@@ -336,7 +351,8 @@ case class GetJsonObject(json: Expression, path: Expression)
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(jsonStr, p1, p2, ..., pn) - Returns a tuple like the function get_json_object, but it takes multiple names. All the input parameters and output column types are string.",
-  examples = """
+  examples =
+    """
     Examples:
       > SELECT _FUNC_('{"a":1, "b":2}', 'a', 'b');
        1  2
@@ -354,7 +370,7 @@ case class JsonTuple(children: Seq[Expression])
 
   // if processing fails this shared value will be returned
   @transient private lazy val nullRow: Seq[InternalRow] =
-    new GenericInternalRow(Array.ofDim[Any](fieldExpressions.length)) :: Nil
+  new GenericInternalRow(Array.ofDim[Any](fieldExpressions.length)) :: Nil
 
   // the json body is the first child
   @transient private lazy val jsonExpr: Expression = children.head
@@ -501,7 +517,8 @@ case class JsonTuple(children: Seq[Expression])
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(jsonStr, schema[, options]) - Returns a struct value with the given `jsonStr` and `schema`.",
-  examples = """
+  examples =
+    """
     Examples:
       > SELECT _FUNC_('{"a":1, "b":0.8}', 'a INT, b DOUBLE');
        {"a":1, "b":0.8}
@@ -511,10 +528,10 @@ case class JsonTuple(children: Seq[Expression])
   since = "2.2.0")
 // scalastyle:on line.size.limit
 case class JsonToStructs(
-    schema: DataType,
-    options: Map[String, String],
-    child: Expression,
-    timeZoneId: Option[String] = None)
+  schema: DataType,
+  options: Map[String, String],
+  child: Expression,
+  timeZoneId: Option[String] = None)
   extends UnaryExpression with TimeZoneAwareExpression with CodegenFallback with ExpectsInputTypes {
 
   val forceNullableSchema = SQLConf.get.getConf(SQLConf.FROM_JSON_FORCE_NULLABLE_SCHEMA)
@@ -560,7 +577,7 @@ case class JsonToStructs(
     case _: MapType =>
       (rows: Iterator[InternalRow]) => if (rows.hasNext) rows.next().getMap(0) else null
   }
-  
+
   val nameOfCorruptRecord = SQLConf.get.getConf(SQLConf.COLUMN_NAME_OF_CORRUPT_RECORD)
   @transient lazy val parser = {
     val parsedOptions = new JSONOptions(options, timeZoneId.get, nameOfCorruptRecord)
@@ -571,12 +588,12 @@ case class JsonToStructs(
     }
     val rawParser = new JacksonParser(nullableSchema, parsedOptions, allowArrayAsStructs = false)
     val createParser = CreateJacksonParser.utf8String _
-    
+
     val parserSchema = nullableSchema match {
       case s: StructType => s
       case other => StructType(StructField("value", other) :: Nil)
     }
-    
+
     new FailureSafeParser[UTF8String](
       input => rawParser.parse(input, createParser, identity[UTF8String]),
       mode,
@@ -607,7 +624,8 @@ case class JsonToStructs(
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(expr[, options]) - Returns a JSON string with a given struct value",
-  examples = """
+  examples =
+    """
     Examples:
       > SELECT _FUNC_(named_struct('a', 1, 'b', 2));
        {"a":1,"b":2}
@@ -627,9 +645,9 @@ case class JsonToStructs(
   since = "2.2.0")
 // scalastyle:on line.size.limit
 case class StructsToJson(
-    options: Map[String, String],
-    child: Expression,
-    timeZoneId: Option[String] = None)
+  options: Map[String, String],
+  child: Expression,
+  timeZoneId: Option[String] = None)
   extends UnaryExpression with TimeZoneAwareExpression with CodegenFallback with ExpectsInputTypes {
   override def nullable: Boolean = true
 
@@ -637,6 +655,7 @@ case class StructsToJson(
 
   // Used in `FunctionRegistry`
   def this(child: Expression) = this(Map.empty, child, None)
+
   def this(child: Expression, options: Expression) =
     this(
       options = JsonExprUtils.convertToMapData(options),
@@ -710,7 +729,7 @@ case class StructsToJson(
       }
     case _ => TypeCheckResult.TypeCheckFailure(
       s"Input type ${child.dataType.catalogString} must be a struct, array of structs or " +
-          "a map or array of map.")
+        "a map or array of map.")
   }
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
@@ -726,7 +745,8 @@ case class StructsToJson(
  */
 @ExpressionDescription(
   usage = "_FUNC_(json[, options]) - Returns schema in the DDL format of JSON string.",
-  examples = """
+  examples =
+    """
     Examples:
       > SELECT _FUNC_('[{"col":0}]');
        array<struct<col:int>>
@@ -766,17 +786,17 @@ object JsonExprUtils {
 
   def evalSchemaExpr(exp: Expression): DataType = exp match {
     case Literal(s, StringType) => DataType.fromDDL(s.toString)
-    case e @ SchemaOfJson(_: Literal) =>
+    case e@SchemaOfJson(_: Literal) =>
       val ddlSchema = e.eval(EmptyRow).asInstanceOf[UTF8String]
       DataType.fromDDL(ddlSchema.toString)
     case e => throw new AnalysisException(
       "Schema should be specified in DDL format as a string literal" +
-      s" or output of the schema_of_json function instead of ${e.sql}")
+        s" or output of the schema_of_json function instead of ${e.sql}")
   }
 
   def convertToMapData(exp: Expression): Map[String, String] = exp match {
     case m: CreateMap
-        if m.dataType.acceptsType(MapType(StringType, StringType, valueContainsNull = false)) =>
+      if m.dataType.acceptsType(MapType(StringType, StringType, valueContainsNull = false)) =>
       val arrayMap = m.eval().asInstanceOf[ArrayBasedMapData]
       ArrayBasedMapData.toScalaMap(arrayMap).map { case (key, value) =>
         key.toString -> value.toString

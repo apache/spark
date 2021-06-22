@@ -178,7 +178,8 @@ class JacksonParser(
             case "Infinity" => Float.PositiveInfinity
             case "-Infinity" => Float.NegativeInfinity
             case other => throw new RuntimeException(
-              s"Cannot parse fieldName: [${parser.getCurrentName}], fieldValue: [${parser.getText}], " +
+              s"Cannot parse fieldName: [${parser.getCurrentName}], " +
+                s"fieldValue: [${parser.getText}], " +
                 s"[${VALUE_STRING}] as target spark dataType: [${dataType}].")
           }
       }
@@ -196,7 +197,8 @@ class JacksonParser(
             case "-Infinity" => Double.NegativeInfinity
             case other =>
               throw new RuntimeException(
-                s"Cannot parse fieldName: [${parser.getCurrentName}], fieldValue: [${parser.getText}], " +
+                s"Cannot parse fieldName: [${parser.getCurrentName}], " +
+                  s"fieldValue: [${parser.getText}], " +
                   s"[${VALUE_STRING}] as target spark dataType: [${dataType}]."
               )
           }
@@ -332,7 +334,8 @@ class JacksonParser(
       // We cannot parse this token based on the given data type. So, we throw a
       // RuntimeException and this exception will be caught by `parse` method.
       throw new RuntimeException(
-        s"Failed to parse fieldName: [${parser.getCurrentName}], fieldValue: [${parser.getText}], " +
+        s"Failed to parse fieldName: [${parser.getCurrentName}], " +
+          s"fieldValue: [${parser.getText}], " +
           s"[${token.toString}] to target spark dataType: [${dataType}]."
       )
   }

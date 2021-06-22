@@ -22,7 +22,9 @@ import java.math.BigDecimal
 
 import scala.util.Try
 import scala.util.control.NonFatal
+
 import com.univocity.parsers.csv.CsvParser
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow

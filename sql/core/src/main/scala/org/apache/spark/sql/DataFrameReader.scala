@@ -20,22 +20,23 @@ package org.apache.spark.sql
 import java.util.{Locale, Properties}
 
 import scala.collection.JavaConverters._
+
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.univocity.parsers.csv.CsvParser
+
 import org.apache.spark.Partition
 import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.json.{CreateJacksonParser, JSONOptions, JacksonParser}
+import org.apache.spark.sql.catalyst.json.{CreateJacksonParser, JacksonParser, JSONOptions}
 import org.apache.spark.sql.catalyst.util.FailureSafeParser
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.datasources.csv._
 import org.apache.spark.sql.execution.datasources.jdbc._
 import org.apache.spark.sql.execution.datasources.json.TextInputJsonDataSource
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Utils
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2Utils}
 import org.apache.spark.sql.sources.v2.{DataSourceOptions, DataSourceV2, ReadSupport}
 import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.unsafe.types.UTF8String
@@ -262,13 +263,13 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * @since 1.4.0
    */
   def jdbc(
-      url: String,
-      table: String,
-      columnName: String,
-      lowerBound: Long,
-      upperBound: Long,
-      numPartitions: Int,
-      connectionProperties: Properties): DataFrame = {
+    url: String,
+    table: String,
+    columnName: String,
+    lowerBound: Long,
+    upperBound: Long,
+    numPartitions: Int,
+    connectionProperties: Properties): DataFrame = {
     // columnName, lowerBound, upperBound and numPartitions override settings in extraOptions.
     this.extraOptions ++= Map(
       JDBCOptions.JDBC_PARTITION_COLUMN -> columnName,
@@ -297,16 +298,16 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * @since 1.4.0
    */
   def jdbc(
-      url: String,
-      table: String,
-      predicates: Array[String],
-      connectionProperties: Properties): DataFrame = {
+    url: String,
+    table: String,
+    predicates: Array[String],
+    connectionProperties: Properties): DataFrame = {
     assertNoSpecifiedSchema("jdbc")
     // connectionProperties should override settings in extraOptions.
     val params = extraOptions.toMap ++ connectionProperties.asScala.toMap
     val options = new JDBCOptions(url, table, params)
     val parts: Array[Partition] = predicates.zipWithIndex.map { case (part, i) =>
-      JDBCPartition(part, i) : Partition
+      JDBCPartition(part, i): Partition
     }
     val relation = JDBCRelation(parts, options)(sparkSession)
     sparkSession.baseRelationToDataFrame(relation)
@@ -387,7 +388,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * @since 2.0.0
    */
   @scala.annotation.varargs
-  def json(paths: String*): DataFrame = format("json").load(paths : _*)
+  def json(paths: String*): DataFrame = format("json").load(paths: _*)
 
   /**
    * Loads a `JavaRDD[String]` storing JSON objects (<a href="http://jsonlines.org/">JSON
@@ -611,7 +612,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * @since 2.0.0
    */
   @scala.annotation.varargs
-  def csv(paths: String*): DataFrame = format("csv").load(paths : _*)
+  def csv(paths: String*): DataFrame = format("csv").load(paths: _*)
 
   /**
    * Loads a Parquet file, returning the result as a `DataFrame`. See the documentation
@@ -633,6 +634,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * whether we should merge schemas collected from all Parquet part-files. This will override
    * `spark.sql.parquet.mergeSchema`.</li>
    * </ul>
+   *
    * @since 1.4.0
    */
   @scala.annotation.varargs
@@ -707,11 +709,12 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * @since 1.6.0
    */
   @scala.annotation.varargs
-  def text(paths: String*): DataFrame = format("text").load(paths : _*)
+  def text(paths: String*): DataFrame = format("text").load(paths: _*)
 
   /**
    * Loads text files and returns a [[Dataset]] of String. See the documentation on the
    * other overloaded `textFile()` method for more details.
+   *
    * @since 2.0.0
    */
   def textFile(path: String): Dataset[String] = {
@@ -749,7 +752,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   @scala.annotation.varargs
   def textFile(paths: String*): Dataset[String] = {
     assertNoSpecifiedSchema("textFile")
-    text(paths : _*).select("value").as[String](sparkSession.implicits.newStringEncoder)
+    text(paths: _*).select("value").as[String](sparkSession.implicits.newStringEncoder)
   }
 
   /**
@@ -766,8 +769,8 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * `columnNameOfCorruptRecord` as an option.
    */
   private def verifyColumnNameOfCorruptRecord(
-      schema: StructType,
-      columnNameOfCorruptRecord: String): Unit = {
+    schema: StructType,
+    columnNameOfCorruptRecord: String): Unit = {
     schema.getFieldIndex(columnNameOfCorruptRecord).foreach { corruptFieldIndex =>
       val f = schema(corruptFieldIndex)
       if (f.dataType != StringType || !f.nullable) {
