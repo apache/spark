@@ -36,6 +36,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.DayTimeIntervalType.DAY
 import org.apache.spark.unsafe.types.UTF8String
 
 class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
@@ -2790,7 +2791,9 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
           ).foreach { case (end, start) =>
             val df = Seq((end, start)).toDF("end", "start")
             val daysBetween = Duration.ofDays(ChronoUnit.DAYS.between(start, end))
-            checkAnswer(df.select($"end" - $"start"), Row(daysBetween))
+            val r = df.select($"end" - $"start").toDF("diff")
+            checkAnswer(r, Row(daysBetween))
+            assert(r.schema === new StructType().add("diff", DayTimeIntervalType(DAY)))
           }
         }
       }

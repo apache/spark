@@ -35,6 +35,7 @@ import org.apache.spark.sql.catalyst.util.LegacyDateFormats.SIMPLE_DATE_FORMAT
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.DayTimeIntervalType.DAY
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 /**
@@ -2701,8 +2702,7 @@ case class SubtractDates(
 
   override def inputTypes: Seq[AbstractDataType] = Seq(DateType, DateType)
   override def dataType: DataType = {
-    // TODO(SPARK-35727): Return INTERVAL DAY from dates subtraction
-    if (legacyInterval) CalendarIntervalType else DayTimeIntervalType()
+    if (legacyInterval) CalendarIntervalType else DayTimeIntervalType(DAY)
   }
 
   @transient

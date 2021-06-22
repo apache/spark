@@ -626,7 +626,7 @@ cannot resolve 'date_sub(CAST('2011-11-11' AS DATE), v.str)' due to data type mi
 -- !query
 select null - date '2019-10-06'
 -- !query schema
-struct<(NULL - DATE '2019-10-06'):interval day to second>
+struct<(NULL - DATE '2019-10-06'):interval day>
 -- !query output
 NULL
 
@@ -634,7 +634,7 @@ NULL
 -- !query
 select date '2001-10-01' - date '2001-09-28'
 -- !query schema
-struct<(DATE '2001-10-01' - DATE '2001-09-28'):interval day to second>
+struct<(DATE '2001-10-01' - DATE '2001-09-28'):interval day>
 -- !query output
 3 00:00:00.000000000
 
