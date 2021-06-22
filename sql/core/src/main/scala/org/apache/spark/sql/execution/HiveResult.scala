@@ -119,10 +119,16 @@ object HiveResult {
       }.mkString("{", ",", "}")
     case (period: Period, YearMonthIntervalType(startField, endField)) =>
       toYearMonthIntervalString(
-        periodToMonths(period, endField), HIVE_STYLE, startField, endField)
+        periodToMonths(period, endField),
+        HIVE_STYLE,
+        startField,
+        endField)
     case (duration: Duration, DayTimeIntervalType(startField, endField)) =>
       toDayTimeIntervalString(
-        durationToMicros(duration, endField), HIVE_STYLE, startField, endField)
+        durationToMicros(duration, endField),
+        HIVE_STYLE,
+        startField,
+        endField)
     case (other, _: UserDefinedType[_]) => other.toString
   }
 }
