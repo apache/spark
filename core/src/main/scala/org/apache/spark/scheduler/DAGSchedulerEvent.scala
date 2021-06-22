@@ -30,6 +30,7 @@ import org.apache.spark.util.{AccumulatorV2, CallSite}
  * architecture where any thread can post an event (e.g. a task finishing or a new job being
  * submitted) but there is a single "logic" thread that reads these events and takes decisions.
  * This greatly simplifies synchronization.
+ * DAGScheduler 可以处理的事件类型。
  */
 private[scheduler] sealed trait DAGSchedulerEvent
 
