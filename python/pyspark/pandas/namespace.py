@@ -562,6 +562,8 @@ def read_delta(
     3      13
     4      14
     """
+    if version is not None and timestamp is not None:
+        raise ValueError("version and timestamp cannot be used together.")
     if "options" in options and isinstance(options.get("options"), dict) and len(options) == 1:
         options = options.get("options")  # type: ignore
 
