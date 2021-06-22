@@ -367,7 +367,10 @@ class FractionalOps(NumericOps):
 
     def isnull(self, index_ops: T_IndexOps) -> T_IndexOps:
         return index_ops._with_new_scol(
-            index_ops.spark.column.isNull() | F.isnan(index_ops.spark.column)
+            index_ops.spark.column.isNull() | F.isnan(index_ops.spark.column),
+            field=index_ops._internal.data_fields[0].copy(
+                dtype=np.dtype("bool"), spark_type=BooleanType(), nullable=False
+            ),
         )
 
     def astype(self, index_ops: T_IndexOps, dtype: Union[str, type, Dtype]) -> T_IndexOps:
@@ -404,7 +407,12 @@ class DecimalOps(FractionalOps):
         return "decimal"
 
     def isnull(self, index_ops: T_IndexOps) -> T_IndexOps:
-        return index_ops._with_new_scol(index_ops.spark.column.isNull())
+        return index_ops._with_new_scol(
+            index_ops.spark.column.isNull(),
+            field=index_ops._internal.data_fields[0].copy(
+                dtype=np.dtype("bool"), spark_type=BooleanType(), nullable=False
+            ),
+        )
 
     def astype(self, index_ops: T_IndexOps, dtype: Union[str, type, Dtype]) -> T_IndexOps:
         dtype, spark_type = pandas_on_spark_type(dtype)
