@@ -53,7 +53,12 @@ specified, multiple nodes are inserted into the logical plan, but the leftmost h
 
 * **REBALANCE_PARTITIONS**
 
-  The `REBALANCE_PARTITIONS` hint can be used to repartition to the specified partitioning expressions. It takes column names or none as parameters.
+  The `REBALANCE_PARTITIONS` hint can be used to rebalance the query result output partitions, so that
+  every partition is of a reasonable size (not too small and not too big). It can take column names as
+  parameters, and try its best to partition the query result by these columns. This is a best-effort: if
+  there are skews, Spark will split the skewed partitions, to make these partitions not too big. This
+  hint is useful when you need to write the result of this query to a table, to avoid too small/big files.
+  This hint is ignored if AQE is not enabled.
 
 #### Examples
 
