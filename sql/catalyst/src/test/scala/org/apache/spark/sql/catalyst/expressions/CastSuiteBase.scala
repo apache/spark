@@ -1086,26 +1086,29 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
         checkEvaluation(cast(Literal.create(s"INTERVAL -'$str' YEAR TO MONTH"), dataType), -ym)
       }
 
-    Seq(("13", YearMonthIntervalType(YEAR), 156, 12),
-      ("13", YearMonthIntervalType(MONTH), 156, 13),
-      ("-13", YearMonthIntervalType(YEAR), -156, -12),
-      ("-13", YearMonthIntervalType(MONTH), -156, -13))
-      .foreach { case (str, dataType, year, month) =>
+    Seq(("13", YearMonthIntervalType(YEAR), 13 * 12),
+      ("13", YearMonthIntervalType(MONTH), 13),
+      ("-13", YearMonthIntervalType(YEAR), -13 * 12),
+      ("-13", YearMonthIntervalType(MONTH), -13))
+      .foreach { case (str, dataType, value) =>
+        checkEvaluation(cast(Literal.create(str), dataType), value)
         if (dataType == YearMonthIntervalType(YEAR)) {
-          checkEvaluation(cast(Literal.create(s"INTERVAL '$str' YEAR"), dataType), year)
+          checkEvaluation(cast(Literal.create(s"INTERVAL '$str' YEAR"), dataType), value)
         } else {
-          checkEvaluation(cast(Literal.create(s"INTERVAL '$str' MONTH"), dataType), month)
+          checkEvaluation(cast(Literal.create(s"INTERVAL '$str' MONTH"), dataType), value)
         }
       }
 
     if (!isTryCast) {
       Seq("INTERVAL '1-1' YEAR", "INTERVAL '1-1' MONTH").foreach { interval =>
-          val e = intercept[IllegalArgumentException] {
-            cast(Literal.create(interval), YearMonthIntervalType()).eval()
-          }.getMessage
-          assert(e.contains("Interval string does not match year-month format"))
-        }
-      Seq(("1-1", YearMonthIntervalType(YEAR)),
+        val e = intercept[IllegalArgumentException] {
+          cast(Literal.create(interval), YearMonthIntervalType()).eval()
+        }.getMessage
+        assert(e.contains("Interval string does not match year-month format"))
+      }
+      Seq(("1", YearMonthIntervalType(YEAR, MONTH)),
+        ("1", YearMonthIntervalType(YEAR, MONTH)),
+        ("1-1", YearMonthIntervalType(YEAR)),
         ("1-1", YearMonthIntervalType(MONTH)),
         ("INTERVAL '1-1' YEAR TO MONTH", YearMonthIntervalType(YEAR)),
         ("INTERVAL '1-1' YEAR TO MONTH", YearMonthIntervalType(MONTH)),

@@ -105,8 +105,10 @@ object IntervalUtils {
   private val yearMonthRegex = (s"^$yearMonthPatternString$$").r
   private val yearMonthLiteralRegex =
     (s"(?i)^INTERVAL\\s+([+|-])?'$yearMonthPatternString'\\s+YEAR\\s+TO\\s+MONTH$$").r
+  private val yearMonthIndividualPatternString = "([+|-])?(\\d+)"
+  private val yearMonthIndividualRegex = (s"^$yearMonthIndividualPatternString$$").r
   private val yearMonthIndividualLiteralRegex =
-    (s"(?i)^INTERVAL\\s+([+|-])?'([+|-])?(\\d+)'\\s+(YEAR|MONTH)$$").r
+    (s"(?i)^INTERVAL\\s+([+|-])?'$yearMonthIndividualPatternString'\\s+(YEAR|MONTH)$$").r
 
   private def getSign(firstSign: String, secondSign: String): Int = {
     (firstSign, secondSign) match {
@@ -123,9 +125,10 @@ object IntervalUtils {
       endField: Byte): Int = {
 
     val supportedFormat = Map(
-      (YM.YEAR, YM.MONTH) -> Seq("[+|-]y-m", "INTERVAL [+|-]'[+|-]y-m' YEAR TO MONTH"),
-      (YM.YEAR, YM.YEAR) -> Seq("INTERVAL [+|-]'[+|-]y' YEAR"),
-      (YM.MONTH, YM.MONTH) -> Seq("INTERVAL [+|-]'[+|-]m' MONTH")
+      (YM.YEAR, YM.MONTH) ->
+        Seq("[+|-]y-m", "[+|-]m", "INTERVAL [+|-]'[+|-]y-m' YEAR TO MONTH"),
+      (YM.YEAR, YM.YEAR) -> Seq("[+|-]y", "INTERVAL [+|-]'[+|-]y' YEAR"),
+      (YM.MONTH, YM.MONTH) -> Seq("[+|-]m", "INTERVAL [+|-]'[+|-]m' MONTH")
     )
 
     def checkStringIntervalType(targetStartField: Byte, targetEndField: Byte): Unit = {
@@ -147,20 +150,37 @@ object IntervalUtils {
       case yearMonthLiteralRegex(firstSign, secondSign, year, month) =>
         checkStringIntervalType(YM.YEAR, YM.MONTH)
         toYMInterval(year, month, getSign(firstSign, secondSign))
+      case yearMonthIndividualRegex(secondSign, value) =>
+        safeToYMInterval {
+          val sign = getSign("+", secondSign)
+          if (endField == YM.YEAR) {
+            sign * Math.toIntExact(value.toLong * MONTHS_PER_YEAR)
+          } else if (startField == YM.MONTH) {
+            Math.toIntExact(sign * value.toLong)
+          } else {
+            throw new IllegalArgumentException(
+              s"Interval string does not match year-month format of " +
+                s"${supportedFormat((YM.YEAR, YM.MONTH))
+                  .map(format => s"`$format`").mkString(", ")} " +
+                s"when cast to ${YM(startField, endField).typeName}: ${input.toString}")
+          }
+        }
       case yearMonthIndividualLiteralRegex(firstSign, secondSign, value, suffix) =>
-        val sign = getSign(firstSign, secondSign)
-        if ("YEAR".equalsIgnoreCase(suffix)) {
-          checkStringIntervalType(YM.YEAR, YM.YEAR)
-          sign * Math.toIntExact(value.toLong * MONTHS_PER_YEAR)
-        } else {
-          checkStringIntervalType(YM.MONTH, YM.MONTH)
-          Math.toIntExact(sign * value.toLong)
+        safeToYMInterval {
+          val sign = getSign(firstSign, secondSign)
+          if ("YEAR".equalsIgnoreCase(suffix)) {
+            checkStringIntervalType(YM.YEAR, YM.YEAR)
+            sign * Math.toIntExact(value.toLong * MONTHS_PER_YEAR)
+          } else {
+            checkStringIntervalType(YM.MONTH, YM.MONTH)
+            Math.toIntExact(sign * value.toLong)
+          }
         }
       case _ => throw new IllegalArgumentException(
-        s"Interval string does not match year-month format of `[+|-]y-m` " +
-          s", `INTERVAL [+|-]'[+|-]y' YEAR`, `INTERVAL [+|-]'[+|-]y-m' YEAR TO MONTH` " +
-          s"or `INTERVAL [+|-]'[+|-]m' MONTH` when cast to " +
-          s"${YM(startField, endField).typeName}: ${input.toString}")
+        s"Interval string does not match year-month format of " +
+          s"${supportedFormat((YM.YEAR, YM.MONTH))
+            .map(format => s"`$format`").mkString(", ")} " +
+          s"when cast to ${YM(startField, endField).typeName}: ${input.toString}")
     }
   }
 
@@ -182,15 +202,21 @@ object IntervalUtils {
     }
   }
 
-  def toYMInterval(yearStr: String, monthStr: String, sign: Int): Int = {
+  private def safeToYMInterval(f: => Int): Int = {
     try {
-      val years = toLongWithRange(YEAR, yearStr, 0, Integer.MAX_VALUE / MONTHS_PER_YEAR)
-      val totalMonths = sign * (years * MONTHS_PER_YEAR + toLongWithRange(MONTH, monthStr, 0, 11))
-      Math.toIntExact(totalMonths)
+      f
     } catch {
       case NonFatal(e) =>
         throw new IllegalArgumentException(
           s"Error parsing interval year-month string: ${e.getMessage}", e)
+    }
+  }
+
+  private def toYMInterval(yearStr: String, monthStr: String, sign: Int): Int = {
+    safeToYMInterval {
+      val years = toLongWithRange(YEAR, yearStr, 0, Integer.MAX_VALUE / MONTHS_PER_YEAR)
+      val totalMonths = sign * (years * MONTHS_PER_YEAR + toLongWithRange(MONTH, monthStr, 0, 11))
+      Math.toIntExact(totalMonths)
     }
   }
 
