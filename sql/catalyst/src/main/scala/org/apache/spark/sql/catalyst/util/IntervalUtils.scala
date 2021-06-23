@@ -126,7 +126,7 @@ object IntervalUtils {
 
     val supportedFormat = Map(
       (YM.YEAR, YM.MONTH) ->
-        Seq("[+|-]y-m", "[+|-]m", "INTERVAL [+|-]'[+|-]y-m' YEAR TO MONTH"),
+        Seq("[+|-]y-m", "INTERVAL [+|-]'[+|-]y-m' YEAR TO MONTH"),
       (YM.YEAR, YM.YEAR) -> Seq("[+|-]y", "INTERVAL [+|-]'[+|-]y' YEAR"),
       (YM.MONTH, YM.MONTH) -> Seq("[+|-]m", "INTERVAL [+|-]'[+|-]m' MONTH")
     )
