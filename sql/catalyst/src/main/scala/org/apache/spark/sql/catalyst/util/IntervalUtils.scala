@@ -114,7 +114,7 @@ object IntervalUtils {
       endField: Byte): Int = {
 
     def truncatedMonth(month: String) : String = {
-      if (endField == YearMonthIntervalType.YEAR) "0" else month
+      if (endField == YM.YEAR) "0" else month
     }
 
     def getSigh(firstSign: String, secondSign: String): Int = {
@@ -144,7 +144,7 @@ object IntervalUtils {
         s"Interval string does not match year-month format of `[+|-]y-m` " +
           s", `INTERVAL [+|-]'[+|-]y' YEAR`, `INTERVAL [+|-]'[+|-]y-m' YEAR TO MONTH` " +
           s"or `INTERVAL [+|-]'[+|-]m' MONTH` when cast to " +
-          s"${YearMonthIntervalType(startField, endField).typeName}: ${input.toString}")
+          s"${YM(startField, endField).typeName}: ${input.toString}")
     }
   }
 
