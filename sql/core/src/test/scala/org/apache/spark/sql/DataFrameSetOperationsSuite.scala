@@ -924,6 +924,7 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-35756: unionByName support struct having same col names but different sequence") {
+    // struct having same col names but different sequence
     var df1 = Seq((1, Struct1(1, 2))).toDF("a", "b")
     var df2 = Seq((1, Struct2(1, 2))).toDF("a", "b")
     var unionDF = df1.unionByName(df2)
@@ -951,6 +952,17 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
 
     unionDF = df1.unionByName(df2)
     checkAnswer(unionDF, expected)
+
+    // sorting of sequence based on the lower case
+    df1 = Seq((1, Struct1(1, 2))).toDF("a", "b")
+    df2 = Seq((1, Struct2a(1, 2))).toDF("a", "b")
+    expected = Row(1, Row(1, 2, 5)) :: Row(1, Row(2, 1, 5)) :: Nil
+
+    unionDF = df1.unionByName(df2)
+    checkAnswer(unionDF, expected)
+
+    unionDF = df1.unionByName(df2, true)
+    checkAnswer(unionDF, expected)
   }
 }
 
@@ -966,6 +978,7 @@ case class UnionClass3(a: Int, b: Long)
 case class UnionClass4(A: Int, b: Long)
 case class Struct1(c1: Int, c2: Int)
 case class Struct2(c2: Int, c1: Int)
+case class Struct2a(C2: Int, c1: Int)
 case class Struct3(c3: Int)
 case class Struct3a(C3: Int)
 case class Struct4(c4: Int)
