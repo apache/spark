@@ -17,6 +17,7 @@
 
 from typing import TYPE_CHECKING, Union
 
+import pandas as pd
 from pandas.api.types import CategoricalDtype
 
 from pyspark.sql import functions as F
@@ -25,6 +26,7 @@ from pyspark.sql.types import IntegralType, StringType
 from pyspark.pandas.base import column_op, IndexOpsMixin
 from pyspark.pandas.data_type_ops.base import (
     DataTypeOps,
+    T_IndexOps,
     _as_categorical_type,
     _as_other_type,
     _as_string_type,
@@ -111,9 +113,7 @@ class StringOps(DataTypeOps):
     def rmod(self, left, right):
         raise TypeError("modulo can not be applied on string series or literals.")
 
-    def astype(
-        self, index_ops: Union["Index", "Series"], dtype: Union[str, type, Dtype]
-    ) -> Union["Index", "Series"]:
+    def astype(self, index_ops: T_IndexOps, dtype: Union[str, type, Dtype]) -> T_IndexOps:
         dtype, spark_type = pandas_on_spark_type(dtype)
 
         if isinstance(dtype, CategoricalDtype):
@@ -134,3 +134,14 @@ class StringOps(DataTypeOps):
             return _as_string_type(index_ops, dtype)
         else:
             return _as_other_type(index_ops, dtype, spark_type)
+
+
+class StringExtensionOps(StringOps):
+    """
+    The class for binary operations of pandas-on-Spark objects with spark type StringType,
+    and dtype StringDtype.
+    """
+
+    def restore(self, col: pd.Series) -> pd.Series:
+        """Restore column when to_pandas."""
+        return col.astype(self.dtype)

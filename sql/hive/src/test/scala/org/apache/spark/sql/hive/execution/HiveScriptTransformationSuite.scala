@@ -32,6 +32,7 @@ import org.apache.spark.sql.execution._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.YearMonthIntervalType._
 import org.apache.spark.unsafe.types.CalendarInterval
 
 class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with TestHiveSingleton {
@@ -521,22 +522,20 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
 
   }
 
-  test("SPARK-34879: HiveInspectors supports DayTimeIntervalType and YearMonthIntervalType") {
+  test("SPARK-34879: HiveInspectors supports DayTimeIntervalType") {
     assume(TestUtils.testCommandAvailable("/bin/bash"))
     withTempView("v") {
       val df = Seq(
         (Duration.ofDays(1),
           Duration.ofSeconds(100).plusNanos(123456),
-          Duration.of(Long.MaxValue, ChronoUnit.MICROS),
-          Period.ofMonths(10)),
+          Duration.of(Long.MaxValue, ChronoUnit.MICROS)),
         (Duration.ofDays(1),
           Duration.ofSeconds(100).plusNanos(1123456789),
-          Duration.ofSeconds(Long.MaxValue / DateTimeConstants.MICROS_PER_SECOND),
-          Period.ofMonths(10))
-      ).toDF("a", "b", "c", "d")
+          Duration.ofSeconds(Long.MaxValue / DateTimeConstants.MICROS_PER_SECOND))
+      ).toDF("a", "b", "c")
       df.createTempView("v")
 
-      // Hive serde supports DayTimeIntervalType/YearMonthIntervalType as input and output data type
+      // Hive serde supports DayTimeIntervalType as input and output data type
       checkAnswer(
         df,
         (child: SparkPlan) => createScriptTransformationExec(
@@ -545,12 +544,37 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
             // TODO(SPARK-35733): Check all day-time interval types in HiveInspectors tests
             AttributeReference("a", DayTimeIntervalType())(),
             AttributeReference("b", DayTimeIntervalType())(),
-            AttributeReference("c", DayTimeIntervalType())(),
-            // TODO(SPARK-35772): Check all year-month interval types in HiveInspectors tests
-            AttributeReference("d", YearMonthIntervalType())()),
+            AttributeReference("c", DayTimeIntervalType())()),
           child = child,
           ioschema = hiveIOSchema),
-        df.select($"a", $"b", $"c", $"d").collect())
+        df.select($"a", $"b", $"c").collect())
+    }
+  }
+
+  test("SPARK-35722: HiveInspectors supports all type of YearMonthIntervalType") {
+    assume(TestUtils.testCommandAvailable("/bin/bash"))
+    withTempView("v") {
+      val schema = StructType(Seq(
+        StructField("a", YearMonthIntervalType(YEAR)),
+        StructField("b", YearMonthIntervalType(YEAR, MONTH)),
+        StructField("c", YearMonthIntervalType(MONTH))
+      ))
+      val df = spark.createDataFrame(sparkContext.parallelize(Seq(
+        Row(Period.ofMonths(13), Period.ofMonths(13), Period.ofMonths(13))
+      )), schema)
+
+      // Hive serde supports YearMonthIntervalType as input and output data type
+      checkAnswer(
+        df,
+        (child: SparkPlan) => createScriptTransformationExec(
+          script = "cat",
+          output = Seq(
+            AttributeReference("a", YearMonthIntervalType(YEAR))(),
+            AttributeReference("b", YearMonthIntervalType(YEAR, MONTH))(),
+            AttributeReference("c", YearMonthIntervalType(MONTH))()),
+          child = child,
+          ioschema = hiveIOSchema),
+        df.select($"a", $"b", $"c").collect())
     }
   }
 

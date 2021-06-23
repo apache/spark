@@ -739,7 +739,7 @@ case class AdaptiveExecutionContext(session: SparkSession, qe: QueryExecution) {
    * The subquery-reuse map shared across the entire query.
    *
    * [[ExprId]] is required in the cache to correctly identify all subquery reuses as the
-   * [[PlanAdaptiveSubqueries]] inserts the same instance of planned physical subqueries from
+   * [[PlanAdaptiveSubqueries]] rule inserts the same instance of planned physical subqueries from
    * [[CommonScalarSubqueriesExec]] nodes into the plan multiple times, only the [[ExprId]] of the
    * wrapper [[ScalarSubquery]] is different in those cases.
    */

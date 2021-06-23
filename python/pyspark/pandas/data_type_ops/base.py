@@ -18,7 +18,7 @@
 import numbers
 from abc import ABCMeta
 from itertools import chain
-from typing import Any, Optional, TYPE_CHECKING, Union
+from typing import Any, Optional, TypeVar, Union, TYPE_CHECKING
 
 import numpy as np
 import pandas as pd
@@ -43,14 +43,28 @@ from pyspark.sql.types import (
     UserDefinedType,
 )
 from pyspark.pandas.typedef import Dtype, extension_dtypes
-from pyspark.pandas.typedef.typehints import extension_object_dtypes_available
+from pyspark.pandas.typedef.typehints import (
+    extension_dtypes_available,
+    extension_float_dtypes_available,
+    extension_object_dtypes_available,
+)
+
+if extension_dtypes_available:
+    from pandas import Int8Dtype, Int16Dtype, Int32Dtype, Int64Dtype
+
+if extension_float_dtypes_available:
+    from pandas import Float32Dtype, Float64Dtype
 
 if extension_object_dtypes_available:
-    from pandas import BooleanDtype
+    from pandas import BooleanDtype, StringDtype
 
 if TYPE_CHECKING:
+    from pyspark.pandas.base import IndexOpsMixin  # noqa: F401 (SPARK-34943)
     from pyspark.pandas.indexes import Index  # noqa: F401 (SPARK-34943)
     from pyspark.pandas.series import Series  # noqa: F401 (SPARK-34943)
+
+
+T_IndexOps = TypeVar("T_IndexOps", bound="IndexOpsMixin")
 
 
 def is_valid_operand_for_numeric_arithmetic(operand: Any, *, allow_bool: bool = True) -> bool:
@@ -92,8 +106,8 @@ def transform_boolean_operand_to_numeric(
 
 
 def _as_categorical_type(
-    index_ops: Union["Series", "Index"], dtype: CategoricalDtype, spark_type: DataType
-) -> Union["Index", "Series"]:
+    index_ops: T_IndexOps, dtype: CategoricalDtype, spark_type: DataType
+) -> T_IndexOps:
     """Cast `index_ops` to categorical dtype, given `dtype` and `spark_type`."""
     assert isinstance(dtype, CategoricalDtype)
     if dtype.categories is None:
@@ -121,9 +135,7 @@ def _as_categorical_type(
         )
 
 
-def _as_bool_type(
-    index_ops: Union["Series", "Index"], dtype: Union[str, type, Dtype]
-) -> Union["Index", "Series"]:
+def _as_bool_type(index_ops: T_IndexOps, dtype: Union[str, type, Dtype]) -> T_IndexOps:
     """Cast `index_ops` to BooleanType Spark type, given `dtype`."""
     from pyspark.pandas.internal import InternalField
 
@@ -140,11 +152,8 @@ def _as_bool_type(
 
 
 def _as_string_type(
-    index_ops: Union["Series", "Index"],
-    dtype: Union[str, type, Dtype],
-    *,
-    null_str: str = str(None)
-) -> Union["Index", "Series"]:
+    index_ops: T_IndexOps, dtype: Union[str, type, Dtype], *, null_str: str = str(None)
+) -> T_IndexOps:
     """Cast `index_ops` to StringType Spark type, given `dtype` and `null_str`,
     representing null Spark column.
     """
@@ -162,8 +171,8 @@ def _as_string_type(
 
 
 def _as_other_type(
-    index_ops: Union["Series", "Index"], dtype: Union[str, type, Dtype], spark_type: DataType
-) -> Union["Index", "Series"]:
+    index_ops: T_IndexOps, dtype: Union[str, type, Dtype], spark_type: DataType
+) -> T_IndexOps:
     """Cast `index_ops` to a `dtype` (`spark_type`) that needs no pre-processing.
 
     Destination types that need pre-processing: CategoricalDtype, BooleanType, and StringType.
@@ -195,8 +204,14 @@ class DataTypeOps(object, metaclass=ABCMeta):
         from pyspark.pandas.data_type_ops.date_ops import DateOps
         from pyspark.pandas.data_type_ops.datetime_ops import DatetimeOps
         from pyspark.pandas.data_type_ops.null_ops import NullOps
-        from pyspark.pandas.data_type_ops.num_ops import IntegralOps, FractionalOps, DecimalOps
-        from pyspark.pandas.data_type_ops.string_ops import StringOps
+        from pyspark.pandas.data_type_ops.num_ops import (
+            DecimalOps,
+            FractionalExtensionOps,
+            FractionalOps,
+            IntegralExtensionOps,
+            IntegralOps,
+        )
+        from pyspark.pandas.data_type_ops.string_ops import StringOps, StringExtensionOps
         from pyspark.pandas.data_type_ops.udt_ops import UDTOps
 
         if isinstance(dtype, CategoricalDtype):
@@ -204,11 +219,25 @@ class DataTypeOps(object, metaclass=ABCMeta):
         elif isinstance(spark_type, DecimalType):
             return object.__new__(DecimalOps)
         elif isinstance(spark_type, FractionalType):
-            return object.__new__(FractionalOps)
+            if extension_float_dtypes_available and type(dtype) in [Float32Dtype, Float64Dtype]:
+                return object.__new__(FractionalExtensionOps)
+            else:
+                return object.__new__(FractionalOps)
         elif isinstance(spark_type, IntegralType):
-            return object.__new__(IntegralOps)
+            if extension_dtypes_available and type(dtype) in [
+                Int8Dtype,
+                Int16Dtype,
+                Int32Dtype,
+                Int64Dtype,
+            ]:
+                return object.__new__(IntegralExtensionOps)
+            else:
+                return object.__new__(IntegralOps)
         elif isinstance(spark_type, StringType):
-            return object.__new__(StringOps)
+            if extension_object_dtypes_available and isinstance(dtype, StringDtype):
+                return object.__new__(StringExtensionOps)
+            else:
+                return object.__new__(StringOps)
         elif isinstance(spark_type, BooleanType):
             if extension_object_dtypes_available and isinstance(dtype, BooleanDtype):
                 return object.__new__(BooleanExtensionOps)
@@ -303,10 +332,13 @@ class DataTypeOps(object, metaclass=ABCMeta):
         """Prepare column when from_pandas."""
         return col.replace({np.nan: None})
 
-    def isnull(self, index_ops: Union["Index", "Series"]) -> Union["Series", "Index"]:
-        return index_ops._with_new_scol(index_ops.spark.column.isNull())
+    def isnull(self, index_ops: T_IndexOps) -> T_IndexOps:
+        return index_ops._with_new_scol(
+            index_ops.spark.column.isNull(),
+            field=index_ops._internal.data_fields[0].copy(
+                dtype=np.dtype("bool"), spark_type=BooleanType(), nullable=False
+            ),
+        )
 
-    def astype(
-        self, index_ops: Union["Index", "Series"], dtype: Union[str, type, Dtype]
-    ) -> Union["Index", "Series"]:
+    def astype(self, index_ops: T_IndexOps, dtype: Union[str, type, Dtype]) -> T_IndexOps:
         raise TypeError("astype can not be applied to %s." % self.pretty_name)

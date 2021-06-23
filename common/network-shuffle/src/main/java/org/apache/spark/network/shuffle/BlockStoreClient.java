@@ -178,4 +178,24 @@ public abstract class BlockStoreClient implements Closeable {
       MergeFinalizerListener listener) {
     throw new UnsupportedOperationException();
   }
+
+  /**
+   * Get the meta information of a merged block from the remote shuffle service.
+   *
+   * @param host the host of the remote node.
+   * @param port the port of the remote node.
+   * @param shuffleId shuffle id.
+   * @param reduceId reduce id.
+   * @param listener the listener to receive chunk counts.
+   *
+   * @since 3.2.0
+   */
+  public void getMergedBlockMeta(
+      String host,
+      int port,
+      int shuffleId,
+      int reduceId,
+      MergedBlocksMetaListener listener) {
+    throw new UnsupportedOperationException();
+  }
 }
