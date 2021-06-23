@@ -587,7 +587,7 @@ object Decimal {
     }
   }
 
-  private def calculateWholeNumberPartLength(bigDecimal: JavaBigDecimal): Int = {
+  private def numDigitsInIntegralPart(bigDecimal: JavaBigDecimal): Int = {
       bigDecimal.precision - bigDecimal.scale
   }
 
@@ -602,7 +602,7 @@ object Decimal {
       val bigDecimal = stringToJavaBigDecimal(str)
       // We fast fail because constructing a very large JavaBigDecimal to Decimal is very slow.
       // For example: Decimal("6.0790316E+25569151")
-      if (calculateWholeNumberPartLength(bigDecimal) > DecimalType.MAX_PRECISION) {
+      if (numDigitsInIntegralPart(bigDecimal) > DecimalType.MAX_PRECISION) {
         null
       } else {
         Decimal(bigDecimal)
@@ -618,7 +618,7 @@ object Decimal {
       val bigDecimal = stringToJavaBigDecimal(str)
       // We fast fail because constructing a very large JavaBigDecimal to Decimal is very slow.
       // For example: Decimal("6.0790316E+25569151")
-      if (calculateWholeNumberPartLength(bigDecimal) > DecimalType.MAX_PRECISION) {
+      if (numDigitsInIntegralPart(bigDecimal) > DecimalType.MAX_PRECISION) {
         throw QueryExecutionErrors.outOfDecimalTypeRangeError(str)
       } else {
         Decimal(bigDecimal)
