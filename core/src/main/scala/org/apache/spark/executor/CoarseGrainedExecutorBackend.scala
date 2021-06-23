@@ -267,11 +267,10 @@ private[spark] class CoarseGrainedExecutorBackend(
    * executor exits differently. For e.g. when an executor goes down,
    * back-end may not want to take the parent process down.
    */
-  protected def exitExecutor(
-      code: Int,
-      reason: String,
-      throwable: Throwable = null,
-      notifyDriver: Boolean = true): Unit = {
+  protected def exitExecutor(code: Int,
+                             reason: String,
+                             throwable: Throwable = null,
+                             notifyDriver: Boolean = true) = {
     if (stopping.compareAndSet(false, true)) {
       val message = "Executor self-exiting due to : " + reason
       if (throwable != null) {
