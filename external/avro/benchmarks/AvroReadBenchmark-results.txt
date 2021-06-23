@@ -127,4 +127,3 @@ Filters pushdown:                         Best Time(ms)   Avg Time(ms)   Stdev(m
 w/o filters                                        9215           9309         146          0.1        9215.2       1.0X
 pushdown disabled                                  9535           9637          96          0.1        9534.9       1.0X
 w/ filters                                         3969           3994          22          0.3        3969.5       2.3X
-

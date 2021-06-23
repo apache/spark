@@ -7,4 +7,3 @@ Output Single Double Column                        3595           3595          
 Output Int and String Column                       7491           7504          18          2.1         476.3       0.4X
 Output Partitions                                  5518           5663         205          2.9         350.8       0.6X
 Output Buckets                                     7467           7581         161          2.1         474.7       0.4X
-
