@@ -123,6 +123,7 @@ from pyspark.pandas.typedef import (
 from pyspark.pandas.plot import PandasOnSparkPlotAccessor
 
 if TYPE_CHECKING:
+    from pyspark.pandas.groupby import DataFrameGroupBy  # noqa: F401 (SPARK-34943)
     from pyspark.pandas.indexes import Index  # noqa: F401 (SPARK-34943)
     from pyspark.pandas.series import Series  # noqa: F401 (SPARK-34943)
 
@@ -4824,6 +4825,13 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         index_col: Optional[Union[str, List[str]]] = None,
         **options
     ) -> None:
+        """An alias for :func:`DataFrame.spark.to_spark_io`.
+        See :meth:`pyspark.pandas.spark.accessors.SparkFrameMethods.to_spark_io`.
+
+        .. deprecated:: 3.2.0
+            Use :func:`DataFrame.spark.to_spark_io` instead.
+        """
+        warnings.warn("Deprecated in 3.2, Use spark.to_spark_io instead.", FutureWarning)
         return self.spark.to_spark_io(path, format, mode, partition_cols, index_col, **options)
 
     to_spark_io.__doc__ = SparkFrameMethods.to_spark_io.__doc__
@@ -11579,6 +11587,13 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         row_2  10  20  30  40
         """
         return DataFrame(pd.DataFrame.from_dict(data, orient=orient, dtype=dtype, columns=columns))
+
+    def _build_groupby(
+        self, by: List[Union["Series", Tuple]], as_index: bool, dropna: bool
+    ) -> "DataFrameGroupBy":
+        from pyspark.pandas.groupby import DataFrameGroupBy
+
+        return DataFrameGroupBy._build(self, by, as_index=as_index, dropna=dropna)
 
     def _to_internal_pandas(self):
         """

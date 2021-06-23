@@ -82,6 +82,7 @@ object Cast {
     case (StringType, _: DayTimeIntervalType) => true
     case (StringType, _: YearMonthIntervalType) => true
 
+    case (_: DayTimeIntervalType, _: DayTimeIntervalType) => true
     case (_: YearMonthIntervalType, _: YearMonthIntervalType) => true
 
     case (StringType, _: NumericType) => true
@@ -172,6 +173,9 @@ object Cast {
           case (f1, f2) =>
             resolvableNullability(f1.nullable, f2.nullable) && canUpCast(f1.dataType, f2.dataType)
         }
+
+    case (_: DayTimeIntervalType, _: DayTimeIntervalType) => true
+    case (_: YearMonthIntervalType, _: YearMonthIntervalType) => true
 
     case (from: UserDefinedType[_], to: UserDefinedType[_]) if to.acceptsType(from) => true
 
@@ -577,6 +581,8 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       it: DayTimeIntervalType): Any => Any = from match {
     case StringType => buildCast[UTF8String](_, s =>
       IntervalUtils.castStringToDTInterval(s, it.startField, it.endField))
+    case _: DayTimeIntervalType => buildCast[Long](_, s =>
+      IntervalUtils.durationToMicros(IntervalUtils.microsToDuration(s), it.endField))
   }
 
   private[this] def castToYearMonthInterval(
@@ -1476,6 +1482,12 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
         code"""
           $evPrim = $util.castStringToDTInterval($c, (byte)${it.startField}, (byte)${it.endField});
         """
+    case _: DayTimeIntervalType =>
+      val util = IntervalUtils.getClass.getCanonicalName.stripSuffix("$")
+      (c, evPrim, _) =>
+        code"""
+          $evPrim = $util.durationToMicros($util.microsToDuration($c), (byte)${it.endField});
+        """
   }
 
   private[this] def castToYearMonthIntervalCode(
@@ -2063,6 +2075,7 @@ object AnsiCast {
     case (StringType, _: DayTimeIntervalType) => true
     case (StringType, _: YearMonthIntervalType) => true
 
+    case (_: DayTimeIntervalType, _: DayTimeIntervalType) => true
     case (_: YearMonthIntervalType, _: YearMonthIntervalType) => true
 
     case (StringType, DateType) => true

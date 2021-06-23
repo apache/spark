@@ -4018,6 +4018,30 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     val minuteToSecDF = spark.sql("SELECT INTERVAL '10:03.775808000' MINUTE TO SECOND")
     assert(minuteToSecDF.schema.head.dataType === DayTimeIntervalType(2, 3))
   }
+
+  test("SPARK-35545: split SubqueryExpression's children field into outer attributes and " +
+    "join conditions") {
+    withView("t") {
+      Seq((0, 1), (1, 2)).toDF("c1", "c2").createOrReplaceTempView("t")
+      checkAnswer(sql(
+        s"""with
+           |start as (
+           |  select c1, c2 from t A where not exists (
+           |    select * from t B where A.c1 = B.c1 - 2
+           |  )
+           |),
+           |
+           |end as (
+           |  select c1, c2 from t A where not exists (
+           |    select * from t B where A.c1 < B.c1
+           |  )
+           |)
+           |
+           |select * from start S join end E on S.c1 = E.c1
+           |""".stripMargin),
+        Row(1, 2, 1, 2) :: Nil)
+    }
+  }
 }
 
 case class Foo(bar: Option[String])

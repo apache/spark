@@ -95,6 +95,7 @@ case object YearMonthIntervalType extends AbstractDataType {
   val DEFAULT = YearMonthIntervalType(YEAR, MONTH)
 
   def apply(): YearMonthIntervalType = DEFAULT
+  def apply(field: Byte): YearMonthIntervalType = YearMonthIntervalType(field, field)
 
   override private[sql] def defaultConcreteType: DataType = DEFAULT
 
