@@ -1352,8 +1352,13 @@ object RepartitionByExpression {
 }
 
 /**
- * This operator does not guarantee the output partitioning, because the partition number will be
- * optimized by AQE.
+ * This operator used to rebalance the query result output partitions, so that every partition
+ * is of a reasonable size (not too small and not too big). It can take column names as parameters,
+ * and try its best to partition the query result by these columns. If there are skews, Spark will
+ * split the skewed partitions, to make these partitions not too big. This operator is useful when
+ * you need to write the result of this query to a table, to avoid too small/big files.
+ *
+ * Note that, only AQE is enabled does the operator make sense.
  */
 case class RebalancePartitions(
     partitionExpressions: Seq[Expression],
@@ -1361,12 +1366,10 @@ case class RebalancePartitions(
   override def maxRows: Option[Long] = child.maxRows
   override def output: Seq[Attribute] = child.output
 
-  lazy val numPartitions: Int = conf.numShufflePartitions
-
   def partitioning: Partitioning = if (partitionExpressions.nonEmpty) {
-    HashPartitioning(partitionExpressions, numPartitions)
+    HashPartitioning(partitionExpressions, conf.numShufflePartitions)
   } else {
-    RoundRobinPartitioning(numPartitions)
+    RoundRobinPartitioning(conf.numShufflePartitions)
   }
 
   override protected def withNewChildInternal(newChild: LogicalPlan): RebalancePartitions =
