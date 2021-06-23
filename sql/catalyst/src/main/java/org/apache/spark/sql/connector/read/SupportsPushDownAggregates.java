@@ -23,7 +23,14 @@ import org.apache.spark.sql.types.StructType;
 
 /**
  * A mix-in interface for {@link ScanBuilder}. Data source can implement this interface to
- * push down aggregates to the data source.
+ * push down aggregates. Depends on the data source implementation, the aggregates may not
+ * be able to push down, partially push down and have final aggregate at Spark, or completely
+ * push down.
+ *
+ * When pushing down operators, Spark pushes down filter to the data source first, then push down
+ * aggregates or apply column pruning. Depends on data source implementation, aggregates may or
+ * may not be able to be pushed down with filters. If pushed filters still need to be evaluated
+ * after scanning, aggregates can't be pushed down.
  *
  * @since 3.2.0
  */
@@ -32,18 +39,28 @@ public interface SupportsPushDownAggregates extends ScanBuilder {
 
   /**
    * Pushes down Aggregation to datasource.
-   * The Aggregation can be pushed down only if all the Aggregate Functions can
-   * be pushed down.
    */
-  boolean pushAggregation(Aggregation aggregation);
+  AggregatePushDownResult pushAggregation(Aggregation aggregation);
 
-  /**
-   * Returns the schema of the pushed down aggregates
-   */
-  StructType getPushDownAggSchema();
+  class AggregatePushDownResult {
 
-  /**
-   * Indicate if the data source only supports global aggregated push down
-   */
-  boolean supportsGlobalAggregatePushDownOnly();
+    // 0: aggregates not pushed down
+    // 1: aggregates partially pushed down, need to final aggregate in Spark
+    // 2: aggregates completely pushed down, doesn't need to final aggregate in Spark
+    int pushedDownResult = 0;
+    StructType pushedDownAggSchema;
+
+    public AggregatePushDownResult(int pushedDownResult, StructType pushedDownAggSchema) {
+      this.pushedDownResult = pushedDownResult;
+      this.pushedDownAggSchema = pushedDownAggSchema;
+    }
+
+    public int getPushedDownResult() {
+      return pushedDownResult;
+    }
+
+    public StructType getPushedDownAggSchema() {
+      return pushedDownAggSchema;
+    }
+  }
 }

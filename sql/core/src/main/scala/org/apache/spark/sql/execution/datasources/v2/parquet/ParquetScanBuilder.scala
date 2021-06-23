@@ -18,10 +18,10 @@
 package org.apache.spark.sql.execution.datasources.v2.parquet
 
 import scala.collection.JavaConverters._
-
 import org.apache.spark.SparkException
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.expressions.{Aggregation, Count, FieldReference, LiteralValue, Max, Min}
+import org.apache.spark.sql.connector.read.SupportsPushDownAggregates.AggregatePushDownResult
 import org.apache.spark.sql.connector.read.{Scan, SupportsPushDownAggregates, SupportsPushDownFilters}
 import org.apache.spark.sql.execution.datasources.PartitioningAwareFileIndex
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetFilters, SparkToParquetSchemaConverter}
@@ -75,10 +75,10 @@ case class ParquetScanBuilder(
 
   private var pushedAggregations = Aggregation.empty
 
-  override def pushAggregation(aggregation: Aggregation): Boolean = {
+  override def pushAggregation(aggregation: Aggregation): AggregatePushDownResult = {
     if (!sparkSession.sessionState.conf.parquetAggregatePushDown ||
       aggregation.groupByColumns.nonEmpty || pushedParquetFilters.length > 0) {
-      return false
+      return new AggregatePushDownResult (0, StructType(Array.empty[StructField]))
     }
 
     aggregation.aggregateExpressions.foreach {
@@ -88,7 +88,8 @@ case class ParquetScanBuilder(
             .dataType match {
             // not push down nested column and Timestamp (INT96 sort order is undefined, parquet
             // doesn't return statistics for INT96)
-            case StructType(_) | ArrayType(_, _) | MapType(_, _, _) | TimestampType => return false
+            case StructType(_) | ArrayType(_, _) | MapType(_, _, _) | TimestampType =>
+              return new AggregatePushDownResult (0, StructType(Array.empty[StructField]))
             case _ =>
           }
         case _ =>
@@ -100,7 +101,8 @@ case class ParquetScanBuilder(
             .dataType match {
             // not push down nested column and Timestamp (INT96 sort order is undefined, parquet
             // doesn't return statistics for INT96)
-            case StructType(_) | ArrayType(_, _) | MapType(_, _, _) | TimestampType => return false
+            case StructType(_) | ArrayType(_, _) | MapType(_, _, _) | TimestampType =>
+              return new AggregatePushDownResult (0, StructType(Array.empty[StructField]))
             case _ =>
           }
         case _ =>
@@ -108,15 +110,14 @@ case class ParquetScanBuilder(
       }
       // not push down distinct count
       case Count(_, _, false) =>
-      case _ => return false
+      case _ =>
+        return return new AggregatePushDownResult (0, StructType(Array.empty[StructField]))
     }
     this.pushedAggregations = aggregation
-    true
+    new AggregatePushDownResult (1, getPushDownAggSchema)
   }
 
-  override def supportsGlobalAggregatePushDownOnly(): Boolean = true
-
-  override def getPushDownAggSchema: StructType = {
+  private def getPushDownAggSchema: StructType = {
     var schema = new StructType()
     pushedAggregations.aggregateExpressions.foreach {
       case Max(col, _) => col match {

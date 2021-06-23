@@ -94,7 +94,7 @@ object PushDownUtils extends PredicateHelper {
         val translatedGroupBys = groupBy.map(columnAsString)
 
         val agg = Aggregation(translatedAggregates.flatten, translatedGroupBys.flatten)
-        if (r.pushAggregation(agg)) {
+        if (r.pushAggregation(agg).getPushedDownResult > 0) {
           agg
         } else {
           Aggregation.empty
