@@ -522,19 +522,17 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
 
   }
 
-  test("SPARK-34879: HiveInspectors supports DayTimeIntervalType and YearMonthIntervalType") {
+  test("SPARK-34879: HiveInspectors supports DayTimeIntervalType") {
     assume(TestUtils.testCommandAvailable("/bin/bash"))
     withTempView("v") {
       val df = Seq(
         (Duration.ofDays(1),
           Duration.ofSeconds(100).plusNanos(123456),
-          Duration.of(Long.MaxValue, ChronoUnit.MICROS),
-          Period.ofMonths(10)),
+          Duration.of(Long.MaxValue, ChronoUnit.MICROS)),
         (Duration.ofDays(1),
           Duration.ofSeconds(100).plusNanos(1123456789),
-          Duration.ofSeconds(Long.MaxValue / DateTimeConstants.MICROS_PER_SECOND),
-          Period.ofMonths(10))
-      ).toDF("a", "b", "c", "d")
+          Duration.ofSeconds(Long.MaxValue / DateTimeConstants.MICROS_PER_SECOND))
+      ).toDF("a", "b", "c")
       df.createTempView("v")
 
       // Hive serde supports DayTimeIntervalType/YearMonthIntervalType as input and output data type
@@ -546,11 +544,10 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
             // TODO(SPARK-35733): Check all day-time interval types in HiveInspectors tests
             AttributeReference("a", DayTimeIntervalType())(),
             AttributeReference("b", DayTimeIntervalType())(),
-            AttributeReference("c", DayTimeIntervalType())(),
-            AttributeReference("d", YearMonthIntervalType())()),
+            AttributeReference("c", DayTimeIntervalType())()),
           child = child,
           ioschema = hiveIOSchema),
-        df.select($"a", $"b", $"c", $"d").collect())
+        df.select($"a", $"b", $"c").collect())
     }
   }
 
