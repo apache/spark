@@ -1357,11 +1357,13 @@ object RepartitionByExpression {
  */
 case class AdaptiveRepartition(
     partitionExpressions: Seq[Expression],
-    child: LogicalPlan) extends RepartitionOperation {
-  override def shuffle: Boolean = true
-  override def numPartitions: Int = conf.numShufflePartitions
+    child: LogicalPlan) extends UnaryNode {
+  override def maxRows: Option[Long] = child.maxRows
+  override def output: Seq[Attribute] = child.output
 
-  override lazy val partitioning: Partitioning = if (partitionExpressions.nonEmpty) {
+  lazy val numPartitions: Int = conf.numShufflePartitions
+
+  def partitioning: Partitioning = if (partitionExpressions.nonEmpty) {
     HashPartitioning(partitionExpressions, numPartitions)
   } else {
     RoundRobinPartitioning(numPartitions)
