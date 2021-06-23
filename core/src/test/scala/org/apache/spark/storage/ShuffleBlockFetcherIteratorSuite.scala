@@ -1301,6 +1301,44 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     verifyLocalBlocksFromFallback(iterator)
   }
 
+  test("SPARK-32922: failure to fetch local push-merged meta of a single merged block " +
+    "should not drop the fetch of other local push-merged blocks") {
+    val blockManager = mock(classOf[BlockManager])
+    val localDirs = Array("testPath1", "testPath2")
+    prepareForFallbackToLocalBlocks(
+      blockManager, Map(SHUFFLE_MERGER_IDENTIFIER -> localDirs))
+    val localHost = "test-local-host"
+    val localBmId = BlockManagerId("test-client", localHost, 1)
+    val pushMergedBmId = BlockManagerId(SHUFFLE_MERGER_IDENTIFIER, localHost, 1)
+    val blocksByAddress = Map[BlockManagerId, Seq[(BlockId, Long, Int)]](
+      (localBmId, toBlockList(Seq(ShuffleBlockId(0, 0, 2), ShuffleBlockId(0, 3, 2)), 1L, 1)),
+      (pushMergedBmId, toBlockList(Seq(ShuffleBlockId(0, SHUFFLE_PUSH_MAP_ID, 2),
+        ShuffleBlockId(0, SHUFFLE_PUSH_MAP_ID, 3)), 2L, SHUFFLE_PUSH_MAP_ID)))
+    doThrow(new RuntimeException("Forced error")).when(blockManager)
+      .getLocalMergedBlockMeta(ShuffleBlockId(0, SHUFFLE_PUSH_MAP_ID, 2), localDirs)
+    // Create a valid chunk meta for partition 3
+    val bitmaps = Array(new RoaringBitmap)
+    bitmaps(0).add(1) // chunk 0 has mapId 1
+    doReturn(createMockPushMergedBlockMeta(bitmaps.length, bitmaps)).when(blockManager)
+      .getLocalMergedBlockMeta(ShuffleBlockId(0, SHUFFLE_PUSH_MAP_ID, 3), localDirs)
+    // Return valid buffer for chunk in partition 3
+    doReturn(Seq(createMockManagedBuffer(2))).when(blockManager)
+      .getLocalMergedBlockData(ShuffleBlockId(0, SHUFFLE_PUSH_MAP_ID, 3), localDirs)
+    val iterator = createShuffleBlockIteratorWithDefaults(blocksByAddress,
+      blockManager = Some(blockManager))
+    val (id1, _) = iterator.next()
+    assert(id1 === ShuffleBlockId(0, 0, 2))
+    val (id2, _) = iterator.next()
+    assert(id2 === ShuffleBlockId(0, 3, 2))
+    val (id3, _) = iterator.next()
+    assert(id3 === ShuffleBlockId(0, 1, 2))
+    val (id4, _) = iterator.next()
+    assert(id4 === ShuffleBlockId(0, 2, 2))
+    val (id5, _) = iterator.next()
+    assert(id5 === ShuffleBlockChunkId(0, 3, 0))
+    assert(!iterator.hasNext)
+  }
+
   test("SPARK-32922: failure to fetch push-merged block as well as fallback block should throw " +
     "a FetchFailedException") {
     val blockManager = mock(classOf[BlockManager])

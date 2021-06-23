@@ -522,7 +522,7 @@ final class ShuffleBlockFetcherIterator(
         }
       }
       createFetchRequests(curBlocks.toSeq, address, isLast = true, collectedRemoteRequests,
-        enableBatchFetch = enableBatchFetch, forMergedBlocks = areMergedBlocks)
+        enableBatchFetch = enableBatchFetch, forMergedMetas = areMergedBlocks)
     }
   }
 
@@ -746,21 +746,20 @@ final class ShuffleBlockFetcherIterator(
       result match {
         case r @ SuccessFetchResult(blockId, mapIndex, address, size, buf, isNetworkReqDone) =>
           if (address != blockManager.blockManagerId) {
-           if (hostLocalBlocks.contains(blockId -> mapIndex) ||
-             pushBasedFetchHelper.isLocalPushMergedBlockAddress(address)) {
-             // It is a host local block or a local shuffle chunk
-             shuffleMetrics.incLocalBlocksFetched(1)
-             shuffleMetrics.incLocalBytesRead(buf.size)
-           } else {
-             // Could be a remote shuffle chunk or remote block
-             numBlocksInFlightPerAddress(address) = numBlocksInFlightPerAddress(address) - 1
-             shuffleMetrics.incRemoteBytesRead(buf.size)
-             if (buf.isInstanceOf[FileSegmentManagedBuffer]) {
-               shuffleMetrics.incRemoteBytesReadToDisk(buf.size)
-             }
-             shuffleMetrics.incRemoteBlocksFetched(1)
-             bytesInFlight -= size
-           }
+            if (hostLocalBlocks.contains(blockId -> mapIndex) ||
+              pushBasedFetchHelper.isLocalPushMergedBlockAddress(address)) {
+              // It is a host local block or a local shuffle chunk
+              shuffleMetrics.incLocalBlocksFetched(1)
+              shuffleMetrics.incLocalBytesRead(buf.size)
+            } else {
+              numBlocksInFlightPerAddress(address) = numBlocksInFlightPerAddress(address) - 1
+              shuffleMetrics.incRemoteBytesRead(buf.size)
+              if (buf.isInstanceOf[FileSegmentManagedBuffer]) {
+                shuffleMetrics.incRemoteBytesReadToDisk(buf.size)
+              }
+              shuffleMetrics.incRemoteBlocksFetched(1)
+              bytesInFlight -= size
+            }
           }
           if (isNetworkReqDone) {
             reqsInFlight -= 1
@@ -914,7 +913,7 @@ final class ShuffleBlockFetcherIterator(
               // Update total number of blocks to fetch, reflecting the multiple local shuffle
               // chunks.
               numBlocksToFetch += bufs.size
-              bufs.zipWithIndex { case (buf, chunkId) =>
+              bufs.zipWithIndex.foreach { case (buf, chunkId) =>
                 buf.retain()
                 val shuffleChunkId = ShuffleBlockChunkId(shuffleId, reduceId, chunkId)
                 pushBasedFetchHelper.addChunk(shuffleChunkId, bitmaps(chunkId))

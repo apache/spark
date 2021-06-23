@@ -189,33 +189,33 @@ private class PushBasedFetchHelper(
   private def fetchPushMergedLocalBlocks(
       hostLocalDirManager: HostLocalDirManager,
       pushMergedLocalBlocks: mutable.LinkedHashSet[BlockId]): Unit = {
-    val cachedMergerDirs = hostLocalDirManager.getCachedHostLocalDirs.get(
+    val cachedPushedMergedDirs = hostLocalDirManager.getCachedHostLocalDirsFor(
       SHUFFLE_MERGER_IDENTIFIER)
-    if (cachedMergerDirs.isDefined) {
-      logDebug(s"Fetching local push-merged blocks with cached executors dir: " +
-        s"${cachedMergerDirs.get.mkString(", ")}")
+    if (cachedPushedMergedDirs.isDefined) {
+      logDebug(s"Fetch the local push-merged blocks with cached merged dirs: " +
+        s"${cachedPushedMergedDirs.get.mkString(", ")}")
       pushMergedLocalBlocks.foreach { blockId =>
-        fetchPushMergedLocalBlock(blockId, cachedMergerDirs.get,
+        fetchPushMergedLocalBlock(blockId, cachedPushedMergedDirs.get,
           localShuffleMergerBlockMgrId)
       }
     } else {
-      logDebug(s"Asynchronous fetching local push-merged blocks without cached executors dir")
+      logDebug(s"Asynchronous fetch the local push-merged blocks without cached merged dirs")
       hostLocalDirManager.getHostLocalDirs(localShuffleMergerBlockMgrId.host,
         localShuffleMergerBlockMgrId.port, Array(SHUFFLE_MERGER_IDENTIFIER)) {
         case Success(dirs) =>
-          pushMergedLocalBlocks.takeWhile {
+          logDebug(s"Fetched merged dirs in " +
+            s"${TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startTimeNs)} ms")
+          pushMergedLocalBlocks.foreach {
             blockId =>
               logDebug(s"Successfully fetched local dirs: " +
                 s"${dirs.get(SHUFFLE_MERGER_IDENTIFIER).mkString(", ")}")
               fetchPushMergedLocalBlock(blockId, dirs(SHUFFLE_MERGER_IDENTIFIER),
                 localShuffleMergerBlockMgrId)
           }
-          logDebug(s"Got local push-merged blocks (without cached executors' dir) in " +
-            s"${TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startTimeNs)} ms")
         case Failure(throwable) =>
           // If we see an exception with getting the local dirs for local push-merged blocks,
           // we fallback to fetch the original blocks. We do not report block fetch failure.
-          logWarning(s"Error occurred while getting the local dirs for local push-merged " +
+          logWarning(s"Error while fetching the merged dirs for local push-merged " +
             s"blocks: ${pushMergedLocalBlocks.mkString(", ")}. Fetch the original blocks instead",
             throwable)
           pushMergedLocalBlocks.foreach {
@@ -233,19 +233,17 @@ private class PushBasedFetchHelper(
    * @param blockId ShuffleBlockId to be fetched
    * @param localDirs Local directories where the push-merged shuffle files are stored
    * @param blockManagerId BlockManagerId
-   * @return Boolean represents successful or failed fetch
    */
   private[this] def fetchPushMergedLocalBlock(
       blockId: BlockId,
       localDirs: Array[String],
-      blockManagerId: BlockManagerId): Boolean = {
+      blockManagerId: BlockManagerId): Unit = {
     try {
       val shuffleBlockId = blockId.asInstanceOf[ShuffleBlockId]
       val chunksMeta = blockManager.getLocalMergedBlockMeta(shuffleBlockId, localDirs)
       iterator.addToResultsQueue(PushMergedLocalMetaFetchResult(
         shuffleBlockId.shuffleId, shuffleBlockId.reduceId, chunksMeta.getNumChunks,
         chunksMeta.readChunkBitmaps(), localDirs))
-      true
     } catch {
       case e: Exception =>
         // If we see an exception with reading a local push-merged meta, we fallback to
@@ -255,7 +253,6 @@ private class PushBasedFetchHelper(
           s"prepare to fetch the original blocks", e)
         iterator.addToResultsQueue(
           FallbackOnPushMergedFailureResult(blockId, blockManagerId, 0, isNetworkReqDone = false))
-        false
     }
   }
 
