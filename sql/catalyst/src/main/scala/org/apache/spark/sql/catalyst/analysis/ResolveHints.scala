@@ -176,7 +176,7 @@ object ResolveHints {
   object ResolveCoalesceHints extends Rule[LogicalPlan] {
 
     val COALESCE_HINT_NAMES: Set[String] =
-      Set("COALESCE", "REPARTITION", "REPARTITION_BY_RANGE", "ADAPTIVE_REPARTITION")
+      Set("COALESCE", "REPARTITION", "REPARTITION_BY_RANGE", "REPARTITION_BY_AQE")
 
     /**
      * This function handles hints for "COALESCE" and "REPARTITION".
@@ -188,7 +188,7 @@ object ResolveHints {
       val hintName = hint.name.toUpperCase(Locale.ROOT)
 
       def createRepartitionByExpression(
-          numPartitions: Option[Int], partitionExprs: Seq[Any]): RepartitionOperation = {
+          numPartitions: Option[Int], partitionExprs: Seq[Any]): LogicalPlan = {
         val sortOrders = partitionExprs.filter(_.isInstanceOf[SortOrder])
         if (sortOrders.nonEmpty) {
           throw QueryCompilationErrors.invalidRepartitionExpressionsError(sortOrders)
@@ -265,7 +265,7 @@ object ResolveHints {
             createRepartition(shuffle = false, hint)
           case "REPARTITION_BY_RANGE" =>
             createRepartitionByRange(hint)
-          case "ADAPTIVE_REPARTITION" =>
+          case "REPARTITION_BY_AQE" =>
             createRepartition(shuffle = true, hint, true)
           case _ => hint
         }
