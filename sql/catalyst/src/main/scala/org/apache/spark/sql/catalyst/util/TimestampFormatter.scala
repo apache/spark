@@ -80,7 +80,13 @@ sealed trait TimestampFormatter extends Serializable {
       s"The method `format(localDateTime: LocalDateTime)` should be implemented in the formatter " +
         "of timestamp without time zone")
 
-  def validatePatternString(): Unit
+  /**
+   * Validates the pattern string.
+   * @param checkLegacy  if true and the pattern is invalid, check whether the pattern is valid for
+   *                     legacy formatters and show hints for using legacy formatter.
+   *                     Otherwise, simply check the pattern string.
+   */
+  def validatePatternString(checkLegacy: Boolean): Unit
 }
 
 class Iso8601TimestampFormatter(
@@ -140,10 +146,17 @@ class Iso8601TimestampFormatter(
     localDateTime.format(formatter)
   }
 
-  override def validatePatternString(): Unit = {
-    try {
-      formatter
-    } catch checkLegacyFormatter(pattern, legacyFormatter.validatePatternString)
+  override def validatePatternString(checkLegacy: Boolean): Unit = {
+    if (checkLegacy) {
+      try {
+        formatter
+      } catch checkLegacyFormatter(pattern,
+        legacyFormatter.validatePatternString(checkLegacy = true))
+    } else {
+      try {
+        formatter
+      } catch checkInvalidPattern(pattern)
+    }
   }
 }
 
@@ -275,7 +288,7 @@ class LegacyFastTimestampFormatter(
     format(instantToMicros(instant))
   }
 
-  override def validatePatternString(): Unit = fastDateFormat
+  override def validatePatternString(checkLegacy: Boolean): Unit = fastDateFormat
 }
 
 class LegacySimpleTimestampFormatter(
@@ -306,7 +319,7 @@ class LegacySimpleTimestampFormatter(
     format(instantToMicros(instant))
   }
 
-  override def validatePatternString(): Unit = sdf
+  override def validatePatternString(checkLegacy: Boolean): Unit = sdf
 }
 
 object LegacyDateFormats extends Enumeration {
@@ -335,7 +348,7 @@ object TimestampFormatter {
       new Iso8601TimestampFormatter(
         pattern, zoneId, locale, legacyFormat, isParsing)
     }
-    formatter.validatePatternString()
+    formatter.validatePatternString(checkLegacy = !forTimestampWithoutTZ)
     formatter
   }
 

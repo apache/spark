@@ -333,7 +333,12 @@ class DataTypeOps(object, metaclass=ABCMeta):
         return col.replace({np.nan: None})
 
     def isnull(self, index_ops: T_IndexOps) -> T_IndexOps:
-        return index_ops._with_new_scol(index_ops.spark.column.isNull())
+        return index_ops._with_new_scol(
+            index_ops.spark.column.isNull(),
+            field=index_ops._internal.data_fields[0].copy(
+                dtype=np.dtype("bool"), spark_type=BooleanType(), nullable=False
+            ),
+        )
 
     def astype(self, index_ops: T_IndexOps, dtype: Union[str, type, Dtype]) -> T_IndexOps:
         raise TypeError("astype can not be applied to %s." % self.pretty_name)

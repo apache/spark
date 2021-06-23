@@ -72,7 +72,7 @@ from pyspark.pandas.window import Rolling, Expanding
 if TYPE_CHECKING:
     from pyspark.pandas.frame import DataFrame  # noqa: F401 (SPARK-34943)
     from pyspark.pandas.indexes.base import Index  # noqa: F401 (SPARK-34943)
-    from pyspark.pandas.groupby import DataFrameGroupBy, SeriesGroupBy  # noqa: F401 (SPARK-34943)
+    from pyspark.pandas.groupby import GroupBy  # noqa: F401 (SPARK-34943)
     from pyspark.pandas.series import Series  # noqa: F401 (SPARK-34943)
 
 
@@ -2114,12 +2114,12 @@ class Frame(object, metaclass=ABCMeta):
     # TODO: by argument only support the grouping name and as_index only for now. Documentation
     # should be updated when it's supported.
     def groupby(
-        self,
+        self: T_Frame,
         by: Union[Any, Tuple, "Series", List[Union[Any, Tuple, "Series"]]],
         axis: Union[int, str] = 0,
         as_index: bool = True,
         dropna: bool = True,
-    ) -> Union["DataFrameGroupBy", "SeriesGroupBy"]:
+    ) -> "GroupBy[T_Frame]":
         """
         Group DataFrame or Series using a Series of columns.
 
@@ -2199,8 +2199,6 @@ class Frame(object, metaclass=ABCMeta):
         2.0  2  5
         NaN  1  4
         """
-        from pyspark.pandas.groupby import DataFrameGroupBy, SeriesGroupBy
-
         if isinstance(by, ps.DataFrame):
             raise ValueError("Grouper for '{}' not 1-dimensional".format(type(by).__name__))
         elif isinstance(by, ps.Series):
@@ -2242,14 +2240,13 @@ class Frame(object, metaclass=ABCMeta):
         if axis != 0:
             raise NotImplementedError('axis should be either 0 or "index" currently.')
 
-        if isinstance(self, ps.DataFrame):
-            return DataFrameGroupBy._build(self, new_by, as_index=as_index, dropna=dropna)
-        elif isinstance(self, ps.Series):
-            return SeriesGroupBy._build(self, new_by, as_index=as_index, dropna=dropna)
-        else:
-            raise TypeError(
-                "Constructor expects DataFrame or Series; however, " "got [%s]" % (self,)
-            )
+        return self._build_groupby(by=new_by, as_index=as_index, dropna=dropna)
+
+    @abstractmethod
+    def _build_groupby(
+        self: T_Frame, by: List[Union["Series", Tuple]], as_index: bool, dropna: bool
+    ) -> "GroupBy[T_Frame]":
+        pass
 
     def bool(self) -> bool:
         """
