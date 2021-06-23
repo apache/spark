@@ -18,11 +18,12 @@
 package org.apache.spark.sql.execution.datasources.v2.parquet
 
 import scala.collection.JavaConverters._
+
 import org.apache.spark.SparkException
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.expressions.{Aggregation, Count, FieldReference, LiteralValue, Max, Min}
-import org.apache.spark.sql.connector.read.SupportsPushDownAggregates.AggregatePushDownResult
 import org.apache.spark.sql.connector.read.{Scan, SupportsPushDownAggregates, SupportsPushDownFilters}
+import org.apache.spark.sql.connector.read.SupportsPushDownAggregates.AggregatePushDownResult
 import org.apache.spark.sql.execution.datasources.PartitioningAwareFileIndex
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetFilters, SparkToParquetSchemaConverter}
 import org.apache.spark.sql.execution.datasources.v2.FileScanBuilder
