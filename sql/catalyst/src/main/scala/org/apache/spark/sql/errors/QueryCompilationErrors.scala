@@ -1521,7 +1521,7 @@ private[spark] object QueryCompilationErrors {
       function: String, e: NumberFormatException): Throwable = {
     // The second argument of '{function}' function needs to be an integer
     new AnalysisException(
-      errorClass = "SECOND_FUNCTION_ARGUMENT_NOT_INTEGER_ERROR",
+      errorClass = "SECOND_FUNCTION_ARGUMENT_NOT_INTEGER",
       messageParameters = Seq(function),
       cause = Some(e))
   }

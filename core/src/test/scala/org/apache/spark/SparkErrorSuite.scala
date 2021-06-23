@@ -60,6 +60,10 @@ class SparkErrorSuite extends SparkFunSuite {
 
   test("Error classes are correctly formatted") {
     val errorClassFileContents = IOUtils.toString(errorClassesUrl.openStream())
+    val mapper = JsonMapper.builder()
+      .addModule(DefaultScalaModule)
+      .enable(SerializationFeature.INDENT_OUTPUT)
+      .build()
     val rewrittenString = mapper.configure(SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS, true)
       .writeValueAsString(errorClassToInfoMap)
     assert(rewrittenString == errorClassFileContents)
@@ -78,6 +82,10 @@ class SparkErrorSuite extends SparkFunSuite {
 
   test("Round trip") {
     val tmpFile = File.createTempFile("rewritten", ".json")
+    val mapper = JsonMapper.builder()
+      .addModule(DefaultScalaModule)
+      .enable(SerializationFeature.INDENT_OUTPUT)
+      .build()
     mapper.writeValue(tmpFile, errorClassToInfoMap)
     val rereadErrorClassToInfoMap = mapper.readValue(
       tmpFile, new TypeReference[Map[String, ErrorInfo]]() {})
@@ -91,35 +99,35 @@ class SparkErrorSuite extends SparkFunSuite {
     assert(ex1.getMessage == "Cannot find error class ''")
 
     val ex2 = intercept[IllegalArgumentException] {
-      getMessage("LOREM_IPSUM_ERROR", Seq.empty)
+      getMessage("LOREM_IPSUM", Seq.empty)
     }
-    assert(ex2.getMessage == "Cannot find error class 'LOREM_IPSUM_ERROR'")
+    assert(ex2.getMessage == "Cannot find error class 'LOREM_IPSUM'")
   }
 
   test("Check if message parameters match message format") {
     // Requires 2 args
     intercept[IllegalFormatException] {
-      getMessage("MISSING_COLUMN_ERROR", Seq.empty)
+      getMessage("MISSING_COLUMN", Seq.empty)
     }
 
     // Does not fail with too many args (expects 0 args)
-    assert(getMessage("DIVIDE_BY_ZERO_ERROR", Seq("foo", "bar")) == "divide by zero")
+    assert(getMessage("DIVIDE_BY_ZERO", Seq("foo", "bar")) == "divide by zero")
   }
 
   test("Error message is formatted") {
-    assert(getMessage("MISSING_COLUMN_ERROR", Seq("foo", "bar")) ==
+    assert(getMessage("MISSING_COLUMN", Seq("foo", "bar")) ==
       "cannot resolve 'foo' given input columns: [bar]")
   }
 
   test("Try catching SparkError") {
     try {
       throw new SparkException(
-        errorClass = "WRITING_JOB_ABORTED_ERROR",
+        errorClass = "WRITING_JOB_ABORTED",
         messageParameters = Seq.empty,
         cause = null)
     } catch {
       case e: SparkError =>
-        assert(e.errorClass.contains("WRITING_JOB_ABORTED_ERROR"))
+        assert(e.errorClass.contains("WRITING_JOB_ABORTED"))
         assert(e.sqlState.contains("40000"))
       case _: Throwable =>
         // Should not end up here

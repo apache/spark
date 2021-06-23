@@ -23,7 +23,6 @@ import scala.collection.immutable.SortedMap
 
 import com.fasterxml.jackson.annotation.JsonIgnore
 import com.fasterxml.jackson.core.`type`.TypeReference
-import com.fasterxml.jackson.databind.SerializationFeature
 import com.fasterxml.jackson.databind.json.JsonMapper
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
 
@@ -49,12 +48,12 @@ case class ErrorInfo(sqlState: Option[String], message: Seq[String]) {
 object SparkError {
   val errorClassesUrl: URL =
     Utils.getSparkClassLoader.getResource("error/error-classes.json")
-  val mapper: JsonMapper = JsonMapper.builder()
-    .addModule(DefaultScalaModule)
-    .enable(SerializationFeature.INDENT_OUTPUT)
-    .build()
-  val errorClassToInfoMap: SortedMap[String, ErrorInfo] =
+  val errorClassToInfoMap: SortedMap[String, ErrorInfo] = {
+    val mapper: JsonMapper = JsonMapper.builder()
+      .addModule(DefaultScalaModule)
+      .build()
     mapper.readValue(errorClassesUrl, new TypeReference[SortedMap[String, ErrorInfo]]() {})
+  }
 
   def getMessage(errorClass: String, messageParameters: Seq[String]): String = {
     val errorInfo = errorClassToInfoMap.getOrElse(errorClass,

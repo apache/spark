@@ -317,7 +317,7 @@ object QueryParsingErrors {
 
   def duplicateKeysError(key: String, ctx: ParserRuleContext): Throwable = {
     // Found duplicate keys '$key'
-    new ParseException(errorClass = "DUPLICATE_KEY_ERROR", messageParameters = Seq(key), ctx)
+    new ParseException(errorClass = "DUPLICATE_KEY", messageParameters = Seq(key), ctx)
   }
 
   def unexpectedFomatForSetConfigurationError(ctx: SetConfigurationContext): Throwable = {
