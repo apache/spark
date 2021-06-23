@@ -41,6 +41,11 @@ object FileStreamSink extends Logging {
    * be read.
    */
   def hasMetadata(path: Seq[String], hadoopConf: Configuration, sqlConf: SQLConf): Boolean = {
+    // User explicitly configs to ignore sink metadata.
+    if (sqlConf.fileStreamSinkMetadataIgnored) {
+      return false
+    }
+
     path match {
       case Seq(singlePath) =>
         val hdfsPath = new Path(singlePath)

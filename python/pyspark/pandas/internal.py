@@ -1170,11 +1170,7 @@ class InternalFrame(object):
         """Create arguments for `restore_index`."""
         column_names = []
         fields = self.index_fields.copy()
-        ext_fields = {
-            col: field
-            for col, field in zip(self.index_spark_column_names, self.index_fields)
-            if isinstance(field.dtype, extension_dtypes)
-        }
+
         for spark_column, column_name, field in zip(
             self.data_spark_columns, self.data_spark_column_names, self.data_fields
         ):
@@ -1187,8 +1183,6 @@ class InternalFrame(object):
             else:
                 column_names.append(column_name)
                 fields.append(field)
-                if isinstance(field.dtype, extension_dtypes):
-                    ext_fields[column_name] = field
 
         return dict(
             index_columns=self.index_spark_column_names,
@@ -1197,7 +1191,6 @@ class InternalFrame(object):
             column_labels=self.column_labels,
             column_label_names=self.column_label_names,
             fields=fields,
-            ext_fields=ext_fields,
         )
 
     @staticmethod
@@ -1210,7 +1203,6 @@ class InternalFrame(object):
         column_labels: List[Tuple],
         column_label_names: List[Tuple],
         fields: List[InternalField] = None,
-        ext_fields: Dict[str, InternalField] = None,
     ) -> pd.DataFrame:
         """
         Restore pandas DataFrame indices using the metadata.
@@ -1222,7 +1214,6 @@ class InternalFrame(object):
         :param column_labels: the column labels after restored.
         :param column_label_names: the column label names after restored.
         :param fields: the fields after restored.
-        :param ext_fields: the map from the original column names to extension data fields.
         :return: the restored pandas DataFrame
 
         >>> from numpy import dtype
@@ -1248,7 +1239,6 @@ class InternalFrame(object):
         ...             struct_field=StructField(name='b', dataType=LongType(), nullable=False),
         ...         ),
         ...     ],
-        ...     ext_fields=None,
         ... )  # doctest: +NORMALIZE_WHITESPACE
         lv1  x  y   z
         idx
@@ -1256,9 +1246,6 @@ class InternalFrame(object):
         20   b  k  20
         30   c  j  30
         """
-        if ext_fields is not None and len(ext_fields) > 0:
-            pdf = pdf.astype({col: field.dtype for col, field in ext_fields.items()}, copy=True)
-
         for col, field in zip(pdf.columns, fields):
             pdf[col] = DataTypeOps(field.dtype, field.spark_type).restore(pdf[col])
 

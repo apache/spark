@@ -53,21 +53,21 @@ object DataTypeTestUtils {
   val numericTypeWithoutDecimal: Set[DataType] = integralType ++ Set(DoubleType, FloatType)
 
   val dayTimeIntervalTypes: Seq[DayTimeIntervalType] = Seq(
-    DayTimeIntervalType(DAY, DAY),
+    DayTimeIntervalType(DAY),
     DayTimeIntervalType(DAY, HOUR),
     DayTimeIntervalType(DAY, MINUTE),
     DayTimeIntervalType(DAY, SECOND),
-    DayTimeIntervalType(HOUR, HOUR),
+    DayTimeIntervalType(HOUR),
     DayTimeIntervalType(HOUR, MINUTE),
     DayTimeIntervalType(HOUR, SECOND),
-    DayTimeIntervalType(MINUTE, MINUTE),
+    DayTimeIntervalType(MINUTE),
     DayTimeIntervalType(MINUTE, SECOND),
-    DayTimeIntervalType(SECOND, SECOND))
+    DayTimeIntervalType(SECOND))
 
   val yearMonthIntervalTypes: Seq[YearMonthIntervalType] = Seq(
     YearMonthIntervalType(YEAR, MONTH),
-    YearMonthIntervalType(YEAR, YEAR),
-    YearMonthIntervalType(MONTH, MONTH))
+    YearMonthIntervalType(YEAR),
+    YearMonthIntervalType(MONTH))
 
   /**
    * Instances of all [[NumericType]]s and [[CalendarIntervalType]]

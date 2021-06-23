@@ -24,7 +24,19 @@ import inspect
 import sys
 from collections.abc import Mapping
 from functools import partial, wraps, reduce
-from typing import Any, Generic, Iterable, List, Optional, Tuple, TypeVar, Union, cast
+from typing import (
+    Any,
+    Callable,
+    Generic,
+    Iterable,
+    List,
+    Optional,
+    Tuple,
+    TypeVar,
+    Union,
+    cast,
+    TYPE_CHECKING,
+)
 
 import numpy as np
 import pandas as pd
@@ -37,6 +49,7 @@ from pyspark import sql as spark
 from pyspark.sql import functions as F, Column
 from pyspark.sql.types import (
     BooleanType,
+    DataType,
     DoubleType,
     FloatType,
     IntegerType,
@@ -87,11 +100,14 @@ from pyspark.pandas.strings import StringMethods
 from pyspark.pandas.typedef import (
     infer_return_type,
     spark_type_to_pandas_dtype,
+    Dtype,
     ScalarType,
     Scalar,
     SeriesType,
 )
 
+if TYPE_CHECKING:
+    from pyspark.pandas.groupby import SeriesGroupBy  # noqa: F401 (SPARK-34943)
 
 # This regular expression pattern is complied and defined here to avoid to compile the same
 # pattern every time it is used in _repr_ in Series.
@@ -449,7 +465,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
     spark = CachedAccessor("spark", SparkSeriesMethods)
 
     @property
-    def dtypes(self) -> np.dtype:
+    def dtypes(self) -> Dtype:
         """Return the dtype object of the underlying data.
 
         >>> s = ps.Series(list('abc'))
@@ -6082,7 +6098,14 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         else:
             return psser
 
-    def _reduce_for_stat_function(self, sfun, name, axis=None, numeric_only=None, **kwargs):
+    def _reduce_for_stat_function(
+        self,
+        sfun: Union[Callable[[Column], Column], Callable[[Column, DataType], Column]],
+        name: str_type,
+        axis: Optional[Union[int, str_type]] = None,
+        numeric_only: bool = True,
+        **kwargs: Any
+    ) -> Scalar:
         """
         Applies sfun to the column and returns a scalar
 
@@ -6104,11 +6127,11 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         if num_args == 1:
             # Only pass in the column if sfun accepts only one arg
-            scol = sfun(spark_column)
+            scol = cast(Callable[[Column], Column], sfun)(spark_column)
         else:  # must be 2
             assert num_args == 2
             # Pass in both the column and its data type if sfun accepts two args
-            scol = sfun(spark_column, spark_type)
+            scol = cast(Callable[[Column, DataType], Column], sfun)(spark_column, spark_type)
 
         min_count = kwargs.get("min_count", 0)
         if min_count > 0:
@@ -6116,6 +6139,13 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         result = unpack_scalar(self._internal.spark_frame.select(scol))
         return result if result is not None else np.nan
+
+    def _build_groupby(
+        self, by: List[Union["Series", Tuple]], as_index: bool, dropna: bool
+    ) -> "SeriesGroupBy":
+        from pyspark.pandas.groupby import SeriesGroupBy
+
+        return SeriesGroupBy._build(self, by, as_index=as_index, dropna=dropna)
 
     def __getitem__(self, key):
         try:

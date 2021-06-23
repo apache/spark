@@ -892,17 +892,28 @@ object IntervalUtils {
    * @throws ArithmeticException If numeric overflow occurs
    */
   def durationToMicros(duration: Duration): Long = {
+    durationToMicros(duration, DayTimeIntervalType.SECOND)
+  }
+
+  def durationToMicros(duration: Duration, endField: Byte): Long = {
     val seconds = duration.getSeconds
-    if (seconds == minDurationSeconds) {
+    val micros = if (seconds == minDurationSeconds) {
       val microsInSeconds = (minDurationSeconds + 1) * MICROS_PER_SECOND
       val nanoAdjustment = duration.getNano
       assert(0 <= nanoAdjustment && nanoAdjustment < NANOS_PER_SECOND,
         "Duration.getNano() must return the adjustment to the seconds field " +
-        "in the range from 0 to 999999999 nanoseconds, inclusive.")
+          "in the range from 0 to 999999999 nanoseconds, inclusive.")
       Math.addExact(microsInSeconds, (nanoAdjustment - NANOS_PER_SECOND) / NANOS_PER_MICROS)
     } else {
       val microsInSeconds = Math.multiplyExact(seconds, MICROS_PER_SECOND)
       Math.addExact(microsInSeconds, duration.getNano / NANOS_PER_MICROS)
+    }
+
+    endField match {
+      case DayTimeIntervalType.DAY => micros - micros % MICROS_PER_DAY
+      case DayTimeIntervalType.HOUR => micros - micros % MICROS_PER_HOUR
+      case DayTimeIntervalType.MINUTE => micros - micros % MICROS_PER_MINUTE
+      case DayTimeIntervalType.SECOND => micros
     }
   }
 
@@ -976,15 +987,14 @@ object IntervalUtils {
       absMonths = -absMonths
     }
     val year = s"$sign${absMonths / MONTHS_PER_YEAR}"
-    val month = s"${absMonths % MONTHS_PER_YEAR}"
-    val yearAndMonth = s"$year-$month"
+    val yearAndMonth = s"$year-${absMonths % MONTHS_PER_YEAR}"
     style match {
       case ANSI_STYLE =>
         val formatBuilder = new StringBuilder("INTERVAL '")
         if (startField == endField) {
           startField match {
             case YearMonthIntervalType.YEAR => formatBuilder.append(s"$year' YEAR")
-            case YearMonthIntervalType.MONTH => formatBuilder.append(s"$month' MONTH")
+            case YearMonthIntervalType.MONTH => formatBuilder.append(s"$months' MONTH")
           }
         } else {
           formatBuilder.append(s"$yearAndMonth' YEAR TO MONTH")

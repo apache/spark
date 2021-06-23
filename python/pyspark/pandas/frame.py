@@ -123,6 +123,7 @@ from pyspark.pandas.typedef import (
 from pyspark.pandas.plot import PandasOnSparkPlotAccessor
 
 if TYPE_CHECKING:
+    from pyspark.pandas.groupby import DataFrameGroupBy  # noqa: F401 (SPARK-34943)
     from pyspark.pandas.indexes import Index  # noqa: F401 (SPARK-34943)
     from pyspark.pandas.series import Series  # noqa: F401 (SPARK-34943)
 
@@ -628,7 +629,14 @@ class DataFrame(Frame, Generic[T]):
         """
         return [self.index, self.columns]
 
-    def _reduce_for_stat_function(self, sfun, name, axis=None, numeric_only=True, **kwargs):
+    def _reduce_for_stat_function(
+        self,
+        sfun: Union[Callable[[Column], Column], Callable[[Column, DataType], Column]],
+        name: str,
+        axis: Optional[Union[int, str]] = None,
+        numeric_only: bool = True,
+        **kwargs: Any
+    ) -> "Series":
         """
         Applies sfun to each column and returns a pd.Series where the number of rows equal the
         number of columns.
@@ -665,11 +673,13 @@ class DataFrame(Frame, Generic[T]):
                 if keep_column:
                     if num_args == 1:
                         # Only pass in the column if sfun accepts only one arg
-                        scol = sfun(spark_column)
+                        scol = cast(Callable[[Column], Column], sfun)(spark_column)
                     else:  # must be 2
                         assert num_args == 2
                         # Pass in both the column and its data type if sfun accepts two args
-                        scol = sfun(spark_column, spark_type)
+                        scol = cast(Callable[[Column, DataType], Column], sfun)(
+                            spark_column, spark_type
+                        )
 
                     if min_count > 0:
                         scol = F.when(
@@ -703,8 +713,8 @@ class DataFrame(Frame, Generic[T]):
             if len(pdf) <= limit:
                 return Series(pser)
 
-            @pandas_udf(returnType=as_spark_type(pser.dtype.type))
-            def calculate_columns_axis(*cols):
+            @pandas_udf(returnType=as_spark_type(pser.dtype.type))  # type: ignore
+            def calculate_columns_axis(*cols: pd.Series) -> pd.Series:
                 return getattr(pd.concat(cols, axis=1), name)(
                     axis=axis, numeric_only=numeric_only, **kwargs
                 )
@@ -4815,6 +4825,13 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         index_col: Optional[Union[str, List[str]]] = None,
         **options
     ) -> None:
+        """An alias for :func:`DataFrame.spark.to_spark_io`.
+        See :meth:`pyspark.pandas.spark.accessors.SparkFrameMethods.to_spark_io`.
+
+        .. deprecated:: 3.2.0
+            Use :func:`DataFrame.spark.to_spark_io` instead.
+        """
+        warnings.warn("Deprecated in 3.2, Use spark.to_spark_io instead.", FutureWarning)
         return self.spark.to_spark_io(path, format, mode, partition_cols, index_col, **options)
 
     to_spark_io.__doc__ = SparkFrameMethods.to_spark_io.__doc__
@@ -11570,6 +11587,13 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         row_2  10  20  30  40
         """
         return DataFrame(pd.DataFrame.from_dict(data, orient=orient, dtype=dtype, columns=columns))
+
+    def _build_groupby(
+        self, by: List[Union["Series", Tuple]], as_index: bool, dropna: bool
+    ) -> "DataFrameGroupBy":
+        from pyspark.pandas.groupby import DataFrameGroupBy
+
+        return DataFrameGroupBy._build(self, by, as_index=as_index, dropna=dropna)
 
     def _to_internal_pandas(self):
         """
