@@ -18,14 +18,15 @@
 pandas-on-Spark specific features.
 """
 import inspect
-from typing import Any, Optional, Tuple, Union, TYPE_CHECKING, cast
-import types
+from typing import Any, Callable, Optional, Tuple, Union, TYPE_CHECKING, cast
+from types import FunctionType
 
 import numpy as np  # noqa: F401
 import pandas as pd
+
 from pyspark.sql import functions as F
-from pyspark.sql.functions import pandas_udf, PandasUDFType
-from pyspark.sql.types import LongType, StructField, StructType
+from pyspark.sql.functions import pandas_udf
+from pyspark.sql.types import DataType, LongType, StructField, StructType
 
 from pyspark.pandas.internal import (
     InternalField,
@@ -45,6 +46,7 @@ from pyspark.pandas.utils import (
 if TYPE_CHECKING:
     from pyspark.pandas.frame import DataFrame  # noqa: F401 (SPARK-34943)
     from pyspark.pandas.series import Series  # noqa: F401 (SPARK-34943)
+    from pyspark.sql._typing import UserDefinedFunctionLike
 
 
 class PandasOnSparkFrameMethods(object):
@@ -201,7 +203,9 @@ class PandasOnSparkFrameMethods(object):
             ).resolved_copy
         )
 
-    def apply_batch(self, func, args=(), **kwds) -> "DataFrame":
+    def apply_batch(
+        self, func: Callable[..., pd.DataFrame], args: Tuple = (), **kwds: Any
+    ) -> "DataFrame":
         """
         Apply a function that takes pandas DataFrame and outputs pandas DataFrame. The pandas
         DataFrame given to the function is of a batch used internally.
@@ -338,7 +342,7 @@ class PandasOnSparkFrameMethods(object):
         from pyspark.pandas.frame import DataFrame
         from pyspark import pandas as ps
 
-        if not isinstance(func, types.FunctionType):
+        if not isinstance(func, FunctionType):
             assert callable(func), "the first argument should be a callable function."
             f = func
             func = lambda *args, **kwargs: f(*args, **kwargs)
@@ -409,7 +413,9 @@ class PandasOnSparkFrameMethods(object):
 
         return DataFrame(internal)
 
-    def transform_batch(self, func, *args, **kwargs) -> Union["DataFrame", "Series"]:
+    def transform_batch(
+        self, func: Callable[..., Union[pd.DataFrame, pd.Series]], *args: Any, **kwargs: Any
+    ) -> Union["DataFrame", "Series"]:
         """
         Transform chunks with a function that takes pandas DataFrame and outputs pandas DataFrame.
         The pandas DataFrame given to the function is of a batch used internally. The length of
@@ -557,30 +563,19 @@ class PandasOnSparkFrameMethods(object):
         original_func = func
         func = lambda o: original_func(o, *args, **kwargs)
 
-        names = self._psdf._internal.to_internal_spark_frame.schema.names
-
-        def pandas_concat(series):
-            # The input can only be a DataFrame for struct from Spark 3.0.
-            # This works around to make the input as a frame. See SPARK-27240
-            pdf = pd.concat(series, axis=1)
-            pdf.columns = names
-            return pdf
-
-        def apply_func(pdf):
+        def apply_func(pdf: pd.DataFrame) -> pd.DataFrame:
             return func(pdf).to_frame()
 
-        def pandas_extract(pdf, name):
-            # This is for output to work around a DataFrame for struct
-            # from Spark 3.0.  See SPARK-23836
-            return pdf[name]
-
-        def pandas_series_func(f):
+        def pandas_series_func(
+            f: Callable[[pd.DataFrame], pd.DataFrame], return_type: DataType
+        ) -> "UserDefinedFunctionLike":
             ff = f
-            return lambda *series: first_series(ff(*series))
 
-        def pandas_frame_func(f, field_name):
-            ff = f
-            return lambda *series: pandas_extract(ff(pandas_concat(series)), field_name)
+            @pandas_udf(returnType=return_type)  # type: ignore
+            def udf(pdf: pd.DataFrame) -> pd.Series:
+                return first_series(ff(pdf))
+
+            return udf
 
         if should_infer_schema:
             # Here we execute with the first 1000 to get the return type.
@@ -607,9 +602,7 @@ class PandasOnSparkFrameMethods(object):
                     self._psdf, apply_func, return_schema, retain_index=False
                 )
 
-                pudf = pandas_udf(  # type: ignore
-                    returnType=field.spark_type, functionType=PandasUDFType.SCALAR
-                )(pandas_series_func(output_func))
+                pudf = pandas_series_func(output_func, return_type=field.spark_type)
                 columns = self._psdf._internal.spark_columns
                 # TODO: Index will be lost in this case.
                 internal = self._psdf._internal.copy(
@@ -642,9 +635,7 @@ class PandasOnSparkFrameMethods(object):
                 )
                 columns = self_applied._internal.spark_columns
 
-                pudf = pandas_udf(returnType=return_schema, functionType=PandasUDFType.SCALAR)(
-                    output_func
-                )
+                pudf = pandas_udf(output_func, returnType=return_schema)  # type: ignore
                 temp_struct_column = verify_temp_column_name(
                     self_applied._internal.spark_frame, "__temp_struct__"
                 )
@@ -680,9 +671,7 @@ class PandasOnSparkFrameMethods(object):
                     self._psdf, apply_func, return_schema, retain_index=False
                 )
 
-                pudf = pandas_udf(  # type: ignore
-                    returnType=field.spark_type, functionType=PandasUDFType.SCALAR
-                )(pandas_series_func(output_func))
+                pudf = pandas_series_func(output_func, return_type=field.spark_type)
                 columns = self._psdf._internal.spark_columns
                 internal = self._psdf._internal.copy(
                     column_labels=[None],
@@ -705,9 +694,7 @@ class PandasOnSparkFrameMethods(object):
                 )
                 columns = self_applied._internal.spark_columns
 
-                pudf = pandas_udf(returnType=return_schema, functionType=PandasUDFType.SCALAR)(
-                    output_func
-                )
+                pudf = pandas_udf(output_func, returnType=return_schema)  # type: ignore
                 temp_struct_column = verify_temp_column_name(
                     self_applied._internal.spark_frame, "__temp_struct__"
                 )
@@ -727,7 +714,9 @@ class PandasOnSparkSeriesMethods(object):
     def __init__(self, series: "Series"):
         self._psser = series
 
-    def transform_batch(self, func, *args, **kwargs) -> "Series":
+    def transform_batch(
+        self, func: Callable[..., pd.Series], *args: Any, **kwargs: Any
+    ) -> "Series":
         """
         Transform the data with the function that takes pandas Series and outputs pandas Series.
         The pandas Series given to the function is of a batch used internally.
@@ -852,12 +841,14 @@ class PandasOnSparkSeriesMethods(object):
 
         return self._transform_batch(lambda c: func(c, *args, **kwargs), return_type)
 
-    def _transform_batch(self, func, return_type: Optional[Union[SeriesType, ScalarType]]):
+    def _transform_batch(
+        self, func: Callable[..., pd.Series], return_type: Optional[Union[SeriesType, ScalarType]]
+    ) -> "Series":
         from pyspark.pandas.groupby import GroupBy
         from pyspark.pandas.series import Series, first_series
         from pyspark import pandas as ps
 
-        if not isinstance(func, types.FunctionType):
+        if not isinstance(func, FunctionType):
             f = func
             func = lambda *args, **kwargs: f(*args, **kwargs)
 
@@ -886,14 +877,14 @@ class PandasOnSparkSeriesMethods(object):
         psdf = self._psser.to_frame()
         columns = psdf._internal.spark_column_names
 
-        def pandas_concat(series):
+        def pandas_concat(*series: pd.Series) -> pd.DataFrame:
             # The input can only be a DataFrame for struct from Spark 3.0.
             # This works around to make the input as a frame. See SPARK-27240
             pdf = pd.concat(series, axis=1)
             pdf.columns = columns
             return pdf
 
-        def apply_func(pdf):
+        def apply_func(pdf: pd.DataFrame) -> pd.DataFrame:
             return func(first_series(pdf)).to_frame()
 
         return_schema = StructType([StructField(SPARK_DEFAULT_SERIES_NAME, field.spark_type)])
@@ -901,16 +892,16 @@ class PandasOnSparkSeriesMethods(object):
             psdf, apply_func, return_schema, retain_index=False
         )
 
-        pudf = pandas_udf(  # type: ignore
-            returnType=field.spark_type, functionType=PandasUDFType.SCALAR
-        )(lambda *series: first_series(output_func(pandas_concat(series))))
+        @pandas_udf(returnType=field.spark_type)  # type: ignore
+        def pudf(*series: pd.Series) -> pd.Series:
+            return first_series(output_func(pandas_concat(*series)))
 
         return self._psser._with_new_scol(
             scol=pudf(*psdf._internal.spark_columns).alias(field.name), field=field
         )
 
 
-def _test():
+def _test() -> None:
     import os
     import doctest
     import sys

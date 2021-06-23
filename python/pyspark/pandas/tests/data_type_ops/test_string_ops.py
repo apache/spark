@@ -15,12 +15,16 @@
 # limitations under the License.
 #
 
+import unittest
+
 import numpy as np
 import pandas as pd
+from pandas.api.types import CategoricalDtype
 
 from pyspark import pandas as ps
 from pyspark.pandas.config import option_context
 from pyspark.pandas.tests.data_type_ops.testing_utils import TestCasesUtils
+from pyspark.pandas.typedef.typehints import extension_object_dtypes_available
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 
 
@@ -154,10 +158,68 @@ class StringOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         self.assert_eq(pser, psser.to_pandas())
         self.assert_eq(ps.from_pandas(pser), psser)
 
+    def test_isnull(self):
+        self.assert_eq(self.pser.isnull(), self.psser.isnull())
+
+    def test_astype(self):
+        pser = pd.Series(["1", "2", "3"])
+        psser = ps.from_pandas(pser)
+        self.assert_eq(pser.astype(int), psser.astype(int))
+        self.assert_eq(pser.astype(float), psser.astype(float))
+        self.assert_eq(pser.astype(np.float32), psser.astype(np.float32))
+        self.assert_eq(pser.astype(np.int32), psser.astype(np.int32))
+        self.assert_eq(pser.astype(np.int16), psser.astype(np.int16))
+        self.assert_eq(pser.astype(np.int8), psser.astype(np.int8))
+        self.assert_eq(pser.astype(str), psser.astype(str))
+        self.assert_eq(pser.astype(bool), psser.astype(bool))
+        self.assert_eq(pser.astype("category"), psser.astype("category"))
+        cat_type = CategoricalDtype(categories=["3", "1", "2"])
+        self.assert_eq(pser.astype(cat_type), psser.astype(cat_type))
+
+
+@unittest.skipIf(
+    not extension_object_dtypes_available, "pandas extension object dtypes are not available"
+)
+class StringExtensionOpsTest(StringOpsTest, PandasOnSparkTestCase, TestCasesUtils):
+    @property
+    def pser(self):
+        return pd.Series(["x", "y", "z", None], dtype="string")
+
+    @property
+    def psser(self):
+        return ps.from_pandas(self.pser)
+
+    def test_radd(self):
+        self.assert_eq("x" + self.pser, ("x" + self.psser).astype("string"))
+        self.assertRaises(TypeError, lambda: 1 + self.psser)
+
+    def test_mul(self):
+        self.assertRaises(TypeError, lambda: self.psser * "x")
+        self.assert_eq(self.pser * 1, self.psser * 1)
+
+        with option_context("compute.ops_on_diff_frames", True):
+            for pser, psser in self.pser_psser_pairs:
+                if psser.dtype in [np.int32, np.int64]:
+                    self.assert_eq(
+                        ps.Series(["x", "yy", "zzz", None]).astype("string"),
+                        (self.psser * psser).sort_index(),
+                    )
+                else:
+                    self.assertRaises(TypeError, lambda: self.psser * psser)
+
+    def test_from_to_pandas(self):
+        data = ["x", "y", "z", None]
+        pser = pd.Series(data, dtype="string")
+        psser = ps.Series(data, dtype="string")
+        self.assert_eq(pser, psser.to_pandas())
+        self.assert_eq(ps.from_pandas(pser), psser)
+
+    def test_isnull(self):
+        self.assert_eq(self.pser.isnull(), self.psser.isnull())
+
 
 if __name__ == "__main__":
-    import unittest
-    from pyspark.pandas.tests.data_type_ops.test_num_ops import *  # noqa: F401
+    from pyspark.pandas.tests.data_type_ops.test_string_ops import *  # noqa: F401
 
     try:
         import xmlrunner  # type: ignore[import]

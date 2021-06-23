@@ -503,8 +503,9 @@ private[spark] class BlockManager(
     }
 
     hostLocalDirManager = {
-      if (conf.get(config.SHUFFLE_HOST_LOCAL_DISK_READING_ENABLED) &&
-          !conf.get(config.SHUFFLE_USE_OLD_FETCH_PROTOCOL)) {
+      if ((conf.get(config.SHUFFLE_HOST_LOCAL_DISK_READING_ENABLED) &&
+          !conf.get(config.SHUFFLE_USE_OLD_FETCH_PROTOCOL)) ||
+          Utils.isPushBasedShuffleEnabled(conf)) {
         Some(new HostLocalDirManager(
           futureExecutionContext,
           conf.get(config.STORAGE_LOCAL_DISK_BY_EXECUTORS_CACHE_SIZE),
@@ -726,6 +727,27 @@ private[spark] class BlockManager(
         tmpFile.delete()
       }
     }
+  }
+
+  /**
+   * Get the local merged shuffle block data for the given block ID as multiple chunks.
+   * A merged shuffle file is divided into multiple chunks according to the index file.
+   * Instead of reading the entire file as a single block, we split it into smaller chunks
+   * which will be memory efficient when performing certain operations.
+   */
+  def getLocalMergedBlockData(
+      blockId: ShuffleBlockId,
+      dirs: Array[String]): Seq[ManagedBuffer] = {
+    shuffleManager.shuffleBlockResolver.getMergedBlockData(blockId, Some(dirs))
+  }
+
+  /**
+   * Get the local merged shuffle block meta data for the given block ID.
+   */
+  def getLocalMergedBlockMeta(
+      blockId: ShuffleBlockId,
+      dirs: Array[String]): MergedBlockMeta = {
+    shuffleManager.shuffleBlockResolver.getMergedBlockMeta(blockId, Some(dirs))
   }
 
   /**

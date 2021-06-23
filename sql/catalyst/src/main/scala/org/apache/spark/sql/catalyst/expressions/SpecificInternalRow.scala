@@ -194,9 +194,10 @@ final class SpecificInternalRow(val values: Array[MutableValue]) extends BaseGen
 
   private[this] def dataTypeToMutableValue(dataType: DataType): MutableValue = dataType match {
     // We use INT for DATE and YearMonthIntervalType internally
-    case IntegerType | DateType | YearMonthIntervalType => new MutableInt
+    case IntegerType | DateType | _: YearMonthIntervalType => new MutableInt
     // We use Long for Timestamp, Timestamp without time zone and DayTimeInterval internally
-    case LongType | TimestampType | TimestampWithoutTZType | DayTimeIntervalType => new MutableLong
+    case LongType | TimestampType | TimestampWithoutTZType | _: DayTimeIntervalType =>
+      new MutableLong
     case FloatType => new MutableFloat
     case DoubleType => new MutableDouble
     case BooleanType => new MutableBoolean

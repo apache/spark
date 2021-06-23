@@ -820,4 +820,9 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       }
     }
   }
+
+  test("SPARK-35679: instantToMicros should be able to return microseconds of Long.MinValue") {
+    assert(instantToMicros(microsToInstant(Long.MaxValue)) === Long.MaxValue)
+    assert(instantToMicros(microsToInstant(Long.MinValue)) === Long.MinValue)
+  }
 }

@@ -48,6 +48,8 @@ class TimestampWithoutTZType private() extends AtomicType {
    */
   override def defaultSize: Int = 8
 
+  override def typeName: String = "timestamp without time zone"
+
   private[spark] override def asNullable: TimestampWithoutTZType = this
 }
 

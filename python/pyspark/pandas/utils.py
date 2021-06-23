@@ -600,7 +600,7 @@ def column_labels_level(column_labels: List[Tuple]) -> int:
         return list(levels)[0]
 
 
-def name_like_string(name: Optional[Union[str, Tuple]]) -> str:
+def name_like_string(name: Optional[Union[Any, Tuple]]) -> str:
     """
     Return the name-like strings from str or tuple of str
 

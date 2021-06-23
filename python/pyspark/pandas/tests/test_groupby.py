@@ -212,13 +212,17 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
 
         self.assert_eq(psdf.groupby((10, "a"))[(20, "c")].sum().sort_index(), expected)
 
-        if LooseVersion(pd.__version__) < LooseVersion("1.1.3"):
+        if (
+            LooseVersion(pd.__version__) >= LooseVersion("1.0.4")
+            and LooseVersion(pd.__version__) != LooseVersion("1.1.3")
+            and LooseVersion(pd.__version__) != LooseVersion("1.1.4")
+        ):
             self.assert_eq(
                 psdf[(20, "c")].groupby(psdf[(10, "a")]).sum().sort_index(),
                 pdf[(20, "c")].groupby(pdf[(10, "a")]).sum().sort_index(),
             )
         else:
-            # seems like a pandas bug introduced in pandas 1.1.3.
+            # Due to pandas bugs resolved in 1.0.4, re-introduced in 1.1.3 and resolved in 1.1.5
             self.assert_eq(psdf[(20, "c")].groupby(psdf[(10, "a")]).sum().sort_index(), expected)
 
     def test_split_apply_combine_on_series(self):

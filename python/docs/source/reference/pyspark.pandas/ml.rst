@@ -8,7 +8,7 @@ Machine Learning utilities
 MLflow
 ------
 
-Arbitrary MLflow models can be used with Koalas Dataframes,
+Arbitrary MLflow models can be used with pandas-on-Spark Dataframes,
 provided they implement the 'pyfunc' flavor. This is the case
 for most frameworks supported by MLflow (scikit-learn, pytorch,
 tensorflow, ...). See comprehensive examples in

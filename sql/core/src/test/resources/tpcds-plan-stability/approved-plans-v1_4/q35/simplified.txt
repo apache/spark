@@ -1,6 +1,6 @@
-TakeOrderedAndProject [ca_state,cd_gender,cd_marital_status,aggOrder,cd_dep_employed_count,cd_dep_college_count,cnt1,min(cd_dep_count),max(cd_dep_count),avg(cd_dep_count),cnt2,min(cd_dep_employed_count),max(cd_dep_employed_count),avg(cd_dep_employed_count),cnt3,min(cd_dep_college_count),max(cd_dep_college_count),avg(cd_dep_college_count)]
+TakeOrderedAndProject [ca_state,cd_gender,cd_marital_status,cd_dep_count,cd_dep_employed_count,cd_dep_college_count,cnt1,min(cd_dep_count),max(cd_dep_count),avg(cd_dep_count),cnt2,min(cd_dep_employed_count),max(cd_dep_employed_count),avg(cd_dep_employed_count),cnt3,min(cd_dep_college_count),max(cd_dep_college_count),avg(cd_dep_college_count)]
   WholeStageCodegen (10)
-    HashAggregate [ca_state,cd_gender,cd_marital_status,cd_dep_count,cd_dep_employed_count,cd_dep_college_count,count,min,max,sum,count,min,max,sum,count,min,max,sum,count] [count(1),min(cd_dep_count),max(cd_dep_count),avg(cd_dep_count),min(cd_dep_employed_count),max(cd_dep_employed_count),avg(cd_dep_employed_count),min(cd_dep_college_count),max(cd_dep_college_count),avg(cd_dep_college_count),cnt1,min(cd_dep_count),max(cd_dep_count),avg(cd_dep_count),cnt2,min(cd_dep_employed_count),max(cd_dep_employed_count),avg(cd_dep_employed_count),cnt3,min(cd_dep_college_count),max(cd_dep_college_count),avg(cd_dep_college_count),aggOrder,count,min,max,sum,count,min,max,sum,count,min,max,sum,count]
+    HashAggregate [ca_state,cd_gender,cd_marital_status,cd_dep_count,cd_dep_employed_count,cd_dep_college_count,count,min,max,sum,count,min,max,sum,count,min,max,sum,count] [count(1),min(cd_dep_count),max(cd_dep_count),avg(cd_dep_count),min(cd_dep_employed_count),max(cd_dep_employed_count),avg(cd_dep_employed_count),min(cd_dep_college_count),max(cd_dep_college_count),avg(cd_dep_college_count),cnt1,min(cd_dep_count),max(cd_dep_count),avg(cd_dep_count),cnt2,min(cd_dep_employed_count),max(cd_dep_employed_count),avg(cd_dep_employed_count),cnt3,min(cd_dep_college_count),max(cd_dep_college_count),avg(cd_dep_college_count),count,min,max,sum,count,min,max,sum,count,min,max,sum,count]
       InputAdapter
         Exchange [ca_state,cd_gender,cd_marital_status,cd_dep_count,cd_dep_employed_count,cd_dep_college_count] #1
           WholeStageCodegen (9)
@@ -27,15 +27,15 @@ TakeOrderedAndProject [ca_state,cd_gender,cd_marital_status,aggOrder,cd_dep_empl
                                             InputAdapter
                                               Scan parquet default.store_sales [ss_customer_sk,ss_sold_date_sk]
                                                 SubqueryBroadcast [d_date_sk] #1
-                                                  ReusedExchange [d_date_sk] #3
+                                                  BroadcastExchange #3
+                                                    WholeStageCodegen (1)
+                                                      Project [d_date_sk]
+                                                        Filter [d_year,d_qoy,d_date_sk]
+                                                          ColumnarToRow
+                                                            InputAdapter
+                                                              Scan parquet default.date_dim [d_date_sk,d_year,d_qoy]
                                           InputAdapter
-                                            BroadcastExchange #3
-                                              WholeStageCodegen (1)
-                                                Project [d_date_sk]
-                                                  Filter [d_year,d_qoy,d_date_sk]
-                                                    ColumnarToRow
-                                                      InputAdapter
-                                                        Scan parquet default.date_dim [d_date_sk,d_year,d_qoy]
+                                            ReusedExchange [d_date_sk] #3
                               InputAdapter
                                 BroadcastExchange #4
                                   WholeStageCodegen (4)

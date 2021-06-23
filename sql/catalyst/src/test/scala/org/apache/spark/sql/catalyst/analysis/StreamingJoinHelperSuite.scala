@@ -86,6 +86,18 @@ class StreamingJoinHelperSuite extends AnalysisTest {
     assert(watermarkFrom("rightTime - interval 1 second < leftTime - interval 3 second")
       === Some(12000))
 
+    assert(watermarkFrom("leftTime > rightTime + interval '0 00:00:01' day to second")
+      === Some(11000))
+    assert(watermarkFrom("leftTime + interval '00:00:02' hour to second > rightTime ")
+      === Some(8000))
+    assert(watermarkFrom("leftTime > rightTime - interval '00:03' minute to second")
+      === Some(7000))
+    assert(watermarkFrom("rightTime < leftTime - interval '1 20:30:40' day to second")
+      === Some(160250000))
+    assert(watermarkFrom(
+      "rightTime - interval 1 second < leftTime - interval '20:15:32' hour to second")
+      === Some(72941000))
+
     // Test with casted long type + constants on either side of equation
     // Note: long type and constants commute, so more combinations to test.
     // -- Constants on the right

@@ -76,13 +76,6 @@ abstract class SubqueryExpression(
     AttributeSet.fromAttributeSets(outerAttrs.map(_.references))
   override def children: Seq[Expression] = outerAttrs ++ joinCond
   override def withNewPlan(plan: LogicalPlan): SubqueryExpression
-  override def semanticEquals(o: Expression): Boolean = o match {
-    case p: SubqueryExpression =>
-      this.getClass.getName.equals(p.getClass.getName) && plan.sameResult(p.plan) &&
-        children.length == p.children.length &&
-        children.zip(p.children).forall(p => p._1.semanticEquals(p._2))
-    case _ => false
-  }
 }
 
 object SubqueryExpression {
@@ -199,9 +192,7 @@ object SubExprUtils extends PredicateHelper {
     val outerExpressions = ArrayBuffer.empty[Expression]
     def collectOutRefs(input: Expression): Unit = input match {
       case a: AggregateExpression if containsOuter(a) =>
-        val outer = a.collect { case OuterReference(e) => e.toAttribute }
-        val local = a.references -- outer
-        if (local.nonEmpty) {
+        if (a.references.nonEmpty) {
           throw QueryCompilationErrors.mixedRefsInAggFunc(a.sql)
         } else {
           // Collect and update the sub-tree so that outer references inside this aggregate
@@ -283,6 +274,39 @@ object ScalarSubquery {
       case _ => false
     }.isDefined
   }
+}
+
+/**
+ * A subquery that can return multiple rows and columns. This should be rewritten as a join
+ * with the outer query during the optimization phase.
+ *
+ * Note: `exprId` is used to have a unique name in explain string output.
+ */
+case class LateralSubquery(
+    plan: LogicalPlan,
+    outerAttrs: Seq[Expression] = Seq.empty,
+    exprId: ExprId = NamedExpression.newExprId,
+    joinCond: Seq[Expression] = Seq.empty)
+  extends SubqueryExpression(plan, outerAttrs, exprId, joinCond) with Unevaluable {
+  override def dataType: DataType = plan.output.toStructType
+  override def nullable: Boolean = true
+  override def withNewPlan(plan: LogicalPlan): LateralSubquery = copy(plan = plan)
+  override def toString: String = s"lateral-subquery#${exprId.id} $conditionString"
+  override lazy val canonicalized: Expression = {
+    LateralSubquery(
+      plan.canonicalized,
+      outerAttrs.map(_.canonicalized),
+      ExprId(0),
+      joinCond.map(_.canonicalized))
+  }
+
+  override protected def withNewChildrenInternal(
+    newChildren: IndexedSeq[Expression]): LateralSubquery =
+    copy(
+      outerAttrs = newChildren.take(outerAttrs.size),
+      joinCond = newChildren.drop(outerAttrs.size))
+
+  final override def nodePatternsInternal: Seq[TreePattern] = Seq(LATERAL_SUBQUERY)
 }
 
 /**

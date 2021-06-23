@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import scala.collection
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.expressions._
@@ -255,7 +256,7 @@ object NestedColumnAliasing {
     nestedFieldReferences
       .filter(!_.references.subsetOf(exclusiveAttrSet))
       .groupBy(_.references.head.canonicalized.asInstanceOf[Attribute])
-      .flatMap { case (attr: Attribute, nestedFields: Seq[ExtractValue]) =>
+      .flatMap { case (attr: Attribute, nestedFields: collection.Seq[ExtractValue]) =>
         // Remove redundant [[ExtractValue]]s if they share the same parent nest field.
         // For example, when `a.b` and `a.b.c` are in project list, we only need to alias `a.b`.
         // Because `a.b` requires all of the inner fields of `b`, we cannot prune `a.b.c`.

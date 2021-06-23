@@ -278,11 +278,6 @@ case class AttributeReference(
     case _ => false
   }
 
-  override def semanticEquals(other: Expression): Boolean = other match {
-    case ar: AttributeReference => sameRef(ar)
-    case _ => false
-  }
-
   override def semanticHash(): Int = {
     this.exprId.hashCode()
   }

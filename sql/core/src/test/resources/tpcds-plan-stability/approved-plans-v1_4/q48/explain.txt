@@ -1,9 +1,9 @@
 == Physical Plan ==
-* HashAggregate (32)
-+- Exchange (31)
-   +- * HashAggregate (30)
-      +- * Project (29)
-         +- * BroadcastHashJoin Inner BuildRight (28)
+* HashAggregate (28)
++- Exchange (27)
+   +- * HashAggregate (26)
+      +- * Project (25)
+         +- * BroadcastHashJoin Inner BuildRight (24)
             :- * Project (22)
             :  +- * BroadcastHashJoin Inner BuildRight (21)
             :     :- * Project (15)
@@ -26,11 +26,7 @@
             :           +- * Filter (18)
             :              +- * ColumnarToRow (17)
             :                 +- Scan parquet default.customer_address (16)
-            +- BroadcastExchange (27)
-               +- * Project (26)
-                  +- * Filter (25)
-                     +- * ColumnarToRow (24)
-                        +- Scan parquet default.date_dim (23)
+            +- ReusedExchange (23)
 
 
 (1) Scan parquet default.store_sales
@@ -133,62 +129,66 @@ Join condition: ((((ca_state#16 IN (CO,OH,TX) AND (ss_net_profit#6 >= 0.00)) AND
 Output [2]: [ss_quantity#4, ss_sold_date_sk#7]
 Input [6]: [ss_addr_sk#2, ss_quantity#4, ss_net_profit#6, ss_sold_date_sk#7, ca_address_sk#15, ca_state#16]
 
-(23) Scan parquet default.date_dim
-Output [2]: [d_date_sk#19, d_year#20]
+(23) ReusedExchange [Reuses operator id: 33]
+Output [1]: [d_date_sk#19]
+
+(24) BroadcastHashJoin [codegen id : 5]
+Left keys [1]: [ss_sold_date_sk#7]
+Right keys [1]: [d_date_sk#19]
+Join condition: None
+
+(25) Project [codegen id : 5]
+Output [1]: [ss_quantity#4]
+Input [3]: [ss_quantity#4, ss_sold_date_sk#7, d_date_sk#19]
+
+(26) HashAggregate [codegen id : 5]
+Input [1]: [ss_quantity#4]
+Keys: []
+Functions [1]: [partial_sum(ss_quantity#4)]
+Aggregate Attributes [1]: [sum#20]
+Results [1]: [sum#21]
+
+(27) Exchange
+Input [1]: [sum#21]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#22]
+
+(28) HashAggregate [codegen id : 6]
+Input [1]: [sum#21]
+Keys: []
+Functions [1]: [sum(ss_quantity#4)]
+Aggregate Attributes [1]: [sum(ss_quantity#4)#23]
+Results [1]: [sum(ss_quantity#4)#23 AS sum(ss_quantity)#24]
+
+===== Subqueries =====
+
+Subquery:1 Hosting operator id = 1 Hosting Expression = ss_sold_date_sk#7 IN dynamicpruning#8
+BroadcastExchange (33)
++- * Project (32)
+   +- * Filter (31)
+      +- * ColumnarToRow (30)
+         +- Scan parquet default.date_dim (29)
+
+
+(29) Scan parquet default.date_dim
+Output [2]: [d_date_sk#19, d_year#25]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
 PushedFilters: [IsNotNull(d_year), EqualTo(d_year,2001), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_year:int>
 
-(24) ColumnarToRow [codegen id : 4]
-Input [2]: [d_date_sk#19, d_year#20]
+(30) ColumnarToRow [codegen id : 1]
+Input [2]: [d_date_sk#19, d_year#25]
 
-(25) Filter [codegen id : 4]
-Input [2]: [d_date_sk#19, d_year#20]
-Condition : ((isnotnull(d_year#20) AND (d_year#20 = 2001)) AND isnotnull(d_date_sk#19))
+(31) Filter [codegen id : 1]
+Input [2]: [d_date_sk#19, d_year#25]
+Condition : ((isnotnull(d_year#25) AND (d_year#25 = 2001)) AND isnotnull(d_date_sk#19))
 
-(26) Project [codegen id : 4]
+(32) Project [codegen id : 1]
 Output [1]: [d_date_sk#19]
-Input [2]: [d_date_sk#19, d_year#20]
+Input [2]: [d_date_sk#19, d_year#25]
 
-(27) BroadcastExchange
+(33) BroadcastExchange
 Input [1]: [d_date_sk#19]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#21]
-
-(28) BroadcastHashJoin [codegen id : 5]
-Left keys [1]: [ss_sold_date_sk#7]
-Right keys [1]: [d_date_sk#19]
-Join condition: None
-
-(29) Project [codegen id : 5]
-Output [1]: [ss_quantity#4]
-Input [3]: [ss_quantity#4, ss_sold_date_sk#7, d_date_sk#19]
-
-(30) HashAggregate [codegen id : 5]
-Input [1]: [ss_quantity#4]
-Keys: []
-Functions [1]: [partial_sum(ss_quantity#4)]
-Aggregate Attributes [1]: [sum#22]
-Results [1]: [sum#23]
-
-(31) Exchange
-Input [1]: [sum#23]
-Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#24]
-
-(32) HashAggregate [codegen id : 6]
-Input [1]: [sum#23]
-Keys: []
-Functions [1]: [sum(ss_quantity#4)]
-Aggregate Attributes [1]: [sum(ss_quantity#4)#25]
-Results [1]: [sum(ss_quantity#4)#25 AS sum(ss_quantity)#26]
-
-===== Subqueries =====
-
-Subquery:1 Hosting operator id = 1 Hosting Expression = ss_sold_date_sk#7 IN dynamicpruning#8
-ReusedExchange (33)
-
-
-(33) ReusedExchange [Reuses operator id: 27]
-Output [1]: [d_date_sk#19]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#26]
 
 
