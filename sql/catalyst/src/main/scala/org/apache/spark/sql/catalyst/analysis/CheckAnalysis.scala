@@ -708,24 +708,6 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
   }
 
   /**
-   * Find the given field name in the resolved table's schema for alter table commands.
-   */
-  private def findField(
-      alterCommand: LogicalPlan,
-      table: ResolvedTable,
-      operation: String,
-      fieldName: Array[String]): StructField = {
-    // Include collections because structs nested in maps and arrays may be altered.
-    val field = table.schema.findNestedField(fieldName, includeCollections = true)
-    if (field.isEmpty) {
-      alterCommand.failAnalysis(
-        s"Cannot $operation missing field ${fieldName.quoted} in ${table.name} schema: " +
-          table.schema.treeString)
-    }
-    field.get._2
-  }
-
-  /**
    * Validates subquery expressions in the plan. Upon failure, returns an user facing error.
    */
   private def checkSubqueryExpression(plan: LogicalPlan, expr: SubqueryExpression): Unit = {
