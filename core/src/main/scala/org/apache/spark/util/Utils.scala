@@ -3116,13 +3116,13 @@ private[spark] object Utils extends Logging {
       .getOrElse(Utils.timeStringAsMs(s"${conf.get(Network.NETWORK_TIMEOUT)}s"))
   }
 
-<<<<<<< HEAD
   /** Returns a string message about delegation token generation failure */
   def createFailedToGetTokenMessage(serviceName: String, e: scala.Throwable): String = {
     val message = "Failed to get token from service %s due to %s. " +
       "If %s is not used, set spark.security.credentials.%s.enabled to false."
     message.format(serviceName, e, serviceName, serviceName)
-=======
+  }
+
   /** Decompress a zip file into a local dir. File names are read from the zip file. */
   def unzipFromFile(fs: FileSystem, dfsZipFile: Path, localDir: File): Seq[File] = {
     val files = new mutable.ArrayBuffer[File]()
@@ -3150,7 +3150,6 @@ private[spark] object Utils extends Logging {
       IOUtils.closeQuietly(out)
     }
     files
->>>>>>> implementation for the load path
   }
 }
 

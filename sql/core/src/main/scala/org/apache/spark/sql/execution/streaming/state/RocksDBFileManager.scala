@@ -158,7 +158,7 @@ class RocksDBFileManager(
 
   /**
    * Load all necessary files for specific checkpoint version from DFS to given local directory.
-   * If version is 0, then it will deleted all files in the directory. For other versions, it
+   * If version is 0, then it will delete all files in the directory. For other versions, it
    * ensures that only the exact files generated during checkpointing will be present in the
    * local directory.
    */
@@ -171,7 +171,7 @@ class RocksDBFileManager(
     } else {
       // Delete all non-immutable files in local dir, and unzip new ones from DFS commit file
       listRocksDBFiles(localDir)._2.foreach(_.delete())
-      Utils.unzipFromFile(fs, dfsBatchZipFile(version), localDir)
+      Utils.unzipFilesFromFile(fs, dfsBatchZipFile(version), localDir)
 
       // Copy the necessary immutable files
       val metadataFile = localMetadataFile(localDir)
@@ -279,20 +279,21 @@ class RocksDBFileManager(
         // not going to be used at all. Eventually these files should get cleared.
         fs.copyToLocalFile(dfsFile, new Path(localFile.getAbsoluteFile.toURI))
         val localFileSize = localFile.length()
-        filesCopied += 1
-        bytesCopied += localFileSize
-        logInfo(s"Copied $dfsFile to $localFile - $localFileSize bytes")
         val expectedSize = file.sizeBytes
         if (localFileSize != expectedSize) {
           throw new IllegalStateException(
             s"Copied $dfsFile to $localFile," +
               s" expected $expectedSize bytes, found $localFileSize bytes ")
         }
+        filesCopied += 1
+        bytesCopied += localFileSize
+        logInfo(s"Copied $dfsFile to $localFile - $localFileSize bytes")
       } else {
         filesReused += 1
       }
     }
-    logInfo(s"Copied $filesCopied files ($bytesCopied bytes) from DFS to local.")
+    logInfo(s"Copied $filesCopied files ($bytesCopied bytes) from DFS to local with " +
+      s"$filesReused files reused.")
   }
 
   /**
