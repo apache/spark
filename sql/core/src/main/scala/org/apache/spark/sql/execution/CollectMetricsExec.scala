@@ -24,7 +24,7 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, NamedExpression, SortOrder}
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
-import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, QueryStageExec}
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.types.StructType
 
@@ -88,19 +88,16 @@ case class CollectMetricsExec(
   }
 }
 
-object CollectMetricsExec {
+object CollectMetricsExec extends AdaptiveSparkPlanHelper {
   /**
    * Recursively collect all collected metrics from a query tree.
    */
   def collect(plan: SparkPlan): Map[String, Row] = {
-    val metrics = plan.collectWithSubqueries {
-      case collector: CollectMetricsExec => Map(collector.name -> collector.collectedMetrics)
+    val metrics = collectWithSubqueries(plan) {
+      case collector: CollectMetricsExec =>
+        Map(collector.name -> collector.collectedMetrics)
       case tableScan: InMemoryTableScanExec =>
         CollectMetricsExec.collect(tableScan.relation.cachedPlan)
-      case adaptivePlan: AdaptiveSparkPlanExec =>
-        CollectMetricsExec.collect(adaptivePlan.executedPlan)
-      case queryStageExec: QueryStageExec =>
-        CollectMetricsExec.collect(queryStageExec.plan)
     }
     metrics.reduceOption(_ ++ _).getOrElse(Map.empty)
   }
