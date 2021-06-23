@@ -90,7 +90,6 @@ abstract class FileCommitProtocol extends Logging {
    * if a task is going to write out multiple files to the same dir. The file commit protocol only
    * guarantees that files written by different tasks will not conflict.
    */
-  @deprecated("use newTaskFile(taskContext, dir, spec)", "3.2.0")
   def newTaskTempFile(taskContext: TaskAttemptContext, dir: Option[String], ext: String): String
 
   /**
@@ -108,7 +107,7 @@ abstract class FileCommitProtocol extends Logging {
    * if a task is going to write out multiple files to the same dir. The file commit protocol only
    * guarantees that files written by different tasks will not conflict.
    *
-   * This API should be implemented and called, instead of deprecated
+   * This API should be implemented and called, instead of
    * [[newTaskTempFile(taskContest, dir, ext)]]. Provide a default implementation here to be
    * backward compatible with custom [[FileCommitProtocol]] implementations before Spark 3.2.0.
    */
@@ -130,7 +129,6 @@ abstract class FileCommitProtocol extends Logging {
    * if a task is going to write out multiple files to the same dir. The file commit protocol only
    * guarantees that files written by different tasks will not conflict.
    */
-  @deprecated("use newTaskTempFileAbsPath(taskContext, absoluteDir, spec)", "3.2.0")
   def newTaskTempFileAbsPath(
       taskContext: TaskAttemptContext, absoluteDir: String, ext: String): String
 
@@ -146,7 +144,7 @@ abstract class FileCommitProtocol extends Logging {
    * if a task is going to write out multiple files to the same dir. The file commit protocol only
    * guarantees that files written by different tasks will not conflict.
    *
-   * This API should be implemented and called, instead of deprecated
+   * This API should be implemented and called, instead of
    * [[newTaskTempFileAbsPath(taskContest, absoluteDir, ext)]]. Provide a default implementation
    * here to be backward compatible with custom [[FileCommitProtocol]] implementations before
    * Spark 3.2.0.
