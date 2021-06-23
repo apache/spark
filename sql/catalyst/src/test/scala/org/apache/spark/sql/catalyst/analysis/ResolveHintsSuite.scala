@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeReference,
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.IntegerType
 
 class ResolveHintsSuite extends AnalysisTest {
@@ -304,6 +305,16 @@ class ResolveHintsSuite extends AnalysisTest {
     checkAnalysisWithoutViewWrapper(
       UnresolvedHint("REBALANCE_PARTITIONS", Seq.empty, table("TaBlE")),
       RebalancePartitions(Seq.empty, testRelation))
+
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      checkAnalysisWithoutViewWrapper(
+        UnresolvedHint("REBALANCE_PARTITIONS", Seq(UnresolvedAttribute("a")), table("TaBlE")),
+        testRelation)
+
+      checkAnalysisWithoutViewWrapper(
+        UnresolvedHint("REBALANCE_PARTITIONS", Seq.empty, table("TaBlE")),
+        testRelation)
+    }
 
     assertAnalysisError(
       UnresolvedHint("REBALANCE_PARTITIONS", Seq(Literal(1)), table("TaBlE")),

@@ -265,7 +265,7 @@ object ResolveHints {
             createRepartition(shuffle = false, hint)
           case "REPARTITION_BY_RANGE" =>
             createRepartitionByRange(hint)
-          case "REBALANCE_PARTITIONS" =>
+          case "REBALANCE_PARTITIONS" if conf.adaptiveExecutionEnabled =>
             createRepartition(shuffle = true, hint, true)
           case _ => hint
         }
