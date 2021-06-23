@@ -239,6 +239,6 @@ object FileCommitProtocol extends Logging {
  * This is used by [[FileCommitProtocol]] to create full path of file.
  *
  * @param prefix Prefix of file.
- * @param ext Extension of file.
+ * @param suffix Suffix of file.
  */
-final case class FileNameSpec(prefix: String, ext: String)
+final case class FileNameSpec(prefix: String, suffix: String)
