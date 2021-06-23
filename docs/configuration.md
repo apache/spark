@@ -2381,7 +2381,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>0.6.0</td>
 </tr>
 <tr>
-  <td><code>spark.speculation.min.threshold</code></td>
+  <td><code>spark.speculation.minTaskRuntime</code></td>
   <td>100ms</td>
   <td>
     Minimum amount of time a task runs before being considered for speculation.
