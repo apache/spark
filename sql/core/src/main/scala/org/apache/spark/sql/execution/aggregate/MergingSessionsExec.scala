@@ -19,10 +19,10 @@ package org.apache.spark.sql.execution.aggregate
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, AttributeSet, Expression, MutableProjection, NamedExpression, SortOrder, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, Expression, MutableProjection, NamedExpression, SortOrder, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.physical._
-import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
+import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.metric.SQLMetrics
 
 /**
@@ -48,34 +48,23 @@ case class MergingSessionsExec(
     aggregateAttributes: Seq[Attribute],
     initialInputBufferOffset: Int,
     resultExpressions: Seq[NamedExpression],
-    child: SparkPlan) extends UnaryExecNode {
+    child: SparkPlan) extends BaseAggregateExec {
 
   private val keyWithoutSessionExpressions = groupingExpressions.diff(Seq(sessionExpression))
-
-  private[this] val aggregateBufferAttributes = {
-    aggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes)
-  }
-
-  override def producedAttributes: AttributeSet =
-    AttributeSet(aggregateAttributes) ++
-      AttributeSet(resultExpressions.diff(groupingExpressions).map(_.toAttribute)) ++
-      AttributeSet(aggregateBufferAttributes)
 
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
   override def output: Seq[Attribute] = child.output
 
-  override def outputPartitioning: Partitioning = child.outputPartitioning
-
   override def outputOrdering: Seq[SortOrder] = child.outputOrdering
 
-  override def requiredChildDistribution: Seq[Distribution] = {
+  override def requiredChildDistribution: List[Distribution] = {
     requiredChildDistributionExpressions match {
       case Some(exprs) if exprs.isEmpty => AllTuples :: Nil
       case Some(exprs) => ClusteredDistribution(exprs) :: Nil
       case None => requiredChildDistributionOption match {
-        case Some(distributions) => distributions
+        case Some(distributions) => distributions.toList
         case None => UnspecifiedDistribution :: Nil
       }
     }

@@ -237,9 +237,9 @@ class MergingSessionsIterator(
     groupingWithoutSessionAttributes :+ sessionExpression.toAttribute)
 
   private def generateGroupingKey(): UnsafeRow = {
-    val newRow = new SpecificInternalRow(Seq(sessionExpression.toAttribute).toStructType)
-    newRow.update(0, currentSession)
-    val joined = join(currentGroupingKey, newRow)
+    val sessionStruct = new SpecificInternalRow(Seq(sessionExpression.toAttribute).toStructType)
+    sessionStruct.update(0, currentSession)
+    val joined = join(currentGroupingKey, sessionStruct)
 
     groupingKeyProj(joined)
   }
