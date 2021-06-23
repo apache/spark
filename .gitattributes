@@ -1,7 +1,0 @@
-*.bat text eol=crlf
-*.cmd text eol=crlf
-*.java text eol=lf
-*.scala text eol=lf
-*.xml text eol=lf
-*.py text eol=lf
-*.R text eol=lf

@@ -74,8 +74,10 @@ numpydoc_show_class_members = False
 # Links used globally in the RST files.
 # These are defined here to allow link substitutions dynamically.
 rst_epilog = """
-.. |binder| replace:: Live Notebook
-.. _binder: https://mybinder.org/v2/gh/apache/spark/{0}?filepath=python%2Fdocs%2Fsource%2Fgetting_started%2Fquickstart.ipynb
+.. |binder_df| replace:: DataFrame
+.. _binder_df: https://mybinder.org/v2/gh/apache/spark/{0}?filepath=python%2Fdocs%2Fsource%2Fgetting_started%2Fquickstart_df.ipynb
+.. |binder_ps| replace:: pandas API on Spark
+.. _binder_ps: https://mybinder.org/v2/gh/apache/spark/{0}?filepath=python%2Fdocs%2Fsource%2Fgetting_started%2Fquickstart_ps.ipynb
 .. |examples| replace:: Examples
 .. _examples: https://github.com/apache/spark/tree/{0}/examples/src/main/python
 .. |downloading| replace:: Downloading

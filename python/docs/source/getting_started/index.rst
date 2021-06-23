@@ -25,12 +25,10 @@ There are more guides shared with other languages such as
 `Quick Start <https://spark.apache.org/docs/latest/quick-start.html>`_ in Programming Guides
 at `the Spark documentation <https://spark.apache.org/docs/latest/index.html#where-to-go-from-here>`_.
 
-.. TODO(SPARK-35588): Merge PySpark quickstart and 10 minutes to pandas API on Spark.
-
 .. toctree::
    :maxdepth: 2
 
    install
-   quickstart
-   ps_10mins
+   quickstart_df
+   quickstart_ps
 

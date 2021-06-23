@@ -20,5 +20,11 @@
 # This file is used for Binder integration to install PySpark available in
 # Jupyter notebook.
 
-VERSION=$(python -c "exec(open('python/pyspark/version.py').read()); print(__version__)")
-pip install "pyspark[sql,ml,mllib]<=$VERSION"
+# This Binder notebook is for releases
+# VERSION=$(python -c "exec(open('python/pyspark/version.py').read()); print(__version__)")
+# pip install plotly "pyspark[sql,ml,mllib,pandas_on_spark]<=$VERSION"
+cd python
+cat x* > pyspark-3.2.0.dev0.tar.gz
+ls -al
+ls -al pyspark-3.2.0.dev0.tar.gz
+pip install plotly "pyspark-3.2.0.dev0.tar.gz[sql,ml,mllib,pandas_on_spark]"
