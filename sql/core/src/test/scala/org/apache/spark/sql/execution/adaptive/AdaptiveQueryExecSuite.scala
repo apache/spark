@@ -1788,7 +1788,7 @@ class AdaptiveQueryExecSuite
 
   test("SPARK-35650: Coalesce number of partitions by AEQ") {
     withSQLConf(SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM.key -> "1") {
-      Seq("REPARTITION", "REBALANCE_PARTITIONS", "REBALANCE_PARTITIONS(key)")
+      Seq("REPARTITION", "REBALANCE_PARTITIONS(key)")
         .foreach {repartition =>
           val query = s"SELECT /*+ $repartition */ * FROM testData"
           val (_, adaptivePlan) = runAdaptiveAndVerifyResult(query)
