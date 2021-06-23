@@ -30,7 +30,7 @@ import org.apache.spark.sql.internal.SQLConf
 case class CoalesceShufflePartitions(session: SparkSession) extends CustomShuffleReaderRule {
 
   override val supportedShuffleOrigins: Seq[ShuffleOrigin] =
-    Seq(ENSURE_REQUIREMENTS, REBALANCE_PARTITIONS_BY_NONE, REPARTITION_BY_COL,
+    Seq(ENSURE_REQUIREMENTS, REPARTITION_BY_COL, REBALANCE_PARTITIONS_BY_NONE,
       REBALANCE_PARTITIONS_BY_COL)
 
   override def apply(plan: SparkPlan): SparkPlan = {
