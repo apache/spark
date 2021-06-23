@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.avro
 
-import org.apache.avro.Schema
+import org.apache.avro.SchemaBuilder
 
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
@@ -25,18 +25,8 @@ import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 class AvroSchemaHelperSuite extends SQLTestUtils with SharedSparkSession {
 
   test("ensure schema is a record") {
-    val jsonSchema = s"""
-      {
-        "namespace": "logical",
-        "type": "record",
-        "name": "test",
-        "fields": [
-          {"name": "date", "type": {"type": "int", "logicalType": "date"}}
-        ]
-      }
-    """
+    val avroSchema = SchemaBuilder.builder().intType()
 
-    val avroSchema = (new Schema.Parser()).parse(jsonSchema).getField("date").schema()
     val msg = intercept[IncompatibleSchemaException] {
       new AvroUtils.AvroSchemaHelper(avroSchema, Seq(""))
     }.getMessage
@@ -61,15 +51,14 @@ class AvroSchemaHelperSuite extends SQLTestUtils with SharedSparkSession {
     }
 
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
-      val msg1 = intercept[IncompatibleSchemaException] {
-        helper.getFieldByName("A")
-      }.getMessage
-      assert(msg1.contains("Searching for 'A' in Avro schema"))
-
-      val msg2 = intercept[IncompatibleSchemaException] {
-        helper.getFieldByName("a")
-      }.getMessage
-      assert(msg2.contains("Searching for 'a' in Avro schema"))
+      Seq("a", "A").foreach { fieldName =>
+        withClue(s"looking for field name: $fieldName") {
+          val msg = intercept[IncompatibleSchemaException] {
+            helper.getFieldByName(fieldName)
+          }.getMessage
+          assert(msg.contains(s"Searching for '$fieldName' in Avro schema"))
+        }
+      }
 
       assert(helper.getFieldByName("b").get.name() == "b")
       assert(helper.getFieldByName("B").get.name() == "b")
