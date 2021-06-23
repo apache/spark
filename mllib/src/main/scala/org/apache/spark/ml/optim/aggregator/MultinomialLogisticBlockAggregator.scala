@@ -19,6 +19,7 @@ package org.apache.spark.ml.optim.aggregator
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.feature.InstanceBlock
+import org.apache.spark.ml.impl.Utils
 import org.apache.spark.ml.linalg._
 
 /**
@@ -125,47 +126,26 @@ private[ml] class MultinomialLogisticBlockAggregator(
     var localLossSum = 0.0
     var localWeightSum = 0.0
     var i = 0
-    val tmp = Array.ofDim[Double](numClasses)
+    val probs = Array.ofDim[Double](numClasses)
     val multiplierSum = Array.ofDim[Double](numClasses)
     while (i < size) {
       val weight = block.getWeight(i)
       localWeightSum += weight
       if (weight > 0) {
         val label = block.getLabel(i)
-        var maxMargin = Double.NegativeInfinity
         var j = 0
-        while (j < numClasses) {
-          tmp(j) = mat(i, j)
-          maxMargin = math.max(maxMargin, tmp(j))
-          j += 1
-        }
-
-        // marginOfLabel is margins(label) in the formula
-        val marginOfLabel = tmp(label.toInt)
-
-        var sum = 0.0
-        j = 0
-        while (j < numClasses) {
-          if (maxMargin > 0) tmp(j) -= maxMargin
-          val exp = math.exp(tmp(j))
-          sum += exp
-          tmp(j) = exp
-          j += 1
-        }
+        while (j < numClasses) { probs(j) = mat(i, j); j += 1 }
+        Utils.softmax(probs)
 
         j = 0
         while (j < numClasses) {
-          val multiplier = weight * (tmp(j) / sum - (if (label == j) 1.0 else 0.0))
+          val multiplier = weight * (probs(j) - (if (label == j) 1.0 else 0.0))
           mat.update(i, j, multiplier)
           multiplierSum(j) += multiplier
           j += 1
         }
 
-        if (maxMargin > 0) {
-          localLossSum += weight * (math.log(sum) - marginOfLabel + maxMargin)
-        } else {
-          localLossSum += weight * (math.log(sum) - marginOfLabel)
-        }
+        localLossSum -= weight * math.log(probs(label.toInt))
       } else {
         var j = 0; while (j < numClasses) { mat.update(i, j, 0.0); j += 1 }
       }

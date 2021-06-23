@@ -116,7 +116,7 @@ object SerializerBuildHelper {
   def createSerializerForJavaDuration(inputObject: Expression): Expression = {
     StaticInvoke(
       IntervalUtils.getClass,
-      DayTimeIntervalType,
+      DayTimeIntervalType(),
       "durationToMicros",
       inputObject :: Nil,
       returnNullable = false)
@@ -125,7 +125,7 @@ object SerializerBuildHelper {
   def createSerializerForJavaPeriod(inputObject: Expression): Expression = {
     StaticInvoke(
       IntervalUtils.getClass,
-      YearMonthIntervalType,
+      YearMonthIntervalType(),
       "periodToMonths",
       inputObject :: Nil,
       returnNullable = false)

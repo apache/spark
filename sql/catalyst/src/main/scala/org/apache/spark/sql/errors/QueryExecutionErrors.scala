@@ -26,7 +26,7 @@ import java.time.temporal.ChronoField
 import java.util.ConcurrentModificationException
 
 import com.fasterxml.jackson.core.JsonToken
-import org.apache.hadoop.fs.{FileStatus, Path}
+import org.apache.hadoop.fs.{FileAlreadyExistsException, FileStatus, Path}
 import org.codehaus.commons.compiler.{CompileException, InternalCompilerException}
 
 import org.apache.spark.{Partition, SparkException, SparkUpgradeException}
@@ -48,6 +48,7 @@ import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.unsafe.types.UTF8String
@@ -918,12 +919,18 @@ object QueryExecutionErrors {
        """.stripMargin.replaceAll("\n", " "), e)
   }
 
-  def failToRecognizePatternInDateTimeFormatterError(
-      pattern: String, e: Throwable): Throwable = {
+  def failToRecognizePatternAfterUpgradeError(pattern: String, e: Throwable): Throwable = {
     new SparkUpgradeException("3.0", s"Fail to recognize '$pattern' pattern in the" +
       s" DateTimeFormatter. 1) You can set ${SQLConf.LEGACY_TIME_PARSER_POLICY.key} to LEGACY" +
       s" to restore the behavior before Spark 3.0. 2) You can form a valid datetime pattern" +
       s" with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html",
+      e)
+  }
+
+  def failToRecognizePatternError(pattern: String, e: Throwable): Throwable = {
+    new RuntimeException(s"Fail to recognize '$pattern' pattern in the" +
+      " DateTimeFormatter. You can form a valid datetime pattern" +
+      " with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html",
       e)
   }
 
@@ -1328,5 +1335,97 @@ object QueryExecutionErrors {
 
   def illegalLocationClauseForViewPartitionError(): Throwable = {
     new SparkException("LOCATION clause illegal for view partition")
+  }
+
+  def renamePathAsExistsPathError(srcPath: Path, dstPath: Path): Throwable = {
+    new FileAlreadyExistsException(
+      s"Failed to rename $srcPath to $dstPath as destination already exists")
+  }
+
+  def renameAsExistsPathError(dstPath: Path): Throwable = {
+    new FileAlreadyExistsException(s"Failed to rename as $dstPath already exists")
+  }
+
+  def renameSrcPathNotFoundError(srcPath: Path): Throwable = {
+    new FileNotFoundException(s"Failed to rename as $srcPath was not found")
+  }
+
+  def failedRenameTempFileError(srcPath: Path, dstPath: Path): Throwable = {
+    new IOException(s"Failed to rename temp file $srcPath to $dstPath as rename returned false")
+  }
+
+  def legacyMetadataPathExistsError(metadataPath: Path, legacyMetadataPath: Path): Throwable = {
+    new SparkException(
+      s"""
+         |Error: we detected a possible problem with the location of your "_spark_metadata"
+         |directory and you likely need to move it before restarting this query.
+         |
+         |Earlier version of Spark incorrectly escaped paths when writing out the
+         |"_spark_metadata" directory for structured streaming. While this was corrected in
+         |Spark 3.0, it appears that your query was started using an earlier version that
+         |incorrectly handled the "_spark_metadata" path.
+         |
+         |Correct "_spark_metadata" Directory: $metadataPath
+         |Incorrect "_spark_metadata" Directory: $legacyMetadataPath
+         |
+         |Please move the data from the incorrect directory to the correct one, delete the
+         |incorrect directory, and then restart this query. If you believe you are receiving
+         |this message in error, you can disable it with the SQL conf
+         |${SQLConf.STREAMING_CHECKPOINT_ESCAPED_PATH_CHECK_ENABLED.key}.
+       """.stripMargin)
+  }
+
+  def partitionColumnNotFoundInSchemaError(col: String, schema: StructType): Throwable = {
+    new RuntimeException(s"Partition column $col not found in schema $schema")
+  }
+
+  def stateNotDefinedOrAlreadyRemovedError(): Throwable = {
+    new NoSuchElementException("State is either not defined or has already been removed")
+  }
+
+  def cannotSetTimeoutDurationError(): Throwable = {
+    new UnsupportedOperationException(
+      "Cannot set timeout duration without enabling processing time timeout in " +
+        "[map|flatMap]GroupsWithState")
+  }
+
+  def cannotGetEventTimeWatermarkError(): Throwable = {
+    new UnsupportedOperationException(
+      "Cannot get event time watermark timestamp without setting watermark before " +
+        "[map|flatMap]GroupsWithState")
+  }
+
+  def cannotSetTimeoutTimestampError(): Throwable = {
+    new UnsupportedOperationException(
+      "Cannot set timeout timestamp without enabling event time timeout in " +
+        "[map|flatMapGroupsWithState")
+  }
+
+  def batchMetadataFileNotFoundError(batchMetadataFile: Path): Throwable = {
+    new FileNotFoundException(s"Unable to find batch $batchMetadataFile")
+  }
+
+  def multiStreamingQueriesUsingPathConcurrentlyError(
+      path: String, e: FileAlreadyExistsException): Throwable = {
+    new ConcurrentModificationException(
+      s"Multiple streaming queries are concurrently using $path", e)
+  }
+
+  def addFilesWithAbsolutePathUnsupportedError(commitProtocol: String): Throwable = {
+    new UnsupportedOperationException(
+      s"$commitProtocol does not support adding files with an absolute path")
+  }
+
+  def microBatchUnsupportedByDataSourceError(srcName: String): Throwable = {
+    new UnsupportedOperationException(
+      s"Data source $srcName does not support microbatch processing.")
+  }
+
+  def cannotExecuteStreamingRelationExecError(): Throwable = {
+    new UnsupportedOperationException("StreamingRelationExec cannot be executed")
+  }
+
+  def invalidStreamingOutputModeError(outputMode: Option[OutputMode]): Throwable = {
+    new UnsupportedOperationException(s"Invalid output mode: $outputMode")
   }
 }

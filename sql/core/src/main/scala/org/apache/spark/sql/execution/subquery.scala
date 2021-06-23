@@ -17,9 +17,6 @@
 
 package org.apache.spark.sql.execution
 
-import scala.collection.mutable
-import scala.collection.mutable.ArrayBuffer
-
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.{expressions, InternalRow}
@@ -29,7 +26,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.{LeafLike, UnaryLike}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{BooleanType, DataType, StructType}
+import org.apache.spark.sql.types.{BooleanType, DataType}
 
 /**
  * The base class for subquery that is used in SparkPlan.
@@ -71,9 +68,8 @@ case class ScalarSubquery(
   override def toString: String = plan.simpleString(SQLConf.get.maxToStringFields)
   override def withNewPlan(query: BaseSubqueryExec): ScalarSubquery = copy(plan = query)
 
-  override def semanticEquals(other: Expression): Boolean = other match {
-    case s: ScalarSubquery => plan.sameResult(s.plan)
-    case _ => false
+  override lazy val canonicalized: Expression = {
+    ScalarSubquery(plan.canonicalized.asInstanceOf[BaseSubqueryExec], ExprId(0))
   }
 
   // the first column in first row from `query`.
@@ -127,11 +123,6 @@ case class InSubqueryExec(
   override def withNewPlan(plan: BaseSubqueryExec): InSubqueryExec = copy(plan = plan)
   final override def nodePatternsInternal: Seq[TreePattern] = Seq(IN_SUBQUERY_EXEC)
 
-  override def semanticEquals(other: Expression): Boolean = other match {
-    case in: InSubqueryExec => child.semanticEquals(in.child) && plan.sameResult(in.plan)
-    case _ => false
-  }
-
   def updateResult(): Unit = {
     val rows = plan.executeCollect()
     result = if (plan.output.length > 1) {
@@ -139,7 +130,7 @@ case class InSubqueryExec(
     } else {
       rows.map(_.get(0, child.dataType))
     }
-    resultBroadcast = plan.sqlContext.sparkContext.broadcast(result)
+    resultBroadcast = plan.session.sparkContext.broadcast(result)
   }
 
   def values(): Option[Array[Any]] = Option(resultBroadcast).map(_.value)
@@ -197,33 +188,6 @@ case class PlanSubqueries(sparkSession: SparkSession) extends Rule[SparkPlan] {
         }
         val executedPlan = QueryExecution.prepareExecutedPlan(sparkSession, query)
         InSubqueryExec(expr, SubqueryExec(s"subquery#${exprId.id}", executedPlan), exprId)
-    }
-  }
-}
-
-/**
- * Find out duplicated subqueries in the spark plan, then use the same subquery result for all the
- * references.
- */
-object ReuseSubquery extends Rule[SparkPlan] {
-
-  def apply(plan: SparkPlan): SparkPlan = {
-    if (!conf.subqueryReuseEnabled) {
-      return plan
-    }
-    // Build a hash map using schema of subqueries to avoid O(N*N) sameResult calls.
-    val subqueries = mutable.HashMap[StructType, ArrayBuffer[BaseSubqueryExec]]()
-    plan.transformAllExpressionsWithPruning(_.containsPattern(PLAN_EXPRESSION)) {
-      case sub: ExecSubqueryExpression =>
-        val sameSchema =
-          subqueries.getOrElseUpdate(sub.plan.schema, ArrayBuffer[BaseSubqueryExec]())
-        val sameResult = sameSchema.find(_.sameResult(sub.plan))
-        if (sameResult.isDefined) {
-          sub.withNewPlan(ReusedSubqueryExec(sameResult.get))
-        } else {
-          sameSchema += sub.plan
-          sub
-        }
     }
   }
 }

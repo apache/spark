@@ -41,7 +41,7 @@ Public Classes
     BarrierTaskContext
     BarrierTaskInfo
     InheritableThread
-
+    util.VersionUtils
 
 Spark Context APIs
 ------------------
@@ -239,6 +239,7 @@ Management
 .. autosummary::
     :toctree: api/
 
+    inheritable_thread_target
     SparkConf.contains
     SparkConf.get
     SparkConf.getAll
@@ -279,3 +280,5 @@ Management
     BarrierTaskContext.resources
     BarrierTaskContext.stageId
     BarrierTaskContext.taskAttemptId
+    util.VersionUtils.majorMinorVersion
+

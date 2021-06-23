@@ -4003,6 +4003,45 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     }
     checkAnswer(sql(s"select /*+ REPARTITION(3, a) */ a b from values('123') t(a)"), Row("123"))
   }
+
+  test("SPARK-35737: Parse day-time interval literals to tightest types") {
+    val dayToSecDF = spark.sql("SELECT INTERVAL '13 02:02:10' DAY TO SECOND")
+    assert(dayToSecDF.schema.head.dataType === DayTimeIntervalType(0, 3))
+    val dayToMinuteDF = spark.sql("SELECT INTERVAL '-2 13:00' DAY TO MINUTE")
+    assert(dayToMinuteDF.schema.head.dataType === DayTimeIntervalType(0, 2))
+    val dayToHourDF = spark.sql("SELECT INTERVAL '0 15' DAY TO HOUR")
+    assert(dayToHourDF.schema.head.dataType === DayTimeIntervalType(0, 1))
+    val hourToSecDF = spark.sql("SELECT INTERVAL '00:21:02.03' HOUR TO SECOND")
+    assert(hourToSecDF.schema.head.dataType === DayTimeIntervalType(1, 3))
+    val hourToMinuteDF = spark.sql("SELECT INTERVAL '01:02' HOUR TO MINUTE")
+    assert(hourToMinuteDF.schema.head.dataType === DayTimeIntervalType(1, 2))
+    val minuteToSecDF = spark.sql("SELECT INTERVAL '10:03.775808000' MINUTE TO SECOND")
+    assert(minuteToSecDF.schema.head.dataType === DayTimeIntervalType(2, 3))
+  }
+
+  test("SPARK-35545: split SubqueryExpression's children field into outer attributes and " +
+    "join conditions") {
+    withView("t") {
+      Seq((0, 1), (1, 2)).toDF("c1", "c2").createOrReplaceTempView("t")
+      checkAnswer(sql(
+        s"""with
+           |start as (
+           |  select c1, c2 from t A where not exists (
+           |    select * from t B where A.c1 = B.c1 - 2
+           |  )
+           |),
+           |
+           |end as (
+           |  select c1, c2 from t A where not exists (
+           |    select * from t B where A.c1 < B.c1
+           |  )
+           |)
+           |
+           |select * from start S join end E on S.c1 = E.c1
+           |""".stripMargin),
+        Row(1, 2, 1, 2) :: Nil)
+    }
+  }
 }
 
 case class Foo(bar: Option[String])

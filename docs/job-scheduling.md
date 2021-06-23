@@ -297,10 +297,6 @@ in each corresponding JVM thread. Due to this limitation, it is unable to set a 
 via `sc.setJobGroup` in a separate PVM thread, which also disallows to cancel the job via `sc.cancelJobGroup`
 later.
 
-In order to synchronize PVM threads with JVM threads, you should set `PYSPARK_PIN_THREAD` environment variable
-to `true`. This pinned thread mode allows one PVM thread has one corresponding JVM thread. With this mode,
 `pyspark.InheritableThread` is recommended to use together for a PVM thread to inherit the inheritable attributes
- such as local properties in a JVM thread.
-
-Note that `PYSPARK_PIN_THREAD` is currently experimental and not recommended for use in production.
+ such as local properties in a JVM thread, and to avoid resource leak.
 
