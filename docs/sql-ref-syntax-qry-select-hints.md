@@ -51,6 +51,10 @@ specified, multiple nodes are inserted into the logical plan, but the leftmost h
 
   The `REPARTITION_BY_RANGE` hint can be used to repartition to the specified number of partitions using the specified partitioning expressions. It takes column names and an optional partition number as parameters.
 
+* **REPARTITION_BY_AQE**
+
+  The `REPARTITION_BY_AQE` hint can be used to repartition to the specified partitioning expressions. It takes column names or none as parameters.
+
 #### Examples
 
 ```sql
@@ -65,6 +69,10 @@ SELECT /*+ REPARTITION(3, c) */ * FROM t;
 SELECT /*+ REPARTITION_BY_RANGE(c) */ * FROM t;
 
 SELECT /*+ REPARTITION_BY_RANGE(3, c) */ * FROM t;
+
+SELECT /*+ REPARTITION_BY_AQE */ * FROM t;
+
+SELECT /*+ REPARTITION_BY_AQE(c) */ * FROM t;
 
 -- multiple partitioning hints
 EXPLAIN EXTENDED SELECT /*+ REPARTITION(100), COALESCE(500), REPARTITION_BY_RANGE(3, c) */ * FROM t;
