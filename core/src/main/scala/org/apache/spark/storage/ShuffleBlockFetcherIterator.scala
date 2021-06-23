@@ -914,8 +914,7 @@ final class ShuffleBlockFetcherIterator(
               // Update total number of blocks to fetch, reflecting the multiple local shuffle
               // chunks.
               numBlocksToFetch += bufs.size
-              for (chunkId <- bufs.indices) {
-                val buf = bufs(chunkId)
+              bufs.zipWithIndex { case (buf, chunkId) =>
                 buf.retain()
                 val shuffleChunkId = ShuffleBlockChunkId(shuffleId, reduceId, chunkId)
                 pushBasedFetchHelper.addChunk(shuffleChunkId, bitmaps(chunkId))
