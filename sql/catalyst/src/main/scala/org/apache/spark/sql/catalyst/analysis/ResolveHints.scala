@@ -176,7 +176,7 @@ object ResolveHints {
   object ResolveCoalesceHints extends Rule[LogicalPlan] {
 
     val COALESCE_HINT_NAMES: Set[String] =
-      Set("COALESCE", "REPARTITION", "REPARTITION_BY_RANGE", "REPARTITION_BY_AQE")
+      Set("COALESCE", "REPARTITION", "REPARTITION_BY_RANGE", "REBALANCE_PARTITIONS")
 
     /**
      * This function handles hints for "COALESCE" and "REPARTITION".
@@ -198,7 +198,7 @@ object ResolveHints {
           throw QueryCompilationErrors.invalidHintParameterError(hintName, invalidParams)
         }
         if (adaptive) {
-          AdaptiveRepartition(partitionExprs.map(_.asInstanceOf[Expression]), hint.child)
+          RebalancePartitions(partitionExprs.map(_.asInstanceOf[Expression]), hint.child)
         } else {
           RepartitionByExpression(
             partitionExprs.map(_.asInstanceOf[Expression]), hint.child, numPartitions)
@@ -265,7 +265,7 @@ object ResolveHints {
             createRepartition(shuffle = false, hint)
           case "REPARTITION_BY_RANGE" =>
             createRepartitionByRange(hint)
-          case "REPARTITION_BY_AQE" =>
+          case "REBALANCE_PARTITIONS" =>
             createRepartition(shuffle = true, hint, true)
           case _ => hint
         }

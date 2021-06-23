@@ -1355,7 +1355,7 @@ object RepartitionByExpression {
  * This operator does not guarantee the output partitioning, because the partition number will be
  * optimized by AQE.
  */
-case class AdaptiveRepartition(
+case class RebalancePartitions(
     partitionExpressions: Seq[Expression],
     child: LogicalPlan) extends UnaryNode {
   override def maxRows: Option[Long] = child.maxRows
@@ -1369,7 +1369,7 @@ case class AdaptiveRepartition(
     RoundRobinPartitioning(numPartitions)
   }
 
-  override protected def withNewChildInternal(newChild: LogicalPlan): AdaptiveRepartition =
+  override protected def withNewChildInternal(newChild: LogicalPlan): RebalancePartitions =
     copy(child = newChild)
 }
 
