@@ -113,6 +113,11 @@ object IntervalUtils {
       startField: Byte,
       endField: Byte): Int = {
 
+    val errorMsg = s"Interval string does not match year-month format of " +
+      s"`INTERVAL [+|-]'[+|-]y' YEAR`, `INTERVAL [+|-]'[+|-]y-m' YEAR TO MONTH` " +
+      s"or `INTERVAL [+|-]'[+|-]m' MONTH` when cast to " +
+      s"${YM(startField, endField).typeName}: ${input.toString}"
+
     def truncatedMonth(month: String) : String = {
       if (endField == YM.YEAR) "0" else month
     }
@@ -127,12 +132,11 @@ object IntervalUtils {
     }
 
     input.trimAll().toString match {
-      case yearMonthRegex("-", year, month) => toYMInterval(year, truncatedMonth(month), -1)
-      case yearMonthRegex(_, year, month) => toYMInterval(year, truncatedMonth(month), 1)
+      case yearMonthRegex("-", year, month) => throw new IllegalArgumentException(errorMsg)
+      case yearMonthRegex(_, year, month) => throw new IllegalArgumentException(errorMsg)
       case yearMonthLiteralRegex(firstSign, secondSign, year, month, suffix) =>
         suffix match {
-          case "YEAR" | "MONTH" =>
-            throw new IllegalArgumentException("Interval string does not match year-month format")
+          case "YEAR" | "MONTH" => throw new IllegalArgumentException(errorMsg)
           case _ => toYMInterval(year, truncatedMonth(month), getSigh(firstSign, secondSign))
         }
       case yearMonthIndividualLiteralRegex(firstSign, secondSign, value, suffix) =>
@@ -147,11 +151,7 @@ object IntervalUtils {
             months
           }
         }
-      case _ => throw new IllegalArgumentException(
-        s"Interval string does not match year-month format of `[+|-]y-m` " +
-          s", `INTERVAL [+|-]'[+|-]y' YEAR`, `INTERVAL [+|-]'[+|-]y-m' YEAR TO MONTH` " +
-          s"or `INTERVAL [+|-]'[+|-]m' MONTH` when cast to " +
-          s"${YM(startField, endField).typeName}: ${input.toString}")
+      case _ => throw new IllegalArgumentException(errorMsg)
     }
   }
 
