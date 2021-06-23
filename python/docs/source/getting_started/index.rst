@@ -25,7 +25,7 @@ There are more guides shared with other languages such as
 `Quick Start <https://spark.apache.org/docs/latest/quick-start.html>`_ in Programming Guides
 at `the Spark documentation <https://spark.apache.org/docs/latest/index.html#where-to-go-from-here>`_.
 
-There are live notebooks below where some examples can be executed for a quickstart:
+There are live notebooks where you can try PySpark out without any other step:
 
 * |binder_df|_
 * |binder_ps|_
