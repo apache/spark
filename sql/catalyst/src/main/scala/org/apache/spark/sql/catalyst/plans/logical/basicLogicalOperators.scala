@@ -1366,10 +1366,10 @@ case class RebalancePartitions(
   override def maxRows: Option[Long] = child.maxRows
   override def output: Seq[Attribute] = child.output
 
-  def partitioning: Partitioning = if (partitionExpressions.nonEmpty) {
-    HashPartitioning(partitionExpressions, conf.numShufflePartitions)
-  } else {
+  def partitioning: Partitioning = if (partitionExpressions.isEmpty) {
     RoundRobinPartitioning(conf.numShufflePartitions)
+  } else {
+    HashPartitioning(partitionExpressions, conf.numShufflePartitions)
   }
 
   override protected def withNewChildInternal(newChild: LogicalPlan): RebalancePartitions =
