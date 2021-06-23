@@ -535,7 +535,7 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
       ).toDF("a", "b", "c")
       df.createTempView("v")
 
-      // Hive serde supports DayTimeIntervalType/YearMonthIntervalType as input and output data type
+      // Hive serde supports DayTimeIntervalType as input and output data type
       checkAnswer(
         df,
         (child: SparkPlan) => createScriptTransformationExec(
@@ -563,6 +563,7 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
         Row(Period.ofMonths(13), Period.ofMonths(13), Period.ofMonths(13))
       )), schema)
 
+      // Hive serde supports YearMonthIntervalType as input and output data type
       checkAnswer(
         df,
         (child: SparkPlan) => createScriptTransformationExec(
