@@ -1076,4 +1076,38 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
         checkEvaluation(cast(ym, dt), value)
       }
   }
+
+  test("SPARK-35768: Take into account year-month interval fields in cast") {
+    Seq(("1-1", YearMonthIntervalType(YEAR), 12, 12, 12),
+      ("1-1", YearMonthIntervalType(YEAR, MONTH), 13, 12, 13),
+      ("1-1", YearMonthIntervalType(MONTH), 13, 12, 13),
+      ("-1-1", YearMonthIntervalType(YEAR), -12, -12, -12),
+      ("-1-1", YearMonthIntervalType(YEAR, MONTH), -13, -12, -13),
+      ("-1-1", YearMonthIntervalType(MONTH), -13, -12, -13))
+      .foreach { case (str, dataType, ym, year, month) =>
+        checkEvaluation(cast(Literal.create(str), dataType), ym)
+        checkEvaluation(cast(Literal.create(s"INTERVAL '$str' YEAR TO MONTH"), dataType), ym)
+        checkEvaluation(cast(Literal.create(s"INTERVAL -'$str' YEAR TO MONTH"), dataType), -ym)
+      }
+
+    Seq(("13", YearMonthIntervalType(YEAR), 156, 12),
+      ("13", YearMonthIntervalType(YEAR, MONTH), 156, 13),
+      ("13", YearMonthIntervalType(MONTH), 156, 13),
+      ("-13", YearMonthIntervalType(YEAR), -156, -12),
+      ("-13", YearMonthIntervalType(YEAR, MONTH), -156, -13),
+      ("-13", YearMonthIntervalType(MONTH), -156, -13))
+      .foreach { case (str, dataType, year, month) =>
+        checkEvaluation(cast(Literal.create(s"INTERVAL '$str' YEAR"), dataType), year)
+        checkEvaluation(cast(Literal.create(s"INTERVAL '$str' MONTH"), dataType), month)
+      }
+
+    Seq("INTERVAL '1-1' YEAR", "INTERVAL '1-1' MONTH")
+      .foreach { interval =>
+        val e = intercept[IllegalArgumentException] {
+          cast(Literal.create(interval), YearMonthIntervalType()).eval()
+        }.getMessage
+        assert(e.contains("Interval string does not match year-month format"))
+      }
+  }
+
 }
