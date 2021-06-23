@@ -3547,10 +3547,11 @@ class Analyzer(override val catalogManager: CatalogManager)
    */
   object ResolveFieldNames extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
-      case a @ AlterTableDropColumns(r: ResolvedTable, _) =>
+      case a: AlterTableCommand if a.table.resolved =>
         a.transformExpressions {
           case u: UnresolvedFieldName =>
-            resolveFieldNames(r.schema, u.name).map(ResolvedFieldName(_)).getOrElse(u)
+            val table = a.table.asInstanceOf[ResolvedTable]
+            resolveFieldNames(table.schema, u.name).map(ResolvedFieldName(_)).getOrElse(u)
         }
     }
 
