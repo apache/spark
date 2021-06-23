@@ -104,7 +104,7 @@ object IntervalUtils {
   private val yearMonthPatternString = "([+|-])?(\\d+)-(\\d+)"
   private val yearMonthRegex = (s"^$yearMonthPatternString$$").r
   private val yearMonthLiteralRegex =
-    (s"(?i)^INTERVAL\\s+([+|-])?'$yearMonthPatternString'\\s+(YEAR|YEAR\\s+TO\\s+MONTH|MONTH)$$").r
+    (s"(?i)^INTERVAL\\s+([+|-])?'$yearMonthPatternString'\\s+YEAR\\s+TO\\s+MONTH$$").r
   private val yearMonthIndividualLiteralRegex =
     (s"(?i)^INTERVAL\\s+([+|-])?'([+|-])?(\\d+)'\\s+(YEAR|MONTH)$$").r
 
@@ -129,11 +129,8 @@ object IntervalUtils {
     input.trimAll().toString match {
       case yearMonthRegex("-", year, month) => toYMInterval(year, truncatedMonth(month), -1)
       case yearMonthRegex(_, year, month) => toYMInterval(year, truncatedMonth(month), 1)
-      case yearMonthLiteralRegex(firstSign, secondSign, year, month, prefix) =>
-        prefix match {
-          case "YEAR" => toYMInterval(year, "0", getSigh(firstSign, secondSign))
-          case _ => toYMInterval(year, truncatedMonth(month), getSigh(firstSign, secondSign))
-        }
+      case yearMonthLiteralRegex(firstSign, secondSign, year, month) =>
+        toYMInterval(year, truncatedMonth(month), getSigh(firstSign, secondSign))
       case yearMonthIndividualLiteralRegex(firstSign, secondSign, value, suffix) =>
         suffix match {
           case "YEAR" => toYMInterval(value, "0", getSigh(firstSign, secondSign))
@@ -145,8 +142,8 @@ object IntervalUtils {
         }
       case _ => throw new IllegalArgumentException(
         s"Interval string does not match year-month format of `[+|-]y-m` " +
-          s", `INTERVAL [+|-]'[+|-]y-m' YEAR`, `INTERVAL [+|-]'[+|-]y-m' YEAR TO MONTH` " +
-          s"or `INTERVAL [+|-]'[+|-]y-m' MONTH` when cast to " +
+          s", `INTERVAL [+|-]'[+|-]y' YEAR`, `INTERVAL [+|-]'[+|-]y-m' YEAR TO MONTH` " +
+          s"or `INTERVAL [+|-]'[+|-]m' MONTH` when cast to " +
           s"${YearMonthIntervalType(startField, endField).typeName}: ${input.toString}")
     }
   }

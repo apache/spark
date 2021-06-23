@@ -665,19 +665,25 @@ class CastSuite extends CastSuiteBase {
         checkEvaluation(cast(Literal.create(str), dataType), ym)
         checkEvaluation(cast(Literal.create(s"INTERVAL '$str' YEAR TO MONTH"), dataType), ym)
         checkEvaluation(cast(Literal.create(s"INTERVAL -'$str' YEAR TO MONTH"), dataType), -ym)
-        checkEvaluation(cast(Literal.create(s"INTERVAL '$str' YEAR"), dataType), year)
-        checkEvaluation(cast(Literal.create(s"INTERVAL '$str' MONTH"), dataType), month)
       }
 
     Seq(("13", YearMonthIntervalType(YEAR), 156, 12),
       ("13", YearMonthIntervalType(YEAR, MONTH), 156, 13),
       ("13", YearMonthIntervalType(MONTH), 156, 13),
-      ("-13", YearMonthIntervalType(YEAR, YEAR), -156, -12),
-      ("-13", YearMonthIntervalType(YEAR), -156, -13),
+      ("-13", YearMonthIntervalType(YEAR), -156, -12),
+      ("-13", YearMonthIntervalType(YEAR, MONTH), -156, -13),
       ("-13", YearMonthIntervalType(MONTH), -156, -13))
       .foreach { case (str, dataType, year, month) =>
         checkEvaluation(cast(Literal.create(s"INTERVAL '$str' YEAR"), dataType), year)
         checkEvaluation(cast(Literal.create(s"INTERVAL '$str' MONTH"), dataType), month)
+      }
+
+    Seq("INTERVAL '1-1' YEAR", "INTERVAL '1-1' MONTH")
+      .foreach { interval =>
+        val e = intercept[IllegalArgumentException] {
+          cast(Literal.create(interval), YearMonthIntervalType()).eval()
+        }.getMessage
+        assert(e.contains("Interval string does not match year-month format"))
       }
   }
 
