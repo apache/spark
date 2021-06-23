@@ -252,10 +252,6 @@ object ResolveHints {
     private def createRebalance(hint: UnresolvedHint): LogicalPlan = {
       hint.parameters match {
         case partitionExprs @ Seq(_*) =>
-          val sortOrders = partitionExprs.filter(_.isInstanceOf[SortOrder])
-          if (sortOrders.nonEmpty) {
-            throw QueryCompilationErrors.invalidRepartitionExpressionsError(sortOrders)
-          }
           val invalidParams = partitionExprs.filter(!_.isInstanceOf[UnresolvedAttribute])
           if (invalidParams.nonEmpty) {
             val hintName = hint.name.toUpperCase(Locale.ROOT)
