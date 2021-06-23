@@ -104,7 +104,7 @@ object IntervalUtils {
   private val yearMonthPatternString = "([+|-])?(\\d+)-(\\d+)"
   private val yearMonthRegex = (s"^$yearMonthPatternString$$").r
   private val yearMonthLiteralRegex =
-    (s"(?i)^INTERVAL\\s+([+|-])?'$yearMonthPatternString'\\s+(YEAR|YEAR\\s+TO\\s+MONTH|MONTH)$$").r
+    (s"(?i)^INTERVAL\\s+([+|-])?'$yearMonthPatternString'\\s+YEAR\\s+TO\\s+MONTH$$").r
   private val yearMonthIndividualLiteralRegex =
     (s"(?i)^INTERVAL\\s+([+|-])?'([+|-])?(\\d+)'\\s+(YEAR|MONTH)$$").r
 
@@ -112,6 +112,12 @@ object IntervalUtils {
       input: UTF8String,
       startField: Byte,
       endField: Byte): Int = {
+
+    val supportedFormat = Map(
+      (YM.YEAR, YM.MONTH) -> Seq("[+|-]y-m", "INTERVAL [+|-]'[+|-]y-m' YEAR TO MONTH"),
+      (YM.YEAR, YM.YEAR) -> Seq("INTERVAL [+|-]'[+|-]y' YEAR"),
+      (YM.MONTH, YM.MONTH) -> Seq("INTERVAL [+|-]'[+|-]m' MONTH")
+    )
 
     def truncatedMonth(month: String) : String = {
       if (endField == YM.YEAR) "0" else month
@@ -126,26 +132,33 @@ object IntervalUtils {
       }
     }
 
+    def checkStringIntervalType(targetStartField: Byte, targetEndField: Byte): Unit = {
+      if (startField != targetStartField || endField != targetEndField) {
+        throw new IllegalArgumentException(s"Interval string does not match year-month format of " +
+          s"${supportedFormat((targetStartField, targetStartField))
+            .map(format => s"`$format`").mkString(", ")} " +
+          s"when cast to ${YM(startField, endField).typeName}: ${input.toString}")
+      }
+    }
+
     input.trimAll().toString match {
-      case yearMonthRegex("-", year, month) => toYMInterval(year, truncatedMonth(month), -1)
-      case yearMonthRegex(_, year, month) => toYMInterval(year, truncatedMonth(month), 1)
-      case yearMonthLiteralRegex(firstSign, secondSign, year, month, suffix) =>
-        suffix match {
-          case "YEAR" | "MONTH" =>
-            throw new IllegalArgumentException("Interval string does not match year-month format")
-          case _ => toYMInterval(year, truncatedMonth(month), getSigh(firstSign, secondSign))
-        }
+      case yearMonthRegex("-", year, month) =>
+        checkStringIntervalType(YM.YEAR, YM.MONTH)
+        toYMInterval(year, truncatedMonth(month), -1)
+      case yearMonthRegex(_, year, month) =>
+        checkStringIntervalType(YM.YEAR, YM.MONTH)
+        toYMInterval(year, truncatedMonth(month), 1)
+      case yearMonthLiteralRegex(firstSign, secondSign, year, month) =>
+        checkStringIntervalType(YM.YEAR, YM.MONTH)
+        toYMInterval(year, truncatedMonth(month), getSigh(firstSign, secondSign))
       case yearMonthIndividualLiteralRegex(firstSign, secondSign, value, suffix) =>
         val sign = getSigh(firstSign, secondSign)
         if ("YEAR".equalsIgnoreCase(suffix)) {
+          checkStringIntervalType(YM.YEAR, YM.YEAR)
           sign * Math.toIntExact(value.toLong * MONTHS_PER_YEAR)
         } else {
-          val months = Math.toIntExact(sign * value.toLong)
-          if (endField == YM.YEAR) {
-            months - months % 12
-          } else {
-            months
-          }
+          checkStringIntervalType(YM.MONTH, YM.MONTH)
+          Math.toIntExact(sign * value.toLong)
         }
       case _ => throw new IllegalArgumentException(
         s"Interval string does not match year-month format of `[+|-]y-m` " +
