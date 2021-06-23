@@ -108,6 +108,15 @@ object IntervalUtils {
   private val yearMonthIndividualLiteralRegex =
     (s"(?i)^INTERVAL\\s+([+|-])?'([+|-])?(\\d+)'\\s+(YEAR|MONTH)$$").r
 
+  private def getSign(firstSign: String, secondSign: String): Int = {
+    (firstSign, secondSign) match {
+      case ("-", "-") => 1
+      case ("-", _) => -1
+      case (_, "-") => -1
+      case (_, _) => 1
+    }
+  }
+
   def castStringToYMInterval(
       input: UTF8String,
       startField: Byte,
@@ -118,19 +127,6 @@ object IntervalUtils {
       (YM.YEAR, YM.YEAR) -> Seq("INTERVAL [+|-]'[+|-]y' YEAR"),
       (YM.MONTH, YM.MONTH) -> Seq("INTERVAL [+|-]'[+|-]m' MONTH")
     )
-
-    def truncatedMonth(month: String) : String = {
-      if (endField == YM.YEAR) "0" else month
-    }
-
-    def getSigh(firstSign: String, secondSign: String): Int = {
-      (firstSign, secondSign) match {
-        case ("-", "-") => 1
-        case ("-", _) => -1
-        case (_, "-") => -1
-        case (_, _) => 1
-      }
-    }
 
     def checkStringIntervalType(targetStartField: Byte, targetEndField: Byte): Unit = {
       if (startField != targetStartField || endField != targetEndField) {
@@ -144,15 +140,15 @@ object IntervalUtils {
     input.trimAll().toString match {
       case yearMonthRegex("-", year, month) =>
         checkStringIntervalType(YM.YEAR, YM.MONTH)
-        toYMInterval(year, truncatedMonth(month), -1)
+        toYMInterval(year, month, -1)
       case yearMonthRegex(_, year, month) =>
         checkStringIntervalType(YM.YEAR, YM.MONTH)
-        toYMInterval(year, truncatedMonth(month), 1)
+        toYMInterval(year, month, 1)
       case yearMonthLiteralRegex(firstSign, secondSign, year, month) =>
         checkStringIntervalType(YM.YEAR, YM.MONTH)
-        toYMInterval(year, truncatedMonth(month), getSigh(firstSign, secondSign))
+        toYMInterval(year, month, getSign(firstSign, secondSign))
       case yearMonthIndividualLiteralRegex(firstSign, secondSign, value, suffix) =>
-        val sign = getSigh(firstSign, secondSign)
+        val sign = getSign(firstSign, secondSign)
         if ("YEAR".equalsIgnoreCase(suffix)) {
           checkStringIntervalType(YM.YEAR, YM.YEAR)
           sign * Math.toIntExact(value.toLong * MONTHS_PER_YEAR)
@@ -223,12 +219,8 @@ object IntervalUtils {
       case daySecondRegex(_, day, hour, minute, second, micro) =>
         toDTInterval(day, hour, minute, secondAndMicro(second, micro), 1)
       case daySecondLiteralRegex(firstSign, secondSign, day, hour, minute, second, micro) =>
-        (firstSign, secondSign) match {
-          case ("-", "-") => toDTInterval(day, hour, minute, secondAndMicro(second, micro), 1)
-          case ("-", _) => toDTInterval(day, hour, minute, secondAndMicro(second, micro), -1)
-          case (_, "-") => toDTInterval(day, hour, minute, secondAndMicro(second, micro), -1)
-          case (_, _) => toDTInterval(day, hour, minute, secondAndMicro(second, micro), 1)
-        }
+        toDTInterval(day, hour, minute, secondAndMicro(second, micro),
+          getSign(firstSign, secondSign))
       case _ =>
         throw new IllegalArgumentException(
           s"Interval string must match day-time format of `d h:m:s.n` " +
