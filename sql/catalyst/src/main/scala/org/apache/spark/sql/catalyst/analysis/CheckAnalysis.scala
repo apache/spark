@@ -440,8 +440,14 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
           case write: V2WriteCommand if write.resolved =>
             write.query.schema.foreach(f => TypeUtils.failWithIntervalType(f.dataType))
 
-          case alter @ AlterTableDropColumns(table: ResolvedTable, columnsToDrop) =>
-            columnsToDrop.foreach(col => findField(alter, table, "delete", col.toArray))
+          case alter: AlterTableCommand if alter.table.resolved =>
+            alter.transformExpressions {
+              case u: UnresolvedFieldName =>
+                val table = alter.table.asInstanceOf[ResolvedTable]
+                alter.failAnalysis(
+                  s"Cannot ${alter.operation} missing field ${u.name.quoted} in ${table.name} " +
+                    s"schema: ${table.schema.treeString}")
+            }
 
           case alter: AlterTable if alter.table.resolved =>
             val table = alter.table

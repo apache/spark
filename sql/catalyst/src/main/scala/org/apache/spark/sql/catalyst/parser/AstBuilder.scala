@@ -3633,7 +3633,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       createUnresolvedTable(
         ctx.multipartIdentifier,
         "ALTER TABLE ... DROP COLUMNS"),
-      columnsToDrop.toSeq)
+      columnsToDrop.map(UnresolvedFieldName(_)).toSeq)
   }
 
   /**
