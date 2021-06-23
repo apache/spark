@@ -507,11 +507,14 @@ def read_delta(
         Path to the Delta Lake table.
     version : string, optional
         Specifies the table version (based on Delta's internal transaction version) to read from,
-        using Delta's time travel feature. This sets Delta's 'versionAsOf' option.
+        using Delta's time travel feature. This sets Delta's 'versionAsOf' option. Note that
+        this paramter and `timestamp` paramter cannot be used together, otherwise it will raise a
+        `ValueError`.
     timestamp : string, optional
         Specifies the table version (based on timestamp) to read from,
         using Delta's time travel feature. This must be a valid date or timestamp string in Spark,
-        and sets Delta's 'timestampAsOf' option.
+        and sets Delta's 'timestampAsOf' option. Note that this paramter and `version` paramter
+        cannot be used together, otherwise it will raise a `ValueError`.
     index_col : str or list of str, optional, default: None
         Index column of table in Spark.
     options
@@ -562,6 +565,8 @@ def read_delta(
     3      13
     4      14
     """
+    if version is not None and timestamp is not None:
+        raise ValueError("version and timestamp cannot be used together.")
     if "options" in options and isinstance(options.get("options"), dict) and len(options) == 1:
         options = options.get("options")  # type: ignore
 
