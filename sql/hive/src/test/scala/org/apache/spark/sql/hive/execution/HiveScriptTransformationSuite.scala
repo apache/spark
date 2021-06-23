@@ -523,7 +523,7 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
 
   }
 
-  test("SPARK-35733: HiveInspectors supports supports all type of DayTimeIntervalType") {
+  test("SPARK-34879, SPARK-35733: HiveInspectors supports all type of DayTimeIntervalType") {
     assume(TestUtils.testCommandAvailable("/bin/bash"))
     withTempView("v") {
       val schema = StructType(Seq(
@@ -573,7 +573,7 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
     }
   }
 
-  test("SPARK-35722: HiveInspectors supports all type of YearMonthIntervalType") {
+  test("SPARK-34879, SPARK-35722: HiveInspectors supports all type of YearMonthIntervalType") {
     assume(TestUtils.testCommandAvailable("/bin/bash"))
     withTempView("v") {
       val schema = StructType(Seq(
@@ -611,7 +611,6 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
           df,
           (child: SparkPlan) => createScriptTransformationExec(
             script = "cat",
-            // TODO(SPARK-35733): Check all day-time interval types in HiveInspectors tests
             output = Seq(AttributeReference("a", DayTimeIntervalType())()),
             child = child,
             ioschema = hiveIOSchema),
