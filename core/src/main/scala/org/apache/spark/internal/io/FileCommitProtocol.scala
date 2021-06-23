@@ -115,7 +115,7 @@ abstract class FileCommitProtocol extends Logging {
   def newTaskTempFile(
       taskContext: TaskAttemptContext, dir: Option[String], spec: FileNameSpec): String = {
     if (spec.prefix.isEmpty) {
-      newTaskTempFile(taskContext, dir, spec.ext)
+      newTaskTempFile(taskContext, dir, spec.suffix)
     } else {
       throw new UnsupportedOperationException(s"${getClass.getSimpleName}.newTaskTempFile does " +
         s"not support file name prefix: ${spec.prefix}")
@@ -154,7 +154,7 @@ abstract class FileCommitProtocol extends Logging {
   def newTaskTempFileAbsPath(
       taskContext: TaskAttemptContext, absoluteDir: String, spec: FileNameSpec): String = {
     if (spec.prefix.isEmpty) {
-      newTaskTempFileAbsPath(taskContext, absoluteDir, spec.ext)
+      newTaskTempFileAbsPath(taskContext, absoluteDir, spec.suffix)
     } else {
       throw new UnsupportedOperationException(
         s"${getClass.getSimpleName}.newTaskTempFileAbsPath does not support file name prefix: " +
