@@ -97,8 +97,8 @@ case object REPARTITION_BY_NUM extends ShuffleOrigin
 // reader.
 case object REBALANCE_PARTITIONS_BY_NONE extends ShuffleOrigin
 
-// Indicates that the shuffle operator was added by the user-specified repartition operator. Spark
-// can still optimize it via changing shuffle partition number, as data partitioning won't change.
+// Indicates that the shuffle operator was not guaranteed the output partitioning so Spark
+// can try to optimize the partition number in AQE framework.
 case object REBALANCE_PARTITIONS_BY_COL extends ShuffleOrigin
 
 /**
