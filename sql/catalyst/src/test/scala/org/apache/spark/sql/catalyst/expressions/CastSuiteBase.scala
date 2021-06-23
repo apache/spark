@@ -672,6 +672,18 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     atomicTypes.foreach { atomicType =>
       assert(Cast.canUpCast(NullType, atomicType))
     }
+
+    dayTimeIntervalTypes.foreach { from =>
+      dayTimeIntervalTypes.foreach { to =>
+        assert(Cast.canUpCast(from, to))
+      }
+    }
+
+    yearMonthIntervalTypes.foreach { from =>
+      yearMonthIntervalTypes.foreach { to =>
+        assert(Cast.canUpCast(from, to))
+      }
+    }
   }
 
   test("SPARK-27671: cast from nested null type in struct") {
