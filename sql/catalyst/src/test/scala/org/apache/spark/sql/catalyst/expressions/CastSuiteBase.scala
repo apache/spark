@@ -1101,13 +1101,14 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
         checkEvaluation(cast(Literal.create(s"INTERVAL '$str' MONTH"), dataType), month)
       }
 
-    Seq("INTERVAL '1-1' YEAR", "INTERVAL '1-1' MONTH")
-      .foreach { interval =>
-        val e = intercept[IllegalArgumentException] {
-          cast(Literal.create(interval), YearMonthIntervalType()).eval()
-        }.getMessage
-        assert(e.contains("Interval string does not match year-month format"))
-      }
+    if (!isTryCast) {
+      Seq("INTERVAL '1-1' YEAR", "INTERVAL '1-1' MONTH")
+        .foreach { interval =>
+          val e = intercept[IllegalArgumentException] {
+            cast(Literal.create(interval), YearMonthIntervalType()).eval()
+          }.getMessage
+          assert(e.contains("Interval string does not match year-month format"))
+        }
+    }
   }
-
 }
