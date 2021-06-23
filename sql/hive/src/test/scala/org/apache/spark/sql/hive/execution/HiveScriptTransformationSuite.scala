@@ -555,9 +555,9 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
     assume(TestUtils.testCommandAvailable("/bin/bash"))
     withTempView("v") {
       val schema = StructType(Seq(
-        StructField("a", YearMonthIntervalType(YEAR, YEAR)),
+        StructField("a", YearMonthIntervalType(YEAR)),
         StructField("b", YearMonthIntervalType(YEAR, MONTH)),
-        StructField("c", YearMonthIntervalType(MONTH, MONTH))
+        StructField("c", YearMonthIntervalType(MONTH))
       ))
       val df = spark.createDataFrame(sparkContext.parallelize(Seq(
         Row(Period.ofMonths(13), Period.ofMonths(13), Period.ofMonths(13))
@@ -568,9 +568,9 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
         (child: SparkPlan) => createScriptTransformationExec(
           script = "cat",
           output = Seq(
-            AttributeReference("a", YearMonthIntervalType(YEAR, YEAR))(),
+            AttributeReference("a", YearMonthIntervalType(YEAR))(),
             AttributeReference("b", YearMonthIntervalType(YEAR, MONTH))(),
-            AttributeReference("c", YearMonthIntervalType(MONTH, MONTH))()),
+            AttributeReference("c", YearMonthIntervalType(MONTH))()),
           child = child,
           ioschema = hiveIOSchema),
         df.select($"a", $"b", $"c").collect())
