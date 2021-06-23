@@ -106,7 +106,7 @@ case class SubqueryBroadcastExec(
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
-    throw QueryExecutionErrors.executeUnsupportedByExecError("SubqueryBroadcastExec")
+    throw QueryExecutionErrors.executeCodePathUnsupportedError("SubqueryBroadcastExec")
   }
 
   override def executeCollect(): Array[InternalRow] = {

@@ -132,7 +132,7 @@ case class BroadcastExchangeExec(
             val (numRows, input) = child.executeCollectIterator()
             longMetric("numOutputRows") += numRows
             if (numRows >= maxBroadcastRows) {
-              throw QueryExecutionErrors.cannotBroadcastExceedMaxTableRowsError(
+              throw QueryExecutionErrors.cannotBroadcastTableOverMaxTableRowsError(
                 maxBroadcastRows, numRows)
             }
 
@@ -154,7 +154,7 @@ case class BroadcastExchangeExec(
 
             longMetric("dataSize") += dataSize
             if (dataSize >= MAX_BROADCAST_TABLE_BYTES) {
-              throw QueryExecutionErrors.cannotBroadcastExceedMaxTableBytesError(
+              throw QueryExecutionErrors.cannotBroadcastTableOverMaxTableBytesError(
                 MAX_BROADCAST_TABLE_BYTES, dataSize)
             }
 
@@ -195,7 +195,7 @@ case class BroadcastExchangeExec(
   }
 
   override protected def doExecute(): RDD[InternalRow] = {
-    throw QueryExecutionErrors.executeUnsupportedByExecError("BroadcastExchange")
+    throw QueryExecutionErrors.executeCodePathUnsupportedError("BroadcastExchange")
   }
 
   override protected[sql] def doExecuteBroadcast[T](): broadcast.Broadcast[T] = {

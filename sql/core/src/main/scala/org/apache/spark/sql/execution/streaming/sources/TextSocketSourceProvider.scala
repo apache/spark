@@ -42,17 +42,17 @@ class TextSocketSourceProvider extends SimpleTableProvider with DataSourceRegist
     logWarning("The socket source should not be used for production applications! " +
       "It does not support recovery.")
     if (!params.containsKey("host")) {
-      throw QueryCompilationErrors.notSetHostOptionError()
+      throw QueryCompilationErrors.hostOptionNotSetError()
     }
     if (!params.containsKey("port")) {
-      throw QueryCompilationErrors.notSetPortOptionError()
+      throw QueryCompilationErrors.portOptionNotSetError()
     }
     Try {
       params.getBoolean("includeTimestamp", false)
     } match {
       case Success(_) =>
       case Failure(_) =>
-        throw QueryCompilationErrors.includeTimestampIsNotSuitableError()
+        throw QueryCompilationErrors.invalidIncludeTimestampValueError()
     }
   }
 

@@ -186,7 +186,7 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
       val exitCode = proc.exitValue()
       if (exitCode != 0) {
         logError(stderrBuffer.toString) // log the stderr circular buffer
-        throw QueryExecutionErrors.subProcessExitedError(exitCode, stderrBuffer, cause)
+        throw QueryExecutionErrors.subprocessExitedError(exitCode, stderrBuffer, cause)
       }
     }
   }

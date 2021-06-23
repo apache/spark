@@ -63,7 +63,7 @@ case class WriteToContinuousDataSourceExec(write: StreamingWrite, query: SparkPl
           // Do not wrap interruption exceptions that will be handled by streaming specially.
           case _ if StreamExecution.isInterruptionException(cause, sparkContext) => throw cause
           // Only wrap non fatal exceptions.
-          case NonFatal(e) => throw QueryExecutionErrors.failedWriteJobError(e)
+          case NonFatal(e) => throw QueryExecutionErrors.writingJobAbortedError(e)
           case _ => throw cause
         }
     }

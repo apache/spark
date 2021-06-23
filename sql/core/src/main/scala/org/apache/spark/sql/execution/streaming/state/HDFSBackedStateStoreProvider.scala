@@ -471,7 +471,7 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
         if (keySize == -1) {
           eof = true
         } else if (keySize < 0) {
-          throw QueryExecutionErrors.failedReadDeltaFileError(fileToRead, toString(), keySize)
+          throw QueryExecutionErrors.failedToReadDeltaFileError(fileToRead, toString(), keySize)
         } else {
           val keyRowBuffer = new Array[Byte](keySize)
           ByteStreams.readFully(input, keyRowBuffer, 0, keySize)
@@ -568,7 +568,7 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
         if (keySize == -1) {
           eof = true
         } else if (keySize < 0) {
-          throw QueryExecutionErrors.failedReadSnapshotFileError(
+          throw QueryExecutionErrors.failedToReadSnapshotFileError(
             fileToRead, toString(), s"key size cannot be $keySize")
         } else {
           val keyRowBuffer = new Array[Byte](keySize)
@@ -579,7 +579,7 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
 
           val valueSize = input.readInt()
           if (valueSize < 0) {
-            throw QueryExecutionErrors.failedReadSnapshotFileError(
+            throw QueryExecutionErrors.failedToReadSnapshotFileError(
               fileToRead, toString(), s"value size cannot be $valueSize")
           } else {
             val valueRowBuffer = new Array[Byte](valueSize)

@@ -96,7 +96,7 @@ case class OptimizeMetadataOnlyQuery(catalog: SessionCatalog) extends Rule[Logic
     val attrMap = relation.output.map(a => a.name.toLowerCase(Locale.ROOT) -> a).toMap
     partitionColumnNames.map { colName =>
       attrMap.getOrElse(colName.toLowerCase(Locale.ROOT),
-        throw QueryCompilationErrors.cannotFindColumnInGivenOutputError(colName, relation)
+        throw QueryCompilationErrors.cannotFindColumnInRelationOutputError(colName, relation)
       )
     }
   }

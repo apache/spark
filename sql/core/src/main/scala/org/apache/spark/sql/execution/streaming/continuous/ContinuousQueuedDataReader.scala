@@ -103,10 +103,10 @@ class ContinuousQueuedDataReader(
         currentEntry = EpochMarker
       } else {
         if (dataReaderThread.failureReason != null) {
-          throw QueryExecutionErrors.failedReadDataError(dataReaderThread.failureReason)
+          throw QueryExecutionErrors.failedToReadDataError(dataReaderThread.failureReason)
         }
         if (epochMarkerGenerator.failureReason != null) {
-          throw QueryExecutionErrors.failedGenerateEpochMarkerError(dataReaderThread.failureReason)
+          throw QueryExecutionErrors.failedToGenerateEpochMarkerError(dataReaderThread.failureReason)
         }
         currentEntry = queue.poll(POLL_TIMEOUT_MS, TimeUnit.MILLISECONDS)
       }

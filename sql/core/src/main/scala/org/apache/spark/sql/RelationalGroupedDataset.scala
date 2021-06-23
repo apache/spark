@@ -100,7 +100,7 @@ class RelationalGroupedDataset protected[sql](
       colNames.map { colName =>
         val namedExpr = df.resolve(colName)
         if (!namedExpr.dataType.isInstanceOf[NumericType]) {
-          throw QueryCompilationErrors.aggregationFunctionBeAppliedOnNonNumericColumnError(colName)
+          throw QueryCompilationErrors.aggregationFunctionAppliedOnNonNumericColumnError(colName)
         }
         namedExpr
       }
@@ -427,7 +427,7 @@ class RelationalGroupedDataset protected[sql](
       .toSeq
 
     if (values.length > maxValues) {
-      throw QueryCompilationErrors.aggregationFunctionBeAppliedOnNonNumericColumnError(
+      throw QueryCompilationErrors.aggregationFunctionAppliedOnNonNumericColumnError(
         pivotColumn.toString, maxValues)
     }
 

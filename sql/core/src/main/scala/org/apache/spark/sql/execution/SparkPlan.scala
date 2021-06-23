@@ -298,7 +298,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    * Overridden by concrete implementations of SparkPlan.
    */
   protected[sql] def doExecuteBroadcast[T](): broadcast.Broadcast[T] = {
-    throw QueryExecutionErrors.doExecuteBroadcastNotImplementedByNodeError(nodeName)
+    throw QueryExecutionErrors.doExecuteBroadcastNotImplementedError(nodeName)
   }
 
   /**

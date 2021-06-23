@@ -151,7 +151,7 @@ private[sql] class ExecutionListenerBus private(sessionUUID: String)
           val exception = ex match {
             case e: Exception => e
             case other: Throwable =>
-              QueryExecutionErrors.hitAnErrorWhenExecutingQueryError(other)
+              QueryExecutionErrors.failedToExecuteQueryError(other)
           }
           listener.onFailure(funcName, event.qe, exception)
         case _ =>

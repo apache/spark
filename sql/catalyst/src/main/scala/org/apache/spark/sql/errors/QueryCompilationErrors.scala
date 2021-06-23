@@ -1722,15 +1722,15 @@ private[spark] object QueryCompilationErrors {
         s"is 'YYYY-MM-DDTHH:mm:ss', but the provided timestamp: $timeString")
   }
 
-  def notSetHostOptionError(): Throwable = {
+  def hostOptionNotSetError(): Throwable = {
     new AnalysisException("Set a host to read from with option(\"host\", ...).")
   }
 
-  def notSetPortOptionError(): Throwable = {
+  def portOptionNotSetError(): Throwable = {
     new AnalysisException("Set a port to read from with option(\"port\", ...).")
   }
 
-  def includeTimestampIsNotSuitableError(): Throwable = {
+  def invalidIncludeTimestampValueError(): Throwable = {
     new AnalysisException("includeTimestamp must be set to either \"true\" or \"false\"")
   }
 
@@ -1748,7 +1748,7 @@ private[spark] object QueryCompilationErrors {
       s"Delete $checkpointPath to start over.")
   }
 
-  def cannotFindColumnInGivenOutputError(
+  def cannotFindColumnInRelationOutputError(
       colName: String, relation: LogicalPlan): Throwable = {
     new AnalysisException(s"Unable to find the column `$colName` " +
       s"given [${relation.output.map(_.name).mkString(", ")}]")
@@ -1836,7 +1836,7 @@ private[spark] object QueryCompilationErrors {
     new AnalysisException(s"Table $tableIdent already exists.")
   }
 
-  def overwriteTableThatIsBeingReadFromError(tableName: String): Throwable = {
+  def cannotOverwriteTableThatIsBeingReadFromError(tableName: String): Throwable = {
     new AnalysisException(s"Cannot overwrite table $tableName that is also being read from")
   }
 
@@ -1885,12 +1885,12 @@ private[spark] object QueryCompilationErrors {
       s"use this API with caution")
   }
 
-  def aggregationFunctionBeAppliedOnNonNumericColumnError(colName: String): Throwable = {
+  def aggregationFunctionAppliedOnNonNumericColumnError(colName: String): Throwable = {
     new AnalysisException(s""""$colName" is not a numeric column. """ +
       "Aggregation function can only be applied on a numeric column.")
   }
 
-  def aggregationFunctionBeAppliedOnNonNumericColumnError(
+  def aggregationFunctionAppliedOnNonNumericColumnError(
       pivotColumn: String, maxValues: Int): Throwable = {
     new AnalysisException(
       s"""

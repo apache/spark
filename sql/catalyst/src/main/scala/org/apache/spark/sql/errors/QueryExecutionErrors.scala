@@ -1496,13 +1496,13 @@ object QueryExecutionErrors {
     new SparkException(s"Failed merging schema:\n${schema.treeString}", e)
   }
 
-  def cannotBroadcastExceedMaxTableRowsError(
+  def cannotBroadcastTableOverMaxTableRowsError(
       maxBroadcastTableRows: Long, numRows: Long): Throwable = {
     new SparkException(
       s"Cannot broadcast the table over $maxBroadcastTableRows rows: $numRows rows")
   }
 
-  def cannotBroadcastExceedMaxTableBytesError(
+  def cannotBroadcastTableOverMaxTableBytesError(
       maxBroadcastTableBytes: Long, dataSize: Long): Throwable = {
     new SparkException("Cannot broadcast the table that is larger than" +
       s" ${maxBroadcastTableBytes >> 30}GB: ${dataSize >> 30} GB")
@@ -1516,7 +1516,7 @@ object QueryExecutionErrors {
       .initCause(oe.getCause)
   }
 
-  def executeUnsupportedByExecError(execName: String): Throwable = {
+  def executeCodePathUnsupportedError(execName: String): Throwable = {
     new UnsupportedOperationException(s"$execName does not support the execute() code path.")
   }
 
@@ -1530,16 +1530,12 @@ object QueryExecutionErrors {
       s"Data source $sourceName does not support continuous processing.")
   }
 
-  def failedReadDataError(failureReason: Throwable): Throwable = {
+  def failedToReadDataError(failureReason: Throwable): Throwable = {
     new SparkException("Data read failed", failureReason)
   }
 
-  def failedGenerateEpochMarkerError(failureReason: Throwable): Throwable = {
+  def failedToGenerateEpochMarkerError(failureReason: Throwable): Throwable = {
     new SparkException("Epoch marker generation failed", failureReason)
-  }
-
-  def failedWriteJobError(failureReason: Throwable): Throwable = {
-    new SparkException("Writing job aborted.", failureReason)
   }
 
   def foreachWriterAbortedDueToTaskFailureError(): Throwable = {
@@ -1550,12 +1546,12 @@ object QueryExecutionErrors {
     new ArithmeticException(s"Integer overflow. $message")
   }
 
-  def failedReadDeltaFileError(fileToRead: Path, clazz: String, keySize: Int): Throwable = {
+  def failedToReadDeltaFileError(fileToRead: Path, clazz: String, keySize: Int): Throwable = {
     new IOException(
       s"Error reading delta file $fileToRead of $clazz: key size cannot be $keySize")
   }
 
-  def failedReadSnapshotFileError(fileToRead: Path, clazz: String, message: String): Throwable = {
+  def failedToReadSnapshotFileError(fileToRead: Path, clazz: String, message: String): Throwable = {
     new IOException(s"Error reading snapshot file $fileToRead of $clazz: $message")
   }
 
@@ -1595,7 +1591,7 @@ object QueryExecutionErrors {
        """.stripMargin)
   }
 
-  def subProcessExitedError(
+  def subprocessExitedError(
       exitCode: Int, stderrBuffer: CircularBuffer, cause: Throwable): Throwable = {
     new SparkException(s"Subprocess exited with status $exitCode. " +
       s"Error: ${stderrBuffer.toString}", cause)
@@ -1619,7 +1615,7 @@ object QueryExecutionErrors {
       s"The backing $className has been modified since the creation of this Iterator")
   }
 
-  def doExecuteBroadcastNotImplementedByNodeError(nodeName: String): Throwable = {
+  def doExecuteBroadcastNotImplementedError(nodeName: String): Throwable = {
     new UnsupportedOperationException(s"$nodeName does not implement doExecuteBroadcast")
   }
 
@@ -1645,7 +1641,7 @@ object QueryExecutionErrors {
       "Rename column is only supported for MySQL version 8.0 and above.")
   }
 
-  def hitAnErrorWhenExecutingQueryError(e: Throwable): QueryExecutionException = {
+  def failedToExecuteQueryError(e: Throwable): QueryExecutionException = {
     val message = "Hit an error when executing a query" +
       (if (e.getMessage == null) "" else s": ${e.getMessage}")
     new QueryExecutionException(message, e)

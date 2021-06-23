@@ -38,7 +38,7 @@ case class SubqueryAdaptiveBroadcastExec(
     child: SparkPlan) extends BaseSubqueryExec with UnaryExecNode {
 
   protected override def doExecute(): RDD[InternalRow] = {
-    throw QueryExecutionErrors.executeUnsupportedByExecError("SubqueryAdaptiveBroadcastExec")
+    throw QueryExecutionErrors.executeCodePathUnsupportedError("SubqueryAdaptiveBroadcastExec")
   }
 
   protected override def doCanonicalize(): SparkPlan = {
