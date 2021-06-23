@@ -1949,6 +1949,9 @@ case class Cast(
     override val ansiEnabled: Boolean = SQLConf.get.ansiEnabled)
   extends CastBase {
 
+  def this(child: Expression, dataType: DataType, timeZoneId: Option[String]) =
+    this(child, dataType, timeZoneId, ansiEnabled = SQLConf.get.ansiEnabled)
+
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
 
