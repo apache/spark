@@ -24,7 +24,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
-import scala.util.{Random, Try}
+import scala.util.{Failure, Random, Success, Try}
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst._
@@ -115,8 +115,8 @@ object FakeV2SessionCatalog extends TableCatalog {
  *                              if `t` was a permanent table when the current view was created, it
  *                              should still be a permanent table when resolving the current view,
  *                              even if a temp view `t` has been created.
- * @param outerPlans The query plans from the outer query that can be used to resolve star
- *                   expressions in a subquery.
+ * @param outerPlan The query plan from the outer query that can be used to resolve star
+ *                  expressions in a subquery.
  */
 case class AnalysisContext(
     catalogAndNamespace: Seq[String] = Nil,
@@ -125,7 +125,7 @@ case class AnalysisContext(
     relationCache: mutable.Map[Seq[String], LogicalPlan] = mutable.Map.empty,
     referredTempViewNames: Seq[Seq[String]] = Seq.empty,
     referredTempFunctionNames: Seq[String] = Seq.empty,
-    outerPlans: Seq[LogicalPlan] = Seq.empty)
+    outerPlan: Option[LogicalPlan] = None)
 
 object AnalysisContext {
   private val value = new ThreadLocal[AnalysisContext]() {
@@ -156,12 +156,9 @@ object AnalysisContext {
     try f finally { set(originContext) }
   }
 
-  def withOuterPlans[A](outerPlans: Seq[LogicalPlan])(f: => A): A = {
+  def withOuterPlan[A](outerPlan: LogicalPlan)(f: => A): A = {
     val originContext = value.get()
-    // Since currently Spark can only resolve a subquery using the immediate outer query plans,
-    // the context should only include the current outer plans instead of adding the plans to
-    // the existing outer plans in the context.
-    val context = originContext.copy(outerPlans = outerPlans)
+    val context = originContext.copy(outerPlan = Some(outerPlan))
     set(context)
     try f finally { set(originContext) }
   }
@@ -1585,19 +1582,22 @@ class Analyzer(override val catalogManager: CatalogManager)
       }
     }
 
-    // Expand the star expression using the given plan.
+    // Expand the star expression using the input plan first. If failed, try resolve
+    // the star expression using the outer query plan and wrap the resolved attributes
+    // in outer references. Otherwise throw the original exception.
     private def expand(s: Star, plan: LogicalPlan): Seq[NamedExpression] = {
       withPosition(s) {
         try {
           s.expand(plan, resolver)
         } catch {
           case e: AnalysisException =>
-            // Try resolve the star expression using the outer query plans and wrap the resolved
-            // attributes in outer references. Otherwise throw the original exception.
-            AnalysisContext.get.outerPlans
-              .find(p => Try(s.expand(p, resolver)).isSuccess)
-              .map(s.expand(_, resolver).map(wrapOuterReference))
-              .getOrElse { throw e }
+            AnalysisContext.get.outerPlan.map(p =>
+              // Only a few unary nodes (Project/Aggregate) can host star expressions.
+              Try(s.expand(p.children.head, resolver)) match {
+                case Success(expanded) => expanded.map(wrapOuterReference)
+                case Failure(_) => throw e
+              }
+            ).getOrElse { throw e }
         }
       }
     }
@@ -2348,7 +2348,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       do {
         // Try to resolve the subquery plan using the regular analyzer.
         previous = current
-        current = AnalysisContext.withOuterPlans(plans) {
+        current = AnalysisContext.withOuterPlan(outer) {
           executeSameContext(current)
         }
 
