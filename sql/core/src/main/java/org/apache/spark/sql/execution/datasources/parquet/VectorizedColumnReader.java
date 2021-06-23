@@ -77,8 +77,7 @@ public class VectorizedColumnReader {
 
   /**
    * The index for the first row in the current page, among all rows across all pages in the
-   * column chunk for this reader. The value for this is 0 if there is no column index for the
-   * column chunk.
+   * column chunk for this reader. If there is no column index, the value is 0.
    */
   private long pageFirstRowIndex;
 
