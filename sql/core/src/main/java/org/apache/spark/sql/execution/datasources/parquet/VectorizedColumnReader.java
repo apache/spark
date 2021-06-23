@@ -160,18 +160,18 @@ public class VectorizedColumnReader {
       // page.
       dictionaryIds = column.reserveDictionaryIds(total);
     }
-    readState.resetForBatch(total);
+    readState.resetForNewBatch(total);
     while (readState.valuesToReadInBatch > 0) {
-      // Compute the number of values we want to read in this page.
       if (readState.valuesToReadInPage == 0) {
         int pageValueCount = readPage();
-        readState.resetForPage(pageValueCount, pageFirstRowIndex);
+        readState.resetForNewPage(pageValueCount, pageFirstRowIndex);
       }
       PrimitiveType.PrimitiveTypeName typeName =
           descriptor.getPrimitiveType().getPrimitiveTypeName();
       if (isCurrentPageDictionaryEncoded) {
         // Save starting offset in case we need to decode dictionary IDs.
         int startOffset = readState.offset;
+        // Save starting row index so we can check if we need to eagerly decode dict ids later
         long startRowId = readState.rowId;
 
         // Read and decode dictionary ids.

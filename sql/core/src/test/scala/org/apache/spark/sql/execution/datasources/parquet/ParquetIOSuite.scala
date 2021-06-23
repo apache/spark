@@ -386,7 +386,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
       .build()
   }
 
-  test("test multiple pages with different sizes and nulls") {
+  test("SPARK-34859: test multiple pages with different sizes and nulls") {
     def makeRawParquetFile(
         path: Path,
         dictionaryEnabled: Boolean,

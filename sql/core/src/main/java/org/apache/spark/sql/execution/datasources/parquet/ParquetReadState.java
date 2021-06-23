@@ -35,11 +35,11 @@ final class ParquetReadState {
   /** The current row range */
   private RowRange currentRange;
 
-  /** Maximum definition level */
+  /** Maximum definition level for the Parquet column */
   final int maxDefinitionLevel;
 
   /** The current index overall all rows within the column chunk. This is used to check if the
-   * current row should be skipped by comparing the index against the row ranges. */
+   * current row should be skipped by comparing against the row ranges. */
   long rowId;
 
   /** The offset in the current batch to put the next value */
@@ -83,26 +83,19 @@ final class ParquetReadState {
   }
 
   /**
-   * Called at the beginning of reading a new batch.
+   * Must be called at the beginning of reading a new batch.
    */
-  void resetForBatch(int batchSize) {
+  void resetForNewBatch(int batchSize) {
     this.offset = 0;
     this.valuesToReadInBatch = batchSize;
   }
 
   /**
-   * Called at the beginning of reading a new page.
+   * Must be called at the beginning of reading a new page.
    */
-  void resetForPage(int totalValuesInPage, long pageFirstRowIndex) {
+  void resetForNewPage(int totalValuesInPage, long pageFirstRowIndex) {
     this.valuesToReadInPage = totalValuesInPage;
     this.rowId = pageFirstRowIndex;
-  }
-
-  /**
-   * Returns whether there are more values to read in the current page.
-   */
-  boolean hasMoreInPage(int newOffset, long newRowId) {
-    return newRowId - rowId < valuesToReadInPage && newOffset - offset < valuesToReadInBatch;
   }
 
   /**
@@ -122,13 +115,16 @@ final class ParquetReadState {
   /**
    * Advance the current offset and rowId to the new values.
    */
-  void advanceOffset(int newOffset, long newRowId) {
+  void advanceOffsetAndRowId(int newOffset, long newRowId) {
     valuesToReadInBatch -= (newOffset - offset);
     valuesToReadInPage -= (newRowId - rowId);
     offset = newOffset;
     rowId = newRowId;
   }
 
+  /**
+   * Advance to the next range.
+   */
   void nextRange() {
     if (rowRanges == null) {
       currentRange = MAX_ROW_RANGE;

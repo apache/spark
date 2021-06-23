@@ -230,7 +230,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
       }
     }
 
-    state.advanceOffset(offset, rowId);
+    state.advanceOffsetAndRowId(offset, rowId);
   }
 
   /**
@@ -304,7 +304,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
       }
     }
 
-    state.advanceOffset(offset, rowId);
+    state.advanceOffsetAndRowId(offset, rowId);
   }
 
 
@@ -417,42 +417,42 @@ public final class VectorizedRleValuesReader extends ValuesReader
 
   @Override
   public void skipBooleans(int total) {
-    throw new UnsupportedOperationException("only skipIntegers is supported");
+    throw new UnsupportedOperationException("only skipIntegers is valid");
   }
 
   @Override
   public void skipBytes(int total) {
-    throw new UnsupportedOperationException("only skipIntegers is supported");
+    throw new UnsupportedOperationException("only skipIntegers is valid");
   }
 
   @Override
   public void skipShorts(int total) {
-    throw new UnsupportedOperationException("only skipIntegers is supported");
+    throw new UnsupportedOperationException("only skipIntegers is valid");
   }
 
   @Override
   public void skipLongs(int total) {
-    throw new UnsupportedOperationException("only skipIntegers is supported");
+    throw new UnsupportedOperationException("only skipIntegers is valid");
   }
 
   @Override
   public void skipFloats(int total) {
-    throw new UnsupportedOperationException("only skipIntegers is supported");
+    throw new UnsupportedOperationException("only skipIntegers is valid");
   }
 
   @Override
   public void skipDoubles(int total) {
-    throw new UnsupportedOperationException("only skipIntegers is supported");
+    throw new UnsupportedOperationException("only skipIntegers is valid");
   }
 
   @Override
   public void skipBinary(int total) {
-    throw new UnsupportedOperationException("only skipIntegers is supported");
+    throw new UnsupportedOperationException("only skipIntegers is valid");
   }
 
   @Override
   public void skipFixedLenByteArray(int total, int len) {
-    throw new UnsupportedOperationException("only skipIntegers is supported");
+    throw new UnsupportedOperationException("only skipIntegers is valid");
   }
 
   /**
