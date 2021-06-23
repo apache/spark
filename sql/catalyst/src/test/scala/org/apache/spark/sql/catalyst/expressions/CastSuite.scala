@@ -655,12 +655,12 @@ class CastSuite extends CastSuiteBase {
   }
 
   test("SPARK-35768: Take into account year-month interval fields in cast") {
-    Seq(("1-1", YearMonthIntervalType(YEAR, YEAR), 12, 12, 12),
+    Seq(("1-1", YearMonthIntervalType(YEAR), 12, 12, 12),
       ("1-1", YearMonthIntervalType(YEAR, MONTH), 13, 12, 13),
-      ("1-1", YearMonthIntervalType(MONTH, MONTH), 13, 12, 13),
-      ("-1-1", YearMonthIntervalType(YEAR, YEAR), -12, -12, -12),
+      ("1-1", YearMonthIntervalType(MONTH), 13, 12, 13),
+      ("-1-1", YearMonthIntervalType(YEAR), -12, -12, -12),
       ("-1-1", YearMonthIntervalType(YEAR, MONTH), -13, -12, -13),
-      ("-1-1", YearMonthIntervalType(MONTH, MONTH), -13, -12, -13))
+      ("-1-1", YearMonthIntervalType(MONTH), -13, -12, -13))
       .foreach { case (str, dataType, ym, year, month) =>
         checkEvaluation(cast(Literal.create(str), dataType), ym)
         checkEvaluation(cast(Literal.create(s"INTERVAL '$str' YEAR TO MONTH"), dataType), ym)
@@ -669,12 +669,12 @@ class CastSuite extends CastSuiteBase {
         checkEvaluation(cast(Literal.create(s"INTERVAL '$str' MONTH"), dataType), month)
       }
 
-    Seq(("13", YearMonthIntervalType(YEAR, YEAR), 156, 12),
+    Seq(("13", YearMonthIntervalType(YEAR), 156, 12),
       ("13", YearMonthIntervalType(YEAR, MONTH), 156, 13),
-      ("13", YearMonthIntervalType(MONTH, MONTH), 156, 13),
+      ("13", YearMonthIntervalType(MONTH), 156, 13),
       ("-13", YearMonthIntervalType(YEAR, YEAR), -156, -12),
-      ("-13", YearMonthIntervalType(YEAR, MONTH), -156, -13),
-      ("-13", YearMonthIntervalType(MONTH, MONTH), -156, -13))
+      ("-13", YearMonthIntervalType(YEAR), -156, -13),
+      ("-13", YearMonthIntervalType(MONTH), -156, -13))
       .foreach { case (str, dataType, year, month) =>
         checkEvaluation(cast(Literal.create(s"INTERVAL '$str' YEAR"), dataType), year)
         checkEvaluation(cast(Literal.create(s"INTERVAL '$str' MONTH"), dataType), month)
