@@ -22,7 +22,7 @@ import functools
 from collections import OrderedDict
 from contextlib import contextmanager
 import os
-from typing import (
+from typing import (  # noqa: F401 (SPARK-34943)
     Any,
     Callable,
     Dict,
