@@ -32,6 +32,8 @@ import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.DayTimeIntervalType._
+import org.apache.spark.sql.types.YearMonthIntervalType._
 import org.apache.spark.unsafe.types.CalendarInterval
 
 class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
@@ -434,20 +436,25 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("SPARK-35871: Literal.create(value, dataType) should support fields") {
-    Seq((Period.ofMonths(13), Array(13, 12, 13)))
-      .foreach { case (period, expect) =>
-        DataTypeTestUtils.yearMonthIntervalTypes.zip(expect).foreach { case (dt, result) =>
-          checkEvaluation(Literal.create(period, dt), result)
-        }
-      }
+    val period = Period.ofMonths(13)
+    Seq(YearMonthIntervalType(YEAR, MONTH) -> 13,
+      YearMonthIntervalType(YEAR) -> 12,
+      YearMonthIntervalType(MONTH) -> 13).foreach { case (dt, result) =>
+      checkEvaluation(Literal.create(period, dt), result)
+    }
 
-    Seq((Duration.ofSeconds(86400 + 3600 + 60 + 1),
-      Array(86400000000L, 90000000000L, 90060000000L, 90061000000L, 90000000000L,
-        90060000000L, 90061000000L, 90060000000L, 90061000000L, 90061000000L)))
-      .foreach { case (duration, expect) =>
-        DataTypeTestUtils.dayTimeIntervalTypes.zip(expect).foreach { case (dt, result) =>
-          checkEvaluation(Literal.create(duration, dt), result)
-        }
-      }
+    val duration = Duration.ofSeconds(86400 + 3600 + 60 + 1)
+    Seq(DayTimeIntervalType(DAY) -> 86400000000L,
+      DayTimeIntervalType(DAY, HOUR) -> 90000000000L,
+      DayTimeIntervalType(DAY, MINUTE) -> 90060000000L,
+      DayTimeIntervalType(DAY, SECOND) -> 90061000000L,
+      DayTimeIntervalType(HOUR) -> 90000000000L,
+      DayTimeIntervalType(HOUR, MINUTE) -> 90060000000L,
+      DayTimeIntervalType(HOUR, SECOND) -> 90061000000L,
+      DayTimeIntervalType(MINUTE) -> 90060000000L,
+      DayTimeIntervalType(MINUTE, SECOND) -> 90061000000L,
+      DayTimeIntervalType(SECOND) -> 90061000000L).foreach { case (dt, result) =>
+      checkEvaluation(Literal.create(duration, dt), result)
+    }
   }
 }
