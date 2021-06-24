@@ -2695,6 +2695,62 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
         return DataFrameWriterV2(self, table)
 
+    def to_pandas_on_spark(self, index_col=None):
+        """
+        Converts the existing DataFrame into a pandas-on-Spark DataFrame.
+
+        If a pandas-on-Spark DataFrame is converted to a Spark DataFrame and then back
+        to pandas-on-Spark, it will lose the index information and the original index
+        will be turned into a normal column.
+
+        Parameters
+        ----------
+        index_col: str or list of str, optional, default: None
+            Index column of table in Spark.
+
+        See Also
+        --------
+        DataFrame.to_spark
+
+        Examples
+        --------
+        >>> df = spark.createDataFrame([("a", 1), ("b", 2), ("c",  3)], ["Col1", "Col2"])
+
+        >>> psdf = df.to_pandas_on_spark()
+        >>> psdf
+          Col1  Col2
+        0    a     1
+        1    b     2
+        2    c     3
+
+        We can specify the index columns.
+
+        >>> psdf = df.to_pandas_on_spark(index_col="Col1")
+        >>> psdf  # doctest: +NORMALIZE_WHITESPACE
+              Col2
+        Col1
+        a        1
+        b        2
+        c        3
+        """
+        from pyspark.pandas.namespace import _get_index_map
+        from pyspark.pandas.frame import DataFrame
+        from pyspark.pandas.internal import InternalFrame
+
+        index_spark_columns, index_names = _get_index_map(self, index_col)
+        internal = InternalFrame(
+            spark_frame=self, index_spark_columns=index_spark_columns, index_names=index_names
+        )
+        return DataFrame(internal)
+
+    # Keep to_koalas for backward compatibility for now.
+    def to_koalas(self, index_col=None):
+        warnings.warn(
+            "DataFrame.to_koalas is deprecated. Use DataFrame.to_pandas_on_spark instead.",
+            FutureWarning,
+        )
+        return self.to_pandas_on_spark(index_col)
+
 
 def _to_scala_map(sc, jm):
     """
