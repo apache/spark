@@ -437,23 +437,22 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("SPARK-35871: Literal.create(value, dataType) should support fields") {
     val period = Period.ofMonths(13)
-    Seq(YearMonthIntervalType(YEAR, MONTH) -> 13,
-      YearMonthIntervalType(YEAR) -> 12,
-      YearMonthIntervalType(MONTH) -> 13).foreach { case (dt, result) =>
+    DataTypeTestUtils.yearMonthIntervalTypes.foreach { dt =>
+      val result = dt.endField match {
+        case YEAR => 12
+        case MONTH => 13
+      }
       checkEvaluation(Literal.create(period, dt), result)
     }
 
     val duration = Duration.ofSeconds(86400 + 3600 + 60 + 1)
-    Seq(DayTimeIntervalType(DAY) -> 86400000000L,
-      DayTimeIntervalType(DAY, HOUR) -> 90000000000L,
-      DayTimeIntervalType(DAY, MINUTE) -> 90060000000L,
-      DayTimeIntervalType(DAY, SECOND) -> 90061000000L,
-      DayTimeIntervalType(HOUR) -> 90000000000L,
-      DayTimeIntervalType(HOUR, MINUTE) -> 90060000000L,
-      DayTimeIntervalType(HOUR, SECOND) -> 90061000000L,
-      DayTimeIntervalType(MINUTE) -> 90060000000L,
-      DayTimeIntervalType(MINUTE, SECOND) -> 90061000000L,
-      DayTimeIntervalType(SECOND) -> 90061000000L).foreach { case (dt, result) =>
+    DataTypeTestUtils.dayTimeIntervalTypes.foreach { dt =>
+      val result = dt.endField match {
+        case DAY => 86400000000L
+        case HOUR => 90000000000L
+        case MINUTE => 90060000000L
+        case SECOND => 90061000000L
+      }
       checkEvaluation(Literal.create(duration, dt), result)
     }
   }
