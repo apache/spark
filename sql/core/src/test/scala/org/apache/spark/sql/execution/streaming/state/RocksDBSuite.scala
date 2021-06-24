@@ -68,7 +68,7 @@ class RocksDBSuite extends SparkFunSuite {
 
       // Load back the checkpoint files into another local dir with existing files and verify
       generateFiles(verificationDir, Seq(
-        "sst-file1.sst" -> 11, // files with same exist but different sizes, should get overwritten
+        "sst-file1.sst" -> 11, // files with same name but different sizes, should get overwritten
         "other-file1" -> 101,
         "archive/00001.log" -> 1001,
         "random-sst-file.sst" -> 100, // unnecessary files, should get deleted
