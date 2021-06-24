@@ -32,7 +32,7 @@ class SparkHadoopUtilSuite extends SparkFunSuite {
     val hadoopConf = new Configuration(false)
     sc.set("spark.hadoop.orc.filterPushdown", "true")
     new SparkHadoopUtil().appendSparkHadoopConfigs(sc, hadoopConf)
-    assertConfigValue(hadoopConf, "orc.filterPushdown","true" )
+    assertConfigValue(hadoopConf, "orc.filterPushdown", "true" )
     assertConfigValue(hadoopConf, "fs.s3a.downgrade.syncable.exceptions", "true")
     assertConfigValue(hadoopConf, "fs.s3a.endpoint", "s3.amazonaws.com")
   }
@@ -42,7 +42,6 @@ class SparkHadoopUtilSuite extends SparkFunSuite {
    * would.
    */
   test("appendSparkHadoopConfigs with S3A endpoint set to empty string") {
-
     val sc = new SparkConf()
     val hadoopConf = new Configuration(false)
     sc.set("spark.hadoop.fs.s3a.endpoint", "")
@@ -54,10 +53,9 @@ class SparkHadoopUtilSuite extends SparkFunSuite {
    * Explicitly set the patched s3a options and verify that they are not overridden.
    */
   test("appendSparkHadoopConfigs with S3A options explicitly set") {
-
     val sc = new SparkConf()
     val hadoopConf = new Configuration(false)
-    sc.set("spark.hadoop.fs.s3a.downgrade.syncable.exceptions","false")
+    sc.set("spark.hadoop.fs.s3a.downgrade.syncable.exceptions", "false")
     sc.set("spark.hadoop.fs.s3a.endpoint", "s3-eu-west-1.amazonaws.com")
     new SparkHadoopUtil().appendSparkHadoopConfigs(sc, hadoopConf)
     assertConfigValue(hadoopConf, "fs.s3a.downgrade.syncable.exceptions", "false")
