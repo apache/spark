@@ -28,7 +28,6 @@ import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.types.DayTimeIntervalType.{DAY, HOUR, MINUTE, SECOND}
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -576,84 +575,5 @@ class CastSuite extends CastSuiteBase {
       "2021-06-17 00:00:00ABC").foreach { invalidInput =>
       checkEvaluation(cast(invalidInput, TimestampWithoutTZType), null)
     }
-
-    Seq("INTERVAL '-106751991 04:00:54.775809' YEAR TO MONTH",
-      "INTERVAL '106751991 04:00:54.775808' YEAR TO MONTH").foreach { interval =>
-        val e = intercept[IllegalArgumentException] {
-          cast(Literal.create(interval), DayTimeIntervalType()).eval()
-        }.getMessage
-        assert(e.contains("Interval string must match day-time format of"))
-      }
-
-    Seq(Byte.MaxValue, Short.MaxValue, Int.MaxValue, Long.MaxValue, Long.MinValue + 1,
-      Long.MinValue).foreach { duration =>
-        val interval = Literal.create(
-          Duration.of(duration, ChronoUnit.MICROS),
-          DayTimeIntervalType())
-        checkEvaluation(cast(cast(interval, StringType), DayTimeIntervalType()), duration)
-      }
-  }
-
-  test("SPARK-35735: Take into account day-time interval fields in cast") {
-    Seq(DayTimeIntervalType(DAY, DAY) -> 86400000000L,
-      DayTimeIntervalType(DAY, HOUR) -> 93600000000L,
-      DayTimeIntervalType(DAY, MINUTE) -> 93780000000L,
-      DayTimeIntervalType(DAY, SECOND) -> 93784000000L,
-      DayTimeIntervalType(HOUR, HOUR) -> 93600000000L,
-      DayTimeIntervalType(HOUR, MINUTE) -> 93780000000L,
-      DayTimeIntervalType(HOUR, SECOND) -> 93784000000L,
-      DayTimeIntervalType(MINUTE, MINUTE) -> 93780000000L,
-      DayTimeIntervalType(MINUTE, SECOND) -> 93784000000L,
-      DayTimeIntervalType(SECOND, SECOND) -> 93784000000L)
-      .foreach { case (dataType, value) =>
-        checkEvaluation(
-          cast(Literal.create("1 2:03:04"), dataType), value)
-        checkEvaluation(
-          cast(Literal.create("-1 2:03:04"), dataType), -value)
-        checkEvaluation(
-          cast(Literal.create("INTERVAL '1 2:03:04' DAY TO SECOND"), dataType), value)
-      }
-  }
-
-  test("SPARK-35111: Cast string to year-month interval") {
-    checkEvaluation(cast(Literal.create("INTERVAL '1-0' YEAR TO MONTH"),
-      YearMonthIntervalType()), 12)
-    checkEvaluation(cast(Literal.create("INTERVAL '-1-0' YEAR TO MONTH"),
-      YearMonthIntervalType()), -12)
-    checkEvaluation(cast(Literal.create("INTERVAL -'-1-0' YEAR TO MONTH"),
-      YearMonthIntervalType()), 12)
-    checkEvaluation(cast(Literal.create("INTERVAL +'-1-0' YEAR TO MONTH"),
-      YearMonthIntervalType()), -12)
-    checkEvaluation(cast(Literal.create("INTERVAL +'+1-0' YEAR TO MONTH"),
-      YearMonthIntervalType()), 12)
-    checkEvaluation(cast(Literal.create("INTERVAL +'1-0' YEAR TO MONTH"),
-      YearMonthIntervalType()), 12)
-    checkEvaluation(cast(Literal.create(" interval +'1-0' YEAR  TO MONTH "),
-      YearMonthIntervalType()), 12)
-    checkEvaluation(cast(Literal.create(" -1-0 "), YearMonthIntervalType()), -12)
-    checkEvaluation(cast(Literal.create("-1-0"), YearMonthIntervalType()), -12)
-    checkEvaluation(cast(Literal.create(null, StringType), YearMonthIntervalType()), null)
-
-    Seq("0-0", "10-1", "-178956970-7", "178956970-7", "-178956970-8").foreach { interval =>
-      val ansiInterval = s"INTERVAL '$interval' YEAR TO MONTH"
-      checkEvaluation(
-        cast(cast(Literal.create(interval), YearMonthIntervalType()), StringType), ansiInterval)
-      checkEvaluation(cast(cast(Literal.create(ansiInterval),
-        YearMonthIntervalType()), StringType), ansiInterval)
-    }
-
-    Seq("INTERVAL '-178956970-9' YEAR TO MONTH", "INTERVAL '178956970-8' YEAR TO MONTH")
-      .foreach { interval =>
-        val e = intercept[IllegalArgumentException] {
-          cast(Literal.create(interval), YearMonthIntervalType()).eval()
-        }.getMessage
-        assert(e.contains("Error parsing interval year-month string: integer overflow"))
-      }
-
-    Seq(Byte.MaxValue, Short.MaxValue, Int.MaxValue, Int.MinValue + 1, Int.MinValue)
-      .foreach { period =>
-        val interval = Literal.create(Period.ofMonths(period), YearMonthIntervalType())
-        checkEvaluation(cast(cast(interval, StringType), YearMonthIntervalType()), period)
-      }
   }
 }
