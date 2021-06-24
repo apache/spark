@@ -23,7 +23,7 @@ as below:
 
 .. code-block:: python
 
-   >>> import pyspark.pandas as ks
+   >>> import pyspark.pandas as ps
    >>>
    >>> psdf = ps.range(10)
    >>> pdf = psdf.to_pandas()
@@ -71,7 +71,7 @@ as below:
 
 .. code-block:: python
 
-   >>> import pyspark.pandas as ks
+   >>> import pyspark.pandas as ps
    >>>
    >>> psdf = ps.range(10)
    >>> sdf = psdf.to_spark().filter("id > 5")

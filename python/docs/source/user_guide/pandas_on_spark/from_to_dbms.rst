@@ -77,7 +77,7 @@ Now, you're ready to read the table:
 
 .. code-block:: python
 
-    import pyspark.pandas as ks
+    import pyspark.pandas as ps
 
     df = ps.read_sql("stocks", con="jdbc:sqlite:{}/example.db".format(os.getcwd()))
     df

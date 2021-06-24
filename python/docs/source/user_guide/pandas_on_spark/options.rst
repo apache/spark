@@ -12,24 +12,24 @@ You can get/set options directly as attributes of the top-level ``options`` attr
 
 .. code-block:: python
 
-   >>> import pyspark.pandas as ks
+   >>> import pyspark.pandas as ps
    >>> ps.options.display.max_rows
    1000
    >>> ps.options.display.max_rows = 10
    >>> ps.options.display.max_rows
    10
 
-The API is composed of 3 relevant functions, available directly from the ``koalas``
+The API is composed of 3 relevant functions, available directly from the ``pandas_on_spark``
 namespace:
 
 * :func:`get_option` / :func:`set_option` - get/set the value of a single option.
 * :func:`reset_option` - reset one or more options to their default value.
 
-**Note:** Developers can check out `pyspark.pandas/config.py <https://github.com/databricks/koalas/blob/master/databricks/koalas/config.py>`_ for more information.
+**Note:** Developers can check out `pyspark.pandas/config.py <https://github.com/apache/spark/blob/master/python/pyspark/pandas/config.py>`_ for more information.
 
 .. code-block:: python
 
-   >>> import pyspark.pandas as ks
+   >>> import pyspark.pandas as ps
    >>> ps.get_option("display.max_rows")
    1000
    >>> ps.set_option("display.max_rows", 101)
@@ -41,12 +41,12 @@ Getting and setting options
 ---------------------------
 
 As described above, :func:`get_option` and :func:`set_option`
-are available from the koalas namespace.  To change an option, call
+are available from the ``pandas_on_spark`` namespace.  To change an option, call
 ``set_option('option name', new_value)``.
 
 .. code-block:: python
 
-   >>> import pyspark.pandas as ks
+   >>> import pyspark.pandas as ps
    >>> ps.get_option('compute.max_rows')
    1000
    >>> ps.set_option('compute.max_rows', 2000)
@@ -57,12 +57,12 @@ All options also have a default value, and you can use ``reset_option`` to do ju
 
 .. code-block:: python
 
-   >>> import pyspark.pandas as ks
+   >>> import pyspark.pandas as ps
    >>> ps.reset_option("display.max_rows")
 
 .. code-block:: python
 
-   >>> import pyspark.pandas as ks
+   >>> import pyspark.pandas as ps
    >>> ps.get_option("display.max_rows")
    1000
    >>> ps.set_option("display.max_rows", 999)
@@ -100,7 +100,7 @@ See the examples below.
 
 .. code-block:: python
 
-    >>> import pyspark.pandas as ks
+    >>> import pyspark.pandas as ps
     >>> ps.set_option('compute.ops_on_diff_frames', True)
     >>> psdf1 = ps.range(5)
     >>> psdf2 = ps.DataFrame({'id': [5, 4, 3]})
@@ -115,7 +115,7 @@ See the examples below.
 
 .. code-block:: python
 
-    >>> import pyspark.pandas as ks
+    >>> import pyspark.pandas as ps
     >>> ps.set_option('compute.ops_on_diff_frames', True)
     >>> psdf = ps.range(5)
     >>> psser_a = ps.Series([1, 2, 3, 4])
@@ -146,7 +146,7 @@ This index type should be avoided when the data is large. This is default. See t
 
 .. code-block:: python
 
-    >>> import pyspark.pandas as ks
+    >>> import pyspark.pandas as ps
     >>> ps.set_option('compute.default_index_type', 'sequence')
     >>> psdf = ps.range(3)
     >>> ps.reset_option('compute.default_index_type')
@@ -158,7 +158,7 @@ This is conceptually equivalent to the PySpark example as below:
 .. code-block:: python
 
     >>> from pyspark.sql import functions as F, Window
-    >>> import pyspark.pandas as ks
+    >>> import pyspark.pandas as ps
     >>> spark_df = ps.range(3).to_spark()
     >>> sequential_index = F.row_number().over(
     ...    Window.orderBy(F.monotonically_increasing_id().asc())) - 1
@@ -174,7 +174,7 @@ then it does not guarantee the sequential index. See the example below:
 
 .. code-block:: python
 
-    >>> import pyspark.pandas as ks
+    >>> import pyspark.pandas as ps
     >>> ps.set_option('compute.default_index_type', 'distributed-sequence')
     >>> psdf = ps.range(3)
     >>> ps.reset_option('compute.default_index_type')
@@ -185,7 +185,7 @@ This is conceptually equivalent to the PySpark example as below:
 
 .. code-block:: python
 
-    >>> import pyspark.pandas as ks
+    >>> import pyspark.pandas as ps
     >>> spark_df = ps.range(3).to_spark()
     >>> spark_df.rdd.zipWithIndex().map(lambda p: p[1]).collect()
     [0, 1, 2]
@@ -198,7 +198,7 @@ have any penalty comparing to other index types. See the example below:
 
 .. code-block:: python
 
-    >>> import pyspark.pandas as ks
+    >>> import pyspark.pandas as ps
     >>> ps.set_option('compute.default_index_type', 'distributed')
     >>> psdf = ps.range(3)
     >>> ps.reset_option('compute.default_index_type')
@@ -210,7 +210,7 @@ This is conceptually equivalent to the PySpark example as below:
 .. code-block:: python
 
     >>> from pyspark.sql import functions as F
-    >>> import pyspark.pandas as ks
+    >>> import pyspark.pandas as ps
     >>> spark_df = ps.range(3).to_spark()
     >>> spark_df.select(F.monotonically_increasing_id()) \
     ...     .rdd.map(lambda r: r[0]).collect()

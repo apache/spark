@@ -24,7 +24,7 @@ For example, if you want to configure the executor memory in Spark, you can do a
    # Pandas API on Spark automatically uses this Spark context with the configurations set.
    SparkContext(conf=conf)
 
-   import pyspark.pandas as ks
+   import pyspark.pandas as ps
    ...
 
 Another common configuration might be Arrow optimization in PySpark. In case of SQL configuration,
@@ -38,7 +38,7 @@ it can be set into Spark session as below:
    # Pandas API on Spark automatically uses this Spark session with the configurations set.
    builder.getOrCreate()
 
-   import pyspark.pandas as ks
+   import pyspark.pandas as ps
    ...
 
 All Spark features such as history server, web UI and deployment modes can be used as are with pandas API on Spark.
@@ -53,7 +53,7 @@ before the actual computation since pandas API on Spark is based on lazy executi
 
 .. code-block:: python
 
-   >>> import pyspark.pandas as ks
+   >>> import pyspark.pandas as ps
    >>> psdf = ps.DataFrame({'id': range(10)})
    >>> psdf = psdf[psdf.id > 5]
    >>> psdf.spark.explain()
@@ -78,7 +78,7 @@ or ``DataFrame.spark.local_checkpoint()`` would be helpful.
 
 .. code-block:: python
 
-   >>> import pyspark.pandas as ks
+   >>> import pyspark.pandas as ps
    >>> psdf = ps.DataFrame({'id': range(10)})
    >>> psdf = psdf[psdf.id > 5]
    >>> psdf['id'] = psdf['id'] + (10 * psdf['id'] + psdf['id'])
@@ -115,7 +115,7 @@ and exchange the data across multiple nodes via networks. See the example below.
 
 .. code-block:: python
 
-   >>> import pyspark.pandas as ks
+   >>> import pyspark.pandas as ps
    >>> psdf = ps.DataFrame({'id': range(10)}).sort_values(by="id")
    >>> psdf.spark.explain()
    == Physical Plan ==
@@ -130,14 +130,14 @@ Avoid computation on single partition
 -------------------------------------
 
 Another common case is the computation on a single partition. Currently, some APIs such as
-`DataFrame.rank <https://koalas.readthedocs.io/en/latest/reference/api/pyspark.pandas.DataFrame.rank.html>`_
+`DataFrame.rank <https://spark.apache.org/docs/latest/api/python/reference/api/pyspark.pandas.DataFrame.rank.html>`_
 uses PySpark’s Window without specifying partition specification. This leads to move all data into a single
 partition in single machine and could cause serious performance degradation.
 Such APIs should be avoided very large dataset.
 
 .. code-block:: python
 
-   >>> import pyspark.pandas as ks
+   >>> import pyspark.pandas as ps
    >>> psdf = ps.DataFrame({'id': range(10)})
    >>> psdf.rank().spark.explain()
    == Physical Plan ==
@@ -150,7 +150,7 @@ Such APIs should be avoided very large dataset.
                   +- *(1) Scan ExistingRDD[__index_level_0__#16L,id#17L]
 
 Instead, use 
-`GroupBy.rank <https://koalas.readthedocs.io/en/latest/reference/api/pyspark.pandas.groupby.GroupBy.rank.html>`_
+`GroupBy.rank <https://spark.apache.org/docs/latest/api/python/reference/api/pyspark.pandas.groupby.GroupBy.rank.html>`_
 as it is less expensive because data can be distributed and computed for each group.
 
 
@@ -169,7 +169,7 @@ this behavior. For instance, see below:
 
 .. code-block:: python
 
-   >>> import pyspark.pandas as ks
+   >>> import pyspark.pandas as ps
    >>> psdf = ps.DataFrame({'a': [1, 2], 'b':[3, 4]})
    >>> psdf.columns = ["a", "a"]
    ...
@@ -179,7 +179,7 @@ Additionally, it is strongly discouraged to use case sensitive column names. Pan
 
 .. code-block:: python
 
-   >>> import pyspark.pandas as ks
+   >>> import pyspark.pandas as ps
    >>> psdf = ps.DataFrame({'a': [1, 2], 'A':[3, 4]})
    ...
    Reference 'a' is ambiguous, could be: a, a.;
@@ -193,7 +193,7 @@ However, you can turn on ``spark.sql.caseSensitive`` in Spark configuration to e
    >>> builder = builder.config("spark.sql.caseSensitive", "true")
    >>> builder.getOrCreate()
 
-   >>> import pyspark.pandas as ks
+   >>> import pyspark.pandas as ps
    >>> psdf = ps.DataFrame({'a': [1, 2], 'A':[3, 4]})
    >>> psdf
       a  A
@@ -261,7 +261,7 @@ The examples above can be converted as below:
 
 .. code-block:: python
 
-   >>> import pyspark.pandas as ks
+   >>> import pyspark.pandas as ps
    >>> ps.Series([1, 2, 3]).max()
    3
    >>> ps.Series([1, 2, 3]).min()
@@ -296,7 +296,7 @@ The example above can be also changed to directly using pandas-on-Spark APIs as 
 
 .. code-block:: python
 
-   >>> import pyspark.pandas as ks
+   >>> import pyspark.pandas as ps
    >>> import numpy as np
    >>> countries = ['London', 'New York', 'Helsinki']
    >>> psser = ps.Series([20., 21., 12.], index=countries)
