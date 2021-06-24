@@ -1858,9 +1858,6 @@ class AdaptiveQueryExecSuite
           // partition size [72,216,216,144,72]
           checkPartitionNumber("SELECT /*+ REBALANCE */ * FROM v", 8, 10)
 
-          // specified repartition number
-          checkPartitionNumber("SELECT /*+ REBALANCE(2, c1) */ * FROM v", 0, 0)
-          checkPartitionNumber("SELECT /*+ REBALANCE(2) */ * FROM v", 0, 0)
           // extra shuffle
           checkPartitionNumber(
             "SELECT c1, count(*) FROM (SELECT /*+ REBALANCE(c1) */ * FROM v) GROUP BY c1",
