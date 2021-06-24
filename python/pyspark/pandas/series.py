@@ -2208,7 +2208,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                     "that contain index names"
                 )
             else:
-                index_list = index
+                index_list = cast(List[Tuple], index)
 
             drop_index_scols = []
             for idxes in index_list:

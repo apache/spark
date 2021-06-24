@@ -2264,7 +2264,7 @@ class Index(IndexOpsMixin):
                     )
                 elif isinstance(other, Series):
                     other_frame = other.to_frame()
-                    other_idx = other_frame.set_index(other.columns[0]).index
+                    other_idx = other_frame.set_index(other_frame.columns[0]).index
                 elif isinstance(other, DataFrame):
                     raise ValueError("Index data must be 1-dimensional")
                 else:
