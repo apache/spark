@@ -479,9 +479,9 @@ abstract class BroadcastJoinSuiteBase extends QueryTest with SQLTestUtils
   test("broadcast join where streamed side's output partitioning is PartitioningCollection") {
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "500") {
       val t1 = (0 until 100).map(i => (i % 5, i % 13)).toDF("i1", "j1")
-      val t2 = (0 until 100).map(i => (i % 5, i % 13)).toDF("i2", "j2")
+      val t2 = (0 until 100).map(i => (i % 5, i % 14)).toDF("i2", "j2")
       val t3 = (0 until 20).map(i => (i % 7, i % 11)).toDF("i3", "j3")
-      val t4 = (0 until 100).map(i => (i % 5, i % 13)).toDF("i4", "j4")
+      val t4 = (0 until 100).map(i => (i % 5, i % 15)).toDF("i4", "j4")
 
       // join1 is a sort merge join (shuffle on the both sides).
       val join1 = t1.join(t2, t1("i1") === t2("i2"))

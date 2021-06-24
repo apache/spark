@@ -2226,7 +2226,7 @@ class TaskSetManagerSuite
       numTasks = 2,
       numExecutorCores = 2,
       numCoresPerTask = 1,
-      Some("3000") // spark.speculation.min.threshold
+      Some("3000") // spark.speculation.minTaskRuntime
     )
     // Task duration can't be 0, advance 1 sec
     clock.advance(1000)

@@ -24,7 +24,19 @@ import inspect
 import sys
 from collections.abc import Mapping
 from functools import partial, wraps, reduce
-from typing import Any, Callable, Generic, Iterable, List, Optional, Tuple, TypeVar, Union, cast
+from typing import (
+    Any,
+    Callable,
+    Generic,
+    Iterable,
+    List,
+    Optional,
+    Tuple,
+    TypeVar,
+    Union,
+    cast,
+    TYPE_CHECKING,
+)
 
 import numpy as np
 import pandas as pd
@@ -94,6 +106,8 @@ from pyspark.pandas.typedef import (
     SeriesType,
 )
 
+if TYPE_CHECKING:
+    from pyspark.pandas.groupby import SeriesGroupBy  # noqa: F401 (SPARK-34943)
 
 # This regular expression pattern is complied and defined here to avoid to compile the same
 # pattern every time it is used in _repr_ in Series.
@@ -6125,6 +6139,13 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         result = unpack_scalar(self._internal.spark_frame.select(scol))
         return result if result is not None else np.nan
+
+    def _build_groupby(
+        self, by: List[Union["Series", Tuple]], as_index: bool, dropna: bool
+    ) -> "SeriesGroupBy":
+        from pyspark.pandas.groupby import SeriesGroupBy
+
+        return SeriesGroupBy._build(self, by, as_index=as_index, dropna=dropna)
 
     def __getitem__(self, key):
         try:

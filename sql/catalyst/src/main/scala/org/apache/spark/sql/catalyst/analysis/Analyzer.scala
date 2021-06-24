@@ -431,7 +431,7 @@ class Analyzer(override val catalogManager: CatalogManager)
             case go @ GeneratorOuter(g: Generator) if g.resolved => MultiAlias(go, Nil)
             case e if !e.resolved => u
             case g: Generator => MultiAlias(g, Nil)
-            case c @ Cast(ne: NamedExpression, _, _) => Alias(c, ne.name)()
+            case c @ Cast(ne: NamedExpression, _, _, _) => Alias(c, ne.name)()
             case e: ExtractValue => Alias(e, toPrettySQL(e))()
             case e if optGenAliasFunc.isDefined =>
               Alias(child, optGenAliasFunc.get.apply(e))()
@@ -2285,8 +2285,8 @@ class Analyzer(override val catalogManager: CatalogManager)
     }
 
     /**
-     * Resolve the correlated expressions in a subquery by using the an outer plans' references. All
-     * resolved outer references are wrapped in an [[OuterReference]]
+     * Resolve the correlated expressions in a subquery, as if the expressions live in the outer
+     * plan. All resolved outer references are wrapped in an [[OuterReference]]
      */
     private def resolveOuterReferences(plan: LogicalPlan, outer: LogicalPlan): LogicalPlan = {
       plan.resolveOperatorsDownWithPruning(_.containsPattern(UNRESOLVED_ATTRIBUTE)) {
@@ -2295,7 +2295,7 @@ class Analyzer(override val catalogManager: CatalogManager)
             case u @ UnresolvedAttribute(nameParts) =>
               withPosition(u) {
                 try {
-                  outer.resolve(nameParts, resolver) match {
+                  outer.resolveChildren(nameParts, resolver) match {
                     case Some(outerAttr) => wrapOuterReference(outerAttr)
                     case None => u
                   }
@@ -2317,7 +2317,7 @@ class Analyzer(override val catalogManager: CatalogManager)
      */
     private def resolveSubQuery(
         e: SubqueryExpression,
-        plans: Seq[LogicalPlan])(
+        outer: LogicalPlan)(
         f: (LogicalPlan, Seq[Expression]) => SubqueryExpression): SubqueryExpression = {
       // Step 1: Resolve the outer expressions.
       var previous: LogicalPlan = null
@@ -2328,10 +2328,8 @@ class Analyzer(override val catalogManager: CatalogManager)
         current = executeSameContext(current)
 
         // Use the outer references to resolve the subquery plan if it isn't resolved yet.
-        val i = plans.iterator
-        val afterResolve = current
-        while (!current.resolved && current.fastEquals(afterResolve) && i.hasNext) {
-          current = resolveOuterReferences(current, i.next())
+        if (!current.resolved) {
+          current = resolveOuterReferences(current, outer)
         }
       } while (!current.resolved && !current.fastEquals(previous))
 
@@ -2354,20 +2352,20 @@ class Analyzer(override val catalogManager: CatalogManager)
      * (2) Any aggregate expression(s) that reference outer attributes are pushed down to
      *     outer plan to get evaluated.
      */
-    private def resolveSubQueries(plan: LogicalPlan, plans: Seq[LogicalPlan]): LogicalPlan = {
+    private def resolveSubQueries(plan: LogicalPlan, outer: LogicalPlan): LogicalPlan = {
       plan.transformAllExpressionsWithPruning(_.containsPattern(PLAN_EXPRESSION), ruleId) {
         case s @ ScalarSubquery(sub, _, exprId, _) if !sub.resolved =>
-          resolveSubQuery(s, plans)(ScalarSubquery(_, _, exprId))
+          resolveSubQuery(s, outer)(ScalarSubquery(_, _, exprId))
         case e @ Exists(sub, _, exprId, _) if !sub.resolved =>
-          resolveSubQuery(e, plans)(Exists(_, _, exprId))
+          resolveSubQuery(e, outer)(Exists(_, _, exprId))
         case InSubquery(values, l @ ListQuery(_, _, exprId, _, _))
             if values.forall(_.resolved) && !l.resolved =>
-          val expr = resolveSubQuery(l, plans)((plan, exprs) => {
+          val expr = resolveSubQuery(l, outer)((plan, exprs) => {
             ListQuery(plan, exprs, exprId, plan.output)
           })
           InSubquery(values, expr.asInstanceOf[ListQuery])
         case s @ LateralSubquery(sub, _, exprId, _) if !sub.resolved =>
-          resolveSubQuery(s, plans)(LateralSubquery(_, _, exprId))
+          resolveSubQuery(s, outer)(LateralSubquery(_, _, exprId))
       }
     }
 
@@ -2377,14 +2375,17 @@ class Analyzer(override val catalogManager: CatalogManager)
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
       _.containsPattern(PLAN_EXPRESSION), ruleId) {
       case j: LateralJoin if j.left.resolved =>
-        resolveSubQueries(j, j.children)
+        // We can't pass `LateralJoin` as the outer plan, as its right child is not resolved yet
+        // and we can't call `LateralJoin.resolveChildren` to resolve outer references. Here we
+        // create a fake Project node as the outer plan.
+        resolveSubQueries(j, Project(Nil, j.left))
       // Only a few unary nodes (Project/Filter/Aggregate) can contain subqueries.
       case q: UnaryNode if q.childrenResolved =>
-        resolveSubQueries(q, q.children)
+        resolveSubQueries(q, q)
       case j: Join if j.childrenResolved && j.duplicateResolved =>
-        resolveSubQueries(j, j.children)
+        resolveSubQueries(j, j)
       case s: SupportsSubquery if s.childrenResolved =>
-        resolveSubQueries(s, s.children)
+        resolveSubQueries(s, s)
     }
   }
 

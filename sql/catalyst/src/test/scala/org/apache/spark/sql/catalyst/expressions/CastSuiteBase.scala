@@ -37,8 +37,13 @@ import org.apache.spark.sql.catalyst.util.IntervalUtils.microsToDuration
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.DataTypeTestUtils.{dayTimeIntervalTypes, yearMonthIntervalTypes}
+import org.apache.spark.sql.types.DayTimeIntervalType.{DAY, HOUR, MINUTE, SECOND}
+import org.apache.spark.sql.types.YearMonthIntervalType.{MONTH, YEAR}
 import org.apache.spark.unsafe.types.UTF8String
 
+/**
+ * Common test suite for [[Cast]], [[AnsiCast]] and [[TryCast]] expressions.
+ */
 abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
 
   protected def cast(v: Any, targetType: DataType, timeZoneId: Option[String] = None): CastBase
@@ -68,7 +73,9 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
-  protected def isAlwaysNullable: Boolean = false
+  // Whether the test suite is for TryCast. If yes, there is no exceptions and the result is
+  // always nullable.
+  protected def isTryCast: Boolean = false
 
   protected def setConfigurationHint: String = ""
 
@@ -268,8 +275,8 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("cast from string") {
-    assert(cast("abcdef", StringType).nullable === isAlwaysNullable)
-    assert(cast("abcdef", BinaryType).nullable === isAlwaysNullable)
+    assert(cast("abcdef", StringType).nullable === isTryCast)
+    assert(cast("abcdef", BinaryType).nullable === isTryCast)
     assert(cast("abcdef", BooleanType).nullable)
     assert(cast("abcdef", TimestampType).nullable)
     assert(cast("abcdef", LongType).nullable)
@@ -665,6 +672,18 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     atomicTypes.foreach { atomicType =>
       assert(Cast.canUpCast(NullType, atomicType))
     }
+
+    dayTimeIntervalTypes.foreach { from =>
+      dayTimeIntervalTypes.foreach { to =>
+        assert(Cast.canUpCast(from, to))
+      }
+    }
+
+    yearMonthIntervalTypes.foreach { from =>
+      yearMonthIntervalTypes.foreach { to =>
+        assert(Cast.canUpCast(from, to))
+      }
+    }
   }
 
   test("SPARK-27671: cast from nested null type in struct") {
@@ -948,5 +967,125 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     // The input string can contain date only
     checkEvaluation(cast("2021-06-17", TimestampWithoutTZType),
       LocalDateTime.of(2021, 6, 17, 0, 0))
+  }
+
+  test("SPARK-35112: Cast string to day-time interval") {
+    checkEvaluation(cast(Literal.create("0 0:0:0"), DayTimeIntervalType()), 0L)
+    checkEvaluation(cast(Literal.create(" interval '0 0:0:0' Day TO second   "),
+      DayTimeIntervalType()), 0L)
+    checkEvaluation(cast(Literal.create("INTERVAL '1 2:03:04' DAY TO SECOND"),
+      DayTimeIntervalType()), 93784000000L)
+    checkEvaluation(cast(Literal.create("INTERVAL '1 03:04:00' DAY TO SECOND"),
+      DayTimeIntervalType()), 97440000000L)
+    checkEvaluation(cast(Literal.create("INTERVAL '1 03:04:00.0000' DAY TO SECOND"),
+      DayTimeIntervalType()), 97440000000L)
+    checkEvaluation(cast(Literal.create("1 2:03:04"), DayTimeIntervalType()), 93784000000L)
+    checkEvaluation(cast(Literal.create("INTERVAL '-10 2:03:04' DAY TO SECOND"),
+      DayTimeIntervalType()), -871384000000L)
+    checkEvaluation(cast(Literal.create("-10 2:03:04"), DayTimeIntervalType()), -871384000000L)
+    checkEvaluation(cast(Literal.create("-106751991 04:00:54.775808"), DayTimeIntervalType()),
+      Long.MinValue)
+    checkEvaluation(cast(Literal.create("106751991 04:00:54.775807"), DayTimeIntervalType()),
+      Long.MaxValue)
+
+    Seq("-106751991 04:00:54.775808", "106751991 04:00:54.775807").foreach { interval =>
+      val ansiInterval = s"INTERVAL '$interval' DAY TO SECOND"
+      checkEvaluation(
+        cast(cast(Literal.create(interval), DayTimeIntervalType()), StringType), ansiInterval)
+      checkEvaluation(cast(cast(Literal.create(ansiInterval),
+        DayTimeIntervalType()), StringType), ansiInterval)
+    }
+
+    if (!isTryCast) {
+      Seq("INTERVAL '-106751991 04:00:54.775809' YEAR TO MONTH",
+        "INTERVAL '106751991 04:00:54.775808' YEAR TO MONTH").foreach { interval =>
+        val e = intercept[IllegalArgumentException] {
+          cast(Literal.create(interval), DayTimeIntervalType()).eval()
+        }.getMessage
+        assert(e.contains("Interval string must match day-time format of"))
+      }
+    }
+
+    Seq(Byte.MaxValue, Short.MaxValue, Int.MaxValue, Long.MaxValue, Long.MinValue + 1,
+      Long.MinValue).foreach { duration =>
+      val interval = Literal.create(
+        Duration.of(duration, ChronoUnit.MICROS),
+        DayTimeIntervalType())
+      checkEvaluation(cast(cast(interval, StringType), DayTimeIntervalType()), duration)
+    }
+  }
+
+  test("SPARK-35111: Cast string to year-month interval") {
+    checkEvaluation(cast(Literal.create("INTERVAL '1-0' YEAR TO MONTH"),
+      YearMonthIntervalType()), 12)
+    checkEvaluation(cast(Literal.create("INTERVAL '-1-0' YEAR TO MONTH"),
+      YearMonthIntervalType()), -12)
+    checkEvaluation(cast(Literal.create("INTERVAL -'-1-0' YEAR TO MONTH"),
+      YearMonthIntervalType()), 12)
+    checkEvaluation(cast(Literal.create("INTERVAL +'-1-0' YEAR TO MONTH"),
+      YearMonthIntervalType()), -12)
+    checkEvaluation(cast(Literal.create("INTERVAL +'+1-0' YEAR TO MONTH"),
+      YearMonthIntervalType()), 12)
+    checkEvaluation(cast(Literal.create("INTERVAL +'1-0' YEAR TO MONTH"),
+      YearMonthIntervalType()), 12)
+    checkEvaluation(cast(Literal.create(" interval +'1-0' YEAR  TO MONTH "),
+      YearMonthIntervalType()), 12)
+    checkEvaluation(cast(Literal.create(" -1-0 "), YearMonthIntervalType()), -12)
+    checkEvaluation(cast(Literal.create("-1-0"), YearMonthIntervalType()), -12)
+    checkEvaluation(cast(Literal.create(null, StringType), YearMonthIntervalType()), null)
+
+    Seq("0-0", "10-1", "-178956970-7", "178956970-7", "-178956970-8").foreach { interval =>
+      val ansiInterval = s"INTERVAL '$interval' YEAR TO MONTH"
+      checkEvaluation(
+        cast(cast(Literal.create(interval), YearMonthIntervalType()), StringType), ansiInterval)
+      checkEvaluation(cast(cast(Literal.create(ansiInterval),
+        YearMonthIntervalType()), StringType), ansiInterval)
+    }
+
+    if (!isTryCast) {
+      Seq("INTERVAL '-178956970-9' YEAR TO MONTH", "INTERVAL '178956970-8' YEAR TO MONTH")
+        .foreach { interval =>
+          val e = intercept[IllegalArgumentException] {
+            cast(Literal.create(interval), YearMonthIntervalType()).eval()
+          }.getMessage
+          assert(e.contains("Error parsing interval year-month string: integer overflow"))
+        }
+    }
+
+    Seq(Byte.MaxValue, Short.MaxValue, Int.MaxValue, Int.MinValue + 1, Int.MinValue)
+      .foreach { period =>
+        val interval = Literal.create(Period.ofMonths(period), YearMonthIntervalType())
+        checkEvaluation(cast(cast(interval, StringType), YearMonthIntervalType()), period)
+      }
+  }
+
+  test("SPARK-35820: Support cast DayTimeIntervalType in different fields") {
+    val duration = Duration.ofSeconds(12345678L, 123456789)
+    Seq((DayTimeIntervalType(DAY, DAY), 12268800000000L, -12268800000000L),
+      (DayTimeIntervalType(DAY, HOUR), 12344400000000L, -12344400000000L),
+      (DayTimeIntervalType(DAY, MINUTE), 12345660000000L, -12345660000000L),
+      (DayTimeIntervalType(DAY, SECOND), 12345678123456L, -12345678123457L),
+      (DayTimeIntervalType(HOUR, HOUR), 12344400000000L, -12344400000000L),
+      (DayTimeIntervalType(HOUR, MINUTE), 12345660000000L, -12345660000000L),
+      (DayTimeIntervalType(HOUR, SECOND), 12345678123456L, -12345678123457L),
+      (DayTimeIntervalType(MINUTE, MINUTE), 12345660000000L, -12345660000000L),
+      (DayTimeIntervalType(MINUTE, SECOND), 12345678123456L, -12345678123457L),
+      (DayTimeIntervalType(SECOND, SECOND), 12345678123456L, -12345678123457L))
+      .foreach { case (dt, positive, negative) =>
+        checkEvaluation(
+          cast(Literal.create(duration, DayTimeIntervalType(DAY, SECOND)), dt), positive)
+        checkEvaluation(
+          cast(Literal.create(duration.negated(), DayTimeIntervalType(DAY, SECOND)), dt), negative)
+      }
+  }
+
+  test("SPARK-35819: Support cast YearMonthIntervalType in different fields") {
+    val ym = cast(Literal.create("1-1"), YearMonthIntervalType(YEAR, MONTH))
+    Seq(YearMonthIntervalType(YEAR) -> 12,
+      YearMonthIntervalType(YEAR, MONTH) -> 13,
+      YearMonthIntervalType(MONTH) -> 13)
+      .foreach { case (dt, value) =>
+        checkEvaluation(cast(ym, dt), value)
+      }
   }
 }

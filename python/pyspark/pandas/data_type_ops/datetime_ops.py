@@ -28,6 +28,7 @@ from pyspark.sql.types import BooleanType, StringType, TimestampType
 from pyspark.pandas.base import IndexOpsMixin
 from pyspark.pandas.data_type_ops.base import (
     DataTypeOps,
+    T_IndexOps,
     _as_bool_type,
     _as_categorical_type,
     _as_other_type,
@@ -88,9 +89,7 @@ class DatetimeOps(DataTypeOps):
         """Prepare column when from_pandas."""
         return col
 
-    def astype(
-        self, index_ops: Union["Index", "Series"], dtype: Union[str, type, Dtype]
-    ) -> Union["Index", "Series"]:
+    def astype(self, index_ops: T_IndexOps, dtype: Union[str, type, Dtype]) -> T_IndexOps:
         dtype, spark_type = pandas_on_spark_type(dtype)
 
         if isinstance(dtype, CategoricalDtype):
