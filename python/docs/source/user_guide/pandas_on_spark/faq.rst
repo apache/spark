@@ -9,7 +9,7 @@ If you are already familiar with pandas and want to leverage Spark for big data,
 If you are learning Spark from ground up, we recommend you start with PySpark's API.
 
 Does pandas API on Spark support Structured Streaming?
------------------------------------------
+------------------------------------------------------
 
 No, pandas API on Spark does not support Structured Streaming officially.
 
