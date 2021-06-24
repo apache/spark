@@ -254,11 +254,23 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("SPARK-35774: Prohibit the case start/end are the same with unit-to-unit interval syntax") {
-    (YM.yearMonthFields.map(YM.fieldToString) ++ DT.dayTimeFields.map(DT.fieldToString)).foreach {
-      case unit =>
+    def checkIntervalDDL(start: Byte, end: Byte, fieldToString: Byte => String): Unit = {
+      val startUnit = fieldToString(start)
+      val endUnit = fieldToString(end)
+      if (start < end) {
+        fromDDL(s"x INTERVAL $startUnit TO $endUnit")
+      } else {
         intercept[ParseException] {
-          fromDDL(s"x INTERVAL $unit TO $unit")
+          fromDDL(s"x INTERVAL $startUnit TO $endUnit")
         }
+      }
+    }
+
+    for (start <- YM.yearMonthFields; end <- YM.yearMonthFields) {
+      checkIntervalDDL(start, end, YM.fieldToString)
+    }
+    for (start <- DT.dayTimeFields; end <- DT.dayTimeFields) {
+      checkIntervalDDL(start, end, DT.fieldToString)
     }
   }
 }

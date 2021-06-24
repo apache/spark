@@ -2526,7 +2526,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     if (ctx.to != null) {
       val endStr = ctx.to.getText.toLowerCase(Locale.ROOT)
       val end = YearMonthIntervalType.stringToField(endStr)
-      if (start == end) {
+      if (end <= start) {
         throw QueryParsingErrors.fromToIntervalUnsupportedError(startStr, endStr, ctx)
       }
       YearMonthIntervalType(start, end)
@@ -2541,7 +2541,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     if (ctx.to != null ) {
       val endStr = ctx.to.getText.toLowerCase(Locale.ROOT)
       val end = DayTimeIntervalType.stringToField(endStr)
-      if (start == end) {
+      if (end <= start) {
         throw QueryParsingErrors.fromToIntervalUnsupportedError(startStr, endStr, ctx)
       }
       DayTimeIntervalType(start, end)
