@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, IntervalUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.IntervalUtils.{safeStringToInterval, stringToInterval}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{DataTypeTestUtils, DayTimeIntervalType, Decimal, DecimalType, YearMonthIntervalType}
+import org.apache.spark.sql.types.{DayTimeIntervalType, Decimal, DecimalType, YearMonthIntervalType}
 import org.apache.spark.sql.types.DataTypeTestUtils.{dayTimeIntervalTypes, numericTypes, yearMonthIntervalTypes}
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
@@ -361,6 +361,7 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  // TODO(SPARK-35728): Check multiply/divide of day-time intervals of any fields by numeric
   test("SPARK-34850: multiply day-time interval by numeric") {
     Seq(
       (Duration.ofHours(-123), Literal(null, DecimalType.USER_DEFAULT)) -> null,
@@ -372,9 +373,7 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       (Duration.ofDays(9999), 0.0001d) -> Duration.ofDays(9999).dividedBy(10000),
       (Duration.ofDays(9999), BigDecimal(0.0001)) -> Duration.ofDays(9999).dividedBy(10000)
     ).foreach { case ((duration, num), expected) =>
-      DataTypeTestUtils.dayTimeIntervalTypes.foreach { dt =>
-        checkEvaluation(MultiplyDTInterval(Literal.create(duration, dt), Literal(num)), expected)
-      }
+      checkEvaluation(MultiplyDTInterval(Literal(duration), Literal(num)), expected)
     }
 
     Seq(
@@ -434,6 +433,7 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  // TODO(SPARK-35728): Check multiply/divide of day-time intervals of any fields by numeric
   test("SPARK-34875: divide day-time interval by numeric") {
     Seq(
       (Duration.ofDays(-123), Literal(null, DecimalType.USER_DEFAULT)) -> null,
@@ -447,9 +447,7 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       (Duration.ofDays(10080), 100d) -> Duration.ofDays(10080).dividedBy(100),
       (Duration.ofMillis(2), BigDecimal(-0.1)) -> Duration.ofMillis(-20)
     ).foreach { case ((period, num), expected) =>
-      DataTypeTestUtils.dayTimeIntervalTypes.foreach { dt =>
-        checkEvaluation(DivideDTInterval(Literal.create(period, dt), Literal(num)), expected)
-      }
+      checkEvaluation(DivideDTInterval(Literal(period), Literal(num)), expected)
     }
 
     Seq(
