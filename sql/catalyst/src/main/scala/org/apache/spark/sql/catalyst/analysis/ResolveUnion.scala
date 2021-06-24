@@ -48,20 +48,13 @@ object ResolveUnion extends Rule[LogicalPlan] {
 
     val newStructFields = mutable.ArrayBuffer.empty[Expression]
 
-    val targetStructFields = targetType.fields.foreach { expectedField =>
+    targetType.fields.foreach { expectedField =>
       val currentField = colType.fields.find(f => resolver(f.name, expectedField.name))
 
       val newExpression = (currentField, expectedField.dataType) match {
         case (Some(cf), expectedType: StructType) if cf.dataType.isInstanceOf[StructType] =>
-            val extractedValue = ExtractValue(col, Literal(cf.name), resolver)
-            val combinedStruct = addFields(extractedValue, expectedType)
-            if (extractedValue.nullable) {
-              If(IsNull(extractedValue),
-                Literal(null, combinedStruct.dataType),
-                combinedStruct)
-            } else {
-              combinedStruct
-            }
+          val extractedValue = ExtractValue(col, Literal(cf.name), resolver)
+          addFields(extractedValue, expectedType)
         case (Some(cf), _) =>
           ExtractValue(col, Literal(cf.name), resolver)
         case (None, expectedType) =>
@@ -76,7 +69,12 @@ object ResolveUnion extends Rule[LogicalPlan] {
         newStructFields ++= Literal(f.name) :: ExtractValue(col, Literal(f.name), resolver) :: Nil
       }
 
-    CreateNamedStruct(newStructFields.toSeq)
+    val newStruct = CreateNamedStruct(newStructFields.toSeq)
+    if (col.nullable) {
+      If(IsNull(col), Literal(null, newStruct.dataType), newStruct)
+    } else {
+      newStruct
+    }
   }
 
 
@@ -104,11 +102,9 @@ object ResolveUnion extends Rule[LogicalPlan] {
         (foundDt, lattr.dataType) match {
           case (source: StructType, target: StructType)
               if allowMissingCol && !source.sameType(target) =>
-            // Having an output with same name, but different struct type.
-            // We need to add missing fields. Note that if there are deeply nested structs such as
-            // nested struct of array in struct, we don't support to add missing deeply nested field
-            // like that. We will sort columns in the struct expression to make sure two sides of
-            // union have consistent schema.
+            // We have two structs with different types, so make sure the two structs have their
+            // fields in the same order by using `target`'s fields and then inluding any remaining
+            // in `foundAttr`.
             aliased += foundAttr
             Alias(addFields(foundAttr, target), foundAttr.name)()
           case _ =>
