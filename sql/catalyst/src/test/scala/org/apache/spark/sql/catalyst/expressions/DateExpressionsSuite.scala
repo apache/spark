@@ -464,6 +464,133 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("time_add: timestamp without time zone AND CalendarInterval") {
+    for (zid <- outstandingZoneIds) {
+      withDefaultTimeZone(zid) {
+        val timeZoneId = Option(zid.getId)
+        checkEvaluation(
+          TimeAdd(
+            Literal(LocalDateTime.parse("2016-01-29T10:00:00.000")),
+            Literal(new CalendarInterval(1, 2, 123000L)),
+            timeZoneId),
+          LocalDateTime.parse("2016-03-02T10:00:00.123"))
+
+        checkEvaluation(
+          TimeAdd(
+            Literal.create(null, TimestampWithoutTZType),
+            Literal(new CalendarInterval(1, 2, 123000L)),
+            timeZoneId),
+          null)
+        checkEvaluation(
+          TimeAdd(
+            Literal(LocalDateTime.parse("2016-01-29T10:00:00.000")),
+            Literal.create(null, CalendarIntervalType),
+            timeZoneId),
+          null)
+        checkEvaluation(
+          TimeAdd(
+            Literal.create(null, TimestampWithoutTZType),
+            Literal.create(null, CalendarIntervalType),
+            timeZoneId),
+          null)
+        checkConsistencyBetweenInterpretedAndCodegen(
+          (start: Expression, interval: Expression) => TimeAdd(start, interval, timeZoneId),
+          TimestampWithoutTZType, CalendarIntervalType)
+      }
+    }
+  }
+
+  test("time_add: timestamp without time zone AND Year-Month Interval") {
+    for (zid <- outstandingZoneIds) {
+      withDefaultTimeZone(zid) {
+        val timeZoneId = Option(zid.getId)
+        checkEvaluation(
+          TimeAdd(
+            Literal(LocalDateTime.parse("2016-01-29T10:00:00.000")),
+            Literal(Period.ofMonths(2)),
+            timeZoneId),
+          LocalDateTime.parse("2016-03-29T10:00:00"))
+
+        checkEvaluation(
+          TimeAdd(
+            Literal.create(null, TimestampWithoutTZType),
+            Literal(Period.ofMonths(2)),
+            timeZoneId),
+          null)
+        checkEvaluation(
+          TimeAdd(
+            Literal(LocalDateTime.parse("2016-01-29T10:00:00.000")),
+            Literal.create(null, YearMonthIntervalType()),
+            timeZoneId),
+          null)
+        checkEvaluation(
+          TimeAdd(
+            Literal.create(null, TimestampWithoutTZType),
+            Literal.create(null, YearMonthIntervalType()),
+            timeZoneId),
+          null)
+        yearMonthIntervalTypes.foreach { it =>
+          checkConsistencyBetweenInterpretedAndCodegen((ts: Expression, interval: Expression) =>
+            TimeAdd(ts, interval, timeZoneId), TimestampWithoutTZType, it)
+        }
+      }
+    }
+  }
+
+  test("time_add: timestamp without time zone AND DayTime Interval") {
+    for (zid <- outstandingZoneIds) {
+      withDefaultTimeZone(zid) {
+        val timeZoneId = Option(zid.getId)
+        checkEvaluation(
+          TimeAdd(
+            Literal(LocalDateTime.parse("2021-01-01T00:00:00.123")),
+            Literal(Duration.ofDays(10).plusMinutes(10).plusMillis(321)),
+            timeZoneId),
+          LocalDateTime.parse("2021-01-11T00:10:00.444"))
+        checkEvaluation(
+          TimeAdd(
+            Literal(LocalDateTime.parse("2021-01-01T00:00:00.123")),
+            Literal(Duration.ofDays(-10).minusMinutes(9).minusMillis(120)),
+            timeZoneId),
+          LocalDateTime.parse("2020-12-22T00:01:00.003"))
+
+        val e = intercept[Exception] {
+          checkEvaluation(
+            TimeAdd(
+              Literal(LocalDateTime.parse("2021-01-01T00:00:00.123")),
+              Literal(Duration.of(Long.MaxValue, ChronoUnit.MICROS)),
+              timeZoneId),
+            null)
+        }.getCause
+        assert(e.isInstanceOf[ArithmeticException])
+        assert(e.getMessage.contains("long overflow"))
+
+        checkEvaluation(
+          TimeAdd(
+            Literal.create(null, TimestampWithoutTZType),
+            Literal(Duration.ofDays(1)),
+            timeZoneId),
+          null)
+        checkEvaluation(
+          TimeAdd(
+            Literal(LocalDateTime.parse("2021-01-01T00:00:00.123")),
+            Literal.create(null, DayTimeIntervalType()),
+            timeZoneId),
+          null)
+        checkEvaluation(
+          TimeAdd(
+            Literal.create(null, TimestampWithoutTZType),
+            Literal.create(null, DayTimeIntervalType()),
+            timeZoneId),
+          null)
+        dayTimeIntervalTypes.foreach { it =>
+          checkConsistencyBetweenInterpretedAndCodegen((ts: Expression, interval: Expression) =>
+            TimeAdd(ts, interval, timeZoneId), TimestampWithoutTZType, it)
+        }
+      }
+    }
+  }
+
   test("time_sub") {
     val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US)
     for (zid <- outstandingZoneIds) {
