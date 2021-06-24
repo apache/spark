@@ -19,12 +19,14 @@ import numbers
 from typing import TYPE_CHECKING, Union
 
 import numpy as np
+import pandas as pd
 from pandas.api.types import CategoricalDtype
 
 from pyspark.pandas.base import column_op, IndexOpsMixin, numpy_column_op
 from pyspark.pandas.data_type_ops.base import (
     is_valid_operand_for_numeric_arithmetic,
     DataTypeOps,
+    T_IndexOps,
     transform_boolean_operand_to_numeric,
     _as_bool_type,
     _as_categorical_type,
@@ -38,8 +40,6 @@ from pyspark.sql import functions as F
 from pyspark.sql.column import Column
 from pyspark.sql.types import (
     BooleanType,
-    DoubleType,
-    FloatType,
     StringType,
     TimestampType,
 )
@@ -256,9 +256,7 @@ class IntegralOps(NumericOps):
         right = transform_boolean_operand_to_numeric(right, left.spark.data_type)
         return numpy_column_op(rfloordiv)(left, right)
 
-    def astype(
-        self, index_ops: Union["Index", "Series"], dtype: Union[str, type, Dtype]
-    ) -> Union["Index", "Series"]:
+    def astype(self, index_ops: T_IndexOps, dtype: Union[str, type, Dtype]) -> T_IndexOps:
         dtype, spark_type = pandas_on_spark_type(dtype)
 
         if isinstance(dtype, CategoricalDtype):
@@ -367,14 +365,15 @@ class FractionalOps(NumericOps):
         right = transform_boolean_operand_to_numeric(right, left.spark.data_type)
         return numpy_column_op(rfloordiv)(left, right)
 
-    def isnull(self, index_ops: Union["Index", "Series"]) -> Union["Series", "Index"]:
+    def isnull(self, index_ops: T_IndexOps) -> T_IndexOps:
         return index_ops._with_new_scol(
-            index_ops.spark.column.isNull() | F.isnan(index_ops.spark.column)
+            index_ops.spark.column.isNull() | F.isnan(index_ops.spark.column),
+            field=index_ops._internal.data_fields[0].copy(
+                dtype=np.dtype("bool"), spark_type=BooleanType(), nullable=False
+            ),
         )
 
-    def astype(
-        self, index_ops: Union["Index", "Series"], dtype: Union[str, type, Dtype]
-    ) -> Union["Index", "Series"]:
+    def astype(self, index_ops: T_IndexOps, dtype: Union[str, type, Dtype]) -> T_IndexOps:
         dtype, spark_type = pandas_on_spark_type(dtype)
 
         if isinstance(dtype, CategoricalDtype):
@@ -383,15 +382,10 @@ class FractionalOps(NumericOps):
             if isinstance(dtype, extension_dtypes):
                 scol = index_ops.spark.column.cast(spark_type)
             else:
-                if isinstance(index_ops.spark.data_type, (FloatType, DoubleType)):
-                    scol = F.when(
-                        index_ops.spark.column.isNull() | F.isnan(index_ops.spark.column),
-                        F.lit(True),
-                    ).otherwise(index_ops.spark.column.cast(spark_type))
-                else:  # DecimalType
-                    scol = F.when(index_ops.spark.column.isNull(), F.lit(False)).otherwise(
-                        index_ops.spark.column.cast(spark_type)
-                    )
+                scol = F.when(
+                    index_ops.spark.column.isNull() | F.isnan(index_ops.spark.column),
+                    F.lit(True),
+                ).otherwise(index_ops.spark.column.cast(spark_type))
             return index_ops._with_new_scol(
                 scol.alias(index_ops._internal.data_spark_column_names[0]),
                 field=InternalField(dtype=dtype),
@@ -412,5 +406,50 @@ class DecimalOps(FractionalOps):
     def pretty_name(self) -> str:
         return "decimal"
 
-    def isnull(self, index_ops: Union["Index", "Series"]) -> Union["Series", "Index"]:
-        return index_ops._with_new_scol(index_ops.spark.column.isNull())
+    def isnull(self, index_ops: T_IndexOps) -> T_IndexOps:
+        return index_ops._with_new_scol(
+            index_ops.spark.column.isNull(),
+            field=index_ops._internal.data_fields[0].copy(
+                dtype=np.dtype("bool"), spark_type=BooleanType(), nullable=False
+            ),
+        )
+
+    def astype(self, index_ops: T_IndexOps, dtype: Union[str, type, Dtype]) -> T_IndexOps:
+        dtype, spark_type = pandas_on_spark_type(dtype)
+
+        if isinstance(dtype, CategoricalDtype):
+            return _as_categorical_type(index_ops, dtype, spark_type)
+        elif isinstance(spark_type, BooleanType):
+            return _as_bool_type(index_ops, dtype)
+        elif isinstance(spark_type, StringType):
+            return _as_string_type(index_ops, dtype, null_str=str(np.nan))
+        else:
+            return _as_other_type(index_ops, dtype, spark_type)
+
+
+class IntegralExtensionOps(IntegralOps):
+    """
+    The class for binary operations of pandas-on-Spark objects with one of the
+    - spark types:
+        LongType, IntegerType, ByteType and ShortType
+    - dtypes:
+        Int8Dtype, Int16Dtype, Int32Dtype, Int64Dtype
+    """
+
+    def restore(self, col: pd.Series) -> pd.Series:
+        """Restore column when to_pandas."""
+        return col.astype(self.dtype)
+
+
+class FractionalExtensionOps(FractionalOps):
+    """
+    The class for binary operations of pandas-on-Spark objects with one of the
+    - spark types:
+        FloatType, DoubleType and DecimalType
+    - dtypes:
+        Float32Dtype, Float64Dtype
+    """
+
+    def restore(self, col: pd.Series) -> pd.Series:
+        """Restore column when to_pandas."""
+        return col.astype(self.dtype)

@@ -597,7 +597,8 @@ class Dataset[T] private[sql](
    * @group basic
    * @since 1.6.0
    */
-  def isLocal: Boolean = logicalPlan.isInstanceOf[LocalRelation]
+  def isLocal: Boolean = logicalPlan.isInstanceOf[LocalRelation] ||
+    logicalPlan.isInstanceOf[CommandResult]
 
   /**
    * Returns true if the `Dataset` is empty.

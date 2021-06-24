@@ -3114,6 +3114,13 @@ private[spark] object Utils extends Logging {
     conf.get(config.STORAGE_BLOCKMANAGER_HEARTBEAT_TIMEOUT)
       .getOrElse(Utils.timeStringAsMs(s"${conf.get(Network.NETWORK_TIMEOUT)}s"))
   }
+
+  /** Returns a string message about delegation token generation failure */
+  def createFailedToGetTokenMessage(serviceName: String, e: scala.Throwable): String = {
+    val message = "Failed to get token from service %s due to %s. " +
+      "If %s is not used, set spark.security.credentials.%s.enabled to false."
+    message.format(serviceName, e, serviceName, serviceName)
+  }
 }
 
 private[util] object CallerContext extends Logging {

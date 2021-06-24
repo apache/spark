@@ -170,19 +170,20 @@ public final class VectorizedRleValuesReader extends ValuesReader
    *  }
    */
   public void readBatch(
-      int total,
-      int offset,
+      ParquetReadState state,
       WritableColumnVector values,
-      int maxDefinitionLevel,
       VectorizedValuesReader valueReader,
       ParquetVectorUpdater updater) throws IOException {
-    int left = total;
+    int offset = state.offset;
+    int left = Math.min(state.valuesToReadInBatch, state.valuesToReadInPage);
+
     while (left > 0) {
       if (this.currentCount == 0) this.readNextGroup();
       int n = Math.min(left, this.currentCount);
+
       switch (mode) {
         case RLE:
-          if (currentValue == maxDefinitionLevel) {
+          if (currentValue == state.maxDefinitionLevel) {
             updater.updateBatch(n, offset, values, valueReader);
           } else {
             values.putNulls(offset, n);
@@ -190,7 +191,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
           break;
         case PACKED:
           for (int i = 0; i < n; ++i) {
-            if (currentBuffer[currentBufferIdx++] == maxDefinitionLevel) {
+            if (currentBuffer[currentBufferIdx++] == state.maxDefinitionLevel) {
               updater.update(offset + i, values, valueReader);
             } else {
               values.putNull(offset + i);
@@ -202,6 +203,8 @@ public final class VectorizedRleValuesReader extends ValuesReader
       left -= n;
       currentCount -= n;
     }
+
+    state.advanceOffset(offset);
   }
 
   /**
@@ -209,38 +212,41 @@ public final class VectorizedRleValuesReader extends ValuesReader
    * populated into `nulls`.
    */
   public void readIntegers(
-      int total,
+      ParquetReadState state,
       WritableColumnVector values,
       WritableColumnVector nulls,
-      int rowId,
-      int level,
       VectorizedValuesReader data) throws IOException {
-    int left = total;
+    int offset = state.offset;
+    int left = Math.min(state.valuesToReadInBatch, state.valuesToReadInPage);
+
     while (left > 0) {
       if (this.currentCount == 0) this.readNextGroup();
       int n = Math.min(left, this.currentCount);
+
       switch (mode) {
         case RLE:
-          if (currentValue == level) {
-            data.readIntegers(n, values, rowId);
+          if (currentValue == state.maxDefinitionLevel) {
+            data.readIntegers(n, values, offset);
           } else {
-            nulls.putNulls(rowId, n);
+            nulls.putNulls(offset, n);
           }
           break;
         case PACKED:
           for (int i = 0; i < n; ++i) {
-            if (currentBuffer[currentBufferIdx++] == level) {
-              values.putInt(rowId + i, data.readInteger());
+            if (currentBuffer[currentBufferIdx++] == state.maxDefinitionLevel) {
+              values.putInt(offset + i, data.readInteger());
             } else {
-              nulls.putNull(rowId + i);
+              nulls.putNull(offset + i);
             }
           }
           break;
       }
-      rowId += n;
+      offset += n;
       left -= n;
       currentCount -= n;
     }
+
+    state.advanceOffset(offset);
   }
 
 

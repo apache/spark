@@ -136,7 +136,14 @@ private[spark] class Client(
     val driverPodName = resolvedDriverPod.getMetadata.getName
 
     var watch: Watch = null
-    val createdDriverPod = kubernetesClient.pods().create(resolvedDriverPod)
+    var createdDriverPod: Pod = null
+    try {
+      createdDriverPod = kubernetesClient.pods().create(resolvedDriverPod)
+    } catch {
+      case NonFatal(e) =>
+        logError("Please check \"kubectl auth can-i create pod\" first. It should be yes.")
+        throw e
+    }
     try {
       val otherKubernetesResources = resolvedDriverSpec.driverKubernetesResources ++ Seq(configMap)
       addOwnerReference(createdDriverPod, otherKubernetesResources)

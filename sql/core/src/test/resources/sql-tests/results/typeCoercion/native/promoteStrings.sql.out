@@ -204,7 +204,7 @@ cannot resolve '('1' - CAST('2017-12-11 09:30:00.0' AS TIMESTAMP))' due to data 
 -- !query
 SELECT '1' - cast('2017-12-11 09:30:00' as date)        FROM t
 -- !query schema
-struct<(1 - CAST(2017-12-11 09:30:00 AS DATE)):interval day to second>
+struct<(1 - CAST(2017-12-11 09:30:00 AS DATE)):interval day>
 -- !query output
 NULL
 

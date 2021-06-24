@@ -15,6 +15,8 @@
 # limitations under the License.
 #
 
+import unittest
+
 import numpy as np
 import pandas as pd
 from pandas.api.types import CategoricalDtype
@@ -22,6 +24,7 @@ from pandas.api.types import CategoricalDtype
 from pyspark import pandas as ps
 from pyspark.pandas.config import option_context
 from pyspark.pandas.tests.data_type_ops.testing_utils import TestCasesUtils
+from pyspark.pandas.typedef.typehints import extension_object_dtypes_available
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 
 
@@ -174,8 +177,48 @@ class StringOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         self.assert_eq(pser.astype(cat_type), psser.astype(cat_type))
 
 
+@unittest.skipIf(
+    not extension_object_dtypes_available, "pandas extension object dtypes are not available"
+)
+class StringExtensionOpsTest(StringOpsTest, PandasOnSparkTestCase, TestCasesUtils):
+    @property
+    def pser(self):
+        return pd.Series(["x", "y", "z", None], dtype="string")
+
+    @property
+    def psser(self):
+        return ps.from_pandas(self.pser)
+
+    def test_radd(self):
+        self.assert_eq("x" + self.pser, ("x" + self.psser).astype("string"))
+        self.assertRaises(TypeError, lambda: 1 + self.psser)
+
+    def test_mul(self):
+        self.assertRaises(TypeError, lambda: self.psser * "x")
+        self.assert_eq(self.pser * 1, self.psser * 1)
+
+        with option_context("compute.ops_on_diff_frames", True):
+            for pser, psser in self.pser_psser_pairs:
+                if psser.dtype in [np.int32, np.int64]:
+                    self.assert_eq(
+                        ps.Series(["x", "yy", "zzz", None]).astype("string"),
+                        (self.psser * psser).sort_index(),
+                    )
+                else:
+                    self.assertRaises(TypeError, lambda: self.psser * psser)
+
+    def test_from_to_pandas(self):
+        data = ["x", "y", "z", None]
+        pser = pd.Series(data, dtype="string")
+        psser = ps.Series(data, dtype="string")
+        self.assert_eq(pser, psser.to_pandas())
+        self.assert_eq(ps.from_pandas(pser), psser)
+
+    def test_isnull(self):
+        self.assert_eq(self.pser.isnull(), self.psser.isnull())
+
+
 if __name__ == "__main__":
-    import unittest
     from pyspark.pandas.tests.data_type_ops.test_string_ops import *  # noqa: F401
 
     try:
