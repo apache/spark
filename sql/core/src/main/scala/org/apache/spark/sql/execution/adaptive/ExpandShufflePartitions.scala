@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.adaptive
 
 import org.apache.spark.sql.catalyst.plans.physical.SinglePartition
 import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.execution.exchange.{EnsureRequirements, REPARTITION_BY_COL, REPARTITION_BY_NONE, ShuffleExchangeLike, ShuffleOrigin}
+import org.apache.spark.sql.execution.exchange.{EnsureRequirements, REBALANCE_PARTITIONS_BY_COL, REBALANCE_PARTITIONS_BY_NONE, ShuffleExchangeLike, ShuffleOrigin}
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -37,7 +37,7 @@ import org.apache.spark.sql.internal.SQLConf
  */
 object ExpandShufflePartitions extends CustomShuffleReaderRule {
   override def supportedShuffleOrigins: Seq[ShuffleOrigin] =
-    Seq(REPARTITION_BY_COL, REPARTITION_BY_NONE)
+    Seq(REBALANCE_PARTITIONS_BY_NONE, REBALANCE_PARTITIONS_BY_COL)
 
   private def expandPartitions(plan: SparkPlan): SparkPlan = {
     def collectShuffleStageInfos(plan: SparkPlan): Seq[ShuffleStageInfo] = plan match {
@@ -84,7 +84,7 @@ object ExpandShufflePartitions extends CustomShuffleReaderRule {
       case _: ShuffleExchangeLike => true
       case _ => false
     }
-    // For save, we don't expand partition if introduce extra shuffle.
+    // For safe, we don't expand partition if introduce extra shuffle.
     if (extraShuffle.isDefined) {
       plan
     } else {
