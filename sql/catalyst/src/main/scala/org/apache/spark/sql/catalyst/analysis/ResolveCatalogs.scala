@@ -88,11 +88,6 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
         tbl,
         typeChange.toSeq ++ nullabilityChange ++ commentChange ++ positionChange)
 
-    case AlterTableRenameColumnStatement(
-         nameParts @ NonSessionCatalogAndTable(catalog, tbl), col, newName) =>
-      val changes = Seq(TableChange.renameColumn(col.toArray, newName))
-      createAlterTable(nameParts, catalog, tbl, changes)
-
     case c @ CreateTableStatement(
          NonSessionCatalogAndTable(catalog, tbl), _, _, _, _, _, _, _, _, _, _, _) =>
       assertNoNullTypeInSchema(c.tableSchema)

@@ -3532,7 +3532,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   /**
-   * Parse a [[AlterTableRenameColumnStatement]] command.
+   * Parse a [[AlterTableRenameColumn]] command.
    *
    * For example:
    * {{{
@@ -3541,9 +3541,9 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    */
   override def visitRenameTableColumn(
       ctx: RenameTableColumnContext): LogicalPlan = withOrigin(ctx) {
-    AlterTableRenameColumnStatement(
-      visitMultipartIdentifier(ctx.table),
-      ctx.from.parts.asScala.map(_.getText).toSeq,
+    AlterTableRenameColumn(
+      createUnresolvedTable(ctx.table, "ALTER TABLE ... RENAME COLUMN"),
+      UnresolvedFieldName(ctx.from.parts.asScala.map(_.getText).toSeq),
       ctx.to.getText)
   }
 
