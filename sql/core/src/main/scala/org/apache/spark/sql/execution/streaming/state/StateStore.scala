@@ -32,6 +32,7 @@ import org.apache.spark.{SparkContext, SparkEnv}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.util.UnsafeRowUtils
+import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.execution.streaming.StatefulOperatorStateInfo
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.{ThreadUtils, Utils}
@@ -182,16 +183,36 @@ object StateStoreMetrics {
 
 /**
  * Name and description of custom implementation-specific metrics that a
- * state store may wish to expose.
+ * state store may wish to expose. Also provides [[SQLMetric]] instance to
+ * show the metric in UI and accumulate it at the query level.
  */
 trait StateStoreCustomMetric {
   def name: String
   def desc: String
+  def withNewDesc(desc: String): StateStoreCustomMetric
+  def createSQLMetric(sparkContext: SparkContext): SQLMetric
 }
 
-case class StateStoreCustomSumMetric(name: String, desc: String) extends StateStoreCustomMetric
-case class StateStoreCustomSizeMetric(name: String, desc: String) extends StateStoreCustomMetric
-case class StateStoreCustomTimingMetric(name: String, desc: String) extends StateStoreCustomMetric
+case class StateStoreCustomSumMetric(name: String, desc: String) extends StateStoreCustomMetric {
+  override def withNewDesc(newDesc: String): StateStoreCustomSumMetric = copy(desc = desc)
+
+  override def createSQLMetric(sparkContext: SparkContext): SQLMetric =
+    SQLMetrics.createMetric(sparkContext, desc)
+}
+
+case class StateStoreCustomSizeMetric(name: String, desc: String) extends StateStoreCustomMetric {
+  override def withNewDesc(desc: String): StateStoreCustomSizeMetric = copy(desc = desc)
+
+  override def createSQLMetric(sparkContext: SparkContext): SQLMetric =
+    SQLMetrics.createSizeMetric(sparkContext, desc)
+}
+
+case class StateStoreCustomTimingMetric(name: String, desc: String) extends StateStoreCustomMetric {
+  override def withNewDesc(desc: String): StateStoreCustomTimingMetric = copy(desc = desc)
+
+  override def createSQLMetric(sparkContext: SparkContext): SQLMetric =
+    SQLMetrics.createTimingMetric(sparkContext, desc)
+}
 
 /**
  * An exception thrown when an invalid UnsafeRow is detected in state store.

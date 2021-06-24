@@ -45,6 +45,7 @@ import scala.util.matching.Regex
 
 import _root_.io.netty.channel.unix.Errors.NativeIoException
 import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache}
+import com.google.common.collect.Interners
 import com.google.common.io.{ByteStreams, Files => GFiles}
 import com.google.common.net.InetAddresses
 import org.apache.commons.codec.binary.Hex
@@ -101,6 +102,8 @@ private[spark] object Utils extends Logging {
 
   /** Scheme used for files that are locally available on worker nodes in the cluster. */
   val LOCAL_SCHEME = "local"
+
+  private val weakStringInterner = Interners.newWeakInterner[String]()
 
   private val PATTERN_FOR_COMMAND_LINE_ARG = "-D(.+?)=(.+)".r
 
@@ -172,6 +175,11 @@ private[spark] object Utils extends Logging {
     } finally {
       isWrapper.close()
     }
+  }
+
+  /** String interning to reduce the memory usage. */
+  def weakIntern(s: String): String = {
+    weakStringInterner.intern(s)
   }
 
   /**
@@ -2067,7 +2075,7 @@ private[spark] object Utils extends Logging {
     } catch {
       case e: URISyntaxException =>
     }
-    new File(path).getAbsoluteFile().toURI()
+    new File(path).getCanonicalFile().toURI()
   }
 
   /** Resolve a comma-separated list of paths. */
@@ -3105,6 +3113,13 @@ private[spark] object Utils extends Logging {
     // "milliseconds"
     conf.get(config.STORAGE_BLOCKMANAGER_HEARTBEAT_TIMEOUT)
       .getOrElse(Utils.timeStringAsMs(s"${conf.get(Network.NETWORK_TIMEOUT)}s"))
+  }
+
+  /** Returns a string message about delegation token generation failure */
+  def createFailedToGetTokenMessage(serviceName: String, e: scala.Throwable): String = {
+    val message = "Failed to get token from service %s due to %s. " +
+      "If %s is not used, set spark.security.credentials.%s.enabled to false."
+    message.format(serviceName, e, serviceName, serviceName)
   }
 }
 

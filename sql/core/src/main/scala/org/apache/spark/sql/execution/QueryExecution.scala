@@ -30,16 +30,16 @@ import org.apache.spark.sql.catalyst.{InternalRow, QueryPlanningTracker}
 import org.apache.spark.sql.catalyst.analysis.UnsupportedOperationChecker
 import org.apache.spark.sql.catalyst.expressions.codegen.ByteCodeStats
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan, ReturnAnswer}
+import org.apache.spark.sql.catalyst.plans.logical.{AppendData, Command, CommandResult, CreateTableAsSelect, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelect, ReturnAnswer}
 import org.apache.spark.sql.catalyst.rules.{PlanChangeLogger, Rule}
 import org.apache.spark.sql.catalyst.util.StringUtils.PlanStringConcat
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.execution.adaptive.{AdaptiveExecutionContext, InsertAdaptiveSparkPlan}
 import org.apache.spark.sql.execution.bucketing.{CoalesceBucketsInJoin, DisableUnnecessaryBucketedScan}
 import org.apache.spark.sql.execution.dynamicpruning.PlanDynamicPruningFilters
-import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ReuseExchange}
+import org.apache.spark.sql.execution.exchange.EnsureRequirements
+import org.apache.spark.sql.execution.reuse.ReuseExchangeAndSubquery
 import org.apache.spark.sql.execution.streaming.{IncrementalExecution, OffsetSeqMetadata}
-import org.apache.spark.sql.expressions.CommandResult
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.util.Utils
@@ -81,11 +81,21 @@ class QueryExecution(
     case CommandExecutionMode.SKIP => analyzed
   }
 
+  private def commandExecutionName(command: Command): String = command match {
+    case _: CreateTableAsSelect => "create"
+    case _: ReplaceTableAsSelect => "replace"
+    case _: AppendData => "append"
+    case _: OverwriteByExpression => "overwrite"
+    case _: OverwritePartitionsDynamic => "overwritePartitions"
+    case _ => "command"
+  }
+
   private def eagerlyExecuteCommands(p: LogicalPlan) = p transformDown {
     case c: Command =>
       val qe = sparkSession.sessionState.executePlan(c, CommandExecutionMode.NON_ROOT)
-      val result =
-        SQLExecution.withNewExecutionId(qe, Some("command"))(qe.executedPlan.executeCollect())
+      val result = SQLExecution.withNewExecutionId(qe, Some(commandExecutionName(c))) {
+        qe.executedPlan.executeCollect()
+      }
       CommandResult(
         qe.analyzed.output,
         qe.commandExecuted,
@@ -102,7 +112,7 @@ class QueryExecution(
     sparkSession.sharedState.cacheManager.useCachedData(commandExecuted.clone())
   }
 
-  private def assertCommandExecuted(): Unit = commandExecuted
+  def assertCommandExecuted(): Unit = commandExecuted
 
   lazy val optimizedPlan: LogicalPlan = {
     // We need to materialize the commandExecuted here because optimizedPlan is also tracked under
@@ -166,7 +176,7 @@ class QueryExecution(
 
   protected def preparations: Seq[Rule[SparkPlan]] = {
     QueryExecution.preparations(sparkSession,
-      Option(InsertAdaptiveSparkPlan(AdaptiveExecutionContext(sparkSession, this))))
+      Option(InsertAdaptiveSparkPlan(AdaptiveExecutionContext(sparkSession, this))), false)
   }
 
   protected def executePhase[T](phase: String)(block: => T): T = sparkSession.withActive {
@@ -389,7 +399,8 @@ object QueryExecution {
    */
   private[execution] def preparations(
       sparkSession: SparkSession,
-      adaptiveExecutionRule: Option[InsertAdaptiveSparkPlan] = None): Seq[Rule[SparkPlan]] = {
+      adaptiveExecutionRule: Option[InsertAdaptiveSparkPlan] = None,
+      subquery: Boolean): Seq[Rule[SparkPlan]] = {
     // `AdaptiveSparkPlanExec` is a leaf node. If inserted, all the following rules will be no-op
     // as the original plan is hidden behind `AdaptiveSparkPlanExec`.
     adaptiveExecutionRule.toSeq ++
@@ -404,10 +415,12 @@ object QueryExecution {
       RemoveRedundantSorts,
       DisableUnnecessaryBucketedScan,
       ApplyColumnarRulesAndInsertTransitions(sparkSession.sessionState.columnarRules),
-      CollapseCodegenStages(),
-      ReuseExchange,
-      ReuseSubquery
-    )
+      CollapseCodegenStages()) ++
+      (if (subquery) {
+        Nil
+      } else {
+        Seq(ReuseExchangeAndSubquery)
+      })
   }
 
   /**
@@ -445,7 +458,7 @@ object QueryExecution {
    * Prepare the [[SparkPlan]] for execution.
    */
   def prepareExecutedPlan(spark: SparkSession, plan: SparkPlan): SparkPlan = {
-    prepareForExecution(preparations(spark), plan)
+    prepareForExecution(preparations(spark, subquery = true), plan)
   }
 
   /**

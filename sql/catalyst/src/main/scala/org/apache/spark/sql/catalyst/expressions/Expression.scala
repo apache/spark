@@ -238,7 +238,7 @@ abstract class Expression extends TreeNode[Expression] {
    *
    * See [[Canonicalize]] for more details.
    */
-  def semanticEquals(other: Expression): Boolean =
+  final def semanticEquals(other: Expression): Boolean =
     deterministic && other.deterministic && canonicalized == other.canonicalized
 
   /**

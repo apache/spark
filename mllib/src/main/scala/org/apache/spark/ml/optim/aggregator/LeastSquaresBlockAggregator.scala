@@ -60,12 +60,10 @@ private[ml] class LeastSquaresBlockAggregator(
 
   protected override val dim: Int = numFeatures
 
-  @transient private lazy val effectiveCoefVec = bcCoefficients.value match {
+  @transient private lazy val effectiveCoef = bcCoefficients.value match {
     case DenseVector(values) =>
       val inverseStd = bcInverseStd.value
-      val effectiveCoefArray = Array.tabulate(numFeatures)(
-        i => if (inverseStd(i) != 0) values(i) else 0.0)
-      new DenseVector(effectiveCoefArray)
+      Array.tabulate(numFeatures)(i => if (inverseStd(i) != 0) values(i) else 0.0)
 
     case _ => throw new IllegalArgumentException(s"coefficients only supports dense vector but " +
       s"got type ${bcCoefficients.value.getClass}.)")
@@ -96,15 +94,14 @@ private[ml] class LeastSquaresBlockAggregator(
 
     val size = block.size
 
-    // vec/arr here represents diffs
-    val vec = new DenseVector(Array.ofDim[Double](size))
-    val arr = vec.values
+    // arr here represents diffs
+    val arr = Array.ofDim[Double](size)
     if (fitIntercept) java.util.Arrays.fill(arr, offset)
     BLAS.javaBLAS.daxpy(size, -1.0 / labelStd, block.labels, 1, arr, 1)
-    BLAS.gemv(1.0, block.matrix, effectiveCoefVec, 1.0, vec)
+    BLAS.gemv(1.0, block.matrix, effectiveCoef, 1.0, arr)
 
     // in-place convert diffs to multipliers
-    // then, vec/arr represents multipliers
+    // then, arr represents multipliers
     var localLossSum = 0.0
     var localWeightSum = 0.0
     var i = 0
@@ -120,8 +117,7 @@ private[ml] class LeastSquaresBlockAggregator(
     lossSum += localLossSum
     weightSum += localWeightSum
 
-    val gradSumVec = new DenseVector(gradientSumArray)
-    BLAS.gemv(1.0, block.matrix.transpose, vec, 1.0, gradSumVec)
+    BLAS.gemv(1.0, block.matrix.transpose, arr, 1.0, gradientSumArray)
 
     this
   }

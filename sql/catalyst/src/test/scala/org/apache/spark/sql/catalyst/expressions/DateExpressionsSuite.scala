@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.{Date, Timestamp}
 import java.text.{ParseException, SimpleDateFormat}
-import java.time.{DateTimeException, Duration, Instant, LocalDate, Period, ZoneId}
+import java.time.{DateTimeException, Duration, Instant, LocalDate, LocalDateTime, Period, ZoneId}
 import java.time.format.DateTimeParseException
 import java.time.temporal.ChronoUnit
 import java.util.{Calendar, Locale, TimeZone}
@@ -36,6 +36,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{getZoneId, TimeZoneUTC}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.DataTypeTestUtils.{dayTimeIntervalTypes, yearMonthIntervalTypes}
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
@@ -525,7 +526,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   private def testAddMonths(dataType: DataType): Unit = {
     def addMonths(date: Literal, months: Any): AddMonthsBase = dataType match {
       case IntegerType => AddMonths(date, Literal.create(months, dataType))
-      case YearMonthIntervalType =>
+      case _: YearMonthIntervalType =>
         val period = if (months == null) null else Period.ofMonths(months.asInstanceOf[Int])
         DateAddYMInterval(date, Literal.create(period, dataType))
     }
@@ -560,7 +561,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("SPARK-34721: add a year-month interval to a date") {
-    testAddMonths(YearMonthIntervalType)
+    testAddMonths(YearMonthIntervalType())
     // Test evaluation results between Interpreted mode and Codegen mode
     forAll (
       LiteralGenerator.randomGen(DateType),
@@ -1282,6 +1283,33 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("to_timestamp_ntz") {
+    val specialTs = Seq(
+      "0001-01-01T00:00:00", // the fist timestamp of Common Era
+      "1582-10-15T23:59:59", // the cutover date from Julian to Gregorian calendar
+      "1970-01-01T00:00:00", // the epoch timestamp
+      "9999-12-31T23:59:59"  // the last supported timestamp according to SQL standard
+    )
+    outstandingZoneIds.foreach { zoneId =>
+      withDefaultTimeZone(zoneId) {
+        specialTs.foreach { s =>
+          val input = s.replace("T", " ")
+          val expectedTs = LocalDateTime.parse(s)
+          checkEvaluation(
+            GetTimestampWithoutTZ(Literal(input), Literal("yyyy-MM-dd HH:mm:ss")), expectedTs)
+          Seq(".123456", ".123456PST", ".123456CST", ".123456UTC").foreach { segment =>
+            val input2 = input + segment
+            val expectedTs2 = LocalDateTime.parse(s + ".123456")
+            checkEvaluation(
+              GetTimestampWithoutTZ(Literal(input2), Literal("yyyy-MM-dd HH:mm:ss.SSSSSS[zzz]")),
+              expectedTs2)
+          }
+        }
+      }
+    }
+
+  }
+
   test("to_timestamp exception mode") {
     withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> "legacy") {
       checkEvaluation(
@@ -1595,18 +1623,21 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(
         TimestampAddYMInterval(
           Literal(new Timestamp(sdf.parse("2016-01-29 10:00:00.000").getTime)),
-          Literal.create(null, YearMonthIntervalType),
+          Literal.create(null, YearMonthIntervalType()),
           timeZoneId),
         null)
       checkEvaluation(
         TimestampAddYMInterval(
           Literal.create(null, TimestampType),
-          Literal.create(null, YearMonthIntervalType),
+          Literal.create(null, YearMonthIntervalType()),
           timeZoneId),
         null)
-      checkConsistencyBetweenInterpretedAndCodegen(
-        (ts: Expression, interval: Expression) => TimestampAddYMInterval(ts, interval, timeZoneId),
-        TimestampType, YearMonthIntervalType)
+      yearMonthIntervalTypes.foreach { it =>
+        checkConsistencyBetweenInterpretedAndCodegen(
+          (ts: Expression, interval: Expression) =>
+            TimestampAddYMInterval(ts, interval, timeZoneId),
+          TimestampType, it)
+      }
     }
   }
 
@@ -1650,18 +1681,19 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(
         TimeAdd(
           Literal(new Timestamp(sdf.parse("2021-01-01 00:00:00.123").getTime)),
-          Literal.create(null, DayTimeIntervalType),
+          Literal.create(null, DayTimeIntervalType()),
           timeZoneId),
         null)
       checkEvaluation(
         TimeAdd(
           Literal.create(null, TimestampType),
-          Literal.create(null, DayTimeIntervalType),
+          Literal.create(null, DayTimeIntervalType()),
           timeZoneId),
         null)
-      checkConsistencyBetweenInterpretedAndCodegen(
-        (ts: Expression, interval: Expression) => TimeAdd(ts, interval, timeZoneId),
-        TimestampType, DayTimeIntervalType)
+      dayTimeIntervalTypes.foreach { it =>
+        checkConsistencyBetweenInterpretedAndCodegen((ts: Expression, interval: Expression) =>
+          TimeAdd(ts, interval, timeZoneId), TimestampType, it)
+      }
     }
   }
 }

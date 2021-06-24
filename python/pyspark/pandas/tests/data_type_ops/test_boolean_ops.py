@@ -21,11 +21,12 @@ from distutils.version import LooseVersion
 
 import pandas as pd
 import numpy as np
+from pandas.api.types import CategoricalDtype
 
 from pyspark import pandas as ps
 from pyspark.pandas.config import option_context
 from pyspark.pandas.tests.data_type_ops.testing_utils import TestCasesUtils
-from pyspark.pandas.typedef.typehints import extension_dtypes_available
+from pyspark.pandas.typedef.typehints import extension_object_dtypes_available
 from pyspark.sql.types import BooleanType
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 
@@ -287,8 +288,28 @@ class BooleanOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         self.assert_eq(True | pser, True | psser)
         self.assert_eq(False | pser, False | psser)
 
+    def test_isnull(self):
+        self.assert_eq(self.pser.isnull(), self.psser.isnull())
 
-@unittest.skipIf(not extension_dtypes_available, "pandas extension dtypes are not available")
+    def test_astype(self):
+        pser = self.pser
+        psser = self.psser
+        self.assert_eq(pser.astype(int), psser.astype(int))
+        self.assert_eq(pser.astype(float), psser.astype(float))
+        self.assert_eq(pser.astype(np.float32), psser.astype(np.float32))
+        self.assert_eq(pser.astype(np.int32), psser.astype(np.int32))
+        self.assert_eq(pser.astype(np.int16), psser.astype(np.int16))
+        self.assert_eq(pser.astype(np.int8), psser.astype(np.int8))
+        self.assert_eq(pser.astype(str), psser.astype(str))
+        self.assert_eq(pser.astype(bool), psser.astype(bool))
+        self.assert_eq(pser.astype("category"), psser.astype("category"))
+        cat_type = CategoricalDtype(categories=[False, True])
+        self.assert_eq(pser.astype(cat_type), psser.astype(cat_type))
+
+
+@unittest.skipIf(
+    not extension_object_dtypes_available, "pandas extension object dtypes are not available"
+)
 class BooleanExtensionOpsTest(PandasOnSparkTestCase, TestCasesUtils):
     @property
     def pser(self):
@@ -320,17 +341,10 @@ class BooleanExtensionOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         self.assert_eq((pser + 1).astype(float), psser + 1)
         self.assert_eq((pser + 0.1).astype(float), psser + 0.1)
 
-        if LooseVersion(pd.__version__) >= LooseVersion("1.2.2"):
-            # In pandas, NA | True is NA, whereas NA | True is True in pandas-on-Spark
-            self.assert_eq(ps.Series([True, True, True], dtype="boolean"), psser + True)
-
-            self.assert_eq(pser + False, psser + False)
-            self.assert_eq(pser + pser, psser + psser)
-        else:
-            # Due to https://github.com/pandas-dev/pandas/issues/39410
-            self.assert_eq(ps.Series([True, True, True]), (psser + True).astype(bool))
-            self.assert_eq([True, False, pd._libs.missing.NAType()], (psser + False).tolist())
-            self.assert_eq([True, False, pd._libs.missing.NAType()], (psser + psser).tolist())
+        # In pandas, NA | True is NA, whereas NA | True is True in pandas-on-Spark
+        self.check_extension(ps.Series([True, True, True], dtype="boolean"), psser + True)
+        self.check_extension(pser + False, psser + False)
+        self.check_extension(pser + pser, psser + psser)
 
         with option_context("compute.ops_on_diff_frames", True):
             for pser, psser in self.numeric_pser_psser_pairs:
@@ -340,13 +354,7 @@ class BooleanExtensionOpsTest(PandasOnSparkTestCase, TestCasesUtils):
                     self.assertRaises(TypeError, lambda: self.psser + psser)
             bool_pser = pd.Series([False, False, False])
             bool_psser = ps.from_pandas(bool_pser)
-            if LooseVersion(pd.__version__) >= LooseVersion("1.2.2"):
-                self.assert_eq(self.pser + bool_pser, self.psser + bool_psser)
-            else:
-                # Due to https://github.com/pandas-dev/pandas/issues/39410
-                self.assert_eq(
-                    [True, False, pd._libs.missing.NAType()], (self.psser + bool_psser).tolist()
-                )
+            self.check_extension(self.pser + bool_pser, self.psser + bool_psser)
 
     def test_sub(self):
         pser = self.pser
@@ -369,15 +377,9 @@ class BooleanExtensionOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         self.assert_eq((pser * 0.1).astype(float), psser * 0.1)
 
         # In pandas, NA & False is NA, whereas NA & False is False in pandas-on-Spark
-        if LooseVersion(pd.__version__) >= LooseVersion("1.2.2"):
-            self.assert_eq(pser * True, psser * True)
-            self.assert_eq(ps.Series([False, False, False], dtype="boolean"), psser * False)
-            self.assert_eq(pser * pser, psser * psser)
-        else:
-            # Due to https://github.com/pandas-dev/pandas/issues/39410
-            self.assert_eq([True, False, pd._libs.missing.NAType()], (psser * True).tolist())
-            self.assert_eq(ps.Series([False, False, False]), (psser * False).astype(bool))
-            self.assert_eq([True, False, pd._libs.missing.NAType()], (psser * psser).tolist())
+        self.check_extension(pser * True, psser * True)
+        self.check_extension(ps.Series([False, False, False], dtype="boolean"), psser * False)
+        self.check_extension(pser * pser, psser * psser)
 
         with option_context("compute.ops_on_diff_frames", True):
             for pser, psser in self.numeric_pser_psser_pairs:
@@ -387,13 +389,7 @@ class BooleanExtensionOpsTest(PandasOnSparkTestCase, TestCasesUtils):
                     self.assertRaises(TypeError, lambda: self.psser * psser)
             bool_pser = pd.Series([True, True, True])
             bool_psser = ps.from_pandas(bool_pser)
-            if LooseVersion(pd.__version__) >= LooseVersion("1.2.2"):
-                self.assert_eq(self.pser * bool_pser, self.psser * bool_psser)
-            else:
-                # Due to https://github.com/pandas-dev/pandas/issues/39410
-                self.assert_eq(
-                    [True, False, pd._libs.missing.NAType()], (self.psser * bool_psser).tolist()
-                )
+            self.check_extension(self.pser * bool_pser, self.psser * bool_psser)
 
     def test_truediv(self):
         pser = self.pser
@@ -474,12 +470,8 @@ class BooleanExtensionOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         self.assertRaises(TypeError, lambda: "x" + self.psser)
 
         # In pandas, NA | True is NA, whereas NA | True is True in pandas-on-Spark
-        if LooseVersion(pd.__version__) >= LooseVersion("1.2.2"):
-            self.assert_eq(ps.Series([True, True, True], dtype="boolean"), True + self.psser)
-            self.assert_eq(False + self.pser, False + self.psser)
-        else:
-            # Due to https://github.com/pandas-dev/pandas/issues/39410
-            self.assert_eq(ps.Series([True, True, True]), (True + self.psser).astype(bool))
+        self.check_extension(ps.Series([True, True, True], dtype="boolean"), True + self.psser)
+        self.check_extension(False + self.pser, False + self.psser)
 
         self.assertRaises(TypeError, lambda: datetime.date(1994, 1, 1) + self.psser)
         self.assertRaises(TypeError, lambda: datetime.datetime(1994, 1, 1) + self.psser)
@@ -498,12 +490,8 @@ class BooleanExtensionOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         self.assertRaises(TypeError, lambda: "x" * self.psser)
 
         # In pandas, NA & False is NA, whereas NA & False is False in pandas-on-Spark
-        if LooseVersion(pd.__version__) >= LooseVersion("1.2.2"):
-            self.assert_eq(True * self.pser, True * self.psser)
-            self.assert_eq(ps.Series([False, False, False], dtype="boolean"), False * self.psser)
-        else:
-            # Due to https://github.com/pandas-dev/pandas/issues/39410
-            self.assert_eq(ps.Series([False, False, False]), (False * self.psser).astype(bool))
+        self.check_extension(True * self.pser, True * self.psser)
+        self.check_extension(ps.Series([False, False, False], dtype="boolean"), False * self.psser)
 
         self.assertRaises(TypeError, lambda: datetime.date(1994, 1, 1) * self.psser)
         self.assertRaises(TypeError, lambda: datetime.datetime(1994, 1, 1) * self.psser)
@@ -572,11 +560,22 @@ class BooleanExtensionOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         self.check_extension(False | self.pser, False | self.psser)
 
     def test_from_to_pandas(self):
-        data = [True, True, False]
-        pser = pd.Series(data)
-        psser = ps.Series(data)
-        self.assert_eq(pser, psser.to_pandas())
-        self.assert_eq(ps.from_pandas(pser), psser)
+        data = [True, True, False, None]
+        pser = pd.Series(data, dtype="boolean")
+        psser = ps.Series(data, dtype="boolean")
+        self.check_extension(pser, psser.to_pandas())
+        self.check_extension(ps.from_pandas(pser), psser)
+
+    def test_isnull(self):
+        self.assert_eq(self.pser.isnull(), self.psser.isnull())
+
+    def test_astype(self):
+        pser = self.pser
+        psser = self.psser
+        self.assert_eq(["True", "False", "None"], self.psser.astype(str).tolist())
+        self.assert_eq(pser.astype("category"), psser.astype("category"))
+        cat_type = CategoricalDtype(categories=[False, True])
+        self.assert_eq(pser.astype(cat_type), psser.astype(cat_type))
 
 
 if __name__ == "__main__":
