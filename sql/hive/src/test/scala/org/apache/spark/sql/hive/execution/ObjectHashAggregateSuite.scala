@@ -24,7 +24,7 @@ import org.scalatest.matchers.must.Matchers._
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.expressions.{ExpressionEvalHelper, Literal}
-import org.apache.spark.sql.catalyst.expressions.aggregate.ApproximatePercentile
+import org.apache.spark.sql.catalyst.expressions.aggregate.{ApproximatePercentile, HyperLogLogPlusPlus}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.functions._
@@ -81,6 +81,33 @@ class ObjectHashAggregateSuite
       Seq(
         Row(1, 1),
         Row(2, 1))
+    )
+  }
+
+  test("approx_count_distinct without grouping keys and empty input") {
+    val df = Seq.empty[(Integer, Int)].toDF("a", "b")
+
+    checkAnswer(
+      df.coalesce(1).select(typed_count($"a"), approx_count_distinct($"a")),
+      Seq(Row(0, 0))
+    )
+  }
+
+  test("approx_count_distinct without grouping keys") {
+    val df = Seq((1: Integer, 1), (null, 1), (2: Integer, 2)).toDF("a", "b")
+
+    checkAnswer(
+      df.coalesce(1).select(typed_count($"a"), approx_count_distinct($"a")),
+      Seq(Row(2, 2))
+    )
+  }
+
+  test("approx_count_distinct with grouping keys") {
+    val df = Seq((1: Integer, 1), (null, 1), (2: Integer, 2)).toDF("a", "b")
+
+    checkAnswer(
+      df.coalesce(1).groupBy($"b").agg(typed_count($"a"), approx_count_distinct($"a")),
+      Seq(Row(1, 1, 1), Row(2, 1, 1))
     )
   }
 
@@ -182,6 +209,10 @@ class ObjectHashAggregateSuite
   private def typed_count(column: Column): Column =
     Column(TestingTypedCount(column.expr).toAggregateExpression())
 
+  private def approx_count_distinct(column: Column): Column = {
+    Column(HyperLogLogPlusPlus(column.expr).toAggregateExpression())
+  }
+
   // Generates 50 random rows for a given schema.
   private def generateRandomRows(schemaForGenerator: StructType): Seq[Row] = {
     val dataGenerator = RandomDataGenerator.forType(
@@ -210,11 +241,14 @@ class ObjectHashAggregateSuite
     // A TypedImperativeAggregate function
     val typed = percentile_approx($"c0", 0.5)
 
+    // A ImperativeAggregate function
+    val imper_agg = approx_count_distinct($"c0")
+
     // A Spark SQL native aggregate function with partial aggregation support that can be executed
     // by the Tungsten `HashAggregateExec`
     val withPartialUnsafe = max($"c1")
 
-    // A Spark SQL native aggregate function with partial aggregation support that can only be
+    // A Spark SQL native aggregate function with partial aggregation support that can not be
     // executed by the Tungsten `HashAggregateExec`
     val withPartialSafe = max($"c2")
 
@@ -223,6 +257,7 @@ class ObjectHashAggregateSuite
 
     val allAggs = Seq(
       "typed" -> typed,
+      "imper_agg" -> imper_agg,
       "with partial + unsafe" -> withPartialUnsafe,
       "with partial + safe" -> withPartialSafe,
       "with distinct" -> withDistinct
@@ -340,6 +375,8 @@ class ObjectHashAggregateSuite
                 val aggDf = doAggregation(df)
 
                 if (aggs.intersect(Seq(withPartialSafe, typed)).nonEmpty) {
+                  // If there is any of aggs that hash aggregate cannot support,
+                  // sort aggregate will be used.
                   assert(containsSortAggregateExec(aggDf))
                   assert(!containsObjectHashAggregateExec(aggDf))
                   assert(!containsHashAggregateExec(aggDf))
@@ -361,8 +398,8 @@ class ObjectHashAggregateSuite
                   assert(containsObjectHashAggregateExec(aggDf))
                   assert(!containsHashAggregateExec(aggDf))
                 } else if (aggs.contains(withPartialSafe)) {
-                  assert(containsSortAggregateExec(aggDf))
-                  assert(!containsObjectHashAggregateExec(aggDf))
+                  assert(!containsSortAggregateExec(aggDf))
+                  assert(containsObjectHashAggregateExec(aggDf))
                   assert(!containsHashAggregateExec(aggDf))
                 } else {
                   assert(!containsSortAggregateExec(aggDf))

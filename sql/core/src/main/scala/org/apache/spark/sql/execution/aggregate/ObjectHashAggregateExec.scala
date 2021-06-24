@@ -145,7 +145,7 @@ case class ObjectHashAggregateExec(
 object ObjectHashAggregateExec {
   def supportsAggregate(aggregateExpressions: Seq[AggregateExpression]): Boolean = {
     aggregateExpressions.map(_.aggregateFunction).exists {
-      case _: TypedImperativeAggregate[_] => true
+      case _: ImperativeAggregate | _: DeclarativeAggregate => true
       case _ => false
     }
   }
