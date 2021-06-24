@@ -79,12 +79,12 @@ are restored automatically when you exit the `with` block:
 .. code-block:: python
 
    >>> with ps.option_context("display.max_rows", 10, "compute.max_rows", 5):
-   ...    print(ks.get_option("display.max_rows"))
-   ...    print(ks.get_option("compute.max_rows"))
+   ...    print(ps.get_option("display.max_rows"))
+   ...    print(ps.get_option("compute.max_rows"))
    10
    5
-   >>> print(ks.get_option("display.max_rows"))
-   >>> print(ks.get_option("compute.max_rows"))
+   >>> print(ps.get_option("display.max_rows"))
+   >>> print(ps.get_option("compute.max_rows"))
    1000
    1000
 
