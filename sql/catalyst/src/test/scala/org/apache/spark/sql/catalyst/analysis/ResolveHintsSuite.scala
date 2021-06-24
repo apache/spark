@@ -299,25 +299,25 @@ class ResolveHintsSuite extends AnalysisTest {
 
   test("SPARK-35786: Support optimize repartition by expression in AQE") {
     checkAnalysisWithoutViewWrapper(
-      UnresolvedHint("REBALANCE_PARTITIONS", Seq(UnresolvedAttribute("a")), table("TaBlE")),
+      UnresolvedHint("REBALANCE", Seq(UnresolvedAttribute("a")), table("TaBlE")),
       RebalancePartitions(Seq(AttributeReference("a", IntegerType)()), testRelation))
 
     checkAnalysisWithoutViewWrapper(
-      UnresolvedHint("REBALANCE_PARTITIONS", Seq.empty, table("TaBlE")),
+      UnresolvedHint("REBALANCE", Seq.empty, table("TaBlE")),
       RebalancePartitions(Seq.empty, testRelation))
 
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
       checkAnalysisWithoutViewWrapper(
-        UnresolvedHint("REBALANCE_PARTITIONS", Seq(UnresolvedAttribute("a")), table("TaBlE")),
+        UnresolvedHint("REBALANCE", Seq(UnresolvedAttribute("a")), table("TaBlE")),
         testRelation)
 
       checkAnalysisWithoutViewWrapper(
-        UnresolvedHint("REBALANCE_PARTITIONS", Seq.empty, table("TaBlE")),
+        UnresolvedHint("REBALANCE", Seq.empty, table("TaBlE")),
         testRelation)
     }
 
     assertAnalysisError(
-      UnresolvedHint("REBALANCE_PARTITIONS", Seq(Literal(1)), table("TaBlE")),
+      UnresolvedHint("REBALANCE", Seq(Literal(1)), table("TaBlE")),
       Seq("Hint parameter should include columns"))
   }
 }
