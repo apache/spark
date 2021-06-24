@@ -242,17 +242,17 @@ object IntervalUtils {
 
     input.trimAll().toString match {
       case daySecondRegex("-", day, hour, minute, second, micro) =>
-        toDTInterval(day, truncate(hour, DayTimeIntervalType.HOUR),
-          truncate(minute, DayTimeIntervalType.MINUTE),
-          truncate(secondAndMicro(second, micro), DayTimeIntervalType.SECOND), -1)
+        toDTInterval(day, truncate(hour, DT.HOUR),
+          truncate(minute, DT.MINUTE),
+          truncate(secondAndMicro(second, micro), DT.SECOND), -1)
       case daySecondRegex(_, day, hour, minute, second, micro) =>
-        toDTInterval(day, truncate(hour, DayTimeIntervalType.HOUR),
-          truncate(minute, DayTimeIntervalType.MINUTE),
-          truncate(secondAndMicro(second, micro), DayTimeIntervalType.SECOND), 1)
+        toDTInterval(day, truncate(hour, DT.HOUR),
+          truncate(minute, DT.MINUTE),
+          truncate(secondAndMicro(second, micro), DT.SECOND), 1)
       case daySecondLiteralRegex(firstSign, secondSign, day, hour, minute, second, micro) =>
-     toDTInterval(day, truncate(hour, DayTimeIntervalType.HOUR),
-            truncate(minute, DayTimeIntervalType.MINUTE),
-            truncate(secondAndMicro(second, micro), DayTimeIntervalType.SECOND), getSign(firstSign, secondSign))
+        toDTInterval(day, truncate(hour, DT.HOUR),
+          truncate(minute, DT.MINUTE),
+          truncate(secondAndMicro(second, micro), DT.SECOND), getSign(firstSign, secondSign))
       case _ =>
         throw new IllegalArgumentException(
           s"Interval string must match day-time format of `d h:m:s.n` " +
