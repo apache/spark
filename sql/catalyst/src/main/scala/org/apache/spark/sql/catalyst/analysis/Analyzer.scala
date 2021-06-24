@@ -299,6 +299,7 @@ class Analyzer(override val catalogManager: CatalogManager)
     Batch("Post-Hoc Resolution", Once,
       Seq(ResolveCommandsWithIfExists) ++
       postHocResolutionRules: _*),
+    Batch("Normalize Alter Table Field Names", Once, ResolveFieldNames),
     Batch("Normalize Alter Table", Once, ResolveAlterTableChanges),
     Batch("Remove Unresolved Hints", Once,
       new ResolveHints.RemoveAllHints),
@@ -3517,6 +3518,33 @@ class Analyzer(override val catalogManager: CatalogManager)
 
         case u @ UpCast(child, _, _) => Cast(child, u.dataType.asNullable)
       }
+    }
+  }
+
+  /**
+   * Rule to mostly resolve, normalize and rewrite column names based on case sensitivity
+   * for alter table commands.
+   */
+  object ResolveFieldNames extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
+      case a: AlterTableCommand if a.table.resolved =>
+        a.transformExpressions {
+          case u: UnresolvedFieldName =>
+            val table = a.table.asInstanceOf[ResolvedTable]
+            resolveFieldNames(table.schema, u.name).map(ResolvedFieldName(_)).getOrElse(u)
+        }
+    }
+
+    /**
+     * Returns the resolved field name if the field can be resolved, returns None if the column is
+     * not found. An error will be thrown in CheckAnalysis for columns that can't be resolved.
+     */
+    private def resolveFieldNames(
+        schema: StructType,
+        fieldNames: Seq[String]): Option[Seq[String]] = {
+      val fieldOpt = schema.findNestedField(
+        fieldNames, includeCollections = true, conf.resolver)
+      fieldOpt.map { case (path, field) => path :+ field.name }
     }
   }
 
