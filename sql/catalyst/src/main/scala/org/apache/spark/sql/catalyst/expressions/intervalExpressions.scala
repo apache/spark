@@ -346,6 +346,83 @@ case class MakeInterval(
     )
 }
 
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(days, hours, mins, secs) - Make DayTimeIntervalType duration from days, hours, mins and secs.",
+  arguments = """
+    Arguments:
+      * days - the number of days, positive or negative
+      * hours - the number of hours, positive or negative
+      * mins - the number of minutes, positive or negative
+      * secs - the number of seconds with the fractional part in microsecond precision.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(1, 12, 30, 01.001001);
+       1 12:30:01.001001000
+      > SELECT _FUNC_(100, null, 3);
+       NULL
+  """,
+  since = "3.2.0",
+  group = "datetime_funcs")
+// scalastyle:on line.size.limit
+case class MakeDTInterval(
+    days: Expression,
+    hours: Expression,
+    mins: Expression,
+    secs: Expression)
+  extends QuaternaryExpression with ImplicitCastInputTypes with NullIntolerant {
+
+  def this(
+      days: Expression,
+      hours: Expression,
+      mins: Expression) = {
+    this(days, hours, mins, Literal(Decimal(0, Decimal.MAX_LONG_DIGITS, 6)))
+  }
+  def this(days: Expression, hours: Expression) = this(days, hours, Literal(0))
+  def this(days: Expression) = this(days, Literal(0))
+  def this() = this(Literal(0))
+
+  override def first: Expression = days
+  override def second: Expression = hours
+  override def third: Expression = mins
+  override def fourth: Expression = secs
+
+  // Accept `secs` as DecimalType to avoid loosing precision of microseconds when converting
+  // them to the fractional part of `secs`.
+  override def inputTypes: Seq[AbstractDataType] = Seq(
+    IntegerType, IntegerType, IntegerType, DecimalType(Decimal.MAX_LONG_DIGITS, 6))
+  override def dataType: DataType = DayTimeIntervalType()
+
+  override def nullSafeEval(
+      day: Any,
+      hour: Any,
+      min: Any,
+      sec: Any): Any = {
+    IntervalUtils.makeDayTimeInterval(
+      day.asInstanceOf[Int],
+      hour.asInstanceOf[Int],
+      min.asInstanceOf[Int],
+      sec.asInstanceOf[Decimal])
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    defineCodeGen(ctx, ev, (day, hour, min, sec) => {
+      val iu = IntervalUtils.getClass.getName.stripSuffix("$")
+      s"$iu.makeDayTimeInterval($day, $hour, $min, $sec)"
+    })
+  }
+
+  override def prettyName: String = "make_dt_interval"
+
+  override protected def withNewChildrenInternal(
+      days: Expression,
+      hours: Expression,
+      mins: Expression,
+      secs: Expression): MakeDTInterval =
+    copy(days, hours, mins, secs)
+}
+
 @ExpressionDescription(
   usage = "_FUNC_(years, months) - Make year-month interval from years, months.",
   arguments = """

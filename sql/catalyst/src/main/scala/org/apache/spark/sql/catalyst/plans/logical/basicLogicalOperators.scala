@@ -589,7 +589,18 @@ object View {
     if (activeConf.useCurrentSQLConfigsForView && !isTempView) return activeConf
 
     val sqlConf = new SQLConf()
-    for ((k, v) <- configs) {
+    // We retain below configs from current session because they are not captured by view
+    // as optimization configs but they are still needed during the view resolution.
+    // TODO: remove this `retainedConfigs` after the `RelationConversions` is moved to
+    // optimization phase.
+    val retainedConfigs = activeConf.getAllConfs.filterKeys(key =>
+      Seq(
+        "spark.sql.hive.convertMetastoreParquet",
+        "spark.sql.hive.convertMetastoreOrc",
+        "spark.sql.hive.convertInsertingPartitionedTable",
+        "spark.sql.hive.convertMetastoreCtas"
+      ).contains(key))
+    for ((k, v) <- configs ++ retainedConfigs) {
       sqlConf.settings.put(k, v)
     }
     sqlConf

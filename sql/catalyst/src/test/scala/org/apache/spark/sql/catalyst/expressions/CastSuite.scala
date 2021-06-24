@@ -18,8 +18,6 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.{Date, Timestamp}
-import java.time.{Duration, Period}
-import java.time.temporal.ChronoUnit
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
@@ -34,7 +32,9 @@ import org.apache.spark.sql.types.DayTimeIntervalType.{DAY, HOUR, MINUTE, SECOND
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
- * Test suite for data type casting expression [[Cast]].
+ * Test suite for data type casting expression [[Cast]] with ANSI mode disabled.
+ * Note: for new test cases that work for [[Cast]], [[AnsiCast]] and [[TryCast]], please add them
+ *       in `CastSuiteBase` instead of this file to ensure the test coverage.
  */
 class CastSuite extends CastSuiteBase {
 
@@ -567,31 +567,14 @@ class CastSuite extends CastSuiteBase {
     }
   }
 
-  test("SPARK-35112: Cast string to day-time interval") {
-    checkEvaluation(cast(Literal.create("0 0:0:0"), DayTimeIntervalType()), 0L)
-    checkEvaluation(cast(Literal.create(" interval '0 0:0:0' Day TO second   "),
-      DayTimeIntervalType()), 0L)
-    checkEvaluation(cast(Literal.create("INTERVAL '1 2:03:04' DAY TO SECOND"),
-      DayTimeIntervalType()), 93784000000L)
-    checkEvaluation(cast(Literal.create("INTERVAL '1 03:04:00' DAY TO SECOND"),
-      DayTimeIntervalType()), 97440000000L)
-    checkEvaluation(cast(Literal.create("INTERVAL '1 03:04:00.0000' DAY TO SECOND"),
-      DayTimeIntervalType()), 97440000000L)
-    checkEvaluation(cast(Literal.create("1 2:03:04"), DayTimeIntervalType()), 93784000000L)
-    checkEvaluation(cast(Literal.create("INTERVAL '-10 2:03:04' DAY TO SECOND"),
-      DayTimeIntervalType()), -871384000000L)
-    checkEvaluation(cast(Literal.create("-10 2:03:04"), DayTimeIntervalType()), -871384000000L)
-    checkEvaluation(cast(Literal.create("-106751991 04:00:54.775808"), DayTimeIntervalType()),
-      Long.MinValue)
-    checkEvaluation(cast(Literal.create("106751991 04:00:54.775807"), DayTimeIntervalType()),
-      Long.MaxValue)
-
-    Seq("-106751991 04:00:54.775808", "106751991 04:00:54.775807").foreach { interval =>
-      val ansiInterval = s"INTERVAL '$interval' DAY TO SECOND"
-      checkEvaluation(
-        cast(cast(Literal.create(interval), DayTimeIntervalType()), StringType), ansiInterval)
-      checkEvaluation(cast(cast(Literal.create(ansiInterval),
-        DayTimeIntervalType()), StringType), ansiInterval)
+  test("SPARK-35720: cast invalid string input to timestamp without time zone") {
+    Seq("00:00:00",
+      "a",
+      "123",
+      "a2021-06-17",
+      "2021-06-17abc",
+      "2021-06-17 00:00:00ABC").foreach { invalidInput =>
+      checkEvaluation(cast(invalidInput, TimestampWithoutTZType), null)
     }
 
     Seq("INTERVAL '-106751991 04:00:54.775809' YEAR TO MONTH",

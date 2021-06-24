@@ -45,17 +45,6 @@ import static org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName.INT64;
  */
 public class VectorizedColumnReader {
   /**
-   * Total number of values read.
-   */
-  private long valuesRead;
-
-  /**
-   * value that indicates the end of the current page. That is,
-   * if valuesRead == endOfPageValueCount, we are at the end of the page.
-   */
-  private long endOfPageValueCount;
-
-  /**
    * The dictionary, if this column has dictionary encoding.
    */
   private final Dictionary dictionary;
@@ -64,11 +53,6 @@ public class VectorizedColumnReader {
    * If true, the current page is dictionary encoded.
    */
   private boolean isCurrentPageDictionaryEncoded;
-
-  /**
-   * Maximum definition level for this column.
-   */
-  private final int maxDefLevel;
 
   /**
    * Value readers.
@@ -81,19 +65,14 @@ public class VectorizedColumnReader {
   private VectorizedRleValuesReader defColumn;
 
   /**
-   * Total number of values in this column (in this row group).
-   */
-  private final long totalValueCount;
-
-  /**
-   * Total values in the current page.
-   */
-  private int pageValueCount;
-
-  /**
    * Factory to get type-specific vector updater.
    */
   private final ParquetVectorUpdaterFactory updaterFactory;
+
+  /**
+   * Helper struct to track intermediate states while reading Parquet pages in the column chunk.
+   */
+  private final ParquetReadState readState;
 
   private final PageReader pageReader;
   private final ColumnDescriptor descriptor;
@@ -109,8 +88,8 @@ public class VectorizedColumnReader {
       String int96RebaseMode) throws IOException {
     this.descriptor = descriptor;
     this.pageReader = pageReader;
+    this.readState = new ParquetReadState(descriptor.getMaxDefinitionLevel());
     this.logicalTypeAnnotation = logicalTypeAnnotation;
-    this.maxDefLevel = descriptor.getMaxDefinitionLevel();
     this.updaterFactory = new ParquetVectorUpdaterFactory(
         logicalTypeAnnotation, convertTz, datetimeRebaseMode, int96RebaseMode);
 
@@ -126,8 +105,7 @@ public class VectorizedColumnReader {
       this.dictionary = null;
       this.isCurrentPageDictionaryEncoded = false;
     }
-    this.totalValueCount = pageReader.getTotalValueCount();
-    if (totalValueCount == 0) {
+    if (pageReader.getTotalValueCount() == 0) {
       throw new IOException("totalValueCount == 0");
     }
     assert "LEGACY".equals(datetimeRebaseMode) || "EXCEPTION".equals(datetimeRebaseMode) ||
@@ -164,7 +142,6 @@ public class VectorizedColumnReader {
    * Reads `total` values from this columnReader into column.
    */
   void readBatch(int total, WritableColumnVector column) throws IOException {
-    int rowId = 0;
     WritableColumnVector dictionaryIds = null;
     ParquetVectorUpdater updater = updaterFactory.getUpdater(descriptor, column.dataType());
 
@@ -174,24 +151,26 @@ public class VectorizedColumnReader {
       // page.
       dictionaryIds = column.reserveDictionaryIds(total);
     }
-    while (total > 0) {
+    readState.resetForBatch(total);
+    while (readState.valuesToReadInBatch > 0) {
       // Compute the number of values we want to read in this page.
-      int leftInPage = (int) (endOfPageValueCount - valuesRead);
-      if (leftInPage == 0) {
-        readPage();
-        leftInPage = (int) (endOfPageValueCount - valuesRead);
+      if (readState.valuesToReadInPage == 0) {
+        int pageValueCount = readPage();
+        readState.resetForPage(pageValueCount);
       }
-      int num = Math.min(total, leftInPage);
       PrimitiveType.PrimitiveTypeName typeName =
           descriptor.getPrimitiveType().getPrimitiveTypeName();
       if (isCurrentPageDictionaryEncoded) {
+        // Save starting offset in case we need to decode dictionary IDs.
+        int startOffset = readState.offset;
+
         // Read and decode dictionary ids.
-        defColumn.readIntegers(
-            num, dictionaryIds, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
+        defColumn.readIntegers(readState, dictionaryIds, column,
+          (VectorizedValuesReader) dataColumn);
 
         // TIMESTAMP_MILLIS encoded as INT64 can't be lazily decoded as we need to post process
         // the values to add microseconds precision.
-        if (column.hasDictionary() || (rowId == 0 && isLazyDecodingSupported(typeName))) {
+        if (column.hasDictionary() || (startOffset == 0 && isLazyDecodingSupported(typeName))) {
           // Column vector supports lazy decoding of dictionary values so just set the dictionary.
           // We can't do this if rowId != 0 AND the column doesn't have a dictionary (i.e. some
           // non-dictionary encoded values have already been added).
@@ -216,44 +195,38 @@ public class VectorizedColumnReader {
           boolean needTransform = castLongToInt || isUnsignedInt32 || isUnsignedInt64;
           column.setDictionary(new ParquetDictionary(dictionary, needTransform));
         } else {
-          updater.decodeDictionaryIds(num, rowId, column, dictionaryIds, dictionary);
+          updater.decodeDictionaryIds(readState.offset - startOffset, startOffset, column,
+            dictionaryIds, dictionary);
         }
       } else {
-        if (column.hasDictionary() && rowId != 0) {
+        if (column.hasDictionary() && readState.offset != 0) {
           // This batch already has dictionary encoded values but this new page is not. The batch
           // does not support a mix of dictionary and not so we will decode the dictionary.
-          updater.decodeDictionaryIds(rowId, 0, column, dictionaryIds, dictionary);
+          updater.decodeDictionaryIds(readState.offset, 0, column, dictionaryIds, dictionary);
         }
         column.setDictionary(null);
         VectorizedValuesReader valuesReader = (VectorizedValuesReader) dataColumn;
-        defColumn.readBatch(num, rowId, column, maxDefLevel, valuesReader, updater);
+        defColumn.readBatch(readState, column, valuesReader, updater);
       }
-
-      valuesRead += num;
-      rowId += num;
-      total -= num;
     }
   }
 
-  private void readPage() {
+  private int readPage() {
     DataPage page = pageReader.readPage();
-    // TODO: Why is this a visitor?
-    page.accept(new DataPage.Visitor<Void>() {
+    return page.accept(new DataPage.Visitor<Integer>() {
       @Override
-      public Void visit(DataPageV1 dataPageV1) {
+      public Integer visit(DataPageV1 dataPageV1) {
         try {
-          readPageV1(dataPageV1);
-          return null;
+          return readPageV1(dataPageV1);
         } catch (IOException e) {
           throw new RuntimeException(e);
         }
       }
 
       @Override
-      public Void visit(DataPageV2 dataPageV2) {
+      public Integer visit(DataPageV2 dataPageV2) {
         try {
-          readPageV2(dataPageV2);
-          return null;
+          return readPageV2(dataPageV2);
         } catch (IOException e) {
           throw new RuntimeException(e);
         }
@@ -261,8 +234,10 @@ public class VectorizedColumnReader {
     });
   }
 
-  private void initDataReader(Encoding dataEncoding, ByteBufferInputStream in) throws IOException {
-    this.endOfPageValueCount = valuesRead + pageValueCount;
+  private void initDataReader(
+      int pageValueCount,
+      Encoding dataEncoding,
+      ByteBufferInputStream in) throws IOException {
     if (dataEncoding.usesDictionary()) {
       this.dataColumn = null;
       if (dictionary == null) {
@@ -292,15 +267,15 @@ public class VectorizedColumnReader {
     }
   }
 
-  private void readPageV1(DataPageV1 page) throws IOException {
-    this.pageValueCount = page.getValueCount();
-
+  private int readPageV1(DataPageV1 page) throws IOException {
     // Initialize the decoders.
     if (page.getDlEncoding() != Encoding.RLE && descriptor.getMaxDefinitionLevel() != 0) {
       throw new UnsupportedOperationException("Unsupported encoding: " + page.getDlEncoding());
     }
 
+    int pageValueCount = page.getValueCount();
     int bitWidth = BytesUtils.getWidthFromMaxInt(descriptor.getMaxDefinitionLevel());
+
     this.defColumn = new VectorizedRleValuesReader(bitWidth);
     try {
       BytesInput bytes = page.getBytes();
@@ -312,21 +287,23 @@ public class VectorizedColumnReader {
           .initFromPage(pageValueCount, in);
 
       defColumn.initFromPage(pageValueCount, in);
-      initDataReader(page.getValueEncoding(), in);
+      initDataReader(pageValueCount, page.getValueEncoding(), in);
+      return pageValueCount;
     } catch (IOException e) {
       throw new IOException("could not read page " + page + " in col " + descriptor, e);
     }
   }
 
-  private void readPageV2(DataPageV2 page) throws IOException {
-    this.pageValueCount = page.getValueCount();
-
+  private int readPageV2(DataPageV2 page) throws IOException {
+    int pageValueCount = page.getValueCount();
     int bitWidth = BytesUtils.getWidthFromMaxInt(descriptor.getMaxDefinitionLevel());
+
     // do not read the length from the stream. v2 pages handle dividing the page bytes.
     defColumn = new VectorizedRleValuesReader(bitWidth, false);
-    defColumn.initFromPage(this.pageValueCount, page.getDefinitionLevels().toInputStream());
+    defColumn.initFromPage(pageValueCount, page.getDefinitionLevels().toInputStream());
     try {
-      initDataReader(page.getDataEncoding(), page.getData().toInputStream());
+      initDataReader(pageValueCount, page.getDataEncoding(), page.getData().toInputStream());
+      return pageValueCount;
     } catch (IOException e) {
       throw new IOException("could not read page " + page + " in col " + descriptor, e);
     }

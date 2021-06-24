@@ -62,7 +62,7 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
 
   override def doExecute(): RDD[InternalRow] = {
     val broadcastedHadoopConf =
-      new SerializableConfiguration(sqlContext.sessionState.newHadoopConf())
+      new SerializableConfiguration(session.sessionState.newHadoopConf())
 
     child.execute().mapPartitions { iter =>
       if (iter.hasNext) {

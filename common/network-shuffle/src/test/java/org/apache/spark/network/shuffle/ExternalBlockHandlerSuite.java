@@ -34,13 +34,16 @@ import static org.mockito.Mockito.*;
 
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.buffer.NioManagedBuffer;
+import org.apache.spark.network.client.MergedBlockMetaResponseCallback;
 import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.TransportClient;
+import org.apache.spark.network.protocol.MergedBlockMetaRequest;
 import org.apache.spark.network.server.OneForOneStreamManager;
 import org.apache.spark.network.server.RpcHandler;
 import org.apache.spark.network.shuffle.protocol.BlockTransferMessage;
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo;
 import org.apache.spark.network.shuffle.protocol.FetchShuffleBlocks;
+import org.apache.spark.network.shuffle.protocol.FetchShuffleBlockChunks;
 import org.apache.spark.network.shuffle.protocol.FinalizeShuffleMerge;
 import org.apache.spark.network.shuffle.protocol.MergeStatuses;
 import org.apache.spark.network.shuffle.protocol.OpenBlocks;
@@ -257,5 +260,114 @@ public class ExternalBlockHandlerSuite {
         .getMetrics()
         .get("finalizeShuffleMergeLatencyMillis");
     assertEquals(1, finalizeShuffleMergeLatencyMillis.getCount());
+  }
+
+  @Test
+  public void testFetchMergedBlocksMeta() {
+    when(mergedShuffleManager.getMergedBlockMeta("app0", 0, 0)).thenReturn(
+      new MergedBlockMeta(1, mock(ManagedBuffer.class)));
+    when(mergedShuffleManager.getMergedBlockMeta("app0", 0, 1)).thenReturn(
+      new MergedBlockMeta(3, mock(ManagedBuffer.class)));
+    when(mergedShuffleManager.getMergedBlockMeta("app0", 0, 2)).thenReturn(
+      new MergedBlockMeta(5, mock(ManagedBuffer.class)));
+
+    int[] expectedCount = new int[]{1, 3, 5};
+    String appId = "app0";
+    long requestId = 0L;
+    for (int reduceId = 0; reduceId < 3; reduceId++) {
+      MergedBlockMetaRequest req = new MergedBlockMetaRequest(requestId++, appId, 0, reduceId);
+      MergedBlockMetaResponseCallback callback = mock(MergedBlockMetaResponseCallback.class);
+      handler.getMergedBlockMetaReqHandler()
+        .receiveMergeBlockMetaReq(client, req, callback);
+      verify(mergedShuffleManager, times(1)).getMergedBlockMeta("app0", 0, reduceId);
+
+      ArgumentCaptor<Integer> numChunksResponse = ArgumentCaptor.forClass(Integer.class);
+      ArgumentCaptor<ManagedBuffer> chunkBitmapResponse =
+        ArgumentCaptor.forClass(ManagedBuffer.class);
+      verify(callback, times(1)).onSuccess(numChunksResponse.capture(),
+        chunkBitmapResponse.capture());
+      assertEquals("num chunks in merged block " + reduceId, expectedCount[reduceId],
+        numChunksResponse.getValue().intValue());
+      assertNotNull("chunks bitmap buffer " + reduceId, chunkBitmapResponse.getValue());
+    }
+  }
+
+  @Test
+  public void testOpenBlocksWithShuffleChunks() {
+    verifyBlockChunkFetches(true);
+  }
+
+  @Test
+  public void testFetchShuffleChunks() {
+    verifyBlockChunkFetches(false);
+  }
+
+  private void verifyBlockChunkFetches(boolean useOpenBlocks) {
+    RpcResponseCallback callback = mock(RpcResponseCallback.class);
+    ByteBuffer buffer;
+    if (useOpenBlocks) {
+      OpenBlocks openBlocks =
+        new OpenBlocks("app0", "exec1",
+          new String[] {"shuffleChunk_0_0_0", "shuffleChunk_0_0_1", "shuffleChunk_0_1_0",
+            "shuffleChunk_0_1_1"});
+      buffer = openBlocks.toByteBuffer();
+    } else {
+      FetchShuffleBlockChunks fetchChunks = new FetchShuffleBlockChunks(
+        "app0", "exec1", 0, new int[] {0, 1}, new int[][] {{0, 1}, {0, 1}});
+      buffer = fetchChunks.toByteBuffer();
+    }
+    ManagedBuffer[][] buffers = new ManagedBuffer[][] {
+      {
+        new NioManagedBuffer(ByteBuffer.wrap(new byte[5])),
+        new NioManagedBuffer(ByteBuffer.wrap(new byte[7]))
+      },
+      {
+        new NioManagedBuffer(ByteBuffer.wrap(new byte[5])),
+        new NioManagedBuffer(ByteBuffer.wrap(new byte[7]))
+      }
+    };
+    for (int reduceId = 0; reduceId < 2; reduceId++) {
+      for (int chunkId = 0; chunkId < 2; chunkId++) {
+        when(mergedShuffleManager.getMergedBlockData(
+          "app0", 0, reduceId, chunkId)).thenReturn(buffers[reduceId][chunkId]);
+      }
+    }
+    handler.receive(client, buffer, callback);
+    ArgumentCaptor<ByteBuffer> response = ArgumentCaptor.forClass(ByteBuffer.class);
+    verify(callback, times(1)).onSuccess(response.capture());
+    verify(callback, never()).onFailure(any());
+    StreamHandle handle =
+      (StreamHandle) BlockTransferMessage.Decoder.fromByteBuffer(response.getValue());
+    assertEquals(4, handle.numChunks);
+
+    @SuppressWarnings("unchecked")
+    ArgumentCaptor<Iterator<ManagedBuffer>> stream = (ArgumentCaptor<Iterator<ManagedBuffer>>)
+      (ArgumentCaptor<?>) ArgumentCaptor.forClass(Iterator.class);
+    verify(streamManager, times(1)).registerStream(any(), stream.capture(), any());
+    Iterator<ManagedBuffer> bufferIter = stream.getValue();
+    for (int reduceId = 0; reduceId < 2; reduceId++) {
+      for (int chunkId = 0; chunkId < 2; chunkId++) {
+        assertEquals(buffers[reduceId][chunkId], bufferIter.next());
+      }
+    }
+    assertFalse(bufferIter.hasNext());
+    verify(mergedShuffleManager, never()).getMergedBlockMeta(anyString(), anyInt(), anyInt());
+    verify(blockResolver, never()).getBlockData(
+      anyString(), anyString(), anyInt(), anyInt(), anyInt());
+    verify(mergedShuffleManager, times(1)).getMergedBlockData("app0", 0, 0, 0);
+    verify(mergedShuffleManager, times(1)).getMergedBlockData("app0", 0, 0, 1);
+
+    // Verify open block request latency metrics
+    Timer openBlockRequestLatencyMillis = (Timer) ((ExternalBlockHandler) handler)
+      .getAllMetrics()
+      .getMetrics()
+      .get("openBlockRequestLatencyMillis");
+    assertEquals(1, openBlockRequestLatencyMillis.getCount());
+    // Verify block transfer metrics
+    Meter blockTransferRateBytes = (Meter) ((ExternalBlockHandler) handler)
+      .getAllMetrics()
+      .getMetrics()
+      .get("blockTransferRateBytes");
+    assertEquals(24, blockTransferRateBytes.getCount());
   }
 }

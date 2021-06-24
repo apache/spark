@@ -1601,6 +1601,16 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val FILESTREAM_SINK_METADATA_IGNORED =
+    buildConf("spark.sql.streaming.fileStreamSink.ignoreMetadata")
+      .internal()
+      .doc("If this is enabled, when Spark reads from the results of a streaming query written " +
+        "by `FileStreamSink`, Spark will ignore the metadata log and treat it as normal path to " +
+        "read, e.g. listing files using HDFS APIs.")
+      .version("3.2.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val VARIABLE_SUBSTITUTE_ENABLED =
     buildConf("spark.sql.variable.substitute")
       .doc("This enables substitution using syntax like `${var}`, `${system:var}`, " +
@@ -3422,6 +3432,8 @@ class SQLConf extends Serializable with Logging {
 
   def statefulOperatorCorrectnessCheckEnabled: Boolean =
     getConf(STATEFUL_OPERATOR_CHECK_CORRECTNESS_ENABLED)
+
+  def fileStreamSinkMetadataIgnored: Boolean = getConf(FILESTREAM_SINK_METADATA_IGNORED)
 
   def streamingFileCommitProtocolClass: String = getConf(STREAMING_FILE_COMMIT_PROTOCOL_CLASS)
 

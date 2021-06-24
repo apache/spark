@@ -26,6 +26,7 @@ from pyspark.pandas.base import column_op, IndexOpsMixin
 from pyspark.pandas.data_type_ops.base import (
     is_valid_operand_for_numeric_arithmetic,
     DataTypeOps,
+    T_IndexOps,
     transform_boolean_operand_to_numeric,
     _as_bool_type,
     _as_categorical_type,
@@ -250,9 +251,7 @@ class BooleanOps(DataTypeOps):
 
             return column_op(or_func)(left, right)
 
-    def astype(
-        self, index_ops: Union["Index", "Series"], dtype: Union[str, type, Dtype]
-    ) -> Union["Index", "Series"]:
+    def astype(self, index_ops: T_IndexOps, dtype: Union[str, type, Dtype]) -> T_IndexOps:
         dtype, spark_type = pandas_on_spark_type(dtype)
 
         if isinstance(dtype, CategoricalDtype):
@@ -304,3 +303,7 @@ class BooleanExtensionOps(BooleanOps):
             return left | right
 
         return column_op(or_func)(left, right)
+
+    def restore(self, col: pd.Series) -> pd.Series:
+        """Restore column when to_pandas."""
+        return col.astype(self.dtype)

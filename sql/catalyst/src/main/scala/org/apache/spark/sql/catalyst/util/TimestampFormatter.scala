@@ -50,10 +50,43 @@ sealed trait TimestampFormatter extends Serializable {
   @throws(classOf[DateTimeException])
   def parse(s: String): Long
 
+  /**
+   * Parses a timestamp in a string and converts it to microseconds since Unix Epoch in local time.
+   *
+   * @param s - string with timestamp to parse
+   * @return microseconds since epoch.
+   * @throws ParseException can be thrown by legacy parser
+   * @throws DateTimeParseException can be thrown by new parser
+   * @throws DateTimeException unable to obtain local date or time
+   * @throws IllegalStateException The formatter for timestamp without time zone should always
+   *                               implement this method. The exception should never be hit.
+   */
+  @throws(classOf[ParseException])
+  @throws(classOf[DateTimeParseException])
+  @throws(classOf[DateTimeException])
+  @throws(classOf[IllegalStateException])
+  def parseWithoutTimeZone(s: String): Long =
+    throw new IllegalStateException(
+      s"The method `parseWithoutTimeZone(s: String)` should be implemented in the formatter " +
+        "of timestamp without time zone")
+
   def format(us: Long): String
   def format(ts: Timestamp): String
   def format(instant: Instant): String
-  def validatePatternString(): Unit
+
+  @throws(classOf[IllegalStateException])
+  def format(localDateTime: LocalDateTime): String =
+    throw new IllegalStateException(
+      s"The method `format(localDateTime: LocalDateTime)` should be implemented in the formatter " +
+        "of timestamp without time zone")
+
+  /**
+   * Validates the pattern string.
+   * @param checkLegacy  if true and the pattern is invalid, check whether the pattern is valid for
+   *                     legacy formatters and show hints for using legacy formatter.
+   *                     Otherwise, simply check the pattern string.
+   */
+  def validatePatternString(checkLegacy: Boolean): Unit
 }
 
 class Iso8601TimestampFormatter(
@@ -84,6 +117,15 @@ class Iso8601TimestampFormatter(
     } catch checkParsedDiff(s, legacyFormatter.parse)
   }
 
+  override def parseWithoutTimeZone(s: String): Long = {
+    try {
+      val parsed = formatter.parse(s)
+      val localDate = toLocalDate(parsed)
+      val localTime = toLocalTime(parsed)
+      DateTimeUtils.localDateTimeToMicros(LocalDateTime.of(localDate, localTime))
+    } catch checkParsedDiff(s, legacyFormatter.parse)
+  }
+
   override def format(instant: Instant): String = {
     try {
       formatter.withZone(zoneId).format(instant)
@@ -100,10 +142,21 @@ class Iso8601TimestampFormatter(
     legacyFormatter.format(ts)
   }
 
-  override def validatePatternString(): Unit = {
-    try {
-      formatter
-    } catch checkLegacyFormatter(pattern, legacyFormatter.validatePatternString)
+  override def format(localDateTime: LocalDateTime): String = {
+    localDateTime.format(formatter)
+  }
+
+  override def validatePatternString(checkLegacy: Boolean): Unit = {
+    if (checkLegacy) {
+      try {
+        formatter
+      } catch checkLegacyFormatter(pattern,
+        legacyFormatter.validatePatternString(checkLegacy = true))
+    } else {
+      try {
+        formatter
+      } catch checkInvalidPattern(pattern)
+    }
   }
 }
 
@@ -235,7 +288,7 @@ class LegacyFastTimestampFormatter(
     format(instantToMicros(instant))
   }
 
-  override def validatePatternString(): Unit = fastDateFormat
+  override def validatePatternString(checkLegacy: Boolean): Unit = fastDateFormat
 }
 
 class LegacySimpleTimestampFormatter(
@@ -266,7 +319,7 @@ class LegacySimpleTimestampFormatter(
     format(instantToMicros(instant))
   }
 
-  override def validatePatternString(): Unit = sdf
+  override def validatePatternString(checkLegacy: Boolean): Unit = sdf
 }
 
 object LegacyDateFormats extends Enumeration {
@@ -286,15 +339,16 @@ object TimestampFormatter {
       zoneId: ZoneId,
       locale: Locale = defaultLocale,
       legacyFormat: LegacyDateFormat = LENIENT_SIMPLE_DATE_FORMAT,
-      isParsing: Boolean): TimestampFormatter = {
+      isParsing: Boolean,
+      forTimestampWithoutTZ: Boolean = false): TimestampFormatter = {
     val pattern = format.getOrElse(defaultPattern)
-    val formatter = if (SQLConf.get.legacyTimeParserPolicy == LEGACY) {
+    val formatter = if (SQLConf.get.legacyTimeParserPolicy == LEGACY && !forTimestampWithoutTZ) {
       getLegacyFormatter(pattern, zoneId, locale, legacyFormat)
     } else {
       new Iso8601TimestampFormatter(
         pattern, zoneId, locale, legacyFormat, isParsing)
     }
-    formatter.validatePatternString()
+    formatter.validatePatternString(checkLegacy = !forTimestampWithoutTZ)
     formatter
   }
 
@@ -328,6 +382,16 @@ object TimestampFormatter {
       legacyFormat: LegacyDateFormat,
       isParsing: Boolean): TimestampFormatter = {
     getFormatter(Some(format), zoneId, defaultLocale, legacyFormat, isParsing)
+  }
+
+  def apply(
+      format: String,
+      zoneId: ZoneId,
+      legacyFormat: LegacyDateFormat,
+      isParsing: Boolean,
+      forTimestampWithoutTZ: Boolean): TimestampFormatter = {
+    getFormatter(Some(format), zoneId, defaultLocale, legacyFormat, isParsing,
+      forTimestampWithoutTZ)
   }
 
   def apply(

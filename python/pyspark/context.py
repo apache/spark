@@ -1104,18 +1104,14 @@ class SparkContext(object):
         ensure that the tasks are actually stopped in a timely manner, but is off by default due
         to HDFS-1208, where HDFS may respond to Thread.interrupt() by marking nodes as dead.
 
-        Currently, setting a group ID (set to local properties) with multiple threads
-        does not properly work. Internally threads on PVM and JVM are not synced, and JVM
-        thread can be reused for multiple threads on PVM, which fails to isolate local
-        properties for each thread on PVM.
-
-        To avoid this, enable the pinned thread mode by setting ``PYSPARK_PIN_THREAD``
-        environment variable to ``true`` and uses :class:`pyspark.InheritableThread`.
+        If you run jobs in parallel, use :class:`pyspark.InheritableThread` for thread
+        local inheritance, and preventing resource leak.
 
         Examples
         --------
         >>> import threading
         >>> from time import sleep
+        >>> from pyspark import InheritableThread
         >>> result = "Not Set"
         >>> lock = threading.Lock()
         >>> def map_func(x):
@@ -1133,8 +1129,8 @@ class SparkContext(object):
         ...     sleep(5)
         ...     sc.cancelJobGroup("job_to_cancel")
         >>> suppress = lock.acquire()
-        >>> suppress = threading.Thread(target=start_job, args=(10,)).start()
-        >>> suppress = threading.Thread(target=stop_job).start()
+        >>> suppress = InheritableThread(target=start_job, args=(10,)).start()
+        >>> suppress = InheritableThread(target=stop_job).start()
         >>> suppress = lock.acquire()
         >>> print(result)
         Cancelled
@@ -1148,13 +1144,8 @@ class SparkContext(object):
 
         Notes
         -----
-        Currently, setting a local property with multiple threads does not properly work.
-        Internally threads on PVM and JVM are not synced, and JVM thread
-        can be reused for multiple threads on PVM, which fails to isolate local properties
-        for each thread on PVM.
-
-        To avoid this, enable the pinned thread mode by setting ``PYSPARK_PIN_THREAD``
-        environment variable to ``true`` and uses :class:`pyspark.InheritableThread`.
+        If you run jobs in parallel, use :class:`pyspark.InheritableThread` for thread
+        local inheritance, and preventing resource leak.
         """
         self._jsc.setLocalProperty(key, value)
 
@@ -1171,13 +1162,8 @@ class SparkContext(object):
 
         Notes
         -----
-        Currently, setting a job description (set to local properties) with multiple
-        threads does not properly work. Internally threads on PVM and JVM are not synced,
-        and JVM thread can be reused for multiple threads on PVM, which fails to isolate
-        local properties for each thread on PVM.
-
-        To avoid this, enable the pinned thread mode by setting ``PYSPARK_PIN_THREAD``
-        environment variable to ``true`` and uses :class:`pyspark.InheritableThread`.
+        If you run jobs in parallel, use :class:`pyspark.InheritableThread` for thread
+        local inheritance, and preventing resource leak.
         """
         self._jsc.setJobDescription(value)
 

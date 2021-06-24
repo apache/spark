@@ -17,6 +17,7 @@
 package org.apache.spark.sql.avro
 
 import java.io.{FileNotFoundException, IOException}
+import java.util.Locale
 
 import scala.collection.JavaConverters._
 
@@ -203,33 +204,43 @@ private[sql] object AvroUtils extends Logging {
   }
 
   /**
-   * Extract a single field from `avroSchema` which has the desired field name,
-   * performing the matching with proper case sensitivity according to [[SQLConf.resolver]].
+   * Wraps an Avro Schema object so that field lookups are faster.
    *
-   * @param avroSchema The schema in which to search for the field. Must be of type RECORD.
-   * @param name The name of the field to search for.
+   * @param avroSchema The schema in which to search for fields. Must be of type RECORD.
    * @param avroPath The seq of parent field names leading to `avroSchema`.
-   * @return `Some(match)` if a matching Avro field is found, otherwise `None`.
-   * @throws IncompatibleSchemaException if `avroSchema` is not a RECORD or contains multiple
-   *                                     fields matching `name` (i.e., case-insensitive matching
-   *                                     is used and `avroSchema` has two or more fields that have
-   *                                     the same name with difference case).
    */
-  private[avro] def getAvroFieldByName(
-      avroSchema: Schema,
-      name: String,
-      avroPath: Seq[String]): Option[Schema.Field] = {
+  class AvroSchemaHelper(avroSchema: Schema, avroPath: Seq[String]) {
     if (avroSchema.getType != Schema.Type.RECORD) {
       throw new IncompatibleSchemaException(
         s"Attempting to treat ${avroSchema.getName} as a RECORD, but it was: ${avroSchema.getType}")
     }
-    avroSchema.getFields.asScala.filter(f => SQLConf.get.resolver(f.name(), name)).toSeq match {
-      case Seq(avroField) => Some(avroField)
-      case Seq() => None
-      case matches => throw new IncompatibleSchemaException(s"Searching for '$name' in Avro " +
+
+    private[this] val fieldMap = avroSchema.getFields.asScala
+      .groupBy(_.name.toLowerCase(Locale.ROOT))
+      .mapValues(_.toSeq) // toSeq needed for scala 2.13
+
+    /**
+     * Extract a single field from the contained avro schema which has the desired field name,
+     * performing the matching with proper case sensitivity according to SQLConf.resolver.
+     *
+     * @param name The name of the field to search for.
+     * @return `Some(match)` if a matching Avro field is found, otherwise `None`.
+     */
+    def getFieldByName(name: String): Option[Schema.Field] = {
+
+      // get candidates, ignoring case of field name
+      val candidates = fieldMap.get(name.toLowerCase(Locale.ROOT))
+        .getOrElse(Seq.empty[Schema.Field])
+
+      // search candidates, taking into account case sensitivity settings
+      candidates.filter(f => SQLConf.get.resolver(f.name(), name)) match {
+        case Seq(avroField) => Some(avroField)
+        case Seq() => None
+        case matches => throw new IncompatibleSchemaException(s"Searching for '$name' in Avro " +
           s"schema at ${toFieldStr(avroPath)} gave ${matches.size} matches. Candidates: " +
           matches.map(_.name()).mkString("[", ", ", "]")
-      )
+        )
+      }
     }
   }
 

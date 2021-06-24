@@ -70,7 +70,7 @@ RUN apt-get clean && apt-get update && $APT_INSTALL gnupg ca-certificates && \
   curl -sL https://deb.nodesource.com/setup_12.x | bash && \
   $APT_INSTALL nodejs && \
   # Install needed python packages. Use pip for installing packages (for consistency).
-  $APT_INSTALL python3-pip python3-setuptools && \
+  $APT_INSTALL python-is-python3 python3-pip python3-setuptools && \
   # qpdf is required for CRAN checks to pass.
   $APT_INSTALL qpdf jq && \
   pip3 install $PIP_PKGS && \
