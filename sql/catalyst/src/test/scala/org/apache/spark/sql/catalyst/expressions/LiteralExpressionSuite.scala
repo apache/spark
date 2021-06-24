@@ -432,4 +432,22 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       assert(literal.toString === expected)
     }
   }
+
+  test("SPARK-35871: Literal.create(value, dataType) should support fields") {
+    Seq((Period.ofMonths(13), Array(13, 12, 13)))
+      .foreach { case (period, expect) =>
+        DataTypeTestUtils.yearMonthIntervalTypes.zip(expect).foreach { case (dt, result) =>
+          checkEvaluation(Literal.create(period, dt), result)
+        }
+      }
+
+    Seq((Duration.ofSeconds(86400 + 3600 + 60 + 1),
+      Array(86400000000L, 90000000000L, 90060000000L, 90061000000L, 90000000000L,
+        90060000000L, 90061000000L, 90060000000L, 90061000000L, 90061000000L)))
+      .foreach { case (duration, expect) =>
+        DataTypeTestUtils.dayTimeIntervalTypes.zip(expect).foreach { case (dt, result) =>
+          checkEvaluation(Literal.create(duration, dt), result)
+        }
+      }
+  }
 }
