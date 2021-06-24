@@ -32,7 +32,7 @@ trait StateStoreMetricsTest extends StreamTest {
   def assertNumStateRows(
       total: Seq[Long],
       updated: Seq[Long],
-      droppedByWatermark: Seq[Long]): AssertOnQuery =
+      droppedByWatermark: Seq[Long]): AssertOnQuery = {
     AssertOnQuery(s"Check total state rows = $total, updated state rows = $updated" +
       s", rows dropped by watermark = $droppedByWatermark") { q =>
       // This assumes that the streaming query will not make any progress while the eventually
@@ -76,6 +76,41 @@ trait StateStoreMetricsTest extends StreamTest {
       }
       true
     }
+  }
+
+  /** AssertOnQuery to verify the given state operator's custom metric has expected value */
+  def assertStateOperatorCustomMetric(
+    metric: String, expected: Long, operatorIndex: Int = 0): AssertOnQuery = {
+    AssertOnQuery(s"Check metrics $metric has value $expected") { q =>
+      eventually(timeout(streamingTimeout)) {
+        val recentProgress = q.recentProgress
+        require(recentProgress != null, "No progress made")
+
+        if (q.ne(lastQuery)) lastCheckedRecentProgressIndex = -1
+        lastQuery = q
+
+        val numStateOperators = recentProgress.last.stateOperators.length
+        assert(operatorIndex < numStateOperators, s"Invalid operator Index: $operatorIndex")
+
+        val progressesSinceLastCheck = recentProgress
+          .slice(lastCheckedRecentProgressIndex + 1, recentProgress.length)
+          .filter(_.stateOperators.length == numStateOperators)
+
+        val allCustomMetricValuesSinceLastCheck = progressesSinceLastCheck
+          .map(_.stateOperators(operatorIndex).customMetrics.get(metric))
+          .map(Long2long)
+
+        lazy val debugString = "recent progresses:\n" +
+          progressesSinceLastCheck.map(_.prettyJson).mkString("\n\n")
+
+        assert(allCustomMetricValuesSinceLastCheck.sum === expected,
+          s"incorrect custom metric ($metric), $debugString")
+
+        lastCheckedRecentProgressIndex = recentProgress.length - 1
+      }
+      true
+    }
+  }
 
   def assertNumStateRows(total: Seq[Long], updated: Seq[Long]): AssertOnQuery = {
     assert(total.length === updated.length)
