@@ -74,7 +74,7 @@ object ExpandShufflePartitions extends CustomShuffleReaderRule {
     }
 
     val leaves = plan.collectLeaves()
-    // We only handle the shuffle which is introduced by REPARTITION
+    // We only handle the shuffle which is introduced by REBALANCE
     if (leaves.size != 1 || !leaves.head.isInstanceOf[ShuffleQueryStageExec]) {
       return plan
     }
