@@ -43,7 +43,6 @@ class MetricsReporter(
   registerGauge("latency", _.durationMs.get("triggerExecution").longValue(), 0L)
 
   private val timestampFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'") // ISO8601
-  timestampFormat.setTimeZone(DateTimeUtils.getTimeZone("UTC"))
 
   registerGauge("eventTime-watermark",
     progress => convertStringDateToMillis(progress.eventTime.get("watermark")), 0L)
@@ -51,9 +50,9 @@ class MetricsReporter(
   registerGauge("states-rowsTotal", _.stateOperators.map(_.numRowsTotal).sum, 0L)
   registerGauge("states-usedBytes", _.stateOperators.map(_.memoryUsedBytes).sum, 0L)
 
-  private def convertStringDateToMillis(isoUtcDateStr: String) = {
-    if (isoUtcDateStr != null) {
-      timestampFormat.parse(isoUtcDateStr).getTime
+  private def convertStringDateToMillis(isoDateStr: String) = {
+    if (isoDateStr != null) {
+      timestampFormat.parse(isoDateStr).getTime
     } else {
       0L
     }
