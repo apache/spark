@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import java.sql.{Date, Timestamp}
 import java.time.{Duration, LocalDate, LocalDateTime, Period}
 import java.time.temporal.ChronoUnit
-import java.util.{Calendar, TimeZone}
+import java.util.{Calendar, Locale, TimeZone}
 
 import scala.collection.parallel.immutable.ParVector
 
@@ -1138,23 +1138,81 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("SPARK-35735: Take into account day-time interval fields in cast") {
-    Seq(DayTimeIntervalType(DAY, DAY) -> 86400000000L,
-      DayTimeIntervalType(DAY, HOUR) -> 93600000000L,
-      DayTimeIntervalType(DAY, MINUTE) -> 93780000000L,
-      DayTimeIntervalType(DAY, SECOND) -> 93784000000L,
-      DayTimeIntervalType(HOUR, HOUR) -> 93600000000L,
-      DayTimeIntervalType(HOUR, MINUTE) -> 93780000000L,
-      DayTimeIntervalType(HOUR, SECOND) -> 93784000000L,
-      DayTimeIntervalType(MINUTE, MINUTE) -> 93780000000L,
-      DayTimeIntervalType(MINUTE, SECOND) -> 93784000000L,
-      DayTimeIntervalType(SECOND, SECOND) -> 93784000000L)
-      .foreach { case (dataType, value) =>
-        checkEvaluation(
-          cast(Literal.create("1 2:03:04"), dataType), value)
-        checkEvaluation(
-          cast(Literal.create("-1 2:03:04"), dataType), -value)
-        checkEvaluation(
-          cast(Literal.create("INTERVAL '1 2:03:04' DAY TO SECOND"), dataType), value)
+    def typeName(dataType: DayTimeIntervalType): String = {
+      if (dataType.startField == dataType.endField) {
+        DayTimeIntervalType.fieldToString(dataType.startField).toUpperCase(Locale.ROOT)
+      } else {
+        s"${DayTimeIntervalType.fieldToString(dataType.startField)} TO " +
+          s"${DayTimeIntervalType.fieldToString(dataType.endField)}".toUpperCase(Locale.ROOT)
       }
+    }
+
+    Seq(("1", DayTimeIntervalType(DAY, DAY), (86400) * MICROS_PER_SECOND),
+      ("-1", DayTimeIntervalType(DAY, DAY), -(86400) * MICROS_PER_SECOND),
+      ("1 01", DayTimeIntervalType(DAY, HOUR), (86400 + 3600) * MICROS_PER_SECOND),
+      ("-1 01", DayTimeIntervalType(DAY, HOUR), -(86400 + 3600) * MICROS_PER_SECOND),
+      ("1 01:01", DayTimeIntervalType(DAY, MINUTE), (86400 + 3600 + 60) * MICROS_PER_SECOND),
+      ("-1 01:01", DayTimeIntervalType(DAY, MINUTE), -(86400 + 3600 + 60) * MICROS_PER_SECOND),
+      ("1 01:01:01.12345", DayTimeIntervalType(DAY, SECOND),
+        ((86400 + 3600 + 60 + 1.12345) * MICROS_PER_SECOND).toLong),
+      ("-1 01:01:01.12345", DayTimeIntervalType(DAY, SECOND),
+        (-(86400 + 3600 + 60 + 1.12345) * MICROS_PER_SECOND).toLong),
+
+      ("01", DayTimeIntervalType(HOUR, HOUR), (3600) * MICROS_PER_SECOND),
+      ("-01", DayTimeIntervalType(HOUR, HOUR), -(3600) * MICROS_PER_SECOND),
+      ("01:01", DayTimeIntervalType(HOUR, MINUTE), (3600 + 60) * MICROS_PER_SECOND),
+      ("-01:01", DayTimeIntervalType(HOUR, MINUTE), -(3600 + 60) * MICROS_PER_SECOND),
+      ("01:01:01.12345", DayTimeIntervalType(HOUR, SECOND),
+        ((3600 + 60 + 1.12345) * MICROS_PER_SECOND).toLong),
+      ("-01:01:01.12345", DayTimeIntervalType(HOUR, SECOND),
+        (-(3600 + 60 + 1.12345) * MICROS_PER_SECOND).toLong),
+
+      ("01", DayTimeIntervalType(MINUTE, MINUTE), (60) * MICROS_PER_SECOND),
+      ("-01", DayTimeIntervalType(MINUTE, MINUTE), -(60) * MICROS_PER_SECOND),
+      ("01:01.12345", DayTimeIntervalType(MINUTE, SECOND),
+        ((60 + 1.12345) * MICROS_PER_SECOND).toLong),
+      ("-01:01.12345", DayTimeIntervalType(MINUTE, SECOND),
+        (-(60 + 1.12345) * MICROS_PER_SECOND).toLong),
+
+      ("01.12345", DayTimeIntervalType(SECOND, SECOND), ((1.12345) * MICROS_PER_SECOND).toLong),
+      ("-01.12345", DayTimeIntervalType(SECOND, SECOND), (-(1.12345) * MICROS_PER_SECOND).toLong))
+      .foreach { case (str, dataType, dt) =>
+        checkEvaluation(cast(Literal.create(str), dataType), dt)
+        checkEvaluation(
+          cast(Literal.create(s"INTERVAL '$str' ${typeName(dataType)}"), dataType), dt)
+        checkEvaluation(
+          cast(Literal.create(s"INTERVAL -'$str' ${typeName(dataType)}"), dataType), -dt)
+      }
+
+    if (!isTryCast) {
+      Seq(
+        ("INTERVAL '1 01:01:01.12345' DAY TO SECOND", DayTimeIntervalType(DAY, HOUR)),
+        ("INTERVAL '1 01:01:01.12345' DAY TO HOUR", DayTimeIntervalType(DAY, SECOND)),
+        ("INTERVAL '1 01:01:01.12345' DAY TO MINUTE", DayTimeIntervalType(DAY, MINUTE)),
+        ("1 01:01:01.12345", DayTimeIntervalType(DAY, DAY)),
+        ("1 01:01:01.12345", DayTimeIntervalType(DAY, HOUR)),
+        ("1 01:01:01.12345", DayTimeIntervalType(DAY, MINUTE)),
+
+        ("INTERVAL '01:01:01.12345' HOUR TO SECOND", DayTimeIntervalType(DAY, HOUR)),
+        ("INTERVAL '01:01:01.12345' HOUR TO HOUR", DayTimeIntervalType(DAY, SECOND)),
+        ("INTERVAL '01:01:01.12345' HOUR TO MINUTE", DayTimeIntervalType(DAY, MINUTE)),
+        ("01:01:01.12345", DayTimeIntervalType(DAY, DAY)),
+        ("01:01:01.12345", DayTimeIntervalType(HOUR, HOUR)),
+        ("01:01:01.12345", DayTimeIntervalType(DAY, MINUTE)),
+        ("INTERVAL '1.23' DAY", DayTimeIntervalType(DAY)),
+        ("INTERVAL '1.23' HOUR", DayTimeIntervalType(HOUR)),
+        ("INTERVAL '1.23' MINUTE", DayTimeIntervalType(MINUTE)),
+        ("INTERVAL '1.23' SECOND", DayTimeIntervalType(MINUTE)),
+        ("1.23", DayTimeIntervalType(DAY)),
+        ("1.23", DayTimeIntervalType(HOUR)),
+        ("1.23", DayTimeIntervalType(MINUTE)),
+        ("1.23", DayTimeIntervalType(MINUTE)))
+        .foreach { case (interval, dataType) =>
+          val e = intercept[IllegalArgumentException] {
+            cast(Literal.create(interval), dataType).eval()
+          }.getMessage
+          assert(e.contains("Interval string does not match day-time format"))
+        }
+    }
   }
 }
