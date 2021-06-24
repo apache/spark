@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, IntervalUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.IntervalUtils.{safeStringToInterval, stringToInterval}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{DayTimeIntervalType, Decimal, DecimalType, YearMonthIntervalType}
+import org.apache.spark.sql.types.{DataTypeTestUtils, DayTimeIntervalType, Decimal, DecimalType, YearMonthIntervalType}
 import org.apache.spark.sql.types.DataTypeTestUtils.{dayTimeIntervalTypes, numericTypes, yearMonthIntervalTypes}
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
@@ -325,7 +325,6 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkException(days = Int.MaxValue)
   }
 
-  // TODO(SPARK-35778): Check multiply/divide of year-month intervals of any fields by numeric
   test("SPARK-34824: multiply year-month interval by numeric") {
     Seq(
       (Period.ofYears(-123), Literal(null, DecimalType.USER_DEFAULT)) -> null,
@@ -337,7 +336,9 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       (Period.ofYears(9999), 0.0001d) -> Period.ofYears(1),
       (Period.ofYears(9999), BigDecimal(0.0001)) -> Period.ofYears(1)
     ).foreach { case ((period, num), expected) =>
-      checkEvaluation(MultiplyYMInterval(Literal(period), Literal(num)), expected)
+      DataTypeTestUtils.yearMonthIntervalTypes.foreach { dt =>
+        checkEvaluation(MultiplyYMInterval(Literal.create(period, dt), Literal(num)), expected)
+      }
     }
 
     Seq(
@@ -397,7 +398,6 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
-  // TODO(SPARK-35778): Check multiply/divide of year-month intervals of any fields by numeric
   test("SPARK-34868: divide year-month interval by numeric") {
     Seq(
       (Period.ofYears(-123), Literal(null, DecimalType.USER_DEFAULT)) -> null,
@@ -411,7 +411,9 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       (Period.ofYears(1000), 100d) -> Period.ofYears(10),
       (Period.ofMonths(2), BigDecimal(0.1)) -> Period.ofMonths(20)
     ).foreach { case ((period, num), expected) =>
-      checkEvaluation(DivideYMInterval(Literal(period), Literal(num)), expected)
+      DataTypeTestUtils.yearMonthIntervalTypes.foreach { dt =>
+        checkEvaluation(DivideYMInterval(Literal.create(period, dt), Literal(num)), expected)
+      }
     }
 
     Seq(
