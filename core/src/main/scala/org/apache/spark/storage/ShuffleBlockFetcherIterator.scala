@@ -380,7 +380,10 @@ final class ShuffleBlockFetcherIterator(
         hostLocalBlockBytes += mergedBlockInfos.map(_.size).sum
       } else {
         remoteBlockBytes += blockInfos.map(_._2).sum
-        collectFetchRequests(address, blockInfos, collectedRemoteRequests)
+        val (_, timeCost) = Utils.timeTakenMs {
+          collectFetchRequests(address, blockInfos, collectedRemoteRequests)
+        }
+        logDebug(s"Collected remote fetch requests for $address $timeCost ms")
       }
     }
     val numRemoteBlocks = collectedRemoteRequests.map(_.blocks.size).sum
@@ -435,26 +438,24 @@ final class ShuffleBlockFetcherIterator(
       collectedRemoteRequests: ArrayBuffer[FetchRequest]): Unit = {
     val iterator = blockInfos.iterator
     var curRequestSize = 0L
-    var curBlocks = Seq.empty[FetchBlockInfo]
+    var curBlocks = new ArrayBuffer[FetchBlockInfo]()
 
     while (iterator.hasNext) {
       val (blockId, size, mapIndex) = iterator.next()
       assertPositiveBlockSize(blockId, size)
-      curBlocks = curBlocks ++ Seq(FetchBlockInfo(blockId, size, mapIndex))
+      curBlocks += FetchBlockInfo(blockId, size, mapIndex)
       curRequestSize += size
       // For batch fetch, the actual block in flight should count for merged block.
       val mayExceedsMaxBlocks = !doBatchFetch && curBlocks.size >= maxBlocksInFlightPerAddress
       if (curRequestSize >= targetRemoteRequestSize || mayExceedsMaxBlocks) {
         curBlocks = createFetchRequests(curBlocks, address, isLast = false,
-          collectedRemoteRequests)
+          collectedRemoteRequests).to[ArrayBuffer]
         curRequestSize = curBlocks.map(_.size).sum
       }
     }
     // Add in the final request
     if (curBlocks.nonEmpty) {
-      curBlocks = createFetchRequests(curBlocks, address, isLast = true,
-        collectedRemoteRequests)
-      curRequestSize = curBlocks.map(_.size).sum
+      createFetchRequests(curBlocks, address, isLast = true, collectedRemoteRequests)
     }
   }
 
