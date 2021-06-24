@@ -383,7 +383,7 @@ final class ShuffleBlockFetcherIterator(
         val (_, timeCost) = Utils.timeTakenMs {
           collectFetchRequests(address, blockInfos, collectedRemoteRequests)
         }
-        logDebug(s"Collected remote fetch requests for $address $timeCost ms")
+        logDebug(s"Collected remote fetch requests for $address in $timeCost ms")
       }
     }
     val numRemoteBlocks = collectedRemoteRequests.map(_.blocks.size).sum
