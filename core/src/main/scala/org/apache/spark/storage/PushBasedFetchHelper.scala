@@ -104,7 +104,6 @@ private class PushBasedFetchHelper(
    * @param shuffleId shuffle id.
    * @param reduceId  reduce id.
    * @param blockSize size of the push-merged block.
-   * @param numChunks number of chunks in the push-merged block.
    * @param bitmaps   chunk bitmaps, where each bitmap contains all the mapIds that were merged
    *                  to that chunk.
    * @return  shuffle chunks to fetch.
@@ -113,11 +112,10 @@ private class PushBasedFetchHelper(
       shuffleId: Int,
       reduceId: Int,
       blockSize: Long,
-      numChunks: Int,
       bitmaps: Array[RoaringBitmap]): ArrayBuffer[(BlockId, Long, Int)] = {
-    val approxChunkSize = blockSize / numChunks
+    val approxChunkSize = blockSize / bitmaps.length
     val blocksToFetch = new ArrayBuffer[(BlockId, Long, Int)]()
-    for (i <- 0 until numChunks) {
+    for (i <- bitmaps.indices) {
       val blockChunkId = ShuffleBlockChunkId(shuffleId, reduceId, i)
       chunksMetaMap.put(blockChunkId, bitmaps(i))
       logDebug(s"adding block chunk $blockChunkId of size $approxChunkSize")
@@ -146,7 +144,7 @@ private class PushBasedFetchHelper(
           s"from ${req.address.host}:${req.address.port}")
         try {
           iterator.addToResultsQueue(PushMergedRemoteMetaFetchResult(shuffleId, reduceId,
-            sizeMap((shuffleId, reduceId)), meta.getNumChunks, meta.readChunkBitmaps(), address))
+            sizeMap((shuffleId, reduceId)), meta.readChunkBitmaps(), address))
         } catch {
           case exception: Exception =>
             logError(s"Failed to parse the meta of push-merged block for ($shuffleId, " +
@@ -242,8 +240,8 @@ private class PushBasedFetchHelper(
       val shuffleBlockId = blockId.asInstanceOf[ShuffleBlockId]
       val chunksMeta = blockManager.getLocalMergedBlockMeta(shuffleBlockId, localDirs)
       iterator.addToResultsQueue(PushMergedLocalMetaFetchResult(
-        shuffleBlockId.shuffleId, shuffleBlockId.reduceId, chunksMeta.getNumChunks,
-        chunksMeta.readChunkBitmaps(), localDirs))
+        shuffleBlockId.shuffleId, shuffleBlockId.reduceId, chunksMeta.readChunkBitmaps(),
+        localDirs))
     } catch {
       case e: Exception =>
         // If we see an exception with reading a local push-merged meta, we fallback to
