@@ -714,37 +714,39 @@ class ExpressionParserSuite extends AnalysisTest {
     // Non Existing unit
     intercept("interval 10 nanoseconds", "invalid unit 'nanoseconds'")
 
-    // Year-Month intervals.
-    val yearMonthValues = Seq("123-10", "496-0", "-2-3", "-123-0", "\t -1-2\t")
-    yearMonthValues.foreach { value =>
-      val result = Literal(IntervalUtils.fromYearMonthString(value))
-      checkIntervals(s"'$value' year to month", result)
-    }
+    withSQLConf(SQLConf.LEGACY_INTERVAL_ENABLED.key -> "true") {
+      // Year-Month intervals.
+      val yearMonthValues = Seq("123-10", "496-0", "-2-3", "-123-0", "\t -1-2\t")
+      yearMonthValues.foreach { value =>
+        val result = Literal(IntervalUtils.fromYearMonthString(value))
+        checkIntervals(s"'$value' year to month", result)
+      }
 
-    // Day-Time intervals.
-    val datTimeValues = Seq(
-      "99 11:22:33.123456789",
-      "-99 11:22:33.123456789",
-      "10 9:8:7.123456789",
-      "1 0:0:0",
-      "-1 0:0:0",
-      "1 0:0:1",
-      "\t 1 0:0:1 ")
-    datTimeValues.foreach { value =>
-      val result = Literal(IntervalUtils.fromDayTimeString(value))
-      checkIntervals(s"'$value' day to second", result)
-    }
+      // Day-Time intervals.
+      val datTimeValues = Seq(
+        "99 11:22:33.123456789",
+        "-99 11:22:33.123456789",
+        "10 9:8:7.123456789",
+        "1 0:0:0",
+        "-1 0:0:0",
+        "1 0:0:1",
+        "\t 1 0:0:1 ")
+      datTimeValues.foreach { value =>
+        val result = Literal(IntervalUtils.fromDayTimeString(value))
+        checkIntervals(s"'$value' day to second", result)
+      }
 
-    // Hour-Time intervals.
-    val hourTimeValues = Seq(
-      "11:22:33.123456789",
-      "9:8:7.123456789",
-      "-19:18:17.123456789",
-      "0:0:0",
-      "0:0:1")
-    hourTimeValues.foreach { value =>
-      val result = Literal(IntervalUtils.fromDayTimeString(value, HOUR, SECOND))
-      checkIntervals(s"'$value' hour to second", result)
+      // Hour-Time intervals.
+      val hourTimeValues = Seq(
+        "11:22:33.123456789",
+        "9:8:7.123456789",
+        "-19:18:17.123456789",
+        "0:0:0",
+        "0:0:1")
+      hourTimeValues.foreach { value =>
+        val result = Literal(IntervalUtils.fromDayTimeString(value, HOUR, SECOND))
+        checkIntervals(s"'$value' hour to second", result)
+      }
     }
 
     // Unknown FROM TO intervals

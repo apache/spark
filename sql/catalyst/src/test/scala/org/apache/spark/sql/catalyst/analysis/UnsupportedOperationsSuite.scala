@@ -585,10 +585,12 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
     streamStreamSupported = false,
     batchStreamSupported = false)
 
-  // Intersect: stream-stream not supported
+  // Intersect: not supported
   testBinaryOperationInStreamingPlan(
     "intersect",
     _.intersect(_, isAll = false),
+    batchStreamSupported = false,
+    streamBatchSupported = false,
     streamStreamSupported = false)
 
   // Sort: supported only on batch subplans and after aggregation on streaming plan + complete mode

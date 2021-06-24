@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import java.io.{File, FilenameFilter}
 import java.nio.file.{Files, Paths}
+import java.time.{Duration, Period}
 
 import scala.collection.mutable.HashSet
 import scala.concurrent.duration._
@@ -1175,7 +1176,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
   }
 
   test("cache supports for intervals") {
-    withTable("interval_cache") {
+    withTable("interval_cache", "t1") {
       Seq((1, "1 second"), (2, "2 seconds"), (2, null))
         .toDF("k", "v").write.saveAsTable("interval_cache")
       sql("CACHE TABLE t1 AS SELECT k, cast(v as interval) FROM interval_cache")
@@ -1184,6 +1185,20 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
         Row(1, new CalendarInterval(0, 0, DateTimeConstants.MICROS_PER_SECOND)))
       sql("UNCACHE TABLE t1")
       assert(!spark.catalog.isCached("t1"))
+    }
+  }
+
+  test("SPARK-35243: cache supports for YearMonthIntervalType and DayTimeIntervalType") {
+    withTempView("ymi_dti_interval_cache") {
+      Seq((1, Period.ofYears(1), Duration.ofDays(1)),
+        (2, Period.ofYears(2), Duration.ofDays(2)))
+        .toDF("k", "v1", "v2").createTempView("ymi_dti_interval_cache")
+      sql("CACHE TABLE tmp AS SELECT k, v1, v2 FROM ymi_dti_interval_cache")
+      assert(spark.catalog.isCached("tmp"))
+      checkAnswer(sql("SELECT * FROM tmp WHERE k = 1"),
+        Row(1, Period.ofYears(1), Duration.ofDays(1)))
+      sql("UNCACHE TABLE tmp")
+      assert(!spark.catalog.isCached("tmp"))
     }
   }
 
@@ -1552,6 +1567,67 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
       // Validate that the cache is cleared by creating a temp view with the same relation.
       sql(s"CREATE OR REPLACE $tempViewStr ${ident.table} USING parquet OPTIONS (path '$path1')")
       assert(!spark.catalog.isCached(viewName))
+    }
+  }
+
+  test("SPARK-35332: Make cache plan disable configs configurable - check AQE") {
+    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "2",
+      SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM.key -> "1",
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
+
+      withTempView("t1", "t2", "t3") {
+        withSQLConf(SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING.key -> "false") {
+          sql("CACHE TABLE t1 as SELECT /*+ REPARTITION */ * FROM values(1) as t(c)")
+          assert(spark.table("t1").rdd.partitions.length == 2)
+        }
+
+        withSQLConf(SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING.key -> "true") {
+          assert(spark.table("t1").rdd.partitions.length == 2)
+          sql("CACHE TABLE t2 as SELECT /*+ REPARTITION */ * FROM values(2) as t(c)")
+          assert(spark.table("t2").rdd.partitions.length == 1)
+        }
+
+        withSQLConf(SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING.key -> "false") {
+          assert(spark.table("t1").rdd.partitions.length == 2)
+          assert(spark.table("t2").rdd.partitions.length == 1)
+          sql("CACHE TABLE t3 as SELECT /*+ REPARTITION */ * FROM values(3) as t(c)")
+          assert(spark.table("t3").rdd.partitions.length == 2)
+        }
+      }
+    }
+  }
+
+  test("SPARK-35332: Make cache plan disable configs configurable - check bucket scan") {
+    withTable("t1", "t2", "t3") {
+      Seq(1, 2, 3).foreach { i =>
+        spark.range(1, 2)
+          .write
+          .format("parquet")
+          .bucketBy(2, "id")
+          .saveAsTable(s"t$i")
+      }
+
+      withCache("t1", "t2", "t3") {
+        withSQLConf(SQLConf.BUCKETING_ENABLED.key -> "true",
+          SQLConf.FILES_MIN_PARTITION_NUM.key -> "1",
+          SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING.key -> "false") {
+          sql("CACHE TABLE t1")
+          assert(spark.table("t1").rdd.partitions.length == 2)
+
+          withSQLConf(SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING.key -> "true") {
+            assert(spark.table("t1").rdd.partitions.length == 2)
+            sql("CACHE TABLE t2")
+            assert(spark.table("t2").rdd.partitions.length == 1)
+          }
+
+          withSQLConf(SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING.key -> "false") {
+            assert(spark.table("t1").rdd.partitions.length == 2)
+            assert(spark.table("t2").rdd.partitions.length == 1)
+            sql("CACHE TABLE t3")
+            assert(spark.table("t3").rdd.partitions.length == 2)
+          }
+        }
+      }
     }
   }
 }

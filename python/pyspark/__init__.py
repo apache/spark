@@ -53,14 +53,14 @@ from pyspark.conf import SparkConf
 from pyspark.rdd import RDD, RDDBarrier
 from pyspark.files import SparkFiles
 from pyspark.status import StatusTracker, SparkJobInfo, SparkStageInfo
-from pyspark.util import InheritableThread
+from pyspark.util import InheritableThread, inheritable_thread_target
 from pyspark.storagelevel import StorageLevel
 from pyspark.accumulators import Accumulator, AccumulatorParam
 from pyspark.broadcast import Broadcast
 from pyspark.serializers import MarshalSerializer, PickleSerializer
 from pyspark.taskcontext import TaskContext, BarrierTaskContext, BarrierTaskInfo
 from pyspark.profiler import Profiler, BasicProfiler
-from pyspark.version import __version__  # noqa: F401
+from pyspark.version import __version__
 from pyspark._globals import _NoValue  # noqa: F401
 
 
@@ -125,4 +125,5 @@ __all__ = [
     "Accumulator", "AccumulatorParam", "MarshalSerializer", "PickleSerializer",
     "StatusTracker", "SparkJobInfo", "SparkStageInfo", "Profiler", "BasicProfiler", "TaskContext",
     "RDDBarrier", "BarrierTaskContext", "BarrierTaskInfo", "InheritableThread",
+    "inheritable_thread_target", "__version__",
 ]

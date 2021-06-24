@@ -88,12 +88,32 @@ object QueryParsingErrors {
     new ParseException("DISTRIBUTE BY is not supported", ctx)
   }
 
+  def transformNotSupportQuantifierError(ctx: ParserRuleContext): Throwable = {
+    new ParseException("TRANSFORM does not support DISTINCT/ALL in inputs", ctx)
+  }
+
   def transformWithSerdeUnsupportedError(ctx: ParserRuleContext): Throwable = {
     new ParseException("TRANSFORM with serde is only supported in hive mode", ctx)
   }
 
   def lateralWithPivotInFromClauseNotAllowedError(ctx: FromClauseContext): Throwable = {
     new ParseException("LATERAL cannot be used together with PIVOT in FROM clause", ctx)
+  }
+
+  def lateralJoinWithNaturalJoinUnsupportedError(ctx: ParserRuleContext): Throwable = {
+    new ParseException("LATERAL join with NATURAL join is not supported", ctx)
+  }
+
+  def lateralJoinWithUsingJoinUnsupportedError(ctx: ParserRuleContext): Throwable = {
+    new ParseException("LATERAL join with USING join is not supported", ctx)
+  }
+
+  def unsupportedLateralJoinTypeError(ctx: ParserRuleContext, joinType: String): Throwable = {
+    new ParseException(s"Unsupported LATERAL join type $joinType", ctx)
+  }
+
+  def invalidLateralJoinRelationError(ctx: RelationPrimaryContext): Throwable = {
+    new ParseException(s"LATERAL can only be used with subquery", ctx)
   }
 
   def repetitiveWindowDefinitionError(name: String, ctx: WindowClauseContext): Throwable = {
@@ -363,4 +383,7 @@ object QueryParsingErrors {
     new ParseException("LOCAL is supported only with file: scheme", ctx)
   }
 
+  def invalidGroupingSetError(element: String, ctx: GroupingAnalyticsContext): Throwable = {
+    new ParseException(s"Empty set in $element grouping sets is not supported.", ctx)
+  }
 }

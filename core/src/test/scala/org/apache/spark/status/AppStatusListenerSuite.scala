@@ -1796,6 +1796,44 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
     }
   }
 
+  test("SPARK-34877 - check YarnAmInfoEvent is populated correctly") {
+    def checkInfoPopulated(listener: AppStatusListener,
+       logUrlMap: Map[String, String], processId: String): Unit = {
+      val yarnAmInfo = listener.liveMiscellaneousProcess.get(processId)
+      assert(yarnAmInfo.isDefined)
+      yarnAmInfo.foreach { info =>
+        assert(info.processId == processId)
+        assert(info.isActive)
+        assert(info.processLogs == logUrlMap)
+      }
+      check[ProcessSummaryWrapper](processId) { process =>
+        assert(process.info.id === processId)
+        assert(process.info.isActive)
+        assert(process.info.processLogs == logUrlMap)
+      }
+    }
+    val processId = "yarn-am"
+    val listener = new AppStatusListener(store, conf, true)
+    var stdout = "http:yarnAmHost:2453/con1/stdout"
+    var stderr = "http:yarnAmHost:2453/con2/stderr"
+    var logUrlMap: Map[String, String] = Map("stdout" -> stdout,
+      "stderr" -> stderr)
+    var hostport = "yarnAmHost:2453"
+    var info = new MiscellaneousProcessDetails(hostport, 1, logUrlMap)
+    listener.onOtherEvent(SparkListenerMiscellaneousProcessAdded(123678L, processId, info))
+    checkInfoPopulated(listener, logUrlMap, processId)
+
+    // Launch new AM in case of failure
+    // New container entry will be updated in this scenario
+    stdout = "http:yarnAmHost:2451/con1/stdout"
+    stderr = "http:yarnAmHost:2451/con2/stderr"
+    logUrlMap = Map("stdout" -> stdout,
+      "stderr" -> stderr)
+    hostport = "yarnAmHost:2451"
+    info = new MiscellaneousProcessDetails(hostport, 1, logUrlMap)
+    listener.onOtherEvent(SparkListenerMiscellaneousProcessAdded(123678L, processId, info))
+    checkInfoPopulated(listener, logUrlMap, processId)
+  }
 
   private def key(stage: StageInfo): Array[Int] = Array(stage.stageId, stage.attemptNumber)
 

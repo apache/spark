@@ -203,13 +203,12 @@ object SparkBuild extends PomBuild {
   // Silencer: Scala compiler plugin for warning suppression
   // Aim: enable fatal warnings, but suppress ones related to using of deprecated APIs
   // depends on scala version:
-  // <2.13 - silencer 1.6.0 and compiler settings to enable fatal warnings
-  // 2.13.0,2.13.1 - silencer 1.7.1 and compiler settings to enable fatal warnings
+  // <2.13.2 - silencer 1.7.5 and compiler settings to enable fatal warnings
   // 2.13.2+ - no silencer and configured warnings to achieve the same
   lazy val compilerWarningSettings: Seq[sbt.Def.Setting[_]] = Seq(
     libraryDependencies ++= {
       if (VersionNumber(scalaVersion.value).matchesSemVer(SemanticSelector("<2.13.2"))) {
-        val silencerVersion = if (scalaBinaryVersion.value == "2.13") "1.7.1" else "1.6.0"
+        val silencerVersion = "1.7.5"
         Seq(
           "org.scala-lang.modules" %% "scala-collection-compat" % "2.2.0",
           compilerPlugin("com.github.ghik" % "silencer-plugin" % silencerVersion cross CrossVersion.full),
@@ -249,7 +248,9 @@ object SparkBuild extends PomBuild {
           "-Wconf:msg=^(?=.*?Widening conversion from)(?=.*?is deprecated because it loses precision).+$:s",
           "-Wconf:msg=Auto-application to \\`\\(\\)\\` is deprecated:s",
           "-Wconf:msg=method with a single empty parameter list overrides method without any parameter list:s",
-          "-Wconf:msg=method without a parameter list overrides a method with a single empty one:s"
+          "-Wconf:msg=method without a parameter list overrides a method with a single empty one:s",
+          // SPARK-35574 Prevent the recurrence of compilation warnings related to `procedure syntax is deprecated`
+          "-Wconf:cat=deprecation&msg=procedure syntax is deprecated:e"
         )
       }
     }
@@ -264,7 +265,7 @@ object SparkBuild extends PomBuild {
       .orElse(sys.props.get("java.home").map { p => new File(p).getParentFile().getAbsolutePath() })
       .map(file),
     publishMavenStyle := true,
-    unidocGenjavadocVersion := "0.16",
+    unidocGenjavadocVersion := "0.17",
 
     // Override SBT's default resolvers:
     resolvers := Seq(
@@ -290,6 +291,12 @@ object SparkBuild extends PomBuild {
     (MavenCompile / publishLocal) := publishTask((MavenCompile / publishLocalConfiguration)).value,
     (SbtCompile / publishLocal) := publishTask((SbtCompile / publishLocalConfiguration)).value,
     publishLocal := Seq((MavenCompile / publishLocal), (SbtCompile / publishLocal)).dependOn.value,
+
+    javaOptions ++= {
+      val versionParts = System.getProperty("java.version").split("[+.\\-]+", 3)
+      var major = versionParts(0).toInt
+      if (major >= 16) Seq("--add-modules=jdk.incubator.vector,jdk.incubator.foreign", "-Dforeign.restricted=warn") else Seq.empty
+    },
 
     (Compile / doc / javacOptions) ++= {
       val versionParts = System.getProperty("java.version").split("[+.\\-]+", 3)
@@ -408,6 +415,10 @@ object SparkBuild extends PomBuild {
 
   enable(YARN.settings)(yarn)
 
+  if (profiles.contains("sparkr")) {
+    enable(SparkR.settings)(core)
+  }
+
   /**
    * Adds the ability to run the spark shell directly from SBT without building an assembly
    * jar.
@@ -506,7 +517,8 @@ object SparkParallelTestGrouping {
     "org.apache.spark.sql.hive.thriftserver.SparkSQLEnvSuite",
     "org.apache.spark.sql.hive.thriftserver.ui.ThriftServerPageSuite",
     "org.apache.spark.sql.hive.thriftserver.ui.HiveThriftServer2ListenerSuite",
-    "org.apache.spark.sql.kafka010.KafkaDelegationTokenSuite"
+    "org.apache.spark.sql.kafka010.KafkaDelegationTokenSuite",
+    "org.apache.spark.shuffle.KubernetesLocalDiskShuffleDataIOSuite"
   )
 
   private val DEFAULT_TEST_GROUP = "default_test_group"
@@ -683,7 +695,9 @@ object ExcludedDependencies {
     excludeDependencies ++= Seq(
       ExclusionRule(organization = "com.sun.jersey"),
       ExclusionRule("javax.servlet", "javax.servlet-api"),
-      ExclusionRule("javax.ws.rs", "jsr311-api"))
+      ExclusionRule("javax.ws.rs", "jsr311-api"),
+      ExclusionRule("io.netty", "netty-handler"),
+      ExclusionRule("io.netty", "netty-transport-native-epoll"))
   )
 }
 
@@ -878,6 +892,25 @@ object PySparkAssembly {
     }
   }
 
+}
+
+object SparkR {
+  import scala.sys.process.Process
+
+  val buildRPackage = taskKey[Unit]("Build the R package")
+  lazy val settings = Seq(
+    buildRPackage := {
+      val command = baseDirectory.value / ".." / "R" / "install-dev.sh"
+      Process(command.toString).!!
+    },
+    (Compile / compile) := (Def.taskDyn {
+      val c = (Compile / compile).value
+      Def.task {
+        (Compile / buildRPackage).value
+        c
+      }
+    }).value
+  )
 }
 
 object Unidoc {

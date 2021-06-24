@@ -541,14 +541,14 @@ public final class OnHeapColumnVector extends WritableColumnVector {
         shortData = newData;
       }
     } else if (type instanceof IntegerType || type instanceof DateType ||
-      DecimalType.is32BitDecimalType(type)) {
+      DecimalType.is32BitDecimalType(type) || type instanceof YearMonthIntervalType) {
       if (intData == null || intData.length < newCapacity) {
         int[] newData = new int[newCapacity];
         if (intData != null) System.arraycopy(intData, 0, newData, 0, capacity);
         intData = newData;
       }
     } else if (type instanceof LongType || type instanceof TimestampType ||
-        DecimalType.is64BitDecimalType(type)) {
+        DecimalType.is64BitDecimalType(type) || type instanceof DayTimeIntervalType) {
       if (longData == null || longData.length < newCapacity) {
         long[] newData = new long[newCapacity];
         if (longData != null) System.arraycopy(longData, 0, newData, 0, capacity);

@@ -51,6 +51,8 @@
  * since it was forked (commit 101503833a8ce5fe369547f6addf3e71172ce10b).
  */
 
+/* global $, appBasePath, d3, dagreD3, graphlibDot, uiRoot */
+
 var VizConstants = {
   svgMarginX: 16,
   svgMarginY: 16,
@@ -166,7 +168,7 @@ function renderDagViz(forJob) {
   }
 
   // Find cached RDDs and mark them as such
-  metadataContainer().selectAll(".cached-rdd").each(function(v) {
+  metadataContainer().selectAll(".cached-rdd").each(function(_ignored_v) {
     var rddId = d3.select(this).text().trim();
     var nodeId = VizConstants.nodePrefix + rddId;
     svg.selectAll("g." + nodeId).classed("cached", true);
@@ -180,7 +182,7 @@ function renderDagViz(forJob) {
     svg.selectAll("g[id=" + stageClusterId + "] g." + opClusterId).classed("barrier", true)
   });
 
-  metadataContainer().selectAll(".indeterminate-rdd").each(function(v) {
+  metadataContainer().selectAll(".indeterminate-rdd").each(function(_ignored_v) {
     var rddId = d3.select(this).text().trim();
     var nodeId = VizConstants.nodePrefix + rddId;
     svg.selectAll("g." + nodeId).classed("indeterminate", true);
@@ -275,7 +277,7 @@ function renderDagVizForJob(svgContainer) {
     // If there are any incoming edges into this graph, keep track of them to render
     // them separately later. Note that we cannot draw them now because we need to
     // put these edges in a separate container that is on top of all stage graphs.
-    metadata.selectAll(".incoming-edge").each(function(v) {
+    metadata.selectAll(".incoming-edge").each(function(_ignored_v) {
       var edge = d3.select(this).text().trim().split(","); // e.g. 3,4 => [3, 4]
       crossStageEdges.push(edge);
     });

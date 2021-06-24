@@ -73,17 +73,21 @@ class SimpleWritableDataSource extends TestingV2Source {
       this
     }
 
-    override def buildForBatch(): BatchWrite = {
-      val hadoopPath = new Path(path)
-      val hadoopConf = SparkContext.getActive.get.hadoopConfiguration
-      val fs = hadoopPath.getFileSystem(hadoopConf)
+    override def build(): Write = {
+      new Write {
+        override def toBatch: BatchWrite = {
+          val hadoopPath = new Path(path)
+          val hadoopConf = SparkContext.getActive.get.hadoopConfiguration
+          val fs = hadoopPath.getFileSystem(hadoopConf)
 
-      if (needTruncate) {
-        fs.delete(hadoopPath, true)
+          if (needTruncate) {
+            fs.delete(hadoopPath, true)
+          }
+
+          val pathStr = hadoopPath.toUri.toString
+          new MyBatchWrite(queryId, pathStr, hadoopConf)
+        }
       }
-
-      val pathStr = hadoopPath.toUri.toString
-      new MyBatchWrite(queryId, pathStr, hadoopConf)
     }
   }
 

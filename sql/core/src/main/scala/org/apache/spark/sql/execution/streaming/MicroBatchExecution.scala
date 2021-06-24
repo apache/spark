@@ -24,9 +24,11 @@ import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CurrentBatchTimestamp, CurrentDate, CurrentTimestamp}
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LocalRelation, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.streaming.{StreamingRelationV2, WriteToStream}
+import org.apache.spark.sql.catalyst.trees.TreePattern.CURRENT_LIKE
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.connector.catalog.{SupportsRead, SupportsWrite, TableCapability}
 import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, Offset => OffsetV2, ReadLimit, SparkDataStream, SupportsAdmissionControl}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, StreamingDataSourceV2Relation, StreamWriterCommitProgress, WriteToDataSourceV2Exec}
 import org.apache.spark.sql.execution.streaming.sources.WriteToMicroBatchDataSource
@@ -100,8 +102,7 @@ class MicroBatchExecution(
             StreamingDataSourceV2Relation(output, scan, stream)
           })
         } else if (v1.isEmpty) {
-          throw new UnsupportedOperationException(
-            s"Data source $srcName does not support microbatch processing.")
+          throw QueryExecutionErrors.microBatchUnsupportedByDataSourceError(srcName)
         } else {
           v2ToExecutionRelationMap.getOrElseUpdate(s, {
             // Materialize source to avoid creating it in every batch
@@ -549,7 +550,8 @@ class MicroBatchExecution(
     }
 
     // Rewire the plan to use the new attributes that were returned by the source.
-    val newAttributePlan = newBatchesPlan transformAllExpressions {
+    val newAttributePlan = newBatchesPlan.transformAllExpressionsWithPruning(
+      _.containsPattern(CURRENT_LIKE)) {
       case ct: CurrentTimestamp =>
         // CurrentTimestamp is not TimeZoneAwareExpression while CurrentBatchTimestamp is.
         // Without TimeZoneId, CurrentBatchTimestamp is unresolved. Here, we use an explicit

@@ -37,6 +37,7 @@ import org.apache.spark.resource.{ExecutorResourceRequest, ResourceInformation, 
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.storage._
+import org.apache.spark.util.Utils.weakIntern
 
 /**
  * Serializes SparkListener events to/from JSON.  This protocol provides strong backwards-
@@ -916,8 +917,8 @@ private[spark] object JsonProtocol {
     val index = (json \ "Index").extract[Int]
     val attempt = jsonOption(json \ "Attempt").map(_.extract[Int]).getOrElse(1)
     val launchTime = (json \ "Launch Time").extract[Long]
-    val executorId = (json \ "Executor ID").extract[String].intern()
-    val host = (json \ "Host").extract[String].intern()
+    val executorId = weakIntern((json \ "Executor ID").extract[String])
+    val host = weakIntern((json \ "Host").extract[String])
     val taskLocality = TaskLocality.withName((json \ "Locality").extract[String])
     val speculative = jsonOption(json \ "Speculative").exists(_.extract[Boolean])
     val gettingResultTime = (json \ "Getting Result Time").extract[Long]
@@ -1137,8 +1138,8 @@ private[spark] object JsonProtocol {
     if (json == JNothing) {
       return null
     }
-    val executorId = (json \ "Executor ID").extract[String].intern()
-    val host = (json \ "Host").extract[String].intern()
+    val executorId = weakIntern((json \ "Executor ID").extract[String])
+    val host = weakIntern((json \ "Host").extract[String])
     val port = (json \ "Port").extract[Int]
     BlockManagerId(executorId, host, port)
   }

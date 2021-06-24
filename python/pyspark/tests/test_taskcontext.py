@@ -79,7 +79,7 @@ class TaskContextTests(PySparkTestCase):
             partition_id = tc.partitionId()
             attempt_id = tc.taskAttemptId()
             if attempt_number == 0 and partition_id == 0:
-                raise Exception("Failing on first attempt")
+                raise RuntimeError("Failing on first attempt")
             else:
                 return [x, partition_id, attempt_number, attempt_id]
         result = rdd.map(fail_on_first).collect()

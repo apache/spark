@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.trees.UnaryLike
 
 trait DynamicPruning extends Predicate
@@ -69,6 +70,8 @@ case class DynamicPruningSubquery(
       pruningKey.dataType == buildKeys(broadcastKeyIndex).dataType
   }
 
+  final override def nodePatternsInternal: Seq[TreePattern] = Seq(DYNAMIC_PRUNING_SUBQUERY)
+
   override def toString: String = s"dynamicpruning#${exprId.id} $conditionString"
 
   override lazy val canonicalized: DynamicPruning = {
@@ -93,6 +96,7 @@ case class DynamicPruningExpression(child: Expression)
   extends UnaryExpression
   with DynamicPruning {
   override def eval(input: InternalRow): Any = child.eval(input)
+  final override val nodePatterns: Seq[TreePattern] = Seq(DYNAMIC_PRUNING_EXPRESSION)
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     child.genCode(ctx)

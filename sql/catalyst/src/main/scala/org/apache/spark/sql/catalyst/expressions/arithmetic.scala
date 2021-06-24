@@ -21,6 +21,8 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.trees.TreePattern.{BINARY_ARITHMETIC, TreePattern,
+  UNARY_POSITIVE}
 import org.apache.spark.sql.catalyst.util.{IntervalUtils, TypeUtils}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -83,7 +85,7 @@ case class UnaryMinus(
       val iu = IntervalUtils.getClass.getCanonicalName.stripSuffix("$")
       val method = if (failOnError) "negateExact" else "negate"
       defineCodeGen(ctx, ev, c => s"$iu.$method($c)")
-    case DayTimeIntervalType | YearMonthIntervalType =>
+    case _: DayTimeIntervalType | _: YearMonthIntervalType =>
       nullSafeCodeGen(ctx, ev, eval => {
         val mathClass = classOf[Math].getName
         s"${ev.value} = $mathClass.negateExact($eval);"
@@ -94,8 +96,8 @@ case class UnaryMinus(
     case CalendarIntervalType if failOnError =>
       IntervalUtils.negateExact(input.asInstanceOf[CalendarInterval])
     case CalendarIntervalType => IntervalUtils.negate(input.asInstanceOf[CalendarInterval])
-    case DayTimeIntervalType => Math.negateExact(input.asInstanceOf[Long])
-    case YearMonthIntervalType => Math.negateExact(input.asInstanceOf[Int])
+    case _: DayTimeIntervalType => Math.negateExact(input.asInstanceOf[Long])
+    case _: YearMonthIntervalType => Math.negateExact(input.asInstanceOf[Int])
     case _ => numeric.negate(input)
   }
 
@@ -127,6 +129,8 @@ case class UnaryPositive(child: Expression)
   override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection.NumericAndInterval)
 
   override def dataType: DataType = child.dataType
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(UNARY_POSITIVE)
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
     defineCodeGen(ctx, ev, c => c)
@@ -199,15 +203,19 @@ abstract class BinaryArithmetic extends BinaryOperator with NullIntolerant {
 
   override def dataType: DataType = left.dataType
 
+  final override val nodePatterns: Seq[TreePattern] = Seq(BINARY_ARITHMETIC)
+
   override lazy val resolved: Boolean = childrenResolved && checkInputDataTypes().isSuccess
 
   /** Name of the function for this expression on a [[Decimal]] type. */
   def decimalMethod: String =
-    sys.error("BinaryArithmetics must override either decimalMethod or genCode")
+    throw QueryExecutionErrors.notOverrideExpectedMethodsError("BinaryArithmetics",
+      "decimalMethod", "genCode")
 
   /** Name of the function for this expression on a [[CalendarInterval]] type. */
   def calendarIntervalMethod: String =
-    sys.error("BinaryArithmetics must override either calendarIntervalMethod or genCode")
+    throw QueryExecutionErrors.notOverrideExpectedMethodsError("BinaryArithmetics",
+      "calendarIntervalMethod", "genCode")
 
   // Name of the function for the exact version of this expression in [[Math]].
   // If the option "spark.sql.ansi.enabled" is enabled and there is corresponding
@@ -221,7 +229,7 @@ abstract class BinaryArithmetic extends BinaryOperator with NullIntolerant {
     case CalendarIntervalType =>
       val iu = IntervalUtils.getClass.getCanonicalName.stripSuffix("$")
       defineCodeGen(ctx, ev, (eval1, eval2) => s"$iu.$calendarIntervalMethod($eval1, $eval2)")
-    case DayTimeIntervalType | YearMonthIntervalType =>
+    case _: DayTimeIntervalType | _: YearMonthIntervalType =>
       assert(exactMathMethod.isDefined,
         s"The expression '$nodeName' must override the exactMathMethod() method " +
         "if it is supposed to operate over interval types.")
@@ -309,9 +317,9 @@ case class Add(
     case CalendarIntervalType =>
       IntervalUtils.add(
         input1.asInstanceOf[CalendarInterval], input2.asInstanceOf[CalendarInterval])
-    case DayTimeIntervalType =>
+    case _: DayTimeIntervalType =>
       Math.addExact(input1.asInstanceOf[Long], input2.asInstanceOf[Long])
-    case YearMonthIntervalType =>
+    case _: YearMonthIntervalType =>
       Math.addExact(input1.asInstanceOf[Int], input2.asInstanceOf[Int])
     case _ => numeric.plus(input1, input2)
   }
@@ -355,9 +363,9 @@ case class Subtract(
     case CalendarIntervalType =>
       IntervalUtils.subtract(
         input1.asInstanceOf[CalendarInterval], input2.asInstanceOf[CalendarInterval])
-    case DayTimeIntervalType =>
+    case _: DayTimeIntervalType =>
       Math.subtractExact(input1.asInstanceOf[Long], input2.asInstanceOf[Long])
-    case YearMonthIntervalType =>
+    case _: YearMonthIntervalType =>
       Math.subtractExact(input1.asInstanceOf[Int], input2.asInstanceOf[Int])
     case _ => numeric.minus(input1, input2)
   }
@@ -404,6 +412,9 @@ trait DivModLike extends BinaryArithmetic {
 
   protected def decimalToDataTypeCodeGen(decimalResult: String): String = decimalResult
 
+  // Whether we should check overflow or not in ANSI mode.
+  protected def checkDivideOverflow: Boolean = false
+
   override def nullable: Boolean = true
 
   private lazy val isZero: Any => Boolean = right.dataType match {
@@ -424,6 +435,9 @@ trait DivModLike extends BinaryArithmetic {
         if (isZero(input2)) {
           // when we reach here, failOnError must bet true.
           throw QueryExecutionErrors.divideByZeroError
+        }
+        if (checkDivideOverflow && input1 == Long.MinValue && input2 == -1) {
+          throw QueryExecutionErrors.overflowInIntegralDivideError()
         }
         evalOperation(input1, input2)
       }
@@ -450,6 +464,15 @@ trait DivModLike extends BinaryArithmetic {
     } else {
       s"($javaType)(${eval1.value} $symbol ${eval2.value})"
     }
+    val checkIntegralDivideOverflow = if (checkDivideOverflow) {
+      s"""
+        |if (${eval1.value} == ${Long.MinValue}L && ${eval2.value} == -1)
+        |  throw QueryExecutionErrors.overflowInIntegralDivideError();
+        |""".stripMargin
+    } else {
+      ""
+    }
+
     // evaluate right first as we have a chance to skip left if right is 0
     if (!left.nullable && !right.nullable) {
       val divByZero = if (failOnError) {
@@ -465,6 +488,7 @@ trait DivModLike extends BinaryArithmetic {
           $divByZero
         } else {
           ${eval1.code}
+          $checkIntegralDivideOverflow
           ${ev.value} = $operation;
         }""")
     } else {
@@ -486,6 +510,7 @@ trait DivModLike extends BinaryArithmetic {
             ${ev.isNull} = true;
           } else {
             $failOnErrorBranch
+            $checkIntegralDivideOverflow
             ${ev.value} = $operation;
           }
         }""")
@@ -545,6 +570,11 @@ case class IntegralDivide(
     failOnError: Boolean = SQLConf.get.ansiEnabled) extends DivModLike {
 
   def this(left: Expression, right: Expression) = this(left, right, SQLConf.get.ansiEnabled)
+
+  override def checkDivideOverflow: Boolean = left.dataType match {
+    case LongType if failOnError => true
+    case _ => false
+  }
 
   override def inputType: AbstractDataType = TypeCollection(LongType, DecimalType)
 

@@ -1577,7 +1577,7 @@ class Row(tuple):
 
     def __setattr__(self, key, value):
         if key != '__fields__':
-            raise Exception("Row is read-only")
+            raise RuntimeError("Row is read-only")
         self.__dict__[key] = value
 
     def __reduce__(self):

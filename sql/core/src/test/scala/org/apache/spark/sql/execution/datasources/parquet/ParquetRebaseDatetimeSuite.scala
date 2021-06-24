@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.{LegacyBehaviorPolicy, ParquetOutputTimestampType}
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy.{CORRECTED, EXCEPTION, LEGACY}
+import org.apache.spark.sql.internal.SQLConf.ParquetOutputTimestampType.{INT96, TIMESTAMP_MICROS, TIMESTAMP_MILLIS}
 import org.apache.spark.sql.test.SharedSparkSession
 
 abstract class ParquetRebaseDatetimeSuite
@@ -139,11 +140,6 @@ abstract class ParquetRebaseDatetimeSuite
           .select($"dict".cast(catalystType), $"plain".cast(catalystType))
         withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> tsOutputType) {
           checkDefaultLegacyRead(path2_4)
-          // By default we should fail to write ancient datetime values.
-          if (tsOutputType != "INT96") {
-            val e = intercept[SparkException](df.write.parquet(path3_0))
-            assert(e.getCause.getCause.getCause.isInstanceOf[SparkUpgradeException])
-          }
           withSQLConf(inWriteConf -> CORRECTED.toString) {
             df.write.mode("overwrite").parquet(path3_0)
           }
@@ -372,6 +368,58 @@ abstract class ParquetRebaseDatetimeSuite
         saveTs(dir, "2020-10-22 01:02:03")
         assert(getMetaData(dir).get(SPARK_LEGACY_INT96).isEmpty)
       }
+    }
+  }
+
+  test("SPARK-35427: datetime rebasing in the EXCEPTION mode") {
+    def checkTsWrite(): Unit = {
+      withTempPath { dir =>
+        val df = Seq("1001-01-01 01:02:03.123")
+          .toDF("str")
+          .select($"str".cast("timestamp").as("dt"))
+        val e = intercept[SparkException] {
+          df.write.parquet(dir.getCanonicalPath)
+        }
+        val errMsg = e.getCause.getCause.getCause.asInstanceOf[SparkUpgradeException].getMessage
+        assert(errMsg.contains("You may get a different result due to the upgrading"))
+      }
+    }
+    withSQLConf(SQLConf.PARQUET_REBASE_MODE_IN_WRITE.key -> EXCEPTION.toString) {
+      Seq(TIMESTAMP_MICROS, TIMESTAMP_MILLIS).foreach { tsType =>
+        withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> tsType.toString) {
+          checkTsWrite()
+        }
+      }
+      withTempPath { dir =>
+        val df = Seq(java.sql.Date.valueOf("1001-01-01")).toDF("dt")
+        val e = intercept[SparkException] {
+          df.write.parquet(dir.getCanonicalPath)
+        }
+        val errMsg = e.getCause.getCause.getCause.asInstanceOf[SparkUpgradeException].getMessage
+        assert(errMsg.contains("You may get a different result due to the upgrading"))
+      }
+    }
+    withSQLConf(
+      SQLConf.PARQUET_INT96_REBASE_MODE_IN_WRITE.key -> EXCEPTION.toString,
+      SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> INT96.toString) {
+      checkTsWrite()
+    }
+
+    def checkRead(fileName: String): Unit = {
+      val e = intercept[SparkException] {
+        spark.read.parquet(getResourceParquetFilePath("test-data/" + fileName)).collect()
+      }
+      val errMsg = e.getCause.asInstanceOf[SparkUpgradeException].getMessage
+      assert(errMsg.contains("You may get a different result due to the upgrading"))
+    }
+    withSQLConf(SQLConf.PARQUET_REBASE_MODE_IN_READ.key -> EXCEPTION.toString) {
+      Seq(
+        "before_1582_date_v2_4_5.snappy.parquet",
+        "before_1582_timestamp_micros_v2_4_5.snappy.parquet",
+        "before_1582_timestamp_millis_v2_4_5.snappy.parquet").foreach(checkRead)
+    }
+    withSQLConf(SQLConf.PARQUET_INT96_REBASE_MODE_IN_READ.key -> EXCEPTION.toString) {
+      checkRead("before_1582_timestamp_int96_dict_v2_4_5.snappy.parquet")
     }
   }
 }

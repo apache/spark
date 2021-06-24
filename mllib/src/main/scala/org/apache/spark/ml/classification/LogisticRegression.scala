@@ -29,6 +29,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.feature._
+import org.apache.spark.ml.impl.Utils
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.optim.aggregator._
 import org.apache.spark.ml.optim.loss.{L2Regularization, RDDLossFunction}
@@ -980,16 +981,16 @@ class LogisticRegression @Since("1.2.0") (
     if (fitWithMean) {
       if (multinomial) {
         val adapt = Array.ofDim[Double](numClasses)
-        BLAS.f2jBLAS.dgemv("N", numClasses, numFeatures, 1.0,
+        BLAS.javaBLAS.dgemv("N", numClasses, numFeatures, 1.0,
           initialSolution, numClasses, scaledMean, 1, 0.0, adapt, 1)
-        BLAS.getBLAS(numFeatures).daxpy(numClasses, 1.0, adapt, 0, 1,
+        BLAS.javaBLAS.daxpy(numClasses, 1.0, adapt, 0, 1,
           initialSolution, numClasses * numFeatures, 1)
       } else {
-        // orginal `initialCoefWithInterceptArray` is for problem:
+        // original `initialSolution` is for problem:
         // y = f(w1 * x1 / std_x1, w2 * x2 / std_x2, ..., intercept)
         // we should adjust it to the initial solution for problem:
         // y = f(w1 * (x1 - avg_x1) / std_x1, w2 * (x2 - avg_x2) / std_x2, ..., intercept)
-        val adapt = BLAS.getBLAS(numFeatures).ddot(numFeatures, initialSolution, 1, scaledMean, 1)
+        val adapt = BLAS.javaBLAS.ddot(numFeatures, initialSolution, 1, scaledMean, 1)
         initialSolution(numFeatures) += adapt
       }
     }
@@ -1016,16 +1017,16 @@ class LogisticRegression @Since("1.2.0") (
     if (fitWithMean && solution != null) {
       if (multinomial) {
         val adapt = Array.ofDim[Double](numClasses)
-        BLAS.f2jBLAS.dgemv("N", numClasses, numFeatures, 1.0,
+        BLAS.javaBLAS.dgemv("N", numClasses, numFeatures, 1.0,
           solution, numClasses, scaledMean, 1, 0.0, adapt, 1)
-        BLAS.getBLAS(numFeatures).daxpy(numClasses, -1.0, adapt, 0, 1,
+        BLAS.javaBLAS.daxpy(numClasses, -1.0, adapt, 0, 1,
           solution, numClasses * numFeatures, 1)
       } else {
         // the final solution is for problem:
         // y = f(w1 * (x1 - avg_x1) / std_x1, w2 * (x2 - avg_x2) / std_x2, ..., intercept)
         // we should adjust it back for original problem:
         // y = f(w1 * x1 / std_x1, w2 * x2 / std_x2, ..., intercept)
-        val adapt = BLAS.getBLAS(numFeatures).ddot(numFeatures, solution, 1, scaledMean, 1)
+        val adapt = BLAS.javaBLAS.ddot(numFeatures, solution, 1, scaledMean, 1)
         solution(numFeatures) -= adapt
       }
     }
@@ -1224,36 +1225,12 @@ class LogisticRegressionModel private[spark] (
       case dv: DenseVector =>
         val values = dv.values
         if (isMultinomial) {
-          // get the maximum margin
-          val maxMarginIndex = rawPrediction.argmax
-          val maxMargin = rawPrediction(maxMarginIndex)
-
-          if (maxMargin == Double.PositiveInfinity) {
-            var k = 0
-            while (k < numClasses) {
-              values(k) = if (k == maxMarginIndex) 1.0 else 0.0
-              k += 1
-            }
-          } else {
-            var sum = 0.0
-            var k = 0
-            while (k < numClasses) {
-              values(k) = if (maxMargin > 0) {
-                math.exp(values(k) - maxMargin)
-              } else {
-                math.exp(values(k))
-              }
-              sum += values(k)
-              k += 1
-            }
-            BLAS.scal(1 / sum, dv)
-          }
-          dv
+          Utils.softmax(values)
         } else {
           values(0) = 1.0 / (1.0 + math.exp(-values(0)))
           values(1) = 1.0 - values(0)
-          dv
         }
+        dv
       case sv: SparseVector =>
         throw new RuntimeException("Unexpected error in LogisticRegressionModel:" +
           " raw2probabilitiesInPlace encountered SparseVector")

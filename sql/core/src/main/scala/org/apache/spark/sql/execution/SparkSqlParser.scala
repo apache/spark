@@ -61,6 +61,7 @@ class SparkSqlAstBuilder extends AstBuilder {
   private val configKeyValueDef = """([a-zA-Z_\d\\.:]+)\s*=([^;]*);*""".r
   private val configKeyDef = """([a-zA-Z_\d\\.:]+)$""".r
   private val configValueDef = """([^;]*);*""".r
+  private val strLiteralDef = """(".*?[^\\]"|'.*?[^\\]'|[^ \n\r\t"']+)""".r
 
   /**
    * Create a [[SetCommand]] logical plan.
@@ -334,7 +335,7 @@ class SparkSqlAstBuilder extends AstBuilder {
   }
 
   /**
-   * Create a [[AddFileCommand]], [[AddJarCommand]], [[AddArchiveCommand]],
+   * Create a [[AddFilesCommand]], [[AddJarsCommand]], [[AddArchivesCommand]],
    * [[ListFilesCommand]], [[ListJarsCommand]] or [[ListArchivesCommand]]
    * command depending on the requested operation on resources.
    * Expected format:
@@ -349,32 +350,37 @@ class SparkSqlAstBuilder extends AstBuilder {
    *  - '/path/to/fileOrJar'
    */
   override def visitManageResource(ctx: ManageResourceContext): LogicalPlan = withOrigin(ctx) {
-    val maybePaths = if (ctx.STRING != null) string(ctx.STRING) else remainder(ctx.identifier).trim
+    val rawArg = remainder(ctx.identifier).trim
+    val maybePaths = strLiteralDef.findAllIn(rawArg).toSeq.map {
+      case p if p.startsWith("\"") || p.startsWith("'") => unescapeSQLString(p)
+      case p => p
+    }
+
     ctx.op.getType match {
       case SqlBaseParser.ADD =>
         ctx.identifier.getText.toLowerCase(Locale.ROOT) match {
-          case "file" => AddFileCommand(maybePaths)
-          case "jar" => AddJarCommand(maybePaths)
-          case "archive" => AddArchiveCommand(maybePaths)
+          case "files" | "file" => AddFilesCommand(maybePaths)
+          case "jars" | "jar" => AddJarsCommand(maybePaths)
+          case "archives" | "archive" => AddArchivesCommand(maybePaths)
           case other => operationNotAllowed(s"ADD with resource type '$other'", ctx)
         }
       case SqlBaseParser.LIST =>
         ctx.identifier.getText.toLowerCase(Locale.ROOT) match {
           case "files" | "file" =>
             if (maybePaths.length > 0) {
-              ListFilesCommand(maybePaths.split("\\s+"))
+              ListFilesCommand(maybePaths)
             } else {
               ListFilesCommand()
             }
           case "jars" | "jar" =>
             if (maybePaths.length > 0) {
-              ListJarsCommand(maybePaths.split("\\s+"))
+              ListJarsCommand(maybePaths)
             } else {
               ListJarsCommand()
             }
           case "archives" | "archive" =>
             if (maybePaths.length > 0) {
-              ListArchivesCommand(maybePaths.split("\\s+"))
+              ListArchivesCommand(maybePaths)
             } else {
               ListArchivesCommand()
             }

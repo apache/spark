@@ -476,11 +476,10 @@ private[joins] object UnsafeHashedRelation {
           row.getBaseObject, row.getBaseOffset, row.getSizeInBytes)
         if (!success) {
           binaryMap.free()
-          // scalastyle:off throwerror
-          throw new SparkOutOfMemoryError("There is not enough memory to build hash map")
-          // scalastyle:on throwerror
+          throw QueryExecutionErrors.cannotAcquireMemoryToBuildUnsafeHashedRelationError()
         }
       } else if (isNullAware) {
+        binaryMap.free()
         return HashedRelationWithAllNullKeys
       }
     }
@@ -577,7 +576,7 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
     val got = acquireMemory(size)
     if (got < size) {
       freeMemory(got)
-      throw QueryExecutionErrors.cannotAcquireMemoryToBuildHashRelationError(size, got)
+      throw QueryExecutionErrors.cannotAcquireMemoryToBuildLongHashedRelationError(size, got)
     }
   }
 
@@ -1062,6 +1061,7 @@ private[joins] object LongHashedRelation {
         val key = rowKey.getLong(0)
         map.append(key, unsafeRow)
       } else if (isNullAware) {
+        map.free()
         return HashedRelationWithAllNullKeys
       }
     }
@@ -1136,9 +1136,9 @@ case class HashedRelationBroadcastMode(key: Seq[Expression], isNullAware: Boolea
       sizeHint: Option[Long]): HashedRelation = {
     sizeHint match {
       case Some(numRows) =>
-        HashedRelation(rows, canonicalized.key, numRows.toInt, isNullAware = isNullAware)
+        HashedRelation(rows, key, numRows.toInt, isNullAware = isNullAware)
       case None =>
-        HashedRelation(rows, canonicalized.key, isNullAware = isNullAware)
+        HashedRelation(rows, key, isNullAware = isNullAware)
     }
   }
 

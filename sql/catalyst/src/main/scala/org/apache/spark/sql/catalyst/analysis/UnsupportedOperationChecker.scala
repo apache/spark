@@ -357,8 +357,8 @@ object UnsupportedOperationChecker extends Logging {
         case Except(left, right, _) if right.isStreaming =>
           throwError("Except on a streaming DataFrame/Dataset on the right is not supported")
 
-        case Intersect(left, right, _) if left.isStreaming && right.isStreaming =>
-          throwError("Intersect between two streaming DataFrames/Datasets is not supported")
+        case Intersect(left, right, _) if left.isStreaming || right.isStreaming =>
+          throwError("Intersect of streaming DataFrames/Datasets is not supported")
 
         case GlobalLimit(_, _) | LocalLimit(_, _)
             if subPlan.children.forall(_.isStreaming) && outputMode == InternalOutputModes.Update =>

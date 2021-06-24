@@ -21,7 +21,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{And, ArrayExists, ArrayFilter, ArrayTransform, CaseWhen, Expression, GreaterThan, If, LambdaFunction, Literal, MapFilter, NamedExpression, Or, UnresolvedNamedLambdaVariable}
+import org.apache.spark.sql.catalyst.expressions.{And, ArrayExists, ArrayFilter, ArrayTransform, CaseWhen, Expression, GreaterThan, If, In, InSet, LambdaFunction, Literal, MapFilter, NamedExpression, Not, Or, UnresolvedNamedLambdaVariable}
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.plans.{Inner, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical.{Assignment, DeleteAction, DeleteFromTable, InsertAction, InsertStarAction, LocalRelation, LogicalPlan, MergeIntoTable, UpdateAction, UpdateStarAction, UpdateTable}
@@ -432,6 +432,21 @@ class ReplaceNullWithFalseInPredicateSuite extends PlanTest {
     testDelete(allFalseCond, FalseLiteral)
     testUpdate(allFalseCond, FalseLiteral)
     testMerge(allFalseCond, FalseLiteral)
+  }
+
+  test("SPARK-34692: Support Not(Int) and Not(InSet) propagate null") {
+    Seq(
+      Not(In("i".attr, Seq(Literal(1), Literal(2), Literal(null)))),
+      Not(In(Literal(null), Seq(Literal(1), Literal(2)))),
+      Not(InSet("i".attr, Set(1, 2, null))),
+      Not(InSet(Literal(null), Set(1, 2)))
+    ).foreach { condition =>
+      testFilter(condition, FalseLiteral)
+      testJoin(condition, FalseLiteral)
+      testDelete(condition, FalseLiteral)
+      testUpdate(condition, FalseLiteral)
+      testMerge(condition, FalseLiteral)
+    }
   }
 
   private def testFilter(originalCond: Expression, expectedCond: Expression): Unit = {

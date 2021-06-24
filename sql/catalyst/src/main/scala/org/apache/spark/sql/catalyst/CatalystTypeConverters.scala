@@ -21,7 +21,7 @@ import java.lang.{Iterable => JavaIterable}
 import java.math.{BigDecimal => JavaBigDecimal}
 import java.math.{BigInteger => JavaBigInteger}
 import java.sql.{Date, Timestamp}
-import java.time.{Duration, Instant, LocalDate, Period}
+import java.time.{Duration, Instant, LocalDate, LocalDateTime, Period}
 import java.util.{Map => JavaMap}
 import javax.annotation.Nullable
 
@@ -32,6 +32,8 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.DayTimeIntervalType._
+import org.apache.spark.sql.types.YearMonthIntervalType._
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -66,6 +68,7 @@ object CatalystTypeConverters {
       case DateType => DateConverter
       case TimestampType if SQLConf.get.datetimeJava8ApiEnabled => InstantConverter
       case TimestampType => TimestampConverter
+      case TimestampWithoutTZType => TimestampWithoutTZConverter
       case dt: DecimalType => new DecimalConverter(dt)
       case BooleanType => BooleanConverter
       case ByteType => ByteConverter
@@ -74,8 +77,8 @@ object CatalystTypeConverters {
       case LongType => LongConverter
       case FloatType => FloatConverter
       case DoubleType => DoubleConverter
-      case DayTimeIntervalType => DurationConverter
-      case YearMonthIntervalType => PeriodConverter
+      case DayTimeIntervalType(_, endField) => DurationConverter(endField)
+      case YearMonthIntervalType(_, endField) => PeriodConverter(endField)
       case dataType: DataType => IdentityConverter(dataType)
     }
     converter.asInstanceOf[CatalystTypeConverter[Any, Any, Any]]
@@ -304,18 +307,23 @@ object CatalystTypeConverters {
       row.getUTF8String(column).toString
   }
 
-  private object DateConverter extends CatalystTypeConverter[Date, Date, Any] {
-    override def toCatalystImpl(scalaValue: Date): Int = DateTimeUtils.fromJavaDate(scalaValue)
+  private object DateConverter extends CatalystTypeConverter[Any, Date, Any] {
+    override def toCatalystImpl(scalaValue: Any): Int = scalaValue match {
+      case d: Date => DateTimeUtils.fromJavaDate(d)
+      case l: LocalDate => DateTimeUtils.localDateToDays(l)
+      case other => throw new IllegalArgumentException(
+        s"The value (${other.toString}) of the type (${other.getClass.getCanonicalName}) "
+          + s"cannot be converted to the ${DateType.sql} type")
+    }
     override def toScala(catalystValue: Any): Date =
       if (catalystValue == null) null else DateTimeUtils.toJavaDate(catalystValue.asInstanceOf[Int])
     override def toScalaImpl(row: InternalRow, column: Int): Date =
       DateTimeUtils.toJavaDate(row.getInt(column))
   }
 
-  private object LocalDateConverter extends CatalystTypeConverter[LocalDate, LocalDate, Any] {
-    override def toCatalystImpl(scalaValue: LocalDate): Int = {
-      DateTimeUtils.localDateToDays(scalaValue)
-    }
+  private object LocalDateConverter extends CatalystTypeConverter[Any, LocalDate, Any] {
+    override def toCatalystImpl(scalaValue: Any): Int =
+      DateConverter.toCatalystImpl(scalaValue)
     override def toScala(catalystValue: Any): LocalDate = {
       if (catalystValue == null) null
       else DateTimeUtils.daysToLocalDate(catalystValue.asInstanceOf[Int])
@@ -324,9 +332,14 @@ object CatalystTypeConverters {
       DateTimeUtils.daysToLocalDate(row.getInt(column))
   }
 
-  private object TimestampConverter extends CatalystTypeConverter[Timestamp, Timestamp, Any] {
-    override def toCatalystImpl(scalaValue: Timestamp): Long =
-      DateTimeUtils.fromJavaTimestamp(scalaValue)
+  private object TimestampConverter extends CatalystTypeConverter[Any, Timestamp, Any] {
+    override def toCatalystImpl(scalaValue: Any): Long = scalaValue match {
+      case t: Timestamp => DateTimeUtils.fromJavaTimestamp(t)
+      case i: Instant => DateTimeUtils.instantToMicros(i)
+      case other => throw new IllegalArgumentException(
+        s"The value (${other.toString}) of the type (${other.getClass.getCanonicalName}) "
+          + s"cannot be converted to the ${TimestampType.sql} type")
+    }
     override def toScala(catalystValue: Any): Timestamp =
       if (catalystValue == null) null
       else DateTimeUtils.toJavaTimestamp(catalystValue.asInstanceOf[Long])
@@ -334,14 +347,31 @@ object CatalystTypeConverters {
       DateTimeUtils.toJavaTimestamp(row.getLong(column))
   }
 
-  private object InstantConverter extends CatalystTypeConverter[Instant, Instant, Any] {
-    override def toCatalystImpl(scalaValue: Instant): Long =
-      DateTimeUtils.instantToMicros(scalaValue)
+  private object InstantConverter extends CatalystTypeConverter[Any, Instant, Any] {
+    override def toCatalystImpl(scalaValue: Any): Long =
+      TimestampConverter.toCatalystImpl(scalaValue)
     override def toScala(catalystValue: Any): Instant =
       if (catalystValue == null) null
       else DateTimeUtils.microsToInstant(catalystValue.asInstanceOf[Long])
     override def toScalaImpl(row: InternalRow, column: Int): Instant =
       DateTimeUtils.microsToInstant(row.getLong(column))
+  }
+
+  private object TimestampWithoutTZConverter
+    extends CatalystTypeConverter[Any, LocalDateTime, Any] {
+    override def toCatalystImpl(scalaValue: Any): Any = scalaValue match {
+      case l: LocalDateTime => DateTimeUtils.localDateTimeToMicros(l)
+      case other => throw new IllegalArgumentException(
+        s"The value (${other.toString}) of the type (${other.getClass.getCanonicalName}) "
+          + s"cannot be converted to the ${TimestampWithoutTZType.sql} type")
+    }
+
+    override def toScala(catalystValue: Any): LocalDateTime =
+      if (catalystValue == null) null
+      else DateTimeUtils.microsToLocalDateTime(catalystValue.asInstanceOf[Long])
+
+    override def toScalaImpl(row: InternalRow, column: Int): LocalDateTime =
+      DateTimeUtils.microsToLocalDateTime(row.getLong(column))
   }
 
   private class DecimalConverter(dataType: DecimalType)
@@ -402,9 +432,10 @@ object CatalystTypeConverters {
     override def toScalaImpl(row: InternalRow, column: Int): Double = row.getDouble(column)
   }
 
-  private object DurationConverter extends CatalystTypeConverter[Duration, Duration, Any] {
+  private case class DurationConverter(endField: Byte)
+      extends CatalystTypeConverter[Duration, Duration, Any] {
     override def toCatalystImpl(scalaValue: Duration): Long = {
-      IntervalUtils.durationToMicros(scalaValue)
+      IntervalUtils.durationToMicros(scalaValue, endField)
     }
     override def toScala(catalystValue: Any): Duration = {
       if (catalystValue == null) null
@@ -414,9 +445,10 @@ object CatalystTypeConverters {
       IntervalUtils.microsToDuration(row.getLong(column))
   }
 
-  private object PeriodConverter extends CatalystTypeConverter[Period, Period, Any] {
+  private case class PeriodConverter(endField: Byte)
+      extends CatalystTypeConverter[Period, Period, Any] {
     override def toCatalystImpl(scalaValue: Period): Int = {
-      IntervalUtils.periodToMonths(scalaValue)
+      IntervalUtils.periodToMonths(scalaValue, endField)
     }
     override def toScala(catalystValue: Any): Period = {
       if (catalystValue == null) null
@@ -479,6 +511,7 @@ object CatalystTypeConverters {
     case ld: LocalDate => LocalDateConverter.toCatalyst(ld)
     case t: Timestamp => TimestampConverter.toCatalyst(t)
     case i: Instant => InstantConverter.toCatalyst(i)
+    case l: LocalDateTime => TimestampWithoutTZConverter.toCatalyst(l)
     case d: BigDecimal => new DecimalConverter(DecimalType(d.precision, d.scale)).toCatalyst(d)
     case d: JavaBigDecimal => new DecimalConverter(DecimalType(d.precision, d.scale)).toCatalyst(d)
     case seq: Seq[Any] => new GenericArrayData(seq.map(convertToCatalyst).toArray)
@@ -491,8 +524,8 @@ object CatalystTypeConverters {
         map,
         (key: Any) => convertToCatalyst(key),
         (value: Any) => convertToCatalyst(value))
-    case d: Duration => DurationConverter.toCatalyst(d)
-    case p: Period => PeriodConverter.toCatalyst(p)
+    case d: Duration => DurationConverter(SECOND).toCatalyst(d)
+    case p: Period => PeriodConverter(MONTH).toCatalyst(p)
     case other => other
   }
 

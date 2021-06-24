@@ -23,13 +23,13 @@ import scala.util.control.Exception.allCatch
 
 import com.fasterxml.jackson.core._
 
-import org.apache.spark.SparkException
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion
 import org.apache.spark.sql.catalyst.expressions.ExprUtils
 import org.apache.spark.sql.catalyst.json.JacksonUtils.nextUntil
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -74,8 +74,7 @@ private[sql] class JsonInferSchema(options: JSONOptions) extends Serializable {
             case DropMalformedMode =>
               None
             case FailFastMode =>
-              throw new SparkException("Malformed records are detected in schema inference. " +
-                s"Parse Mode: ${FailFastMode.name}.", e)
+              throw QueryExecutionErrors.malformedRecordsDetectedInSchemaInferenceError(e)
           }
         }
       }.reduceOption(typeMerger).toIterator
@@ -192,7 +191,7 @@ private[sql] class JsonInferSchema(options: JSONOptions) extends Serializable {
       case VALUE_TRUE | VALUE_FALSE => BooleanType
 
       case _ =>
-        throw new SparkException("Malformed JSON")
+        throw QueryExecutionErrors.malformedJSONError()
     }
   }
 
@@ -274,9 +273,7 @@ object JsonInferSchema {
 
     case FailFastMode =>
       // If `other` is not struct type, consider it as malformed one and throws an exception.
-      throw new SparkException("Malformed records are detected in schema inference. " +
-        s"Parse Mode: ${FailFastMode.name}. Reasons: Failed to infer a common schema. " +
-        s"Struct types are expected, but `${other.catalogString}` was found.")
+      throw QueryExecutionErrors.malformedRecordsDetectedInSchemaInferenceError(other)
   }
 
   /**

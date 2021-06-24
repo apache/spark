@@ -22,6 +22,7 @@ import scala.annotation.tailrec
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.trees.TreePattern.EXCEPT
 
 
 /**
@@ -46,7 +47,7 @@ object ReplaceExceptWithFilter extends Rule[LogicalPlan] {
       return plan
     }
 
-    plan.transform {
+    plan.transformWithPruning(_.containsPattern(EXCEPT), ruleId) {
       case e @ Except(left, right, false) if isEligible(left, right) =>
         val filterCondition = combineFilters(skipProject(right)).asInstanceOf[Filter].condition
         if (filterCondition.deterministic) {

@@ -20,7 +20,8 @@ package org.apache.spark.sql
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
-import org.apache.spark.sql.connector.{InMemoryPartitionTableCatalog, SchemaRequiredDataSource}
+import org.apache.spark.sql.connector.SchemaRequiredDataSource
+import org.apache.spark.sql.connector.catalog.InMemoryPartitionTableCatalog
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
@@ -799,6 +800,18 @@ class FileSourceCharVarcharTestSuite extends CharVarcharTestSuite with SharedSpa
           sql("SELECT '123456' as col").write.format(format).save(dir.toString)
           sql(s"CREATE TABLE t (col $typ(2)) using $format LOCATION '$dir'")
           checkAnswer(sql("select * from t"), Row("123456"))
+        }
+      }
+    }
+  }
+
+  test("SPARK-35359: create table and insert data over length values") {
+    Seq("char", "varchar").foreach { typ =>
+      withSQLConf((SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key, "true")) {
+        withTable("t") {
+          sql(s"CREATE TABLE t (col $typ(2)) using $format")
+          sql("INSERT INTO t SELECT 'aaa'")
+          checkAnswer(sql("select * from t"), Row("aaa"))
         }
       }
     }

@@ -76,7 +76,7 @@ private[sql] class SessionState(
     val streamingQueryManagerBuilder: () => StreamingQueryManager,
     val listenerManager: ExecutionListenerManager,
     resourceLoaderBuilder: () => SessionResourceLoader,
-    createQueryExecution: LogicalPlan => QueryExecution,
+    createQueryExecution: (LogicalPlan, CommandExecutionMode.Value) => QueryExecution,
     createClone: (SparkSession, SessionState) => SessionState,
     val columnarRules: Seq[ColumnarRule],
     val queryStagePrepRules: Seq[Rule[SparkPlan]]) {
@@ -119,7 +119,10 @@ private[sql] class SessionState(
   //  Helper methods, partially leftover from pre-2.0 days
   // ------------------------------------------------------
 
-  def executePlan(plan: LogicalPlan): QueryExecution = createQueryExecution(plan)
+  def executePlan(
+      plan: LogicalPlan,
+      mode: CommandExecutionMode.Value = CommandExecutionMode.ALL): QueryExecution =
+    createQueryExecution(plan, mode)
 }
 
 private[sql] object SessionState {
@@ -150,10 +153,7 @@ class SessionResourceLoader(session: SparkSession) extends FunctionResourceLoade
     resource.resourceType match {
       case JarResource => addJar(resource.uri)
       case FileResource => session.sparkContext.addFile(resource.uri)
-      case ArchiveResource =>
-        throw new AnalysisException(
-          "Archive is not allowed to be loaded. If YARN mode is used, " +
-            "please use --archives options while calling spark-submit.")
+      case ArchiveResource => session.sparkContext.addArchive(resource.uri)
     }
   }
 

@@ -26,6 +26,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory}
 import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.execution.metric.{CustomMetrics, SQLMetric}
 import org.apache.spark.sql.vectorized.ColumnarBatch
 
 class DataSourceRDDPartition(val index: Int, val inputPartition: InputPartition)
@@ -37,7 +38,8 @@ class DataSourceRDD(
     sc: SparkContext,
     @transient private val inputPartitions: Seq[InputPartition],
     partitionReaderFactory: PartitionReaderFactory,
-    columnarReads: Boolean)
+    columnarReads: Boolean,
+    customMetrics: Map[String, SQLMetric])
   extends RDD[InternalRow](sc, Nil) {
 
   override protected def getPartitions: Array[Partition] = {
@@ -55,14 +57,21 @@ class DataSourceRDD(
     val inputPartition = castPartition(split).inputPartition
     val (iter, reader) = if (columnarReads) {
       val batchReader = partitionReaderFactory.createColumnarReader(inputPartition)
-      val iter = new MetricsBatchIterator(new PartitionIterator[ColumnarBatch](batchReader))
+      val iter = new MetricsBatchIterator(
+        new PartitionIterator[ColumnarBatch](batchReader, customMetrics))
       (iter, batchReader)
     } else {
       val rowReader = partitionReaderFactory.createReader(inputPartition)
-      val iter = new MetricsRowIterator(new PartitionIterator[InternalRow](rowReader))
+      val iter = new MetricsRowIterator(
+        new PartitionIterator[InternalRow](rowReader, customMetrics))
       (iter, rowReader)
     }
-    context.addTaskCompletionListener[Unit](_ => reader.close())
+    context.addTaskCompletionListener[Unit] { _ =>
+      // In case of early stopping before consuming the entire iterator,
+      // we need to do one more metric update at the end of the task.
+      CustomMetrics.updateMetrics(reader.currentMetricsValues, customMetrics)
+      reader.close()
+    }
     // TODO: SPARK-25083 remove the type erasure hack in data source scan
     new InterruptibleIterator(context, iter.asInstanceOf[Iterator[InternalRow]])
   }
@@ -72,8 +81,12 @@ class DataSourceRDD(
   }
 }
 
-private class PartitionIterator[T](reader: PartitionReader[T]) extends Iterator[T] {
+private class PartitionIterator[T](
+    reader: PartitionReader[T],
+    customMetrics: Map[String, SQLMetric]) extends Iterator[T] {
   private[this] var valuePrepared = false
+
+  private var numRow = 0L
 
   override def hasNext: Boolean = {
     if (!valuePrepared) {
@@ -86,6 +99,10 @@ private class PartitionIterator[T](reader: PartitionReader[T]) extends Iterator[
     if (!hasNext) {
       throw QueryExecutionErrors.endOfStreamError()
     }
+    if (numRow % CustomMetrics.NUM_ROWS_PER_UPDATE == 0) {
+      CustomMetrics.updateMetrics(reader.currentMetricsValues, customMetrics)
+    }
+    numRow += 1
     valuePrepared = false
     reader.get()
   }

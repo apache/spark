@@ -24,8 +24,8 @@ license: |
 The `GROUP BY` clause is used to group the rows based on a set of specified grouping expressions and compute aggregations on
 the group of rows based on one or more specified aggregate functions. Spark also supports advanced aggregations to do multiple
 aggregations for the same input record set via `GROUPING SETS`, `CUBE`, `ROLLUP` clauses.
-The grouping expressions and advanced aggregations can be mixed in the `GROUP BY` clause.
-See more details in the `Mixed Grouping Analytics` section. When a FILTER clause is attached to
+The grouping expressions and advanced aggregations can be mixed in the `GROUP BY` clause and nested in a `GROUPING SETS` clause.
+See more details in the `Mixed/Nested Grouping Analytics` section. When a FILTER clause is attached to
 an aggregate function, only the matching rows are passed to that function.
 
 ### Syntax
@@ -95,13 +95,17 @@ aggregate_name ( [ DISTINCT ] expression [ , ... ] ) [ FILTER ( WHERE boolean_ex
      (product, warehouse, location), (warehouse), (product), (warehouse, product), ())`.
     The N elements of a `CUBE` specification results in 2^N `GROUPING SETS`.
 
-* **Mixed Grouping Analytics**
+* **Mixed/Nested Grouping Analytics**
 
-    A GROUP BY clause can include multiple  `group_expression`s and multiple `CUBE|ROLLUP|GROUPING SETS`s.
+    A GROUP BY clause can include multiple `group_expression`s and multiple `CUBE|ROLLUP|GROUPING SETS`s.
+    `GROUPING SETS` can also have nested `CUBE|ROLLUP|GROUPING SETS` clauses, e.g.
+    `GROUPING SETS(ROLLUP(warehouse, location), CUBE(warehouse, location))`,
+    `GROUPING SETS(warehouse, GROUPING SETS(location, GROUPING SETS(ROLLUP(warehouse, location), CUBE(warehouse, location))))`.
     `CUBE|ROLLUP` is just a syntax sugar for `GROUPING SETS`, please refer to the sections above for
     how to translate `CUBE|ROLLUP` to `GROUPING SETS`. `group_expression` can be treated as a single-group
     `GROUPING SETS` under this context. For multiple `GROUPING SETS` in the `GROUP BY` clause, we generate
-    a single `GROUPING SETS` by doing a cross-product of the original `GROUPING SETS`s. For example,
+    a single `GROUPING SETS` by doing a cross-product of the original `GROUPING SETS`s. For nested `GROUPING SETS` in the `GROUPING SETS` clause,
+    we simply take its grouping sets and strip it. For example,
     `GROUP BY warehouse, GROUPING SETS((product), ()), GROUPING SETS((location, size), (location), (size), ())`
     and `GROUP BY warehouse, ROLLUP(product), CUBE(location, size)` is equivalent to 
     `GROUP BY GROUPING SETS(
@@ -113,7 +117,10 @@ aggregate_name ( [ DISTINCT ] expression [ , ... ] ) [ FILTER ( WHERE boolean_ex
         (warehouse, location),
         (warehouse, size),
         (warehouse))`.
- 
+    
+    `GROUP BY GROUPING SETS(GROUPING SETS(warehouse), GROUPING SETS((warehouse, product)))` is equivalent to 
+    `GROUP BY GROUPING SETS((warehouse), (warehouse, product))`.
+
 * **aggregate_name**
 
     Specifies an aggregate function name (MIN, MAX, COUNT, SUM, AVG, etc.).

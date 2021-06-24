@@ -22,10 +22,10 @@ import java.util.Collections
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{NamedRelation, NoSuchDatabaseException, NoSuchNamespaceException, NoSuchTableException, UnresolvedV2Relation}
 import org.apache.spark.sql.catalyst.plans.logical.{AlterTable, CreateTableAsSelectStatement, CreateTableStatement, ReplaceTableAsSelectStatement, ReplaceTableStatement, SerdeInfo}
 import org.apache.spark.sql.connector.catalog.TableChange._
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.types.{ArrayType, DataType, MapType, NullType, StructField, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -386,8 +386,7 @@ private[sql] object CatalogV2Util {
       case _ => dt.isInstanceOf[NullType]
     }
     if (containsNullType(dt)) {
-      throw new AnalysisException(
-        s"Cannot create tables with ${NullType.simpleString} type.")
+      throw QueryCompilationErrors.cannotCreateTablesWithNullTypeError()
     }
   }
 

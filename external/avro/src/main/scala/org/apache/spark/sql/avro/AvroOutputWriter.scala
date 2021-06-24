@@ -38,7 +38,7 @@ import org.apache.spark.sql.types._
 
 // NOTE: This class is instantiated and used on executor side only, no need to be serializable.
 private[avro] class AvroOutputWriter(
-    path: String,
+    val path: String,
     context: TaskAttemptContext,
     schema: StructType,
     avroSchema: Schema) extends OutputWriter {

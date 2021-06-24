@@ -319,7 +319,7 @@ class DataFrameTests(ReusedSQLTestCase):
         self.assertTupleEqual(row, (u'Alice', 20, None))
 
         # should fail if subset is not list, tuple or None
-        with self.assertRaises(ValueError):
+        with self.assertRaises(TypeError):
             self.spark.createDataFrame(
                 [(u'Alice', 10, 80.1)], schema).replace({10: 11}, subset=1).first()
 
@@ -329,7 +329,7 @@ class DataFrameTests(ReusedSQLTestCase):
                 [(u'Alice', 10, 80.1)], schema).replace(["Alice", "Bob"], ["Eve"]).first()
 
         # should fail if when received unexpected type
-        with self.assertRaises(ValueError):
+        with self.assertRaises(TypeError):
             from datetime import datetime
             self.spark.createDataFrame(
                 [(u'Alice', 10, 80.1)], schema).replace(datetime.now(), datetime.now()).first()
@@ -818,7 +818,7 @@ class DataFrameTests(ReusedSQLTestCase):
 
     def test_same_semantics_error(self):
         with QuietTest(self.sc):
-            with self.assertRaisesRegex(ValueError, "should be of DataFrame.*int"):
+            with self.assertRaisesRegex(TypeError, "should be of DataFrame.*int"):
                 self.spark.range(10).sameSemantics(1)
 
     def test_input_files(self):
@@ -836,6 +836,24 @@ class DataFrameTests(ReusedSQLTestCase):
                 self.assertTrue(tpath in file_path)
         finally:
             shutil.rmtree(tpath)
+
+    def test_df_show(self):
+        # SPARK-35408: ensure better diagnostics if incorrect parameters are passed
+        # to DataFrame.show
+
+        df = self.spark.createDataFrame([('foo',)])
+        df.show(5)
+        df.show(5, True)
+        df.show(5, 1, True)
+        df.show(n=5, truncate='1', vertical=False)
+        df.show(n=5, truncate=1.5, vertical=False)
+
+        with self.assertRaisesRegex(TypeError, "Parameter 'n'"):
+            df.show(True)
+        with self.assertRaisesRegex(TypeError, "Parameter 'vertical'"):
+            df.show(vertical='foo')
+        with self.assertRaisesRegex(TypeError, "Parameter 'truncate=foo'"):
+            df.show(truncate='foo')
 
 
 class QueryExecutionListenerTests(unittest.TestCase, SQLTestUtils):

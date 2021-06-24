@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.trees.TreePattern.{NULL_CHECK, TreePattern}
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
 
@@ -345,6 +346,8 @@ case class NaNvl(left: Expression, right: Expression)
 case class IsNull(child: Expression) extends UnaryExpression with Predicate {
   override def nullable: Boolean = false
 
+  final override val nodePatterns: Seq[TreePattern] = Seq(NULL_CHECK)
+
   override def eval(input: InternalRow): Any = {
     child.eval(input) == null
   }
@@ -374,6 +377,8 @@ case class IsNull(child: Expression) extends UnaryExpression with Predicate {
   group = "predicate_funcs")
 case class IsNotNull(child: Expression) extends UnaryExpression with Predicate {
   override def nullable: Boolean = false
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(NULL_CHECK)
 
   override def eval(input: InternalRow): Any = {
     child.eval(input) != null

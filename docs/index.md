@@ -25,11 +25,6 @@ It provides high-level APIs in Java, Scala, Python and R,
 and an optimized engine that supports general execution graphs.
 It also supports a rich set of higher-level tools including [Spark SQL](sql-programming-guide.html) for SQL and structured data processing, [MLlib](ml-guide.html) for machine learning, [GraphX](graphx-programming-guide.html) for graph processing, and [Structured Streaming](structured-streaming-programming-guide.html) for incremental computation and stream processing.
 
-# Security
-
-Security in Spark is OFF by default. This could mean you are vulnerable to attack by default.
-Please see [Spark Security](security.html) before downloading and running Spark.
-
 # Downloading
 
 Get Spark from the [downloads page](https://spark.apache.org/downloads.html) of the project website. This documentation is for Spark version {{site.SPARK_VERSION}}. Spark uses Hadoop's client libraries for HDFS and YARN. Downloads are pre-packaged for a handful of popular Hadoop versions.
@@ -99,7 +94,7 @@ Spark can run both by itself, or over several existing cluster managers. It curr
 options for deployment:
 
 * [Standalone Deploy Mode](spark-standalone.html): simplest way to deploy Spark on a private cluster
-* [Apache Mesos](running-on-mesos.html)
+* [Apache Mesos](running-on-mesos.html) (deprecated)
 * [Hadoop YARN](running-on-yarn.html)
 * [Kubernetes](running-on-kubernetes.html)
 

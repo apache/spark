@@ -3,103 +3,103 @@
 -- !query schema
 struct<brand_id:int,brand:string,ext_price:decimal(17,2)>
 -- !query output
-2001001	amalgimporto #x                                   	128393.59
-5001001	amalgscholar #x                                   	114563.05
-1001001	amalgamalg #x                                     	106541.65
-5003001	exportischolar #x                                 	104481.32
-1002001	importoamalg #x                                   	98315.70
-5002001	importoscholar #x                                 	81980.18
-4001001	amalgedu pack #x                                  	75471.82
-5004001	edu packscholar #x                                	73945.27
-1004002	edu packamalg #x                                  	66973.45
-3003001	exportiexporti #x                                 	65256.40
-4003001	exportiedu pack #x                                	58980.05
-4002001	importoedu pack #x                                	52314.09
-5001002	amalgscholar #x                                   	50720.91
-1001002	amalgamalg #x                                     	48363.52
-1004001	edu packamalg #x                                  	46127.07
-9013009	exportiunivamalg #x                               	44895.45
-2004001	edu packimporto #x                                	44063.02
-2002001	importoimporto #x                                 	43360.76
-4001002	amalgedu pack #x                                  	41578.64
-5002002	importoscholar #x                                 	40981.69
-2004002	edu packimporto #x                                	37031.29
-10015011	scholaramalgamalg #x                             	36984.49
-5003002	exportischolar #x                                 	36835.57
-1003001	exportiamalg #x                                   	36391.68
-7009005	maxibrand #x                                      	35893.23
-3001001	amalgexporti #x                                   	34860.20
-6002002	importocorp #x                                    	34241.20
-10014016	edu packamalgamalg #x                            	33635.08
-6005001	scholarcorp #x                                    	33315.76
-8001003	amalgnameless #x                                  	32795.69
-3001002	amalgexporti #x                                   	32035.45
-7003005	exportibrand #x                                   	30027.76
-8005010	scholarnameless #x                               	28072.90
-3004001	edu packexporti #x                                	27273.13
-4004002	edu packedu pack #x                               	27176.70
-9011009	amalgunivamalg #x                                 	26702.81
-6011001	amalgbrand #x                                     	26270.95
-9009002	maximaxi #x                                       	25941.37
-8011009	amalgmaxi #x                                      	24766.62
-6014007	edu packbrand #x                                  	24592.55
-10016003	corpamalgamalg #x                                 	24575.24
-3002001	importoexporti #x                                 	24004.65
-3003002	exportiexporti #x                                 	23607.27
-10005001	scholarunivamalg #x                               	22468.38
-6014001	edu packbrand #x                                  	22383.40
-6006002	corpcorp #x                                       	22325.52
-9003003	exportimaxi #x                                    	21996.83
-8009003	maxinameless #x                                   	21849.29
-8004009	edu packnameless #x                               	21775.18
-8006008	corpnameless #x                                   	20393.22
-3002002	importoexporti #x                                 	20292.13
-10004001	edu packunivamalg #x                              	20237.13
-8006005	corpnameless #x                                   	19946.01
-2003001	exportiimporto #x                                 	19467.87
-8010006	univmaxi #x                                       	19389.31
-2001002	amalgimporto #x                                   	19388.05
-6015001	scholarbrand #x                                   	19136.97
-10015001	scholaramalgamalg #x                              	18789.40
-9016009	corpunivamalg #x                                  	18671.29
-8009007	maxinameless #x                                   	18581.52
-6002001	importocorp #x                                    	18495.43
-6013005	exportibrand #x                                   	18356.01
-7002004	importobrand #x                                   	18040.61
-6008001	namelesscorp #x                                   	17727.46
-9008008	namelessmaxi #x                                   	17517.04
-8002010	importonameless #x                               	16810.57
-6013007	exportibrand #x                                   	16727.14
-7015003	scholarnameless #x                                	16482.66
-4002002	importoedu pack #x                                	16426.77
-10006001	corpunivamalg #x                                  	15835.02
-7006010	corpbrand #x                                     	15745.12
-8013007	exportimaxi #x                                    	15718.95
-9005011	scholarmaxi #x                                   	15426.87
-7011009	amalgnameless #x                                  	15381.64
-6009008	maxicorp #x                                       	15232.66
-10012012	importoamalgamalg #x                             	14995.50
-10006017	corpunivamalg #x                                 	14040.95
-9016003	corpunivamalg #x                                  	13412.20
-6015005	scholarbrand #x                                   	13026.37
-8004003	edu packnameless #x                               	12978.96
-1003002	exportiamalg #x                                   	12479.78
-7015007	scholarnameless #x                                	11804.43
-6014008	edu packbrand #x                                  	11413.01
-6015003	scholarbrand #x                                   	11218.72
-6009003	maxicorp #x                                       	11124.10
-2003002	exportiimporto #x                                 	10938.52
-6011006	amalgbrand #x                                     	10284.31
-6008008	namelesscorp #x                                   	10056.32
-6001005	amalgcorp #x                                      	9749.25
-9004008	edu packmaxi #x                                   	9443.32
-6003006	exporticorp #x                                    	9165.48
-10011013	amalgamalgamalg #x                               	8336.80
-10013009	exportiamalgamalg #x                              	8324.62
-6006006	corpcorp #x                                       	8284.80
-8013006	exportimaxi #x                                    	7794.40
-8012005	importomaxi #x                                    	7777.35
-9011003	amalgunivamalg #x                                 	7703.20
-6005003	scholarcorp #x                                    	6941.66
-9011008	amalgunivamalg #x                                 	6554.12
-9005002	scholarmaxi #x                                    	5871.46
+4002001	importoedu pack #x                                	141955.03
+2001001	amalgimporto #x                                   	115066.00
+2003001	exportiimporto #x                                 	96597.01
+5003002	exportischolar #x                                 	93316.15
+1002001	importoamalg #x                                   	85318.86
+2002001	importoimporto #x                                 	85035.18
+3003001	exportiexporti #x                                 	80017.81
+2004001	edu packimporto #x                                	68604.08
+9001008	amalgmaxi #x                                      	60900.34
+4004001	edu packedu pack #x                               	58815.34
+4003002	exportiedu pack #x                                	56587.37
+6012003	importobrand #x                                   	55151.38
+1001002	amalgamalg #x                                     	54471.07
+3004001	edu packexporti #x                                	54057.61
+3001001	amalgexporti #x                                   	52690.20
+4003001	exportiedu pack #x                                	51021.71
+5002002	importoscholar #x                                 	46601.52
+8002007	importonameless #x                                	45983.92
+6016003	corpbrand #x                                      	44911.30
+1003001	exportiamalg #x                                   	44127.51
+6014003	edu packbrand #x                                  	41310.31
+7014009	edu packnameless #x                               	40891.96
+7008004	namelessbrand #x                                  	36589.35
+10001016	amalgunivamalg #x                                	36270.01
+6016004	corpbrand #x                                      	36208.64
+9013011	exportiunivamalg #x                              	35794.13
+1003002	exportiamalg #x                                   	35113.55
+1004002	edu packamalg #x                                  	34667.61
+7016005	corpnameless #x                                   	33397.41
+7014005	edu packnameless #x                               	33313.92
+7012010	importonameless #x                               	32862.88
+7012001	importonameless #x                                	32815.12
+6001007	amalgcorp #x                                      	31948.28
+3002001	importoexporti #x                                 	31518.29
+8015001	scholarmaxi #x                                    	31235.19
+10012006	importoamalgamalg #x                              	31123.11
+6004004	edu packcorp #x                                   	29839.27
+10009008	maxiunivamalg #x                                  	29180.04
+5004001	edu packscholar #x                                	28912.61
+9006011	corpmaxi #x                                      	26493.45
+8014004	edu packmaxi #x                                   	26228.69
+9012008	importounivamalg #x                               	25354.49
+8015003	scholarmaxi #x                                    	23994.34
+7013009	exportinameless #x                                	23887.30
+2004002	edu packimporto #x                                	23778.49
+6005005	scholarcorp #x                                    	23243.88
+5001001	amalgscholar #x                                   	23043.20
+8009007	maxinameless #x                                   	22910.03
+8004009	edu packnameless #x                               	22679.38
+9016002	corpunivamalg #x                                  	21881.94
+8003001	exportinameless #x                                	21655.96
+8004004	edu packnameless #x                               	20920.43
+10010007	univamalgamalg #x                                 	20530.11
+8007004	brandnameless #x                                  	19973.79
+9015005	scholarunivamalg #x                               	19929.31
+6004002	edu packcorp #x                                   	19890.20
+10004005	edu packunivamalg #x                              	19819.04
+9014008	edu packunivamalg #x                              	19700.99
+5003001	exportischolar #x                                 	19595.76
+7007006	brandbrand #x                                     	19541.72
+8009001	maxinameless #x                                   	19474.02
+2002002	importoimporto #x                                 	19249.25
+8003002	exportinameless #x                                	18931.96
+9016011	corpunivamalg #x                                 	18840.83
+10012011	importoamalgamalg #x                             	18632.17
+9004005	edu packmaxi #x                                   	17997.32
+7003003	exportibrand #x                                   	16699.26
+9011011	amalgunivamalg #x                                	16656.62
+10008002	namelessunivamalg #x                              	16609.49
+10016015	corpamalgamalg #x                                	16397.21
+8008001	namelessnameless #x                               	15538.37
+6004007	edu packcorp #x                                   	15474.56
+7006001	corpbrand #x                                      	15365.31
+6010003	univbrand #x                                      	15337.21
+1001001	amalgamalg #x                                     	14813.15
+9012003	importounivamalg #x                               	14033.76
+8015008	scholarmaxi #x                                    	13408.30
+6002005	importocorp #x                                    	13393.21
+7010009	univnameless #x                                   	13359.47
+10010002	univamalgamalg #x                                 	13288.24
+8014003	edu packmaxi #x                                   	13137.78
+10001009	amalgunivamalg #x                                 	12326.55
+5001002	amalgscholar #x                                   	12319.21
+5002001	importoscholar #x                                 	12023.80
+8005010	scholarnameless #x                               	12017.53
+6008005	namelesscorp #x                                   	11908.45
+3001002	amalgexporti #x                                   	11679.83
+10008006	namelessunivamalg #x                              	11503.15
+10014009	edu packamalgamalg #x                             	11462.45
+10007017	brandunivamalg #x                                	11188.38
+7002004	importobrand #x                                   	10699.51
+7001006	amalgbrand #x                                     	10166.47
+10004009	edu packunivamalg #x                              	9913.46
+10002011	importounivamalg #x                              	9828.64
+3003002	exportiexporti #x                                 	9521.40
+10014017	edu packamalgamalg #x                            	9150.09
+6002003	importocorp #x                                    	8810.78
+6001005	amalgcorp #x                                      	8582.71
+4001001	amalgedu pack #x                                  	8362.72
+8004002	edu packnameless #x                               	8010.27

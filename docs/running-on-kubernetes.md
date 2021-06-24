@@ -25,8 +25,10 @@ Kubernetes scheduler that has been added to Spark.
 
 # Security
 
-Security in Spark is OFF by default. This could mean you are vulnerable to attack by default.
-Please see [Spark Security](security.html) and the specific advice below before running Spark.
+Security features like authentication are not enabled by default. When deploying a cluster that is open to the internet
+or an untrusted network, it's important to secure access to the cluster to prevent unauthorized applications
+from running on the cluster.
+Please see [Spark Security](security.html) and the specific security sections in this doc before running Spark.
 
 ## User Identity
 

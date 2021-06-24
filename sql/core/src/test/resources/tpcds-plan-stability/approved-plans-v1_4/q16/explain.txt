@@ -11,9 +11,9 @@
                      :  +- * BroadcastHashJoin Inner BuildRight (32)
                      :     :- * Project (26)
                      :     :  +- * BroadcastHashJoin Inner BuildRight (25)
-                     :     :     :- SortMergeJoin LeftAnti (19)
+                     :     :     :- * SortMergeJoin LeftAnti (19)
                      :     :     :  :- * Project (13)
-                     :     :     :  :  +- SortMergeJoin LeftSemi (12)
+                     :     :     :  :  +- * SortMergeJoin LeftSemi (12)
                      :     :     :  :     :- * Sort (6)
                      :     :     :  :     :  +- Exchange (5)
                      :     :     :  :     :     +- * Project (4)
@@ -94,7 +94,7 @@ Arguments: hashpartitioning(cs_order_number#11, 5), ENSURE_REQUIREMENTS, [id=#13
 Input [2]: [cs_warehouse_sk#10, cs_order_number#11]
 Arguments: [cs_order_number#11 ASC NULLS FIRST], false, 0
 
-(12) SortMergeJoin
+(12) SortMergeJoin [codegen id : 5]
 Left keys [1]: [cs_order_number#5]
 Right keys [1]: [cs_order_number#11]
 Join condition: NOT (cs_warehouse_sk#4 = cs_warehouse_sk#10)
@@ -124,7 +124,7 @@ Arguments: hashpartitioning(cr_order_number#14, 5), ENSURE_REQUIREMENTS, [id=#16
 Input [1]: [cr_order_number#14]
 Arguments: [cr_order_number#14 ASC NULLS FIRST], false, 0
 
-(19) SortMergeJoin
+(19) SortMergeJoin [codegen id : 11]
 Left keys [1]: [cs_order_number#5]
 Right keys [1]: [cr_order_number#14]
 Join condition: None

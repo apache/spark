@@ -42,14 +42,12 @@ import org.apache.spark.util.{CircularBuffer, Utils}
 /**
  * Transforms the input by forking and running the specified script.
  *
- * @param input the set of expression that should be passed to the script.
  * @param script the command that should be executed.
  * @param output the attributes that are produced by the script.
  * @param child logical plan whose output is transformed.
  * @param ioschema the class set that defines how to handle input/output data.
  */
 private[hive] case class HiveScriptTransformationExec(
-    input: Seq[Expression],
     script: String,
     output: Seq[Attribute],
     child: SparkPlan,
@@ -142,14 +140,14 @@ private[hive] case class HiveScriptTransformationExec(
 
     val (outputStream, proc, inputStream, stderrBuffer) = initProc
 
-    val (inputSerde, inputSoi) = initInputSerDe(ioschema, input).getOrElse((null, null))
+    val (inputSerde, inputSoi) = initInputSerDe(ioschema, child.output).getOrElse((null, null))
 
     // For HiveScriptTransformationExec, if inputSerde == null, but outputSerde != null
     // We will use StringBuffer to pass data, in this case, we should cast data as string too.
     val finalInput = if (inputSerde == null) {
       inputExpressionsWithoutSerde
     } else {
-      input
+      child.output
     }
 
     val outputProjection = new InterpretedProjection(finalInput, child.output)

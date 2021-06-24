@@ -26,7 +26,7 @@ from typing import Union
 import pandas as pd
 
 from pyspark.pandas import config, namespace, sql_processor
-from pyspark.pandas.accessors import KoalasFrameMethods
+from pyspark.pandas.accessors import PandasOnSparkFrameMethods
 from pyspark.pandas.frame import DataFrame
 from pyspark.pandas.datetimes import DatetimeMethods
 from pyspark.pandas.groupby import DataFrameGroupBy, SeriesGroupBy
@@ -103,7 +103,7 @@ def attach(logger_module: Union[str, ModuleType]) -> None:
         CachedSparkFrameMethods,
         SparkFrameMethods,
         SparkIndexOpsMethods,
-        KoalasFrameMethods,
+        PandasOnSparkFrameMethods,
     ]
 
     try:

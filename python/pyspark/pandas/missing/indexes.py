@@ -191,13 +191,13 @@ class MissingPandasLikeMultiIndex(object):
     codes = _unsupported_property(
         "codes",
         reason="'codes' requires to collect all data into the driver which is against the "
-        "design principle of Koalas. Alternatively, you could call 'to_pandas()' and"
+        "design principle of pandas-on-Spark. Alternatively, you could call 'to_pandas()' and"
         " use 'codes' property in pandas.",
     )
     levels = _unsupported_property(
         "levels",
         reason="'levels' requires to collect all data into the driver which is against the "
-        "design principle of Koalas. Alternatively, you could call 'to_pandas()' and"
+        "design principle of pandas-on-Spark. Alternatively, you could call 'to_pandas()' and"
         " use 'levels' property in pandas.",
     )
     __iter__ = common.__iter__(_unsupported_function)

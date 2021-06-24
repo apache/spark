@@ -26,40 +26,17 @@ import org.apache.commons.io.filefilter.TrueFileFilter
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.matchers.should.Matchers._
 
-import org.apache.spark.internal.config
+import org.apache.spark.internal.config.SHUFFLE_MANAGER
 import org.apache.spark.rdd.ShuffledRDD
 import org.apache.spark.serializer.{JavaSerializer, KryoSerializer}
 import org.apache.spark.shuffle.sort.SortShuffleManager
-import org.apache.spark.util.Utils
 
 class SortShuffleSuite extends ShuffleSuite with BeforeAndAfterAll {
 
   // This test suite should run all tests in ShuffleSuite with sort-based shuffle.
-
-  private var tempDir: File = _
-
   override def beforeAll(): Unit = {
     super.beforeAll()
-    // Once 'spark.local.dir' is set, it is cached. Unless this is manually cleared
-    // before/after a test, it could return the same directory even if this property
-    // is configured.
-    Utils.clearLocalRootDirs()
-    conf.set(config.SHUFFLE_MANAGER, "sort")
-  }
-
-  override def beforeEach(): Unit = {
-    super.beforeEach()
-    tempDir = Utils.createTempDir()
-    conf.set("spark.local.dir", tempDir.getAbsolutePath)
-  }
-
-  override def afterEach(): Unit = {
-    try {
-      Utils.deleteRecursively(tempDir)
-      Utils.clearLocalRootDirs()
-    } finally {
-      super.afterEach()
-    }
+    conf.set(SHUFFLE_MANAGER, "sort")
   }
 
   test("SortShuffleManager properly cleans up files for shuffles that use the serialized path") {

@@ -20,12 +20,13 @@ package org.apache.spark.sql.jdbc.v2
 import org.apache.log4j.Level
 
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.jdbc.DockerIntegrationFunSuite
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.DockerTest
 
 @DockerTest
-private[v2] trait V2JDBCTest extends SharedSparkSession {
+private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFunSuite {
   val catalogName: String
   // dialect specific update column type test
   def testUpdateColumnType(tbl: String): Unit

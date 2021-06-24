@@ -36,7 +36,8 @@ import org.apache.spark.util.ThreadUtils
  *
  * @param index the index of the join key in the list of keys from the build side
  * @param buildKeys the join keys from the build side of the join used
- * @param child the BroadcastExchange from the build side of the join
+ * @param child the BroadcastExchange or the AdaptiveSparkPlan with BroadcastQueryStageExec
+ *              from the build side of the join
  */
 case class SubqueryBroadcastExec(
     name: String,
@@ -51,7 +52,7 @@ case class SubqueryBroadcastExec(
     val key = buildKeys(index)
     val name = key match {
       case n: NamedExpression => n.name
-      case Cast(n: NamedExpression, _, _) => n.name
+      case Cast(n: NamedExpression, _, _, _) => n.name
       case _ => "key"
     }
     Seq(AttributeReference(name, key.dataType, key.nullable)())
@@ -73,7 +74,7 @@ case class SubqueryBroadcastExec(
     Future {
       // This will run in another thread. Set the execution id so that we can connect these jobs
       // with the correct execution.
-      SQLExecution.withExecutionId(sqlContext.sparkSession, executionId) {
+      SQLExecution.withExecutionId(session, executionId) {
         val beforeCollect = System.nanoTime()
 
         val broadcastRelation = child.executeBroadcast[HashedRelation]().value

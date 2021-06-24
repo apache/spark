@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.trees.TreePattern.{COUNT, TreePattern}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -47,6 +48,8 @@ import org.apache.spark.sql.types._
 case class Count(children: Seq[Expression]) extends DeclarativeAggregate {
 
   override def nullable: Boolean = false
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(COUNT)
 
   // Return data type.
   override def dataType: DataType = LongType

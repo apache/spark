@@ -15,7 +15,10 @@
 .ensime_cache/
 .ensime_lucene
 .generated-mima*
+# All the files under .idea/ are ignore. To add new files under ./idea that are not in the VCS yet, please use `git add -f`
 .idea/
+# SPARK-35223: Add IssueNavigationLink to make IDEA support hyperlink on JIRA Ticket and GitHub PR on Git plugin.
+!.idea/vcs.xml
 .idea_modules/
 .project
 .pydevproject
@@ -52,6 +55,7 @@ sql/docs
 sql/site
 lib_managed/
 lint-r-report.log
+lint-js-report.log
 log/
 logs/
 out/
@@ -65,7 +69,7 @@ python/lib/pyspark.zip
 python/.eggs/
 python/deps
 python/docs/_site/
-python/docs/source/reference/api/
+python/docs/source/reference/**/api/
 python/test_coverage/coverage_data
 python/test_coverage/htmlcov
 python/pyspark/python
@@ -103,3 +107,6 @@ spark-warehouse/
 
 # For SBT
 .jvmopts
+
+# For Node.js
+node_modules

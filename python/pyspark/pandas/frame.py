@@ -61,27 +61,26 @@ else:
     from pandas.core.dtypes.common import _get_dtype_from_object as infer_dtype_from_object
 from pandas.core.accessor import CachedAccessor
 from pandas.core.dtypes.inference import is_sequence
-import pyspark
 from pyspark import StorageLevel
 from pyspark import sql as spark
 from pyspark.sql import Column, DataFrame as SparkDataFrame, functions as F
 from pyspark.sql.functions import pandas_udf
-from pyspark.sql.types import (
+from pyspark.sql.types import (  # noqa: F401 (SPARK-34943)
     BooleanType,
+    DataType,
     DoubleType,
     FloatType,
     NumericType,
     StringType,
-    StructType,
     StructField,
+    StructType,
     ArrayType,
 )
 from pyspark.sql.window import Window
 
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
-from pyspark.pandas.accessors import KoalasFrameMethods
+from pyspark.pandas.accessors import PandasOnSparkFrameMethods
 from pyspark.pandas.config import option_context, get_option
-from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.spark.accessors import SparkFrameMethods, CachedSparkFrameMethods
 from pyspark.pandas.utils import (
     align_diff_frames,
@@ -100,9 +99,9 @@ from pyspark.pandas.utils import (
     validate_how,
     verify_temp_column_name,
 )
-from pyspark.pandas.spark.utils import as_nullable_spark_type, force_decimal_precision_scale
 from pyspark.pandas.generic import Frame
 from pyspark.pandas.internal import (
+    InternalField,
     InternalFrame,
     HIDDEN_COLUMNS,
     NATURAL_ORDER_COLUMN_NAME,
@@ -121,9 +120,10 @@ from pyspark.pandas.typedef import (
     Scalar,
     ScalarType,
 )
-from pyspark.pandas.plot import KoalasPlotAccessor
+from pyspark.pandas.plot import PandasOnSparkPlotAccessor
 
 if TYPE_CHECKING:
+    from pyspark.pandas.groupby import DataFrameGroupBy  # noqa: F401 (SPARK-34943)
     from pyspark.pandas.indexes import Index  # noqa: F401 (SPARK-34943)
     from pyspark.pandas.series import Series  # noqa: F401 (SPARK-34943)
 
@@ -406,8 +406,8 @@ if (3, 5) <= sys.version_info < (3, 7) and __name__ != "__main__":
 
 class DataFrame(Frame, Generic[T]):
     """
-    Koalas DataFrame that corresponds to pandas DataFrame logically. This holds Spark DataFrame
-    internally.
+    pandas-on-Spark DataFrame that corresponds to pandas DataFrame logically. This holds Spark
+    DataFrame internally.
 
     :ivar _internal: an internal immutable Frame to manage metadata.
     :type _internal: InternalFrame
@@ -415,11 +415,11 @@ class DataFrame(Frame, Generic[T]):
     Parameters
     ----------
     data : numpy ndarray (structured or homogeneous), dict, pandas DataFrame, Spark DataFrame \
-        or Koalas Series
+        or pandas-on-Spark Series
         Dict can contain Series, arrays, constants, or list-like objects
         If data is a dict, argument order is maintained for Python 3.6
         and later.
-        Note that if `data` is a pandas DataFrame, a Spark DataFrame, and a Koalas Series,
+        Note that if `data` is a pandas DataFrame, a Spark DataFrame, and a pandas-on-Spark Series,
         other arguments should not be used.
     index : Index or array-like
         Index to use for resulting frame. Will default to RangeIndex if
@@ -513,31 +513,31 @@ class DataFrame(Frame, Generic[T]):
         object.__setattr__(self, "_internal_frame", internal)
 
     @property
-    def _ksers(self):
-        """ Return a dict of column label -> Series which anchors `self`. """
+    def _pssers(self):
+        """Return a dict of column label -> Series which anchors `self`."""
         from pyspark.pandas.series import Series
 
-        if not hasattr(self, "_kseries"):
+        if not hasattr(self, "_psseries"):
             object.__setattr__(
                 self,
-                "_kseries",
+                "_psseries",
                 {label: Series(data=self, index=label) for label in self._internal.column_labels},
             )
         else:
-            kseries = self._kseries
-            assert len(self._internal.column_labels) == len(kseries), (
+            psseries = self._psseries
+            assert len(self._internal.column_labels) == len(psseries), (
                 len(self._internal.column_labels),
-                len(kseries),
+                len(psseries),
             )
-            if any(self is not kser._kdf for kser in kseries.values()):
+            if any(self is not psser._psdf for psser in psseries.values()):
                 # Refresh the dict to contain only Series anchoring `self`.
-                self._kseries = {
-                    label: kseries[label]
-                    if self is kseries[label]._kdf
+                self._psseries = {
+                    label: psseries[label]
+                    if self is psseries[label]._psdf
                     else Series(data=self, index=label)
                     for label in self._internal.column_labels
                 }
-        return self._kseries
+        return self._psseries
 
     @property
     def _internal(self) -> InternalFrame:
@@ -559,30 +559,30 @@ class DataFrame(Frame, Generic[T]):
         """
         from pyspark.pandas.series import Series
 
-        if hasattr(self, "_kseries"):
-            kseries = {}
+        if hasattr(self, "_psseries"):
+            psseries = {}
 
             for old_label, new_label in zip_longest(
                 self._internal.column_labels, internal.column_labels
             ):
                 if old_label is not None:
-                    kser = self._ksers[old_label]
+                    psser = self._pssers[old_label]
 
                     renamed = old_label != new_label
-                    not_same_anchor = requires_same_anchor and not same_anchor(internal, kser)
+                    not_same_anchor = requires_same_anchor and not same_anchor(internal, psser)
 
                     if renamed or not_same_anchor:
-                        kdf = DataFrame(self._internal.select_column(old_label))  # type: DataFrame
-                        kser._update_anchor(kdf)
-                        kser = None
+                        psdf = DataFrame(self._internal.select_column(old_label))  # type: DataFrame
+                        psser._update_anchor(psdf)
+                        psser = None
                 else:
-                    kser = None
+                    psser = None
                 if new_label is not None:
-                    if kser is None:
-                        kser = Series(data=self, index=new_label)
-                    kseries[new_label] = kser
+                    if psser is None:
+                        psser = Series(data=self, index=new_label)
+                    psseries[new_label] = psser
 
-            self._kseries = kseries
+            self._psseries = psseries
 
         self._internal_frame = internal
 
@@ -629,7 +629,14 @@ class DataFrame(Frame, Generic[T]):
         """
         return [self.index, self.columns]
 
-    def _reduce_for_stat_function(self, sfun, name, axis=None, numeric_only=True, **kwargs):
+    def _reduce_for_stat_function(
+        self,
+        sfun: Union[Callable[[Column], Column], Callable[[Column, DataType], Column]],
+        name: str,
+        axis: Optional[Union[int, str]] = None,
+        numeric_only: bool = True,
+        **kwargs: Any
+    ) -> "Series":
         """
         Applies sfun to each column and returns a pd.Series where the number of rows equal the
         number of columns.
@@ -666,11 +673,13 @@ class DataFrame(Frame, Generic[T]):
                 if keep_column:
                     if num_args == 1:
                         # Only pass in the column if sfun accepts only one arg
-                        scol = sfun(spark_column)
+                        scol = cast(Callable[[Column], Column], sfun)(spark_column)
                     else:  # must be 2
                         assert num_args == 2
                         # Pass in both the column and its data type if sfun accepts two args
-                        scol = sfun(spark_column, spark_type)
+                        scol = cast(Callable[[Column, DataType], Column], sfun)(
+                            spark_column, spark_type
+                        )
 
                     if min_count > 0:
                         scol = F.when(
@@ -704,8 +713,8 @@ class DataFrame(Frame, Generic[T]):
             if len(pdf) <= limit:
                 return Series(pser)
 
-            @pandas_udf(returnType=as_spark_type(pser.dtype.type))
-            def calculate_columns_axis(*cols):
+            @pandas_udf(returnType=as_spark_type(pser.dtype.type))  # type: ignore
+            def calculate_columns_axis(*cols: pd.Series) -> pd.Series:
                 return getattr(pd.concat(cols, axis=1), name)(
                     axis=axis, numeric_only=numeric_only, **kwargs
                 )
@@ -724,11 +733,11 @@ class DataFrame(Frame, Generic[T]):
                     scol_for(sdf, col) for col in self._internal.index_spark_column_names
                 ],
                 index_names=self._internal.index_names,
-                index_dtypes=self._internal.index_dtypes,
+                index_fields=self._internal.index_fields,
             )
             return first_series(DataFrame(internal)).rename(pser.name)
 
-    def _kser_for(self, label):
+    def _psser_for(self, label):
         """
         Create Series with a proper column label.
 
@@ -738,15 +747,15 @@ class DataFrame(Frame, Generic[T]):
 
         >>> self = ps.range(3)
 
-        `self._kser_for(label)` can be used with `InternalFrame.column_labels`:
+        `self._psser_for(label)` can be used with `InternalFrame.column_labels`:
 
-        >>> self._kser_for(self._internal.column_labels[0])
+        >>> self._psser_for(self._internal.column_labels[0])
         0    0
         1    1
         2    2
         Name: id, dtype: int64
 
-        `self._kser_for(label)` must not be used directly with user inputs.
+        `self._psser_for(label)` must not be used directly with user inputs.
         In that case, `self[label]` should be used instead, which checks the label exists or not:
 
         >>> self['id']
@@ -755,12 +764,12 @@ class DataFrame(Frame, Generic[T]):
         2    2
         Name: id, dtype: int64
         """
-        return self._ksers[label]
+        return self._pssers[label]
 
     def _apply_series_op(self, op, should_resolve: bool = False):
         applied = []
         for label in self._internal.column_labels:
-            applied.append(op(self._kser_for(label)))
+            applied.append(op(self._psser_for(label)))
         internal = self._internal.with_new_columns(applied)
         if should_resolve:
             internal = internal.resolved_copy
@@ -773,7 +782,7 @@ class DataFrame(Frame, Generic[T]):
         if not isinstance(other, DataFrame) and (
             isinstance(other, IndexOpsMixin) or is_sequence(other)
         ):
-            raise ValueError(
+            raise TypeError(
                 "%s with a sequence is currently not supported; "
                 "however, got %s." % (op, type(other).__name__)
             )
@@ -784,11 +793,11 @@ class DataFrame(Frame, Generic[T]):
 
             if not same_anchor(self, other):
                 # Different DataFrames
-                def apply_op(kdf, this_column_labels, that_column_labels):
+                def apply_op(psdf, this_column_labels, that_column_labels):
                     for this_label, that_label in zip(this_column_labels, that_column_labels):
                         yield (
-                            getattr(kdf._kser_for(this_label), op)(
-                                kdf._kser_for(that_label)
+                            getattr(psdf._psser_for(this_label), op)(
+                                psdf._psser_for(that_label)
                             ).rename(this_label),
                             this_label,
                         )
@@ -799,7 +808,7 @@ class DataFrame(Frame, Generic[T]):
                 column_labels = []
                 for label in self._internal.column_labels:
                     if label in other._internal.column_labels:
-                        applied.append(getattr(self._kser_for(label), op)(other._kser_for(label)))
+                        applied.append(getattr(self._psser_for(label), op)(other._psser_for(label)))
                     else:
                         applied.append(
                             F.lit(None)
@@ -818,7 +827,7 @@ class DataFrame(Frame, Generic[T]):
                 internal = self._internal.with_new_columns(applied, column_labels=column_labels)
                 return DataFrame(internal)
         else:
-            return self._apply_series_op(lambda kser: getattr(kser, op)(other))
+            return self._apply_series_op(lambda psser: getattr(psser, op)(other))
 
     def __add__(self, other) -> "DataFrame":
         return self._map_series_op("add", other)
@@ -869,32 +878,35 @@ class DataFrame(Frame, Generic[T]):
         return self._map_series_op("rfloordiv", other)
 
     def __abs__(self) -> "DataFrame":
-        return self._apply_series_op(lambda kser: abs(kser))
+        return self._apply_series_op(lambda psser: abs(psser))
 
     def __neg__(self) -> "DataFrame":
-        return self._apply_series_op(lambda kser: -kser)
+        return self._apply_series_op(lambda psser: -psser)
 
     def add(self, other) -> "DataFrame":
         return self + other
 
     # create accessor for plot
-    plot = CachedAccessor("plot", KoalasPlotAccessor)
+    plot = CachedAccessor("plot", PandasOnSparkPlotAccessor)
 
     # create accessor for Spark related methods.
     spark = CachedAccessor("spark", SparkFrameMethods)
 
-    # create accessor for Koalas specific methods.
-    koalas = CachedAccessor("koalas", KoalasFrameMethods)
+    # create accessor for pandas-on-Spark specific methods.
+    pandas_on_spark = CachedAccessor("pandas_on_spark", PandasOnSparkFrameMethods)
+
+    # keep the name "koalas" for backward compatibility.
+    koalas = CachedAccessor("koalas", PandasOnSparkFrameMethods)
 
     def hist(self, bins=10, **kwds):
         return self.plot.hist(bins, **kwds)
 
-    hist.__doc__ = KoalasPlotAccessor.hist.__doc__
+    hist.__doc__ = PandasOnSparkPlotAccessor.hist.__doc__
 
     def kde(self, bw_method=None, ind=None, **kwds):
         return self.plot.kde(bw_method, ind, **kwds)
 
-    kde.__doc__ = KoalasPlotAccessor.kde.__doc__
+    kde.__doc__ = PandasOnSparkPlotAccessor.kde.__doc__
 
     add.__doc__ = _flex_doc_FRAME.format(
         desc="Addition", op_name="+", equiv="dataframe + other", reverse="radd"
@@ -1150,7 +1162,7 @@ class DataFrame(Frame, Generic[T]):
              >>> def square(x) -> np.int32:
              ...     return x ** 2
 
-             Koalas uses return type hint and does not try to infer the type.
+             pandas-on-Spark uses return type hint and does not try to infer the type.
 
         Parameters
         ----------
@@ -1184,7 +1196,7 @@ class DataFrame(Frame, Generic[T]):
         0   1.000000   4.494400
         1  11.262736  20.857489
 
-        You can omit the type hint and let Koalas infer its type.
+        You can omit the type hint and let pandas-on-Spark infer its type.
 
         >>> df.applymap(lambda x: x ** 2)
                    0          1
@@ -1194,7 +1206,7 @@ class DataFrame(Frame, Generic[T]):
 
         # TODO: We can implement shortcut theoretically since it creates new DataFrame
         #  anyway and we don't have to worry about operations on different DataFrames.
-        return self._apply_series_op(lambda kser: kser.apply(func))
+        return self._apply_series_op(lambda psser: psser.apply(func))
 
     # TODO: not all arguments are implemented comparing to pandas' for now.
     def aggregate(
@@ -1297,7 +1309,7 @@ class DataFrame(Frame, Generic[T]):
             )
 
         with option_context("compute.default_index_type", "distributed"):
-            kdf = DataFrame(GroupBy._spark_groupby(self, func))  # type: DataFrame
+            psdf = DataFrame(GroupBy._spark_groupby(self, func))  # type: DataFrame
 
             # The codes below basically converts:
             #
@@ -1313,12 +1325,7 @@ class DataFrame(Frame, Generic[T]):
             #
             # Aggregated output is usually pretty much small.
 
-            if LooseVersion(pyspark.__version__) >= LooseVersion("2.4"):
-                return kdf.stack().droplevel(0)[list(func.keys())]
-            else:
-                pdf = kdf._to_internal_pandas().stack()
-                pdf.index = pdf.index.droplevel()
-                return ps.from_pandas(pdf[list(func.keys())])
+            return psdf.stack().droplevel(0)[list(func.keys())]
 
     agg = aggregate
 
@@ -1356,11 +1363,11 @@ class DataFrame(Frame, Generic[T]):
 
         Notes
         -----
-        There are behavior differences between Koalas and pandas.
+        There are behavior differences between pandas-on-Spark and pandas.
 
         * the `method` argument only accepts 'pearson', 'spearman'
-        * the data should not contain NaNs. Koalas will return an error.
-        * Koalas doesn't support the following argument(s).
+        * the data should not contain NaNs. pandas-on-Spark will return an error.
+        * pandas-on-Spark doesn't support the following argument(s).
 
           * `min_periods` argument is not supported
         """
@@ -1406,7 +1413,7 @@ class DataFrame(Frame, Generic[T]):
         koala    80000
         """
         return (
-            (label if len(label) > 1 else label[0], self._kser_for(label))
+            (label if len(label) > 1 else label[0], self._psser_for(label))
             for label in self._internal.column_labels
         )
 
@@ -1471,7 +1478,7 @@ class DataFrame(Frame, Generic[T]):
             s = pd.Series(v, index=columns, name=k)
             yield k, s
 
-    def itertuples(self, index: bool = True, name: Optional[str] = "Koalas") -> Iterator:
+    def itertuples(self, index: bool = True, name: Optional[str] = "PandasOnSpark") -> Iterator:
         """
         Iterate over DataFrame rows as namedtuples.
 
@@ -1479,7 +1486,7 @@ class DataFrame(Frame, Generic[T]):
         ----------
         index : bool, default True
             If True, return the index as the first element of the tuple.
-        name : str or None, default "Koalas"
+        name : str or None, default "PandasOnSpark"
             The name of the returned namedtuples or None to return regular
             tuples.
 
@@ -1515,8 +1522,8 @@ class DataFrame(Frame, Generic[T]):
         >>> for row in df.itertuples():
         ...     print(row)
         ...
-        Koalas(Index='dog', num_legs=4, num_wings=0)
-        Koalas(Index='hawk', num_legs=2, num_wings=2)
+        PandasOnSpark(Index='dog', num_legs=4, num_wings=0)
+        PandasOnSpark(Index='hawk', num_legs=2, num_wings=2)
 
         By setting the `index` parameter to False we can remove the index
         as the first element of the tuple:
@@ -1524,8 +1531,8 @@ class DataFrame(Frame, Generic[T]):
         >>> for row in df.itertuples(index=False):
         ...     print(row)
         ...
-        Koalas(num_legs=4, num_wings=0)
-        Koalas(num_legs=2, num_wings=2)
+        PandasOnSpark(num_legs=4, num_wings=0)
+        PandasOnSpark(num_legs=2, num_wings=2)
 
         With the `name` parameter set we set a custom name for the yielded
         namedtuples:
@@ -1642,9 +1649,9 @@ class DataFrame(Frame, Generic[T]):
         """
 
         args = locals()
-        kdf = self
+        psdf = self
         return validate_arguments_and_invoke_function(
-            kdf._to_internal_pandas(), self.to_clipboard, pd.DataFrame.to_clipboard, args
+            psdf._to_internal_pandas(), self.to_clipboard, pd.DataFrame.to_clipboard, args
         )
 
     def to_html(
@@ -1759,12 +1766,12 @@ class DataFrame(Frame, Generic[T]):
         # Make sure locals() call is at the top of the function so we don't capture local variables.
         args = locals()
         if max_rows is not None:
-            kdf = self.head(max_rows)
+            psdf = self.head(max_rows)
         else:
-            kdf = self
+            psdf = self
 
         return validate_arguments_and_invoke_function(
-            kdf._to_internal_pandas(), self.to_html, pd.DataFrame.to_html, args
+            psdf._to_internal_pandas(), self.to_html, pd.DataFrame.to_html, args
         )
 
     def to_string(
@@ -1874,12 +1881,12 @@ class DataFrame(Frame, Generic[T]):
         # Make sure locals() call is at the top of the function so we don't capture local variables.
         args = locals()
         if max_rows is not None:
-            kdf = self.head(max_rows)
+            psdf = self.head(max_rows)
         else:
-            kdf = self
+            psdf = self
 
         return validate_arguments_and_invoke_function(
-            kdf._to_internal_pandas(), self.to_string, pd.DataFrame.to_string, args
+            psdf._to_internal_pandas(), self.to_string, pd.DataFrame.to_string, args
         )
 
     def to_dict(self, orient="dict", into=dict) -> Union[List, Mapping]:
@@ -1974,9 +1981,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         """
         # Make sure locals() call is at the top of the function so we don't capture local variables.
         args = locals()
-        kdf = self
+        psdf = self
         return validate_arguments_and_invoke_function(
-            kdf._to_internal_pandas(), self.to_dict, pd.DataFrame.to_dict, args
+            psdf._to_internal_pandas(), self.to_dict, pd.DataFrame.to_dict, args
         )
 
     def to_latex(
@@ -2098,9 +2105,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         """
 
         args = locals()
-        kdf = self
+        psdf = self
         return validate_arguments_and_invoke_function(
-            kdf._to_internal_pandas(), self.to_latex, pd.DataFrame.to_latex, args
+            psdf._to_internal_pandas(), self.to_latex, pd.DataFrame.to_latex, args
         )
 
     # TODO: enable doctests once we drop Spark 2.3.x (due to type coercion logic
@@ -2251,11 +2258,11 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             F.array(
                 *[
                     F.struct(
-                        [
+                        *[
                             F.lit(col).alias(SPARK_INDEX_NAME_FORMAT(i))
                             for i, col in enumerate(label)
-                        ]
-                        + [self._internal.spark_column_for(label).alias("value")]
+                        ],
+                        *[self._internal.spark_column_for(label).alias("value")],
                     )
                     for label in self._internal.column_labels
                 ]
@@ -2266,7 +2273,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             [
                 F.to_json(
                     F.struct(
-                        F.array([scol for scol in self._internal.index_spark_columns]).alias("a")
+                        F.array(*[scol for scol in self._internal.index_spark_columns]).alias("a")
                     )
                 ).alias("index"),
                 F.col("pairs.*"),
@@ -2305,27 +2312,6 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
     T = property(transpose)
 
-    def apply_batch(self, func, args=(), **kwds) -> "DataFrame":
-        warnings.warn(
-            "DataFrame.apply_batch is deprecated as of DataFrame.koalas.apply_batch. "
-            "Please use the API instead.",
-            FutureWarning,
-        )
-        return self.koalas.apply_batch(func, args=args, **kwds)
-
-    apply_batch.__doc__ = KoalasFrameMethods.apply_batch.__doc__
-
-    # TODO: Remove this API when Koalas 2.0.0.
-    def map_in_pandas(self, func) -> "DataFrame":
-        warnings.warn(
-            "DataFrame.map_in_pandas is deprecated as of DataFrame.koalas.apply_batch. "
-            "Please use the API instead.",
-            FutureWarning,
-        )
-        return self.koalas.apply_batch(func)
-
-    map_in_pandas.__doc__ = KoalasFrameMethods.apply_batch.__doc__
-
     def apply(self, func, axis=0, args=(), **kwds) -> Union["Series", "DataFrame", "Index"]:
         """
         Apply a function along an axis of the DataFrame.
@@ -2338,8 +2324,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         <https://koalas.readthedocs.io/en/latest/user_guide/transform_apply.html>`_.
 
         .. note:: when `axis` is 0 or 'index', the `func` is unable to access
-            to the whole input series. Koalas internally splits the input series into multiple
-            batches and calls `func` with each batch multiple times. Therefore, operations
+            to the whole input series. pandas-on-Spark internally splits the input series into
+            multiple batches and calls `func` with each batch multiple times. Therefore, operations
             such as global aggregations are impossible. See the example below.
 
             >>> # This case does not return the length of whole series but of the batch internally
@@ -2367,7 +2353,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             >>> def square(s) -> ps.Series[np.int32]:
             ...     return s ** 2
 
-            Koalas uses return type hint and does not try to infer the type.
+            pandas-on-Spark uses return type hint and does not try to infer the type.
 
             In case when axis is 1, it requires to specify `DataFrame` or scalar value
             with type hints as below:
@@ -2447,7 +2433,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         1  2.0  3.0
         2  2.0  3.0
 
-        You can omit the type hint and let Koalas infer its type.
+        You can omit the type hint and let pandas-on-Spark infer its type.
 
         >>> df.apply(np.sqrt, axis=0)
              A    B
@@ -2466,7 +2452,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         2    13
         dtype: int64
 
-        Likewise, you can omit the type hint and let Koalas infer its type.
+        Likewise, you can omit the type hint and let pandas-on-Spark infer its type.
 
         >>> df.apply(np.sum, axis=1)
         0    13
@@ -2524,7 +2510,6 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         spec = inspect.getfullargspec(func)
         return_sig = spec.annotations.get("return", None)
         should_infer_schema = return_sig is None
-        should_use_map_in_pandas = LooseVersion(pyspark.__version__) >= "3.0"
 
         def apply_func(pdf):
             pdf_or_pser = pdf.apply(func, axis=axis, args=args, **kwds)
@@ -2542,37 +2527,31 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             limit = get_option("compute.shortcut_limit")
             pdf = self_applied.head(limit + 1)._to_internal_pandas()
             applied = pdf.apply(func, axis=axis, args=args, **kwds)
-            kser_or_kdf = ps.from_pandas(applied)
+            psser_or_psdf = ps.from_pandas(applied)
             if len(pdf) <= limit:
-                return kser_or_kdf
+                return psser_or_psdf
 
-            kdf = kser_or_kdf
-            if isinstance(kser_or_kdf, ps.Series):
+            psdf = psser_or_psdf
+            if isinstance(psser_or_psdf, ps.Series):
                 should_return_series = True
-                kdf = kser_or_kdf._kdf
+                psdf = psser_or_psdf._psdf
 
-            return_schema = force_decimal_precision_scale(
-                as_nullable_spark_type(kdf._internal.to_internal_spark_frame.schema)
+            index_fields = [field.normalize_spark_type() for field in psdf._internal.index_fields]
+            data_fields = [field.normalize_spark_type() for field in psdf._internal.data_fields]
+
+            return_schema = StructType([field.struct_field for field in index_fields + data_fields])
+
+            output_func = GroupBy._make_pandas_df_builder_func(
+                self_applied, apply_func, return_schema, retain_index=True
+            )
+            sdf = self_applied._internal.to_internal_spark_frame.mapInPandas(
+                lambda iterator: map(output_func, iterator), schema=return_schema
             )
 
-            if should_use_map_in_pandas:
-                output_func = GroupBy._make_pandas_df_builder_func(
-                    self_applied, apply_func, return_schema, retain_index=True
-                )
-                sdf = self_applied._internal.to_internal_spark_frame.mapInPandas(
-                    lambda iterator: map(output_func, iterator), schema=return_schema
-                )
-            else:
-                sdf = GroupBy._spark_group_map_apply(
-                    self_applied,
-                    apply_func,
-                    (F.spark_partition_id(),),
-                    return_schema,
-                    retain_index=True,
-                )
-
             # If schema is inferred, we can restore indexes too.
-            internal = kdf._internal.with_new_sdf(sdf)
+            internal = psdf._internal.with_new_sdf(
+                spark_frame=sdf, index_fields=index_fields, data_fields=data_fields
+            )
         else:
             return_type = infer_return_type(func)
             require_index_axis = isinstance(return_type, SeriesType)
@@ -2585,12 +2564,15 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                         "hints when axis is 0 or 'index'; however, the return type "
                         "was %s" % return_sig
                     )
-                return_schema = cast(SeriesType, return_type).spark_type
-                fields_types = zip(
-                    self_applied.columns, [return_schema] * len(self_applied.columns)
-                )
-                return_schema = StructType([StructField(c, t) for c, t in fields_types])
-                data_dtypes = [cast(SeriesType, return_type).dtype] * len(self_applied.columns)
+                dtype = cast(SeriesType, return_type).dtype
+                spark_type = cast(SeriesType, return_type).spark_type
+                data_fields = [
+                    InternalField(
+                        dtype=dtype, struct_field=StructField(name=name, dataType=spark_type)
+                    )
+                    for name in self_applied.columns
+                ]
+                return_schema = StructType([field.struct_field for field in data_fields])
             elif require_column_axis:
                 if axis != 1:
                     raise TypeError(
@@ -2598,38 +2580,37 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                         "hints when axis is 1 or 'column'; however, the return type "
                         "was %s" % return_sig
                     )
+                data_fields = cast(DataFrameType, return_type).fields
                 return_schema = cast(DataFrameType, return_type).spark_type
-                data_dtypes = cast(DataFrameType, return_type).dtypes
             else:
                 # any axis is fine.
                 should_return_series = True
-                return_schema = cast(ScalarType, return_type).spark_type
-                return_schema = StructType([StructField(SPARK_DEFAULT_SERIES_NAME, return_schema)])
-                data_dtypes = [cast(ScalarType, return_type).dtype]
+                spark_type = cast(ScalarType, return_type).spark_type
+                dtype = cast(ScalarType, return_type).dtype
+                data_fields = [
+                    InternalField(
+                        dtype=dtype,
+                        struct_field=StructField(
+                            name=SPARK_DEFAULT_SERIES_NAME, dataType=spark_type
+                        ),
+                    )
+                ]
+                return_schema = StructType([field.struct_field for field in data_fields])
                 column_labels = [None]
 
-            if should_use_map_in_pandas:
-                output_func = GroupBy._make_pandas_df_builder_func(
-                    self_applied, apply_func, return_schema, retain_index=False
-                )
-                sdf = self_applied._internal.to_internal_spark_frame.mapInPandas(
-                    lambda iterator: map(output_func, iterator), schema=return_schema
-                )
-            else:
-                sdf = GroupBy._spark_group_map_apply(
-                    self_applied,
-                    apply_func,
-                    (F.spark_partition_id(),),
-                    return_schema,
-                    retain_index=False,
-                )
+            output_func = GroupBy._make_pandas_df_builder_func(
+                self_applied, apply_func, return_schema, retain_index=False
+            )
+            sdf = self_applied._internal.to_internal_spark_frame.mapInPandas(
+                lambda iterator: map(output_func, iterator), schema=return_schema
+            )
 
             # Otherwise, it loses index.
             internal = InternalFrame(
                 spark_frame=sdf,
                 index_spark_columns=None,
                 column_labels=column_labels,
-                data_dtypes=data_dtypes,
+                data_fields=data_fields,
             )
 
         result = DataFrame(internal)  # type: "DataFrame"
@@ -2655,10 +2636,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
              >>> def square(x) -> ps.Series[np.int32]:
              ...     return x ** 2
 
-             Koalas uses return type hint and does not try to infer the type.
+             pandas-on-Spark uses return type hint and does not try to infer the type.
 
         .. note:: the series within ``func`` is actually multiple pandas series as the
-            segments of the whole Koalas series; therefore, the length of each series
+            segments of the whole pandas-on-Spark series; therefore, the length of each series
             is not guaranteed. As an example, an aggregation against each series
             does work as a global aggregation but an aggregation of each segment. See
             below:
@@ -2710,7 +2691,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         1  1  4
         2  4  9
 
-        You can omit the type hint and let Koalas infer its type.
+        You can omit the type hint and let pandas-on-Spark infer its type.
 
         >>> df.transform(lambda x: x ** 2)
            A  B
@@ -2765,44 +2746,34 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             limit = get_option("compute.shortcut_limit")
             pdf = self.head(limit + 1)._to_internal_pandas()
             transformed = pdf.transform(func, axis, *args, **kwargs)
-            kdf = DataFrame(transformed)  # type: "DataFrame"
+            psdf = DataFrame(transformed)  # type: "DataFrame"
             if len(pdf) <= limit:
-                return kdf
+                return psdf
 
             applied = []
+            data_fields = []
             for input_label, output_label in zip(
-                self._internal.column_labels, kdf._internal.column_labels
+                self._internal.column_labels, psdf._internal.column_labels
             ):
-                kser = self._kser_for(input_label)
-                dtype = kdf._internal.dtype_for(output_label)
-                return_schema = force_decimal_precision_scale(
-                    as_nullable_spark_type(kdf._internal.spark_type_for(output_label))
-                )
+                psser = self._psser_for(input_label)
+
+                field = psdf._internal.field_for(output_label).normalize_spark_type()
+                data_fields.append(field)
+
+                return_schema = field.spark_type
                 applied.append(
-                    kser.koalas._transform_batch(
+                    psser.pandas_on_spark._transform_batch(
                         func=lambda c: func(c, *args, **kwargs),
-                        return_type=SeriesType(dtype, return_schema),
+                        return_type=SeriesType(field.dtype, return_schema),
                     )
                 )
 
-            internal = self._internal.with_new_columns(
-                applied, data_dtypes=kdf._internal.data_dtypes
-            )
+            internal = self._internal.with_new_columns(applied, data_fields=data_fields)
             return DataFrame(internal)
         else:
             return self._apply_series_op(
-                lambda kser: kser.koalas.transform_batch(func, *args, **kwargs)
+                lambda psser: psser.pandas_on_spark.transform_batch(func, *args, **kwargs)
             )
-
-    def transform_batch(self, func, *args, **kwargs) -> "DataFrame":
-        warnings.warn(
-            "DataFrame.transform_batch is deprecated as of DataFrame.koalas.transform_batch. "
-            "Please use the API instead.",
-            FutureWarning,
-        )
-        return self.koalas.transform_batch(func, *args, **kwargs)
-
-    transform_batch.__doc__ = KoalasFrameMethods.transform_batch.__doc__
 
     def pop(self, item) -> "DataFrame":
         """
@@ -2962,7 +2933,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         from pyspark.pandas.series import first_series
 
         if not is_name_like_value(key):
-            raise ValueError("'key' should be a scalar value or tuple that contains scalar values")
+            raise TypeError("'key' should be a scalar value or tuple that contains scalar values")
 
         if level is not None and is_name_like_tuple(key):
             raise KeyError(key)
@@ -2988,26 +2959,26 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         internal = self._internal.with_filter(reduce(lambda x, y: x & y, rows))
 
         if len(key) == self._internal.index_level:
-            kdf = DataFrame(internal)  # type: DataFrame
-            pdf = kdf.head(2)._to_internal_pandas()
+            psdf = DataFrame(internal)  # type: DataFrame
+            pdf = psdf.head(2)._to_internal_pandas()
             if len(pdf) == 0:
                 raise KeyError(key)
             elif len(pdf) > 1:
-                return kdf
+                return psdf
             else:
                 return first_series(DataFrame(pdf.transpose()))
         else:
             index_spark_columns = (
                 internal.index_spark_columns[:level]
-                + internal.index_spark_columns[level + len(key):]
+                + internal.index_spark_columns[level + len(key) :]
             )
-            index_names = internal.index_names[:level] + internal.index_names[level + len(key):]
-            index_dtypes = internal.index_dtypes[:level] + internal.index_dtypes[level + len(key):]
+            index_names = internal.index_names[:level] + internal.index_names[level + len(key) :]
+            index_fields = internal.index_fields[:level] + internal.index_fields[level + len(key) :]
 
             internal = internal.copy(
                 index_spark_columns=index_spark_columns,
                 index_names=index_names,
-                index_dtypes=index_dtypes,
+                index_fields=index_fields,
             ).resolved_copy
             return DataFrame(internal)
 
@@ -3020,7 +2991,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         axis: Union[int, str] = 0,
     ) -> "DataFrame":
         """
-        Select values between particular times of the day (e.g., 9:00-9:30 AM).
+        Select values between particular times of the day (example: 9:00-9:30 AM).
 
         By setting ``start_time`` to be later than ``end_time``,
         you can get the times that are *not* between the two times.
@@ -3059,15 +3030,15 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         Examples
         --------
         >>> idx = pd.date_range('2018-04-09', periods=4, freq='1D20min')
-        >>> kdf = ps.DataFrame({'A': [1, 2, 3, 4]}, index=idx)
-        >>> kdf
+        >>> psdf = ps.DataFrame({'A': [1, 2, 3, 4]}, index=idx)
+        >>> psdf
                              A
         2018-04-09 00:00:00  1
         2018-04-10 00:20:00  2
         2018-04-11 00:40:00  3
         2018-04-12 01:00:00  4
 
-        >>> kdf.between_time('0:15', '0:45')
+        >>> psdf.between_time('0:15', '0:45')
                              A
         2018-04-10 00:20:00  2
         2018-04-11 00:40:00  3
@@ -3075,7 +3046,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         You get the times that are *not* between two times by setting
         ``start_time`` later than ``end_time``:
 
-        >>> kdf.between_time('0:45', '0:15')
+        >>> psdf.between_time('0:45', '0:15')
                              A
         2018-04-09 00:00:00  1
         2018-04-12 01:00:00  4
@@ -3088,23 +3059,26 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         if not isinstance(self.index, ps.DatetimeIndex):
             raise TypeError("Index must be DatetimeIndex")
 
-        kdf = self.copy()
-        kdf.index.name = verify_temp_column_name(kdf, "__index_name__")
-        return_types = [kdf.index.dtype] + list(kdf.dtypes)
+        psdf = self.copy()
+        psdf.index.name = verify_temp_column_name(psdf, "__index_name__")
+        return_types = [psdf.index.dtype] + list(psdf.dtypes)
 
         def pandas_between_time(pdf) -> ps.DataFrame[return_types]:  # type: ignore
             return pdf.between_time(start_time, end_time, include_start, include_end).reset_index()
 
-        # apply_batch will remove the index of the Koalas DataFrame and attach a default index,
-        # which will never be used. So use "distributed" index as a dummy to avoid overhead.
+        # apply_batch will remove the index of the pandas-on-Spark DataFrame and attach a
+        # default index, which will never be used. So use "distributed" index as a dummy to
+        # avoid overhead.
         with option_context("compute.default_index_type", "distributed"):
-            kdf = kdf.koalas.apply_batch(pandas_between_time)
+            psdf = psdf.pandas_on_spark.apply_batch(pandas_between_time)
 
         return DataFrame(
             self._internal.copy(
-                spark_frame=kdf._internal.spark_frame,
-                index_spark_columns=kdf._internal.data_spark_columns[:1],
-                data_spark_columns=kdf._internal.data_spark_columns[1:],
+                spark_frame=psdf._internal.spark_frame,
+                index_spark_columns=psdf._internal.data_spark_columns[:1],
+                index_fields=psdf._internal.data_fields[:1],
+                data_spark_columns=psdf._internal.data_spark_columns[1:],
+                data_fields=psdf._internal.data_fields[1:],
             )
         )
 
@@ -3113,7 +3087,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         self, time: Union[datetime.time, str], asof: bool = False, axis: Union[int, str] = 0
     ) -> "DataFrame":
         """
-        Select values at particular time of day (e.g., 9:30AM).
+        Select values at particular time of day (example: 9:30AM).
 
         Parameters
         ----------
@@ -3138,15 +3112,15 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         Examples
         --------
         >>> idx = pd.date_range('2018-04-09', periods=4, freq='12H')
-        >>> kdf = ps.DataFrame({'A': [1, 2, 3, 4]}, index=idx)
-        >>> kdf
+        >>> psdf = ps.DataFrame({'A': [1, 2, 3, 4]}, index=idx)
+        >>> psdf
                              A
         2018-04-09 00:00:00  1
         2018-04-09 12:00:00  2
         2018-04-10 00:00:00  3
         2018-04-10 12:00:00  4
 
-        >>> kdf.at_time('12:00')
+        >>> psdf.at_time('12:00')
                              A
         2018-04-09 12:00:00  2
         2018-04-10 12:00:00  4
@@ -3162,9 +3136,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         if not isinstance(self.index, ps.DatetimeIndex):
             raise TypeError("Index must be DatetimeIndex")
 
-        kdf = self.copy()
-        kdf.index.name = verify_temp_column_name(kdf, "__index_name__")
-        return_types = [kdf.index.dtype] + list(kdf.dtypes)
+        psdf = self.copy()
+        psdf.index.name = verify_temp_column_name(psdf, "__index_name__")
+        return_types = [psdf.index.dtype] + list(psdf.dtypes)
 
         if LooseVersion(pd.__version__) < LooseVersion("0.24"):
 
@@ -3176,16 +3150,19 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             def pandas_at_time(pdf) -> ps.DataFrame[return_types]:  # type: ignore
                 return pdf.at_time(time, asof, axis).reset_index()
 
-        # apply_batch will remove the index of the Koalas DataFrame and attach a default index,
-        # which will never be used. So use "distributed" index as a dummy to avoid overhead.
+        # apply_batch will remove the index of the pandas-on-Spark DataFrame and attach
+        # a default index, which will never be used. So use "distributed" index as a dummy
+        # to avoid overhead.
         with option_context("compute.default_index_type", "distributed"):
-            kdf = kdf.koalas.apply_batch(pandas_at_time)
+            psdf = psdf.pandas_on_spark.apply_batch(pandas_at_time)
 
         return DataFrame(
             self._internal.copy(
-                spark_frame=kdf._internal.spark_frame,
-                index_spark_columns=kdf._internal.data_spark_columns[:1],
-                data_spark_columns=kdf._internal.data_spark_columns[1:],
+                spark_frame=psdf._internal.spark_frame,
+                index_spark_columns=psdf._internal.data_spark_columns[:1],
+                index_fields=psdf._internal.data_fields[:1],
+                data_spark_columns=psdf._internal.data_spark_columns[1:],
+                data_fields=psdf._internal.data_fields[1:],
             )
         )
 
@@ -3301,7 +3278,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         tmp_cond_col_name = "__tmp_cond_col_{}__".format
         tmp_other_col_name = "__tmp_other_col_{}__".format
 
-        kdf = self.copy()
+        psdf = self.copy()
 
         tmp_cond_col_names = [
             tmp_cond_col_name(name_like_string(label)) for label in self._internal.column_labels
@@ -3317,15 +3294,15 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                     for label, name in zip(self._internal.column_labels, tmp_cond_col_names)
                 ]
             ]
-            kdf[tmp_cond_col_names] = cond
+            psdf[tmp_cond_col_names] = cond
         elif isinstance(cond, Series):
             cond = cond.to_frame()
             cond = cond[
                 [cond._internal.data_spark_columns[0].alias(name) for name in tmp_cond_col_names]
             ]
-            kdf[tmp_cond_col_names] = cond
+            psdf[tmp_cond_col_names] = cond
         else:
-            raise ValueError("type of cond must be a DataFrame or Series")
+            raise TypeError("type of cond must be a DataFrame or Series")
 
         tmp_other_col_names = [
             tmp_other_col_name(name_like_string(label)) for label in self._internal.column_labels
@@ -3341,16 +3318,16 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                     for label, name in zip(self._internal.column_labels, tmp_other_col_names)
                 ]
             ]
-            kdf[tmp_other_col_names] = other
+            psdf[tmp_other_col_names] = other
         elif isinstance(other, Series):
             other = other.to_frame()
             other = other[
                 [other._internal.data_spark_columns[0].alias(name) for name in tmp_other_col_names]
             ]
-            kdf[tmp_other_col_names] = other
+            psdf[tmp_other_col_names] = other
         else:
             for label in self._internal.column_labels:
-                kdf[tmp_other_col_name(name_like_string(label))] = other
+                psdf[tmp_other_col_name(name_like_string(label))] = other
 
         # above logic make spark dataframe looks like below:
         # +-----------------+---+---+------------------+-------------------+------------------+--...
@@ -3367,15 +3344,15 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         for label in self._internal.column_labels:
             data_spark_columns.append(
                 F.when(
-                    kdf[tmp_cond_col_name(name_like_string(label))].spark.column,
-                    kdf._internal.spark_column_for(label),
+                    psdf[tmp_cond_col_name(name_like_string(label))].spark.column,
+                    psdf._internal.spark_column_for(label),
                 )
-                .otherwise(kdf[tmp_other_col_name(name_like_string(label))].spark.column)
-                .alias(kdf._internal.spark_column_name_for(label))
+                .otherwise(psdf[tmp_other_col_name(name_like_string(label))].spark.column)
+                .alias(psdf._internal.spark_column_name_for(label))
             )
 
         return DataFrame(
-            kdf._internal.with_new_columns(
+            psdf._internal.with_new_columns(
                 data_spark_columns, column_labels=self._internal.column_labels  # TODO: dtypes?
             )
         )
@@ -3455,9 +3432,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         from pyspark.pandas.series import Series
 
         if not isinstance(cond, (DataFrame, Series)):
-            raise ValueError("type of cond must be a DataFrame or Series")
+            raise TypeError("type of cond must be a DataFrame or Series")
 
-        cond_inversed = cond._apply_series_op(lambda kser: ~kser)
+        cond_inversed = cond._apply_series_op(lambda psser: ~psser)
         return self.where(cond_inversed, other)
 
     @property
@@ -3599,21 +3576,21 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 self._internal.spark_column_for(label) for label in keys
             ]
             index_names = self._internal.index_names + keys
-            index_dtypes = self._internal.index_dtypes + [
-                self._internal.dtype_for(label) for label in keys
+            index_fields = self._internal.index_fields + [
+                self._internal.field_for(label) for label in keys
             ]
         else:
             index_spark_columns = [self._internal.spark_column_for(label) for label in keys]
             index_names = keys
-            index_dtypes = [self._internal.dtype_for(label) for label in keys]
+            index_fields = [self._internal.field_for(label) for label in keys]
 
         internal = self._internal.copy(
             index_spark_columns=index_spark_columns,
             index_names=index_names,
-            index_dtypes=index_dtypes,
+            index_fields=index_fields,
             column_labels=column_labels,
             data_spark_columns=[self._internal.spark_column_for(label) for label in column_labels],
-            data_dtypes=[self._internal.dtype_for(label) for label in column_labels],
+            data_fields=[self._internal.field_for(label) for label in column_labels],
         )
 
         if inplace:
@@ -3674,7 +3651,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         lion    mammal       80.5
         monkey  mammal        NaN
 
-        When we reset the index, the old index is added as a column. Unlike pandas, Koalas
+        When we reset the index, the old index is added as a column. Unlike pandas, pandas-on-Spark
         does not automatically add a sequential index. The following 0, 1, 2, 3 are only
         there when we display the DataFrame.
 
@@ -3788,11 +3765,11 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 scol.alias(name_like_string(label))
                 for scol, label in zip(self._internal.index_spark_columns, new_column_labels)
             ]
-            new_data_dtypes = self._internal.index_dtypes
+            new_data_fields = self._internal.index_fields
 
             index_spark_columns = []
             index_names = []
-            index_dtypes = []
+            index_fields = []
         else:
             if is_list_like(level):
                 level = list(level)
@@ -3836,11 +3813,11 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
             new_column_labels = []
             new_data_spark_columns = []
-            new_data_dtypes = []
+            new_data_fields = []
 
             index_spark_columns = self._internal.index_spark_columns.copy()
             index_names = self._internal.index_names.copy()
-            index_dtypes = self._internal.index_dtypes.copy()
+            index_fields = self._internal.index_fields.copy()
 
             for i in idx[::-1]:
                 name = index_names.pop(i)
@@ -3849,12 +3826,12 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 scol = index_spark_columns.pop(i)
                 new_data_spark_columns.insert(0, scol.alias(name_like_string(name)))
 
-                new_data_dtypes.insert(0, index_dtypes.pop(i))
+                new_data_fields.insert(0, index_fields.pop(i).copy(name=name_like_string(name)))
 
         if drop:
             new_data_spark_columns = []
             new_column_labels = []
-            new_data_dtypes = []
+            new_data_fields = []
 
         for label in new_column_labels:
             if label in self._internal.column_labels:
@@ -3882,10 +3859,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         internal = self._internal.copy(
             index_spark_columns=index_spark_columns,
             index_names=index_names,
-            index_dtypes=index_dtypes,
+            index_fields=index_fields,
             column_labels=new_column_labels + self._internal.column_labels,
             data_spark_columns=new_data_spark_columns + self._internal.data_spark_columns,
-            data_dtypes=new_data_dtypes + self._internal.data_dtypes,
+            data_fields=new_data_fields + self._internal.data_fields,
         )
 
         if inplace:
@@ -3922,7 +3899,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         0   True  False   True
         1  False   True  False
         """
-        return self._apply_series_op(lambda kser: kser.isnull())
+        return self._apply_series_op(lambda psser: psser.isnull())
 
     isna = isnull
 
@@ -3954,7 +3931,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         0  True   True  True
         1  True  False  True
         """
-        return self._apply_series_op(lambda kser: kser.notnull())
+        return self._apply_series_op(lambda psser: psser.notnull())
 
     notna = notnull
 
@@ -3982,14 +3959,14 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Examples
         --------
-        >>> kdf = ps.DataFrame([1, 2, 3])
-        >>> kdf.sort_index()
+        >>> psdf = ps.DataFrame([1, 2, 3])
+        >>> psdf.sort_index()
            0
         0  1
         1  2
         2  3
-        >>> kdf.insert(0, 'x', 4)
-        >>> kdf.sort_index()
+        >>> psdf.insert(0, 'x', 4)
+        >>> psdf.sort_index()
            x  0
         0  4  1
         1  4  2
@@ -3998,15 +3975,15 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         >>> from pyspark.pandas.config import set_option, reset_option
         >>> set_option("compute.ops_on_diff_frames", True)
 
-        >>> kdf.insert(1, 'y', [5, 6, 7])
-        >>> kdf.sort_index()
+        >>> psdf.insert(1, 'y', [5, 6, 7])
+        >>> psdf.sort_index()
            x  y  0
         0  4  5  1
         1  4  6  2
         2  4  7  3
 
-        >>> kdf.insert(2, 'z', ps.Series([8, 9, 10]))
-        >>> kdf.sort_index()
+        >>> psdf.insert(2, 'z', ps.Series([8, 9, 10]))
+        >>> psdf.sort_index()
            x  y   z  0
         0  4  5   8  1
         1  4  6   9  2
@@ -4021,7 +3998,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         assert allow_duplicates is False
 
         if not is_name_like_value(column):
-            raise ValueError(
+            raise TypeError(
                 '"column" should be a scalar value or tuple that contains scalar values'
             )
 
@@ -4033,11 +4010,11 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         if column in self.columns:
             raise ValueError("cannot insert %s, already exists" % column)
 
-        kdf = self.copy()
-        kdf[column] = value
-        columns = kdf.columns[:-1].insert(loc, kdf.columns[-1])
-        kdf = kdf[columns]
-        self._update_internal_frame(kdf._internal)
+        psdf = self.copy()
+        psdf[column] = value
+        columns = psdf.columns[:-1].insert(loc, psdf.columns[-1])
+        psdf = psdf[columns]
+        self._update_internal_frame(psdf._internal)
 
     # TODO: add frep and axis parameter
     def shift(self, periods=1, fill_value=None) -> "DataFrame":
@@ -4086,7 +4063,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         """
         return self._apply_series_op(
-            lambda kser: kser._shift(periods, fill_value), should_resolve=True
+            lambda psser: psser._shift(periods, fill_value), should_resolve=True
         )
 
     # TODO: axis should support 1 or 'columns' either at this moment
@@ -4162,7 +4139,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         if axis != 0:
             raise NotImplementedError('axis should be either 0 or "index" currently.')
 
-        return self._apply_series_op(lambda kser: kser._diff(periods), should_resolve=True)
+        return self._apply_series_op(lambda psser: psser._diff(periods), should_resolve=True)
 
     # TODO: axis should support 1 or 'columns' either at this moment
     def nunique(
@@ -4187,14 +4164,14 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             If False, will use the exact algorithm and return the exact number of unique.
             If True, it uses the HyperLogLog approximate algorithm, which is significantly faster
             for large amount of data.
-            Note: This parameter is specific to Koalas and is not found in pandas.
+            Note: This parameter is specific to pandas-on-Spark and is not found in pandas.
         rsd: float, default 0.05
             Maximum estimation error allowed in the HyperLogLog algorithm.
-            Note: Just like ``approx`` this parameter is specific to Koalas.
+            Note: Just like ``approx`` this parameter is specific to pandas-on-Spark.
 
         Returns
         -------
-        The number of unique values per column as a Koalas Series.
+        The number of unique values per column as a pandas-on-Spark Series.
 
         Examples
         --------
@@ -4225,7 +4202,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         sdf = self._internal.spark_frame.select(
             [F.lit(None).cast(StringType()).alias(SPARK_DEFAULT_INDEX_NAME)]
             + [
-                self._kser_for(label)._nunique(dropna, approx, rsd)
+                self._psser_for(label)._nunique(dropna, approx, rsd)
                 for label in self._internal.column_labels
             ]
         )
@@ -4236,11 +4213,11 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 spark_frame=sdf,
                 index_spark_columns=[scol_for(sdf, SPARK_DEFAULT_INDEX_NAME)],
                 index_names=[None],
-                index_dtypes=[None],
+                index_fields=[None],
                 data_spark_columns=[
                     scol_for(sdf, col) for col in self._internal.data_spark_column_names
                 ],
-                data_dtypes=None,
+                data_fields=None,
             )
             return first_series(DataFrame(internal).transpose())
 
@@ -4313,16 +4290,16 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         elif isinstance(decimals, int):
             decimals = {k: decimals for k in self._internal.column_labels}
         else:
-            raise ValueError("decimals must be an integer, a dict-like or a Series")
+            raise TypeError("decimals must be an integer, a dict-like or a Series")
 
-        def op(kser):
-            label = kser._column_label
+        def op(psser):
+            label = psser._column_label
             if label in decimals:
-                return F.round(kser.spark.column, decimals[label]).alias(
-                    kser._internal.data_spark_column_names[0]
+                return F.round(psser.spark.column, decimals[label]).alias(
+                    psser._internal.data_spark_column_names[0]
                 )
             else:
-                return kser
+                return psser
 
         return self._apply_series_op(op)
 
@@ -4435,7 +4412,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                         scol_for(sdf, col) for col in self._internal.index_spark_column_names
                     ],
                     index_names=self._internal.index_names,
-                    index_dtypes=self._internal.index_dtypes,
+                    index_fields=self._internal.index_fields,
                     column_labels=[None],  # type: ignore
                     data_spark_columns=[scol_for(sdf, SPARK_DEFAULT_SERIES_NAME)],
                 )
@@ -4461,9 +4438,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 >>> with option_context(
                 ...     'compute.max_rows', 1000, "compute.ops_on_diff_frames", True
                 ... ):  # doctest: +NORMALIZE_WHITESPACE
-                ...     kdf = ps.DataFrame({'a': range(1001)})
-                ...     kser = ps.Series([2], index=['a'])
-                ...     kdf.dot(kser)
+                ...     psdf = ps.DataFrame({'a': range(1001)})
+                ...     psser = ps.Series([2], index=['a'])
+                ...     psdf.dot(psser)
                 Traceback (most recent call last):
                   ...
                 ValueError: Current DataFrame has more then the given limit 1000 rows.
@@ -4499,21 +4476,21 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         --------
         >>> from pyspark.pandas.config import set_option, reset_option
         >>> set_option("compute.ops_on_diff_frames", True)
-        >>> kdf = ps.DataFrame([[0, 1, -2, -1], [1, 1, 1, 1]])
-        >>> kser = ps.Series([1, 1, 2, 1])
-        >>> kdf.dot(kser)
+        >>> psdf = ps.DataFrame([[0, 1, -2, -1], [1, 1, 1, 1]])
+        >>> psser = ps.Series([1, 1, 2, 1])
+        >>> psdf.dot(psser)
         0   -4
         1    5
         dtype: int64
 
         Note how shuffling of the objects does not change the result.
 
-        >>> kser2 = kser.reindex([1, 0, 2, 3])
-        >>> kdf.dot(kser2)
+        >>> psser2 = psser.reindex([1, 0, 2, 3])
+        >>> psdf.dot(psser2)
         0   -4
         1    5
         dtype: int64
-        >>> kdf @ kser2
+        >>> psdf @ psser2
         0   -4
         1    5
         dtype: int64
@@ -4530,16 +4507,16 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         """
         return self.dot(other)
 
-    def to_koalas(self, index_col: Optional[Union[str, List[str]]] = None) -> "DataFrame":
+    def to_pandas_on_spark(self, index_col: Optional[Union[str, List[str]]] = None) -> "DataFrame":
         """
-        Converts the existing DataFrame into a Koalas DataFrame.
+        Converts the existing DataFrame into a pandas-on-Spark DataFrame.
 
         This method is monkey-patched into Spark's DataFrame and can be used
-        to convert a Spark DataFrame into a Koalas DataFrame. If running on
-        an existing Koalas DataFrame, the method returns itself.
+        to convert a Spark DataFrame into a pandas-on-Spark DataFrame. If running on
+        an existing pandas-on-Spark DataFrame, the method returns itself.
 
-        If a Koalas DataFrame is converted to a Spark DataFrame and then back
-        to Koalas, it will lose the index information and the original index
+        If a pandas-on-Spark DataFrame is converted to a Spark DataFrame and then back
+        to pandas-on-Spark, it will lose the index information and the original index
         will be turned into a normal column.
 
         Parameters
@@ -4563,24 +4540,24 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         >>> spark_df
         DataFrame[col1: bigint, col2: bigint]
 
-        >>> kdf = spark_df.to_koalas()
-        >>> kdf
+        >>> psdf = spark_df.to_pandas_on_spark()
+        >>> psdf
            col1  col2
         0     1     3
         1     2     4
 
         We can specify the index columns.
 
-        >>> kdf = spark_df.to_koalas(index_col='col1')
-        >>> kdf  # doctest: +NORMALIZE_WHITESPACE
+        >>> psdf = spark_df.to_pandas_on_spark(index_col='col1')
+        >>> psdf  # doctest: +NORMALIZE_WHITESPACE
               col2
         col1
         1        3
         2        4
 
-        Calling to_koalas on a Koalas DataFrame simply returns itself.
+        Calling to_pandas_on_spark on a pandas-on-Spark DataFrame simply returns itself.
 
-        >>> df.to_koalas()
+        >>> df.to_pandas_on_spark()
            col1  col2
         0     1     3
         1     2     4
@@ -4597,35 +4574,13 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             )
             return DataFrame(internal)
 
-    def cache(self) -> "CachedDataFrame":
+    # Keep to_koalas for backward compatibility for now.
+    def to_koalas(self, index_col: Optional[Union[str, List[str]]] = None) -> "DataFrame":
         warnings.warn(
-            "DataFrame.cache is deprecated as of DataFrame.spark.cache. "
-            "Please use the API instead.",
+            "DataFrame.to_koalas is deprecated. Use DataFrame.to_pandas_on_spark instead.",
             FutureWarning,
         )
-        return self.spark.cache()
-
-    cache.__doc__ = SparkFrameMethods.cache.__doc__
-
-    def persist(self, storage_level=StorageLevel.MEMORY_AND_DISK) -> "CachedDataFrame":
-        warnings.warn(
-            "DataFrame.persist is deprecated as of DataFrame.spark.persist. "
-            "Please use the API instead.",
-            FutureWarning,
-        )
-        return self.spark.persist(storage_level)
-
-    persist.__doc__ = SparkFrameMethods.persist.__doc__
-
-    def hint(self, name: str, *parameters) -> "DataFrame":
-        warnings.warn(
-            "DataFrame.hint is deprecated as of DataFrame.spark.hint. "
-            "Please use the API instead.",
-            FutureWarning,
-        )
-        return self.spark.hint(name, *parameters)
-
-    hint.__doc__ = SparkFrameMethods.hint.__doc__
+        return self.to_pandas_on_spark(index_col)
 
     def to_table(
         self,
@@ -4667,8 +4622,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         partition_cols : str or list of str, optional, default None
             Names of partitioning columns
         index_col: str or list of str, optional, default: None
-            Column names to be used in Spark to represent Koalas' index. The index name
-            in Koalas is ignored. By default, the index is always lost.
+            Column names to be used in Spark to represent pandas-on-Spark's index. The index name
+            in pandas-on-Spark is ignored. By default, the index is always lost.
         options : dict
             All other options passed directly into Delta Lake.
 
@@ -4749,8 +4704,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             Compression codec to use when saving to file. If None is set, it uses the
             value specified in `spark.sql.parquet.compression.codec`.
         index_col: str or list of str, optional, default: None
-            Column names to be used in Spark to represent Koalas' index. The index name
-            in Koalas is ignored. By default, the index is always lost.
+            Column names to be used in Spark to represent pandas-on-Spark's index. The index name
+            in pandas-on-Spark is ignored. By default, the index is always lost.
         options : dict
             All other options passed directly into Spark's data source.
 
@@ -4786,7 +4741,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         builder = self.to_spark(index_col=index_col).write.mode(mode)
         if partition_cols is not None:
             builder.partitionBy(partition_cols)
-        builder._set_opts(compression=compression)
+        if compression is not None:
+            builder.option("compression", compression)
         builder.options(**options).format("parquet").save(path)
 
     def to_orc(
@@ -4816,8 +4772,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         partition_cols : str or list of str, optional, default None
             Names of partitioning columns
         index_col: str or list of str, optional, default: None
-            Column names to be used in Spark to represent Koalas' index. The index name
-            in Koalas is ignored. By default, the index is always lost.
+            Column names to be used in Spark to represent pandas-on-Spark's index. The index name
+            in pandas-on-Spark is ignored. By default, the index is always lost.
         options : dict
             All other options passed directly into Spark's data source.
 
@@ -4869,6 +4825,13 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         index_col: Optional[Union[str, List[str]]] = None,
         **options
     ) -> None:
+        """An alias for :func:`DataFrame.spark.to_spark_io`.
+        See :meth:`pyspark.pandas.spark.accessors.SparkFrameMethods.to_spark_io`.
+
+        .. deprecated:: 3.2.0
+            Use :func:`DataFrame.spark.to_spark_io` instead.
+        """
+        warnings.warn("Deprecated in 3.2, Use spark.to_spark_io instead.", FutureWarning)
         return self.spark.to_spark_io(path, format, mode, partition_cols, index_col, **options)
 
     to_spark_io.__doc__ = SparkFrameMethods.to_spark_io.__doc__
@@ -4898,17 +4861,6 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         """
         return self._internal.to_pandas_frame.copy()
 
-    # Alias to maintain backward compatibility with Spark
-    def toPandas(self) -> pd.DataFrame:
-        warnings.warn(
-            "DataFrame.toPandas is deprecated as of DataFrame.to_pandas. "
-            "Please use the API instead.",
-            FutureWarning,
-        )
-        return self.to_pandas()
-
-    toPandas.__doc__ = to_pandas.__doc__
-
     def assign(self, **kwargs) -> "DataFrame":
         """
         Assign new columns to a DataFrame.
@@ -4922,7 +4874,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             The column names are keywords. If the values are
             callable, they are computed on the DataFrame and
             assigned to the new columns. The callable must not
-            change input DataFrame (though Koalas doesn't check it).
+            change input DataFrame (though pandas-on-Spark doesn't check it).
             If the values are not callable, (e.g. a Series or a literal),
             they are simply assigned.
 
@@ -4965,7 +4917,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         Assigning multiple columns within the same ``assign`` is possible
         but you cannot refer to newly created or modified columns. This
         feature is supported in pandas for Python 3.6 and later but not in
-        Koalas. In Koalas, all items are computed first, and then assigned.
+        pandas-on-Spark. In pandas-on-Spark, all items are computed first,
+        and then assigned.
         """
         return self._assign(kwargs)
 
@@ -4987,7 +4940,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         pairs = {
             (k if is_name_like_tuple(k) else (k,)): (
-                (v.spark.column, v.dtype)
+                (v.spark.column, v._internal.data_fields[0])
                 if isinstance(v, IndexOpsMixin) and not isinstance(v, MultiIndex)
                 else (v, None)
                 if isinstance(v, spark.Column)
@@ -4997,25 +4950,33 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         }
 
         scols = []
-        data_dtypes = []
+        data_fields = []
         for label in self._internal.column_labels:
             for i in range(len(label)):
                 if label[: len(label) - i] in pairs:
-                    scol, dtype = pairs[label[: len(label) - i]]
-                    scol = scol.alias(self._internal.spark_column_name_for(label))
+                    scol, field = pairs[label[: len(label) - i]]
+
+                    name = self._internal.spark_column_name_for(label)
+                    scol = scol.alias(name)
+                    if field is not None:
+                        field = field.copy(name=name)
                     break
             else:
                 scol = self._internal.spark_column_for(label)
-                dtype = self._internal.dtype_for(label)
+                field = self._internal.field_for(label)
             scols.append(scol)
-            data_dtypes.append(dtype)
+            data_fields.append(field)
 
         column_labels = self._internal.column_labels.copy()
-        for label, (scol, dtype) in pairs.items():
+        for label, (scol, field) in pairs.items():
             if label not in set(i[: len(label)] for i in self._internal.column_labels):
-                scols.append(scol.alias(name_like_string(label)))
+                name = name_like_string(label)
+                scols.append(scol.alias(name))
+                if field is not None:
+                    field = field.copy(name=name)
+                data_fields.append(field)
+
                 column_labels.append(label)
-                data_dtypes.append(dtype)
 
         level = self._internal.column_labels_level
         column_labels = [
@@ -5023,7 +4984,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         ]
 
         internal = self._internal.with_new_columns(
-            scols, column_labels=column_labels, data_dtypes=data_dtypes
+            scols, column_labels=column_labels, data_fields=data_fields
         )
         return DataFrame(internal)
 
@@ -5162,10 +5123,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                   dtype=[('index', 'S2'), ('A', '<i8'), ('B', '<f8')])
         """
         args = locals()
-        kdf = self
+        psdf = self
 
         return validate_arguments_and_invoke_function(
-            kdf._to_internal_pandas(), self.to_records, pd.DataFrame.to_records, args
+            psdf._to_internal_pandas(), self.to_records, pd.DataFrame.to_records, args
         )
 
     def copy(self, deep=None) -> "DataFrame":
@@ -5320,7 +5281,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             cnt = reduce(
                 lambda x, y: x + y,
                 [
-                    F.when(self._kser_for(label).notna().spark.column, 1).otherwise(0)
+                    F.when(self._psser_for(label).notna().spark.column, 1).otherwise(0)
                     for label in labels
                 ],
                 F.lit(0),
@@ -5395,12 +5356,12 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                     label for label, cnt in zip(internal.column_labels, counts) if (cnt or 0) > 0
                 ]
 
-            kdf = self[column_labels]
+            psdf = self[column_labels]
             if inplace:
-                self._update_internal_frame(kdf._internal)
+                self._update_internal_frame(psdf._internal)
                 return None
             else:
-                return kdf
+                return psdf
 
     # TODO: add 'limit' when value parameter exists
     def fillna(
@@ -5501,34 +5462,40 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                         raise TypeError("Unsupported type %s" % type(v).__name__)
                 value = {k if is_name_like_tuple(k) else (k,): v for k, v in value.items()}
 
-                def op(kser):
-                    label = kser._column_label
+                def op(psser):
+                    label = psser._column_label
                     for k, v in value.items():
                         if k == label[: len(k)]:
-                            return kser._fillna(
+                            return psser._fillna(
                                 value=value[k], method=method, axis=axis, limit=limit
                             )
                     else:
-                        return kser
+                        return psser
 
             else:
-                op = lambda kser: kser._fillna(value=value, method=method, axis=axis, limit=limit)
+                op = lambda psser: psser._fillna(value=value, method=method, axis=axis, limit=limit)
         elif method is not None:
-            op = lambda kser: kser._fillna(value=value, method=method, axis=axis, limit=limit)
+            op = lambda psser: psser._fillna(value=value, method=method, axis=axis, limit=limit)
         else:
             raise ValueError("Must specify a fillna 'value' or 'method' parameter.")
 
-        kdf = self._apply_series_op(op, should_resolve=(method is not None))
+        psdf = self._apply_series_op(op, should_resolve=(method is not None))
 
         inplace = validate_bool_kwarg(inplace, "inplace")
         if inplace:
-            self._update_internal_frame(kdf._internal, requires_same_anchor=False)
+            self._update_internal_frame(psdf._internal, requires_same_anchor=False)
             return None
         else:
-            return kdf
+            return psdf
 
     def replace(
-        self, to_replace=None, value=None, inplace=False, limit=None, regex=False, method="pad",
+        self,
+        to_replace=None,
+        value=None,
+        inplace=False,
+        limit=None,
+        regex=False,
+        method="pad",
     ) -> Optional["DataFrame"]:
         """
         Returns a new DataFrame replacing a value with another value.
@@ -5633,21 +5600,23 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             value is not None or all(isinstance(i, dict) for i in to_replace.values())
         ):
 
-            def op(kser):
-                if kser.name in to_replace:
-                    return kser.replace(to_replace=to_replace[kser.name], value=value, regex=regex)
+            def op(psser):
+                if psser.name in to_replace:
+                    return psser.replace(
+                        to_replace=to_replace[psser.name], value=value, regex=regex
+                    )
                 else:
-                    return kser
+                    return psser
 
         else:
-            op = lambda kser: kser.replace(to_replace=to_replace, value=value, regex=regex)
+            op = lambda psser: psser.replace(to_replace=to_replace, value=value, regex=regex)
 
-        kdf = self._apply_series_op(op)
+        psdf = self._apply_series_op(op)
         if inplace:
-            self._update_internal_frame(kdf._internal)
+            self._update_internal_frame(psdf._internal)
             return None
         else:
-            return kdf
+            return psdf
 
     def clip(self, lower: Union[float, int] = None, upper: Union[float, int] = None) -> "DataFrame":
         """
@@ -5683,14 +5652,14 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         will output the original DataFrame, simply ignoring the incompatible types.
         """
         if is_list_like(lower) or is_list_like(upper):
-            raise ValueError(
+            raise TypeError(
                 "List-like value are not supported for 'lower' and 'upper' at the " + "moment"
             )
 
         if lower is None and upper is None:
             return self
 
-        return self._apply_series_op(lambda kser: kser.clip(lower=lower, upper=upper))
+        return self._apply_series_op(lambda psser: psser.clip(lower=lower, upper=upper))
 
     def head(self, n: int = 5) -> "DataFrame":
         """
@@ -5781,8 +5750,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         --------
 
         >>> index = pd.date_range('2018-04-09', periods=4, freq='2D')
-        >>> kdf = ps.DataFrame({'A': [1, 2, 3, 4]}, index=index)
-        >>> kdf
+        >>> psdf = ps.DataFrame({'A': [1, 2, 3, 4]}, index=index)
+        >>> psdf
                     A
         2018-04-09  1
         2018-04-11  2
@@ -5791,7 +5760,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Get the rows for the last 3 days:
 
-        >>> kdf.last('3D')
+        >>> psdf.last('3D')
                     A
         2018-04-13  3
         2018-04-15  4
@@ -5836,8 +5805,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         --------
 
         >>> index = pd.date_range('2018-04-09', periods=4, freq='2D')
-        >>> kdf = ps.DataFrame({'A': [1, 2, 3, 4]}, index=index)
-        >>> kdf
+        >>> psdf = ps.DataFrame({'A': [1, 2, 3, 4]}, index=index)
+        >>> psdf
                     A
         2018-04-09  1
         2018-04-11  2
@@ -5846,7 +5815,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Get the rows for the last 3 days:
 
-        >>> kdf.first('3D')
+        >>> psdf.first('3D')
                     A
         2018-04-09  1
         2018-04-11  2
@@ -5964,12 +5933,12 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         small  5.5  2.333333  17  13
         """
         if not is_name_like_value(columns):
-            raise ValueError("columns should be one column name.")
+            raise TypeError("columns should be one column name.")
 
         if not is_name_like_value(values) and not (
             isinstance(values, list) and all(is_name_like_value(v) for v in values)
         ):
-            raise ValueError("values should be one column or list of columns.")
+            raise TypeError("values should be one column or list of columns.")
 
         if not isinstance(aggfunc, str) and (
             not isinstance(aggfunc, dict)
@@ -5977,7 +5946,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 is_name_like_value(key) and isinstance(value, str) for key, value in aggfunc.items()
             )
         ):
-            raise ValueError(
+            raise TypeError(
                 "aggfunc must be a dict mapping from column name "
                 "to aggregate functions (string)."
             )
@@ -6054,14 +6023,14 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 .agg(*agg_cols)
             )
         else:
-            raise ValueError("index should be a None or a list of columns.")
+            raise TypeError("index should be a None or a list of columns.")
 
         if fill_value is not None and isinstance(fill_value, (int, float)):
             sdf = sdf.fillna(fill_value)
 
         if index is not None:
             index_columns = [self._internal.spark_column_name_for(label) for label in index]
-            index_dtypes = [self._internal.dtype_for(label) for label in index]
+            index_fields = [self._internal.field_for(label) for label in index]
 
             if isinstance(values, list):
                 data_columns = [column for column in sdf.columns if column not in index_columns]
@@ -6090,12 +6059,12 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                         spark_frame=sdf,
                         index_spark_columns=[scol_for(sdf, col) for col in index_columns],
                         index_names=index,
-                        index_dtypes=index_dtypes,
+                        index_fields=index_fields,
                         column_labels=column_labels,
                         data_spark_columns=[scol_for(sdf, col) for col in data_columns],
                         column_label_names=column_label_names,  # type: ignore
                     )
-                    kdf = DataFrame(internal)  # type: "DataFrame"
+                    psdf = DataFrame(internal)  # type: "DataFrame"
                 else:
                     column_labels = [tuple(list(values[0]) + [column]) for column in data_columns]
                     column_label_names = ([None] * len(values[0])) + [columns]
@@ -6103,21 +6072,21 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                         spark_frame=sdf,
                         index_spark_columns=[scol_for(sdf, col) for col in index_columns],
                         index_names=index,
-                        index_dtypes=index_dtypes,
+                        index_fields=index_fields,
                         column_labels=column_labels,
                         data_spark_columns=[scol_for(sdf, col) for col in data_columns],
                         column_label_names=column_label_names,  # type: ignore
                     )
-                    kdf = DataFrame(internal)
+                    psdf = DataFrame(internal)
             else:
                 internal = InternalFrame(
                     spark_frame=sdf,
                     index_spark_columns=[scol_for(sdf, col) for col in index_columns],
                     index_names=index,
-                    index_dtypes=index_dtypes,
+                    index_fields=index_fields,
                     column_label_names=[columns],
                 )
-                kdf = DataFrame(internal)
+                psdf = DataFrame(internal)
         else:
             if isinstance(values, list):
                 index_values = values[-1]
@@ -6134,22 +6103,22 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 index_names=list(index_map.values()),
                 column_label_names=[columns],
             )
-            kdf = DataFrame(internal)
+            psdf = DataFrame(internal)
 
-        kdf_columns = kdf.columns
-        if isinstance(kdf_columns, pd.MultiIndex):
-            kdf.columns = kdf_columns.set_levels(
-                kdf_columns.levels[-1].astype(
-                    spark_type_to_pandas_dtype(self._kser_for(columns).spark.data_type)
+        psdf_columns = psdf.columns
+        if isinstance(psdf_columns, pd.MultiIndex):
+            psdf.columns = psdf_columns.set_levels(
+                psdf_columns.levels[-1].astype(
+                    spark_type_to_pandas_dtype(self._psser_for(columns).spark.data_type)
                 ),
                 level=-1,
             )
         else:
-            kdf.columns = kdf_columns.astype(
-                spark_type_to_pandas_dtype(self._kser_for(columns).spark.data_type)
+            psdf.columns = psdf_columns.astype(
+                spark_type_to_pandas_dtype(self._psser_for(columns).spark.data_type)
             )
 
-        return kdf
+        return psdf
 
     def pivot(self, index=None, columns=None, values=None) -> "DataFrame":
         """
@@ -6214,9 +6183,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         5  NaN  NaN  6.0
 
         Notice that, unlike pandas raises an ValueError when duplicated values are found,
-        Koalas' pivot still works with its first value it meets during operation because pivot
-        is an expensive operation and it is preferred to permissively execute over failing fast
-        when processing large data.
+        pandas-on-Spark's pivot still works with its first value it meets during operation because
+        pivot is an expensive operation and it is preferred to permissively execute over failing
+        fast when processing large data.
 
         >>> df = ps.DataFrame({"foo": ['one', 'one', 'two', 'two'],
         ...                    "bar": ['A', 'A', 'B', 'C'],
@@ -6320,12 +6289,12 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         else:
             column_label_names = None
 
-        ksers = [
-            self._kser_for(label).rename(name)
+        pssers = [
+            self._psser_for(label).rename(name)
             for label, name in zip(self._internal.column_labels, column_labels)
         ]
         self._update_internal_frame(
-            self._internal.with_new_columns(ksers, column_label_names=column_label_names)
+            self._internal.with_new_columns(pssers, column_label_names=column_label_names)
         )
 
     @property
@@ -6359,31 +6328,11 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         dtype: object
         """
         return pd.Series(
-            [self._kser_for(label).dtype for label in self._internal.column_labels],
+            [self._psser_for(label).dtype for label in self._internal.column_labels],
             index=pd.Index(
                 [label if len(label) > 1 else label[0] for label in self._internal.column_labels]
             ),
         )
-
-    def spark_schema(self, index_col: Optional[Union[str, List[str]]] = None) -> StructType:
-        warnings.warn(
-            "DataFrame.spark_schema is deprecated as of DataFrame.spark.schema. "
-            "Please use the API instead.",
-            FutureWarning,
-        )
-        return self.spark.schema(index_col)
-
-    spark_schema.__doc__ = SparkFrameMethods.schema.__doc__
-
-    def print_schema(self, index_col: Optional[Union[str, List[str]]] = None) -> None:
-        warnings.warn(
-            "DataFrame.print_schema is deprecated as of DataFrame.spark.print_schema. "
-            "Please use the API instead.",
-            FutureWarning,
-        )
-        return self.spark.print_schema(index_col)
-
-    print_schema.__doc__ = SparkFrameMethods.print_schema.__doc__
 
     def select_dtypes(self, include=None, exclude=None) -> "DataFrame":
         """
@@ -6483,7 +6432,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         4  1   True  1.0
         5  2  False  2.0
         """
-        from pyspark.sql.types import _parse_datatype_string
+        from pyspark.sql.types import _parse_datatype_string  # type: ignore
 
         if not is_list_like(include):
             include = (include,) if include is not None else ()
@@ -6535,12 +6484,12 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         for label in self._internal.column_labels:
             if len(include) > 0:
                 should_include = (
-                    infer_dtype_from_object(self._kser_for(label).dtype.name) in include_numpy_type
+                    infer_dtype_from_object(self._psser_for(label).dtype.name) in include_numpy_type
                     or self._internal.spark_type_for(label) in include_spark_type
                 )
             else:
                 should_include = not (
-                    infer_dtype_from_object(self._kser_for(label).dtype.name) in exclude_numpy_type
+                    infer_dtype_from_object(self._psser_for(label).dtype.name) in exclude_numpy_type
                     or self._internal.spark_type_for(label) in exclude_spark_type
                 )
 
@@ -6548,7 +6497,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 column_labels.append(label)
 
         return DataFrame(
-            self._internal.with_new_columns([self._kser_for(label) for label in column_labels])
+            self._internal.with_new_columns([self._psser_for(label) for label in column_labels])
         )
 
     def droplevel(self, level, axis=0) -> "DataFrame":
@@ -6637,14 +6586,14 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                     "at least one level must be left.".format(len(level), nlevels)
                 )
 
-            index_spark_columns, index_names, index_dtypes = zip(
+            index_spark_columns, index_names, index_fields = zip(
                 *[
                     item
                     for i, item in enumerate(
                         zip(
                             self._internal.index_spark_columns,
                             self._internal.index_names,
-                            self._internal.index_dtypes,
+                            self._internal.index_fields,
                         )
                     )
                     if i not in int_level
@@ -6654,13 +6603,13 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             internal = self._internal.copy(
                 index_spark_columns=list(index_spark_columns),
                 index_names=list(index_names),
-                index_dtypes=list(index_dtypes),
+                index_fields=list(index_fields),
             )
             return DataFrame(internal)
         else:
-            kdf = self.copy()
-            kdf.columns = kdf.columns.droplevel(level)
-            return kdf
+            psdf = self.copy()
+            psdf.columns = psdf.columns.droplevel(level)
+            return psdf
 
     def drop(
         self, labels=None, axis=1, columns: Union[Any, Tuple, List[Any], List[Tuple]] = None
@@ -6766,7 +6715,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                     if label not in drop_column_labels
                 )
             )
-            internal = self._internal.with_new_columns([self._kser_for(label) for label in labels])
+            internal = self._internal.with_new_columns([self._psser_for(label) for label in labels])
             return DataFrame(internal)
         else:
             raise ValueError("Need to specify at least one of 'labels' or 'columns'")
@@ -6792,13 +6741,13 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             (False, "last"): lambda x: Column(getattr(x._jc, "desc_nulls_last")()),
         }
         by = [mapper[(asc, na_position)](scol) for scol, asc in zip(by, ascending)]
-        sdf = self._internal.resolved_copy.spark_frame.sort(*(by + [NATURAL_ORDER_COLUMN_NAME]))
-        kdf = DataFrame(self._internal.with_new_sdf(sdf))  # type: DataFrame
+        sdf = self._internal.resolved_copy.spark_frame.sort(*by, NATURAL_ORDER_COLUMN_NAME)
+        psdf = DataFrame(self._internal.with_new_sdf(sdf))  # type: DataFrame
         if inplace:
-            self._update_internal_frame(kdf._internal)
+            self._update_internal_frame(psdf._internal)
             return None
         else:
-            return kdf
+            return psdf
 
     def sort_values(
         self,
@@ -6919,7 +6868,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         inplace : bool, default False
             if True, perform operation in-place
         kind : str, default None
-            Koalas does not allow specifying the sorting algorithm at the moment, default None
+            pandas-on-Spark does not allow specifying the sorting algorithm at the moment,
+            default None
         na_position : {‘first’, ‘last’}, default ‘last’
             first puts NaNs at the beginning, last puts NaNs at the end. Not implemented for
             MultiIndex.
@@ -7028,26 +6978,26 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Swap levels in a MultiIndex on index.
 
-        >>> kdf = ps.DataFrame({'x': [5, 6], 'y':[5, 6]}, index=midx)
-        >>> kdf  # doctest: +NORMALIZE_WHITESPACE
+        >>> psdf = ps.DataFrame({'x': [5, 6], 'y':[5, 6]}, index=midx)
+        >>> psdf  # doctest: +NORMALIZE_WHITESPACE
                            x  y
         color number size
         red   1      s     5  5
         blue  2      m     6  6
 
-        >>> kdf.swaplevel()  # doctest: +NORMALIZE_WHITESPACE
+        >>> psdf.swaplevel()  # doctest: +NORMALIZE_WHITESPACE
                            x  y
         color size number
         red   s    1       5  5
         blue  m    2       6  6
 
-        >>> kdf.swaplevel(0, 1)  # doctest: +NORMALIZE_WHITESPACE
+        >>> psdf.swaplevel(0, 1)  # doctest: +NORMALIZE_WHITESPACE
                            x  y
         number color size
         1      red   s     5  5
         2      blue  m     6  6
 
-        >>> kdf.swaplevel('number', 'size')  # doctest: +NORMALIZE_WHITESPACE
+        >>> psdf.swaplevel('number', 'size')  # doctest: +NORMALIZE_WHITESPACE
                            x  y
         color size number
         red   s    1       5  5
@@ -7055,37 +7005,37 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Swap levels in a MultiIndex on columns.
 
-        >>> kdf = ps.DataFrame({'x': [5, 6], 'y':[5, 6]})
-        >>> kdf.columns = midx
-        >>> kdf
+        >>> psdf = ps.DataFrame({'x': [5, 6], 'y':[5, 6]})
+        >>> psdf.columns = midx
+        >>> psdf
         color  red blue
         number   1    2
         size     s    m
         0        5    5
         1        6    6
 
-        >>> kdf.swaplevel(axis=1)
+        >>> psdf.swaplevel(axis=1)
         color  red blue
         size     s    m
         number   1    2
         0        5    5
         1        6    6
 
-        >>> kdf.swaplevel(axis=1)
+        >>> psdf.swaplevel(axis=1)
         color  red blue
         size     s    m
         number   1    2
         0        5    5
         1        6    6
 
-        >>> kdf.swaplevel(0, 1, axis=1)
+        >>> psdf.swaplevel(0, 1, axis=1)
         number   1    2
         color  red blue
         size     s    m
         0        5    5
         1        6    6
 
-        >>> kdf.swaplevel('number', 'color', axis=1)
+        >>> psdf.swaplevel('number', 'color', axis=1)
         number   1    2
         color  red blue
         size     s    m
@@ -7132,20 +7082,20 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Examples
         --------
-        >>> kdf = ps.DataFrame(
+        >>> psdf = ps.DataFrame(
         ...     [[1, 2, 3], [4, 5, 6], [7, 8, 9]], index=['x', 'y', 'z'], columns=['a', 'b', 'c']
         ... )
-        >>> kdf
+        >>> psdf
            a  b  c
         x  1  2  3
         y  4  5  6
         z  7  8  9
-        >>> kdf.swapaxes(i=1, j=0)
+        >>> psdf.swapaxes(i=1, j=0)
            x  y  z
         a  1  4  7
         b  2  5  8
         c  3  6  9
-        >>> kdf.swapaxes(i=1, j=1)
+        >>> psdf.swapaxes(i=1, j=1)
            a  b  c
         x  1  2  3
         y  4  5  6
@@ -7207,15 +7157,15 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             zip(
                 self._internal.index_spark_columns,
                 self._internal.index_names,
-                self._internal.index_dtypes,
+                self._internal.index_fields,
             )
         )
-        index_map[i], index_map[j], = index_map[j], index_map[i]
-        index_spark_columns, index_names, index_dtypes = zip(*index_map)
+        index_map[i], index_map[j] = index_map[j], index_map[i]
+        index_spark_columns, index_names, index_fields = zip(*index_map)
         internal = self._internal.copy(
             index_spark_columns=list(index_spark_columns),
             index_names=list(index_names),
-            index_dtypes=list(index_dtypes),
+            index_fields=list(index_fields),
         )
         return internal
 
@@ -7231,7 +7181,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         This method is equivalent to
         ``df.sort_values(columns, ascending=False).head(n)``, but more
         performant in pandas.
-        In Koalas, thanks to Spark's lazy execution and query optimizer,
+        In pandas-on-Spark, thanks to Spark's lazy execution and query optimizer,
         the two would have same performance.
 
         Parameters
@@ -7303,8 +7253,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         well, but not used for ordering.
 
         This method is equivalent to ``df.sort_values(columns, ascending=True).head(n)``,
-        but more performant. In Koalas, thanks to Spark's lazy execution and query optimizer,
-        the two would have same performance.
+        but more performant. In pandas-on-Spark, thanks to Spark's lazy execution and query
+        optimizer, the two would have same performance.
 
         Parameters
         ----------
@@ -7554,24 +7504,24 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         ...foo        5  foo        5
         ...foo        5  foo        8
 
-        >>> left_kdf = ps.DataFrame({'A': [1, 2]})
-        >>> right_kdf = ps.DataFrame({'B': ['x', 'y']}, index=[1, 2])
+        >>> left_psdf = ps.DataFrame({'A': [1, 2]})
+        >>> right_psdf = ps.DataFrame({'B': ['x', 'y']}, index=[1, 2])
 
-        >>> left_kdf.merge(right_kdf, left_index=True, right_index=True).sort_index()
+        >>> left_psdf.merge(right_psdf, left_index=True, right_index=True).sort_index()
            A  B
         1  2  x
 
-        >>> left_kdf.merge(right_kdf, left_index=True, right_index=True, how='left').sort_index()
+        >>> left_psdf.merge(right_psdf, left_index=True, right_index=True, how='left').sort_index()
            A     B
         0  1  None
         1  2     x
 
-        >>> left_kdf.merge(right_kdf, left_index=True, right_index=True, how='right').sort_index()
+        >>> left_psdf.merge(right_psdf, left_index=True, right_index=True, how='right').sort_index()
              A  B
         1  2.0  x
         2  NaN  y
 
-        >>> left_kdf.merge(right_kdf, left_index=True, right_index=True, how='outer').sort_index()
+        >>> left_psdf.merge(right_psdf, left_index=True, right_index=True, how='outer').sort_index()
              A     B
         0  1.0  None
         1  2.0     x
@@ -7656,9 +7606,13 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 index_spark_columns=[
                     scol_for(sdf, rename(col)) for col in internal.index_spark_column_names
                 ],
+                index_fields=[
+                    field.copy(name=rename(field.name)) for field in internal.index_fields
+                ],
                 data_spark_columns=[
                     scol_for(sdf, rename(col)) for col in internal.data_spark_column_names
                 ],
+                data_fields=[field.copy(name=rename(field.name)) for field in internal.data_fields],
             )
 
         left_internal = self._internal.resolved_copy
@@ -7720,7 +7674,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             column_labels.append(label)
         for label in right_internal.column_labels:
             # recover `right_prefix` here.
-            col = right_internal.spark_column_name_for(label)[len(right_prefix):]
+            col = right_internal.spark_column_name_for(label)[len(right_prefix) :]
             scol = right_scol_for(label).alias(col)
             if label in duplicate_columns:
                 spark_column_name = left_internal.spark_column_name_for(label)
@@ -7839,19 +7793,19 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Examples
         --------
-        >>> kdf1 = ps.DataFrame({'key': ['K0', 'K1', 'K2', 'K3'],
+        >>> psdf1 = ps.DataFrame({'key': ['K0', 'K1', 'K2', 'K3'],
         ...                      'A': ['A0', 'A1', 'A2', 'A3']},
         ...                     columns=['key', 'A'])
-        >>> kdf2 = ps.DataFrame({'key': ['K0', 'K1', 'K2'],
+        >>> psdf2 = ps.DataFrame({'key': ['K0', 'K1', 'K2'],
         ...                      'B': ['B0', 'B1', 'B2']},
         ...                     columns=['key', 'B'])
-        >>> kdf1
+        >>> psdf1
           key   A
         0  K0  A0
         1  K1  A1
         2  K2  A2
         3  K3  A3
-        >>> kdf2
+        >>> psdf2
           key   B
         0  K0  B0
         1  K1  B1
@@ -7859,8 +7813,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Join DataFrames using their indexes.
 
-        >>> join_kdf = kdf1.join(kdf2, lsuffix='_left', rsuffix='_right')
-        >>> join_kdf.sort_values(by=join_kdf.columns)
+        >>> join_psdf = psdf1.join(psdf2, lsuffix='_left', rsuffix='_right')
+        >>> join_psdf.sort_values(by=join_psdf.columns)
           key_left   A key_right     B
         0       K0  A0        K0    B0
         1       K1  A1        K1    B1
@@ -7870,8 +7824,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         If we want to join using the key columns, we need to set key to be the index in both df and
         right. The joined DataFrame will have key as its index.
 
-        >>> join_kdf = kdf1.set_index('key').join(kdf2.set_index('key'))
-        >>> join_kdf.sort_values(by=join_kdf.columns) # doctest: +NORMALIZE_WHITESPACE
+        >>> join_psdf = psdf1.set_index('key').join(psdf2.set_index('key'))
+        >>> join_psdf.sort_values(by=join_psdf.columns) # doctest: +NORMALIZE_WHITESPACE
               A     B
         key
         K0   A0    B0
@@ -7883,8 +7837,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         always uses right’s index but we can use any column in df. This method not preserve the
         original DataFrame’s index in the result unlike pandas.
 
-        >>> join_kdf = kdf1.join(kdf2.set_index('key'), on='key')
-        >>> join_kdf.index
+        >>> join_psdf = psdf1.join(psdf2.set_index('key'), on='key')
+        >>> join_psdf.index
         Int64Index([0, 1, 2, 3], dtype='int64')
         """
         if isinstance(right, ps.Series):
@@ -7908,10 +7862,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             need_set_index = len(set(on) & set(self.index.names)) == 0
         if need_set_index:
             self = self.set_index(on)
-        join_kdf = self.merge(
+        join_psdf = self.merge(
             right, left_index=True, right_index=True, how=how, suffixes=(lsuffix, rsuffix)
         )
-        return join_kdf.reset_index() if need_set_index else join_kdf
+        return join_psdf.reset_index() if need_set_index else join_psdf
 
     def append(
         self,
@@ -7962,7 +7916,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         3  3  4
         """
         if isinstance(other, ps.Series):
-            raise ValueError("DataFrames.append() does not support appending Series to DataFrames")
+            raise TypeError("DataFrames.append() does not support appending Series to DataFrames")
         if sort:
             raise NotImplementedError("The 'sort' parameter is currently not supported")
 
@@ -8072,7 +8026,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             other[update_columns], rsuffix="_new"
         )._internal.resolved_copy.spark_frame
 
-        data_dtypes = self._internal.data_dtypes.copy()
+        data_fields = self._internal.data_fields.copy()
         for column_labels in update_columns:
             column_name = self._internal.spark_column_name_for(column_labels)
             old_col = scol_for(update_sdf, column_name)
@@ -8087,12 +8041,12 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 update_sdf = update_sdf.withColumn(
                     column_name, F.when(old_col.isNull(), new_col).otherwise(old_col)
                 )
-            data_dtypes[self._internal.column_labels.index(column_labels)] = None  # TODO: dtype?
+            data_fields[self._internal.column_labels.index(column_labels)] = None  # TODO: dtype?
         sdf = update_sdf.select(
-            [scol_for(update_sdf, col) for col in self._internal.spark_column_names]
-            + list(HIDDEN_COLUMNS)
+            *[scol_for(update_sdf, col) for col in self._internal.spark_column_names],
+            *HIDDEN_COLUMNS,
         )
-        internal = self._internal.with_new_sdf(sdf, data_dtypes=data_dtypes)
+        internal = self._internal.with_new_sdf(sdf, data_fields=data_fields)
         self._update_internal_frame(internal, requires_same_anchor=False)
 
     def sample(
@@ -8108,10 +8062,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         Please call this function using named argument by specifying the ``frac`` argument.
 
         You can use `random_state` for reproducibility. However, note that different from pandas,
-        specifying a seed in Koalas/Spark does not guarantee the sampled rows will be fixed. The
-        result set depends on not only the seed, but also how the data is distributed across
-        machines and to some extent network randomness when shuffle operations are involved. Even
-        in the simplest case, the result set will depend on the system's CPU core count.
+        specifying a seed in pandas-on-Spark/Spark does not guarantee the sampled rows will
+        be fixed. The result set depends on not only the seed, but also how the data is distributed
+        across machines and to some extent network randomness when shuffle operations are involved.
+        Even in the simplest case, the result set will depend on the system's CPU core count.
 
         Parameters
         ----------
@@ -8186,12 +8140,12 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
     def astype(self, dtype) -> "DataFrame":
         """
-        Cast a Koalas object to a specified dtype ``dtype``.
+        Cast a pandas-on-Spark object to a specified dtype ``dtype``.
 
         Parameters
         ----------
         dtype : data type, or dict of column name -> data type
-            Use a numpy.dtype or Python type to cast entire Koalas object to
+            Use a numpy.dtype or Python type to cast entire pandas-on-Spark object to
             the same type. Alternatively, use {col: dtype, ...}, where col is a
             column label and dtype is a numpy.dtype or Python type to cast one
             or more of the DataFrame's columns to column-specific types.
@@ -8298,7 +8252,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         """
         assert isinstance(prefix, str)
         return self._apply_series_op(
-            lambda kser: kser.rename(tuple([prefix + i for i in kser._column_label]))
+            lambda psser: psser.rename(tuple([prefix + i for i in psser._column_label]))
         )
 
     def add_suffix(self, suffix) -> "DataFrame":
@@ -8343,7 +8297,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         """
         assert isinstance(suffix, str)
         return self._apply_series_op(
-            lambda kser: kser.rename(tuple([i + suffix for i in kser._column_label]))
+            lambda psser: psser.rename(tuple([i + suffix for i in psser._column_label]))
         )
 
     # TODO: include, and exclude should be implemented.
@@ -8516,8 +8470,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         formatted_perc = ["{:.0%}".format(p) for p in sorted(percentiles)]
         stats = ["count", "mean", "stddev", "min", *formatted_perc, "max"]
 
-        sdf = self._internal.spark_frame.select(*exprs).summary(stats)
-        sdf = sdf.replace("stddev", "std", subset="summary")
+        sdf = self._internal.spark_frame.select(*exprs).summary(*stats)
+        sdf = sdf.replace("stddev", "std", subset=["summary"])
 
         internal = InternalFrame(
             spark_frame=sdf,
@@ -8799,7 +8753,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         nlevels = self._internal.index_level
         assert nlevels <= 1 or (
             isinstance(index, ps.MultiIndex) and nlevels == index.nlevels
-        ), "MultiIndex DataFrame can only be reindexed with a similar Koalas MultiIndex."
+        ), "MultiIndex DataFrame can only be reindexed with a similar pandas-on-Spark MultiIndex."
 
         index_columns = self._internal.index_spark_column_names
         frame = self._internal.resolved_copy.spark_frame.drop(NATURAL_ORDER_COLUMN_NAME)
@@ -8816,8 +8770,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 [scol.alias(index_column) for scol, index_column in zip(scols, index_columns)]
             )
         else:
-            kser = ps.Series(list(index))
-            labels = kser._internal.spark_frame.select(kser.spark.column.alias(index_columns[0]))
+            psser = ps.Series(list(index))
+            labels = psser._internal.spark_frame.select(psser.spark.column.alias(index_columns[0]))
             index_names = self._internal.index_names
 
         if fill_value is not None:
@@ -8872,10 +8826,11 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 scol_for(sdf, col) for col in self._internal.index_spark_column_names
             ],
             index_names=index_names,
-            index_dtypes=None,  # TODO: dtypes?
+            index_fields=None,  # TODO: dtypes?
             data_spark_columns=[
                 scol_for(sdf, col) for col in self._internal.data_spark_column_names
             ],
+            data_fields=[InternalField(dtype=field.dtype) for field in self._internal.data_fields],
         )
         return DataFrame(internal)
 
@@ -8894,12 +8849,12 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                     "shape (1,{}) doesn't match the shape (1,{})".format(len(col), level)
                 )
         fill_value = np.nan if fill_value is None else fill_value
-        scols_or_ksers, labels = [], []
+        scols_or_pssers, labels = [], []
         for label in label_columns:
             if label in self._internal.column_labels:
-                scols_or_ksers.append(self._kser_for(label))
+                scols_or_pssers.append(self._psser_for(label))
             else:
-                scols_or_ksers.append(F.lit(fill_value).alias(name_like_string(label)))
+                scols_or_pssers.append(F.lit(fill_value).alias(name_like_string(label)))
             labels.append(label)
 
         if isinstance(columns, pd.Index):
@@ -8907,10 +8862,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 name if is_name_like_tuple(name) else (name,) for name in columns.names
             ]
             internal = self._internal.with_new_columns(
-                scols_or_ksers, column_labels=labels, column_label_names=column_label_names
+                scols_or_pssers, column_labels=labels, column_label_names=column_label_names
             )
         else:
-            internal = self._internal.with_new_columns(scols_or_ksers, column_labels=labels)
+            internal = self._internal.with_new_columns(scols_or_pssers, column_labels=labels)
 
         return DataFrame(internal)
 
@@ -8987,9 +8942,15 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         if isinstance(other, DataFrame):
             return self.reindex(index=other.index, columns=other.columns, copy=copy)
         else:
-            raise TypeError("other must be a Koalas DataFrame")
+            raise TypeError("other must be a pandas-on-Spark DataFrame")
 
-    def melt(self, id_vars=None, value_vars=None, var_name=None, value_name="value") -> "DataFrame":
+    def melt(
+        self,
+        id_vars: Optional[Union[Any, Tuple, List[Union[Any, Tuple]]]] = None,
+        value_vars: Optional[Union[Any, Tuple, List[Union[Any, Tuple]]]] = None,
+        var_name: Optional[Union[str, List[str]]] = None,
+        value_name: str = "value",
+    ) -> "DataFrame":
         """
         Unpivot a DataFrame from wide format to long format, optionally
         leaving identifier variables set.
@@ -9170,10 +9131,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             F.array(
                 *[
                     F.struct(
-                        *(
-                            [F.lit(c).alias(name) for c, name in zip(label, var_name)]
-                            + [self._internal.spark_column_for(label).alias(value_name)]
-                        )
+                        *[F.lit(c).alias(name) for c, name in zip(label, var_name)],
+                        *[self._internal.spark_column_for(label).alias(value_name)],
                     )
                     for label in column_labels
                     if label in value_vars
@@ -9345,20 +9304,20 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         structs = [
             F.struct(
-                [F.lit(value).alias(index_column)]
-                + [
+                *[F.lit(value).alias(index_column)],
+                *[
                     (
                         column_labels[label][value]
                         if value in column_labels[label]
                         else F.lit(None)
                     ).alias(name)
                     for label, name in zip(column_labels, data_columns)
-                ]
+                ],
             ).alias(value)
             for value in index_values
         ]
 
-        pairs = F.explode(F.array(structs))
+        pairs = F.explode(F.array(*structs))
 
         sdf = self._internal.spark_frame.withColumn("pairs", pairs)
         sdf = sdf.select(
@@ -9374,17 +9333,17 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 for col in (self._internal.index_spark_column_names + [index_column])
             ],
             index_names=self._internal.index_names + [index_name],
-            index_dtypes=self._internal.index_dtypes + [None],
+            index_fields=self._internal.index_fields + [None],
             column_labels=list(column_labels),
             data_spark_columns=[scol_for(sdf, col) for col in data_columns],
             column_label_names=column_label_names,  # type: ignore
         )
-        kdf = DataFrame(internal)  # type: "DataFrame"
+        psdf = DataFrame(internal)  # type: "DataFrame"
 
         if should_returns_series:
-            return first_series(kdf)
+            return first_series(psdf)
         else:
-            return kdf
+            return psdf
 
     def unstack(self) -> Union["DataFrame", "Series"]:
         """
@@ -9478,7 +9437,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             )
             internal = df._internal.copy(
                 index_names=self._internal.index_names[:-1],
-                index_dtypes=self._internal.index_dtypes[:-1],
+                index_fields=df._internal.index_fields[: self._internal.index_level - 1],
                 column_label_names=(
                     df._internal.column_label_names[:-1]
                     + [
@@ -9504,10 +9463,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             F.array(
                 *[
                     F.struct(
-                        *(
-                            [F.lit(c).alias(name) for c, name in zip(idx, new_index_columns)]
-                            + [self._internal.spark_column_for(idx).alias(ser_name)]
-                        )
+                        *[F.lit(c).alias(name) for c, name in zip(idx, new_index_columns)],
+                        *[self._internal.spark_column_for(idx).alias(ser_name)],
                     )
                     for idx in column_labels
                 ]
@@ -9609,8 +9566,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         for label, applied_col in zip(column_labels, applied):
             cols.append(
                 F.struct(
-                    [F.lit(col).alias(SPARK_INDEX_NAME_FORMAT(i)) for i, col in enumerate(label)]
-                    + [applied_col.alias(value_column)]
+                    *[F.lit(col).alias(SPARK_INDEX_NAME_FORMAT(i)) for i, col in enumerate(label)],
+                    *[applied_col.alias(value_column)],
                 )
             )
 
@@ -9696,8 +9653,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         for label, applied_col in zip(column_labels, applied):
             cols.append(
                 F.struct(
-                    [F.lit(col).alias(SPARK_INDEX_NAME_FORMAT(i)) for i, col in enumerate(label)]
-                    + [applied_col.alias(value_column)]
+                    *[F.lit(col).alias(SPARK_INDEX_NAME_FORMAT(i)) for i, col in enumerate(label)],
+                    *[applied_col.alias(value_column)],
                 )
             )
 
@@ -9790,7 +9747,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         3  3.0  1.0
         """
         return self._apply_series_op(
-            lambda kser: kser._rank(method=method, ascending=ascending), should_resolve=True
+            lambda psser: psser._rank(method=method, ascending=ascending), should_resolve=True
         )
 
     def filter(self, items=None, like=None, regex=None, axis=None) -> "DataFrame":
@@ -9997,14 +9954,14 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Examples
         --------
-        >>> kdf1 = ps.DataFrame({"A": [1, 2, 3], "B": [4, 5, 6]})
-        >>> kdf1.rename(columns={"A": "a", "B": "c"})  # doctest: +NORMALIZE_WHITESPACE
+        >>> psdf1 = ps.DataFrame({"A": [1, 2, 3], "B": [4, 5, 6]})
+        >>> psdf1.rename(columns={"A": "a", "B": "c"})  # doctest: +NORMALIZE_WHITESPACE
            a  c
         0  1  4
         1  2  5
         2  3  6
 
-        >>> kdf1.rename(index={1: 10, 2: 20})  # doctest: +NORMALIZE_WHITESPACE
+        >>> psdf1.rename(index={1: 10, 2: 20})  # doctest: +NORMALIZE_WHITESPACE
             A  B
         0   1  4
         10  2  5
@@ -10012,7 +9969,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         >>> def str_lower(s) -> str:
         ...     return str.lower(s)
-        >>> kdf1.rename(str_lower, axis='columns')  # doctest: +NORMALIZE_WHITESPACE
+        >>> psdf1.rename(str_lower, axis='columns')  # doctest: +NORMALIZE_WHITESPACE
            a  b
         0  1  4
         1  2  5
@@ -10020,22 +9977,22 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         >>> def mul10(x) -> int:
         ...     return x * 10
-        >>> kdf1.rename(mul10, axis='index')  # doctest: +NORMALIZE_WHITESPACE
+        >>> psdf1.rename(mul10, axis='index')  # doctest: +NORMALIZE_WHITESPACE
             A  B
         0   1  4
         10  2  5
         20  3  6
 
         >>> idx = pd.MultiIndex.from_tuples([('X', 'A'), ('X', 'B'), ('Y', 'C'), ('Y', 'D')])
-        >>> kdf2 = ps.DataFrame([[1, 2, 3, 4], [5, 6, 7, 8]], columns=idx)
-        >>> kdf2.rename(columns=str_lower, level=0)  # doctest: +NORMALIZE_WHITESPACE
+        >>> psdf2 = ps.DataFrame([[1, 2, 3, 4], [5, 6, 7, 8]], columns=idx)
+        >>> psdf2.rename(columns=str_lower, level=0)  # doctest: +NORMALIZE_WHITESPACE
            x     y
            A  B  C  D
         0  1  2  3  4
         1  5  6  7  8
 
-        >>> kdf3 = ps.DataFrame([[1, 2], [3, 4], [5, 6], [7, 8]], index=idx, columns=list('ab'))
-        >>> kdf3.rename(index=str_lower)  # doctest: +NORMALIZE_WHITESPACE
+        >>> psdf3 = ps.DataFrame([[1, 2], [3, 4], [5, 6], [7, 8]], index=idx, columns=list('ab'))
+        >>> psdf3.rename(index=str_lower)  # doctest: +NORMALIZE_WHITESPACE
              a  b
         x a  1  2
           b  3  4
@@ -10102,22 +10059,22 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             if not index and not columns:
                 raise ValueError("Either `index` or `columns` should be provided.")
 
-        kdf = self.copy()
+        psdf = self.copy()
         if index_mapper_fn:
             # rename index labels, if `level` is None, rename all index columns, otherwise only
             # rename the corresponding level index.
             # implement this by transform the underlying spark dataframe,
             # Example:
-            # suppose the kdf index column in underlying spark dataframe is "index_0", "index_1",
+            # suppose the psdf index column in underlying spark dataframe is "index_0", "index_1",
             # if rename level 0 index labels, will do:
-            #   ``kdf._sdf.withColumn("index_0", mapper_fn_udf(col("index_0"))``
+            #   ``psdf._sdf.withColumn("index_0", mapper_fn_udf(col("index_0"))``
             # if rename all index labels (`level` is None), then will do:
             #   ```
-            #   kdf._sdf.withColumn("index_0", mapper_fn_udf(col("index_0"))
+            #   psdf._sdf.withColumn("index_0", mapper_fn_udf(col("index_0"))
             #           .withColumn("index_1", mapper_fn_udf(col("index_1"))
             #   ```
 
-            index_columns = kdf._internal.index_spark_column_names
+            index_columns = psdf._internal.index_spark_column_names
             num_indices = len(index_columns)
             if level:
                 if level < 0 or level >= num_indices:
@@ -10126,27 +10083,28 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             def gen_new_index_column(level):
                 index_col_name = index_columns[level]
 
-                index_mapper_udf = pandas_udf(
-                    lambda s: s.map(index_mapper_fn), returnType=index_mapper_ret_stype
-                )
-                return index_mapper_udf(scol_for(kdf._internal.spark_frame, index_col_name))
+                @pandas_udf(returnType=index_mapper_ret_stype)
+                def index_mapper_udf(s: pd.Series) -> pd.Series:
+                    return s.map(index_mapper_fn)
 
-            sdf = kdf._internal.resolved_copy.spark_frame
-            index_dtypes = self._internal.index_dtypes.copy()
+                return index_mapper_udf(scol_for(psdf._internal.spark_frame, index_col_name))
+
+            sdf = psdf._internal.resolved_copy.spark_frame
+            index_fields = self._internal.index_fields.copy()
             if level is None:
                 for i in range(num_indices):
                     sdf = sdf.withColumn(index_columns[i], gen_new_index_column(i))
-                    index_dtypes[i] = None  # TODO: dtype?
+                    index_fields[i] = None  # TODO: dtype?
             else:
                 sdf = sdf.withColumn(index_columns[level], gen_new_index_column(level))
-                index_dtypes[level] = None  # TODO: dtype?
-            kdf = DataFrame(kdf._internal.with_new_sdf(sdf, index_dtypes=index_dtypes))
+                index_fields[level] = None  # TODO: dtype?
+            psdf = DataFrame(psdf._internal.with_new_sdf(sdf, index_fields=index_fields))
         if columns_mapper_fn:
             # rename column name.
             # Will modify the `_internal._column_labels` and transform underlying spark dataframe
             # to the same column name with `_internal._column_labels`.
             if level:
-                if level < 0 or level >= kdf._internal.column_labels_level:
+                if level < 0 or level >= psdf._internal.column_labels_level:
                     raise ValueError("level should be an integer between [0, column_labels_level)")
 
             def gen_new_column_labels_entry(column_labels_entry):
@@ -10162,18 +10120,18 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 else:
                     return columns_mapper_fn(column_labels_entry)
 
-            new_column_labels = list(map(gen_new_column_labels_entry, kdf._internal.column_labels))
+            new_column_labels = list(map(gen_new_column_labels_entry, psdf._internal.column_labels))
 
             new_data_scols = [
-                kdf._kser_for(old_label).rename(new_label)
-                for old_label, new_label in zip(kdf._internal.column_labels, new_column_labels)
+                psdf._psser_for(old_label).rename(new_label)
+                for old_label, new_label in zip(psdf._internal.column_labels, new_column_labels)
             ]
-            kdf = DataFrame(kdf._internal.with_new_columns(new_data_scols))
+            psdf = DataFrame(psdf._internal.with_new_columns(new_data_scols))
         if inplace:
-            self._update_internal_frame(kdf._internal)
+            self._update_internal_frame(psdf._internal)
             return None
         else:
-            return kdf
+            return psdf
 
     def rename_axis(
         self,
@@ -10413,10 +10371,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         """
         window = Window.orderBy(NATURAL_ORDER_COLUMN_NAME).rowsBetween(-periods, -periods)
 
-        def op(kser):
-            prev_row = F.lag(kser.spark.column, periods).over(window)
-            return ((kser.spark.column - prev_row) / prev_row).alias(
-                kser._internal.data_spark_column_names[0]
+        def op(psser):
+            prev_row = F.lag(psser.spark.column, periods).over(window)
+            return ((psser.spark.column - prev_row) / prev_row).alias(
+                psser._internal.data_spark_column_names[0]
             )
 
         return self._apply_series_op(op, should_resolve=True)
@@ -10445,17 +10403,17 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Examples
         --------
-        >>> kdf = ps.DataFrame({'a': [1, 2, 3, 2],
+        >>> psdf = ps.DataFrame({'a': [1, 2, 3, 2],
         ...                     'b': [4.0, 2.0, 3.0, 1.0],
         ...                     'c': [300, 200, 400, 200]})
-        >>> kdf
+        >>> psdf
            a    b    c
         0  1  4.0  300
         1  2  2.0  200
         2  3  3.0  400
         3  2  1.0  200
 
-        >>> kdf.idxmax()
+        >>> psdf.idxmax()
         a    2
         b    0
         c    2
@@ -10463,11 +10421,11 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         For Multi-column Index
 
-        >>> kdf = ps.DataFrame({'a': [1, 2, 3, 2],
+        >>> psdf = ps.DataFrame({'a': [1, 2, 3, 2],
         ...                     'b': [4.0, 2.0, 3.0, 1.0],
         ...                     'c': [300, 200, 400, 200]})
-        >>> kdf.columns = pd.MultiIndex.from_tuples([('a', 'x'), ('b', 'y'), ('c', 'z')])
-        >>> kdf
+        >>> psdf.columns = pd.MultiIndex.from_tuples([('a', 'x'), ('b', 'y'), ('c', 'z')])
+        >>> psdf
            a    b    c
            x    y    z
         0  1  4.0  300
@@ -10475,7 +10433,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         2  3  3.0  400
         3  2  1.0  200
 
-        >>> kdf.idxmax()
+        >>> psdf.idxmax()
         a  x    2
         b  y    0
         c  z    2
@@ -10495,9 +10453,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         )
         cond = reduce(lambda x, y: x | y, conds)
 
-        kdf = DataFrame(self._internal.with_filter(cond))  # type: "DataFrame"
+        psdf = DataFrame(self._internal.with_filter(cond))  # type: "DataFrame"
 
-        return cast(ps.Series, ps.from_pandas(kdf._to_internal_pandas().idxmax()))
+        return cast(ps.Series, ps.from_pandas(psdf._to_internal_pandas().idxmax()))
 
     # TODO: axis = 1
     def idxmin(self, axis=0) -> "Series":
@@ -10523,17 +10481,17 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Examples
         --------
-        >>> kdf = ps.DataFrame({'a': [1, 2, 3, 2],
+        >>> psdf = ps.DataFrame({'a': [1, 2, 3, 2],
         ...                     'b': [4.0, 2.0, 3.0, 1.0],
         ...                     'c': [300, 200, 400, 200]})
-        >>> kdf
+        >>> psdf
            a    b    c
         0  1  4.0  300
         1  2  2.0  200
         2  3  3.0  400
         3  2  1.0  200
 
-        >>> kdf.idxmin()
+        >>> psdf.idxmin()
         a    0
         b    3
         c    1
@@ -10541,11 +10499,11 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         For Multi-column Index
 
-        >>> kdf = ps.DataFrame({'a': [1, 2, 3, 2],
+        >>> psdf = ps.DataFrame({'a': [1, 2, 3, 2],
         ...                     'b': [4.0, 2.0, 3.0, 1.0],
         ...                     'c': [300, 200, 400, 200]})
-        >>> kdf.columns = pd.MultiIndex.from_tuples([('a', 'x'), ('b', 'y'), ('c', 'z')])
-        >>> kdf
+        >>> psdf.columns = pd.MultiIndex.from_tuples([('a', 'x'), ('b', 'y'), ('c', 'z')])
+        >>> psdf
            a    b    c
            x    y    z
         0  1  4.0  300
@@ -10553,7 +10511,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         2  3  3.0  400
         3  2  1.0  200
 
-        >>> kdf.idxmin()
+        >>> psdf.idxmin()
         a  x    0
         b  y    3
         c  z    1
@@ -10567,9 +10525,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         )
         cond = reduce(lambda x, y: x | y, conds)
 
-        kdf = DataFrame(self._internal.with_filter(cond))  # type: "DataFrame"
+        psdf = DataFrame(self._internal.with_filter(cond))  # type: "DataFrame"
 
-        return cast(ps.Series, ps.from_pandas(kdf._to_internal_pandas().idxmin()))
+        return cast(ps.Series, ps.from_pandas(psdf._to_internal_pandas().idxmin()))
 
     def info(self, verbose=None, buf=None, max_cols=None, null_counts=None) -> None:
         """
@@ -10663,8 +10621,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         ' 2   float_col  5 non-null      float64\\n',
         'dtypes: float64(1), int64(1), object(1)']
         """
-        # To avoid pandas' existing config affects Koalas.
-        # TODO: should we have corresponding Koalas configs?
+        # To avoid pandas' existing config affects pandas-on-Spark.
+        # TODO: should we have corresponding pandas-on-Spark configs?
         with pd.option_context(
             "display.max_info_columns", sys.maxsize, "display.max_info_rows", sys.maxsize
         ):
@@ -10696,9 +10654,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         """
         Return value at the given quantile.
 
-        .. note:: Unlike pandas', the quantile in Koalas is an approximated quantile based upon
-            approximate percentile computation because computing quantile across a large dataset
-            is extremely expensive.
+        .. note:: Unlike pandas', the quantile in pandas-on-Spark is an approximated quantile
+            based upon approximate percentile computation because computing quantile across a
+            large dataset is extremely expensive.
 
         Parameters
         ----------
@@ -10723,8 +10681,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Examples
         --------
-        >>> kdf = ps.DataFrame({'a': [1, 2, 3, 4, 5], 'b': [6, 7, 8, 9, 0]})
-        >>> kdf
+        >>> psdf = ps.DataFrame({'a': [1, 2, 3, 4, 5], 'b': [6, 7, 8, 9, 0]})
+        >>> psdf
            a  b
         0  1  6
         1  2  7
@@ -10732,12 +10690,12 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         3  4  9
         4  5  0
 
-        >>> kdf.quantile(.5)
+        >>> psdf.quantile(.5)
         a    3.0
         b    7.0
         Name: 0.5, dtype: float64
 
-        >>> kdf.quantile([.25, .5, .75])
+        >>> psdf.quantile([.25, .5, .75])
                 a    b
         0.25  2.0  6.0
         0.50  3.0  7.0
@@ -10748,7 +10706,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             raise NotImplementedError('axis should be either 0 or "index" currently.')
 
         if not isinstance(accuracy, int):
-            raise ValueError(
+            raise TypeError(
                 "accuracy must be an integer; however, got [%s]" % type(accuracy).__name__
             )
 
@@ -10757,7 +10715,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         for v in q if isinstance(q, list) else [q]:
             if not isinstance(v, float):
-                raise ValueError(
+                raise TypeError(
                     "q must be a float or an array of floats; however, [%s] found." % type(v)
                 )
             if v < 0.0 or v > 1.0:
@@ -10765,7 +10723,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         def quantile(spark_column, spark_type):
             if isinstance(spark_type, (BooleanType, NumericType)):
-                return SF.percentile_approx(spark_column.cast(DoubleType()), q, accuracy)
+                return F.percentile_approx(spark_column.cast(DoubleType()), q, accuracy)
             else:
                 raise TypeError(
                     "Could not convert {} ({}) to numeric".format(
@@ -10854,7 +10812,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         .. note:: This API delegates to Spark SQL so the syntax follows Spark SQL. Therefore, the
             pandas specific syntax such as `@` is not supported. If you want the pandas syntax,
-            you can work around with :meth:`DataFrame.koalas.apply_batch`, but you should
+            you can work around with :meth:`DataFrame.pandas_on_spark.apply_batch`, but you should
             be aware that `query_func` will be executed at different nodes in a distributed manner.
             So, for example, to use `@` syntax, make sure the variable is serialized by, for
             example, putting it within the closure as below.
@@ -10863,7 +10821,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             >>> def query_func(pdf):
             ...     num = 1995
             ...     return pdf.query('A > @num')
-            >>> df.koalas.apply_batch(query_func)
+            >>> df.pandas_on_spark.apply_batch(query_func)
                      A     B
             1996  1996  1996
             1997  1997  1997
@@ -10926,9 +10884,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         0  1  10   10
         """
         if isinstance(self.columns, pd.MultiIndex):
-            raise ValueError("Doesn't support for MultiIndex columns")
+            raise TypeError("Doesn't support for MultiIndex columns")
         if not isinstance(expr, str):
-            raise ValueError(
+            raise TypeError(
                 "expr must be a string to be evaluated, {} given".format(type(expr).__name__)
             )
         inplace = validate_bool_kwarg(inplace, "inplace")
@@ -10948,16 +10906,6 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             return None
         else:
             return DataFrame(internal)
-
-    def explain(self, extended: Optional[bool] = None, mode: Optional[str] = None) -> None:
-        warnings.warn(
-            "DataFrame.explain is deprecated as of DataFrame.spark.explain. "
-            "Please use the API instead.",
-            FutureWarning,
-        )
-        return self.spark.explain(extended, mode)
-
-    explain.__doc__ = SparkFrameMethods.explain.__doc__
 
     def take(self, indices, axis=0, **kwargs) -> "DataFrame":
         """
@@ -11034,7 +10982,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         """
         axis = validate_axis(axis)
         if not is_list_like(indices) or isinstance(indices, (dict, set)):
-            raise ValueError("`indices` must be a list-like except dict or set")
+            raise TypeError("`indices` must be a list-like except dict or set")
         if axis == 0:
             return cast(DataFrame, self.iloc[indices, :])
         else:
@@ -11120,7 +11068,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         from pyspark.pandas.series import first_series
 
         if isinstance(self.columns, pd.MultiIndex):
-            raise ValueError("`eval` is not supported for multi-index columns")
+            raise TypeError("`eval` is not supported for multi-index columns")
         inplace = validate_bool_kwarg(inplace, "inplace")
         should_return_series = False
         series_name = None
@@ -11145,7 +11093,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 result_inner = pd.Series(result_inner).to_frame()
             return result_inner
 
-        result = self.koalas.apply_batch(eval_func)
+        result = self.pandas_on_spark.apply_batch(eval_func)
         if inplace:
             # Here, the result is always a frame because the error is thrown during schema inference
             # from pandas.
@@ -11201,26 +11149,26 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         from pyspark.pandas.series import Series
 
         if not is_name_like_value(column):
-            raise ValueError("column must be a scalar")
+            raise TypeError("column must be a scalar")
 
-        kdf = DataFrame(self._internal.resolved_copy)  # type: "DataFrame"
-        kser = kdf[column]
-        if not isinstance(kser, Series):
+        psdf = DataFrame(self._internal.resolved_copy)  # type: "DataFrame"
+        psser = psdf[column]
+        if not isinstance(psser, Series):
             raise ValueError(
                 "The column %s is not unique. For a multi-index, the label must be a tuple "
                 "with elements corresponding to each level." % name_like_string(column)
             )
-        if not isinstance(kser.spark.data_type, ArrayType):
+        if not isinstance(psser.spark.data_type, ArrayType):
             return self.copy()
 
-        sdf = kdf._internal.spark_frame.withColumn(
-            kser._internal.data_spark_column_names[0], F.explode_outer(kser.spark.column)
+        sdf = psdf._internal.spark_frame.withColumn(
+            psser._internal.data_spark_column_names[0], F.explode_outer(psser.spark.column)
         )
 
-        data_dtypes = kdf._internal.data_dtypes.copy()
-        data_dtypes[kdf._internal.column_labels.index(kser._column_label)] = None  # TODO: dtype?
+        data_fields = psdf._internal.data_fields.copy()
+        data_fields[psdf._internal.column_labels.index(psser._column_label)] = None  # TODO: dtype?
 
-        internal = kdf._internal.with_new_sdf(sdf, data_dtypes=data_dtypes)
+        internal = psdf._internal.with_new_sdf(sdf, data_fields=data_fields)
         return DataFrame(internal)
 
     def mad(self, axis=0) -> "Series":
@@ -11255,9 +11203,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         if axis == 0:
 
-            def get_spark_column(kdf, label):
-                scol = kdf._internal.spark_column_for(label)
-                col_type = kdf._internal.spark_type_for(label)
+            def get_spark_column(psdf, label):
+                scol = psdf._internal.spark_column_for(label)
+                col_type = psdf._internal.spark_type_for(label)
 
                 if isinstance(col_type, BooleanType):
                     scol = scol.cast("integer")
@@ -11267,7 +11215,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             new_column_labels = []
             for label in self._internal.column_labels:
                 # Filtering out only columns of numeric and boolean type column.
-                dtype = self._kser_for(label).spark.data_type
+                dtype = self._psser_for(label).spark.data_type
                 if isinstance(dtype, (NumericType, BooleanType)):
                     new_column_labels.append(label)
 
@@ -11301,8 +11249,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         else:
 
-            @pandas_udf(returnType=DoubleType())
-            def calculate_columns_axis(*cols):
+            @pandas_udf(returnType=DoubleType())  # type: ignore
+            def calculate_columns_axis(*cols: pd.Series) -> pd.Series:
                 return pd.concat(cols, axis=1).mad(axis=1)
 
             internal = self._internal.copy(
@@ -11312,7 +11260,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                         SPARK_DEFAULT_SERIES_NAME
                     )
                 ],
-                data_dtypes=[None],
+                data_fields=[None],
                 column_label_names=None,
             )
             return first_series(DataFrame(internal))
@@ -11387,15 +11335,13 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         7   whale
         8   zebra
         """
-        if LooseVersion(pyspark.__version__) < LooseVersion("3.0"):
-            raise RuntimeError("tail can be used in PySpark >= 3.0")
         if not isinstance(n, int):
             raise TypeError("bad operand type for unary -: '{}'".format(type(n).__name__))
         if n < 0:
             n = len(self) + n
         if n <= 0:
             return ps.DataFrame(self._internal.with_filter(F.lit(False)))
-        # Should use `resolved_copy` here for the case like `(kdf + 1).tail()`
+        # Should use `resolved_copy` here for the case like `(psdf + 1).tail()`
         sdf = self._internal.resolved_copy.spark_frame
         rows = sdf.tail(n)
         new_sdf = default_session().createDataFrame(rows, sdf.schema)
@@ -11642,6 +11588,13 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         """
         return DataFrame(pd.DataFrame.from_dict(data, orient=orient, dtype=dtype, columns=columns))
 
+    def _build_groupby(
+        self, by: List[Union["Series", Tuple]], as_index: bool, dropna: bool
+    ) -> "DataFrameGroupBy":
+        from pyspark.pandas.groupby import DataFrameGroupBy
+
+        return DataFrameGroupBy._build(self, by, as_index=as_index, dropna=dropna)
+
     def _to_internal_pandas(self):
         """
         Return a pandas DataFrame directly from _internal to avoid overhead of copy.
@@ -11730,18 +11683,18 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             key = DataFrame._index_normalized_label(level, key)
             value = DataFrame._index_normalized_frame(level, value)
 
-            def assign_columns(kdf, this_column_labels, that_column_labels):
+            def assign_columns(psdf, this_column_labels, that_column_labels):
                 assert len(key) == len(that_column_labels)
                 # Note that here intentionally uses `zip_longest` that combine
                 # that_columns.
                 for k, this_label, that_label in zip_longest(
                     key, this_column_labels, that_column_labels
                 ):
-                    yield (kdf._kser_for(that_label), tuple(["that", *k]))
+                    yield (psdf._psser_for(that_label), tuple(["that", *k]))
                     if this_label is not None and this_label[1:] != k:
-                        yield (kdf._kser_for(this_label), this_label)
+                        yield (psdf._psser_for(this_label), this_label)
 
-            kdf = align_diff_frames(assign_columns, self, value, fillna=False, how="left")
+            psdf = align_diff_frames(assign_columns, self, value, fillna=False, how="left")
         elif isinstance(value, list):
             if len(self) != len(value):
                 raise ValueError("Length of values does not match length of index")
@@ -11753,21 +11706,21 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 "compute.ops_on_diff_frames",
                 True,
             ):
-                kdf = self.reset_index()
-                kdf[key] = ps.DataFrame(value)
-                kdf = kdf.set_index(kdf.columns[: self._internal.index_level])
-                kdf.index.names = self.index.names
+                psdf = self.reset_index()
+                psdf[key] = ps.DataFrame(value)
+                psdf = psdf.set_index(psdf.columns[: self._internal.index_level])
+                psdf.index.names = self.index.names
 
         elif isinstance(key, list):
             assert isinstance(value, DataFrame)
             # Same DataFrames.
             field_names = value.columns
-            kdf = self._assign({k: value[c] for k, c in zip(key, field_names)})
+            psdf = self._assign({k: value[c] for k, c in zip(key, field_names)})
         else:
             # Same Series.
-            kdf = self._assign({key: value})
+            psdf = self._assign({key: value})
 
-        self._update_internal_frame(kdf._internal)
+        self._update_internal_frame(psdf._internal)
 
     @staticmethod
     def _index_normalized_label(level, labels):
@@ -11792,7 +11745,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         return [tuple(list(label) + ([""] * (level - len(label)))) for label in labels]
 
     @staticmethod
-    def _index_normalized_frame(level, kser_or_kdf):
+    def _index_normalized_frame(level, psser_or_psdf):
         """
         Returns a frame that is normalized against the current column index level.
         For example, the name in `pd.Series([...], name="abc")` can be can be
@@ -11800,20 +11753,20 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         """
         from pyspark.pandas.series import Series
 
-        if isinstance(kser_or_kdf, Series):
-            kdf = kser_or_kdf.to_frame()
+        if isinstance(psser_or_psdf, Series):
+            psdf = psser_or_psdf.to_frame()
         else:
-            assert isinstance(kser_or_kdf, DataFrame), type(kser_or_kdf)
-            kdf = kser_or_kdf.copy()
+            assert isinstance(psser_or_psdf, DataFrame), type(psser_or_psdf)
+            psdf = psser_or_psdf.copy()
 
-        kdf.columns = pd.MultiIndex.from_tuples(
+        psdf.columns = pd.MultiIndex.from_tuples(
             [
                 tuple([name_like_string(label)] + ([""] * (level - 1)))
-                for label in kdf._internal.column_labels
+                for label in psdf._internal.column_labels
             ],
         )
 
-        return kdf
+        return psdf
 
     def __getattr__(self, key: str) -> Any:
         if key.startswith("__"):
@@ -11842,7 +11795,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         if (key,) in self._internal.column_labels:
             self[key] = value
         else:
-            msg = "Koalas doesn't allow columns to be created via a new attribute name"
+            msg = "pandas-on-Spark doesn't allow columns to be created via a new attribute name"
             if is_testing():
                 raise AssertionError(msg)
             else:
@@ -11874,11 +11827,11 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 raise ValueError("cannot join with no overlapping index names")
 
             # Different DataFrames
-            def apply_op(kdf, this_column_labels, that_column_labels):
+            def apply_op(psdf, this_column_labels, that_column_labels):
                 for this_label, that_label in zip(this_column_labels, that_column_labels):
                     yield (
                         ufunc(
-                            kdf._kser_for(this_label), kdf._kser_for(that_label), **kwargs
+                            psdf._psser_for(this_label), psdf._psser_for(that_label), **kwargs
                         ).rename(this_label),
                         this_label,
                     )
@@ -11911,7 +11864,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
     elif (3, 5) <= sys.version_info < (3, 7):
         # This is a workaround to support variadic generic in DataFrame in Python 3.5+
         # The implementation is in its metaclass so this flag is needed to distinguish
-        # Koalas DataFrame.
+        # pandas-on-Spark DataFrame.
         is_dataframe = None
 
 
@@ -11931,8 +11884,8 @@ def _reduce_spark_multi(sdf, aggs):
 
 class CachedDataFrame(DataFrame):
     """
-    Cached Koalas DataFrame, which corresponds to pandas DataFrame logically, but internally
-    it caches the corresponding Spark DataFrame.
+    Cached pandas-on-Spark DataFrame, which corresponds to pandas DataFrame logically, but
+    internally it caches the corresponding Spark DataFrame.
     """
 
     def __init__(self, internal, storage_level=None):
@@ -11954,27 +11907,6 @@ class CachedDataFrame(DataFrame):
 
     # create accessor for Spark related methods.
     spark = CachedAccessor("spark", CachedSparkFrameMethods)
-
-    @property
-    def storage_level(self) -> StorageLevel:
-        warnings.warn(
-            "DataFrame.storage_level is deprecated as of DataFrame.spark.storage_level. "
-            "Please use the API instead.",
-            FutureWarning,
-        )
-        return self.spark.storage_level
-
-    storage_level.__doc__ = CachedSparkFrameMethods.storage_level.__doc__
-
-    def unpersist(self) -> None:
-        warnings.warn(
-            "DataFrame.unpersist is deprecated as of DataFrame.spark.unpersist. "
-            "Please use the API instead.",
-            FutureWarning,
-        )
-        return self.spark.unpersist()
-
-    unpersist.__doc__ = CachedSparkFrameMethods.unpersist.__doc__
 
 
 def _test():

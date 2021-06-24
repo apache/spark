@@ -45,11 +45,20 @@ object PlanHelper {
         case e: AggregateExpression
           if !(plan.isInstanceOf[Aggregate] ||
                plan.isInstanceOf[Window] ||
-               plan.isInstanceOf[CollectMetrics]) => e
+               plan.isInstanceOf[CollectMetrics] ||
+               onlyInLateralSubquery(plan)) => e
         case e: Generator
           if !plan.isInstanceOf[Generate] => e
       }
     }
     invalidExpressions
+  }
+
+  private def onlyInLateralSubquery(plan: LogicalPlan): Boolean = {
+    lazy val noAggInJoinCond = {
+      val join = plan.asInstanceOf[LateralJoin]
+      !(join.condition ++ join.right.joinCond).exists(AggregateExpression.containsAggregate)
+    }
+    plan.isInstanceOf[LateralJoin] && noAggInJoinCond
   }
 }

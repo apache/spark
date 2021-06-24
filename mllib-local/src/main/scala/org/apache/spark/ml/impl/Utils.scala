@@ -17,6 +17,7 @@
 
 package org.apache.spark.ml.impl
 
+import org.apache.spark.ml.linalg.BLAS
 
 private[spark] object Utils {
 
@@ -93,5 +94,35 @@ private[spark] object Utils {
     } else {
       math.log1p(math.exp(x))
     }
+  }
+
+  /**
+   * Perform in-place softmax conversion.
+   */
+  def softmax(values: Array[Double]): Unit = {
+    var maxValue = Double.MinValue
+    var i = 0
+    while (i < values.length) {
+      val value = values(i)
+      if (value.isPosInfinity) {
+        java.util.Arrays.fill(values, 0)
+        values(i) = 1.0
+        return
+      } else if (value > maxValue) {
+        maxValue = value
+      }
+      i += 1
+    }
+
+    var sum = 0.0
+    i = 0
+    while (i < values.length) {
+      val exp = math.exp(values(i) - maxValue)
+      values(i) = exp
+      sum += exp
+      i += 1
+    }
+
+    BLAS.javaBLAS.dscal(values.length, 1.0 / sum, values, 1)
   }
 }

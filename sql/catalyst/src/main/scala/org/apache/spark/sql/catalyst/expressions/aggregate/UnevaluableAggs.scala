@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult}
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.trees.TreePattern.{BOOL_AGG, TreePattern}
 import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.types._
 
@@ -30,6 +31,8 @@ abstract class UnevaluableBooleanAggBase(arg: Expression)
   override def dataType: DataType = BooleanType
 
   override def inputTypes: Seq[AbstractDataType] = Seq(BooleanType)
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(BOOL_AGG)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     arg.dataType match {

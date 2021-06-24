@@ -201,7 +201,7 @@ class ContextTests(unittest.TestCase):
         try:
             with SparkContext() as sc:
                 self.assertNotEqual(SparkContext._active_spark_context, None)
-                raise Exception()
+                raise RuntimeError()
         except:
             pass
         self.assertEqual(SparkContext._active_spark_context, None)
@@ -220,7 +220,7 @@ class ContextTests(unittest.TestCase):
             def run():
                 # When thread is pinned, job group should be set for each thread for now.
                 # Local properties seem not being inherited like Scala side does.
-                if os.environ.get("PYSPARK_PIN_THREAD", "false").lower() == "true":
+                if os.environ.get("PYSPARK_PIN_THREAD", "true").lower() == "true":
                     sc.setJobGroup('test_progress_api', '', True)
                 try:
                     rdd.count()

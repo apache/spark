@@ -21,7 +21,6 @@ import java.util.UUID
 
 import scala.collection.JavaConverters._
 
-import org.json4s._
 import org.json4s.jackson.JsonMethods._
 import org.scalatest.concurrent.Eventually
 import org.scalatest.concurrent.PatienceConfiguration.Timeout

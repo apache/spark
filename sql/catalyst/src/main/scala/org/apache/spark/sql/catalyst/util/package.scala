@@ -25,7 +25,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{NumericType, StringType}
+import org.apache.spark.sql.types.{MetadataBuilder, NumericType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
@@ -200,5 +200,29 @@ package object util extends Logging {
   /** Shorthand for calling truncatedString() without start or end strings. */
   def truncatedString[T](seq: Seq[T], sep: String, maxFields: Int): String = {
     truncatedString(seq, "", sep, "", maxFields)
+  }
+
+  val METADATA_COL_ATTR_KEY = "__metadata_col"
+
+  implicit class MetadataColumnHelper(attr: Attribute) {
+    /**
+     * If set, this metadata column is a candidate during qualified star expansions.
+     */
+    val SUPPORTS_QUALIFIED_STAR = "__supports_qualified_star"
+
+    def isMetadataCol: Boolean = attr.metadata.contains(METADATA_COL_ATTR_KEY) &&
+      attr.metadata.getBoolean(METADATA_COL_ATTR_KEY)
+
+    def supportsQualifiedStar: Boolean = attr.isMetadataCol &&
+      attr.metadata.contains(SUPPORTS_QUALIFIED_STAR) &&
+      attr.metadata.getBoolean(SUPPORTS_QUALIFIED_STAR)
+
+    def markAsSupportsQualifiedStar(): Attribute = attr.withMetadata(
+      new MetadataBuilder()
+        .withMetadata(attr.metadata)
+        .putBoolean(METADATA_COL_ATTR_KEY, true)
+        .putBoolean(SUPPORTS_QUALIFIED_STAR, true)
+        .build()
+    )
   }
 }

@@ -29,6 +29,7 @@ import com.google.common.io.{ByteStreams, Files}
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.util.ConverterUtils
 import org.scalatest.concurrent.Eventually._
+import org.scalatest.exceptions.TestFailedException
 import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.should.Matchers._
 
@@ -368,6 +369,64 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
     )
     checkResult(finalState, result, "true")
   }
+
+  def createEmptyIvySettingsFile: File = {
+    val emptyIvySettings = File.createTempFile("ivy", ".xml")
+    Files.write("<ivysettings />", emptyIvySettings, StandardCharsets.UTF_8)
+    emptyIvySettings
+  }
+
+  test("SPARK-34472: ivySettings file with no scheme or file:// scheme should be " +
+    "localized on driver in cluster mode") {
+    val emptyIvySettings = createEmptyIvySettingsFile
+    // For file:// URIs or URIs without scheme, make sure that ivySettings conf was changed
+    // to the localized file. So the expected ivySettings path on the driver will start with
+    // the file name and then some random UUID suffix
+    testIvySettingsDistribution(clientMode = false, emptyIvySettings.getAbsolutePath,
+      emptyIvySettings.getName, prefixMatch = true)
+    testIvySettingsDistribution(clientMode = false, s"file://${emptyIvySettings.getAbsolutePath}",
+      emptyIvySettings.getName, prefixMatch = true)
+  }
+
+  test("SPARK-34472: ivySettings file with no scheme or file:// scheme should retain " +
+    "user provided path in client mode") {
+    val emptyIvySettings = createEmptyIvySettingsFile
+    // In client mode, the file is present locally on the driver and so does not need to be
+    // distributed. So the user provided path should be kept as is.
+    testIvySettingsDistribution(clientMode = true, emptyIvySettings.getAbsolutePath,
+      emptyIvySettings.getAbsolutePath)
+    testIvySettingsDistribution(clientMode = true, s"file://${emptyIvySettings.getAbsolutePath}",
+      s"file://${emptyIvySettings.getAbsolutePath}")
+  }
+
+  test("SPARK-34472: ivySettings file with non-file:// schemes should throw an error") {
+    val emptyIvySettings = createEmptyIvySettingsFile
+    val e1 = intercept[TestFailedException] {
+      testIvySettingsDistribution(clientMode = false,
+        s"local://${emptyIvySettings.getAbsolutePath}", "")
+    }
+    assert(e1.getMessage.contains("IllegalArgumentException: " +
+      "Scheme local not supported in spark.jars.ivySettings"))
+    val e2 = intercept[TestFailedException] {
+      testIvySettingsDistribution(clientMode = false,
+        s"hdfs://${emptyIvySettings.getAbsolutePath}", "")
+    }
+    assert(e2.getMessage.contains("IllegalArgumentException: " +
+      "Scheme hdfs not supported in spark.jars.ivySettings"))
+  }
+
+  def testIvySettingsDistribution(clientMode: Boolean, ivySettingsPath: String,
+    expectedIvySettingsPrefixOnDriver: String, prefixMatch: Boolean = false): Unit = {
+    val result = File.createTempFile("result", null, tempDir)
+    val outFile = File.createTempFile("out", null, tempDir)
+    val finalState = runSpark(clientMode = clientMode,
+      mainClassName(YarnAddJarTest.getClass),
+      appArgs = Seq(result.getAbsolutePath, expectedIvySettingsPrefixOnDriver,
+        prefixMatch.toString),
+      extraConf = Map("spark.jars.ivySettings" -> ivySettingsPath),
+      outFile = Option(outFile))
+    checkResult(finalState, result, outFile = Option(outFile))
+  }
 }
 
 private[spark] class SaveExecutorInfo extends SparkListener {
@@ -581,6 +640,50 @@ private object YarnClasspathTest extends Logging {
     }
   }
 
+}
+
+private object YarnAddJarTest extends Logging {
+  def main(args: Array[String]): Unit = {
+    if (args.length != 3) {
+      // scalastyle:off println
+      System.err.println(
+        s"""
+           |Invalid command line: ${args.mkString(" ")}
+           |
+           |Usage: YarnAddJarTest [result file] [expected ivy settings path] [prefix match]
+        """.stripMargin)
+      // scalastyle:on println
+      System.exit(1)
+    }
+
+    val resultPath = args(0)
+    val expectedIvySettingsPath = args(1)
+    val prefixMatch = args(2).toBoolean
+    val sc = new SparkContext(new SparkConf())
+
+    var result = "failure"
+    try {
+      val settingsFile = sc.getConf.get("spark.jars.ivySettings")
+      if (prefixMatch) {
+        assert(settingsFile !== expectedIvySettingsPath)
+        assert(settingsFile.startsWith(expectedIvySettingsPath))
+      } else {
+        assert(settingsFile === expectedIvySettingsPath)
+      }
+
+      val caught = intercept[RuntimeException] {
+        sc.addJar("ivy://org.fake-project.test:test:1.0.0")
+      }
+      if (caught.getMessage.contains("unresolved dependency: org.fake-project.test#test")) {
+        // "unresolved dependency" is expected as the dependency does not exist
+        // but exception like "Ivy settings file <file> does not exist" should result in failure
+        result = "success"
+      }
+    } finally {
+      Files.write(result, new File(resultPath), StandardCharsets.UTF_8)
+      sc.stop()
+    }
+  }
 }
 
 private object YarnLauncherTestApp {

@@ -549,7 +549,7 @@ trait Row extends Serializable {
     require(schema != null, "JSON serialization requires a non-null schema.")
 
     lazy val zoneId = DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone)
-    lazy val dateFormatter = DateFormatter.apply(zoneId)
+    lazy val dateFormatter = DateFormatter()
     lazy val timestampFormatter = TimestampFormatter(zoneId)
 
     // Convert an iterator of values to a json array

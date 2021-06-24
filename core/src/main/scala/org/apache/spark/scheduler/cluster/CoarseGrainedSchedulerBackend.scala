@@ -213,6 +213,11 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           data.freeCores = data.totalCores
         }
         makeOffers(executorId)
+
+      case MiscellaneousProcessAdded(time: Long,
+          processId: String, info: MiscellaneousProcessDetails) =>
+        listenerBus.post(SparkListenerMiscellaneousProcessAdded(time, processId, info))
+
       case e =>
         logError(s"Received unexpected message. ${e}")
     }
