@@ -22,8 +22,6 @@ import java.util.Random
 import breeze.linalg.{sum => Bsum, DenseMatrix => BDM, DenseVector => BDV}
 import breeze.numerics.{log => brzlog}
 
-import org.apache.spark.ml.impl.Utils
-
 /**
  * Trait for loss function
  */
@@ -81,10 +79,30 @@ private[ann] class SoftmaxLayerModelWithCrossEntropyLoss extends LayerModel with
   val weights = new BDV[Double](0)
 
   override def eval(data: BDM[Double], output: BDM[Double]): Unit = {
-    require(!data.isTranspose && !output.isTranspose)
     var j = 0
+    // find max value to make sure later that exponent is computable
     while (j < data.cols) {
-      Utils.softmax(data.data, data.rows, j * data.rows, 1, output.data)
+      var i = 0
+      var max = Double.MinValue
+      while (i < data.rows) {
+        if (data(i, j) > max) {
+          max = data(i, j)
+        }
+        i += 1
+      }
+      var sum = 0.0
+      i = 0
+      while (i < data.rows) {
+        val res = math.exp(data(i, j) - max)
+        output(i, j) = res
+        sum += res
+        i += 1
+      }
+      i = 0
+      while (i < data.rows) {
+        output(i, j) /= sum
+        i += 1
+      }
       j += 1
     }
   }
