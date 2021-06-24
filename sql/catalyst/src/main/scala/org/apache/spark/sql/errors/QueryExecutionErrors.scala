@@ -1155,6 +1155,10 @@ object QueryExecutionErrors {
        """.stripMargin.replaceAll("\n", " "))
   }
 
+  def unexpectedDomainJoinTypeError(tpe: JoinType): Throwable = {
+    new IllegalStateException(s"Unexpected domain join type $tpe")
+  }
+
   def cannotRewriteDomainJoinWithConditionsError(
       conditions: Seq[Expression], d: DomainJoin): Throwable = {
     new IllegalStateException(
