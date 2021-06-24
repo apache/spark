@@ -483,6 +483,10 @@ private[spark] object SparkHadoopUtil extends Logging {
     if (conf.getOption("spark.hadoop.mapreduce.fileoutputcommitter.algorithm.version").isEmpty) {
       hadoopConf.set("mapreduce.fileoutputcommitter.algorithm.version", "1")
     }
+    // Since Hadoop 3.3.1, HADOOP-17597 starts to throw exceptions by default
+    if (conf.getOption("spark.hadoop.fs.s3a.downgrade.syncable.exceptions").isEmpty) {
+      hadoopConf.set("fs.s3a.downgrade.syncable.exceptions", "true")
+    }
   }
 
   private def appendSparkHiveConfigs(conf: SparkConf, hadoopConf: Configuration): Unit = {
