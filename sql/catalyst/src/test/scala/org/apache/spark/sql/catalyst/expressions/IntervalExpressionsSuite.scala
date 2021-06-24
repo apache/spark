@@ -325,7 +325,7 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkException(days = Int.MaxValue)
   }
 
-  ignore("SPARK-34824: multiply year-month interval by numeric") {
+  test("SPARK-34824: multiply year-month interval by numeric") {
     Seq(
       (Period.ofYears(-123), Literal(null, DecimalType.USER_DEFAULT)) -> null,
       (Period.ofMonths(0), 10) -> Period.ofMonths(0),
@@ -362,7 +362,7 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
-  ignore("SPARK-34850: multiply day-time interval by numeric") {
+  test("SPARK-34850: multiply day-time interval by numeric") {
     Seq(
       (Duration.ofHours(-123), Literal(null, DecimalType.USER_DEFAULT)) -> null,
       (Duration.ofMinutes(0), 10) -> Duration.ofMinutes(0),
@@ -399,7 +399,7 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
-  ignore("SPARK-34868: divide year-month interval by numeric") {
+  test("SPARK-34868: divide year-month interval by numeric") {
     Seq(
       (Period.ofYears(-123), Literal(null, DecimalType.USER_DEFAULT)) -> null,
       (Period.ofMonths(0), 10) -> Period.ofMonths(0),
@@ -436,7 +436,7 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
-  ignore("SPARK-34875: divide day-time interval by numeric") {
+  test("SPARK-34875: divide day-time interval by numeric") {
     Seq(
       (Duration.ofDays(-123), Literal(null, DecimalType.USER_DEFAULT)) -> null,
       (Duration.ZERO, 10) -> Duration.ZERO,
