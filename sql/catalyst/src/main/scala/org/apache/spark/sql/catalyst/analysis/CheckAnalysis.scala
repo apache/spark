@@ -1090,6 +1090,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
     alter match {
       case AlterTableRenameColumn(table: ResolvedTable, ResolvedFieldName(name), newName) =>
         checkColumnNotExists(name.init :+ newName, table.schema)
+      case _ =>
     }
   }
 }
