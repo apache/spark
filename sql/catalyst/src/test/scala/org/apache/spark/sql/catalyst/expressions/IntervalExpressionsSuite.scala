@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.util.IntervalUtils.{safeStringToInterval, s
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataTypeTestUtils, DayTimeIntervalType, Decimal, DecimalType, YearMonthIntervalType}
 import org.apache.spark.sql.types.DataTypeTestUtils.{dayTimeIntervalTypes, numericTypes, yearMonthIntervalTypes}
+import org.apache.spark.sql.types.YearMonthIntervalType.YEAR
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
@@ -325,7 +326,6 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkException(days = Int.MaxValue)
   }
 
-  // TODO(SPARK-35778): Check multiply/divide of year-month intervals of any fields by numeric
   test("SPARK-34824: multiply year-month interval by numeric") {
     Seq(
       (Period.ofYears(-123), Literal(null, DecimalType.USER_DEFAULT)) -> null,
@@ -397,7 +397,6 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
-  // TODO(SPARK-35778): Check multiply/divide of year-month intervals of any fields by numeric
   test("SPARK-34868: divide year-month interval by numeric") {
     Seq(
       (Period.ofYears(-123), Literal(null, DecimalType.USER_DEFAULT)) -> null,
@@ -439,33 +438,42 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("SPARK-35778: Check multiply/divide of year-month intervals of any fields by numeric") {
     Seq(
-//      ((Period.ofYears(-123), Literal(null, DecimalType.USER_DEFAULT)), Array(null, null, null)),
       ((Period.ofMonths(0), 10),
+        Array(Period.ofMonths(0), Period.ofMonths(0), Period.ofMonths(0)),
         Array(Period.ofMonths(0), Period.ofMonths(0), Period.ofMonths(0))),
-      ((Period.ofMonths(200), Double.PositiveInfinity),
-        Array(Period.ofMonths(0), Period.ofMonths(0), Period.ofMonths(0))),
-      ((Period.ofMonths(-200), Float.NegativeInfinity),
-        Array(Period.ofMonths(0), Period.ofMonths(0), Period.ofMonths(0))),
+      ((Period.ofMonths(13), 1),
+        Array(Period.ofMonths(13), Period.ofMonths(13), Period.ofMonths(13)),
+        Array(Period.ofMonths(13), Period.ofMonths(13), Period.ofMonths(13))),
+      ((Period.ofMonths(-200), 1),
+        Array(Period.ofMonths(-200), Period.ofMonths(-200), Period.ofMonths(-200)),
+        Array(Period.ofMonths(-200), Period.ofMonths(-200), Period.ofMonths(-200))),
       ((Period.ofYears(100), -1.toByte),
+        Array(Period.ofMonths(-1200), Period.ofMonths(-1200), Period.ofMonths(-1200)),
         Array(Period.ofMonths(-1200), Period.ofMonths(-1200), Period.ofMonths(-1200))),
       ((Period.ofYears(1), 2.toShort),
-        Array(Period.ofMonths(6), Period.ofMonths(6), Period.ofMonths(6))),
+        Array(Period.ofMonths(6), Period.ofMonths(6), Period.ofMonths(6)),
+        Array(Period.ofMonths(24), Period.ofMonths(24), Period.ofMonths(24))),
       ((Period.ofYears(-1), -3),
-        Array(Period.ofMonths(4), Period.ofMonths(4), Period.ofMonths(4))),
+        Array(Period.ofMonths(4), Period.ofMonths(4), Period.ofMonths(4)),
+        Array(Period.ofMonths(36), Period.ofMonths(36), Period.ofMonths(36))),
       ((Period.ofMonths(-1000), 0.5f),
-        Array(Period.ofMonths(-2000), Period.ofMonths(-2000), Period.ofMonths(-2000))),
+        Array(Period.ofMonths(-2000), Period.ofMonths(-2000), Period.ofMonths(-2000)),
+        Array(Period.ofMonths(-500), Period.ofMonths(-500), Period.ofMonths(-500))),
       ((Period.ofYears(1000), 100d),
-        Array(Period.ofYears(10), Period.ofMonths(10), Period.ofYears(10))),
+        Array(Period.ofYears(10), Period.ofYears(10), Period.ofYears(10)),
+        Array(Period.ofMonths(1200000), Period.ofMonths(1200000), Period.ofMonths(1200000))),
       ((Period.ofMonths(2), BigDecimal(0.1)),
-        Array(Period.ofMonths(0), Period.ofMonths(0), Period.ofMonths(20)))
-    ).foreach { case ((period, num), expected) =>
-      DataTypeTestUtils.yearMonthIntervalTypes.zip(expected)
+        Array(Period.ofMonths(20), Period.ofMonths(20), Period.ofMonths(20)),
+        Array(Period.ofMonths(0), Period.ofMonths(0), Period.ofMonths(0)))
+    ).foreach { case ((period, num), divideExpected, multiplyExpected) =>
+      DataTypeTestUtils.yearMonthIntervalTypes.zip(divideExpected)
         .foreach { case (dt, result) =>
-          print(DivideYMInterval(Literal.create(period, dt), Literal(num)).eval())
-          print(",  ")
-          //  checkEvaluation(DivideYMInterval(Literal.create(period, dt), Literal(num)), result)
+          checkEvaluation(DivideYMInterval(Literal.create(period, dt), Literal(num)), result)
         }
-      println("")
+      DataTypeTestUtils.yearMonthIntervalTypes.zip(multiplyExpected)
+        .foreach { case (dt, result) =>
+          checkEvaluation(MultiplyYMInterval(Literal.create(period, dt), Literal(num)), result)
+        }
     }
   }
 
