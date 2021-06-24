@@ -321,7 +321,8 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         pass
 
     # arithmetic operators
-    __neg__ = column_op(Column.__neg__)
+    def __neg__(self: T_IndexOps) -> T_IndexOps:
+        return cast(T_IndexOps, column_op(Column.__neg__)(self))
 
     def __add__(self, other: Any) -> IndexOpsLike:
         return self._dtype_op.add(self, other)
@@ -397,7 +398,8 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
     def __rpow__(self, other: Any) -> IndexOpsLike:
         return self._dtype_op.rpow(self, other)
 
-    __abs__ = column_op(F.abs)
+    def __abs__(self: T_IndexOps) -> T_IndexOps:
+        return cast(T_IndexOps, column_op(F.abs)(self))
 
     # comparison operators
     def __eq__(self, other: Any) -> IndexOpsLike:  # type: ignore[override]
@@ -411,7 +413,8 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
     __ge__ = column_op(Column.__ge__)
     __gt__ = column_op(Column.__gt__)
 
-    __invert__ = column_op(Column.__invert__)
+    def __invert__(self: T_IndexOps) -> T_IndexOps:
+        return cast(T_IndexOps, column_op(Column.__invert__)(self))
 
     # `and`, `or`, `not` cannot be overloaded in Python,
     # so use bitwise operators as boolean operators
