@@ -105,25 +105,82 @@ object IntervalUtils {
   private val yearMonthRegex = (s"^$yearMonthPatternString$$").r
   private val yearMonthLiteralRegex =
     (s"(?i)^INTERVAL\\s+([+|-])?'$yearMonthPatternString'\\s+YEAR\\s+TO\\s+MONTH$$").r
+  private val yearMonthIndividualPatternString = "([+|-])?(\\d+)"
+  private val yearMonthIndividualRegex = (s"^$yearMonthIndividualPatternString$$").r
+  private val yearMonthIndividualLiteralRegex =
+    (s"(?i)^INTERVAL\\s+([+|-])?'$yearMonthIndividualPatternString'\\s+(YEAR|MONTH)$$").r
+
+  private def getSign(firstSign: String, secondSign: String): Int = {
+    (firstSign, secondSign) match {
+      case ("-", "-") => 1
+      case ("-", _) => -1
+      case (_, "-") => -1
+      case (_, _) => 1
+    }
+  }
 
   def castStringToYMInterval(
       input: UTF8String,
-      // TODO(SPARK-35768): Take into account year-month interval fields in cast
       startField: Byte,
       endField: Byte): Int = {
+
+    val supportedFormat = Map(
+      (YM.YEAR, YM.MONTH) ->
+        Seq("[+|-]y-m", "INTERVAL [+|-]'[+|-]y-m' YEAR TO MONTH"),
+      (YM.YEAR, YM.YEAR) -> Seq("[+|-]y", "INTERVAL [+|-]'[+|-]y' YEAR"),
+      (YM.MONTH, YM.MONTH) -> Seq("[+|-]m", "INTERVAL [+|-]'[+|-]m' MONTH")
+    )
+
+    def checkStringIntervalType(targetStartField: Byte, targetEndField: Byte): Unit = {
+      if (startField != targetStartField || endField != targetEndField) {
+        throw new IllegalArgumentException(s"Interval string does not match year-month format of " +
+          s"${supportedFormat((targetStartField, targetStartField))
+            .map(format => s"`$format`").mkString(", ")} " +
+          s"when cast to ${YM(startField, endField).typeName}: ${input.toString}")
+      }
+    }
+
     input.trimAll().toString match {
-      case yearMonthRegex("-", year, month) => toYMInterval(year, month, -1)
-      case yearMonthRegex(_, year, month) => toYMInterval(year, month, 1)
+      case yearMonthRegex("-", year, month) =>
+        checkStringIntervalType(YM.YEAR, YM.MONTH)
+        toYMInterval(year, month, -1)
+      case yearMonthRegex(_, year, month) =>
+        checkStringIntervalType(YM.YEAR, YM.MONTH)
+        toYMInterval(year, month, 1)
       case yearMonthLiteralRegex(firstSign, secondSign, year, month) =>
-        (firstSign, secondSign) match {
-          case ("-", "-") => toYMInterval(year, month, 1)
-          case ("-", _) => toYMInterval(year, month, -1)
-          case (_, "-") => toYMInterval(year, month, -1)
-          case (_, _) => toYMInterval(year, month, 1)
+        checkStringIntervalType(YM.YEAR, YM.MONTH)
+        toYMInterval(year, month, getSign(firstSign, secondSign))
+      case yearMonthIndividualRegex(secondSign, value) =>
+        safeToYMInterval {
+          val sign = getSign("+", secondSign)
+          if (endField == YM.YEAR) {
+            sign * Math.toIntExact(value.toLong * MONTHS_PER_YEAR)
+          } else if (startField == YM.MONTH) {
+            Math.toIntExact(sign * value.toLong)
+          } else {
+            throw new IllegalArgumentException(
+              s"Interval string does not match year-month format of " +
+                s"${supportedFormat((YM.YEAR, YM.MONTH))
+                  .map(format => s"`$format`").mkString(", ")} " +
+                s"when cast to ${YM(startField, endField).typeName}: ${input.toString}")
+          }
+        }
+      case yearMonthIndividualLiteralRegex(firstSign, secondSign, value, suffix) =>
+        safeToYMInterval {
+          val sign = getSign(firstSign, secondSign)
+          if ("YEAR".equalsIgnoreCase(suffix)) {
+            checkStringIntervalType(YM.YEAR, YM.YEAR)
+            sign * Math.toIntExact(value.toLong * MONTHS_PER_YEAR)
+          } else {
+            checkStringIntervalType(YM.MONTH, YM.MONTH)
+            Math.toIntExact(sign * value.toLong)
+          }
         }
       case _ => throw new IllegalArgumentException(
-        s"Interval string does not match year-month format of `[+|-]y-m` " +
-          s"or `INTERVAL [+|-]'[+|-]y-m' YEAR TO MONTH`: ${input.toString}")
+        s"Interval string does not match year-month format of " +
+          s"${supportedFormat((YM.YEAR, YM.MONTH))
+            .map(format => s"`$format`").mkString(", ")} " +
+          s"when cast to ${YM(startField, endField).typeName}: ${input.toString}")
     }
   }
 
@@ -145,15 +202,21 @@ object IntervalUtils {
     }
   }
 
-  def toYMInterval(yearStr: String, monthStr: String, sign: Int): Int = {
+  private def safeToYMInterval(f: => Int): Int = {
     try {
-      val years = toLongWithRange(YEAR, yearStr, 0, Integer.MAX_VALUE / MONTHS_PER_YEAR)
-      val totalMonths = sign * (years * MONTHS_PER_YEAR + toLongWithRange(MONTH, monthStr, 0, 11))
-      Math.toIntExact(totalMonths)
+      f
     } catch {
       case NonFatal(e) =>
         throw new IllegalArgumentException(
           s"Error parsing interval year-month string: ${e.getMessage}", e)
+    }
+  }
+
+  private def toYMInterval(yearStr: String, monthStr: String, sign: Int): Int = {
+    safeToYMInterval {
+      val years = toLongWithRange(YEAR, yearStr, 0, Integer.MAX_VALUE / MONTHS_PER_YEAR)
+      val totalMonths = sign * (years * MONTHS_PER_YEAR + toLongWithRange(MONTH, monthStr, 0, 11))
+      Math.toIntExact(totalMonths)
     }
   }
 
@@ -182,12 +245,8 @@ object IntervalUtils {
       case daySecondRegex(_, day, hour, minute, second, micro) =>
         toDTInterval(day, hour, minute, secondAndMicro(second, micro), 1)
       case daySecondLiteralRegex(firstSign, secondSign, day, hour, minute, second, micro) =>
-        (firstSign, secondSign) match {
-          case ("-", "-") => toDTInterval(day, hour, minute, secondAndMicro(second, micro), 1)
-          case ("-", _) => toDTInterval(day, hour, minute, secondAndMicro(second, micro), -1)
-          case (_, "-") => toDTInterval(day, hour, minute, secondAndMicro(second, micro), -1)
-          case (_, _) => toDTInterval(day, hour, minute, secondAndMicro(second, micro), 1)
-        }
+        toDTInterval(day, hour, minute, secondAndMicro(second, micro),
+          getSign(firstSign, secondSign))
       case _ =>
         throw new IllegalArgumentException(
           s"Interval string must match day-time format of `d h:m:s.n` " +
