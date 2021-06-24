@@ -174,6 +174,9 @@ object Cast {
             resolvableNullability(f1.nullable, f2.nullable) && canUpCast(f1.dataType, f2.dataType)
         }
 
+    case (_: DayTimeIntervalType, _: DayTimeIntervalType) => true
+    case (_: YearMonthIntervalType, _: YearMonthIntervalType) => true
+
     case (from: UserDefinedType[_], to: UserDefinedType[_]) if to.acceptsType(from) => true
 
     case _ => false
@@ -1942,15 +1945,20 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
   """,
   since = "1.0.0",
   group = "conversion_funcs")
-case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String] = None)
+case class Cast(
+    child: Expression,
+    dataType: DataType,
+    timeZoneId: Option[String] = None,
+    override val ansiEnabled: Boolean = SQLConf.get.ansiEnabled)
   extends CastBase {
+
+  def this(child: Expression, dataType: DataType, timeZoneId: Option[String]) =
+    this(child, dataType, timeZoneId, ansiEnabled = SQLConf.get.ansiEnabled)
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
 
   final override def nodePatternsInternal(): Seq[TreePattern] = Seq(CAST)
-
-  override protected val ansiEnabled: Boolean = SQLConf.get.ansiEnabled
 
   override def canCast(from: DataType, to: DataType): Boolean = if (ansiEnabled) {
     AnsiCast.canCast(from, to)
