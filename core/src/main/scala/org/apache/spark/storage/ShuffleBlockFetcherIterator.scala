@@ -449,7 +449,7 @@ final class ShuffleBlockFetcherIterator(
       val mayExceedsMaxBlocks = !doBatchFetch && curBlocks.size >= maxBlocksInFlightPerAddress
       if (curRequestSize >= targetRemoteRequestSize || mayExceedsMaxBlocks) {
         val retBlocks =
-          createFetchRequests(curBlocks, address, isLast = false, collectedRemoteRequests)
+          createFetchRequests(curBlocks.toSeq, address, isLast = false, collectedRemoteRequests)
         curBlocks.clear()
         curBlocks ++= retBlocks
         curRequestSize = curBlocks.map(_.size).sum
@@ -457,7 +457,7 @@ final class ShuffleBlockFetcherIterator(
     }
     // Add in the final request
     if (curBlocks.nonEmpty) {
-      createFetchRequests(curBlocks, address, isLast = true, collectedRemoteRequests)
+      createFetchRequests(curBlocks.toSeq, address, isLast = true, collectedRemoteRequests)
     }
   }
 
