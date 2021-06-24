@@ -2786,23 +2786,25 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
   }
 
   test("Non-deterministic aggregate functions should not be deduplicated") {
-    spark.udf.register("countND", udaf(new Aggregator[Long, Long, Long] {
-      def zero: Long = 0L
-      def reduce(b: Long, a: Long): Long = b + a
-      def merge(b1: Long, b2: Long): Long = b1 + b2
-      def finish(r: Long): Long = r
-      def bufferEncoder: Encoder[Long] = Encoders.scalaLong
-      def outputEncoder: Encoder[Long] = Encoders.scalaLong
-    }).asNondeterministic())
+    withUserDefinedFunction("sumND" -> true) {
+      spark.udf.register("sumND", udaf(new Aggregator[Long, Long, Long] {
+        def zero: Long = 0L
+        def reduce(b: Long, a: Long): Long = b + a
+        def merge(b1: Long, b2: Long): Long = b1 + b2
+        def finish(r: Long): Long = r
+        def bufferEncoder: Encoder[Long] = Encoders.scalaLong
+        def outputEncoder: Encoder[Long] = Encoders.scalaLong
+      }).asNondeterministic())
 
-    val query = "SELECT a, countND(b), countND(b) + 1 FROM testData2 GROUP BY a"
-    val df = sql(query)
-    val physical = df.queryExecution.sparkPlan
-    val aggregateExpressions = physical.collectFirst {
-      case agg : BaseAggregateExec => agg.aggregateExpressions
+      val query = "SELECT a, sumND(b), sumND(b) + 1 FROM testData2 GROUP BY a"
+      val df = sql(query)
+      val physical = df.queryExecution.sparkPlan
+      val aggregateExpressions = physical.collectFirst {
+        case agg: BaseAggregateExec => agg.aggregateExpressions
+      }
+      assert(aggregateExpressions.isDefined)
+      assert(aggregateExpressions.get.size == 2)
     }
-    assert (aggregateExpressions.isDefined)
-    assert (aggregateExpressions.get.size == 2)
   }
 
   test("SPARK-22356: overlapped columns between data and partition schema in data source tables") {
