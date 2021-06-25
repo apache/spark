@@ -1759,7 +1759,7 @@ case class TimestampAddYMInterval(
   override def inputTypes: Seq[AbstractDataType] =
     Seq(TypeCollection.AllTimestampTypes, YearMonthIntervalType)
 
-  override def dataType: DataType = TimestampType
+  override def dataType: DataType = timestamp.dataType
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))

@@ -1397,17 +1397,17 @@ struct<to_timestamp_ntz(2021-06-25 10:11:12) + INTERVAL '2 days':timestamp witho
 -- !query
 select to_timestamp_ntz('2021-06-25 10:11:12') + interval '0-0' year to month
 -- !query schema
-struct<to_timestamp_ntz(2021-06-25 10:11:12) + INTERVAL '0-0' YEAR TO MONTH:timestamp>
+struct<to_timestamp_ntz(2021-06-25 10:11:12) + INTERVAL '0-0' YEAR TO MONTH:timestamp without time zone>
 -- !query output
-2021-06-25 03:11:12
+2021-06-25 10:11:12
 
 
 -- !query
 select to_timestamp_ntz('2021-06-25 10:11:12') + interval '1-2' year to month
 -- !query schema
-struct<to_timestamp_ntz(2021-06-25 10:11:12) + INTERVAL '1-2' YEAR TO MONTH:timestamp>
+struct<to_timestamp_ntz(2021-06-25 10:11:12) + INTERVAL '1-2' YEAR TO MONTH:timestamp without time zone>
 -- !query output
-2022-08-25 03:11:12
+2022-08-25 10:11:12
 
 
 -- !query
@@ -1429,9 +1429,9 @@ struct<to_timestamp_ntz(2021-06-25 10:11:12) + INTERVAL '0 00:00:00.1' DAY TO SE
 -- !query
 select to_timestamp_ntz('2021-06-25 10:11:12') + interval '10-9' year to month
 -- !query schema
-struct<to_timestamp_ntz(2021-06-25 10:11:12) + INTERVAL '10-9' YEAR TO MONTH:timestamp>
+struct<to_timestamp_ntz(2021-06-25 10:11:12) + INTERVAL '10-9' YEAR TO MONTH:timestamp without time zone>
 -- !query output
-2032-03-25 03:11:12
+2032-03-25 10:11:12
 
 
 -- !query
