@@ -49,7 +49,6 @@ from pyspark.storagelevel import StorageLevel
 
 from pyspark.sql.pandas.conversion import PandasConversionMixin
 from pyspark.sql.pandas.map_ops import PandasMapOpsMixin
-
 from pyspark.pandas.frame import DataFrame as PandasOnSparkDataFrame
 
 class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
@@ -269,7 +268,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
     def semanticHash(self) -> int: ...
     def inputFiles(self) -> List[str]: ...
     def writeTo(self, table: str) -> DataFrameWriterV2: ...
-    def to_pandas_on_spark(self, index_col: None) -> PandasOnSparkDataFrame: ...
+    def to_pandas_on_spark(self, index_col: Optional[Union[str, List[str]]] = None) -> PandasOnSparkDataFrame: ...
 
 class DataFrameNaFunctions:
     df: DataFrame
