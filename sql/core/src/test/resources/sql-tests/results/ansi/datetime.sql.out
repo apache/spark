@@ -649,7 +649,7 @@ cannot resolve 'date_sub(CAST('2011-11-11' AS DATE), v.str)' due to data type mi
 -- !query
 select null - date '2019-10-06'
 -- !query schema
-struct<(NULL - DATE '2019-10-06'):interval day to second>
+struct<(NULL - DATE '2019-10-06'):interval day>
 -- !query output
 NULL
 
@@ -657,7 +657,7 @@ NULL
 -- !query
 select date '2001-10-01' - date '2001-09-28'
 -- !query schema
-struct<(DATE '2001-10-01' - DATE '2001-09-28'):interval day to second>
+struct<(DATE '2001-10-01' - DATE '2001-09-28'):interval day>
 -- !query output
 3 00:00:00.000000000
 
@@ -1219,8 +1219,8 @@ select to_timestamp_ntz('2019-10-06 A', 'yyyy-MM-dd GGGGG')
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkUpgradeException
-You may get a different result due to the upgrading of Spark 3.0: Fail to recognize 'yyyy-MM-dd GGGGG' pattern in the DateTimeFormatter. 1) You can set spark.sql.legacy.timeParserPolicy to LEGACY to restore the behavior before Spark 3.0. 2) You can form a valid datetime pattern with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
+java.lang.RuntimeException
+Fail to recognize 'yyyy-MM-dd GGGGG' pattern in the DateTimeFormatter. You can form a valid datetime pattern with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
 
 
 -- !query
@@ -1228,8 +1228,8 @@ select to_timestamp_ntz('22 05 2020 Friday', 'dd MM yyyy EEEEEE')
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkUpgradeException
-You may get a different result due to the upgrading of Spark 3.0: Fail to recognize 'dd MM yyyy EEEEEE' pattern in the DateTimeFormatter. 1) You can set spark.sql.legacy.timeParserPolicy to LEGACY to restore the behavior before Spark 3.0. 2) You can form a valid datetime pattern with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
+java.lang.RuntimeException
+Fail to recognize 'dd MM yyyy EEEEEE' pattern in the DateTimeFormatter. You can form a valid datetime pattern with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
 
 
 -- !query
@@ -1237,8 +1237,8 @@ select to_timestamp_ntz('22 05 2020 Friday', 'dd MM yyyy EEEEE')
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkUpgradeException
-You may get a different result due to the upgrading of Spark 3.0: Fail to recognize 'dd MM yyyy EEEEE' pattern in the DateTimeFormatter. 1) You can set spark.sql.legacy.timeParserPolicy to LEGACY to restore the behavior before Spark 3.0. 2) You can form a valid datetime pattern with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
+java.lang.RuntimeException
+Fail to recognize 'dd MM yyyy EEEEE' pattern in the DateTimeFormatter. You can form a valid datetime pattern with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
 
 
 -- !query

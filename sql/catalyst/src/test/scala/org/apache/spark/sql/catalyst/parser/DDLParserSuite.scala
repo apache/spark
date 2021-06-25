@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.parser
 import java.util.Locale
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, GlobalTempView, LocalTempView, PersistedView, UnresolvedAttribute, UnresolvedFunc, UnresolvedInlineTable, UnresolvedNamespace, UnresolvedRelation, UnresolvedStar, UnresolvedTable, UnresolvedTableOrView, UnresolvedView}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, GlobalTempView, LocalTempView, PersistedView, UnresolvedAttribute, UnresolvedFieldName, UnresolvedFunc, UnresolvedInlineTable, UnresolvedNamespace, UnresolvedRelation, UnresolvedStar, UnresolvedTable, UnresolvedTableOrView, UnresolvedView}
 import org.apache.spark.sql.catalyst.catalog.{ArchiveResource, BucketSpec, FileResource, FunctionResource, JarResource}
 import org.apache.spark.sql.catalyst.expressions.{EqualTo, Hex, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -992,7 +992,9 @@ class DDLParserSuite extends AnalysisTest {
   test("alter table: drop column") {
     comparePlans(
       parsePlan("ALTER TABLE table_name DROP COLUMN a.b.c"),
-      AlterTableDropColumnsStatement(Seq("table_name"), Seq(Seq("a", "b", "c"))))
+      AlterTableDropColumns(
+        UnresolvedTable(Seq("table_name"), "ALTER TABLE ... DROP COLUMNS", None),
+        Seq(UnresolvedFieldName(Seq("a", "b", "c")))))
   }
 
   test("alter table: drop multiple columns") {
@@ -1000,9 +1002,11 @@ class DDLParserSuite extends AnalysisTest {
     Seq(sql, sql.replace("COLUMN", "COLUMNS")).foreach { drop =>
       comparePlans(
         parsePlan(drop),
-        AlterTableDropColumnsStatement(
-          Seq("table_name"),
-          Seq(Seq("x"), Seq("y"), Seq("a", "b", "c"))))
+        AlterTableDropColumns(
+          UnresolvedTable(Seq("table_name"), "ALTER TABLE ... DROP COLUMNS", None),
+          Seq(UnresolvedFieldName(Seq("x")),
+            UnresolvedFieldName(Seq("y")),
+            UnresolvedFieldName(Seq("a", "b", "c")))))
     }
   }
 

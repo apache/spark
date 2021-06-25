@@ -89,6 +89,18 @@ case class UnresolvedPartitionSpec(
   override lazy val resolved = false
 }
 
+sealed trait FieldName extends LeafExpression with Unevaluable {
+  def name: Seq[String]
+  override def dataType: DataType = throw new IllegalStateException(
+    "UnresolvedFieldName.dataType should not be called.")
+  override def nullable: Boolean = throw new IllegalStateException(
+    "UnresolvedFieldName.nullable should not be called.")
+}
+
+case class UnresolvedFieldName(name: Seq[String]) extends FieldName {
+  override lazy val resolved = false
+}
+
 /**
  * Holds the name of a function that has yet to be looked up in a catalog. It will be resolved to
  * [[ResolvedFunc]] during analysis.
@@ -137,6 +149,8 @@ case class ResolvedPartitionSpec(
     names: Seq[String],
     ident: InternalRow,
     location: Option[String] = None) extends PartitionSpec
+
+case class ResolvedFieldName(name: Seq[String]) extends FieldName
 
 /**
  * A plan containing resolved (temp) views.

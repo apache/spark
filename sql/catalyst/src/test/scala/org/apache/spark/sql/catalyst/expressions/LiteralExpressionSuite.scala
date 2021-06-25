@@ -32,6 +32,8 @@ import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.DayTimeIntervalType._
+import org.apache.spark.sql.types.YearMonthIntervalType._
 import org.apache.spark.unsafe.types.CalendarInterval
 
 class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
@@ -430,6 +432,28 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       val expected = s"INTERVAL '$intervalPayload' YEAR TO MONTH"
       assert(literal.sql === expected)
       assert(literal.toString === expected)
+    }
+  }
+
+  test("SPARK-35871: Literal.create(value, dataType) should support fields") {
+    val period = Period.ofMonths(13)
+    DataTypeTestUtils.yearMonthIntervalTypes.foreach { dt =>
+      val result = dt.endField match {
+        case YEAR => 12
+        case MONTH => 13
+      }
+      checkEvaluation(Literal.create(period, dt), result)
+    }
+
+    val duration = Duration.ofSeconds(86400 + 3600 + 60 + 1)
+    DataTypeTestUtils.dayTimeIntervalTypes.foreach { dt =>
+      val result = dt.endField match {
+        case DAY => 86400000000L
+        case HOUR => 90000000000L
+        case MINUTE => 90060000000L
+        case SECOND => 90061000000L
+      }
+      checkEvaluation(Literal.create(duration, dt), result)
     }
   }
 }

@@ -987,14 +987,24 @@ object TransposeWindow extends Rule[LogicalPlan] {
     })
   }
 
+  private def windowsCompatible(w1: Window, w2: Window): Boolean = {
+    w1.references.intersect(w2.windowOutputSet).isEmpty &&
+      w1.expressions.forall(_.deterministic) &&
+      w2.expressions.forall(_.deterministic) &&
+      compatiblePartitions(w1.partitionSpec, w2.partitionSpec)
+  }
+
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithPruning(
     _.containsPattern(WINDOW), ruleId) {
-    case w1 @ Window(we1, ps1, os1, w2 @ Window(we2, ps2, os2, grandChild))
-        if w1.references.intersect(w2.windowOutputSet).isEmpty &&
-           w1.expressions.forall(_.deterministic) &&
-           w2.expressions.forall(_.deterministic) &&
-           compatiblePartitions(ps1, ps2) =>
-      Project(w1.output, Window(we2, ps2, os2, Window(we1, ps1, os1, grandChild)))
+    case w1 @ Window(_, _, _, w2 @ Window(_, _, _, grandChild))
+      if windowsCompatible(w1, w2) =>
+      Project(w1.output, w2.copy(child = w1.copy(child = grandChild)))
+
+    case w1 @ Window(_, _, _, Project(pl, w2 @ Window(_, _, _, grandChild)))
+      if windowsCompatible(w1, w2) && w1.references.subsetOf(grandChild.outputSet) =>
+      Project(
+        pl ++ w1.windowOutputSet,
+        w2.copy(child = w1.copy(child = grandChild)))
   }
 }
 
