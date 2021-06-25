@@ -326,6 +326,10 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
         val stateVersion = conf.getConf(SQLConf.STREAMING_AGGREGATION_STATE_FORMAT_VERSION)
 
+        val sessionWindowOption = namedGroupingExpressions.find { p =>
+          p.metadata.contains(SessionWindow.marker)
+        }
+
         // Ideally this should be done in `NormalizeFloatingNumbers`, but we do it here because
         // `groupingExpressions` is not extracted during logical phase.
         val normalizedGroupingExpressions = namedGroupingExpressions.map { e =>
@@ -335,12 +339,29 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           }
         }
 
-        AggUtils.planStreamingAggregation(
-          normalizedGroupingExpressions,
-          aggregateExpressions.map(expr => expr.asInstanceOf[AggregateExpression]),
-          rewrittenResultExpressions,
-          stateVersion,
-          planLater(child))
+        sessionWindowOption match {
+          case Some(sessionWindow) =>
+            val stateVersion = conf.getConf(SQLConf.STREAMING_SESSION_WINDOW_STATE_FORMAT_VERSION)
+
+            AggUtils.planStreamingAggregationForSession(
+              normalizedGroupingExpressions,
+              sessionWindow,
+              aggregateExpressions.map(expr => expr.asInstanceOf[AggregateExpression]),
+              rewrittenResultExpressions,
+              stateVersion,
+              conf.streamingSessionWindowMergeSessionInLocalPartition,
+              planLater(child))
+
+          case None =>
+            val stateVersion = conf.getConf(SQLConf.STREAMING_AGGREGATION_STATE_FORMAT_VERSION)
+
+            AggUtils.planStreamingAggregation(
+              normalizedGroupingExpressions,
+              aggregateExpressions.map(expr => expr.asInstanceOf[AggregateExpression]),
+              rewrittenResultExpressions,
+              stateVersion,
+              planLater(child))
+        }
 
       case _ => Nil
     }
