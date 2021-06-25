@@ -1432,9 +1432,9 @@ class InternalFrame(object):
             assert isinstance(pred.spark.data_type, BooleanType), pred.spark.data_type
             condition = pred.spark.column
         else:
-            spark_type = self.spark_frame.select(pred).schema[0].dataType
-            assert isinstance(spark_type, BooleanType), spark_type
             condition = pred
+            spark_type = self.spark_frame.select(condition).schema[0].dataType
+            assert isinstance(spark_type, BooleanType), spark_type
 
         return self.with_new_sdf(self.spark_frame.filter(condition).select(self.spark_columns))
 

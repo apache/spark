@@ -1363,6 +1363,31 @@ object RepartitionByExpression {
 }
 
 /**
+ * This operator is used to rebalance the output partitions of the given `child`, so that every
+ * partition is of a reasonable size (not too small and not too big). It also try its best to
+ * partition the child output by `partitionExpressions`. If there are skews, Spark will split the
+ * skewed partitions, to make these partitions not too big. This operator is useful when you need
+ * to write the result of `child` to a table, to avoid too small/big files.
+ *
+ * Note that, this operator only makes sense when AQE is enabled.
+ */
+case class RebalancePartitions(
+    partitionExpressions: Seq[Expression],
+    child: LogicalPlan) extends UnaryNode {
+  override def maxRows: Option[Long] = child.maxRows
+  override def output: Seq[Attribute] = child.output
+
+  def partitioning: Partitioning = if (partitionExpressions.isEmpty) {
+    RoundRobinPartitioning(conf.numShufflePartitions)
+  } else {
+    HashPartitioning(partitionExpressions, conf.numShufflePartitions)
+  }
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): RebalancePartitions =
+    copy(child = newChild)
+}
+
+/**
  * A relation with one row. This is used in "SELECT ..." without a from clause.
  */
 case class OneRowRelation() extends LeafNode {

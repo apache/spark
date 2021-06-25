@@ -31,6 +31,7 @@ class ArrowWriterSuite extends SparkFunSuite {
   test("simple") {
     def check(dt: DataType, data: Seq[Any], timeZoneId: String = null): Unit = {
       val avroDatatype = dt match {
+        case _: DayTimeIntervalType => DayTimeIntervalType()
         case _: YearMonthIntervalType => YearMonthIntervalType()
         case tpe => tpe
       }
@@ -83,8 +84,8 @@ class ArrowWriterSuite extends SparkFunSuite {
     check(NullType, Seq(null, null, null))
     DataTypeTestUtils.yearMonthIntervalTypes
       .foreach(check(_, Seq(null, 0, 1, -1, Int.MaxValue, Int.MinValue)))
-    check(DayTimeIntervalType(), Seq(null, 0L, 1000L, -1000L, (Long.MaxValue - 807L),
-      (Long.MinValue + 808L)))
+    DataTypeTestUtils.dayTimeIntervalTypes.foreach(check(_,
+      Seq(null, 0L, 1000L, -1000L, (Long.MaxValue - 807L), (Long.MinValue + 808L))))
   }
 
   test("long overflow for DayTimeIntervalType")
@@ -114,6 +115,7 @@ class ArrowWriterSuite extends SparkFunSuite {
   test("get multiple") {
     def check(dt: DataType, data: Seq[Any], timeZoneId: String = null): Unit = {
       val avroDatatype = dt match {
+        case _: DayTimeIntervalType => DayTimeIntervalType()
         case _: YearMonthIntervalType => YearMonthIntervalType()
         case tpe => tpe
       }
@@ -154,8 +156,7 @@ class ArrowWriterSuite extends SparkFunSuite {
     check(DateType, (0 until 10))
     check(TimestampType, (0 until 10).map(_ * 4.32e10.toLong), "America/Los_Angeles")
     DataTypeTestUtils.yearMonthIntervalTypes.foreach(check(_, (0 until 14)))
-    // TODO(SPARK-35731): Check all day-time interval types in arrow
-    check(DayTimeIntervalType(), (-10 until 10).map(_ * 1000.toLong))
+    DataTypeTestUtils.dayTimeIntervalTypes.foreach(check(_, (-10 until 10).map(_ * 1000.toLong)))
   }
 
   test("array") {

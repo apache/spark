@@ -42,7 +42,7 @@ ARG APT_INSTALL="apt-get install --no-install-recommends -y"
 #   We should use the latest Sphinx version once this is fixed.
 # TODO(SPARK-35375): Jinja2 3.0.0+ causes error when building with Sphinx.
 #   See also https://issues.apache.org/jira/browse/SPARK-35375.
-ARG PIP_PKGS="sphinx==3.0.4 mkdocs==1.1.2 numpy==1.19.4 pydata_sphinx_theme==0.4.1 ipython==7.19.0 nbsphinx==0.8.0 numpydoc==1.1.0 jinja2==2.11.3"
+ARG PIP_PKGS="sphinx==3.0.4 mkdocs==1.1.2 numpy==1.19.4 pydata_sphinx_theme==0.4.1 ipython==7.19.0 nbsphinx==0.8.0 numpydoc==1.1.0 jinja2==2.11.3 twine==3.4.1"
 ARG GEM_PKGS="bundler:2.2.9"
 
 # Install extra needed repos and refresh.
@@ -70,7 +70,7 @@ RUN apt-get clean && apt-get update && $APT_INSTALL gnupg ca-certificates && \
   curl -sL https://deb.nodesource.com/setup_12.x | bash && \
   $APT_INSTALL nodejs && \
   # Install needed python packages. Use pip for installing packages (for consistency).
-  $APT_INSTALL python3-pip python3-setuptools && \
+  $APT_INSTALL python-is-python3 python3-pip python3-setuptools && \
   # qpdf is required for CRAN checks to pass.
   $APT_INSTALL qpdf jq && \
   pip3 install $PIP_PKGS && \

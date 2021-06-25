@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.catalyst.analysis.{NamedRelation, PartitionSpec, UnresolvedException}
+import org.apache.spark.sql.catalyst.analysis.{FieldName, NamedRelation, PartitionSpec, UnresolvedException}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, Expression, Unevaluable}
 import org.apache.spark.sql.catalyst.plans.DescribeCommandSchema
@@ -1095,6 +1095,50 @@ case class UnsetTableProperties(
     propertyKeys: Seq[String],
     ifExists: Boolean) extends UnaryCommand {
   override def child: LogicalPlan = table
+  override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
+    copy(table = newChild)
+}
+
+trait AlterTableCommand extends UnaryCommand {
+  def table: LogicalPlan
+  def operation: String
+  def changes: Seq[TableChange]
+  override def child: LogicalPlan = table
+}
+
+/**
+ * The logical plan of the ALTER TABLE ... DROP COLUMNS command.
+ */
+case class AlterTableDropColumns(
+    table: LogicalPlan,
+    columnsToDrop: Seq[FieldName]) extends AlterTableCommand {
+  override def operation: String = "delete"
+
+  override def changes: Seq[TableChange] = {
+    columnsToDrop.map { col =>
+      require(col.resolved, "FieldName should be resolved before it's converted to TableChange.")
+      TableChange.deleteColumn(col.name.toArray)
+    }
+  }
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
+    copy(table = newChild)
+}
+
+/**
+ * The logical plan of the ALTER TABLE ... RENAME COLUMN command.
+ */
+case class AlterTableRenameColumn(
+    table: LogicalPlan,
+    column: FieldName,
+    newName: String) extends AlterTableCommand {
+  override def operation: String = "rename"
+
+  override def changes: Seq[TableChange] = {
+    require(column.resolved, "FieldName should be resolved before it's converted to TableChange.")
+    Seq(TableChange.renameColumn(column.name.toArray, newName))
+  }
+
   override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
     copy(table = newChild)
 }

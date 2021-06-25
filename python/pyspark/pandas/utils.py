@@ -22,10 +22,11 @@ import functools
 from collections import OrderedDict
 from contextlib import contextmanager
 import os
-from typing import (
+from typing import (  # noqa: F401 (SPARK-34943)
     Any,
     Callable,
     Dict,
+    Iterable,
     Iterator,
     List,
     Optional,
@@ -306,7 +307,9 @@ def combine_frames(
 
 
 def align_diff_frames(
-    resolve_func: Callable[["DataFrame", List[Tuple], List[Tuple]], Tuple["Series", Tuple]],
+    resolve_func: Callable[
+        ["DataFrame", List[Tuple], List[Tuple]], Iterator[Tuple["Series", Tuple]]
+    ],
     this: "DataFrame",
     that: "DataFrame",
     fillna: bool = True,
@@ -381,11 +384,11 @@ def align_diff_frames(
     # 2. Apply the given function to transform the columns in a batch and keep the new columns.
     combined_column_labels = combined._internal.column_labels
 
-    that_columns_to_apply = []
-    this_columns_to_apply = []
-    additional_that_columns = []
-    columns_to_keep = []
-    column_labels_to_keep = []
+    that_columns_to_apply = []  # type: List[Tuple]
+    this_columns_to_apply = []  # type: List[Tuple]
+    additional_that_columns = []  # type: List[Tuple]
+    columns_to_keep = []  # type: List[Union[Series, spark.Column]]
+    column_labels_to_keep = []  # type: List[Tuple]
 
     for combined_label in combined_column_labels:
         for common_label in common_column_labels:
@@ -419,8 +422,8 @@ def align_diff_frames(
         psser_set, column_labels_set = zip(
             *resolve_func(combined, this_columns_to_apply, that_columns_to_apply)
         )
-        columns_applied = list(psser_set)
-        column_labels_applied = list(column_labels_set)
+        columns_applied = list(psser_set)  # type: List[Union[Series, spark.Column]]
+        column_labels_applied = list(column_labels_set)  # type: List[Tuple]
     else:
         columns_applied = []
         column_labels_applied = []

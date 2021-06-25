@@ -258,21 +258,6 @@ case class AlterTableAlterColumnStatement(
     position: Option[ColumnPosition]) extends LeafParsedStatement
 
 /**
- * ALTER TABLE ... RENAME COLUMN command, as parsed from SQL.
- */
-case class AlterTableRenameColumnStatement(
-    tableName: Seq[String],
-    column: Seq[String],
-    newName: String) extends LeafParsedStatement
-
-/**
- * ALTER TABLE ... DROP COLUMNS command, as parsed from SQL.
- */
-case class AlterTableDropColumnsStatement(
-    tableName: Seq[String],
-    columnsToDrop: Seq[Seq[String]]) extends LeafParsedStatement
-
-/**
  * An INSERT INTO statement, as parsed from SQL.
  *
  * @param table                the logical plan representing the table.
