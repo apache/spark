@@ -86,8 +86,6 @@ class RocksDB(
   @volatile private var numUncommittedKeys = 0L
   @volatile private var acquiredThreadInfo: AcquiredThreadInfo = _
 
-  workingDir.mkdirs()
-
   /**
    * Load the given version of data in a native RocksDB instance.
    * Note that this will copy all the necessary file from DFS to local disk as needed,

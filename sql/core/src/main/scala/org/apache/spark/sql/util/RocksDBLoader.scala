@@ -32,7 +32,7 @@ object RocksDBLoader extends Logging {
    */
   private var exception: Option[Throwable] = null
 
-  private val loadLibraryThread = new UninterruptibleThread("RocksDB") {
+  private val loadLibraryThread = new UninterruptibleThread("RocksDBLoader") {
     override def run(): Unit = {
       try {
         runUninterruptibly {
