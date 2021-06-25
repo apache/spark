@@ -65,6 +65,7 @@ if TYPE_CHECKING:
 
 
 T_IndexOps = TypeVar("T_IndexOps", bound="IndexOpsMixin")
+IndexOpsLike = Union["Series", "Index"]
 
 
 def is_valid_operand_for_numeric_arithmetic(operand: Any, *, allow_bool: bool = True) -> bool:
@@ -196,7 +197,7 @@ def _as_other_type(
 class DataTypeOps(object, metaclass=ABCMeta):
     """The base class for binary operations of pandas-on-Spark objects (of different data types)."""
 
-    def __new__(cls, dtype: Dtype, spark_type: DataType):
+    def __new__(cls, dtype: Dtype, spark_type: DataType) -> "DataTypeOps":
         from pyspark.pandas.data_type_ops.binary_ops import BinaryOps
         from pyspark.pandas.data_type_ops.boolean_ops import BooleanOps, BooleanExtensionOps
         from pyspark.pandas.data_type_ops.categorical_ops import CategoricalOps
@@ -270,58 +271,58 @@ class DataTypeOps(object, metaclass=ABCMeta):
     def pretty_name(self) -> str:
         raise NotImplementedError()
 
-    def add(self, left, right) -> Union["Series", "Index"]:
+    def add(self, left: T_IndexOps, right: Any) -> IndexOpsLike:
         raise TypeError("Addition can not be applied to %s." % self.pretty_name)
 
-    def sub(self, left, right) -> Union["Series", "Index"]:
+    def sub(self, left: T_IndexOps, right: Any) -> IndexOpsLike:
         raise TypeError("Subtraction can not be applied to %s." % self.pretty_name)
 
-    def mul(self, left, right) -> Union["Series", "Index"]:
+    def mul(self, left: T_IndexOps, right: Any) -> IndexOpsLike:
         raise TypeError("Multiplication can not be applied to %s." % self.pretty_name)
 
-    def truediv(self, left, right) -> Union["Series", "Index"]:
+    def truediv(self, left: T_IndexOps, right: Any) -> IndexOpsLike:
         raise TypeError("True division can not be applied to %s." % self.pretty_name)
 
-    def floordiv(self, left, right) -> Union["Series", "Index"]:
+    def floordiv(self, left: T_IndexOps, right: Any) -> IndexOpsLike:
         raise TypeError("Floor division can not be applied to %s." % self.pretty_name)
 
-    def mod(self, left, right) -> Union["Series", "Index"]:
+    def mod(self, left: T_IndexOps, right: Any) -> IndexOpsLike:
         raise TypeError("Modulo can not be applied to %s." % self.pretty_name)
 
-    def pow(self, left, right) -> Union["Series", "Index"]:
+    def pow(self, left: T_IndexOps, right: Any) -> IndexOpsLike:
         raise TypeError("Exponentiation can not be applied to %s." % self.pretty_name)
 
-    def radd(self, left, right) -> Union["Series", "Index"]:
+    def radd(self, left: T_IndexOps, right: Any) -> IndexOpsLike:
         raise TypeError("Addition can not be applied to %s." % self.pretty_name)
 
-    def rsub(self, left, right) -> Union["Series", "Index"]:
+    def rsub(self, left: T_IndexOps, right: Any) -> IndexOpsLike:
         raise TypeError("Subtraction can not be applied to %s." % self.pretty_name)
 
-    def rmul(self, left, right) -> Union["Series", "Index"]:
+    def rmul(self, left: T_IndexOps, right: Any) -> IndexOpsLike:
         raise TypeError("Multiplication can not be applied to %s." % self.pretty_name)
 
-    def rtruediv(self, left, right) -> Union["Series", "Index"]:
+    def rtruediv(self, left: T_IndexOps, right: Any) -> IndexOpsLike:
         raise TypeError("True division can not be applied to %s." % self.pretty_name)
 
-    def rfloordiv(self, left, right) -> Union["Series", "Index"]:
+    def rfloordiv(self, left: T_IndexOps, right: Any) -> IndexOpsLike:
         raise TypeError("Floor division can not be applied to %s." % self.pretty_name)
 
-    def rmod(self, left, right) -> Union["Series", "Index"]:
+    def rmod(self, left: T_IndexOps, right: Any) -> IndexOpsLike:
         raise TypeError("Modulo can not be applied to %s." % self.pretty_name)
 
-    def rpow(self, left, right) -> Union["Series", "Index"]:
+    def rpow(self, left: T_IndexOps, right: Any) -> IndexOpsLike:
         raise TypeError("Exponentiation can not be applied to %s." % self.pretty_name)
 
-    def __and__(self, left, right) -> Union["Series", "Index"]:
+    def __and__(self, left: T_IndexOps, right: Any) -> IndexOpsLike:
         raise TypeError("Bitwise and can not be applied to %s." % self.pretty_name)
 
-    def __or__(self, left, right) -> Union["Series", "Index"]:
+    def __or__(self, left: T_IndexOps, right: Any) -> IndexOpsLike:
         raise TypeError("Bitwise or can not be applied to %s." % self.pretty_name)
 
-    def rand(self, left, right) -> Union["Series", "Index"]:
+    def rand(self, left: T_IndexOps, right: Any) -> IndexOpsLike:
         return left.__and__(right)
 
-    def ror(self, left, right) -> Union["Series", "Index"]:
+    def ror(self, left: T_IndexOps, right: Any) -> IndexOpsLike:
         return left.__or__(right)
 
     def restore(self, col: pd.Series) -> pd.Series:
