@@ -882,7 +882,15 @@ object JdbcUtils extends Logging {
     val repartitionedDF = options.numPartitions match {
       case Some(n) if n <= 0 => throw QueryExecutionErrors.invalidJdbcNumPartitionsError(
         n, JDBCOptions.JDBC_NUM_PARTITIONS)
-      case Some(n) if n < df.rdd.getNumPartitions => df.coalesce(n)
+      case Some(n) =>
+        val dn = df.rdd.getNumPartitions
+        if (n < dn) {
+          df.coalesce(n)
+        } else if (n > dn) {
+          df.repartition(n)
+        } else {
+          df
+        }
       case _ => df
     }
     repartitionedDF.rdd.foreachPartition { iterator => savePartition(

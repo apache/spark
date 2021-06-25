@@ -372,6 +372,17 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
     }.getMessage
     assert(e.contains("Invalid value `0` for parameter `numPartitions` in table writing " +
       "via JDBC. The minimum value is 1."))
+
+    (1 to 3).foreach { value =>
+      df.write.mode(SaveMode.Overwrite).format("jdbc")
+        .option("dbtable", "TEST.SAVETEST")
+        .option("url", url1)
+        .option("user", "testUser")
+        .option("password", "testPass")
+        .option(s"${JDBCOptions.JDBC_NUM_PARTITIONS}", value.toString())
+        .save()
+      assert(spark.read.jdbc(url1, "TEST.SAVETEST", properties).collect().length === 2)
+    }
   }
 
   test("SPARK-19318 temporary view data source option keys should be case-insensitive") {
