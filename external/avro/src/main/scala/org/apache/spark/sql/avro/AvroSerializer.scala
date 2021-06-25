@@ -227,10 +227,11 @@ private[sql] class AvroSerializer(
       throw new IncompatibleSchemaException(s"Cannot convert Catalyst type $catalystStruct to " +
         s"Avro type $avroStruct.")
     }
+    val avroSchemaHelper = new AvroUtils.AvroSchemaHelper(avroStruct)
 
     val (avroIndices: Array[Int], fieldConverters: Array[Converter]) =
       catalystStruct.map { catalystField =>
-        val avroField = AvroUtils.getAvroFieldByName(avroStruct, catalystField.name) match {
+        val avroField = avroSchemaHelper.getFieldByName(catalystField.name) match {
           case Some(f) => f
           case None => throw new IncompatibleSchemaException(
             s"Cannot find ${catalystField.name} in Avro schema")

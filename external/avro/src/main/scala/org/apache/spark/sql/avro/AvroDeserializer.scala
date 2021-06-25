@@ -326,11 +326,12 @@ private[sql] class AvroDeserializer(
     val validFieldIndexes = ArrayBuffer.empty[Int]
     val fieldWriters = ArrayBuffer.empty[(CatalystDataUpdater, Any) => Unit]
 
+    val avroSchemaHelper = new AvroUtils.AvroSchemaHelper(avroType)
     val length = sqlType.length
     var i = 0
     while (i < length) {
       val sqlField = sqlType.fields(i)
-      AvroUtils.getAvroFieldByName(avroType, sqlField.name) match {
+      avroSchemaHelper.getFieldByName(sqlField.name) match {
         case Some(avroField) =>
           validFieldIndexes += avroField.pos()
 
