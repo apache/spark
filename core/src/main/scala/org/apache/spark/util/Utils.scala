@@ -3152,7 +3152,7 @@ private[spark] object Utils extends Logging {
       IOUtils.closeQuietly(in)
       IOUtils.closeQuietly(out)
     }
-    files
+    files.toSeq
   }
 }
 
