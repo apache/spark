@@ -22,7 +22,6 @@ import java.lang.{Long => JLong}
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 import java.util.{Locale, UUID}
-import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 
 import scala.reflect.runtime.universe.TypeTag
@@ -2407,14 +2406,8 @@ class DataFrameSuite extends QueryTest
       assert(unnamedMetric === Row(49))
     }
 
-    // Before first run observation times out
-    assert(namedObservation.waitCompleted(100, TimeUnit.MILLISECONDS) === false)
-    assert(unnamedObservation.waitCompleted(100, TimeUnit.MILLISECONDS) === false)
-
     // First run
     df.collect()
-    assert(namedObservation.waitCompleted(1, TimeUnit.SECONDS))
-    assert(unnamedObservation.waitCompleted(1, TimeUnit.SECONDS))
     checkMetrics(namedObservation.get, unnamedObservation.get)
     // we can get the result multiple times
     checkMetrics(namedObservation.get, unnamedObservation.get)
