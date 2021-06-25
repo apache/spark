@@ -34,8 +34,8 @@ import java.util.concurrent.TimeUnit.NANOSECONDS
 import java.util.zip.{GZIPInputStream, ZipInputStream}
 
 import scala.annotation.tailrec
-import scala.collection.{mutable, Map, Seq}
 import scala.collection.JavaConverters._
+import scala.collection.Map
 import scala.collection.mutable.ArrayBuffer
 import scala.io.Source
 import scala.reflect.ClassTag
@@ -3128,7 +3128,7 @@ private[spark] object Utils extends Logging {
    * addressing the directory here. Also, we rely on the caller side to address any exceptions.
    */
   def unzipFilesFromFile(fs: FileSystem, dfsZipFile: Path, localDir: File): Seq[File] = {
-    val files = new mutable.ArrayBuffer[File]()
+    val files = new ArrayBuffer[File]()
     val in = new ZipInputStream(fs.open(dfsZipFile))
     var out: OutputStream = null
     try {
@@ -3152,7 +3152,7 @@ private[spark] object Utils extends Logging {
       IOUtils.closeQuietly(in)
       IOUtils.closeQuietly(out)
     }
-    files
+    files.toSeq
   }
 }
 
