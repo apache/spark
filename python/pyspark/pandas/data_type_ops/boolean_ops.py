@@ -16,7 +16,7 @@
 #
 
 import numbers
-from typing import TYPE_CHECKING, Any, Union
+from typing import Any, Union
 
 import pandas as pd
 from pandas.api.types import CategoricalDtype
@@ -38,10 +38,6 @@ from pyspark.pandas.typedef.typehints import as_spark_type
 from pyspark.sql import functions as F
 from pyspark.sql.column import Column
 from pyspark.sql.types import BooleanType, StringType
-
-if TYPE_CHECKING:
-    from pyspark.pandas.indexes import Index  # noqa: F401 (SPARK-34943)
-    from pyspark.pandas.series import Series  # noqa: F401 (SPARK-34943)
 
 
 class BooleanOps(DataTypeOps):

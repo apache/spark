@@ -16,7 +16,7 @@
 #
 
 import numbers
-from typing import TYPE_CHECKING, Any, Union
+from typing import Any, Union
 
 import numpy as np
 import pandas as pd
@@ -44,10 +44,6 @@ from pyspark.sql.types import (
     StringType,
     TimestampType,
 )
-
-if TYPE_CHECKING:
-    from pyspark.pandas.indexes import Index  # noqa: F401 (SPARK-34943)
-    from pyspark.pandas.series import Series  # noqa: F401 (SPARK-34943)
 
 
 class NumericOps(DataTypeOps):

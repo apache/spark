@@ -17,7 +17,7 @@
 
 import datetime
 import warnings
-from typing import TYPE_CHECKING, Any, Union
+from typing import Any, Union
 
 import pandas as pd
 from pandas.api.types import CategoricalDtype
@@ -36,10 +36,6 @@ from pyspark.pandas.data_type_ops.base import (
     _as_string_type,
 )
 from pyspark.pandas.typedef import Dtype, pandas_on_spark_type
-
-if TYPE_CHECKING:
-    from pyspark.pandas.indexes import Index  # noqa: F401 (SPARK-34943)
-    from pyspark.pandas.series import Series  # noqa: F401 (SPARK-34943)
 
 
 class DateOps(DataTypeOps):

@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-from typing import TYPE_CHECKING, Any, Union, cast
+from typing import Any, Union, cast
 
 import pandas as pd
 from pandas.api.types import CategoricalDtype
@@ -36,10 +36,6 @@ from pyspark.pandas.internal import InternalField
 from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.typedef import Dtype, extension_dtypes, pandas_on_spark_type
 from pyspark.sql.types import BooleanType
-
-if TYPE_CHECKING:
-    from pyspark.pandas.indexes import Index  # noqa: F401 (SPARK-34943)
-    from pyspark.pandas.series import Series  # noqa: F401 (SPARK-34943)
 
 
 class StringOps(DataTypeOps):
