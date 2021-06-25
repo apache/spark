@@ -35,7 +35,7 @@ import org.apache.spark.sql.internal.SQLConf
  *                              /                              \
  *   r0:[m0-b0, m1-b0, m2-b0], r1:[m0-b1], r2:[m1-b1], r3:[m2-b1], r4[m0-b2, m1-b2, m2-b2]
  */
-object ExpandShufflePartitions extends CustomShuffleReaderRule {
+object OptimizeSkewedPartitions extends CustomShuffleReaderRule {
   override def supportedShuffleOrigins: Seq[ShuffleOrigin] =
     Seq(REBALANCE_PARTITIONS_BY_NONE, REBALANCE_PARTITIONS_BY_COL)
 
