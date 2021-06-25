@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-from typing import TYPE_CHECKING, Any, Union
+from typing import TYPE_CHECKING, Any, Union, cast
 
 from pandas.api.types import CategoricalDtype
 
@@ -59,7 +59,9 @@ class BinaryOps(DataTypeOps):
 
     def radd(self, left: T_IndexOps, right: Any) -> IndexOpsLike:
         if isinstance(right, bytes):
-            return column_op(F.concat)(F.lit(right), left)
+            return cast(
+                IndexOpsLike, left._with_new_scol(F.concat(F.lit(right), left.spark.column))
+            )
         else:
             raise TypeError(
                 "Concatenation can not be applied to %s and the given type." % self.pretty_name
