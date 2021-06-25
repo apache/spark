@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-from typing import TYPE_CHECKING, Any, Union
+from typing import TYPE_CHECKING, Any, Union, cast
 
 import pandas as pd
 from pandas.api.types import CategoricalDtype
@@ -89,7 +89,10 @@ class StringOps(DataTypeOps):
 
     def radd(self, left: T_IndexOps, right: Any) -> IndexOpsLike:
         if isinstance(right, str):
-            return column_op(F.concat)(F.lit(right), left)
+            return cast(
+                IndexOpsLike,
+                left._with_new_scol(F.concat(F.lit(right), left.spark.column)),  # TODO: dtype?
+            )
         else:
             raise TypeError("string addition can only be applied to string series or literals.")
 
