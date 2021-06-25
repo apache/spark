@@ -1453,7 +1453,7 @@ case class TimeAdd(start: Expression, interval: Expression, timeZoneId: Option[S
   override def inputTypes: Seq[AbstractDataType] =
     Seq(TypeCollection.AllTimestampTypes, TypeCollection(CalendarIntervalType, DayTimeIntervalType))
 
-  override def dataType: DataType = TimestampType
+  override def dataType: DataType = start.dataType
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
