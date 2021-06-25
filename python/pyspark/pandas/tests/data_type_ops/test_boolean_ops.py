@@ -576,6 +576,8 @@ class BooleanExtensionOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         self.assert_eq(pser.astype("category"), psser.astype("category"))
         cat_type = CategoricalDtype(categories=[False, True])
         self.assert_eq(pser.astype(cat_type), psser.astype(cat_type))
+        for dtype in self.extension_dtypes:
+            self.check_extension(pser.astype(dtype), psser.astype(dtype))
 
 
 if __name__ == "__main__":
