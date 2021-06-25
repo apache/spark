@@ -1621,7 +1621,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
-  test("SPARK-34739: add a year-month interval to a timestamp") {
+  test("SPARK-34739,SPARK-35889: add a year-month interval to a timestamp") {
     val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US)
     Seq(TimestampType, TimestampWithoutTZType).foreach { dt =>
       for (zid <- outstandingZoneIds) {
@@ -1662,7 +1662,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
-  test("SPARK-34761: add a day-time interval to a timestamp") {
+  test("SPARK-34761,SPARK-35889: add a day-time interval to a timestamp") {
     val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US)
     Seq(TimestampType, TimestampWithoutTZType).foreach { dt =>
       for (zid <- outstandingZoneIds) {
