@@ -57,10 +57,15 @@ final class ParquetReadState {
     nextRange();
   }
 
+  /**
+   * Construct a list of row ranges from the given `rowIndexes`. For example, suppose the
+   * `rowIndexes` are `[0, 1, 2, 4, 5, 7, 8, 9]`, it will be converted into 3 row ranges:
+   * `[0-2], [4-5], [7-9]`.
+   */
   private Iterator<RowRange> constructRanges(PrimitiveIterator.OfLong rowIndexes) {
     List<RowRange> rowRanges = new ArrayList<>();
-    long currentStart, previous;
-    currentStart = previous = Long.MIN_VALUE;
+    long currentStart = Long.MIN_VALUE;
+    long previous = Long.MIN_VALUE;
 
     while (rowIndexes.hasNext()) {
       long idx = rowIndexes.nextLong();
