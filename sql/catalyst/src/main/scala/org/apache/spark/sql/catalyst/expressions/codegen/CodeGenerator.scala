@@ -1766,19 +1766,20 @@ object CodeGenerator extends Logging {
       argSet += JavaCode.variable(ctx.INPUT_ROW, classOf[InternalRow])
     }
 
+    val stack = mutable.Stack[Expression](expr)
+
     // Collects local variables from a given `expr` tree
-    val collectLocalVariable = (ev: ExprValue) => ev match {
+    val collectLocalVariable = (ev: ExprValue, e: Expression) => ev match {
       case vv: VariableValue => argSet += vv
-      case _ =>
+      case _ => stack.pushAll(e.children)
     }
 
-    val stack = mutable.Stack[Expression](expr)
     while (stack.nonEmpty) {
       stack.pop() match {
         case e if subExprs.contains(e) =>
           val SubExprEliminationState(isNull, value) = subExprs(e)
-          collectLocalVariable(value)
-          collectLocalVariable(isNull)
+          collectLocalVariable(value, e)
+          collectLocalVariable(isNull, e)
 
         case ref: BoundReference if ctx.currentVars != null &&
             ctx.currentVars(ref.ordinal) != null =>
@@ -1788,8 +1789,8 @@ object CodeGenerator extends Logging {
             exprCodesNeedEvaluate += exprCode.copy()
             exprCode.code = EmptyBlock
           }
-          collectLocalVariable(exprCode.value)
-          collectLocalVariable(exprCode.isNull)
+          collectLocalVariable(exprCode.value, ref)
+          collectLocalVariable(exprCode.isNull, ref)
 
         case e =>
           stack.pushAll(e.children)

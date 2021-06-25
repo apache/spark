@@ -4042,6 +4042,21 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         Row(1, 2, 1, 2) :: Nil)
     }
   }
+
+  test("SPARK-35886: Codegen issue for decimal type") {
+    withTable("t") {
+      sql(
+        """
+          |CREATE TABLE t (
+          |  c1 DECIMAL(18,6),
+          |  c2 DECIMAL(18,6),
+          |  c3 DECIMAL(18,6))
+          |USING parquet;
+          |""".stripMargin)
+      sql("INSERT INTO t SELECT 1, 1, 1")
+      checkAnswer(sql("SELECT sum(c1 * c3) + sum(c2 * c3) FROM t"), Row(2.00000000000) :: Nil)
+    }
+  }
 }
 
 case class Foo(bar: Option[String])
