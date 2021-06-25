@@ -3123,7 +3123,10 @@ private[spark] object Utils extends Logging {
     message.format(serviceName, e, serviceName, serviceName)
   }
 
-  /** Decompress a zip file into a local dir. File names are read from the zip file. */
+  /**
+   * Decompress a zip file into a local dir. File names are read from the zip file. Note, we skip
+   * addressing the directory here. Also, we rely on the caller side to address any exceptions.
+   */
   def unzipFilesFromFile(fs: FileSystem, dfsZipFile: Path, localDir: File): Seq[File] = {
     val files = new mutable.ArrayBuffer[File]()
     val in = new ZipInputStream(fs.open(dfsZipFile))
