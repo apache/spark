@@ -184,6 +184,11 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
             val from = operator.inputSet.toSeq.map(_.qualifiedName).mkString(", ")
             a.failAnalysis(s"cannot resolve '${a.sql}' given input columns: [$from]")
 
+          case s: Star =>
+            withPosition(s) {
+              throw QueryCompilationErrors.invalidStarUsageError(operator.nodeName)
+            }
+
           case e: Expression if e.checkInputDataTypes().isFailure =>
             e.checkInputDataTypes() match {
               case TypeCheckResult.TypeCheckFailure(message) =>

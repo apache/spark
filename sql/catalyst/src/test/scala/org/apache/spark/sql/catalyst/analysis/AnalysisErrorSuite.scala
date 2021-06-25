@@ -808,7 +808,7 @@ class AnalysisErrorSuite extends AnalysisTest {
     assertAnalysisSuccess(plan, true)
   }
 
-  test("SPARK-35618: Resolve star expressions in subquery") {
+  test("SPARK-35618: Resolve star expressions in subqueries") {
     val a = AttributeReference("a", IntegerType)()
     val b = AttributeReference("b", IntegerType)()
     val t0 = OneRowRelation()
@@ -829,6 +829,26 @@ class AnalysisErrorSuite extends AnalysisTest {
     assertAnalysisError(
       Project(ScalarSubquery(t0.select(star("t2"))).as("sub") :: Nil, t1),
       "cannot resolve 't2.*' given input columns ''" :: Nil
+    )
+  }
+
+  test("SPARK-35618: Invalid star usage in subqueries") {
+    val a = AttributeReference("a", IntegerType)()
+    val b = AttributeReference("b", IntegerType)()
+    val c = AttributeReference("c", IntegerType)()
+    val t1 = LocalRelation(a, b).as("t1")
+    val t2 = LocalRelation(b, c).as("t2")
+
+    // SELECT * FROM t1 WHERE a = (SELECT sum(c) FROM t2 WHERE t1.* = t2.b)
+    assertAnalysisError(
+      Filter(EqualTo(a, ScalarSubquery(t2.select(sum(c)).where(star("t1") === b))), t1),
+      "Invalid usage of '*' in Filter" :: Nil
+    )
+
+    // SELECT * FROM t1 JOIN t2 ON (EXISTS (SELECT 1 FROM t2 WHERE t1.* = b))
+    assertAnalysisError(
+      t1.join(t2, condition = Some(Exists(t2.select(1).where(star("t1") === b)))),
+      "Invalid usage of '*' in Filter" :: Nil
     )
   }
 }
