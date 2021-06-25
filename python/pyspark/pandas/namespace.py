@@ -30,6 +30,7 @@ from typing import (  # noqa: F401 (SPARK-34943)
     Union,
     cast,
     no_type_check,
+    overload,
 )
 from collections import OrderedDict
 from collections.abc import Iterable
@@ -1130,7 +1131,7 @@ def read_excel(
             else:
                 pdf = pdf_or_pser
 
-            psdf = from_pandas(pdf)
+            psdf = cast(DataFrame, from_pandas(pdf))
             return_schema = force_decimal_precision_scale(
                 as_nullable_spark_type(psdf._internal.spark_frame.drop(*HIDDEN_COLUMNS).schema)
             )
