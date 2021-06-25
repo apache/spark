@@ -334,7 +334,7 @@ class StreamingDeduplicationSuite extends StateStoreMetricsTest {
 
   test("SPARK-35880: custom metric numDroppedDuplicateRows in state operator progress") {
     val dedupeInputData = MemoryStream[(String, Int)]
-    val dedupe = dedupeInputData.toDS().dropDuplicates().dropDuplicates("_1")
+    val dedupe = dedupeInputData.toDS().dropDuplicates("_1")
 
     testStream(dedupe, Append)(
       AddData(dedupeInputData, "a" -> 1),

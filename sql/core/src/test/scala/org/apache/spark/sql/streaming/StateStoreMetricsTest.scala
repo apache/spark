@@ -38,19 +38,8 @@ trait StateStoreMetricsTest extends StreamTest {
       // This assumes that the streaming query will not make any progress while the eventually
       // is being executed.
       eventually(timeout(streamingTimeout)) {
-        val recentProgress = q.recentProgress
-        require(recentProgress.nonEmpty, "No progress made, cannot check num state rows")
-        require(recentProgress.length < spark.sessionState.conf.streamingProgressRetention,
-          "This test assumes that all progresses are present in q.recentProgress but " +
-            "some may have been dropped due to retention limits")
-
-        if (q.ne(lastQuery)) lastCheckedRecentProgressIndex = -1
-        lastQuery = q
-
-        val numStateOperators = recentProgress.last.stateOperators.length
-        val progressesSinceLastCheck = recentProgress
-          .slice(lastCheckedRecentProgressIndex + 1, recentProgress.length)
-          .filter(_.stateOperators.length == numStateOperators)
+        val (progressesSinceLastCheck, lastCheckedProgressIndex, numStateOperators) =
+          retrieveProgressesSinceLastCheck(q)
 
         val allNumUpdatedRowsSinceLastCheck =
           progressesSinceLastCheck.map(_.stateOperators.map(_.numRowsUpdated))
@@ -61,7 +50,7 @@ trait StateStoreMetricsTest extends StreamTest {
         lazy val debugString = "recent progresses:\n" +
           progressesSinceLastCheck.map(_.prettyJson).mkString("\n\n")
 
-        val numTotalRows = recentProgress.last.stateOperators.map(_.numRowsTotal)
+        val numTotalRows = progressesSinceLastCheck.last.stateOperators.map(_.numRowsTotal)
         assert(numTotalRows === total, s"incorrect total rows, $debugString")
 
         val numUpdatedRows = arraySum(allNumUpdatedRowsSinceLastCheck, numStateOperators)
@@ -72,7 +61,7 @@ trait StateStoreMetricsTest extends StreamTest {
         assert(numRowsDroppedByWatermark === droppedByWatermark,
           s"incorrect dropped rows by watermark, $debugString")
 
-        lastCheckedRecentProgressIndex = recentProgress.length - 1
+        advanceLastCheckedRecentProgressIndex(lastCheckedProgressIndex)
       }
       true
     }
@@ -80,21 +69,12 @@ trait StateStoreMetricsTest extends StreamTest {
 
   /** AssertOnQuery to verify the given state operator's custom metric has expected value */
   def assertStateOperatorCustomMetric(
-    metric: String, expected: Long, operatorIndex: Int = 0): AssertOnQuery = {
+      metric: String, expected: Long, operatorIndex: Int = 0): AssertOnQuery = {
     AssertOnQuery(s"Check metrics $metric has value $expected") { q =>
       eventually(timeout(streamingTimeout)) {
-        val recentProgress = q.recentProgress
-        require(recentProgress != null, "No progress made")
-
-        if (q.ne(lastQuery)) lastCheckedRecentProgressIndex = -1
-        lastQuery = q
-
-        val numStateOperators = recentProgress.last.stateOperators.length
+        val (progressesSinceLastCheck, lastCheckedProgressIndex, numStateOperators) =
+          retrieveProgressesSinceLastCheck(q)
         assert(operatorIndex < numStateOperators, s"Invalid operator Index: $operatorIndex")
-
-        val progressesSinceLastCheck = recentProgress
-          .slice(lastCheckedRecentProgressIndex + 1, recentProgress.length)
-          .filter(_.stateOperators.length == numStateOperators)
 
         val allCustomMetricValuesSinceLastCheck = progressesSinceLastCheck
           .map(_.stateOperators(operatorIndex).customMetrics.get(metric))
@@ -106,7 +86,7 @@ trait StateStoreMetricsTest extends StreamTest {
         assert(allCustomMetricValuesSinceLastCheck.sum === expected,
           s"incorrect custom metric ($metric), $debugString")
 
-        lastCheckedRecentProgressIndex = recentProgress.length - 1
+        advanceLastCheckedRecentProgressIndex(lastCheckedProgressIndex)
       }
       true
     }
@@ -130,5 +110,28 @@ trait StateStoreMetricsTest extends StreamTest {
     assert(arraySeq.forall(_.length == arrayLength),
       "Arrays are of different lengths:\n" + arraySeq.map(_.toSeq).mkString("\n"))
     (0 until arrayLength).map { index => arraySeq.map(_.apply(index)).sum }
+  }
+
+  def retrieveProgressesSinceLastCheck(
+      execution: StreamExecution): (Array[StreamingQueryProgress], Int, Int) = {
+    val recentProgress = execution.recentProgress
+    require(recentProgress != null, "No progress made")
+    require(recentProgress.length < spark.sessionState.conf.streamingProgressRetention,
+      "This test assumes that all progresses are present in q.recentProgress but " +
+        "some may have been dropped due to retention limits")
+
+    if (execution.ne(lastQuery)) lastCheckedRecentProgressIndex = -1
+    lastQuery = execution
+
+    val numStateOperators = recentProgress.last.stateOperators.length
+    val recentProgresses = recentProgress
+      .slice(lastCheckedRecentProgressIndex + 1, recentProgress.length)
+      .filter(_.stateOperators.length == numStateOperators)
+
+    (recentProgresses, recentProgress.length - 1, recentProgresses.last.stateOperators.length)
+  }
+
+  def advanceLastCheckedRecentProgressIndex(newLastCheckedRecentProgressIndex: Int): Unit = {
+    lastCheckedRecentProgressIndex = newLastCheckedRecentProgressIndex
   }
 }
