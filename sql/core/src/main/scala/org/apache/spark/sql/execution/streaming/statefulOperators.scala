@@ -512,7 +512,6 @@ case class StreamingDeduplicateExec(
       }
 
       val updatesStartTimeNs = System.nanoTime
-      var droppedDuplicateRowsCount = 0
 
       val result = baseIterator.filter { r =>
         val row = r.asInstanceOf[UnsafeRow]
@@ -525,7 +524,7 @@ case class StreamingDeduplicateExec(
           true
         } else {
           // Drop duplicated rows
-          droppedDuplicateRowsCount += 1
+          numDroppedDuplicateRows += 1
           false
         }
       }
@@ -533,7 +532,6 @@ case class StreamingDeduplicateExec(
       CompletionIterator[InternalRow, Iterator[InternalRow]](result, {
         allUpdatesTimeMs += NANOSECONDS.toMillis(System.nanoTime - updatesStartTimeNs)
         allRemovalsTimeMs += timeTakenMs { removeKeysOlderThanWatermark(store) }
-        numDroppedDuplicateRows += droppedDuplicateRowsCount
         commitTimeMs += timeTakenMs { store.commit() }
         setStoreMetrics(store)
       })
