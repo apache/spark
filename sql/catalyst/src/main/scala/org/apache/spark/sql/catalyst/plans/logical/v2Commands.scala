@@ -1124,3 +1124,21 @@ case class AlterTableDropColumns(
   override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
     copy(table = newChild)
 }
+
+/**
+ * The logical plan of the ALTER TABLE ... RENAME COLUMN command.
+ */
+case class AlterTableRenameColumn(
+    table: LogicalPlan,
+    column: FieldName,
+    newName: String) extends AlterTableCommand {
+  override def operation: String = "rename"
+
+  override def changes: Seq[TableChange] = {
+    require(column.resolved, "FieldName should be resolved before it's converted to TableChange.")
+    Seq(TableChange.renameColumn(column.name.toArray, newName))
+  }
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
+    copy(table = newChild)
+}
