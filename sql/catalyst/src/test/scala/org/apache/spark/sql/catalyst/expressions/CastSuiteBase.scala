@@ -997,12 +997,12 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     }
 
     if (!isTryCast) {
-      Seq("INTERVAL '-106751991 04:00:54.775809' YEAR TO MONTH",
-        "INTERVAL '106751991 04:00:54.775808' YEAR TO MONTH").foreach { interval =>
-        val e = intercept[IllegalArgumentException] {
+      Seq("INTERVAL '-106751991 04:00:54.775809' DAY TO SECOND",
+        "INTERVAL '106751991 04:00:54.775808' DAY TO SECOND").foreach { interval =>
+        val e = intercept[ArithmeticException] {
           cast(Literal.create(interval), DayTimeIntervalType()).eval()
         }.getMessage
-        assert(e.contains("Interval string must match day-time format of"))
+        assert(e.contains("long overflow"))
       }
     }
 
