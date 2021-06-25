@@ -23,7 +23,6 @@ import com.codahale.metrics.{Gauge, MetricRegistry}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.source.{Source => CodahaleSource}
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.streaming.StreamingQueryProgress
 
 /**
