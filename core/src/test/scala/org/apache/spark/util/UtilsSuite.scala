@@ -1512,7 +1512,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     conf.set("spark.yarn.maxAttempts", "1")
     assert(Utils.isPushBasedShuffleEnabled(conf) === true)
     conf.set("spark.yarn.maxAttempts", "2")
-    assert(Utils.isPushBasedShuffleEnabled(conf) === false)
+    assert(Utils.isPushBasedShuffleEnabled(conf) === true)
   }
 }
 

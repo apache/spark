@@ -91,11 +91,11 @@ class DiskBlockManagerSuite extends SparkFunSuite with BeforeAndAfterEach with B
   }
 
   test("should still create merge directories if one already exists under a local dir") {
-    val mergeDir0 = new File(rootDir0, DiskBlockManager.MERGE_MANAGER_DIR)
+    val mergeDir0 = new File(rootDir0, DiskBlockManager.MERGE_DIRECTORY)
     if (!mergeDir0.exists()) {
       Files.createDirectories(mergeDir0.toPath)
     }
-    val mergeDir1 = new File(rootDir1, DiskBlockManager.MERGE_MANAGER_DIR)
+    val mergeDir1 = new File(rootDir1, DiskBlockManager.MERGE_DIRECTORY)
     if (mergeDir1.exists()) {
       Utils.deleteRecursively(mergeDir1)
     }
@@ -104,7 +104,7 @@ class DiskBlockManagerSuite extends SparkFunSuite with BeforeAndAfterEach with B
     testConf.set(config.Tests.IS_TESTING, true)
     diskBlockManager = new DiskBlockManager(testConf, deleteFilesOnStop = true)
     assert(Utils.getConfiguredLocalDirs(testConf).map(
-      rootDir => new File(rootDir, DiskBlockManager.MERGE_MANAGER_DIR))
+      rootDir => new File(rootDir, DiskBlockManager.MERGE_DIRECTORY))
       .filter(mergeDir => mergeDir.exists()).length === 2)
     // mergeDir0 will be skipped as it already exists
     assert(mergeDir0.list().length === 0)
