@@ -2102,7 +2102,9 @@ class Frame(object, metaclass=ABCMeta):
             if isinstance(psser.spark.data_type, BooleanType):
                 return psser
             elif isinstance(psser.spark.data_type, NumericType):
-                return F.abs(psser.spark.column)
+                return psser._with_new_scol(
+                    F.abs(psser.spark.column), field=psser._internal.data_fields[0]
+                )
             else:
                 raise TypeError(
                     "bad operand type for abs(): {} ({})".format(
