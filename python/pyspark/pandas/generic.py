@@ -96,7 +96,9 @@ class Frame(object, metaclass=ABCMeta):
 
     @abstractmethod
     def _apply_series_op(
-        self: T_Frame, op: Callable[["Series"], "Series"], should_resolve: bool = False
+        self: T_Frame,
+        op: Callable[["Series"], Union["Series", Column]],
+        should_resolve: bool = False,
     ) -> T_Frame:
         pass
 
@@ -2096,11 +2098,13 @@ class Frame(object, metaclass=ABCMeta):
         3  7  40   50
         """
 
-        def abs(psser: "Series") -> "Series":
+        def abs(psser: "Series") -> Union["Series", Column]:
             if isinstance(psser.spark.data_type, BooleanType):
                 return psser
             elif isinstance(psser.spark.data_type, NumericType):
-                return psser.spark.transform(F.abs)
+                return psser._with_new_scol(
+                    F.abs(psser.spark.column), field=psser._internal.data_fields[0]
+                )
             else:
                 raise TypeError(
                     "bad operand type for abs(): {} ({})".format(

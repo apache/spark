@@ -892,9 +892,9 @@ class DDLParserSuite extends AnalysisTest {
   test("alter table: rename column") {
     comparePlans(
       parsePlan("ALTER TABLE table_name RENAME COLUMN a.b.c TO d"),
-      AlterTableRenameColumnStatement(
-        Seq("table_name"),
-        Seq("a", "b", "c"),
+      AlterTableRenameColumn(
+        UnresolvedTable(Seq("table_name"), "ALTER TABLE ... RENAME COLUMN", None),
+        UnresolvedFieldName(Seq("a", "b", "c")),
         "d"))
   }
 

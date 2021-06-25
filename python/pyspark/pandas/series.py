@@ -2500,7 +2500,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         """
         inplace = validate_bool_kwarg(inplace, "inplace")
         psdf = self._psdf[[self.name]]._sort(
-            by=[self.spark.column], ascending=ascending, inplace=False, na_position=na_position
+            by=[self.spark.column], ascending=ascending, na_position=na_position
         )
 
         if inplace:
@@ -3041,7 +3041,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
     sample.__doc__ = DataFrame.sample.__doc__
 
-    def hist(self, bins: int = 10, **kwds: Any) -> Any:
+    @no_type_check
+    def hist(self, bins=10, **kwds):
         return self.plot.hist(bins, **kwds)
 
     hist.__doc__ = PandasOnSparkPlotAccessor.hist.__doc__
@@ -4963,17 +4964,19 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                 if not self.index.sort_values().equals(other.index.sort_values()):
                     raise ValueError("matrices are not aligned")
 
-            other = other.copy()
-            column_labels = other._internal.column_labels
+            other_copy = other.copy()  # type: DataFrame
+            column_labels = other_copy._internal.column_labels
 
-            self_column_label = verify_temp_column_name(other, "__self_column__")
-            other[self_column_label] = self
-            self_psser = other._psser_for(self_column_label)
+            self_column_label = verify_temp_column_name(other_copy, "__self_column__")
+            other_copy[self_column_label] = self
+            self_psser = other_copy._psser_for(self_column_label)
 
-            product_pssers = [other._psser_for(label) * self_psser for label in column_labels]
+            product_pssers = [
+                cast(Series, other_copy._psser_for(label) * self_psser) for label in column_labels
+            ]
 
             dot_product_psser = DataFrame(
-                other._internal.with_new_columns(product_pssers, column_labels=column_labels)
+                other_copy._internal.with_new_columns(product_pssers, column_labels=column_labels)
             ).sum()
 
             return cast(Series, dot_product_psser).rename(self.name)
@@ -6158,9 +6161,13 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
     # ----------------------------------------------------------------------
 
     def _apply_series_op(
-        self, op: Callable[["Series"], "Series"], should_resolve: bool = False
+        self, op: Callable[["Series"], Union["Series", Column]], should_resolve: bool = False
     ) -> "Series":
-        psser = op(self)
+        psser_or_scol = op(self)
+        if isinstance(psser_or_scol, Series):
+            psser = psser_or_scol
+        else:
+            psser = self._with_new_scol(cast(Column, psser_or_scol))
         if should_resolve:
             internal = psser._internal.resolved_copy
             return first_series(DataFrame(internal))

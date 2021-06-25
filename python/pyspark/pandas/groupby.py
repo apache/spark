@@ -31,6 +31,7 @@ from typing import (
     Callable,
     Dict,
     Generic,
+    Iterator,
     Mapping,
     List,
     Optional,
@@ -2632,7 +2633,7 @@ class GroupBy(Generic[T_Frame], metaclass=ABCMeta):
 
         def assign_columns(
             psdf: DataFrame, this_column_labels: List[Tuple], that_column_labels: List[Tuple]
-        ) -> Tuple[Series, Tuple]:
+        ) -> Iterator[Tuple[Series, Tuple]]:
             raise NotImplementedError(
                 "Duplicated labels with groupby() and "
                 "'compute.ops_on_diff_frames' option are not supported currently "

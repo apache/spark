@@ -147,15 +147,8 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
           typeChange.toSeq ++ nullabilityChange ++ commentChange ++ positionChange)
       }
 
-    case AlterTableRenameColumnStatement(
-         nameParts @ SessionCatalogAndTable(catalog, tbl), col, newName) =>
-      loadTable(catalog, tbl.asIdentifier).collect {
-        case v1Table: V1Table =>
-          throw QueryCompilationErrors.renameColumnOnlySupportedWithV2TableError
-      }.getOrElse {
-        val changes = Seq(TableChange.renameColumn(col.toArray, newName))
-        createAlterTable(nameParts, catalog, tbl, changes)
-      }
+    case AlterTableRenameColumn(ResolvedV1TableIdentifier(_), _, _) =>
+      throw QueryCompilationErrors.renameColumnOnlySupportedWithV2TableError
 
     case AlterTableDropColumns(ResolvedV1TableIdentifier(_), _) =>
       throw QueryCompilationErrors.dropColumnOnlySupportedWithV2TableError
