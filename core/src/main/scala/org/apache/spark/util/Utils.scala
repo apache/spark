@@ -3124,7 +3124,7 @@ private[spark] object Utils extends Logging {
   }
 
   /** Decompress a zip file into a local dir. File names are read from the zip file. */
-  def unzipFromFile(fs: FileSystem, dfsZipFile: Path, localDir: File): Seq[File] = {
+  def unzipFilesFromFile(fs: FileSystem, dfsZipFile: Path, localDir: File): Seq[File] = {
     val files = new mutable.ArrayBuffer[File]()
     val in = new ZipInputStream(fs.open(dfsZipFile))
     var out: OutputStream = null
