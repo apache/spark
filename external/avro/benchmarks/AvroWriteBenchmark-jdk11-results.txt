@@ -1,16 +1,16 @@
 OpenJDK 64-Bit Server VM 11.0.11+9-LTS on Linux 5.8.0-1033-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
 Avro writer benchmark:                    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Output Single Int Column                           3383           3412          40          4.6         215.1       1.0X
-Output Single Double Column                        3851           3867          23          4.1         244.8       0.9X
-Output Int and String Column                       6885           6914          40          2.3         437.7       0.5X
-Output Partitions                                  6692           6708          22          2.4         425.5       0.5X
-Output Buckets                                     8610           8728         167          1.8         547.4       0.4X
+Output Single Int Column                           3388           3435          66          4.6         215.4       1.0X
+Output Single Double Column                        3783           3854         101          4.2         240.5       0.9X
+Output Int and String Column                       6849           6860          15          2.3         435.5       0.5X
+Output Partitions                                  6427           6465          54          2.4         408.6       0.5X
+Output Buckets                                     8536           8557          30          1.8         542.7       0.4X
 
 OpenJDK 64-Bit Server VM 11.0.11+9-LTS on Linux 5.8.0-1033-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
 Write wide rows into 20 files:            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Write wide rows                                   52673          52713          57          0.0      105345.3       1.0X
+Write wide rows                                   58183          58226          61          0.0      116366.3       1.0X
 
