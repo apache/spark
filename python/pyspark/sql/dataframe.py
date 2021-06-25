@@ -2703,6 +2703,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         to pandas-on-Spark, it will lose the index information and the original index
         will be turned into a normal column.
 
+        This is only available if Pandas is installed and available.
+
         Parameters
         ----------
         index_col: str or list of str, optional, default: None
@@ -2710,14 +2712,20 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         See Also
         --------
-        DataFrame.to_spark
+        pyspark.pandas.frame.DataFrame.to_spark
 
         Examples
         --------
-        >>> df = spark.createDataFrame([("a", 1), ("b", 2), ("c",  3)], ["Col1", "Col2"])
+        >>> df.show()  # doctest: +SKIP
+        +----+----+
+        |Col1|Col2|
+        +----+----+
+        |   a|   1|
+        |   b|   2|
+        |   c|   3|
+        +----+----+
 
-        >>> psdf = df.to_pandas_on_spark()
-        >>> psdf
+        >>> df.to_pandas_on_spark()  # doctest: +SKIP
           Col1  Col2
         0    a     1
         1    b     2
@@ -2725,8 +2733,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         We can specify the index columns.
 
-        >>> psdf = df.to_pandas_on_spark(index_col="Col1")
-        >>> psdf  # doctest: +NORMALIZE_WHITESPACE
+        >>> df.to_pandas_on_spark(index_col="Col1"): # doctest: +SKIP
               Col2
         Col1
         a        1

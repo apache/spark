@@ -855,6 +855,9 @@ class DataFrameTests(ReusedSQLTestCase):
         with self.assertRaisesRegex(TypeError, "Parameter 'truncate=foo'"):
             df.show(truncate='foo')
 
+    @unittest.skipIf(
+        not have_pandas or not have_pyarrow,
+        pandas_requirement_message or pyarrow_requirement_message)  # type: ignore
     def test_to_pandas_on_spark(self):
         from pyspark.pandas.frame import DataFrame
         from pandas.testing import assert_frame_equal
