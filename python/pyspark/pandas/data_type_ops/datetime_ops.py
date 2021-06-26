@@ -17,7 +17,7 @@
 
 import datetime
 import warnings
-from typing import TYPE_CHECKING, Union
+from typing import Any, Union, cast
 
 import pandas as pd
 from pandas.api.types import CategoricalDtype
@@ -28,6 +28,7 @@ from pyspark.sql.types import BooleanType, StringType, TimestampType
 from pyspark.pandas.base import IndexOpsMixin
 from pyspark.pandas.data_type_ops.base import (
     DataTypeOps,
+    IndexOpsLike,
     T_IndexOps,
     _as_bool_type,
     _as_categorical_type,
@@ -35,10 +36,6 @@ from pyspark.pandas.data_type_ops.base import (
 )
 from pyspark.pandas.internal import InternalField
 from pyspark.pandas.typedef import as_spark_type, Dtype, extension_dtypes, pandas_on_spark_type
-
-if TYPE_CHECKING:
-    from pyspark.pandas.indexes import Index  # noqa: F401 (SPARK-34943)
-    from pyspark.pandas.series import Series  # noqa: F401 (SPARK-34943)
 
 
 class DatetimeOps(DataTypeOps):
@@ -50,7 +47,7 @@ class DatetimeOps(DataTypeOps):
     def pretty_name(self) -> str:
         return "datetimes"
 
-    def sub(self, left, right) -> Union["Series", "Index"]:
+    def sub(self, left: T_IndexOps, right: Any) -> IndexOpsLike:
         # Note that timestamp subtraction casts arguments to integer. This is to mimic pandas's
         # behaviors. pandas returns 'timedelta64[ns]' from 'datetime64[ns]'s subtraction.
         msg = (
@@ -63,13 +60,16 @@ class DatetimeOps(DataTypeOps):
             return left.astype("long") - right.astype("long")
         elif isinstance(right, datetime.datetime):
             warnings.warn(msg, UserWarning)
-            return left.astype("long").spark.transform(
-                lambda scol: scol - F.lit(right).cast(as_spark_type("long"))
+            return cast(
+                IndexOpsLike,
+                left.spark.transform(
+                    lambda scol: scol.astype("long") - F.lit(right).cast(as_spark_type("long"))
+                ),
             )
         else:
             raise TypeError("datetime subtraction can only be applied to datetime series.")
 
-    def rsub(self, left, right) -> Union["Series", "Index"]:
+    def rsub(self, left: T_IndexOps, right: Any) -> IndexOpsLike:
         # Note that timestamp subtraction casts arguments to integer. This is to mimic pandas's
         # behaviors. pandas returns 'timedelta64[ns]' from 'datetime64[ns]'s subtraction.
         msg = (
@@ -79,13 +79,16 @@ class DatetimeOps(DataTypeOps):
         )
         if isinstance(right, datetime.datetime):
             warnings.warn(msg, UserWarning)
-            return -(left.astype("long")).spark.transform(
-                lambda scol: scol - F.lit(right).cast(as_spark_type("long"))
+            return cast(
+                IndexOpsLike,
+                left.spark.transform(
+                    lambda scol: F.lit(right).cast(as_spark_type("long")) - scol.astype("long")
+                ),
             )
         else:
             raise TypeError("datetime subtraction can only be applied to datetime series.")
 
-    def prepare(self, col):
+    def prepare(self, col: pd.Series) -> pd.Series:
         """Prepare column when from_pandas."""
         return col
 
