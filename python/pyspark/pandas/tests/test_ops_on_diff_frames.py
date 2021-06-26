@@ -728,7 +728,8 @@ class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
             psser1 = ps.from_pandas(pser1)
             psser2 = ps.from_pandas(pser2)
             self.assert_eq(
-                pser1.compare(pser2).sort_index(), psser1.compare(psser2).sort_index(),
+                pser1.compare(pser2).sort_index(),
+                psser1.compare(psser2).sort_index(),
             )
 
             # `keep_shape=True`
@@ -757,7 +758,8 @@ class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
             psser1 = ps.from_pandas(pser1)
             psser2 = ps.from_pandas(pser2)
             self.assert_eq(
-                pser1.compare(pser2).sort_index(), psser1.compare(psser2).sort_index(),
+                pser1.compare(pser2).sort_index(),
+                psser1.compare(psser2).sort_index(),
             )
 
             # `keep_shape=True` with MultiIndex
@@ -790,14 +792,16 @@ class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
                 columns=["self", "other"],
             )
             self.assert_eq(
-                expected, psser1.compare(psser2, keep_shape=True).sort_index(),
+                expected,
+                psser1.compare(psser2, keep_shape=True).sort_index(),
             )
             # `keep_equal=True`
             expected = ps.DataFrame(
                 [["b", "a"], ["g", None], [None, "h"]], index=[0, 3, 4], columns=["self", "other"]
             )
             self.assert_eq(
-                expected, psser1.compare(psser2, keep_equal=True).sort_index(),
+                expected,
+                psser1.compare(psser2, keep_equal=True).sort_index(),
             )
             # `keep_shape=True` and `keep_equal=True`
             expected = ps.DataFrame(
@@ -806,7 +810,8 @@ class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
                 columns=["self", "other"],
             )
             self.assert_eq(
-                expected, psser1.compare(psser2, keep_shape=True, keep_equal=True).sort_index(),
+                expected,
+                psser1.compare(psser2, keep_shape=True, keep_equal=True).sort_index(),
             )
 
             # MultiIndex
@@ -838,7 +843,8 @@ class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
                 columns=["self", "other"],
             )
             self.assert_eq(
-                expected, psser1.compare(psser2, keep_shape=True).sort_index(),
+                expected,
+                psser1.compare(psser2, keep_shape=True).sort_index(),
             )
             # `keep_equal=True`
             expected = ps.DataFrame(
@@ -847,7 +853,8 @@ class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
                 columns=["self", "other"],
             )
             self.assert_eq(
-                expected, psser1.compare(psser2, keep_equal=True).sort_index(),
+                expected,
+                psser1.compare(psser2, keep_equal=True).sort_index(),
             )
             # `keep_shape=True` and `keep_equal=True`
             expected = ps.DataFrame(
@@ -858,15 +865,22 @@ class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
                 columns=["self", "other"],
             )
             self.assert_eq(
-                expected, psser1.compare(psser2, keep_shape=True, keep_equal=True).sort_index(),
+                expected,
+                psser1.compare(psser2, keep_shape=True, keep_equal=True).sort_index(),
             )
 
         # Different Index
         with self.assertRaisesRegex(
             ValueError, "Can only compare identically-labeled Series objects"
         ):
-            psser1 = ps.Series([1, 2, 3, 4, 5], index=pd.Index([1, 2, 3, 4, 5]),)
-            psser2 = ps.Series([2, 2, 3, 4, 1], index=pd.Index([5, 4, 3, 2, 1]),)
+            psser1 = ps.Series(
+                [1, 2, 3, 4, 5],
+                index=pd.Index([1, 2, 3, 4, 5]),
+            )
+            psser2 = ps.Series(
+                [2, 2, 3, 4, 1],
+                index=pd.Index([5, 4, 3, 2, 1]),
+            )
             psser1.compare(psser2)
         # Different MultiIndex
         with self.assertRaisesRegex(
@@ -1153,7 +1167,8 @@ class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(psdf, pdf)
 
         with self.assertRaisesRegex(
-            ValueError, "shape mismatch",
+            ValueError,
+            "shape mismatch",
         ):
             psdf.iloc[[1, 2], [1]] = -another_psdf.max_speed
 

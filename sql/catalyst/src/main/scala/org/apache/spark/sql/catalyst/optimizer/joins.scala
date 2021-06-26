@@ -272,28 +272,16 @@ trait JoinSelectionHelper {
     val buildLeft = if (hintOnly) {
       hintToShuffleHashJoinLeft(hint)
     } else {
-      if (hintToPreferShuffleHashJoinLeft(hint)) {
-        true
-      } else {
-        if (!conf.preferSortMergeJoin) {
-          canBuildLocalHashMapBySize(left, conf) && muchSmaller(left, right)
-        } else {
-          false
-        }
-      }
+      hintToPreferShuffleHashJoinLeft(hint) ||
+        (!conf.preferSortMergeJoin && canBuildLocalHashMapBySize(left, conf) &&
+          muchSmaller(left, right))
     }
     val buildRight = if (hintOnly) {
       hintToShuffleHashJoinRight(hint)
     } else {
-      if (hintToPreferShuffleHashJoinRight(hint)) {
-        true
-      } else {
-        if (!conf.preferSortMergeJoin) {
-          canBuildLocalHashMapBySize(right, conf) && muchSmaller(right, left)
-        } else {
-          false
-        }
-      }
+      hintToPreferShuffleHashJoinRight(hint) ||
+        (!conf.preferSortMergeJoin && canBuildLocalHashMapBySize(right, conf) &&
+          muchSmaller(right, left))
     }
     getBuildSide(
       canBuildShuffledHashJoinLeft(joinType) && buildLeft,

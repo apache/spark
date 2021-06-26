@@ -148,11 +148,11 @@ class RuntimeConfig private[sql](sqlConf: SQLConf = new SQLConf) {
   }
 
   private def requireNonStaticConf(key: String): Unit = {
-    if (SQLConf.staticConfKeys.contains(key)) {
+    if (SQLConf.isStaticConfigKey(key)) {
       throw new AnalysisException(s"Cannot modify the value of a static config: $key")
     }
     if (sqlConf.setCommandRejectsSparkCoreConfs &&
-        ConfigEntry.findEntry(key) != null && !SQLConf.sqlConfEntries.containsKey(key)) {
+        ConfigEntry.findEntry(key) != null && !SQLConf.containsConfigKey(key)) {
       throw new AnalysisException(s"Cannot modify the value of a Spark config: $key")
     }
   }

@@ -11,6 +11,12 @@
 -- Disable BroadcastHashJoin optimization to avoid changing result order when we enable AQE
 --SET spark.sql.autoBroadcastJoinThreshold = -1
 
+CREATE OR REPLACE TEMPORARY VIEW INT2_TBL(f1) AS VALUES
+  (smallint(trim('0   '))),
+  (smallint(trim('  1234 '))),
+  (smallint(trim('    -1234'))),
+  (smallint('32767')),
+  (smallint('-32767'));
 CREATE OR REPLACE TEMPORARY VIEW INT4_TBL AS SELECT * FROM
   (VALUES (0), (123456), (-123456), (2147483647), (-2147483647))
   AS v(f1);
@@ -1605,21 +1611,21 @@ select udf(uunique1) from
 -- Test LATERAL
 --
 
--- select unique2, x.*
--- from tenk1 a, lateral (select * from int4_tbl b where f1 = a.unique1) x;
+select unique2, x.*
+from tenk1 a, lateral (select * from int4_tbl b where f1 = a.unique1) x;
 -- explain (costs off)
 --   select unique2, x.*
 --   from tenk1 a, lateral (select * from int4_tbl b where f1 = a.unique1) x;
--- select unique2, x.*
--- from int4_tbl x, lateral (select unique2 from tenk1 where f1 = unique1) ss;
+select unique2, x.*
+from int4_tbl x, lateral (select unique2 from tenk1 where f1 = unique1) ss;
 -- explain (costs off)
 --   select unique2, x.*
 --   from int4_tbl x, lateral (select unique2 from tenk1 where f1 = unique1) ss;
 -- explain (costs off)
 --   select unique2, x.*
 --   from int4_tbl x cross join lateral (select unique2 from tenk1 where f1 = unique1) ss;
--- select unique2, x.*
--- from int4_tbl x left join lateral (select unique1, unique2 from tenk1 where f1 = unique1) ss on true;
+select unique2, x.*
+from int4_tbl x left join lateral (select unique1, unique2 from tenk1 where f1 = unique1) ss on true;
 -- explain (costs off)
 --   select unique2, x.*
 --   from int4_tbl x left join lateral (select unique1, unique2 from tenk1 where f1 = unique1) ss on true;
@@ -1675,12 +1681,12 @@ select udf(uunique1) from
 --   order by a.q1, a.q2, x.q1, x.q2, ss.z;
 
 -- lateral reference to a join alias variable
--- select * from (select f1/2 as x from int4_tbl) ss1 join int4_tbl i4 on x = f1,
---   lateral (select x) ss2(y);
+select * from (select f1/2 as x from int4_tbl) ss1 join int4_tbl i4 on x = f1,
+  lateral (select x) ss2(y);
 -- select * from (select f1 as x from int4_tbl) ss1 join int4_tbl i4 on x = f1,
 --   lateral (values(x)) ss2(y);
--- select * from ((select f1/2 as x from int4_tbl) ss1 join int4_tbl i4 on x = f1) j,
---   lateral (select x) ss2(y);
+select * from ((select f1/2 as x from int4_tbl) ss1 join int4_tbl i4 on x = f1) j,
+  lateral (select x) ss2(y);
 
 -- lateral references requiring pullup
 -- select * from (values(1)) x(lb),
@@ -1694,12 +1700,12 @@ select udf(uunique1) from
 -- select * from
 --   int8_tbl x left join (select q1,coalesce(q2,0) q2 from int8_tbl) y on x.q2 = y.q1,
 --   lateral (values(x.q1,y.q1,y.q2)) v(xq1,yq1,yq2);
--- select * from
---   int8_tbl x left join (select q1,coalesce(q2,0) q2 from int8_tbl) y on x.q2 = y.q1,
---   lateral (select x.q1,y.q1,y.q2) v(xq1,yq1,yq2);
--- select x.* from
---   int8_tbl x left join (select q1,coalesce(q2,0) q2 from int8_tbl) y on x.q2 = y.q1,
---   lateral (select x.q1,y.q1,y.q2) v(xq1,yq1,yq2);
+select * from
+  int8_tbl x left join (select q1,coalesce(q2,0) q2 from int8_tbl) y on x.q2 = y.q1,
+  lateral (select x.q1,y.q1,y.q2) v(xq1,yq1,yq2);
+select x.* from
+  int8_tbl x left join (select q1,coalesce(q2,0) q2 from int8_tbl) y on x.q2 = y.q1,
+  lateral (select x.q1,y.q1,y.q2) v(xq1,yq1,yq2);
 -- select v.* from
 --   (int8_tbl x left join (select q1,coalesce(q2,0) q2 from int8_tbl) y on x.q2 = y.q1)
 --   left join int4_tbl z on z.f1 = x.q2,
@@ -1717,24 +1723,24 @@ select udf(uunique1) from
 -- select * from
 --   int8_tbl a left join
 --   lateral (select *, a.q2 as x from int8_tbl b) ss on a.q2 = ss.q1;
--- select * from
---   int8_tbl a left join
---   lateral (select *, a.q2 as x from int8_tbl b) ss on a.q2 = ss.q1;
+select * from
+  int8_tbl a left join
+  lateral (select *, a.q2 as x from int8_tbl b) ss on a.q2 = ss.q1;
 -- explain (verbose, costs off)
 -- select * from
 --   int8_tbl a left join
 --   lateral (select *, coalesce(a.q2, 42) as x from int8_tbl b) ss on a.q2 = ss.q1;
--- select * from
---   int8_tbl a left join
---   lateral (select *, coalesce(a.q2, 42) as x from int8_tbl b) ss on a.q2 = ss.q1;
+select * from
+  int8_tbl a left join
+  lateral (select *, coalesce(a.q2, 42) as x from int8_tbl b) ss on a.q2 = ss.q1;
 
 -- lateral can result in join conditions appearing below their
 -- real semantic level
 -- explain (verbose, costs off)
 -- select * from int4_tbl i left join
 --   lateral (select * from int2_tbl j where i.f1 = j.f1) k on true;
--- select * from int4_tbl i left join
---   lateral (select * from int2_tbl j where i.f1 = j.f1) k on true;
+select * from int4_tbl i left join
+  lateral (select * from int2_tbl j where i.f1 = j.f1) k on true;
 -- explain (verbose, costs off)
 -- select * from int4_tbl i left join
 --   lateral (select coalesce(i) from int2_tbl j where i.f1 = j.f1) k on true;
@@ -1757,11 +1763,11 @@ select udf(uunique1) from
 --   (select b.q1 as bq1, c.q1 as cq1, least(a.q1,b.q1,c.q1) from
 --    int8_tbl b cross join int8_tbl c) ss
 --   on a.q2 = ss.bq1;
--- select * from
---   int8_tbl a left join lateral
---   (select b.q1 as bq1, c.q1 as cq1, least(a.q1,b.q1,c.q1) from
---    int8_tbl b cross join int8_tbl c) ss
---   on a.q2 = ss.bq1;
+select * from
+  int8_tbl a left join lateral
+  (select b.q1 as bq1, c.q1 as cq1, least(a.q1,b.q1,c.q1) from
+   int8_tbl b cross join int8_tbl c) ss
+  on a.q2 = ss.bq1;
 
 -- case requiring nested PlaceHolderVars
 -- explain (verbose, costs off)

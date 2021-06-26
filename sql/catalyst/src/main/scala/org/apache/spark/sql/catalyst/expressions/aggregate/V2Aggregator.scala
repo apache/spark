@@ -20,19 +20,22 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, ObjectInputStream, ObjectOutputStream}
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Expression, UnsafeProjection}
+import org.apache.spark.sql.catalyst.expressions.{Expression, ImplicitCastInputTypes, UnsafeProjection}
 import org.apache.spark.sql.connector.catalog.functions.{AggregateFunction => V2AggregateFunction}
-import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.types.{AbstractDataType, DataType}
 
 case class V2Aggregator[BUF <: java.io.Serializable, OUT](
     aggrFunc: V2AggregateFunction[BUF, OUT],
     children: Seq[Expression],
     mutableAggBufferOffset: Int = 0,
-    inputAggBufferOffset: Int = 0) extends TypedImperativeAggregate[BUF] {
+    inputAggBufferOffset: Int = 0)
+  extends TypedImperativeAggregate[BUF] with ImplicitCastInputTypes {
+
   private[this] lazy val inputProjection = UnsafeProjection.create(children)
 
   override def nullable: Boolean = aggrFunc.isResultNullable
   override def dataType: DataType = aggrFunc.resultType()
+  override def inputTypes: Seq[AbstractDataType] = aggrFunc.inputTypes().toSeq
   override def createAggregationBuffer(): BUF = aggrFunc.newAggregationState()
 
   override def update(buffer: BUF, input: InternalRow): BUF = {

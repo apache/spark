@@ -421,6 +421,11 @@ class RowMatrix @Since("1.0.0") (
     }
   }
 
+  // The matrix is sparse, if all the rows has sparsity more than 0.5.
+  private def isSparseMatrix: Boolean = {
+    rows.filter(row => row.sparsity() < 0.5).isEmpty()
+  }
+
   /**
    * Computes the covariance matrix, treating each row as an observation.
    *
@@ -438,8 +443,8 @@ class RowMatrix @Since("1.0.0") (
     require(m > 1, s"RowMatrix.computeCovariance called on matrix with only $m rows." +
       "  Cannot compute the covariance of a RowMatrix with <= 1 row.")
     val mean = Vectors.fromML(summary.mean)
-
-    if (rows.first().isInstanceOf[DenseVector]) {
+    // If all the rows are sparse vectors, then compute based on `computeSparseVectorCovariance`.
+    if (!isSparseMatrix) {
       computeDenseVectorCovariance(mean, n, m)
     } else {
       computeSparseVectorCovariance(mean, n, m)

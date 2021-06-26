@@ -35,8 +35,9 @@ sealed abstract class Filter {
   /**
    * List of columns that are referenced by this filter.
    *
-   * Note that, each element in `references` represents a column; `dots` are used as separators
-   * for nested columns. If any part of the names contains `dots`, it is quoted to avoid confusion.
+   * Note that, each element in `references` represents a column. The column name follows ANSI SQL
+   * names and identifiers: dots are used as separators for nested columns, name will be quoted if
+   * it contains special chars.
    *
    * @since 2.1.0
    */

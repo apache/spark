@@ -30,7 +30,7 @@ import sun.util.calendar.ZoneInfo
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.RebaseDateTime._
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.types.{DateType, Decimal, TimestampType}
+import org.apache.spark.sql.types.{DateType, Decimal, TimestampType, TimestampWithoutTZType}
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 /**
@@ -69,6 +69,14 @@ object DateTimeUtils {
   def daysToMicros(days: Int, zoneId: ZoneId): Long = {
     val instant = daysToLocalDate(days).atStartOfDay(zoneId).toInstant
     instantToMicros(instant)
+  }
+
+  def microsToLocalDateTime(micros: Long): LocalDateTime = {
+    getLocalDateTime(micros, ZoneOffset.UTC)
+  }
+
+  def localDateTimeToMicros(localDateTime: LocalDateTime): Long = {
+    instantToMicros(localDateTime.toInstant(ZoneOffset.UTC))
   }
 
   /**
@@ -211,7 +219,8 @@ object DateTimeUtils {
   def cleanLegacyTimestampStr(s: UTF8String): UTF8String = s.replace(gmtUtf8, UTF8String.EMPTY_UTF8)
 
   /**
-   * Trims and parses a given UTF8 timestamp string to the corresponding a corresponding [[Long]]
+   * Trims and parses a given UTF8 timestamp string to the corresponding timestamp segments,
+   * time zone id and whether it is just time without a date.
    * value. The return type is [[Option]] in order to distinguish between 0L and null. The following
    * formats are allowed:
    *
@@ -235,10 +244,13 @@ object DateTimeUtils {
    *     - +|-hh:mm:ss
    *     - +|-hhmmss
    *  - Region-based zone IDs in the form `area/city`, such as `Europe/Paris`
+   *
+   * @return timestamp segments, time zone id and whether the input is just time without a date. If
+   *         the input string can't be parsed as timestamp, the result timestamp segments are empty.
    */
-  def stringToTimestamp(s: UTF8String, timeZoneId: ZoneId): Option[Long] = {
+  private def parseTimestampString(s: UTF8String): (Array[Int], Option[ZoneId], Boolean) = {
     if (s == null) {
-      return None
+      return (Array.empty, None, false)
     }
     var tz: Option[String] = None
     val segments: Array[Int] = Array[Int](1, 1, 1, 0, 0, 0, 0, 0, 0)
@@ -259,7 +271,7 @@ object DateTimeUtils {
           if (b == '-') {
             if (i == 0 && j != 4) {
               // year should have exact four digits
-              return None
+              return (Array.empty, None, false)
             }
             segments(i) = currentSegmentValue
             currentSegmentValue = 0
@@ -270,7 +282,7 @@ object DateTimeUtils {
             currentSegmentValue = 0
             i = 4
           } else {
-            return None
+            return (Array.empty, None, false)
           }
         } else if (i == 2) {
           if (b == ' ' || b == 'T') {
@@ -278,7 +290,7 @@ object DateTimeUtils {
             currentSegmentValue = 0
             i += 1
           } else {
-            return None
+            return (Array.empty, None, false)
           }
         } else if (i == 3 || i == 4) {
           if (b == ':') {
@@ -286,7 +298,7 @@ object DateTimeUtils {
             currentSegmentValue = 0
             i += 1
           } else {
-            return None
+            return (Array.empty, None, false)
           }
         } else if (i == 5 || i == 6) {
           if (b == '-' || b == '+') {
@@ -314,7 +326,7 @@ object DateTimeUtils {
             currentSegmentValue = 0
             i += 1
           } else {
-            return None
+            return (Array.empty, None, false)
           }
         }
       } else {
@@ -329,7 +341,7 @@ object DateTimeUtils {
     segments(i) = currentSegmentValue
     if (!justTime && i == 0 && j != 4) {
       // year should have exact four digits
-      return None
+      return (Array.empty, None, false)
     }
 
     while (digitsMilli < 6) {
@@ -342,13 +354,48 @@ object DateTimeUtils {
       segments(6) /= 10
       digitsMilli -= 1
     }
+    // This step also validates time zone part
+    val zoneId = tz.map {
+      case "+" => ZoneOffset.ofHoursMinutes(segments(7), segments(8))
+      case "-" => ZoneOffset.ofHoursMinutes(-segments(7), -segments(8))
+      case zoneName: String => getZoneId(zoneName.trim)
+    }
+    (segments, zoneId, justTime)
+  }
+
+  /**
+   * Trims and parses a given UTF8 timestamp string to the corresponding a corresponding [[Long]]
+   * value. The return type is [[Option]] in order to distinguish between 0L and null. The following
+   * formats are allowed:
+   *
+   * `yyyy`
+   * `yyyy-[m]m`
+   * `yyyy-[m]m-[d]d`
+   * `yyyy-[m]m-[d]d `
+   * `yyyy-[m]m-[d]d [h]h:[m]m:[s]s.[ms][ms][ms][us][us][us][zone_id]`
+   * `yyyy-[m]m-[d]dT[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us][zone_id]`
+   * `[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us][zone_id]`
+   * `T[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us][zone_id]`
+   *
+   * where `zone_id` should have one of the forms:
+   *   - Z - Zulu time zone UTC+0
+   *   - +|-[h]h:[m]m
+   *   - A short id, see https://docs.oracle.com/javase/8/docs/api/java/time/ZoneId.html#SHORT_IDS
+   *   - An id with one of the prefixes UTC+, UTC-, GMT+, GMT-, UT+ or UT-,
+   *     and a suffix in the formats:
+   *     - +|-h[h]
+   *     - +|-hh[:]mm
+   *     - +|-hh:mm:ss
+   *     - +|-hhmmss
+   *  - Region-based zone IDs in the form `area/city`, such as `Europe/Paris`
+   */
+  def stringToTimestamp(s: UTF8String, timeZoneId: ZoneId): Option[Long] = {
     try {
-      val zoneId = tz match {
-        case None => timeZoneId
-        case Some("+") => ZoneOffset.ofHoursMinutes(segments(7), segments(8))
-        case Some("-") => ZoneOffset.ofHoursMinutes(-segments(7), -segments(8))
-        case Some(zoneName: String) => getZoneId(zoneName.trim)
+      val (segments, parsedZoneId, justTime) = parseTimestampString(s)
+      if (segments.isEmpty) {
+        return None
       }
+      val zoneId = parsedZoneId.getOrElse(timeZoneId)
       val nanoseconds = MICROSECONDS.toNanos(segments(6))
       val localTime = LocalTime.of(segments(3), segments(4), segments(5), nanoseconds.toInt)
       val localDate = if (justTime) {
@@ -372,14 +419,76 @@ object DateTimeUtils {
   }
 
   /**
+   * Trims and parses a given UTF8 string to a corresponding [[Long]] value which representing the
+   * number of microseconds since the epoch. The result is independent of time zones,
+   * which means that zone ID in the input string will be ignored.
+   * The return type is [[Option]] in order to distinguish between 0L and null. The following
+   * formats are allowed:
+   *
+   * `yyyy`
+   * `yyyy-[m]m`
+   * `yyyy-[m]m-[d]d`
+   * `yyyy-[m]m-[d]d `
+   * `yyyy-[m]m-[d]d [h]h:[m]m:[s]s.[ms][ms][ms][us][us][us][zone_id]`
+   * `yyyy-[m]m-[d]dT[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us][zone_id]`
+   *
+   * where `zone_id` should have one of the forms:
+   *   - Z - Zulu time zone UTC+0
+   *   - +|-[h]h:[m]m
+   *   - A short id, see https://docs.oracle.com/javase/8/docs/api/java/time/ZoneId.html#SHORT_IDS
+   *   - An id with one of the prefixes UTC+, UTC-, GMT+, GMT-, UT+ or UT-,
+   *     and a suffix in the formats:
+   *     - +|-h[h]
+   *     - +|-hh[:]mm
+   *     - +|-hh:mm:ss
+   *     - +|-hhmmss
+   *  - Region-based zone IDs in the form `area/city`, such as `Europe/Paris`
+   *
+   * Note: The input string has to contains year/month/day fields, otherwise Spark can't determine
+   *       the value of timestamp without time zone.
+   */
+  def stringToTimestampWithoutTimeZone(s: UTF8String): Option[Long] = {
+    try {
+      val (segments, _, justTime) = parseTimestampString(s)
+      // If the input string can't be parsed as a timestamp, or it contains only the time part of a
+      // timestamp and we can't determine its date, return None.
+      if (segments.isEmpty || justTime) {
+        return None
+      }
+      val nanoseconds = MICROSECONDS.toNanos(segments(6))
+      val localTime = LocalTime.of(segments(3), segments(4), segments(5), nanoseconds.toInt)
+      val localDate = LocalDate.of(segments(0), segments(1), segments(2))
+      val localDateTime = LocalDateTime.of(localDate, localTime)
+      Some(localDateTimeToMicros(localDateTime))
+    } catch {
+      case NonFatal(_) => None
+    }
+  }
+
+  def stringToTimestampWithoutTimeZoneAnsi(s: UTF8String): Long = {
+    stringToTimestampWithoutTimeZone(s).getOrElse {
+      throw QueryExecutionErrors.cannotCastUTF8StringToDataTypeError(s, TimestampWithoutTZType)
+    }
+  }
+
+  // See issue SPARK-35679
+  // min second cause overflow in instant to micro
+  private val MIN_SECONDS = Math.floorDiv(Long.MinValue, MICROS_PER_SECOND)
+
+  /**
    * Gets the number of microseconds since the epoch of 1970-01-01 00:00:00Z from the given
    * instance of `java.time.Instant`. The epoch microsecond count is a simple incrementing count of
    * microseconds where microsecond 0 is 1970-01-01 00:00:00Z.
    */
   def instantToMicros(instant: Instant): Long = {
-    val us = Math.multiplyExact(instant.getEpochSecond, MICROS_PER_SECOND)
-    val result = Math.addExact(us, NANOSECONDS.toMicros(instant.getNano))
-    result
+    val secs = instant.getEpochSecond
+    if (secs == MIN_SECONDS) {
+      val us = Math.multiplyExact(secs + 1, MICROS_PER_SECOND)
+      Math.addExact(us, NANOSECONDS.toMicros(instant.getNano) - MICROS_PER_SECOND)
+    } else {
+      val us = Math.multiplyExact(secs, MICROS_PER_SECOND)
+      Math.addExact(us, NANOSECONDS.toMicros(instant.getNano))
+    }
   }
 
   /**

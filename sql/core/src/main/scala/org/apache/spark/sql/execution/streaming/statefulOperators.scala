@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjectio
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
 import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistribution, Distribution, Partitioning}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.execution.streaming.state._
@@ -123,14 +124,9 @@ trait StateStoreWriter extends StatefulOperator { self: SparkPlan =>
   }
 
   private def stateStoreCustomMetrics: Map[String, SQLMetric] = {
-    val provider = StateStoreProvider.create(sqlContext.conf.stateStoreProviderClass)
+    val provider = StateStoreProvider.create(conf.stateStoreProviderClass)
     provider.supportedCustomMetrics.map {
-      case StateStoreCustomSumMetric(name, desc) =>
-        name -> SQLMetrics.createMetric(sparkContext, desc)
-      case StateStoreCustomSizeMetric(name, desc) =>
-        name -> SQLMetrics.createSizeMetric(sparkContext, desc)
-      case StateStoreCustomTimingMetric(name, desc) =>
-        name -> SQLMetrics.createTimingMetric(sparkContext, desc)
+      metric => (metric.name, metric.createSQLMetric(sparkContext))
     }.toMap
   }
 
@@ -250,8 +246,8 @@ case class StateStoreRestoreExec(
       keyExpressions.toStructType,
       stateManager.getStateValueSchema,
       indexOrdinal = None,
-      sqlContext.sessionState,
-      Some(sqlContext.streams.stateStoreCoordinator)) { case (store, iter) =>
+      session.sessionState,
+      Some(session.streams.stateStoreCoordinator)) { case (store, iter) =>
         val hasInput = iter.hasNext
         if (!hasInput && keyExpressions.isEmpty) {
           // If our `keyExpressions` are empty, we're getting a global aggregation. In that case
@@ -312,8 +308,8 @@ case class StateStoreSaveExec(
       keyExpressions.toStructType,
       stateManager.getStateValueSchema,
       indexOrdinal = None,
-      sqlContext.sessionState,
-      Some(sqlContext.streams.stateStoreCoordinator)) { (store, iter) =>
+      session.sessionState,
+      Some(session.streams.stateStoreCoordinator)) { (store, iter) =>
         val numOutputRows = longMetric("numOutputRows")
         val numUpdatedStateRows = longMetric("numUpdatedStateRows")
         val allUpdatesTimeMs = longMetric("allUpdatesTimeMs")
@@ -418,7 +414,7 @@ case class StateStoreSaveExec(
               }
             }
 
-          case _ => throw new UnsupportedOperationException(s"Invalid output mode: $outputMode")
+          case _ => throw QueryExecutionErrors.invalidStreamingOutputModeError(outputMode)
         }
     }
   }
@@ -465,8 +461,8 @@ case class StreamingDeduplicateExec(
       keyExpressions.toStructType,
       child.output.toStructType,
       indexOrdinal = None,
-      sqlContext.sessionState,
-      Some(sqlContext.streams.stateStoreCoordinator),
+      session.sessionState,
+      Some(session.streams.stateStoreCoordinator),
       // We won't check value row in state store since the value StreamingDeduplicateExec.EMPTY_ROW
       // is unrelated to the output schema.
       Map(StateStoreConf.FORMAT_VALIDATION_CHECK_VALUE_CONFIG -> "false")) { (store, iter) =>

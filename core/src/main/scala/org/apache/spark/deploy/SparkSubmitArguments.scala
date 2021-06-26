@@ -185,13 +185,13 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
     files = Option(files).orElse(sparkProperties.get(config.FILES.key)).orNull
     archives = Option(archives).orElse(sparkProperties.get(config.ARCHIVES.key)).orNull
     pyFiles = Option(pyFiles).orElse(sparkProperties.get(config.SUBMIT_PYTHON_FILES.key)).orNull
-    ivyRepoPath = sparkProperties.get("spark.jars.ivy").orNull
-    ivySettingsPath = sparkProperties.get("spark.jars.ivySettings")
-    packages = Option(packages).orElse(sparkProperties.get("spark.jars.packages")).orNull
+    ivyRepoPath = sparkProperties.get(config.JAR_IVY_REPO_PATH.key).orNull
+    ivySettingsPath = sparkProperties.get(config.JAR_IVY_SETTING_PATH.key)
+    packages = Option(packages).orElse(sparkProperties.get(config.JAR_PACKAGES.key)).orNull
     packagesExclusions = Option(packagesExclusions)
-      .orElse(sparkProperties.get("spark.jars.excludes")).orNull
+      .orElse(sparkProperties.get(config.JAR_PACKAGES_EXCLUSIONS.key)).orNull
     repositories = Option(repositories)
-      .orElse(sparkProperties.get("spark.jars.repositories")).orNull
+      .orElse(sparkProperties.get(config.JAR_REPOSITORIES.key)).orNull
     deployMode = Option(deployMode)
       .orElse(sparkProperties.get(config.SUBMIT_DEPLOY_MODE.key))
       .orElse(env.get("DEPLOY_MODE"))
@@ -200,11 +200,11 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
       .getOrElse(sparkProperties.get(config.EXECUTOR_INSTANCES.key).orNull)
     queue = Option(queue).orElse(sparkProperties.get("spark.yarn.queue")).orNull
     keytab = Option(keytab)
-      .orElse(sparkProperties.get("spark.kerberos.keytab"))
+      .orElse(sparkProperties.get(config.KEYTAB.key))
       .orElse(sparkProperties.get("spark.yarn.keytab"))
       .orNull
     principal = Option(principal)
-      .orElse(sparkProperties.get("spark.kerberos.principal"))
+      .orElse(sparkProperties.get(config.PRINCIPAL.key))
       .orElse(sparkProperties.get("spark.yarn.principal"))
       .orNull
     dynamicAllocationEnabled =

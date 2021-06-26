@@ -346,6 +346,11 @@ object ViewHelper extends SQLConfHelper with Logging {
     "spark.sql.execution.",
     "spark.sql.shuffle.",
     "spark.sql.adaptive.",
+    // ignore optimization configs used in `RelationConversions`
+    "spark.sql.hive.convertMetastoreParquet",
+    "spark.sql.hive.convertMetastoreOrc",
+    "spark.sql.hive.convertInsertingPartitionedTable",
+    "spark.sql.hive.convertMetastoreCtas",
     SQLConf.ADDITIONAL_REMOTE_REPOSITORIES.key)
 
   private val configAllowList = Seq(

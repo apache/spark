@@ -25,6 +25,8 @@ MINIMUM_PYCODESTYLE="2.7.0"
 
 PYTHON_EXECUTABLE="python3"
 
+BLACK_BUILD="$PYTHON_EXECUTABLE -m black"
+
 function satisfies_min_version {
     local provided_version="$1"
     local expected_version="$2"
@@ -185,6 +187,35 @@ flake8 checks failed."
     fi
 }
 
+function black_test {
+    local BLACK_REPORT=
+    local BLACK_STATUS=
+
+    # Skip check if black is not installed.
+    $BLACK_BUILD 2> /dev/null
+    if [ $? -ne 0 ]; then
+        echo "The $BLACK_BUILD command was not found. Skipping black checks for now."
+        echo
+        return
+    fi
+
+    echo "starting black test..."
+    # Black is only applied for pandas API on Spark for now.
+    BLACK_REPORT=$( ($BLACK_BUILD python/pyspark/pandas --line-length 100 --check ) 2>&1)
+    BLACK_STATUS=$?
+
+    if [ "$BLACK_STATUS" -ne 0 ]; then
+        echo "black checks failed:"
+        echo "$BLACK_REPORT"
+        echo "Please run 'dev/reformat-python' script."
+        echo "$BLACK_STATUS"
+        exit "$BLACK_STATUS"
+    else
+        echo "black checks passed."
+        echo
+    fi
+}
+
 SCRIPT_DIR="$( cd "$( dirname "$0" )" && pwd )"
 SPARK_ROOT_DIR="$(dirname "${SCRIPT_DIR}")"
 
@@ -194,6 +225,7 @@ pushd "$SPARK_ROOT_DIR" &> /dev/null
 PYTHON_SOURCE="$(find . -path ./docs/.local_ruby_bundle -prune -false -o -name "*.py")"
 
 compile_python_test "$PYTHON_SOURCE"
+black_test
 pycodestyle_test "$PYTHON_SOURCE"
 flake8_test
 mypy_test

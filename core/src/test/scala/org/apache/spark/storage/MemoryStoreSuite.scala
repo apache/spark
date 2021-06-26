@@ -33,6 +33,8 @@ import org.apache.spark.storage.memory.{BlockEvictionHandler, MemoryStore, Parti
 import org.apache.spark.util._
 import org.apache.spark.util.io.ChunkedByteBuffer
 
+case class OffHeapValue(override val estimatedSize: Long) extends KnownSizeEstimation
+
 class MemoryStoreSuite
   extends SparkFunSuite
   with PrivateMethodTester
@@ -41,6 +43,9 @@ class MemoryStoreSuite
 
   val conf: SparkConf = new SparkConf(false)
     .set(STORAGE_UNROLL_MEMORY_THRESHOLD, 512L)
+    .set(MEMORY_OFFHEAP_ENABLED, true)
+    .set(MEMORY_OFFHEAP_SIZE, 12000L)
+    .set(MEMORY_STORAGE_FRACTION, 0.5)
 
   // Reuse a serializer across tests to avoid creating a new thread-local buffer on each test
   val serializer = new KryoSerializer(
@@ -156,7 +161,7 @@ class MemoryStoreSuite
       assert(blockInfoManager.lockNewBlockForWriting(
         blockId,
         new BlockInfo(StorageLevel.MEMORY_ONLY, classTag, tellMaster = false)))
-      val res = memoryStore.putIteratorAsValues(blockId, iter, classTag)
+      val res = memoryStore.putIteratorAsValues(blockId, iter, MemoryMode.ON_HEAP, classTag)
       blockInfoManager.unlock(blockId)
       res
     }
@@ -196,10 +201,13 @@ class MemoryStoreSuite
     assert(memoryStore.currentUnrollMemoryForThisTask === 0)
   }
 
-  test("safely unroll blocks through putIteratorAsValues") {
+  def testPutIteratorAsValues[T](
+      smallListValue: () => T,
+      bigListValue: () => T,
+      storageLevel: StorageLevel): Unit = {
     val (memoryStore, blockInfoManager) = makeMemoryStore(12000)
-    val smallList = List.fill(40)(new Array[Byte](100))
-    val bigList = List.fill(40)(new Array[Byte](1000))
+    val smallList = List.fill(40)(smallListValue())
+    val bigList = List.fill(40)(bigListValue())
     def smallIterator: Iterator[Any] = smallList.iterator.asInstanceOf[Iterator[Any]]
     def bigIterator: Iterator[Any] = bigList.iterator.asInstanceOf[Iterator[Any]]
     assert(memoryStore.currentUnrollMemoryForThisTask === 0)
@@ -210,8 +218,8 @@ class MemoryStoreSuite
         classTag: ClassTag[T]): Either[PartiallyUnrolledIterator[T], Long] = {
       assert(blockInfoManager.lockNewBlockForWriting(
         blockId,
-        new BlockInfo(StorageLevel.MEMORY_ONLY, classTag, tellMaster = false)))
-      val res = memoryStore.putIteratorAsValues(blockId, iter, classTag)
+        new BlockInfo(storageLevel, classTag, tellMaster = false)))
+      val res = memoryStore.putIteratorAsValues(blockId, iter, storageLevel.memoryMode, classTag)
       blockInfoManager.unlock(blockId)
       res
     }
@@ -258,6 +266,18 @@ class MemoryStoreSuite
     assert(memoryStore.currentUnrollMemoryForThisTask > 0) // we returned an iterator
     result4.left.get.close()
     assert(memoryStore.currentUnrollMemoryForThisTask === 0) // close released the unroll memory
+  }
+
+  test("safely unroll blocks through putIteratorAsValues") {
+    testPutIteratorAsValues(() => new Array[Byte](100), () => new Array[Byte](1000),
+      StorageLevel.MEMORY_ONLY)
+  }
+
+  test("safely unroll blocks through putIteratorAsValues off-heap") {
+    // Size the values so the sequence of block drops matches the one in the on-heap test. The
+    // values are different since the sizes here are exact, vs. being estimated for on-heap.
+    testPutIteratorAsValues(() => OffHeapValue(110), () => OffHeapValue(1500),
+      StorageLevel(false, true, useOffHeap = true, deserialized = true, 1))
   }
 
   test("safely unroll blocks through putIteratorAsBytes") {
@@ -376,7 +396,7 @@ class MemoryStoreSuite
     def putIteratorAsValues(
         blockId: BlockId,
         iter: Iterator[Any]): Either[PartiallyUnrolledIterator[Any], Long] = {
-       memoryStore.putIteratorAsValues(blockId, iter, ClassTag.Any)
+       memoryStore.putIteratorAsValues(blockId, iter, MemoryMode.ON_HEAP, ClassTag.Any)
     }
 
     // All unroll memory used is released because putIterator did not return an iterator
@@ -556,7 +576,7 @@ class MemoryStoreSuite
         blockId: BlockId,
         iter: Iterator[T],
         classTag: ClassTag[T]): Either[PartiallyUnrolledIterator[T], Long] = {
-      memoryStore.putIteratorAsValues(blockId, iter, classTag)
+      memoryStore.putIteratorAsValues(blockId, iter, MemoryMode.ON_HEAP, classTag)
     }
 
     // Unroll with plenty of space. This should succeed and cache both blocks.
@@ -582,7 +602,7 @@ class MemoryStoreSuite
         blockId: BlockId,
         iter: Iterator[T],
         classTag: ClassTag[T]): Either[PartiallyUnrolledIterator[T], Long] = {
-      memoryStore.putIteratorAsValues(blockId, iter, classTag)
+      memoryStore.putIteratorAsValues(blockId, iter, MemoryMode.ON_HEAP, classTag)
     }
 
     // Unroll with plenty of space. This should succeed and cache both blocks.
