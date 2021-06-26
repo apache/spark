@@ -18,7 +18,7 @@
 package org.apache.spark.sql.sources
 
 import org.apache.spark.sql.QueryTest
-import org.apache.spark.sql.catalyst.plans.logical.{RepartitionByExpression, Sort}
+import org.apache.spark.sql.catalyst.plans.logical.{RebalancePartitions, RepartitionByExpression, Sort}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.command.{CreateDataSourceTableAsSelectCommand, InsertIntoDataSourceDirCommand}
 import org.apache.spark.sql.execution.datasources.InsertIntoHadoopFsRelationCommand
@@ -84,7 +84,7 @@ class RepartitionWritingDataSourceSuite extends QueryTest
           |CREATE TABLE t1 USING parquet
           |AS (SELECT id AS key, id AS value FROM range(5))
           |""".stripMargin).queryExecution.analyzed match {
-        case CreateDataSourceTableAsSelectCommand(_, _, RepartitionByExpression(Nil, _, None), _) =>
+        case CreateDataSourceTableAsSelectCommand(_, _, RebalancePartitions(Nil, _), _) =>
         case other =>
           fail(
             s"""
@@ -101,8 +101,7 @@ class RepartitionWritingDataSourceSuite extends QueryTest
           |PARTITIONED BY (key)
           |AS (SELECT id AS key, id AS value FROM range(5))
           |""".stripMargin).queryExecution.analyzed match {
-        case CreateDataSourceTableAsSelectCommand(_, _,
-            RepartitionByExpression(partExps, _, None), _)
+        case CreateDataSourceTableAsSelectCommand(_, _, RebalancePartitions(partExps, _), _)
           if partExps.flatMap(_.references.map(_.name)) == Seq("key") =>
         case other =>
           fail(
@@ -122,7 +121,7 @@ class RepartitionWritingDataSourceSuite extends QueryTest
           |""".stripMargin).queryExecution.analyzed match {
         case CreateDataSourceTableAsSelectCommand(_, _,
             Sort(_, false, RepartitionByExpression(partExps, _, Some(10))), _)
-          if partExps.flatMap(_.references.map(_.name)) == Seq("key") =>
+          if partExps.flatMap(_.references.map(_.name)) == Seq("part", "key") =>
         case other =>
           fail(
             s"""
@@ -149,7 +148,7 @@ class RepartitionWritingDataSourceSuite extends QueryTest
           |SELECT id, id AS  p1, id AS p2 FROM range(5)
           |""".stripMargin).queryExecution.analyzed match {
         case InsertIntoHadoopFsRelationCommand(
-        _, _, _, _, _, _, _, RepartitionByExpression(partExps, _, _), _, _, _, _)
+            _, _, _, _, _, _, _, RebalancePartitions(partExps, _), _, _, _, _)
           if partExps.flatMap(_.references.map(_.name)) == Seq("p1", "p2") =>
         case other =>
           fail(
@@ -166,7 +165,7 @@ class RepartitionWritingDataSourceSuite extends QueryTest
           |SELECT id, id AS p2 FROM range(5)
           |""".stripMargin).queryExecution.analyzed match {
         case InsertIntoHadoopFsRelationCommand(
-            _, _, _, _, _, _, _, RepartitionByExpression(partExps, _, _), _, _, _, _)
+            _, _, _, _, _, _, _, RebalancePartitions(partExps, _), _, _, _, _)
           if partExps.flatMap(_.references.map(_.name)) == Seq("p2") =>
         case other =>
           fail(
@@ -183,7 +182,7 @@ class RepartitionWritingDataSourceSuite extends QueryTest
           |SELECT id, id % 2 AS P2 FROM range(5)
           |""".stripMargin).queryExecution.analyzed match {
         case InsertIntoHadoopFsRelationCommand(
-            _, _, _, _, _, _, _, RepartitionByExpression(partExps, _, _), _, _, _, _)
+            _, _, _, _, _, _, _, RebalancePartitions(partExps, _), _, _, _, _)
           if partExps.flatMap(_.references.map(_.name)) == Seq("p2") =>
         case other =>
           fail(
@@ -199,7 +198,7 @@ class RepartitionWritingDataSourceSuite extends QueryTest
           |SELECT id FROM range(5)
           |""".stripMargin).queryExecution.analyzed match {
         case InsertIntoHadoopFsRelationCommand(
-            _, _, _, _, _, _, _, RepartitionByExpression(Nil, _, None), _, _, _, _) =>
+            _, _, _, _, _, _, _, RebalancePartitions(Nil, _), _, _, _, _) =>
         case other =>
           fail(
             s"""
@@ -218,7 +217,7 @@ class RepartitionWritingDataSourceSuite extends QueryTest
            | USING parquet
            | SELECT 1 AS a, 'c' AS b
          """.stripMargin).queryExecution.analyzed match {
-        case InsertIntoDataSourceDirCommand(_, _, RepartitionByExpression(Nil, _, None), _) =>
+        case InsertIntoDataSourceDirCommand(_, _, RebalancePartitions(Nil, _), _) =>
         case other =>
           fail(
             s"""

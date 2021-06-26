@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.ScanOperation
-import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoDir, InsertIntoStatement, LogicalPlan, Project, RepartitionByExpression, Sort}
+import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoDir, InsertIntoStatement, LogicalPlan, Project, RebalancePartitions, RepartitionByExpression, RepartitionOperation, Sort}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.connector.catalog.SupportsRead
@@ -249,63 +249,63 @@ object RepartitionWritingDataSource extends Rule[LogicalPlan] {
         .filterNot(p => i.staticPartitions.exists(s => conf.resolver(p.name, s._1)))
       applyRepartition(i, i.bucketSpec, dynamicPartExps)
 
-    case i: InsertIntoDataSourceDirCommand if i.resolved && canApplyRepartition(i.query) =>
-      i.copy(query = RepartitionByExpression(Nil, i.query, None))
+    case i: InsertIntoDataSourceDirCommand if i.resolved && canApplyRebalancePartitions(i.query) =>
+      i.copy(query = RebalancePartitions(Nil, i.query))
 
     // InsertIntoDataSourceCommand only accept InsertableRelation, do not need repartition.
   }
 
-  def applyRepartition(
-      dataWritingCommand: DataWritingCommand,
+  private def applyRepartition(
+      dataWriting: DataWritingCommand,
       bucketSpec: Option[BucketSpec],
       partitionColumns: Seq[Expression]): LogicalPlan = {
-    val query = dataWritingCommand.query
+    val query = dataWriting.query
     (bucketSpec, partitionColumns) match {
       case (None, Nil) =>
-        if (canApplyRepartition(query)) {
-          dataWritingCommand.withNewChildrenInternal(
-            IndexedSeq(RepartitionByExpression(Nil, query, None)))
+        if (canApplyRebalancePartitions(query)) {
+          dataWriting.withNewChildrenInternal(
+            IndexedSeq(RebalancePartitions(Nil, query)))
         } else {
-          dataWritingCommand
+          dataWriting
         }
 
-      case (None, partExps @ _ +: _) =>
+      case (None, partExps) if partExps.nonEmpty =>
         query match {
-          case RepartitionByExpression(partExpressions, _, _) if partExpressions == partExps =>
-            dataWritingCommand
+          case RebalancePartitions(partitionExpressions, _) if partitionExpressions == partExps =>
+            dataWriting
           case _ =>
-            dataWritingCommand.withNewChildrenInternal(
-              IndexedSeq(RepartitionByExpression(partExps, query, None)))
+            dataWriting.withNewChildrenInternal(
+              IndexedSeq(RebalancePartitions(partExps, query)))
         }
 
-      case (Some(bucket), _) if bucket.sortColumnNames.nonEmpty =>
-        val bucketExps = resolveColumnNames(bucket.bucketColumnNames, query.output)
-        val sortExps = resolveColumnNames(bucket.sortColumnNames, query.output)
-          .map(SortOrder(_, Ascending))
-        query match {
-          case Sort(order, false, RepartitionByExpression(partExpr, _, Some(bucket.numBuckets)))
-            if order == sortExps && partExpr == bucketExps =>
-            dataWritingCommand
-          case _ =>
-            dataWritingCommand.withNewChildrenInternal(
-              IndexedSeq(Sort(sortExps, false,
-                RepartitionByExpression(bucketExps, query, Some(bucket.numBuckets)))))
-        }
-
-      case (Some(bucket), _) if bucket.sortColumnNames.isEmpty =>
-        val bucketExps = resolveColumnNames(bucket.bucketColumnNames, query.output)
-        query match {
-          case RepartitionByExpression(partExpr, _, Some(bucket.numBuckets))
-            if partExpr == bucketExps =>
-            dataWritingCommand
-          case _ =>
-            dataWritingCommand.withNewChildrenInternal(
-              IndexedSeq(RepartitionByExpression(bucketExps, query, Some(bucket.numBuckets))))
+      case (Some(bucket), partExps) =>
+        val bucketExps = partExps ++ resolveColumnNames(bucket.bucketColumnNames, query.output)
+        if (bucket.sortColumnNames.nonEmpty) {
+          val sortExps = resolveColumnNames(bucket.sortColumnNames, query.output)
+            .map(SortOrder(_, Ascending))
+          query match {
+            case Sort(order, false, RepartitionByExpression(partExpr, _, Some(bucket.numBuckets)))
+                if order == sortExps && partExpr == bucketExps =>
+              dataWriting
+            case _ =>
+              dataWriting.withNewChildrenInternal(
+                IndexedSeq(Sort(sortExps, false,
+                  RepartitionByExpression(bucketExps, query, Some(bucket.numBuckets)))))
+          }
+        } else {
+          query match {
+            case RepartitionByExpression(partExpr, _, Some(bucket.numBuckets))
+                if partExpr == bucketExps =>
+              dataWriting
+            case _ =>
+              dataWriting.withNewChildrenInternal(
+                IndexedSeq(RepartitionByExpression(bucketExps, query, Some(bucket.numBuckets))))
+          }
         }
     }
   }
 
-  def resolveColumnNames(
+  private def resolveColumnNames(
       columnNames: Seq[String], outputAttrs: Seq[Attribute]): Seq[NamedExpression] = {
     columnNames.map { c =>
       outputAttrs.resolve(c :: Nil, conf.resolver).
@@ -314,9 +314,9 @@ object RepartitionWritingDataSource extends Rule[LogicalPlan] {
     }
   }
 
-  def canApplyRepartition(plan: LogicalPlan): Boolean = {
+  private def canApplyRebalancePartitions(plan: LogicalPlan): Boolean = {
     plan match {
-      case _: RepartitionByExpression | _: Sort => false
+      case _: RepartitionOperation | _: Sort => false
       case _ => conf.adaptiveExecutionEnabled && conf.coalesceShufflePartitionsEnabled
     }
   }
