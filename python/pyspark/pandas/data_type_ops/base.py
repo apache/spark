@@ -42,7 +42,7 @@ from pyspark.sql.types import (
     TimestampType,
     UserDefinedType,
 )
-from pyspark.pandas._typing import Dtype, IndexOpsLike, T_IndexOps
+from pyspark.pandas._typing import Dtype, SeriesOrIndex, T_IndexOps
 from pyspark.pandas.typedef import extension_dtypes
 from pyspark.pandas.typedef.typehints import (
     extension_dtypes_available,
@@ -263,58 +263,58 @@ class DataTypeOps(object, metaclass=ABCMeta):
     def pretty_name(self) -> str:
         raise NotImplementedError()
 
-    def add(self, left: T_IndexOps, right: Any) -> IndexOpsLike:
+    def add(self, left: T_IndexOps, right: Any) -> SeriesOrIndex:
         raise TypeError("Addition can not be applied to %s." % self.pretty_name)
 
-    def sub(self, left: T_IndexOps, right: Any) -> IndexOpsLike:
+    def sub(self, left: T_IndexOps, right: Any) -> SeriesOrIndex:
         raise TypeError("Subtraction can not be applied to %s." % self.pretty_name)
 
-    def mul(self, left: T_IndexOps, right: Any) -> IndexOpsLike:
+    def mul(self, left: T_IndexOps, right: Any) -> SeriesOrIndex:
         raise TypeError("Multiplication can not be applied to %s." % self.pretty_name)
 
-    def truediv(self, left: T_IndexOps, right: Any) -> IndexOpsLike:
+    def truediv(self, left: T_IndexOps, right: Any) -> SeriesOrIndex:
         raise TypeError("True division can not be applied to %s." % self.pretty_name)
 
-    def floordiv(self, left: T_IndexOps, right: Any) -> IndexOpsLike:
+    def floordiv(self, left: T_IndexOps, right: Any) -> SeriesOrIndex:
         raise TypeError("Floor division can not be applied to %s." % self.pretty_name)
 
-    def mod(self, left: T_IndexOps, right: Any) -> IndexOpsLike:
+    def mod(self, left: T_IndexOps, right: Any) -> SeriesOrIndex:
         raise TypeError("Modulo can not be applied to %s." % self.pretty_name)
 
-    def pow(self, left: T_IndexOps, right: Any) -> IndexOpsLike:
+    def pow(self, left: T_IndexOps, right: Any) -> SeriesOrIndex:
         raise TypeError("Exponentiation can not be applied to %s." % self.pretty_name)
 
-    def radd(self, left: T_IndexOps, right: Any) -> IndexOpsLike:
+    def radd(self, left: T_IndexOps, right: Any) -> SeriesOrIndex:
         raise TypeError("Addition can not be applied to %s." % self.pretty_name)
 
-    def rsub(self, left: T_IndexOps, right: Any) -> IndexOpsLike:
+    def rsub(self, left: T_IndexOps, right: Any) -> SeriesOrIndex:
         raise TypeError("Subtraction can not be applied to %s." % self.pretty_name)
 
-    def rmul(self, left: T_IndexOps, right: Any) -> IndexOpsLike:
+    def rmul(self, left: T_IndexOps, right: Any) -> SeriesOrIndex:
         raise TypeError("Multiplication can not be applied to %s." % self.pretty_name)
 
-    def rtruediv(self, left: T_IndexOps, right: Any) -> IndexOpsLike:
+    def rtruediv(self, left: T_IndexOps, right: Any) -> SeriesOrIndex:
         raise TypeError("True division can not be applied to %s." % self.pretty_name)
 
-    def rfloordiv(self, left: T_IndexOps, right: Any) -> IndexOpsLike:
+    def rfloordiv(self, left: T_IndexOps, right: Any) -> SeriesOrIndex:
         raise TypeError("Floor division can not be applied to %s." % self.pretty_name)
 
-    def rmod(self, left: T_IndexOps, right: Any) -> IndexOpsLike:
+    def rmod(self, left: T_IndexOps, right: Any) -> SeriesOrIndex:
         raise TypeError("Modulo can not be applied to %s." % self.pretty_name)
 
-    def rpow(self, left: T_IndexOps, right: Any) -> IndexOpsLike:
+    def rpow(self, left: T_IndexOps, right: Any) -> SeriesOrIndex:
         raise TypeError("Exponentiation can not be applied to %s." % self.pretty_name)
 
-    def __and__(self, left: T_IndexOps, right: Any) -> IndexOpsLike:
+    def __and__(self, left: T_IndexOps, right: Any) -> SeriesOrIndex:
         raise TypeError("Bitwise and can not be applied to %s." % self.pretty_name)
 
-    def __or__(self, left: T_IndexOps, right: Any) -> IndexOpsLike:
+    def __or__(self, left: T_IndexOps, right: Any) -> SeriesOrIndex:
         raise TypeError("Bitwise or can not be applied to %s." % self.pretty_name)
 
-    def rand(self, left: T_IndexOps, right: Any) -> IndexOpsLike:
+    def rand(self, left: T_IndexOps, right: Any) -> SeriesOrIndex:
         return left.__and__(right)
 
-    def ror(self, left: T_IndexOps, right: Any) -> IndexOpsLike:
+    def ror(self, left: T_IndexOps, right: Any) -> SeriesOrIndex:
         return left.__or__(right)
 
     def restore(self, col: pd.Series) -> pd.Series:

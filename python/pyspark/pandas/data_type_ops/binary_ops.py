@@ -20,7 +20,7 @@ from typing import Any, Union, cast
 from pandas.api.types import CategoricalDtype
 
 from pyspark.pandas.base import column_op, IndexOpsMixin
-from pyspark.pandas._typing import Dtype, IndexOpsLike, T_IndexOps
+from pyspark.pandas._typing import Dtype, SeriesOrIndex, T_IndexOps
 from pyspark.pandas.data_type_ops.base import (
     DataTypeOps,
     _as_bool_type,
@@ -42,7 +42,7 @@ class BinaryOps(DataTypeOps):
     def pretty_name(self) -> str:
         return "binaries"
 
-    def add(self, left: T_IndexOps, right: Any) -> IndexOpsLike:
+    def add(self, left: T_IndexOps, right: Any) -> SeriesOrIndex:
         if isinstance(right, IndexOpsMixin) and isinstance(right.spark.data_type, BinaryType):
             return column_op(F.concat)(left, right)
         elif isinstance(right, bytes):
@@ -52,10 +52,10 @@ class BinaryOps(DataTypeOps):
                 "Concatenation can not be applied to %s and the given type." % self.pretty_name
             )
 
-    def radd(self, left: T_IndexOps, right: Any) -> IndexOpsLike:
+    def radd(self, left: T_IndexOps, right: Any) -> SeriesOrIndex:
         if isinstance(right, bytes):
             return cast(
-                IndexOpsLike, left._with_new_scol(F.concat(F.lit(right), left.spark.column))
+                SeriesOrIndex, left._with_new_scol(F.concat(F.lit(right), left.spark.column))
             )
         else:
             raise TypeError(

@@ -36,6 +36,6 @@ Scalar = Union[
 
 Dtype = Union[np.dtype, ExtensionDtype]
 
-IndexOpsLike = Union["Series", "Index"]
+SeriesOrIndex = Union["Series", "Index"]
 T_IndexOps = TypeVar("T_IndexOps", bound="IndexOpsMixin")
 T_Frame = TypeVar("T_Frame", bound="Frame")
