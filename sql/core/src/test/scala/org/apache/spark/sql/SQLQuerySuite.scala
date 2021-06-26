@@ -3586,24 +3586,28 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
 
   test("SPARK-32372: ResolveReferences.dedupRight should only rewrite attributes for ancestor " +
     "plans of the conflict plan") {
-    sql("SELECT name, avg(age) as avg_age FROM person GROUP BY name")
-      .createOrReplaceTempView("person_a")
-    sql("SELECT p1.name, p2.avg_age FROM person p1 JOIN person_a p2 ON p1.name = p2.name")
-      .createOrReplaceTempView("person_b")
-    sql("SELECT * FROM person_a UNION SELECT * FROM person_b")
-      .createOrReplaceTempView("person_c")
-    checkAnswer(
-      sql("SELECT p1.name, p2.avg_age FROM person_c p1 JOIN person_c p2 ON p1.name = p2.name"),
-      Row("jim", 20.0) :: Row("mike", 30.0) :: Nil)
+    withTempView("person_a", "person_b", "person_c") {
+      sql("SELECT name, avg(age) as avg_age FROM person GROUP BY name")
+        .createOrReplaceTempView("person_a")
+      sql("SELECT p1.name, p2.avg_age FROM person p1 JOIN person_a p2 ON p1.name = p2.name")
+        .createOrReplaceTempView("person_b")
+      sql("SELECT * FROM person_a UNION SELECT * FROM person_b")
+        .createOrReplaceTempView("person_c")
+      checkAnswer(
+        sql("SELECT p1.name, p2.avg_age FROM person_c p1 JOIN person_c p2 ON p1.name = p2.name"),
+        Row("jim", 20.0) :: Row("mike", 30.0) :: Nil)
+    }
   }
 
   test("SPARK-32280: Avoid duplicate rewrite attributes when there're multiple JOINs") {
-    sql("SELECT 1 AS id").createOrReplaceTempView("A")
-    sql("SELECT id, 'foo' AS kind FROM A").createOrReplaceTempView("B")
-    sql("SELECT l.id as id FROM B AS l LEFT SEMI JOIN B AS r ON l.kind = r.kind")
-      .createOrReplaceTempView("C")
-    checkAnswer(sql("SELECT 0 FROM ( SELECT * FROM B JOIN C USING (id)) " +
-      "JOIN ( SELECT * FROM B JOIN C USING (id)) USING (id)"), Row(0))
+    withTempView("A", "B", "C") {
+      sql("SELECT 1 AS id").createOrReplaceTempView("A")
+      sql("SELECT id, 'foo' AS kind FROM A").createOrReplaceTempView("B")
+      sql("SELECT l.id as id FROM B AS l LEFT SEMI JOIN B AS r ON l.kind = r.kind")
+        .createOrReplaceTempView("C")
+      checkAnswer(sql("SELECT 0 FROM ( SELECT * FROM B JOIN C USING (id)) " +
+        "JOIN ( SELECT * FROM B JOIN C USING (id)) USING (id)"), Row(0))
+    }
   }
 
   test("SPARK-32788: non-partitioned table scan should not have partition filter") {
@@ -3629,13 +3633,15 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
   }
 
   test("SPARK-33338: GROUP BY using literal map should not fail") {
-    withTempDir { dir =>
-      sql(s"CREATE TABLE t USING ORC LOCATION '${dir.toURI}' AS SELECT map('k1', 'v1') m, 'k1' k")
-      Seq(
-        "SELECT map('k1', 'v1')[k] FROM t GROUP BY 1",
-        "SELECT map('k1', 'v1')[k] FROM t GROUP BY map('k1', 'v1')[k]",
-        "SELECT map('k1', 'v1')[k] a FROM t GROUP BY a").foreach { statement =>
-        checkAnswer(sql(statement), Row("v1"))
+    withTable("t") {
+      withTempDir { dir =>
+        sql(s"CREATE TABLE t USING ORC LOCATION '${dir.toURI}' AS SELECT map('k1', 'v1') m, 'k1' k")
+        Seq(
+          "SELECT map('k1', 'v1')[k] FROM t GROUP BY 1",
+          "SELECT map('k1', 'v1')[k] FROM t GROUP BY map('k1', 'v1')[k]",
+          "SELECT map('k1', 'v1')[k] a FROM t GROUP BY a").foreach { statement =>
+          checkAnswer(sql(statement), Row("v1"))
+        }
       }
     }
   }
