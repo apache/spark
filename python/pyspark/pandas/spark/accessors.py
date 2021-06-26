@@ -26,7 +26,7 @@ from pyspark import StorageLevel
 from pyspark.sql import Column, DataFrame as SparkDataFrame
 from pyspark.sql.types import DataType, StructType
 
-from pyspark.pandas._typing import T_IndexOps
+from pyspark.pandas._typing import IndexOpsLike
 from pyspark.pandas.internal import InternalField
 
 if TYPE_CHECKING:
@@ -37,11 +37,11 @@ if TYPE_CHECKING:
     from pyspark.pandas.frame import CachedDataFrame  # noqa: F401 (SPARK-34943)
 
 
-class SparkIndexOpsMethods(Generic[T_IndexOps], metaclass=ABCMeta):
+class SparkIndexOpsMethods(Generic[IndexOpsLike], metaclass=ABCMeta):
     """Spark related features. Usually, the features here are missing in pandas
     but Spark has it."""
 
-    def __init__(self, data: T_IndexOps):
+    def __init__(self, data: IndexOpsLike):
         self._data = data
 
     @property
@@ -64,7 +64,7 @@ class SparkIndexOpsMethods(Generic[T_IndexOps], metaclass=ABCMeta):
         """
         return self._data._internal.spark_column_for(self._data._column_label)
 
-    def transform(self, func: Callable[[Column], Column]) -> T_IndexOps:
+    def transform(self, func: Callable[[Column], Column]) -> IndexOpsLike:
         """
         Applies a function that takes and returns a Spark column. It allows to natively
         apply a Spark function and column APIs with the Spark column internally used
@@ -131,7 +131,7 @@ class SparkIndexOpsMethods(Generic[T_IndexOps], metaclass=ABCMeta):
 
     @property
     @abstractmethod
-    def analyzed(self) -> T_IndexOps:
+    def analyzed(self) -> IndexOpsLike:
         pass
 
 

@@ -19,7 +19,7 @@ from typing import Any, Union, cast
 
 from pandas.api.types import CategoricalDtype
 
-from pyspark.pandas._typing import Dtype, SeriesOrIndex, T_IndexOps
+from pyspark.pandas._typing import Dtype, IndexOpsLike, SeriesOrIndex
 from pyspark.pandas.base import column_op, IndexOpsMixin
 from pyspark.pandas.data_type_ops.base import (
     DataTypeOps,
@@ -42,7 +42,7 @@ class ArrayOps(DataTypeOps):
     def pretty_name(self) -> str:
         return "arrays"
 
-    def add(self, left: T_IndexOps, right: Any) -> SeriesOrIndex:
+    def add(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         if not isinstance(right, IndexOpsMixin) or (
             isinstance(right, IndexOpsMixin) and not isinstance(right.spark.data_type, ArrayType)
         ):
@@ -62,7 +62,7 @@ class ArrayOps(DataTypeOps):
 
         return column_op(F.concat)(left, right)
 
-    def astype(self, index_ops: T_IndexOps, dtype: Union[str, type, Dtype]) -> T_IndexOps:
+    def astype(self, index_ops: IndexOpsLike, dtype: Union[str, type, Dtype]) -> IndexOpsLike:
         dtype, spark_type = pandas_on_spark_type(dtype)
 
         if isinstance(dtype, CategoricalDtype):

@@ -21,7 +21,7 @@ from typing import Union
 import pandas as pd
 from pandas.api.types import CategoricalDtype
 
-from pyspark.pandas._typing import Dtype, T_IndexOps
+from pyspark.pandas._typing import Dtype, IndexOpsLike
 from pyspark.pandas.data_type_ops.base import DataTypeOps
 from pyspark.pandas.typedef import pandas_on_spark_type
 from pyspark.sql import functions as F
@@ -46,7 +46,7 @@ class CategoricalOps(DataTypeOps):
         """Prepare column when from_pandas."""
         return col.cat.codes
 
-    def astype(self, index_ops: T_IndexOps, dtype: Union[str, type, Dtype]) -> T_IndexOps:
+    def astype(self, index_ops: IndexOpsLike, dtype: Union[str, type, Dtype]) -> IndexOpsLike:
         dtype, spark_type = pandas_on_spark_type(dtype)
 
         if isinstance(dtype, CategoricalDtype) and dtype.categories is None:

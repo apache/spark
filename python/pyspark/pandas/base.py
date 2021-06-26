@@ -35,7 +35,7 @@ from pyspark.sql.types import (
 )
 
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
-from pyspark.pandas._typing import Dtype, SeriesOrIndex, T_IndexOps
+from pyspark.pandas._typing import Dtype, IndexOpsLike, SeriesOrIndex
 from pyspark.pandas.config import get_option, option_context
 from pyspark.pandas.internal import (
     InternalField,
@@ -291,8 +291,8 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
 
     @abstractmethod
     def _with_new_scol(
-        self: T_IndexOps, scol: spark.Column, *, field: Optional[InternalField] = None
-    ) -> T_IndexOps:
+        self: IndexOpsLike, scol: spark.Column, *, field: Optional[InternalField] = None
+    ) -> IndexOpsLike:
         pass
 
     @property
@@ -302,7 +302,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
 
     @property
     @abstractmethod
-    def spark(self: T_IndexOps) -> SparkIndexOpsMethods[T_IndexOps]:
+    def spark(self: IndexOpsLike) -> SparkIndexOpsMethods[IndexOpsLike]:
         pass
 
     @property
@@ -312,12 +312,12 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         return DataTypeOps(self.dtype, self.spark.data_type)
 
     @abstractmethod
-    def copy(self: T_IndexOps) -> T_IndexOps:
+    def copy(self: IndexOpsLike) -> IndexOpsLike:
         pass
 
     # arithmetic operators
-    def __neg__(self: T_IndexOps) -> T_IndexOps:
-        return cast(T_IndexOps, column_op(Column.__neg__)(self))
+    def __neg__(self: IndexOpsLike) -> IndexOpsLike:
+        return cast(IndexOpsLike, column_op(Column.__neg__)(self))
 
     def __add__(self, other: Any) -> SeriesOrIndex:
         return self._dtype_op.add(self, other)
@@ -393,8 +393,8 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
     def __rpow__(self, other: Any) -> SeriesOrIndex:
         return self._dtype_op.rpow(self, other)
 
-    def __abs__(self: T_IndexOps) -> T_IndexOps:
-        return cast(T_IndexOps, column_op(F.abs)(self))
+    def __abs__(self: IndexOpsLike) -> IndexOpsLike:
+        return cast(IndexOpsLike, column_op(F.abs)(self))
 
     # comparison operators
     def __eq__(self, other: Any) -> SeriesOrIndex:  # type: ignore[override]
@@ -408,8 +408,8 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
     __ge__ = column_op(Column.__ge__)
     __gt__ = column_op(Column.__gt__)
 
-    def __invert__(self: T_IndexOps) -> T_IndexOps:
-        return cast(T_IndexOps, column_op(Column.__invert__)(self))
+    def __invert__(self: IndexOpsLike) -> IndexOpsLike:
+        return cast(IndexOpsLike, column_op(Column.__invert__)(self))
 
     # `and`, `or`, `not` cannot be overloaded in Python,
     # so use bitwise operators as boolean operators
@@ -783,7 +783,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         """
         return 1
 
-    def astype(self: T_IndexOps, dtype: Union[str, type, Dtype]) -> T_IndexOps:
+    def astype(self: IndexOpsLike, dtype: Union[str, type, Dtype]) -> IndexOpsLike:
         """
         Cast a pandas-on-Spark object to a specified dtype ``dtype``.
 
@@ -817,9 +817,9 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         >>> ser.rename("a").to_frame().set_index("a").index.astype('int64')
         Int64Index([1, 2], dtype='int64', name='a')
         """
-        return cast(T_IndexOps, self._dtype_op.astype(cast(SeriesOrIndex, self), dtype))
+        return cast(IndexOpsLike, self._dtype_op.astype(cast(SeriesOrIndex, self), dtype))
 
-    def isin(self: T_IndexOps, values: Sequence[Any]) -> T_IndexOps:
+    def isin(self: IndexOpsLike, values: Sequence[Any]) -> IndexOpsLike:
         """
         Check whether `values` are contained in Series or Index.
 
@@ -872,7 +872,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         values = values.tolist() if isinstance(values, np.ndarray) else list(values)
         return self._with_new_scol(self.spark.column.isin(values))
 
-    def isnull(self: T_IndexOps) -> T_IndexOps:
+    def isnull(self: IndexOpsLike) -> IndexOpsLike:
         """
         Detect existing (non-missing) values.
 
@@ -908,7 +908,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
 
     isna = isnull
 
-    def notnull(self: T_IndexOps) -> T_IndexOps:
+    def notnull(self: IndexOpsLike) -> IndexOpsLike:
         """
         Detect existing (non-missing) values.
         Return a boolean same-sized object indicating if the values are not NA.
@@ -1077,7 +1077,9 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
             return ret
 
     # TODO: add frep and axis parameter
-    def shift(self: T_IndexOps, periods: int = 1, fill_value: Optional[Any] = None) -> T_IndexOps:
+    def shift(
+        self: IndexOpsLike, periods: int = 1, fill_value: Optional[Any] = None
+    ) -> IndexOpsLike:
         """
         Shift Series/Index by desired number of periods.
 
@@ -1127,8 +1129,12 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         return self._shift(periods, fill_value).spark.analyzed
 
     def _shift(
-        self: T_IndexOps, periods: int, fill_value: Any, *, part_cols: Sequence["ColumnOrName"] = ()
-    ) -> T_IndexOps:
+        self: IndexOpsLike,
+        periods: int,
+        fill_value: Any,
+        *,
+        part_cols: Sequence["ColumnOrName"] = ()
+    ) -> IndexOpsLike:
         if not isinstance(periods, int):
             raise TypeError("periods should be an int; however, got [%s]" % type(periods).__name__)
 
@@ -1400,7 +1406,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
                 ).otherwise(0)
             ).alias(colname)
 
-    def take(self: T_IndexOps, indices: Sequence[int]) -> T_IndexOps:
+    def take(self: IndexOpsLike, indices: Sequence[int]) -> IndexOpsLike:
         """
         Return the elements in the given *positional* indices along an axis.
 
@@ -1470,13 +1476,13 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         if not is_list_like(indices) or isinstance(indices, (dict, set)):
             raise TypeError("`indices` must be a list-like except dict or set")
         if isinstance(self, ps.Series):
-            return cast(T_IndexOps, self.iloc[indices])
+            return cast(IndexOpsLike, self.iloc[indices])
         else:
-            return cast(T_IndexOps, self._psdf.iloc[indices].index)
+            return cast(IndexOpsLike, self._psdf.iloc[indices].index)
 
     def factorize(
-        self: T_IndexOps, sort: bool = True, na_sentinel: Optional[int] = -1
-    ) -> Tuple[T_IndexOps, pd.Index]:
+        self: IndexOpsLike, sort: bool = True, na_sentinel: Optional[int] = -1
+    ) -> Tuple[IndexOpsLike, pd.Index]:
         """
         Encode the object as an enumerated type or categorical variable.
 

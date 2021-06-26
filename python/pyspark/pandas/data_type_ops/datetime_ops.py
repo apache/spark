@@ -25,7 +25,7 @@ from pandas.api.types import CategoricalDtype
 from pyspark.sql import functions as F
 from pyspark.sql.types import BooleanType, StringType, TimestampType
 
-from pyspark.pandas._typing import Dtype, SeriesOrIndex, T_IndexOps
+from pyspark.pandas._typing import Dtype, IndexOpsLike, SeriesOrIndex
 from pyspark.pandas.base import IndexOpsMixin
 from pyspark.pandas.data_type_ops.base import (
     DataTypeOps,
@@ -46,7 +46,7 @@ class DatetimeOps(DataTypeOps):
     def pretty_name(self) -> str:
         return "datetimes"
 
-    def sub(self, left: T_IndexOps, right: Any) -> SeriesOrIndex:
+    def sub(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         # Note that timestamp subtraction casts arguments to integer. This is to mimic pandas's
         # behaviors. pandas returns 'timedelta64[ns]' from 'datetime64[ns]'s subtraction.
         msg = (
@@ -68,7 +68,7 @@ class DatetimeOps(DataTypeOps):
         else:
             raise TypeError("datetime subtraction can only be applied to datetime series.")
 
-    def rsub(self, left: T_IndexOps, right: Any) -> SeriesOrIndex:
+    def rsub(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         # Note that timestamp subtraction casts arguments to integer. This is to mimic pandas's
         # behaviors. pandas returns 'timedelta64[ns]' from 'datetime64[ns]'s subtraction.
         msg = (
@@ -91,7 +91,7 @@ class DatetimeOps(DataTypeOps):
         """Prepare column when from_pandas."""
         return col
 
-    def astype(self, index_ops: T_IndexOps, dtype: Union[str, type, Dtype]) -> T_IndexOps:
+    def astype(self, index_ops: IndexOpsLike, dtype: Union[str, type, Dtype]) -> IndexOpsLike:
         dtype, spark_type = pandas_on_spark_type(dtype)
 
         if isinstance(dtype, CategoricalDtype):
