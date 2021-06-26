@@ -111,6 +111,8 @@ from pyspark.pandas.typedef import (
 )
 
 if TYPE_CHECKING:
+    from pyspark.sql._typing import ColumnOrName  # noqa: F401 (SPARK-34943)
+
     from pyspark.pandas.groupby import SeriesGroupBy  # noqa: F401 (SPARK-34943)
     from pyspark.pandas.indexes import Index  # noqa: F401 (SPARK-34943)
 
@@ -1898,7 +1900,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         method: Optional[str] = None,
         axis: Optional[Union[int, str]] = None,
         limit: Optional[int] = None,
-        part_cols: Sequence[Union[str, Column]] = (),
+        part_cols: Sequence["ColumnOrName"] = (),
     ) -> "Series":
         axis = validate_axis(axis)
         if axis != 0:
@@ -3545,7 +3547,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         method: str = "average",
         ascending: bool = True,
         *,
-        part_cols: Sequence[Union[str, Column]] = ()
+        part_cols: Sequence["ColumnOrName"] = ()
     ) -> "Series":
         if method not in ["average", "min", "max", "first", "dense"]:
             msg = "method must be one of 'average', 'min', 'max', 'first', 'dense'"
@@ -3684,7 +3686,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         """
         return self._diff(periods).spark.analyzed
 
-    def _diff(self, periods: int, *, part_cols: Sequence[Union[str, Column]] = ()) -> "Series":
+    def _diff(self, periods: int, *, part_cols: Sequence["ColumnOrName"] = ()) -> "Series":
         if not isinstance(periods, int):
             raise TypeError("periods should be an int; however, got [%s]" % type(periods).__name__)
         window = (
@@ -6012,7 +6014,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         self,
         func: Callable[[Column], Column],
         skipna: bool,
-        part_cols: Sequence[Union[str, Column]] = (),
+        part_cols: Sequence["ColumnOrName"] = (),
         ascending: bool = True,
     ) -> "Series":
         # This is used to cummin, cummax, cumsum, etc.
@@ -6101,7 +6103,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         return self._with_new_scol(scol)
 
-    def _cumsum(self, skipna: bool, part_cols: Sequence[Union[str, Column]] = ()) -> "Series":
+    def _cumsum(self, skipna: bool, part_cols: Sequence["ColumnOrName"] = ()) -> "Series":
         psser = self
         if isinstance(psser.spark.data_type, BooleanType):
             psser = psser.spark.transform(lambda scol: scol.cast(LongType()))
@@ -6114,7 +6116,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             )
         return psser._cum(F.sum, skipna, part_cols)
 
-    def _cumprod(self, skipna: bool, part_cols: Sequence[Union[str, Column]] = ()) -> "Series":
+    def _cumprod(self, skipna: bool, part_cols: Sequence["ColumnOrName"] = ()) -> "Series":
         if isinstance(self.spark.data_type, BooleanType):
             scol = self._cum(
                 lambda scol: F.min(F.coalesce(scol, F.lit(True))), skipna, part_cols

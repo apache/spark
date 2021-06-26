@@ -55,6 +55,8 @@ from pyspark.pandas.utils import (
 from pyspark.pandas.frame import DataFrame
 
 if TYPE_CHECKING:
+    from pyspark.sql._typing import ColumnOrName  # noqa: F401 (SPARK-34943)
+
     from pyspark.pandas.data_type_ops.base import DataTypeOps  # noqa: F401 (SPARK-34943)
     from pyspark.pandas.series import Series  # noqa: F401 (SPARK-34943)
 
@@ -1125,11 +1127,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         return self._shift(periods, fill_value).spark.analyzed
 
     def _shift(
-        self: T_IndexOps,
-        periods: int,
-        fill_value: Any,
-        *,
-        part_cols: Sequence[Union[str, Column]] = ()
+        self: T_IndexOps, periods: int, fill_value: Any, *, part_cols: Sequence["ColumnOrName"] = ()
     ) -> T_IndexOps:
         if not isinstance(periods, int):
             raise TypeError("periods should be an int; however, got [%s]" % type(periods).__name__)
