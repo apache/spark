@@ -43,7 +43,6 @@ from typing import (
     Sequence,
     Tuple,
     Type,
-    TypeVar,
     Union,
     cast,
     no_type_check,
@@ -84,6 +83,7 @@ from pyspark.sql.types import (  # noqa: F401 (SPARK-34943)
 from pyspark.sql.window import Window
 
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
+from pyspark.pandas._typing import Dtype, Scalar, T
 from pyspark.pandas.accessors import PandasOnSparkFrameMethods
 from pyspark.pandas.config import option_context, get_option
 from pyspark.pandas.spark.accessors import SparkFrameMethods, CachedSparkFrameMethods
@@ -121,9 +121,7 @@ from pyspark.pandas.typedef import (
     infer_return_type,
     spark_type_to_pandas_dtype,
     DataFrameType,
-    Dtype,
     SeriesType,
-    Scalar,
     ScalarType,
 )
 from pyspark.pandas.plot import PandasOnSparkPlotAccessor
@@ -340,8 +338,6 @@ circle        1.0  2.348543e+108
 triangle      8.0   1.532496e+54
 rectangle    16.0  2.348543e+108
 """
-
-T = TypeVar("T")
 
 
 def _create_tuple_for_frame_type(params: Any) -> object:

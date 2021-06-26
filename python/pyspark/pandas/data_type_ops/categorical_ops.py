@@ -21,8 +21,9 @@ from typing import Union
 import pandas as pd
 from pandas.api.types import CategoricalDtype
 
-from pyspark.pandas.data_type_ops.base import DataTypeOps, T_IndexOps
-from pyspark.pandas.typedef import Dtype, pandas_on_spark_type
+from pyspark.pandas._typing import Dtype, T_IndexOps
+from pyspark.pandas.data_type_ops.base import DataTypeOps
+from pyspark.pandas.typedef import pandas_on_spark_type
 from pyspark.sql import functions as F
 
 

@@ -23,18 +23,17 @@ from pandas.api.types import CategoricalDtype
 from pyspark.sql import functions as F
 from pyspark.sql.types import IntegralType, StringType
 
+from pyspark.pandas._typing import Dtype, IndexOpsLike, T_IndexOps
 from pyspark.pandas.base import column_op, IndexOpsMixin
 from pyspark.pandas.data_type_ops.base import (
     DataTypeOps,
-    IndexOpsLike,
-    T_IndexOps,
     _as_categorical_type,
     _as_other_type,
     _as_string_type,
 )
 from pyspark.pandas.internal import InternalField
 from pyspark.pandas.spark import functions as SF
-from pyspark.pandas.typedef import Dtype, extension_dtypes, pandas_on_spark_type
+from pyspark.pandas.typedef import extension_dtypes, pandas_on_spark_type
 from pyspark.sql.types import BooleanType
 
 

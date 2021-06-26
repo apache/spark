@@ -21,7 +21,7 @@ Base and utility classes for pandas-on-Spark objects.
 from abc import ABCMeta, abstractmethod
 from functools import wraps, partial
 from itertools import chain
-from typing import Any, Callable, Optional, Sequence, Tuple, TypeVar, Union, cast, TYPE_CHECKING
+from typing import Any, Callable, Optional, Sequence, Tuple, Union, cast, TYPE_CHECKING
 
 import numpy as np
 import pandas as pd  # noqa: F401
@@ -35,6 +35,7 @@ from pyspark.sql.types import (
 )
 
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
+from pyspark.pandas._typing import Dtype, IndexOpsLike, T_IndexOps
 from pyspark.pandas.config import get_option, option_context
 from pyspark.pandas.internal import (
     InternalField,
@@ -43,10 +44,7 @@ from pyspark.pandas.internal import (
     SPARK_DEFAULT_INDEX_NAME,
 )
 from pyspark.pandas.spark.accessors import SparkIndexOpsMethods
-from pyspark.pandas.typedef import (
-    Dtype,
-    extension_dtypes,
-)
+from pyspark.pandas.typedef import extension_dtypes
 from pyspark.pandas.utils import (
     combine_frames,
     same_anchor,
@@ -58,12 +56,7 @@ from pyspark.pandas.frame import DataFrame
 
 if TYPE_CHECKING:
     from pyspark.pandas.data_type_ops.base import DataTypeOps  # noqa: F401 (SPARK-34943)
-    from pyspark.pandas.indexes import Index  # noqa: F401 (SPARK-34943)
     from pyspark.pandas.series import Series  # noqa: F401 (SPARK-34943)
-
-
-T_IndexOps = TypeVar("T_IndexOps", bound="IndexOpsMixin")
-IndexOpsLike = Union["Series", "Index"]
 
 
 def should_alignment_for_column_op(self: IndexOpsLike, other: IndexOpsLike) -> bool:

@@ -36,7 +36,6 @@ from typing import (
     Sequence,
     Tuple,
     Type,
-    TypeVar,
     Union,
     cast,
     no_type_check,
@@ -68,6 +67,7 @@ from pyspark.sql.types import (
 from pyspark.sql.window import Window
 
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
+from pyspark.pandas._typing import Dtype, Scalar, T
 from pyspark.pandas.accessors import PandasOnSparkSeriesMethods
 from pyspark.pandas.categorical import CategoricalAccessor
 from pyspark.pandas.config import get_option
@@ -106,9 +106,7 @@ from pyspark.pandas.strings import StringMethods
 from pyspark.pandas.typedef import (
     infer_return_type,
     spark_type_to_pandas_dtype,
-    Dtype,
     ScalarType,
-    Scalar,
     SeriesType,
 )
 
@@ -337,8 +335,6 @@ c    0.0
 d    NaN
 dtype: float64
 """
-
-T = TypeVar("T")
 
 # Needed to disambiguate Series.str and str type
 str_type = str

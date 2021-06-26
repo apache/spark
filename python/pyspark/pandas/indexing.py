@@ -32,6 +32,7 @@ from pyspark.sql.utils import AnalysisException
 import numpy as np
 
 from pyspark import pandas as ps  # noqa: F401
+from pyspark.pandas._typing import Scalar
 from pyspark.pandas.internal import (
     InternalField,
     InternalFrame,
@@ -39,7 +40,6 @@ from pyspark.pandas.internal import (
     SPARK_DEFAULT_SERIES_NAME,
 )
 from pyspark.pandas.exceptions import SparkPandasIndexingError, SparkPandasNotImplementedError
-from pyspark.pandas.typedef.typehints import Scalar
 from pyspark.pandas.utils import (
     is_name_like_tuple,
     is_name_like_value,

@@ -25,17 +25,16 @@ from pandas.api.types import CategoricalDtype
 from pyspark.sql import functions as F
 from pyspark.sql.types import BooleanType, StringType, TimestampType
 
+from pyspark.pandas._typing import Dtype, IndexOpsLike, T_IndexOps
 from pyspark.pandas.base import IndexOpsMixin
 from pyspark.pandas.data_type_ops.base import (
     DataTypeOps,
-    IndexOpsLike,
-    T_IndexOps,
     _as_bool_type,
     _as_categorical_type,
     _as_other_type,
 )
 from pyspark.pandas.internal import InternalField
-from pyspark.pandas.typedef import as_spark_type, Dtype, extension_dtypes, pandas_on_spark_type
+from pyspark.pandas.typedef import as_spark_type, extension_dtypes, pandas_on_spark_type
 
 
 class DatetimeOps(DataTypeOps):

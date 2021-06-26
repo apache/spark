@@ -22,11 +22,10 @@ import numpy as np
 import pandas as pd
 from pandas.api.types import CategoricalDtype
 
+from pyspark.pandas._typing import Dtype, IndexOpsLike, T_IndexOps
 from pyspark.pandas.base import column_op, IndexOpsMixin, numpy_column_op
 from pyspark.pandas.data_type_ops.base import (
     DataTypeOps,
-    IndexOpsLike,
-    T_IndexOps,
     is_valid_operand_for_numeric_arithmetic,
     transform_boolean_operand_to_numeric,
     _as_bool_type,
@@ -36,7 +35,7 @@ from pyspark.pandas.data_type_ops.base import (
 )
 from pyspark.pandas.internal import InternalField
 from pyspark.pandas.spark import functions as SF
-from pyspark.pandas.typedef import Dtype, extension_dtypes, pandas_on_spark_type
+from pyspark.pandas.typedef import extension_dtypes, pandas_on_spark_type
 from pyspark.sql import functions as F
 from pyspark.sql.column import Column
 from pyspark.sql.types import (

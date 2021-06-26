@@ -19,15 +19,15 @@ from typing import Union
 
 from pandas.api.types import CategoricalDtype
 
+from pyspark.pandas._typing import Dtype, T_IndexOps
 from pyspark.pandas.data_type_ops.base import (
     DataTypeOps,
-    T_IndexOps,
     _as_bool_type,
     _as_categorical_type,
     _as_other_type,
     _as_string_type,
 )
-from pyspark.pandas.typedef import Dtype, pandas_on_spark_type
+from pyspark.pandas.typedef import pandas_on_spark_type
 from pyspark.sql.types import BooleanType, StringType
 
 

@@ -20,12 +20,13 @@ Spark related features. Usually, the features here are missing in pandas
 but Spark has it.
 """
 from abc import ABCMeta, abstractmethod
-from typing import TYPE_CHECKING, Callable, Generic, List, Optional, TypeVar, Union, cast
+from typing import TYPE_CHECKING, Callable, Generic, List, Optional, Union, cast
 
 from pyspark import StorageLevel
 from pyspark.sql import Column, DataFrame as SparkDataFrame
 from pyspark.sql.types import DataType, StructType
 
+from pyspark.pandas._typing import T_IndexOps
 from pyspark.pandas.internal import InternalField
 
 if TYPE_CHECKING:
@@ -33,11 +34,7 @@ if TYPE_CHECKING:
     from pyspark._typing import PrimitiveType  # noqa: F401 (SPARK-34943)
 
     import pyspark.pandas as ps  # noqa: F401 (SPARK-34943)
-    from pyspark.pandas.base import IndexOpsMixin  # noqa: F401 (SPARK-34943)
     from pyspark.pandas.frame import CachedDataFrame  # noqa: F401 (SPARK-34943)
-
-
-T_IndexOps = TypeVar("T_IndexOps", bound="IndexOpsMixin")
 
 
 class SparkIndexOpsMethods(Generic[T_IndexOps], metaclass=ABCMeta):

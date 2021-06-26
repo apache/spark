@@ -22,7 +22,6 @@ from typing import (  # noqa: F401 (SPARK-34943)
     Generic,
     List,
     Optional,
-    TypeVar,
 )
 
 from pyspark.sql import Window
@@ -36,17 +35,12 @@ from pyspark.pandas.missing.window import (
 
 # For running doctests and reference resolution in PyCharm.
 from pyspark import pandas as ps  # noqa: F401
-
+from pyspark.pandas._typing import T_Frame
+from pyspark.pandas.groupby import GroupBy
 from pyspark.pandas.internal import NATURAL_ORDER_COLUMN_NAME, SPARK_INDEX_NAME_FORMAT
 from pyspark.pandas.utils import scol_for
 from pyspark.sql.column import Column
 from pyspark.sql.window import WindowSpec
-
-from pyspark.pandas.generic import Frame
-from pyspark.pandas.groupby import GroupBy
-
-
-T_Frame = TypeVar("T_Frame", bound=Frame)
 
 
 class RollingAndExpanding(Generic[T_Frame], metaclass=ABCMeta):

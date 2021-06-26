@@ -18,7 +18,7 @@
 import numbers
 from abc import ABCMeta
 from itertools import chain
-from typing import Any, Optional, TypeVar, Union, TYPE_CHECKING
+from typing import Any, Optional, Union
 
 import numpy as np
 import pandas as pd
@@ -42,7 +42,8 @@ from pyspark.sql.types import (
     TimestampType,
     UserDefinedType,
 )
-from pyspark.pandas.typedef import Dtype, extension_dtypes
+from pyspark.pandas._typing import Dtype, IndexOpsLike, T_IndexOps
+from pyspark.pandas.typedef import extension_dtypes
 from pyspark.pandas.typedef.typehints import (
     extension_dtypes_available,
     extension_float_dtypes_available,
@@ -57,15 +58,6 @@ if extension_float_dtypes_available:
 
 if extension_object_dtypes_available:
     from pandas import BooleanDtype, StringDtype
-
-if TYPE_CHECKING:
-    from pyspark.pandas.base import IndexOpsMixin  # noqa: F401 (SPARK-34943)
-    from pyspark.pandas.indexes import Index  # noqa: F401 (SPARK-34943)
-    from pyspark.pandas.series import Series  # noqa: F401 (SPARK-34943)
-
-
-T_IndexOps = TypeVar("T_IndexOps", bound="IndexOpsMixin")
-IndexOpsLike = Union["Series", "Index"]
 
 
 def is_valid_operand_for_numeric_arithmetic(operand: Any, *, allow_bool: bool = True) -> bool:

@@ -29,6 +29,7 @@ from pyspark.sql.types import DataType
 
 # For running doctests and reference resolution in PyCharm.
 from pyspark import pandas as ps  # noqa: F401
+from pyspark.pandas._typing import Scalar
 from pyspark.pandas.exceptions import PandasNotImplementedError
 from pyspark.pandas.frame import DataFrame
 from pyspark.pandas.indexes.base import Index
@@ -47,7 +48,6 @@ from pyspark.pandas.internal import (
     NATURAL_ORDER_COLUMN_NAME,
     SPARK_INDEX_NAME_FORMAT,
 )
-from pyspark.pandas.typedef import Scalar
 
 
 class MultiIndex(Index):

@@ -41,6 +41,7 @@ from pyspark.sql import functions as F
 from pyspark.sql.types import FractionalType, IntegralType, TimestampType
 
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
+from pyspark.pandas._typing import Dtype, Scalar
 from pyspark.pandas.config import get_option, option_context
 from pyspark.pandas.base import IndexOpsMixin
 from pyspark.pandas.frame import DataFrame
@@ -64,7 +65,6 @@ from pyspark.pandas.internal import (
     SPARK_DEFAULT_INDEX_NAME,
     SPARK_INDEX_NAME_FORMAT,
 )
-from pyspark.pandas.typedef import Dtype, Scalar
 
 
 class Index(IndexOpsMixin):

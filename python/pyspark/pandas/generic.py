@@ -31,7 +31,6 @@ from typing import (
     Optional,
     NoReturn,
     Tuple,
-    TypeVar,
     Union,
     TYPE_CHECKING,
     cast,
@@ -54,9 +53,10 @@ from pyspark.sql.types import (
 )
 
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
+from pyspark.pandas._typing import Dtype, Scalar, T_Frame
 from pyspark.pandas.indexing import AtIndexer, iAtIndexer, iLocIndexer, LocIndexer
 from pyspark.pandas.internal import InternalFrame
-from pyspark.pandas.typedef import Dtype, Scalar, spark_type_to_pandas_dtype
+from pyspark.pandas.typedef import spark_type_to_pandas_dtype
 from pyspark.pandas.utils import (
     is_name_like_tuple,
     is_name_like_value,
@@ -76,7 +76,6 @@ if TYPE_CHECKING:
     from pyspark.pandas.window import Rolling, Expanding  # noqa: F401 (SPARK-34943)
 
 
-T_Frame = TypeVar("T_Frame", bound="Frame")
 bool_type = bool
 
 

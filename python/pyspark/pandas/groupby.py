@@ -38,7 +38,6 @@ from typing import (
     Sequence,
     Set,
     Tuple,
-    TypeVar,
     Union,
     cast,
     TYPE_CHECKING,
@@ -59,9 +58,9 @@ from pyspark.sql.types import (  # noqa: F401
 )
 
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
+from pyspark.pandas._typing import T_Frame
 from pyspark.pandas.typedef import infer_return_type, DataFrameType, ScalarType, SeriesType
 from pyspark.pandas.frame import DataFrame
-from pyspark.pandas.generic import Frame
 from pyspark.pandas.internal import (
     InternalField,
     InternalFrame,
@@ -94,8 +93,6 @@ if TYPE_CHECKING:
 
 # to keep it the same as pandas
 NamedAgg = namedtuple("NamedAgg", ["column", "aggfunc"])
-
-T_Frame = TypeVar("T_Frame", bound=Frame)
 
 
 class GroupBy(Generic[T_Frame], metaclass=ABCMeta):

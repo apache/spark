@@ -37,7 +37,6 @@ from typing import (  # noqa: F401
 import numpy as np
 import pandas as pd
 from pandas.api.types import CategoricalDtype, pandas_dtype
-from pandas.api.extensions import ExtensionDtype
 
 try:
     from pandas import Int8Dtype, Int16Dtype, Int32Dtype, Int64Dtype
@@ -72,15 +71,8 @@ import pyspark.sql.types as types
 from pyspark.sql.pandas.types import to_arrow_type, from_arrow_type
 
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
+from pyspark.pandas._typing import Dtype, T
 from pyspark.pandas.typedef.string_typehints import resolve_string_type_hint
-
-T = TypeVar("T")
-
-Scalar = Union[
-    int, float, bool, str, bytes, decimal.Decimal, datetime.date, datetime.datetime, None
-]
-
-Dtype = Union[np.dtype, ExtensionDtype]
 
 
 # A column of data, with the data type.
