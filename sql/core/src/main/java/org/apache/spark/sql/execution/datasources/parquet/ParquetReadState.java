@@ -69,15 +69,14 @@ final class ParquetReadState {
 
     while (rowIndexes.hasNext()) {
       long idx = rowIndexes.nextLong();
-      if (previous == Long.MIN_VALUE) {
-        currentStart = previous = idx;
+      if (currentStart == Long.MIN_VALUE) {
+        currentStart = idx;
       } else if (previous + 1 != idx) {
         RowRange range = new RowRange(currentStart, previous);
         rowRanges.add(range);
-        currentStart = previous = idx;
-      } else {
-        previous = idx;
+        currentStart = idx;
       }
+      previous = idx;
     }
 
     if (previous != Long.MIN_VALUE) {
@@ -133,12 +132,10 @@ final class ParquetReadState {
   void nextRange() {
     if (rowRanges == null) {
       currentRange = MAX_ROW_RANGE;
+    } else if (!rowRanges.hasNext()) {
+      currentRange = MIN_ROW_RANGE;
     } else {
-      if (!rowRanges.hasNext()) {
-        currentRange = MIN_ROW_RANGE;
-      } else {
-        currentRange = rowRanges.next();
-      }
+      currentRange = rowRanges.next();
     }
   }
 
@@ -146,8 +143,8 @@ final class ParquetReadState {
    * Helper struct to represent a range of row indexes `[start, end]`.
    */
   private static class RowRange {
-    long start;
-    long end;
+    final long start;
+    final long end;
 
     RowRange(long start, long end) {
       this.start = start;
