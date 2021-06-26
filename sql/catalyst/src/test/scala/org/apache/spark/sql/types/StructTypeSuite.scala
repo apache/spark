@@ -18,8 +18,11 @@
 package org.apache.spark.sql.types
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.{DayTimeIntervalType => DT}
+import org.apache.spark.sql.types.{YearMonthIntervalType => YM}
 import org.apache.spark.sql.types.StructType.fromDDL
 
 class StructTypeSuite extends SparkFunSuite with SQLHelper {
@@ -248,5 +251,26 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
 
     val dayTimeInterval = "`dti` INTERVAL DAY TO SECOND"
     assert(fromDDL(dayTimeInterval).toDDL === dayTimeInterval)
+  }
+
+  test("SPARK-35774: Prohibit the case start/end are the same with unit-to-unit interval syntax") {
+    def checkIntervalDDL(start: Byte, end: Byte, fieldToString: Byte => String): Unit = {
+      val startUnit = fieldToString(start)
+      val endUnit = fieldToString(end)
+      if (start < end) {
+        fromDDL(s"x INTERVAL $startUnit TO $endUnit")
+      } else {
+        intercept[ParseException] {
+          fromDDL(s"x INTERVAL $startUnit TO $endUnit")
+        }
+      }
+    }
+
+    for (start <- YM.yearMonthFields; end <- YM.yearMonthFields) {
+      checkIntervalDDL(start, end, YM.fieldToString)
+    }
+    for (start <- DT.dayTimeFields; end <- DT.dayTimeFields) {
+      checkIntervalDDL(start, end, DT.fieldToString)
+    }
   }
 }

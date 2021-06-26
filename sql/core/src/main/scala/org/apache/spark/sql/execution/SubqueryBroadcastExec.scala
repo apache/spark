@@ -52,7 +52,7 @@ case class SubqueryBroadcastExec(
     val key = buildKeys(index)
     val name = key match {
       case n: NamedExpression => n.name
-      case Cast(n: NamedExpression, _, _) => n.name
+      case Cast(n: NamedExpression, _, _, _) => n.name
       case _ => "key"
     }
     Seq(AttributeReference(name, key.dataType, key.nullable)())

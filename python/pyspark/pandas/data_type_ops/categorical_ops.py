@@ -16,19 +16,14 @@
 #
 
 from itertools import chain
-from typing import cast, TYPE_CHECKING, Union
+from typing import Union
 
 import pandas as pd
 from pandas.api.types import CategoricalDtype
 
-import pyspark.pandas as ps
-from pyspark.pandas.data_type_ops.base import DataTypeOps
+from pyspark.pandas.data_type_ops.base import DataTypeOps, T_IndexOps
 from pyspark.pandas.typedef import Dtype, pandas_on_spark_type
 from pyspark.sql import functions as F
-
-if TYPE_CHECKING:
-    from pyspark.pandas.indexes import Index  # noqa: F401 (SPARK-34943)
-    from pyspark.pandas.series import Series  # noqa: F401 (SPARK-34943)
 
 
 class CategoricalOps(DataTypeOps):
@@ -50,13 +45,11 @@ class CategoricalOps(DataTypeOps):
         """Prepare column when from_pandas."""
         return col.cat.codes
 
-    def astype(
-        self, index_ops: Union["Index", "Series"], dtype: Union[str, type, Dtype]
-    ) -> Union["Index", "Series"]:
+    def astype(self, index_ops: T_IndexOps, dtype: Union[str, type, Dtype]) -> T_IndexOps:
         dtype, spark_type = pandas_on_spark_type(dtype)
 
         if isinstance(dtype, CategoricalDtype) and dtype.categories is None:
-            return cast(Union[ps.Index, ps.Series], index_ops).copy()
+            return index_ops.copy()
 
         categories = index_ops.dtype.categories
         if len(categories) == 0:

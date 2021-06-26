@@ -103,7 +103,8 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
       val msg = intercept[AnalysisException] {
         sql(s"ALTER TABLE $catalogName.alt_table DROP COLUMN bad_column")
       }.getMessage
-      assert(msg.contains("Cannot delete missing field bad_column in alt_table schema"))
+      assert(
+        msg.contains(s"Cannot delete missing field bad_column in $catalogName.alt_table schema"))
     }
     // Drop a column from a not existing table
     val msg = intercept[AnalysisException] {

@@ -247,6 +247,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 cannot resolve 'make_interval(0, 0, 0, 0, 0, 0, 1234567890123456789L)' due to data type mismatch: argument 7 requires decimal(18,6) type, however, '1234567890123456789L' is of bigint type.; line 1 pos 7
 
+
 -- !query
 select make_dt_interval(1)
 -- !query schema
@@ -294,6 +295,7 @@ struct<>
 -- !query output
 java.lang.ArithmeticException
 long overflow
+
 
 -- !query
 select make_ym_interval(1)

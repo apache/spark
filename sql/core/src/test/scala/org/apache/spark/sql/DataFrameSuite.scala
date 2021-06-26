@@ -2907,6 +2907,13 @@ class DataFrameSuite extends QueryTest
       }
     }
   }
+
+  test("isLocal should consider CommandResult and LocalRelation") {
+    val df1 = sql("SHOW TABLES")
+    assert(df1.isLocal)
+    val df2 = (1 to 10).toDF()
+    assert(df2.isLocal)
+  }
 }
 
 case class GroupByKey(a: Int, b: Int)

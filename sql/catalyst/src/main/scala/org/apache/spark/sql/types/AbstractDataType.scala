@@ -88,6 +88,14 @@ private[sql] object TypeCollection {
     DayTimeIntervalType,
     YearMonthIntervalType)
 
+  /**
+   * All the supported timestamp data types
+   */
+  val AllTimestampTypes = TypeCollection(
+    TimestampType,
+    TimestampWithoutTZType
+  )
+
   def apply(types: AbstractDataType*): TypeCollection = new TypeCollection(types)
 
   def unapply(typ: AbstractDataType): Option[Seq[AbstractDataType]] = typ match {
