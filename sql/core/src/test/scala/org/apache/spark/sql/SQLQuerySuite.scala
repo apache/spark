@@ -4044,7 +4044,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
   }
 
   test("SPARK-35886: CodeGenerator.getLocalInputVariableValues should handle " +
-    "matched subQuery but not VariableValue") {
+    "expression match SubExprEliminationState but not VariableValue") {
     withTable("tbl") {
       sql(
         """
