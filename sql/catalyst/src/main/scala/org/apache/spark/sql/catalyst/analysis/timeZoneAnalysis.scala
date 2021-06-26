@@ -20,7 +20,7 @@ import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.expressions.{Cast, Expression, ListQuery, TimeZoneAwareExpression}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.AlwaysProcess
+import org.apache.spark.sql.catalyst.trees.TreePattern.{LIST_SUBQUERY, TIME_ZONE_AWARE_EXPRESSION}
 import org.apache.spark.sql.types.DataType
 
 /**
@@ -39,7 +39,9 @@ object ResolveTimeZone extends Rule[LogicalPlan] {
   }
 
   override def apply(plan: LogicalPlan): LogicalPlan =
-    plan.resolveExpressionsWithPruning(AlwaysProcess.fn, ruleId)(transformTimeZoneExprs)
+    plan.resolveExpressionsWithPruning(
+      _.containsAnyPattern(LIST_SUBQUERY, TIME_ZONE_AWARE_EXPRESSION), ruleId
+    )(transformTimeZoneExprs)
 
   def resolveTimeZones(e: Expression): Expression = e.transform(transformTimeZoneExprs)
 }

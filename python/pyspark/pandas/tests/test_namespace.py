@@ -20,7 +20,7 @@ import itertools
 import pandas as pd
 
 from pyspark import pandas as ps
-from pyspark.pandas.namespace import _get_index_map
+from pyspark.pandas.namespace import _get_index_map, read_delta
 from pyspark.pandas.utils import spark_column_equals
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
@@ -266,7 +266,10 @@ class NamespaceTest(PandasOnSparkTestCase, SQLTestUtils):
 
         objs = [
             ([psdf1.A, psdf1.A.rename("B")], [pdf1.A, pdf1.A.rename("B")]),
-            ([psdf3[("X", "A")], psdf3[("X", "B")]], [pdf3[("X", "A")], pdf3[("X", "B")]],),
+            (
+                [psdf3[("X", "A")], psdf3[("X", "B")]],
+                [pdf3[("X", "A")], pdf3[("X", "B")]],
+            ),
             (
                 [psdf3[("X", "A")], psdf3[("X", "B")].rename("ABC")],
                 [pdf3[("X", "A")], pdf3[("X", "B")].rename("ABC")],
@@ -325,6 +328,13 @@ class NamespaceTest(PandasOnSparkTestCase, SQLTestUtils):
         check(_get_index_map(sdf, ["year", "month"]), (["year", "month"], [("year",), ("month",)]))
 
         self.assertRaises(KeyError, lambda: _get_index_map(sdf, ["year", "hour"]))
+
+    def test_read_delta_with_wrong_input(self):
+        self.assertRaisesRegex(
+            ValueError,
+            "version and timestamp cannot be used together",
+            lambda: read_delta("fake_path", version="0", timestamp="2021-06-22"),
+        )
 
 
 if __name__ == "__main__":

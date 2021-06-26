@@ -73,7 +73,7 @@ trait DateTimeFormatterHelper {
     }
   }
 
-  private def toLocalTime(accessor: TemporalAccessor): LocalTime = {
+  protected def toLocalTime(accessor: TemporalAccessor): LocalTime = {
     val localTime = accessor.query(TemporalQueries.localTime())
     // If all the time fields are specified, return the local time directly.
     if (localTime != null) return localTime
@@ -184,7 +184,12 @@ trait DateTimeFormatterHelper {
       } catch {
         case _: Throwable => throw e
       }
-      throw QueryExecutionErrors.failToRecognizePatternInDateTimeFormatterError(pattern, e)
+      throw QueryExecutionErrors.failToRecognizePatternAfterUpgradeError(pattern, e)
+  }
+
+  protected def checkInvalidPattern(pattern: String): PartialFunction[Throwable, Nothing] = {
+    case e: IllegalArgumentException =>
+      throw QueryExecutionErrors.failToRecognizePatternError(pattern, e)
   }
 }
 

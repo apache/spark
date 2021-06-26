@@ -27,7 +27,7 @@ import org.apache.hadoop.conf.Configuration
 import org.json4s.JsonAST.JValue
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.{SPARK_VERSION, SparkConf}
+import org.apache.spark.{SPARK_VERSION, SparkConf, SparkContext}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.history.EventLogFileWriter
 import org.apache.spark.executor.ExecutorMetrics
@@ -250,6 +250,9 @@ private[spark] class EventLoggingListener(
 
   override def onExecutorMetricsUpdate(event: SparkListenerExecutorMetricsUpdate): Unit = {
     if (shouldLogStageExecutorMetrics) {
+      if (event.execId == SparkContext.DRIVER_IDENTIFIER) {
+        logEvent(event)
+      }
       event.executorUpdates.foreach { case (stageKey1, newPeaks) =>
         liveStageExecutorMetrics.foreach { case (stageKey2, metricsPerExecutor) =>
           // If the update came from the driver, stageKey1 will be the dummy key (-1, -1),

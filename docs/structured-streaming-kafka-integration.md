@@ -369,7 +369,7 @@ The following configurations are optional:
   <td>streaming and batch</td>
   <td>The start point of timestamp when a query is started, a string specifying a starting timestamp for
   all partitions in topics being subscribed. Please refer the details on timestamp offset options below. If Kafka doesn't return the matched offset,
-  the query will fail immediately to prevent unintended read from such partition. (This is a kind of limitation as of now, and will be addressed in near future.)<p/>
+  the behavior will follow to the value of the option <code>startingOffsetsByTimestampStrategy</code><p/>
   <p/>
   Note1: <code>startingTimestamp</code> takes precedence over <code>startingOffsetsByTimestamp</code> and <code>startingOffsets</code>.<p/>
   Note2: For streaming queries, this only applies when a new query is started, and that resuming will
@@ -385,7 +385,7 @@ The following configurations are optional:
   <td>streaming and batch</td>
   <td>The start point of timestamp when a query is started, a json string specifying a starting timestamp for
   each TopicPartition. Please refer the details on timestamp offset options below. If Kafka doesn't return the matched offset,
-  the query will fail immediately to prevent unintended read from such partition. (This is a kind of limitation as of now, and will be addressed in near future.)<p/>
+  the behavior will follow to the value of the option <code>startingOffsetsByTimestampStrategy</code><p/>
   <p/>
   Note1: <code>startingOffsetsByTimestamp</code> takes precedence over <code>startingOffsets</code>.<p/>
   Note2: For streaming queries, this only applies when a new query is started, and that resuming will
@@ -481,6 +481,21 @@ The following configurations are optional:
   <td>Rate limit on maximum number of offsets processed per trigger interval. The specified total number of offsets will be proportionally split across topicPartitions of different volume.</td>
 </tr>
 <tr>
+  <td>minOffsetsPerTrigger</td>
+  <td>long</td>
+  <td>none</td>
+  <td>streaming and batch</td>
+  <td>Minimum number of offsets to be processed per trigger interval. The specified total number of offsets will
+   be proportionally split across topicPartitions of different volume.</td>
+</tr>
+<tr>
+  <td>maxTriggerDelay</td>
+  <td>time with units</td>
+  <td>15m</td>
+  <td>streaming and batch</td>
+  <td>Maximum amount of time for which trigger can be delayed between two triggers provided some data is available from the source.</td>
+</tr>
+<tr>
   <td>minPartitions</td>
   <td>int</td>
   <td>none</td>
@@ -523,6 +538,16 @@ The following configurations are optional:
   <td>false</td>
   <td>streaming and batch</td>
   <td>Whether to include the Kafka headers in the row.</td>
+</tr>
+<tr>
+  <td>startingOffsetsByTimestampStrategy</td>
+  <td>"error" or "latest"</td>
+  <td>"error"</td>
+  <td>streaming and batch</td>
+  <td>Defines the behavior when the starting offset by timestamp is specified (either global or per partition), and Kafka doesn't return the matched offset.<p/>
+  <p/>
+  "error": fail the query.<p/>
+  "latest": set the offset to the latest, so that further new records in the partition are being read.<p/></td>
 </tr>
 </table>
 

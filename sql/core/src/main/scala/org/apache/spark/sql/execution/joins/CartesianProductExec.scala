@@ -80,8 +80,8 @@ case class CartesianProductExec(
     val pair = new UnsafeCartesianRDD(
       leftResults,
       rightResults,
-      sqlContext.conf.cartesianProductExecBufferInMemoryThreshold,
-      sqlContext.conf.cartesianProductExecBufferSpillThreshold)
+      conf.cartesianProductExecBufferInMemoryThreshold,
+      conf.cartesianProductExecBufferSpillThreshold)
     pair.mapPartitionsWithIndexInternal { (index, iter) =>
       val joiner = GenerateUnsafeRowJoiner.create(left.schema, right.schema)
       val filtered = if (condition.isDefined) {

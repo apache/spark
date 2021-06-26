@@ -421,6 +421,9 @@ private[spark] object SparkHadoopUtil extends Logging {
    * Returns a Configuration object with Spark configuration applied on top. Unlike
    * the instance method, this will always return a Configuration instance, and not a
    * cluster manager-specific type.
+   * The configuration will load all default values set in core-default.xml,
+   * and if found on the classpath, those of core-site.xml.
+   * This is done before the spark overrides are applied.
    */
   private[spark] def newConfiguration(conf: SparkConf): Configuration = {
     val hadoopConf = new Configuration()
@@ -482,6 +485,22 @@ private[spark] object SparkHadoopUtil extends Logging {
     }
     if (conf.getOption("spark.hadoop.mapreduce.fileoutputcommitter.algorithm.version").isEmpty) {
       hadoopConf.set("mapreduce.fileoutputcommitter.algorithm.version", "1")
+    }
+    // Since Hadoop 3.3.1, HADOOP-17597 starts to throw exceptions by default
+    if (conf.getOption("spark.hadoop.fs.s3a.downgrade.syncable.exceptions").isEmpty) {
+      hadoopConf.set("fs.s3a.downgrade.syncable.exceptions", "true")
+    }
+    // In Hadoop 3.3.1, AWS region handling with the default "" endpoint only works
+    // in EC2 deployments or when the AWS CLI is installed.
+    // The workaround is to set the name of the S3 endpoint explicitly,
+    // if not already set. See HADOOP-17771.
+    // This change is harmless on older versions and compatible with
+    // later Hadoop releases
+    if (hadoopConf.get("fs.s3a.endpoint", "").isEmpty &&
+      hadoopConf.get("fs.s3a.endpoint.region") == null) {
+      // set to US central endpoint which can also connect to buckets
+      // in other regions at the expense of a HEAD request during fs creation
+      hadoopConf.set("fs.s3a.endpoint", "s3.amazonaws.com")
     }
   }
 

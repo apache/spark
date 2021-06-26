@@ -17,12 +17,10 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
-import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.Resolver
-import org.apache.spark.sql.catalyst.expressions.{Ascending, Descending, Expression, NamedExpression, NullOrdering, NullsFirst, NullsLast, SortDirection, SortOrder}
+import org.apache.spark.sql.catalyst.expressions.{Expression, SortOrder}
+import org.apache.spark.sql.catalyst.expressions.V2ExpressionUtils.toCatalyst
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, RepartitionByExpression, Sort}
 import org.apache.spark.sql.connector.distributions.{ClusteredDistribution, OrderedDistribution, UnspecifiedDistribution}
-import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, FieldReference, IdentityTransform, NullOrdering => V2NullOrdering, SortDirection => V2SortDirection, SortValue}
 import org.apache.spark.sql.connector.write.{RequiresDistributionAndOrdering, Write}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -70,42 +68,5 @@ object DistributionAndOrderingUtils {
 
     case _ =>
       query
-  }
-
-  private def toCatalyst(
-      expr: V2Expression,
-      query: LogicalPlan,
-      resolver: Resolver): Expression = {
-
-    // we cannot perform the resolution in the analyzer since we need to optimize expressions
-    // in nodes like OverwriteByExpression before constructing a logical write
-    def resolve(ref: FieldReference): NamedExpression = {
-      query.resolve(ref.parts, resolver) match {
-        case Some(attr) => attr
-        case None => throw new AnalysisException(s"Cannot resolve '$ref' using ${query.output}")
-      }
-    }
-
-    expr match {
-      case SortValue(child, direction, nullOrdering) =>
-        val catalystChild = toCatalyst(child, query, resolver)
-        SortOrder(catalystChild, toCatalyst(direction), toCatalyst(nullOrdering), Seq.empty)
-      case IdentityTransform(ref) =>
-        resolve(ref)
-      case ref: FieldReference =>
-        resolve(ref)
-      case _ =>
-        throw new AnalysisException(s"$expr is not currently supported")
-    }
-  }
-
-  private def toCatalyst(direction: V2SortDirection): SortDirection = direction match {
-    case V2SortDirection.ASCENDING => Ascending
-    case V2SortDirection.DESCENDING => Descending
-  }
-
-  private def toCatalyst(nullOrdering: V2NullOrdering): NullOrdering = nullOrdering match {
-    case V2NullOrdering.NULLS_FIRST => NullsFirst
-    case V2NullOrdering.NULLS_LAST => NullsLast
   }
 }

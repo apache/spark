@@ -176,10 +176,10 @@ case class StreamingSymmetricHashJoinExec(
     errorMessageForJoinType)
   require(leftKeys.map(_.dataType) == rightKeys.map(_.dataType))
 
-  private val storeConf = new StateStoreConf(sqlContext.conf)
+  private val storeConf = new StateStoreConf(conf)
   private val hadoopConfBcast = sparkContext.broadcast(
     new SerializableConfiguration(SessionState.newHadoopConf(
-      sparkContext.hadoopConfiguration, sqlContext.conf)))
+      sparkContext.hadoopConfiguration, conf)))
 
   val nullLeft = new GenericInternalRow(left.output.map(_.withNullability(true)).length)
   val nullRight = new GenericInternalRow(right.output.map(_.withNullability(true)).length)
@@ -219,7 +219,7 @@ case class StreamingSymmetricHashJoinExec(
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
-    val stateStoreCoord = sqlContext.sessionState.streamingQueryManager.stateStoreCoordinator
+    val stateStoreCoord = session.sessionState.streamingQueryManager.stateStoreCoordinator
     val stateStoreNames = SymmetricHashJoinStateManager.allStateStoreNames(LeftSide, RightSide)
     left.execute().stateStoreAwareZipPartitions(
       right.execute(), stateInfo.get, stateStoreNames, stateStoreCoord)(processPartitions)

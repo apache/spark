@@ -18,9 +18,13 @@
 package org.apache.spark.sql.test
 
 import java.nio.charset.StandardCharsets
+import java.time.{Duration, Period}
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, SparkSession, SQLContext, SQLImplicits}
+import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.DayTimeIntervalType.{DAY, HOUR, MINUTE, SECOND}
+import org.apache.spark.sql.types.YearMonthIntervalType.{MONTH, YEAR}
 import org.apache.spark.unsafe.types.CalendarInterval
 
 /**
@@ -286,6 +290,108 @@ private[sql] trait SQLTestData { self =>
     df.createOrReplaceTempView("trainingSales")
     df
   }
+
+  protected lazy val intervalData: DataFrame = Seq(
+    (1,
+      Period.ofMonths(10),
+      Period.ofYears(8),
+      Period.ofMonths(10),
+      Duration.ofDays(7).plusHours(13).plusMinutes(3).plusSeconds(18),
+      Duration.ofDays(5).plusHours(21).plusMinutes(12),
+      Duration.ofDays(1).plusHours(8),
+      Duration.ofDays(10),
+      Duration.ofHours(20).plusMinutes(11).plusSeconds(33),
+      Duration.ofHours(3).plusMinutes(18),
+      Duration.ofHours(13),
+      Duration.ofMinutes(2).plusSeconds(59),
+      Duration.ofMinutes(38),
+      Duration.ofSeconds(5)),
+    (2,
+      Period.ofMonths(1),
+      Period.ofYears(1),
+      Period.ofMonths(1),
+      Duration.ofSeconds(1),
+      Duration.ofMinutes(1),
+      Duration.ofHours(1),
+      Duration.ofDays(1),
+      Duration.ofSeconds(1),
+      Duration.ofMinutes(1),
+      Duration.ofHours(1),
+      Duration.ofSeconds(1),
+      Duration.ofMinutes(1),
+      Duration.ofSeconds(1)),
+    (2, null, null, null, null, null, null, null, null, null, null, null, null, null),
+    (3,
+      Period.ofMonths(-3),
+      Period.ofYears(-12),
+      Period.ofMonths(-3),
+      Duration.ofDays(-8).plusHours(-21).plusMinutes(-10).plusSeconds(-32),
+      Duration.ofDays(-2).plusHours(-1).plusMinutes(-12),
+      Duration.ofDays(-11).plusHours(-7),
+      Duration.ofDays(-6),
+      Duration.ofHours(-6).plusMinutes(-17).plusSeconds(-38),
+      Duration.ofHours(-12).plusMinutes(-53),
+      Duration.ofHours(-8),
+      Duration.ofMinutes(-30).plusSeconds(-2),
+      Duration.ofMinutes(-15),
+      Duration.ofSeconds(-36)),
+    (3,
+      Period.ofMonths(21),
+      Period.ofYears(30),
+      Period.ofMonths(5),
+      Duration.ofDays(11).plusHours(7).plusMinutes(36).plusSeconds(17),
+      Duration.ofDays(19).plusHours(12).plusMinutes(25),
+      Duration.ofDays(1).plusHours(14),
+      Duration.ofDays(-5),
+      Duration.ofHours(22).plusMinutes(8).plusSeconds(37),
+      Duration.ofHours(10).plusMinutes(16),
+      Duration.ofHours(5),
+      Duration.ofMinutes(45).plusSeconds(5),
+      Duration.ofMinutes(27),
+      Duration.ofSeconds(50)),
+    (3,
+      null,
+      Period.ofYears(1),
+      null,
+      null,
+      Duration.ofMinutes(1),
+      Duration.ofHours(1),
+      Duration.ofDays(1),
+      null,
+      Duration.ofMinutes(1),
+      Duration.ofHours(1),
+      null,
+      Duration.ofMinutes(1),
+      null))
+    .toDF("class",
+      "year-month",
+      "year",
+      "month",
+      "day-second",
+      "day-minute",
+      "day-hour",
+      "day",
+      "hour-second",
+      "hour-minute",
+      "hour",
+      "minute-second",
+      "minute",
+      "second")
+    .select(
+      $"class",
+      $"year-month",
+      $"year" cast YearMonthIntervalType(YEAR) as "year",
+      $"month" cast YearMonthIntervalType(MONTH) as "month",
+      $"day-second",
+      $"day-minute" cast DayTimeIntervalType(DAY, MINUTE) as "day-minute",
+      $"day-hour" cast DayTimeIntervalType(DAY, HOUR) as "day-hour",
+      $"day" cast DayTimeIntervalType(DAY) as "day",
+      $"hour-second" cast DayTimeIntervalType(HOUR, SECOND) as "hour-second",
+      $"hour-minute" cast DayTimeIntervalType(HOUR, MINUTE) as "hour-minute",
+      $"hour" cast DayTimeIntervalType(HOUR) as "hour",
+      $"minute-second" cast DayTimeIntervalType(MINUTE, SECOND) as "minute-second",
+      $"minute" cast DayTimeIntervalType(MINUTE) as "minute",
+      $"second" cast DayTimeIntervalType(SECOND) as "second")
 
   /**
    * Initialize all test data such that all temp tables are properly registered.

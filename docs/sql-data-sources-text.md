@@ -45,19 +45,19 @@ Data source options of text can be set via:
   *  `DataFrameWriter`
   *  `DataStreamReader`
   *  `DataStreamWriter`
-  *  `OPTIONS` clause at [CREATE TABLE USING DATA_SOURCE](sql-ref-syntax-ddl-create-table-datasource.html)
+*  `OPTIONS` clause at [CREATE TABLE USING DATA_SOURCE](sql-ref-syntax-ddl-create-table-datasource.html)
 
 <table class="table">
   <tr><th><b>Property Name</b></th><th><b>Default</b></th><th><b>Meaning</b></th><th><b>Scope</b></th></tr>
   <tr>
     <td><code>wholetext</code></td>
-    <td>false</td>
+    <td><code>false</code></td>
     <td>If true, read each file from input path(s) as a single row.</td>
     <td>read</td>
   </tr>
   <tr>
     <td><code>lineSep</code></td>
-    <td><code>\r</code>, <code>\r\n</code>, <code>\n</code> for reading, <code>\n</code> for writing</td>
+    <td><code>\r</code>, <code>\r\n</code>, <code>\n</code> (for reading), <code>\n</code> (for writing)</td>
     <td>Defines the line separator that should be used for reading or writing.</td>
     <td>read/write</td>
   </tr>

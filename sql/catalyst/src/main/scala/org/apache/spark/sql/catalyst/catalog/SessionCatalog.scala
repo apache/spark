@@ -265,6 +265,9 @@ class SessionCatalog(
     if (dbName == DEFAULT_DATABASE) {
       throw QueryCompilationErrors.cannotDropDefaultDatabaseError
     }
+    if (!ignoreIfNotExists) {
+      requireDbExists(dbName)
+    }
     if (cascade && databaseExists(dbName)) {
       listTables(dbName).foreach { t =>
         invalidateCachedTable(QualifiedTableName(dbName, t.table))

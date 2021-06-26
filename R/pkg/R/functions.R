@@ -258,11 +258,19 @@ NULL
 #'          \item \code{to_json}, \code{from_json} and \code{schema_of_json}: this contains
 #'              additional named properties to control how it is converted and accepts the
 #'              same options as the JSON data source.
+#'              You can find the JSON-specific options for reading/writing JSON files in
+#'              \url{
+#'              https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option}{
+#'              Data Source Option} in the version you use.
 #'          \item \code{to_json}: it supports the "pretty" option which enables pretty
 #'              JSON generation.
 #'          \item \code{to_csv}, \code{from_csv} and \code{schema_of_csv}: this contains
 #'              additional named properties to control how it is converted and accepts the
 #'              same options as the CSV data source.
+#'              You can find the CSV-specific options for reading/writing CSV files in
+#'              \url{
+#'              https://spark.apache.org/docs/latest/sql-data-sources-csv.html#data-source-option}{
+#'              Data Source Option} in the version you use.
 #'          \item \code{arrays_zip}, this contains additional Columns of arrays to be merged.
 #'          \item \code{map_concat}, this contains additional Columns of maps to be unioned.
 #'          }

@@ -965,7 +965,7 @@ object SparkSession extends Logging {
 
     private def applyModifiableSettings(session: SparkSession): Unit = {
       val (staticConfs, otherConfs) =
-        options.partition(kv => SQLConf.staticConfKeys.contains(kv._1))
+        options.partition(kv => SQLConf.isStaticConfigKey(kv._1))
 
       otherConfs.foreach { case (k, v) => session.sessionState.conf.setConfString(k, v) }
 

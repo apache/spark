@@ -50,7 +50,7 @@ object BLASBenchmark extends BenchmarkBase {
     println("nativeBLAS = " + nativeBLAS.getClass.getName)
     // scalastyle:on println
 
-    def runBLASBenchmark(name: String, n: Int)(bench: NetlibBLAS => Unit) {
+    def runBLASBenchmark(name: String, n: Int)(bench: NetlibBLAS => Unit): Unit = {
       val benchmark = new Benchmark(name, n, iters,
                                     warmupTime = 30.seconds,
                                     minTime = 30.seconds,

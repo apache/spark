@@ -22,10 +22,11 @@ import functools
 from collections import OrderedDict
 from contextlib import contextmanager
 import os
-from typing import (
+from typing import (  # noqa: F401 (SPARK-34943)
     Any,
     Callable,
     Dict,
+    Iterable,
     Iterator,
     List,
     Optional,
@@ -46,11 +47,7 @@ from pandas.api.types import is_list_like
 
 # For running doctests and reference resolution in PyCharm.
 from pyspark import pandas as ps  # noqa: F401
-from pyspark.pandas.typedef.typehints import (
-    as_spark_type,
-    extension_dtypes,
-    spark_type_to_pandas_dtype,
-)
+from pyspark.pandas.typedef.typehints import as_spark_type
 
 if TYPE_CHECKING:
     # This is required in old Python 3.5 to prevent circular reference.
@@ -124,6 +121,7 @@ def combine_frames(
     from pyspark.pandas.config import get_option
     from pyspark.pandas.frame import DataFrame
     from pyspark.pandas.internal import (
+        InternalField,
         InternalFrame,
         HIDDEN_COLUMNS,
         NATURAL_ORDER_COLUMN_NAME,
@@ -165,9 +163,13 @@ def combine_frames(
                 index_spark_columns=[
                     scol_for(sdf, rename(col)) for col in internal.index_spark_column_names
                 ],
+                index_fields=[
+                    field.copy(name=rename(field.name)) for field in internal.index_fields
+                ],
                 data_spark_columns=[
                     scol_for(sdf, rename(col)) for col in internal.data_spark_column_names
                 ],
+                data_fields=[field.copy(name=rename(field.name)) for field in internal.data_fields],
             )
 
         this_internal = resolve(this._internal, "this")
@@ -177,14 +179,14 @@ def combine_frames(
             zip(
                 this_internal.index_spark_column_names,
                 this_internal.index_names,
-                this_internal.index_dtypes,
+                this_internal.index_fields,
             )
         )
         that_index_map = list(
             zip(
                 that_internal.index_spark_column_names,
                 that_internal.index_names,
-                that_internal.index_dtypes,
+                that_internal.index_fields,
             )
         )
         assert len(this_index_map) == len(that_index_map)
@@ -204,7 +206,7 @@ def combine_frames(
         index_use_extension_dtypes = []
         for (
             i,
-            ((this_column, this_name, this_dtype), (that_column, that_name, that_dtype)),
+            ((this_column, this_name, this_field), (that_column, that_name, that_field)),
         ) in enumerate(this_and_that_index_map):
             if this_name == that_name:
                 # We should merge the Spark columns into one
@@ -217,7 +219,7 @@ def combine_frames(
                 column_name = SPARK_INDEX_NAME_FORMAT(i)
                 index_column_names.append(column_name)
                 index_use_extension_dtypes.append(
-                    any(isinstance(dtype, extension_dtypes) for dtype in [this_dtype, that_dtype])
+                    any(field.is_extension_dtype for field in [this_field, that_field])
                 )
                 merged_index_scols.append(
                     F.when(this_scol.isNotNull(), this_scol).otherwise(that_scol).alias(column_name)
@@ -248,12 +250,6 @@ def combine_frames(
         )
 
         index_spark_columns = [scol_for(joined_df, col) for col in index_column_names]
-        index_dtypes = [
-            spark_type_to_pandas_dtype(field.dataType, use_extension_dtypes=use_extension_dtypes)
-            for field, use_extension_dtypes in zip(
-                joined_df.select(index_spark_columns).schema, index_use_extension_dtypes
-            )
-        ]
 
         index_columns = set(index_column_names)
         new_data_columns = [
@@ -261,7 +257,24 @@ def combine_frames(
             for col in joined_df.columns
             if col not in index_columns and col != NATURAL_ORDER_COLUMN_NAME
         ]
-        data_dtypes = this_internal.data_dtypes + that_internal.data_dtypes
+
+        schema = joined_df.select(*index_spark_columns, *new_data_columns).schema
+
+        index_fields = [
+            InternalField.from_struct_field(struct_field, use_extension_dtypes=use_extension_dtypes)
+            for struct_field, use_extension_dtypes in zip(
+                schema.fields[: len(index_spark_columns)], index_use_extension_dtypes
+            )
+        ]
+        data_fields = [
+            InternalField.from_struct_field(
+                struct_field, use_extension_dtypes=field.is_extension_dtype
+            )
+            for struct_field, field in zip(
+                schema.fields[len(index_spark_columns) :],
+                this_internal.data_fields + that_internal.data_fields,
+            )
+        ]
 
         level = max(this_internal.column_labels_level, that_internal.column_labels_level)
 
@@ -282,10 +295,10 @@ def combine_frames(
                 spark_frame=joined_df,
                 index_spark_columns=index_spark_columns,
                 index_names=this_internal.index_names,
-                index_dtypes=index_dtypes,
+                index_fields=index_fields,
                 column_labels=column_labels,
                 data_spark_columns=[scol_for(joined_df, col) for col in new_data_columns],
-                data_dtypes=data_dtypes,
+                data_fields=data_fields,
                 column_label_names=column_label_names,
             )
         )
@@ -294,7 +307,9 @@ def combine_frames(
 
 
 def align_diff_frames(
-    resolve_func: Callable[["DataFrame", List[Tuple], List[Tuple]], Tuple["Series", Tuple]],
+    resolve_func: Callable[
+        ["DataFrame", List[Tuple], List[Tuple]], Iterator[Tuple["Series", Tuple]]
+    ],
     this: "DataFrame",
     that: "DataFrame",
     fillna: bool = True,
@@ -369,11 +384,11 @@ def align_diff_frames(
     # 2. Apply the given function to transform the columns in a batch and keep the new columns.
     combined_column_labels = combined._internal.column_labels
 
-    that_columns_to_apply = []
-    this_columns_to_apply = []
-    additional_that_columns = []
-    columns_to_keep = []
-    column_labels_to_keep = []
+    that_columns_to_apply = []  # type: List[Tuple]
+    this_columns_to_apply = []  # type: List[Tuple]
+    additional_that_columns = []  # type: List[Tuple]
+    columns_to_keep = []  # type: List[Union[Series, spark.Column]]
+    column_labels_to_keep = []  # type: List[Tuple]
 
     for combined_label in combined_column_labels:
         for common_label in common_column_labels:
@@ -407,8 +422,8 @@ def align_diff_frames(
         psser_set, column_labels_set = zip(
             *resolve_func(combined, this_columns_to_apply, that_columns_to_apply)
         )
-        columns_applied = list(psser_set)
-        column_labels_applied = list(column_labels_set)
+        columns_applied = list(psser_set)  # type: List[Union[Series, spark.Column]]
+        column_labels_applied = list(column_labels_set)  # type: List[Tuple]
     else:
         columns_applied = []
         column_labels_applied = []
@@ -440,7 +455,7 @@ def align_diff_frames(
 
 
 def is_testing() -> bool:
-    """ Indicates whether Spark is currently running tests. """
+    """Indicates whether Spark is currently running tests."""
     return "SPARK_TESTING" in os.environ
 
 
@@ -574,12 +589,12 @@ def lazy_property(fn: Callable[[Any], Any]) -> property:
 
 
 def scol_for(sdf: spark.DataFrame, column_name: str) -> spark.Column:
-    """ Return Spark Column for the given column name. """
+    """Return Spark Column for the given column name."""
     return sdf["`{}`".format(column_name)]
 
 
 def column_labels_level(column_labels: List[Tuple]) -> int:
-    """ Return the level of the column index. """
+    """Return the level of the column index."""
     if len(column_labels) == 0:
         return 1
     else:
@@ -588,7 +603,7 @@ def column_labels_level(column_labels: List[Tuple]) -> int:
         return list(levels)[0]
 
 
-def name_like_string(name: Optional[Union[str, Tuple]]) -> str:
+def name_like_string(name: Optional[Union[Any, Tuple]]) -> str:
     """
     Return the name-like strings from str or tuple of str
 
@@ -700,7 +715,7 @@ def is_name_like_value(
 
 
 def validate_axis(axis: Optional[Union[int, str]] = 0, none_axis: int = 0) -> int:
-    """ Check the given axis is valid. """
+    """Check the given axis is valid."""
     # convert to numeric axis
     axis = cast(
         Dict[Optional[Union[int, str]], int], {None: none_axis, "index": 0, "columns": 1}
@@ -712,7 +727,7 @@ def validate_axis(axis: Optional[Union[int, str]] = 0, none_axis: int = 0) -> in
 
 
 def validate_bool_kwarg(value: Any, arg_name: str) -> Optional[bool]:
-    """ Ensures that argument passed in arg_name is of type bool. """
+    """Ensures that argument passed in arg_name is of type bool."""
     if not (isinstance(value, bool) or value is None):
         raise TypeError(
             'For argument "{}" expected type bool, received '
@@ -722,7 +737,7 @@ def validate_bool_kwarg(value: Any, arg_name: str) -> Optional[bool]:
 
 
 def validate_how(how: str) -> str:
-    """ Check the given how for join is valid. """
+    """Check the given how for join is valid."""
     if how == "full":
         warnings.warn(
             "Warning: While pandas-on-Spark will accept 'full', you should use 'outer' "

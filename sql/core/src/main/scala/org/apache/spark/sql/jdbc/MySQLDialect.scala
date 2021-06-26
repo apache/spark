@@ -20,7 +20,8 @@ package org.apache.spark.sql.jdbc
 import java.sql.{SQLFeatureNotSupportedException, Types}
 import java.util.Locale
 
-import org.apache.spark.sql.types.{BooleanType, DataType, LongType, MetadataBuilder}
+import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils
+import org.apache.spark.sql.types.{BooleanType, DataType, FloatType, LongType, MetadataBuilder}
 
 private case object MySQLDialect extends JdbcDialect {
 
@@ -93,5 +94,12 @@ private case object MySQLDialect extends JdbcDialect {
   // See https://dev.mysql.com/doc/refman/8.0/en/alter-table.html
   override def getTableCommentQuery(table: String, comment: String): String = {
     s"ALTER TABLE $table COMMENT = '$comment'"
+  }
+
+  override def getJDBCType(dt: DataType): Option[JdbcType] = dt match {
+    // See SPARK-35446: MySQL treats REAL as a synonym to DOUBLE by default
+    // We override getJDBCType so that FloatType is mapped to FLOAT instead
+    case FloatType => Option(JdbcType("FLOAT", java.sql.Types.FLOAT))
+    case _ => JdbcUtils.getCommonJDBCType(dt)
   }
 }

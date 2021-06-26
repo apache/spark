@@ -20,14 +20,17 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.connector.catalog.functions.ScalarFunction
-import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.types.{AbstractDataType, DataType}
 
 case class ApplyFunctionExpression(
     function: ScalarFunction[_],
-    children: Seq[Expression]) extends Expression with UserDefinedExpression with CodegenFallback {
+    children: Seq[Expression])
+  extends Expression with UserDefinedExpression with CodegenFallback with ImplicitCastInputTypes {
+
   override def nullable: Boolean = function.isResultNullable
   override def name: String = function.name()
   override def dataType: DataType = function.resultType()
+  override def inputTypes: Seq[AbstractDataType] = function.inputTypes().toSeq
 
   private lazy val reusedRow = new SpecificInternalRow(function.inputTypes())
 

@@ -38,6 +38,15 @@ Spark SQL is a Spark module for structured data processing. It provides
 a programming abstraction called DataFrame and can also act as distributed
 SQL query engine.
 
+**pandas API on Spark**
+
+pandas API on Spark allows you to scale your pandas workload out.
+With this package, you can:
+
+* Be immediately productive with Spark, with no learning curve, if you are already familiar with pandas.
+* Have a single codebase that works both with pandas (tests, smaller datasets) and with Spark (distributed datasets).
+* Switch to pandas API and PySpark API contexts easily without any overhead.
+
 **Streaming**
 
 Running on top of Spark, the streaming feature in Apache Spark enables powerful
@@ -65,4 +74,3 @@ and in-memory computing capabilities.
     reference/index
     development/index
     migration_guide/index
-

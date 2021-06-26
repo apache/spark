@@ -24,10 +24,7 @@ import java.util.LinkedHashMap
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
-import scala.concurrent.ExecutionContext.Implicits.global
-import scala.concurrent.Future
 import scala.reflect.ClassTag
-import scala.util.{Failure, Success}
 import scala.util.control.NonFatal
 
 import com.google.common.io.ByteStreams
@@ -52,8 +49,8 @@ private sealed trait MemoryEntry[T] {
 private case class DeserializedMemoryEntry[T](
     value: Array[T],
     size: Long,
+    memoryMode: MemoryMode,
     classTag: ClassTag[T]) extends MemoryEntry[T] {
-  val memoryMode: MemoryMode = MemoryMode.ON_HEAP
 }
 private case class SerializedMemoryEntry[T](
     buffer: ChunkedByteBuffer,
@@ -297,11 +294,12 @@ private[spark] class MemoryStore(
   private[storage] def putIteratorAsValues[T](
       blockId: BlockId,
       values: Iterator[T],
+      memoryMode: MemoryMode,
       classTag: ClassTag[T]): Either[PartiallyUnrolledIterator[T], Long] = {
 
-    val valuesHolder = new DeserializedValuesHolder[T](classTag)
+    val valuesHolder = new DeserializedValuesHolder[T](classTag, memoryMode)
 
-    putIterator(blockId, values, classTag, MemoryMode.ON_HEAP, valuesHolder) match {
+    putIterator(blockId, values, classTag, memoryMode, valuesHolder) match {
       case Right(storedSize) => Right(storedSize)
       case Left(unrollMemoryUsedByThisBlock) =>
         val unrolledIterator = if (valuesHolder.vector != null) {
@@ -312,7 +310,7 @@ private[spark] class MemoryStore(
 
         Left(new PartiallyUnrolledIterator(
           this,
-          MemoryMode.ON_HEAP,
+          memoryMode,
           unrollMemoryUsedByThisBlock,
           unrolled = unrolledIterator,
           rest = values))
@@ -384,45 +382,34 @@ private[spark] class MemoryStore(
       case null => None
       case e: SerializedMemoryEntry[_] =>
         throw new IllegalArgumentException("should only call getValues on deserialized blocks")
-      case DeserializedMemoryEntry(values, _, _) =>
+      case DeserializedMemoryEntry(values, _, _, _) =>
         val x = Some(values)
         x.map(_.iterator)
     }
   }
 
-  def manualClose[T <: MemoryEntry[_]](entry: T): T = {
-    val entryManualCloseTasks = Future {
-      entry match {
-        case e: DeserializedMemoryEntry[_] => e.value.foreach {
-          case o: AutoCloseable =>
-            try {
-              o.close
-            } catch {
-              case NonFatal(e) =>
-                logWarning(s"Got NonFatal exception during remove")
-            }
-          case _ =>
-        }
+  def freeMemoryEntry[T <: MemoryEntry[_]](entry: T): Unit = {
+    entry match {
+      case SerializedMemoryEntry(buffer, _, _) => buffer.dispose()
+      case e: DeserializedMemoryEntry[_] => e.value.foreach {
+        case o: AutoCloseable =>
+          try {
+            o.close()
+          } catch {
+            case NonFatal(e) =>
+              logWarning("Fail to close a memory entry", e)
+          }
         case _ =>
       }
     }
-    entryManualCloseTasks.onComplete {
-      case Success(_) =>
-      case Failure(e) => throw e
-    }
-    entry
   }
 
   def remove(blockId: BlockId): Boolean = memoryManager.synchronized {
     val entry = entries.synchronized {
-      val removed = entries.remove(blockId)
-      manualClose(removed)
+      entries.remove(blockId)
     }
     if (entry != null) {
-      entry match {
-        case SerializedMemoryEntry(buffer, _, _) => buffer.dispose()
-        case _ =>
-      }
+      freeMemoryEntry(entry)
       memoryManager.releaseStorageMemory(entry.size, entry.memoryMode)
       logDebug(s"Block $blockId of size ${entry.size} dropped " +
         s"from memory (free ${maxMemory - blocksMemoryUsed})")
@@ -434,7 +421,7 @@ private[spark] class MemoryStore(
 
   def clear(): Unit = memoryManager.synchronized {
     entries.synchronized {
-      entries.values.asScala.foreach(manualClose)
+      entries.values.asScala.foreach(freeMemoryEntry)
       entries.clear()
     }
     onHeapUnrollMemoryMap.clear()
@@ -488,7 +475,7 @@ private[spark] class MemoryStore(
             // non-blocking "tryLock" here in order to ignore blocks which are locked for reading:
             if (blockInfoManager.lockForWriting(blockId, blocking = false).isDefined) {
               selectedBlocks += blockId
-              freedMemory += pair.getValue.size
+              freedMemory += entry.size
             }
           }
         }
@@ -496,7 +483,7 @@ private[spark] class MemoryStore(
 
       def dropBlock[T](blockId: BlockId, entry: MemoryEntry[T]): Unit = {
         val data = entry match {
-          case DeserializedMemoryEntry(values, _, _) => Left(values)
+          case DeserializedMemoryEntry(values, _, _, _) => Left(values)
           case SerializedMemoryEntry(buffer, _, _) => Right(buffer)
         }
         val newEffectiveStorageLevel =
@@ -686,7 +673,9 @@ private trait ValuesHolder[T] {
 /**
  * A holder for storing the deserialized values.
  */
-private class DeserializedValuesHolder[T] (classTag: ClassTag[T]) extends ValuesHolder[T] {
+private class DeserializedValuesHolder[T](
+    classTag: ClassTag[T],
+    memoryMode: MemoryMode) extends ValuesHolder[T] {
   // Underlying vector for unrolling the block
   var vector = new SizeTrackingVector[T]()(classTag)
   var arrayValues: Array[T] = null
@@ -707,7 +696,7 @@ private class DeserializedValuesHolder[T] (classTag: ClassTag[T]) extends Values
     override val preciseSize: Long = SizeEstimator.estimate(arrayValues)
 
     override def build(): MemoryEntry[T] =
-      DeserializedMemoryEntry[T](arrayValues, preciseSize, classTag)
+      DeserializedMemoryEntry[T](arrayValues, preciseSize, memoryMode, classTag)
   }
 }
 

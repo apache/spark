@@ -43,7 +43,10 @@ object BasicStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
     AggregateEstimation.estimate(p).getOrElse(fallback(p))
   }
 
-  override def visitDistinct(p: Distinct): Statistics = default(p)
+  override def visitDistinct(p: Distinct): Statistics = {
+    val child = p.child
+    visitAggregate(Aggregate(child.output, child.output, child))
+  }
 
   override def visitExcept(p: Except): Statistics = fallback(p)
 
@@ -81,9 +84,9 @@ object BasicStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
     ProjectEstimation.estimate(p).getOrElse(fallback(p))
   }
 
-  override def visitRepartition(p: Repartition): Statistics = default(p)
+  override def visitRepartition(p: Repartition): Statistics = fallback(p)
 
-  override def visitRepartitionByExpr(p: RepartitionByExpression): Statistics = default(p)
+  override def visitRepartitionByExpr(p: RepartitionByExpression): Statistics = fallback(p)
 
   override def visitSample(p: Sample): Statistics = fallback(p)
 

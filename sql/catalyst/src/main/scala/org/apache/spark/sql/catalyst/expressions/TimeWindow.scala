@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.TypeCheckFailure
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.trees.TreePattern.{TIME_WINDOW, TreePattern}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.MICROS_PER_DAY
 import org.apache.spark.sql.catalyst.util.IntervalUtils
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -64,6 +65,7 @@ case class TimeWindow(
     .add(StructField("start", TimestampType))
     .add(StructField("end", TimestampType))
   override def prettyName: String = "window"
+  final override val nodePatterns: Seq[TreePattern] = Seq(TIME_WINDOW)
 
   // This expression is replaced in the analyzer.
   override lazy val resolved = false

@@ -102,7 +102,7 @@ case class SortMergeJoinExec(
     UnsafeProjection.create(rightKeys, right.output)
 
   private def getSpillThreshold: Int = {
-    sqlContext.conf.sortMergeJoinExecBufferSpillThreshold
+    conf.sortMergeJoinExecBufferSpillThreshold
   }
 
   // Flag to only buffer first matched row, to avoid buffering unnecessary rows.
@@ -115,7 +115,7 @@ case class SortMergeJoinExec(
     if (onlyBufferFirstMatchedRow) {
       1
     } else {
-      sqlContext.conf.sortMergeJoinExecBufferInMemoryThreshold
+      conf.sortMergeJoinExecBufferInMemoryThreshold
     }
   }
 
@@ -1365,7 +1365,7 @@ private class SortMergeFullOuterJoinScanner(
 
   def advanceNext(): Boolean = {
     // If we already buffered some matching rows, use them directly
-    if (leftIndex <= leftMatches.size || rightIndex <= rightMatches.size) {
+    if (leftIndex < leftMatches.size || rightIndex < rightMatches.size) {
       if (scanNextInBuffered()) {
         return true
       }

@@ -2067,7 +2067,7 @@ class RDD(object):
                     avg = int(size / n) >> 20
                     # let 1M < avg < 10M
                     if avg < 1:
-                        batch *= 1.5
+                        batch = min(sys.maxsize, batch * 1.5)
                     elif avg > 10:
                         batch = max(int(batch / 1.5), 1)
                     c = 0
