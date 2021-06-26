@@ -47,6 +47,7 @@ from pandas.api.types import is_list_like
 
 # For running doctests and reference resolution in PyCharm.
 from pyspark import pandas as ps  # noqa: F401
+from pyspark.pandas._typing import DataFrameOrSeries
 from pyspark.pandas.typedef.typehints import as_spark_type
 
 if TYPE_CHECKING:
@@ -103,7 +104,7 @@ def same_anchor(
 
 def combine_frames(
     this: "DataFrame",
-    *args: Union["DataFrame", "Series"],
+    *args: DataFrameOrSeries,
     how: str = "full",
     preserve_order_column: bool = False
 ) -> "DataFrame":

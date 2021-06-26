@@ -53,7 +53,7 @@ from pyspark.sql.types import (
 )
 
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
-from pyspark.pandas._typing import Dtype, FrameLike, Scalar
+from pyspark.pandas._typing import DataFrameOrSeries, Dtype, FrameLike, Scalar
 from pyspark.pandas.indexing import AtIndexer, iAtIndexer, iLocIndexer, LocIndexer
 from pyspark.pandas.internal import InternalFrame
 from pyspark.pandas.typedef import spark_type_to_pandas_dtype
@@ -2753,7 +2753,7 @@ class Frame(object, metaclass=ABCMeta):
         after: Optional[Any] = None,
         axis: Optional[Union[int, str]] = None,
         copy: bool_type = True,
-    ) -> Union["DataFrame", "Series"]:
+    ) -> DataFrameOrSeries:
         """
         Truncate a Series or DataFrame before and after some index value.
 
@@ -2890,7 +2890,7 @@ class Frame(object, metaclass=ABCMeta):
             elif axis == 1:
                 result = self.loc[:, before:after]
 
-        return cast(Union[ps.DataFrame, ps.Series], result.copy() if copy else result)
+        return cast(DataFrameOrSeries, result.copy() if copy else result)
 
     def to_markdown(
         self, buf: Optional[Union[IO[str], str]] = None, mode: Optional[str] = None
