@@ -46,7 +46,7 @@ from pandas.api.types import is_list_like
 
 # For running doctests and reference resolution in PyCharm.
 from pyspark import pandas as ps  # noqa: F401
-from pyspark.pandas._typing import DataFrameOrSeries
+from pyspark.pandas._typing import Axis, DataFrameOrSeries
 from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.typedef.typehints import as_spark_type
 
@@ -713,12 +713,12 @@ def is_name_like_value(
         return True
 
 
-def validate_axis(axis: Optional[Union[int, str]] = 0, none_axis: int = 0) -> int:
+def validate_axis(axis: Optional[Axis] = 0, none_axis: int = 0) -> int:
     """Check the given axis is valid."""
     # convert to numeric axis
-    axis = cast(
-        Dict[Optional[Union[int, str]], int], {None: none_axis, "index": 0, "columns": 1}
-    ).get(axis, axis)
+    axis = cast(Dict[Optional[Axis], int], {None: none_axis, "index": 0, "columns": 1}).get(
+        axis, axis
+    )
     if axis in (none_axis, 0, 1):
         return cast(int, axis)
     else:
