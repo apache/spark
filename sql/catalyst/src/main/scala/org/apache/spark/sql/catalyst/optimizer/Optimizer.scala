@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.plans.logical.{RepartitionOperation, _}
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.AlwaysProcess
 import org.apache.spark.sql.catalyst.trees.TreePattern._
@@ -915,12 +915,15 @@ object CollapseRepartition extends Rule[LogicalPlan] {
 }
 
 /**
- * Replace RepartitionByExpression numPartitions to 1 if all partition expressions are foldable
+ * 1. Remove repartition if the child maximum number of rows less than or equal to 1.
+ * 2. Replace RepartitionByExpression numPartitions to 1 if all partition expressions are foldable
  * and user not specify.
  */
 object OptimizeRepartition extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
     _.containsPattern(REPARTITION_OPERATION), ruleId) {
+    case r: RepartitionOperation
+      if r.child.maxRows.exists(_ <= 1L) => r.child
     case r @ RepartitionByExpression(partitionExpressions, _, numPartitions)
       if partitionExpressions.nonEmpty && partitionExpressions.forall(_.foldable) &&
         numPartitions.isEmpty =>
