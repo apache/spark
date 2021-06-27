@@ -18,10 +18,10 @@
 package org.apache.spark.sql
 
 import org.scalatest.GivenWhenThen
-
-import org.apache.spark.sql.catalyst.expressions.{DynamicPruningExpression, Expression}
+import org.apache.spark.sql.catalyst.expressions.{DynamicPruningExpression, DynamicPruningSubquery, Expression}
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode._
 import org.apache.spark.sql.catalyst.plans.ExistenceJoin
+import org.apache.spark.sql.catalyst.plans.logical.Filter
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive._
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeLike, ReusedExchangeExec}
@@ -221,6 +221,10 @@ abstract class DynamicPartitionPruningSuiteBase
       }
       assert(subquery.find(_.isInstanceOf[AdaptiveSparkPlanExec]).isDefined == isMainQueryAdaptive)
     }
+
+    if(withSubquery || withBroadcast) {
+      checkExprIdsForPruningExpressions(df, dpExprs)
+    }
   }
 
   /**
@@ -260,6 +264,24 @@ abstract class DynamicPartitionPruningSuiteBase
         }
       case _ => false
     }.isDefined
+  }
+
+  /**
+   * Checks if the dynamic pruning expression id in optimized plan and executed plan match.
+   */
+  def checkExprIdsForPruningExpressions(df: DataFrame, dpExprs: Seq[Expression]): Unit = {
+    val dpExprIdsInOptimizedPlan = df.queryExecution.optimizedPlan.flatMap {
+      case f: Filter =>
+        splitConjunctivePredicates(f.condition).collect {
+          case s: DynamicPruningSubquery => s.exprId
+        }
+      case _ => Nil
+    }
+
+    val dpExprIdsInExecutedPlan = dpExprs.collect {
+      case i: InSubqueryExec => i.exprId
+    }
+    dpExprIdsInExecutedPlan.foreach{ e => assert(dpExprIdsInOptimizedPlan.contains(e))}
   }
 
   /**
