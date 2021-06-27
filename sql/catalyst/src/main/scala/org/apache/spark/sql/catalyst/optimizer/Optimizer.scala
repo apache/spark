@@ -922,8 +922,8 @@ object CollapseRepartition extends Rule[LogicalPlan] {
 object OptimizeRepartition extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
     _.containsPattern(REPARTITION_OPERATION), ruleId) {
-    case r: RepartitionOperation
-      if r.child.maxRows.exists(_ <= 1L) => r.child
+    case r: RepartitionOperation if r.child.maxRows.exists(_ <= 1L) =>
+      r.child
     case r @ RepartitionByExpression(partitionExpressions, _, numPartitions)
       if partitionExpressions.nonEmpty && partitionExpressions.forall(_.foldable) &&
         numPartitions.isEmpty =>
