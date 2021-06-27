@@ -47,25 +47,29 @@ class RowToColumnConverterSuite extends SparkFunSuite {
   test("array column") {
     val schema = StructType(Seq(StructField("a", ArrayType(IntegerType))))
     val rows = (0 until 100).map { i =>
-      if (i % 10 == 0) {
-        InternalRow(null)
-      } else {
-        InternalRow(new GenericArrayData((0 until i).map { j =>
-          if (j % 3 == 0) {
-            null
-          } else {
-            j
-          }
-        }))
-      }
+      InternalRow(new GenericArrayData(0 until i))
     }
     val vectors = convertRows(rows, schema)
     rows.zipWithIndex.map { case (row, i) =>
-      if (row.isNullAt(0)) {
-        assert(vectors.head.isNullAt(i))
-      } else {
-        assert(vectors.head.getArray(i).array().array === row.getArray(0).array)
-      }
+      assert(vectors.head.getArray(i).array().array === row.getArray(0).array)
+    }
+  }
+
+  test("non-nullable array column with null elements") {
+    val arrayType = ArrayType(IntegerType, containsNull = true)
+    val schema = StructType(Seq(StructField("a", arrayType, nullable = false)))
+    val rows = (0 until 100).map { i =>
+      InternalRow(new GenericArrayData((0 until i).map { j =>
+        if (j % 3 == 0) {
+          null
+        } else {
+          j
+        }
+      }))
+    }
+    val vectors = convertRows(rows, schema)
+    rows.zipWithIndex.map { case (row, i) =>
+      assert(vectors.head.getArray(i).array().array === row.getArray(0).array)
     }
   }
 
@@ -89,30 +93,39 @@ class RowToColumnConverterSuite extends SparkFunSuite {
     val mapType = MapType(IntegerType, StringType)
     val schema = StructType(Seq(StructField("m", mapType)))
     val rows = (0 until 100).map { i =>
-      if (i % 3 == 0) {
-        InternalRow(null)
-      } else {
         InternalRow(new ArrayBasedMapData(
           new GenericArrayData(0 until i),
-          new GenericArrayData((0 until i).map { j =>
-            if (j % 3 == 0) {
-              null
-            } else {
-              UTF8String.fromString(s"str$j")
-            }
-          })))
-      }
+          new GenericArrayData((0 until i).map(j => UTF8String.fromString(s"str$j"))))
     }
     val vectors = convertRows(rows, schema)
     rows.zipWithIndex.map { case (row, i) =>
-      if (row.isNullAt(0)) {
-        assert(vectors.head.isNullAt(i))
-      } else {
-        val result = vectors.head.getMap(i)
-        val expected = row.getMap(0)
-        assert(result.keyArray().array().array === expected.keyArray().array)
-        assert(result.valueArray().array().array === expected.valueArray().array)
-      }
+      val result = vectors.head.getMap(i)
+      val expected = row.getMap(0)
+      assert(result.keyArray().array().array === expected.keyArray().array)
+      assert(result.valueArray().array().array === expected.valueArray().array)
+    }
+  }
+
+  test("non-nullable map column with null values") {
+    val mapType = MapType(IntegerType, StringType, valueContainsNull = true)
+    val schema = StructType(Seq(StructField("m", mapType, nullable = false)))
+    val rows = (0 until 100).map { i =>
+      InternalRow(new ArrayBasedMapData(
+        new GenericArrayData(0 until i),
+        new GenericArrayData((0 until i).map { j =>
+          if (j % 3 == 0) {
+            null
+          } else {
+            UTF8String.fromString(s"str$j")
+          }
+        })))
+    }
+    val vectors = convertRows(rows, schema)
+    rows.zipWithIndex.map { case (row, i) =>
+      val result = vectors.head.getMap(i)
+      val expected = row.getMap(0)
+      assert(result.keyArray().array().array === expected.keyArray().array)
+      assert(result.valueArray().array().array === expected.valueArray().array)
     }
   }
 
