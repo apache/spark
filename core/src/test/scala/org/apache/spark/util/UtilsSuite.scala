@@ -480,7 +480,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
   test("createDirectory") {
     val tmpDir = new File(System.getProperty("java.io.tmpdir"))
     val testDir = new File(tmpDir, "createDirectory" + System.nanoTime())
-    val testDirPath = testDir.getAbsolutePath
+    val testDirPath = testDir.getCanonicalPath
 
     // 1. Directory created successfully
     val scenario1 = new File(testDir, "scenario1")
