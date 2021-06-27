@@ -84,7 +84,7 @@ case class PlanDynamicPruningFilters(sparkSession: SparkSession)
           val alias = Alias(buildKeys(broadcastKeyIndex), buildKeys(broadcastKeyIndex).toString)()
           val aggregate = Aggregate(Seq(alias), Seq(alias), buildPlan)
           DynamicPruningExpression(expressions.InSubquery(
-            Seq(value), ListQuery(aggregate, childOutputs = aggregate.output)))
+            Seq(value), ListQuery(aggregate, exprId = exprId, childOutputs = aggregate.output)))
         }
     }
   }
