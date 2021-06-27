@@ -455,7 +455,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
             return appShuffleInfo;
           });
           for (AppShuffleInfo appShuffleInfo: appShuffleInfoToBeCleanedUp.values()) {
-            logger.warn("Remove shuffle info for {}_{} as new application attempt registered",
+            logger.info("Remove shuffle info for {}_{} as new application attempt registered",
               appId, appShuffleInfo.attemptId);
             appShuffleInfo.cleanupShufflePartitionInfo();
           }
@@ -1056,7 +1056,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       int shuffleId,
       int reduceId) {
       return String.format(
-        "%s_%s_%d_%d", MERGED_SHUFFLE_FILE_NAME_PREFIX,appId, shuffleId, reduceId);
+        "%s_%s_%d_%d", MERGED_SHUFFLE_FILE_NAME_PREFIX, appId, shuffleId, reduceId);
     }
 
     public File getMergedShuffleDataFile(
