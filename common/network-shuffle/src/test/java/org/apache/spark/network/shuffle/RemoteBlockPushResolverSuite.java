@@ -539,7 +539,7 @@ public class RemoteBlockPushResolverSuite {
     PushBlock[] pushBlocks = new PushBlock[] {
       new PushBlock(0, 0, 0, ByteBuffer.wrap(new byte[4]))};
     pushBlockHelper(testApp, NO_ATTEMPT_ID, pushBlocks);
-    pushResolver.finalizeShuffleMerge(new FinalizeShuffleMerge(testApp, 1, 0));
+    pushResolver.finalizeShuffleMerge(new FinalizeShuffleMerge(testApp, NO_ATTEMPT_ID, 0));
     MergedBlockMeta blockMeta = pushResolver.getMergedBlockMeta(testApp, 0, 0);
     validateChunks(testApp, 0, 0, blockMeta, new int[]{4}, new int[][]{{0}});
     String[] mergeDirs = pushResolver.getMergedBlockDirs(testApp);
