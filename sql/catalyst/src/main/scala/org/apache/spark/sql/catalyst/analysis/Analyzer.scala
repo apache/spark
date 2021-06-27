@@ -3530,10 +3530,29 @@ class Analyzer(override val catalogManager: CatalogManager)
   object ResolveFieldNames extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
       case a: AlterTableCommand if a.table.resolved =>
-        a.transformExpressions {
+        val table = a.table.asInstanceOf[ResolvedTable]
+        val transformed = a.transformExpressions {
           case u: UnresolvedFieldName =>
-            val table = a.table.asInstanceOf[ResolvedTable]
-            resolveFieldNames(table.schema, u.name).map(ResolvedFieldName(_)).getOrElse(u)
+            resolveFieldNames(table.schema, u.name).getOrElse(u)
+        }
+
+        transformed match {
+          case alterColumn @ AlterTableAlterColumn(_, f: ResolvedFieldName, _, _, _, Some(pos))
+            if pos.isInstanceOf[UnresolvedFieldPosition] =>
+            pos.position match {
+              case after: After =>
+                val newPos = resolveFieldNames(table.schema, f.path :+ after.column())
+                  .map { resolved =>
+                    ResolvedFieldPosition(ColumnPosition.after(resolved.field.name))
+                  }.getOrElse {
+                    pos.asInstanceOf[UnresolvedFieldPosition].copy(
+                      parent = Some(findParentDataType(table.schema, f)))
+                  }
+                alterColumn.copy(position = Some(newPos))
+              case _ =>
+                alterColumn.copy(position = Some(ResolvedFieldPosition(pos.position)))
+            }
+          case other => other
         }
     }
 
@@ -3543,10 +3562,20 @@ class Analyzer(override val catalogManager: CatalogManager)
      */
     private def resolveFieldNames(
         schema: StructType,
-        fieldNames: Seq[String]): Option[Seq[String]] = {
+        fieldNames: Seq[String]): Option[ResolvedFieldName] = {
       val fieldOpt = schema.findNestedField(
         fieldNames, includeCollections = true, conf.resolver)
-      fieldOpt.map { case (path, field) => path :+ field.name }
+      fieldOpt.map { case (path, field) => ResolvedFieldName(path, field) }
+    }
+
+    private def findParentDataType(schema: StructType, col: ResolvedFieldName): DataType = {
+      if (col.path.isEmpty) {
+        schema
+      } else {
+        val field = schema.findNestedField(col.path, includeCollections = true)
+        assert(field.nonEmpty)
+        field.get._2.dataType
+      }
     }
   }
 
