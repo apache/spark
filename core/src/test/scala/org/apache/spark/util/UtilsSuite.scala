@@ -534,7 +534,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     assert(scenario1.exists())
 
     // 8. Not directory
-    val scenario8 = new File(testDir.getAbsolutePath + File.separator + "scenario8")
+    val scenario8 = new File(testDir.getCanonicalPath + File.separator + "scenario8")
     assert(scenario8.createNewFile())
     assert(!Utils.createDirectory(scenario8))
   }
