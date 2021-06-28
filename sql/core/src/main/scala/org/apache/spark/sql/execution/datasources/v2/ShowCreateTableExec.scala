@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
-import scala.collection.mutable
+import scala.collection.JavaConverters._
+import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
@@ -34,13 +35,11 @@ case class ShowCreateTableExec(
     table: Table) extends V2CommandExec with LeafExecNode {
   override protected def run(): Seq[InternalRow] = {
     val builder = StringBuilder.newBuilder
-    // it is used to generate Spark DDL for given table. include Hive Serde table
     showCreateTable(table, builder)
     Seq(InternalRow(UTF8String.fromString(builder.toString)))
   }
 
   private def showCreateTable(table: Table, builder: StringBuilder): Unit = {
-    import scala.collection.JavaConverters._
     builder ++= s"CREATE TABLE ${table.name()} "
 
     showTableDataColumns(table, builder)
@@ -82,7 +81,7 @@ case class ShowCreateTableExec(
 
   private def showTablePartitioning(table: Table, builder: StringBuilder): Unit = {
     if (!table.partitioning.isEmpty) {
-      val transforms = new mutable.ArrayBuffer[String]
+      val transforms = new ArrayBuffer[String]
       table.partitioning.foreach(t => transforms += t.describe())
       builder ++= s"PARTITIONED BY ${transforms.mkString("(", ", ", ")")}\n"
     }
@@ -98,7 +97,7 @@ case class ShowCreateTableExec(
       table: Table,
       builder: StringBuilder,
       tableOptions: Map[String, String]): Unit = {
-    import scala.collection.JavaConverters._
+
 
     val showProps = table.properties.asScala
       .filterKeys(key => !CatalogV2Util.TABLE_RESERVED_PROPERTIES.contains(key)

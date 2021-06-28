@@ -1975,22 +1975,24 @@ class DataSourceV2SQLSuite
   test("SPARK-33898: SHOW CREATE TABLE") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
-      spark.sql(s"""|CREATE TABLE $t (
-                    |  a bigint,
-                    |  b bigint,
-                    |  c bigint,
-                    |  `extra col` ARRAY<INT>,
-                    |  `<another>` STRUCT<x: INT, y: ARRAY<BOOLEAN>>
-                    |)
-                    |USING foo
-                    |OPTIONS (
-                    |  from = 0,
-                    |  to = 1)
-                    |COMMENT 'This is a comment'
-                    |TBLPROPERTIES ('prop1' = '1')
-                    |PARTITIONED BY (a)
-                    |LOCATION '/tmp'
-                 """.stripMargin)
+      sql(
+        s"""
+           |CREATE TABLE $t (
+           |  a bigint,
+           |  b bigint,
+           |  c bigint,
+           |  `extra col` ARRAY<INT>,
+           |  `<another>` STRUCT<x: INT, y: ARRAY<BOOLEAN>>
+           |)
+           |USING foo
+           |OPTIONS (
+           |  from = 0,
+           |  to = 1)
+           |COMMENT 'This is a comment'
+           |TBLPROPERTIES ('prop1' = '1')
+           |PARTITIONED BY (a)
+           |LOCATION '/tmp'
+        """.stripMargin)
       val showDDL = getShowCreateDDL(s"SHOW CREATE TABLE $t")
       assert(showDDL === Array(
         "CREATE TABLE testcat.ns1.ns2.tbl (",
@@ -2015,10 +2017,12 @@ class DataSourceV2SQLSuite
   test("SPARK-33898: SHOW CREATE TABLE WITH AS SELECT") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
-      spark.sql(s"""|CREATE TABLE $t
-                    |USING foo
-                    |AS SELECT 1 AS a, "foo" AS b
-                 """.stripMargin)
+      sql(
+        s"""
+           |CREATE TABLE $t
+           |USING foo
+           |AS SELECT 1 AS a, "foo" AS b
+         """.stripMargin)
       val showDDL = getShowCreateDDL(s"SHOW CREATE TABLE $t")
       assert(showDDL === Array(
         "CREATE TABLE testcat.ns1.ns2.tbl (",
@@ -2032,18 +2036,17 @@ class DataSourceV2SQLSuite
   test("SPARK-33898: SHOW CREATE TABLE PARTITIONED BY Transforms") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
-      val createSql =
+      sql(
         s"""
-            |CREATE TABLE $t (a INT, b STRING, ts TIMESTAMP) USING foo
-            |PARTITIONED BY (
-            |    a,
-            |    bucket(16, b),
-            |    years(ts),
-            |    months(ts),
-            |    days(ts),
-            |    hours(ts))
-         """.stripMargin
-      spark.sql(createSql)
+           |CREATE TABLE $t (a INT, b STRING, ts TIMESTAMP) USING foo
+           |PARTITIONED BY (
+           |    a,
+           |    bucket(16, b),
+           |    years(ts),
+           |    months(ts),
+           |    days(ts),
+           |    hours(ts))
+         """.stripMargin)
       val showDDL = getShowCreateDDL(s"SHOW CREATE TABLE $t")
       assert(showDDL === Array(
         "CREATE TABLE testcat.ns1.ns2.tbl (",
@@ -2923,11 +2926,7 @@ class DataSourceV2SQLSuite
   }
 
   private def getShowCreateDDL(showCreateTableSql: String): Array[String] = {
-    sql(showCreateTableSql)
-      .head()
-      .getString(0)
-      .split("\n")
-      .map(_.trim)
+    sql(showCreateTableSql).head().getString(0).split("\n").map(_.trim)
   }
 }
 
