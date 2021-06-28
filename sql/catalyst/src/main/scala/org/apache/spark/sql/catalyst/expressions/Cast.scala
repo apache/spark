@@ -318,7 +318,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
 
   protected lazy val dateFormatter = DateFormatter()
   protected lazy val timestampFormatter = TimestampFormatter.getFractionFormatter(zoneId)
-  protected lazy val timestampWithoutTZFormatter =
+  private lazy val timestampWithoutTZFormatter =
     TimestampFormatter.getFractionFormatter(ZoneOffset.UTC)
 
   private val legacyCastToStr = SQLConf.get.getConf(SQLConf.LEGACY_COMPLEX_TYPES_TO_STRING)
