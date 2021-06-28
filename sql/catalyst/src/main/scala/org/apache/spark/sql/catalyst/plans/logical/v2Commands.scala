@@ -1171,7 +1171,8 @@ case class AlterTableAlterColumn(
       TableChange.updateColumnComment(colName, newComment)
     }
     val positionChange = position.map { newPosition =>
-      require(newPosition.resolved)
+      require(newPosition.resolved,
+        "FieldPosition should be resolved before it's converted to TableChange.")
       TableChange.updateColumnPosition(colName, newPosition.position)
     }
     typeChange.toSeq ++ nullabilityChange ++ commentChange ++ positionChange
