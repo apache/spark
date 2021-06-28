@@ -2079,7 +2079,7 @@ package object config {
         "conjunction with the server side flag spark.shuffle.server.mergedShuffleFileManagerImpl " +
         "which needs to be set with the appropriate " +
         "org.apache.spark.network.shuffle.MergedShuffleFileManager implementation for push-based " +
-        "shuffle to be enabled")
+        "shuffle to be enabled. Push-based shuffle is not yet supported.")
       .version("3.1.0")
       .booleanConf
       .createWithDefault(false)

@@ -381,6 +381,8 @@ public class TransportConf {
    * 'org.apache.spark.network.shuffle.ExternalBlockHandler$NoOpMergedShuffleFileManager'.
    * To turn on push-based shuffle at a cluster level, set the configuration to
    * 'org.apache.spark.network.shuffle.RemoteBlockPushResolver'.
+   *
+   * Push-based shuffle is not yet supported.
    */
   public String mergedShuffleFileManagerImpl() {
     return conf.get("spark.shuffle.server.mergedShuffleFileManagerImpl",
