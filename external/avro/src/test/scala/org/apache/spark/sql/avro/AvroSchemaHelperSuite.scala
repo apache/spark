@@ -28,7 +28,7 @@ class AvroSchemaHelperSuite extends SQLTestUtils with SharedSparkSession {
     val avroSchema = SchemaBuilder.builder().intType()
 
     val msg = intercept[IncompatibleSchemaException] {
-      new AvroUtils.AvroSchemaHelper(avroSchema, StructType(Seq()), Seq(""), false)
+      new AvroUtils.AvroSchemaHelper(avroSchema, Seq(""), false)
     }.getMessage
     assert(msg.contains("Attempting to treat int as a RECORD"))
   }
@@ -42,7 +42,7 @@ class AvroSchemaHelperSuite extends SQLTestUtils with SharedSparkSession {
     )
 
     val avroSchema = SchemaConverters.toAvroType(catalystSchema)
-    val helper = new AvroUtils.AvroSchemaHelper(avroSchema, StructType(Seq()), Seq(""), false)
+    val helper = new AvroUtils.AvroSchemaHelper(avroSchema, Seq(""), false)
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
       assert(helper.getFieldByName("A").get.name() == "A")
       assert(helper.getFieldByName("a").get.name() == "a")
@@ -69,34 +69,17 @@ class AvroSchemaHelperSuite extends SQLTestUtils with SharedSparkSession {
     val catalystSchema = new StructType().add("foo", IntegerType).add("bar", StringType)
     val avroSchema = SchemaConverters.toAvroType(catalystSchema)
 
-    val posHelper = new AvroUtils.AvroSchemaHelper(avroSchema, catalystSchema, Seq(""), true)
-    val nameHelper = new AvroUtils.AvroSchemaHelper(avroSchema, catalystSchema, Seq(""), false)
+    val posHelper = new AvroUtils.AvroSchemaHelper(avroSchema, Seq(""), true)
+    val nameHelper = new AvroUtils.AvroSchemaHelper(avroSchema, Seq(""), false)
 
     for (name <- Seq("foo", "bar"); fieldPos <- Seq(0, 1)) {
-      val catalystTuple = (catalystSchema(name), fieldPos)
-      assert(posHelper.getAvroField(catalystTuple) === Some(avroSchema.getFields.get(fieldPos)))
-      assert(nameHelper.getAvroField(catalystTuple) === Some(avroSchema.getField(name)))
+      assert(posHelper.getAvroField(name, fieldPos) === Some(avroSchema.getFields.get(fieldPos)))
+      assert(nameHelper.getAvroField(name, fieldPos) === Some(avroSchema.getField(name)))
     }
-  }
+    assert(posHelper.getAvroField("foo", 5).isEmpty)
+    assert(nameHelper.getAvroField("foo", 5).isDefined)
 
-  test("properly match fields between Avro and Catalyst schemas") {
-    val catalystSchema = StructType(
-      Seq("catalyst1", "catalyst2", "shared1", "shared2").map(StructField(_, IntegerType))
-    )
-    val avroSchema = SchemaBuilder.record("toplevel").fields()
-      .requiredInt("shared1")
-      .requiredInt("shared2")
-      .requiredInt("avro1")
-      .requiredInt("avro2")
-      .endRecord()
-
-    val helper = new AvroUtils.AvroSchemaHelper(avroSchema, catalystSchema, Seq(""), false)
-    assert(helper.getMatchedFields === Seq(
-      (catalystSchema("shared1"), 2, avroSchema.getField("shared1")),
-      (catalystSchema("shared2"), 3, avroSchema.getField("shared2"))
-    ))
-    assert(helper.getCatalystFieldsWithoutMatch ===
-      Seq("catalyst1", "catalyst2").map(catalystSchema.apply))
-    assert(helper.getAvroFieldsWithoutMatch === Set("avro1", "avro2").map(avroSchema.getField))
+    assert(posHelper.getAvroField("nonexist", 1).isDefined)
+    assert(nameHelper.getAvroField("nonexist", 1).isEmpty)
   }
 }

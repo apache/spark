@@ -206,14 +206,9 @@ private[sql] object AvroUtils extends Logging {
   }
 
   /**
-   * Helper class to perform field lookup/matching on Avro schemas.
-   *
-   * This will match `avroSchema` against `catalystSchema`, attempting to find a matching field in
-   * the Avro schema for each field in the Catalyst schema and vice-versa, respecting settings for
-   * case sensitivity. The match results can be accessed using the getter methods.
+   * Wraps an Avro Schema object so that field lookups are faster.
    *
    * @param avroSchema The schema in which to search for fields. Must be of type RECORD.
-   * @param catalystSchema The Catalyst schema to use for matching.
    * @param avroPath The seq of parent field names leading to `avroSchema`.
    * @param positionalFieldMatch If true, perform field matching in a positional fashion
    *                             (structural comparison between schemas, ignoring names);
@@ -221,7 +216,6 @@ private[sql] object AvroUtils extends Logging {
    */
   class AvroSchemaHelper(
       avroSchema: Schema,
-      catalystSchema: StructType,
       avroPath: Seq[String],
       positionalFieldMatch: Boolean) {
     if (avroSchema.getType != Schema.Type.RECORD) {
@@ -233,33 +227,6 @@ private[sql] object AvroUtils extends Logging {
     private[this] val fieldMap = avroSchema.getFields.asScala
       .groupBy(_.name.toLowerCase(Locale.ROOT))
       .mapValues(_.toSeq) // toSeq needed for scala 2.13
-
-    private[this] val (matchedFields, catalystFieldsWithoutMatch) = catalystSchema
-      .zipWithIndex
-      .map(fieldWithPos => (fieldWithPos, getAvroField(fieldWithPos)))
-      .partition(_._2.isDefined)
-
-    /**
-     * Get the fields which have matching equivalents in both Avro and Catalyst schemas.
-     *
-     * @return A sequence of `(catalystField, catalystPosition, avroField)` tuples.
-     */
-    def getMatchedFields: Seq[(StructField, Int, Schema.Field)] = matchedFields.map {
-      case ((sqlField, sqlPos), Some(avroField)) => (sqlField, sqlPos, avroField)
-      case (_, None) => // should never happen since it is partitioned on isDefined
-        throw new RuntimeException("Unexpectedly missing Avro field")
-    }
-
-    /** Get the Catalyst fields which have no matching equivalent in the Avro schema. */
-    def getCatalystFieldsWithoutMatch: Seq[StructField] = catalystFieldsWithoutMatch.map {
-      case ((catalystField, _), None) => catalystField
-      case (_, Some(avroField)) => // should never happen since it is partitioned on isDefined
-        throw new RuntimeException("Found unexpected Avro field: " + avroField)
-    }
-
-    /** Get the Avro fields which have no matching equivalent in the Catalyst schema. */
-    def getAvroFieldsWithoutMatch: Set[Schema.Field] =
-      avroFieldArray.toSet -- getMatchedFields.map(_._3)
 
     /**
      * Extract a single field from the contained avro schema which has the desired field name,
@@ -284,14 +251,29 @@ private[sql] object AvroUtils extends Logging {
       }
     }
 
-    /** Get the Avro field corresponding to the provided Catalyst field/position, if any. */
-    private[avro] def getAvroField(fieldWithPos: (StructField, Int)): Option[Schema.Field] = {
+    /** Get the Avro field corresponding to the provided Catalyst field name/position, if any. */
+    def getAvroField(fieldName: String, catalystPos: Int): Option[Schema.Field] = {
       if (positionalFieldMatch) {
-        avroFieldArray.lift(fieldWithPos._2)
+        avroFieldArray.lift(catalystPos)
       } else {
-        getFieldByName(fieldWithPos._1.name)
+        getFieldByName(fieldName)
       }
     }
+  }
+
+  /**
+   * Take a field's hierarchical names (see [[toFieldStr]]) and position, and convert it to a
+   * human-readable description of the field. Depending on the value of `positionalFieldMatch`,
+   * either the position or name will be emphasized (for true and false, respectively); both will
+   * be included in either case.
+   */
+  private[avro] def toFieldDescription(
+      names: Seq[String],
+      position: Int,
+      positionalFieldMatch: Boolean): String = if (positionalFieldMatch) {
+    s"field at position $position (${toFieldStr(names)})"
+  } else {
+    s"${toFieldStr(names)} (at position $position)"
   }
 
   /**
