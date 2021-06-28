@@ -36,7 +36,7 @@ from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils, SPARK_
 
 # This is used in run-tests.py to discover the slow test. See more in the doc of
 # _discover_python_unittests of dev/sparktestsupport/modules.py
-_slow_test = True
+is_slow_test = True
 
 
 class IndexesTest(PandasOnSparkTestCase, TestUtils):

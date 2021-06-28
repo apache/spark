@@ -19,6 +19,7 @@
 
 import itertools
 from argparse import ArgumentParser
+import doctest
 import os
 import re
 import sys
@@ -774,12 +775,19 @@ def main():
 
 
 def _test():
-    import doctest
     failure_count = doctest.testmod()[0]
+    if failure_count:
+        sys.exit(-1)
+
+
+def _modules_doctest():
+    # Running doctests in sparktestsupport.modules
+    failure_count = doctest.testmod(m=modules)[0]
     if failure_count:
         sys.exit(-1)
 
 
 if __name__ == "__main__":
     _test()
+    _modules_doctest()
     main()

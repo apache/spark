@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+from collections.abc import Iterable
 from functools import total_ordering
 import itertools
 import os
@@ -50,34 +51,43 @@ def _discover_python_unittests(*paths, discover_slow=False):
     Returns
     -------
     A set of complete test module name discovered under specified paths
+
+    >>> sorted([x for x in _discover_python_unittests('pyspark/tests')])
+    ... # doctest: +NORMALIZE_WHITESPACE
+    ['pyspark.tests.test_appsubmit', 'pyspark.tests.test_broadcast', 'pyspark.tests.test_conf',
+    'pyspark.tests.test_context', 'pyspark.tests.test_daemon', 'pyspark.tests.test_install_spark',
+    'pyspark.tests.test_join', 'pyspark.tests.test_pin_thread', 'pyspark.tests.test_profiler',
+    'pyspark.tests.test_rdd', 'pyspark.tests.test_rddbarrier', 'pyspark.tests.test_readwrite',
+    'pyspark.tests.test_serializers', 'pyspark.tests.test_shuffle',
+    'pyspark.tests.test_taskcontext', 'pyspark.tests.test_util', 'pyspark.tests.test_worker']
     """
 
-    def add_suite(testcases, modules, slow):
-        """Gather the suite module names"""
-        if hasattr(testcases, '__iter__'):
+    def add_test_module(testcases, modules, slow):
+        """Append the testcases module names to modules set"""
+        if isinstance(testcases, Iterable):
             for test_case in testcases:
-                add_suite(test_case, modules, slow)
+                add_test_module(test_case, modules, slow)
         else:
             name = testcases.__module__
             module = _get_module_from_name(name)
-            if slow and hasattr(module, '_slow_test'):
+            if slow and hasattr(module, 'is_slow_test'):
                 modules.add(name)
-            if not slow and not hasattr(module, '_slow_test'):
+            if not slow and not hasattr(module, 'is_slow_test'):
                 modules.add(name)
 
     if not paths:
         return []
-    _modules = set()
+    modules = set()
     pyspark_path = os.path.join(SPARK_HOME, "python")
     for path in paths:
         # Discover the unittest in every path
-        suite = unittest.defaultTestLoader.discover(
+        testcases = unittest.defaultTestLoader.discover(
             os.path.join(pyspark_path, path),
             top_level_dir=pyspark_path
         )
-        add_suite(suite, _modules, discover_slow)
+        add_test_module(testcases, modules, discover_slow)
 
-    return sorted(list(_modules))
+    return sorted(list(modules))
 
 
 @total_ordering
@@ -594,12 +604,7 @@ pyspark_pandas = Module(
         "pyspark.pandas.spark.accessors",
         "pyspark.pandas.spark.utils",
         "pyspark.pandas.typedef.typehints",
-    ] + _discover_python_unittests(
-        "pyspark/pandas/tests",
-        "pyspark/pandas/tests/data_type_ops",
-        "pyspark/pandas/tests/indexes",
-        "pyspark/pandas/tests/plot"
-    ),
+    ] + _discover_python_unittests("pyspark/pandas/tests"),
     excluded_python_implementations=[
         "PyPy"  # Skip these tests under PyPy since they require numpy, pandas, and pyarrow and
         # they aren't available there
@@ -618,13 +623,7 @@ pyspark_pandas_slow = Module(
         "pyspark.pandas.frame",
         "pyspark.pandas.generic",
         "pyspark.pandas.series",
-    ] + _discover_python_unittests(
-        "pyspark/pandas/tests",
-        "pyspark/pandas/tests/data_type_ops",
-        "pyspark/pandas/tests/indexes",
-        "pyspark/pandas/tests/plot",
-        discover_slow=True
-    ),
+    ] + _discover_python_unittests("pyspark/pandas/tests", discover_slow=True),
     excluded_python_implementations=[
         "PyPy"  # Skip these tests under PyPy since they require numpy, pandas, and pyarrow and
         # they aren't available there
