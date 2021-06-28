@@ -133,13 +133,13 @@ private[client] sealed abstract class Shim {
       numDP: Int,
       listBucketingEnabled: Boolean): Unit
 
-  def createFunction(hive: Hive, db: String, func: CatalogFunction): Unit
+  def createFunction(hive: Hive, db: String, func: CatalogFunction, owner: String): Unit
 
   def dropFunction(hive: Hive, db: String, name: String): Unit
 
-  def renameFunction(hive: Hive, db: String, oldName: String, newName: String): Unit
+  def renameFunction(hive: Hive, db: String, oldName: String, newName: String, owner: String): Unit
 
-  def alterFunction(hive: Hive, db: String, func: CatalogFunction): Unit
+  def alterFunction(hive: Hive, db: String, func: CatalogFunction, owner: String): Unit
 
   def getFunctionOption(hive: Hive, db: String, name: String): Option[CatalogFunction]
 
@@ -453,11 +453,14 @@ private[client] class Shim_v0_12 extends Shim with Logging {
     hive.dropPartition(dbName, tableName, part, deleteData)
   }
 
-  override def createFunction(hive: Hive, db: String, func: CatalogFunction): Unit = {
+  override def createFunction(hive: Hive,
+      db: String,
+      func: CatalogFunction,
+      owner: String): Unit = {
     throw QueryCompilationErrors.hiveCreatePermanentFunctionsUnsupportedError()
   }
 
-  def dropFunction(hive: Hive, db: String, name: String): Unit = {
+  def dropFunction(hive: Hive, db: String, name: String, owner: String): Unit = {
     throw new NoSuchPermanentFunctionException(db, name)
   }
 
@@ -465,7 +468,7 @@ private[client] class Shim_v0_12 extends Shim with Logging {
     throw new NoSuchPermanentFunctionException(db, oldName)
   }
 
-  def alterFunction(hive: Hive, db: String, func: CatalogFunction): Unit = {
+  def alterFunction(hive: Hive, db: String, func: CatalogFunction, owner: String): Unit = {
     throw new NoSuchPermanentFunctionException(db, func.identifier.funcName)
   }
 
@@ -554,7 +557,7 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
   override def getAllPartitions(hive: Hive, table: Table): Seq[Partition] =
     getAllPartitionsMethod.invoke(hive, table).asInstanceOf[JSet[Partition]].asScala.toSeq
 
-  private def toHiveFunction(f: CatalogFunction, db: String): HiveFunction = {
+  private def toHiveFunction(f: CatalogFunction, db: String, owner: String): HiveFunction = {
     val resourceUris = f.resources.map { resource =>
       new ResourceUri(ResourceType.valueOf(
         resource.resourceType.resourceType.toUpperCase(Locale.ROOT)), resource.uri)
@@ -563,31 +566,38 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
       f.identifier.funcName,
       db,
       f.className,
-      null,
+      owner,
       PrincipalType.USER,
       TimeUnit.MILLISECONDS.toSeconds(System.currentTimeMillis).toInt,
       FunctionType.JAVA,
       resourceUris.asJava)
   }
 
-  override def createFunction(hive: Hive, db: String, func: CatalogFunction): Unit = {
-    hive.createFunction(toHiveFunction(func, db))
+  override def createFunction(hive: Hive,
+      db: String,
+      func: CatalogFunction,
+      owner: String): Unit = {
+    hive.createFunction(toHiveFunction(func, db, owner))
   }
 
   override def dropFunction(hive: Hive, db: String, name: String): Unit = {
     hive.dropFunction(db, name)
   }
 
-  override def renameFunction(hive: Hive, db: String, oldName: String, newName: String): Unit = {
+  override def renameFunction(hive: Hive,
+      db: String,
+      oldName: String,
+      newName: String,
+      owner: String): Unit = {
     val catalogFunc = getFunctionOption(hive, db, oldName)
       .getOrElse(throw new NoSuchPermanentFunctionException(db, oldName))
       .copy(identifier = FunctionIdentifier(newName, Some(db)))
-    val hiveFunc = toHiveFunction(catalogFunc, db)
+    val hiveFunc = toHiveFunction(catalogFunc, db, owner)
     hive.alterFunction(db, oldName, hiveFunc)
   }
 
-  override def alterFunction(hive: Hive, db: String, func: CatalogFunction): Unit = {
-    hive.alterFunction(db, func.identifier.funcName, toHiveFunction(func, db))
+  override def alterFunction(hive: Hive, db: String, func: CatalogFunction, owner: String): Unit = {
+    hive.alterFunction(db, func.identifier.funcName, toHiveFunction(func, db, owner))
   }
 
   private def fromHiveFunction(hf: HiveFunction): CatalogFunction = {

@@ -925,7 +925,7 @@ private[hive] class HiveClientImpl(
   }
 
   override def createFunction(db: String, func: CatalogFunction): Unit = withHiveState {
-    shim.createFunction(client, db, func)
+    shim.createFunction(client, db, func, userName)
   }
 
   override def dropFunction(db: String, name: String): Unit = withHiveState {
@@ -933,11 +933,11 @@ private[hive] class HiveClientImpl(
   }
 
   override def renameFunction(db: String, oldName: String, newName: String): Unit = withHiveState {
-    shim.renameFunction(client, db, oldName, newName)
+    shim.renameFunction(client, db, oldName, newName, userName)
   }
 
   override def alterFunction(db: String, func: CatalogFunction): Unit = withHiveState {
-    shim.alterFunction(client, db, func)
+    shim.alterFunction(client, db, func, userName)
   }
 
   override def getFunctionOption(
