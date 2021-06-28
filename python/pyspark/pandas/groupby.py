@@ -58,7 +58,7 @@ from pyspark.sql.types import (  # noqa: F401
 )
 
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
-from pyspark.pandas._typing import Axis, FrameLike
+from pyspark.pandas._typing import Axis, FrameLike, Label, Name
 from pyspark.pandas.typedef import infer_return_type, DataFrameType, ScalarType, SeriesType
 from pyspark.pandas.frame import DataFrame
 from pyspark.pandas.internal import (
@@ -110,7 +110,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         groupkeys: List[Series],
         as_index: bool,
         dropna: bool,
-        column_labels_to_exlcude: Set[Tuple],
+        column_labels_to_exlcude: Set[Label],
         agg_columns_selected: bool,
         agg_columns: List[Series],
     ):
@@ -147,9 +147,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
     # TODO: not all arguments are implemented comparing to pandas' for now.
     def aggregate(
         self,
-        func_or_funcs: Optional[
-            Union[str, List[str], Dict[Union[Any, Tuple], Union[str, List[str]]]]
-        ] = None,
+        func_or_funcs: Optional[Union[str, List[str], Dict[Name, Union[str, List[str]]]]] = None,
         *args: Any,
         **kwargs: Any
     ) -> DataFrame:
@@ -312,7 +310,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
     @staticmethod
     def _spark_groupby(
         psdf: DataFrame,
-        func: Mapping[Union[Any, Tuple], Union[str, List[str]]],
+        func: Mapping[Name, Union[str, List[str]]],
         groupkeys: Sequence[Series] = (),
     ) -> InternalFrame:
         groupkey_names = [SPARK_INDEX_NAME_FORMAT(i) for i in range(len(groupkeys))]
@@ -1405,11 +1403,11 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
     @staticmethod
     def _prepare_group_map_apply(
         psdf: DataFrame, groupkeys: List[Series], agg_columns: List[Series]
-    ) -> Tuple[DataFrame, List[Tuple], List[str]]:
+    ) -> Tuple[DataFrame, List[Label], List[str]]:
         groupkey_labels = [
             verify_temp_column_name(psdf, "__groupkey_{}__".format(i))
             for i in range(len(groupkeys))
-        ]  # type: List[Tuple]
+        ]  # type: List[Label]
         psdf = psdf[[s.rename(label) for s, label in zip(groupkeys, groupkey_labels)] + agg_columns]
         groupkey_names = [label if len(label) > 1 else label[0] for label in groupkey_labels]
         return DataFrame(psdf._internal.resolved_copy), groupkey_labels, groupkey_names
@@ -2377,7 +2375,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
         return ExpandingGroupby(self, min_periods=min_periods)
 
-    def get_group(self, name: Union[Any, Tuple, List[Union[Any, Tuple]]]) -> FrameLike:
+    def get_group(self, name: Union[Name, List[Name]]) -> FrameLike:
         """
         Construct DataFrame from group with provided name.
 
@@ -2594,8 +2592,8 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
     @staticmethod
     def _resolve_grouping_from_diff_dataframes(
-        psdf: DataFrame, by: List[Union[Series, Tuple]]
-    ) -> Tuple[DataFrame, List[Series], Set[Tuple]]:
+        psdf: DataFrame, by: List[Union[Series, Label]]
+    ) -> Tuple[DataFrame, List[Series], Set[Label]]:
         column_labels_level = psdf._internal.column_labels_level
 
         column_labels = []
@@ -2636,8 +2634,8 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         )
 
         def assign_columns(
-            psdf: DataFrame, this_column_labels: List[Tuple], that_column_labels: List[Tuple]
-        ) -> Iterator[Tuple[Series, Tuple]]:
+            psdf: DataFrame, this_column_labels: List[Label], that_column_labels: List[Label]
+        ) -> Iterator[Tuple[Series, Label]]:
             raise NotImplementedError(
                 "Duplicated labels with groupby() and "
                 "'compute.ops_on_diff_frames' option are not supported currently "
@@ -2669,7 +2667,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         return psdf, new_by_series, tmp_column_labels
 
     @staticmethod
-    def _resolve_grouping(psdf: DataFrame, by: List[Union[Series, Tuple]]) -> List[Series]:
+    def _resolve_grouping(psdf: DataFrame, by: List[Union[Series, Label]]) -> List[Series]:
         new_by_series = []
         for col_or_s in by:
             if isinstance(col_or_s, Series):
@@ -2687,7 +2685,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 class DataFrameGroupBy(GroupBy[DataFrame]):
     @staticmethod
     def _build(
-        psdf: DataFrame, by: List[Union[Series, Tuple]], as_index: bool, dropna: bool
+        psdf: DataFrame, by: List[Union[Series, Label]], as_index: bool, dropna: bool
     ) -> "DataFrameGroupBy":
         if any(isinstance(col_or_s, Series) and not same_anchor(psdf, col_or_s) for col_or_s in by):
             (
@@ -2712,8 +2710,8 @@ class DataFrameGroupBy(GroupBy[DataFrame]):
         by: List[Series],
         as_index: bool,
         dropna: bool,
-        column_labels_to_exlcude: Set[Tuple],
-        agg_columns: List[Tuple] = None,
+        column_labels_to_exlcude: Set[Label],
+        agg_columns: List[Label] = None,
     ):
         agg_columns_selected = agg_columns is not None
         if agg_columns_selected:
@@ -2891,7 +2889,7 @@ class DataFrameGroupBy(GroupBy[DataFrame]):
 class SeriesGroupBy(GroupBy[Series]):
     @staticmethod
     def _build(
-        psser: Series, by: List[Union[Series, Tuple]], as_index: bool, dropna: bool
+        psser: Series, by: List[Union[Series, Label]], as_index: bool, dropna: bool
     ) -> "SeriesGroupBy":
         if any(
             isinstance(col_or_s, Series) and not same_anchor(psser, col_or_s) for col_or_s in by
@@ -3255,8 +3253,8 @@ def is_multi_agg_with_relabel(**kwargs: Any) -> bool:
 
 
 def normalize_keyword_aggregation(
-    kwargs: Dict[str, Tuple[Union[Any, Tuple], str]],
-) -> Tuple[Dict[Union[Any, Tuple], List[str]], List[str], List[Tuple]]:
+    kwargs: Dict[str, Tuple[Name, str]],
+) -> Tuple[Dict[Name, List[str]], List[str], List[Tuple]]:
     """
     Normalize user-provided kwargs.
 

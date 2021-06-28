@@ -53,7 +53,15 @@ from pyspark.sql.types import (
 )
 
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
-from pyspark.pandas._typing import Axis, DataFrameOrSeries, Dtype, FrameLike, Scalar
+from pyspark.pandas._typing import (
+    Axis,
+    DataFrameOrSeries,
+    Dtype,
+    FrameLike,
+    Label,
+    Name,
+    Scalar,
+)
 from pyspark.pandas.indexing import AtIndexer, iAtIndexer, iLocIndexer, LocIndexer
 from pyspark.pandas.internal import InternalFrame
 from pyspark.pandas.spark import functions as SF
@@ -636,7 +644,7 @@ class Frame(object, metaclass=ABCMeta):
         path: Optional[str] = None,
         sep: str = ",",
         na_rep: str = "",
-        columns: Optional[List[Union[Any, Tuple]]] = None,
+        columns: Optional[List[Name]] = None,
         header: bool = True,
         quotechar: str = '"',
         date_format: Optional[str] = None,
@@ -811,9 +819,11 @@ class Frame(object, metaclass=ABCMeta):
             column_labels = psdf._internal.column_labels
         else:
             column_labels = []
-            for label in columns:
-                if not is_name_like_tuple(label):
-                    label = (label,)
+            for col in columns:
+                if is_name_like_tuple(col):
+                    label = cast(Label, col)
+                else:
+                    label = cast(Label, (col,))
                 if label not in psdf._internal.column_labels:
                     raise KeyError(name_like_string(label))
                 column_labels.append(label)
@@ -2119,7 +2129,7 @@ class Frame(object, metaclass=ABCMeta):
     # should be updated when it's supported.
     def groupby(
         self: FrameLike,
-        by: Union[Any, Tuple, "Series", List[Union[Any, Tuple, "Series"]]],
+        by: Union[Name, "Series", List[Union[Name, "Series"]]],
         axis: Axis = 0,
         as_index: bool = True,
         dropna: bool = True,
@@ -2206,15 +2216,15 @@ class Frame(object, metaclass=ABCMeta):
         if isinstance(by, ps.DataFrame):
             raise ValueError("Grouper for '{}' not 1-dimensional".format(type(by).__name__))
         elif isinstance(by, ps.Series):
-            new_by = [by]  # type: List[Union[Tuple, ps.Series]]
+            new_by = [by]  # type: List[Union[Label, ps.Series]]
         elif is_name_like_tuple(by):
             if isinstance(self, ps.Series):
                 raise KeyError(by)
-            new_by = [cast(Tuple, by)]
+            new_by = [cast(Label, by)]
         elif is_name_like_value(by):
             if isinstance(self, ps.Series):
                 raise KeyError(by)
-            new_by = [(by,)]
+            new_by = [cast(Label, (by,))]
         elif is_list_like(by):
             new_by = []
             for key in by:
@@ -2227,11 +2237,11 @@ class Frame(object, metaclass=ABCMeta):
                 elif is_name_like_tuple(key):
                     if isinstance(self, ps.Series):
                         raise KeyError(key)
-                    new_by.append(key)
+                    new_by.append(cast(Label, key))
                 elif is_name_like_value(key):
                     if isinstance(self, ps.Series):
                         raise KeyError(key)
-                    new_by.append((key,))
+                    new_by.append(cast(Label, (key,)))
                 else:
                     raise ValueError(
                         "Grouper for '{}' not 1-dimensional".format(type(key).__name__)
@@ -2248,7 +2258,7 @@ class Frame(object, metaclass=ABCMeta):
 
     @abstractmethod
     def _build_groupby(
-        self: FrameLike, by: List[Union["Series", Tuple]], as_index: bool, dropna: bool
+        self: FrameLike, by: List[Union["Series", Label]], as_index: bool, dropna: bool
     ) -> "GroupBy[FrameLike]":
         pass
 

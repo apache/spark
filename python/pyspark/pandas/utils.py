@@ -46,7 +46,7 @@ from pandas.api.types import is_list_like
 
 # For running doctests and reference resolution in PyCharm.
 from pyspark import pandas as ps  # noqa: F401
-from pyspark.pandas._typing import Axis, DataFrameOrSeries
+from pyspark.pandas._typing import Axis, Label, Name, DataFrameOrSeries
 from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.typedef.typehints import as_spark_type
 
@@ -279,7 +279,7 @@ def combine_frames(
 
         level = max(this_internal.column_labels_level, that_internal.column_labels_level)
 
-        def fill_label(label: Optional[Tuple]) -> List:
+        def fill_label(label: Optional[Label]) -> List:
             if label is None:
                 return ([""] * (level - 1)) + [None]
             else:
@@ -289,7 +289,7 @@ def combine_frames(
             tuple(["this"] + fill_label(label)) for label in this_internal.column_labels
         ] + [tuple(["that"] + fill_label(label)) for label in that_internal.column_labels]
         column_label_names = (
-            cast(List[Optional[Tuple]], [None]) * (1 + level - this_internal.column_labels_level)
+            cast(List[Optional[Label]], [None]) * (1 + level - this_internal.column_labels_level)
         ) + this_internal.column_label_names
         return DataFrame(
             InternalFrame(
@@ -309,7 +309,7 @@ def combine_frames(
 
 def align_diff_frames(
     resolve_func: Callable[
-        ["DataFrame", List[Tuple], List[Tuple]], Iterator[Tuple["Series", Tuple]]
+        ["DataFrame", List[Label], List[Label]], Iterator[Tuple["Series", Label]]
     ],
     this: "DataFrame",
     that: "DataFrame",
@@ -385,11 +385,11 @@ def align_diff_frames(
     # 2. Apply the given function to transform the columns in a batch and keep the new columns.
     combined_column_labels = combined._internal.column_labels
 
-    that_columns_to_apply = []  # type: List[Tuple]
-    this_columns_to_apply = []  # type: List[Tuple]
-    additional_that_columns = []  # type: List[Tuple]
+    that_columns_to_apply = []  # type: List[Label]
+    this_columns_to_apply = []  # type: List[Label]
+    additional_that_columns = []  # type: List[Label]
     columns_to_keep = []  # type: List[Union[Series, Column]]
-    column_labels_to_keep = []  # type: List[Tuple]
+    column_labels_to_keep = []  # type: List[Label]
 
     for combined_label in combined_column_labels:
         for common_label in common_column_labels:
@@ -424,7 +424,7 @@ def align_diff_frames(
             *resolve_func(combined, this_columns_to_apply, that_columns_to_apply)
         )
         columns_applied = list(psser_set)  # type: List[Union[Series, Column]]
-        column_labels_applied = list(column_labels_set)  # type: List[Tuple]
+        column_labels_applied = list(column_labels_set)  # type: List[Label]
     else:
         columns_applied = []
         column_labels_applied = []
@@ -592,7 +592,7 @@ def scol_for(sdf: SparkDataFrame, column_name: str) -> Column:
     return sdf["`{}`".format(column_name)]
 
 
-def column_labels_level(column_labels: List[Tuple]) -> int:
+def column_labels_level(column_labels: List[Label]) -> int:
     """Return the level of the column index."""
     if len(column_labels) == 0:
         return 1
@@ -602,7 +602,7 @@ def column_labels_level(column_labels: List[Tuple]) -> int:
         return list(levels)[0]
 
 
-def name_like_string(name: Optional[Union[Any, Tuple]]) -> str:
+def name_like_string(name: Optional[Name]) -> str:
     """
     Return the name-like strings from str or tuple of str
 
@@ -621,12 +621,12 @@ def name_like_string(name: Optional[Union[Any, Tuple]]) -> str:
     '(a, b, c)'
     """
     if name is None:
-        name = ("__none__",)
+        label = ("__none__",)  # type: Label
     elif is_list_like(name):
-        name = tuple([str(n) for n in name])
+        label = tuple([str(n) for n in name])
     else:
-        name = (str(name),)
-    return ("(%s)" % ", ".join(name)) if len(name) > 1 else name[0]
+        label = (str(name),)
+    return ("(%s)" % ", ".join(label)) if len(label) > 1 else label[0]
 
 
 def is_name_like_tuple(value: Any, allow_none: bool = True, check_type: bool = False) -> bool:
@@ -760,15 +760,13 @@ def verify_temp_column_name(df: SparkDataFrame, column_name_or_label: str) -> st
 
 
 @overload
-def verify_temp_column_name(
-    df: "DataFrame", column_name_or_label: Union[Any, Tuple]
-) -> Union[Any, Tuple]:
+def verify_temp_column_name(df: "DataFrame", column_name_or_label: Name) -> Label:
     ...
 
 
 def verify_temp_column_name(
-    df: Union["DataFrame", SparkDataFrame], column_name_or_label: Union[Any, Tuple]
-) -> Union[Any, Tuple]:
+    df: Union["DataFrame", SparkDataFrame], column_name_or_label: Union[str, Name]
+) -> Union[str, Label]:
     """
     Verify that the given column name does not exist in the given pandas-on-Spark or
     Spark DataFrame.

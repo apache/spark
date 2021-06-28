@@ -34,7 +34,7 @@ from pyspark.sql.types import (
 )
 
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
-from pyspark.pandas._typing import Axis, Dtype, IndexOpsLike, SeriesOrIndex
+from pyspark.pandas._typing import Axis, Dtype, IndexOpsLike, Label, SeriesOrIndex
 from pyspark.pandas.config import get_option, option_context
 from pyspark.pandas.internal import (
     InternalField,
@@ -297,7 +297,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
 
     @property
     @abstractmethod
-    def _column_label(self) -> Optional[Tuple]:
+    def _column_label(self) -> Optional[Label]:
         pass
 
     @property
