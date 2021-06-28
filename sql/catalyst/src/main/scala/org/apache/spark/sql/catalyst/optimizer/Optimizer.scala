@@ -911,11 +911,6 @@ object CollapseRepartition extends Rule[LogicalPlan] {
     // we can remove the child.
     case r @ RepartitionByExpression(_, child: RepartitionOperation, _) =>
       r.copy(child = child.child)
-
-    // Case 3: When a RebalancePartitions has a child of Repartition or RepartitionByExpression
-    // we can remove the child.
-    case r @ RebalancePartitions(_, child: RepartitionOperation) =>
-      r.copy(child = child.child)
   }
 }
 
