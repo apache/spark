@@ -1184,6 +1184,44 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
           cast(Literal.create(s"INTERVAL -'$str' ${typeName(dataType)}"), dataType), -dt)
       }
 
+    // Check max value
+    Seq(("INTERVAL '106751991' DAY", DayTimeIntervalType(DAY), 106751991L * MICROS_PER_DAY),
+      ("INTERVAL '106751991 04' DAY TO HOUR", DayTimeIntervalType(DAY, HOUR), 9223372036800000000L),
+      ("INTERVAL '106751991 04:00' DAY TO MINUTE",
+        DayTimeIntervalType(DAY, MINUTE), 9223372036800000000L),
+      ("INTERVAL '106751991 04:00:54.775807' DAY TO SECOND", DayTimeIntervalType(), Long.MaxValue),
+      ("INTERVAL '2562047788' HOUR", DayTimeIntervalType(HOUR), 9223372036800000000L),
+      ("INTERVAL '2562047788:00' HOUR TO MINUTE",
+        DayTimeIntervalType(HOUR, MINUTE), 9223372036800000000L),
+      ("INTERVAL '2562047788:00:54.775807' HOUR TO SECOND",
+        DayTimeIntervalType(HOUR, SECOND), Long.MaxValue),
+      ("INTERVAL '153722867280' MINUTE", DayTimeIntervalType(MINUTE), 9223372036800000000L),
+      ("INTERVAL '153722867280:54.775807' MINUTE TO SECOND",
+        DayTimeIntervalType(MINUTE, SECOND), Long.MaxValue),
+      ("INTERVAL '9223372036854.775807' SECOND", DayTimeIntervalType(SECOND), Long.MaxValue))
+      .foreach { case (interval, dataType, dt) =>
+        checkEvaluation(cast(Literal.create(interval), dataType), dt)
+      }
+
+    Seq(("INTERVAL '-106751991' DAY", DayTimeIntervalType(DAY), -106751991L * MICROS_PER_DAY),
+      ("INTERVAL '-106751991 04' DAY TO HOUR",
+        DayTimeIntervalType(DAY, HOUR), -9223372036800000000L),
+      ("INTERVAL '-106751991 04:00' DAY TO MINUTE",
+        DayTimeIntervalType(DAY, MINUTE), -9223372036800000000L),
+      ("INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND", DayTimeIntervalType(), Long.MinValue),
+      ("INTERVAL '-2562047788' HOUR", DayTimeIntervalType(HOUR), -9223372036800000000L),
+      ("INTERVAL '-2562047788:00' HOUR TO MINUTE",
+        DayTimeIntervalType(HOUR, MINUTE), -9223372036800000000L),
+      ("INTERVAL '-2562047788:00:54.775808' HOUR TO SECOND",
+        DayTimeIntervalType(HOUR, SECOND), Long.MinValue),
+      ("INTERVAL '-153722867280' MINUTE", DayTimeIntervalType(MINUTE), -9223372036800000000L),
+      ("INTERVAL '-153722867280:54.775808' MINUTE TO SECOND",
+        DayTimeIntervalType(MINUTE, SECOND), Long.MinValue),
+      ("INTERVAL '-9223372036854.775808' SECOND", DayTimeIntervalType(SECOND), Long.MinValue))
+      .foreach { case (interval, dataType, dt) =>
+        checkEvaluation(cast(Literal.create(interval), dataType), dt)
+      }
+
     if (!isTryCast) {
       Seq(
         ("INTERVAL '1 01:01:01.12345' DAY TO SECOND", DayTimeIntervalType(DAY, HOUR)),
@@ -1207,6 +1245,24 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
         ("1.23", DayTimeIntervalType(HOUR)),
         ("1.23", DayTimeIntervalType(MINUTE)),
         ("1.23", DayTimeIntervalType(MINUTE)))
+        .foreach { case (interval, dataType) =>
+          val e = intercept[IllegalArgumentException] {
+            cast(Literal.create(interval), dataType).eval()
+          }.getMessage
+          assert(e.contains("Interval string does not match day-time format"))
+        }
+
+      // Check first field outof bound
+      Seq(("INTERVAL '1067519911' DAY", DayTimeIntervalType(DAY)),
+        ("INTERVAL '10675199111 04' DAY TO HOUR", DayTimeIntervalType(DAY, HOUR)),
+        ("INTERVAL '1067519911 04:00' DAY TO MINUTE", DayTimeIntervalType(DAY, MINUTE)),
+        ("INTERVAL '1067519911 04:00:54.775807' DAY TO SECOND", DayTimeIntervalType()),
+        ("INTERVAL '25620477881' HOUR", DayTimeIntervalType(HOUR)),
+        ("INTERVAL '25620477881:00' HOUR TO MINUTE", DayTimeIntervalType(HOUR, MINUTE)),
+        ("INTERVAL '25620477881:00:54.775807' HOUR TO SECOND", DayTimeIntervalType(HOUR, SECOND)),
+        ("INTERVAL '1537228672801' MINUTE", DayTimeIntervalType(MINUTE)),
+        ("INTERVAL '1537228672801:54.7757' MINUTE TO SECOND", DayTimeIntervalType(MINUTE, SECOND)),
+        ("INTERVAL '92233720368541.775807' SECOND", DayTimeIntervalType(SECOND)))
         .foreach { case (interval, dataType) =>
           val e = intercept[IllegalArgumentException] {
             cast(Literal.create(interval), dataType).eval()
