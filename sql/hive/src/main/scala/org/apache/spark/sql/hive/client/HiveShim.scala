@@ -460,11 +460,15 @@ private[client] class Shim_v0_12 extends Shim with Logging {
     throw QueryCompilationErrors.hiveCreatePermanentFunctionsUnsupportedError()
   }
 
-  def dropFunction(hive: Hive, db: String, name: String, owner: String): Unit = {
+  def dropFunction(hive: Hive, db: String, name: String): Unit = {
     throw new NoSuchPermanentFunctionException(db, name)
   }
 
-  def renameFunction(hive: Hive, db: String, oldName: String, newName: String): Unit = {
+  def renameFunction(hive: Hive,
+       db: String,
+       oldName: String,
+       newName: String,
+       owner: String): Unit = {
     throw new NoSuchPermanentFunctionException(db, oldName)
   }
 
