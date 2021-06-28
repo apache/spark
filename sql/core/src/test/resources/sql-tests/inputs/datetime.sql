@@ -85,8 +85,8 @@ select to_timestamp_ntz('2019-10-06 10:11:12.345678') - null;
 select null - to_timestamp_ntz('2019-10-06 10:11:12.345678');
 select to_timestamp_ntz('2019-10-07 10:11:12.345678') - to_timestamp_ntz('2019-10-06 10:11:12.345677');
 select to_timestamp_ntz('2019-10-06 10:11:12.345677') - to_timestamp_ntz('2019-10-07 10:11:12.345678');
-select to_timestamp_ntz('2019-10-07 10:11:12.345678') - timestamp'2019-10-06 10:11:12.345678';
-select timestamp'2019-10-06 10:11:12.345678' - to_timestamp_ntz('2019-10-07 10:11:12.345678');
+select to_timestamp_ntz('2019-10-07 10:11:12.345678') - to_timestamp('2019-10-06 10:11:12.345678');
+select to_timestamp('2019-10-06 10:11:12.345678') - to_timestamp_ntz('2019-10-07 10:11:12.345678');
 
 -- date add/sub
 select date_add('2011-11-11', 1Y);
