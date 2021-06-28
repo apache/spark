@@ -37,9 +37,11 @@ case class NoSuchNamespaceException(
     override val cause: Option[Throwable] = None)
   extends AnalysisException(message, cause = cause) {
 
-  def this(namespace: Array[String]) = {
-    this(s"Namespace '${namespace.quoted}' not found")
+  def this(namespace: Array[String], cause: Throwable) = {
+    this(s"Namespace '${namespace.quoted}' not found", cause = Option(cause))
   }
+
+  def this(namespace: Array[String]) = this(namespace, cause = null)
 }
 
 case class NoSuchTableException(
@@ -54,6 +56,15 @@ case class NoSuchTableException(
   def this(tableIdent: Identifier) = {
     this(s"Table ${tableIdent.quoted} not found")
   }
+}
+
+class NoSuchViewException(message: String, cause: Option[Throwable] = None)
+  extends AnalysisException(message, cause = cause) {
+
+  def this(ident: Identifier, cause: Throwable) =
+    this(s"View '${ident.quoted}' not found", cause = Option(cause))
+
+  def this(ident: Identifier) = this(ident, cause = null)
 }
 
 case class NoSuchPartitionException(
