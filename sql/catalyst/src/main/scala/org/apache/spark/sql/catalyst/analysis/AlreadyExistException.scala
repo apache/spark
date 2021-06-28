@@ -21,6 +21,8 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.util.{quoteIdentifier, quoteNameParts }
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.IdentifierHelper
+import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -69,6 +71,14 @@ class TempTableAlreadyExistsException(errorClass: String, messageParameters: Map
       messageParameters = Map("relationName"
         -> quoteNameParts(UnresolvedAttribute.parseAttributeName(table))))
   }
+}
+
+class ViewAlreadyExistsException(errorClass: String, messageParameters: Map[String, String])
+  extends AnalysisException(errorClass, messageParameters) {
+
+  def this(ident: Identifier) =
+    this(errorClass = "VIEW_ALREADY_EXISTS",
+      messageParameters = Map("relationName" -> ident.quoted))
 }
 
 class PartitionAlreadyExistsException(errorClass: String, messageParameters: Map[String, String])
